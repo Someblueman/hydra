@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(make lint)",
+      "Bash(command:*)",
+      "Bash(dash -n:*)",
+      "Bash(for f in lib/*.sh)",
+      "Bash(do echo \"Checking $f...\")",
+      "Bash(exit 1)",
+      "Bash(done)",
+      "Bash(git add:*)"
+    ],
+    "deny": []
+  }
+}
