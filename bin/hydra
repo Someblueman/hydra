@@ -15,6 +15,7 @@ HYDRA_LIB_DIR="$(dirname "$0")/../lib"
 . "$HYDRA_LIB_DIR/tmux.sh"
 . "$HYDRA_LIB_DIR/layout.sh"
 . "$HYDRA_LIB_DIR/state.sh"
+. "$HYDRA_LIB_DIR/completion.sh"
 
 # Initialize Hydra home directory
 init_hydra_home() {
@@ -41,6 +42,7 @@ Commands:
   regenerate        Restore tmux sessions for existing worktrees
   status            Show health status of all heads
   doctor            Check system performance
+  completion        Generate shell completion scripts
   version           Show version information
 
 Options:
@@ -83,6 +85,10 @@ main() {
         doctor)
             shift
             cmd_doctor "$@"
+            ;;
+        completion)
+            shift
+            cmd_completion "$@"
             ;;
         version|--version|-v)
             echo "hydra version $HYDRA_VERSION"
@@ -743,6 +749,46 @@ cmd_doctor() {
     
     echo ""
     echo "Diagnosis complete."
+}
+
+# Generate shell completion scripts
+cmd_completion() {
+    shell="${1:-}"
+    
+    if [ -z "$shell" ]; then
+        echo "Usage: hydra completion <shell>"
+        echo "Supported shells: bash, zsh, fish"
+        echo ""
+        echo "Examples:"
+        echo "  hydra completion bash > /etc/bash_completion.d/hydra"
+        echo "  hydra completion zsh > /usr/local/share/zsh/site-functions/_hydra"
+        echo "  hydra completion fish > ~/.config/fish/completions/hydra.fish"
+        echo ""
+        echo "To install automatically (may require sudo):"
+        echo "  hydra completion install [shell]"
+        return 1
+    fi
+    
+    case "$shell" in
+        bash)
+            generate_bash_completion
+            ;;
+        zsh)
+            generate_zsh_completion
+            ;;
+        fish)
+            generate_fish_completion
+            ;;
+        install)
+            shift
+            install_completions "$@"
+            ;;
+        *)
+            echo "Error: Unsupported shell '$shell'" >&2
+            echo "Supported shells: bash, zsh, fish" >&2
+            return 1
+            ;;
+    esac
 }
 
 # Execute main function
