@@ -1,0 +1,749 @@
+#!/bin/sh
+# Hydra - POSIX-compliant CLI for managing parallel Claude-Code sessions
+# Wraps tmux ≥ 3.0 and git worktree
+
+set -eu
+
+# Global variables
+HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
+HYDRA_MAP="$HYDRA_HOME/map"
+HYDRA_VERSION="0.1.0"
+
+# Source helper libraries
+HYDRA_LIB_DIR="$(dirname "$0")/../lib"
+. "$HYDRA_LIB_DIR/git.sh"
+. "$HYDRA_LIB_DIR/tmux.sh"
+. "$HYDRA_LIB_DIR/layout.sh"
+. "$HYDRA_LIB_DIR/state.sh"
+
+# Initialize Hydra home directory
+init_hydra_home() {
+    if [ ! -d "$HYDRA_HOME" ]; then
+        mkdir -p "$HYDRA_HOME"
+    fi
+    if [ ! -f "$HYDRA_MAP" ]; then
+        touch "$HYDRA_MAP"
+    fi
+}
+
+# Display usage information
+usage() {
+    cat <<EOF
+hydra - Manage parallel Claude-Code sessions with tmux and git worktree
+
+Usage: hydra <command> [options]
+
+Commands:
+  spawn <branch>    Create a new worktree and tmux session
+  list              List all active Hydra heads
+  switch            Switch to a different head (interactive)
+  kill <branch>     Remove a worktree and its tmux session
+  regenerate        Restore tmux sessions for existing worktrees
+  status            Show health status of all heads
+  doctor            Check system performance
+  version           Show version information
+
+Options:
+  -h, --help        Show this help message
+
+Environment:
+  HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
+EOF
+}
+
+# Main command dispatcher
+main() {
+    init_hydra_home
+    
+    case "${1:-}" in
+        spawn)
+            shift
+            cmd_spawn "$@"
+            ;;
+        list)
+            shift
+            cmd_list "$@"
+            ;;
+        switch)
+            shift
+            cmd_switch "$@"
+            ;;
+        kill)
+            shift
+            cmd_kill "$@"
+            ;;
+        regenerate)
+            shift
+            cmd_regenerate "$@"
+            ;;
+        status)
+            shift
+            cmd_status "$@"
+            ;;
+        doctor)
+            shift
+            cmd_doctor "$@"
+            ;;
+        version|--version|-v)
+            echo "hydra version $HYDRA_VERSION"
+            ;;
+        help|--help|-h|"")
+            usage
+            ;;
+        *)
+            echo "Error: Unknown command '$1'" >&2
+            echo "Run 'hydra help' for usage information" >&2
+            exit 1
+            ;;
+    esac
+}
+
+# Command implementations
+cmd_spawn() {
+    # Parse arguments
+    branch=""
+    layout="default"
+    
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -l|--layout)
+                shift
+                layout="$1"
+                shift
+                ;;
+            -*)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Usage: hydra spawn <branch> [-l|--layout <layout>]" >&2
+                exit 1
+                ;;
+            *)
+                if [ -z "$branch" ]; then
+                    branch="$1"
+                else
+                    echo "Error: Too many arguments" >&2
+                    echo "Usage: hydra spawn <branch> [-l|--layout <layout>]" >&2
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    if [ -z "$branch" ]; then
+        echo "Error: Branch name is required" >&2
+        echo "Usage: hydra spawn <branch> [-l|--layout <layout>]" >&2
+        exit 1
+    fi
+    
+    # Check tmux availability
+    if ! check_tmux_version; then
+        exit 1
+    fi
+    
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Error: Not in a git repository" >&2
+        exit 1
+    fi
+    
+    # Get the repository root
+    repo_root="$(git rev-parse --show-toplevel)"
+    worktree_path="$repo_root/../hydra-$branch"
+    
+    # Check if branch already has a session
+    existing_session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
+    if [ -n "$existing_session" ] && tmux_session_exists "$existing_session"; then
+        echo "Error: Branch '$branch' already has an active session '$existing_session'" >&2
+        echo "Use 'hydra switch' to switch to it" >&2
+        exit 1
+    fi
+    
+    # Create worktree
+    echo "Creating worktree for branch '$branch'..."
+    if ! create_worktree "$branch" "$worktree_path"; then
+        exit 1
+    fi
+    
+    # Generate session name
+    session="$(generate_session_name "$branch")"
+    
+    # Create tmux session
+    echo "Creating tmux session '$session'..."
+    if ! create_session "$session" "$worktree_path"; then
+        # Clean up worktree if session creation failed
+        delete_worktree "$worktree_path" 2>/dev/null || true
+        exit 1
+    fi
+    
+    # Add mapping
+    if ! add_mapping "$branch" "$session"; then
+        echo "Warning: Failed to save branch-session mapping" >&2
+    fi
+    
+    # Apply layout
+    TMUX="$TMUX" tmux send-keys -t "$session" "hydra cycle-layout" Enter
+    
+    # Start Claude
+    echo "Starting Claude in session '$session'..."
+    send_keys_to_session "$session" "claude"
+    
+    # Switch to the new session
+    echo "Switching to session '$session'..."
+    switch_to_session "$session"
+}
+
+cmd_list() {
+    # Check if we have any mappings
+    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+        echo "No active Hydra heads"
+        return 0
+    fi
+    
+    # Print header
+    printf "%-20s %-20s %-10s %s\n" "BRANCH" "SESSION" "STATUS" "PATH"
+    printf "%-20s %-20s %-10s %s\n" "------" "-------" "------" "----"
+    
+    # Get repository root
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo ".")"
+    
+    # List all mappings
+    while IFS=' ' read -r branch session; do
+        # Check session status
+        if tmux_session_exists "$session"; then
+            status="active"
+        else
+            status="dead"
+        fi
+        
+        # Find worktree path
+        worktree_path=""
+        git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
+            case "$line" in
+                "worktree "*)
+                    current_path="${line#worktree }"
+                    ;;
+                "branch refs/heads/$branch")
+                    worktree_path="$current_path"
+                    break
+                    ;;
+            esac
+        done
+        
+        # Make path relative if possible
+        if [ -n "$worktree_path" ]; then
+            case "$worktree_path" in
+                "$repo_root"/../*)
+                    worktree_path="../${worktree_path#$repo_root/../}"
+                    ;;
+            esac
+        else
+            worktree_path="(not found)"
+        fi
+        
+        # Print row
+        printf "%-20s %-20s %-10s %s\n" \
+            "$(echo "$branch" | cut -c1-20)" \
+            "$(echo "$session" | cut -c1-20)" \
+            "$status" \
+            "$worktree_path"
+    done < "$HYDRA_MAP"
+}
+
+cmd_switch() {
+    # Check if we have any mappings
+    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+        echo "No active Hydra heads to switch to"
+        exit 1
+    fi
+    
+    # Check tmux availability
+    if ! check_tmux_version; then
+        exit 1
+    fi
+    
+    # Count active sessions
+    active_count=0
+    while IFS=' ' read -r branch session; do
+        if tmux_session_exists "$session"; then
+            active_count=$((active_count + 1))
+        fi
+    done < "$HYDRA_MAP"
+    
+    if [ "$active_count" -eq 0 ]; then
+        echo "No active sessions found"
+        echo "Use 'hydra regenerate' to restore sessions"
+        exit 1
+    fi
+    
+    # Record start time for performance tracking
+    start_time="$(date +%s%N 2>/dev/null || date +%s)"
+    
+    # Use fzf if available
+    if command -v fzf >/dev/null 2>&1; then
+        # Build list for fzf
+        selected="$(
+            while IFS=' ' read -r branch session; do
+                if tmux_session_exists "$session"; then
+                    echo "$branch -> $session"
+                fi
+            done < "$HYDRA_MAP" | fzf --prompt="Select head: " --height=10 --reverse
+        )"
+        
+        if [ -z "$selected" ]; then
+            echo "No selection made"
+            exit 1
+        fi
+        
+        # Extract session name
+        target_session="${selected##* }"
+    else
+        # Fallback to numeric selection
+        echo "Active Hydra heads:"
+        num=1
+        
+        # Create temporary file for menu items
+        tmpfile="$(mktemp)" || exit 1
+        trap 'rm -f "$tmpfile"' EXIT INT TERM
+        
+        while IFS=' ' read -r branch session; do
+            if tmux_session_exists "$session"; then
+                echo "$num) $branch -> $session"
+                echo "$num $session" >> "$tmpfile"
+                num=$((num + 1))
+            fi
+        done < "$HYDRA_MAP"
+        
+        printf "Select head (1-%d): " "$((num - 1))"
+        read -r selection
+        
+        # Validate selection
+        if ! echo "$selection" | grep -q '^[0-9]\+$'; then
+            echo "Error: Invalid selection" >&2
+            exit 1
+        fi
+        
+        # Find the selected session
+        target_session=""
+        while IFS=' ' read -r menu_num menu_session; do
+            if [ "$menu_num" = "$selection" ]; then
+                target_session="$menu_session"
+                break
+            fi
+        done < "$tmpfile"
+        
+        rm -f "$tmpfile"
+        trap - EXIT INT TERM
+        
+        if [ -z "$target_session" ]; then
+            echo "Error: Invalid selection" >&2
+            exit 1
+        fi
+    fi
+    
+    # Switch to the selected session
+    echo "Switching to session '$target_session'..."
+    if ! switch_to_session "$target_session"; then
+        exit 1
+    fi
+    
+    # Record end time and calculate duration
+    end_time="$(date +%s%N 2>/dev/null || date +%s)"
+    
+    # Calculate duration in milliseconds if nanoseconds are available
+    if echo "$start_time" | grep -q '[0-9]\{10,\}'; then
+        # Have nanoseconds
+        duration_ns=$((end_time - start_time))
+        duration_ms=$((duration_ns / 1000000))
+        echo "Switch completed in ${duration_ms}ms"
+    fi
+}
+
+cmd_kill() {
+    branch="$1"
+    
+    if [ -z "$branch" ]; then
+        echo "Error: Branch name is required" >&2
+        echo "Usage: hydra kill <branch>" >&2
+        exit 1
+    fi
+    
+    # Get session for branch
+    session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
+    
+    if [ -z "$session" ]; then
+        echo "Error: No session found for branch '$branch'" >&2
+        exit 1
+    fi
+    
+    # Get repository root
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo ".")"
+    
+    # Find worktree path
+    worktree_path=""
+    git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
+        case "$line" in
+            "worktree "*)
+                current_path="${line#worktree }"
+                ;;
+            "branch refs/heads/$branch")
+                worktree_path="$current_path"
+                break
+                ;;
+        esac
+    done
+    
+    # Kill tmux session if it exists
+    if tmux_session_exists "$session"; then
+        echo "Killing tmux session '$session'..."
+        if ! kill_session "$session"; then
+            echo "Warning: Failed to kill tmux session" >&2
+        fi
+    fi
+    
+    # Remove worktree if it exists
+    if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
+        echo "Removing worktree at '$worktree_path'..."
+        if ! delete_worktree "$worktree_path"; then
+            echo "Error: Failed to remove worktree" >&2
+            echo "You may need to manually clean up: $worktree_path" >&2
+            # Don't exit, still remove mapping
+        fi
+    fi
+    
+    # Remove mapping
+    echo "Removing branch-session mapping..."
+    if ! remove_mapping "$branch"; then
+        echo "Warning: Failed to remove mapping" >&2
+    fi
+    
+    echo "Hydra head '$branch' has been killed"
+}
+
+cmd_regenerate() {
+    # Check tmux availability
+    if ! check_tmux_version; then
+        exit 1
+    fi
+    
+    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+        echo "No Hydra heads to regenerate"
+        return 0
+    fi
+    
+    regenerated=0
+    failed=0
+    
+    # Get repository root
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo ".")"
+    
+    echo "Regenerating Hydra sessions..."
+    
+    while IFS=' ' read -r branch session; do
+        # Skip if session already exists
+        if tmux_session_exists "$session"; then
+            echo "Session '$session' for branch '$branch' already exists"
+            continue
+        fi
+        
+        # Find worktree path
+        worktree_path=""
+        git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
+            case "$line" in
+                "worktree "*)
+                    current_path="${line#worktree }"
+                    ;;
+                "branch refs/heads/$branch")
+                    worktree_path="$current_path"
+                    break
+                    ;;
+            esac
+        done
+        
+        if [ -z "$worktree_path" ] || [ ! -d "$worktree_path" ]; then
+            echo "Warning: No worktree found for branch '$branch'"
+            echo "  Use 'hydra spawn $branch' to create it"
+            failed=$((failed + 1))
+            continue
+        fi
+        
+        # Create session
+        echo "Regenerating session '$session' for branch '$branch'..."
+        if create_session "$session" "$worktree_path"; then
+            regenerated=$((regenerated + 1))
+            
+            # Start Claude
+            send_keys_to_session "$session" "claude"
+        else
+            echo "Error: Failed to create session '$session'" >&2
+            failed=$((failed + 1))
+        fi
+    done < "$HYDRA_MAP"
+    
+    # Clean up invalid mappings
+    if [ "$failed" -gt 0 ]; then
+        echo "Cleaning up invalid mappings..."
+        cleanup_mappings
+    fi
+    
+    echo ""
+    echo "Regeneration complete:"
+    echo "  Regenerated: $regenerated session(s)"
+    if [ "$failed" -gt 0 ]; then
+        echo "  Failed: $failed session(s)"
+    fi
+}
+
+cmd_status() {
+    echo "Hydra Status Report"
+    echo "=================="
+    echo ""
+    
+    # Check git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Error: Not in a git repository" >&2
+        exit 1
+    fi
+    
+    # Check tmux
+    if ! check_tmux_version >/dev/null 2>&1; then
+        echo "tmux: Not available or version too old"
+    else
+        echo "tmux: $(tmux -V)"
+    fi
+    echo ""
+    
+    # Analyze mappings
+    mapped_branches=""
+    mapped_sessions=""
+    orphaned_mappings=0
+    
+    if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
+        while IFS=' ' read -r branch session; do
+            mapped_branches="$mapped_branches $branch"
+            mapped_sessions="$mapped_sessions $session"
+            
+            # Check for orphaned mappings
+            if ! git_branch_exists "$branch" || ! tmux_session_exists "$session"; then
+                orphaned_mappings=$((orphaned_mappings + 1))
+            fi
+        done < "$HYDRA_MAP"
+    fi
+    
+    # Get all worktrees
+    echo "Git Worktrees:"
+    worktree_count=0
+    unmapped_worktrees=0
+    
+    git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
+        case "$line" in
+            "worktree "*)
+                current_path="${line#worktree }"
+                ;;
+            "branch refs/heads/"*)
+                worktree_branch="${line#branch refs/heads/}"
+                worktree_count=$((worktree_count + 1))
+                
+                # Check if this worktree has a mapping
+                mapped=0
+                for mb in $mapped_branches; do
+                    if [ "$mb" = "$worktree_branch" ]; then
+                        mapped=1
+                        break
+                    fi
+                done
+                
+                if [ "$mapped" -eq 0 ]; then
+                    unmapped_worktrees=$((unmapped_worktrees + 1))
+                    echo "  - $worktree_branch (no session)"
+                else
+                    # Get session name
+                    session="$(get_session_for_branch "$worktree_branch" 2>/dev/null || echo "(unknown)")"
+                    if tmux_session_exists "$session"; then
+                        echo "  - $worktree_branch -> $session (active)"
+                    else
+                        echo "  - $worktree_branch -> $session (dead)"
+                    fi
+                fi
+                ;;
+        esac
+    done
+    
+    echo ""
+    echo "tmux Sessions:"
+    session_count=0
+    unmapped_sessions=0
+    
+    # List all tmux sessions
+    tmux list-sessions -F '#{session_name}' 2>/dev/null | while read -r session; do
+        session_count=$((session_count + 1))
+        
+        # Check if this session has a mapping
+        mapped=0
+        for ms in $mapped_sessions; do
+            if [ "$ms" = "$session" ]; then
+                mapped=1
+                break
+            fi
+        done
+        
+        if [ "$mapped" -eq 0 ]; then
+            unmapped_sessions=$((unmapped_sessions + 1))
+            echo "  - $session (no branch)"
+        else
+            # Get branch name
+            branch="$(get_branch_for_session "$session" 2>/dev/null || echo "(unknown)")"
+            echo "  - $session <- $branch"
+        fi
+    done
+    
+    echo ""
+    echo "Summary:"
+    echo "  Hydra home: $HYDRA_HOME"
+    echo "  Mapped heads: $(echo "$mapped_branches" | wc -w | tr -d ' ')"
+    if [ "$orphaned_mappings" -gt 0 ]; then
+        echo "  Orphaned mappings: $orphaned_mappings (run 'hydra regenerate' to fix)"
+    fi
+    if [ "$unmapped_worktrees" -gt 0 ]; then
+        echo "  Unmapped worktrees: $unmapped_worktrees"
+    fi
+    if [ "$unmapped_sessions" -gt 0 ]; then
+        echo "  Unmapped sessions: $unmapped_sessions"
+    fi
+}
+
+cmd_doctor() {
+    echo "Hydra Doctor - System Health Check"
+    echo "================================="
+    echo ""
+    
+    # Check dependencies
+    echo "Dependencies:"
+    
+    # Git
+    if command -v git >/dev/null 2>&1; then
+        git_version="$(git --version | cut -d' ' -f3)"
+        echo "  git: $git_version ✓"
+    else
+        echo "  git: NOT FOUND ✗"
+    fi
+    
+    # tmux
+    if command -v tmux >/dev/null 2>&1; then
+        tmux_version="$(tmux -V | cut -d' ' -f2)"
+        echo "  tmux: $tmux_version"
+        
+        # Check version requirement
+        if check_tmux_version >/dev/null 2>&1; then
+            echo "    Version check: ✓ (>= 3.0)"
+        else
+            echo "    Version check: ✗ (need >= 3.0)"
+        fi
+    else
+        echo "  tmux: NOT FOUND ✗"
+    fi
+    
+    # Optional tools
+    echo ""
+    echo "Optional tools:"
+    
+    if command -v fzf >/dev/null 2>&1; then
+        echo "  fzf: found ✓ (interactive switching enabled)"
+    else
+        echo "  fzf: not found (fallback to numeric selection)"
+    fi
+    
+    if command -v claude >/dev/null 2>&1; then
+        echo "  claude: found ✓"
+    else
+        echo "  claude: not found (install Claude CLI)"
+    fi
+    
+    # Performance test
+    echo ""
+    echo "Performance test:"
+    
+    # Test session switch latency
+    if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
+        # Find an active session to test with
+        test_session=""
+        while IFS=' ' read -r branch session; do
+            if tmux_session_exists "$session"; then
+                test_session="$session"
+                break
+            fi
+        done < "$HYDRA_MAP"
+        
+        if [ -n "$test_session" ] && [ -n "$TMUX" ]; then
+            echo "  Testing switch latency to session '$test_session'..."
+            
+            # Measure 5 switches
+            total_ms=0
+            switches=5
+            i=1
+            
+            while [ "$i" -le "$switches" ]; do
+                start_time="$(date +%s%N 2>/dev/null || date +%s)"
+                tmux switch-client -t "$test_session" 2>/dev/null || true
+                end_time="$(date +%s%N 2>/dev/null || date +%s)"
+                
+                # Calculate duration if we have nanoseconds
+                if echo "$start_time" | grep -q '[0-9]\{10,\}'; then
+                    duration_ns=$((end_time - start_time))
+                    duration_ms=$((duration_ns / 1000000))
+                    total_ms=$((total_ms + duration_ms))
+                    printf "    Switch %d: %dms\n" "$i" "$duration_ms"
+                else
+                    echo "    (nanosecond precision not available)"
+                    break
+                fi
+                
+                i=$((i + 1))
+            done
+            
+            if [ "$total_ms" -gt 0 ]; then
+                avg_ms=$((total_ms / switches))
+                echo "  Average latency: ${avg_ms}ms"
+                
+                if [ "$avg_ms" -gt 100 ]; then
+                    echo "  WARNING: Switch latency exceeds 100ms target"
+                else
+                    echo "  Performance: ✓ (within 100ms target)"
+                fi
+            fi
+        else
+            echo "  No active sessions to test (run inside tmux with active heads)"
+        fi
+    else
+        echo "  No Hydra heads configured"
+    fi
+    
+    # File system check
+    echo ""
+    echo "File system:"
+    echo "  HYDRA_HOME: $HYDRA_HOME"
+    
+    if [ -d "$HYDRA_HOME" ]; then
+        echo "    Directory exists: ✓"
+        
+        if [ -w "$HYDRA_HOME" ]; then
+            echo "    Writable: ✓"
+        else
+            echo "    Writable: ✗ (permission denied)"
+        fi
+        
+        if [ -f "$HYDRA_MAP" ]; then
+            map_size="$(wc -l < "$HYDRA_MAP" | tr -d ' ')"
+            echo "    Map file: $map_size entries"
+        else
+            echo "    Map file: not found"
+        fi
+    else
+        echo "    Directory exists: ✗ (run any hydra command to create)"
+    fi
+    
+    echo ""
+    echo "Diagnosis complete."
+}
+
+# Execute main function
+main "$@"
