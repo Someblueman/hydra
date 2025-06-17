@@ -10,7 +10,7 @@ HYDRA_MAP="$HYDRA_HOME/map"
 HYDRA_VERSION="0.1.0"
 
 # Source helper libraries
-HYDRA_LIB_DIR="$(dirname "$0")/../lib"
+HYDRA_LIB_DIR="$(dirname "$0")/../lib/hydra"
 . "$HYDRA_LIB_DIR/git.sh"
 . "$HYDRA_LIB_DIR/tmux.sh"
 . "$HYDRA_LIB_DIR/layout.sh"
