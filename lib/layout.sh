@@ -14,7 +14,7 @@ apply_layout() {
     fi
     
     # Check if we're in a tmux session
-    if [ -z "$TMUX" ]; then
+    if [ -z "${TMUX:-}" ]; then
         echo "Error: Not in a tmux session" >&2
         return 1
     fi
@@ -55,7 +55,7 @@ apply_layout() {
 # Usage: get_current_layout
 # Returns: Layout name on stdout, "custom" if not recognized
 get_current_layout() {
-    if [ -z "$TMUX" ]; then
+    if [ -z "${TMUX:-}" ]; then
         return 1
     fi
     
@@ -82,7 +82,7 @@ get_current_layout() {
 # Usage: cycle_layout
 # Returns: 0 on success, 1 on failure
 cycle_layout() {
-    if [ -z "$TMUX" ]; then
+    if [ -z "${TMUX:-}" ]; then
         echo "Error: Not in a tmux session" >&2
         return 1
     fi

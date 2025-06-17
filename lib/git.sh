@@ -153,3 +153,39 @@ list_worktrees() {
         esac
     done
 }
+
+# Find worktree path for a specific branch
+# Usage: find_worktree_path <branch>
+# Returns: worktree path on stdout, empty if not found
+find_worktree_path() {
+    branch="$1"
+    
+    if [ -z "$branch" ]; then
+        return 1
+    fi
+    
+    # Use temporary file to avoid pipe subshell variable scope issues
+    tmpfile="$(mktemp)" || return 1
+    trap 'rm -f "$tmpfile"' EXIT INT TERM
+    
+    git worktree list --porcelain 2>/dev/null > "$tmpfile"
+    
+    current_path=""
+    while IFS= read -r line; do
+        case "$line" in
+            "worktree "*)
+                current_path="${line#worktree }"
+                ;;
+            "branch refs/heads/$branch")
+                echo "$current_path"
+                rm -f "$tmpfile"
+                trap - EXIT INT TERM
+                return 0
+                ;;
+        esac
+    done < "$tmpfile"
+    
+    rm -f "$tmpfile"
+    trap - EXIT INT TERM
+    return 1
+}

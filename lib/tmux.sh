@@ -133,7 +133,7 @@ switch_to_session() {
     fi
     
     # Check if we're inside tmux
-    if [ -n "$TMUX" ]; then
+    if [ -n "${TMUX:-}" ]; then
         # Inside tmux, use switch-client
         tmux switch-client -t "$session" || return 1
     else

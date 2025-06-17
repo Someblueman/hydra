@@ -42,6 +42,7 @@ Commands:
   regenerate        Restore tmux sessions for existing worktrees
   status            Show health status of all heads
   doctor            Check system performance
+  cycle-layout      Cycle through tmux pane layouts
   completion        Generate shell completion scripts
   version           Show version information
 
@@ -89,6 +90,10 @@ main() {
         completion)
             shift
             cmd_completion "$@"
+            ;;
+        cycle-layout)
+            shift
+            cmd_cycle_layout "$@"
             ;;
         version|--version|-v)
             echo "hydra version $HYDRA_VERSION"
@@ -187,7 +192,7 @@ cmd_spawn() {
     fi
     
     # Apply layout
-    TMUX="$TMUX" tmux send-keys -t "$session" "hydra cycle-layout" Enter
+    TMUX="${TMUX:-}" tmux send-keys -t "$session" "hydra cycle-layout" Enter
     
     # Start Claude
     echo "Starting Claude in session '$session'..."
@@ -222,18 +227,7 @@ cmd_list() {
         fi
         
         # Find worktree path
-        worktree_path=""
-        git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
-            case "$line" in
-                "worktree "*)
-                    current_path="${line#worktree }"
-                    ;;
-                "branch refs/heads/$branch")
-                    worktree_path="$current_path"
-                    break
-                    ;;
-            esac
-        done
+        worktree_path="$(find_worktree_path "$branch")"
         
         # Make path relative if possible
         if [ -n "$worktree_path" ]; then
@@ -385,18 +379,7 @@ cmd_kill() {
     repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo ".")"
     
     # Find worktree path
-    worktree_path=""
-    git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
-        case "$line" in
-            "worktree "*)
-                current_path="${line#worktree }"
-                ;;
-            "branch refs/heads/$branch")
-                worktree_path="$current_path"
-                break
-                ;;
-        esac
-    done
+    worktree_path="$(find_worktree_path "$branch")"
     
     # Kill tmux session if it exists
     if tmux_session_exists "$session"; then
@@ -452,18 +435,7 @@ cmd_regenerate() {
         fi
         
         # Find worktree path
-        worktree_path=""
-        git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
-            case "$line" in
-                "worktree "*)
-                    current_path="${line#worktree }"
-                    ;;
-                "branch refs/heads/$branch")
-                    worktree_path="$current_path"
-                    break
-                    ;;
-            esac
-        done
+        worktree_path="$(find_worktree_path "$branch")"
         
         if [ -z "$worktree_path" ] || [ ! -d "$worktree_path" ]; then
             echo "Warning: No worktree found for branch '$branch'"
@@ -540,7 +512,14 @@ cmd_status() {
     worktree_count=0
     unmapped_worktrees=0
     
-    git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
+    # Use temporary file to avoid pipe subshell issues
+    tmpfile="$(mktemp)" || exit 1
+    trap 'rm -f "$tmpfile"' EXIT INT TERM
+    
+    git worktree list --porcelain 2>/dev/null > "$tmpfile"
+    
+    current_path=""
+    while IFS= read -r line; do
         case "$line" in
             "worktree "*)
                 current_path="${line#worktree }"
@@ -572,15 +551,23 @@ cmd_status() {
                 fi
                 ;;
         esac
-    done
+    done < "$tmpfile"
+    
+    rm -f "$tmpfile"
+    trap - EXIT INT TERM
     
     echo ""
     echo "tmux Sessions:"
     session_count=0
     unmapped_sessions=0
     
-    # List all tmux sessions
-    tmux list-sessions -F '#{session_name}' 2>/dev/null | while read -r session; do
+    # List all tmux sessions using temp file
+    tmpfile2="$(mktemp)" || exit 1
+    trap 'rm -f "$tmpfile2"' EXIT INT TERM
+    
+    tmux list-sessions -F '#{session_name}' 2>/dev/null > "$tmpfile2"
+    
+    while read -r session; do
         session_count=$((session_count + 1))
         
         # Check if this session has a mapping
@@ -600,7 +587,10 @@ cmd_status() {
             branch="$(get_branch_for_session "$session" 2>/dev/null || echo "(unknown)")"
             echo "  - $session <- $branch"
         fi
-    done
+    done < "$tmpfile2"
+    
+    rm -f "$tmpfile2"
+    trap - EXIT INT TERM
     
     echo ""
     echo "Summary:"
@@ -679,7 +669,7 @@ cmd_doctor() {
             fi
         done < "$HYDRA_MAP"
         
-        if [ -n "$test_session" ] && [ -n "$TMUX" ]; then
+        if [ -n "$test_session" ] && [ -n "${TMUX:-}" ]; then
             echo "  Testing switch latency to session '$test_session'..."
             
             # Measure 5 switches
@@ -789,6 +779,18 @@ cmd_completion() {
             return 1
             ;;
     esac
+}
+
+# Cycle through tmux pane layouts
+cmd_cycle_layout() {
+    # Must be called from within a tmux session
+    if [ -z "${TMUX:-}" ]; then
+        echo "Error: Not in a tmux session" >&2
+        echo "Use this command from within a Hydra session" >&2
+        exit 1
+    fi
+    
+    cycle_layout
 }
 
 # Execute main function
