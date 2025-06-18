@@ -236,7 +236,7 @@ test_kill_command_validation() {
     output="$("$HYDRA_BIN" kill 2>&1)"
     exit_code=$?
     assert_failure "$exit_code" "hydra kill without branch should fail"
-    assert_contains "$output" "unbound variable" "Should report missing argument error"
+    assert_contains "$output" "Error: Branch name is required" "Should report missing argument error"
     
     cleanup_test_env "$test_dir"
 }
