@@ -2,6 +2,29 @@
 # tmux helper functions for Hydra
 # POSIX-compliant shell script
 
+# Validate AI command against allowlist
+# Usage: validate_ai_command <command>
+# Returns: 0 if valid, 1 if invalid
+validate_ai_command() {
+    command="$1"
+    
+    if [ -z "$command" ]; then
+        echo "Error: AI command cannot be empty" >&2
+        return 1
+    fi
+    
+    case "$command" in
+        "claude"|"codex"|"cursor"|"copilot"|"aider")
+            return 0
+            ;;
+        *)
+            echo "Error: Unsupported AI command: $command" >&2
+            echo "Supported: claude, codex, cursor, copilot, aider" >&2
+            return 1
+            ;;
+    esac
+}
+
 # Check if tmux is available and meets version requirement
 # Usage: check_tmux_version
 # Returns: 0 if tmux >= 3.0, 1 otherwise
@@ -94,6 +117,11 @@ list_sessions() {
     tmux list-sessions -F '#{session_name}' 2>/dev/null || true
 }
 
+# WARNING: SECURITY SENSITIVE
+# This function executes arbitrary commands in tmux sessions.
+# Only call with trusted, validated input - never with user input.
+# Commands are executed with the user's shell privileges.
+#
 # Send keys to a tmux session
 # Usage: send_keys_to_session <session_name> <keys>
 # Returns: 0 on success, 1 on failure

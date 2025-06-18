@@ -1,5 +1,5 @@
 #!/bin/sh
-# Hydra - POSIX-compliant CLI for managing parallel Claude-Code sessions
+# Hydra - POSIX-compliant CLI for managing parallel AI coding sessions
 # Wraps tmux ≥ 3.0 and git worktree
 
 set -eu
@@ -38,7 +38,7 @@ init_hydra_home() {
 # Display usage information
 usage() {
     cat <<EOF
-hydra - Manage parallel Claude-Code sessions with tmux and git worktree
+hydra - Manage parallel AI coding sessions with tmux and git worktree
 
 Usage: hydra <command> [options]
 
@@ -213,9 +213,13 @@ cmd_spawn() {
         tmux send-keys -t "$session" "TMUX=\$TMUX . /usr/local/lib/hydra/layout.sh && apply_layout $layout" Enter
     fi
     
-    # Start Claude
-    echo "Starting Claude in session '$session'..."
-    send_keys_to_session "$session" "claude"
+    # Start AI tool
+    ai_command="${HYDRA_AI_COMMAND:-claude}"
+    if ! validate_ai_command "$ai_command"; then
+        return 1
+    fi
+    echo "Starting $ai_command in session '$session'..."
+    send_keys_to_session "$session" "$ai_command"
     
     # Switch to the new session
     echo "Switching to session '$session'..."
@@ -468,8 +472,13 @@ cmd_regenerate() {
         if create_session "$session" "$worktree_path"; then
             regenerated=$((regenerated + 1))
             
-            # Start Claude
-            send_keys_to_session "$session" "claude"
+            # Start AI tool
+            ai_command="${HYDRA_AI_COMMAND:-claude}"
+            if validate_ai_command "$ai_command"; then
+                send_keys_to_session "$session" "$ai_command"
+            else
+                echo "Warning: Skipping AI tool startup for session '$session'" >&2
+            fi
         else
             echo "Error: Failed to create session '$session'" >&2
             failed=$((failed + 1))
@@ -667,10 +676,12 @@ cmd_doctor() {
         echo "  fzf: not found (fallback to numeric selection)"
     fi
     
-    if command -v claude >/dev/null 2>&1; then
-        echo "  claude: found ✓"
+    # Check configured AI tool
+    ai_command="${HYDRA_AI_COMMAND:-claude}"
+    if command -v "$ai_command" >/dev/null 2>&1; then
+        echo "  $ai_command: found ✓"
     else
-        echo "  claude: not found (install Claude CLI)"
+        echo "  $ai_command: not found (install $ai_command CLI)"
     fi
     
     # Performance test
