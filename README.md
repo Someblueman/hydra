@@ -1,7 +1,7 @@
 # Hydra
 
 <p align="center">
-  <img src="assets/logo.png" alt="Hydra Logo" width="200">
+  <img src="assets/hydra.png" alt="Hydra Logo" width="200">
 </p>
 
 <p align="center">
