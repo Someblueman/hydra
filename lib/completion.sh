@@ -16,7 +16,7 @@ _hydra_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     
-    commands="spawn list switch kill regenerate status doctor version help"
+    commands="spawn list switch kill regenerate status doctor dashboard cycle-layout completion version help"
     opts="-h --help -v --version"
     
     case "${prev}" in
@@ -107,6 +107,9 @@ _hydra_commands() {
         'regenerate:Restore tmux sessions for existing worktrees'
         'status:Show health status of all heads'
         'doctor:Check system performance'
+        'dashboard:View all sessions in a single dashboard'
+        'cycle-layout:Cycle through tmux pane layouts'
+        'completion:Generate shell completion scripts'
         'version:Show version information'
         'help:Show help message'
     )
@@ -146,6 +149,9 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'kill' -d 'Remove a worktree 
 complete -c hydra -f -n '__fish_use_subcommand' -a 'regenerate' -d 'Restore tmux sessions for existing worktrees'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'status' -d 'Show health status of all heads'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'doctor' -d 'Check system performance'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'dashboard' -d 'View all sessions in a single dashboard'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'cycle-layout' -d 'Cycle through tmux pane layouts'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'completion' -d 'Generate shell completion scripts'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'version' -d 'Show version information'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'help' -d 'Show help message'
 
