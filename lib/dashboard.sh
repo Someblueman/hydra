@@ -103,15 +103,34 @@ arrange_dashboard_layout() {
     # Get pane count
     pane_count="$(tmux list-panes -t "$DASHBOARD_SESSION:0" | wc -l | tr -d ' ')"
     
-    # Select appropriate layout
+    # Apply grid layout with equal percentages
     case "$pane_count" in
         1)
-            # Single pane, no layout needed
+            # Single pane (100%), no layout needed
             ;;
         2)
+            # Two panes (50%/50%) horizontally
             tmux select-layout -t "$DASHBOARD_SESSION:0" even-horizontal
             ;;
-        3|4)
+        3)
+            # Three panes: one on top (100%), two on bottom (50%/50%)
+            tmux select-layout -t "$DASHBOARD_SESSION:0" main-horizontal
+            tmux resize-pane -t "$DASHBOARD_SESSION:0.0" -y 50%
+            ;;
+        4)
+            # Four panes (25%/25%/25%/25%) in a 2x2 grid
+            tmux select-layout -t "$DASHBOARD_SESSION:0" tiled
+            ;;
+        5|6)
+            # 5-6 panes: use 2x3 grid (tiled with manual adjustments)
+            tmux select-layout -t "$DASHBOARD_SESSION:0" tiled
+            ;;
+        7|8)
+            # 7-8 panes: use 2x4 grid
+            tmux select-layout -t "$DASHBOARD_SESSION:0" tiled
+            ;;
+        9)
+            # 9 panes: perfect 3x3 grid
             tmux select-layout -t "$DASHBOARD_SESSION:0" tiled
             ;;
         *)

@@ -10,7 +10,14 @@ HYDRA_MAP="$HYDRA_HOME/map"
 HYDRA_VERSION="0.2.0"
 
 # Source helper libraries
-HYDRA_LIB_DIR="$(dirname "$0")/../lib"
+# Detect if we're running from source or installed
+if [ -f "$(dirname "$0")/../lib/git.sh" ]; then
+    # Running from source directory
+    HYDRA_LIB_DIR="$(dirname "$0")/../lib"
+else
+    # Running from installed location
+    HYDRA_LIB_DIR="/usr/local/lib/hydra"
+fi
 . "$HYDRA_LIB_DIR/git.sh"
 . "$HYDRA_LIB_DIR/tmux.sh"
 . "$HYDRA_LIB_DIR/layout.sh"
@@ -202,7 +209,9 @@ cmd_spawn() {
     fi
     
     # Apply layout
-    TMUX="${TMUX:-}" tmux send-keys -t "$session" "hydra cycle-layout" Enter
+    if [ "$layout" != "default" ]; then
+        tmux send-keys -t "$session" "TMUX=\$TMUX . /usr/local/lib/hydra/layout.sh && apply_layout $layout" Enter
+    fi
     
     # Start AI tool
     ai_command="${HYDRA_AI_COMMAND:-claude}"

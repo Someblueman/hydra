@@ -1,5 +1,3 @@
-#!/bin/sh
-# Install script for hydra
 # POSIX-compliant installation script
 
 set -e
