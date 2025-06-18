@@ -10,12 +10,13 @@ HYDRA_MAP="$HYDRA_HOME/map"
 HYDRA_VERSION="0.1.0"
 
 # Source helper libraries
-HYDRA_LIB_DIR="$(dirname "$0")/../lib/hydra"
+HYDRA_LIB_DIR="$(dirname "$0")/../lib"
 . "$HYDRA_LIB_DIR/git.sh"
 . "$HYDRA_LIB_DIR/tmux.sh"
 . "$HYDRA_LIB_DIR/layout.sh"
 . "$HYDRA_LIB_DIR/state.sh"
 . "$HYDRA_LIB_DIR/completion.sh"
+. "$HYDRA_LIB_DIR/dashboard.sh"
 
 # Initialize Hydra home directory
 init_hydra_home() {
@@ -42,6 +43,7 @@ Commands:
   regenerate        Restore tmux sessions for existing worktrees
   status            Show health status of all heads
   doctor            Check system performance
+  dashboard         View all sessions in a single dashboard
   cycle-layout      Cycle through tmux pane layouts
   completion        Generate shell completion scripts
   version           Show version information
@@ -86,6 +88,14 @@ main() {
         doctor)
             shift
             cmd_doctor "$@"
+            ;;
+        dashboard)
+            shift
+            cmd_dashboard "$@"
+            ;;
+        dashboard-exit)
+            # Internal command for exiting dashboard
+            cmd_dashboard_exit
             ;;
         completion)
             shift
