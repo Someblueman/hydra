@@ -24,16 +24,19 @@ A POSIX-compliant CLI tool that wraps tmux ≥ 3.0 and git worktree to manage pa
 ```sh
 git clone https://github.com/yourusername/hydra.git
 cd hydra
-make install  # Installs to /usr/local/bin
+sudo ./install.sh
 ```
 
-Or manually:
+Or use make:
 
 ```sh
-chmod +x bin/hydra
-cp bin/hydra /usr/local/bin/
-mkdir -p /usr/local/lib/hydra
-cp lib/*.sh /usr/local/lib/hydra/
+sudo make install
+```
+
+To uninstall:
+
+```sh
+sudo ./uninstall.sh
 ```
 
 ## Usage
@@ -59,6 +62,12 @@ hydra regenerate
 # Check system health
 hydra status
 hydra doctor
+
+# View all sessions in a dashboard
+hydra dashboard
+
+# Cycle through layouts in current session
+hydra cycle-layout
 ```
 
 ### Spawn Options
@@ -79,6 +88,24 @@ Hydra supports three built-in layouts:
 3. **full**: Three panes - editor (top-left), terminal (top-right), logs (bottom)
 
 Press `Ctrl-L` within a session to cycle through layouts.
+
+### Dashboard
+
+The dashboard provides a unified view of all active Hydra sessions:
+
+```sh
+# View all sessions in a single dashboard
+hydra dashboard
+
+# Get help about dashboard
+hydra dashboard --help
+```
+
+Dashboard features:
+- Displays panes from all active sessions in a grid layout
+- Press `q` to exit and restore panes to their original sessions
+- Non-disruptive: panes are temporarily moved and restored on exit
+- Automatically adjusts layout based on number of sessions (2x2, 3x3, etc.)
 
 ## How It Works
 
@@ -109,7 +136,10 @@ All scripts pass validation with:
 ## Development
 
 ```sh
-# Run linter
+# Install hydra (requires sudo)
+sudo make install
+
+# Run linter (requires shellcheck)
 make lint
 
 # Run tests
@@ -117,6 +147,9 @@ make test
 
 # Clean temporary files
 make clean
+
+# Show all available targets
+make help
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for POSIX shell guidelines.

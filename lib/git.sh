@@ -85,8 +85,8 @@ git_branch_exists() {
     fi
     
     # Check both local and remote branches
-    if git rev-parse --verify --quiet -- "refs/heads/$branch" >/dev/null 2>&1 || \
-       git rev-parse --verify --quiet -- "refs/remotes/origin/$branch" >/dev/null 2>&1; then
+    if git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null 2>&1 || \
+       git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null 2>&1; then
         return 0
     else
         return 1

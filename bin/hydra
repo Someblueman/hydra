@@ -7,7 +7,7 @@ set -eu
 # Global variables
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="0.1.0"
+HYDRA_VERSION="0.2.0"
 
 # Source helper libraries
 # Detect if we're running from source or installed
@@ -382,7 +382,7 @@ cmd_switch() {
 }
 
 cmd_kill() {
-    branch="$1"
+    branch="${1:-}"
     
     if [ -z "$branch" ]; then
         echo "Error: Branch name is required" >&2
