@@ -18,11 +18,23 @@ else
     # Running from installed location
     HYDRA_LIB_DIR="/usr/local/lib/hydra"
 fi
+# shellcheck source=../lib/git.sh
+# shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/git.sh"
+# shellcheck source=../lib/tmux.sh
+# shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/tmux.sh"
+# shellcheck source=../lib/layout.sh
+# shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/layout.sh"
+# shellcheck source=../lib/state.sh
+# shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/state.sh"
+# shellcheck source=../lib/completion.sh
+# shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/completion.sh"
+# shellcheck source=../lib/dashboard.sh
+# shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/dashboard.sh"
 
 # Initialize Hydra home directory
@@ -221,9 +233,13 @@ cmd_spawn() {
     echo "Starting $ai_command in session '$session'..."
     send_keys_to_session "$session" "$ai_command"
     
-    # Switch to the new session
-    echo "Switching to session '$session'..."
-    switch_to_session "$session"
+    # Switch to the new session (only in terminal)
+    if [ -t 0 ] && [ -t 1 ]; then
+        echo "Switching to session '$session'..."
+        switch_to_session "$session"
+    else
+        echo "Session '$session' created successfully (not switching - not in terminal)"
+    fi
 }
 
 cmd_list() {
@@ -242,6 +258,10 @@ cmd_list() {
     
     # List all mappings
     while IFS=' ' read -r branch session; do
+        # Skip empty lines
+        if [ -z "$branch" ] || [ -z "$session" ]; then
+            continue
+        fi
         # Check session status
         if tmux_session_exists "$session"; then
             status="active"
@@ -249,14 +269,14 @@ cmd_list() {
             status="dead"
         fi
         
-        # Find worktree path
-        worktree_path="$(find_worktree_path "$branch")"
+        # Find worktree path (may not exist)
+        worktree_path="$(find_worktree_path "$branch" 2>/dev/null || true)"
         
         # Make path relative if possible
         if [ -n "$worktree_path" ]; then
             case "$worktree_path" in
                 "$repo_root"/../*)
-                    worktree_path="../${worktree_path#$repo_root/../}"
+                    worktree_path="../${worktree_path#"$repo_root"/../}"
                     ;;
             esac
         else
@@ -457,8 +477,8 @@ cmd_regenerate() {
             continue
         fi
         
-        # Find worktree path
-        worktree_path="$(find_worktree_path "$branch")"
+        # Find worktree path (may not exist)
+        worktree_path="$(find_worktree_path "$branch" 2>/dev/null || true)"
         
         if [ -z "$worktree_path" ] || [ ! -d "$worktree_path" ]; then
             echo "Warning: No worktree found for branch '$branch'"
@@ -546,11 +566,10 @@ cmd_status() {
     
     git worktree list --porcelain 2>/dev/null > "$tmpfile"
     
-    current_path=""
     while IFS= read -r line; do
         case "$line" in
             "worktree "*)
-                current_path="${line#worktree }"
+                # Path not needed for this check
                 ;;
             "branch refs/heads/"*)
                 worktree_branch="${line#branch refs/heads/}"

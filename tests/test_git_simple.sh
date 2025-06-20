@@ -11,9 +11,12 @@ fail_count=0
 original_dir="$(pwd)"
 
 # Source the library under test
+# shellcheck source=../lib/git.sh
+# shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/git.sh"
 
 # Test helper functions
+# shellcheck disable=SC2317 # These functions are called later in the file
 assert_equal() {
     expected="$1"
     actual="$2" 

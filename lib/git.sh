@@ -19,11 +19,11 @@ validate_branch_name() {
             echo "Error: Branch name cannot start with '-': $branch" >&2
             return 1
             ;;
-        *[';|&`$(){}[]<>?*'\''"']*) 
+        *[";|&\`\$(){}[]<>?*'"]*) 
             echo "Error: Branch name contains invalid characters: $branch" >&2
             return 1
             ;;
-        *..*|*/*/..*|*/..) 
+        *..*) 
             echo "Error: Branch name contains dangerous path patterns: $branch" >&2
             return 1
             ;;
@@ -52,7 +52,11 @@ validate_worktree_path() {
     
     # Check for dangerous path patterns
     case "$path" in
-        ..*|*/..*|*/../*) 
+        ..*) 
+            echo "Error: Path contains directory traversal: $path" >&2
+            return 1
+            ;;
+        */../*) 
             echo "Error: Path contains directory traversal: $path" >&2
             return 1
             ;;
@@ -261,9 +265,7 @@ find_worktree_path() {
                 ;;
             "branch refs/heads/$branch")
                 echo "$current_path"
-                rm -f "$tmpfile"
-                trap - EXIT INT TERM
-                return 0
+                break
                 ;;
         esac
     done < "$tmpfile"

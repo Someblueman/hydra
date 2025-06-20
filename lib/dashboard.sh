@@ -41,7 +41,7 @@ collect_session_panes() {
     fi
     
     # Clear restoration map
-    > "$DASHBOARD_RESTORE_MAP"
+    : > "$DASHBOARD_RESTORE_MAP"
     
     # Counter for collected panes
     collected=0
