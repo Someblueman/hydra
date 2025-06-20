@@ -6,7 +6,7 @@
     <br>
     </div>
     <h1>Hydra</h1>
-        <div style="display: flex;">
+        <div align="center", style="display: flex;">
         <a href="https://github.com/Someblueman/hydra/actions?query=workflow%3Aci">
             <img src="https://github.com/Someblueman/hydra/workflows/CI/badge.svg" alt="CI Status">
         </a>
