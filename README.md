@@ -1,8 +1,7 @@
 <div align="center">
     <a href="https://github.com/Someblueman/hydra">
-        <img width="200" height="200" src="assets/hydra.png" alt="Hydra Logo">
+        <img width="300" height="200" src="assets/hydra.png" alt="Hydra Logo">
     </a>
-    <br>
     <br>
     <div style="display: flex;">
         <a href="https://github.com/Someblueman/hydra/actions?query=workflow%3Aci">
