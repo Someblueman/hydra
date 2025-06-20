@@ -2,8 +2,6 @@
     <a href="https://github.com/Someblueman/hydra">
         <img width="300" height="200" src="assets/hydra.png" alt="Hydra Logo">
     </a>
-    <br>
-    <br>
     </div>
     <h1>Hydra</h1>
         <div align="center", style="display: flex;">
