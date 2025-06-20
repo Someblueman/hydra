@@ -1,6 +1,6 @@
 <div align="center">
     <a href="https://github.com/Someblueman/hydra">
-        <img width="300" height="300" src="assets/hydra.png" alt="Hydra Logo">
+        <img width="300" height="200" src="assets/hydra.png" alt="Hydra Logo">
     </a>
     <br>
     <br>
