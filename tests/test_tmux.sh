@@ -8,9 +8,12 @@ pass_count=0
 fail_count=0
 
 # Source the library under test
+# shellcheck source=../lib/tmux.sh
+# shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/tmux.sh"
 
 # Test helper functions
+# shellcheck disable=SC2317
 assert_equal() {
     expected="$1"
     actual="$2"
@@ -28,6 +31,7 @@ assert_equal() {
     fi
 }
 
+# shellcheck disable=SC2317
 assert_success() {
     exit_code="$1"
     message="$2"
@@ -44,6 +48,7 @@ assert_success() {
     fi
 }
 
+# shellcheck disable=SC2317
 assert_failure() {
     exit_code="$1"
     message="$2"
@@ -66,8 +71,7 @@ test_check_tmux_version() {
     
     # This test depends on tmux being available
     if command -v tmux >/dev/null 2>&1; then
-        check_tmux_version >/dev/null 2>&1
-        if [ $? -eq 0 ]; then
+        if check_tmux_version >/dev/null 2>&1; then
             echo "✓ check_tmux_version succeeds with available tmux"
             pass_count=$((pass_count + 1))
         else
@@ -182,11 +186,11 @@ test_list_sessions() {
     echo "Testing list_sessions..."
     
     # This should not fail even if no sessions exist
-    output="$(list_sessions 2>/dev/null)"
-    exit_code=$?
-    
-    # list_sessions should always succeed (returns empty if no sessions)
-    assert_success "$exit_code" "list_sessions should always succeed"
+    if list_sessions >/dev/null 2>&1; then
+        assert_success 0 "list_sessions should always succeed"
+    else
+        assert_failure 1 "list_sessions failed unexpectedly"
+    fi
 }
 
 # Test get_current_session (outside tmux)

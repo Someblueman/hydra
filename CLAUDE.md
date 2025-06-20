@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding assistants when working with code in this repository.
 
 ## Project Overview
 
-Hydra is a POSIX-compliant shell CLI that wraps tmux ≥ 3.0 and git worktree to manage parallel Claude-Code sessions. It enables developers to work on multiple git branches simultaneously, each with its own tmux session and isolated worktree.
+Hydra is a POSIX-compliant shell CLI that wraps tmux ≥ 3.0 and git worktree to manage parallel AI coding sessions. It enables developers to work on multiple git branches simultaneously, each with its own tmux session and isolated worktree.
 
 ## Key Commands
 

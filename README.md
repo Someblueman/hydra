@@ -1,12 +1,35 @@
-# Hydra
+<div align="center">
+    <a href="https://github.com/Someblueman/hydra">
+        <img width="200" height="200" src="assets/hydra.png" alt="Hydra Logo">
+    </a>
+    <br>
+    <br>
+    <div style="display: flex;">
+        <a href="https://github.com/Someblueman/hydra/actions?query=workflow%3Aci">
+            <img src="https://github.com/Someblueman/hydra/workflows/CI/badge.svg" alt="CI Status">
+        </a>
+        <a href="https://github.com/Someblueman/hydra/releases">
+            <img src="https://img.shields.io/github/release/Someblueman/hydra.svg" alt="Latest Release">
+        </a>
+        <a href="https://github.com/Someblueman/hydra/stargazers">
+            <img src="https://img.shields.io/github/stars/Someblueman/hydra.svg" alt="GitHub Stars">
+        </a>
+        <a href="https://github.com/Someblueman/hydra/blob/main/LICENSE">
+            <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
+        </a>
+        <a>
+            <img src="https://img.shields.io/badge/POSIX-compliant-brightgreen.svg" alt="POSIX Compliant">
+        </a>
+    </div>
+    <h1>Hydra</h1>
+    <p>
+        <b>A POSIX-compliant CLI tool that wraps tmux ≥ 3.0 and git worktree to manage parallel AI coding sessions ("heads")</b>
+    </p>
+    <p>
+        Work on multiple git branches simultaneously, each with its own tmux session and isolated worktree.
+    </p>
+</div>
 
-<p align="center">
-  <img src="assets/hydra.png" alt="Hydra Logo" width="200">
-</p>
-
-<p align="center">
-  <strong>A POSIX-compliant CLI tool that wraps tmux ≥ 3.0 and git worktree to manage parallel Claude-Code sessions ("heads")</strong>
-</p>
 
 ## Features
 
@@ -24,13 +47,13 @@
 - `/bin/sh` (POSIX shell)
 - git
 - tmux ≥ 3.0
-- Claude CLI (optional but recommended)
+- AI CLI tool (optional but recommended: claude, codex, cursor, copilot, or aider)
 - fzf (optional, for interactive switching)
 
 ### Installation
 
 ```sh
-git clone https://github.com/yourusername/hydra.git
+git clone https://github.com/Someblueman/hydra.git
 cd hydra
 sudo ./install.sh
 ```

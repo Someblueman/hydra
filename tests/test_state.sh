@@ -8,11 +8,18 @@ pass_count=0
 fail_count=0
 
 # Source the library under test
+# shellcheck source=../lib/state.sh
+# shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/state.sh"
+# shellcheck source=../lib/git.sh
+# shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/git.sh"  # Required for validate_mappings
+# shellcheck source=../lib/tmux.sh
+# shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/tmux.sh" # Required for validate_mappings
 
 # Test helper functions
+# shellcheck disable=SC2317
 assert_equal() {
     expected="$1"
     actual="$2"
@@ -30,6 +37,7 @@ assert_equal() {
     fi
 }
 
+# shellcheck disable=SC2317
 assert_success() {
     exit_code="$1"
     message="$2"
@@ -46,6 +54,7 @@ assert_success() {
     fi
 }
 
+# shellcheck disable=SC2317
 assert_failure() {
     exit_code="$1"
     message="$2"
@@ -62,6 +71,7 @@ assert_failure() {
     fi
 }
 
+# shellcheck disable=SC2317
 assert_file_contains() {
     file="$1"
     pattern="$2"

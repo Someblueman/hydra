@@ -1,0 +1,16 @@
+# Claude configuration
+.claude/
+
+# OS files
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+
+# GitHub Actions
+.github/workflows/*.log
