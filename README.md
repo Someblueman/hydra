@@ -2,9 +2,8 @@
     <a href="https://github.com/Someblueman/hydra">
         <img width="300" height="200" src="assets/hydra.png" alt="Hydra Logo">
     </a>
-    </div>
-    <h1>Hydra</h1>
-        <div align="center", style="display: flex;">
+    <br>
+    <div style="display: flex;">
         <a href="https://github.com/Someblueman/hydra/actions?query=workflow%3Aci">
             <img src="https://github.com/Someblueman/hydra/workflows/CI/badge.svg" alt="CI Status">
         </a>
@@ -20,6 +19,8 @@
         <a>
             <img src="https://img.shields.io/badge/POSIX-compliant-brightgreen.svg" alt="POSIX Compliant">
         </a>
+    </div>
+    <h1>Hydra</h1>
     <p>
         <b>A POSIX-compliant CLI tool that wraps tmux ≥ 3.0 and git worktree to manage parallel AI coding sessions ("heads")</b>
     </p>
