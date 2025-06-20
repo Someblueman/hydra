@@ -129,6 +129,33 @@ hydra status
 hydra doctor
 ```
 
+## Examples
+
+### Dashboard with Multiple Sessions
+
+The dashboard provides a unified view of all your active Hydra sessions:
+
+<img src="assets/dashboard.png" alt="Hydra Dashboard" width="800">
+
+### Development Layout
+
+The `dev` layout provides a split view perfect for coding with an editor and terminal:
+
+<img src="assets/dev_layout.png" alt="Development Layout" width="800">
+
+### Full Layouts
+
+Choose from multiple full layout options for complex workflows:
+
+**Quad Layout (2x2 grid):**
+<img src="assets/full_quad.png" alt="Quad Layout" width="800">
+
+**Triple Layout (1 large + 2 small panes):**
+<img src="assets/full_triple.png" alt="Triple Layout" width="800">
+
+**Six Panes Layout:**
+<img src="assets/full_six_panes.png" alt="Six Panes Layout" width="800">
+
 ## How It Works
 
 1. **Spawn**: Creates a git worktree at `../hydra-{branch}` and a tmux session
