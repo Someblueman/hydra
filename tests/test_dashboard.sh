@@ -411,11 +411,11 @@ cleanup_test_env() {
     
     cd "$TEST_REPO_DIR" || return 0
     
-    # Kill any remaining test sessions
+    # Kill any remaining test sessions (use non-interactive mode in subshell to avoid state leak)
     for branch in $TEST_BRANCHES; do
         if "$HYDRA_BIN" list 2>/dev/null | grep -q "$branch"; then
             print_status "Killing session for branch: $branch"
-            "$HYDRA_BIN" kill "$branch" >/dev/null 2>&1 || true
+            (HYDRA_NONINTERACTIVE=1 "$HYDRA_BIN" kill "$branch" >/dev/null 2>&1) || true
         fi
     done
     

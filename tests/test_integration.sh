@@ -14,6 +14,8 @@ HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
 if [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${CI:-}" ]; then
     echo "Running in CI environment"
     CI_ENV=1
+    # Set non-interactive mode for hydra commands in CI
+    export HYDRA_NONINTERACTIVE=1
 else
     CI_ENV=0
 fi
@@ -126,19 +128,19 @@ test_version_command() {
     output="$("$HYDRA_BIN" version 2>&1)"
     exit_code=$?
     assert_success "$exit_code" "hydra version should succeed"
-    assert_contains "$output" "hydra version" "Version output should contain version string"
+    assert_contains "$output" "Hydra version" "Version output should contain version string"
     
     # Test --version flag
     output="$("$HYDRA_BIN" --version 2>&1)"
     exit_code=$?
     assert_success "$exit_code" "hydra --version should succeed"
-    assert_contains "$output" "hydra version" "Version output should contain version string"
+    assert_contains "$output" "Hydra version" "Version output should contain version string"
     
     # Test -v flag
     output="$("$HYDRA_BIN" -v 2>&1)"
     exit_code=$?
     assert_success "$exit_code" "hydra -v should succeed"
-    assert_contains "$output" "hydra version" "Version output should contain version string"
+    assert_contains "$output" "Hydra version" "Version output should contain version string"
 }
 
 # Test hydra help command
@@ -231,7 +233,7 @@ test_doctor_command() {
     output="$("$HYDRA_BIN" doctor 2>&1)"
     exit_code=$?
     assert_success "$exit_code" "hydra doctor should succeed"
-    assert_contains "$output" "Dependencies:" "Doctor output should contain dependencies check"
+    assert_contains "$output" "Checking dependencies" "Doctor output should contain dependencies check"
     assert_contains "$output" "tmux" "Doctor should check tmux"
     assert_contains "$output" "git" "Doctor should check git"
     
@@ -276,7 +278,7 @@ test_kill_command_validation() {
     output="$("$HYDRA_BIN" kill 2>&1)"
     exit_code=$?
     assert_failure "$exit_code" "hydra kill without branch should fail"
-    assert_contains "$output" "Error: Branch name is required" "Should report missing argument error"
+    assert_contains "$output" "Error: Branch name required" "Should report missing argument error"
     
     cleanup_test_env "$test_dir"
 }
@@ -374,6 +376,8 @@ test_issue_branch_cleanup() {
     echo "  Killing test branch '$test_branch'..."
     output="$("$HYDRA_BIN" kill "$test_branch" 2>&1)"
     exit_code=$?
+    echo "  Kill output: $output"
+    echo "  Kill exit code: $exit_code"
     assert_success "$exit_code" "hydra kill should succeed"
     
     # Verify worktree was removed

@@ -49,9 +49,31 @@ _hydra_completion() {
     
     # Check if we're completing a flag for spawn command
     if [[ "${COMP_WORDS[@]}" =~ spawn ]]; then
+        case "${prev}" in
+            -n|--count)
+                # Complete with numbers 1-10
+                COMPREPLY=($(compgen -W "1 2 3 4 5 6 7 8 9 10" -- ${cur}))
+                return 0
+                ;;
+            --ai)
+                # Complete with AI tools
+                COMPREPLY=($(compgen -W "claude aider codex cursor copilot" -- ${cur}))
+                return 0
+                ;;
+            --agents)
+                # Suggest example format
+                COMPREPLY=($(compgen -W "claude:2,aider:1" -- ${cur}))
+                return 0
+                ;;
+            -i|--issue)
+                # GitHub issue numbers
+                return 0
+                ;;
+        esac
+        
         case "${cur}" in
             -*)
-                COMPREPLY=($(compgen -W "-l --layout" -- ${cur}))
+                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --agents -i --issue" -- ${cur}))
                 return 0
                 ;;
         esac
@@ -85,6 +107,10 @@ _hydra() {
                 spawn)
                     _arguments \
                         '(-l --layout)'{-l,--layout}'[Layout to use]:layout:(default dev full)' \
+                        '(-n --count)'{-n,--count}'[Number of sessions to spawn]:count:(1 2 3 4 5 6 7 8 9 10)' \
+                        '--ai[AI tool to use]:ai:(claude aider codex cursor copilot)' \
+                        '--agents[Mixed agents specification]:agents:' \
+                        '(-i --issue)'{-i,--issue}'[Create from GitHub issue]:issue:' \
                         '1:branch:_hydra_branches'
                     ;;
                 kill)
@@ -161,7 +187,11 @@ complete -c hydra -f -n '__fish_use_subcommand' -s v -l version -d 'Show version
 
 # Complete spawn command
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s l -l layout -d 'Layout to use' -a 'default dev full'
-complete -c hydra -f -n '__fish_seen_subcommand_from spawn; and not __fish_seen_subcommand_from -l --layout' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s n -l count -d 'Number of sessions to spawn' -a '1 2 3 4 5 6 7 8 9 10'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to use' -a 'claude aider codex cursor copilot'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l agents -d 'Mixed agents specification (e.g., claude:2,aider:1)'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s i -l issue -d 'Create from GitHub issue number'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn; and not __fish_seen_subcommand_from -l --layout -n --count --ai --agents -i --issue' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
 
 # Complete kill command with git branches
 complete -c hydra -f -n '__fish_seen_subcommand_from kill' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
