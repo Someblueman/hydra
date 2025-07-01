@@ -52,15 +52,19 @@ collect_session_panes() {
             continue
         fi
         
-        # Get the first pane from the session
-        pane_id="$(tmux list-panes -t "$session:0" -F '#{pane_id}' | head -1 2>/dev/null)" || continue
+        # Get the first pane from the session with its window ID
+        pane_info="$(tmux list-panes -t "$session" -F '#{pane_id} #{window_id}' | head -1 2>/dev/null)" || continue
         
-        if [ -z "$pane_id" ]; then
+        if [ -z "$pane_info" ]; then
             continue
         fi
         
+        # Extract pane_id and window_id
+        pane_id="$(echo "$pane_info" | cut -d' ' -f1)"
+        window_id="$(echo "$pane_info" | cut -d' ' -f2)"
+        
         # Record original location for restoration
-        echo "$pane_id $session 0 $branch" >> "$DASHBOARD_RESTORE_MAP"
+        echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
         
         # Set pane title to show branch name
         tmux select-pane -t "$pane_id" -T "$branch"
