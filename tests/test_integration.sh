@@ -330,6 +330,9 @@ test_issue_branch_cleanup() {
         return
     fi
     
+    # Create isolated test environment
+    test_dir="$(setup_test_env)"
+    
     # Create a test branch name that looks like an issue branch
     test_branch="issue-999-test-cleanup-$(date +%s)"
     repo_root="$(git rev-parse --show-toplevel)"
@@ -338,6 +341,7 @@ test_issue_branch_cleanup() {
     # Skip if tmux is not available
     if ! command -v tmux >/dev/null 2>&1; then
         echo "⚠ Skipping issue branch test - tmux not available"
+        cleanup_test_env "$test_dir"
         return
     fi
     
@@ -396,6 +400,9 @@ test_issue_branch_cleanup() {
             assert_failure 1 "Branch mapping still exists in state file"
         fi
     fi
+    
+    # Clean up test environment
+    cleanup_test_env "$test_dir"
 }
 
 # Test that hydra binary is executable and has correct shebang
