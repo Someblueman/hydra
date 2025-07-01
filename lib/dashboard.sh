@@ -25,8 +25,10 @@ create_dashboard_session() {
     # Create dashboard session in background
     tmux new-session -d -s "$DASHBOARD_SESSION" -c "$(pwd)" || return 1
     
-    # Set up dashboard keybinding to exit
-    tmux bind-key -T root q run-shell "hydra dashboard-exit"
+    # Set up dashboard keybinding to exit - only works when in dashboard session
+    tmux bind-key -T root q if-shell '[ "#{session_name}" = "hydra-dashboard" ]' \
+        'run-shell "/usr/local/bin/hydra dashboard-exit"' \
+        'send-keys q'
     
     return 0
 }
@@ -203,6 +205,9 @@ cleanup_dashboard() {
     if tmux_session_exists "$DASHBOARD_SESSION"; then
         tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
     fi
+    
+    # Clean up the q key binding
+    tmux unbind-key -T root q 2>/dev/null || true
     
     # Clean up any remaining files
     rm -f "$DASHBOARD_RESTORE_MAP"
