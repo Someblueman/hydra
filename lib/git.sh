@@ -129,10 +129,10 @@ create_worktree() {
     # Create worktree
     if git_branch_exists "$branch"; then
         # Branch exists, create worktree from it
-        git worktree add -- "$path" "$branch" || return 1
+        git worktree add -- "$path" "$branch" >&2 || return 1
     else
         # Branch doesn't exist, create new branch
-        git worktree add -b "$branch" -- "$path" || return 1
+        git worktree add -b "$branch" -- "$path" >&2 || return 1
     fi
     
     return 0

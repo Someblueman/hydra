@@ -124,7 +124,7 @@ spawn_single() {
     fi
     
     # Create worktree
-    echo "Creating worktree for branch '$branch'..."
+    echo "Creating worktree for branch '$branch'..." >&2
     if ! create_worktree "$branch" "$worktree_path"; then
         return 1
     fi
@@ -133,7 +133,7 @@ spawn_single() {
     session="$(generate_session_name "$branch")"
     
     # Create tmux session
-    echo "Creating tmux session '$session'..."
+    echo "Creating tmux session '$session'..." >&2
     if ! create_session "$session" "$worktree_path"; then
         # Clean up worktree if session creation failed
         delete_worktree "$worktree_path" 2>/dev/null || true
@@ -157,7 +157,7 @@ spawn_single() {
     if ! validate_ai_command "$ai_tool"; then
         return 1
     fi
-    echo "Starting $ai_tool in session '$session'..."
+    echo "Starting $ai_tool in session '$session'..." >&2
     send_keys_to_session "$session" "$ai_tool"
     
     # Return session name for caller
@@ -622,7 +622,7 @@ cmd_switch() {
     fi
     
     # If inside tmux, use tmux's interactive switcher
-    if [ -n "$TMUX" ]; then
+    if [ -n "${TMUX:-}" ]; then
         # Build session list for fzf or simple menu
         sessions=""
         while IFS=' ' read -r branch session; do
