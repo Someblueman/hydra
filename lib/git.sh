@@ -139,10 +139,11 @@ create_worktree() {
 }
 
 # Delete a git worktree safely
-# Usage: delete_worktree <path>
+# Usage: delete_worktree <path> [force]
 # Returns: 0 on success, 1 on failure
 delete_worktree() {
     path="$1"
+    force="${2:-}"
     
     if [ -z "$path" ]; then
         echo "Error: Worktree path is required" >&2
@@ -159,15 +160,21 @@ delete_worktree() {
         return 1
     fi
     
+    # If force is specified, skip checks
+    if [ "$force" = "force" ]; then
+        git worktree remove --force -- "$path" || return 1
+        return 0
+    fi
+    
     # Check for uncommitted changes
-    if ! git -C "$path" diff --quiet -- || ! git -C "$path" diff --cached --quiet --; then
+    if ! git -C "$path" diff --quiet -- 2>/dev/null || ! git -C "$path" diff --cached --quiet -- 2>/dev/null; then
         echo "Error: Worktree has uncommitted changes" >&2
         echo "Please commit or stash your changes first" >&2
         return 1
     fi
     
     # Check for untracked files (optional warning)
-    if [ -n "$(git -C "$path" ls-files --others --exclude-standard --)" ]; then
+    if [ -n "$(git -C "$path" ls-files --others --exclude-standard -- 2>/dev/null)" ]; then
         echo "Warning: Worktree has untracked files" >&2
         printf "Continue anyway? [y/N] "
         read -r response
@@ -274,5 +281,48 @@ find_worktree_path() {
     
     rm -f "$tmpfile"
     trap - EXIT INT TERM
+    return 1
+}
+
+# Find worktree path by matching a pattern
+# Usage: find_worktree_by_pattern <pattern>
+# Returns: worktree path on stdout, empty if not found
+find_worktree_by_pattern() {
+    pattern="$1"
+    
+    if [ -z "$pattern" ]; then
+        return 1
+    fi
+    
+    # Use temporary file to avoid pipe subshell variable scope issues
+    tmpfile="$(mktemp)" || return 1
+    trap 'rm -f "$tmpfile"' EXIT INT TERM
+    
+    git worktree list --porcelain 2>/dev/null > "$tmpfile"
+    
+    found_path=""
+    while IFS= read -r line; do
+        case "$line" in
+            "worktree "*)
+                current_path="${line#worktree }"
+                # Check if path matches the pattern
+                case "$current_path" in
+                    *"$pattern"*)
+                        found_path="$current_path"
+                        break
+                        ;;
+                esac
+                ;;
+        esac
+    done < "$tmpfile"
+    
+    rm -f "$tmpfile"
+    trap - EXIT INT TERM
+    
+    if [ -n "$found_path" ]; then
+        echo "$found_path"
+        return 0
+    fi
+    
     return 1
 }
