@@ -7,7 +7,7 @@ set -eu
 # Global variables
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="0.2.0"
+HYDRA_VERSION="1.1.0-dev"
 
 # Source helper libraries
 # Detect if we're running from source or installed
@@ -36,6 +36,9 @@ fi
 # shellcheck source=../lib/dashboard.sh
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/dashboard.sh"
+# shellcheck source=../lib/github.sh
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/github.sh"
 
 # Initialize Hydra home directory
 init_hydra_home() {
@@ -56,6 +59,7 @@ Usage: hydra <command> [options]
 
 Commands:
   spawn <branch>    Create a new worktree and tmux session
+  spawn --issue <#> Create a head from a GitHub issue
   list              List all active Hydra heads
   switch            Switch to a different head (interactive)
   kill <branch>     Remove a worktree and its tmux session
@@ -143,6 +147,7 @@ cmd_spawn() {
     # Parse arguments
     branch=""
     layout="default"
+    issue_num=""
     
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -151,9 +156,15 @@ cmd_spawn() {
                 layout="$1"
                 shift
                 ;;
+            -i|--issue)
+                shift
+                issue_num="$1"
+                shift
+                ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
                 echo "Usage: hydra spawn <branch> [-l|--layout <layout>]" >&2
+                echo "       hydra spawn --issue <number> [-l|--layout <layout>]" >&2
                 exit 1
                 ;;
             *)
@@ -162,6 +173,7 @@ cmd_spawn() {
                 else
                     echo "Error: Too many arguments" >&2
                     echo "Usage: hydra spawn <branch> [-l|--layout <layout>]" >&2
+                    echo "       hydra spawn --issue <number> [-l|--layout <layout>]" >&2
                     exit 1
                 fi
                 shift
@@ -169,9 +181,21 @@ cmd_spawn() {
         esac
     done
     
+    # Handle GitHub issue mode
+    if [ -n "$issue_num" ]; then
+        if [ -n "$branch" ]; then
+            echo "Error: Cannot specify both branch name and issue number" >&2
+            exit 1
+        fi
+        
+        # Generate branch from issue
+        branch="$(spawn_from_issue "$issue_num")" || exit 1
+    fi
+    
     if [ -z "$branch" ]; then
         echo "Error: Branch name is required" >&2
         echo "Usage: hydra spawn <branch> [-l|--layout <layout>]" >&2
+        echo "       hydra spawn --issue <number> [-l|--layout <layout>]" >&2
         exit 1
     fi
     
