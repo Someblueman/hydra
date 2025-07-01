@@ -37,16 +37,61 @@ print_error() {
     echo "${RED}[ERROR]${RESET} $1"
 }
 
+# Comprehensive pre-test cleanup
+cleanup_all_test_sessions() {
+    print_status "Performing comprehensive pre-test cleanup..."
+    
+    # Kill all test-related tmux sessions
+    tmux list-sessions -F '#{session_name}' 2>/dev/null | while IFS= read -r session; do
+        case "$session" in
+            feature_test*|test-*|hydra-*|test_*)
+                print_status "  Cleaning up session: $session"
+                tmux kill-session -t "$session" 2>/dev/null || true
+                ;;
+        esac
+    done
+    
+    # Clean up test directories
+    rm -rf "$TEST_REPO_DIR" 2>/dev/null || true
+    rm -rf /tmp/hydra-* 2>/dev/null || true
+    rm -rf /tmp/test_hydra_home 2>/dev/null || true
+    
+    # Clean up any test HYDRA_HOME directories
+    find /tmp -maxdepth 2 -name ".hydra" -type d 2>/dev/null | while IFS= read -r dir; do
+        parent="$(dirname "$dir")"
+        case "$parent" in
+            /tmp/hydra*|/tmp/test*)
+                print_status "  Removing test hydra home: $dir"
+                rm -rf "$dir" 2>/dev/null || true
+                ;;
+        esac
+    done
+}
+
 # Setup test environment
 setup_test_repo() {
     print_status "Setting up test repository..."
     
-    # Clean up any existing test directory and worktrees
+    # Clean up any existing test directory
     rm -rf "$TEST_REPO_DIR"
-    # Clean up worktrees that would be created by hydra
-    # The worktrees are created at ../hydra-{branch} relative to the repo
-    rm -rf /tmp/hydra-feature 2>/dev/null || true
+    
+    # Clean up all hydra worktrees from previous runs
+    # First remove top-level hydra-* directories
     rm -rf /tmp/hydra-* 2>/dev/null || true
+    
+    # Then handle worktrees with slashes in branch names (e.g., feature/test-1)
+    # These create subdirectories like /tmp/hydra-feature/test-1
+    for branch in $TEST_BRANCHES; do
+        worktree_path="/tmp/hydra-$branch"
+        if [ -d "$worktree_path" ]; then
+            rm -rf "$worktree_path" 2>/dev/null || true
+        fi
+        # Clean up parent directory if empty (e.g., /tmp/hydra-feature)
+        parent_dir="$(dirname "$worktree_path")"
+        if [ -d "$parent_dir" ] && [ "$parent_dir" != "/tmp" ]; then
+            rmdir "$parent_dir" 2>/dev/null || true
+        fi
+    done
     
     # Create test repository
     mkdir -p "$TEST_REPO_DIR"
@@ -68,14 +113,14 @@ setup_test_repo() {
     
     # Create test branches
     for branch in $TEST_BRANCHES; do
-        git checkout -b "$branch" >/dev/null 2>&1
+        # Create branch from main without checking it out
+        git checkout -b "$branch" main >/dev/null 2>&1
         echo "Testing branch: $branch" > "$(echo "$branch" | tr '/' '-').md"
         git add "$(echo "$branch" | tr '/' '-').md" >/dev/null 2>&1
         git commit -m "Add content for $branch" >/dev/null 2>&1
+        # Important: switch back to main after each branch to avoid conflicts
+        git checkout main >/dev/null 2>&1
     done
-    
-    # Switch back to main for spawning
-    git checkout main >/dev/null 2>&1
     
     print_status "Test repository created at $TEST_REPO_DIR"
 }
@@ -100,13 +145,46 @@ test_dashboard_creation() {
         fi
         sleep 1
         # Don't kill the init session yet - we need the server running
-    else
-        # Clean up any leftover test sessions
-        print_status "Cleaning up leftover test sessions..."
-        for branch in $TEST_BRANCHES; do
-            session="$(echo "$branch" | tr '/' '_' | tr '-' '_')"
-            tmux kill-session -t "$session" 2>/dev/null || true
+    fi
+    
+    # Comprehensive cleanup of ALL hydra-related sessions
+    print_status "Cleaning up ALL hydra-related test sessions..."
+    
+    # Kill all sessions that match our test patterns
+    tmux list-sessions -F '#{session_name}' 2>/dev/null | while IFS= read -r session; do
+        case "$session" in
+            feature_test-*|test-init|hydra-dashboard|test-branch*)
+                print_status "  Killing leftover session: $session"
+                tmux kill-session -t "$session" 2>/dev/null || true
+                ;;
+            *hydra*)
+                # Be extra careful about hydra sessions in CI
+                if [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${CI:-}" ]; then
+                    print_status "  Killing leftover hydra session: $session"
+                    tmux kill-session -t "$session" 2>/dev/null || true
+                fi
+                ;;
+        esac
+    done
+    
+    # Also clean up by our expected test session names
+    for branch in $TEST_BRANCHES; do
+        base_session="$(echo "$branch" | tr '/' '_' | tr '-' '_')"
+        # Kill base session and any numbered variants
+        for suffix in "" "_1" "_2" "_3" "_4" "_5"; do
+            session="${base_session}${suffix}"
+            if tmux has-session -t "$session" 2>/dev/null; then
+                print_status "  Killing test session: $session"
+                tmux kill-session -t "$session" 2>/dev/null || true
+            fi
         done
+    done
+    
+    # Final check - list remaining sessions for debugging
+    remaining_sessions=$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)
+    if [ -n "$remaining_sessions" ]; then
+        print_status "Remaining tmux sessions after cleanup:"
+        echo "$remaining_sessions" | sed 's/^/    /'
     fi
     
     cd "$TEST_REPO_DIR" || exit 1
@@ -354,7 +432,20 @@ cleanup_test_env() {
     # Remove test repository and worktrees
     cd /tmp || return 0
     rm -rf "$TEST_REPO_DIR"
+    # Remove all hydra worktrees, including those with slashes in branch names
     rm -rf /tmp/hydra-* 2>/dev/null || true
+    # Also remove any parent directories created by branch names with slashes
+    for branch in $TEST_BRANCHES; do
+        worktree_path="/tmp/hydra-$branch"
+        if [ -d "$worktree_path" ]; then
+            rm -rf "$worktree_path" 2>/dev/null || true
+        fi
+        # Clean up parent directory if empty
+        parent_dir="$(dirname "$worktree_path")"
+        if [ -d "$parent_dir" ] && [ "$parent_dir" != "/tmp" ]; then
+            rmdir "$parent_dir" 2>/dev/null || true
+        fi
+    done
     
     print_status "Test environment cleaned up"
 }
@@ -381,6 +472,9 @@ main() {
     
     # Set up cleanup trap
     trap cleanup_test_env EXIT INT TERM
+    
+    # Perform comprehensive cleanup before starting tests
+    cleanup_all_test_sessions
     
     # Run tests
     test_failed=0

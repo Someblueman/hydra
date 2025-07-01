@@ -421,8 +421,13 @@ cmd_kill() {
     # Get repository root
     repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo ".")"
     
-    # Find worktree path
-    worktree_path="$(find_worktree_path "$branch")"
+    # Find worktree path - try multiple methods
+    worktree_path="$(find_worktree_path "$branch" 2>/dev/null || true)"
+    
+    # If not found by branch, try by pattern (handles case where branch was already deleted)
+    if [ -z "$worktree_path" ]; then
+        worktree_path="$(find_worktree_by_pattern "hydra-$branch" 2>/dev/null || true)"
+    fi
     
     # Kill tmux session if it exists
     if tmux_session_exists "$session"; then
@@ -435,10 +440,37 @@ cmd_kill() {
     # Remove worktree if it exists
     if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
         echo "Removing worktree at '$worktree_path'..."
-        if ! delete_worktree "$worktree_path"; then
-            echo "Error: Failed to remove worktree" >&2
-            echo "You may need to manually clean up: $worktree_path" >&2
-            # Don't exit, still remove mapping
+        # Check if branch still exists - if not, force removal
+        if ! git_branch_exists "$branch"; then
+            # Branch doesn't exist, force removal
+            if ! delete_worktree "$worktree_path" "force"; then
+                echo "Error: Failed to remove worktree" >&2
+                echo "You may need to manually clean up: $worktree_path" >&2
+                # Don't exit, still remove mapping
+            fi
+        else
+            # Branch exists, normal removal
+            if ! delete_worktree "$worktree_path"; then
+                echo "Error: Failed to remove worktree" >&2
+                echo "You may need to manually clean up: $worktree_path" >&2
+                # Don't exit, still remove mapping
+            fi
+        fi
+    else
+        # Check if expected worktree path exists (fallback)
+        expected_path="$repo_root/../hydra-$branch"
+        if [ -d "$expected_path" ]; then
+            echo "Found orphaned worktree at '$expected_path'..."
+            echo "Attempting to remove it..."
+            # Try normal remove first, then force if needed
+            if git worktree remove "$expected_path" 2>/dev/null; then
+                echo "Successfully removed orphaned worktree"
+            elif git worktree remove --force "$expected_path" 2>/dev/null; then
+                echo "Successfully removed orphaned worktree (forced)"
+            else
+                echo "Warning: Could not remove orphaned worktree at: $expected_path" >&2
+                echo "You may need to manually run: git worktree remove --force '$expected_path'" >&2
+            fi
         fi
     fi
     
@@ -561,7 +593,14 @@ cmd_status() {
     unmapped_worktrees=0
     
     # Use temporary file to avoid pipe subshell issues
-    tmpfile="$(mktemp)" || exit 1
+    tmpfile="$(mktemp)" || {
+        echo "Error: Failed to create temporary file" >&2
+        echo ""
+        echo "Summary:"
+        echo "  Hydra home: $HYDRA_HOME"
+        echo "  Error: Unable to complete status report"
+        return 0
+    }
     trap 'rm -f "$tmpfile"' EXIT INT TERM
     
     git worktree list --porcelain 2>/dev/null > "$tmpfile"
@@ -609,7 +648,14 @@ cmd_status() {
     unmapped_sessions=0
     
     # List all tmux sessions using temp file
-    tmpfile2="$(mktemp)" || exit 1
+    tmpfile2="$(mktemp)" || {
+        echo "Error: Failed to create temporary file" >&2
+        echo ""
+        echo "Summary:"
+        echo "  Hydra home: $HYDRA_HOME"
+        echo "  Error: Unable to complete status report"
+        return 0
+    }
     trap 'rm -f "$tmpfile2"' EXIT INT TERM
     
     tmux list-sessions -F '#{session_name}' 2>/dev/null > "$tmpfile2"
@@ -652,6 +698,8 @@ cmd_status() {
     if [ "$unmapped_sessions" -gt 0 ]; then
         echo "  Unmapped sessions: $unmapped_sessions"
     fi
+    
+    return 0
 }
 
 cmd_doctor() {

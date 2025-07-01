@@ -180,16 +180,25 @@ generate_session_name() {
     base_name="$(echo "$branch" | sed 's/[^a-zA-Z0-9_-]/_/g')"
     
     # If session doesn't exist, use base name
-    if ! tmux_session_exists "$base_name"; then
+    if ! tmux has-session -t "$base_name" 2>/dev/null; then
         echo "$base_name"
         return 0
     fi
     
-    # Otherwise, append a number
+    # Otherwise, append a number - start from 1 and find first available
     num=1
-    while tmux_session_exists "${base_name}_${num}"; do
+    max_attempts=100  # Prevent infinite loop in edge cases
+    
+    while [ "$num" -le "$max_attempts" ]; do
+        session_name="${base_name}_${num}"
+        if ! tmux has-session -t "$session_name" 2>/dev/null; then
+            echo "$session_name"
+            return 0
+        fi
         num=$((num + 1))
     done
     
-    echo "${base_name}_${num}"
+    # If we've exhausted attempts, use timestamp for uniqueness
+    timestamp="$(date +%s 2>/dev/null || echo "$$")"
+    echo "${base_name}_${timestamp}"
 }
