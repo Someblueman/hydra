@@ -265,7 +265,9 @@ find_worktree_path() {
                 ;;
             "branch refs/heads/$branch")
                 echo "$current_path"
-                break
+                rm -f "$tmpfile"
+                trap - EXIT INT TERM
+                return 0
                 ;;
         esac
     done < "$tmpfile"
