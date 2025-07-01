@@ -1,0 +1,50 @@
+name: Quick Check
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - develop
+      - 'release/**'
+
+jobs:
+  quick-lint:
+    name: Quick Lint Check
+    runs-on: ubuntu-latest
+    if: |
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      !contains(github.event.head_commit.message, '[ci skip]')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install ShellCheck
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y shellcheck
+    
+    - name: Run ShellCheck on changed files
+      run: |
+        # Get list of changed shell files
+        changed_files=$(git diff --name-only HEAD^ HEAD | grep -E '\.(sh)$|bin/hydra$' || true)
+        
+        if [ -n "$changed_files" ]; then
+          echo "Checking changed files:"
+          echo "$changed_files"
+          echo "$changed_files" | xargs -I {} shellcheck --shell=sh --severity=style {}
+        else
+          echo "No shell files changed, running full lint"
+          make lint
+        fi
+    
+    - name: Quick syntax check
+      run: |
+        # Quick dash syntax check on changed files only
+        changed_files=$(git diff --name-only HEAD^ HEAD | grep -E '\.(sh)$|bin/hydra$' || true)
+        
+        if [ -n "$changed_files" ]; then
+          echo "$changed_files" | while read -r file; do
+            echo "Syntax check: $file"
+            dash -n "$file"
+          done
+        fi
