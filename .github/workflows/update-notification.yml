@@ -1,0 +1,81 @@
+name: Branch Update Notification
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Run daily at 9 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-branches:
+    name: Check Feature Branches
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Check branch status
+      run: |
+        echo "## Branch Status Report" >> $GITHUB_STEP_SUMMARY
+        echo "Branches that are behind main:" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        behind_count=0
+        for branch in $(git branch -r | grep -E 'origin/(feature|fix|release)/' | grep -v HEAD | sed 's/origin\///'); do
+          # Skip if branch is deleted
+          if ! git rev-parse "origin/$branch" >/dev/null 2>&1; then
+            continue
+          fi
+          
+          # Check if branch is behind main
+          behind=$(git rev-list --count "origin/$branch..origin/main" 2>/dev/null || echo "0")
+          
+          if [ "$behind" -gt 0 ]; then
+            echo "- \`$branch\` is $behind commits behind main" >> $GITHUB_STEP_SUMMARY
+            behind_count=$((behind_count + 1))
+          fi
+        done
+        
+        if [ "$behind_count" -eq 0 ]; then
+          echo "✅ All feature branches are up-to-date!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### How to update your branch:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "git checkout your-branch" >> $GITHUB_STEP_SUMMARY
+          echo "git fetch origin" >> $GITHUB_STEP_SUMMARY
+          echo "git rebase origin/main" >> $GITHUB_STEP_SUMMARY
+          echo "# or: git merge origin/main" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        fi
+    
+    - name: Comment on PRs
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: pulls } = await github.rest.pulls.list({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'open'
+          });
+          
+          for (const pr of pulls) {
+            const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              basehead: `${pr.base.ref}...${pr.head.ref}`
+            });
+            
+            if (comparison.behind_by > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: `⚠️ This branch is ${comparison.behind_by} commits behind \`${pr.base.ref}\`. Consider rebasing or merging the latest changes.`
+              });
+            }
+          }
