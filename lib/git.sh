@@ -265,22 +265,27 @@ find_worktree_path() {
     git worktree list --porcelain 2>/dev/null > "$tmpfile"
     
     current_path=""
+    found_path=""
     while IFS= read -r line; do
         case "$line" in
             "worktree "*)
                 current_path="${line#worktree }"
                 ;;
             "branch refs/heads/$branch")
-                echo "$current_path"
-                rm -f "$tmpfile"
-                trap - EXIT INT TERM
-                return 0
+                found_path="$current_path"
+                break
                 ;;
         esac
     done < "$tmpfile"
     
     rm -f "$tmpfile"
     trap - EXIT INT TERM
+    
+    if [ -n "$found_path" ]; then
+        echo "$found_path"
+        return 0
+    fi
+    
     return 1
 }
 
