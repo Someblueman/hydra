@@ -173,12 +173,18 @@ test_status_command() {
     echo "Testing hydra status command..."
     
     test_dir="$(setup_test_env)"
+    original_dir="$(pwd)"
     
-    output="$("$HYDRA_BIN" status 2>&1)"
+    # Create a git repository in the test directory
+    cd "$test_dir" || exit 1
+    git init >/dev/null 2>&1
+    
+    output="$("$original_dir/$HYDRA_BIN" status 2>&1)"
     exit_code=$?
     assert_success "$exit_code" "hydra status should succeed"
     assert_contains "$output" "Hydra Status" "Status output should contain status header"
     
+    cd "$original_dir" || exit 1
     cleanup_test_env "$test_dir"
 }
 
