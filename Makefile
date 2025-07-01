@@ -1,7 +1,7 @@
 # Makefile for Hydra
 # POSIX-compliant build and lint tasks
 
-.PHONY: all lint test clean install help
+.PHONY: all lint test clean install dev-setup help
 
 # Default target
 all: lint
@@ -49,11 +49,22 @@ install:
 	@echo "Installation complete"
 	@echo "Run 'hydra help' to get started"
 
+# Set up development environment
+dev-setup:
+	@echo "Setting up development environment..."
+	@if [ -f scripts/install-hooks.sh ]; then \
+		sh scripts/install-hooks.sh; \
+	else \
+		echo "Warning: scripts/install-hooks.sh not found"; \
+	fi
+	@echo "Development environment setup complete"
+
 # Display help
 help:
 	@echo "Hydra Makefile targets:"
-	@echo "  make lint    - Run ShellCheck and dash syntax validation"
-	@echo "  make test    - Run all tests"
-	@echo "  make clean   - Remove temporary files"
-	@echo "  make install - Install hydra to /usr/local/bin"
-	@echo "  make help    - Show this help message"
+	@echo "  make lint      - Run ShellCheck and dash syntax validation"
+	@echo "  make test      - Run all tests"
+	@echo "  make clean     - Remove temporary files"
+	@echo "  make install   - Install hydra to /usr/local/bin"
+	@echo "  make dev-setup - Set up development environment (git hooks)"
+	@echo "  make help      - Show this help message"
