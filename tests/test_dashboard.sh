@@ -411,7 +411,8 @@ cleanup_test_env() {
     
     cd "$TEST_REPO_DIR" || return 0
     
-    # Kill any remaining test sessions
+    # Kill any remaining test sessions (set non-interactive mode for tests)
+    export HYDRA_NONINTERACTIVE=1
     for branch in $TEST_BRANCHES; do
         if "$HYDRA_BIN" list 2>/dev/null | grep -q "$branch"; then
             print_status "Killing session for branch: $branch"

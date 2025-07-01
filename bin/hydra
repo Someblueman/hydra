@@ -18,6 +18,7 @@ else
     # Running from installed location
     HYDRA_LIB_DIR="/usr/local/lib/hydra"
 fi
+
 # shellcheck source=../lib/git.sh
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/git.sh"
@@ -59,6 +60,11 @@ Usage: hydra <command> [options]
 
 Commands:
   spawn <branch>    Create a new worktree and tmux session
+                    Options:
+                      -l, --layout <layout>    Apply tmux layout
+                      -n, --count <number>     Spawn multiple sessions (1-10)
+                      --ai <tool>              Specify AI tool (claude, aider, etc.)
+                      --agents <spec>          Mixed agents (e.g., "claude:2,aider:1")
   spawn --issue <#> Create a head from a GitHub issue
   list              List all active Hydra heads
   switch            Switch to a different head (interactive)
@@ -74,9 +80,327 @@ Commands:
 Options:
   -h, --help        Show this help message
 
+Examples:
+  hydra spawn feature-x                    # Create single session
+  hydra spawn feature-x -n 3               # Create 3 sessions (feature-x-1, feature-x-2, feature-x-3)
+  hydra spawn feature-x -n 3 --ai aider    # Create 3 sessions with aider
+  hydra spawn exp --agents "claude:2,aider:1"  # Create 2 claude + 1 aider sessions
+  hydra spawn --issue 42                   # Create session from GitHub issue #42
+
 Environment:
   HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
+  HYDRA_AI_COMMAND  Default AI tool (default: claude)
 EOF
+}
+
+# Helper function to spawn a single session
+# Usage: spawn_single <branch> <layout> [ai_tool]
+spawn_single() {
+    branch="$1"
+    layout="${2:-default}"
+    ai_tool="${3:-}"
+    
+    # Check tmux availability
+    if ! check_tmux_version; then
+        return 1
+    fi
+    
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Error: Not in a git repository" >&2
+        return 1
+    fi
+    
+    # Get the repository root
+    repo_root="$(git rev-parse --show-toplevel)"
+    worktree_path="$repo_root/../hydra-$branch"
+    
+    # Check if branch already has a session
+    existing_session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
+    if [ -n "$existing_session" ] && tmux_session_exists "$existing_session"; then
+        echo "Error: Branch '$branch' already has an active session '$existing_session'" >&2
+        echo "Use 'hydra switch' to switch to it" >&2
+        return 1
+    fi
+    
+    # Create worktree
+    echo "Creating worktree for branch '$branch'..."
+    if ! create_worktree "$branch" "$worktree_path"; then
+        return 1
+    fi
+    
+    # Generate session name
+    session="$(generate_session_name "$branch")"
+    
+    # Create tmux session
+    echo "Creating tmux session '$session'..."
+    if ! create_session "$session" "$worktree_path"; then
+        # Clean up worktree if session creation failed
+        delete_worktree "$worktree_path" 2>/dev/null || true
+        return 1
+    fi
+    
+    # Add mapping
+    if ! add_mapping "$branch" "$session"; then
+        echo "Warning: Failed to save branch-session mapping" >&2
+    fi
+    
+    # Apply layout
+    if [ "$layout" != "default" ]; then
+        tmux send-keys -t "$session" "TMUX=\$TMUX . /usr/local/lib/hydra/layout.sh && apply_layout $layout" Enter
+    fi
+    
+    # Start AI tool
+    if [ -z "$ai_tool" ]; then
+        ai_tool="${HYDRA_AI_COMMAND:-claude}"
+    fi
+    if ! validate_ai_command "$ai_tool"; then
+        return 1
+    fi
+    echo "Starting $ai_tool in session '$session'..."
+    send_keys_to_session "$session" "$ai_tool"
+    
+    # Return session name for caller
+    echo "$session"
+    return 0
+}
+
+# Spawn multiple sessions with same AI tool
+# Usage: spawn_bulk <base_branch> <count> <layout> [ai_tool]
+spawn_bulk() {
+    base_branch="$1"
+    count="$2"
+    layout="${3:-default}"
+    ai_tool="${4:-}"
+    
+    # Confirm if spawning many sessions
+    if [ "$count" -gt 3 ]; then
+        printf "Are you sure you want to spawn %d sessions? [y/N] " "$count"
+        read -r response
+        case "$response" in
+            [yY][eE][sS]|[yY])
+                ;;
+            *)
+                echo "Aborted" >&2
+                return 1
+                ;;
+        esac
+    fi
+    
+    echo "Spawning $count sessions based on '$base_branch'..."
+    
+    succeeded=0
+    failed=0
+    created_branches=""
+    
+    i=1
+    while [ "$i" -le "$count" ]; do
+        branch_name="${base_branch}-${i}"
+        echo ""
+        echo "[$i/$count] Creating head '$branch_name'..."
+        
+        if session="$(spawn_single "$branch_name" "$layout" "$ai_tool")"; then
+            succeeded=$((succeeded + 1))
+            created_branches="$created_branches $branch_name"
+            echo "[$i/$count] Successfully created session: $session"
+        else
+            failed=$((failed + 1))
+            echo "[$i/$count] Failed to create head '$branch_name'" >&2
+            
+            # Ask whether to continue or rollback
+            if [ "$i" -lt "$count" ]; then
+                printf "Continue with remaining heads? [y/N] "
+                read -r response
+                case "$response" in
+                    [yY][eE][sS]|[yY])
+                        ;;
+                    *)
+                        echo "Rolling back created heads..."
+                        for b in $created_branches; do
+                            echo "Removing $b..."
+                            cmd_kill "$b" >/dev/null 2>&1 || true
+                        done
+                        return 1
+                        ;;
+                esac
+            fi
+        fi
+        
+        i=$((i + 1))
+    done
+    
+    echo ""
+    echo "Bulk spawn complete:"
+    echo "  Succeeded: $succeeded"
+    echo "  Failed: $failed"
+    
+    # Switch to first created session if in terminal
+    if [ -t 0 ] && [ -t 1 ] && [ "$succeeded" -gt 0 ]; then
+        first_branch="$(echo "$created_branches" | cut -d' ' -f2)"
+        first_session="$(get_session_for_branch "$first_branch" 2>/dev/null || true)"
+        if [ -n "$first_session" ]; then
+            echo ""
+            echo "Switching to first session '$first_session'..."
+            switch_to_session "$first_session"
+        fi
+    fi
+    
+    return 0
+}
+
+# Spawn sessions with mixed AI agents
+# Usage: spawn_bulk_mixed <base_branch> <agents_spec> <layout>
+# agents_spec format: "claude:2,aider:1,codex:1"
+spawn_bulk_mixed() {
+    base_branch="$1"
+    agents_spec="$2"
+    layout="${3:-default}"
+    
+    echo "Parsing agents specification: $agents_spec"
+    
+    # Parse the agents spec and create sessions
+    total_count=0
+    session_num=1
+    succeeded=0
+    failed=0
+    created_branches=""
+    
+    # Process each agent:count pair
+    while [ -n "$agents_spec" ]; do
+        # Extract first agent:count pair
+        pair="${agents_spec%%,*}"
+        
+        # Remove processed pair from spec
+        if [ "$pair" = "$agents_spec" ]; then
+            agents_spec=""
+        else
+            agents_spec="${agents_spec#*,}"
+        fi
+        
+        # Check if pair contains a colon
+        case "$pair" in
+            *:*)
+                # Parse agent and count
+                agent="${pair%%:*}"
+                agent_count="${pair#*:}"
+                ;;
+            *)
+                echo "Error: Invalid agent specification: $pair" >&2
+                return 1
+                ;;
+        esac
+        
+        # Validate
+        if [ -z "$agent" ] || [ -z "$agent_count" ]; then
+            echo "Error: Invalid agent specification: $pair" >&2
+            return 1
+        fi
+        
+        if ! echo "$agent_count" | grep -q '^[0-9]\+$' || [ "$agent_count" -lt 1 ]; then
+            echo "Error: Invalid count for $agent: $agent_count" >&2
+            return 1
+        fi
+        
+        if ! validate_ai_command "$agent"; then
+            return 1
+        fi
+        
+        total_count=$((total_count + agent_count))
+    done
+    
+    # Confirm if spawning many sessions
+    if [ "$total_count" -gt 3 ]; then
+        printf "Are you sure you want to spawn %d sessions? [y/N] " "$total_count"
+        read -r response
+        case "$response" in
+            [yY][eE][sS]|[yY])
+                ;;
+            *)
+                echo "Aborted" >&2
+                return 1
+                ;;
+        esac
+    fi
+    
+    # Reset agents_spec for actual processing
+    agents_spec="$2"
+    
+    echo "Spawning $total_count sessions with mixed agents..."
+    
+    # Process each agent:count pair again for actual spawning
+    while [ -n "$agents_spec" ]; do
+        # Extract first agent:count pair
+        pair="${agents_spec%%,*}"
+        
+        # Remove processed pair from spec
+        if [ "$pair" = "$agents_spec" ]; then
+            agents_spec=""
+        else
+            agents_spec="${agents_spec#*,}"
+        fi
+        
+        # Parse agent and count (already validated in first loop)
+        agent="${pair%%:*}"
+        agent_count="${pair#*:}"
+        
+        echo ""
+        echo "Creating $agent_count session(s) with $agent..."
+        
+        i=1
+        while [ "$i" -le "$agent_count" ]; do
+            branch_name="${base_branch}-${session_num}"
+            echo ""
+            echo "[$session_num/$total_count] Creating head '$branch_name' with $agent..."
+            
+            if session="$(spawn_single "$branch_name" "$layout" "$agent")"; then
+                succeeded=$((succeeded + 1))
+                created_branches="$created_branches $branch_name"
+                echo "[$session_num/$total_count] Successfully created session: $session"
+            else
+                failed=$((failed + 1))
+                echo "[$session_num/$total_count] Failed to create head '$branch_name'" >&2
+                
+                # Ask whether to continue or rollback
+                if [ "$session_num" -lt "$total_count" ]; then
+                    printf "Continue with remaining heads? [y/N] "
+                    read -r response
+                    case "$response" in
+                        [yY][eE][sS]|[yY])
+                            ;;
+                        *)
+                            echo "Rolling back created heads..."
+                            for b in $created_branches; do
+                                echo "Removing $b..."
+                                cmd_kill "$b" >/dev/null 2>&1 || true
+                            done
+                            return 1
+                            ;;
+                    esac
+                fi
+            fi
+            
+            i=$((i + 1))
+            session_num=$((session_num + 1))
+        done
+    done
+    
+    echo ""
+    echo "Bulk spawn complete:"
+    echo "  Succeeded: $succeeded"
+    echo "  Failed: $failed"
+    
+    # Switch to first created session if in terminal
+    if [ -t 0 ] && [ -t 1 ] && [ "$succeeded" -gt 0 ]; then
+        first_branch="$(echo "$created_branches" | cut -d' ' -f2)"
+        first_session="$(get_session_for_branch "$first_branch" 2>/dev/null || true)"
+        if [ -n "$first_session" ]; then
+            echo ""
+            echo "Switching to first session '$first_session'..."
+            switch_to_session "$first_session"
+        fi
+    fi
+    
+    return 0
 }
 
 # Main command dispatcher
@@ -116,28 +440,28 @@ main() {
             shift
             cmd_dashboard "$@"
             ;;
-        dashboard-exit)
-            # Internal command for exiting dashboard
-            cmd_dashboard_exit
+        cycle-layout)
+            shift
+            cmd_cycle_layout "$@"
             ;;
         completion)
             shift
             cmd_completion "$@"
             ;;
-        cycle-layout)
-            shift
-            cmd_cycle_layout "$@"
+        version|-v|--version)
+            echo "Hydra version $HYDRA_VERSION"
             ;;
-        version|--version|-v)
-            echo "hydra version $HYDRA_VERSION"
-            ;;
-        help|--help|-h|"")
+        help|-h|--help)
             usage
             ;;
         *)
-            echo "Error: Unknown command '$1'" >&2
-            echo "Run 'hydra help' for usage information" >&2
-            exit 1
+            if [ -z "${1:-}" ]; then
+                usage
+            else
+                echo "Error: Unknown command '$1'" >&2
+                echo "Run 'hydra help' for usage information" >&2
+                exit 1
+            fi
             ;;
     esac
 }
@@ -147,6 +471,9 @@ cmd_spawn() {
     # Parse arguments
     branch=""
     layout="default"
+    count=1
+    ai_tool=""
+    agents_spec=""
     issue_num=""
     
     while [ $# -gt 0 ]; do
@@ -156,6 +483,21 @@ cmd_spawn() {
                 layout="$1"
                 shift
                 ;;
+            -n|--count)
+                shift
+                count="$1"
+                shift
+                ;;
+            --ai)
+                shift
+                ai_tool="$1"
+                shift
+                ;;
+            --agents)
+                shift
+                agents_spec="$1"
+                shift
+                ;;
             -i|--issue)
                 shift
                 issue_num="$1"
@@ -163,7 +505,7 @@ cmd_spawn() {
                 ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra spawn <branch> [-l|--layout <layout>]" >&2
+                echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>]" >&2
                 echo "       hydra spawn --issue <number> [-l|--layout <layout>]" >&2
                 exit 1
                 ;;
@@ -172,7 +514,7 @@ cmd_spawn() {
                     branch="$1"
                 else
                     echo "Error: Too many arguments" >&2
-                    echo "Usage: hydra spawn <branch> [-l|--layout <layout>]" >&2
+                    echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>]" >&2
                     echo "       hydra spawn --issue <number> [-l|--layout <layout>]" >&2
                     exit 1
                 fi
@@ -188,81 +530,59 @@ cmd_spawn() {
             exit 1
         fi
         
+        # Check for incompatible options
+        if [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; then
+            echo "Error: Cannot use bulk spawn options with --issue" >&2
+            exit 1
+        fi
+        
         # Generate branch from issue
         branch="$(spawn_from_issue "$issue_num")" || exit 1
     fi
     
     if [ -z "$branch" ]; then
         echo "Error: Branch name is required" >&2
-        echo "Usage: hydra spawn <branch> [-l|--layout <layout>]" >&2
+        echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>]" >&2
         echo "       hydra spawn --issue <number> [-l|--layout <layout>]" >&2
         exit 1
     fi
     
-    # Check tmux availability
-    if ! check_tmux_version; then
+    # Validate count
+    if ! echo "$count" | grep -q '^[0-9]\+$' || [ "$count" -lt 1 ] || [ "$count" -gt 10 ]; then
+        echo "Error: Count must be a number between 1 and 10" >&2
         exit 1
     fi
     
-    # Check if we're in a git repository
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        echo "Error: Not in a git repository" >&2
+    # Handle mutually exclusive options
+    if [ -n "$agents_spec" ] && [ -n "$ai_tool" ]; then
+        echo "Error: Cannot use both --ai and --agents options" >&2
         exit 1
     fi
     
-    # Get the repository root
-    repo_root="$(git rev-parse --show-toplevel)"
-    worktree_path="$repo_root/../hydra-$branch"
-    
-    # Check if branch already has a session
-    existing_session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
-    if [ -n "$existing_session" ] && tmux_session_exists "$existing_session"; then
-        echo "Error: Branch '$branch' already has an active session '$existing_session'" >&2
-        echo "Use 'hydra switch' to switch to it" >&2
-        exit 1
+    # If agents spec is provided, delegate to bulk spawn with mixed agents
+    if [ -n "$agents_spec" ]; then
+        spawn_bulk_mixed "$branch" "$agents_spec" "$layout"
+        return $?
     fi
     
-    # Create worktree
-    echo "Creating worktree for branch '$branch'..."
-    if ! create_worktree "$branch" "$worktree_path"; then
-        exit 1
+    # If count > 1, delegate to bulk spawn
+    if [ "$count" -gt 1 ]; then
+        spawn_bulk "$branch" "$count" "$layout" "$ai_tool"
+        return $?
     fi
     
-    # Generate session name
-    session="$(generate_session_name "$branch")"
-    
-    # Create tmux session
-    echo "Creating tmux session '$session'..."
-    if ! create_session "$session" "$worktree_path"; then
-        # Clean up worktree if session creation failed
-        delete_worktree "$worktree_path" 2>/dev/null || true
-        exit 1
-    fi
-    
-    # Add mapping
-    if ! add_mapping "$branch" "$session"; then
-        echo "Warning: Failed to save branch-session mapping" >&2
-    fi
-    
-    # Apply layout
-    if [ "$layout" != "default" ]; then
-        tmux send-keys -t "$session" "TMUX=\$TMUX . /usr/local/lib/hydra/layout.sh && apply_layout $layout" Enter
-    fi
-    
-    # Start AI tool
-    ai_command="${HYDRA_AI_COMMAND:-claude}"
-    if ! validate_ai_command "$ai_command"; then
-        return 1
-    fi
-    echo "Starting $ai_command in session '$session'..."
-    send_keys_to_session "$session" "$ai_command"
-    
-    # Switch to the new session (only in terminal)
-    if [ -t 0 ] && [ -t 1 ]; then
-        echo "Switching to session '$session'..."
-        switch_to_session "$session"
+    # Single spawn - use helper function
+    if session="$(spawn_single "$branch" "$layout" "$ai_tool")"; then
+        # Switch to the new session (only in terminal)
+        if [ -t 0 ] && [ -t 1 ]; then
+            echo "Switching to session '$session'..."
+            switch_to_session "$session"
+        else
+            echo "Session '$session' created successfully (not switching - not in terminal)"
+        fi
+        return 0
     else
-        echo "Session '$session' created successfully (not switching - not in terminal)"
+        return 1
     fi
 }
 
@@ -273,155 +593,73 @@ cmd_list() {
         return 0
     fi
     
-    # Print header
-    printf "%-20s %-20s %-10s %s\n" "BRANCH" "SESSION" "STATUS" "PATH"
-    printf "%-20s %-20s %-10s %s\n" "------" "-------" "------" "----"
+    # List all sessions with their branch names
+    echo "Active Hydra heads:"
+    echo ""
     
-    # Get repository root
-    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo ".")"
-    
-    # List all mappings
+    # Read mapping file and display status
     while IFS=' ' read -r branch session; do
-        # Skip empty lines
-        if [ -z "$branch" ] || [ -z "$session" ]; then
-            continue
-        fi
-        # Check session status
+        # Check if session still exists
         if tmux_session_exists "$session"; then
-            status="active"
+            # Check if it's the current session
+            current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
+            if [ "$session" = "$current_session" ]; then
+                echo "* $branch -> $session (current)"
+            else
+                echo "  $branch -> $session"
+            fi
         else
-            status="dead"
+            echo "  $branch -> $session (dead)"
         fi
-        
-        # Find worktree path (may not exist)
-        worktree_path="$(find_worktree_path "$branch" 2>/dev/null || true)"
-        
-        # Make path relative if possible
-        if [ -n "$worktree_path" ]; then
-            case "$worktree_path" in
-                "$repo_root"/../*)
-                    worktree_path="../${worktree_path#"$repo_root"/../}"
-                    ;;
-            esac
-        else
-            worktree_path="(not found)"
-        fi
-        
-        # Print row
-        printf "%-20s %-20s %-10s %s\n" \
-            "$(echo "$branch" | cut -c1-20)" \
-            "$(echo "$session" | cut -c1-20)" \
-            "$status" \
-            "$worktree_path"
     done < "$HYDRA_MAP"
 }
 
 cmd_switch() {
-    # Check if we have any mappings
+    # Interactive session switcher
     if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
         echo "No active Hydra heads to switch to"
-        exit 1
+        return 1
     fi
     
-    # Check tmux availability
-    if ! check_tmux_version; then
-        exit 1
-    fi
-    
-    # Count active sessions
-    active_count=0
-    while IFS=' ' read -r branch session; do
-        if tmux_session_exists "$session"; then
-            active_count=$((active_count + 1))
-        fi
-    done < "$HYDRA_MAP"
-    
-    if [ "$active_count" -eq 0 ]; then
-        echo "No active sessions found"
-        echo "Use 'hydra regenerate' to restore sessions"
-        exit 1
-    fi
-    
-    # Record start time for performance tracking
-    start_time="$(date +%s%N 2>/dev/null || date +%s)"
-    
-    # Use fzf if available
-    if command -v fzf >/dev/null 2>&1; then
-        # Build list for fzf
-        selected="$(
-            while IFS=' ' read -r branch session; do
-                if tmux_session_exists "$session"; then
-                    echo "$branch -> $session"
-                fi
-            done < "$HYDRA_MAP" | fzf --prompt="Select head: " --height=10 --reverse
-        )"
-        
-        if [ -z "$selected" ]; then
-            echo "No selection made"
-            exit 1
-        fi
-        
-        # Extract session name
-        target_session="${selected##* }"
-    else
-        # Fallback to numeric selection
-        echo "Active Hydra heads:"
-        num=1
-        
-        # Create temporary file for menu items
-        tmpfile="$(mktemp)" || exit 1
-        trap 'rm -f "$tmpfile"' EXIT INT TERM
-        
+    # If inside tmux, use tmux's interactive switcher
+    if [ -n "$TMUX" ]; then
+        # Build session list for fzf or simple menu
+        sessions=""
         while IFS=' ' read -r branch session; do
             if tmux_session_exists "$session"; then
-                echo "$num) $branch -> $session"
-                echo "$num $session" >> "$tmpfile"
-                num=$((num + 1))
+                sessions="$sessions$branch ($session)\n"
             fi
         done < "$HYDRA_MAP"
         
-        printf "Select head (1-%d): " "$((num - 1))"
-        read -r selection
-        
-        # Validate selection
-        if ! echo "$selection" | grep -q '^[0-9]\+$'; then
-            echo "Error: Invalid selection" >&2
-            exit 1
+        if [ -z "$sessions" ]; then
+            echo "No active sessions found"
+            return 1
         fi
         
-        # Find the selected session
-        target_session=""
-        while IFS=' ' read -r menu_num menu_session; do
-            if [ "$menu_num" = "$selection" ]; then
-                target_session="$menu_session"
-                break
-            fi
-        done < "$tmpfile"
-        
-        rm -f "$tmpfile"
-        trap - EXIT INT TERM
-        
-        if [ -z "$target_session" ]; then
-            echo "Error: Invalid selection" >&2
-            exit 1
+        # Use fzf if available, otherwise simple menu
+        if command -v fzf >/dev/null 2>&1; then
+            selection="$(printf "%b" "$sessions" | fzf --prompt="Switch to: " --height=10)"
+        else
+            echo "Active sessions:"
+            i=1
+            printf "%b" "$sessions" | while IFS= read -r line; do
+                echo "$i) $line"
+                i=$((i + 1))
+            done
+            printf "Select session (1-%d): " "$(printf "%b" "$sessions" | wc -l | tr -d ' ')"
+            read -r choice
+            selection="$(printf "%b" "$sessions" | sed -n "${choice}p")"
         fi
-    fi
-    
-    # Switch to the selected session
-    echo "Switching to session '$target_session'..."
-    if ! switch_to_session "$target_session"; then
-        exit 1
-    fi
-    
-    # Record end time and calculate duration
-    end_time="$(date +%s%N 2>/dev/null || date +%s)"
-    
-    # Calculate duration in milliseconds if nanoseconds are available
-    if echo "$start_time" | grep -q '[0-9]\{10,\}'; then
-        # Have nanoseconds
-        duration_ns=$((end_time - start_time))
-        duration_ms=$((duration_ns / 1000000))
-        echo "Switch completed in ${duration_ms}ms"
+        
+        if [ -n "$selection" ]; then
+            # Extract session name from selection
+            session_name="$(echo "$selection" | sed 's/.*(\(.*\))/\1/')"
+            switch_to_session "$session_name"
+        fi
+    else
+        echo "Error: Not inside a tmux session"
+        echo "Use 'tmux attach -t <session>' to attach to a session"
+        return 1
     fi
 }
 
@@ -429,150 +667,110 @@ cmd_kill() {
     branch="${1:-}"
     
     if [ -z "$branch" ]; then
-        echo "Error: Branch name is required" >&2
+        echo "Error: Branch name required" >&2
         echo "Usage: hydra kill <branch>" >&2
-        exit 1
+        return 1
     fi
     
     # Get session for branch
     session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
     
     if [ -z "$session" ]; then
-        echo "Error: No session found for branch '$branch'" >&2
-        exit 1
+        echo "No session found for branch '$branch'"
+        return 1
     fi
     
-    # Get repository root
-    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo ".")"
-    
-    # Find worktree path - try multiple methods
-    worktree_path="$(find_worktree_path "$branch" 2>/dev/null || true)"
-    
-    # If not found by branch, try by pattern (handles case where branch was already deleted)
-    if [ -z "$worktree_path" ]; then
-        worktree_path="$(find_worktree_by_pattern "hydra-$branch" 2>/dev/null || true)"
+    # Skip confirmation in non-interactive environments (CI, tests)
+    if [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
+        # Interactive mode - ask for confirmation
+        printf "Kill hydra head '%s' (session: %s)? [y/N] " "$branch" "$session"
+        read -r response
+        case "$response" in
+            [yY][eE][sS]|[yY])
+                ;;
+            *)
+                echo "Aborted"
+                return 0
+                ;;
+        esac
+    else
+        # Non-interactive mode - proceed without confirmation
+        echo "Killing hydra head '$branch' (session: $session) [non-interactive mode]"
     fi
     
-    # Kill tmux session if it exists
+    # Kill tmux session
     if tmux_session_exists "$session"; then
         echo "Killing tmux session '$session'..."
-        if ! kill_session "$session"; then
-            echo "Warning: Failed to kill tmux session" >&2
-        fi
-    fi
-    
-    # Remove worktree if it exists
-    if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
-        echo "Removing worktree at '$worktree_path'..."
-        # Check if branch still exists - if not, force removal
-        if ! git_branch_exists "$branch"; then
-            # Branch doesn't exist, force removal
-            if ! delete_worktree "$worktree_path" "force"; then
-                echo "Error: Failed to remove worktree" >&2
-                echo "You may need to manually clean up: $worktree_path" >&2
-                # Don't exit, still remove mapping
-            fi
-        else
-            # Branch exists, normal removal
-            if ! delete_worktree "$worktree_path"; then
-                echo "Error: Failed to remove worktree" >&2
-                echo "You may need to manually clean up: $worktree_path" >&2
-                # Don't exit, still remove mapping
-            fi
-        fi
-    else
-        # Check if expected worktree path exists (fallback)
-        expected_path="$repo_root/../hydra-$branch"
-        if [ -d "$expected_path" ]; then
-            echo "Found orphaned worktree at '$expected_path'..."
-            echo "Attempting to remove it..."
-            # Try normal remove first, then force if needed
-            if git worktree remove "$expected_path" 2>/dev/null; then
-                echo "Successfully removed orphaned worktree"
-            elif git worktree remove --force "$expected_path" 2>/dev/null; then
-                echo "Successfully removed orphaned worktree (forced)"
-            else
-                echo "Warning: Could not remove orphaned worktree at: $expected_path" >&2
-                echo "You may need to manually run: git worktree remove --force '$expected_path'" >&2
-            fi
-        fi
+        tmux kill-session -t "$session" 2>/dev/null || true
     fi
     
     # Remove mapping
-    echo "Removing branch-session mapping..."
-    if ! remove_mapping "$branch"; then
-        echo "Warning: Failed to remove mapping" >&2
+    remove_mapping "$branch"
+    
+    # Delete worktree
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -n "$repo_root" ]; then
+        worktree_path="$repo_root/../hydra-$branch"
+        if [ -d "$worktree_path" ]; then
+            # Normalize the path by cd'ing to it and getting pwd
+            normalized_path="$(cd "$worktree_path" && pwd)" || normalized_path="$worktree_path"
+            echo "Removing worktree at '$normalized_path'..."
+            delete_worktree "$normalized_path"
+        fi
     fi
     
     echo "Hydra head '$branch' has been killed"
 }
 
 cmd_regenerate() {
-    # Check tmux availability
-    if ! check_tmux_version; then
-        exit 1
-    fi
-    
-    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
-        echo "No Hydra heads to regenerate"
-        return 0
-    fi
-    
-    regenerated=0
-    failed=0
+    echo "Regenerating tmux sessions for existing worktrees..."
     
     # Get repository root
-    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo ".")"
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "Error: Not in a git repository" >&2
+        return 1
+    fi
     
-    echo "Regenerating Hydra sessions..."
+    repo_root="$(git rev-parse --show-toplevel)"
+    parent_dir="$(dirname "$repo_root")"
     
-    while IFS=' ' read -r branch session; do
-        # Skip if session already exists
-        if tmux_session_exists "$session"; then
-            echo "Session '$session' for branch '$branch' already exists"
+    # Find all hydra worktrees
+    regenerated=0
+    skipped=0
+    
+    for dir in "$parent_dir"/hydra-*; do
+        if [ ! -d "$dir" ]; then
             continue
         fi
         
-        # Find worktree path (may not exist)
-        worktree_path="$(find_worktree_path "$branch" 2>/dev/null || true)"
+        # Extract branch name from directory
+        branch="$(basename "$dir" | sed 's/^hydra-//')"
         
-        if [ -z "$worktree_path" ] || [ ! -d "$worktree_path" ]; then
-            echo "Warning: No worktree found for branch '$branch'"
-            echo "  Use 'hydra spawn $branch' to create it"
-            failed=$((failed + 1))
+        # Check if session already exists
+        existing_session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
+        if [ -n "$existing_session" ] && tmux_session_exists "$existing_session"; then
+            echo "Session already exists for '$branch', skipping..."
+            skipped=$((skipped + 1))
             continue
         fi
+        
+        # Generate session name
+        session="$(generate_session_name "$branch")"
         
         # Create session
-        echo "Regenerating session '$session' for branch '$branch'..."
-        if create_session "$session" "$worktree_path"; then
+        echo "Creating session '$session' for branch '$branch'..."
+        if create_session "$session" "$dir"; then
+            add_mapping "$branch" "$session"
             regenerated=$((regenerated + 1))
-            
-            # Start AI tool
-            ai_command="${HYDRA_AI_COMMAND:-claude}"
-            if validate_ai_command "$ai_command"; then
-                send_keys_to_session "$session" "$ai_command"
-            else
-                echo "Warning: Skipping AI tool startup for session '$session'" >&2
-            fi
         else
-            echo "Error: Failed to create session '$session'" >&2
-            failed=$((failed + 1))
+            echo "Failed to create session for '$branch'" >&2
         fi
-    done < "$HYDRA_MAP"
-    
-    # Clean up invalid mappings
-    if [ "$failed" -gt 0 ]; then
-        echo "Cleaning up invalid mappings..."
-        cleanup_mappings
-    fi
+    done
     
     echo ""
     echo "Regeneration complete:"
-    echo "  Regenerated: $regenerated session(s)"
-    if [ "$failed" -gt 0 ]; then
-        echo "  Failed: $failed session(s)"
-    fi
+    echo "  Created: $regenerated"
+    echo "  Skipped: $skipped"
 }
 
 cmd_status() {
@@ -580,150 +778,51 @@ cmd_status() {
     echo "=================="
     echo ""
     
-    # Check git repository
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        echo "Error: Not in a git repository" >&2
-        exit 1
-    fi
-    
-    # Check tmux
-    if ! check_tmux_version >/dev/null 2>&1; then
-        echo "tmux: Not available or version too old"
-    else
-        echo "tmux: $(tmux -V)"
-    fi
+    # System info
+    echo "System Information:"
+    echo "  Hydra Version: $HYDRA_VERSION"
+    echo "  tmux Version: $(tmux -V 2>/dev/null || echo "Not installed")"
+    echo "  Git Version: $(git --version 2>/dev/null || echo "Not installed")"
     echo ""
     
-    # Analyze mappings
-    mapped_branches=""
-    mapped_sessions=""
-    orphaned_mappings=0
-    
-    if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
-        while IFS=' ' read -r branch session; do
-            mapped_branches="$mapped_branches $branch"
-            mapped_sessions="$mapped_sessions $session"
-            
-            # Check for orphaned mappings
-            if ! git_branch_exists "$branch" || ! tmux_session_exists "$session"; then
-                orphaned_mappings=$((orphaned_mappings + 1))
-            fi
-        done < "$HYDRA_MAP"
+    # Repository info
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        repo_root="$(git rev-parse --show-toplevel)"
+        echo "Repository:"
+        echo "  Path: $repo_root"
+        echo "  Current Branch: $(git branch --show-current 2>/dev/null || echo "Unknown")"
+        echo ""
     fi
     
-    # Get all worktrees
-    echo "Git Worktrees:"
-    worktree_count=0
-    unmapped_worktrees=0
-    
-    # Use temporary file to avoid pipe subshell issues
-    tmpfile="$(mktemp)" || {
-        echo "Error: Failed to create temporary file" >&2
-        echo ""
-        echo "Summary:"
-        echo "  Hydra home: $HYDRA_HOME"
-        echo "  Error: Unable to complete status report"
+    # Session info
+    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+        echo "No active Hydra heads"
         return 0
-    }
-    trap 'rm -f "$tmpfile"' EXIT INT TERM
+    fi
     
-    git worktree list --porcelain 2>/dev/null > "$tmpfile"
+    echo "Active Heads:"
+    active=0
+    dead=0
     
-    while IFS= read -r line; do
-        case "$line" in
-            "worktree "*)
-                # Path not needed for this check
-                ;;
-            "branch refs/heads/"*)
-                worktree_branch="${line#branch refs/heads/}"
-                worktree_count=$((worktree_count + 1))
-                
-                # Check if this worktree has a mapping
-                mapped=0
-                for mb in $mapped_branches; do
-                    if [ "$mb" = "$worktree_branch" ]; then
-                        mapped=1
-                        break
-                    fi
-                done
-                
-                if [ "$mapped" -eq 0 ]; then
-                    unmapped_worktrees=$((unmapped_worktrees + 1))
-                    echo "  - $worktree_branch (no session)"
-                else
-                    # Get session name
-                    session="$(get_session_for_branch "$worktree_branch" 2>/dev/null || echo "(unknown)")"
-                    if tmux_session_exists "$session"; then
-                        echo "  - $worktree_branch -> $session (active)"
-                    else
-                        echo "  - $worktree_branch -> $session (dead)"
-                    fi
-                fi
-                ;;
-        esac
-    done < "$tmpfile"
-    
-    rm -f "$tmpfile"
-    trap - EXIT INT TERM
-    
-    echo ""
-    echo "tmux Sessions:"
-    session_count=0
-    unmapped_sessions=0
-    
-    # List all tmux sessions using temp file
-    tmpfile2="$(mktemp)" || {
-        echo "Error: Failed to create temporary file" >&2
-        echo ""
-        echo "Summary:"
-        echo "  Hydra home: $HYDRA_HOME"
-        echo "  Error: Unable to complete status report"
-        return 0
-    }
-    trap 'rm -f "$tmpfile2"' EXIT INT TERM
-    
-    tmux list-sessions -F '#{session_name}' 2>/dev/null > "$tmpfile2"
-    
-    while read -r session; do
-        session_count=$((session_count + 1))
-        
-        # Check if this session has a mapping
-        mapped=0
-        for ms in $mapped_sessions; do
-            if [ "$ms" = "$session" ]; then
-                mapped=1
-                break
-            fi
-        done
-        
-        if [ "$mapped" -eq 0 ]; then
-            unmapped_sessions=$((unmapped_sessions + 1))
-            echo "  - $session (no branch)"
+    while IFS=' ' read -r branch session; do
+        if tmux_session_exists "$session"; then
+            echo "  ✓ $branch -> $session"
+            active=$((active + 1))
         else
-            # Get branch name
-            branch="$(get_branch_for_session "$session" 2>/dev/null || echo "(unknown)")"
-            echo "  - $session <- $branch"
+            echo "  ✗ $branch -> $session (dead)"
+            dead=$((dead + 1))
         fi
-    done < "$tmpfile2"
-    
-    rm -f "$tmpfile2"
-    trap - EXIT INT TERM
+    done < "$HYDRA_MAP"
     
     echo ""
     echo "Summary:"
-    echo "  Hydra home: $HYDRA_HOME"
-    echo "  Mapped heads: $(echo "$mapped_branches" | wc -w | tr -d ' ')"
-    if [ "$orphaned_mappings" -gt 0 ]; then
-        echo "  Orphaned mappings: $orphaned_mappings (run 'hydra regenerate' to fix)"
-    fi
-    if [ "$unmapped_worktrees" -gt 0 ]; then
-        echo "  Unmapped worktrees: $unmapped_worktrees"
-    fi
-    if [ "$unmapped_sessions" -gt 0 ]; then
-        echo "  Unmapped sessions: $unmapped_sessions"
-    fi
+    echo "  Active Sessions: $active"
+    echo "  Dead Sessions: $dead"
     
-    return 0
+    if [ "$dead" -gt 0 ]; then
+        echo ""
+        echo "Note: Dead sessions can be regenerated with 'hydra regenerate'"
+    fi
 }
 
 cmd_doctor() {
@@ -732,187 +831,81 @@ cmd_doctor() {
     echo ""
     
     # Check dependencies
-    echo "Dependencies:"
+    echo "Checking dependencies..."
+    errors=0
     
-    # Git
-    if command -v git >/dev/null 2>&1; then
-        git_version="$(git --version | cut -d' ' -f3)"
-        echo "  git: $git_version ✓"
-    else
-        echo "  git: NOT FOUND ✗"
-    fi
-    
-    # tmux
+    # Check tmux
     if command -v tmux >/dev/null 2>&1; then
-        tmux_version="$(tmux -V | cut -d' ' -f2)"
-        echo "  tmux: $tmux_version"
-        
-        # Check version requirement
-        if check_tmux_version >/dev/null 2>&1; then
-            echo "    Version check: ✓ (>= 3.0)"
+        if check_tmux_version; then
+            echo "  ✓ tmux $(tmux -V)"
         else
-            echo "    Version check: ✗ (need >= 3.0)"
+            echo "  ✗ tmux version too old (need 3.0+)"
+            errors=$((errors + 1))
         fi
     else
-        echo "  tmux: NOT FOUND ✗"
+        echo "  ✗ tmux not installed"
+        errors=$((errors + 1))
     fi
     
-    # Optional tools
-    echo ""
-    echo "Optional tools:"
-    
-    if command -v fzf >/dev/null 2>&1; then
-        echo "  fzf: found ✓ (interactive switching enabled)"
+    # Check git
+    if command -v git >/dev/null 2>&1; then
+        echo "  ✓ $(git --version)"
     else
-        echo "  fzf: not found (fallback to numeric selection)"
+        echo "  ✗ git not installed"
+        errors=$((errors + 1))
     fi
     
-    # Check configured AI tool
-    ai_command="${HYDRA_AI_COMMAND:-claude}"
-    if command -v "$ai_command" >/dev/null 2>&1; then
-        echo "  $ai_command: found ✓"
-    else
-        echo "  $ai_command: not found (install $ai_command CLI)"
-    fi
-    
-    # Performance test
+    # Check performance
     echo ""
-    echo "Performance test:"
+    echo "Running performance tests..."
     
-    # Test session switch latency
-    if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
-        # Find an active session to test with
-        test_session=""
-        while IFS=' ' read -r branch session; do
-            if tmux_session_exists "$session"; then
-                test_session="$session"
-                break
-            fi
-        done < "$HYDRA_MAP"
-        
-        if [ -n "$test_session" ] && [ -n "${TMUX:-}" ]; then
-            echo "  Testing switch latency to session '$test_session'..."
-            
-            # Measure 5 switches
-            total_ms=0
-            switches=5
-            i=1
-            
-            while [ "$i" -le "$switches" ]; do
-                start_time="$(date +%s%N 2>/dev/null || date +%s)"
-                tmux switch-client -t "$test_session" 2>/dev/null || true
-                end_time="$(date +%s%N 2>/dev/null || date +%s)"
-                
-                # Calculate duration if we have nanoseconds
-                if echo "$start_time" | grep -q '[0-9]\{10,\}'; then
-                    duration_ns=$((end_time - start_time))
-                    duration_ms=$((duration_ns / 1000000))
-                    total_ms=$((total_ms + duration_ms))
-                    printf "    Switch %d: %dms\n" "$i" "$duration_ms"
-                else
-                    echo "    (nanosecond precision not available)"
-                    break
-                fi
-                
-                i=$((i + 1))
-            done
-            
-            if [ "$total_ms" -gt 0 ]; then
-                avg_ms=$((total_ms / switches))
-                echo "  Average latency: ${avg_ms}ms"
-                
-                if [ "$avg_ms" -gt 100 ]; then
-                    echo "  WARNING: Switch latency exceeds 100ms target"
-                else
-                    echo "  Performance: ✓ (within 100ms target)"
-                fi
-            fi
-        else
-            echo "  No active sessions to test (run inside tmux with active heads)"
-        fi
+    # Test command dispatch
+    start_time=$(date +%s%N 2>/dev/null || date +%s)
+    "$0" version >/dev/null 2>&1
+    end_time=$(date +%s%N 2>/dev/null || date +%s)
+    
+    if [ ${#start_time} -gt 10 ]; then
+        # Nanosecond precision available
+        elapsed=$(( (end_time - start_time) / 1000000 ))
+        echo "  Command dispatch: ${elapsed}ms"
     else
-        echo "  No Hydra heads configured"
+        # Only second precision
+        echo "  Command dispatch: <1000ms (no precise timing available)"
     fi
     
-    # File system check
+    # Check state file
     echo ""
-    echo "File system:"
-    echo "  HYDRA_HOME: $HYDRA_HOME"
-    
-    if [ -d "$HYDRA_HOME" ]; then
-        echo "    Directory exists: ✓"
-        
-        if [ -w "$HYDRA_HOME" ]; then
-            echo "    Writable: ✓"
-        else
-            echo "    Writable: ✗ (permission denied)"
-        fi
-        
-        if [ -f "$HYDRA_MAP" ]; then
-            map_size="$(wc -l < "$HYDRA_MAP" | tr -d ' ')"
-            echo "    Map file: $map_size entries"
-        else
-            echo "    Map file: not found"
-        fi
+    echo "Checking state management..."
+    if [ -f "$HYDRA_MAP" ]; then
+        echo "  ✓ State file exists: $HYDRA_MAP"
+        echo "    Size: $(wc -c < "$HYDRA_MAP") bytes"
+        echo "    Entries: $(wc -l < "$HYDRA_MAP" | tr -d ' ')"
     else
-        echo "    Directory exists: ✗ (run any hydra command to create)"
+        echo "  ℹ No state file (this is normal for new installations)"
     fi
     
+    # Summary
     echo ""
-    echo "Diagnosis complete."
-}
-
-# Generate shell completion scripts
-cmd_completion() {
-    shell="${1:-}"
-    
-    if [ -z "$shell" ]; then
-        echo "Usage: hydra completion <shell>"
-        echo "Supported shells: bash, zsh, fish"
-        echo ""
-        echo "Examples:"
-        echo "  hydra completion bash > /etc/bash_completion.d/hydra"
-        echo "  hydra completion zsh > /usr/local/share/zsh/site-functions/_hydra"
-        echo "  hydra completion fish > ~/.config/fish/completions/hydra.fish"
-        echo ""
-        echo "To install automatically (may require sudo):"
-        echo "  hydra completion install [shell]"
+    if [ "$errors" -eq 0 ]; then
+        echo "✓ All checks passed! Hydra is ready to use."
+    else
+        echo "✗ Found $errors issue(s). Please install missing dependencies."
         return 1
     fi
-    
-    case "$shell" in
-        bash)
-            generate_bash_completion
-            ;;
-        zsh)
-            generate_zsh_completion
-            ;;
-        fish)
-            generate_fish_completion
-            ;;
-        install)
-            shift
-            install_completions "$@"
-            ;;
-        *)
-            echo "Error: Unsupported shell '$shell'" >&2
-            echo "Supported shells: bash, zsh, fish" >&2
-            return 1
-            ;;
-    esac
 }
 
-# Cycle through tmux pane layouts
+cmd_dashboard() {
+    show_dashboard
+}
+
 cmd_cycle_layout() {
-    # Must be called from within a tmux session
-    if [ -z "${TMUX:-}" ]; then
-        echo "Error: Not in a tmux session" >&2
-        echo "Use this command from within a Hydra session" >&2
-        exit 1
-    fi
-    
     cycle_layout
 }
 
-# Execute main function
+cmd_completion() {
+    shell="${1:-bash}"
+    generate_completion "$shell"
+}
+
+# Run main function with all arguments
 main "$@"
