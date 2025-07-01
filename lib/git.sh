@@ -265,6 +265,7 @@ find_worktree_path() {
                 ;;
             "branch refs/heads/$branch")
                 echo "$current_path"
+                found=1
                 break
                 ;;
         esac
@@ -272,5 +273,10 @@ find_worktree_path() {
     
     rm -f "$tmpfile"
     trap - EXIT INT TERM
-    return 1
+    
+    if [ "${found:-0}" -eq 1 ]; then
+        return 0
+    else
+        return 1
+    fi
 }
