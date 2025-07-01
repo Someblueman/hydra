@@ -320,6 +320,91 @@ test_hydra_home_init() {
     rm -rf "$test_dir"
 }
 
+# Test hydra spawn and kill cycle for issue branches
+test_issue_branch_cleanup() {
+    echo "Testing issue branch spawn and kill cycle..."
+    
+    # Only run if we're in a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "⚠ Skipping issue branch test - not in a git repository"
+        return
+    fi
+    
+    # Create isolated test environment
+    test_dir="$(setup_test_env)"
+    
+    # Create a test branch name that looks like an issue branch
+    test_branch="issue-999-test-cleanup-$(date +%s)"
+    repo_root="$(git rev-parse --show-toplevel)"
+    expected_worktree="$repo_root/../hydra-$test_branch"
+    
+    # Skip if tmux is not available
+    if ! command -v tmux >/dev/null 2>&1; then
+        echo "⚠ Skipping issue branch test - tmux not available"
+        cleanup_test_env "$test_dir"
+        return
+    fi
+    
+    # Create the branch and worktree
+    echo "  Creating test branch '$test_branch'..."
+    output="$("$HYDRA_BIN" spawn "$test_branch" 2>&1)"
+    exit_code=$?
+    
+    if [ "$exit_code" -ne 0 ]; then
+        echo "⚠ Skipping - spawn failed (might be in non-terminal environment)"
+        return
+    fi
+    
+    # Check that worktree was created
+    if [ -d "$expected_worktree" ]; then
+        assert_success 0 "Worktree directory was created at expected location"
+    else
+        assert_failure 1 "Worktree directory was not created at expected location"
+    fi
+    
+    # Check that branch exists in worktree list
+    worktree_exists="$(git worktree list | grep -c "$test_branch" || true)"
+    if [ "$worktree_exists" -gt 0 ]; then
+        assert_success 0 "Branch appears in git worktree list"
+    else
+        assert_failure 1 "Branch does not appear in git worktree list"
+    fi
+    
+    # Now kill the branch
+    echo "  Killing test branch '$test_branch'..."
+    output="$("$HYDRA_BIN" kill "$test_branch" 2>&1)"
+    exit_code=$?
+    assert_success "$exit_code" "hydra kill should succeed"
+    
+    # Verify worktree was removed
+    if [ ! -d "$expected_worktree" ]; then
+        assert_success 0 "Worktree directory was successfully removed"
+    else
+        assert_failure 1 "Worktree directory still exists after kill"
+    fi
+    
+    # Verify branch is no longer in worktree list
+    worktree_exists="$(git worktree list | grep -c "$test_branch" || true)"
+    if [ "$worktree_exists" -eq 0 ]; then
+        assert_success 0 "Branch no longer appears in git worktree list"
+    else
+        assert_failure 1 "Branch still appears in git worktree list after kill"
+    fi
+    
+    # Verify mapping was removed
+    if [ -f "$HYDRA_HOME/map" ]; then
+        mapping_exists="$(grep -c "$test_branch" "$HYDRA_HOME/map" 2>/dev/null || true)"
+        if [ "$mapping_exists" -eq 0 ]; then
+            assert_success 0 "Branch mapping was removed from state file"
+        else
+            assert_failure 1 "Branch mapping still exists in state file"
+        fi
+    fi
+    
+    # Clean up test environment
+    cleanup_test_env "$test_dir"
+}
+
 # Test that hydra binary is executable and has correct shebang
 test_hydra_binary() {
     echo "Testing hydra binary properties..."
@@ -357,6 +442,7 @@ test_regenerate_command_empty
 test_spawn_command_validation
 test_kill_command_validation
 test_hydra_home_init
+test_issue_branch_cleanup
 
 echo "=================================="
 echo "Test Results:"

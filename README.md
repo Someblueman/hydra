@@ -35,6 +35,7 @@
 - **Multiple Parallel Sessions**: Work on different branches simultaneously with isolated environments
 - **tmux Integration**: Each branch gets its own tmux session with customizable layouts
 - **Git Worktree Management**: Automatic creation and cleanup of git worktrees
+- **GitHub Integration**: Create heads directly from GitHub issues
 - **Session Persistence**: Maintains branch-to-session mappings across restarts
 - **Interactive Switching**: Use fzf for quick session switching (falls back to numeric selection)
 - **Performance Monitoring**: Built-in latency tracking ensures <100ms switch times
@@ -48,6 +49,7 @@
 - tmux ≥ 3.0
 - AI CLI tool (optional but recommended: claude, codex, cursor, copilot, or aider)
 - fzf (optional, for interactive switching)
+- GitHub CLI (optional, for GitHub issue integration)
 
 ### Installation
 
@@ -70,6 +72,9 @@ sudo make install
 ```sh
 # Create a new head for a branch
 hydra spawn feature-branch
+
+# Create a head from a GitHub issue
+hydra spawn --issue 123
 
 # List all active heads
 hydra list

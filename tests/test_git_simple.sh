@@ -142,6 +142,51 @@ test_git_functions_integration() {
     assert_failure $? "git_branch_exists should fail for non-existent branch"
 }
 
+# Test find_worktree_path parameter validation
+test_find_worktree_path_validation() {
+    echo "Testing find_worktree_path parameter validation..."
+    
+    # Test empty branch name
+    result="$(find_worktree_path "" 2>/dev/null)"
+    exit_code=$?
+    assert_failure $exit_code "find_worktree_path should fail with empty branch name"
+    assert_equal "" "$result" "find_worktree_path should return empty for empty branch"
+}
+
+# Test find_worktree_path with actual worktrees
+test_find_worktree_path_integration() {
+    echo "Testing find_worktree_path integration..."
+    
+    # Only run if we're in a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        echo "⚠ Skipping integration tests - not in a git repository"
+        return
+    fi
+    
+    # Get current branch
+    current_branch="$(git branch --show-current 2>/dev/null || echo "main")"
+    if [ -n "$current_branch" ]; then
+        # Test finding current worktree
+        worktree_path="$(find_worktree_path "$current_branch" 2>/dev/null)"
+        exit_code=$?
+        assert_success $exit_code "find_worktree_path should succeed for current branch"
+        
+        # Verify we got a non-empty path
+        if [ -n "$worktree_path" ]; then
+            assert_success 0 "find_worktree_path returned a path for current branch"
+        else
+            assert_failure 1 "find_worktree_path returned empty path for current branch"
+        fi
+    fi
+    
+    # Test non-existent branch
+    fake_branch="non-existent-branch-$(date +%s)"
+    result="$(find_worktree_path "$fake_branch" 2>/dev/null)"
+    exit_code=$?
+    assert_failure $exit_code "find_worktree_path should fail for non-existent branch"
+    assert_equal "" "$result" "find_worktree_path should return empty for non-existent branch"
+}
+
 # Run all tests
 echo "Running git.sh unit tests (edge cases and validation)..."
 echo "================================================"
@@ -150,6 +195,8 @@ test_git_branch_exists_edge_cases
 test_create_worktree_validation
 test_delete_worktree_validation
 test_get_worktree_branch_validation
+test_find_worktree_path_validation
+test_find_worktree_path_integration
 test_git_functions_integration
 
 echo "================================================"
