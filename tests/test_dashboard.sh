@@ -68,14 +68,13 @@ setup_test_repo() {
     
     # Create test branches
     for branch in $TEST_BRANCHES; do
+        git checkout main >/dev/null 2>&1
         git checkout -b "$branch" >/dev/null 2>&1
         echo "Testing branch: $branch" > "$(echo "$branch" | tr '/' '-').md"
         git add "$(echo "$branch" | tr '/' '-').md" >/dev/null 2>&1
         git commit -m "Add content for $branch" >/dev/null 2>&1
+        git checkout main >/dev/null 2>&1
     done
-    
-    # Switch back to main for spawning
-    git checkout main >/dev/null 2>&1
     
     print_status "Test repository created at $TEST_REPO_DIR"
 }
