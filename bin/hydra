@@ -14,13 +14,44 @@ HYDRA_MAP="$HYDRA_HOME/map"
 HYDRA_VERSION="1.1.0-dev"
 
 # Source helper libraries
-# Detect if we're running from source or installed
-if [ -f "$(dirname "$0")/../lib/git.sh" ]; then
-    # Running from source directory
-    HYDRA_LIB_DIR="$(dirname "$0")/../lib"
+# Enhanced library detection with multiple fallback paths
+# Try to resolve the real path of the hydra binary
+HYDRA_BIN_PATH="$0"
+if [ -L "$HYDRA_BIN_PATH" ]; then
+    # Follow symlinks if possible (POSIX-compliant approach)
+    if command -v readlink >/dev/null 2>&1; then
+        # Try GNU readlink -f first, then BSD readlink
+        HYDRA_BIN_PATH="$(readlink -f "$HYDRA_BIN_PATH" 2>/dev/null || readlink "$HYDRA_BIN_PATH" 2>/dev/null || echo "$HYDRA_BIN_PATH")"
+    fi
+fi
+
+# Get the directory containing the hydra binary
+if HYDRA_BIN_DIR="$(cd "$(dirname "$HYDRA_BIN_PATH")" 2>/dev/null && pwd)"; then
+    : # Successfully got absolute path
 else
-    # Running from installed location
+    # Fallback to dirname if cd fails
+    HYDRA_BIN_DIR="$(dirname "$HYDRA_BIN_PATH")"
+fi
+
+# Try multiple paths to find the library directory
+if [ -d "$HYDRA_BIN_DIR/../lib" ] && [ -f "$HYDRA_BIN_DIR/../lib/git.sh" ]; then
+    # Running from source - resolve to absolute path
+    HYDRA_LIB_DIR="$(cd "$HYDRA_BIN_DIR/../lib" && pwd)"
+elif [ -d "/usr/local/lib/hydra" ] && [ -f "/usr/local/lib/hydra/git.sh" ]; then
+    # Installed location
     HYDRA_LIB_DIR="/usr/local/lib/hydra"
+elif [ -n "${HYDRA_ROOT:-}" ] && [ -d "$HYDRA_ROOT/lib" ] && [ -f "$HYDRA_ROOT/lib/git.sh" ]; then
+    # Environment variable override
+    HYDRA_LIB_DIR="$HYDRA_ROOT/lib"
+else
+    echo "Error: Cannot find hydra library directory" >&2
+    echo "Searched in:" >&2
+    echo "  - $HYDRA_BIN_DIR/../lib (source)" >&2
+    echo "  - /usr/local/lib/hydra (installed)" >&2
+    [ -n "${HYDRA_ROOT:-}" ] && echo "  - $HYDRA_ROOT/lib (HYDRA_ROOT)" >&2
+    echo "" >&2
+    echo "Please ensure hydra is properly installed or set HYDRA_ROOT environment variable" >&2
+    exit 1
 fi
 
 # shellcheck source=../lib/git.sh
@@ -95,6 +126,7 @@ Examples:
 Environment:
   HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
   HYDRA_AI_COMMAND  Default AI tool (default: claude)
+  HYDRA_ROOT        Override hydra installation path (for library discovery)
 EOF
 }
 
