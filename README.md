@@ -193,10 +193,24 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
 
 **Environment Variables:**
 - `HYDRA_HOME`: Directory for runtime files (default: `~/.hydra`)
+- `HYDRA_AI_COMMAND`: Default AI tool to use (default: `claude`)
+- `HYDRA_ROOT`: Override hydra installation path for library discovery (useful when running from source)
 
 ## Performance
 
 Hydra targets <100ms switch latency. Run `hydra doctor` to test your system's performance and identify any bottlenecks.
+
+## Troubleshooting
+
+### Hydra commands fail inside hydra sessions
+
+If you're running hydra from source and commands like `hydra list` fail when run from inside a hydra-managed session, this is likely due to library path resolution issues. Solutions:
+
+1. **Install hydra system-wide**: Run `make install` to install hydra to `/usr/local/bin`
+2. **Set HYDRA_ROOT**: Export `HYDRA_ROOT=/path/to/hydra` pointing to your hydra source directory
+3. **Use absolute paths**: Call hydra using its full path instead of relying on PATH
+
+The issue occurs because hydra sessions run in git worktrees that don't contain the library files needed by the hydra script.
 
 ## License
 
