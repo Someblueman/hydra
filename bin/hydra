@@ -5,6 +5,10 @@
 set -eu
 
 # Global variables
+# Ensure HOME is set to actual user home directory
+if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
+    HOME="$(cd ~ && pwd)"
+fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_MAP="$HYDRA_HOME/map"
 HYDRA_VERSION="1.1.0-dev"
