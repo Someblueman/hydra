@@ -24,10 +24,23 @@ _hydra_completion() {
             COMPREPLY=($(compgen -W "${commands} ${opts}" -- ${cur}))
             return 0
             ;;
-        spawn|kill)
+        spawn)
             # Complete with git branch names
             local branches=$(git branch 2>/dev/null | sed 's/^[ *]*//' | grep -v '^(')
             COMPREPLY=($(compgen -W "${branches}" -- ${cur}))
+            return 0
+            ;;
+        kill)
+            # Complete with git branch names or --all flag
+            case "${cur}" in
+                -*)
+                    COMPREPLY=($(compgen -W "--all --force" -- ${cur}))
+                    ;;
+                *)
+                    local branches=$(git branch 2>/dev/null | sed 's/^[ *]*//' | grep -v '^(')
+                    COMPREPLY=($(compgen -W "${branches}" -- ${cur}))
+                    ;;
+            esac
             return 0
             ;;
         switch)
@@ -78,6 +91,17 @@ _hydra_completion() {
                 ;;
         esac
     fi
+    
+    # Check if we're completing a flag for kill command
+    if [[ "${COMP_WORDS[@]}" =~ kill ]]; then
+        case "${prev}" in
+            --all)
+                # After --all, only --force is valid
+                COMPREPLY=($(compgen -W "--force" -- ${cur}))
+                return 0
+                ;;
+        esac
+    fi
 }
 
 complete -F _hydra_completion hydra
@@ -114,7 +138,10 @@ _hydra() {
                         '1:branch:_hydra_branches'
                     ;;
                 kill)
-                    _arguments '1:branch:_hydra_branches'
+                    _arguments \
+                        '--all[Kill all hydra sessions]' \
+                        '--force[Skip confirmation prompt]' \
+                        '1:branch:_hydra_branches'
                     ;;
                 switch)
                     _arguments '1:session:_hydra_sessions'

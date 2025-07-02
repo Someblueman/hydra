@@ -104,6 +104,9 @@ Commands:
   list              List all active Hydra heads
   switch            Switch to a different head (interactive)
   kill <branch>     Remove a worktree and its tmux session
+  kill --all        Kill all hydra sessions
+                    Options:
+                      --force          Skip confirmation prompt
   regenerate        Restore tmux sessions for existing worktrees
   status            Show health status of all heads
   doctor            Check system performance
@@ -122,6 +125,9 @@ Examples:
   hydra spawn feature-x --ai gemini        # Create session with Google Gemini CLI
   hydra spawn exp --agents "claude:2,aider:1"  # Create 2 claude + 1 aider sessions
   hydra spawn --issue 42                   # Create session from GitHub issue #42
+  hydra kill feature-x                     # Kill a specific session
+  hydra kill --all                         # Kill all sessions (with confirmation)
+  hydra kill --all --force                 # Kill all sessions without confirmation
 
 Environment:
   HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
@@ -700,12 +706,199 @@ cmd_switch() {
     fi
 }
 
-cmd_kill() {
-    branch="${1:-}"
+# Kill all hydra sessions
+# Usage: kill_all_sessions [force]
+# Returns: 0 on success, 1 on failure
+kill_all_sessions() {
+    force="${1:-false}"
     
+    # Check if we have any mappings
+    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+        echo "No active Hydra heads to kill"
+        return 0
+    fi
+    
+    # Get all mappings
+    mappings="$(list_mappings)"
+    count="$(echo "$mappings" | wc -l | tr -d ' ')"
+    
+    if [ "$count" -eq 0 ]; then
+        echo "No active Hydra heads to kill"
+        return 0
+    fi
+    
+    # Display what will be killed
+    echo "The following hydra heads will be killed:"
+    while IFS=' ' read -r branch session; do
+        if [ -n "$branch" ] && [ -n "$session" ]; then
+            echo "  $branch -> $session"
+        fi
+    done <<EOF
+$mappings
+EOF
+    
+    # Handle confirmation
+    if [ "$force" != "true" ]; then
+        # Check if we're in interactive mode
+        if [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
+            # Interactive mode - ask for confirmation
+            printf "\nKill all %d hydra heads? [y/N] " "$count"
+            read -r response
+            case "$response" in
+                [yY][eE][sS]|[yY])
+                    ;;
+                *)
+                    echo "Aborted"
+                    return 0
+                    ;;
+            esac
+        else
+            # Non-interactive mode without force - fail safe
+            echo "Error: Cannot kill all sessions in non-interactive mode without --force" >&2
+            return 1
+        fi
+    else
+        echo ""
+        echo "Killing all $count hydra heads (--force specified)..."
+    fi
+    
+    # Kill each session
+    succeeded=0
+    failed=0
+    
+    # Process each mapping
+    while IFS=' ' read -r branch session; do
+        if [ -z "$branch" ] || [ -z "$session" ]; then
+            continue
+        fi
+        
+        echo ""
+        echo "Killing hydra head '$branch' (session: $session)..."
+        
+        # Kill tmux session
+        if tmux_session_exists "$session"; then
+            echo "  Killing tmux session '$session'..."
+            if tmux kill-session -t "$session" 2>/dev/null; then
+                # Remove mapping
+                remove_mapping "$branch"
+                
+                # Delete worktree
+                repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+                if [ -n "$repo_root" ]; then
+                    worktree_path="$repo_root/../hydra-$branch"
+                    if [ -d "$worktree_path" ]; then
+                        # Normalize the path by cd'ing to it and getting pwd
+                        normalized_path="$(cd "$worktree_path" && pwd 2>/dev/null)" || normalized_path="$worktree_path"
+                        echo "  Removing worktree at '$normalized_path'..."
+                        if delete_worktree "$normalized_path"; then
+                            succeeded=$((succeeded + 1))
+                            echo "  Successfully killed hydra head '$branch'"
+                        else
+                            failed=$((failed + 1))
+                            echo "  Failed to remove worktree for '$branch'" >&2
+                        fi
+                    else
+                        # Session killed but no worktree found
+                        succeeded=$((succeeded + 1))
+                        echo "  Successfully killed session '$session' (no worktree found)"
+                    fi
+                else
+                    # Not in a git repo - just count as success if session was killed
+                    succeeded=$((succeeded + 1))
+                    echo "  Successfully killed session '$session'"
+                fi
+            else
+                failed=$((failed + 1))
+                echo "  Failed to kill tmux session '$session'" >&2
+            fi
+        else
+            # Session doesn't exist - clean up mapping anyway
+            echo "  Session '$session' not found, cleaning up mapping..."
+            remove_mapping "$branch"
+            
+            # Try to remove worktree if it exists
+            repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+            if [ -n "$repo_root" ]; then
+                worktree_path="$repo_root/../hydra-$branch"
+                if [ -d "$worktree_path" ]; then
+                    normalized_path="$(cd "$worktree_path" && pwd 2>/dev/null)" || normalized_path="$worktree_path"
+                    echo "  Removing orphaned worktree at '$normalized_path'..."
+                    delete_worktree "$normalized_path"
+                fi
+            fi
+            succeeded=$((succeeded + 1))
+        fi
+    done <<EOF
+$mappings
+EOF
+    
+    # Summary
+    echo ""
+    echo "Kill all complete:"
+    echo "  Succeeded: $succeeded"
+    if [ "$failed" -gt 0 ]; then
+        echo "  Failed: $failed"
+        return 1
+    fi
+    
+    return 0
+}
+
+cmd_kill() {
+    # Parse arguments
+    branch=""
+    kill_all=false
+    force=false
+    
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --all)
+                kill_all=true
+                shift
+                ;;
+            --force)
+                force=true
+                shift
+                ;;
+            -*)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Usage: hydra kill <branch>" >&2
+                echo "       hydra kill --all [--force]" >&2
+                return 1
+                ;;
+            *)
+                if [ -z "$branch" ]; then
+                    branch="$1"
+                else
+                    echo "Error: Too many arguments" >&2
+                    echo "Usage: hydra kill <branch>" >&2
+                    echo "       hydra kill --all [--force]" >&2
+                    return 1
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    # Check mutual exclusivity
+    if [ "$kill_all" = true ] && [ -n "$branch" ]; then
+        echo "Error: Cannot specify both branch name and --all" >&2
+        echo "Usage: hydra kill <branch>" >&2
+        echo "       hydra kill --all [--force]" >&2
+        return 1
+    fi
+    
+    # If --all flag is set, delegate to kill_all_sessions
+    if [ "$kill_all" = true ]; then
+        kill_all_sessions "$force"
+        return $?
+    fi
+    
+    # Original single branch kill logic
     if [ -z "$branch" ]; then
         echo "Error: Branch name required" >&2
         echo "Usage: hydra kill <branch>" >&2
+        echo "       hydra kill --all [--force]" >&2
         return 1
     fi
     
