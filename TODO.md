@@ -41,6 +41,15 @@ Date: 2025-07-01
   - Pushed release/v1.1.0 with CI improvements
   - Date: 2025-07-01
 
+- [x] Implement 'kill all' functionality for hydra
+  - Added `hydra kill --all` command to kill all active sessions
+  - Added `--force` flag to skip confirmation prompt
+  - Implemented safe confirmation flow in interactive mode
+  - Added comprehensive tests for all scenarios
+  - Updated shell completion for bash and zsh
+  - All tests pass, ShellCheck clean
+  - Date: 2025-07-03
+
 ## In Progress
 - [ ] Monitor PR #15 CI results
   - Bulk spawn tests should now pass
@@ -67,6 +76,11 @@ The spawn command now supports:
 3. **AI tool selection**: `hydra spawn feature-x --ai aider`
 4. **Mixed agents**: `hydra spawn exp --agents "claude:2,aider:1"`
 5. **GitHub issues**: `hydra spawn --issue 42`
+
+The kill command now supports:
+1. **Single session**: `hydra kill feature-x`
+2. **Kill all**: `hydra kill --all`
+3. **Force mode**: `hydra kill --all --force`
 
 ### Test Path Fix
 Tests now use:
