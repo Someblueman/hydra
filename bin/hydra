@@ -67,7 +67,7 @@ Commands:
                     Options:
                       -l, --layout <layout>    Apply tmux layout
                       -n, --count <number>     Spawn multiple sessions (1-10)
-                      --ai <tool>              Specify AI tool (claude, aider, etc.)
+                      --ai <tool>              Specify AI tool (claude, aider, gemini, etc.)
                       --agents <spec>          Mixed agents (e.g., "claude:2,aider:1")
   spawn --issue <#> Create a head from a GitHub issue
   list              List all active Hydra heads
@@ -88,6 +88,7 @@ Examples:
   hydra spawn feature-x                    # Create single session
   hydra spawn feature-x -n 3               # Create 3 sessions (feature-x-1, feature-x-2, feature-x-3)
   hydra spawn feature-x -n 3 --ai aider    # Create 3 sessions with aider
+  hydra spawn feature-x --ai gemini        # Create session with Google Gemini CLI
   hydra spawn exp --agents "claude:2,aider:1"  # Create 2 claude + 1 aider sessions
   hydra spawn --issue 42                   # Create session from GitHub issue #42
 

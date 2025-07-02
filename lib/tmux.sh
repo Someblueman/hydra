@@ -14,12 +14,12 @@ validate_ai_command() {
     fi
     
     case "$command" in
-        "claude"|"codex"|"cursor"|"copilot"|"aider")
+        "claude"|"codex"|"cursor"|"copilot"|"aider"|"gemini")
             return 0
             ;;
         *)
             echo "Error: Unsupported AI command: $command" >&2
-            echo "Supported: claude, codex, cursor, copilot, aider" >&2
+            echo "Supported: claude, codex, cursor, copilot, aider, gemini" >&2
             return 1
             ;;
     esac

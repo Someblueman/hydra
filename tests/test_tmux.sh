@@ -208,6 +208,40 @@ test_get_current_session() {
     fi
 }
 
+# Test validate_ai_command function
+test_validate_ai_command() {
+    echo "Testing validate_ai_command..."
+    
+    # Test valid AI commands
+    validate_ai_command "claude" 2>/dev/null
+    assert_success $? "validate_ai_command should accept 'claude'"
+    
+    validate_ai_command "codex" 2>/dev/null
+    assert_success $? "validate_ai_command should accept 'codex'"
+    
+    validate_ai_command "cursor" 2>/dev/null
+    assert_success $? "validate_ai_command should accept 'cursor'"
+    
+    validate_ai_command "copilot" 2>/dev/null
+    assert_success $? "validate_ai_command should accept 'copilot'"
+    
+    validate_ai_command "aider" 2>/dev/null
+    assert_success $? "validate_ai_command should accept 'aider'"
+    
+    validate_ai_command "gemini" 2>/dev/null
+    assert_success $? "validate_ai_command should accept 'gemini'"
+    
+    # Test invalid AI commands
+    validate_ai_command "invalid-ai" 2>/dev/null
+    assert_failure $? "validate_ai_command should reject 'invalid-ai'"
+    
+    validate_ai_command "" 2>/dev/null
+    assert_failure $? "validate_ai_command should reject empty command"
+    
+    validate_ai_command "claude && rm -rf /" 2>/dev/null
+    assert_failure $? "validate_ai_command should reject command injection attempt"
+}
+
 # Run all tests
 echo "Running tmux.sh unit tests (parameter validation)..."
 echo "=============================================="
@@ -221,6 +255,7 @@ test_switch_to_session_validation
 test_rename_session_validation
 test_list_sessions
 test_get_current_session
+test_validate_ai_command
 
 echo "=============================================="
 echo "Test Results:"
