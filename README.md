@@ -47,7 +47,8 @@
 - `/bin/sh` (POSIX shell)
 - git
 - tmux ≥ 3.0
-- AI CLI tool (optional but recommended: claude, codex, cursor, copilot, or aider)
+- AI CLI tool (optional but recommended: claude, codex, cursor, copilot, aider, or gemini)
+  - Note: gemini requires Node.js 18+ and Google account authentication
 - fzf (optional, for interactive switching)
 - GitHub CLI (optional, for GitHub issue integration)
 

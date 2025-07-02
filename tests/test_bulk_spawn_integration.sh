@@ -114,12 +114,44 @@ test_bulk_spawn_confirmation() {
     teardown_test_env
 }
 
+# Test valid AI tools including gemini
+test_valid_ai_tools() {
+    echo "Testing valid AI tools including gemini..."
+    
+    # Test gemini is accepted
+    output="$("$HYDRA_BIN" spawn test-gemini --agents 'gemini:2' 2>&1 || true)"
+    if echo "$output" | grep -q "Unsupported AI command"; then
+        fail_count=$((fail_count + 1))
+        test_count=$((test_count + 1))
+        echo "✗ Should accept 'gemini' as valid AI tool"
+        echo "  Output: $output"
+    else
+        pass_count=$((pass_count + 1))
+        test_count=$((test_count + 1))
+        echo "✓ Should accept 'gemini' as valid AI tool"
+    fi
+    
+    # Test mixed agents with gemini
+    output="$("$HYDRA_BIN" spawn test-mixed --agents 'claude:2,gemini:1' 2>&1 || true)"
+    if echo "$output" | grep -q "Unsupported AI command"; then
+        fail_count=$((fail_count + 1))
+        test_count=$((test_count + 1))
+        echo "✗ Should accept mixed agents with gemini"
+        echo "  Output: $output"
+    else
+        pass_count=$((pass_count + 1))
+        test_count=$((test_count + 1))
+        echo "✓ Should accept mixed agents with gemini"
+    fi
+}
+
 # Run all tests
 echo "Running bulk spawn integration tests..."
 echo ""
 
 test_bulk_spawn_parsing
 test_invalid_agents_spec
+test_valid_ai_tools
 test_bulk_spawn_confirmation
 
 # Report results
