@@ -115,7 +115,7 @@ test_kill_all_force() {
     "$HYDRA_BIN" spawn test-kill-3 >/dev/null 2>&1
     
     # Verify sessions were created
-    sessions_before="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^test-kill-' | wc -l | tr -d ' ')"
+    sessions_before="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -c '^test-kill-')"
     assert_equal "3" "$sessions_before" "Should have 3 test sessions before kill"
     
     # Kill all with force
@@ -127,12 +127,12 @@ test_kill_all_force() {
     assert_contains "$output" "Succeeded: 3" "Should report 3 successful kills"
     
     # Verify sessions were killed
-    sessions_after="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^test-kill-' | wc -l | tr -d ' ')"
+    sessions_after="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -c '^test-kill-')"
     assert_equal "0" "$sessions_after" "Should have 0 test sessions after kill"
     
     # Verify map is empty
     if [ -f "$HOME/.hydra/map" ]; then
-        map_lines="$(grep 'test-kill-' "$HOME/.hydra/map" 2>/dev/null | wc -l | tr -d ' ')"
+        map_lines="$(grep -c 'test-kill-' "$HOME/.hydra/map" 2>/dev/null)"
         assert_equal "0" "$map_lines" "Map should have no test-kill entries"
     fi
 }
@@ -186,7 +186,7 @@ test_kill_all_partial_failure() {
     assert_contains "$output" "Succeeded: 3" "Should count phantom cleanup as success"
     
     # Verify real sessions were killed
-    sessions_after="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^killtest-' | wc -l | tr -d ' ')"
+    sessions_after="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -c '^killtest-')"
     assert_equal "0" "$sessions_after" "Should have 0 killtest sessions after kill"
 }
 
