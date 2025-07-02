@@ -175,17 +175,24 @@ delete_worktree() {
     
     # Check for untracked files (optional warning)
     if [ -n "$(git -C "$path" ls-files --others --exclude-standard -- 2>/dev/null)" ]; then
-        echo "Warning: Worktree has untracked files" >&2
-        printf "Continue anyway? [y/N] "
-        read -r response
-        case "$response" in
-            [yY][eE][sS]|[yY])
-                ;;
-            *)
-                echo "Aborted" >&2
-                return 1
-                ;;
-        esac
+        # Check if we're in non-interactive mode
+        if [ -z "${HYDRA_NONINTERACTIVE:-}" ] && [ -z "${CI:-}" ]; then
+            # Interactive mode - prompt user
+            echo "Warning: Worktree has untracked files" >&2
+            printf "Continue anyway? [y/N] "
+            read -r response
+            case "$response" in
+                [yY][eE][sS]|[yY])
+                    ;;
+                *)
+                    echo "Aborted" >&2
+                    return 1
+                    ;;
+            esac
+        else
+            # Non-interactive mode - proceed with warning
+            echo "Warning: Worktree has untracked files (proceeding in non-interactive mode)" >&2
+        fi
     fi
     
     # Remove the worktree
