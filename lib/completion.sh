@@ -57,7 +57,7 @@ _hydra_completion() {
                 ;;
             --ai)
                 # Complete with AI tools
-                COMPREPLY=($(compgen -W "claude aider codex cursor copilot" -- ${cur}))
+                COMPREPLY=($(compgen -W "claude aider codex cursor copilot gemini" -- ${cur}))
                 return 0
                 ;;
             --agents)
@@ -108,7 +108,7 @@ _hydra() {
                     _arguments \
                         '(-l --layout)'{-l,--layout}'[Layout to use]:layout:(default dev full)' \
                         '(-n --count)'{-n,--count}'[Number of sessions to spawn]:count:(1 2 3 4 5 6 7 8 9 10)' \
-                        '--ai[AI tool to use]:ai:(claude aider codex cursor copilot)' \
+                        '--ai[AI tool to use]:ai:(claude aider codex cursor copilot gemini)' \
                         '--agents[Mixed agents specification]:agents:' \
                         '(-i --issue)'{-i,--issue}'[Create from GitHub issue]:issue:' \
                         '1:branch:_hydra_branches'
@@ -188,7 +188,7 @@ complete -c hydra -f -n '__fish_use_subcommand' -s v -l version -d 'Show version
 # Complete spawn command
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s l -l layout -d 'Layout to use' -a 'default dev full'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s n -l count -d 'Number of sessions to spawn' -a '1 2 3 4 5 6 7 8 9 10'
-complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to use' -a 'claude aider codex cursor copilot'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to use' -a 'claude aider codex cursor copilot gemini'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l agents -d 'Mixed agents specification (e.g., claude:2,aider:1)'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s i -l issue -d 'Create from GitHub issue number'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn; and not __fish_seen_subcommand_from -l --layout -n --count --ai --agents -i --issue' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'

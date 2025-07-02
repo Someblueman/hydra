@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-07-02
+
+### Added
+- Support for Google Gemini CLI as an AI tool option
+  - Users can now spawn sessions with `--ai gemini`
+  - Gemini provides free access with generous limits (60 req/min, 1000 req/day)
+  - Added gemini to mixed agents support (e.g., `--agents "claude:2,gemini:1"`)
+  - Requires Node.js 18+ and Google account authentication
+- Tests for gemini tool validation and integration
+
+### Changed
+- Updated AI tool validation to include gemini
+- Enhanced shell completions for all supported shells (bash, zsh, fish)
+- Updated documentation with gemini requirements and examples
+
 ## [0.2.0] - 2025-06-18
 
 ### Added
