@@ -5,20 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] - Unreleased
+## [1.1.0] - 2025-07-03
 
 ### Added
+- GitHub Issue Integration (`hydra spawn --issue <#>`)
+  - Create heads directly from GitHub issues
+  - Automatically generates branch names from issue titles
+  - Validates issue numbers and fetches issue details via GitHub CLI
+- Bulk spawn capability for multi-agent workflows
+  - `hydra spawn <branch> -n <count>` creates multiple numbered sessions
+  - `hydra spawn <branch> --agents "claude:2,aider:1"` for mixed AI agents
+  - Automatic rollback on failure with confirmation prompts
+- Kill all sessions command (`hydra kill --all`)
+  - Optional `--force` flag to skip confirmation
+  - Safely removes all sessions with proper cleanup
 - Support for Google Gemini CLI as an AI tool option
   - Users can now spawn sessions with `--ai gemini`
   - Gemini provides free access with generous limits (60 req/min, 1000 req/day)
   - Added gemini to mixed agents support (e.g., `--agents "claude:2,gemini:1"`)
   - Requires Node.js 18+ and Google account authentication
-- Tests for gemini tool validation and integration
 
 ### Changed
+- Enhanced library path resolution for better reliability
+  - Support for running hydra from inside hydra-managed sessions
+  - Multiple fallback paths with HYDRA_ROOT environment variable
 - Updated AI tool validation to include gemini
 - Enhanced shell completions for all supported shells (bash, zsh, fish)
 - Updated documentation with gemini requirements and examples
+- Version bumped to 1.1.0-dev during development cycle
+
+### Fixed
+- Library path resolution when running hydra inside sessions
+- Non-interactive mode handling in delete_worktree
+- Test cleanup to prevent HYDRA_NONINTERACTIVE state leak
+- ShellCheck compliance improvements (removed grep|wc -l patterns)
 
 ## [0.2.0] - 2025-06-18
 
