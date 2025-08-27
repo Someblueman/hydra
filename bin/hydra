@@ -11,7 +11,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="1.1.0"
+HYDRA_VERSION="1.2.0"
 
 # Source helper libraries
 # Enhanced library detection with multiple fallback paths
@@ -183,8 +183,8 @@ spawn_single() {
         return 1
     fi
     
-    # Add mapping
-    if ! add_mapping "$branch" "$session"; then
+    # Add mapping (persist selected AI tool if provided)
+    if ! add_mapping "$branch" "$session" "${ai_tool:-}"; then
         echo "Warning: Failed to save branch-session mapping" >&2
     fi
     
@@ -654,18 +654,30 @@ cmd_list() {
     echo ""
     
     # Read mapping file and display status
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session ai; do
         # Check if session still exists
         if tmux_session_exists "$session"; then
             # Check if it's the current session
             current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
             if [ "$session" = "$current_session" ]; then
-                echo "* $branch -> $session (current)"
+                if [ -n "$ai" ]; then
+                    echo "* $branch -> $session [ai: $ai] (current)"
+                else
+                    echo "* $branch -> $session (current)"
+                fi
             else
-                echo "  $branch -> $session"
+                if [ -n "$ai" ]; then
+                    echo "  $branch -> $session [ai: $ai]"
+                else
+                    echo "  $branch -> $session"
+                fi
             fi
         else
-            echo "  $branch -> $session (dead)"
+            if [ -n "$ai" ]; then
+                echo "  $branch -> $session [ai: $ai] (dead)"
+            else
+                echo "  $branch -> $session (dead)"
+            fi
         fi
     done < "$HYDRA_MAP"
 }
@@ -1003,8 +1015,20 @@ cmd_regenerate() {
         # Create session
         echo "Creating session '$session' for branch '$branch'..."
         if create_session "$session" "$dir"; then
-            add_mapping "$branch" "$session"
+            # Preserve any stored AI tool for this branch
+            stored_ai="$(get_ai_for_branch "$branch" 2>/dev/null || true)"
+            add_mapping "$branch" "$session" "$stored_ai"
             regenerated=$((regenerated + 1))
+
+            # Optionally auto-launch stored AI tool in the regenerated session
+            if [ -n "$stored_ai" ]; then
+                if validate_ai_command "$stored_ai"; then
+                    echo "Starting $stored_ai in session '$session'..." >&2
+                    send_keys_to_session "$session" "$stored_ai"
+                else
+                    echo "Warning: Stored AI tool '$stored_ai' is invalid; skipping launch" >&2
+                fi
+            fi
         else
             echo "Failed to create session for '$branch'" >&2
         fi
@@ -1047,12 +1071,20 @@ cmd_status() {
     active=0
     dead=0
     
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session ai; do
         if tmux_session_exists "$session"; then
-            echo "  ✓ $branch -> $session"
+            if [ -n "$ai" ]; then
+                echo "  ✓ $branch -> $session [ai: $ai]"
+            else
+                echo "  ✓ $branch -> $session"
+            fi
             active=$((active + 1))
         else
-            echo "  ✗ $branch -> $session (dead)"
+            if [ -n "$ai" ]; then
+                echo "  ✗ $branch -> $session [ai: $ai] (dead)"
+            else
+                echo "  ✗ $branch -> $session (dead)"
+            fi
             dead=$((dead + 1))
         fi
     done < "$HYDRA_MAP"

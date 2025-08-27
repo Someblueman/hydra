@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-08-27
+
+### Added
+- Per-head AI persistence in mapping file
+  - `spawn` now stores the selected AI tool per head in `~/.hydra/map` (third column)
+  - `list` and `status` annotate entries with `[ai: <tool>]`
+  - `regenerate` auto-launches the stored AI tool for each restored session
+
+### Changed
+- Documentation updated to describe per-head AI persistence and regenerate behavior
+
+### Notes
+- Backward compatible with existing two-column map files; missing AI column is handled gracefully
+- No changes required for users relying solely on `HYDRA_AI_COMMAND` or `--agents`
+
 ## [1.1.0] - 2025-07-03
 
 ### Added
@@ -93,3 +108,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [0.2.0]: https://github.com/yourusername/hydra/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
+[1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
