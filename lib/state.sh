@@ -257,6 +257,9 @@ release_session_lock() {
     fi
 }
 
+<<<<<<< HEAD
+}
+
 # Get AI tool for a branch (if stored)
 # Usage: get_ai_for_branch <branch>
 # Returns: AI tool on stdout, empty if not set

@@ -143,6 +143,9 @@ spawn_single() {
     layout="${2:-default}"
     ai_tool="${3:-}"
     
+    # Best-effort cleanup of stale session-name locks
+    cleanup_stale_locks 2>/dev/null || true
+
     # Check tmux availability
     if ! check_tmux_version; then
         return 1
@@ -984,6 +987,9 @@ cmd_kill() {
 cmd_regenerate() {
     echo "Regenerating tmux sessions for existing worktrees..."
     
+    # Best-effort cleanup of stale session-name locks
+    cleanup_stale_locks 2>/dev/null || true
+
     # Get repository root
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         echo "Error: Not in a git repository" >&2

@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `spawn` now stores the selected AI tool per head in `~/.hydra/map` (third column)
   - `list` and `status` annotate entries with `[ai: <tool>]`
   - `regenerate` auto-launches the stored AI tool for each restored session
+- Concurrency mitigation for session naming
+  - Reserve session names using best-effort lock directories under `~/.hydra/locks` during creation
+  - Added stale lock cleanup to remove `.lock` dirs older than 24 hours
 
 ### Changed
 - Documentation updated to describe per-head AI persistence and regenerate behavior
