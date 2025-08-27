@@ -200,6 +200,38 @@ Per-head AI selection:
 - You can override the AI tool per head via `hydra spawn <branch> --ai <tool>`; Hydra persists this choice in the mapping file and shows it in `hydra list` and `hydra status`.
 - When running `hydra regenerate`, if a head has a stored AI tool, Hydra auto-launches that tool in the regenerated session.
 
+Advanced refs:
+- `HYDRA_ALLOW_ADVANCED_REFS`: Allow broader Git ref syntax for branch names and worktree paths. By default, Hydra uses a conservative
+  safe character set to prevent injection and traversal issues. Setting this variable (e.g., to `1`) relaxes only the final
+  charset restriction while keeping core safety checks (no whitespace/control chars, no `..` or `.` path components, no `@{`, no trailing `.` or `.lock`,
+  and no leading/trailing `/`). Use with care.
+
+## Uninstall
+
+To uninstall Hydra, run the uninstall script with sudo:
+
+```sh
+sudo ./uninstall.sh
+```
+
+What it does:
+- Removes the installed binary at `/usr/local/bin/hydra` and library files under `/usr/local/lib/hydra`.
+- Prompts to remove user data (session mappings, layouts, dashboard state) from the following locations:
+  - Custom `HYDRA_HOME` if set
+  - Default `~/.hydra` (uses the invoking user’s home when run via `sudo`)
+
+Flags:
+- `--purge`: Remove user data non-interactively (both custom `HYDRA_HOME` and default `~/.hydra` if present).
+
+Examples:
+```sh
+# Interactive uninstall (asks about user data)
+sudo ./uninstall.sh
+
+# Non-interactive uninstall that also removes user data
+sudo ./uninstall.sh --purge
+```
+
 ## Performance
 
 Hydra targets <100ms switch latency. Run `hydra doctor` to test your system's performance and identify any bottlenecks.
