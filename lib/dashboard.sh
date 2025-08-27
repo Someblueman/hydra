@@ -25,9 +25,12 @@ create_dashboard_session() {
     # Create dashboard session in background
     tmux new-session -d -s "$DASHBOARD_SESSION" -c "$(pwd)" || return 1
     
+    # Determine hydra binary path for exit binding
+    bin_path="${HYDRA_BIN_PATH:-$(command -v hydra 2>/dev/null || echo hydra)}"
+    
     # Set up dashboard keybinding to exit - only works when in dashboard session
     tmux bind-key -T root q if-shell '[ "#{session_name}" = "hydra-dashboard" ]' \
-        'run-shell "/usr/local/bin/hydra dashboard-exit"' \
+        "run-shell \"$bin_path dashboard-exit\"" \
         'send-keys q'
     
     return 0
@@ -119,9 +122,9 @@ arrange_dashboard_layout() {
             tmux select-layout -t "$DASHBOARD_SESSION:0" even-horizontal
             ;;
         3)
-            # Three panes: one on top (100%), two on bottom (50%/50%)
+            # Three panes: one on top, two on bottom; rely on main-horizontal
             tmux select-layout -t "$DASHBOARD_SESSION:0" main-horizontal
-            tmux resize-pane -t "$DASHBOARD_SESSION:0.0" -y 50%
+            tmux resize-pane -t "$DASHBOARD_SESSION:0.0" -y 20 2>/dev/null || true
             ;;
         4)
             # Four panes (25%/25%/25%/25%) in a 2x2 grid

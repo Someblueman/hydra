@@ -61,6 +61,10 @@ setup_test_env() {
     test_dir="$(mktemp -d)"
     cd "$test_dir" || exit 1
     
+    # Set isolated HYDRA_HOME for tests
+    export HYDRA_HOME="$test_dir/.hydra"
+    mkdir -p "$HYDRA_HOME"
+    
     # Initialize a git repository
     git init >/dev/null 2>&1
     git config user.name "Test User"
@@ -86,9 +90,9 @@ cleanup_test_sessions() {
         esac
     done
     
-    # Clear hydra map
-    if [ -f "$HOME/.hydra/map" ]; then
-        : > "$HOME/.hydra/map"
+    # Clear hydra map (isolated)
+    if [ -n "${HYDRA_HOME:-}" ] && [ -f "$HYDRA_HOME/map" ]; then
+        : > "$HYDRA_HOME/map"
     fi
 }
 
@@ -173,8 +177,8 @@ test_kill_all_partial_failure() {
     "$HYDRA_BIN" spawn killtest-success1 >/dev/null 2>&1
     "$HYDRA_BIN" spawn killtest-success2 >/dev/null 2>&1
     
-    # Create a mapping for a non-existent session
-    echo "killtest-phantom killtest-phantom-session" >> "$HOME/.hydra/map"
+    # Create a mapping for a non-existent session (isolated map)
+    echo "killtest-phantom killtest-phantom-session" >> "$HYDRA_HOME/map"
     
     # Kill all with force
     output="$("$HYDRA_BIN" kill --all --force 2>&1)"
@@ -205,6 +209,13 @@ test_kill_all_with_branch_fails() {
 # Main test runner
 main() {
     echo "Running hydra kill --all tests..."
+    
+    # Skip if tmux cannot create sessions in this environment
+    if ! command -v tmux >/dev/null 2>&1 || ! tmux new-session -d -s killall-sanity 2>/dev/null; then
+        echo "tmux unavailable or cannot create sessions; skipping kill --all tests"
+        exit 0
+    fi
+    tmux kill-session -t killall-sanity 2>/dev/null || true
     
     # Setup test environment
     setup_test_env

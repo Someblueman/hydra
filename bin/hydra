@@ -190,7 +190,7 @@ spawn_single() {
     
     # Apply layout
     if [ "$layout" != "default" ]; then
-        tmux send-keys -t "$session" "TMUX=\$TMUX . /usr/local/lib/hydra/layout.sh && apply_layout $layout" Enter
+        tmux send-keys -t "$session" "TMUX=\$TMUX . \"$HYDRA_LIB_DIR/layout.sh\" && apply_layout \"$layout\"" Enter
     fi
     
     # Start AI tool
@@ -483,6 +483,10 @@ main() {
             shift
             cmd_dashboard "$@"
             ;;
+        dashboard-exit)
+            shift
+            cmd_dashboard_exit "$@"
+            ;;
         cycle-layout)
             shift
             cmd_cycle_layout "$@"
@@ -595,6 +599,15 @@ cmd_spawn() {
         echo "Error: Count must be a number between 1 and 10" >&2
         exit 1
     fi
+
+    # Validate layout early to avoid injection in apply step
+    case "$layout" in
+        default|dev|full) ;;
+        *)
+            echo "Error: Invalid layout '$layout' (allowed: default, dev, full)" >&2
+            exit 1
+            ;;
+    esac
     
     # Handle mutually exclusive options
     if [ -n "$agents_spec" ] && [ -n "$ai_tool" ]; then
@@ -1122,10 +1135,6 @@ cmd_doctor() {
         echo "✗ Found $errors issue(s). Please install missing dependencies."
         return 1
     fi
-}
-
-cmd_dashboard() {
-    show_dashboard
 }
 
 cmd_cycle_layout() {
