@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Documentation updated to describe per-head AI persistence and regenerate behavior
+- Hardened validation in Git helpers (lib/git.sh): stricter branch and worktree path checks to prevent traversal and injection
 
 ### Notes
 - Backward compatible with existing two-column map files; missing AI column is handled gracefully
