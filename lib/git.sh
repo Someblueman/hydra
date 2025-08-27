@@ -59,13 +59,15 @@ validate_branch_name() {
             ;;
     esac
     
-    # Restrict to a conservative safe character set
-    case "$branch" in
-        *[!A-Za-z0-9._/-]* )
-            echo "Error: Branch name contains unsupported characters: $branch" >&2
-            return 1
-            ;;
-    esac
+    # Restrict to a conservative safe character set (unless advanced refs allowed)
+    if [ -z "${HYDRA_ALLOW_ADVANCED_REFS:-}" ]; then
+        case "$branch" in
+            *[!A-Za-z0-9._/-]* )
+                echo "Error: Branch name contains unsupported characters: $branch" >&2
+                return 1
+                ;;
+        esac
+    fi
     
     # Git has additional restrictions on branch names
     # Check length (255 chars is reasonable limit)
@@ -123,13 +125,15 @@ validate_worktree_path() {
             ;;
     esac
     
-    # Restrict to a conservative safe character set
-    case "$path" in
-        *[!A-Za-z0-9._/-]* )
-            echo "Error: Path contains unsupported characters: $path" >&2
-            return 1
-            ;;
-    esac
+    # Restrict to a conservative safe character set (unless advanced refs allowed)
+    if [ -z "${HYDRA_ALLOW_ADVANCED_REFS:-}" ]; then
+        case "$path" in
+            *[!A-Za-z0-9._/-]* )
+                echo "Error: Path contains unsupported characters: $path" >&2
+                return 1
+                ;;
+        esac
+    fi
     
     return 0
 }

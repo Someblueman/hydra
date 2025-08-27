@@ -195,6 +195,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
 - `HYDRA_HOME`: Directory for runtime files (default: `~/.hydra`)
 - `HYDRA_AI_COMMAND`: Default AI tool to use (default: `claude`)
 - `HYDRA_ROOT`: Override hydra installation path for library discovery (useful when running from source)
+- `HYDRA_ALLOW_ADVANCED_REFS`: Allow broader Git ref syntax for branch names and worktree paths. By default, Hydra uses a conservative
+  safe character set to prevent injection and traversal issues. Setting this variable (e.g., to `1`) relaxes only the final
+  charset restriction while keeping core safety checks (no whitespace/control chars, no `..` or `.` path components, no `@{`, no trailing `.` or `.lock`,
+  and no leading/trailing `/`). Use with care.
 
 Per-head AI selection:
 - You can override the AI tool per head via `hydra spawn <branch> --ai <tool>`; Hydra persists this choice in the mapping file and shows it in `hydra list` and `hydra status`.

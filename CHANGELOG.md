@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Notes
 - Backward compatible with existing two-column map files; missing AI column is handled gracefully
 - No changes required for users relying solely on `HYDRA_AI_COMMAND` or `--agents`
+- Optional: Set `HYDRA_ALLOW_ADVANCED_REFS=1` to relax conservative charset checks for Git refs while retaining core safety guards
 
 ## [1.1.0] - 2025-07-03
 
