@@ -37,12 +37,12 @@ validate_branch_name() {
             echo "Error: Branch name cannot contain consecutive '/': $branch" >&2
             return 1
             ;;
-        *..*)
-            echo "Error: Branch name cannot contain '..': $branch" >&2
+        */./*|*/.)
+            echo "Error: Branch name contains self-reference '.': $branch" >&2
             return 1
             ;;
-        */./*|*/../*|*/.|*/..)
-            echo "Error: Branch name contains invalid path components: $branch" >&2
+        *..*)
+            echo "Error: Branch name cannot contain '..': $branch" >&2
             return 1
             ;;
         *.)
