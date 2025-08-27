@@ -187,29 +187,74 @@ generate_session_name() {
     
     # Clean branch name for tmux (replace special chars)
     base_name="$(echo "$branch" | sed 's/[^a-zA-Z0-9_-]/_/g')"
-    
-    # If session doesn't exist, use base name
-    if ! tmux has-session -t "$base_name" 2>/dev/null; then
-        echo "$base_name"
-        return 0
+
+    # Helper to attempt locking a candidate name (best-effort)
+    try_lock() {
+        candidate="$1"
+        # Only lock if HYDRA_HOME is set
+        if [ -z "${HYDRA_HOME:-}" ]; then
+            return 0
+        fi
+        lock_dir="$HYDRA_HOME/locks"
+        mkdir -p "$lock_dir" 2>/dev/null || true
+        mkdir "$lock_dir/$candidate.lock" 2>/dev/null
+    }
+
+    # Helper to release a lock (best-effort)
+    release_lock() {
+        candidate="$1"
+        if [ -n "${HYDRA_HOME:-}" ] && [ -d "$HYDRA_HOME/locks/$candidate.lock" ]; then
+            rmdir "$HYDRA_HOME/locks/$candidate.lock" 2>/dev/null || true
+        fi
+    }
+
+    # First, try the base name with an atomic lock to avoid races
+    if try_lock "$base_name"; then
+        if ! tmux has-session -t "$base_name" 2>/dev/null; then
+            echo "$base_name"
+            return 0
+        fi
+        # Already exists, release and continue to numeric suffixes
+        release_lock "$base_name"
     fi
-    
-    # Otherwise, append a number - start from 1 and find first available
+
+    # Append a number - start from 1 and find first available with locking
     num=1
     max_attempts=100  # Prevent infinite loop in edge cases
-    
     while [ "$num" -le "$max_attempts" ]; do
         session_name="${base_name}_${num}"
-        if ! tmux has-session -t "$session_name" 2>/dev/null; then
-            echo "$session_name"
-            return 0
+        if try_lock "$session_name"; then
+            if ! tmux has-session -t "$session_name" 2>/dev/null; then
+                echo "$session_name"
+                return 0
+            fi
+            # Release and continue if exists
+            release_lock "$session_name"
         fi
         num=$((num + 1))
     done
-    
-    # If we've exhausted attempts, use timestamp for uniqueness
+
+    # If we've exhausted attempts, use timestamp for uniqueness (best-effort lock)
     timestamp="$(date +%s 2>/dev/null || echo "$$")"
-    echo "${base_name}_${timestamp}"
+    final_name="${base_name}_${timestamp}"
+    if try_lock "$final_name"; then
+        echo "$final_name"
+        return 0
+    fi
+    # As a last resort, return the timestamped name without lock
+    echo "$final_name"
+}
+
+# Release any acquired session name lock (safe to call even if not held)
+# Usage: release_session_lock <session_name>
+release_session_lock() {
+    name="$1"
+    if [ -z "$name" ] || [ -z "${HYDRA_HOME:-}" ]; then
+        return 0
+    fi
+    if [ -d "$HYDRA_HOME/locks/$name.lock" ]; then
+        rmdir "$HYDRA_HOME/locks/$name.lock" 2>/dev/null || true
+    fi
 }
 
 # Get AI tool for a branch (if stored)

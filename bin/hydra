@@ -179,9 +179,13 @@ spawn_single() {
     echo "Creating tmux session '$session'..." >&2
     if ! create_session "$session" "$worktree_path"; then
         # Clean up worktree if session creation failed
+        # Release any reserved session name lock
+        release_session_lock "$session" 2>/dev/null || true
         delete_worktree "$worktree_path" 2>/dev/null || true
         return 1
     fi
+    # Release the reserved session name lock now that session is created
+    release_session_lock "$session" 2>/dev/null || true
     
     # Add mapping (persist selected AI tool if provided)
     if ! add_mapping "$branch" "$session" "${ai_tool:-}"; then
@@ -1019,7 +1023,8 @@ cmd_regenerate() {
             stored_ai="$(get_ai_for_branch "$branch" 2>/dev/null || true)"
             add_mapping "$branch" "$session" "$stored_ai"
             regenerated=$((regenerated + 1))
-
+            # Release any reserved session name lock
+            release_session_lock "$session" 2>/dev/null || true
             # Optionally auto-launch stored AI tool in the regenerated session
             if [ -n "$stored_ai" ]; then
                 if validate_ai_command "$stored_ai"; then
@@ -1031,6 +1036,8 @@ cmd_regenerate() {
             fi
         else
             echo "Failed to create session for '$branch'" >&2
+            # Release any reserved session name lock
+            release_session_lock "$session" 2>/dev/null || true
         fi
     done
     
