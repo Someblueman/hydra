@@ -460,6 +460,13 @@ main() {
         exit 0  # Exit successfully since this is expected in some CI environments
     fi
     
+    # Verify tmux can actually create sessions in this environment
+    if ! tmux new-session -d -s hydra-dash-sanity 2>/dev/null; then
+        print_warning "tmux cannot create sessions in this environment; skipping dashboard tests"
+        exit 0
+    fi
+    tmux kill-session -t hydra-dash-sanity 2>/dev/null || true
+    
     if ! command -v git >/dev/null 2>&1; then
         print_error "git not found, skipping tests"
         exit 1

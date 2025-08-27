@@ -20,6 +20,7 @@ fail_count=0
 
 # Test helper functions
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 assert_equal() {
     expected="$1"
     actual="$2"
@@ -38,6 +39,7 @@ assert_equal() {
 }
 
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 assert_success() {
     exit_code="$1"
     message="$2"
@@ -55,6 +57,7 @@ assert_success() {
 }
 
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 assert_failure() {
     exit_code="$1"
     message="$2"
@@ -72,6 +75,7 @@ assert_failure() {
 }
 
 # shellcheck disable=SC2317
+# shellcheck disable=SC2329
 assert_file_contains() {
     file="$1"
     pattern="$2"

@@ -190,7 +190,7 @@ spawn_single() {
     
     # Apply layout
     if [ "$layout" != "default" ]; then
-        tmux send-keys -t "$session" "TMUX=\$TMUX . /usr/local/lib/hydra/layout.sh && apply_layout $layout" Enter
+        tmux send-keys -t "$session" "TMUX=\$TMUX . \"$HYDRA_LIB_DIR/layout.sh\" && apply_layout \"$layout\"" Enter
     fi
     
     # Start AI tool
@@ -216,8 +216,8 @@ spawn_bulk() {
     layout="${3:-default}"
     ai_tool="${4:-}"
     
-    # Confirm if spawning many sessions
-    if [ "$count" -gt 3 ]; then
+    # Confirm if spawning many sessions (skip only in CI or explicit non-interactive)
+    if [ "$count" -gt 3 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
         printf "Are you sure you want to spawn %d sessions? [y/N] " "$count"
         read -r response
         case "$response" in
@@ -250,22 +250,31 @@ spawn_bulk() {
             failed=$((failed + 1))
             echo "[$i/$count] Failed to create head '$branch_name'" >&2
             
-            # Ask whether to continue or rollback
+            # Ask whether to continue or rollback (skip only in CI or explicit non-interactive)
             if [ "$i" -lt "$count" ]; then
-                printf "Continue with remaining heads? [y/N] "
-                read -r response
-                case "$response" in
-                    [yY][eE][sS]|[yY])
-                        ;;
-                    *)
-                        echo "Rolling back created heads..."
-                        for b in $created_branches; do
-                            echo "Removing $b..."
-                            cmd_kill "$b" >/dev/null 2>&1 || true
-                        done
-                        return 1
-                        ;;
-                esac
+                if [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
+                    printf "Continue with remaining heads? [y/N] "
+                    read -r response
+                    case "$response" in
+                        [yY][eE][sS]|[yY])
+                            ;;
+                        *)
+                            echo "Rolling back created heads..."
+                            for b in $created_branches; do
+                                echo "Removing $b..."
+                                cmd_kill "$b" >/dev/null 2>&1 || true
+                            done
+                            return 1
+                            ;;
+                    esac
+                else
+                    echo "Rolling back created heads (non-interactive)..."
+                    for b in $created_branches; do
+                        echo "Removing $b..."
+                        cmd_kill "$b" >/dev/null 2>&1 || true
+                    done
+                    return 1
+                fi
             fi
         fi
         
@@ -351,8 +360,8 @@ spawn_bulk_mixed() {
         total_count=$((total_count + agent_count))
     done
     
-    # Confirm if spawning many sessions
-    if [ "$total_count" -gt 3 ]; then
+    # Confirm if spawning many sessions (skip only in CI or explicit non-interactive)
+    if [ "$total_count" -gt 3 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
         printf "Are you sure you want to spawn %d sessions? [y/N] " "$total_count"
         read -r response
         case "$response" in
@@ -403,22 +412,31 @@ spawn_bulk_mixed() {
                 failed=$((failed + 1))
                 echo "[$session_num/$total_count] Failed to create head '$branch_name'" >&2
                 
-                # Ask whether to continue or rollback
+                # Ask whether to continue or rollback (skip only in CI or explicit non-interactive)
                 if [ "$session_num" -lt "$total_count" ]; then
-                    printf "Continue with remaining heads? [y/N] "
-                    read -r response
-                    case "$response" in
-                        [yY][eE][sS]|[yY])
-                            ;;
-                        *)
-                            echo "Rolling back created heads..."
-                            for b in $created_branches; do
-                                echo "Removing $b..."
-                                cmd_kill "$b" >/dev/null 2>&1 || true
-                            done
-                            return 1
-                            ;;
-                    esac
+                    if [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
+                        printf "Continue with remaining heads? [y/N] "
+                        read -r response
+                        case "$response" in
+                            [yY][eE][sS]|[yY])
+                                ;;
+                            *)
+                                echo "Rolling back created heads..."
+                                for b in $created_branches; do
+                                    echo "Removing $b..."
+                                    cmd_kill "$b" >/dev/null 2>&1 || true
+                                done
+                                return 1
+                                ;;
+                        esac
+                    else
+                        echo "Rolling back created heads (non-interactive)..."
+                        for b in $created_branches; do
+                            echo "Removing $b..."
+                            cmd_kill "$b" >/dev/null 2>&1 || true
+                        done
+                        return 1
+                    fi
                 fi
             fi
             
@@ -482,6 +500,10 @@ main() {
         dashboard)
             shift
             cmd_dashboard "$@"
+            ;;
+        dashboard-exit)
+            shift
+            cmd_dashboard_exit "$@"
             ;;
         cycle-layout)
             shift
@@ -595,6 +617,15 @@ cmd_spawn() {
         echo "Error: Count must be a number between 1 and 10" >&2
         exit 1
     fi
+
+    # Validate layout early to avoid injection in apply step
+    case "$layout" in
+        default|dev|full) ;;
+        *)
+            echo "Error: Invalid layout '$layout' (allowed: default, dev, full)" >&2
+            exit 1
+            ;;
+    esac
     
     # Handle mutually exclusive options
     if [ -n "$agents_spec" ] && [ -n "$ai_tool" ]; then
@@ -1122,10 +1153,6 @@ cmd_doctor() {
         echo "✗ Found $errors issue(s). Please install missing dependencies."
         return 1
     fi
-}
-
-cmd_dashboard() {
-    show_dashboard
 }
 
 cmd_cycle_layout() {

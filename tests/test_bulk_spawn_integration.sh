@@ -15,6 +15,7 @@ test_dir=""
 HYDRA_BIN="${HYDRA_BIN:-$original_dir/bin/hydra}"
 
 # Test helper functions
+# shellcheck disable=SC2329
 assert_contains() {
     haystack="$1"
     needle="$2"
