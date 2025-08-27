@@ -357,51 +357,104 @@ test_dashboard_dry_run() {
 }
 
 # Test pane collection simulation
-test_pane_collection() {
-    print_status "Testing pane collection logic..."
-    
+test_pane_collection_and_restore() {
+    print_status "Testing pane collection and restoration..."
     cd "$TEST_REPO_DIR" || exit 1
-    
-    # Check if we have active sessions to collect from
+
+    # Source libs
+    HYDRA_LIB_DIR="$SCRIPT_DIR/../lib"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/tmux.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/state.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/dashboard.sh"
+
     HYDRA_MAP="${HYDRA_HOME:-$HOME/.hydra}/map"
-    
     if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
         print_warning "No Hydra map file found, skipping pane collection test"
         return 0
     fi
-    
-    # Count expected sessions
+
+    # Count active source sessions
     expected_sessions=0
     while IFS=' ' read -r branch session; do
         if tmux_session_exists "$session"; then
             expected_sessions=$((expected_sessions + 1))
         fi
     done < "$HYDRA_MAP"
-    
-    if [ "$expected_sessions" -eq 0 ]; then
+    if [ "$expected_sessions" -lt 1 ]; then
         print_warning "No active sessions found, skipping pane collection test"
         return 0
     fi
-    
-    print_status "Found $expected_sessions active sessions for testing"
-    return 0
-}
 
-# Test restoration logic
-test_restoration_logic() {
-    print_status "Testing restoration logic..."
-    
-    # Create a mock restoration map
-    DASHBOARD_RESTORE_MAP="${HYDRA_HOME:-$HOME/.hydra}/.dashboard_restore"
-    
-    # This is a simulation since we don't want to actually move panes
-    echo "# Mock restoration map for testing" > "$DASHBOARD_RESTORE_MAP"
-    echo "# pane_id session window_id branch" >> "$DASHBOARD_RESTORE_MAP"
-    
-    # Test cleanup
-    rm -f "$DASHBOARD_RESTORE_MAP"
-    print_status "Restoration logic test completed"
-    
+    # Create dashboard session
+    if ! create_dashboard_session; then
+        print_error "Failed to create dashboard session"
+        return 1
+    fi
+
+    # Record initial pane count in the dashboard (usually 1)
+    initial_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+
+    # Ensure source sessions survive collection by adding an extra pane to each
+    while IFS=' ' read -r branch session; do
+        if tmux_session_exists "$session"; then
+            # Split a new pane in window 0 to keep the session alive
+            tmux split-window -t "$session:0" -d 2>/dev/null || true
+        fi
+    done < "$HYDRA_MAP"
+
+    # Collect panes
+    if ! collect_session_panes; then
+        print_error "collect_session_panes failed"
+        tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+        return 1
+    fi
+
+    # Verify restoration map populated
+    if [ ! -s "$DASHBOARD_RESTORE_MAP" ]; then
+        print_error "Restoration map not created or empty"
+        tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+        return 1
+    fi
+    collected_lines=$(wc -l < "$DASHBOARD_RESTORE_MAP" | tr -d ' ')
+
+    # Verify panes joined into dashboard increased by collected count
+    after_collect_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+    expected_after=$((initial_panes + collected_lines))
+    if [ "$after_collect_panes" -ne "$expected_after" ]; then
+        print_error "Unexpected pane count in dashboard (got $after_collect_panes, expected $expected_after)"
+        tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+        return 1
+    fi
+
+    print_status "Collected $collected_lines panes into dashboard (initial $initial_panes -> $after_collect_panes)"
+
+    # Restore panes back
+    if ! restore_panes; then
+        print_error "restore_panes reported failures"
+        # proceed to check counts but mark failure
+        failed_restore=1
+    else
+        failed_restore=0
+    fi
+
+    # After restore, the dashboard should be back to its initial pane count
+    after_restore_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$after_restore_panes" -ne "$initial_panes" ]; then
+        print_error "Dashboard pane count after restore is $after_restore_panes (expected $initial_panes)"
+        tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+        return 1
+    fi
+
+    # Cleanup dashboard session
+    tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+
+    if [ "$failed_restore" -ne 0 ]; then
+        return 1
+    fi
+    print_status "Pane collection and restoration verified"
     return 0
 }
 
@@ -497,11 +550,7 @@ main() {
     fi
     
     if [ "$test_failed" -eq 0 ]; then
-        test_pane_collection || test_failed=1
-    fi
-    
-    if [ "$test_failed" -eq 0 ]; then
-        test_restoration_logic || test_failed=1
+        test_pane_collection_and_restore || test_failed=1
     fi
     
     # Report results
