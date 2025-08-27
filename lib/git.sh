@@ -13,18 +13,56 @@ validate_branch_name() {
         return 1
     fi
     
+    # Reject whitespace or control characters
+    if printf '%s' "$branch" | grep -q '[[:space:]]'; then
+        echo "Error: Branch name cannot contain whitespace: $branch" >&2
+        return 1
+    fi
+    if printf '%s' "$branch" | grep -q '[[:cntrl:]]'; then
+        echo "Error: Branch name contains control characters: $branch" >&2
+        return 1
+    fi
+    
     # Check for dangerous characters and patterns
     case "$branch" in
-        -*) 
+        -*)
             echo "Error: Branch name cannot start with '-': $branch" >&2
             return 1
             ;;
-        *[";|&\`\$(){}[]<>?*'"]*) 
-            echo "Error: Branch name contains invalid characters: $branch" >&2
+        */|/*)
+            echo "Error: Branch name cannot start or end with '/': $branch" >&2
             return 1
             ;;
-        *..*) 
-            echo "Error: Branch name contains dangerous path patterns: $branch" >&2
+        *//*)
+            echo "Error: Branch name cannot contain consecutive '/': $branch" >&2
+            return 1
+            ;;
+        *..*)
+            echo "Error: Branch name cannot contain '..': $branch" >&2
+            return 1
+            ;;
+        */./*|*/../*|*/.|*/..)
+            echo "Error: Branch name contains invalid path components: $branch" >&2
+            return 1
+            ;;
+        *.)
+            echo "Error: Branch name cannot end with '.': $branch" >&2
+            return 1
+            ;;
+        *'@{'*)
+            echo "Error: Branch name cannot contain '@{': $branch" >&2
+            return 1
+            ;;
+        *.lock)
+            echo "Error: Branch name cannot end with '.lock': $branch" >&2
+            return 1
+            ;;
+    esac
+    
+    # Restrict to a conservative safe character set
+    case "$branch" in
+        *[!A-Za-z0-9._/-]* )
+            echo "Error: Branch name contains unsupported characters: $branch" >&2
             return 1
             ;;
     esac
@@ -50,24 +88,46 @@ validate_worktree_path() {
         return 1
     fi
     
+    # Disallow control chars and whitespace to avoid ambiguous paths
+    if printf '%s' "$path" | grep -q '[[:cntrl:]]'; then
+        echo "Error: Path contains control characters: $path" >&2
+        return 1
+    fi
+    if printf '%s' "$path" | grep -q '[[:space:]]'; then
+        echo "Error: Path cannot contain whitespace: $path" >&2
+        return 1
+    fi
+    
     # Check for dangerous path patterns
     case "$path" in
-        ..*) 
-            echo "Error: Path contains directory traversal: $path" >&2
+        /)
+            echo "Error: Path cannot be root '/'" >&2
             return 1
             ;;
-        */../*) 
-            echo "Error: Path contains directory traversal: $path" >&2
+        */../*|../*|*/..|..)
+            echo "Error: Path contains directory traversal '..': $path" >&2
             return 1
             ;;
-        /*) 
+        */./*|./*|*/.)
+            echo "Error: Path contains self-reference '.': $path" >&2
+            return 1
+            ;;
+        /*)
             # Absolute paths are OK, but validate they're not system directories
             case "$path" in
-                /bin/*|/sbin/*|/usr/bin/*|/usr/sbin/*|/etc/*|/boot/*|/sys/*|/proc/*) 
+                /bin/*|/sbin/*|/usr/bin/*|/usr/sbin/*|/etc/*|/boot/*|/sys/*|/proc/*)
                     echo "Error: Path points to system directory: $path" >&2
                     return 1
                     ;;
             esac
+            ;;
+    esac
+    
+    # Restrict to a conservative safe character set
+    case "$path" in
+        *[!A-Za-z0-9._/-]* )
+            echo "Error: Path contains unsupported characters: $path" >&2
+            return 1
             ;;
     esac
     
