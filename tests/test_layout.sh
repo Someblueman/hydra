@@ -121,6 +121,7 @@ test_restore_layout_no_file() {
     
     # Set up temporary HYDRA_HOME
     temp_home="$(mktemp -d)"
+    trap 'if [ -n "$temp_home" ] && [ -d "$temp_home" ]; then rm -rf "$temp_home"; fi' EXIT INT TERM
     HYDRA_HOME="$temp_home"
     export HYDRA_HOME
     
@@ -130,6 +131,7 @@ test_restore_layout_no_file() {
     
     # Cleanup
     rm -rf "$temp_home"
+    trap - EXIT INT TERM
     unset HYDRA_HOME
 }
 
@@ -155,6 +157,7 @@ test_layout_save_restore() {
     
     # Set up temporary HYDRA_HOME
     temp_home="$(mktemp -d)"
+    trap 'if [ -n "$temp_home" ] && [ -d "$temp_home" ]; then rm -rf "$temp_home"; fi' EXIT INT TERM
     HYDRA_HOME="$temp_home"
     export HYDRA_HOME
     
@@ -169,6 +172,7 @@ test_layout_save_restore() {
     
     # Cleanup
     rm -rf "$temp_home"
+    trap - EXIT INT TERM
     unset HYDRA_HOME
 }
 
