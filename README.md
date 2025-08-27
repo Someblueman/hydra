@@ -196,6 +196,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
 - `HYDRA_AI_COMMAND`: Default AI tool to use (default: `claude`)
 - `HYDRA_ROOT`: Override hydra installation path for library discovery (useful when running from source)
 
+Per-head AI selection:
+- You can override the AI tool per head via `hydra spawn <branch> --ai <tool>`; Hydra persists this choice in the mapping file and shows it in `hydra list` and `hydra status`.
+- When running `hydra regenerate`, if a head has a stored AI tool, Hydra auto-launches that tool in the regenerated session.
+
 ## Performance
 
 Hydra targets <100ms switch latency. Run `hydra doctor` to test your system's performance and identify any bottlenecks.

@@ -3,11 +3,12 @@
 # POSIX-compliant shell script
 
 # Add a branch-session mapping
-# Usage: add_mapping <branch> <session>
+# Usage: add_mapping <branch> <session> [ai_tool]
 # Returns: 0 on success, 1 on failure
 add_mapping() {
     branch="$1"
     session="$2"
+    ai_tool="${3:-}"
     
     if [ -z "$branch" ] || [ -z "$session" ]; then
         echo "Error: Branch and session are required" >&2
@@ -22,8 +23,12 @@ add_mapping() {
     # Remove existing mapping for this branch if any
     remove_mapping "$branch" 2>/dev/null || true
     
-    # Add new mapping
-    echo "$branch $session" >> "$HYDRA_MAP"
+    # Add new mapping (optionally with AI tool)
+    if [ -n "$ai_tool" ]; then
+        echo "$branch $session $ai_tool" >> "$HYDRA_MAP"
+    else
+        echo "$branch $session" >> "$HYDRA_MAP"
+    fi
     
     return 0
 }
@@ -47,10 +52,12 @@ remove_mapping() {
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
     
-    # Filter out the branch
-    while IFS=' ' read -r map_branch map_session; do
+    # Filter out the branch; preserve optional AI column for others
+    while IFS=' ' read -r map_branch map_session map_ai; do
         if [ "$map_branch" != "$branch" ]; then
-            echo "$map_branch $map_session"
+            suffix=""
+            [ -n "$map_ai" ] && suffix=" $map_ai"
+            echo "$map_branch $map_session$suffix"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
     
@@ -71,7 +78,7 @@ get_session_for_branch() {
         return 1
     fi
     
-    while IFS=' ' read -r map_branch map_session; do
+    while IFS=' ' read -r map_branch map_session _map_ai; do
         if [ "$map_branch" = "$branch" ]; then
             echo "$map_session"
             return 0
@@ -91,7 +98,7 @@ get_branch_for_session() {
         return 1
     fi
     
-    while IFS=' ' read -r map_branch map_session; do
+    while IFS=' ' read -r map_branch map_session _map_ai; do
         if [ "$map_session" = "$session" ]; then
             echo "$map_branch"
             return 0
@@ -122,7 +129,7 @@ validate_mappings() {
     
     errors=0
     
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai; do
         # Check if branch exists
         if ! git_branch_exists "$branch"; then
             echo "Warning: Branch '$branch' no longer exists" >&2
@@ -139,7 +146,7 @@ validate_mappings() {
     return $errors
 }
 
-# Clean up invalid mappings
+# Clean up invalid mappings (preserving optional AI column)
 # Usage: cleanup_mappings
 # Returns: 0 on success
 cleanup_mappings() {
@@ -151,10 +158,12 @@ cleanup_mappings() {
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
     
-    # Keep only valid mappings
-    while IFS=' ' read -r branch session; do
+    # Keep only valid mappings; preserve AI if present
+    while IFS=' ' read -r branch session ai; do
         if git_branch_exists "$branch" && tmux_session_exists "$session"; then
-            echo "$branch $session"
+            suffix=""
+            [ -n "$ai" ] && suffix=" $ai"
+            echo "$branch $session$suffix"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
     
@@ -201,4 +210,21 @@ generate_session_name() {
     # If we've exhausted attempts, use timestamp for uniqueness
     timestamp="$(date +%s 2>/dev/null || echo "$$")"
     echo "${base_name}_${timestamp}"
+}
+
+# Get AI tool for a branch (if stored)
+# Usage: get_ai_for_branch <branch>
+# Returns: AI tool on stdout, empty if not set
+get_ai_for_branch() {
+    branch="$1"
+    if [ -z "$branch" ] || [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+        return 1
+    fi
+    while IFS=' ' read -r map_branch _map_session map_ai; do
+        if [ "$map_branch" = "$branch" ] && [ -n "$map_ai" ]; then
+            echo "$map_ai"
+            return 0
+        fi
+    done < "$HYDRA_MAP"
+    return 1
 }
