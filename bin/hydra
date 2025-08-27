@@ -76,6 +76,12 @@ fi
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/github.sh"
 
+# Export paths for downstream helpers (e.g., safe tmux run-shell bindings)
+export HYDRA_LIB_DIR
+# Resolve the absolute path to the current hydra binary for secure bindings
+HYDRA_BIN_CMD="${HYDRA_BIN_PATH}"
+export HYDRA_BIN_CMD
+
 # Initialize Hydra home directory
 init_hydra_home() {
     if [ ! -d "$HYDRA_HOME" ]; then

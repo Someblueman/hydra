@@ -15,9 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Concurrency mitigation for session naming
   - Reserve session names using best-effort lock directories under `~/.hydra/locks` during creation
   - Added stale lock cleanup to remove `.lock` dirs older than 24 hours
- - Uninstall improvements
-   - `uninstall.sh` now detects both default `~/.hydra` and custom `HYDRA_HOME` user data locations
-   - New `--purge` flag removes user data non-interactively
+- Uninstall improvements
+  - `uninstall.sh` now detects both default `~/.hydra` and custom `HYDRA_HOME` user data locations
+  - New `--purge` flag removes user data non-interactively
+ - Safer layout hotkeys
+   - `setup_layout_hotkeys` binds `cycle-layout` via absolute hydra path or direct library invocation, reducing PATH injection risk
 
 ### Changed
 - Documentation updated to describe per-head AI persistence and regenerate behavior
