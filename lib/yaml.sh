@@ -131,7 +131,6 @@ apply_yaml_config() {
             if [ -z "${current_window_id:-}" ]; then
                 current_window_id="$(tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null | tail -n1)"
             fi
-            current_window_index="$(tmux display-message -p -t "$current_window_id" '#{window_index}' 2>/dev/null || true)"
             # After creating the first window, kill any other pre-existing window(s)
             if [ -z "${original_windows_cleaned:-}" ]; then
                 tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null | while IFS= read -r wid; do
@@ -151,7 +150,9 @@ apply_yaml_config() {
                 if [ -n "$session_env" ]; then session_env="$session_env;$f2"; else session_env="$f2"; fi
                 # Propagate to tmux session so subsequent windows/panes inherit
                 k="${f2%%=*}"; v="${f2#*=}"
-                [ -n "$k" ] && tmux set-environment -t "$session" "$k" "$v" 2>/dev/null || true
+                if [ -n "$k" ]; then
+                    tmux set-environment -t "$session" "$k" "$v" 2>/dev/null || true
+                fi
                 ;;
               LAYOUT)
                 window_layout="$f2"

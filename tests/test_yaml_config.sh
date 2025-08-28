@@ -78,11 +78,12 @@ assert_true "tmux list-windows -t yaml-test 2>/dev/null | grep -q 'yaml-server'"
 # Determine index of yaml-editor window
 ed_idx="$(tmux list-windows -t yaml-test -F '#{window_index} #{window_name}' 2>/dev/null | awk '$2=="yaml-editor"{print $1; exit}')"
 [ -z "$ed_idx" ] && ed_idx=0
+target_ed="yaml-test:$ed_idx"
 
 # Wait for panes to settle in the yaml-editor window (up to ~2s)
 tries=0
 while : ; do
-  pcnt="$(tmux list-panes -t yaml-test:"$ed_idx" 2>/dev/null | wc -l | tr -d ' ')"
+  pcnt="$(tmux list-panes -t "$target_ed" 2>/dev/null | wc -l | tr -d ' ')"
   [ "${pcnt:-0}" -ge 2 ] && break
   tries=$((tries+1))
   [ "$tries" -ge 10 ] && break
@@ -90,15 +91,18 @@ while : ; do
 done
 
 # Check pane counts
-assert_true "[ \"$(tmux list-panes -t yaml-test:$ed_idx 2>/dev/null | wc -l | tr -d ' ')\" -ge 2 ]" "editor window has 2 panes"
+ed_panes="$(tmux list-panes -t "$target_ed" 2>/dev/null | wc -l | tr -d ' ')"
+assert_true "[ \"$ed_panes\" -ge 2 ]" "editor window has 2 panes"
 # Determine index of yaml-server window
 srv_idx="$(tmux list-windows -t yaml-test -F '#{window_index} #{window_name}' 2>/dev/null | awk '$2=="yaml-server"{print $1; exit}')"
 [ -z "$srv_idx" ] && srv_idx=1
+target_srv="yaml-test:$srv_idx"
 
-assert_true "[ \"$(tmux list-panes -t yaml-test:$srv_idx 2>/dev/null | wc -l | tr -d ' ')\" -ge 2 ]" "server window has >=2 panes"
+srv_panes="$(tmux list-panes -t "$target_srv" 2>/dev/null | wc -l | tr -d ' ')"
+assert_true "[ \"$srv_panes\" -ge 2 ]" "server window has >=2 panes"
 
 # Check window layout tag set
-val="$(tmux show-window-options -v -t yaml-test:"$ed_idx" @hydra_layout 2>/dev/null || true)"
+val="$(tmux show-window-options -v -t "$target_ed" @hydra_layout 2>/dev/null || true)"
 assert_true "[ \"$val\" = \"even-horizontal\" ]" "per-window layout applied"
 
 # Check that YAML-defined env is present at the tmux session level
