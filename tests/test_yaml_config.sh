@@ -47,15 +47,25 @@ teardown() {
 echo "Testing YAML session config..."
 setup
 
+# Prepare directories and YAML config
+mkdir -p sub/project logs
+
 cat > .hydra/config.yml <<'YAML'
 windows:
   - name: yaml-editor
+    dir: sub
+    env:
+      FOO: bar
     panes:
-      - echo editor
-      - echo shell
+      - cmd: echo editor
+      - cmd: pwd
+        split: v
+        dir: sub/project
   - name: yaml-server
     panes:
-      - echo srv
+      - cmd: sh -lc "echo $FOO"
+      - cmd: echo srv
+        split: h
 YAML
 
 "$HYDRA_BIN" spawn yaml-test >/dev/null 2>&1 || true
@@ -63,6 +73,20 @@ YAML
 # Check that windows were created
 assert_true "tmux list-windows -t yaml-test 2>/dev/null | grep -q 'yaml-editor'" "yaml-editor window created"
 assert_true "tmux list-windows -t yaml-test 2>/dev/null | grep -q 'yaml-server'" "yaml-server window created"
+
+# Check pane counts
+assert_true "[ \"$(tmux list-panes -t yaml-test:0 2>/dev/null | wc -l | tr -d ' ')\" -eq 2 ]" "editor window has 2 panes"
+assert_true "[ \"$(tmux list-panes -t yaml-test:1 2>/dev/null | wc -l | tr -d ' ')\" -ge 2 ]" "server window has >=2 panes"
+
+# Check that window env is visible in server window
+sleep 0.2
+content="$(tmux capture-pane -pt yaml-test:1.0 2>/dev/null || true)"
+echo "$content" | grep -q "bar" && pass_count=$((pass_count+1)) || fail_count=$((fail_count+1))
+test_count=$((test_count+1))
+
+# YAML guard: disable YAML and ensure no extra windows from config applied
+HYDRA_DISABLE_YAML=1 "$HYDRA_BIN" spawn yaml-guard >/dev/null 2>&1 || true
+assert_true "[ \"$(tmux list-windows -t yaml-guard 2>/dev/null | wc -l | tr -d ' ')\" -eq 1 ]" "YAML disabled guard results in single window"
 
 teardown
 
@@ -77,4 +101,3 @@ if [ "$fail_count" -gt 0 ]; then
 else
     exit 0
 fi
-

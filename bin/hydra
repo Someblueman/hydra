@@ -211,7 +211,7 @@ spawn_single() {
     fi
     
     # Apply YAML config if present; otherwise custom/built-in layout
-    if cfgpath="$(locate_yaml_config "$worktree_path" "$repo_root" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
+    if [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$worktree_path" "$repo_root" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
         apply_yaml_config "$cfgpath" "$session" "$worktree_path" "$repo_root"
     else
         apply_custom_layout_or_default "$layout" "$session" "$worktree_path" "$repo_root"
@@ -1055,7 +1055,7 @@ cmd_regenerate() {
             release_session_lock "$session" 2>/dev/null || true
             # Apply YAML config if available; else apply custom/built-in default
             repo_root_for_dir="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || dirname "$dir")"
-            if cfgpath="$(locate_yaml_config "$dir" "$repo_root_for_dir" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
+            if [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$dir" "$repo_root_for_dir" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
                 apply_yaml_config "$cfgpath" "$session" "$dir" "$repo_root_for_dir"
             else
                 apply_custom_layout_or_default "default" "$session" "$dir" "$repo_root_for_dir"

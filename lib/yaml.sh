@@ -66,6 +66,11 @@ apply_yaml_config() {
         print "WATTR\tDIR\t" w_dir;
         next
       }
+      ctx=="windows" && subctx=="window" && i>=4 && $0 ~ /^[[:space:]]*layout:/ {
+        w_layout=$0; sub(/.*layout:[[:space:]]*/,"",w_layout); w_layout=trim(w_layout);
+        print "WATTR\tLAYOUT\t" w_layout;
+        next
+      }
       ctx=="windows" && subctx=="window" && i>=4 && $0 ~ /^[[:space:]]*env:/ {
         wenv_mode=1; next
       }
@@ -114,7 +119,7 @@ apply_yaml_config() {
     ' "$cfg" | while IFS=$(printf '\t') read -r kind f1 f2 f3; do
         case "$kind" in
           WIN)
-            window_name="$f1"; window_dir="$f2"; window_env="$f3"
+            window_name="$f1"; window_dir="$f2"; window_env="$f3"; window_layout=""
             if [ -z "${window_index:-}" ]; then window_index=0; else window_index=$((window_index+1)); fi
             if [ "$window_index" -eq 0 ]; then
                 [ -n "$window_name" ] && tmux rename-window -t "$session:0" "$window_name" 2>/dev/null || true
@@ -128,6 +133,7 @@ apply_yaml_config() {
             case "$f1" in
               DIR) window_dir="$f2" ;;
               ENV) if [ -n "$window_env" ]; then window_env="$window_env;$f2"; else window_env="$f2"; fi ;;
+              LAYOUT) window_layout="$f2" ;;
             esac
             ;;
           PANE)
@@ -154,6 +160,9 @@ apply_yaml_config() {
             fi
             current_pane_index=$((current_pane_index+1))
             tmux select-layout -t "$session:$window_index" tiled 2>/dev/null || true
+            if [ -n "$window_layout" ]; then
+                tmux select-layout -t "$session:$window_index" "$window_layout" 2>/dev/null || true
+            fi
             ;;
           START)
             tmux send-keys -t "$session" "$f1" Enter 2>/dev/null || true
