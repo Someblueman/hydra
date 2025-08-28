@@ -75,6 +75,12 @@ fi
 # shellcheck source=../lib/github.sh
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/github.sh"
+# shellcheck source=../lib/hooks.sh
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/hooks.sh"
+# shellcheck source=../lib/yaml.sh
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/yaml.sh"
 
 # Export paths for downstream helpers (e.g., safe tmux run-shell bindings)
 export HYDRA_LIB_DIR
@@ -184,6 +190,9 @@ spawn_single() {
     # Generate session name
     session="$(generate_session_name "$branch")"
     
+    # Run pre-spawn hook (best-effort)
+    run_hook pre-spawn "$worktree_path" "$repo_root" "" "$branch"
+
     # Create tmux session
     echo "Creating tmux session '$session'..." >&2
     if ! create_session "$session" "$worktree_path"; then
@@ -201,9 +210,13 @@ spawn_single() {
         echo "Warning: Failed to save branch-session mapping" >&2
     fi
     
-    # Apply layout
-    if [ "$layout" != "default" ]; then
-        tmux send-keys -t "$session" "TMUX=\$TMUX . \"$HYDRA_LIB_DIR/layout.sh\" && apply_layout \"$layout\"" Enter
+    # Apply YAML config if present; otherwise custom/built-in layout
+    if [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$worktree_path" "$repo_root" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
+        apply_yaml_config "$cfgpath" "$session" "$worktree_path" "$repo_root"
+    else
+        apply_custom_layout_or_default "$layout" "$session" "$worktree_path" "$repo_root"
+        # Send optional startup commands
+        run_startup_commands "$session" "$worktree_path" "$repo_root"
     fi
     
     # Start AI tool
@@ -215,6 +228,9 @@ spawn_single() {
     fi
     echo "Starting $ai_tool in session '$session'..." >&2
     send_keys_to_session "$session" "$ai_tool"
+
+    # Run post-spawn hook (best-effort)
+    run_hook post-spawn "$worktree_path" "$repo_root" "$session" "$branch"
     
     # Return session name for caller
     echo "$session"
@@ -1037,6 +1053,17 @@ cmd_regenerate() {
             regenerated=$((regenerated + 1))
             # Release any reserved session name lock
             release_session_lock "$session" 2>/dev/null || true
+            # Apply YAML config if available; else apply custom/built-in default
+            repo_root_for_dir="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || dirname "$dir")"
+            if [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$dir" "$repo_root_for_dir" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
+                apply_yaml_config "$cfgpath" "$session" "$dir" "$repo_root_for_dir"
+            else
+                apply_custom_layout_or_default "default" "$session" "$dir" "$repo_root_for_dir"
+                # Optionally run startup commands on regenerate only if explicitly enabled
+                if [ -n "${HYDRA_REGENERATE_RUN_STARTUP:-}" ]; then
+                    run_startup_commands "$session" "$dir" "$repo_root_for_dir"
+                fi
+            fi
             # Optionally auto-launch stored AI tool in the regenerated session
             if [ -n "$stored_ai" ]; then
                 if validate_ai_command "$stored_ai"; then

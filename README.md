@@ -210,6 +210,59 @@ Advanced refs:
   charset restriction while keeping core safety checks (no whitespace/control chars, no `..` or `.` path components, no `@{`, no trailing `.` or `.lock`,
   and no leading/trailing `/`). Use with care.
 
+## Custom Session Configs & Hooks
+
+Hydra supports optional per-project customization using a simple `.hydra` directory. Hydra looks for config in this order:
+1. Worktree directory: `<worktree>/.hydra`
+2. Repository root: `<repo>/.hydra`
+3. Global: `$HYDRA_HOME`
+
+Available hooks and files:
+- `hooks/pre-spawn`: Runs before the tmux session is created. Receives env vars:
+  - `HYDRA_WORKTREE`, `HYDRA_BRANCH`
+- `hooks/layout`: If present, overrides built-in layouts. Runs after the tmux session is created with env:
+  - `HYDRA_SESSION`, `HYDRA_WORKTREE`
+- `startup`: File with one shell command per line (blank lines and lines starting with `#` are ignored). Commands are sent to the session’s main pane after spawn.
+- `hooks/post-spawn`: Runs after applying layout and sending startup commands. Receives env vars:
+  - `HYDRA_SESSION`, `HYDRA_WORKTREE`, `HYDRA_BRANCH`
+
+Notes:
+- Hooks are regular shell scripts executed with your user privileges; keep them trusted.
+- If `hooks/layout` is absent, Hydra applies the built-in `--layout` if provided; otherwise uses `default`.
+
+### YAML Config (config.yml or config.yaml)
+
+Place a minimal YAML config in `.hydra/config.yml` to declare windows/panes and optional startup commands:
+
+```yaml
+windows:
+  - name: editor
+    dir: sub/project
+    env:
+      EDITOR: nvim
+      NODE_ENV: development
+    panes:
+      - cmd: nvim
+      - cmd: bash
+        split: v      # or h
+        dir: logs
+        env:
+          FOO: bar
+  - name: server
+    panes:
+      - cmd: npm run dev
+startup:
+  - echo "Project ready"
+```
+
+Behavior:
+- On spawn: If a YAML config is present, Hydra creates windows and panes as specified and runs `startup` commands after setup. Window-level `dir` and `env` apply to panes; pane-level settings override them. `split` can be `h` or `v`.
+- On regenerate: Hydra applies YAML windows/panes as well. `startup` commands run on regenerate only if `HYDRA_REGENERATE_RUN_STARTUP` is set.
+
+Limitations:
+- The YAML parser is intentionally minimal: supports only the structure shown above (name/dir/env under windows; cmd/split/dir/env under panes; startup list). Values should be plain strings.
+- Complex YAML features (anchors, nested maps beyond what is shown) are not supported.
+
 ## Uninstall
 
 To uninstall Hydra, run the uninstall script with sudo:
