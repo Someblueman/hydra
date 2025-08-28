@@ -76,6 +76,12 @@ fi
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/github.sh"
 
+# Export paths for downstream helpers (e.g., safe tmux run-shell bindings)
+export HYDRA_LIB_DIR
+# Resolve the absolute path to the current hydra binary for secure bindings
+HYDRA_BIN_CMD="${HYDRA_BIN_PATH}"
+export HYDRA_BIN_CMD
+
 # Initialize Hydra home directory
 init_hydra_home() {
     if [ ! -d "$HYDRA_HOME" ]; then
@@ -143,6 +149,9 @@ spawn_single() {
     layout="${2:-default}"
     ai_tool="${3:-}"
     
+    # Best-effort cleanup of stale session-name locks
+    cleanup_stale_locks 2>/dev/null || true
+
     # Check tmux availability
     if ! check_tmux_version; then
         return 1
@@ -179,9 +188,13 @@ spawn_single() {
     echo "Creating tmux session '$session'..." >&2
     if ! create_session "$session" "$worktree_path"; then
         # Clean up worktree if session creation failed
+        # Release any reserved session name lock
+        release_session_lock "$session" 2>/dev/null || true
         delete_worktree "$worktree_path" 2>/dev/null || true
         return 1
     fi
+    # Release the reserved session name lock now that session is created
+    release_session_lock "$session" 2>/dev/null || true
     
     # Add mapping (persist selected AI tool if provided)
     if ! add_mapping "$branch" "$session" "${ai_tool:-}"; then
@@ -980,6 +993,9 @@ cmd_kill() {
 cmd_regenerate() {
     echo "Regenerating tmux sessions for existing worktrees..."
     
+    # Best-effort cleanup of stale session-name locks
+    cleanup_stale_locks 2>/dev/null || true
+
     # Get repository root
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         echo "Error: Not in a git repository" >&2
@@ -1019,7 +1035,8 @@ cmd_regenerate() {
             stored_ai="$(get_ai_for_branch "$branch" 2>/dev/null || true)"
             add_mapping "$branch" "$session" "$stored_ai"
             regenerated=$((regenerated + 1))
-
+            # Release any reserved session name lock
+            release_session_lock "$session" 2>/dev/null || true
             # Optionally auto-launch stored AI tool in the regenerated session
             if [ -n "$stored_ai" ]; then
                 if validate_ai_command "$stored_ai"; then
@@ -1031,6 +1048,8 @@ cmd_regenerate() {
             fi
         else
             echo "Failed to create session for '$branch'" >&2
+            # Release any reserved session name lock
+            release_session_lock "$session" 2>/dev/null || true
         fi
     done
     

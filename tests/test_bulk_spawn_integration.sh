@@ -37,6 +37,7 @@ assert_contains() {
 setup_test_env() {
     # Create temporary test directory
     test_dir="$(mktemp -d)" || exit 1
+    trap 'if [ -n "$test_dir" ] && [ -d "$test_dir" ]; then rm -rf "$test_dir"; fi' EXIT INT TERM
     export HYDRA_HOME="$test_dir/.hydra"
     export HYDRA_MAP="$HYDRA_HOME/map"
     
@@ -63,6 +64,7 @@ teardown_test_env() {
     if [ -n "$test_dir" ] && [ -d "$test_dir" ]; then
         rm -rf "$test_dir"
     fi
+    trap - EXIT INT TERM
 }
 
 # Test bulk spawn argument parsing

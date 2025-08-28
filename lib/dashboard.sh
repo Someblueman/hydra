@@ -25,12 +25,21 @@ create_dashboard_session() {
     # Create dashboard session in background
     tmux new-session -d -s "$DASHBOARD_SESSION" -c "$(pwd)" || return 1
     
-    # Determine hydra binary path for exit binding
-    bin_path="${HYDRA_BIN_PATH:-$(command -v hydra 2>/dev/null || echo hydra)}"
-    
+    # Build a safe command to exit dashboard without relying on PATH
+    exit_cmd=""
+    if [ -n "${HYDRA_LIB_DIR:-}" ] && [ -f "$HYDRA_LIB_DIR/dashboard.sh" ]; then
+        exit_cmd="TMUX=\$TMUX . \"$HYDRA_LIB_DIR/dashboard.sh\" && cmd_dashboard_exit"
+    elif [ -n "${HYDRA_BIN_CMD:-}" ] && [ -x "$HYDRA_BIN_CMD" ]; then
+        exit_cmd="\"$HYDRA_BIN_CMD\" dashboard-exit"
+    elif [ -x "/usr/local/bin/hydra" ]; then
+        exit_cmd="/usr/local/bin/hydra dashboard-exit"
+    else
+        exit_cmd="hydra dashboard-exit"
+    fi
+
     # Set up dashboard keybinding to exit - only works when in dashboard session
     tmux bind-key -T root q if-shell '[ "#{session_name}" = "hydra-dashboard" ]' \
-        "run-shell \"$bin_path dashboard-exit\"" \
+        "run-shell \"$exit_cmd\"" \
         'send-keys q'
     
     return 0

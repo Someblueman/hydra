@@ -12,13 +12,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `spawn` now stores the selected AI tool per head in `~/.hydra/map` (third column)
   - `list` and `status` annotate entries with `[ai: <tool>]`
   - `regenerate` auto-launches the stored AI tool for each restored session
+- Concurrency mitigation for session naming
+  - Reserve session names using best-effort lock directories under `~/.hydra/locks` during creation
+  - Added stale lock cleanup to remove `.lock` dirs older than 24 hours
+- Uninstall improvements
+  - `uninstall.sh` now detects both default `~/.hydra` and custom `HYDRA_HOME` user data locations
+  - New `--purge` flag removes user data non-interactively
+ - Safer layout hotkeys
+   - `setup_layout_hotkeys` binds `cycle-layout` via absolute hydra path or direct library invocation, reducing PATH injection risk
 
 ### Changed
 - Documentation updated to describe per-head AI persistence and regenerate behavior
+- Hardened validation in Git helpers (lib/git.sh): stricter branch and worktree path checks to prevent traversal and injection
 
 ### Notes
 - Backward compatible with existing two-column map files; missing AI column is handled gracefully
 - No changes required for users relying solely on `HYDRA_AI_COMMAND` or `--agents`
+- Optional: Set `HYDRA_ALLOW_ADVANCED_REFS=1` to relax conservative charset checks for Git refs while retaining core safety guards
 
 ## [1.1.0] - 2025-07-03
 

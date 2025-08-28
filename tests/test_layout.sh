@@ -12,61 +12,10 @@ fail_count=0
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/layout.sh"
 
-# Test helper functions
-# shellcheck disable=SC2317
-# shellcheck disable=SC2329
-assert_equal() {
-    expected="$1"
-    actual="$2"
-    message="$3"
-    
-    test_count=$((test_count + 1))
-    if [ "$expected" = "$actual" ]; then
-        pass_count=$((pass_count + 1))
-        echo "✓ $message"
-    else
-        fail_count=$((fail_count + 1))
-        echo "✗ $message"
-        echo "  Expected: '$expected'"
-        echo "  Actual:   '$actual'"
-    fi
-}
-
-# shellcheck disable=SC2317
-# shellcheck disable=SC2329
-assert_success() {
-    exit_code="$1"
-    message="$2"
-    
-    test_count=$((test_count + 1))
-    if [ "$exit_code" -eq 0 ]; then
-        pass_count=$((pass_count + 1))
-        echo "✓ $message"
-    else
-        fail_count=$((fail_count + 1))
-        echo "✗ $message"
-        echo "  Expected: success (exit code 0)"
-        echo "  Actual:   failure (exit code $exit_code)"
-    fi
-}
-
-# shellcheck disable=SC2317
-# shellcheck disable=SC2329
-assert_failure() {
-    exit_code="$1"
-    message="$2"
-    
-    test_count=$((test_count + 1))
-    if [ "$exit_code" -ne 0 ]; then
-        pass_count=$((pass_count + 1))
-        echo "✓ $message"
-    else
-        fail_count=$((fail_count + 1))
-        echo "✗ $message"
-        echo "  Expected: failure (non-zero exit code)"
-        echo "  Actual:   success (exit code 0)"
-    fi
-}
+# Common test helpers
+# shellcheck source=./helpers.sh
+# shellcheck disable=SC1091
+. "$(dirname "$0")/helpers.sh"
 
 # Test apply_layout parameter validation
 test_apply_layout_validation() {
@@ -172,6 +121,7 @@ test_restore_layout_no_file() {
     
     # Set up temporary HYDRA_HOME
     temp_home="$(mktemp -d)"
+    trap 'if [ -n "$temp_home" ] && [ -d "$temp_home" ]; then rm -rf "$temp_home"; fi' EXIT INT TERM
     HYDRA_HOME="$temp_home"
     export HYDRA_HOME
     
@@ -181,6 +131,7 @@ test_restore_layout_no_file() {
     
     # Cleanup
     rm -rf "$temp_home"
+    trap - EXIT INT TERM
     unset HYDRA_HOME
 }
 
@@ -206,6 +157,7 @@ test_layout_save_restore() {
     
     # Set up temporary HYDRA_HOME
     temp_home="$(mktemp -d)"
+    trap 'if [ -n "$temp_home" ] && [ -d "$temp_home" ]; then rm -rf "$temp_home"; fi' EXIT INT TERM
     HYDRA_HOME="$temp_home"
     export HYDRA_HOME
     
@@ -220,6 +172,7 @@ test_layout_save_restore() {
     
     # Cleanup
     rm -rf "$temp_home"
+    trap - EXIT INT TERM
     unset HYDRA_HOME
 }
 
