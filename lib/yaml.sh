@@ -37,8 +37,8 @@ apply_yaml_config() {
     [ -f "$cfg" ] || return 0
 
     awk '
-      function ltrim(s){ sub(/^\s+/,"",s); return s }
-      function rtrim(s){ sub(/\s+$/,"",s); return s }
+      function ltrim(s){ sub(/^[[:space:]]+/,"",s); return s }
+      function rtrim(s){ sub(/[[:space:]]+$/,"",s); return s }
       function trim(s){ return rtrim(ltrim(s)) }
       function indent(s){ match(s,/^[ ]*/); return RLENGTH }
       function flush_pane(){
@@ -82,7 +82,8 @@ apply_yaml_config() {
         next
       }
       ctx=="windows" && i>=4 && $0 ~ /^[[:space:]]*panes:/ {
-        subctx="panes"; penv_mode=0; next
+        # Enter panes section; stop collecting window-level env
+        subctx="panes"; wenv_mode=0; penv_mode=0; next
       }
       ctx=="windows" && subctx=="panes" && i>=6 && $0 ~ /^[[:space:]]*-/ {
         # Flush previous pane if any
@@ -116,55 +117,107 @@ apply_yaml_config() {
         next
       }
       END{ flush_pane() }
-    ' "$cfg" | while IFS=$(printf '\t') read -r kind f1 f2 f3; do
+    ' "$cfg" | while IFS=$(printf '\t') read -r kind f1 f2 f3 f4; do
+        # Accumulate session-wide env seen so far so later windows/panes inherit it
+        session_env="${session_env:-}"
         case "$kind" in
           WIN)
             window_name="$f1"; window_dir="$f2"; window_env="$f3"; window_layout=""
-            if [ -z "${window_index:-}" ]; then window_index=0; else window_index=$((window_index+1)); fi
-            if [ "$window_index" -eq 0 ]; then
-                if [ -n "$window_name" ]; then
-                    tmux rename-window -t "$session:0" "$window_name" 2>/dev/null || true
-                fi
-            else
-                base_dir="${window_dir:-$wt}"
-                tmux new-window -t "$session" -n "${window_name:-win$window_index}" -c "$base_dir" 2>/dev/null || true
+            if [ -z "${window_count:-}" ]; then window_count=0; else window_count=$((window_count+1)); fi
+            base_dir="${window_dir:-$wt}"
+            # Create a new window and capture its index
+            current_window_id="$(tmux new-window -P -F '#{window_id}' -t "$session:" -n "${window_name:-win$window_count}" -c "$base_dir" 2>/dev/null || true)"
+            # Fallback: get the last-created window id
+            if [ -z "${current_window_id:-}" ]; then
+                current_window_id="$(tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null | tail -n1)"
+            fi
+            current_window_index="$(tmux display-message -p -t "$current_window_id" '#{window_index}' 2>/dev/null || true)"
+            # After creating the first window, kill any other pre-existing window(s)
+            if [ -z "${original_windows_cleaned:-}" ]; then
+                tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null | while IFS= read -r wid; do
+                    [ "$wid" = "$current_window_id" ] && continue
+                    tmux kill-window -t "$wid" 2>/dev/null || true
+                done
+                original_windows_cleaned=1
             fi
             current_pane_index=0
             ;;
           WATTR)
             case "$f1" in
               DIR) window_dir="$f2" ;;
-              ENV) if [ -n "$window_env" ]; then window_env="$window_env;$f2"; else window_env="$f2"; fi ;;
-              LAYOUT) window_layout="$f2" ;;
+              ENV)
+                # Accumulate window-level env and also set it at the tmux session level
+                if [ -n "$window_env" ]; then window_env="$window_env;$f2"; else window_env="$f2"; fi
+                if [ -n "$session_env" ]; then session_env="$session_env;$f2"; else session_env="$f2"; fi
+                # Propagate to tmux session so subsequent windows/panes inherit
+                k="${f2%%=*}"; v="${f2#*=}"
+                [ -n "$k" ] && tmux set-environment -t "$session" "$k" "$v" 2>/dev/null || true
+                ;;
+              LAYOUT)
+                window_layout="$f2"
+                # Tag the window layout early for verification (window must exist by now)
+                if [ -n "${current_window_id:-}" ]; then
+                  tmux set-window-option -t "$current_window_id" "@hydra_layout" "$window_layout" 2>/dev/null || true
+                fi
+                ;;
             esac
             ;;
           PANE)
-            pane_cmd="$f1"; pane_split="$f2"; pane_dir="$f3"; pane_env="$4" # $4 may be empty
+            pane_cmd="$f1"; pane_split="$f2"; pane_dir="$f3"; pane_env="$f4" # $f4 may be empty
             # Determine dir and env
             run_dir="${pane_dir:-$window_dir}"
-            [ -z "$run_dir" ] && run_dir="$wt"
+            if [ -z "$run_dir" ]; then
+                run_dir="$wt"
+            else
+                case "$run_dir" in
+                  /*) : ;; # absolute
+                  *) run_dir="$wt/$run_dir" ;;
+                esac
+            fi
             prefix=""
-            # Compose env prefix as exports to persist in shell
+            # Compose env prefix as exports to persist in shell (session -> window -> pane)
+            if [ -n "$session_env" ]; then
+                IFS=';'
+                for kv in $session_env; do
+                    unset IFS
+                    [ -z "$kv" ] && continue
+                    prefix="$prefix export $kv;"
+                done
+            fi
             if [ -n "$window_env" ]; then
-                IFS=';' ; for kv in $window_env; do unset IFS; [ -n "$kv" ] && prefix="$prefix export $kv;"; done
+                IFS=';'
+                for kv in $window_env; do
+                    unset IFS
+                    [ -z "$kv" ] && continue
+                    prefix="$prefix export $kv;"
+                done
             fi
             if [ -n "$pane_env" ]; then
-                IFS=';' ; for kv in $pane_env; do unset IFS; [ -n "$kv" ] && prefix="$prefix export $kv;"; done
+                IFS=';'
+                for kv in $pane_env; do
+                    unset IFS
+                    [ -z "$kv" ] && continue
+                    prefix="$prefix export $kv;"
+                done
             fi
+            tmux select-window -t "$current_window_id" 2>/dev/null || true
             if [ "$current_pane_index" -eq 0 ]; then
-                tmux select-window -t "$session:$window_index" 2>/dev/null || true
-                tmux send-keys -t "$session:$window_index.0" "$prefix $pane_cmd" Enter 2>/dev/null || true
+                # Avoid premature shell expansion of command contents
+                tmux send-keys -t "$current_window_id" "$prefix" C-m 2>/dev/null || true
+                tmux send-keys -t "$current_window_id" "$pane_cmd" Enter 2>/dev/null || true
             else
                 split_flag="-h"
                 [ "$pane_split" = "v" ] && split_flag="-v"
-                tmux split-window -t "$session:$window_index" $split_flag -c "$run_dir" 2>/dev/null || true
-                tmux send-keys -t "$session:$window_index" "$prefix $pane_cmd" Enter 2>/dev/null || true
+                tmux select-window -t "$current_window_id" 2>/dev/null || true
+                tmux split-window $split_flag -t "$current_window_id" -c "$run_dir" 2>/dev/null || true
+                tmux send-keys -t "$current_window_id" "$prefix" C-m 2>/dev/null || true
+                tmux send-keys -t "$current_window_id" "$pane_cmd" Enter 2>/dev/null || true
             fi
             current_pane_index=$((current_pane_index+1))
-            tmux select-layout -t "$session:$window_index" tiled 2>/dev/null || true
+            tmux select-layout -t "$current_window_id" tiled 2>/dev/null || true
             if [ -n "$window_layout" ]; then
-                tmux select-layout -t "$session:$window_index" "$window_layout" 2>/dev/null || true
-                tmux set-window-option -t "$session:$window_index" "@hydra_layout" "$window_layout" 2>/dev/null || true
+                tmux select-layout -t "$current_window_id" "$window_layout" 2>/dev/null || true
+                tmux set-window-option -t "$current_window_id" "@hydra_layout" "$window_layout" 2>/dev/null || true
             fi
             ;;
           START)

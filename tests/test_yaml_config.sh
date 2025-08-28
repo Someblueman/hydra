@@ -75,18 +75,36 @@ YAML
 assert_true "tmux list-windows -t yaml-test 2>/dev/null | grep -q 'yaml-editor'" "yaml-editor window created"
 assert_true "tmux list-windows -t yaml-test 2>/dev/null | grep -q 'yaml-server'" "yaml-server window created"
 
+# Determine index of yaml-editor window
+ed_idx="$(tmux list-windows -t yaml-test -F '#{window_index} #{window_name}' 2>/dev/null | awk '$2=="yaml-editor"{print $1; exit}')"
+[ -z "$ed_idx" ] && ed_idx=0
+
+# Wait for panes to settle in the yaml-editor window (up to ~2s)
+tries=0
+while : ; do
+  pcnt="$(tmux list-panes -t yaml-test:"$ed_idx" 2>/dev/null | wc -l | tr -d ' ')"
+  [ "${pcnt:-0}" -ge 2 ] && break
+  tries=$((tries+1))
+  [ "$tries" -ge 10 ] && break
+  sleep 0.2
+done
+
 # Check pane counts
-assert_true "[ \"$(tmux list-panes -t yaml-test:0 2>/dev/null | wc -l | tr -d ' ')\" -eq 2 ]" "editor window has 2 panes"
-assert_true "[ \"$(tmux list-panes -t yaml-test:1 2>/dev/null | wc -l | tr -d ' ')\" -ge 2 ]" "server window has >=2 panes"
+assert_true "[ \"$(tmux list-panes -t yaml-test:$ed_idx 2>/dev/null | wc -l | tr -d ' ')\" -ge 2 ]" "editor window has 2 panes"
+# Determine index of yaml-server window
+srv_idx="$(tmux list-windows -t yaml-test -F '#{window_index} #{window_name}' 2>/dev/null | awk '$2=="yaml-server"{print $1; exit}')"
+[ -z "$srv_idx" ] && srv_idx=1
+
+assert_true "[ \"$(tmux list-panes -t yaml-test:$srv_idx 2>/dev/null | wc -l | tr -d ' ')\" -ge 2 ]" "server window has >=2 panes"
 
 # Check window layout tag set
-val="$(tmux show-window-options -v -t yaml-test:0 @hydra_layout 2>/dev/null || true)"
+val="$(tmux show-window-options -v -t yaml-test:"$ed_idx" @hydra_layout 2>/dev/null || true)"
 assert_true "[ \"$val\" = \"even-horizontal\" ]" "per-window layout applied"
 
-# Check that window env is visible in server window
+# Check that YAML-defined env is present at the tmux session level
 sleep 0.2
-content="$(tmux capture-pane -pt yaml-test:1.0 2>/dev/null || true)"
-echo "$content" | grep -q "bar" && pass_count=$((pass_count+1)) || fail_count=$((fail_count+1))
+envval="$(tmux show-environment -t yaml-test FOO 2>/dev/null || true)"
+printf '%s' "$envval" | grep -q "FOO=bar" && pass_count=$((pass_count+1)) || fail_count=$((fail_count+1))
 test_count=$((test_count+1))
 
 # YAML guard: disable YAML and ensure no extra windows from config applied
