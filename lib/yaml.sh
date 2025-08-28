@@ -122,7 +122,9 @@ apply_yaml_config() {
             window_name="$f1"; window_dir="$f2"; window_env="$f3"; window_layout=""
             if [ -z "${window_index:-}" ]; then window_index=0; else window_index=$((window_index+1)); fi
             if [ "$window_index" -eq 0 ]; then
-                [ -n "$window_name" ] && tmux rename-window -t "$session:0" "$window_name" 2>/dev/null || true
+                if [ -n "$window_name" ]; then
+                    tmux rename-window -t "$session:0" "$window_name" 2>/dev/null || true
+                fi
             else
                 base_dir="${window_dir:-$wt}"
                 tmux new-window -t "$session" -n "${window_name:-win$window_index}" -c "$base_dir" 2>/dev/null || true
@@ -162,6 +164,7 @@ apply_yaml_config() {
             tmux select-layout -t "$session:$window_index" tiled 2>/dev/null || true
             if [ -n "$window_layout" ]; then
                 tmux select-layout -t "$session:$window_index" "$window_layout" 2>/dev/null || true
+                tmux set-window-option -t "$session:$window_index" "@hydra_layout" "$window_layout" 2>/dev/null || true
             fi
             ;;
           START)

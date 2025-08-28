@@ -56,6 +56,7 @@ windows:
     dir: sub
     env:
       FOO: bar
+    layout: even-horizontal
     panes:
       - cmd: echo editor
       - cmd: pwd
@@ -77,6 +78,10 @@ assert_true "tmux list-windows -t yaml-test 2>/dev/null | grep -q 'yaml-server'"
 # Check pane counts
 assert_true "[ \"$(tmux list-panes -t yaml-test:0 2>/dev/null | wc -l | tr -d ' ')\" -eq 2 ]" "editor window has 2 panes"
 assert_true "[ \"$(tmux list-panes -t yaml-test:1 2>/dev/null | wc -l | tr -d ' ')\" -ge 2 ]" "server window has >=2 panes"
+
+# Check window layout tag set
+val="$(tmux show-window-options -v -t yaml-test:0 @hydra_layout 2>/dev/null || true)"
+assert_true "[ \"$val\" = \"even-horizontal\" ]" "per-window layout applied"
 
 # Check that window env is visible in server window
 sleep 0.2
