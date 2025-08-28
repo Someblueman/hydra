@@ -75,6 +75,9 @@ fi
 # shellcheck source=../lib/github.sh
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/github.sh"
+# shellcheck source=../lib/hooks.sh
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/hooks.sh"
 
 # Export paths for downstream helpers (e.g., safe tmux run-shell bindings)
 export HYDRA_LIB_DIR
@@ -184,6 +187,9 @@ spawn_single() {
     # Generate session name
     session="$(generate_session_name "$branch")"
     
+    # Run pre-spawn hook (best-effort)
+    run_hook pre-spawn "$worktree_path" "$repo_root" "" "$branch"
+
     # Create tmux session
     echo "Creating tmux session '$session'..." >&2
     if ! create_session "$session" "$worktree_path"; then
@@ -201,10 +207,8 @@ spawn_single() {
         echo "Warning: Failed to save branch-session mapping" >&2
     fi
     
-    # Apply layout
-    if [ "$layout" != "default" ]; then
-        tmux send-keys -t "$session" "TMUX=\$TMUX . \"$HYDRA_LIB_DIR/layout.sh\" && apply_layout \"$layout\"" Enter
-    fi
+    # Apply custom layout or default built-in layout
+    apply_custom_layout_or_default "$layout" "$session" "$worktree_path" "$repo_root"
     
     # Start AI tool
     if [ -z "$ai_tool" ]; then
@@ -215,6 +219,12 @@ spawn_single() {
     fi
     echo "Starting $ai_tool in session '$session'..." >&2
     send_keys_to_session "$session" "$ai_tool"
+
+    # Send optional startup commands
+    run_startup_commands "$session" "$worktree_path" "$repo_root"
+
+    # Run post-spawn hook (best-effort)
+    run_hook post-spawn "$worktree_path" "$repo_root" "$session" "$branch"
     
     # Return session name for caller
     echo "$session"
