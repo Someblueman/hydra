@@ -124,6 +124,26 @@ hydra dashboard --help # Get help about dashboard features
 - Non-disruptive: panes are temporarily moved and restored on exit
 - Automatically adjusts layout based on number of sessions (2x2, 3x3, etc.)
 
+#### Collect Multiple Panes Per Session
+
+By default, the dashboard collects just the first pane from each active session. For more complex layouts, you can collect multiple panes per session:
+
+```sh
+# Collect two panes from each session
+hydra dashboard --panes-per-session 2
+
+# Collect all panes from each session (leaves one pane per source session to keep it alive)
+hydra dashboard --panes-per-session all
+
+# Equivalent via environment variable
+HYDRA_DASHBOARD_PANES_PER_SESSION=2 hydra dashboard
+HYDRA_DASHBOARD_PANES_PER_SESSION=all hydra dashboard
+```
+
+Notes:
+- Hydra never drains a source session completely; it always leaves at least one pane behind so your sessions remain usable while viewing the dashboard.
+- Pane titles in the dashboard are set to the corresponding branch name for clarity.
+
 ### System Management
 
 ```sh

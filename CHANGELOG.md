@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2025-08-27
 
 ### Added
+- Dashboard: configurable multi-pane collection
+  - New env `HYDRA_DASHBOARD_PANES_PER_SESSION` controls panes per session:
+    - `1` (default): collect first pane only (previous behavior)
+    - `N`: collect up to N panes per session
+    - `all`: collect all panes from each session (leaves one pane behind)
+  - New CLI flag for `dashboard`: `-p, --panes-per-session <N|all>`
+  - Pane titles set to branch names for clarity
 - Per-head AI persistence in mapping file
   - `spawn` now stores the selected AI tool per head in `~/.hydra/map` (third column)
   - `list` and `status` annotate entries with `[ai: <tool>]`
