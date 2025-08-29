@@ -297,8 +297,8 @@ test_dashboard_creation() {
     
     # Count active sessions - we need at least 2 out of 3
     list_output=$(cd "$TEST_REPO_DIR" && HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" list 2>/dev/null || echo "")
-    # Count lines that look like mapping rows (robust to header text)
-    active_count=$(printf '%s' "$list_output" | grep -c ' -> ')
+    # Count lines that look like mapping rows (robust to header text) and coerce to number
+    active_count=$(printf '%s' "$list_output" | awk '/ -> /{c++} END{ if(c=="" || c==0){print 0}else{print c} }')
     if [ "$active_count" -lt 2 ]; then
         print_error "Not enough active sessions found after spawning (found: $active_count, expected: at least 2)"
         # Additional debugging
@@ -513,7 +513,19 @@ test_multi_pane_collection_env() {
     fi
 
     collected_lines=$(wc -l < "$DASHBOARD_RESTORE_MAP" | tr -d ' ')
-    expected_collected=$((expected_sessions * 2))
+    # Compute expected collected panes with cap=2 per session (leaving one behind)
+    expected_collected=0
+    while IFS=' ' read -r branch session; do
+        if tmux_session_exists "$session"; then
+            pcnt=$(tmux list-panes -t "$session" 2>/dev/null | wc -l | tr -d ' ')
+            if [ "${pcnt:-0}" -gt 1 ]; then
+                avail=$((pcnt - 1))
+                [ "$avail" -gt 2 ] && avail=2
+                expected_collected=$((expected_collected + avail))
+            fi
+        fi
+    done < "$HYDRA_MAP"
+
     if [ "$collected_lines" -ne "$expected_collected" ]; then
         print_error "Expected to collect $expected_collected panes, got $collected_lines"
         tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
