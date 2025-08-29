@@ -123,6 +123,8 @@ Commands:
   status            Show health status of all heads
   doctor            Check system performance
   dashboard         View all sessions in a single dashboard
+                    Options:
+                      -p, --panes-per-session <N|all>  Collect multiple panes per session
   cycle-layout      Cycle through tmux pane layouts
   completion        Generate shell completion scripts
   version           Show version information
@@ -145,6 +147,7 @@ Environment:
   HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
   HYDRA_AI_COMMAND  Default AI tool (default: claude)
   HYDRA_ROOT        Override hydra installation path (for library discovery)
+  HYDRA_DASHBOARD_PANES_PER_SESSION  Panes per session for dashboard (1, N, or all)
 EOF
 }
 

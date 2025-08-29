@@ -297,7 +297,8 @@ test_dashboard_creation() {
     
     # Count active sessions - we need at least 2 out of 3
     list_output=$(cd "$TEST_REPO_DIR" && HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" list 2>/dev/null || echo "")
-    active_count=$(echo "$list_output" | grep -c "active" || echo "0")
+    # Count lines that look like mapping rows (robust to header text) and coerce to number
+    active_count=$(printf '%s' "$list_output" | awk '/ -> /{c++} END{ if(c=="" || c==0){print 0}else{print c} }')
     if [ "$active_count" -lt 2 ]; then
         print_error "Not enough active sessions found after spawning (found: $active_count, expected: at least 2)"
         # Additional debugging
@@ -458,6 +459,108 @@ test_pane_collection_and_restore() {
     return 0
 }
 
+# Test multi-pane collection via env
+test_multi_pane_collection_env() {
+    print_status "Testing multi-pane collection (env: 2 panes per session)..."
+    cd "$TEST_REPO_DIR" || exit 1
+
+    HYDRA_LIB_DIR="$SCRIPT_DIR/../lib"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/tmux.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/state.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/dashboard.sh"
+
+    HYDRA_MAP="${HYDRA_HOME:-$HOME/.hydra}/map"
+    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+        print_warning "No Hydra map file found, skipping multi-pane test"
+        return 0
+    fi
+
+    # Ensure each source session has at least 3 panes so we can collect 2 and leave 1 behind
+    expected_sessions=0
+    while IFS=' ' read -r branch session; do
+        if tmux_session_exists "$session"; then
+            expected_sessions=$((expected_sessions + 1))
+            # Ensure exactly >=3 panes by splitting until 3
+            pcnt=$(tmux list-panes -t "$session:0" 2>/dev/null | wc -l | tr -d ' ')
+            while [ "${pcnt:-0}" -lt 3 ]; do
+                tmux split-window -t "$session:0" -d 2>/dev/null || true
+                pcnt=$(tmux list-panes -t "$session:0" 2>/dev/null | wc -l | tr -d ' ')
+            done
+        fi
+    done < "$HYDRA_MAP"
+    if [ "$expected_sessions" -lt 1 ]; then
+        print_warning "No active sessions found, skipping multi-pane test"
+        return 0
+    fi
+
+    # Create a new dashboard session
+    if ! create_dashboard_session; then
+        print_error "Failed to create dashboard session"
+        return 1
+    fi
+
+    initial_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+
+    # Collect up to 2 panes per session
+    export HYDRA_DASHBOARD_PANES_PER_SESSION=2
+    if ! collect_session_panes; then
+        print_error "collect_session_panes failed (env=2)"
+        tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+        return 1
+    fi
+
+    collected_lines=$(wc -l < "$DASHBOARD_RESTORE_MAP" | tr -d ' ')
+    # Compute expected collected panes with cap=2 per session (leaving one behind)
+    expected_collected=0
+    while IFS=' ' read -r branch session; do
+        if tmux_session_exists "$session"; then
+            pcnt=$(tmux list-panes -t "$session" 2>/dev/null | wc -l | tr -d ' ')
+            if [ "${pcnt:-0}" -gt 1 ]; then
+                avail=$((pcnt - 1))
+                [ "$avail" -gt 2 ] && avail=2
+                expected_collected=$((expected_collected + avail))
+            fi
+        fi
+    done < "$HYDRA_MAP"
+
+    if [ "$collected_lines" -ne "$expected_collected" ]; then
+        print_error "Expected to collect $expected_collected panes, got $collected_lines"
+        tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+        return 1
+    fi
+
+    after_collect_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+    expected_after=$((initial_panes + collected_lines))
+    if [ "$after_collect_panes" -ne "$expected_after" ]; then
+        print_error "Unexpected pane count in dashboard (got $after_collect_panes, expected $expected_after)"
+        tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+        return 1
+    fi
+
+    # Restore
+    if ! restore_panes; then
+        print_error "restore_panes reported failures (env=2)"
+        tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+        return 1
+    fi
+
+    # After restore, initial pane count persists
+    after_restore_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$after_restore_panes" -ne "$initial_panes" ]; then
+        print_error "Dashboard pane count after restore is $after_restore_panes (expected $initial_panes)"
+        tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+        return 1
+    fi
+
+    # Clean up dashboard session
+    tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
+    unset HYDRA_DASHBOARD_PANES_PER_SESSION
+    print_status "Multi-pane collection via env verified"
+    return 0
+}
 # Cleanup test environment
 cleanup_test_env() {
     print_status "Cleaning up test environment..."
@@ -551,6 +654,9 @@ main() {
     
     if [ "$test_failed" -eq 0 ]; then
         test_pane_collection_and_restore || test_failed=1
+    fi
+    if [ "$test_failed" -eq 0 ]; then
+        test_multi_pane_collection_env || test_failed=1
     fi
     
     # Report results
