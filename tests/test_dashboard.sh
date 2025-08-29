@@ -297,7 +297,8 @@ test_dashboard_creation() {
     
     # Count active sessions - we need at least 2 out of 3
     list_output=$(cd "$TEST_REPO_DIR" && HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" list 2>/dev/null || echo "")
-    active_count=$(echo "$list_output" | grep -c "active" || echo "0")
+    # Count lines that look like mapping rows (robust to header text)
+    active_count=$(printf '%s' "$list_output" | grep -c ' -> ')
     if [ "$active_count" -lt 2 ]; then
         print_error "Not enough active sessions found after spawning (found: $active_count, expected: at least 2)"
         # Additional debugging
@@ -477,14 +478,14 @@ test_multi_pane_collection_env() {
         return 0
     fi
 
-    # Ensure each source session has at least 2 panes
+    # Ensure each source session has at least 3 panes so we can collect 2 and leave 1 behind
     expected_sessions=0
     while IFS=' ' read -r branch session; do
         if tmux_session_exists "$session"; then
             expected_sessions=$((expected_sessions + 1))
-            # Ensure exactly >=2 panes by splitting until 2
+            # Ensure exactly >=3 panes by splitting until 3
             pcnt=$(tmux list-panes -t "$session:0" 2>/dev/null | wc -l | tr -d ' ')
-            while [ "${pcnt:-0}" -lt 2 ]; do
+            while [ "${pcnt:-0}" -lt 3 ]; do
                 tmux split-window -t "$session:0" -d 2>/dev/null || true
                 pcnt=$(tmux list-panes -t "$session:0" 2>/dev/null | wc -l | tr -d ' ')
             done
