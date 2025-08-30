@@ -109,6 +109,7 @@ setup_test_env() {
         echo "Error: Failed to create temporary directory" >&2
         return 1
     }
+    trap 'if [ -n "$test_dir" ] && [ -d "$test_dir" ]; then rm -rf "$test_dir"; fi' EXIT INT TERM
     HYDRA_HOME="$test_dir/.hydra"
     export HYDRA_HOME
     echo "$test_dir"
@@ -118,6 +119,7 @@ cleanup_test_env() {
     test_dir="$1"
     rm -rf "$test_dir"
     unset HYDRA_HOME
+    trap - EXIT INT TERM
 }
 
 # Test hydra version command

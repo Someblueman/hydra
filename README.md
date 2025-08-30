@@ -22,195 +22,142 @@
     </div>
     <h1>Hydra</h1>
     <p>
-        <b>A POSIX-compliant CLI tool that wraps tmux ≥ 3.0 and git worktree to manage parallel AI coding sessions ("heads")</b>
+        <b>POSIX tmux + git worktree orchestrator for parallel “heads”</b>
     </p>
     <p>
-        Work on multiple git branches simultaneously, each with its own tmux session and isolated worktree.
+        One tmux session + worktree per branch. Fast switches, layouts, YAML, and a multi-session dashboard; optional GitHub issues and AI agents.
     </p>
 </div>
 
-
-## Features
-
-- **Multiple Parallel Sessions**: Work on different branches simultaneously with isolated environments
-- **tmux Integration**: Each branch gets its own tmux session with customizable layouts
-- **Git Worktree Management**: Automatic creation and cleanup of git worktrees
-- **GitHub Integration**: Create heads directly from GitHub issues
-- **Session Persistence**: Maintains branch-to-session mappings across restarts
-- **Interactive Switching**: Use fzf for quick session switching (falls back to numeric selection)
-- **Performance Monitoring**: Built-in latency tracking ensures <100ms switch times
-
 ## Quick Start
 
-### Requirements
+- Requirements: `git`, `tmux` (≥ 3.0). Optional: `fzf`, GitHub CLI, an AI CLI (`claude`, `aider`, `gemini`, etc.).
+- Install:
+  - `git clone https://github.com/Someblueman/hydra && cd hydra && sudo ./install.sh`
+  - or `sudo make install`
+- Try it:
+  - `hydra spawn feature-x -l dev`
+  - `hydra list` • `hydra switch` • `hydra dashboard` • `hydra kill feature-x`
 
-- `/bin/sh` (POSIX shell)
-- git
-- tmux ≥ 3.0
-- AI CLI tool (optional but recommended: claude, codex, cursor, copilot, aider, or gemini)
-  - Note: gemini requires Node.js 18+ and Google account authentication
-- fzf (optional, for interactive switching)
-- GitHub CLI (optional, for GitHub issue integration)
+## Why Hydra
 
-### Installation
+- Multiple heads: Isolated tmux sessions + git worktrees per branch.
+- GitHub aware: `hydra spawn --issue 123` to branch from an issue.
+- Mixed agents: `--ai aider` or `--agents "claude:2,aider:1"` at spawn.
+- Dashboard: View panes from many sessions in one place; press `q` to exit.
+- Layouts: `default`, `dev`, `full`, and `Ctrl-L` to cycle.
+- Durable: `hydra regenerate` restores sessions after restart.
+
+## Demos (VHS)
+
+Below is a lightweight demo GIF. Regenerate locally with Charm’s VHS.
+
+- Quick tour: `assets/demos/quick-tour.gif`
+
+If you want to regenerate the GIF yourself, you can use the VHS project from Charm (not included here): https://github.com/charmbracelet/vhs
+
+## Core Commands
 
 ```sh
-git clone https://github.com/Someblueman/hydra.git
-cd hydra
-sudo ./install.sh
-```
+# Create a new head for a branch (tmux + worktree)
+hydra spawn feature-branch [-l default|dev|full]
 
-Or using make:
-
-```sh
-sudo make install
-```
-
-## Usage
-
-### Essential Commands
-
-```sh
-# Create a new head for a branch
-hydra spawn feature-branch
-
-# Create a head from a GitHub issue
+# From a GitHub issue
 hydra spawn --issue 123
 
-# List all active heads
+# Bulk and mixed agents
+hydra spawn feature -n 3 --ai aider
+hydra spawn exp --agents "claude:2,aider:1"
+
+# Inspect & switch
 hydra list
+hydra switch   # interactive (fzf if available)
 
-# Switch between heads interactively
-hydra switch
-
-# Kill a head (removes session and worktree)
+# Manage
 hydra kill feature-branch
+hydra kill --all [--force]
 
-# View all sessions in a unified dashboard
+# System
+hydra regenerate   # restore sessions after restart
+hydra status       # per-head health
+hydra doctor       # performance diagnostics
+
+# Dashboard
 hydra dashboard
+HYDRA_DASHBOARD_PANES_PER_SESSION=2 hydra dashboard
 ```
 
-### Working with Layouts
+## Layouts
 
-Hydra supports three built-in layouts that can be specified during spawn or cycled through with `Ctrl-L`:
-
-```sh
-# Spawn with specific layout
-hydra spawn feature-branch --layout dev      # Two panes: editor (70%) + terminal (30%)
-hydra spawn feature-branch --layout full     # Three panes: editor + terminal + logs
-hydra spawn feature-branch --layout default  # Single pane (default)
-
-# Cycle through layouts in current session
-hydra cycle-layout
-```
-
-**Available layouts:**
-- `default`: Single pane, full screen
-- `dev`: Two panes - editor (left 70%) and terminal (right 30%)
-- `full`: Three panes - editor (top-left), terminal (top-right), logs (bottom)
-
-### Dashboard View
-
-The dashboard provides a unified view of all active Hydra sessions in a single tmux window:
-
-```sh
-hydra dashboard        # View all sessions in a grid
-hydra dashboard --help # Get help about dashboard features
-```
-
-**Dashboard features:**
-- Displays panes from all active sessions in a grid layout
-- Press `q` to exit and restore panes to their original sessions
-- Non-disruptive: panes are temporarily moved and restored on exit
-- Automatically adjusts layout based on number of sessions (2x2, 3x3, etc.)
-
-### System Management
-
-```sh
-# Regenerate sessions after restart
-hydra regenerate
-
-# Check system health and performance
-hydra status
-hydra doctor
-```
-
-## Examples
-
-### Dashboard with Multiple Sessions
-
-The dashboard provides a unified view of all your active Hydra sessions:
-
-<img src="assets/dashboard.png" alt="Hydra Dashboard" width="800">
-
-### Development Layout
-
-The `dev` layout provides a split view perfect for coding with an editor and terminal:
-
-<img src="assets/dev_layout.png" alt="Development Layout" width="800">
-
-### Full Layouts
-
-Choose from multiple full layout options for complex workflows:
-
-**Quad Layout (2x2 grid):**
-<img src="assets/full_quad.png" alt="Quad Layout" width="800">
-
-**Triple Layout (1 large + 2 small panes):**
-<img src="assets/full_triple.png" alt="Triple Layout" width="800">
-
-**Six Panes Layout:**
-<img src="assets/full_six_panes.png" alt="Six Panes Layout" width="800">
-
-## How It Works
-
-1. **Spawn**: Creates a git worktree at `../hydra-{branch}` and a tmux session
-2. **Mapping**: Stores branch-to-session mappings in `~/.hydra/map`
-3. **Switch**: Uses tmux's `switch-client` for instant context switching
-4. **Persistence**: Mappings survive system restarts; use `regenerate` to restore sessions
-
-## Development
-
-Hydra is strictly POSIX-compliant and works with `/bin/sh`. All scripts are validated with ShellCheck and dash.
-
-```sh
-# Run linter (requires shellcheck)
-make lint
-
-# Run tests
-make test
-
-# Clean temporary files
-make clean
-
-# Show all available targets
-make help
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
+- `default`: Single full-screen pane
+- `dev`: Two panes (editor ~70% left, terminal right)
+- `full`: Three panes (editor top-left, terminal top-right, logs bottom)
+- Cycle in-session with `Ctrl-L`.
 
 ## Configuration
 
-**Environment Variables:**
-- `HYDRA_HOME`: Directory for runtime files (default: `~/.hydra`)
-- `HYDRA_AI_COMMAND`: Default AI tool to use (default: `claude`)
-- `HYDRA_ROOT`: Override hydra installation path for library discovery (useful when running from source)
+- `HYDRA_HOME`: Runtime dir (default `~/.hydra`)
+- `HYDRA_AI_COMMAND`: Default AI tool (`claude`)
+- `HYDRA_ROOT`: Force library discovery when running from source
+- `HYDRA_DASHBOARD_PANES_PER_SESSION`: `1`, `N`, or `all`
+- `HYDRA_ALLOW_ADVANCED_REFS`: Relax final branch/path charset only; safety checks remain (no whitespace/control, no `..`/`.` components, no `@{`, no trailing `.`/`.lock`, no leading/trailing `/`). Use with care.
 
-## Performance
+Per‑head AI selection is persisted: `hydra spawn <branch> --ai <tool>` shows in `hydra list/status` and is reused by `hydra regenerate`.
 
-Hydra targets <100ms switch latency. Run `hydra doctor` to test your system's performance and identify any bottlenecks.
+## YAML Config (optional)
+
+Place `.hydra/config.yml` in the worktree or repo root to declare windows/panes and optional startup commands:
+
+```yaml
+windows:
+  - name: editor
+    panes:
+      - cmd: nvim
+      - cmd: bash
+        split: v
+  - name: server
+    panes:
+      - cmd: npm run dev
+startup:
+  - echo "Project ready"
+```
+
+- On spawn/regenerate: windows and panes are applied. `startup` runs on spawn, and on regenerate only if `HYDRA_REGENERATE_RUN_STARTUP=1`.
+- Minimal parser supports the fields above; values are plain strings.
+
+## Hooks (optional)
+
+Add `.hydra/` scripts to customize lifecycle:
+
+- `hooks/pre-spawn`: runs before tmux session; env: `HYDRA_WORKTREE`, `HYDRA_BRANCH`.
+- `hooks/layout`: override built‑in layouts; env: `HYDRA_SESSION`, `HYDRA_WORKTREE`.
+- `startup`: one command per line; sent to the main pane after spawn.
+- `hooks/post-spawn`: after layout/startup; env: `HYDRA_SESSION`, `HYDRA_WORKTREE`, `HYDRA_BRANCH`.
+
+## Dashboard
+
+- Shows panes from all heads in one tmux window; exits with `q` and restores everything.
+- Collect more than one pane per head with `--panes-per-session <N|all>` or `HYDRA_DASHBOARD_PANES_PER_SESSION`.
+- More details: `docs/dashboard-demo.md`.
+
+## Development
+
+```sh
+make lint    # ShellCheck + dash syntax
+make test    # Run tests in tests/*.sh
+make help    # Show all targets
+```
 
 ## Troubleshooting
 
-### Hydra commands fail inside hydra sessions
+- Running from source inside a hydra worktree can break library discovery. Fix by installing (`make install`), setting `HYDRA_ROOT=/path/to/hydra`, or invoking the absolute `hydra` path.
 
-If you're running hydra from source and commands like `hydra list` fail when run from inside a hydra-managed session, this is likely due to library path resolution issues. Solutions:
+## Uninstall
 
-1. **Install hydra system-wide**: Run `make install` to install hydra to `/usr/local/bin`
-2. **Set HYDRA_ROOT**: Export `HYDRA_ROOT=/path/to/hydra` pointing to your hydra source directory
-3. **Use absolute paths**: Call hydra using its full path instead of relying on PATH
-
-The issue occurs because hydra sessions run in git worktrees that don't contain the library files needed by the hydra script.
+```sh
+sudo ./uninstall.sh            # prompts to remove user data
+sudo ./uninstall.sh --purge    # non-interactive, remove user data
+```
 
 ## License
 

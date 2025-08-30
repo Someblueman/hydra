@@ -3,11 +3,12 @@
 # POSIX-compliant shell script
 
 # Add a branch-session mapping
-# Usage: add_mapping <branch> <session>
+# Usage: add_mapping <branch> <session> [ai_tool]
 # Returns: 0 on success, 1 on failure
 add_mapping() {
     branch="$1"
     session="$2"
+    ai_tool="${3:-}"
     
     if [ -z "$branch" ] || [ -z "$session" ]; then
         echo "Error: Branch and session are required" >&2
@@ -22,8 +23,12 @@ add_mapping() {
     # Remove existing mapping for this branch if any
     remove_mapping "$branch" 2>/dev/null || true
     
-    # Add new mapping
-    echo "$branch $session" >> "$HYDRA_MAP"
+    # Add new mapping (optionally with AI tool)
+    if [ -n "$ai_tool" ]; then
+        echo "$branch $session $ai_tool" >> "$HYDRA_MAP"
+    else
+        echo "$branch $session" >> "$HYDRA_MAP"
+    fi
     
     return 0
 }
@@ -47,10 +52,12 @@ remove_mapping() {
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
     
-    # Filter out the branch
-    while IFS=' ' read -r map_branch map_session; do
+    # Filter out the branch; preserve optional AI column for others
+    while IFS=' ' read -r map_branch map_session map_ai; do
         if [ "$map_branch" != "$branch" ]; then
-            echo "$map_branch $map_session"
+            suffix=""
+            [ -n "$map_ai" ] && suffix=" $map_ai"
+            echo "$map_branch $map_session$suffix"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
     
@@ -71,7 +78,7 @@ get_session_for_branch() {
         return 1
     fi
     
-    while IFS=' ' read -r map_branch map_session; do
+    while IFS=' ' read -r map_branch map_session _map_ai; do
         if [ "$map_branch" = "$branch" ]; then
             echo "$map_session"
             return 0
@@ -91,7 +98,7 @@ get_branch_for_session() {
         return 1
     fi
     
-    while IFS=' ' read -r map_branch map_session; do
+    while IFS=' ' read -r map_branch map_session _map_ai; do
         if [ "$map_session" = "$session" ]; then
             echo "$map_branch"
             return 0
@@ -122,7 +129,7 @@ validate_mappings() {
     
     errors=0
     
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai; do
         # Check if branch exists
         if ! git_branch_exists "$branch"; then
             echo "Warning: Branch '$branch' no longer exists" >&2
@@ -139,7 +146,7 @@ validate_mappings() {
     return $errors
 }
 
-# Clean up invalid mappings
+# Clean up invalid mappings (preserving optional AI column)
 # Usage: cleanup_mappings
 # Returns: 0 on success
 cleanup_mappings() {
@@ -151,10 +158,12 @@ cleanup_mappings() {
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
     
-    # Keep only valid mappings
-    while IFS=' ' read -r branch session; do
+    # Keep only valid mappings; preserve AI if present
+    while IFS=' ' read -r branch session ai; do
         if git_branch_exists "$branch" && tmux_session_exists "$session"; then
-            echo "$branch $session"
+            suffix=""
+            [ -n "$ai" ] && suffix=" $ai"
+            echo "$branch $session$suffix"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
     
@@ -178,27 +187,89 @@ generate_session_name() {
     
     # Clean branch name for tmux (replace special chars)
     base_name="$(echo "$branch" | sed 's/[^a-zA-Z0-9_-]/_/g')"
-    
-    # If session doesn't exist, use base name
-    if ! tmux has-session -t "$base_name" 2>/dev/null; then
-        echo "$base_name"
-        return 0
+
+    # Helper to attempt locking a candidate name (best-effort)
+    try_lock() {
+        candidate="$1"
+        # Only lock if HYDRA_HOME is set
+        if [ -z "${HYDRA_HOME:-}" ]; then
+            return 0
+        fi
+        lock_dir="$HYDRA_HOME/locks"
+        mkdir -p "$lock_dir" 2>/dev/null || true
+        mkdir "$lock_dir/$candidate.lock" 2>/dev/null
+    }
+
+    # Helper to release a lock (best-effort)
+    release_lock() {
+        candidate="$1"
+        if [ -n "${HYDRA_HOME:-}" ] && [ -d "$HYDRA_HOME/locks/$candidate.lock" ]; then
+            rmdir "$HYDRA_HOME/locks/$candidate.lock" 2>/dev/null || true
+        fi
+    }
+
+    # First, try the base name with an atomic lock to avoid races
+    if try_lock "$base_name"; then
+        if ! tmux has-session -t "$base_name" 2>/dev/null; then
+            echo "$base_name"
+            return 0
+        fi
+        # Already exists, release and continue to numeric suffixes
+        release_lock "$base_name"
     fi
-    
-    # Otherwise, append a number - start from 1 and find first available
+
+    # Append a number - start from 1 and find first available with locking
     num=1
     max_attempts=100  # Prevent infinite loop in edge cases
-    
     while [ "$num" -le "$max_attempts" ]; do
         session_name="${base_name}_${num}"
-        if ! tmux has-session -t "$session_name" 2>/dev/null; then
-            echo "$session_name"
-            return 0
+        if try_lock "$session_name"; then
+            if ! tmux has-session -t "$session_name" 2>/dev/null; then
+                echo "$session_name"
+                return 0
+            fi
+            # Release and continue if exists
+            release_lock "$session_name"
         fi
         num=$((num + 1))
     done
-    
-    # If we've exhausted attempts, use timestamp for uniqueness
+
+    # If we've exhausted attempts, use timestamp for uniqueness (best-effort lock)
     timestamp="$(date +%s 2>/dev/null || echo "$$")"
-    echo "${base_name}_${timestamp}"
+    final_name="${base_name}_${timestamp}"
+    if try_lock "$final_name"; then
+        echo "$final_name"
+        return 0
+    fi
+    # As a last resort, return the timestamped name without lock
+    echo "$final_name"
+}
+
+# Release any acquired session name lock (safe to call even if not held)
+# Usage: release_session_lock <session_name>
+release_session_lock() {
+    name="$1"
+    if [ -z "$name" ] || [ -z "${HYDRA_HOME:-}" ]; then
+        return 0
+    fi
+    if [ -d "$HYDRA_HOME/locks/$name.lock" ]; then
+        rmdir "$HYDRA_HOME/locks/$name.lock" 2>/dev/null || true
+    fi
+}
+
+# Get AI tool for a branch (if stored)
+# Usage: get_ai_for_branch <branch>
+# Returns: AI tool on stdout, empty if not set
+get_ai_for_branch() {
+    branch="$1"
+    if [ -z "$branch" ] || [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+        return 1
+    fi
+    while IFS=' ' read -r map_branch _map_session map_ai; do
+        if [ "$map_branch" = "$branch" ] && [ -n "$map_ai" ]; then
+            echo "$map_ai"
+            return 0
+        fi
+    done < "$HYDRA_MAP"
+    return 1
 }

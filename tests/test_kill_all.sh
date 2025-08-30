@@ -19,6 +19,8 @@ fi
 
 # Store original directory
 original_dir="$(pwd)"
+test_base_dir=""
+suffix=""
 
 # Test helper functions
 assert_equal() {
@@ -57,9 +59,16 @@ assert_contains() {
 
 # Setup test environment
 setup_test_env() {
-    # Create a temporary test directory
-    test_dir="$(mktemp -d)"
-    cd "$test_dir" || exit 1
+    # Create a unique parent directory to avoid worktree collisions
+    test_base_dir="$(mktemp -d)"
+    mkdir -p "$test_base_dir/repo"
+    cd "$test_base_dir/repo" || exit 1
+    
+    # Isolate hydra state in this base dir
+    export HYDRA_HOME="$test_base_dir/.hydra"
+    export HYDRA_MAP="$HYDRA_HOME/map"
+    mkdir -p "$HYDRA_HOME"
+    : > "$HYDRA_MAP"
     
     # Initialize a git repository
     git init >/dev/null 2>&1
@@ -70,6 +79,9 @@ setup_test_env() {
     echo "# Test Project" > README.md
     git add README.md
     git commit -m "Initial commit" >/dev/null 2>&1
+    
+    # Unique suffix for branch names
+    suffix="$(date +%s%N 2>/dev/null || date +%s)"
     
     # Clean up any existing test sessions
     cleanup_test_sessions
@@ -87,8 +99,13 @@ cleanup_test_sessions() {
     done
     
     # Clear hydra map
-    if [ -f "$HOME/.hydra/map" ]; then
-        : > "$HOME/.hydra/map"
+    if [ -n "${HYDRA_HOME:-}" ] && [ -f "$HYDRA_HOME/map" ]; then
+        : > "$HYDRA_HOME/map"
+    fi
+    
+    # Remove any hydra-* worktrees under our unique base dir
+    if [ -n "$test_base_dir" ] && [ -d "$test_base_dir" ]; then
+        rm -rf "$test_base_dir"/hydra-*
     fi
 }
 
@@ -109,30 +126,33 @@ test_kill_all_force() {
     echo ""
     echo "Test: kill --all with multiple sessions (force mode)"
     
-    # Create test sessions
-    "$HYDRA_BIN" spawn test-kill-1 >/dev/null 2>&1
-    "$HYDRA_BIN" spawn test-kill-2 >/dev/null 2>&1
-    "$HYDRA_BIN" spawn test-kill-3 >/dev/null 2>&1
+    # Create test sessions with unique names
+    BR1="test-kill-1-$suffix"
+    BR2="test-kill-2-$suffix"
+    BR3="test-kill-3-$suffix"
+    "$HYDRA_BIN" spawn "$BR1" >/dev/null 2>&1
+    "$HYDRA_BIN" spawn "$BR2" >/dev/null 2>&1
+    "$HYDRA_BIN" spawn "$BR3" >/dev/null 2>&1
     
     # Verify sessions were created
-    sessions_before="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -c '^test-kill-')"
+    sessions_before="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E -c "^(${BR1}|${BR2}|${BR3})$")"
     assert_equal "3" "$sessions_before" "Should have 3 test sessions before kill"
     
     # Kill all with force
     output="$("$HYDRA_BIN" kill --all --force 2>&1)"
-    assert_contains "$output" "test-kill-1" "Should list test-kill-1"
-    assert_contains "$output" "test-kill-2" "Should list test-kill-2"
-    assert_contains "$output" "test-kill-3" "Should list test-kill-3"
+    assert_contains "$output" "$BR1" "Should list $BR1"
+    assert_contains "$output" "$BR2" "Should list $BR2"
+    assert_contains "$output" "$BR3" "Should list $BR3"
     assert_contains "$output" "Killing all 3 hydra heads" "Should report killing 3 heads"
     assert_contains "$output" "Succeeded: 3" "Should report 3 successful kills"
     
     # Verify sessions were killed
-    sessions_after="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -c '^test-kill-')"
+    sessions_after="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E -c "^(${BR1}|${BR2}|${BR3})$")"
     assert_equal "0" "$sessions_after" "Should have 0 test sessions after kill"
     
     # Verify map is empty
-    if [ -f "$HOME/.hydra/map" ]; then
-        map_lines="$(grep -c 'test-kill-' "$HOME/.hydra/map" 2>/dev/null)"
+    if [ -n "${HYDRA_HOME:-}" ] && [ -f "$HYDRA_HOME/map" ]; then
+        map_lines="$(grep -E -c "(${BR1}|${BR2}|${BR3})" "$HYDRA_HOME/map" 2>/dev/null)"
         assert_equal "0" "$map_lines" "Map should have no test-kill entries"
     fi
 }
@@ -143,7 +163,8 @@ test_kill_all_non_interactive_no_force() {
     echo "Test: kill --all in non-interactive mode without force"
     
     # Create a test session
-    "$HYDRA_BIN" spawn test-kill-noforce >/dev/null 2>&1
+    NOFORCE="test-kill-noforce-$suffix"
+    "$HYDRA_BIN" spawn "$NOFORCE" >/dev/null 2>&1
     
     # Try to kill all without force in non-interactive mode
     output="$(HYDRA_NONINTERACTIVE=1 "$HYDRA_BIN" kill --all 2>&1)"
@@ -153,7 +174,7 @@ test_kill_all_non_interactive_no_force() {
     assert_contains "$output" "Cannot kill all sessions in non-interactive mode without --force" "Should show error message"
     
     # Verify session still exists
-    if tmux has-session -t test-kill-noforce 2>/dev/null; then
+    if tmux has-session -t "$NOFORCE" 2>/dev/null; then
         echo "✓ Session was not killed (as expected)"
     else
         echo "✗ Session was killed (unexpected)"
@@ -161,7 +182,7 @@ test_kill_all_non_interactive_no_force() {
     fi
     
     # Cleanup
-    "$HYDRA_BIN" kill test-kill-noforce --force >/dev/null 2>&1
+    "$HYDRA_BIN" kill "$NOFORCE" --force >/dev/null 2>&1
 }
 
 # Test: kill --all with partial failures
@@ -169,24 +190,26 @@ test_kill_all_partial_failure() {
     echo ""
     echo "Test: kill --all with partial failures"
     
-    # Create test sessions
-    "$HYDRA_BIN" spawn killtest-success1 >/dev/null 2>&1
-    "$HYDRA_BIN" spawn killtest-success2 >/dev/null 2>&1
+    # Create test sessions with unique names
+    K1="killtest-success1-$suffix"
+    K2="killtest-success2-$suffix"
+    "$HYDRA_BIN" spawn "$K1" >/dev/null 2>&1
+    "$HYDRA_BIN" spawn "$K2" >/dev/null 2>&1
     
     # Create a mapping for a non-existent session
-    echo "killtest-phantom killtest-phantom-session" >> "$HOME/.hydra/map"
+    echo "killtest-phantom-$suffix killtest-phantom-session" >> "$HYDRA_HOME/map"
     
     # Kill all with force
     output="$("$HYDRA_BIN" kill --all --force 2>&1)"
     
-    assert_contains "$output" "killtest-success1" "Should list killtest-success1"
-    assert_contains "$output" "killtest-success2" "Should list killtest-success2"
-    assert_contains "$output" "killtest-phantom" "Should list killtest-phantom"
+    assert_contains "$output" "$K1" "Should list $K1"
+    assert_contains "$output" "$K2" "Should list $K2"
+    assert_contains "$output" "killtest-phantom-$suffix" "Should list phantom mapping"
     assert_contains "$output" "Session 'killtest-phantom-session' not found" "Should report phantom session not found"
     assert_contains "$output" "Succeeded: 3" "Should count phantom cleanup as success"
     
     # Verify real sessions were killed
-    sessions_after="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -c '^killtest-')"
+    sessions_after="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E -c "^(${K1}|${K2})$")"
     assert_equal "0" "$sessions_after" "Should have 0 killtest sessions after kill"
 }
 
@@ -205,6 +228,13 @@ test_kill_all_with_branch_fails() {
 # Main test runner
 main() {
     echo "Running hydra kill --all tests..."
+    
+    # Skip if tmux cannot create sessions in this environment
+    if ! command -v tmux >/dev/null 2>&1 || ! tmux new-session -d -s killall-sanity 2>/dev/null; then
+        echo "tmux unavailable or cannot create sessions; skipping kill --all tests"
+        exit 0
+    fi
+    tmux kill-session -t killall-sanity 2>/dev/null || true
     
     # Setup test environment
     setup_test_env

@@ -29,15 +29,18 @@ apply_layout() {
         dev)
             # Two panes: editor (left 70%) and terminal (right 30%)
             tmux kill-pane -a -t 0 2>/dev/null || true
-            tmux split-window -h -p 30
+            # Ensure new pane inherits the current pane's path
+            tmux split-window -h -p 30 -c "#{pane_current_path}"
             tmux select-pane -t 0
             ;;
             
         full)
             # Three panes: editor (top-left), terminal (top-right), logs (bottom)
             tmux kill-pane -a -t 0 2>/dev/null || true
-            tmux split-window -h -p 30
-            tmux split-window -v -p 30 -t 1
+            # Right pane inherits current pane's path
+            tmux split-window -h -p 30 -c "#{pane_current_path}"
+            # Split the right pane vertically; ensure it inherits that pane's path
+            tmux split-window -v -p 30 -t 1 -c "#{pane_current_path}"
             tmux select-pane -t 0
             ;;
             
@@ -174,9 +177,28 @@ setup_layout_hotkeys() {
         echo "Error: Session name is required" >&2
         return 1
     fi
+    # Allow demos or environments to disable hotkey bindings
+    if [ -n "${HYDRA_DISABLE_HOTKEYS:-}" ]; then
+        return 0
+    fi
     
-    # Set up C-l to cycle layouts (for current session only)
-    tmux bind-key -n C-l run-shell "hydra cycle-layout" \; display-message "Layout cycled"
+    # Build a safe command for cycling layouts without relying on PATH
+    cycle_cmd=""
+    if [ -n "${HYDRA_LIB_DIR:-}" ] && [ -f "$HYDRA_LIB_DIR/layout.sh" ]; then
+        # Source the known library and invoke function directly inside tmux's shell
+        cycle_cmd="TMUX=\$TMUX . \"$HYDRA_LIB_DIR/layout.sh\" && cycle_layout"
+    elif [ -n "${HYDRA_BIN_CMD:-}" ] && [ -x "$HYDRA_BIN_CMD" ]; then
+        # Fallback to absolute hydra binary if available
+        cycle_cmd="\"$HYDRA_BIN_CMD\" cycle-layout"
+    elif [ -x "/usr/local/bin/hydra" ]; then
+        cycle_cmd="/usr/local/bin/hydra cycle-layout"
+    else
+        # Last resort: rely on PATH (least preferred)
+        cycle_cmd="hydra cycle-layout"
+    fi
+    
+    # Set up C-l to cycle layouts (for current session only) using the safe command
+    tmux bind-key -n C-l run-shell "$cycle_cmd" \; display-message "Layout cycled"
     
     return 0
 }

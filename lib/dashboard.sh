@@ -25,9 +25,26 @@ create_dashboard_session() {
     # Create dashboard session in background
     tmux new-session -d -s "$DASHBOARD_SESSION" -c "$(pwd)" || return 1
     
+    # Optionally skip key bindings (demo/CI environments)
+    if [ -n "${HYDRA_DISABLE_HOTKEYS:-}" ]; then
+        return 0
+    fi
+
+    # Build a safe command to exit dashboard without relying on PATH
+    exit_cmd=""
+    if [ -n "${HYDRA_LIB_DIR:-}" ] && [ -f "$HYDRA_LIB_DIR/dashboard.sh" ]; then
+        exit_cmd="TMUX=\$TMUX . \"$HYDRA_LIB_DIR/dashboard.sh\" && cmd_dashboard_exit"
+    elif [ -n "${HYDRA_BIN_CMD:-}" ] && [ -x "$HYDRA_BIN_CMD" ]; then
+        exit_cmd="\"$HYDRA_BIN_CMD\" dashboard-exit"
+    elif [ -x "/usr/local/bin/hydra" ]; then
+        exit_cmd="/usr/local/bin/hydra dashboard-exit"
+    else
+        exit_cmd="hydra dashboard-exit"
+    fi
+
     # Set up dashboard keybinding to exit - only works when in dashboard session
     tmux bind-key -T root q if-shell '[ "#{session_name}" = "hydra-dashboard" ]' \
-        'run-shell "/usr/local/bin/hydra dashboard-exit"' \
+        "run-shell \"$exit_cmd\"" \
         'send-keys q'
     
     return 0
@@ -35,6 +52,10 @@ create_dashboard_session() {
 
 # Collect panes from all active Hydra sessions
 # Usage: collect_session_panes
+# Honors: HYDRA_DASHBOARD_PANES_PER_SESSION
+#   - unset/empty or invalid -> 1 (current behavior)
+#   - number N               -> collect up to N panes per session
+#   - "all"                  -> collect all panes from each session
 # Returns: 0 on success, 1 on failure
 collect_session_panes() {
     if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
@@ -45,7 +66,21 @@ collect_session_panes() {
     # Clear restoration map
     : > "$DASHBOARD_RESTORE_MAP"
     
-    # Counter for collected panes
+    # Determine how many panes to collect per session
+    per_session_raw="${HYDRA_DASHBOARD_PANES_PER_SESSION:-1}"
+    case "$per_session_raw" in
+        all|ALL)
+            per_session_max="all"
+            ;;
+        ''|*[!0-9]*)
+            per_session_max=1
+            ;;
+        *)
+            per_session_max="$per_session_raw"
+            ;;
+    esac
+
+    # Counter for collected panes (informational)
     collected=0
     
     while IFS=' ' read -r branch session; do
@@ -54,38 +89,66 @@ collect_session_panes() {
             continue
         fi
         
-        # Get the first pane from the session with its window ID
-        pane_info="$(tmux list-panes -t "$session" -F '#{pane_id} #{window_id}' | head -1 2>/dev/null)" || continue
-        
-        if [ -z "$pane_info" ]; then
-            continue
+        # Enumerate panes for this session across all windows and collect based on policy
+        pane_count_for_session=0
+        windows_list="$(tmux list-windows -t "$session" -F '#{window_id}' 2>/dev/null || true)"
+        # Determine how many panes to collect (never drain last pane from a session)
+        total_panes_session=0
+        OLDIFS="$IFS"; IFS='
+'
+        for w in $windows_list; do
+            [ -z "$w" ] && continue
+            cnt=$(tmux list-panes -t "$w" 2>/dev/null | wc -l | tr -d ' ')
+            total_panes_session=$((total_panes_session + ${cnt:-0}))
+        done
+        IFS="$OLDIFS"
+        max_to_collect=0
+        if [ "$total_panes_session" -gt 1 ]; then
+            if [ "$per_session_max" = "all" ]; then
+                max_to_collect=$((total_panes_session - 1))
+            else
+                cap=$per_session_max
+                remaining=$((total_panes_session - 1))
+                if [ "$cap" -lt "$remaining" ]; then max_to_collect="$cap"; else max_to_collect="$remaining"; fi
+            fi
         fi
-        
-        # Extract pane_id and window_id
-        pane_id="$(echo "$pane_info" | cut -d' ' -f1)"
-        window_id="$(echo "$pane_info" | cut -d' ' -f2)"
-        
-        # Record original location for restoration
-        echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
-        
-        # Set pane title to show branch name
-        tmux select-pane -t "$pane_id" -T "$branch"
-        
-        # Move pane to dashboard (except the first one)
-        if [ "$collected" -gt 0 ]; then
-            tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION:0" 2>/dev/null || {
-                echo "Warning: Failed to collect pane from session '$session'" >&2
-                continue
-            }
-        else
-            # For the first pane, move it directly
-            tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION:0" 2>/dev/null || {
-                echo "Warning: Failed to collect pane from session '$session'" >&2
-                continue
-            }
-        fi
-        
-        collected=$((collected + 1))
+        OLDIFS="$IFS"; IFS='
+'
+        for win in $windows_list; do
+            [ -z "$win" ] && continue
+            panes_list="$(tmux list-panes -t "$win" -F '#{pane_id} #{window_id}' 2>/dev/null || true)"
+            for line in $panes_list; do
+                # Respect per-session maximum unless set to "all"
+                if [ "$pane_count_for_session" -ge "$max_to_collect" ]; then
+                    break
+                fi
+                # Parse "pane_id window_id" safely
+                pane_id="${line%% *}"
+                window_id="${line#* }"
+                [ -z "$pane_id" ] && continue
+                # Move pane to dashboard first
+                if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION:0" 2>/dev/null; then
+                    # Record original location for restoration only on success
+                    echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
+                    # Set pane title to show branch name
+                    tmux select-pane -t "$pane_id" -T "$branch" 2>/dev/null || true
+                    pane_count_for_session=$((pane_count_for_session + 1))
+                    collected=$((collected + 1))
+                else
+                    # Brief retry in case tmux state lags
+                    sleep 0.1
+                    if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION:0" 2>/dev/null; then
+                        echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
+                        tmux select-pane -t "$pane_id" -T "$branch" 2>/dev/null || true
+                        pane_count_for_session=$((pane_count_for_session + 1))
+                        collected=$((collected + 1))
+                    else
+                        echo "Warning: Failed to collect pane from session '$session'" >&2
+                    fi
+                fi
+            done
+        done
+        IFS="$OLDIFS"
     done < "$HYDRA_MAP"
     
     if [ "$collected" -eq 0 ]; then
@@ -119,9 +182,9 @@ arrange_dashboard_layout() {
             tmux select-layout -t "$DASHBOARD_SESSION:0" even-horizontal
             ;;
         3)
-            # Three panes: one on top (100%), two on bottom (50%/50%)
+            # Three panes: one on top, two on bottom; rely on main-horizontal
             tmux select-layout -t "$DASHBOARD_SESSION:0" main-horizontal
-            tmux resize-pane -t "$DASHBOARD_SESSION:0.0" -y 50%
+            tmux resize-pane -t "$DASHBOARD_SESSION:0.0" -y 20 2>/dev/null || true
             ;;
         4)
             # Four panes (25%/25%/25%/25%) in a 2x2 grid
@@ -219,6 +282,41 @@ cleanup_dashboard() {
 # Usage: cmd_dashboard
 # Returns: 0 on success, 1 on failure
 cmd_dashboard() {
+    # Parse options (currently: --panes-per-session|-p)
+    panes_per=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -p|--panes-per-session)
+                shift
+                panes_per="${1:-}"
+                if [ -z "$panes_per" ]; then
+                    echo "Error: Missing value for --panes-per-session" >&2
+                    return 1
+                fi
+                shift
+                ;;
+            -h|--help)
+                echo "Usage: hydra dashboard [--panes-per-session N|all]" >&2
+                return 0
+                ;;
+            --)
+                shift; break ;;
+            -*)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Usage: hydra dashboard [--panes-per-session N|all]" >&2
+                return 1
+                ;;
+            *)
+                # Ignore positional args for now
+                shift
+                ;;
+        esac
+    done
+    # Apply panes-per-session if provided
+    if [ -n "$panes_per" ]; then
+        HYDRA_DASHBOARD_PANES_PER_SESSION="$panes_per"
+        export HYDRA_DASHBOARD_PANES_PER_SESSION
+    fi
     # Check tmux availability
     if ! check_tmux_version; then
         exit 1
@@ -277,10 +375,14 @@ cmd_dashboard() {
     echo "Switching to dashboard..."
     sleep 1
     
-    # Switch to dashboard
-    if ! switch_to_session "$DASHBOARD_SESSION"; then
-        cleanup_dashboard
-        exit 1
+    # Optionally skip attaching (useful for demos/automation)
+    if [ -z "${HYDRA_DASHBOARD_NO_ATTACH:-}" ]; then
+        if ! switch_to_session "$DASHBOARD_SESSION"; then
+            cleanup_dashboard
+            exit 1
+        fi
+    else
+        echo "Attach suppressed by HYDRA_DASHBOARD_NO_ATTACH=1" >&2
     fi
     
     # Cleanup will be handled by trap

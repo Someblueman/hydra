@@ -176,7 +176,7 @@ switch_to_session() {
 # Usage: get_current_session
 # Returns: Session name on stdout, empty if not in tmux
 get_current_session() {
-    if [ -z "$TMUX" ]; then
+    if [ -z "${TMUX:-}" ]; then
         return 1
     fi
     

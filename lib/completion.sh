@@ -30,6 +30,20 @@ _hydra_completion() {
             COMPREPLY=($(compgen -W "${branches}" -- ${cur}))
             return 0
             ;;
+        dashboard)
+            case "${cur}" in
+                --*)
+                    COMPREPLY=($(compgen -W "--panes-per-session" -- ${cur}))
+                    ;;
+                *)
+                    if [ "${prev}" = "--panes-per-session" ]; then
+                        COMPREPLY=($(compgen -W "1 2 3 4 5 6 7 8 9 10 all" -- ${cur}))
+                        return 0
+                    fi
+                    ;;
+            esac
+            return 0
+            ;;
         kill)
             # Complete with git branch names or --all flag
             case "${cur}" in
@@ -137,6 +151,10 @@ _hydra() {
                         '(-i --issue)'{-i,--issue}'[Create from GitHub issue]:issue:' \
                         '1:branch:_hydra_branches'
                     ;;
+                dashboard)
+                    _arguments \
+                        '(-p --panes-per-session)'{-p,--panes-per-session}'[Panes to collect per session]:value:(1 2 3 4 5 6 7 8 9 10 all)'
+                    ;;
                 kill)
                     _arguments \
                         '--all[Kill all hydra sessions]' \
@@ -219,6 +237,9 @@ complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l agents -d 'Mixed agents specification (e.g., claude:2,aider:1)'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s i -l issue -d 'Create from GitHub issue number'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn; and not __fish_seen_subcommand_from -l --layout -n --count --ai --agents -i --issue' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
+
+# Complete dashboard flags
+complete -c hydra -f -n '__fish_seen_subcommand_from dashboard' -s p -l panes-per-session -d 'Panes to collect per session' -a '1 2 3 4 5 6 7 8 9 10 all'
 
 # Complete kill command with git branches
 complete -c hydra -f -n '__fish_seen_subcommand_from kill' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'

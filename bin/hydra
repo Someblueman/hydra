@@ -11,7 +11,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="1.1.0"
+HYDRA_VERSION="1.2.0"
 
 # Source helper libraries
 # Enhanced library detection with multiple fallback paths
@@ -75,6 +75,18 @@ fi
 # shellcheck source=../lib/github.sh
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/github.sh"
+# shellcheck source=../lib/hooks.sh
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/hooks.sh"
+# shellcheck source=../lib/yaml.sh
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/yaml.sh"
+
+# Export paths for downstream helpers (e.g., safe tmux run-shell bindings)
+export HYDRA_LIB_DIR
+# Resolve the absolute path to the current hydra binary for secure bindings
+HYDRA_BIN_CMD="${HYDRA_BIN_PATH}"
+export HYDRA_BIN_CMD
 
 # Initialize Hydra home directory
 init_hydra_home() {
@@ -111,6 +123,8 @@ Commands:
   status            Show health status of all heads
   doctor            Check system performance
   dashboard         View all sessions in a single dashboard
+                    Options:
+                      -p, --panes-per-session <N|all>  Collect multiple panes per session
   cycle-layout      Cycle through tmux pane layouts
   completion        Generate shell completion scripts
   version           Show version information
@@ -133,6 +147,7 @@ Environment:
   HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
   HYDRA_AI_COMMAND  Default AI tool (default: claude)
   HYDRA_ROOT        Override hydra installation path (for library discovery)
+  HYDRA_DASHBOARD_PANES_PER_SESSION  Panes per session for dashboard (1, N, or all)
 EOF
 }
 
@@ -143,6 +158,9 @@ spawn_single() {
     layout="${2:-default}"
     ai_tool="${3:-}"
     
+    # Best-effort cleanup of stale session-name locks
+    cleanup_stale_locks 2>/dev/null || true
+
     # Check tmux availability
     if ! check_tmux_version; then
         return 1
@@ -175,33 +193,49 @@ spawn_single() {
     # Generate session name
     session="$(generate_session_name "$branch")"
     
+    # Run pre-spawn hook (best-effort)
+    run_hook pre-spawn "$worktree_path" "$repo_root" "" "$branch"
+
     # Create tmux session
     echo "Creating tmux session '$session'..." >&2
     if ! create_session "$session" "$worktree_path"; then
         # Clean up worktree if session creation failed
+        # Release any reserved session name lock
+        release_session_lock "$session" 2>/dev/null || true
         delete_worktree "$worktree_path" 2>/dev/null || true
         return 1
     fi
+    # Release the reserved session name lock now that session is created
+    release_session_lock "$session" 2>/dev/null || true
     
-    # Add mapping
-    if ! add_mapping "$branch" "$session"; then
+    # Add mapping (persist selected AI tool if provided)
+    if ! add_mapping "$branch" "$session" "${ai_tool:-}"; then
         echo "Warning: Failed to save branch-session mapping" >&2
     fi
     
-    # Apply layout
-    if [ "$layout" != "default" ]; then
-        tmux send-keys -t "$session" "TMUX=\$TMUX . /usr/local/lib/hydra/layout.sh && apply_layout $layout" Enter
+    # Apply YAML config if present; otherwise custom/built-in layout
+    if [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$worktree_path" "$repo_root" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
+        apply_yaml_config "$cfgpath" "$session" "$worktree_path" "$repo_root"
+    else
+        apply_custom_layout_or_default "$layout" "$session" "$worktree_path" "$repo_root"
+        # Send optional startup commands
+        run_startup_commands "$session" "$worktree_path" "$repo_root"
     fi
     
-    # Start AI tool
-    if [ -z "$ai_tool" ]; then
-        ai_tool="${HYDRA_AI_COMMAND:-claude}"
+    # Start AI tool unless explicitly skipped (e.g., demos/CI)
+    if [ -z "${HYDRA_SKIP_AI:-}" ]; then
+        if [ -z "$ai_tool" ]; then
+            ai_tool="${HYDRA_AI_COMMAND:-claude}"
+        fi
+        if ! validate_ai_command "$ai_tool"; then
+            return 1
+        fi
+        echo "Starting $ai_tool in session '$session'..." >&2
+        send_keys_to_session "$session" "$ai_tool"
     fi
-    if ! validate_ai_command "$ai_tool"; then
-        return 1
-    fi
-    echo "Starting $ai_tool in session '$session'..." >&2
-    send_keys_to_session "$session" "$ai_tool"
+
+    # Run post-spawn hook (best-effort)
+    run_hook post-spawn "$worktree_path" "$repo_root" "$session" "$branch"
     
     # Return session name for caller
     echo "$session"
@@ -483,6 +517,10 @@ main() {
             shift
             cmd_dashboard "$@"
             ;;
+        dashboard-exit)
+            shift
+            cmd_dashboard_exit "$@"
+            ;;
         cycle-layout)
             shift
             cmd_cycle_layout "$@"
@@ -595,6 +633,15 @@ cmd_spawn() {
         echo "Error: Count must be a number between 1 and 10" >&2
         exit 1
     fi
+
+    # Validate layout early to avoid injection in apply step
+    case "$layout" in
+        default|dev|full) ;;
+        *)
+            echo "Error: Invalid layout '$layout' (allowed: default, dev, full)" >&2
+            exit 1
+            ;;
+    esac
     
     # Handle mutually exclusive options
     if [ -n "$agents_spec" ] && [ -n "$ai_tool" ]; then
@@ -616,12 +663,17 @@ cmd_spawn() {
     
     # Single spawn - use helper function
     if session="$(spawn_single "$branch" "$layout" "$ai_tool")"; then
-        # Switch to the new session (only in terminal)
-        if [ -t 0 ] && [ -t 1 ]; then
-            echo "Switching to session '$session'..."
-            switch_to_session "$session"
+        # Optionally skip switching (useful for demos/automation)
+        if [ -n "${HYDRA_NO_SWITCH:-}" ]; then
+            echo "Session '$session' created (HYDRA_NO_SWITCH set; not attaching)"
         else
-            echo "Session '$session' created successfully (not switching - not in terminal)"
+            # Switch to the new session (only in terminal)
+            if [ -t 0 ] && [ -t 1 ]; then
+                echo "Switching to session '$session'..."
+                switch_to_session "$session"
+            else
+                echo "Session '$session' created successfully (not switching - not in terminal)"
+            fi
         fi
         return 0
     else
@@ -641,18 +693,30 @@ cmd_list() {
     echo ""
     
     # Read mapping file and display status
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session ai; do
         # Check if session still exists
         if tmux_session_exists "$session"; then
             # Check if it's the current session
             current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
             if [ "$session" = "$current_session" ]; then
-                echo "* $branch -> $session (current)"
+                if [ -n "$ai" ]; then
+                    echo "* $branch -> $session [ai: $ai] (current)"
+                else
+                    echo "* $branch -> $session (current)"
+                fi
             else
-                echo "  $branch -> $session"
+                if [ -n "$ai" ]; then
+                    echo "  $branch -> $session [ai: $ai]"
+                else
+                    echo "  $branch -> $session"
+                fi
             fi
         else
-            echo "  $branch -> $session (dead)"
+            if [ -n "$ai" ]; then
+                echo "  $branch -> $session [ai: $ai] (dead)"
+            else
+                echo "  $branch -> $session (dead)"
+            fi
         fi
     done < "$HYDRA_MAP"
 }
@@ -955,6 +1019,9 @@ cmd_kill() {
 cmd_regenerate() {
     echo "Regenerating tmux sessions for existing worktrees..."
     
+    # Best-effort cleanup of stale session-name locks
+    cleanup_stale_locks 2>/dev/null || true
+
     # Get repository root
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         echo "Error: Not in a git repository" >&2
@@ -990,10 +1057,36 @@ cmd_regenerate() {
         # Create session
         echo "Creating session '$session' for branch '$branch'..."
         if create_session "$session" "$dir"; then
-            add_mapping "$branch" "$session"
+            # Preserve any stored AI tool for this branch
+            stored_ai="$(get_ai_for_branch "$branch" 2>/dev/null || true)"
+            add_mapping "$branch" "$session" "$stored_ai"
             regenerated=$((regenerated + 1))
+            # Release any reserved session name lock
+            release_session_lock "$session" 2>/dev/null || true
+            # Apply YAML config if available; else apply custom/built-in default
+            repo_root_for_dir="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || dirname "$dir")"
+            if [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$dir" "$repo_root_for_dir" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
+                apply_yaml_config "$cfgpath" "$session" "$dir" "$repo_root_for_dir"
+            else
+                apply_custom_layout_or_default "default" "$session" "$dir" "$repo_root_for_dir"
+                # Optionally run startup commands on regenerate only if explicitly enabled
+                if [ -n "${HYDRA_REGENERATE_RUN_STARTUP:-}" ]; then
+                    run_startup_commands "$session" "$dir" "$repo_root_for_dir"
+                fi
+            fi
+            # Optionally auto-launch stored AI tool in the regenerated session
+            if [ -n "$stored_ai" ]; then
+                if validate_ai_command "$stored_ai"; then
+                    echo "Starting $stored_ai in session '$session'..." >&2
+                    send_keys_to_session "$session" "$stored_ai"
+                else
+                    echo "Warning: Stored AI tool '$stored_ai' is invalid; skipping launch" >&2
+                fi
+            fi
         else
             echo "Failed to create session for '$branch'" >&2
+            # Release any reserved session name lock
+            release_session_lock "$session" 2>/dev/null || true
         fi
     done
     
@@ -1034,12 +1127,20 @@ cmd_status() {
     active=0
     dead=0
     
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session ai; do
         if tmux_session_exists "$session"; then
-            echo "  ✓ $branch -> $session"
+            if [ -n "$ai" ]; then
+                echo "  ✓ $branch -> $session [ai: $ai]"
+            else
+                echo "  ✓ $branch -> $session"
+            fi
             active=$((active + 1))
         else
-            echo "  ✗ $branch -> $session (dead)"
+            if [ -n "$ai" ]; then
+                echo "  ✗ $branch -> $session [ai: $ai] (dead)"
+            else
+                echo "  ✗ $branch -> $session (dead)"
+            fi
             dead=$((dead + 1))
         fi
     done < "$HYDRA_MAP"
@@ -1122,10 +1223,6 @@ cmd_doctor() {
         echo "✗ Found $errors issue(s). Please install missing dependencies."
         return 1
     fi
-}
-
-cmd_dashboard() {
-    show_dashboard
 }
 
 cmd_cycle_layout() {

@@ -15,56 +15,10 @@ original_dir="$(pwd)"
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/git.sh"
 
-# Test helper functions
-# shellcheck disable=SC2317 # These functions are called later in the file
-assert_equal() {
-    expected="$1"
-    actual="$2" 
-    message="$3"
-    
-    test_count=$((test_count + 1))
-    if [ "$expected" = "$actual" ]; then
-        pass_count=$((pass_count + 1))
-        echo "✓ $message"
-    else
-        fail_count=$((fail_count + 1))
-        echo "✗ $message"
-        echo "  Expected: '$expected'"
-        echo "  Actual:   '$actual'"
-    fi
-}
-
-assert_success() {
-    exit_code="$1"
-    message="$2"
-    
-    test_count=$((test_count + 1))
-    if [ "$exit_code" -eq 0 ]; then
-        pass_count=$((pass_count + 1))
-        echo "✓ $message"
-    else
-        fail_count=$((fail_count + 1))
-        echo "✗ $message"
-        echo "  Expected: success (exit code 0)"
-        echo "  Actual:   failure (exit code $exit_code)"
-    fi
-}
-
-assert_failure() {
-    exit_code="$1"
-    message="$2"
-    
-    test_count=$((test_count + 1))
-    if [ "$exit_code" -ne 0 ]; then
-        pass_count=$((pass_count + 1))
-        echo "✓ $message"
-    else
-        fail_count=$((fail_count + 1))
-        echo "✗ $message"
-        echo "  Expected: failure (non-zero exit code)"
-        echo "  Actual:   success (exit code 0)"
-    fi
-}
+# Common test helpers
+# shellcheck source=./helpers.sh
+# shellcheck disable=SC1091
+. "$(dirname "$0")/helpers.sh"
 
 # Test git_branch_exists function with empty/invalid inputs
 test_git_branch_exists_edge_cases() {
@@ -187,6 +141,26 @@ test_find_worktree_path_integration() {
     assert_equal "" "$result" "find_worktree_path should return empty for non-existent branch"
 }
 
+# Advanced refs support (safe charset relaxed, core safety retained)
+test_advanced_refs_mode() {
+    echo "Testing advanced refs mode..."
+    
+    # Allow '+' in branch names when advanced refs enabled
+    export HYDRA_ALLOW_ADVANCED_REFS=1
+    validate_branch_name "feature+plus" 2>/dev/null
+    assert_success $? "validate_branch_name should allow '+' when HYDRA_ALLOW_ADVANCED_REFS=1"
+    
+    # Still reject whitespace even in advanced mode
+    validate_branch_name "feature bad" 2>/dev/null
+    assert_failure $? "validate_branch_name should still reject whitespace in advanced mode"
+    
+    # Allow '+' in worktree path check when advanced refs enabled
+    validate_worktree_path "/tmp/hydra-feature+plus" 2>/dev/null
+    assert_success $? "validate_worktree_path should allow '+' when HYDRA_ALLOW_ADVANCED_REFS=1"
+    
+    unset HYDRA_ALLOW_ADVANCED_REFS
+}
+
 # Run all tests
 echo "Running git.sh unit tests (edge cases and validation)..."
 echo "================================================"
@@ -198,6 +172,7 @@ test_get_worktree_branch_validation
 test_find_worktree_path_validation
 test_find_worktree_path_integration
 test_git_functions_integration
+test_advanced_refs_mode
 
 echo "================================================"
 echo "Test Results:"
