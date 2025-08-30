@@ -58,10 +58,26 @@ apply_custom_layout_or_default() {
         HYDRA_SESSION="$target_session" HYDRA_WORKTREE="$wt" sh "$confdir/hooks/layout" || true
         return 0
     fi
-    # Fallback to built-in layouts
-    if [ "$layout" != "default" ]; then
-        tmux send-keys -t "$target_session" "TMUX=\$TMUX . \"$HYDRA_LIB_DIR/layout.sh\" && apply_layout \"$layout\"" Enter
-    fi
+    # Fallback to built-in layouts: split panes anchored to worktree path
+    case "$layout" in
+        default)
+            # Single pane; create_session already starts at worktree
+            ;;
+        dev)
+            tmux kill-pane -a -t "$target_session:0.0" 2>/dev/null || true
+            tmux split-window -t "$target_session:0.0" -h -p 30 -c "$wt"
+            tmux select-pane -t "$target_session:0.0"
+            ;;
+        full)
+            tmux kill-pane -a -t "$target_session:0.0" 2>/dev/null || true
+            tmux split-window -t "$target_session:0.0" -h -p 30 -c "$wt"
+            tmux split-window -t "$target_session:0.1" -v -p 30 -c "$wt"
+            tmux select-pane -t "$target_session:0.0"
+            ;;
+        *)
+            :
+            ;;
+    esac
 }
 
 # Send startup commands from config file to the session
