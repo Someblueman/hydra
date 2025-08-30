@@ -48,13 +48,11 @@
 - Layouts: `default`, `dev`, `full`, and `Ctrl-L` to cycle.
 - Durable: `hydra regenerate` restores sessions after restart.
 
-## Demos (VHS)
+## Demo
 
-Below is a lightweight demo GIF. Regenerate locally with Charm’s VHS.
+<img alt="Hydra" src="assets/demos/quick-tour.gif" width="600" />
 
-- Quick tour: `assets/demos/quick-tour.gif`
-
-If you want to regenerate the GIF yourself, you can use the VHS project from Charm (not included here): https://github.com/charmbracelet/vhs
+If you want to generate GIFs yourself, you can use the [VHS project](https://github.com/charmbracelet/vhs) from Charm
 
 ## Core Commands
 
