@@ -25,6 +25,11 @@ create_dashboard_session() {
     # Create dashboard session in background
     tmux new-session -d -s "$DASHBOARD_SESSION" -c "$(pwd)" || return 1
     
+    # Optionally skip key bindings (demo/CI environments)
+    if [ -n "${HYDRA_DISABLE_HOTKEYS:-}" ]; then
+        return 0
+    fi
+
     # Build a safe command to exit dashboard without relying on PATH
     exit_cmd=""
     if [ -n "${HYDRA_LIB_DIR:-}" ] && [ -f "$HYDRA_LIB_DIR/dashboard.sh" ]; then
@@ -370,10 +375,14 @@ cmd_dashboard() {
     echo "Switching to dashboard..."
     sleep 1
     
-    # Switch to dashboard
-    if ! switch_to_session "$DASHBOARD_SESSION"; then
-        cleanup_dashboard
-        exit 1
+    # Optionally skip attaching (useful for demos/automation)
+    if [ -z "${HYDRA_DASHBOARD_NO_ATTACH:-}" ]; then
+        if ! switch_to_session "$DASHBOARD_SESSION"; then
+            cleanup_dashboard
+            exit 1
+        fi
+    else
+        echo "Attach suppressed by HYDRA_DASHBOARD_NO_ATTACH=1" >&2
     fi
     
     # Cleanup will be handled by trap

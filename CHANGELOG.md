@@ -6,17 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+<!-- Nothing yet -->
 
-### Added
-- Dashboard: configurable multi-pane collection
-  - New env `HYDRA_DASHBOARD_PANES_PER_SESSION` controls panes per session:
-    - `1` (default): collect first pane only (previous behavior)
-    - `N`: collect up to N panes per session
-    - `all`: collect all panes from each session
-  - New CLI flag for `dashboard`: `-p, --panes-per-session <N|all>`
-  - Pane titles set to branch names for clarity
-
-## [1.2.0] - 2025-08-27
+## [1.2.0] - 2025-08-30
 
 ### Added
 - Dashboard: configurable multi-pane collection
@@ -38,10 +30,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `--purge` flag removes user data non-interactively
  - Safer layout hotkeys
    - `setup_layout_hotkeys` binds `cycle-layout` via absolute hydra path or direct library invocation, reducing PATH injection risk
+ - New environment flags for demos/automation
+   - `HYDRA_SKIP_AI`: skip AI command launch on spawn
+   - `HYDRA_DASHBOARD_NO_ATTACH`: create dashboard without attaching
+   - `HYDRA_NO_SWITCH`: create sessions without auto-attaching on spawn
 
 ### Changed
 - Documentation updated to describe per-head AI persistence and regenerate behavior
 - Hardened validation in Git helpers (lib/git.sh): stricter branch and worktree path checks to prevent traversal and injection
+ - Layout behavior: new panes inherit the current working directory using tmux `-c`
+ - Fallback layouts: splits are anchored to the worktree path (`-c "$wt"`)
+ - Dashboard workflow: support non-attaching mode via `HYDRA_DASHBOARD_NO_ATTACH`
+
+### Fixed
+- Inconsistent pane directories causing mismatched git branches across panes
 
 ### Notes
 - Backward compatible with existing two-column map files; missing AI column is handled gracefully

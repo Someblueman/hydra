@@ -222,15 +222,17 @@ spawn_single() {
         run_startup_commands "$session" "$worktree_path" "$repo_root"
     fi
     
-    # Start AI tool
-    if [ -z "$ai_tool" ]; then
-        ai_tool="${HYDRA_AI_COMMAND:-claude}"
+    # Start AI tool unless explicitly skipped (e.g., demos/CI)
+    if [ -z "${HYDRA_SKIP_AI:-}" ]; then
+        if [ -z "$ai_tool" ]; then
+            ai_tool="${HYDRA_AI_COMMAND:-claude}"
+        fi
+        if ! validate_ai_command "$ai_tool"; then
+            return 1
+        fi
+        echo "Starting $ai_tool in session '$session'..." >&2
+        send_keys_to_session "$session" "$ai_tool"
     fi
-    if ! validate_ai_command "$ai_tool"; then
-        return 1
-    fi
-    echo "Starting $ai_tool in session '$session'..." >&2
-    send_keys_to_session "$session" "$ai_tool"
 
     # Run post-spawn hook (best-effort)
     run_hook post-spawn "$worktree_path" "$repo_root" "$session" "$branch"
@@ -661,12 +663,17 @@ cmd_spawn() {
     
     # Single spawn - use helper function
     if session="$(spawn_single "$branch" "$layout" "$ai_tool")"; then
-        # Switch to the new session (only in terminal)
-        if [ -t 0 ] && [ -t 1 ]; then
-            echo "Switching to session '$session'..."
-            switch_to_session "$session"
+        # Optionally skip switching (useful for demos/automation)
+        if [ -n "${HYDRA_NO_SWITCH:-}" ]; then
+            echo "Session '$session' created (HYDRA_NO_SWITCH set; not attaching)"
         else
-            echo "Session '$session' created successfully (not switching - not in terminal)"
+            # Switch to the new session (only in terminal)
+            if [ -t 0 ] && [ -t 1 ]; then
+                echo "Switching to session '$session'..."
+                switch_to_session "$session"
+            else
+                echo "Session '$session' created successfully (not switching - not in terminal)"
+            fi
         fi
         return 0
     else
