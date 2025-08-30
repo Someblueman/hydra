@@ -54,21 +54,7 @@ Below is a lightweight demo GIF. Regenerate locally with Charm’s VHS.
 
 - Quick tour: `assets/demos/quick-tour.gif`
 
-Generate locally:
-
-```sh
-# Install VHS (macOS)
-brew install charmbracelet/tap/vhs
-
-# Quick tour (with setup/cleanup wrapper)
-scripts/vhs/run-quick-tour.sh
-# Use real AI CLIs instead of no-op stubs:
-# HYDRA_VHS_FAKE_AI=0 scripts/vhs/run-quick-tour.sh
-# HYDRA_VHS_FAKE_AI=0 scripts/vhs/run-dashboard.sh
-
-# Or run the tape directly (requires a prepared git repo)
-vhs scripts/vhs/quick-tour.tape
-```
+If you want to regenerate the GIF yourself, you can use the VHS project from Charm (not included here): https://github.com/charmbracelet/vhs
 
 ## Core Commands
 
