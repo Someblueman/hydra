@@ -249,6 +249,31 @@ complete -c hydra -f -n '__fish_seen_subcommand_from switch' -a '(test -f "$HYDR
 EOF
 }
 
+# Dispatch completion generation by shell
+# Usage: generate_completion [bash|zsh|fish]
+# Returns: 0 on success, 1 on unsupported shell
+generate_completion() {
+    shell="${1:-bash}"
+
+    case "$shell" in
+        bash)
+            generate_bash_completion
+            ;;
+        zsh)
+            generate_zsh_completion
+            ;;
+        fish)
+            generate_fish_completion
+            ;;
+        *)
+            echo "Error: Unsupported shell '$shell'. Supported shells: bash, zsh, fish" >&2
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
 # Install completion scripts
 # Usage: install_completions [bash|zsh|fish]
 # Returns: 0 on success, 1 on failure
