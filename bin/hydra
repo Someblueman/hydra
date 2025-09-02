@@ -692,7 +692,7 @@ cmd_list() {
     echo "Active Hydra heads:"
     echo ""
     
-    # Read mapping file and display status
+    # Read per-repo mappings and display status
     while IFS=' ' read -r branch session ai; do
         # Check if session still exists
         if tmux_session_exists "$session"; then
@@ -718,7 +718,9 @@ cmd_list() {
                 echo "  $branch -> $session (dead)"
             fi
         fi
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(list_mappings_current_repo)
+EOF
 }
 
 cmd_switch() {
@@ -732,11 +734,13 @@ cmd_switch() {
     if [ -n "${TMUX:-}" ]; then
         # Build session list for fzf or simple menu
         sessions=""
-        while IFS=' ' read -r branch session; do
+        while IFS=' ' read -r branch session _ai; do
             if tmux_session_exists "$session"; then
                 sessions="$sessions$branch ($session)\n"
             fi
-        done < "$HYDRA_MAP"
+        done <<EOF
+$(list_mappings_current_repo)
+EOF
         
         if [ -z "$sessions" ]; then
             echo "No active sessions found"
@@ -782,8 +786,8 @@ kill_all_sessions() {
         return 0
     fi
     
-    # Get all mappings
-    mappings="$(list_mappings)"
+    # Get all mappings for current repo
+    mappings="$(list_mappings_current_repo)"
     count="$(echo "$mappings" | wc -l | tr -d ' ')"
     
     if [ "$count" -eq 0 ]; then
@@ -793,7 +797,7 @@ kill_all_sessions() {
     
     # Display what will be killed
     echo "The following hydra heads will be killed:"
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai; do
         if [ -n "$branch" ] && [ -n "$session" ]; then
             echo "  $branch -> $session"
         fi
@@ -831,7 +835,7 @@ EOF
     failed=0
     
     # Process each mapping
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai; do
         if [ -z "$branch" ] || [ -z "$session" ]; then
             continue
         fi
@@ -1143,7 +1147,9 @@ cmd_status() {
             fi
             dead=$((dead + 1))
         fi
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(list_mappings_current_repo)
+EOF
     
     echo ""
     echo "Summary:"
