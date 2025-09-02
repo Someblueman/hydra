@@ -6,7 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-<!-- Nothing yet -->
+### Added
+- Optional Procfile-based process orchestration
+  - When no YAML config is present, Hydra can read a Procfile and launch each entry in its own tmux window (e.g., `proc-web`, `proc-worker`).
+  - Procfile search precedence: worktree `Procfile` → worktree `/.hydra/Procfile` → repo `/.hydra/Procfile` → `~/.hydra/Procfile`.
+  - Guards: `HYDRA_DISABLE_PROCFILE=1` disables; `HYDRA_REGENERATE_RUN_PROCFILE` controls regenerate behavior (on by default).
+  - Customizable window name prefix via `HYDRA_PROCFILE_WINDOW_PREFIX` (default: `proc`).
 
 ## [1.2.0] - 2025-08-30
 
