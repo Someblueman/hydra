@@ -123,6 +123,30 @@ startup:
 - On spawn/regenerate: windows and panes are applied. `startup` runs on spawn, and on regenerate only if `HYDRA_REGENERATE_RUN_STARTUP=1`.
 - Minimal parser supports the fields above; values are plain strings.
 
+## Procfile (optional)
+
+If no YAML config is present, Hydra can auto-launch common processes from a Procfile when a head is spawned.
+
+- File locations (checked in order):
+  - `./Procfile`
+  - `./.hydra/Procfile`
+  - `<repo>/.hydra/Procfile`
+  - `~/.hydra/Procfile`
+- Format: one process per line: `name: command`
+
+Example:
+
+```
+web: npm run dev
+worker: bin/worker
+postgres: docker compose up db
+```
+
+- Each entry runs in its own tmux window named `proc-<name>` within the head’s session.
+- Disable at spawn/regenerate with `HYDRA_DISABLE_PROCFILE=1`.
+- Window prefix can be customized via `HYDRA_PROCFILE_WINDOW_PREFIX` (default: `proc`).
+- YAML takes precedence: if `.hydra/config.yml` exists, Procfile is ignored for that spawn/regenerate.
+
 ## Hooks (optional)
 
 Add `.hydra/` scripts to customize lifecycle:
