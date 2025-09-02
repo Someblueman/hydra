@@ -81,6 +81,9 @@ fi
 # shellcheck source=../lib/yaml.sh
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/yaml.sh"
+# shellcheck source=../lib/panel.sh
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/panel.sh"
 
 # Export paths for downstream helpers (e.g., safe tmux run-shell bindings)
 export HYDRA_LIB_DIR
@@ -125,6 +128,9 @@ Commands:
   dashboard         View all sessions in a single dashboard
                     Options:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session
+  panel             Interactive control panel for heads (TUI)
+                    Options:
+                      --print           Print summary and exit (non-interactive)
   cycle-layout      Cycle through tmux pane layouts
   completion        Generate shell completion scripts
   version           Show version information
@@ -516,6 +522,10 @@ main() {
         dashboard)
             shift
             cmd_dashboard "$@"
+            ;;
+        panel)
+            shift
+            cmd_panel "$@"
             ;;
         dashboard-exit)
             shift
@@ -1232,6 +1242,34 @@ cmd_cycle_layout() {
 cmd_completion() {
     shell="${1:-bash}"
     generate_completion "$shell"
+}
+
+# Control panel command
+cmd_panel() {
+    # Non-interactive print mode
+    print_only=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --print)
+                print_only=1
+                shift
+                ;;
+            -h|--help)
+                echo "Usage: hydra panel [--print]" ; return 0 ;;
+            *)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Usage: hydra panel [--print]" >&2
+                return 1
+                ;;
+        esac
+    done
+
+    if [ "$print_only" -eq 1 ] || [ -n "${HYDRA_PANEL_NONINTERACTIVE:-}" ] || [ ! -t 0 ] || [ ! -t 1 ]; then
+        panel_print_summary
+        return $?
+    fi
+
+    run_control_panel
 }
 
 # Run main function with all arguments
