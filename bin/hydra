@@ -11,7 +11,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="1.2.0"
+HYDRA_VERSION="1.3.0"
 
 # Source helper libraries
 # Enhanced library detection with multiple fallback paths
@@ -84,6 +84,9 @@ fi
 # shellcheck source=../lib/panel.sh
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/panel.sh"
+# shellcheck source=../lib/procfile.sh
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/procfile.sh"
 
 # Export paths for downstream helpers (e.g., safe tmux run-shell bindings)
 export HYDRA_LIB_DIR
@@ -115,6 +118,9 @@ Commands:
                       -n, --count <number>     Spawn multiple sessions (1-10)
                       --ai <tool>              Specify AI tool (claude, aider, gemini, etc.)
                       --agents <spec>          Mixed agents (e.g., "claude:2,aider:1")
+                    Notes:
+                      - If a YAML config is present (.hydra/config.yml), it defines windows/panes.
+                      - Otherwise, if a Procfile is present, Hydra launches processes per entry.
   spawn --issue <#> Create a head from a GitHub issue
   list              List all active Hydra heads
   switch            Switch to a different head (interactive)
@@ -226,6 +232,12 @@ spawn_single() {
         apply_custom_layout_or_default "$layout" "$session" "$worktree_path" "$repo_root"
         # Send optional startup commands
         run_startup_commands "$session" "$worktree_path" "$repo_root"
+        # Launch processes from Procfile if present and not disabled
+        if [ -z "${HYDRA_DISABLE_PROCFILE:-}" ]; then
+            if pfpath="$(locate_procfile "$worktree_path" "$repo_root" 2>/dev/null || true)" && [ -n "$pfpath" ]; then
+                run_procfile "$pfpath" "$session" "$worktree_path" "$repo_root"
+            fi
+        fi
     fi
     
     # Start AI tool unless explicitly skipped (e.g., demos/CI)
@@ -702,7 +714,7 @@ cmd_list() {
     echo "Active Hydra heads:"
     echo ""
     
-    # Read mapping file and display status
+    # Read per-repo mappings and display status
     while IFS=' ' read -r branch session ai; do
         # Check if session still exists
         if tmux_session_exists "$session"; then
@@ -728,7 +740,9 @@ cmd_list() {
                 echo "  $branch -> $session (dead)"
             fi
         fi
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(list_mappings_current_repo)
+EOF
 }
 
 cmd_switch() {
@@ -742,11 +756,13 @@ cmd_switch() {
     if [ -n "${TMUX:-}" ]; then
         # Build session list for fzf or simple menu
         sessions=""
-        while IFS=' ' read -r branch session; do
+        while IFS=' ' read -r branch session _ai; do
             if tmux_session_exists "$session"; then
                 sessions="$sessions$branch ($session)\n"
             fi
-        done < "$HYDRA_MAP"
+        done <<EOF
+$(list_mappings_current_repo)
+EOF
         
         if [ -z "$sessions" ]; then
             echo "No active sessions found"
@@ -792,8 +808,8 @@ kill_all_sessions() {
         return 0
     fi
     
-    # Get all mappings
-    mappings="$(list_mappings)"
+    # Get all mappings for current repo
+    mappings="$(list_mappings_current_repo)"
     count="$(echo "$mappings" | wc -l | tr -d ' ')"
     
     if [ "$count" -eq 0 ]; then
@@ -803,7 +819,7 @@ kill_all_sessions() {
     
     # Display what will be killed
     echo "The following hydra heads will be killed:"
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai; do
         if [ -n "$branch" ] && [ -n "$session" ]; then
             echo "  $branch -> $session"
         fi
@@ -841,7 +857,7 @@ EOF
     failed=0
     
     # Process each mapping
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai; do
         if [ -z "$branch" ] || [ -z "$session" ]; then
             continue
         fi
@@ -1083,6 +1099,12 @@ cmd_regenerate() {
                 if [ -n "${HYDRA_REGENERATE_RUN_STARTUP:-}" ]; then
                     run_startup_commands "$session" "$dir" "$repo_root_for_dir"
                 fi
+                # Optionally run Procfile on regenerate (default on)
+                if [ -z "${HYDRA_DISABLE_PROCFILE:-}" ] && [ -n "${HYDRA_REGENERATE_RUN_PROCFILE:-1}" ]; then
+                    if pfpath="$(locate_procfile "$dir" "$repo_root_for_dir" 2>/dev/null || true)" && [ -n "$pfpath" ]; then
+                        run_procfile "$pfpath" "$session" "$dir" "$repo_root_for_dir"
+                    fi
+                fi
             fi
             # Optionally auto-launch stored AI tool in the regenerated session
             if [ -n "$stored_ai" ]; then
@@ -1153,7 +1175,9 @@ cmd_status() {
             fi
             dead=$((dead + 1))
         fi
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(list_mappings_current_repo)
+EOF
     
     echo ""
     echo "Summary:"
