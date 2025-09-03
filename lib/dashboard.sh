@@ -126,8 +126,22 @@ collect_session_panes() {
                 pane_id="${line%% *}"
                 window_id="${line#* }"
                 [ -z "$pane_id" ] && continue
-                # Move pane to dashboard first
-                if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION:0" 2>/dev/null; then
+                # Move pane to dashboard with small retry loop to avoid transient failures
+                retries=${HYDRA_DASHBOARD_COLLECT_RETRIES:-5}
+                delay=1  # tenths of a second (0.1s)
+                attempt=0
+                moved=0
+                while [ "$attempt" -lt "$retries" ]; do
+                    if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION:0" 2>/dev/null; then
+                        moved=1
+                        break
+                    fi
+                    # backoff: 0.1s * (attempt+1)
+                    # shellcheck disable=SC2039
+                    sleep "0.$((delay * (attempt + 1)))"
+                    attempt=$((attempt + 1))
+                done
+                if [ "$moved" -eq 1 ]; then
                     # Record original location for restoration only on success
                     echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
                     # Set pane title to show branch name
@@ -135,16 +149,7 @@ collect_session_panes() {
                     pane_count_for_session=$((pane_count_for_session + 1))
                     collected=$((collected + 1))
                 else
-                    # Brief retry in case tmux state lags
-                    sleep 0.1
-                    if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION:0" 2>/dev/null; then
-                        echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
-                        tmux select-pane -t "$pane_id" -T "$branch" 2>/dev/null || true
-                        pane_count_for_session=$((pane_count_for_session + 1))
-                        collected=$((collected + 1))
-                    else
-                        echo "Warning: Failed to collect pane from session '$session'" >&2
-                    fi
+                    echo "Warning: Failed to collect pane from session '$session'" >&2
                 fi
             done
         done
