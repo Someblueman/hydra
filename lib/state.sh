@@ -257,6 +257,35 @@ release_session_lock() {
     fi
 }
 
+# Best-effort cleanup of stale session-name locks (older than 24h)
+# Usage: cleanup_stale_locks
+# Returns: 0 always (best-effort)
+cleanup_stale_locks() {
+    # Require HYDRA_HOME
+    if [ -z "${HYDRA_HOME:-}" ]; then
+        return 0
+    fi
+    locks_dir="$HYDRA_HOME/locks"
+    [ -d "$locks_dir" ] || return 0
+
+    # Prefer 'find' if available with -mtime support
+    if command -v find >/dev/null 2>&1; then
+        # Collect paths first to avoid invoking -exec portability concerns
+        old_paths="$(find "$locks_dir" -type d -name '*.lock' -mtime +1 2>/dev/null || true)"
+        if [ -n "$old_paths" ]; then
+            # Iterate and remove empty lock dirs
+            echo "$old_paths" | while IFS= read -r p; do
+                [ -z "$p" ] && continue
+                rmdir "$p" 2>/dev/null || true
+            done
+        fi
+        return 0
+    fi
+
+    # Fallback: no portable mtime check; do nothing to avoid unsafe deletions
+    return 0
+}
+
 # Get AI tool for a branch (if stored)
 # Usage: get_ai_for_branch <branch>
 # Returns: AI tool on stdout, empty if not set
