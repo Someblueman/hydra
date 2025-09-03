@@ -98,6 +98,58 @@ init_hydra_home() {
     fi
 }
 
+# Best-effort resolver for a worktree path for a branch
+# Usage: resolve_worktree_path <branch> <session>
+# Echoes an absolute path if found, empty otherwise
+resolve_worktree_path() {
+    r_branch="$1"
+    r_session="$2"
+
+    # 1) Try repo-root relative convention
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -n "$repo_root" ]; then
+        candidate="$repo_root/../hydra-$r_branch"
+        if [ -d "$candidate" ]; then
+            printf '%s\n' "$(cd "$candidate" 2>/dev/null && pwd)"
+            return 0
+        fi
+    fi
+
+    # 2) If session exists, try to grab its first pane path
+    if [ -n "$r_session" ] && tmux_session_exists "$r_session"; then
+        pane_path="$(tmux list-panes -t "$r_session" -F '#{pane_current_path}' 2>/dev/null | sed -n '1p')"
+        if [ -n "$pane_path" ] && [ -d "$pane_path" ]; then
+            # If this path is the hydra worktree for r_branch, use it
+            # Accept if basename matches or git inside shows the branch
+            base="$(basename "$pane_path")"
+            if [ "$base" = "hydra-$r_branch" ]; then
+                printf '%s\n' "$(cd "$pane_path" 2>/dev/null && pwd)"
+                return 0
+            fi
+            # Check via git branch of the worktree path
+            wt_branch="$(get_worktree_branch "$pane_path" 2>/dev/null || true)"
+            if [ "$wt_branch" = "$r_branch" ]; then
+                printf '%s\n' "$(cd "$pane_path" 2>/dev/null && pwd)"
+                return 0
+            fi
+        fi
+    fi
+
+    # 3) If we are in any repo where git can enumerate worktrees, use git helpers
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        if wt="$(find_worktree_path "$r_branch" 2>/dev/null || true)" && [ -n "$wt" ]; then
+            printf '%s\n' "$wt"
+            return 0
+        fi
+        if wt="$(find_worktree_by_pattern "hydra-$r_branch" 2>/dev/null || true)" && [ -n "$wt" ]; then
+            printf '%s\n' "$wt"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
 # Display usage information
 usage() {
     cat <<EOF
@@ -842,34 +894,37 @@ EOF
         # Kill tmux session
         if tmux_session_exists "$session"; then
             echo "  Killing tmux session '$session'..."
+            # Resolve worktree path before terminating the session
+            resolved_wt="$(resolve_worktree_path "$branch" "$session" 2>/dev/null || true)"
             if tmux kill-session -t "$session" 2>/dev/null; then
                 # Remove mapping
                 remove_mapping "$branch"
                 
-                # Delete worktree
-                repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-                if [ -n "$repo_root" ]; then
-                    worktree_path="$repo_root/../hydra-$branch"
-                    if [ -d "$worktree_path" ]; then
-                        # Normalize the path by cd'ing to it and getting pwd
-                        normalized_path="$(cd "$worktree_path" && pwd 2>/dev/null)" || normalized_path="$worktree_path"
-                        echo "  Removing worktree at '$normalized_path'..."
-                        if delete_worktree "$normalized_path"; then
-                            succeeded=$((succeeded + 1))
-                            echo "  Successfully killed hydra head '$branch'"
-                        else
-                            failed=$((failed + 1))
-                            echo "  Failed to remove worktree for '$branch'" >&2
-                        fi
-                    else
-                        # Session killed but no worktree found
+                # Delete worktree using resolved path if available; otherwise fallback to repo-root convention
+                target_path=""
+                if [ -n "$resolved_wt" ] && [ -d "$resolved_wt" ]; then
+                    target_path="$resolved_wt"
+                else
+                    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+                    if [ -n "$repo_root" ]; then
+                        candidate="$repo_root/../hydra-$branch"
+                        [ -d "$candidate" ] && target_path="$(cd "$candidate" 2>/dev/null && pwd || printf '%s' "$candidate")"
+                    fi
+                fi
+
+                if [ -n "$target_path" ] && [ -d "$target_path" ]; then
+                    echo "  Removing worktree at '$target_path'..."
+                    if delete_worktree "$target_path"; then
                         succeeded=$((succeeded + 1))
-                        echo "  Successfully killed session '$session' (no worktree found)"
+                        echo "  Successfully killed hydra head '$branch'"
+                    else
+                        failed=$((failed + 1))
+                        echo "  Failed to remove worktree for '$branch'" >&2
                     fi
                 else
-                    # Not in a git repo - just count as success if session was killed
+                    # Session killed but no worktree path resolved
                     succeeded=$((succeeded + 1))
-                    echo "  Successfully killed session '$session'"
+                    echo "  Successfully killed session '$session' (no worktree found)"
                 fi
             else
                 failed=$((failed + 1))
@@ -992,6 +1047,9 @@ cmd_kill() {
         echo "Killing hydra head '$branch' (session: $session) [non-interactive mode]"
     fi
     
+    # Resolve the worktree path before killing the session (best-effort)
+    resolved_wt="$(resolve_worktree_path "$branch" "$session" 2>/dev/null || true)"
+
     # Kill tmux session
     if tmux_session_exists "$session"; then
         echo "Killing tmux session '$session'..."
@@ -1001,15 +1059,19 @@ cmd_kill() {
     # Remove mapping
     remove_mapping "$branch"
     
-    # Delete worktree
-    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-    if [ -n "$repo_root" ]; then
-        worktree_path="$repo_root/../hydra-$branch"
-        if [ -d "$worktree_path" ]; then
-            # Normalize the path by cd'ing to it and getting pwd
-            normalized_path="$(cd "$worktree_path" && pwd)" || normalized_path="$worktree_path"
-            echo "Removing worktree at '$normalized_path'..."
-            delete_worktree "$normalized_path"
+    # Delete worktree via resolved path, or fall back to repo-root convention
+    if [ -n "$resolved_wt" ] && [ -d "$resolved_wt" ]; then
+        echo "Removing worktree at '$resolved_wt'..."
+        delete_worktree "$resolved_wt"
+    else
+        repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+        if [ -n "$repo_root" ]; then
+            worktree_path="$repo_root/../hydra-$branch"
+            if [ -d "$worktree_path" ]; then
+                normalized_path="$(cd "$worktree_path" && pwd)" || normalized_path="$worktree_path"
+                echo "Removing worktree at '$normalized_path'..."
+                delete_worktree "$normalized_path"
+            fi
         fi
     fi
     
