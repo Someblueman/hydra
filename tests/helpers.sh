@@ -12,10 +12,10 @@ assert_equal() {
     test_count=$((test_count + 1))
     if [ "${expected}" = "${actual}" ]; then
         pass_count=$((pass_count + 1))
-        echo "✓ ${message}"
+        echo "[PASS] ${message}"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ ${message}"
+        echo "[FAIL] ${message}"
         echo "  Expected: '${expected}'"
         echo "  Actual:   '${actual}'"
     fi
@@ -28,10 +28,10 @@ assert_success() {
     test_count=$((test_count + 1))
     if [ "${exit_code}" -eq 0 ]; then
         pass_count=$((pass_count + 1))
-        echo "✓ ${message}"
+        echo "[PASS] ${message}"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ ${message}"
+        echo "[FAIL] ${message}"
         echo "  Expected: success (exit code 0)"
         echo "  Actual:   failure (exit code ${exit_code})"
     fi
@@ -44,10 +44,10 @@ assert_failure() {
     test_count=$((test_count + 1))
     if [ "${exit_code}" -ne 0 ]; then
         pass_count=$((pass_count + 1))
-        echo "✓ ${message}"
+        echo "[PASS] ${message}"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ ${message}"
+        echo "[FAIL] ${message}"
         echo "  Expected: failure (non-zero exit code)"
         echo "  Actual:   success (exit code 0)"
     fi

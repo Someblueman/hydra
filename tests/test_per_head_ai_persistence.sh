@@ -15,10 +15,10 @@ assert_contains() {
     test_count=$((test_count + 1))
     if echo "$haystack" | grep -F -q "$needle"; then
         pass_count=$((pass_count + 1))
-        echo "✓ $message"
+        echo "[PASS] $message"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $message"
+        echo "[FAIL] $message"
         echo "  Expected to contain: '$needle'"
         echo "  Actual output: '$haystack'"
     fi

@@ -34,7 +34,7 @@ test_apply_layout_validation() {
         apply_layout "default" 2>/dev/null
         assert_failure $? "apply_layout should fail when not in tmux session"
     else
-        echo "⚠ Skipping tmux check - already in tmux session"
+        echo "[WARN] Skipping tmux check - already in tmux session"
         pass_count=$((pass_count + 1))
         test_count=$((test_count + 1))
     fi
@@ -52,10 +52,10 @@ test_get_current_layout() {
         # Inside tmux - should return something
         result="$(get_current_layout)"
         if [ -n "$result" ]; then
-            echo "✓ get_current_layout returns a layout name when in tmux"
+            echo "[PASS] get_current_layout returns a layout name when in tmux"
             pass_count=$((pass_count + 1))
         else
-            echo "✗ get_current_layout should return a layout name when in tmux"
+            echo "[FAIL] get_current_layout should return a layout name when in tmux"
             fail_count=$((fail_count + 1))
         fi
         test_count=$((test_count + 1))
@@ -71,7 +71,7 @@ test_cycle_layout() {
         cycle_layout 2>/dev/null
         assert_failure $? "cycle_layout should fail when not in tmux session"
     else
-        echo "⚠ Skipping cycle_layout test - would modify current tmux session"
+        echo "[WARN] Skipping cycle_layout test - would modify current tmux session"
         pass_count=$((pass_count + 1))
         test_count=$((test_count + 1))
     fi
@@ -146,7 +146,7 @@ test_setup_layout_hotkeys_validation() {
     # Test with valid session name (this might fail if tmux/session doesn't exist, but that's expected)
     setup_layout_hotkeys "test-session" 2>/dev/null
     # We don't assert success/failure here since it depends on tmux availability and session existence
-    echo "✓ setup_layout_hotkeys parameter validation passed"
+    echo "[PASS] setup_layout_hotkeys parameter validation passed"
     pass_count=$((pass_count + 1))
     test_count=$((test_count + 1))
 }

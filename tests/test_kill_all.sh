@@ -31,10 +31,10 @@ assert_equal() {
     test_count=$((test_count + 1))
     if [ "$expected" = "$actual" ]; then
         pass_count=$((pass_count + 1))
-        echo "✓ $message"
+        echo "[PASS] $message"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $message"
+        echo "[FAIL] $message"
         echo "  Expected: $expected"
         echo "  Actual: $actual"
     fi
@@ -48,10 +48,10 @@ assert_contains() {
     test_count=$((test_count + 1))
     if echo "$haystack" | grep -q "$needle"; then
         pass_count=$((pass_count + 1))
-        echo "✓ $message"
+        echo "[PASS] $message"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $message"
+        echo "[FAIL] $message"
         echo "  Output: $haystack"
         echo "  Expected to contain: $needle"
     fi
@@ -175,9 +175,9 @@ test_kill_all_non_interactive_no_force() {
     
     # Verify session still exists
     if tmux has-session -t "$NOFORCE" 2>/dev/null; then
-        echo "✓ Session was not killed (as expected)"
+        echo "[PASS] Session was not killed (as expected)"
     else
-        echo "✗ Session was killed (unexpected)"
+        echo "[FAIL] Session was killed (unexpected)"
         fail_count=$((fail_count + 1))
     fi
     

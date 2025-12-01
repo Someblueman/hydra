@@ -24,14 +24,14 @@ test_check_tmux_version() {
     # This test depends on tmux being available
     if command -v tmux >/dev/null 2>&1; then
         if check_tmux_version >/dev/null 2>&1; then
-            echo "✓ check_tmux_version succeeds with available tmux"
+            echo "[PASS] check_tmux_version succeeds with available tmux"
             pass_count=$((pass_count + 1))
         else
-            echo "⚠ check_tmux_version fails - tmux version may be too old"
+            echo "[WARN] check_tmux_version fails - tmux version may be too old"
             pass_count=$((pass_count + 1))
         fi
     else
-        echo "⚠ Skipping tmux version test - tmux not available"
+        echo "[WARN] Skipping tmux version test - tmux not available"
         pass_count=$((pass_count + 1))
     fi
     test_count=$((test_count + 1))
@@ -154,7 +154,7 @@ test_get_current_session() {
         get_current_session >/dev/null 2>&1
         assert_failure $? "get_current_session should fail when not in tmux"
     else
-        echo "⚠ Skipping get_current_session test - already inside tmux"
+        echo "[WARN] Skipping get_current_session test - already inside tmux"
         pass_count=$((pass_count + 1))
         test_count=$((test_count + 1))
     fi

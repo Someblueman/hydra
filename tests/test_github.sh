@@ -20,59 +20,59 @@ test_validate_issue_number() {
     
     # Valid numbers
     if validate_issue_number "1" 2>/dev/null; then
-        echo "  ✓ Accepts valid number '1'"
+        echo "  [PASS]Accepts valid number '1'"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to accept valid number '1'"
+        echo "  [FAIL]Failed to accept valid number '1'"
     fi
     
     tests=$((tests + 1))
     if validate_issue_number "123" 2>/dev/null; then
-        echo "  ✓ Accepts valid number '123'"
+        echo "  [PASS]Accepts valid number '123'"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to accept valid number '123'"
+        echo "  [FAIL]Failed to accept valid number '123'"
     fi
     
     # Invalid numbers
     tests=$((tests + 1))
     if ! validate_issue_number "" 2>/dev/null; then
-        echo "  ✓ Rejects empty string"
+        echo "  [PASS]Rejects empty string"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to reject empty string"
+        echo "  [FAIL]Failed to reject empty string"
     fi
     
     tests=$((tests + 1))
     if ! validate_issue_number "0" 2>/dev/null; then
-        echo "  ✓ Rejects zero"
+        echo "  [PASS]Rejects zero"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to reject zero"
+        echo "  [FAIL]Failed to reject zero"
     fi
     
     tests=$((tests + 1))
     if ! validate_issue_number "-1" 2>/dev/null; then
-        echo "  ✓ Rejects negative number"
+        echo "  [PASS]Rejects negative number"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to reject negative number"
+        echo "  [FAIL]Failed to reject negative number"
     fi
     
     tests=$((tests + 1))
     if ! validate_issue_number "abc" 2>/dev/null; then
-        echo "  ✓ Rejects non-numeric string"
+        echo "  [PASS]Rejects non-numeric string"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to reject non-numeric string"
+        echo "  [FAIL]Failed to reject non-numeric string"
     fi
     
     tests=$((tests + 1))
     if ! validate_issue_number "12.3" 2>/dev/null; then
-        echo "  ✓ Rejects decimal number"
+        echo "  [PASS]Rejects decimal number"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to reject decimal number"
+        echo "  [FAIL]Failed to reject decimal number"
     fi
 }
 
@@ -84,40 +84,40 @@ test_sanitize_branch_name() {
     tests=$((tests + 1))
     result="$(sanitize_branch_name "Hello World")"
     if [ "$result" = "hello-world" ]; then
-        echo "  ✓ Converts spaces to hyphens"
+        echo "  [PASS]Converts spaces to hyphens"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed space conversion: got '$result'"
+        echo "  [FAIL]Failed space conversion: got '$result'"
     fi
     
     # Test special character removal
     tests=$((tests + 1))
     result="$(sanitize_branch_name "Feature: Add @mentions & #hashtags!")"
     if [ "$result" = "feature-add-mentions-hashtags" ]; then
-        echo "  ✓ Removes special characters"
+        echo "  [PASS]Removes special characters"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed special char removal: got '$result'"
+        echo "  [FAIL]Failed special char removal: got '$result'"
     fi
     
     # Test multiple hyphens
     tests=$((tests + 1))
     result="$(sanitize_branch_name "Fix -- Multiple   Spaces")"
     if [ "$result" = "fix-multiple-spaces" ]; then
-        echo "  ✓ Collapses multiple hyphens"
+        echo "  [PASS]Collapses multiple hyphens"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed hyphen collapse: got '$result'"
+        echo "  [FAIL]Failed hyphen collapse: got '$result'"
     fi
     
     # Test leading/trailing hyphens
     tests=$((tests + 1))
     result="$(sanitize_branch_name "  Trim Me  ")"
     if [ "$result" = "trim-me" ]; then
-        echo "  ✓ Trims leading/trailing spaces"
+        echo "  [PASS]Trims leading/trailing spaces"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed trimming: got '$result'"
+        echo "  [FAIL]Failed trimming: got '$result'"
     fi
     
     # Test truncation
@@ -125,10 +125,10 @@ test_sanitize_branch_name() {
     long_text="This is a very long issue title that exceeds the maximum allowed length for branch names"
     result="$(sanitize_branch_name "$long_text")"
     if [ ${#result} -le 50 ]; then
-        echo "  ✓ Truncates to max length (${#result} chars)"
+        echo "  [PASS]Truncates to max length (${#result} chars)"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to truncate: got ${#result} chars"
+        echo "  [FAIL]Failed to truncate: got ${#result} chars"
     fi
 }
 
@@ -140,37 +140,37 @@ test_generate_branch_from_issue() {
     tests=$((tests + 1))
     result="$(generate_branch_from_issue "123" "Fix bug in parser")"
     if [ "$result" = "issue-123-fix-bug-in-parser" ]; then
-        echo "  ✓ Generates correct branch name"
+        echo "  [PASS]Generates correct branch name"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed generation: got '$result'"
+        echo "  [FAIL]Failed generation: got '$result'"
     fi
     
     # Test with special characters
     tests=$((tests + 1))
     result="$(generate_branch_from_issue "456" "[BUG] Can't handle & symbols")"
     if [ "$result" = "issue-456-bug-cant-handle-symbols" ]; then
-        echo "  ✓ Handles special characters in title"
+        echo "  [PASS]Handles special characters in title"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed with special chars: got '$result'"
+        echo "  [FAIL]Failed with special chars: got '$result'"
     fi
     
     # Test empty inputs
     tests=$((tests + 1))
     if ! generate_branch_from_issue "" "Title" 2>/dev/null; then
-        echo "  ✓ Rejects empty issue number"
+        echo "  [PASS]Rejects empty issue number"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to reject empty issue number"
+        echo "  [FAIL]Failed to reject empty issue number"
     fi
     
     tests=$((tests + 1))
     if ! generate_branch_from_issue "123" "" 2>/dev/null; then
-        echo "  ✓ Rejects empty title"
+        echo "  [PASS]Rejects empty title"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to reject empty title"
+        echo "  [FAIL]Failed to reject empty title"
     fi
 }
 
@@ -184,38 +184,38 @@ test_parse_json_value() {
     tests=$((tests + 1))
     result="$(parse_json_value "$json" "number")"
     if [ "$result" = "10" ]; then
-        echo "  ✓ Parses number field"
+        echo "  [PASS]Parses number field"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to parse number: got '$result'"
+        echo "  [FAIL]Failed to parse number: got '$result'"
     fi
     
     tests=$((tests + 1))
     result="$(parse_json_value "$json" "title")"
     if [ "$result" = "Test Issue" ]; then
-        echo "  ✓ Parses title field"
+        echo "  [PASS]Parses title field"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to parse title: got '$result'"
+        echo "  [FAIL]Failed to parse title: got '$result'"
     fi
     
     tests=$((tests + 1))
     result="$(parse_json_value "$json" "state")"
     if [ "$result" = "OPEN" ]; then
-        echo "  ✓ Parses state field"
+        echo "  [PASS]Parses state field"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed to parse state: got '$result'"
+        echo "  [FAIL]Failed to parse state: got '$result'"
     fi
     
     # Test missing field
     tests=$((tests + 1))
     result="$(parse_json_value "$json" "missing")"
     if [ -z "$result" ]; then
-        echo "  ✓ Returns empty for missing field"
+        echo "  [PASS]Returns empty for missing field"
         passed=$((passed + 1))
     else
-        echo "  ✗ Failed missing field test: got '$result'"
+        echo "  [FAIL]Failed missing field test: got '$result'"
     fi
 }
 
@@ -227,19 +227,19 @@ test_check_gh_cli() {
     if command -v gh >/dev/null 2>&1; then
         # If gh is installed, it should pass or fail based on auth
         if check_gh_cli 2>/dev/null; then
-            echo "  ✓ GitHub CLI check passed (authenticated)"
+            echo "  [PASS]GitHub CLI check passed (authenticated)"
             passed=$((passed + 1))
         else
-            echo "  ⚠ GitHub CLI found but not authenticated"
+            echo "  [WARN] GitHub CLI found but not authenticated"
             passed=$((passed + 1))  # Still pass the test
         fi
     else
         # If gh is not installed, it should fail
         if ! check_gh_cli 2>/dev/null; then
-            echo "  ✓ Correctly reports missing GitHub CLI"
+            echo "  [PASS]Correctly reports missing GitHub CLI"
             passed=$((passed + 1))
         else
-            echo "  ✗ Failed to detect missing GitHub CLI"
+            echo "  [FAIL]Failed to detect missing GitHub CLI"
         fi
     fi
 }

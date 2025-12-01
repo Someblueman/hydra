@@ -45,10 +45,10 @@ assert_equal() {
     test_count=$((test_count + 1))
     if [ "$expected" = "$actual" ]; then
         pass_count=$((pass_count + 1))
-        echo "✓ $message"
+        echo "[PASS] $message"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $message"
+        echo "[FAIL] $message"
         echo "  Expected: '$expected'"
         echo "  Actual:   '$actual'"
     fi
@@ -61,10 +61,10 @@ assert_success() {
     test_count=$((test_count + 1))
     if [ "$exit_code" -eq 0 ]; then
         pass_count=$((pass_count + 1))
-        echo "✓ $message"
+        echo "[PASS] $message"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $message"
+        echo "[FAIL] $message"
         echo "  Expected: success (exit code 0)"
         echo "  Actual:   failure (exit code $exit_code)"
     fi
@@ -77,10 +77,10 @@ assert_failure() {
     test_count=$((test_count + 1))
     if [ "$exit_code" -ne 0 ]; then
         pass_count=$((pass_count + 1))
-        echo "✓ $message"
+        echo "[PASS] $message"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $message"
+        echo "[FAIL] $message"
         echo "  Expected: failure (non-zero exit code)"
         echo "  Actual:   success (exit code 0)"
     fi
@@ -94,10 +94,10 @@ assert_contains() {
     test_count=$((test_count + 1))
     if echo "$text" | grep -q "$pattern"; then
         pass_count=$((pass_count + 1))
-        echo "✓ $message"
+        echo "[PASS] $message"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $message"
+        echo "[FAIL] $message"
         echo "  Text does not contain: '$pattern'"
         echo "  Actual text: '$text'"
     fi
@@ -212,10 +212,10 @@ test_status_command() {
     if [ "$exit_code" -ne 0 ]; then
         # Check if it failed gracefully with proper output
         if echo "$output" | grep -q "Hydra Status"; then
-            echo "✓ hydra status shows output even when not in git repo"
+            echo "[PASS] hydra status shows output even when not in git repo"
             pass_count=$((pass_count + 1))
         else
-            echo "✗ hydra status failed without proper output"
+            echo "[FAIL] hydra status failed without proper output"
             fail_count=$((fail_count + 1))
         fi
         test_count=$((test_count + 1))
@@ -295,7 +295,7 @@ test_hydra_home_init() {
     
     # HYDRA_HOME should not exist initially
     if [ -d "$HYDRA_HOME" ]; then
-        echo "⚠ HYDRA_HOME already exists, skipping initialization test"
+        echo "[WARN] HYDRA_HOME already exists, skipping initialization test"
         pass_count=$((pass_count + 2))
         test_count=$((test_count + 2))
     else
@@ -304,19 +304,19 @@ test_hydra_home_init() {
         
         test_count=$((test_count + 1))
         if [ -d "$HYDRA_HOME" ]; then
-            echo "✓ HYDRA_HOME directory should be created"
+            echo "[PASS] HYDRA_HOME directory should be created"
             pass_count=$((pass_count + 1))
         else
-            echo "✗ HYDRA_HOME directory should be created (path: $HYDRA_HOME)"
+            echo "[FAIL] HYDRA_HOME directory should be created (path: $HYDRA_HOME)"
             fail_count=$((fail_count + 1))
         fi
         
         test_count=$((test_count + 1))
         if [ -f "$HYDRA_HOME/map" ]; then
-            echo "✓ Map file should be created"
+            echo "[PASS] Map file should be created"
             pass_count=$((pass_count + 1))
         else
-            echo "✗ Map file should be created (path: $HYDRA_HOME/map)"
+            echo "[FAIL] Map file should be created (path: $HYDRA_HOME/map)"
             fail_count=$((fail_count + 1))
         fi
     fi
@@ -330,7 +330,7 @@ test_issue_branch_cleanup() {
     
     # Only run if we're in a git repository
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        echo "⚠ Skipping issue branch test - not in a git repository"
+        echo "[WARN] Skipping issue branch test - not in a git repository"
         return
     fi
     
@@ -344,7 +344,7 @@ test_issue_branch_cleanup() {
     
     # Skip if tmux is not available
     if ! command -v tmux >/dev/null 2>&1; then
-        echo "⚠ Skipping issue branch test - tmux not available"
+        echo "[WARN] Skipping issue branch test - tmux not available"
         cleanup_test_env "$test_dir"
         return
     fi
@@ -355,7 +355,7 @@ test_issue_branch_cleanup() {
     exit_code=$?
     
     if [ "$exit_code" -ne 0 ]; then
-        echo "⚠ Skipping - spawn failed (might be in non-terminal environment)"
+        echo "[WARN] Skipping - spawn failed (might be in non-terminal environment)"
         return
     fi
     
@@ -417,10 +417,10 @@ test_hydra_binary() {
     
     # Test that hydra is executable
     if [ -x "$HYDRA_BIN" ]; then
-        echo "✓ Hydra binary should be executable"
+        echo "[PASS] Hydra binary should be executable"
         pass_count=$((pass_count + 1))
     else
-        echo "✗ Hydra binary should be executable"
+        echo "[FAIL] Hydra binary should be executable"
         fail_count=$((fail_count + 1))
     fi
     test_count=$((test_count + 1))

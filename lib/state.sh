@@ -9,28 +9,41 @@ add_mapping() {
     branch="$1"
     session="$2"
     ai_tool="${3:-}"
-    
+
     if [ -z "$branch" ] || [ -z "$session" ]; then
         echo "Error: Branch and session are required" >&2
         return 1
     fi
-    
+
     if [ -z "$HYDRA_MAP" ]; then
         echo "Error: HYDRA_MAP not set" >&2
         return 1
     fi
-    
-    # Remove existing mapping for this branch if any
-    remove_mapping "$branch" 2>/dev/null || true
-    
-    # Add new mapping (optionally with AI tool)
-    if [ -n "$ai_tool" ]; then
-        echo "$branch $session $ai_tool" >> "$HYDRA_MAP"
+
+    # Use lock to make remove+add atomic
+    if try_lock "state_map"; then
+        # Remove existing mapping for this branch if any
+        remove_mapping "$branch" 2>/dev/null || true
+
+        # Add new mapping (optionally with AI tool)
+        if [ -n "$ai_tool" ]; then
+            echo "$branch $session $ai_tool" >> "$HYDRA_MAP"
+        else
+            echo "$branch $session" >> "$HYDRA_MAP"
+        fi
+
+        release_lock "state_map"
+        return 0
     else
-        echo "$branch $session" >> "$HYDRA_MAP"
+        # Fallback if lock fails - still try the operation
+        remove_mapping "$branch" 2>/dev/null || true
+        if [ -n "$ai_tool" ]; then
+            echo "$branch $session $ai_tool" >> "$HYDRA_MAP"
+        else
+            echo "$branch $session" >> "$HYDRA_MAP"
+        fi
+        return 0
     fi
-    
-    return 0
 }
 
 # Remove a branch-session mapping
@@ -177,36 +190,17 @@ cleanup_mappings() {
 # Generate a unique session name for a branch
 # Usage: generate_session_name <branch>
 # Returns: Session name on stdout
+# Note: Uses try_lock/release_lock from lib/locks.sh
 generate_session_name() {
     branch="$1"
-    
+
     if [ -z "$branch" ]; then
         echo "Error: Branch is required" >&2
         return 1
     fi
-    
+
     # Clean branch name for tmux (replace special chars)
     base_name="$(echo "$branch" | sed 's/[^a-zA-Z0-9_-]/_/g')"
-
-    # Helper to attempt locking a candidate name (best-effort)
-    try_lock() {
-        candidate="$1"
-        # Only lock if HYDRA_HOME is set
-        if [ -z "${HYDRA_HOME:-}" ]; then
-            return 0
-        fi
-        lock_dir="$HYDRA_HOME/locks"
-        mkdir -p "$lock_dir" 2>/dev/null || true
-        mkdir "$lock_dir/$candidate.lock" 2>/dev/null
-    }
-
-    # Helper to release a lock (best-effort)
-    release_lock() {
-        candidate="$1"
-        if [ -n "${HYDRA_HOME:-}" ] && [ -d "$HYDRA_HOME/locks/$candidate.lock" ]; then
-            rmdir "$HYDRA_HOME/locks/$candidate.lock" 2>/dev/null || true
-        fi
-    }
 
     # First, try the base name with an atomic lock to avoid races
     if try_lock "$base_name"; then
@@ -245,17 +239,7 @@ generate_session_name() {
     echo "$final_name"
 }
 
-# Release any acquired session name lock (safe to call even if not held)
-# Usage: release_session_lock <session_name>
-release_session_lock() {
-    name="$1"
-    if [ -z "$name" ] || [ -z "${HYDRA_HOME:-}" ]; then
-        return 0
-    fi
-    if [ -d "$HYDRA_HOME/locks/$name.lock" ]; then
-        rmdir "$HYDRA_HOME/locks/$name.lock" 2>/dev/null || true
-    fi
-}
+# Note: release_session_lock() has been moved to lib/locks.sh
 
 # Get AI tool for a branch (if stored)
 # Usage: get_ai_for_branch <branch>

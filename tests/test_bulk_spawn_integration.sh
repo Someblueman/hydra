@@ -24,10 +24,10 @@ assert_contains() {
     test_count=$((test_count + 1))
     if echo "$haystack" | grep -q "$needle"; then
         pass_count=$((pass_count + 1))
-        echo "✓ $message"
+        echo "[PASS] $message"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $message"
+        echo "[FAIL] $message"
         echo "  Expected to contain: '$needle'"
         echo "  Actual output: '$haystack'"
     fi
@@ -126,12 +126,12 @@ test_valid_ai_tools() {
     if echo "$output" | grep -q "Unsupported AI command"; then
         fail_count=$((fail_count + 1))
         test_count=$((test_count + 1))
-        echo "✗ Should accept 'gemini' as valid AI tool"
+        echo "[FAIL] Should accept 'gemini' as valid AI tool"
         echo "  Output: $output"
     else
         pass_count=$((pass_count + 1))
         test_count=$((test_count + 1))
-        echo "✓ Should accept 'gemini' as valid AI tool"
+        echo "[PASS] Should accept 'gemini' as valid AI tool"
     fi
     
     # Test mixed agents with gemini
@@ -139,12 +139,12 @@ test_valid_ai_tools() {
     if echo "$output" | grep -q "Unsupported AI command"; then
         fail_count=$((fail_count + 1))
         test_count=$((test_count + 1))
-        echo "✗ Should accept mixed agents with gemini"
+        echo "[FAIL] Should accept mixed agents with gemini"
         echo "  Output: $output"
     else
         pass_count=$((pass_count + 1))
         test_count=$((test_count + 1))
-        echo "✓ Should accept mixed agents with gemini"
+        echo "[PASS] Should accept mixed agents with gemini"
     fi
 }
 

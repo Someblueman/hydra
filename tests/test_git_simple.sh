@@ -80,7 +80,7 @@ test_git_functions_integration() {
     
     # Only run if we're in a git repository
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        echo "⚠ Skipping integration tests - not in a git repository"
+        echo "[WARN] Skipping integration tests - not in a git repository"
         return
     fi
     
@@ -113,7 +113,7 @@ test_find_worktree_path_integration() {
     
     # Only run if we're in a git repository
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        echo "⚠ Skipping integration tests - not in a git repository"
+        echo "[WARN] Skipping integration tests - not in a git repository"
         return
     fi
     

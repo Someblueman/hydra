@@ -14,10 +14,10 @@ assert_contains() {
     test_count=$((test_count + 1))
     if echo "$haystack" | grep -q "$needle"; then
         pass_count=$((pass_count + 1))
-        echo "✓ $message"
+        echo "[PASS] $message"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $message"
+        echo "[FAIL] $message"
         echo "  Expected to contain: '$needle'"
         echo "  Actual: $haystack"
     fi
@@ -69,10 +69,10 @@ assert_contains "$out" "Creating worktree for branch 'hooks-test'" "spawn starte
 
 # Verify hooks side-effects
 if [ -f "$HYDRA_HOME/pre.txt" ]; then
-    pass_count=$((pass_count + 1)); echo "✓ pre-spawn hook executed"; else fail_count=$((fail_count + 1)); echo "✗ pre-spawn hook not executed"; fi
+    pass_count=$((pass_count + 1)); echo "[PASS] pre-spawn hook executed"; else fail_count=$((fail_count + 1)); echo "[FAIL] pre-spawn hook not executed"; fi
 test_count=$((test_count + 1))
 if [ -f "$HYDRA_HOME/post.txt" ]; then
-    pass_count=$((pass_count + 1)); echo "✓ post-spawn hook executed"; else fail_count=$((fail_count + 1)); echo "✗ post-spawn hook not executed"; fi
+    pass_count=$((pass_count + 1)); echo "[PASS] post-spawn hook executed"; else fail_count=$((fail_count + 1)); echo "[FAIL] post-spawn hook not executed"; fi
 test_count=$((test_count + 1))
 
 teardown

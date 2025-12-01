@@ -13,10 +13,10 @@ assert_true() {
     test_count=$((test_count + 1))
     if eval "$cond"; then
         pass_count=$((pass_count + 1))
-        echo "✓ $msg"
+        echo "[PASS] $msg"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $msg"
+        echo "[FAIL] $msg"
     fi
 }
 

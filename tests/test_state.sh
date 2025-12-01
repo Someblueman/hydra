@@ -7,7 +7,10 @@ test_count=0
 pass_count=0
 fail_count=0
 
-# Source the library under test
+# Source the library under test and its dependencies
+# shellcheck source=../lib/locks.sh
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/locks.sh"  # Required for state.sh lock functions
 # shellcheck source=../lib/state.sh
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/state.sh"
@@ -33,10 +36,10 @@ assert_file_contains() {
     test_count=$((test_count + 1))
     if [ -f "$file" ] && grep -q "$pattern" "$file"; then
         pass_count=$((pass_count + 1))
-        echo "✓ $message"
+        echo "[PASS] $message"
     else
         fail_count=$((fail_count + 1))
-        echo "✗ $message"
+        echo "[FAIL] $message"
         echo "  File '$file' does not contain '$pattern'"
     fi
 }
@@ -126,10 +129,10 @@ test_remove_mapping() {
     
     if [ -f "$HYDRA_MAP" ]; then
         if grep -q "branch2" "$HYDRA_MAP"; then
-            echo "✗ Mapping should be removed from file"
+            echo "[FAIL] Mapping should be removed from file"
             fail_count=$((fail_count + 1))
         else
-            echo "✓ Mapping should be removed from file"
+            echo "[PASS] Mapping should be removed from file"
             pass_count=$((pass_count + 1))
         fi
         test_count=$((test_count + 1))
