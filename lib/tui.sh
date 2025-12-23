@@ -21,6 +21,7 @@ TUI_TAGS_FILE=""        # Path to tags storage file
 TUI_TAG_FILTER=""       # Current tag filter (empty = show all)
 TUI_SEARCH_MODE=0       # Search/filter input mode active
 TUI_SEARCH_PATTERN=""   # Current search pattern
+TUI_ACTIVITY_DIR=""     # Directory for activity tracking
 
 # Terminal control codes (initialized by tui_init_colors)
 TUI_CLEAR=""
@@ -98,6 +99,9 @@ tui_init() {
     # Create temp file for session list
     TUI_TEMP_LIST="$(mktemp)" || return 1
 
+    # Create temp directory for activity tracking
+    TUI_ACTIVITY_DIR="$(mktemp -d)" || return 1
+
     # Initialize state
     TUI_SELECTED=0
     TUI_OFFSET=0
@@ -128,6 +132,11 @@ tui_cleanup() {
         rm -f "$TUI_TEMP_LIST"
     fi
 
+    # Clear activity tracking directory
+    if [ -n "$TUI_ACTIVITY_DIR" ] && [ -d "$TUI_ACTIVITY_DIR" ]; then
+        rm -rf "$TUI_ACTIVITY_DIR"
+    fi
+
     # Clear screen and move cursor to top
     printf "%s%s" "$TUI_CLEAR" "$TUI_HOME"
 
@@ -151,13 +160,49 @@ tui_build_list() {
 
     # Read mappings and write to temp file with status
     # Use tab as delimiter (safe - branch/session names can't contain tabs)
-    while IFS=' ' read -r branch session ai; do
+    while IFS=' ' read -r branch session ai _group; do
         [ -z "$branch" ] && continue
 
         if tmux_session_exists "$session" 2>/dev/null; then
             sess_status="ALIVE"
+
+            # Check activity status for alive sessions
+            activity="IDLE"
+            if [ -n "$TUI_ACTIVITY_DIR" ] && [ -d "$TUI_ACTIVITY_DIR" ]; then
+                # Get current pane output hash
+                current_hash="$(tmux capture-pane -t "$session" -p 2>/dev/null | cksum)"
+                hash_file="$TUI_ACTIVITY_DIR/${session}.hash"
+                time_file="$TUI_ACTIVITY_DIR/${session}.time"
+
+                if [ -f "$hash_file" ]; then
+                    last_hash="$(cat "$hash_file")"
+                    if [ "$current_hash" != "$last_hash" ]; then
+                        # Output changed - session is busy
+                        activity="BUSY"
+                        echo "$current_hash" > "$hash_file"
+                        date +%s > "$time_file"
+                    else
+                        # Check how long since last change
+                        if [ -f "$time_file" ]; then
+                            last_time="$(cat "$time_file")"
+                            current_time="$(date +%s)"
+                            idle_secs=$((current_time - last_time))
+                            # Consider busy if changed in last 5 seconds
+                            if [ "$idle_secs" -lt 5 ]; then
+                                activity="BUSY"
+                            fi
+                        fi
+                    fi
+                else
+                    # First time seeing this session
+                    echo "$current_hash" > "$hash_file"
+                    date +%s > "$time_file"
+                    activity="BUSY"  # Assume busy on first check
+                fi
+            fi
         else
             sess_status="DEAD"
+            activity="-"
         fi
 
         # Get tag for this branch
@@ -186,9 +231,9 @@ tui_build_list() {
             esac
         fi
 
-        # Format: branch<TAB>session<TAB>ai<TAB>status<TAB>tag
+        # Format: branch<TAB>session<TAB>ai<TAB>status<TAB>tag<TAB>activity
         # Use "-" as placeholder for empty values (POSIX read collapses consecutive tabs)
-        printf "%s\t%s\t%s\t%s\t%s\n" "$branch" "$session" "${ai:--}" "$sess_status" "${tag:--}" >> "$TUI_TEMP_LIST"
+        printf "%s\t%s\t%s\t%s\t%s\t%s\n" "$branch" "$session" "${ai:--}" "$sess_status" "${tag:--}" "$activity" >> "$TUI_TEMP_LIST"
         TUI_ITEM_COUNT=$((TUI_ITEM_COUNT + 1))
     done < "$HYDRA_MAP"
 
@@ -515,9 +560,9 @@ tui_render() {
         printf "\n"
     fi
 
-    # Render visible items (tab-delimited with 5 fields)
+    # Render visible items (tab-delimited with 6 fields)
     idx=0
-    while IFS='	' read -r branch session ai status tag; do
+    while IFS='	' read -r branch session ai status tag activity; do
         [ -z "$branch" ] && continue
 
         # Skip items before visible range
@@ -531,9 +576,13 @@ tui_render() {
             break
         fi
 
-        # Status indicator
+        # Status indicator with activity
         if [ "$status" = "ALIVE" ]; then
-            status_str="${TUI_GREEN}[OK]${TUI_RESET}"
+            if [ "$activity" = "BUSY" ]; then
+                status_str="${TUI_YELLOW}[BUSY]${TUI_RESET}"
+            else
+                status_str="${TUI_GREEN}[IDLE]${TUI_RESET}"
+            fi
         else
             status_str="${TUI_RED}[DEAD]${TUI_RESET}"
         fi
@@ -893,7 +942,7 @@ tui_action_kill_all() {
             # Kill all except current session
             killed=0
             skipped=0
-            while IFS='	' read -r branch session ai status; do
+            while IFS='	' read -r branch session _ai _status _tag _activity; do
                 [ -z "$branch" ] && continue
                 if [ "$session" = "$TUI_CURRENT_SESSION" ]; then
                     skipped=1
