@@ -5,6 +5,31 @@
 # Provides session kill capabilities for single and bulk operations.
 # Dependencies: paths.sh, git.sh, tmux.sh, state.sh
 
+# Get worktree path for a branch with fallback
+# Usage: get_worktree_path_with_fallback <branch>
+# Returns: Worktree path on stdout, 1 if not found
+# Note: Tries repo-relative path first, then git worktree list
+get_worktree_path_with_fallback() {
+    _branch="$1"
+    if [ -z "$_branch" ]; then
+        return 1
+    fi
+
+    # Try primary method: calculate from repo root
+    if _path="$(get_worktree_path_for_branch "$_branch" 2>/dev/null)"; then
+        echo "$_path"
+        return 0
+    fi
+
+    # Fallback: use git worktree list to find existing worktree
+    if _path="$(find_worktree_path "$_branch" 2>/dev/null)"; then
+        echo "$_path"
+        return 0
+    fi
+
+    return 1
+}
+
 # Kill a single hydra head (session + worktree + mapping)
 # Usage: kill_single_head <branch> <session>
 # Returns: 0 on success, 1 on failure
@@ -29,8 +54,8 @@ kill_single_head() {
     # Remove mapping
     remove_mapping "$branch"
 
-    # Delete worktree using consolidated path function
-    worktree_path="$(get_worktree_path_for_branch "$branch" 2>/dev/null || true)"
+    # Delete worktree using path function with fallback
+    worktree_path="$(get_worktree_path_with_fallback "$branch" || true)"
     if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
         normalized_path="$(normalize_path "$worktree_path")"
         echo "  Removing worktree at '$normalized_path'..."
@@ -120,8 +145,8 @@ EOF
                 # Remove mapping
                 remove_mapping "$branch"
 
-                # Delete worktree using consolidated path function
-                worktree_path="$(get_worktree_path_for_branch "$branch" 2>/dev/null || true)"
+                # Delete worktree using path function with fallback
+                worktree_path="$(get_worktree_path_with_fallback "$branch" || true)"
                 if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
                     normalized_path="$(normalize_path "$worktree_path")"
                     echo "  Removing worktree at '$normalized_path'..."
@@ -146,8 +171,8 @@ EOF
             echo "  Session '$session' not found, cleaning up mapping..."
             remove_mapping "$branch"
 
-            # Try to remove worktree if it exists
-            worktree_path="$(get_worktree_path_for_branch "$branch" 2>/dev/null || true)"
+            # Try to remove worktree if it exists (with fallback for outside-repo invocation)
+            worktree_path="$(get_worktree_path_with_fallback "$branch" || true)"
             if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
                 normalized_path="$(normalize_path "$worktree_path")"
                 echo "  Removing orphaned worktree at '$normalized_path'..."

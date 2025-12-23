@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 <!-- Nothing yet -->
 
+## [1.3.0] - 2025-12-23
+
+### Added
+- TUI Enhancements
+  - Help overlay (`?`): shows all keyboard shortcuts in a centered modal
+  - Session tags (`t`): cycle through wip/review/priority tags for selected session
+  - Tag filter (`T`): filter sessions by tag
+  - Search/filter (`/`): real-time session search by branch name
+  - Escape key clears all active filters
+  - Progress indicators: visual feedback during spawn/kill/regenerate operations
+  - Tags persisted in `~/.hydra/tags` file
+- Shell completion dispatcher (`hydra completion <shell>`)
+  - New `generate_completion()` function routes to bash/zsh/fish generators
+  - Fixes: `hydra completion bash` now works correctly
+
+### Fixed
+- Bug #34: Missing `generate_completion` dispatcher caused completion command to fail
+- Bug #39: Worktree cleanup now works when invoked outside the main repository
+  - Added fallback to `git worktree list --porcelain` for locating worktrees
+  - `kill` and `kill --all` now work from any directory
+
+### Changed
+- TUI header updated to show new keybindings
+- Improved empty state messages in TUI to guide users based on active filters
+
 ## [1.2.0] - 2025-08-30
 
 ### Added

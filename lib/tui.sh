@@ -16,6 +16,11 @@ TUI_SAVED_STTY=""       # Saved terminal settings
 TUI_RUNNING=1           # Main loop control
 TUI_CURRENT_SESSION=""  # Cached current tmux session name
 TUI_NEEDS_REDRAW=1      # Flag to avoid unnecessary redraws
+TUI_HELP_VISIBLE=0      # Help overlay visibility flag
+TUI_TAGS_FILE=""        # Path to tags storage file
+TUI_TAG_FILTER=""       # Current tag filter (empty = show all)
+TUI_SEARCH_MODE=0       # Search/filter input mode active
+TUI_SEARCH_PATTERN=""   # Current search pattern
 
 # Terminal control codes (initialized by tui_init_colors)
 TUI_CLEAR=""
@@ -98,6 +103,10 @@ tui_init() {
     TUI_OFFSET=0
     TUI_ITEM_COUNT=0
     TUI_RUNNING=1
+    TUI_TAG_FILTER=""
+
+    # Initialize tags subsystem
+    tui_init_tags
 
     return 0
 }
@@ -151,9 +160,35 @@ tui_build_list() {
             sess_status="DEAD"
         fi
 
-        # Format: branch<TAB>session<TAB>ai<TAB>status
-        # Use "-" as placeholder for empty AI (POSIX read collapses consecutive tabs)
-        printf "%s\t%s\t%s\t%s\n" "$branch" "$session" "${ai:--}" "$sess_status" >> "$TUI_TEMP_LIST"
+        # Get tag for this branch
+        tag="$(tui_get_tag "$branch")"
+
+        # Apply tag filter if set
+        if [ -n "$TUI_TAG_FILTER" ]; then
+            if [ "$tag" != "$TUI_TAG_FILTER" ]; then
+                continue
+            fi
+        fi
+
+        # Apply search pattern filter if set
+        if [ -n "$TUI_SEARCH_PATTERN" ]; then
+            # Case-insensitive search using shell pattern matching
+            _search_lower="$(printf '%s' "$TUI_SEARCH_PATTERN" | tr '[:upper:]' '[:lower:]')"
+            _branch_lower="$(printf '%s' "$branch" | tr '[:upper:]' '[:lower:]')"
+            case "$_branch_lower" in
+                *"$_search_lower"*)
+                    # Match found, include this item
+                    ;;
+                *)
+                    # No match, skip
+                    continue
+                    ;;
+            esac
+        fi
+
+        # Format: branch<TAB>session<TAB>ai<TAB>status<TAB>tag
+        # Use "-" as placeholder for empty values (POSIX read collapses consecutive tabs)
+        printf "%s\t%s\t%s\t%s\t%s\n" "$branch" "$session" "${ai:--}" "$sess_status" "${tag:--}" >> "$TUI_TEMP_LIST"
         TUI_ITEM_COUNT=$((TUI_ITEM_COUNT + 1))
     done < "$HYDRA_MAP"
 
@@ -188,6 +223,231 @@ tui_draw_line() {
     printf "\n"
 }
 
+# Render help overlay
+# Usage: tui_render_help
+# Returns: 0 on success
+tui_render_help() {
+    # Calculate box dimensions
+    box_width=50
+    if [ "$TUI_COLS" -lt 60 ]; then
+        box_width=$((TUI_COLS - 4))
+    fi
+    box_height=22
+
+    # Center the box
+    start_col=$(( (TUI_COLS - box_width) / 2 ))
+    start_row=$(( (TUI_ROWS - box_height) / 2 ))
+    if [ "$start_row" -lt 1 ]; then
+        start_row=1
+    fi
+
+    # Move to top and clear
+    printf "%s%s" "$TUI_HOME" "$TUI_CLEAR"
+
+    # Print empty lines to position box
+    i=0
+    while [ "$i" -lt "$start_row" ]; do
+        printf "\n"
+        i=$((i + 1))
+    done
+
+    # Helper to print centered line in box
+    # Draw top border
+    printf "%*s" "$start_col" ""
+    printf "+"
+    i=0
+    while [ "$i" -lt $((box_width - 2)) ]; do
+        printf "-"
+        i=$((i + 1))
+    done
+    printf "+\n"
+
+    # Title
+    title="HYDRA TUI - KEYBOARD SHORTCUTS"
+    title_len=${#title}
+    title_pad=$(( (box_width - 2 - title_len) / 2 ))
+    printf "%*s" "$start_col" ""
+    printf "|%s%*s%s%*s%s|\n" "$TUI_BOLD" "$title_pad" "" "$title" $((box_width - 2 - title_pad - title_len)) "" "$TUI_RESET"
+
+    # Separator
+    printf "%*s" "$start_col" ""
+    printf "|"
+    i=0
+    while [ "$i" -lt $((box_width - 2)) ]; do
+        printf "-"
+        i=$((i + 1))
+    done
+    printf "|\n"
+
+    # Help entries (left-aligned with padding)
+    tui_help_line() {
+        key="$1"
+        desc="$2"
+        content_width=$((box_width - 4))
+        printf "%*s" "$start_col" ""
+        printf "| %s%-8s%s %-*s |\n" "$TUI_GREEN" "$key" "$TUI_RESET" $((content_width - 9)) "$desc"
+    }
+
+    tui_help_line "q" "Quit TUI"
+    tui_help_line "j / DOWN" "Move selection down"
+    tui_help_line "k / UP" "Move selection up"
+    tui_help_line "s" "Switch to selected session"
+    tui_help_line "n" "Spawn new session"
+    tui_help_line "d" "Kill selected session"
+    tui_help_line "a" "Kill all sessions"
+    tui_help_line "r" "Regenerate sessions"
+    tui_help_line "t" "Cycle tag (wip/review/priority)"
+    tui_help_line "T" "Filter by tag"
+    tui_help_line "/" "Search sessions"
+    tui_help_line "Esc" "Clear filters"
+    tui_help_line "i" "Show session status"
+    tui_help_line "?" "Show this help"
+
+    # Empty line
+    printf "%*s" "$start_col" ""
+    printf "| %-*s |\n" $((box_width - 4)) ""
+
+    # Separator
+    printf "%*s" "$start_col" ""
+    printf "|"
+    i=0
+    while [ "$i" -lt $((box_width - 2)) ]; do
+        printf "-"
+        i=$((i + 1))
+    done
+    printf "|\n"
+
+    # Footer
+    footer="Press any key to close"
+    footer_len=${#footer}
+    footer_pad=$(( (box_width - 2 - footer_len) / 2 ))
+    printf "%*s" "$start_col" ""
+    printf "|%s%*s%s%*s%s|\n" "$TUI_DIM" "$footer_pad" "" "$footer" $((box_width - 2 - footer_pad - footer_len)) "" "$TUI_RESET"
+
+    # Bottom border
+    printf "%*s" "$start_col" ""
+    printf "+"
+    i=0
+    while [ "$i" -lt $((box_width - 2)) ]; do
+        printf "-"
+        i=$((i + 1))
+    done
+    printf "+\n"
+
+    return 0
+}
+
+# Initialize tags subsystem
+# Usage: tui_init_tags
+tui_init_tags() {
+    TUI_TAGS_FILE="$HYDRA_HOME/tags"
+    if [ ! -f "$TUI_TAGS_FILE" ]; then
+        touch "$TUI_TAGS_FILE" 2>/dev/null || true
+    fi
+}
+
+# Get tag for a branch
+# Usage: tui_get_tag <branch>
+# Returns: Tag value on stdout (wip, review, priority, or empty)
+tui_get_tag() {
+    _branch="$1"
+    if [ -z "$_branch" ] || [ ! -f "$TUI_TAGS_FILE" ]; then
+        return 0
+    fi
+    # Read tag for branch (format: branch tag)
+    while IFS=' ' read -r b t; do
+        if [ "$b" = "$_branch" ]; then
+            printf "%s" "$t"
+            return 0
+        fi
+    done < "$TUI_TAGS_FILE"
+}
+
+# Set tag for a branch
+# Usage: tui_set_tag <branch> <tag>
+# tag: wip, review, priority, or empty to remove
+tui_set_tag() {
+    _branch="$1"
+    _tag="$2"
+    if [ -z "$_branch" ] || [ -z "$TUI_TAGS_FILE" ]; then
+        return 1
+    fi
+
+    # Create temp file for atomic update
+    _tmpfile="$(mktemp)" || return 1
+
+    # Copy all entries except the one being updated
+    if [ -f "$TUI_TAGS_FILE" ]; then
+        while IFS=' ' read -r b t; do
+            if [ "$b" != "$_branch" ] && [ -n "$b" ]; then
+                printf "%s %s\n" "$b" "$t" >> "$_tmpfile"
+            fi
+        done < "$TUI_TAGS_FILE"
+    fi
+
+    # Add new tag if not empty
+    if [ -n "$_tag" ]; then
+        printf "%s %s\n" "$_branch" "$_tag" >> "$_tmpfile"
+    fi
+
+    # Atomic move
+    mv "$_tmpfile" "$TUI_TAGS_FILE" 2>/dev/null || {
+        rm -f "$_tmpfile"
+        return 1
+    }
+    return 0
+}
+
+# Cycle tag for selected branch
+# Usage: tui_cycle_tag <branch>
+# Cycles: (none) -> wip -> review -> priority -> (none)
+tui_cycle_tag() {
+    _branch="$1"
+    if [ -z "$_branch" ]; then
+        return 1
+    fi
+
+    _current="$(tui_get_tag "$_branch")"
+
+    case "$_current" in
+        "")
+            tui_set_tag "$_branch" "wip"
+            ;;
+        "wip")
+            tui_set_tag "$_branch" "review"
+            ;;
+        "review")
+            tui_set_tag "$_branch" "priority"
+            ;;
+        "priority")
+            tui_set_tag "$_branch" ""
+            ;;
+        *)
+            tui_set_tag "$_branch" "wip"
+            ;;
+    esac
+}
+
+# Cycle tag filter
+# Usage: tui_cycle_tag_filter
+# Cycles: (all) -> wip -> review -> priority -> (all)
+tui_cycle_tag_filter() {
+    case "$TUI_TAG_FILTER" in
+        "")
+            TUI_TAG_FILTER="wip"
+            ;;
+        "wip")
+            TUI_TAG_FILTER="review"
+            ;;
+        "review")
+            TUI_TAG_FILTER="priority"
+            ;;
+        "priority")
+            TUI_TAG_FILTER=""
+            ;;
+    esac
+}
+
 # Render the TUI screen
 # Usage: tui_render
 # Returns: 0 on success
@@ -197,14 +457,37 @@ tui_render() {
 
     # Header
     printf "%s%s Hydra TUI %s- Interactive Session Manager%s\n" "$TUI_BOLD" "$TUI_GREEN" "$TUI_RESET$TUI_DIM" "$TUI_RESET"
-    printf "%s\n" "q=quit | j/k=navigate | s=switch | n=spawn | d=kill | a=kill-all | r=regenerate"
+    printf "%s\n" "q=quit | j/k=nav | s=switch | n=spawn | d=kill | t=tag | /=search | ?=help"
     tui_draw_line
+
+    # Show active filters
+    if [ -n "$TUI_TAG_FILTER" ] || [ -n "$TUI_SEARCH_PATTERN" ]; then
+        filter_info=""
+        if [ -n "$TUI_TAG_FILTER" ]; then
+            filter_info="tag:$TUI_TAG_FILTER"
+        fi
+        if [ -n "$TUI_SEARCH_PATTERN" ]; then
+            if [ -n "$filter_info" ]; then
+                filter_info="$filter_info, "
+            fi
+            filter_info="${filter_info}search:\"$TUI_SEARCH_PATTERN\""
+        fi
+        printf "%s[Filter: %s] (Esc to clear)%s\n" "$TUI_YELLOW" "$filter_info" "$TUI_RESET"
+    fi
 
     # Handle empty list
     if [ "$TUI_ITEM_COUNT" -eq 0 ]; then
-        printf "\n%s  No active Hydra sessions%s\n" "$TUI_YELLOW" "$TUI_RESET"
-        printf "\n  Press 'n' to spawn a new session\n"
-        printf "  Press 'r' to regenerate sessions from existing worktrees\n"
+        if [ -n "$TUI_SEARCH_PATTERN" ]; then
+            printf "\n%s  No sessions matching '%s'%s\n" "$TUI_YELLOW" "$TUI_SEARCH_PATTERN" "$TUI_RESET"
+            printf "\n  Press Esc to clear search\n"
+        elif [ -n "$TUI_TAG_FILTER" ]; then
+            printf "\n%s  No sessions with tag '%s'%s\n" "$TUI_YELLOW" "$TUI_TAG_FILTER" "$TUI_RESET"
+            printf "\n  Press 'T' to change filter\n"
+        else
+            printf "\n%s  No active Hydra sessions%s\n" "$TUI_YELLOW" "$TUI_RESET"
+            printf "\n  Press 'n' to spawn a new session\n"
+            printf "  Press 'r' to regenerate sessions from existing worktrees\n"
+        fi
         printf "  Press 'q' to quit\n"
         return 0
     fi
@@ -232,9 +515,9 @@ tui_render() {
         printf "\n"
     fi
 
-    # Render visible items (tab-delimited)
+    # Render visible items (tab-delimited with 5 fields)
     idx=0
-    while IFS='	' read -r branch session ai status; do
+    while IFS='	' read -r branch session ai status tag; do
         [ -z "$branch" ] && continue
 
         # Skip items before visible range
@@ -261,6 +544,25 @@ tui_render() {
             ai_str=" ${TUI_BLUE}[$ai]${TUI_RESET}"
         fi
 
+        # Tag indicator with colors ("-" is placeholder for none)
+        tag_str=""
+        if [ -n "$tag" ] && [ "$tag" != "-" ]; then
+            case "$tag" in
+                "wip")
+                    tag_str=" ${TUI_YELLOW}[WIP]${TUI_RESET}"
+                    ;;
+                "review")
+                    tag_str=" ${TUI_BLUE}[REVIEW]${TUI_RESET}"
+                    ;;
+                "priority")
+                    tag_str=" ${TUI_RED}[PRIORITY]${TUI_RESET}"
+                    ;;
+                *)
+                    tag_str=" ${TUI_DIM}[$tag]${TUI_RESET}"
+                    ;;
+            esac
+        fi
+
         # Current session marker (uses cached TUI_CURRENT_SESSION)
         current_str=""
         if [ "$session" = "$TUI_CURRENT_SESSION" ]; then
@@ -268,7 +570,7 @@ tui_render() {
         fi
 
         # Build display line
-        line="$status_str $branch -> $session$ai_str$current_str"
+        line="$status_str $branch -> $session$ai_str$tag_str$current_str"
 
         # Highlight selected row
         if [ "$idx" -eq "$TUI_SELECTED" ]; then
@@ -372,7 +674,34 @@ tui_handle_key() {
             # Show status
             tui_action_status
             ;;
+        t)
+            # Cycle tag for selected session
+            tui_action_tag
+            ;;
+        T)
+            # Cycle tag filter
+            tui_cycle_tag_filter
+            tui_build_list
+            ;;
+        "/")
+            # Enter search mode
+            TUI_SEARCH_MODE=1
+            ;;
+        "?")
+            # Show help overlay
+            TUI_HELP_VISIBLE=1
+            ;;
         *)
+            # Handle escape key for clearing filters
+            # Check if key is escape (octal 033, hex 1b)
+            if [ "$key" = "$(printf '\033')" ]; then
+                # Clear all filters
+                if [ -n "$TUI_SEARCH_PATTERN" ] || [ -n "$TUI_TAG_FILTER" ]; then
+                    TUI_SEARCH_PATTERN=""
+                    TUI_TAG_FILTER=""
+                    tui_build_list
+                fi
+            fi
             # Unknown key or timeout - ignore
             ;;
     esac
@@ -458,12 +787,12 @@ tui_action_spawn() {
     read -r branch
 
     if [ -n "$branch" ]; then
-        printf "\n"
+        printf "\n%s[...] Spawning session for '%s'...%s\n\n" "$TUI_YELLOW" "$branch" "$TUI_RESET"
         # Use existing spawn logic
         if spawn_single "$branch" "default" ""; then
-            printf "%s[OK] Session created for '%s'%s\n" "$TUI_GREEN" "$branch" "$TUI_RESET"
+            printf "\n%s[OK] Session created for '%s'%s\n" "$TUI_GREEN" "$branch" "$TUI_RESET"
         else
-            printf "%s[FAIL] Failed to create session%s\n" "$TUI_RED" "$TUI_RESET"
+            printf "\n%s[FAIL] Failed to create session%s\n" "$TUI_RED" "$TUI_RESET"
         fi
     else
         printf "\nCancelled.\n"
@@ -513,7 +842,7 @@ tui_action_kill() {
 
     case "$confirm" in
         [yY]|[yY][eE][sS])
-            printf "\n"
+            printf "\n%s[...] Killing session '%s'...%s\n" "$TUI_YELLOW" "$session" "$TUI_RESET"
             if kill_single_head "$branch" "$session"; then
                 printf "%s[OK] Session killed%s\n" "$TUI_GREEN" "$TUI_RESET"
             else
@@ -534,8 +863,9 @@ tui_action_kill() {
 tui_action_regenerate() {
     tui_pause_for_interaction
 
-    printf "Regenerating sessions from existing worktrees...\n\n"
+    printf "%s[...] Regenerating sessions from existing worktrees...%s\n\n" "$TUI_YELLOW" "$TUI_RESET"
     cmd_regenerate
+    printf "\n%s[OK] Regeneration complete%s\n" "$TUI_GREEN" "$TUI_RESET"
 
     tui_resume_after_interaction
     tui_build_list
@@ -597,6 +927,51 @@ tui_action_status() {
     tui_resume_after_interaction
 }
 
+# Action: Cycle tag for selected session
+# Usage: tui_action_tag
+tui_action_tag() {
+    if [ "$TUI_ITEM_COUNT" -eq 0 ]; then
+        return 0
+    fi
+
+    # Get selected item
+    selected_line="$(tui_get_session_at "$TUI_SELECTED")"
+    if [ -z "$selected_line" ]; then
+        return 0
+    fi
+
+    branch="$(printf '%s' "$selected_line" | cut -f1)"
+    if [ -z "$branch" ]; then
+        return 0
+    fi
+
+    # Cycle the tag
+    tui_cycle_tag "$branch"
+
+    # Rebuild list to reflect changes
+    tui_build_list
+}
+
+# Render search input prompt
+# Usage: tui_render_search_prompt
+tui_render_search_prompt() {
+    # Move to top and clear
+    printf "%s%s" "$TUI_HOME" "$TUI_CLEAR"
+
+    # Header
+    printf "%s%s Hydra TUI %s- Search Mode%s\n" "$TUI_BOLD" "$TUI_GREEN" "$TUI_RESET$TUI_DIM" "$TUI_RESET"
+    printf "%s\n" "Type to search | Enter=confirm | Esc=cancel"
+    tui_draw_line
+
+    # Search prompt
+    printf "\n%sSearch:%s %s" "$TUI_YELLOW" "$TUI_RESET" "$TUI_SEARCH_PATTERN"
+    printf "_"  # Cursor indicator
+    printf "\n"
+
+    # Preview count
+    printf "\n%s%d matching session(s)%s\n" "$TUI_DIM" "$TUI_ITEM_COUNT" "$TUI_RESET"
+}
+
 # Main TUI loop
 # Usage: tui_main_loop
 # Returns: 0 on normal exit
@@ -607,6 +982,53 @@ tui_main_loop() {
     refresh_every=30  # iterations (~3 seconds with 0.1s timeout)
 
     while [ "$TUI_RUNNING" -eq 1 ]; do
+        # Handle help overlay mode
+        if [ "$TUI_HELP_VISIBLE" -eq 1 ]; then
+            tui_render_help
+            # Wait for any key to dismiss
+            key="$(tui_get_key)"
+            if [ -n "$key" ]; then
+                TUI_HELP_VISIBLE=0
+                TUI_NEEDS_REDRAW=1
+            fi
+            continue
+        fi
+
+        # Handle search mode
+        if [ "$TUI_SEARCH_MODE" -eq 1 ]; then
+            tui_build_list
+            tui_render_search_prompt
+
+            key="$(tui_get_key)"
+            if [ -n "$key" ]; then
+                # Handle escape (cancel search, keep previous pattern)
+                if [ "$key" = "$(printf '\033')" ]; then
+                    # Read any remaining escape sequence chars
+                    dd bs=1 count=2 2>/dev/null >/dev/null || true
+                    TUI_SEARCH_MODE=0
+                    TUI_NEEDS_REDRAW=1
+                # Handle enter (confirm search)
+                elif [ "$key" = "$(printf '\r')" ] || [ "$key" = "$(printf '\n')" ]; then
+                    TUI_SEARCH_MODE=0
+                    TUI_NEEDS_REDRAW=1
+                # Handle backspace (delete last char)
+                elif [ "$key" = "$(printf '\177')" ] || [ "$key" = "$(printf '\b')" ]; then
+                    if [ -n "$TUI_SEARCH_PATTERN" ]; then
+                        TUI_SEARCH_PATTERN="${TUI_SEARCH_PATTERN%?}"
+                    fi
+                # Printable characters (append to pattern)
+                else
+                    # Only append printable ASCII chars
+                    case "$key" in
+                        [[:print:]])
+                            TUI_SEARCH_PATTERN="${TUI_SEARCH_PATTERN}${key}"
+                            ;;
+                    esac
+                fi
+            fi
+            continue
+        fi
+
         # Check if refresh needed (approximately every 3 seconds)
         if [ "$loop_count" -ge "$refresh_every" ] || [ "$loop_count" -eq 0 ]; then
             tui_build_list
