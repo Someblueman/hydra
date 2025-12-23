@@ -2,6 +2,131 @@
 # State management functions for Hydra
 # POSIX-compliant shell script
 
+# =============================================================================
+# State Cache Implementation
+# =============================================================================
+# Uses sanitized variable names to provide O(1) lookups in POSIX shell.
+# Cache is loaded once per command and invalidated on write operations.
+
+# Cache state flag (empty = not loaded)
+_STATE_CACHE_LOADED=""
+
+# Sanitize a key for use in variable names
+# Converts any non-alphanumeric to underscore, adds prefix to avoid conflicts
+# Usage: _sanitize_key <key>
+_sanitize_key() {
+    printf '%s' "$1" | sed 's/[^a-zA-Z0-9]/_/g'
+}
+
+# Load state cache from mapping file
+# Creates lookup variables for branch->session, session->branch, branch->ai, branch->group
+# Usage: _load_state_cache
+_load_state_cache() {
+    # Already loaded?
+    if [ -n "$_STATE_CACHE_LOADED" ]; then
+        return 0
+    fi
+
+    if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+        _STATE_CACHE_LOADED="empty"
+        return 0
+    fi
+
+    # Read all mappings and create lookup variables
+    while IFS=' ' read -r map_branch map_session map_ai map_group; do
+        [ -z "$map_branch" ] && continue
+
+        # Create sanitized keys
+        _key_b="$(_sanitize_key "$map_branch")"
+        _key_s="$(_sanitize_key "$map_session")"
+
+        # Store mappings using eval (safe - keys are sanitized)
+        eval "_sc_b2s_${_key_b}=\"\$map_session\""
+        eval "_sc_s2b_${_key_s}=\"\$map_branch\""
+
+        # Store AI tool if present
+        if [ -n "$map_ai" ] && [ "$map_ai" != "-" ]; then
+            eval "_sc_b2ai_${_key_b}=\"\$map_ai\""
+        fi
+
+        # Store group if present
+        if [ -n "$map_group" ] && [ "$map_group" != "-" ]; then
+            eval "_sc_b2grp_${_key_b}=\"\$map_group\""
+        fi
+    done < "$HYDRA_MAP"
+
+    _STATE_CACHE_LOADED="loaded"
+    return 0
+}
+
+# Invalidate state cache (call after writes)
+# Usage: _invalidate_state_cache
+_invalidate_state_cache() {
+    _STATE_CACHE_LOADED=""
+    # Note: We don't unset cached variables - they'll be overwritten on next load
+    # This is acceptable since variable count is bounded by session count
+}
+
+# Get session from cache
+# Usage: _cache_get_session <branch>
+# Returns: session name on stdout, 1 if not found
+_cache_get_session() {
+    _load_state_cache
+    _key="$(_sanitize_key "$1")"
+    eval "_result=\"\${_sc_b2s_${_key}:-}\""
+    if [ -n "$_result" ]; then
+        printf '%s\n' "$_result"
+        return 0
+    fi
+    return 1
+}
+
+# Get branch from cache
+# Usage: _cache_get_branch <session>
+# Returns: branch name on stdout, 1 if not found
+_cache_get_branch() {
+    _load_state_cache
+    _key="$(_sanitize_key "$1")"
+    eval "_result=\"\${_sc_s2b_${_key}:-}\""
+    if [ -n "$_result" ]; then
+        printf '%s\n' "$_result"
+        return 0
+    fi
+    return 1
+}
+
+# Get AI tool from cache
+# Usage: _cache_get_ai <branch>
+# Returns: AI tool on stdout, 1 if not found
+_cache_get_ai() {
+    _load_state_cache
+    _key="$(_sanitize_key "$1")"
+    eval "_result=\"\${_sc_b2ai_${_key}:-}\""
+    if [ -n "$_result" ]; then
+        printf '%s\n' "$_result"
+        return 0
+    fi
+    return 1
+}
+
+# Get group from cache
+# Usage: _cache_get_group <branch>
+# Returns: group on stdout, 1 if not found
+_cache_get_group() {
+    _load_state_cache
+    _key="$(_sanitize_key "$1")"
+    eval "_result=\"\${_sc_b2grp_${_key}:-}\""
+    if [ -n "$_result" ]; then
+        printf '%s\n' "$_result"
+        return 0
+    fi
+    return 1
+}
+
+# =============================================================================
+# Public API Functions
+# =============================================================================
+
 # Add a branch-session mapping
 # Usage: add_mapping <branch> <session> [ai_tool] [group]
 # Returns: 0 on success, 1 on failure
@@ -32,6 +157,9 @@ add_mapping() {
     else
         mapping_line="$branch $session"
     fi
+
+    # Invalidate cache before write
+    _invalidate_state_cache
 
     # Use lock to make remove+add atomic
     if try_lock "state_map"; then
@@ -65,6 +193,9 @@ remove_mapping() {
         return 0  # Nothing to remove
     fi
 
+    # Invalidate cache before write
+    _invalidate_state_cache
+
     # Create temporary file
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
@@ -95,19 +226,13 @@ remove_mapping() {
 # Returns: Session name on stdout, empty if not found
 get_session_for_branch() {
     branch="$1"
-    
-    if [ -z "$branch" ] || [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+
+    if [ -z "$branch" ]; then
         return 1
     fi
-    
-    while IFS=' ' read -r map_branch map_session _map_ai; do
-        if [ "$map_branch" = "$branch" ]; then
-            echo "$map_session"
-            return 0
-        fi
-    done < "$HYDRA_MAP"
-    
-    return 1
+
+    # Use cache for O(1) lookup
+    _cache_get_session "$branch"
 }
 
 # Get branch for a session
@@ -115,19 +240,13 @@ get_session_for_branch() {
 # Returns: Branch name on stdout, empty if not found
 get_branch_for_session() {
     session="$1"
-    
-    if [ -z "$session" ] || [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+
+    if [ -z "$session" ]; then
         return 1
     fi
-    
-    while IFS=' ' read -r map_branch map_session _map_ai; do
-        if [ "$map_session" = "$session" ]; then
-            echo "$map_branch"
-            return 0
-        fi
-    done < "$HYDRA_MAP"
-    
-    return 1
+
+    # Use cache for O(1) lookup
+    _cache_get_branch "$session"
 }
 
 # List all mappings
@@ -175,6 +294,9 @@ cleanup_mappings() {
     if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
         return 0
     fi
+
+    # Invalidate cache before write
+    _invalidate_state_cache
 
     # Create temporary file
     tmpfile="$(mktemp)" || return 1
@@ -259,16 +381,12 @@ generate_session_name() {
 # Returns: AI tool on stdout, empty if not set
 get_ai_for_branch() {
     branch="$1"
-    if [ -z "$branch" ] || [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+    if [ -z "$branch" ]; then
         return 1
     fi
-    while IFS=' ' read -r map_branch _map_session map_ai _map_group; do
-        if [ "$map_branch" = "$branch" ] && [ -n "$map_ai" ] && [ "$map_ai" != "-" ]; then
-            echo "$map_ai"
-            return 0
-        fi
-    done < "$HYDRA_MAP"
-    return 1
+
+    # Use cache for O(1) lookup
+    _cache_get_ai "$branch"
 }
 
 # Get group for a branch
@@ -276,16 +394,12 @@ get_ai_for_branch() {
 # Returns: Group name on stdout, empty if not set
 get_group_for_branch() {
     branch="$1"
-    if [ -z "$branch" ] || [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+    if [ -z "$branch" ]; then
         return 1
     fi
-    while IFS=' ' read -r map_branch _map_session _map_ai map_group; do
-        if [ "$map_branch" = "$branch" ] && [ -n "$map_group" ] && [ "$map_group" != "-" ]; then
-            echo "$map_group"
-            return 0
-        fi
-    done < "$HYDRA_MAP"
-    return 1
+
+    # Use cache for O(1) lookup
+    _cache_get_group "$branch"
 }
 
 # Set group for a branch
@@ -304,6 +418,9 @@ set_group() {
         echo "Error: No mappings file" >&2
         return 1
     fi
+
+    # Invalidate cache before write
+    _invalidate_state_cache
 
     # Create temporary file
     tmpfile="$(mktemp)" || return 1
