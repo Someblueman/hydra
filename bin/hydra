@@ -385,13 +385,15 @@ cmd_list() {
     # List all sessions with their branch names
     echo "Active Hydra heads:"
     echo ""
-    
+
+    # Cache current session once before the loop (perf: issue #36)
+    current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
+
     # Read mapping file and display status
     while IFS=' ' read -r branch session ai; do
         # Check if session still exists
         if tmux_session_exists "$session"; then
             # Check if it's the current session
-            current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
             if [ "$session" = "$current_session" ]; then
                 if [ -n "$ai" ]; then
                     echo "* $branch -> $session [ai: $ai] (current)"
