@@ -54,51 +54,132 @@ else
     exit 1
 fi
 
-# shellcheck source=../lib/output.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/output.sh"
-# shellcheck source=../lib/paths.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/paths.sh"
-# shellcheck source=../lib/locks.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/locks.sh"
-# shellcheck source=../lib/git.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/git.sh"
-# shellcheck source=../lib/tmux.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/tmux.sh"
-# shellcheck source=../lib/layout.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/layout.sh"
-# shellcheck source=../lib/state.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/state.sh"
-# shellcheck source=../lib/completion.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/completion.sh"
-# shellcheck source=../lib/dashboard.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/dashboard.sh"
-# shellcheck source=../lib/github.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/github.sh"
-# shellcheck source=../lib/hooks.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/hooks.sh"
-# shellcheck source=../lib/yaml.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/yaml.sh"
-# shellcheck source=../lib/spawn.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/spawn.sh"
-# shellcheck source=../lib/kill.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/kill.sh"
-# shellcheck source=../lib/tui.sh
-# shellcheck disable=SC1091
-. "$HYDRA_LIB_DIR/tui.sh"
+# Lazy library loading - track which libs are loaded
+_LOADED_LIBS=""
+
+# Load a library if not already loaded
+# Usage: _load_lib <libname>
+_load_lib() {
+    _lib="$1"
+    # Check if already loaded (simple substring check)
+    case "$_LOADED_LIBS" in
+        *":$_lib:"*) return 0 ;;
+    esac
+    # shellcheck disable=SC1090
+    . "$HYDRA_LIB_DIR/${_lib}.sh"
+    _LOADED_LIBS="${_LOADED_LIBS}:${_lib}:"
+}
+
+# Load libraries required for a command
+# Usage: _load_libs_for_cmd <command>
+_load_libs_for_cmd() {
+    case "$1" in
+        version|help|-v|--version|-h|--help)
+            # No libraries needed
+            ;;
+        list)
+            _load_lib state
+            _load_lib tmux
+            ;;
+        switch)
+            _load_lib state
+            _load_lib tmux
+            ;;
+        group)
+            _load_lib state
+            ;;
+        tail|broadcast|wait-idle)
+            _load_lib state
+            _load_lib tmux
+            ;;
+        kill)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib state
+            _load_lib kill
+            ;;
+        spawn)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib layout
+            _load_lib state
+            _load_lib hooks
+            _load_lib yaml
+            _load_lib spawn
+            _load_lib github
+            ;;
+        regenerate)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib layout
+            _load_lib state
+            _load_lib hooks
+            _load_lib yaml
+            _load_lib spawn
+            ;;
+        status)
+            _load_lib state
+            _load_lib tmux
+            _load_lib git
+            ;;
+        doctor)
+            _load_lib tmux
+            ;;
+        dashboard|dashboard-exit)
+            _load_lib state
+            _load_lib tmux
+            _load_lib dashboard
+            ;;
+        tui)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib layout
+            _load_lib state
+            _load_lib hooks
+            _load_lib yaml
+            _load_lib spawn
+            _load_lib kill
+            _load_lib tui
+            ;;
+        cycle-layout)
+            _load_lib tmux
+            _load_lib layout
+            ;;
+        completion)
+            _load_lib completion
+            ;;
+        *)
+            # Unknown command - load all for safety
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib layout
+            _load_lib state
+            _load_lib completion
+            _load_lib dashboard
+            _load_lib github
+            _load_lib hooks
+            _load_lib yaml
+            _load_lib spawn
+            _load_lib kill
+            _load_lib tui
+            ;;
+    esac
+}
 
 # Export paths for downstream helpers (e.g., safe tmux run-shell bindings)
 export HYDRA_LIB_DIR
@@ -205,7 +286,10 @@ EOF
 # Main command dispatcher
 main() {
     init_hydra_home
-    
+
+    # Load only the libraries needed for this command
+    _load_libs_for_cmd "${1:-}"
+
     case "${1:-}" in
         spawn)
             shift
