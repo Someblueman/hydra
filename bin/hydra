@@ -130,13 +130,23 @@ Commands:
                       -n, --count <number>     Spawn multiple sessions (1-10)
                       --ai <tool>              Specify AI tool (claude, aider, gemini, etc.)
                       --agents <spec>          Mixed agents (e.g., "claude:2,aider:1")
+                      -g, --group <name>       Assign to a group for bulk operations
   spawn --issue <#> Create a head from a GitHub issue
   list              List all active Hydra heads
+                    Options:
+                      -g, --group <name>       Filter by group
+                      --groups                 List all groups with session counts
   switch            Switch to a different head (interactive)
   kill <branch>     Remove a worktree and its tmux session
   kill --all        Kill all hydra sessions
+  kill --group <n>  Kill all sessions in a group
                     Options:
                       --force          Skip confirmation prompt
+  group <branch>    Show or set group for a session
+                    Usage:
+                      group <branch>           Show current group
+                      group <branch> <name>    Set group
+                      group <branch> --clear   Remove from group
   regenerate        Restore tmux sessions for existing worktrees
   status            Show health status of all heads
   doctor            Check system performance
@@ -158,9 +168,14 @@ Examples:
   hydra spawn feature-x --ai gemini        # Create session with Google Gemini CLI
   hydra spawn exp --agents "claude:2,aider:1"  # Create 2 claude + 1 aider sessions
   hydra spawn --issue 42                   # Create session from GitHub issue #42
+  hydra spawn feature-x -g project-a       # Create session in group 'project-a'
+  hydra list --groups                      # Show all groups
+  hydra list -g project-a                  # List sessions in group 'project-a'
+  hydra group feature-x project-a          # Assign feature-x to group 'project-a'
   hydra kill feature-x                     # Kill a specific session
   hydra kill --all                         # Kill all sessions (with confirmation)
   hydra kill --all --force                 # Kill all sessions without confirmation
+  hydra kill -g project-a                  # Kill all sessions in group 'project-a'
 
 Environment:
   HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
@@ -190,6 +205,10 @@ main() {
         kill)
             shift
             cmd_kill "$@"
+            ;;
+        group)
+            shift
+            cmd_group "$@"
             ;;
         regenerate)
             shift
@@ -250,7 +269,8 @@ cmd_spawn() {
     ai_tool=""
     agents_spec=""
     issue_num=""
-    
+    group=""
+
     while [ $# -gt 0 ]; do
         case "$1" in
             -l|--layout)
@@ -278,10 +298,15 @@ cmd_spawn() {
                 issue_num="$1"
                 shift
                 ;;
+            -g|--group)
+                shift
+                group="$1"
+                shift
+                ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>]" >&2
-                echo "       hydra spawn --issue <number> [-l|--layout <layout>]" >&2
+                echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>]" >&2
+                echo "       hydra spawn --issue <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
                 exit 1
                 ;;
             *)
@@ -289,8 +314,8 @@ cmd_spawn() {
                     branch="$1"
                 else
                     echo "Error: Too many arguments" >&2
-                    echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>]" >&2
-                    echo "       hydra spawn --issue <number> [-l|--layout <layout>]" >&2
+                    echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>]" >&2
+                    echo "       hydra spawn --issue <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
                     exit 1
                 fi
                 shift
@@ -317,8 +342,8 @@ cmd_spawn() {
     
     if [ -z "$branch" ]; then
         echo "Error: Branch name is required" >&2
-        echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>]" >&2
-        echo "       hydra spawn --issue <number> [-l|--layout <layout>]" >&2
+        echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>]" >&2
+        echo "       hydra spawn --issue <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
         exit 1
     fi
     
@@ -345,18 +370,18 @@ cmd_spawn() {
     
     # If agents spec is provided, delegate to bulk spawn with mixed agents
     if [ -n "$agents_spec" ]; then
-        spawn_bulk_mixed "$branch" "$agents_spec" "$layout"
+        spawn_bulk_mixed "$branch" "$agents_spec" "$layout" "$group"
         return $?
     fi
-    
+
     # If count > 1, delegate to bulk spawn
     if [ "$count" -gt 1 ]; then
-        spawn_bulk "$branch" "$count" "$layout" "$ai_tool"
+        spawn_bulk "$branch" "$count" "$layout" "$ai_tool" "$group"
         return $?
     fi
-    
+
     # Single spawn - use helper function
-    if session="$(spawn_single "$branch" "$layout" "$ai_tool")"; then
+    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group")"; then
         # Optionally skip switching (useful for demos/automation)
         if [ -n "${HYDRA_NO_SWITCH:-}" ]; then
             echo "Session '$session' created (HYDRA_NO_SWITCH set; not attaching)"
@@ -376,43 +401,92 @@ cmd_spawn() {
 }
 
 cmd_list() {
+    # Parse arguments
+    filter_group=""
+    show_groups=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -g|--group)
+                shift
+                filter_group="$1"
+                shift
+                ;;
+            --groups)
+                show_groups="1"
+                shift
+                ;;
+            -*)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Usage: hydra list [-g|--group <name>] [--groups]" >&2
+                exit 1
+                ;;
+            *)
+                echo "Error: Unexpected argument '$1'" >&2
+                exit 1
+                ;;
+        esac
+    done
+
+    # List all groups if requested
+    if [ -n "$show_groups" ]; then
+        groups="$(list_groups)"
+        if [ -z "$groups" ]; then
+            echo "No groups defined"
+        else
+            echo "Groups:"
+            echo "$groups" | while read -r g; do
+                count="$(list_mappings_for_group "$g" | wc -l | tr -d ' ')"
+                echo "  $g ($count sessions)"
+            done
+        fi
+        return 0
+    fi
+
     # Check if we have any mappings
     if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
         echo "No active Hydra heads"
         return 0
     fi
-    
+
     # List all sessions with their branch names
-    echo "Active Hydra heads:"
+    if [ -n "$filter_group" ]; then
+        echo "Active Hydra heads in group '$filter_group':"
+    else
+        echo "Active Hydra heads:"
+    fi
     echo ""
 
     # Cache current session once before the loop (perf: issue #36)
     current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
 
     # Read mapping file and display status
-    while IFS=' ' read -r branch session ai; do
+    while IFS=' ' read -r branch session ai group; do
+        # Filter by group if specified
+        if [ -n "$filter_group" ]; then
+            if [ "$group" != "$filter_group" ]; then
+                continue
+            fi
+        fi
+
+        # Build status line
+        status_line=""
+        if [ -n "$ai" ] && [ "$ai" != "-" ]; then
+            status_line="[ai: $ai]"
+        fi
+        if [ -n "$group" ] && [ "$group" != "-" ]; then
+            status_line="$status_line [group: $group]"
+        fi
+
         # Check if session still exists
         if tmux_session_exists "$session"; then
             # Check if it's the current session
             if [ "$session" = "$current_session" ]; then
-                if [ -n "$ai" ]; then
-                    echo "* $branch -> $session [ai: $ai] (current)"
-                else
-                    echo "* $branch -> $session (current)"
-                fi
+                echo "* $branch -> $session $status_line (current)"
             else
-                if [ -n "$ai" ]; then
-                    echo "  $branch -> $session [ai: $ai]"
-                else
-                    echo "  $branch -> $session"
-                fi
+                echo "  $branch -> $session $status_line"
             fi
         else
-            if [ -n "$ai" ]; then
-                echo "  $branch -> $session [ai: $ai] (dead)"
-            else
-                echo "  $branch -> $session (dead)"
-            fi
+            echo "  $branch -> $session $status_line (dead)"
         fi
     done < "$HYDRA_MAP"
 }
@@ -466,12 +540,64 @@ cmd_switch() {
     fi
 }
 
+cmd_group() {
+    # Assign or show group for a branch
+    if [ $# -lt 1 ]; then
+        echo "Error: Branch name required" >&2
+        echo "Usage: hydra group <branch> [<group-name>]" >&2
+        echo "       hydra group <branch> --clear" >&2
+        return 1
+    fi
+
+    branch="$1"
+    shift
+
+    # Check if branch exists in mappings
+    session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
+    if [ -z "$session" ]; then
+        echo "Error: No session found for branch '$branch'" >&2
+        return 1
+    fi
+
+    # If no group specified, show current group
+    if [ $# -eq 0 ]; then
+        current_group="$(get_group_for_branch "$branch" 2>/dev/null || true)"
+        if [ -n "$current_group" ]; then
+            echo "Group for '$branch': $current_group"
+        else
+            echo "No group assigned to '$branch'"
+        fi
+        return 0
+    fi
+
+    # Handle --clear
+    if [ "$1" = "--clear" ]; then
+        if set_group "$branch" ""; then
+            echo "Cleared group for '$branch'"
+        else
+            echo "Error: Failed to clear group" >&2
+            return 1
+        fi
+        return 0
+    fi
+
+    # Set the group
+    new_group="$1"
+    if set_group "$branch" "$new_group"; then
+        echo "Set group for '$branch' to '$new_group'"
+    else
+        echo "Error: Failed to set group" >&2
+        return 1
+    fi
+}
+
 cmd_kill() {
     # Parse arguments
     branch=""
     kill_all=false
     force=false
-    
+    kill_group=""
+
     while [ $# -gt 0 ]; do
         case "$1" in
             --all)
@@ -482,10 +608,16 @@ cmd_kill() {
                 force=true
                 shift
                 ;;
+            -g|--group)
+                shift
+                kill_group="$1"
+                shift
+                ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
                 echo "Usage: hydra kill <branch>" >&2
                 echo "       hydra kill --all [--force]" >&2
+                echo "       hydra kill -g|--group <name> [--force]" >&2
                 return 1
                 ;;
             *)
@@ -495,32 +627,77 @@ cmd_kill() {
                     echo "Error: Too many arguments" >&2
                     echo "Usage: hydra kill <branch>" >&2
                     echo "       hydra kill --all [--force]" >&2
+                    echo "       hydra kill -g|--group <name> [--force]" >&2
                     return 1
                 fi
                 shift
                 ;;
         esac
     done
-    
+
     # Check mutual exclusivity
     if [ "$kill_all" = true ] && [ -n "$branch" ]; then
         echo "Error: Cannot specify both branch name and --all" >&2
         echo "Usage: hydra kill <branch>" >&2
         echo "       hydra kill --all [--force]" >&2
+        echo "       hydra kill -g|--group <name> [--force]" >&2
         return 1
     fi
-    
+
+    if [ -n "$kill_group" ] && [ -n "$branch" ]; then
+        echo "Error: Cannot specify both branch name and --group" >&2
+        return 1
+    fi
+
+    if [ -n "$kill_group" ] && [ "$kill_all" = true ]; then
+        echo "Error: Cannot specify both --all and --group" >&2
+        return 1
+    fi
+
     # If --all flag is set, delegate to kill_all_sessions
     if [ "$kill_all" = true ]; then
         kill_all_sessions "$force"
         return $?
     fi
-    
+
+    # If --group is set, kill all sessions in the group
+    if [ -n "$kill_group" ]; then
+        mappings="$(list_mappings_for_group "$kill_group")"
+        if [ -z "$mappings" ]; then
+            echo "No sessions found in group '$kill_group'"
+            return 1
+        fi
+
+        count="$(echo "$mappings" | wc -l | tr -d ' ')"
+
+        # Confirm unless forced
+        if [ "$force" != true ] && [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
+            printf "Kill all %s sessions in group '%s'? [y/N] " "$count" "$kill_group"
+            read -r response
+            case "$response" in
+                [yY][eE][sS]|[yY]) ;;
+                *)
+                    echo "Aborted"
+                    return 0
+                    ;;
+            esac
+        fi
+
+        echo "Killing $count sessions in group '$kill_group'..."
+        echo "$mappings" | while IFS=' ' read -r b _s _a _g; do
+            echo "  Killing $b..."
+            kill_single_head "$b" 2>/dev/null || true
+        done
+        echo "Done"
+        return 0
+    fi
+
     # Original single branch kill logic
     if [ -z "$branch" ]; then
         echo "Error: Branch name required" >&2
         echo "Usage: hydra kill <branch>" >&2
         echo "       hydra kill --all [--force]" >&2
+        echo "       hydra kill -g|--group <name> [--force]" >&2
         return 1
     fi
     

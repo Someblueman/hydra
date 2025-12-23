@@ -6,12 +6,13 @@
 # Dependencies: locks.sh, paths.sh, git.sh, tmux.sh, state.sh, hooks.sh, yaml.sh
 
 # Helper function to spawn a single session
-# Usage: spawn_single <branch> <layout> [ai_tool]
+# Usage: spawn_single <branch> <layout> [ai_tool] [group]
 # Returns: Session name on stdout, 1 on failure
 spawn_single() {
     branch="$1"
     layout="${2:-default}"
     ai_tool="${3:-}"
+    group="${4:-}"
 
     # Best-effort cleanup of stale session-name locks
     cleanup_stale_locks 2>/dev/null || true
@@ -63,8 +64,8 @@ spawn_single() {
     # Release the reserved session name lock now that session is created
     release_session_lock "$session" 2>/dev/null || true
 
-    # Add mapping (persist selected AI tool if provided)
-    if ! add_mapping "$branch" "$session" "${ai_tool:-}"; then
+    # Add mapping (persist selected AI tool and group if provided)
+    if ! add_mapping "$branch" "$session" "${ai_tool:-}" "${group:-}"; then
         echo "Warning: Failed to save branch-session mapping" >&2
     fi
 
@@ -98,13 +99,14 @@ spawn_single() {
 }
 
 # Spawn multiple sessions with same AI tool
-# Usage: spawn_bulk <base_branch> <count> <layout> [ai_tool]
+# Usage: spawn_bulk <base_branch> <count> <layout> [ai_tool] [group]
 # Note: Calls cmd_kill for rollback, which must be defined in bin/hydra
 spawn_bulk() {
     base_branch="$1"
     count="$2"
     layout="${3:-default}"
     ai_tool="${4:-}"
+    group="${5:-}"
 
     # Confirm if spawning many sessions
     if [ "$count" -gt 3 ]; then
@@ -132,7 +134,7 @@ spawn_bulk() {
         echo ""
         echo "[$i/$count] Creating head '$branch_name'..."
 
-        if session="$(spawn_single "$branch_name" "$layout" "$ai_tool")"; then
+        if session="$(spawn_single "$branch_name" "$layout" "$ai_tool" "$group")"; then
             succeeded=$((succeeded + 1))
             created_branches="$created_branches $branch_name"
             echo "[$i/$count] Successfully created session: $session"
@@ -182,13 +184,14 @@ spawn_bulk() {
 }
 
 # Spawn sessions with mixed AI agents
-# Usage: spawn_bulk_mixed <base_branch> <agents_spec> <layout>
+# Usage: spawn_bulk_mixed <base_branch> <agents_spec> <layout> [group]
 # agents_spec format: "claude:2,aider:1,codex:1"
 # Note: Calls cmd_kill for rollback, which must be defined in bin/hydra
 spawn_bulk_mixed() {
     base_branch="$1"
     agents_spec="$2"
     layout="${3:-default}"
+    group="${4:-}"
 
     echo "Parsing agents specification: $agents_spec"
 
@@ -286,7 +289,7 @@ spawn_bulk_mixed() {
             echo ""
             echo "[$session_num/$total_count] Creating head '$branch_name' with $agent..."
 
-            if session="$(spawn_single "$branch_name" "$layout" "$agent")"; then
+            if session="$(spawn_single "$branch_name" "$layout" "$agent" "$group")"; then
                 succeeded=$((succeeded + 1))
                 created_branches="$created_branches $branch_name"
                 echo "[$session_num/$total_count] Successfully created session: $session"

@@ -3,12 +3,13 @@
 # POSIX-compliant shell script
 
 # Add a branch-session mapping
-# Usage: add_mapping <branch> <session> [ai_tool]
+# Usage: add_mapping <branch> <session> [ai_tool] [group]
 # Returns: 0 on success, 1 on failure
 add_mapping() {
     branch="$1"
     session="$2"
     ai_tool="${3:-}"
+    group="${4:-}"
 
     if [ -z "$branch" ] || [ -z "$session" ]; then
         echo "Error: Branch and session are required" >&2
@@ -20,28 +21,31 @@ add_mapping() {
         return 1
     fi
 
+    # Build the mapping line based on what fields are provided
+    # Format: branch session [ai_tool] [group]
+    # Use "-" as placeholder when group is set but ai_tool is not
+    if [ -n "$group" ]; then
+        ai_field="${ai_tool:-"-"}"
+        mapping_line="$branch $session $ai_field $group"
+    elif [ -n "$ai_tool" ]; then
+        mapping_line="$branch $session $ai_tool"
+    else
+        mapping_line="$branch $session"
+    fi
+
     # Use lock to make remove+add atomic
     if try_lock "state_map"; then
         # Remove existing mapping for this branch if any
         remove_mapping "$branch" 2>/dev/null || true
 
-        # Add new mapping (optionally with AI tool)
-        if [ -n "$ai_tool" ]; then
-            echo "$branch $session $ai_tool" >> "$HYDRA_MAP"
-        else
-            echo "$branch $session" >> "$HYDRA_MAP"
-        fi
+        echo "$mapping_line" >> "$HYDRA_MAP"
 
         release_lock "state_map"
         return 0
     else
         # Fallback if lock fails - still try the operation
         remove_mapping "$branch" 2>/dev/null || true
-        if [ -n "$ai_tool" ]; then
-            echo "$branch $session $ai_tool" >> "$HYDRA_MAP"
-        else
-            echo "$branch $session" >> "$HYDRA_MAP"
-        fi
+        echo "$mapping_line" >> "$HYDRA_MAP"
         return 0
     fi
 }
@@ -51,33 +55,38 @@ add_mapping() {
 # Returns: 0 on success, 1 on failure
 remove_mapping() {
     branch="$1"
-    
+
     if [ -z "$branch" ]; then
         echo "Error: Branch is required" >&2
         return 1
     fi
-    
+
     if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
         return 0  # Nothing to remove
     fi
-    
+
     # Create temporary file
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
-    
-    # Filter out the branch; preserve optional AI column for others
-    while IFS=' ' read -r map_branch map_session map_ai; do
+
+    # Filter out the branch; preserve AI and group columns for others
+    while IFS=' ' read -r map_branch map_session map_ai map_group; do
         if [ "$map_branch" != "$branch" ]; then
-            suffix=""
-            [ -n "$map_ai" ] && suffix=" $map_ai"
-            echo "$map_branch $map_session$suffix"
+            # Preserve all fields that exist
+            if [ -n "$map_group" ]; then
+                echo "$map_branch $map_session ${map_ai:-"-"} $map_group"
+            elif [ -n "$map_ai" ]; then
+                echo "$map_branch $map_session $map_ai"
+            else
+                echo "$map_branch $map_session"
+            fi
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
-    
+
     # Replace original file
     mv "$tmpfile" "$HYDRA_MAP"
     trap - EXIT INT TERM
-    
+
     return 0
 }
 
@@ -159,31 +168,35 @@ validate_mappings() {
     return $errors
 }
 
-# Clean up invalid mappings (preserving optional AI column)
+# Clean up invalid mappings (preserving AI and group columns)
 # Usage: cleanup_mappings
 # Returns: 0 on success
 cleanup_mappings() {
     if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
         return 0
     fi
-    
+
     # Create temporary file
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
-    
-    # Keep only valid mappings; preserve AI if present
-    while IFS=' ' read -r branch session ai; do
+
+    # Keep only valid mappings; preserve AI and group if present
+    while IFS=' ' read -r branch session ai group; do
         if git_branch_exists "$branch" && tmux_session_exists "$session"; then
-            suffix=""
-            [ -n "$ai" ] && suffix=" $ai"
-            echo "$branch $session$suffix"
+            if [ -n "$group" ]; then
+                echo "$branch $session ${ai:-"-"} $group"
+            elif [ -n "$ai" ]; then
+                echo "$branch $session $ai"
+            else
+                echo "$branch $session"
+            fi
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
-    
+
     # Replace original file
     mv "$tmpfile" "$HYDRA_MAP"
     trap - EXIT INT TERM
-    
+
     return 0
 }
 
@@ -249,11 +262,111 @@ get_ai_for_branch() {
     if [ -z "$branch" ] || [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
         return 1
     fi
-    while IFS=' ' read -r map_branch _map_session map_ai; do
-        if [ "$map_branch" = "$branch" ] && [ -n "$map_ai" ]; then
+    while IFS=' ' read -r map_branch _map_session map_ai _map_group; do
+        if [ "$map_branch" = "$branch" ] && [ -n "$map_ai" ] && [ "$map_ai" != "-" ]; then
             echo "$map_ai"
             return 0
         fi
     done < "$HYDRA_MAP"
     return 1
+}
+
+# Get group for a branch
+# Usage: get_group_for_branch <branch>
+# Returns: Group name on stdout, empty if not set
+get_group_for_branch() {
+    branch="$1"
+    if [ -z "$branch" ] || [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+        return 1
+    fi
+    while IFS=' ' read -r map_branch _map_session _map_ai map_group; do
+        if [ "$map_branch" = "$branch" ] && [ -n "$map_group" ] && [ "$map_group" != "-" ]; then
+            echo "$map_group"
+            return 0
+        fi
+    done < "$HYDRA_MAP"
+    return 1
+}
+
+# Set group for a branch
+# Usage: set_group <branch> <group>
+# Returns: 0 on success, 1 on failure
+set_group() {
+    branch="$1"
+    group="$2"
+
+    if [ -z "$branch" ]; then
+        echo "Error: Branch is required" >&2
+        return 1
+    fi
+
+    if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+        echo "Error: No mappings file" >&2
+        return 1
+    fi
+
+    # Create temporary file
+    tmpfile="$(mktemp)" || return 1
+    trap 'rm -f "$tmpfile"' EXIT INT TERM
+
+    found=0
+    while IFS=' ' read -r map_branch map_session map_ai map_group; do
+        if [ "$map_branch" = "$branch" ]; then
+            found=1
+            # Preserve AI or use placeholder
+            ai="${map_ai:-"-"}"
+            # Set new group (or placeholder if clearing)
+            new_group="${group:-"-"}"
+            echo "$map_branch $map_session $ai $new_group"
+        else
+            # Preserve existing entry with all fields
+            if [ -n "$map_group" ]; then
+                echo "$map_branch $map_session ${map_ai:-"-"} $map_group"
+            elif [ -n "$map_ai" ]; then
+                echo "$map_branch $map_session $map_ai"
+            else
+                echo "$map_branch $map_session"
+            fi
+        fi
+    done < "$HYDRA_MAP" > "$tmpfile"
+
+    if [ "$found" -eq 0 ]; then
+        echo "Error: Branch '$branch' not found in mappings" >&2
+        rm -f "$tmpfile"
+        trap - EXIT INT TERM
+        return 1
+    fi
+
+    mv "$tmpfile" "$HYDRA_MAP"
+    trap - EXIT INT TERM
+    return 0
+}
+
+# List all unique groups
+# Usage: list_groups
+# Returns: List of group names on stdout
+list_groups() {
+    if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+        return 0
+    fi
+    while IFS=' ' read -r _map_branch _map_session _map_ai map_group; do
+        if [ -n "$map_group" ] && [ "$map_group" != "-" ]; then
+            echo "$map_group"
+        fi
+    done < "$HYDRA_MAP" | sort -u
+}
+
+# Get all mappings for a group
+# Usage: list_mappings_for_group <group>
+# Returns: List of "branch session ai group" entries on stdout
+list_mappings_for_group() {
+    group="$1"
+    if [ -z "$group" ] || [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+        return 0
+    fi
+    while IFS=' ' read -r map_branch map_session map_ai map_group; do
+        if [ "$map_group" = "$group" ]; then
+            echo "$map_branch $map_session ${map_ai:-"-"} $map_group"
+        fi
+    done < "$HYDRA_MAP"
 }
