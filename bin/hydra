@@ -96,6 +96,9 @@ fi
 # shellcheck source=../lib/kill.sh
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/kill.sh"
+# shellcheck source=../lib/tui.sh
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/tui.sh"
 
 # Export paths for downstream helpers (e.g., safe tmux run-shell bindings)
 export HYDRA_LIB_DIR
@@ -140,6 +143,7 @@ Commands:
   dashboard         View all sessions in a single dashboard
                     Options:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session
+  tui               Interactive terminal UI for managing sessions
   cycle-layout      Cycle through tmux pane layouts
   completion        Generate shell completion scripts
   version           Show version information
@@ -206,6 +210,10 @@ main() {
         dashboard-exit)
             shift
             cmd_dashboard_exit "$@"
+            ;;
+        tui)
+            shift
+            cmd_tui "$@"
             ;;
         cycle-layout)
             shift
