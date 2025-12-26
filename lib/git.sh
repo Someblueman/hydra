@@ -2,6 +2,47 @@
 # Git helper functions for Hydra
 # POSIX-compliant shell script
 
+# =============================================================================
+# Worktree Cache Implementation
+# =============================================================================
+# Caches git worktree list output to avoid repeated subprocess calls.
+# Cache expires after 5 seconds or when worktree operations are performed.
+
+_WORKTREE_CACHE=""
+_WORKTREE_CACHE_TIME=0
+
+# Get cached worktree list (refreshes if stale or empty)
+# Usage: _get_worktree_cache
+# Returns: worktree list in porcelain format on stdout
+_get_worktree_cache() {
+    _now="$(date +%s 2>/dev/null || echo 0)"
+
+    # Check if cache is valid (exists and less than 5 seconds old)
+    if [ -n "$_WORKTREE_CACHE" ] && [ "$_WORKTREE_CACHE_TIME" -gt 0 ]; then
+        _age="$((_now - _WORKTREE_CACHE_TIME))"
+        if [ "$_age" -lt 5 ]; then
+            printf '%s' "$_WORKTREE_CACHE"
+            return 0
+        fi
+    fi
+
+    # Refresh cache
+    _WORKTREE_CACHE="$(git worktree list --porcelain 2>/dev/null)"
+    _WORKTREE_CACHE_TIME="$_now"
+    printf '%s' "$_WORKTREE_CACHE"
+}
+
+# Invalidate worktree cache (call after create/delete operations)
+# Usage: _invalidate_worktree_cache
+_invalidate_worktree_cache() {
+    _WORKTREE_CACHE=""
+    _WORKTREE_CACHE_TIME=0
+}
+
+# =============================================================================
+# Public API Functions
+# =============================================================================
+
 # Validate branch name for security
 # Usage: validate_branch_name <branch_name>
 # Returns: 0 if valid, 1 if invalid
@@ -198,7 +239,10 @@ create_worktree() {
         # Branch doesn't exist, create new branch
         git worktree add -b "$branch" -- "$path" >&2 || return 1
     fi
-    
+
+    # Invalidate worktree cache after creation
+    _invalidate_worktree_cache
+
     return 0
 }
 
@@ -227,6 +271,8 @@ delete_worktree() {
     # If force is specified, skip checks
     if [ "$force" = "force" ]; then
         git worktree remove --force -- "$path" || return 1
+        # Invalidate worktree cache after deletion
+        _invalidate_worktree_cache
         return 0
     fi
     
@@ -261,7 +307,10 @@ delete_worktree() {
     
     # Remove the worktree
     git worktree remove -- "$path" || return 1
-    
+
+    # Invalidate worktree cache after deletion
+    _invalidate_worktree_cache
+
     return 0
 }
 
@@ -270,16 +319,16 @@ delete_worktree() {
 # Returns: Branch name on stdout, empty if not found
 get_worktree_branch() {
     path="$1"
-    
+
     if [ -z "$path" ] || [ ! -d "$path" ]; then
         return 1
     fi
-    
+
     # Get absolute path
     abs_path="$(cd "$path" 2>/dev/null && pwd)" || return 1
-    
-    # Parse git worktree list output
-    git worktree list --porcelain | while IFS= read -r line; do
+
+    # Parse cached worktree list output
+    printf '%s\n' "$(_get_worktree_cache)" | while IFS= read -r line; do
         case "$line" in
             "worktree $abs_path")
                 # Found our worktree, next line should have the branch
@@ -300,7 +349,7 @@ get_worktree_branch() {
 # Usage: list_worktrees
 # Returns: List of "path branch" pairs on stdout
 list_worktrees() {
-    git worktree list --porcelain | while IFS= read -r line; do
+    printf '%s\n' "$(_get_worktree_cache)" | while IFS= read -r line; do
         case "$line" in
             "worktree "*)
                 worktree_path="${line#worktree }"
@@ -324,17 +373,18 @@ list_worktrees() {
 # Returns: worktree path on stdout, empty if not found
 find_worktree_path() {
     branch="$1"
-    
+
     if [ -z "$branch" ]; then
         return 1
     fi
-    
+
     # Use temporary file to avoid pipe subshell variable scope issues
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
-    
-    git worktree list --porcelain 2>/dev/null > "$tmpfile"
-    
+
+    # Use cached worktree list
+    printf '%s\n' "$(_get_worktree_cache)" > "$tmpfile"
+
     current_path=""
     found_path=""
     while IFS= read -r line; do
@@ -348,15 +398,15 @@ find_worktree_path() {
                 ;;
         esac
     done < "$tmpfile"
-    
+
     rm -f "$tmpfile"
     trap - EXIT INT TERM
-    
+
     if [ -n "$found_path" ]; then
         echo "$found_path"
         return 0
     fi
-    
+
     return 1
 }
 
@@ -365,17 +415,18 @@ find_worktree_path() {
 # Returns: worktree path on stdout, empty if not found
 find_worktree_by_pattern() {
     pattern="$1"
-    
+
     if [ -z "$pattern" ]; then
         return 1
     fi
-    
+
     # Use temporary file to avoid pipe subshell variable scope issues
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
-    
-    git worktree list --porcelain 2>/dev/null > "$tmpfile"
-    
+
+    # Use cached worktree list
+    printf '%s\n' "$(_get_worktree_cache)" > "$tmpfile"
+
     found_path=""
     while IFS= read -r line; do
         case "$line" in
@@ -391,14 +442,14 @@ find_worktree_by_pattern() {
                 ;;
         esac
     done < "$tmpfile"
-    
+
     rm -f "$tmpfile"
     trap - EXIT INT TERM
-    
+
     if [ -n "$found_path" ]; then
         echo "$found_path"
         return 0
     fi
-    
+
     return 1
 }
