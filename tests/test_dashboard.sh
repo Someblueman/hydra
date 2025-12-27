@@ -379,7 +379,7 @@ test_pane_collection_and_restore() {
 
     # Count active source sessions
     expected_sessions=0
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai _group _ts; do
         if tmux_session_exists "$session"; then
             expected_sessions=$((expected_sessions + 1))
         fi
@@ -399,7 +399,7 @@ test_pane_collection_and_restore() {
     initial_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
 
     # Ensure source sessions survive collection by adding an extra pane to each
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai _group _ts; do
         if tmux_session_exists "$session"; then
             # Split a new pane in window 0 to keep the session alive
             tmux split-window -t "$session:0" -d 2>/dev/null || true
@@ -480,7 +480,7 @@ test_multi_pane_collection_env() {
 
     # Ensure each source session has at least 3 panes so we can collect 2 and leave 1 behind
     expected_sessions=0
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai _group _ts; do
         if tmux_session_exists "$session"; then
             expected_sessions=$((expected_sessions + 1))
             # Ensure exactly >=3 panes by splitting until 3
@@ -515,7 +515,7 @@ test_multi_pane_collection_env() {
     collected_lines=$(wc -l < "$DASHBOARD_RESTORE_MAP" | tr -d ' ')
     # Compute expected collected panes with cap=2 per session (leaving one behind)
     expected_collected=0
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai _group _ts; do
         if tmux_session_exists "$session"; then
             pcnt=$(tmux list-panes -t "$session" 2>/dev/null | wc -l | tr -d ' ')
             if [ "${pcnt:-0}" -gt 1 ]; then

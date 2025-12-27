@@ -160,7 +160,7 @@ tui_build_list() {
 
     # Read mappings and write to temp file with status
     # Use tab as delimiter (safe - branch/session names can't contain tabs)
-    while IFS=' ' read -r branch session ai _group; do
+    while IFS=' ' read -r branch session ai _group _ts; do
         [ -z "$branch" ] && continue
 
         if tmux_session_exists "$session" 2>/dev/null; then

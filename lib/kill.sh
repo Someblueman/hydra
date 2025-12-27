@@ -92,7 +92,7 @@ kill_all_sessions() {
 
     # Display what will be killed
     echo "The following hydra heads will be killed:"
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai _group _ts; do
         if [ -n "$branch" ] && [ -n "$session" ]; then
             echo "  $branch -> $session"
         fi
@@ -130,7 +130,7 @@ EOF
     failed=0
 
     # Process each mapping
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai _group _ts; do
         if [ -z "$branch" ] || [ -z "$session" ]; then
             continue
         fi

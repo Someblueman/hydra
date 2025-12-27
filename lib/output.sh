@@ -40,3 +40,45 @@ print_summary_success() {
 print_summary_failure() {
     echo "[FAIL] $1"
 }
+
+# =============================================================================
+# JSON Output Helpers
+# =============================================================================
+# POSIX-compliant JSON formatting without external dependencies
+
+# Escape a string for safe use in JSON
+# Usage: json_escape <string>
+# Returns: Escaped string on stdout
+json_escape() {
+    # Escape backslashes, double quotes, and tabs
+    # Note: newlines in branch/session names are not expected, but we handle tabs
+    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g'
+}
+
+# Output a JSON string key-value pair
+# Usage: json_kv <key> <value>
+# Returns: "key": "value" on stdout (no trailing comma)
+json_kv() {
+    printf '"%s": "%s"' "$1" "$(json_escape "$2")"
+}
+
+# Output a JSON numeric key-value pair
+# Usage: json_kv_num <key> <value>
+# Returns: "key": value on stdout (no trailing comma)
+json_kv_num() {
+    printf '"%s": %s' "$1" "$2"
+}
+
+# Output a JSON boolean key-value pair
+# Usage: json_kv_bool <key> <true|false>
+# Returns: "key": true/false on stdout (no trailing comma)
+json_kv_bool() {
+    printf '"%s": %s' "$1" "$2"
+}
+
+# Output a JSON null key-value pair
+# Usage: json_kv_null <key>
+# Returns: "key": null on stdout (no trailing comma)
+json_kv_null() {
+    printf '"%s": null' "$1"
+}

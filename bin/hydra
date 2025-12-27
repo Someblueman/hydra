@@ -11,7 +11,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="1.3.1"
+HYDRA_VERSION="1.3.2"
 
 # Source helper libraries
 # Enhanced library detection with multiple fallback paths
@@ -78,6 +78,7 @@ _load_libs_for_cmd() {
             # No libraries needed
             ;;
         list)
+            _load_lib output
             _load_lib state
             _load_lib tmux
             ;;
@@ -127,12 +128,17 @@ _load_libs_for_cmd() {
             _load_lib spawn
             ;;
         status)
+            _load_lib output
             _load_lib state
             _load_lib tmux
             _load_lib git
             ;;
-        doctor)
+        doctor|cleanup)
             _load_lib tmux
+            _load_lib state
+            _load_lib git
+            _load_lib locks
+            _load_lib output
             ;;
         dashboard|dashboard-exit)
             _load_lib state
@@ -242,7 +248,8 @@ Commands:
                       -t, --timeout <N>        Max wait time (default: 300)
   regenerate        Restore tmux sessions for existing worktrees
   status            Show health status of all heads
-  doctor            Check system performance
+  doctor            Check system health and consistency
+  cleanup           Remove dead mappings, stale locks, and orphaned worktrees
   dashboard         View all sessions in a single dashboard
                     Options:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session
@@ -334,6 +341,10 @@ main() {
         doctor)
             shift
             cmd_doctor "$@"
+            ;;
+        cleanup)
+            shift
+            cmd_cleanup "$@"
             ;;
         dashboard)
             shift
@@ -517,6 +528,7 @@ cmd_list() {
     # Parse arguments
     filter_group=""
     show_groups=""
+    json_output=""
     while [ $# -gt 0 ]; do
         case "$1" in
             -g|--group)
@@ -528,9 +540,13 @@ cmd_list() {
                 show_groups="1"
                 shift
                 ;;
+            -j|--json)
+                json_output="1"
+                shift
+                ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra list [-g|--group <name>] [--groups]" >&2
+                echo "Usage: hydra list [-g|--group <name>] [--groups] [--json]" >&2
                 exit 1
                 ;;
             *)
@@ -543,65 +559,194 @@ cmd_list() {
     # List all groups if requested
     if [ -n "$show_groups" ]; then
         groups="$(list_groups)"
-        if [ -z "$groups" ]; then
-            echo "No groups defined"
-        else
-            echo "Groups:"
+        if [ -n "$json_output" ]; then
+            # JSON output for groups - collect in temp file to avoid subshell issue
+            tmpjson="$(mktemp)"
+            trap 'rm -f "$tmpjson"' EXIT
             echo "$groups" | while read -r g; do
+                [ -z "$g" ] && continue
                 count="$(list_mappings_for_group "$g" | wc -l | tr -d ' ')"
-                echo "  $g ($count sessions)"
+                printf '{"name": "%s", "count": %s}\n' "$(json_escape "$g")" "$count" >> "$tmpjson"
             done
+            printf '{"groups": ['
+            first=1
+            while IFS= read -r line; do
+                if [ "$first" -eq 1 ]; then
+                    first=0
+                else
+                    printf ','
+                fi
+                printf '%s' "$line"
+            done < "$tmpjson"
+            printf ']}\n'
+            rm -f "$tmpjson"
+            trap - EXIT
+        else
+            if [ -z "$groups" ]; then
+                echo "No groups defined"
+            else
+                echo "Groups:"
+                echo "$groups" | while read -r g; do
+                    count="$(list_mappings_for_group "$g" | wc -l | tr -d ' ')"
+                    echo "  $g ($count sessions)"
+                done
+            fi
         fi
         return 0
     fi
 
     # Check if we have any mappings
     if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
-        echo "No active Hydra heads"
+        if [ -n "$json_output" ]; then
+            printf '{"sessions": [], "total": 0, "active": 0, "dead": 0}\n'
+        else
+            echo "No active Hydra heads"
+        fi
         return 0
     fi
-
-    # List all sessions with their branch names
-    if [ -n "$filter_group" ]; then
-        echo "Active Hydra heads in group '$filter_group':"
-    else
-        echo "Active Hydra heads:"
-    fi
-    echo ""
 
     # Cache current session once before the loop (perf: issue #36)
     current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
 
-    # Read mapping file and display status
-    while IFS=' ' read -r branch session ai group; do
-        # Filter by group if specified
-        if [ -n "$filter_group" ]; then
-            if [ "$group" != "$filter_group" ]; then
-                continue
+    if [ -n "$json_output" ]; then
+        # JSON output mode
+        tmpjson="$(mktemp)"
+        trap 'rm -f "$tmpjson"' EXIT
+        total=0
+        active=0
+        dead=0
+
+        while IFS=' ' read -r branch session ai group timestamp; do
+            # Filter by group if specified
+            if [ -n "$filter_group" ]; then
+                if [ "$group" != "$filter_group" ]; then
+                    continue
+                fi
             fi
-        fi
 
-        # Build status line
-        status_line=""
-        if [ -n "$ai" ] && [ "$ai" != "-" ]; then
-            status_line="[ai: $ai]"
-        fi
-        if [ -n "$group" ] && [ "$group" != "-" ]; then
-            status_line="$status_line [group: $group]"
-        fi
+            total=$((total + 1))
 
-        # Check if session still exists
-        if tmux_session_exists "$session"; then
-            # Check if it's the current session
-            if [ "$session" = "$current_session" ]; then
-                echo "* $branch -> $session $status_line (current)"
+            # Calculate duration
+            duration_secs=0
+            if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
+                duration_secs="$(get_duration_since "$timestamp")"
+            fi
+            duration_human="$(format_duration "$duration_secs")"
+
+            # Determine status
+            if tmux_session_exists "$session"; then
+                status="active"
+                active=$((active + 1))
             else
-                echo "  $branch -> $session $status_line"
+                status="dead"
+                dead=$((dead + 1))
             fi
+
+            # Check if current
+            is_current="false"
+            if [ "$session" = "$current_session" ]; then
+                is_current="true"
+            fi
+
+            # Handle null/empty values for JSON
+            ai_json="null"
+            if [ -n "$ai" ] && [ "$ai" != "-" ]; then
+                ai_json="\"$(json_escape "$ai")\""
+            fi
+            group_json="null"
+            if [ -n "$group" ] && [ "$group" != "-" ]; then
+                group_json="\"$(json_escape "$group")\""
+            fi
+            ts_json="null"
+            if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
+                ts_json="$timestamp"
+            fi
+
+            # Build JSON object
+            printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s}\n' \
+                "$(json_escape "$branch")" \
+                "$(json_escape "$session")" \
+                "$ai_json" \
+                "$group_json" \
+                "$status" \
+                "$duration_secs" \
+                "$duration_human" \
+                "$ts_json" \
+                "$is_current" >> "$tmpjson"
+        done < "$HYDRA_MAP"
+
+        # Output JSON
+        printf '{"sessions": ['
+        first=1
+        while IFS= read -r line; do
+            if [ "$first" -eq 1 ]; then
+                first=0
+            else
+                printf ','
+            fi
+            printf '%s' "$line"
+        done < "$tmpjson"
+        printf '], "total": %s, "active": %s, "dead": %s}\n' "$total" "$active" "$dead"
+
+        rm -f "$tmpjson"
+        trap - EXIT
+    else
+        # Human-readable output mode
+        if [ -n "$filter_group" ]; then
+            echo "Active Hydra heads in group '$filter_group':"
         else
-            echo "  $branch -> $session $status_line (dead)"
+            echo "Active Hydra heads:"
         fi
-    done < "$HYDRA_MAP"
+        echo ""
+
+        while IFS=' ' read -r branch session ai group timestamp; do
+            # Filter by group if specified
+            if [ -n "$filter_group" ]; then
+                if [ "$group" != "$filter_group" ]; then
+                    continue
+                fi
+            fi
+
+            # Calculate duration if timestamp exists
+            duration_str=""
+            if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
+                duration_secs="$(get_duration_since "$timestamp")"
+                duration_str="$(format_duration "$duration_secs")"
+            fi
+
+            # Build status line
+            status_line=""
+            if [ -n "$duration_str" ]; then
+                status_line="($duration_str)"
+            fi
+            if [ -n "$ai" ] && [ "$ai" != "-" ]; then
+                if [ -n "$status_line" ]; then
+                    status_line="$status_line [ai: $ai]"
+                else
+                    status_line="[ai: $ai]"
+                fi
+            fi
+            if [ -n "$group" ] && [ "$group" != "-" ]; then
+                if [ -n "$status_line" ]; then
+                    status_line="$status_line [group: $group]"
+                else
+                    status_line="[group: $group]"
+                fi
+            fi
+
+            # Check if session still exists
+            if tmux_session_exists "$session"; then
+                # Check if it's the current session
+                if [ "$session" = "$current_session" ]; then
+                    echo "* $branch -> $session $status_line (current)"
+                else
+                    echo "  $branch -> $session $status_line"
+                fi
+            else
+                echo "  $branch -> $session $status_line (dead)"
+            fi
+        done < "$HYDRA_MAP"
+    fi
 }
 
 cmd_switch() {
@@ -1182,62 +1327,172 @@ cmd_regenerate() {
 }
 
 cmd_status() {
-    echo "Hydra Status Report"
-    echo "=================="
-    echo ""
-    
-    # System info
-    echo "System Information:"
-    echo "  Hydra Version: $HYDRA_VERSION"
-    echo "  tmux Version: $(tmux -V 2>/dev/null || echo "Not installed")"
-    echo "  Git Version: $(git --version 2>/dev/null || echo "Not installed")"
-    echo ""
-    
+    # Parse arguments
+    json_output=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -j|--json)
+                json_output="1"
+                shift
+                ;;
+            -*)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Usage: hydra status [--json]" >&2
+                exit 1
+                ;;
+            *)
+                echo "Error: Unexpected argument '$1'" >&2
+                exit 1
+                ;;
+        esac
+    done
+
+    # Collect system info
+    tmux_ver="$(tmux -V 2>/dev/null || echo "Not installed")"
+    git_ver="$(git --version 2>/dev/null | sed 's/git version //' || echo "Not installed")"
+
     # Repository info
+    repo_path=""
+    current_branch=""
     if git rev-parse --git-dir >/dev/null 2>&1; then
-        repo_root="$(git rev-parse --show-toplevel)"
-        echo "Repository:"
-        echo "  Path: $repo_root"
-        echo "  Current Branch: $(git branch --show-current 2>/dev/null || echo "Unknown")"
-        echo ""
+        repo_path="$(git rev-parse --show-toplevel)"
+        current_branch="$(git branch --show-current 2>/dev/null || echo "Unknown")"
     fi
-    
-    # Session info
-    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
-        echo "No active Hydra heads"
-        return 0
-    fi
-    
-    echo "Active Heads:"
-    active=0
-    dead=0
-    
-    while IFS=' ' read -r branch session ai; do
-        if tmux_session_exists "$session"; then
-            if [ -n "$ai" ]; then
-                echo "  [OK] $branch -> $session [ai: $ai]"
-            else
-                echo "  [OK] $branch -> $session"
-            fi
-            active=$((active + 1))
-        else
-            if [ -n "$ai" ]; then
-                echo "  [DEAD] $branch -> $session [ai: $ai]"
-            else
-                echo "  [DEAD] $branch -> $session"
-            fi
-            dead=$((dead + 1))
+
+    if [ -n "$json_output" ]; then
+        # JSON output mode
+        tmpjson="$(mktemp)"
+        trap 'rm -f "$tmpjson"' EXIT
+        active=0
+        dead=0
+
+        if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
+            while IFS=' ' read -r branch session ai group timestamp; do
+                # Calculate duration
+                duration_secs=0
+                if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
+                    duration_secs="$(get_duration_since "$timestamp")"
+                fi
+
+                # Determine status
+                if tmux_session_exists "$session"; then
+                    status="active"
+                    active=$((active + 1))
+                else
+                    status="dead"
+                    dead=$((dead + 1))
+                fi
+
+                # Handle null/empty values
+                ai_json="null"
+                if [ -n "$ai" ] && [ "$ai" != "-" ]; then
+                    ai_json="\"$(json_escape "$ai")\""
+                fi
+
+                printf '{"branch": "%s", "session": "%s", "ai": %s, "status": "%s", "duration_seconds": %s}\n' \
+                    "$(json_escape "$branch")" \
+                    "$(json_escape "$session")" \
+                    "$ai_json" \
+                    "$status" \
+                    "$duration_secs" >> "$tmpjson"
+            done < "$HYDRA_MAP"
         fi
-    done < "$HYDRA_MAP"
-    
-    echo ""
-    echo "Summary:"
-    echo "  Active Sessions: $active"
-    echo "  Dead Sessions: $dead"
-    
-    if [ "$dead" -gt 0 ]; then
+
+        # Build final JSON
+        printf '{'
+        printf '"system": {"hydra_version": "%s", "tmux_version": "%s", "git_version": "%s"}' \
+            "$(json_escape "$HYDRA_VERSION")" \
+            "$(json_escape "$tmux_ver")" \
+            "$(json_escape "$git_ver")"
+        printf ', "repository": {"path": "%s", "branch": "%s"}' \
+            "$(json_escape "$repo_path")" \
+            "$(json_escape "$current_branch")"
+        printf ', "sessions": ['
+
+        first=1
+        if [ -f "$tmpjson" ]; then
+            while IFS= read -r line; do
+                if [ "$first" -eq 1 ]; then
+                    first=0
+                else
+                    printf ','
+                fi
+                printf '%s' "$line"
+            done < "$tmpjson"
+        fi
+
+        printf '], "summary": {"active": %s, "dead": %s}' "$active" "$dead"
+        printf '}\n'
+
+        rm -f "$tmpjson"
+        trap - EXIT
+    else
+        # Human-readable output
+        echo "Hydra Status Report"
+        echo "=================="
         echo ""
-        echo "Note: Dead sessions can be regenerated with 'hydra regenerate'"
+
+        echo "System Information:"
+        echo "  Hydra Version: $HYDRA_VERSION"
+        echo "  tmux Version: $tmux_ver"
+        echo "  Git Version: $git_ver"
+        echo ""
+
+        if [ -n "$repo_path" ]; then
+            echo "Repository:"
+            echo "  Path: $repo_path"
+            echo "  Current Branch: $current_branch"
+            echo ""
+        fi
+
+        if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+            echo "No active Hydra heads"
+            return 0
+        fi
+
+        echo "Active Heads:"
+        active=0
+        dead=0
+
+        while IFS=' ' read -r branch session ai group timestamp; do
+            # Calculate duration if timestamp exists
+            duration_str=""
+            if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
+                duration_secs="$(get_duration_since "$timestamp")"
+                duration_str="$(format_duration "$duration_secs")"
+            fi
+
+            # Build info string
+            info=""
+            if [ -n "$duration_str" ]; then
+                info="($duration_str)"
+            fi
+            if [ -n "$ai" ] && [ "$ai" != "-" ]; then
+                if [ -n "$info" ]; then
+                    info="$info [ai: $ai]"
+                else
+                    info="[ai: $ai]"
+                fi
+            fi
+
+            if tmux_session_exists "$session"; then
+                echo "  [OK] $branch -> $session $info"
+                active=$((active + 1))
+            else
+                echo "  [DEAD] $branch -> $session $info"
+                dead=$((dead + 1))
+            fi
+        done < "$HYDRA_MAP"
+
+        echo ""
+        echo "Summary:"
+        echo "  Active Sessions: $active"
+        echo "  Dead Sessions: $dead"
+
+        if [ "$dead" -gt 0 ]; then
+            echo ""
+            echo "Note: Dead sessions can be regenerated with 'hydra regenerate'"
+        fi
     fi
 }
 
@@ -1299,15 +1554,224 @@ cmd_doctor() {
     else
         echo "  [INFO] No state file (this is normal for new installations)"
     fi
-    
+
+    # Consistency checks
+    echo ""
+    echo "Consistency Checks:"
+    consistency_issues=0
+
+    # Check for dead sessions (mapping exists but tmux session doesn't)
+    dead_count=0
+    if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
+        while IFS=' ' read -r branch session _ai _group _ts; do
+            if [ -n "$session" ] && ! tmux_session_exists "$session"; then
+                dead_count=$((dead_count + 1))
+            fi
+        done < "$HYDRA_MAP"
+    fi
+    if [ "$dead_count" -gt 0 ]; then
+        print_warning "Dead sessions: $dead_count (run 'hydra regenerate' to restore)"
+        consistency_issues=$((consistency_issues + 1))
+    else
+        print_success "No dead sessions"
+    fi
+
+    # Check for orphaned worktrees (worktree exists without mapping)
+    orphan_wt=0
+    repo_root="$(get_repo_root 2>/dev/null || true)"
+    if [ -n "$repo_root" ]; then
+        # Get all hydra worktrees
+        parent_dir="$(dirname "$repo_root")"
+        repo_name="$(basename "$repo_root")"
+        for wt_dir in "$parent_dir/${repo_name}-"*; do
+            [ -d "$wt_dir" ] || continue
+            # Extract branch from worktree path
+            wt_branch="${wt_dir#"$parent_dir/${repo_name}-"}"
+            # Check if this branch has a mapping
+            if [ -f "$HYDRA_MAP" ]; then
+                if ! grep -q "^$wt_branch " "$HYDRA_MAP" 2>/dev/null; then
+                    orphan_wt=$((orphan_wt + 1))
+                fi
+            else
+                orphan_wt=$((orphan_wt + 1))
+            fi
+        done
+    fi
+    if [ "$orphan_wt" -gt 0 ]; then
+        print_warning "Orphaned worktrees: $orphan_wt (run 'hydra cleanup' to remove)"
+        consistency_issues=$((consistency_issues + 1))
+    else
+        print_success "No orphaned worktrees"
+    fi
+
+    # Check for stale locks
+    stale_lock_count=0
+    if [ -d "$HYDRA_HOME/locks" ]; then
+        for lock_dir in "$HYDRA_HOME/locks"/*; do
+            [ -d "$lock_dir" ] || continue
+            # Check if lock is older than 60 seconds
+            lock_age=0
+            if [ -f "$lock_dir/pid" ]; then
+                if command -v stat >/dev/null 2>&1; then
+                    if stat --version 2>&1 | grep -q GNU; then
+                        lock_mtime="$(stat -c %Y "$lock_dir/pid" 2>/dev/null || echo 0)"
+                    else
+                        lock_mtime="$(stat -f %m "$lock_dir/pid" 2>/dev/null || echo 0)"
+                    fi
+                    now="$(date +%s)"
+                    lock_age=$((now - lock_mtime))
+                fi
+            fi
+            if [ "$lock_age" -gt 60 ]; then
+                stale_lock_count=$((stale_lock_count + 1))
+            fi
+        done
+    fi
+    if [ "$stale_lock_count" -gt 0 ]; then
+        print_warning "Stale locks: $stale_lock_count (run 'hydra cleanup' to remove)"
+        consistency_issues=$((consistency_issues + 1))
+    else
+        print_success "No stale locks"
+    fi
+
     # Summary
     echo ""
-    if [ "$errors" -eq 0 ]; then
+    if [ "$errors" -eq 0 ] && [ "$consistency_issues" -eq 0 ]; then
         echo "[OK] All checks passed! Hydra is ready to use."
+    elif [ "$errors" -eq 0 ]; then
+        echo "[WARN] Found $consistency_issues consistency issue(s). Run 'hydra cleanup' to fix."
     else
         echo "[FAIL] Found $errors issue(s). Please install missing dependencies."
         return 1
     fi
+}
+
+# Cleanup orphaned worktrees, stale locks, and dead mappings
+# Usage: cmd_cleanup
+cmd_cleanup() {
+    echo "Hydra Cleanup"
+    echo "============="
+    echo ""
+
+    cleaned_total=0
+
+    # Clean stale locks
+    echo "Cleaning stale locks..."
+    stale_cleaned=0
+    if [ -d "$HYDRA_HOME/locks" ]; then
+        for lock_dir in "$HYDRA_HOME/locks"/*; do
+            [ -d "$lock_dir" ] || continue
+            lock_age=0
+            if [ -f "$lock_dir/pid" ]; then
+                if command -v stat >/dev/null 2>&1; then
+                    if stat --version 2>&1 | grep -q GNU; then
+                        lock_mtime="$(stat -c %Y "$lock_dir/pid" 2>/dev/null || echo 0)"
+                    else
+                        lock_mtime="$(stat -f %m "$lock_dir/pid" 2>/dev/null || echo 0)"
+                    fi
+                    now="$(date +%s)"
+                    lock_age=$((now - lock_mtime))
+                fi
+            fi
+            if [ "$lock_age" -gt 60 ]; then
+                rm -rf "$lock_dir"
+                stale_cleaned=$((stale_cleaned + 1))
+            fi
+        done
+    fi
+    print_info "Cleaned $stale_cleaned stale lock(s)"
+    cleaned_total=$((cleaned_total + stale_cleaned))
+
+    # Clean dead session mappings
+    echo ""
+    echo "Cleaning dead session mappings..."
+    dead_cleaned=0
+    if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
+        tmpfile="$(mktemp)"
+        while IFS=' ' read -r branch session ai group timestamp; do
+            if [ -n "$session" ] && tmux_session_exists "$session"; then
+                # Session is alive, keep it
+                if [ -n "$timestamp" ]; then
+                    echo "$branch $session ${ai:--} ${group:--} $timestamp" >> "$tmpfile"
+                else
+                    echo "$branch $session ${ai:--} ${group:--}" >> "$tmpfile"
+                fi
+            else
+                # Session is dead, skip it (will be removed)
+                dead_cleaned=$((dead_cleaned + 1))
+                echo "  Removed mapping: $branch -> $session"
+            fi
+        done < "$HYDRA_MAP"
+        mv "$tmpfile" "$HYDRA_MAP"
+        _invalidate_state_cache
+    fi
+    print_info "Cleaned $dead_cleaned dead mapping(s)"
+    cleaned_total=$((cleaned_total + dead_cleaned))
+
+    # Find and offer to clean orphaned worktrees
+    echo ""
+    echo "Checking for orphaned worktrees..."
+    orphan_list=""
+    repo_root="$(get_repo_root 2>/dev/null || true)"
+    if [ -n "$repo_root" ]; then
+        parent_dir="$(dirname "$repo_root")"
+        repo_name="$(basename "$repo_root")"
+        for wt_dir in "$parent_dir/${repo_name}-"*; do
+            [ -d "$wt_dir" ] || continue
+            wt_branch="${wt_dir#"$parent_dir/${repo_name}-"}"
+            # Check if this branch has a mapping
+            has_mapping=false
+            if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
+                if grep -q "^$wt_branch " "$HYDRA_MAP" 2>/dev/null; then
+                    has_mapping=true
+                fi
+            fi
+            if [ "$has_mapping" = false ]; then
+                orphan_list="$orphan_list$wt_dir
+"
+            fi
+        done
+    fi
+
+    if [ -n "$orphan_list" ]; then
+        orphan_count="$(echo "$orphan_list" | grep -c . || true)"
+        echo "Found $orphan_count orphaned worktree(s):"
+        echo "$orphan_list" | while IFS= read -r wt; do
+            [ -z "$wt" ] && continue
+            echo "  $wt"
+        done
+
+        # Ask for confirmation in interactive mode
+        if [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
+            printf "\nRemove these orphaned worktrees? [y/N] "
+            read -r response
+            case "$response" in
+                [yY][eE][sS]|[yY])
+                    orphan_cleaned=0
+                    echo "$orphan_list" | while IFS= read -r wt; do
+                        [ -z "$wt" ] && continue
+                        echo "  Removing $wt..."
+                        if git worktree remove "$wt" --force 2>/dev/null; then
+                            orphan_cleaned=$((orphan_cleaned + 1))
+                        else
+                            rm -rf "$wt" 2>/dev/null || true
+                        fi
+                    done
+                    print_info "Removed orphaned worktrees"
+                    ;;
+                *)
+                    echo "Skipped orphan cleanup"
+                    ;;
+            esac
+        else
+            print_warning "Run interactively to remove orphaned worktrees"
+        fi
+    else
+        print_success "No orphaned worktrees found"
+    fi
+
+    echo ""
+    echo "Cleanup complete. Total items cleaned: $cleaned_total"
 }
 
 cmd_cycle_layout() {

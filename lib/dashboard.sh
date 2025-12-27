@@ -83,7 +83,7 @@ collect_session_panes() {
     # Counter for collected panes (informational)
     collected=0
     
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai _group _ts; do
         # Skip if session doesn't exist
         if ! tmux_session_exists "$session"; then
             continue
@@ -331,7 +331,7 @@ cmd_dashboard() {
     
     # Count active sessions
     active_count=0
-    while IFS=' ' read -r branch session; do
+    while IFS=' ' read -r branch session _ai _group _ts; do
         if tmux_session_exists "$session"; then
             active_count=$((active_count + 1))
         fi
@@ -399,7 +399,7 @@ cmd_dashboard_exit() {
     # Try to switch back to a regular session if possible
     if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
         # Find first active session to switch to
-        while IFS=' ' read -r branch session; do
+        while IFS=' ' read -r branch session _ai _group _ts; do
             if tmux_session_exists "$session"; then
                 echo "Switching to session '$session' ($branch)"
                 switch_to_session "$session"

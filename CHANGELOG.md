@@ -8,6 +8,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 <!-- Nothing yet -->
 
+## [1.3.2] - 2025-12-27
+
+### Added
+- Session duration tracking
+  - Spawn timestamp stored in state file (5th field)
+  - `list` and `status` display duration (e.g., "2h 15m")
+  - Backward compatible with old state file format
+- JSON output mode for scripting/automation
+  - `hydra list --json` - machine-readable session list
+  - `hydra status --json` - system and session info
+  - `hydra list --groups --json` - group summary
+- Consistency checks in `hydra doctor`
+  - Detects dead sessions (mapping exists, tmux session gone)
+  - Detects orphaned worktrees (worktree exists, no mapping)
+  - Detects stale locks (older than 60 seconds)
+- New `hydra cleanup` command
+  - Removes stale locks
+  - Cleans dead session mappings
+  - Offers to remove orphaned worktrees (interactive)
+- State file auto-repair
+  - Validates state file on load
+  - Backs up and repairs malformed entries automatically
+
+### Fixed
+- Fixed `kill --all` not killing tmux sessions due to extra state file fields
+- Fixed spacing in list output when AI tool present but no duration
+
+## [1.3.1] - 2025-12-26
+
+### Added
+- TUI activity status indicators for sessions
+
+### Changed
+- Performance optimizations
+  - Lazy library loading reduces startup time
+  - In-memory state caching provides O(1) lookups
+  - Git worktree list caching with 5-second TTL
+
 ## [1.3.0] - 2025-12-23
 
 ### Added
