@@ -14,4 +14,4 @@ CLAUDE.md
 *.tmp
 
 # GitHub Actions
-.github/workflows/*.log
+.github/workflows/*.logROADMAP.md
