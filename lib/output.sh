@@ -50,9 +50,9 @@ print_summary_failure() {
 # Usage: json_escape <string>
 # Returns: Escaped string on stdout
 json_escape() {
-    # Escape backslashes, double quotes, and tabs
-    # Note: newlines in branch/session names are not expected, but we handle tabs
-    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g'
+    # Escape backslashes, double quotes, tabs, and convert newlines to spaces
+    # (newlines in branch/session names are not expected, but ensure valid JSON)
+    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | tr '\n' ' ' | sed 's/ $//'
 }
 
 # Output a JSON string key-value pair

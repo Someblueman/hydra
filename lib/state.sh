@@ -82,8 +82,10 @@ _validate_and_repair_state_file() {
     malformed=0
     while IFS= read -r line; do
         [ -z "$line" ] && continue
-        field_count="$(echo "$line" | awk '{print NF}')"
-        if [ "$field_count" -lt 2 ]; then
+        # Count fields using POSIX word splitting (perf: avoid awk)
+        # shellcheck disable=SC2086
+        set -- $line
+        if [ $# -lt 2 ]; then
             malformed=$((malformed + 1))
         fi
     done < "$HYDRA_MAP"
@@ -96,8 +98,10 @@ _validate_and_repair_state_file() {
         tmpfile="$(mktemp)"
         while IFS= read -r line; do
             [ -z "$line" ] && continue
-            field_count="$(echo "$line" | awk '{print NF}')"
-            if [ "$field_count" -ge 2 ]; then
+            # Count fields using POSIX word splitting (perf: avoid awk)
+            # shellcheck disable=SC2086
+            set -- $line
+            if [ $# -ge 2 ]; then
                 echo "$line" >> "$tmpfile"
             fi
         done < "$HYDRA_MAP"

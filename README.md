@@ -68,16 +68,33 @@ hydra spawn feature -n 3 --ai aider
 hydra spawn exp --agents "claude:2,aider:1"
 
 # Inspect & switch
-hydra list
-hydra switch   # interactive (fzf if available)
+hydra list              # list all sessions
+hydra list --json       # JSON output for scripting
+hydra list -g mygroup   # filter by group
+hydra switch            # interactive (fzf if available)
 
 # Manage
 hydra kill feature-branch
 hydra kill --all [--force]
+hydra cleanup           # remove dead mappings, stale locks, orphaned worktrees
+
+# Group operations
+hydra group feature-x backend    # assign to group
+hydra group feature-x            # show group
+hydra group feature-x --clear    # remove from group
+
+# Session output
+hydra tail feature-x             # view last 50 lines of session output
+hydra tail feature-x -f          # follow session output continuously
+hydra broadcast "make test"      # send command to all sessions
+hydra broadcast -g backend "..."  # send to specific group
+hydra wait-idle                  # wait for sessions to become idle
+hydra wait-idle -g backend -s 10 # wait for group with 10s idle threshold
 
 # System
 hydra regenerate   # restore sessions after restart
 hydra status       # per-head health
+hydra status --json # JSON output
 hydra doctor       # performance diagnostics
 
 # Dashboard
@@ -94,11 +111,19 @@ HYDRA_DASHBOARD_PANES_PER_SESSION=2 hydra dashboard
 
 ## Configuration
 
-- `HYDRA_HOME`: Runtime dir (default `~/.hydra`)
-- `HYDRA_AI_COMMAND`: Default AI tool (`claude`)
-- `HYDRA_ROOT`: Force library discovery when running from source
-- `HYDRA_DASHBOARD_PANES_PER_SESSION`: `1`, `N`, or `all`
-- `HYDRA_ALLOW_ADVANCED_REFS`: Relax final branch/path charset only; safety checks remain (no whitespace/control, no `..`/`.` components, no `@{`, no trailing `.`/`.lock`, no leading/trailing `/`). Use with care.
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `HYDRA_HOME` | Runtime dir (default `~/.hydra`) |
+| `HYDRA_AI_COMMAND` | Default AI tool (`claude`) |
+| `HYDRA_ROOT` | Force library discovery when running from source |
+| `HYDRA_DASHBOARD_PANES_PER_SESSION` | `1`, `N`, or `all` |
+| `HYDRA_SKIP_AI` | Skip auto-starting AI tool on spawn |
+| `HYDRA_DASHBOARD_NO_ATTACH` | Create dashboard without attaching |
+| `HYDRA_NONINTERACTIVE` | Skip all confirmation prompts (for CI/automation) |
+| `HYDRA_REGENERATE_RUN_STARTUP` | Run startup commands on regenerate |
+| `HYDRA_ALLOW_ADVANCED_REFS` | Relax branch charset validation (use with care) |
 
 Per‑head AI selection is persisted: `hydra spawn <branch> --ai <tool>` shows in `hydra list/status` and is reused by `hydra regenerate`.
 

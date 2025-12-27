@@ -22,6 +22,7 @@ TUI_TAG_FILTER=""       # Current tag filter (empty = show all)
 TUI_SEARCH_MODE=0       # Search/filter input mode active
 TUI_SEARCH_PATTERN=""   # Current search pattern
 TUI_ACTIVITY_DIR=""     # Directory for activity tracking
+TUI_MULTI_SELECT=""     # Space-separated list of selected indices (multi-select mode)
 
 # Terminal control codes (initialized by tui_init_colors)
 TUI_CLEAR=""
@@ -277,7 +278,7 @@ tui_render_help() {
     if [ "$TUI_COLS" -lt 60 ]; then
         box_width=$((TUI_COLS - 4))
     fi
-    box_height=22
+    box_height=26
 
     # Center the box
     start_col=$(( (TUI_COLS - box_width) / 2 ))
@@ -344,9 +345,12 @@ tui_render_help() {
     tui_help_line "t" "Cycle tag (wip/review/priority)"
     tui_help_line "T" "Filter by tag"
     tui_help_line "/" "Search sessions"
-    tui_help_line "Esc" "Clear filters"
     tui_help_line "i" "Show session status"
     tui_help_line "?" "Show this help"
+    tui_help_line "SPACE" "Toggle multi-select"
+    tui_help_line "x" "Bulk kill selected"
+    tui_help_line "G" "Bulk set group"
+    tui_help_line "Esc" "Clear selection/filters"
 
     # Empty line
     printf "%*s" "$start_col" ""
@@ -493,6 +497,71 @@ tui_cycle_tag_filter() {
     esac
 }
 
+# =============================================================================
+# Multi-Select Functions
+# =============================================================================
+
+# Check if an index is selected
+# Usage: tui_is_selected <index>
+# Returns: 0 if selected, 1 if not
+tui_is_selected() {
+    _idx="$1"
+    case " $TUI_MULTI_SELECT " in
+        *" $_idx "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Toggle selection for an index
+# Usage: tui_toggle_select <index>
+tui_toggle_select() {
+    _idx="$1"
+    if tui_is_selected "$_idx"; then
+        # Remove from selection
+        TUI_MULTI_SELECT="$(echo " $TUI_MULTI_SELECT " | sed "s/ $_idx / /g" | tr -s ' ' | sed 's/^ *//;s/ *$//')"
+    else
+        # Add to selection
+        if [ -z "$TUI_MULTI_SELECT" ]; then
+            TUI_MULTI_SELECT="$_idx"
+        else
+            TUI_MULTI_SELECT="$TUI_MULTI_SELECT $_idx"
+        fi
+    fi
+}
+
+# Clear all selections
+# Usage: tui_clear_selection
+tui_clear_selection() {
+    TUI_MULTI_SELECT=""
+}
+
+# Get count of selected items
+# Usage: tui_selection_count
+# Returns: count on stdout
+tui_selection_count() {
+    if [ -z "$TUI_MULTI_SELECT" ]; then
+        echo "0"
+    else
+        # Count space-separated items
+        echo "$TUI_MULTI_SELECT" | tr ' ' '\n' | grep -c .
+    fi
+}
+
+# Select all visible items
+# Usage: tui_select_all
+tui_select_all() {
+    TUI_MULTI_SELECT=""
+    _i=0
+    while [ "$_i" -lt "$TUI_ITEM_COUNT" ]; do
+        if [ -z "$TUI_MULTI_SELECT" ]; then
+            TUI_MULTI_SELECT="$_i"
+        else
+            TUI_MULTI_SELECT="$TUI_MULTI_SELECT $_i"
+        fi
+        _i=$((_i + 1))
+    done
+}
+
 # Render the TUI screen
 # Usage: tui_render
 # Returns: 0 on success
@@ -502,8 +571,14 @@ tui_render() {
 
     # Header
     printf "%s%s Hydra TUI %s- Interactive Session Manager%s\n" "$TUI_BOLD" "$TUI_GREEN" "$TUI_RESET$TUI_DIM" "$TUI_RESET"
-    printf "%s\n" "q=quit | j/k=nav | s=switch | n=spawn | d=kill | t=tag | /=search | ?=help"
+    printf "%s\n" "q=quit | j/k=nav | s=switch | n=spawn | d=kill | SPACE=select | x=bulk kill | ?=help"
     tui_draw_line
+
+    # Show selection count if any items are selected
+    _sel_count="$(tui_selection_count)"
+    if [ "$_sel_count" -gt 0 ]; then
+        printf "%s[%d selected] x=bulk kill | G=set group | Esc=clear selection%s\n" "$TUI_YELLOW" "$_sel_count" "$TUI_RESET"
+    fi
 
     # Show active filters
     if [ -n "$TUI_TAG_FILTER" ] || [ -n "$TUI_SEARCH_PATTERN" ]; then
@@ -621,11 +696,17 @@ tui_render() {
         # Build display line
         line="$status_str $branch -> $session$ai_str$tag_str$current_str"
 
+        # Multi-select indicator
+        select_marker="  "
+        if tui_is_selected "$idx"; then
+            select_marker="${TUI_GREEN}[x]${TUI_RESET}"
+        fi
+
         # Highlight selected row
         if [ "$idx" -eq "$TUI_SELECTED" ]; then
-            printf "%s> %s%s\n" "$TUI_REVERSE" "$line" "$TUI_RESET"
+            printf "%s>%s %s%s\n" "$TUI_REVERSE" "$select_marker" "$line" "$TUI_RESET"
         else
-            printf "  %s\n" "$line"
+            printf " %s %s\n" "$select_marker" "$line"
         fi
 
         idx=$((idx + 1))
@@ -740,12 +821,30 @@ tui_handle_key() {
             # Show help overlay
             TUI_HELP_VISIBLE=1
             ;;
+        " ")
+            # Space - toggle multi-select for current item
+            tui_toggle_select "$TUI_SELECTED"
+            ;;
+        x)
+            # Bulk kill selected sessions
+            if [ "$(tui_selection_count)" -gt 0 ]; then
+                tui_action_bulk_kill
+            fi
+            ;;
+        G)
+            # Bulk set group for selected sessions
+            if [ "$(tui_selection_count)" -gt 0 ]; then
+                tui_action_bulk_group
+            fi
+            ;;
         *)
-            # Handle escape key for clearing filters
+            # Handle escape key for clearing filters and selection
             # Check if key is escape (octal 033, hex 1b)
             if [ "$key" = "$(printf '\033')" ]; then
-                # Clear all filters
-                if [ -n "$TUI_SEARCH_PATTERN" ] || [ -n "$TUI_TAG_FILTER" ]; then
+                # Clear selection first, then filters
+                if [ "$(tui_selection_count)" -gt 0 ]; then
+                    tui_clear_selection
+                elif [ -n "$TUI_SEARCH_PATTERN" ] || [ -n "$TUI_TAG_FILTER" ]; then
                     TUI_SEARCH_PATTERN=""
                     TUI_TAG_FILTER=""
                     tui_build_list
@@ -998,6 +1097,102 @@ tui_action_tag() {
     tui_cycle_tag "$branch"
 
     # Rebuild list to reflect changes
+    tui_build_list
+}
+
+# Action: Bulk kill selected sessions
+# Usage: tui_action_bulk_kill
+tui_action_bulk_kill() {
+    _sel_count="$(tui_selection_count)"
+    if [ "$_sel_count" -eq 0 ]; then
+        return 0
+    fi
+
+    tui_pause_for_interaction
+
+    printf "%sWARNING: This will kill %d selected session(s)!%s\n" "$TUI_RED" "$_sel_count" "$TUI_RESET"
+    if [ -n "$TUI_CURRENT_SESSION" ]; then
+        printf "%s(Current session will be skipped if selected)%s\n" "$TUI_YELLOW" "$TUI_RESET"
+    fi
+    printf "Are you sure? [y/N] "
+    read -r confirm
+
+    case "$confirm" in
+        [yY]|[yY][eE][sS])
+            printf "\n"
+            killed=0
+            skipped=0
+            # Iterate through selected indices
+            for _sel_idx in $TUI_MULTI_SELECT; do
+                selected_line="$(tui_get_session_at "$_sel_idx")"
+                [ -z "$selected_line" ] && continue
+
+                branch="$(printf '%s' "$selected_line" | cut -f1)"
+                session="$(printf '%s' "$selected_line" | cut -f2)"
+
+                if [ "$session" = "$TUI_CURRENT_SESSION" ]; then
+                    skipped=$((skipped + 1))
+                    continue
+                fi
+
+                if kill_single_head "$branch" "$session" 2>/dev/null; then
+                    killed=$((killed + 1))
+                    printf "%s[OK] Killed %s%s\n" "$TUI_GREEN" "$branch" "$TUI_RESET"
+                else
+                    printf "%s[FAIL] Failed to kill %s%s\n" "$TUI_RED" "$branch" "$TUI_RESET"
+                fi
+            done
+            printf "\n%s[OK] Killed %d session(s)%s\n" "$TUI_GREEN" "$killed" "$TUI_RESET"
+            if [ "$skipped" -gt 0 ]; then
+                printf "%s(Skipped %d - current session)%s\n" "$TUI_YELLOW" "$skipped" "$TUI_RESET"
+            fi
+            tui_clear_selection
+            ;;
+        *)
+            printf "\nCancelled.\n"
+            ;;
+    esac
+
+    tui_resume_after_interaction
+    tui_build_list
+}
+
+# Action: Bulk set group for selected sessions
+# Usage: tui_action_bulk_group
+tui_action_bulk_group() {
+    _sel_count="$(tui_selection_count)"
+    if [ "$_sel_count" -eq 0 ]; then
+        return 0
+    fi
+
+    tui_pause_for_interaction
+
+    printf "Set group for %d selected session(s)\n" "$_sel_count"
+    printf "Enter group name (or press Enter to cancel): "
+    read -r group_name
+
+    if [ -n "$group_name" ]; then
+        updated=0
+        # Iterate through selected indices
+        for _sel_idx in $TUI_MULTI_SELECT; do
+            selected_line="$(tui_get_session_at "$_sel_idx")"
+            [ -z "$selected_line" ] && continue
+
+            branch="$(printf '%s' "$selected_line" | cut -f1)"
+            [ -z "$branch" ] && continue
+
+            # Update group in state (using set_group_for_branch if available)
+            if command -v set_group_for_branch >/dev/null 2>&1; then
+                set_group_for_branch "$branch" "$group_name" 2>/dev/null && updated=$((updated + 1))
+            fi
+        done
+        printf "\n%s[OK] Updated group for %d session(s)%s\n" "$TUI_GREEN" "$updated" "$TUI_RESET"
+        tui_clear_selection
+    else
+        printf "\nCancelled.\n"
+    fi
+
+    tui_resume_after_interaction
     tui_build_list
 }
 

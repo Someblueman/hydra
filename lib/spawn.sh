@@ -136,7 +136,11 @@ spawn_bulk() {
 
         if session="$(spawn_single "$branch_name" "$layout" "$ai_tool" "$group")"; then
             succeeded=$((succeeded + 1))
-            created_branches="$created_branches $branch_name"
+            if [ -z "$created_branches" ]; then
+                created_branches="$branch_name"
+            else
+                created_branches="$created_branches $branch_name"
+            fi
             echo "[$i/$count] Successfully created session: $session"
         else
             failed=$((failed + 1))
@@ -171,7 +175,7 @@ spawn_bulk() {
 
     # Switch to first created session if in terminal
     if [ -t 0 ] && [ -t 1 ] && [ "$succeeded" -gt 0 ]; then
-        first_branch="$(echo "$created_branches" | cut -d' ' -f2)"
+        first_branch="$(echo "$created_branches" | cut -d' ' -f1)"
         first_session="$(get_session_for_branch "$first_branch" 2>/dev/null || true)"
         if [ -n "$first_session" ]; then
             echo ""
@@ -291,7 +295,11 @@ spawn_bulk_mixed() {
 
             if session="$(spawn_single "$branch_name" "$layout" "$agent" "$group")"; then
                 succeeded=$((succeeded + 1))
-                created_branches="$created_branches $branch_name"
+                if [ -z "$created_branches" ]; then
+                    created_branches="$branch_name"
+                else
+                    created_branches="$created_branches $branch_name"
+                fi
                 echo "[$session_num/$total_count] Successfully created session: $session"
             else
                 failed=$((failed + 1))
@@ -328,7 +336,7 @@ spawn_bulk_mixed() {
 
     # Switch to first created session if in terminal
     if [ -t 0 ] && [ -t 1 ] && [ "$succeeded" -gt 0 ]; then
-        first_branch="$(echo "$created_branches" | cut -d' ' -f2)"
+        first_branch="$(echo "$created_branches" | cut -d' ' -f1)"
         first_session="$(get_session_for_branch "$first_branch" 2>/dev/null || true)"
         if [ -n "$first_session" ]; then
             echo ""

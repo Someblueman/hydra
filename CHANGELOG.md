@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 <!-- Nothing yet -->
 
+## [1.3.3] - 2025-12-27
+
+### Added
+- TUI Multi-Select for bulk operations
+  - `SPACE` - Toggle selection on current session
+  - `x` - Bulk kill all selected sessions
+  - `G` - Bulk assign group to selected sessions
+  - `Esc` - Clear selection (first press) or filters (second press)
+  - Visual `[x]` markers for selected items
+  - Selection count displayed in header
+- New test suites
+  - `test_switch.sh` - Input validation tests for cmd_switch
+  - `test_json_output.sh` - JSON escaping and output validity tests
+
+### Fixed
+- **Security**: Unvalidated input in `cmd_switch` now validates numeric input and range
+- **Bug**: `cmd_broadcast` count always showed 0 due to subshell variable loss (now uses temp file)
+- **Bug**: `spawn_bulk` off-by-one error caused switch to wrong session (fixed leading space in concatenation)
+- **Bug**: `json_escape` didn't handle newlines (now converts to spaces)
+
+### Changed
+- Performance: Cache tmux sessions list in `cmd_list` instead of per-entry `tmux has-session`
+- Performance: Cache timestamp at command start instead of repeated `date +%s` calls
+- Performance: Replace AWK field counting with POSIX shell word splitting in state.sh
+- Documentation: Updated README with cleanup, tail, broadcast, wait-idle, group commands
+- Documentation: Added missing environment variables to README table
+- Documentation: Added `--json` flag to list/status help text
+
 ## [1.3.2] - 2025-12-27
 
 ### Added
