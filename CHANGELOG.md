@@ -8,6 +8,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 <!-- Nothing yet -->
 
+## [1.4.0] - 2025-12-27
+
+### Added
+- Session Dependencies for staged multi-agent workflows
+  - `hydra spawn feature-tests --after feature-impl` waits for dependencies to complete
+  - `hydra list --deps` shows dependency tree visualization
+  - Circular dependency detection prevents infinite waits
+  - Configurable timeout and polling intervals
+- GitHub PR Integration
+  - `hydra spawn --pr <#>` creates a head from an existing GitHub PR
+  - `hydra spawn --pr-new` creates a draft PR after spawning
+  - `hydra pr [<branch>]` creates or shows PR for a session
+  - PR numbers stored in state file and displayed in `list`
+- Enhanced Group Workflows for coordinating multiple sessions
+  - `hydra group create <name> <branch> [branch...]` bulk creates groups
+  - `hydra group wait <name>` blocks until all sessions in group are killed
+  - `hydra group status <name> [--json]` shows group health with active/dead status
+- Cross-Session Messaging for loose agent coordination
+  - `hydra send <branch> "<message>"` queues message to session's inbox
+  - `hydra recv [--peek] [--json]` reads messages for current session
+  - File-based message queue at `~/.hydra/messages/`
+  - Messages persist across session restarts
+
+### Changed
+- State file format extended to 7 fields (backward compatible):
+  `branch session ai group timestamp deps pr`
+
 ## [1.3.3] - 2025-12-27
 
 ### Added
