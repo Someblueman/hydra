@@ -15,8 +15,8 @@ _hydra_completion() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    
-    commands="spawn list switch kill regenerate status doctor dashboard cycle-layout completion version help"
+
+    commands="spawn list switch kill regenerate status doctor dashboard cycle-layout tui cleanup pr completion version help"
     opts="-h --help -v --version"
     
     case "${prev}" in
@@ -96,14 +96,45 @@ _hydra_completion() {
                 # GitHub issue numbers
                 return 0
                 ;;
-        esac
-        
-        case "${cur}" in
-            -*)
-                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --agents -i --issue" -- ${cur}))
+            --pr)
+                # GitHub PR numbers
+                return 0
+                ;;
+            --after)
+                # Complete with hydra session branches
+                if [ -f "${HYDRA_MAP:-$HOME/.hydra/map}" ]; then
+                    local branches=$(awk '{print $1}' "${HYDRA_MAP:-$HOME/.hydra/map}" 2>/dev/null)
+                    COMPREPLY=($(compgen -W "${branches}" -- ${cur}))
+                fi
                 return 0
                 ;;
         esac
+
+        case "${cur}" in
+            -*)
+                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --agents -i --issue --pr --pr-new --after" -- ${cur}))
+                return 0
+                ;;
+        esac
+    fi
+
+    # Check if we're completing a flag for list command
+    if [[ "${COMP_WORDS[@]}" =~ list ]]; then
+        case "${cur}" in
+            -*)
+                COMPREPLY=($(compgen -W "--json --deps" -- ${cur}))
+                return 0
+                ;;
+        esac
+    fi
+
+    # Complete pr command with hydra session branches
+    if [[ "${COMP_WORDS[@]}" =~ " pr" ]]; then
+        if [ -f "${HYDRA_MAP:-$HOME/.hydra/map}" ]; then
+            local branches=$(awk '{print $1}' "${HYDRA_MAP:-$HOME/.hydra/map}" 2>/dev/null)
+            COMPREPLY=($(compgen -W "${branches}" -- ${cur}))
+        fi
+        return 0
     fi
     
     # Check if we're completing a flag for kill command
@@ -149,7 +180,15 @@ _hydra() {
                         '--ai[AI tool to use]:ai:(claude aider codex cursor copilot gemini)' \
                         '--agents[Mixed agents specification]:agents:' \
                         '(-i --issue)'{-i,--issue}'[Create from GitHub issue]:issue:' \
+                        '--pr[Create from GitHub PR]:pr:' \
+                        '--pr-new[Create new draft PR after spawn]' \
+                        '--after[Wait for dependencies]:deps:_hydra_sessions' \
                         '1:branch:_hydra_branches'
+                    ;;
+                list)
+                    _arguments \
+                        '--json[Output in JSON format]' \
+                        '--deps[Show dependency tree]'
                     ;;
                 dashboard)
                     _arguments \
@@ -163,6 +202,9 @@ _hydra() {
                     ;;
                 switch)
                     _arguments '1:session:_hydra_sessions'
+                    ;;
+                pr)
+                    _arguments '1:branch:_hydra_sessions'
                     ;;
             esac
             ;;
@@ -180,6 +222,9 @@ _hydra_commands() {
         'doctor:Check system performance'
         'dashboard:View all sessions in a single dashboard'
         'cycle-layout:Cycle through tmux pane layouts'
+        'tui:Interactive terminal UI for session management'
+        'cleanup:Remove orphaned worktrees and mappings'
+        'pr:Create or show GitHub PR for a session'
         'completion:Generate shell completion scripts'
         'version:Show version information'
         'help:Show help message'
@@ -222,6 +267,9 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'status' -d 'Show health stat
 complete -c hydra -f -n '__fish_use_subcommand' -a 'doctor' -d 'Check system performance'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'dashboard' -d 'View all sessions in a single dashboard'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'cycle-layout' -d 'Cycle through tmux pane layouts'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'tui' -d 'Interactive terminal UI for session management'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'cleanup' -d 'Remove orphaned worktrees and mappings'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'pr' -d 'Create or show GitHub PR for a session'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'completion' -d 'Generate shell completion scripts'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'version' -d 'Show version information'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'help' -d 'Show help message'
@@ -236,16 +284,28 @@ complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s n -l count -d 'Nu
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to use' -a 'claude aider codex cursor copilot gemini'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l agents -d 'Mixed agents specification (e.g., claude:2,aider:1)'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s i -l issue -d 'Create from GitHub issue number'
-complete -c hydra -f -n '__fish_seen_subcommand_from spawn; and not __fish_seen_subcommand_from -l --layout -n --count --ai --agents -i --issue' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l pr -d 'Create from GitHub PR number'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l pr-new -d 'Create new draft PR after spawn'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l after -d 'Wait for dependencies (comma-separated branches)'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn; and not __fish_seen_subcommand_from -l --layout -n --count --ai --agents -i --issue --pr --pr-new --after' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
+
+# Complete list command
+complete -c hydra -f -n '__fish_seen_subcommand_from list' -l json -d 'Output in JSON format'
+complete -c hydra -f -n '__fish_seen_subcommand_from list' -l deps -d 'Show dependency tree'
 
 # Complete dashboard flags
 complete -c hydra -f -n '__fish_seen_subcommand_from dashboard' -s p -l panes-per-session -d 'Panes to collect per session' -a '1 2 3 4 5 6 7 8 9 10 all'
 
 # Complete kill command with git branches
 complete -c hydra -f -n '__fish_seen_subcommand_from kill' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
+complete -c hydra -f -n '__fish_seen_subcommand_from kill' -l all -d 'Kill all hydra sessions'
+complete -c hydra -f -n '__fish_seen_subcommand_from kill' -l force -d 'Skip confirmation prompt'
 
 # Complete switch command with hydra sessions
 complete -c hydra -f -n '__fish_seen_subcommand_from switch' -a '(test -f "$HYDRA_MAP"; or test -f "$HOME/.hydra/map"; and awk "{print \$1}" "$HYDRA_MAP" "$HOME/.hydra/map" 2>/dev/null)'
+
+# Complete pr command with hydra sessions
+complete -c hydra -f -n '__fish_seen_subcommand_from pr' -a '(test -f "$HYDRA_MAP"; or test -f "$HOME/.hydra/map"; and awk "{print \$1}" "$HYDRA_MAP" "$HOME/.hydra/map" 2>/dev/null)'
 EOF
 }
 

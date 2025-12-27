@@ -89,6 +89,10 @@ _load_libs_for_cmd() {
         group)
             _load_lib state
             ;;
+        pr)
+            _load_lib state
+            _load_lib github
+            ;;
         tail|broadcast|wait-idle)
             _load_lib state
             _load_lib tmux
@@ -218,12 +222,16 @@ Commands:
                       --ai <tool>              Specify AI tool (claude, aider, gemini, etc.)
                       --agents <spec>          Mixed agents (e.g., "claude:2,aider:1")
                       -g, --group <name>       Assign to a group for bulk operations
+                      --after <deps>           Wait for sessions to complete (e.g., "branch1,branch2")
+                      --pr-new                 Create a draft PR after spawning
   spawn --issue <#> Create a head from a GitHub issue
+  spawn --pr <#>    Create a head from an existing GitHub PR
   list              List all active Hydra heads
                     Options:
                       -g, --group <name>       Filter by group
                       --groups                 List all groups with session counts
                       -j, --json               Output in JSON format
+                      --deps                   Show dependency tree
   switch            Switch to a different head (interactive)
   kill <branch>     Remove a worktree and its tmux session
   kill --all        Kill all hydra sessions
@@ -235,6 +243,8 @@ Commands:
                       group <branch>           Show current group
                       group <branch> <name>    Set group
                       group <branch> --clear   Remove from group
+  pr [<branch>]     Create or show GitHub PR for a session
+                    If no branch specified, uses current session
   tail <branch>     View output from a session
                     Options:
                       -n, --lines <N>          Number of lines (default: 50)
@@ -321,6 +331,10 @@ main() {
             shift
             cmd_group "$@"
             ;;
+        pr)
+            shift
+            cmd_pr "$@"
+            ;;
         tail)
             shift
             cmd_tail "$@"
@@ -397,6 +411,9 @@ cmd_spawn() {
     agents_spec=""
     issue_num=""
     group=""
+    after_deps=""
+    pr_num=""
+    pr_new=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -430,10 +447,25 @@ cmd_spawn() {
                 group="$1"
                 shift
                 ;;
+            --after)
+                shift
+                after_deps="$1"
+                shift
+                ;;
+            --pr)
+                shift
+                pr_num="$1"
+                shift
+                ;;
+            --pr-new)
+                pr_new="1"
+                shift
+                ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>]" >&2
+                echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>] [--after <deps>]" >&2
                 echo "       hydra spawn --issue <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
+                echo "       hydra spawn --pr <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
                 exit 1
                 ;;
             *)
@@ -441,8 +473,9 @@ cmd_spawn() {
                     branch="$1"
                 else
                     echo "Error: Too many arguments" >&2
-                    echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>]" >&2
+                    echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>] [--after <deps>]" >&2
                     echo "       hydra spawn --issue <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
+                    echo "       hydra spawn --pr <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
                     exit 1
                 fi
                 shift
@@ -456,21 +489,45 @@ cmd_spawn() {
             echo "Error: Cannot specify both branch name and issue number" >&2
             exit 1
         fi
-        
+
         # Check for incompatible options
         if [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; then
             echo "Error: Cannot use bulk spawn options with --issue" >&2
             exit 1
         fi
-        
+
+        if [ -n "$pr_num" ]; then
+            echo "Error: Cannot specify both --issue and --pr" >&2
+            exit 1
+        fi
+
         # Generate branch from issue
         branch="$(spawn_from_issue "$issue_num")" || exit 1
     fi
-    
+
+    # Handle GitHub PR mode
+    if [ -n "$pr_num" ]; then
+        if [ -n "$branch" ]; then
+            echo "Error: Cannot specify both branch name and --pr" >&2
+            exit 1
+        fi
+
+        # Check for incompatible options
+        if [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; then
+            echo "Error: Cannot use bulk spawn options with --pr" >&2
+            exit 1
+        fi
+
+        # Get branch from PR
+        require github
+        branch="$(spawn_from_pr "$pr_num")" || exit 1
+    fi
+
     if [ -z "$branch" ]; then
         echo "Error: Branch name is required" >&2
         echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>]" >&2
         echo "       hydra spawn --issue <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
+        echo "       hydra spawn --pr <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
         exit 1
     fi
     
@@ -494,7 +551,27 @@ cmd_spawn() {
         echo "Error: Cannot use both --ai and --agents options" >&2
         exit 1
     fi
-    
+
+    # Validate --after (dependencies) if specified
+    if [ -n "$after_deps" ]; then
+        # Can't use --after with bulk spawn
+        if [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; then
+            echo "Error: Cannot use --after with bulk spawn options" >&2
+            exit 1
+        fi
+
+        # Load deps library and validate
+        require deps
+        if ! validate_deps_spec "$after_deps"; then
+            exit 1
+        fi
+
+        # Check for circular dependencies
+        if ! check_circular_deps "$branch" "$after_deps"; then
+            exit 1
+        fi
+    fi
+
     # If agents spec is provided, delegate to bulk spawn with mixed agents
     if [ -n "$agents_spec" ]; then
         spawn_bulk_mixed "$branch" "$agents_spec" "$layout" "$group"
@@ -508,7 +585,26 @@ cmd_spawn() {
     fi
 
     # Single spawn - use helper function
-    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group")"; then
+    # Pass pr_num if spawning from PR (to store in state)
+    spawn_pr_num=""
+    if [ -n "$pr_num" ]; then
+        spawn_pr_num="$pr_num"
+    fi
+
+    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num")"; then
+        # Handle --pr-new: create a draft PR after spawn
+        if [ -n "$pr_new" ]; then
+            require github
+            echo "Creating draft PR for branch '$branch'..." >&2
+            new_pr="$(create_pr_for_branch "$branch" --draft 2>&1)" || {
+                echo "Warning: Failed to create PR: $new_pr" >&2
+            }
+            if [ -n "$new_pr" ] && echo "$new_pr" | grep -q '^[0-9]*$'; then
+                set_pr_for_branch "$branch" "$new_pr"
+                echo "Created draft PR #$new_pr" >&2
+            fi
+        fi
+
         # Optionally skip switching (useful for demos/automation)
         if [ -n "${HYDRA_NO_SWITCH:-}" ]; then
             echo "Session '$session' created (HYDRA_NO_SWITCH set; not attaching)"
@@ -532,6 +628,7 @@ cmd_list() {
     filter_group=""
     show_groups=""
     json_output=""
+    show_deps=""
     while [ $# -gt 0 ]; do
         case "$1" in
             -g|--group)
@@ -547,9 +644,13 @@ cmd_list() {
                 json_output="1"
                 shift
                 ;;
+            --deps)
+                show_deps="1"
+                shift
+                ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra list [-g|--group <name>] [--groups] [--json]" >&2
+                echo "Usage: hydra list [-g|--group <name>] [--groups] [--json] [--deps]" >&2
                 exit 1
                 ;;
             *)
@@ -558,6 +659,15 @@ cmd_list() {
                 ;;
         esac
     done
+
+    # Show dependency tree if requested
+    if [ -n "$show_deps" ]; then
+        require deps
+        echo "Session Dependencies:"
+        echo ""
+        build_full_dep_tree
+        return 0
+    fi
 
     # List all groups if requested
     if [ -n "$show_groups" ]; then
@@ -630,7 +740,7 @@ cmd_list() {
         active=0
         dead=0
 
-        while IFS=' ' read -r branch session ai group timestamp; do
+        while IFS=' ' read -r branch session ai group timestamp deps pr; do
             # Filter by group if specified
             if [ -n "$filter_group" ]; then
                 if [ "$group" != "$filter_group" ]; then
@@ -675,9 +785,17 @@ cmd_list() {
             if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
                 ts_json="$timestamp"
             fi
+            deps_json="null"
+            if [ -n "$deps" ] && [ "$deps" != "-" ]; then
+                deps_json="\"$(json_escape "$deps")\""
+            fi
+            pr_json="null"
+            if [ -n "$pr" ] && [ "$pr" != "-" ]; then
+                pr_json="$pr"
+            fi
 
             # Build JSON object
-            printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s}\n' \
+            printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s, "deps": %s, "pr": %s}\n' \
                 "$(json_escape "$branch")" \
                 "$(json_escape "$session")" \
                 "$ai_json" \
@@ -686,7 +804,9 @@ cmd_list() {
                 "$duration_secs" \
                 "$duration_human" \
                 "$ts_json" \
-                "$is_current" >> "$tmpjson"
+                "$is_current" \
+                "$deps_json" \
+                "$pr_json" >> "$tmpjson"
         done < "$HYDRA_MAP"
 
         # Output JSON
@@ -713,7 +833,7 @@ cmd_list() {
         fi
         echo ""
 
-        while IFS=' ' read -r branch session ai group timestamp; do
+        while IFS=' ' read -r branch session ai group timestamp deps pr; do
             # Filter by group if specified
             if [ -n "$filter_group" ]; then
                 if [ "$group" != "$filter_group" ]; then
@@ -745,6 +865,22 @@ cmd_list() {
                     status_line="$status_line [group: $group]"
                 else
                     status_line="[group: $group]"
+                fi
+            fi
+            # Show dependencies if present
+            if [ -n "$deps" ] && [ "$deps" != "-" ]; then
+                if [ -n "$status_line" ]; then
+                    status_line="$status_line --after $deps"
+                else
+                    status_line="--after $deps"
+                fi
+            fi
+            # Show PR if linked
+            if [ -n "$pr" ] && [ "$pr" != "-" ]; then
+                if [ -n "$status_line" ]; then
+                    status_line="$status_line [PR #$pr]"
+                else
+                    status_line="[PR #$pr]"
                 fi
             fi
 
@@ -877,6 +1013,70 @@ cmd_group() {
         echo "Error: Failed to set group" >&2
         return 1
     fi
+}
+
+cmd_pr() {
+    # Create or show PR for a branch
+    branch="$1"
+
+    # If no branch specified, use current session's branch
+    if [ -z "$branch" ]; then
+        current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
+        if [ -z "$current_session" ]; then
+            echo "Error: Not in a Hydra session and no branch specified" >&2
+            echo "Usage: hydra pr [<branch>]" >&2
+            return 1
+        fi
+        branch="$(get_branch_for_session "$current_session" 2>/dev/null || true)"
+        if [ -z "$branch" ]; then
+            echo "Error: Could not determine branch for current session" >&2
+            return 1
+        fi
+    fi
+
+    # Check if branch exists in mappings
+    session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
+    if [ -z "$session" ]; then
+        echo "Error: No session found for branch '$branch'" >&2
+        return 1
+    fi
+
+    # Check if already has PR
+    existing_pr="$(get_pr_for_branch "$branch" 2>/dev/null || true)"
+    if [ -n "$existing_pr" ] && [ "$existing_pr" != "-" ]; then
+        echo "Branch '$branch' already has PR #$existing_pr"
+        printf "Open in browser? [y/N] "
+        read -r response
+        case "$response" in
+            [yY][eE][sS]|[yY])
+                require github
+                gh pr view "$existing_pr" --web
+                ;;
+        esac
+        return 0
+    fi
+
+    # Check gh CLI
+    require github
+    if ! check_gh_cli; then
+        return 1
+    fi
+
+    # Create new PR
+    echo "Creating PR for branch '$branch'..."
+    new_pr="$(create_pr_for_branch "$branch")" || return 1
+
+    # Store PR number in state
+    set_pr_for_branch "$branch" "$new_pr"
+
+    echo "Created PR #$new_pr"
+    printf "Open in browser? [y/N] "
+    read -r response
+    case "$response" in
+        [yY][eE][sS]|[yY])
+            gh pr view "$new_pr" --web
+            ;;
+    esac
 }
 
 cmd_tail() {

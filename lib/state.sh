@@ -122,7 +122,7 @@ _sanitize_key() {
 }
 
 # Load state cache from mapping file
-# Creates lookup variables for branch->session, session->branch, branch->ai, branch->group, branch->timestamp
+# Creates lookup variables for branch->session, session->branch, branch->ai, branch->group, branch->timestamp, branch->deps, branch->pr
 # Usage: _load_state_cache
 _load_state_cache() {
     # Already loaded?
@@ -139,8 +139,8 @@ _load_state_cache() {
     _validate_and_repair_state_file
 
     # Read all mappings and create lookup variables
-    # Format: branch session [ai_tool] [group] [timestamp]
-    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp; do
+    # Format: branch session [ai_tool] [group] [timestamp] [deps] [pr_number]
+    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
         [ -z "$map_branch" ] && continue
 
         # Create sanitized keys
@@ -164,6 +164,16 @@ _load_state_cache() {
         # Store timestamp if present
         if [ -n "$map_timestamp" ] && [ "$map_timestamp" != "-" ]; then
             eval "_sc_b2ts_${_key_b}=\"\$map_timestamp\""
+        fi
+
+        # Store dependencies if present
+        if [ -n "$map_deps" ] && [ "$map_deps" != "-" ]; then
+            eval "_sc_b2deps_${_key_b}=\"\$map_deps\""
+        fi
+
+        # Store PR number if present
+        if [ -n "$map_pr" ] && [ "$map_pr" != "-" ]; then
+            eval "_sc_b2pr_${_key_b}=\"\$map_pr\""
         fi
     done < "$HYDRA_MAP"
 
@@ -249,12 +259,40 @@ _cache_get_timestamp() {
     return 1
 }
 
+# Get dependencies from cache
+# Usage: _cache_get_deps <branch>
+# Returns: comma-separated deps on stdout, 1 if not found
+_cache_get_deps() {
+    _load_state_cache
+    _key="$(_sanitize_key "$1")"
+    eval "_result=\"\${_sc_b2deps_${_key}:-}\""
+    if [ -n "$_result" ]; then
+        printf '%s\n' "$_result"
+        return 0
+    fi
+    return 1
+}
+
+# Get PR number from cache
+# Usage: _cache_get_pr <branch>
+# Returns: PR number on stdout, 1 if not found
+_cache_get_pr() {
+    _load_state_cache
+    _key="$(_sanitize_key "$1")"
+    eval "_result=\"\${_sc_b2pr_${_key}:-}\""
+    if [ -n "$_result" ]; then
+        printf '%s\n' "$_result"
+        return 0
+    fi
+    return 1
+}
+
 # =============================================================================
 # Public API Functions
 # =============================================================================
 
 # Add a branch-session mapping
-# Usage: add_mapping <branch> <session> [ai_tool] [group] [timestamp]
+# Usage: add_mapping <branch> <session> [ai_tool] [group] [timestamp] [deps] [pr_number]
 # Returns: 0 on success, 1 on failure
 add_mapping() {
     branch="$1"
@@ -262,6 +300,8 @@ add_mapping() {
     ai_tool="${3:-}"
     group="${4:-}"
     timestamp="${5:-$(get_timestamp)}"
+    deps="${6:-}"
+    pr_number="${7:-}"
 
     if [ -z "$branch" ] || [ -z "$session" ]; then
         echo "Error: Branch and session are required" >&2
@@ -274,12 +314,14 @@ add_mapping() {
     fi
 
     # Build the mapping line based on what fields are provided
-    # Format: branch session [ai_tool] [group] [timestamp]
+    # Format: branch session [ai_tool] [group] [timestamp] [deps] [pr_number]
     # Always include timestamp for new entries
     # Use "-" as placeholder for optional fields
     ai_field="${ai_tool:-"-"}"
     group_field="${group:-"-"}"
-    mapping_line="$branch $session $ai_field $group_field $timestamp"
+    deps_field="${deps:-"-"}"
+    pr_field="${pr_number:-"-"}"
+    mapping_line="$branch $session $ai_field $group_field $timestamp $deps_field $pr_field"
 
     # Invalidate cache before write
     _invalidate_state_cache
@@ -323,19 +365,11 @@ remove_mapping() {
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
 
-    # Filter out the branch; preserve AI, group, and timestamp columns for others
-    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp; do
+    # Filter out the branch; preserve all columns for others
+    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
         if [ "$map_branch" != "$branch" ]; then
-            # Preserve all fields that exist
-            if [ -n "$map_timestamp" ]; then
-                echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} $map_timestamp"
-            elif [ -n "$map_group" ]; then
-                echo "$map_branch $map_session ${map_ai:-"-"} $map_group"
-            elif [ -n "$map_ai" ]; then
-                echo "$map_branch $map_session $map_ai"
-            else
-                echo "$map_branch $map_session"
-            fi
+            # Always use 7-field format for consistency
+            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
 
@@ -392,10 +426,10 @@ validate_mappings() {
     if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
         return 0
     fi
-    
+
     errors=0
-    
-    while IFS=' ' read -r branch session _ai _group _timestamp; do
+
+    while IFS=' ' read -r branch session _ai _group _timestamp _deps _pr; do
         # Check if branch exists
         if ! git_branch_exists "$branch"; then
             echo "Warning: Branch '$branch' no longer exists" >&2
@@ -408,7 +442,7 @@ validate_mappings() {
             errors=1
         fi
     done < "$HYDRA_MAP"
-    
+
     return $errors
 }
 
@@ -427,18 +461,11 @@ cleanup_mappings() {
     tmpfile="$(mktemp)" || return 1
     trap 'rm -f "$tmpfile"' EXIT INT TERM
 
-    # Keep only valid mappings; preserve AI, group, and timestamp if present
-    while IFS=' ' read -r branch session ai group timestamp; do
+    # Keep only valid mappings; preserve all fields
+    while IFS=' ' read -r branch session ai group timestamp deps pr; do
         if git_branch_exists "$branch" && tmux_session_exists "$session"; then
-            if [ -n "$timestamp" ]; then
-                echo "$branch $session ${ai:-"-"} ${group:-"-"} $timestamp"
-            elif [ -n "$group" ]; then
-                echo "$branch $session ${ai:-"-"} $group"
-            elif [ -n "$ai" ]; then
-                echo "$branch $session $ai"
-            else
-                echo "$branch $session"
-            fi
+            # Always use 7-field format for consistency
+            echo "$branch $session ${ai:-"-"} ${group:-"-"} ${timestamp:-"-"} ${deps:-"-"} ${pr:-"-"}"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
 
@@ -554,27 +581,14 @@ set_group() {
     trap 'rm -f "$tmpfile"' EXIT INT TERM
 
     found=0
-    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp; do
+    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
         if [ "$map_branch" = "$branch" ]; then
             found=1
-            # Preserve AI or use placeholder
-            ai="${map_ai:-"-"}"
-            # Set new group (or placeholder if clearing)
-            new_group="${group:-"-"}"
-            # Preserve timestamp or use placeholder
-            ts="${map_timestamp:-"-"}"
-            echo "$map_branch $map_session $ai $new_group $ts"
+            # Set new group (or placeholder if clearing), preserve all other fields
+            echo "$map_branch $map_session ${map_ai:-"-"} ${group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
         else
             # Preserve existing entry with all fields
-            if [ -n "$map_timestamp" ]; then
-                echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} $map_timestamp"
-            elif [ -n "$map_group" ]; then
-                echo "$map_branch $map_session ${map_ai:-"-"} $map_group"
-            elif [ -n "$map_ai" ]; then
-                echo "$map_branch $map_session $map_ai"
-            else
-                echo "$map_branch $map_session"
-            fi
+            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
 
@@ -606,15 +620,15 @@ list_groups() {
 
 # Get all mappings for a group
 # Usage: list_mappings_for_group <group>
-# Returns: List of "branch session ai group timestamp" entries on stdout
+# Returns: List of "branch session ai group timestamp deps pr" entries on stdout
 list_mappings_for_group() {
     group="$1"
     if [ -z "$group" ] || [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
         return 0
     fi
-    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp; do
+    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
         if [ "$map_group" = "$group" ]; then
-            echo "$map_branch $map_session ${map_ai:-"-"} $map_group ${map_timestamp:-"-"}"
+            echo "$map_branch $map_session ${map_ai:-"-"} $map_group ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
         fi
     done < "$HYDRA_MAP"
 }
@@ -630,4 +644,127 @@ get_timestamp_for_branch() {
 
     # Use cache for O(1) lookup
     _cache_get_timestamp "$branch"
+}
+
+# Get dependencies for a branch
+# Usage: get_deps_for_branch <branch>
+# Returns: Comma-separated dependency list on stdout, empty if not set
+get_deps_for_branch() {
+    branch="$1"
+    if [ -z "$branch" ]; then
+        return 1
+    fi
+
+    # Use cache for O(1) lookup
+    _cache_get_deps "$branch"
+}
+
+# Get PR number for a branch
+# Usage: get_pr_for_branch <branch>
+# Returns: PR number on stdout, empty if not set
+get_pr_for_branch() {
+    branch="$1"
+    if [ -z "$branch" ]; then
+        return 1
+    fi
+
+    # Use cache for O(1) lookup
+    _cache_get_pr "$branch"
+}
+
+# Set dependencies for a branch
+# Usage: set_deps <branch> <deps>
+# deps: comma-separated list of branch names (e.g., "branch1,branch2")
+# Returns: 0 on success, 1 on failure
+set_deps() {
+    branch="$1"
+    deps="$2"
+
+    if [ -z "$branch" ]; then
+        echo "Error: Branch is required" >&2
+        return 1
+    fi
+
+    if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+        echo "Error: No mappings file" >&2
+        return 1
+    fi
+
+    # Invalidate cache before write
+    _invalidate_state_cache
+
+    # Create temporary file
+    tmpfile="$(mktemp)" || return 1
+    trap 'rm -f "$tmpfile"' EXIT INT TERM
+
+    found=0
+    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
+        if [ "$map_branch" = "$branch" ]; then
+            found=1
+            # Set new deps (or placeholder if clearing), preserve all other fields
+            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${deps:-"-"} ${map_pr:-"-"}"
+        else
+            # Preserve existing entry with all fields
+            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
+        fi
+    done < "$HYDRA_MAP" > "$tmpfile"
+
+    if [ "$found" -eq 0 ]; then
+        echo "Error: Branch '$branch' not found in mappings" >&2
+        rm -f "$tmpfile"
+        trap - EXIT INT TERM
+        return 1
+    fi
+
+    mv "$tmpfile" "$HYDRA_MAP"
+    trap - EXIT INT TERM
+    return 0
+}
+
+# Set PR number for a branch
+# Usage: set_pr_for_branch <branch> <pr_number>
+# Returns: 0 on success, 1 on failure
+set_pr_for_branch() {
+    branch="$1"
+    pr_number="$2"
+
+    if [ -z "$branch" ]; then
+        echo "Error: Branch is required" >&2
+        return 1
+    fi
+
+    if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+        echo "Error: No mappings file" >&2
+        return 1
+    fi
+
+    # Invalidate cache before write
+    _invalidate_state_cache
+
+    # Create temporary file
+    tmpfile="$(mktemp)" || return 1
+    trap 'rm -f "$tmpfile"' EXIT INT TERM
+
+    found=0
+    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
+        if [ "$map_branch" = "$branch" ]; then
+            found=1
+            # Set new PR number (or placeholder if clearing), preserve all other fields
+            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${pr_number:-"-"}"
+        else
+            # Preserve existing entry with all fields
+            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
+        fi
+    done < "$HYDRA_MAP" > "$tmpfile"
+
+    if [ "$found" -eq 0 ]; then
+        echo "Error: Branch '$branch' not found in mappings" >&2
+        rm -f "$tmpfile"
+        trap - EXIT INT TERM
+        return 1
+    fi
+
+    mv "$tmpfile" "$HYDRA_MAP"
+    trap - EXIT INT TERM
+    return 0
 }

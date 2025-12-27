@@ -39,15 +39,6 @@
   - `hydra spawn feature-x -l dev`
   - `hydra list` • `hydra switch` • `hydra dashboard` • `hydra kill feature-x`
 
-## Why Hydra
-
-- Multiple heads: Isolated tmux sessions + git worktrees per branch.
-- GitHub aware: `hydra spawn --issue 123` to branch from an issue.
-- Mixed agents: `--ai aider` or `--agents "claude:2,aider:1"` at spawn.
-- Dashboard: View panes from many sessions in one place; press `q` to exit.
-- Layouts: `default`, `dev`, `full`, and `Ctrl-L` to cycle.
-- Durable: `hydra regenerate` restores sessions after restart.
-
 ## Demo
 
 <img alt="Hydra" src="assets/demos/quick-tour.gif" width="600" />
@@ -97,9 +88,9 @@ hydra status       # per-head health
 hydra status --json # JSON output
 hydra doctor       # performance diagnostics
 
-# Dashboard
-hydra dashboard
-HYDRA_DASHBOARD_PANES_PER_SESSION=2 hydra dashboard
+# Dashboard & TUI
+hydra dashboard                                    # multi-session overview
+hydra tui                                          # interactive session manager
 ```
 
 ## Layouts
@@ -124,6 +115,7 @@ HYDRA_DASHBOARD_PANES_PER_SESSION=2 hydra dashboard
 | `HYDRA_NONINTERACTIVE` | Skip all confirmation prompts (for CI/automation) |
 | `HYDRA_REGENERATE_RUN_STARTUP` | Run startup commands on regenerate |
 | `HYDRA_ALLOW_ADVANCED_REFS` | Relax branch charset validation (use with care) |
+| `HYDRA_DISABLE_YAML` | Disable YAML config parsing |
 
 Per‑head AI selection is persisted: `hydra spawn <branch> --ai <tool>` shows in `hydra list/status` and is reused by `hydra regenerate`.
 
@@ -161,7 +153,28 @@ Add `.hydra/` scripts to customize lifecycle:
 
 - Shows panes from all heads in one tmux window; exits with `q` and restores everything.
 - Collect more than one pane per head with `--panes-per-session <N|all>` or `HYDRA_DASHBOARD_PANES_PER_SESSION`.
-- More details: `docs/dashboard-demo.md`.
+
+## TUI
+
+Interactive terminal UI for managing sessions with real-time updates.
+
+```sh
+hydra tui
+```
+
+| Key | Action |
+|-----|--------|
+| `j/k`, arrows | Navigate sessions |
+| `Enter` | Switch to selected session |
+| `Space` | Toggle selection (for bulk ops) |
+| `x` | Toggle all selections |
+| `G` | Select all |
+| `d` | Kill selected session(s) |
+| `t` | Set tag on session |
+| `T` | Filter by tag |
+| `/` | Search/filter sessions |
+| `?` | Show help overlay |
+| `q` | Quit |
 
 ## Development
 
@@ -170,10 +183,6 @@ make lint    # ShellCheck + dash syntax
 make test    # Run tests in tests/*.sh
 make help    # Show all targets
 ```
-
-## Troubleshooting
-
-- Running from source inside a hydra worktree can break library discovery. Fix by installing (`make install`), setting `HYDRA_ROOT=/path/to/hydra`, or invoking the absolute `hydra` path.
 
 ## Uninstall
 

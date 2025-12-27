@@ -129,6 +129,181 @@ parse_json_value() {
     echo "$result"
 }
 
+# =============================================================================
+# Pull Request Functions
+# =============================================================================
+
+# Validate PR number
+# Usage: validate_pr_number <number>
+# Returns: 0 if valid, 1 if invalid
+validate_pr_number() {
+    pr_num="$1"
+
+    if [ -z "$pr_num" ]; then
+        echo "Error: PR number is required" >&2
+        return 1
+    fi
+
+    # Check if it's a positive integer
+    case "$pr_num" in
+        ''|*[!0-9]*)
+            echo "Error: PR number must be a positive integer" >&2
+            return 1
+            ;;
+        0)
+            echo "Error: PR number must be greater than 0" >&2
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
+# Fetch PR details from GitHub
+# Usage: fetch_pr_details <pr_number>
+# Returns: JSON data on stdout, 1 on error
+fetch_pr_details() {
+    pr_num="$1"
+
+    if ! validate_pr_number "$pr_num"; then
+        return 1
+    fi
+
+    # Fetch PR data
+    if ! gh pr view "$pr_num" --json number,title,headRefName,state,isDraft 2>/dev/null; then
+        echo "Error: Failed to fetch PR #$pr_num" >&2
+        echo "Make sure you're in a GitHub repository and the PR exists" >&2
+        return 1
+    fi
+}
+
+# Get branch name from PR
+# Usage: get_pr_branch <pr_number>
+# Returns: Branch name on stdout, 1 on error
+get_pr_branch() {
+    pr_num="$1"
+
+    if ! validate_pr_number "$pr_num"; then
+        return 1
+    fi
+
+    # Use gh CLI to get PR head ref
+    pr_json="$(gh pr view "$pr_num" --json headRefName 2>/dev/null)" || {
+        echo "Error: Failed to fetch PR #$pr_num" >&2
+        return 1
+    }
+
+    branch="$(parse_json_value "$pr_json" "headRefName")"
+    if [ -z "$branch" ]; then
+        echo "Error: Could not get branch name from PR" >&2
+        return 1
+    fi
+
+    echo "$branch"
+}
+
+# Get PR status
+# Usage: get_pr_status <pr_number>
+# Returns: OPEN|MERGED|CLOSED|DRAFT on stdout, 1 on error
+get_pr_status() {
+    pr_num="$1"
+
+    if ! validate_pr_number "$pr_num"; then
+        return 1
+    fi
+
+    pr_json="$(gh pr view "$pr_num" --json state,isDraft 2>/dev/null)" || {
+        echo "Error: Failed to fetch PR #$pr_num" >&2
+        return 1
+    }
+
+    state="$(parse_json_value "$pr_json" "state")"
+    is_draft="$(parse_json_value "$pr_json" "isDraft")"
+
+    if [ "$is_draft" = "true" ]; then
+        echo "DRAFT"
+    else
+        echo "$state"
+    fi
+}
+
+# Create a new PR for branch
+# Usage: create_pr_for_branch <branch> [--draft]
+# Returns: PR number on stdout, 1 on error
+create_pr_for_branch() {
+    branch="$1"
+    is_draft=""
+
+    if [ "$2" = "--draft" ]; then
+        is_draft="--draft"
+    fi
+
+    if [ -z "$branch" ]; then
+        echo "Error: Branch is required" >&2
+        return 1
+    fi
+
+    # Check if gh is available
+    if ! check_gh_cli; then
+        return 1
+    fi
+
+    # Push branch first if not pushed
+    if ! git ls-remote --heads origin "$branch" 2>/dev/null | grep -q "$branch"; then
+        echo "Pushing branch to origin..." >&2
+        git push -u origin "$branch" || {
+            echo "Error: Failed to push branch to origin" >&2
+            return 1
+        }
+    fi
+
+    # Create PR using --fill to auto-fill from commit
+    # shellcheck disable=SC2086
+    pr_url="$(gh pr create --head "$branch" $is_draft --fill 2>&1)" || {
+        echo "Error: Failed to create PR: $pr_url" >&2
+        return 1
+    }
+
+    # Extract PR number from URL
+    pr_num="$(echo "$pr_url" | grep -o '/pull/[0-9]*' | sed 's|/pull/||' | head -1)"
+
+    if [ -z "$pr_num" ]; then
+        echo "Error: Could not extract PR number from response" >&2
+        return 1
+    fi
+
+    echo "$pr_num"
+}
+
+# Spawn head from GitHub PR
+# Usage: spawn_from_pr <pr_number>
+# Returns: Branch name on stdout, 1 on error
+spawn_from_pr() {
+    pr_num="$1"
+
+    # Check dependencies
+    if ! check_gh_cli; then
+        return 1
+    fi
+
+    # Validate PR number
+    if ! validate_pr_number "$pr_num"; then
+        return 1
+    fi
+
+    echo "Fetching PR #$pr_num from GitHub..." >&2
+
+    # Get branch name from PR
+    branch="$(get_pr_branch "$pr_num")" || return 1
+
+    echo "PR branch: $branch" >&2
+    echo "$branch"
+}
+
+# =============================================================================
+# Issue Functions
+# =============================================================================
+
 # Spawn head from GitHub issue
 # Usage: spawn_from_issue <issue_number>
 # Returns: Branch name on stdout, empty on error

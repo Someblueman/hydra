@@ -6,13 +6,26 @@
 # Dependencies: locks.sh, paths.sh, git.sh, tmux.sh, state.sh, hooks.sh, yaml.sh
 
 # Helper function to spawn a single session
-# Usage: spawn_single <branch> <layout> [ai_tool] [group]
+# Usage: spawn_single <branch> <layout> [ai_tool] [group] [deps] [pr_number]
 # Returns: Session name on stdout, 1 on failure
 spawn_single() {
     branch="$1"
     layout="${2:-default}"
     ai_tool="${3:-}"
     group="${4:-}"
+    deps="${5:-}"
+    pr_number="${6:-}"
+
+    # Wait for dependencies if specified
+    if [ -n "$deps" ] && [ "$deps" != "-" ]; then
+        require deps
+        echo "Waiting for dependencies: $deps" >&2
+        if ! wait_for_deps "$deps"; then
+            echo "Error: Dependency wait failed or timed out" >&2
+            return 1
+        fi
+        echo "Dependencies complete, proceeding with spawn" >&2
+    fi
 
     # Best-effort cleanup of stale session-name locks
     cleanup_stale_locks 2>/dev/null || true
@@ -64,8 +77,8 @@ spawn_single() {
     # Release the reserved session name lock now that session is created
     release_session_lock "$session" 2>/dev/null || true
 
-    # Add mapping (persist selected AI tool and group if provided)
-    if ! add_mapping "$branch" "$session" "${ai_tool:-}" "${group:-}"; then
+    # Add mapping (persist selected AI tool, group, deps, and PR if provided)
+    if ! add_mapping "$branch" "$session" "${ai_tool:-}" "${group:-}" "" "${deps:-}" "${pr_number:-}"; then
         echo "Warning: Failed to save branch-session mapping" >&2
     fi
 
