@@ -114,6 +114,8 @@ _load_libs_for_cmd() {
             _load_lib tmux
             _load_lib state
             _load_lib kill
+            _load_lib limits
+            _load_lib spawn
             ;;
         spawn)
             _load_lib output
@@ -127,6 +129,7 @@ _load_libs_for_cmd() {
             _load_lib yaml
             _load_lib spawn
             _load_lib github
+            _load_lib limits
             ;;
         regenerate)
             _load_lib output
@@ -178,6 +181,12 @@ _load_libs_for_cmd() {
             ;;
         completion)
             _load_lib completion
+            ;;
+        queue)
+            _load_lib output
+            _load_lib state
+            _load_lib locks
+            _load_lib limits
             ;;
         *)
             # Unknown command - load all for safety
@@ -289,6 +298,14 @@ Commands:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session
   tui               Interactive terminal UI for managing sessions
   cycle-layout      Cycle through tmux pane layouts
+  queue             View and manage pending spawn queue
+                    Subcommands:
+                      queue                    List queued spawns
+                      queue clear              Clear all queued spawns
+                      queue remove <branch>    Remove specific entry
+                      queue process            Process queue immediately
+                    Options:
+                      -j, --json               Output in JSON format
   completion        Generate shell completion scripts
   version           Show version information
 
@@ -321,6 +338,10 @@ Environment:
   HYDRA_AI_COMMAND  Default AI tool (default: claude)
   HYDRA_ROOT        Override hydra installation path (for library discovery)
   HYDRA_DASHBOARD_PANES_PER_SESSION  Panes per session for dashboard (1, N, or all)
+  HYDRA_MAX_SESSIONS  Maximum active sessions (default: unlimited)
+                      When limit is reached, spawns are queued for later
+  HYDRA_SKIP_SETUP  Set to 1 to skip environment setup commands
+  HYDRA_SETUP_CONTINUE  Set to 1 to continue spawn even if setup fails
 EOF
 }
 
@@ -411,6 +432,10 @@ main() {
         completion)
             shift
             cmd_completion "$@"
+            ;;
+        queue)
+            shift
+            cmd_queue "$@"
             ;;
         version|-v|--version)
             echo "Hydra version $HYDRA_VERSION"
@@ -601,6 +626,74 @@ cmd_spawn() {
         fi
     fi
 
+    # Check resource limits before spawning
+    if is_limit_enabled; then
+        # Calculate total sessions to spawn
+        total_to_spawn="$count"
+        if [ -n "$agents_spec" ]; then
+            # Count total from agents spec (e.g., "claude:2,aider:1" = 3)
+            total_to_spawn=0
+            # Parse spec and sum counts
+            _spec="$agents_spec"
+            while [ -n "$_spec" ]; do
+                _item="${_spec%%,*}"
+                _agent_count="${_item#*:}"
+                if [ "$_agent_count" != "$_item" ]; then
+                    total_to_spawn=$((total_to_spawn + _agent_count))
+                else
+                    total_to_spawn=$((total_to_spawn + 1))
+                fi
+                if [ "$_spec" = "$_item" ]; then
+                    break
+                fi
+                _spec="${_spec#*,}"
+            done
+        fi
+
+        if would_exceed_limit "$total_to_spawn"; then
+            max="$(get_max_sessions)"
+            current="$(get_active_session_count)"
+            available="$(get_available_capacity)"
+
+            echo "Session limit reached: $current/$max active sessions" >&2
+
+            if [ "$available" -gt 0 ] && [ "$available" -lt "$total_to_spawn" ]; then
+                echo "Can only spawn $available of requested $total_to_spawn sessions" >&2
+            fi
+
+            # Prompt to queue spawns (only in interactive mode)
+            if [ -t 0 ] && [ -t 1 ]; then
+                printf "Queue spawn request(s) for later? [y/N] "
+                read -r response
+                case "$response" in
+                    [yY][eE][sS]|[yY])
+                        # Queue the spawn(s)
+                        if [ "$total_to_spawn" -eq 1 ]; then
+                            queue_spawn "$branch" "$ai_tool" "$group" "$layout" "50" >/dev/null
+                            echo "Queued spawn for '$branch'. Run 'hydra queue' to view pending."
+                        else
+                            # Queue bulk spawns
+                            i=1
+                            while [ "$i" -le "$total_to_spawn" ]; do
+                                queue_spawn "${branch}-${i}" "$ai_tool" "$group" "$layout" "50" >/dev/null
+                                i=$((i + 1))
+                            done
+                            echo "Queued $total_to_spawn spawn(s). Run 'hydra queue' to view pending."
+                        fi
+                        return 0
+                        ;;
+                    *)
+                        echo "Aborted" >&2
+                        exit 1
+                        ;;
+                esac
+            else
+                echo "Error: Cannot spawn - session limit reached (non-interactive mode)" >&2
+                exit 1
+            fi
+        fi
+    fi
+
     # If agents spec is provided, delegate to bulk spawn with mixed agents
     if [ -n "$agents_spec" ]; then
         spawn_bulk_mixed "$branch" "$agents_spec" "$layout" "$group"
@@ -650,6 +743,83 @@ cmd_spawn() {
     else
         return 1
     fi
+}
+
+cmd_queue() {
+    # Parse arguments
+    action=""
+    json_output=""
+    target_branch=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -j|--json)
+                json_output="1"
+                shift
+                ;;
+            clear)
+                action="clear"
+                shift
+                ;;
+            remove)
+                action="remove"
+                shift
+                if [ $# -gt 0 ]; then
+                    target_branch="$1"
+                    shift
+                fi
+                ;;
+            process)
+                action="process"
+                shift
+                ;;
+            -*)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Usage: hydra queue [clear|remove <branch>|process] [--json]" >&2
+                exit 1
+                ;;
+            *)
+                echo "Error: Unknown action '$1'" >&2
+                echo "Usage: hydra queue [clear|remove <branch>|process] [--json]" >&2
+                exit 1
+                ;;
+        esac
+    done
+
+    case "$action" in
+        clear)
+            count="$(clear_queue)"
+            echo "Cleared $count queued spawn(s)"
+            ;;
+        remove)
+            if [ -z "$target_branch" ]; then
+                echo "Error: Branch name required" >&2
+                echo "Usage: hydra queue remove <branch>" >&2
+                exit 1
+            fi
+            if dequeue_spawn "$target_branch"; then
+                echo "Removed '$target_branch' from queue"
+            else
+                echo "Branch '$target_branch' not found in queue"
+                exit 1
+            fi
+            ;;
+        process)
+            spawned="$(process_spawn_queue)"
+            echo "Processed queue: $spawned session(s) spawned"
+            ;;
+        *)
+            # Default: list queue
+            if [ -n "$json_output" ]; then
+                list_queue --json
+            else
+                echo "Spawn Queue:"
+                echo "============"
+                echo ""
+                list_queue
+            fi
+            ;;
+    esac
 }
 
 cmd_list() {

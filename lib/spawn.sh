@@ -59,6 +59,17 @@ spawn_single() {
         return 1
     fi
 
+    # Run environment setup commands (blocking, before session creation)
+    if ! run_setup_commands "$worktree_path" "$repo_root"; then
+        echo "Error: Environment setup failed" >&2
+        if [ -z "${HYDRA_SETUP_CONTINUE:-}" ]; then
+            # Clean up worktree and abort
+            delete_worktree "$worktree_path" 2>/dev/null || true
+            return 1
+        fi
+        echo "Warning: Continuing despite setup failure (HYDRA_SETUP_CONTINUE set)" >&2
+    fi
+
     # Generate session name
     session="$(generate_session_name "$branch")"
 

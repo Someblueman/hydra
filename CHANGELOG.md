@@ -6,7 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-<!-- Nothing yet -->
+
+### Added
+- Resource Limits to prevent system overload with too many parallel sessions
+  - `HYDRA_MAX_SESSIONS` environment variable sets global session limit
+  - Priority queue for pending spawns when limit is reached
+  - `hydra queue` command to view/manage pending spawns
+  - `hydra queue clear` removes all queued spawns
+  - `hydra queue remove <branch>` removes specific entry
+  - `hydra queue process` manually processes queue
+  - Queue automatically processed when sessions are killed
+- Environment Setup Automation for automatic dependency installation
+  - `setup:` section in `.hydra/config.yml` runs commands before session creation
+  - Commands execute blocking in worktree directory
+  - `HYDRA_SKIP_SETUP=1` bypasses all setup commands
+  - `HYDRA_SETUP_CONTINUE=1` continues spawn even if setup fails
+  - Progress output with `[setup]` prefix for visibility
+
+### Changed
+- Kill command now loads limits library for queue processing
 
 ## [1.4.0] - 2025-12-27
 

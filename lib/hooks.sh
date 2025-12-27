@@ -2,6 +2,145 @@
 # Hooks and custom session configuration for Hydra
 # POSIX-compliant shell script
 
+# =============================================================================
+# Environment Setup Automation
+# =============================================================================
+# Runs setup commands from .hydra/config.yml BEFORE session creation.
+# This enables automatic dependency installation (npm install, etc.)
+#
+# Config format:
+# setup:
+#   - npm install
+#   - cp .env.example .env
+#   - docker-compose up -d db
+#
+# Environment:
+#   HYDRA_SKIP_SETUP=1      Skip all setup commands
+#   HYDRA_SETUP_CONTINUE=1  Continue spawn even if setup fails
+
+# Parse setup commands from YAML config file
+# Usage: parse_setup_commands <config_path>
+# Returns: One command per line on stdout
+parse_setup_commands() {
+    _cfg="$1"
+    [ -f "$_cfg" ] || return 0
+
+    awk '
+      BEGIN { in_setup=0 }
+      /^setup:/ { in_setup=1; next }
+      /^[a-zA-Z_]+:/ && !/^  / { in_setup=0 }
+      in_setup && /^[[:space:]]*-[[:space:]]/ {
+        cmd=$0
+        sub(/^[[:space:]]*-[[:space:]]*/, "", cmd)
+        # Trim trailing whitespace
+        sub(/[[:space:]]*$/, "", cmd)
+        if (cmd != "") print cmd
+      }
+    ' "$_cfg"
+}
+
+# Run environment setup commands from YAML config (blocking)
+# Usage: run_setup_commands <worktree_path> <repo_root>
+# Returns: 0 on success, 1 on failure
+# Note: Runs BEFORE session creation in worktree directory
+run_setup_commands() {
+    _wt="$1"
+    _repo="$2"
+
+    # Check skip flag
+    if [ -n "${HYDRA_SKIP_SETUP:-}" ]; then
+        return 0
+    fi
+
+    # Locate YAML config
+    _cfgpath=""
+    # Check worktree first
+    if [ -n "$_wt" ] && [ -f "$_wt/.hydra/config.yml" ]; then
+        _cfgpath="$_wt/.hydra/config.yml"
+    elif [ -n "$_wt" ] && [ -f "$_wt/.hydra/config.yaml" ]; then
+        _cfgpath="$_wt/.hydra/config.yaml"
+    # Then repo root
+    elif [ -n "$_repo" ] && [ -f "$_repo/.hydra/config.yml" ]; then
+        _cfgpath="$_repo/.hydra/config.yml"
+    elif [ -n "$_repo" ] && [ -f "$_repo/.hydra/config.yaml" ]; then
+        _cfgpath="$_repo/.hydra/config.yaml"
+    # Then HYDRA_HOME
+    elif [ -n "${HYDRA_HOME:-}" ] && [ -f "$HYDRA_HOME/config.yml" ]; then
+        _cfgpath="$HYDRA_HOME/config.yml"
+    elif [ -n "${HYDRA_HOME:-}" ] && [ -f "$HYDRA_HOME/config.yaml" ]; then
+        _cfgpath="$HYDRA_HOME/config.yaml"
+    fi
+
+    # No config found
+    if [ -z "$_cfgpath" ]; then
+        return 0
+    fi
+
+    # Parse setup commands to temp file (avoids subshell issues with while loop)
+    _tmpfile="$(mktemp)"
+    parse_setup_commands "$_cfgpath" > "$_tmpfile"
+
+    # Check if any commands to run
+    if [ ! -s "$_tmpfile" ]; then
+        rm -f "$_tmpfile"
+        return 0
+    fi
+
+    # Count commands for progress
+    _total="$(wc -l < "$_tmpfile" | tr -d ' ')"
+    _current=0
+    _failed=0
+
+    echo "[setup] Running $_total setup command(s)..." >&2
+
+    # Execute each command in worktree directory
+    # Use file redirection instead of pipe to avoid subshell
+    # shellcheck disable=SC2094
+    while IFS= read -r _cmd; do
+        [ -z "$_cmd" ] && continue
+        _current=$((_current + 1))
+
+        echo "[setup] ($_current/$_total) $_cmd" >&2
+
+        # Run command in worktree directory
+        # Use temp file to capture output while preserving exit code
+        _outfile="$(mktemp)"
+        (cd "$_wt" && sh -c "$_cmd") >"$_outfile" 2>&1
+        _exit_code=$?
+
+        # Display output with prefix
+        if [ -s "$_outfile" ]; then
+            sed 's/^/[setup]   /' < "$_outfile" >&2
+        fi
+        rm -f "$_outfile"
+
+        if [ "$_exit_code" -ne 0 ]; then
+            _failed=1
+            echo "[setup] Command failed (exit code $_exit_code): $_cmd" >&2
+
+            if [ -z "${HYDRA_SETUP_CONTINUE:-}" ]; then
+                echo "[setup] Aborting (set HYDRA_SETUP_CONTINUE=1 to continue on failure)" >&2
+                rm -f "$_tmpfile"
+                return 1
+            fi
+            echo "[setup] Continuing despite failure (HYDRA_SETUP_CONTINUE set)" >&2
+        fi
+    done < "$_tmpfile"
+
+    rm -f "$_tmpfile"
+
+    if [ "$_failed" -eq 1 ] && [ -z "${HYDRA_SETUP_CONTINUE:-}" ]; then
+        return 1
+    fi
+
+    echo "[setup] Complete ($_total command(s) executed)" >&2
+    return 0
+}
+
+# =============================================================================
+# Configuration Directory Discovery
+# =============================================================================
+
 # Locate the highest-precedence config directory for a worktree
 # Precedence: worktree/.hydra -> repo_root/.hydra -> HYDRA_HOME
 # Usage: locate_config_dir <worktree_path> <repo_root>
