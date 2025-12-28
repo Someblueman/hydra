@@ -22,9 +22,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `HYDRA_SKIP_SETUP=1` bypasses all setup commands
   - `HYDRA_SETUP_CONTINUE=1` continues spawn even if setup fails
   - Progress output with `[setup]` prefix for visibility
+- New test suites for previously untested modules
+  - `test_kill.sh` - Unit tests for lib/kill.sh (12 tests)
+  - `test_deps.sh` - Unit tests for lib/deps.sh (15 tests)
+
+### Fixed
+- **Critical**: Undefined `require` function broke `--pr`, `--issue`, and `--after` spawn options
+  - Replaced all `require X` calls with `_load_lib X` in bin/hydra and lib/spawn.sh
+- **Bug**: Missing numeric validation in limits.sh could cause silent failures
+  - Added POSIX-compliant validation using case pattern matching
+- **Test**: `test_layout.sh` unconditionally passed without actually testing `setup_layout_hotkeys`
+  - Now tests with `HYDRA_DISABLE_HOTKEYS` environment variable
+- **Test**: `test_json_output.sh` JSON validation only checked brace balance
+  - Improved to check structure, balanced quotes, and valid start character
 
 ### Changed
 - Kill command now loads limits library for queue processing
+- Performance: Added tmux session caching to reduce subprocess calls
+  - `cmd_switch` - Cache sessions before building list
+  - `cmd_broadcast` - Cache before sending to sessions
+  - `cmd_group_wait` - Cache per poll iteration
+  - `cmd_wait_idle` - Cache for initialization and per poll iteration
 
 ## [1.4.0] - 2025-12-27
 

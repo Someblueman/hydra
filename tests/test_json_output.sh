@@ -68,9 +68,22 @@ assert_contains() {
     fi
 }
 
-# Validate JSON syntax (simple check for balanced braces)
+# Validate JSON syntax (improved checks beyond just balanced braces)
 validate_json() {
     json="$1"
+
+    # Empty or whitespace-only is invalid
+    case "$json" in
+        ''|*[!\ ]*) ;;
+        *) return 1 ;;
+    esac
+
+    # Must start with { or [ (after trimming whitespace)
+    trimmed="$(printf '%s' "$json" | sed 's/^[[:space:]]*//')"
+    case "$trimmed" in
+        '{'*|'['*) ;;
+        *) return 1 ;;
+    esac
 
     # Check for balanced curly braces
     open_curly="$(printf '%s' "$json" | tr -cd '{' | wc -c | tr -d ' ')"
@@ -80,7 +93,13 @@ validate_json() {
     open_bracket="$(printf '%s' "$json" | tr -cd '[' | wc -c | tr -d ' ')"
     close_bracket="$(printf '%s' "$json" | tr -cd ']' | wc -c | tr -d ' ')"
 
-    if [ "$open_curly" -eq "$close_curly" ] && [ "$open_bracket" -eq "$close_bracket" ]; then
+    # Check for balanced double quotes (should be even number)
+    quote_count="$(printf '%s' "$json" | tr -cd '"' | wc -c | tr -d ' ')"
+    quote_remainder=$((quote_count % 2))
+
+    if [ "$open_curly" -eq "$close_curly" ] && \
+       [ "$open_bracket" -eq "$close_bracket" ] && \
+       [ "$quote_remainder" -eq 0 ]; then
         return 0
     else
         return 1

@@ -21,7 +21,11 @@ get_max_sessions() {
 # Returns: 0 if limit is enabled and > 0, 1 otherwise
 is_limit_enabled() {
     _max="$(get_max_sessions)"
-    [ "$_max" -gt 0 ] 2>/dev/null
+    # Validate _max is numeric before comparison
+    case "$_max" in
+        ''|*[!0-9]*) return 1 ;;  # Not a valid positive integer
+    esac
+    [ "$_max" -gt 0 ]
 }
 
 # =============================================================================
@@ -46,8 +50,13 @@ would_exceed_limit() {
     _requested="${1:-1}"
     _max="$(get_max_sessions)"
 
+    # Validate _max is numeric
+    case "$_max" in
+        ''|*[!0-9]*) return 1 ;;  # Invalid limit = no limit
+    esac
+
     # No limit set
-    if [ "$_max" -le 0 ] 2>/dev/null; then
+    if [ "$_max" -le 0 ]; then
         return 1
     fi
 
@@ -63,7 +72,15 @@ would_exceed_limit() {
 get_available_capacity() {
     _max="$(get_max_sessions)"
 
-    if [ "$_max" -le 0 ] 2>/dev/null; then
+    # Validate _max is numeric
+    case "$_max" in
+        ''|*[!0-9]*)
+            printf '%s' "unlimited"
+            return 0
+            ;;
+    esac
+
+    if [ "$_max" -le 0 ]; then
         printf '%s' "unlimited"
         return 0
     fi

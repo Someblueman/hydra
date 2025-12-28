@@ -18,7 +18,7 @@ spawn_single() {
 
     # Wait for dependencies if specified
     if [ -n "$deps" ] && [ "$deps" != "-" ]; then
-        require deps
+        _load_lib deps
         echo "Waiting for dependencies: $deps" >&2
         if ! wait_for_deps "$deps"; then
             echo "Error: Dependency wait failed or timed out" >&2

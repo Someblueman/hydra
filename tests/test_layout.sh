@@ -138,17 +138,14 @@ test_restore_layout_no_file() {
 # Test setup_layout_hotkeys parameter validation
 test_setup_layout_hotkeys_validation() {
     echo "Testing setup_layout_hotkeys parameter validation..."
-    
+
     # Test empty session name
     setup_layout_hotkeys "" 2>/dev/null
     assert_failure $? "setup_layout_hotkeys should fail with empty session name"
-    
-    # Test with valid session name (this might fail if tmux/session doesn't exist, but that's expected)
-    setup_layout_hotkeys "test-session" 2>/dev/null
-    # We don't assert success/failure here since it depends on tmux availability and session existence
-    echo "[PASS] setup_layout_hotkeys parameter validation passed"
-    pass_count=$((pass_count + 1))
-    test_count=$((test_count + 1))
+
+    # Test that HYDRA_DISABLE_HOTKEYS skips hotkey binding and returns success
+    HYDRA_DISABLE_HOTKEYS=1 setup_layout_hotkeys "test-session" 2>/dev/null
+    assert_success $? "setup_layout_hotkeys should succeed when HYDRA_DISABLE_HOTKEYS is set"
 }
 
 # Test layout save/restore integration

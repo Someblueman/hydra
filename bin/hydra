@@ -573,7 +573,7 @@ cmd_spawn() {
         fi
 
         # Get branch from PR
-        require github
+        _load_lib github
         branch="$(spawn_from_pr "$pr_num")" || exit 1
     fi
 
@@ -615,7 +615,7 @@ cmd_spawn() {
         fi
 
         # Load deps library and validate
-        require deps
+        _load_lib deps
         if ! validate_deps_spec "$after_deps"; then
             exit 1
         fi
@@ -716,7 +716,7 @@ cmd_spawn() {
     if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num")"; then
         # Handle --pr-new: create a draft PR after spawn
         if [ -n "$pr_new" ]; then
-            require github
+            _load_lib github
             echo "Creating draft PR for branch '$branch'..." >&2
             new_pr="$(create_pr_for_branch "$branch" --draft 2>&1)" || {
                 echo "Warning: Failed to create PR: $new_pr" >&2
@@ -861,7 +861,7 @@ cmd_list() {
 
     # Show dependency tree if requested
     if [ -n "$show_deps" ]; then
-        require deps
+        _load_lib deps
         echo "Session Dependencies:"
         echo ""
         build_full_dep_tree
@@ -1104,13 +1104,19 @@ cmd_switch() {
         echo "No active Hydra heads to switch to"
         return 1
     fi
-    
+
     # If inside tmux, use tmux's interactive switcher
     if [ -n "${TMUX:-}" ]; then
+        # Cache all tmux sessions once to avoid repeated subprocess calls (perf)
+        _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+        _session_exists_cached() {
+            echo "$_cached_tmux_sessions" | grep -qx "$1" 2>/dev/null
+        }
+
         # Build session list for fzf or simple menu
         sessions=""
         while IFS=' ' read -r branch session; do
-            if tmux_session_exists "$session"; then
+            if _session_exists_cached "$session"; then
                 sessions="$sessions$branch ($session)\n"
             fi
         done < "$HYDRA_MAP"
@@ -1283,13 +1289,19 @@ cmd_group_wait() {
         # Re-read mappings in case sessions were killed
         mappings="$(list_mappings_for_group "$group_name")"
 
+        # Cache tmux sessions once per poll iteration (perf: avoid N subprocess calls)
+        _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+        _session_exists_cached() {
+            echo "$_cached_tmux_sessions" | grep -qx "$1" 2>/dev/null
+        }
+
         if [ -n "$mappings" ]; then
             # Use a temp file to avoid subshell variable scope issues
             tmp_active="${HYDRA_HOME}/tmp_wait_$$"
             : > "$tmp_active"
 
             printf '%s\n' "$mappings" | while IFS=' ' read -r branch session _rest; do
-                if tmux_session_exists "$session"; then
+                if _session_exists_cached "$session"; then
                     echo "$branch" >> "$tmp_active"
                 fi
             done
@@ -1683,7 +1695,7 @@ cmd_pr() {
         read -r response
         case "$response" in
             [yY][eE][sS]|[yY])
-                require github
+                _load_lib github
                 gh pr view "$existing_pr" --web
                 ;;
         esac
@@ -1691,7 +1703,7 @@ cmd_pr() {
     fi
 
     # Check gh CLI
-    require github
+    _load_lib github
     if ! check_gh_cli; then
         return 1
     fi
@@ -1837,12 +1849,18 @@ cmd_broadcast() {
         echo "Broadcasting to all sessions..."
     fi
 
+    # Cache all tmux sessions once to avoid repeated subprocess calls (perf)
+    _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+    _session_exists_cached() {
+        echo "$_cached_tmux_sessions" | grep -qx "$1" 2>/dev/null
+    }
+
     # Use temp file for count to avoid subshell variable loss
     tmpcount="$(mktemp)"
     printf "0" > "$tmpcount"
 
     echo "$mappings" | while IFS=' ' read -r branch session _ai _group; do
-        if tmux_session_exists "$session"; then
+        if _session_exists_cached "$session"; then
             echo "  Sending to $branch ($session)..."
             tmux send-keys -t "$session" "$command_text" Enter 2>/dev/null || true
             # Increment count in file
@@ -1917,9 +1935,15 @@ cmd_wait_idle() {
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
+    # Cache tmux sessions for initialization (perf)
+    _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+    _session_exists_cached() {
+        echo "$_cached_tmux_sessions" | grep -qx "$1" 2>/dev/null
+    }
+
     # Initialize tracking
     echo "$mappings" | while IFS=' ' read -r branch session _ai _group; do
-        if tmux_session_exists "$session"; then
+        if _session_exists_cached "$session"; then
             echo "$start_time" > "$tmpdir/$session.time"
             tmux capture-pane -t "$session" -p 2>/dev/null | cksum > "$tmpdir/$session.hash"
         fi
@@ -1934,11 +1958,14 @@ cmd_wait_idle() {
             return 1
         fi
 
+        # Refresh session cache once per poll iteration (perf: avoid N subprocess calls)
+        _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+
         # Use file to track idle state across subshell
         echo "idle" > "$tmpdir/status"
 
         echo "$mappings" | while IFS=' ' read -r _branch session _ai _group; do
-            if ! tmux_session_exists "$session"; then
+            if ! _session_exists_cached "$session"; then
                 continue
             fi
 
