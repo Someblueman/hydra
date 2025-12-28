@@ -16,7 +16,7 @@ _hydra_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    commands="spawn list switch kill regenerate status doctor dashboard cycle-layout tui cleanup pr completion version help"
+    commands="spawn list switch kill regenerate status doctor dashboard cycle-layout tui cleanup pr template completion version help"
     opts="-h --help -v --version"
     
     case "${prev}" in
@@ -112,7 +112,7 @@ _hydra_completion() {
 
         case "${cur}" in
             -*)
-                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --agents -i --issue --pr --pr-new --after" -- ${cur}))
+                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --agents -i --issue --pr --pr-new --after -t --template" -- ${cur}))
                 return 0
                 ;;
         esac
@@ -122,7 +122,17 @@ _hydra_completion() {
     if [[ "${COMP_WORDS[@]}" =~ list ]]; then
         case "${cur}" in
             -*)
-                COMPREPLY=($(compgen -W "--json --deps" -- ${cur}))
+                COMPREPLY=($(compgen -W "--json --deps --no-pr-status --refresh-pr-status" -- ${cur}))
+                return 0
+                ;;
+        esac
+    fi
+
+    # Check if we're completing template subcommand
+    if [[ "${COMP_WORDS[@]}" =~ template ]]; then
+        case "${prev}" in
+            template)
+                COMPREPLY=($(compgen -W "list create show edit delete" -- ${cur}))
                 return 0
                 ;;
         esac
@@ -183,12 +193,18 @@ _hydra() {
                         '--pr[Create from GitHub PR]:pr:' \
                         '--pr-new[Create new draft PR after spawn]' \
                         '--after[Wait for dependencies]:deps:_hydra_sessions' \
+                        '(-t --template)'{-t,--template}'[Apply session template]:template:_hydra_templates' \
                         '1:branch:_hydra_branches'
                     ;;
                 list)
                     _arguments \
                         '--json[Output in JSON format]' \
-                        '--deps[Show dependency tree]'
+                        '--deps[Show dependency tree]' \
+                        '--no-pr-status[Skip fetching PR status]' \
+                        '--refresh-pr-status[Force refresh PR status cache]'
+                    ;;
+                template)
+                    _arguments '1:subcommand:(list create show edit delete)'
                     ;;
                 dashboard)
                     _arguments \
@@ -225,6 +241,7 @@ _hydra_commands() {
         'tui:Interactive terminal UI for session management'
         'cleanup:Remove orphaned worktrees and mappings'
         'pr:Create or show GitHub PR for a session'
+        'template:Manage session templates'
         'completion:Generate shell completion scripts'
         'version:Show version information'
         'help:Show help message'
@@ -243,6 +260,15 @@ _hydra_sessions() {
     if [[ -f "${HYDRA_MAP:-$HOME/.hydra/map}" ]]; then
         sessions=(${(f)"$(awk '{print $1}' "${HYDRA_MAP:-$HOME/.hydra/map}" 2>/dev/null)"})
         _describe 'session' sessions
+    fi
+}
+
+_hydra_templates() {
+    local templates template_dir
+    template_dir="${HYDRA_HOME:-$HOME/.hydra}/templates"
+    if [[ -d "$template_dir" ]]; then
+        templates=(${(f)"$(ls -1 "$template_dir"/*.yml "$template_dir"/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.ya\?ml$//')"})
+        _describe 'template' templates
     fi
 }
 
@@ -270,6 +296,7 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'cycle-layout' -d 'Cycle thro
 complete -c hydra -f -n '__fish_use_subcommand' -a 'tui' -d 'Interactive terminal UI for session management'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'cleanup' -d 'Remove orphaned worktrees and mappings'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'pr' -d 'Create or show GitHub PR for a session'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'template' -d 'Manage session templates'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'completion' -d 'Generate shell completion scripts'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'version' -d 'Show version information'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'help' -d 'Show help message'
@@ -287,11 +314,17 @@ complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s i -l issue -d 'Cr
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l pr -d 'Create from GitHub PR number'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l pr-new -d 'Create new draft PR after spawn'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l after -d 'Wait for dependencies (comma-separated branches)'
-complete -c hydra -f -n '__fish_seen_subcommand_from spawn; and not __fish_seen_subcommand_from -l --layout -n --count --ai --agents -i --issue --pr --pr-new --after' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s t -l template -d 'Apply session template'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn; and not __fish_seen_subcommand_from -l --layout -n --count --ai --agents -i --issue --pr --pr-new --after -t --template' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
 
 # Complete list command
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l json -d 'Output in JSON format'
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l deps -d 'Show dependency tree'
+complete -c hydra -f -n '__fish_seen_subcommand_from list' -l no-pr-status -d 'Skip fetching PR status'
+complete -c hydra -f -n '__fish_seen_subcommand_from list' -l refresh-pr-status -d 'Force refresh PR status cache'
+
+# Complete template command
+complete -c hydra -f -n '__fish_seen_subcommand_from template' -a 'list create show edit delete'
 
 # Complete dashboard flags
 complete -c hydra -f -n '__fish_seen_subcommand_from dashboard' -s p -l panes-per-session -d 'Panes to collect per session' -a '1 2 3 4 5 6 7 8 9 10 all'

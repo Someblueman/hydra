@@ -227,6 +227,107 @@ get_pr_status() {
     fi
 }
 
+# =============================================================================
+# PR Status Caching
+# =============================================================================
+
+# Get path to PR status cache file
+# Usage: _get_pr_cache_file
+# Returns: Path on stdout
+_get_pr_cache_file() {
+    printf '%s' "${HYDRA_HOME:-$HOME/.hydra}/pr_status_cache"
+}
+
+# Get cached PR status if still valid
+# Usage: get_cached_pr_status <pr_number>
+# Returns: Status on stdout if cached and valid, 1 if stale/missing
+get_cached_pr_status() {
+    _pr_num="$1"
+    _cache_file="$(_get_pr_cache_file)"
+    _ttl="${HYDRA_PR_CACHE_TTL:-300}"
+
+    [ -f "$_cache_file" ] || return 1
+
+    # Look up PR in cache
+    _cached_line="$(grep "^${_pr_num} " "$_cache_file" 2>/dev/null | head -1)"
+    [ -n "$_cached_line" ] || return 1
+
+    # Parse: pr_num status timestamp
+    _cached_ts="$(echo "$_cached_line" | cut -d' ' -f3)"
+    _now="$(date +%s)"
+    _age=$((_now - _cached_ts))
+
+    if [ "$_age" -lt "$_ttl" ]; then
+        echo "$_cached_line" | cut -d' ' -f2
+        return 0
+    fi
+    return 1
+}
+
+# Update PR status cache
+# Usage: cache_pr_status <pr_number> <status>
+cache_pr_status() {
+    _pr_num="$1"
+    _status="$2"
+    _cache_file="$(_get_pr_cache_file)"
+    _now="$(date +%s)"
+
+    mkdir -p "$(dirname "$_cache_file")"
+
+    # Remove old entry for this PR (atomic update via temp file)
+    if [ -f "$_cache_file" ]; then
+        _tmpfile="$(mktemp)"
+        grep -v "^${_pr_num} " "$_cache_file" > "$_tmpfile" 2>/dev/null || true
+        mv "$_tmpfile" "$_cache_file"
+    fi
+
+    # Add new entry
+    echo "$_pr_num $_status $_now" >> "$_cache_file"
+}
+
+# Get PR status with caching
+# Usage: get_pr_status_cached <pr_number> [force_refresh]
+# Returns: OPEN|MERGED|CLOSED|DRAFT|UNKNOWN on stdout
+get_pr_status_cached() {
+    _pr_num="$1"
+    _force_refresh="${2:-}"
+
+    # Try cache first (unless force refresh)
+    if [ -z "$_force_refresh" ]; then
+        _cached="$(get_cached_pr_status "$_pr_num" 2>/dev/null)" && {
+            echo "$_cached"
+            return 0
+        }
+    fi
+
+    # Check if gh is available (silent check)
+    if ! command -v gh >/dev/null 2>&1; then
+        echo "UNKNOWN"
+        return 0
+    fi
+
+    # Check if authenticated (silent check)
+    if ! gh auth status >/dev/null 2>&1; then
+        echo "UNKNOWN"
+        return 0
+    fi
+
+    # Fetch from API
+    _status="$(get_pr_status "$_pr_num" 2>/dev/null)" || {
+        # API failed - try returning stale cache
+        if [ -f "$(_get_pr_cache_file)" ]; then
+            _stale="$(grep "^${_pr_num} " "$(_get_pr_cache_file)" 2>/dev/null | cut -d' ' -f2)"
+            [ -n "$_stale" ] && echo "$_stale" && return 0
+        fi
+        echo "UNKNOWN"
+        return 0
+    }
+
+    # Cache the result
+    cache_pr_status "$_pr_num" "$_status"
+    echo "$_status"
+}
+
 # Create a new PR for branch
 # Usage: create_pr_for_branch <branch> [--draft]
 # Returns: PR number on stdout, 1 on error

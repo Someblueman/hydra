@@ -5,71 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.4.0] - 2025-12-28
 
 ### Added
-- Resource Limits to prevent system overload with too many parallel sessions
-  - `HYDRA_MAX_SESSIONS` environment variable sets global session limit
-  - Priority queue for pending spawns when limit is reached
-  - `hydra queue` command to view/manage pending spawns
-  - `hydra queue clear` removes all queued spawns
-  - `hydra queue remove <branch>` removes specific entry
-  - `hydra queue process` manually processes queue
-  - Queue automatically processed when sessions are killed
-- Environment Setup Automation for automatic dependency installation
-  - `setup:` section in `.hydra/config.yml` runs commands before session creation
-  - Commands execute blocking in worktree directory
-  - `HYDRA_SKIP_SETUP=1` bypasses all setup commands
-  - `HYDRA_SETUP_CONTINUE=1` continues spawn even if setup fails
-  - Progress output with `[setup]` prefix for visibility
-- New test suites for previously untested modules
-  - `test_kill.sh` - Unit tests for lib/kill.sh (12 tests)
-  - `test_deps.sh` - Unit tests for lib/deps.sh (15 tests)
 
-### Fixed
-- **Critical**: Undefined `require` function broke `--pr`, `--issue`, and `--after` spawn options
-  - Replaced all `require X` calls with `_load_lib X` in bin/hydra and lib/spawn.sh
-- **Bug**: Missing numeric validation in limits.sh could cause silent failures
-  - Added POSIX-compliant validation using case pattern matching
-- **Test**: `test_layout.sh` unconditionally passed without actually testing `setup_layout_hotkeys`
-  - Now tests with `HYDRA_DISABLE_HOTKEYS` environment variable
-- **Test**: `test_json_output.sh` JSON validation only checked brace balance
-  - Improved to check structure, balanced quotes, and valid start character
-
-### Changed
-- Kill command now loads limits library for queue processing
-- Performance: Added tmux session caching to reduce subprocess calls
-  - `cmd_switch` - Cache sessions before building list
-  - `cmd_broadcast` - Cache before sending to sessions
-  - `cmd_group_wait` - Cache per poll iteration
-  - `cmd_wait_idle` - Cache for initialization and per poll iteration
-
-## [1.4.0] - 2025-12-27
-
-### Added
-- Session Dependencies for staged multi-agent workflows
-  - `hydra spawn feature-tests --after feature-impl` waits for dependencies to complete
+#### Multi-Agent Workflows
+- Session Dependencies for staged workflows
+  - `hydra spawn feature-tests --after feature-impl` waits for dependencies
   - `hydra list --deps` shows dependency tree visualization
   - Circular dependency detection prevents infinite waits
   - Configurable timeout and polling intervals
-- GitHub PR Integration
-  - `hydra spawn --pr <#>` creates a head from an existing GitHub PR
-  - `hydra spawn --pr-new` creates a draft PR after spawning
-  - `hydra pr [<branch>]` creates or shows PR for a session
-  - PR numbers stored in state file and displayed in `list`
-- Enhanced Group Workflows for coordinating multiple sessions
-  - `hydra group create <name> <branch> [branch...]` bulk creates groups
-  - `hydra group wait <name>` blocks until all sessions in group are killed
-  - `hydra group status <name> [--json]` shows group health with active/dead status
+- Resource Limits to prevent system overload
+  - `HYDRA_MAX_SESSIONS` environment variable sets global session limit
+  - Priority queue for pending spawns when limit is reached
+  - `hydra queue` command to view/manage pending spawns
+  - Queue automatically processed when sessions are killed
+- Environment Setup Automation
+  - `setup:` section in `.hydra/config.yml` runs commands before session creation
+  - Commands execute blocking in worktree directory
+  - `HYDRA_SKIP_SETUP=1` bypasses setup; `HYDRA_SETUP_CONTINUE=1` continues on failure
 - Cross-Session Messaging for loose agent coordination
   - `hydra send <branch> "<message>"` queues message to session's inbox
   - `hydra recv [--peek] [--json]` reads messages for current session
   - File-based message queue at `~/.hydra/messages/`
-  - Messages persist across session restarts
+
+#### GitHub Integration
+- PR Integration
+  - `hydra spawn --pr <#>` creates a head from an existing GitHub PR
+  - `hydra spawn --pr-new` creates a draft PR after spawning
+  - `hydra pr [<branch>]` creates or shows PR for a session
+  - PR numbers stored in state file and displayed in `list`
+- PR Status Display
+  - `hydra list` shows `[PR #42 OPEN]` with status (open/merged/closed)
+  - Cached status with configurable TTL (`HYDRA_PR_CACHE_TTL`, default 5 min)
+  - `--no-pr-status` skips lookup; `--refresh-pr-status` forces refresh
+  - JSON output includes `pr_status` field
+
+#### Session Management
+- Session Templates for reusable configurations
+  - `hydra template list|create|show|delete|edit` commands
+  - `hydra spawn <branch> --template <name>` applies template on spawn
+  - Templates stored in `~/.hydra/templates/`
+  - Variable expansion: `${BRANCH}`, `${SESSION}`, `${WORKTREE}`, `${REPO_ROOT}`
+  - Merges with session-level `.hydra/config.yml` overrides
+- Enhanced Group Workflows
+  - `hydra group create <name> <branch> [branch...]` bulk creates groups
+  - `hydra group wait <name>` blocks until all sessions in group are killed
+  - `hydra group status <name> [--json]` shows group health
+
+#### TUI Enhancements
+- Session Preview panel
+  - Press `p` to toggle preview panel showing session output
+  - Displays last N lines (configurable via `HYDRA_TUI_PREVIEW_LINES`)
+  - Auto-hides on small terminals
+
+#### Testing
+- New test suites: `test_kill.sh` (12 tests), `test_deps.sh` (15 tests)
+
+### Fixed
+- **Critical**: Undefined `require` function broke `--pr`, `--issue`, and `--after` spawn options
+- **Bug**: Missing numeric validation in limits.sh could cause silent failures
+- **Test**: `test_layout.sh` now properly tests with `HYDRA_DISABLE_HOTKEYS`
+- **Test**: `test_json_output.sh` improved JSON structure validation
 
 ### Changed
 - State file format extended to 7 fields (backward compatible):
   `branch session ai group timestamp deps pr`
+- Kill command now loads limits library for queue processing
+- Performance: Added tmux session caching to reduce subprocess calls
 
 ## [1.3.3] - 2025-12-27
 

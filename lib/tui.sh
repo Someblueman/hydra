@@ -23,6 +23,8 @@ TUI_SEARCH_MODE=0       # Search/filter input mode active
 TUI_SEARCH_PATTERN=""   # Current search pattern
 TUI_ACTIVITY_DIR=""     # Directory for activity tracking
 TUI_MULTI_SELECT=""     # Space-separated list of selected indices (multi-select mode)
+TUI_PREVIEW_VISIBLE=0   # Preview panel visibility (0=hidden, 1=visible)
+TUI_PREVIEW_LINES=5     # Number of preview lines to show
 
 # Terminal control codes (initialized by tui_init_colors)
 TUI_CLEAR=""
@@ -269,6 +271,45 @@ tui_draw_line() {
     printf "\n"
 }
 
+# Capture preview content for a session
+# Usage: tui_capture_preview <session_name>
+# Returns: Preview content on stdout, truncated to fit terminal
+tui_capture_preview() {
+    _session="$1"
+    _lines="${TUI_PREVIEW_LINES:-5}"
+
+    if [ -z "$_session" ]; then
+        printf "%s(no session)%s\n" "$TUI_DIM" "$TUI_RESET"
+        return 0
+    fi
+
+    # Check if session exists
+    if ! tmux_session_exists "$_session" 2>/dev/null; then
+        printf "%s(session not running)%s\n" "$TUI_DIM" "$TUI_RESET"
+        return 0
+    fi
+
+    # Capture pane content (last N lines)
+    _raw_output="$(tmux capture-pane -t "$_session" -p -S -"$_lines" 2>/dev/null || true)"
+
+    if [ -z "$_raw_output" ]; then
+        printf "%s(no output)%s\n" "$TUI_DIM" "$TUI_RESET"
+        return 0
+    fi
+
+    # Truncate each line to terminal width - 2 (for border padding)
+    _max_width=$((TUI_COLS - 2))
+    printf "%s" "$_raw_output" | while IFS= read -r _line || [ -n "$_line" ]; do
+        _len="${#_line}"
+        if [ "$_len" -gt "$_max_width" ]; then
+            # Truncate and add ellipsis
+            printf "%s...\n" "$(printf '%s' "$_line" | cut -c1-$((_max_width - 3)))"
+        else
+            printf "%s\n" "$_line"
+        fi
+    done
+}
+
 # Render help overlay
 # Usage: tui_render_help
 # Returns: 0 on success
@@ -346,6 +387,7 @@ tui_render_help() {
     tui_help_line "T" "Filter by tag"
     tui_help_line "/" "Search sessions"
     tui_help_line "i" "Show session status"
+    tui_help_line "p" "Toggle preview panel"
     tui_help_line "?" "Show this help"
     tui_help_line "SPACE" "Toggle multi-select"
     tui_help_line "x" "Bulk kill selected"
@@ -612,8 +654,20 @@ tui_render() {
         return 0
     fi
 
-    # Calculate visible range (leave room for header and footer)
-    max_items=$((TUI_ROWS - 8))
+    # Calculate visible range (leave room for header, footer, and optional preview)
+    _preview_height=0
+    if [ "$TUI_PREVIEW_VISIBLE" -eq 1 ]; then
+        _preview_height=$((TUI_PREVIEW_LINES + 3))  # +3 for header line, separator, and spacing
+    fi
+    max_items=$((TUI_ROWS - 8 - _preview_height))
+    if [ "$max_items" -lt 3 ]; then
+        # If terminal too small, disable preview temporarily
+        if [ "$TUI_PREVIEW_VISIBLE" -eq 1 ]; then
+            TUI_PREVIEW_VISIBLE=0
+            _preview_height=0
+            max_items=$((TUI_ROWS - 8))
+        fi
+    fi
     if [ "$max_items" -lt 1 ]; then
         max_items=5
     fi
@@ -718,10 +772,46 @@ tui_render() {
         printf "%s  [...%d more below...]%s\n" "$TUI_DIM" "$remaining" "$TUI_RESET"
     fi
 
+    # Render preview panel if visible
+    if [ "$TUI_PREVIEW_VISIBLE" -eq 1 ] && [ "$TUI_ITEM_COUNT" -gt 0 ]; then
+        # Get currently selected session info
+        _selected_idx=0
+        _selected_branch=""
+        _selected_session=""
+        _selected_status=""
+        while IFS='	' read -r _b _s _a _st _tag _act; do
+            if [ "$_selected_idx" -eq "$TUI_SELECTED" ]; then
+                _selected_branch="$_b"
+                _selected_session="$_s"
+                _selected_status="$_st"
+                break
+            fi
+            _selected_idx=$((_selected_idx + 1))
+        done < "$TUI_TEMP_LIST"
+
+        if [ -n "$_selected_session" ]; then
+            printf "\n"
+            tui_draw_line
+            printf "%s%s PREVIEW: %s (%s)%s\n" "$TUI_BOLD" "$TUI_BLUE" "$_selected_branch" "$_selected_session" "$TUI_RESET"
+
+            if [ "$_selected_status" = "ALIVE" ]; then
+                tui_capture_preview "$_selected_session"
+            else
+                printf "%s(session not running - cannot preview)%s\n" "$TUI_DIM" "$TUI_RESET"
+            fi
+        fi
+    fi
+
     # Footer with session count and return hint
     printf "\n"
     tui_draw_line
-    printf "%s%d session(s)%s | After switch: prefix+s to return\n" "$TUI_DIM" "$TUI_ITEM_COUNT" "$TUI_RESET"
+    _preview_hint=""
+    if [ "$TUI_PREVIEW_VISIBLE" -eq 1 ]; then
+        _preview_hint=" | p=hide preview"
+    else
+        _preview_hint=" | p=preview"
+    fi
+    printf "%s%d session(s)%s%s | After switch: prefix+s to return\n" "$TUI_DIM" "$TUI_ITEM_COUNT" "$_preview_hint" "$TUI_RESET"
 
     return 0
 }
@@ -836,6 +926,15 @@ tui_handle_key() {
             if [ "$(tui_selection_count)" -gt 0 ]; then
                 tui_action_bulk_group
             fi
+            ;;
+        p)
+            # Toggle preview panel
+            if [ "$TUI_PREVIEW_VISIBLE" -eq 0 ]; then
+                TUI_PREVIEW_VISIBLE=1
+            else
+                TUI_PREVIEW_VISIBLE=0
+            fi
+            TUI_NEEDS_REDRAW=1
             ;;
         *)
             # Handle escape key for clearing filters and selection

@@ -6,7 +6,7 @@
 # Dependencies: locks.sh, paths.sh, git.sh, tmux.sh, state.sh, hooks.sh, yaml.sh
 
 # Helper function to spawn a single session
-# Usage: spawn_single <branch> <layout> [ai_tool] [group] [deps] [pr_number]
+# Usage: spawn_single <branch> <layout> [ai_tool] [group] [deps] [pr_number] [template]
 # Returns: Session name on stdout, 1 on failure
 spawn_single() {
     branch="$1"
@@ -15,6 +15,7 @@ spawn_single() {
     group="${4:-}"
     deps="${5:-}"
     pr_number="${6:-}"
+    template="${7:-}"
 
     # Wait for dependencies if specified
     if [ -n "$deps" ] && [ "$deps" != "-" ]; then
@@ -94,7 +95,24 @@ spawn_single() {
     fi
 
     # Apply YAML config if present; otherwise custom/built-in layout
-    if [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$worktree_path" "$repo_root" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
+    # If template specified, use it as base config (merged with session config)
+    if [ -n "$template" ] && [ -z "${HYDRA_DISABLE_YAML:-}" ]; then
+        _load_lib template
+        merged_cfg="$(apply_template "$template" "$worktree_path" "$repo_root" "$branch" "$session")"
+        if [ -n "$merged_cfg" ] && [ -f "$merged_cfg" ]; then
+            # Extract layout/ai_tool from template if not already specified by CLI
+            if [ "$layout" = "default" ]; then
+                tpl_layout="$(get_template_field "$merged_cfg" "layout")"
+                [ -n "$tpl_layout" ] && layout="$tpl_layout"
+            fi
+            if [ -z "$ai_tool" ]; then
+                tpl_ai="$(get_template_field "$merged_cfg" "ai_tool")"
+                [ -n "$tpl_ai" ] && ai_tool="$tpl_ai"
+            fi
+            apply_yaml_config "$merged_cfg" "$session" "$worktree_path" "$repo_root"
+            rm -f "$merged_cfg"
+        fi
+    elif [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$worktree_path" "$repo_root" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
         apply_yaml_config "$cfgpath" "$session" "$worktree_path" "$repo_root"
     else
         apply_custom_layout_or_default "$layout" "$session" "$worktree_path" "$repo_root"
