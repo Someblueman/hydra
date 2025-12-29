@@ -127,7 +127,7 @@ collect_session_panes() {
                 window_id="${line#* }"
                 [ -z "$pane_id" ] && continue
                 # Move pane to dashboard first
-                if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION:0" 2>/dev/null; then
+                if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION" 2>/dev/null; then
                     # Record original location for restoration only on success
                     echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
                     # Set pane title to show branch name
@@ -137,7 +137,7 @@ collect_session_panes() {
                 else
                     # Brief retry in case tmux state lags
                     sleep 0.1
-                    if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION:0" 2>/dev/null; then
+                    if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION" 2>/dev/null; then
                         echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
                         tmux select-pane -t "$pane_id" -T "$branch" 2>/dev/null || true
                         pane_count_for_session=$((pane_count_for_session + 1))
@@ -169,9 +169,9 @@ arrange_dashboard_layout() {
         return 1
     fi
     
-    # Get pane count
-    pane_count="$(tmux list-panes -t "$DASHBOARD_SESSION:0" | wc -l | tr -d ' ')"
-    
+    # Get pane count (target session without window specifier to use current window)
+    pane_count="$(tmux list-panes -t "$DASHBOARD_SESSION" | wc -l | tr -d ' ')"
+
     # Apply grid layout with equal percentages
     case "$pane_count" in
         1)
@@ -179,37 +179,37 @@ arrange_dashboard_layout() {
             ;;
         2)
             # Two panes (50%/50%) horizontally
-            tmux select-layout -t "$DASHBOARD_SESSION:0" even-horizontal
+            tmux select-layout -t "$DASHBOARD_SESSION" even-horizontal
             ;;
         3)
             # Three panes: one on top, two on bottom; rely on main-horizontal
-            tmux select-layout -t "$DASHBOARD_SESSION:0" main-horizontal
-            tmux resize-pane -t "$DASHBOARD_SESSION:0.0" -y 20 2>/dev/null || true
+            tmux select-layout -t "$DASHBOARD_SESSION" main-horizontal
+            tmux resize-pane -t "${DASHBOARD_SESSION}.0" -y 20 2>/dev/null || true
             ;;
         4)
             # Four panes (25%/25%/25%/25%) in a 2x2 grid
-            tmux select-layout -t "$DASHBOARD_SESSION:0" tiled
+            tmux select-layout -t "$DASHBOARD_SESSION" tiled
             ;;
         5|6)
             # 5-6 panes: use 2x3 grid (tiled with manual adjustments)
-            tmux select-layout -t "$DASHBOARD_SESSION:0" tiled
+            tmux select-layout -t "$DASHBOARD_SESSION" tiled
             ;;
         7|8)
             # 7-8 panes: use 2x4 grid
-            tmux select-layout -t "$DASHBOARD_SESSION:0" tiled
+            tmux select-layout -t "$DASHBOARD_SESSION" tiled
             ;;
         9)
             # 9 panes: perfect 3x3 grid
-            tmux select-layout -t "$DASHBOARD_SESSION:0" tiled
+            tmux select-layout -t "$DASHBOARD_SESSION" tiled
             ;;
         *)
             # Many panes, use tiled and let tmux handle it
-            tmux select-layout -t "$DASHBOARD_SESSION:0" tiled
+            tmux select-layout -t "$DASHBOARD_SESSION" tiled
             ;;
     esac
-    
+
     # Set window title
-    tmux rename-window -t "$DASHBOARD_SESSION:0" "Hydra Dashboard ($pane_count heads)"
+    tmux rename-window -t "$DASHBOARD_SESSION" "Hydra Dashboard ($pane_count heads)"
     
     return 0
 }

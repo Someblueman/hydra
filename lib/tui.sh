@@ -151,7 +151,12 @@ tui_cleanup() {
 # Returns: 0 on success
 tui_build_list() {
     # Cache current session once per refresh (not per render)
-    TUI_CURRENT_SESSION="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
+    # Only get current session if actually inside tmux (check $TMUX env var)
+    if [ -n "${TMUX:-}" ]; then
+        TUI_CURRENT_SESSION="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
+    else
+        TUI_CURRENT_SESSION=""
+    fi
 
     # Clear temp file
     : > "$TUI_TEMP_LIST"
@@ -1008,36 +1013,105 @@ tui_action_switch() {
         return 0
     fi
 
-    # Try to switch even if status shows DEAD (might be stale)
-    # tmux switch-client will fail if session truly doesn't exist
-    if ! tmux switch-client -t "$session" 2>/dev/null; then
-        tui_pause_for_interaction
-        printf "%s[ERROR] Cannot switch to session '%s'%s\n" "$TUI_RED" "$session" "$TUI_RESET"
-        printf "Session does not exist.\n"
-        printf "  - Press 'd' to remove this stale entry\n"
-        printf "  - Press 'n' to spawn a new session\n"
-        tui_resume_after_interaction
-        return 0
+    # Switch or attach depending on whether we're in tmux
+    if [ -n "${TMUX:-}" ]; then
+        # Inside tmux - use switch-client
+        if ! tmux switch-client -t "$session" 2>/dev/null; then
+            tui_pause_for_interaction
+            printf "%s[ERROR] Cannot switch to session '%s'%s\n" "$TUI_RED" "$session" "$TUI_RESET"
+            printf "Session does not exist.\n"
+            printf "  - Press 'd' to remove this stale entry\n"
+            printf "  - Press 'n' to spawn a new session\n"
+            tui_resume_after_interaction
+            return 0
+        fi
+        # Update current session cache and force redraw when user returns
+        TUI_CURRENT_SESSION="$session"
+        TUI_NEEDS_REDRAW=1
+    else
+        # Outside tmux - attach to the session
+        if ! tmux_session_exists "$session"; then
+            tui_pause_for_interaction
+            printf "%s[ERROR] Session '%s' does not exist%s\n" "$TUI_RED" "$session" "$TUI_RESET"
+            printf "  - Press 'd' to remove this stale entry\n"
+            printf "  - Press 'n' to spawn a new session\n"
+            tui_resume_after_interaction
+            return 0
+        fi
+        tui_cleanup
+        exec tmux attach-session -t "$session"
     fi
-
-    # Update current session cache and force redraw when user returns
-    TUI_CURRENT_SESSION="$session"
-    TUI_NEEDS_REDRAW=1
 }
 
 # Action: Spawn new session
 # Usage: tui_action_spawn
+# Supports inline options: branch --ai codex --template dev --layout full
 tui_action_spawn() {
     tui_pause_for_interaction
 
-    printf "Enter branch name (or press Enter to cancel): "
-    read -r branch
+    printf "Enter branch [options] (e.g., my-feature --ai codex): "
+    read -r input
 
-    if [ -n "$branch" ]; then
-        printf "\n%s[...] Spawning session for '%s'...%s\n\n" "$TUI_YELLOW" "$branch" "$TUI_RESET"
-        # Use existing spawn logic
-        if spawn_single "$branch" "default" ""; then
-            printf "\n%s[OK] Session created for '%s'%s\n" "$TUI_GREEN" "$branch" "$TUI_RESET"
+    if [ -n "$input" ]; then
+        # Parse input: extract branch name and options
+        branch=""
+        ai_tool=""
+        layout="default"
+        template=""
+
+        # Use set to split input into positional parameters
+        # shellcheck disable=SC2086
+        set -- $input
+
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --ai|-a)
+                    shift
+                    ai_tool="${1:-}"
+                    ;;
+                --template|-t)
+                    shift
+                    template="${1:-}"
+                    ;;
+                --layout|-l)
+                    shift
+                    layout="${1:-}"
+                    ;;
+                -*)
+                    # Skip unknown flags and their values
+                    ;;
+                *)
+                    # First non-flag argument is the branch name
+                    if [ -z "$branch" ]; then
+                        branch="$1"
+                    fi
+                    ;;
+            esac
+            shift
+        done
+
+        if [ -z "$branch" ]; then
+            printf "\n%s[ERROR] Branch name is required%s\n" "$TUI_RED" "$TUI_RESET"
+            tui_resume_after_interaction
+            return 0
+        fi
+
+        printf "\n%s[...] Spawning session for '%s'...%s\n" "$TUI_YELLOW" "$branch" "$TUI_RESET"
+        [ -n "$ai_tool" ] && printf "  AI: %s\n" "$ai_tool"
+        [ -n "$template" ] && [ "$template" != "" ] && printf "  Template: %s\n" "$template"
+        [ "$layout" != "default" ] && printf "  Layout: %s\n" "$layout"
+        printf "\n"
+
+        # spawn_single args: branch layout ai_tool group deps pr_number template
+        new_session="$(spawn_single "$branch" "$layout" "$ai_tool" "" "" "" "$template")"
+        if [ -n "$new_session" ]; then
+            printf "\n%s[OK] Session created: '%s'%s\n" "$TUI_GREEN" "$new_session" "$TUI_RESET"
+            # Attach to new session if not already in tmux
+            if [ -z "${TMUX:-}" ]; then
+                printf "Attaching to session '%s'...\n" "$new_session"
+                tui_cleanup
+                exec tmux attach-session -t "$new_session"
+            fi
         else
             printf "\n%s[FAIL] Failed to create session%s\n" "$TUI_RED" "$TUI_RESET"
         fi

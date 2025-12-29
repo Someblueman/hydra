@@ -371,7 +371,7 @@ test_pane_collection_and_restore() {
     # shellcheck disable=SC1091
     . "$HYDRA_LIB_DIR/dashboard.sh"
 
-    HYDRA_MAP="${HYDRA_HOME:-$HOME/.hydra}/map"
+    export HYDRA_MAP="${HYDRA_HOME:-$HOME/.hydra}/map"
     if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
         print_warning "No Hydra map file found, skipping pane collection test"
         return 0
@@ -396,13 +396,13 @@ test_pane_collection_and_restore() {
     fi
 
     # Record initial pane count in the dashboard (usually 1)
-    initial_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+    initial_panes=$(tmux list-panes -t "$DASHBOARD_SESSION" 2>/dev/null | wc -l | tr -d ' ')
 
     # Ensure source sessions survive collection by adding an extra pane to each
     while IFS=' ' read -r branch session _ai _group _ts; do
         if tmux_session_exists "$session"; then
-            # Split a new pane in window 0 to keep the session alive
-            tmux split-window -t "$session:0" -d 2>/dev/null || true
+            # Split a new pane in first window to keep the session alive
+            tmux split-window -t "$session" -d 2>/dev/null || true
         fi
     done < "$HYDRA_MAP"
 
@@ -422,7 +422,7 @@ test_pane_collection_and_restore() {
     collected_lines=$(wc -l < "$DASHBOARD_RESTORE_MAP" | tr -d ' ')
 
     # Verify panes joined into dashboard increased by collected count
-    after_collect_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+    after_collect_panes=$(tmux list-panes -t "$DASHBOARD_SESSION" 2>/dev/null | wc -l | tr -d ' ')
     expected_after=$((initial_panes + collected_lines))
     if [ "$after_collect_panes" -ne "$expected_after" ]; then
         print_error "Unexpected pane count in dashboard (got $after_collect_panes, expected $expected_after)"
@@ -442,7 +442,7 @@ test_pane_collection_and_restore() {
     fi
 
     # After restore, the dashboard should be back to its initial pane count
-    after_restore_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+    after_restore_panes=$(tmux list-panes -t "$DASHBOARD_SESSION" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$after_restore_panes" -ne "$initial_panes" ]; then
         print_error "Dashboard pane count after restore is $after_restore_panes (expected $initial_panes)"
         tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true
@@ -472,7 +472,7 @@ test_multi_pane_collection_env() {
     # shellcheck disable=SC1091
     . "$HYDRA_LIB_DIR/dashboard.sh"
 
-    HYDRA_MAP="${HYDRA_HOME:-$HOME/.hydra}/map"
+    export HYDRA_MAP="${HYDRA_HOME:-$HOME/.hydra}/map"
     if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
         print_warning "No Hydra map file found, skipping multi-pane test"
         return 0
@@ -484,10 +484,10 @@ test_multi_pane_collection_env() {
         if tmux_session_exists "$session"; then
             expected_sessions=$((expected_sessions + 1))
             # Ensure exactly >=3 panes by splitting until 3
-            pcnt=$(tmux list-panes -t "$session:0" 2>/dev/null | wc -l | tr -d ' ')
+            pcnt=$(tmux list-panes -t "$session" 2>/dev/null | wc -l | tr -d ' ')
             while [ "${pcnt:-0}" -lt 3 ]; do
-                tmux split-window -t "$session:0" -d 2>/dev/null || true
-                pcnt=$(tmux list-panes -t "$session:0" 2>/dev/null | wc -l | tr -d ' ')
+                tmux split-window -t "$session" -d 2>/dev/null || true
+                pcnt=$(tmux list-panes -t "$session" 2>/dev/null | wc -l | tr -d ' ')
             done
         fi
     done < "$HYDRA_MAP"
@@ -502,7 +502,7 @@ test_multi_pane_collection_env() {
         return 1
     fi
 
-    initial_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+    initial_panes=$(tmux list-panes -t "$DASHBOARD_SESSION" 2>/dev/null | wc -l | tr -d ' ')
 
     # Collect up to 2 panes per session
     export HYDRA_DASHBOARD_PANES_PER_SESSION=2
@@ -532,7 +532,7 @@ test_multi_pane_collection_env() {
         return 1
     fi
 
-    after_collect_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+    after_collect_panes=$(tmux list-panes -t "$DASHBOARD_SESSION" 2>/dev/null | wc -l | tr -d ' ')
     expected_after=$((initial_panes + collected_lines))
     if [ "$after_collect_panes" -ne "$expected_after" ]; then
         print_error "Unexpected pane count in dashboard (got $after_collect_panes, expected $expected_after)"
@@ -548,7 +548,7 @@ test_multi_pane_collection_env() {
     fi
 
     # After restore, initial pane count persists
-    after_restore_panes=$(tmux list-panes -t "$DASHBOARD_SESSION:0" 2>/dev/null | wc -l | tr -d ' ')
+    after_restore_panes=$(tmux list-panes -t "$DASHBOARD_SESSION" 2>/dev/null | wc -l | tr -d ' ')
     if [ "$after_restore_panes" -ne "$initial_panes" ]; then
         print_error "Dashboard pane count after restore is $after_restore_panes (expected $initial_panes)"
         tmux kill-session -t "$DASHBOARD_SESSION" 2>/dev/null || true

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2025-12-29
+
+### Added
+- **TUI**: Spawn with inline options support
+  - Enter `my-branch --ai codex --template dev` when spawning
+  - Supports `--ai`, `--template`/`-t`, `--layout`/`-l` flags
+  - Shows parsed options before spawning
+
+### Fixed
+- **TUI**: Fixed incorrect "(current)" session detection when running outside tmux
+  - `tmux display-message` could return stale session names from server state
+  - Now checks `$TMUX` env var to confirm actually inside tmux
+- **TUI**: Fixed spawn from TUI not attaching when outside tmux
+  - After spawning a session via TUI, now automatically attaches to it
+- **TUI**: Fixed switch from TUI not working when outside tmux
+  - `switch-client` only works inside tmux; now uses `attach-session` when outside
+- **Dashboard**: Fixed pane collection failing with non-zero tmux base-index
+  - Removed hardcoded `:0` window references that assumed base-index=0
+
 ## [1.4.0] - 2025-12-28
 
 ### Added
