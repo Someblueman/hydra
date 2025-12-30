@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2025-12-30
+
+### Added
+- **Doctor**: Auto-fix mode with `hydra doctor --fix`
+  - Automatically runs `regenerate` for dead sessions
+  - Automatically runs `cleanup` for stale locks and dead mappings
+  - Orphaned worktrees require manual confirmation for safety
+- **Tests**: Added comprehensive test coverage for template.sh (41 tests)
+  - Covers all 11 template functions: init, list, get, exists, show, validate, create, delete, get_field, expand_vars, apply
+- **Tests**: Added comprehensive test coverage for hooks.sh (16 tests)
+  - Covers locate_config_dir, run_hook, apply_custom_layout_or_default, run_startup_commands
+
+### Changed
+- **Code Quality**: Refactored nested function in deps.sh to module scope
+  - `_check_circular_recursive()` moved to `_check_circular_helper()` at module level
+  - Uses module-level `_DEPS_VISITED` variable instead of closure semantics
+  - Improves POSIX shell clarity and maintainability
+
 ## [1.4.1] - 2025-12-29
 
 ### Added

@@ -51,6 +51,48 @@ validate_deps_spec() {
     return 0
 }
 
+# Module-level visited tracker for circular dependency detection
+_DEPS_VISITED=""
+
+# Helper for circular dependency checking (module scope)
+# Usage: _check_circular_helper <deps_spec>
+# Uses module-level _DEPS_VISITED variable
+# Returns: 0 if no cycle, 1 if cycle detected
+_check_circular_helper() {
+    current_deps="$1"
+
+    remaining="$current_deps"
+    while [ -n "$remaining" ]; do
+        dep="${remaining%%,*}"
+        if [ "$dep" = "$remaining" ]; then
+            remaining=""
+        else
+            remaining="${remaining#*,}"
+        fi
+
+        [ -z "$dep" ] && continue
+
+        # Check if already visited (cycle!)
+        case "$_DEPS_VISITED" in
+            *",$dep,"*)
+                echo "Error: Circular dependency detected: '$dep' already in chain" >&2
+                return 1
+                ;;
+        esac
+
+        # Add to visited
+        _DEPS_VISITED="${_DEPS_VISITED}${dep},"
+
+        # Get this branch's dependencies and recurse
+        next_deps="$(get_deps_for_branch "$dep" 2>/dev/null || true)"
+        if [ -n "$next_deps" ] && [ "$next_deps" != "-" ]; then
+            _check_circular_helper "$next_deps" || return 1
+        fi
+    done
+
+    return 0
+}
+
 # Check for circular dependencies
 # Usage: check_circular_deps <branch> <deps_spec>
 # Returns: 0 if no cycle, 1 if cycle detected (prints error)
@@ -62,45 +104,10 @@ check_circular_deps() {
         return 0
     fi
 
-    # Track visited branches using a string (POSIX doesn't have arrays)
-    visited=",$target,"
+    # Reset module-level visited tracker
+    _DEPS_VISITED=",$target,"
 
-    _check_circular_recursive() {
-        current_deps="$1"
-
-        remaining="$current_deps"
-        while [ -n "$remaining" ]; do
-            dep="${remaining%%,*}"
-            if [ "$dep" = "$remaining" ]; then
-                remaining=""
-            else
-                remaining="${remaining#*,}"
-            fi
-
-            [ -z "$dep" ] && continue
-
-            # Check if already visited (cycle!)
-            case "$visited" in
-                *",$dep,"*)
-                    echo "Error: Circular dependency detected: '$dep' already in chain" >&2
-                    return 1
-                    ;;
-            esac
-
-            # Add to visited
-            visited="${visited}${dep},"
-
-            # Get this branch's dependencies and recurse
-            next_deps="$(get_deps_for_branch "$dep" 2>/dev/null || true)"
-            if [ -n "$next_deps" ] && [ "$next_deps" != "-" ]; then
-                _check_circular_recursive "$next_deps" || return 1
-            fi
-        done
-
-        return 0
-    }
-
-    _check_circular_recursive "$deps_spec"
+    _check_circular_helper "$deps_spec"
 }
 
 # =============================================================================

@@ -11,7 +11,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="1.4.0"
+HYDRA_VERSION="1.4.2"
 
 # Source helper libraries
 # Enhanced library detection with multiple fallback paths
@@ -298,6 +298,8 @@ Commands:
                     Options:
                       -j, --json               Output in JSON format
   doctor            Check system health and consistency
+                    Options:
+                      -f, --fix                Auto-fix detected issues
   cleanup           Remove dead mappings, stale locks, and orphaned worktrees
   dashboard         View all sessions in a single dashboard
                     Options:
@@ -2588,10 +2590,24 @@ cmd_status() {
 }
 
 cmd_doctor() {
+    # Parse --fix flag
+    fix_mode=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --fix|-f)
+                fix_mode=1
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
     echo "Hydra Doctor - System Health Check"
     echo "================================="
     echo ""
-    
+
     # Check dependencies
     echo "Checking dependencies..."
     errors=0
@@ -2725,12 +2741,33 @@ cmd_doctor() {
         print_success "No stale locks"
     fi
 
-    # Summary
+    # Summary and auto-fix
     echo ""
     if [ "$errors" -eq 0 ] && [ "$consistency_issues" -eq 0 ]; then
         echo "[OK] All checks passed! Hydra is ready to use."
     elif [ "$errors" -eq 0 ]; then
-        echo "[WARN] Found $consistency_issues consistency issue(s). Run 'hydra cleanup' to fix."
+        if [ "$fix_mode" -eq 1 ]; then
+            echo "[INFO] Found $consistency_issues consistency issue(s). Auto-fixing..."
+            echo ""
+
+            # Run regenerate if there are dead sessions
+            if [ "$dead_count" -gt 0 ]; then
+                echo "Regenerating dead sessions..."
+                cmd_regenerate
+                echo ""
+            fi
+
+            # Run cleanup for orphaned worktrees and stale locks
+            if [ "$orphan_wt" -gt 0 ] || [ "$stale_lock_count" -gt 0 ]; then
+                echo "Cleaning up..."
+                cmd_cleanup --auto
+                echo ""
+            fi
+
+            echo "[OK] Auto-fix complete. Run 'hydra doctor' again to verify."
+        else
+            echo "[WARN] Found $consistency_issues consistency issue(s). Run 'hydra doctor --fix' to auto-fix."
+        fi
     else
         echo "[FAIL] Found $errors issue(s). Please install missing dependencies."
         return 1
@@ -2738,8 +2775,22 @@ cmd_doctor() {
 }
 
 # Cleanup orphaned worktrees, stale locks, and dead mappings
-# Usage: cmd_cleanup
+# Usage: cmd_cleanup [--auto]
+# --auto: Non-interactive mode for doctor --fix (skips orphan removal prompt)
 cmd_cleanup() {
+    auto_mode=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --auto)
+                auto_mode=1
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
     echo "Hydra Cleanup"
     echo "============="
     echo ""
@@ -2832,8 +2883,10 @@ cmd_cleanup() {
             echo "  $wt"
         done
 
-        # Ask for confirmation in interactive mode
-        if [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
+        # Ask for confirmation in interactive mode (skip in auto mode)
+        if [ "$auto_mode" -eq 1 ]; then
+            print_warning "Orphaned worktrees found but not removed (run 'hydra cleanup' to remove)"
+        elif [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
             printf "\nRemove these orphaned worktrees? [y/N] "
             read -r response
             case "$response" in
