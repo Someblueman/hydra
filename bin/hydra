@@ -89,12 +89,15 @@ _load_libs_for_cmd() {
             _load_lib spawn
             _load_lib github
             _load_lib limits
+            _load_lib kill
             _load_lib cmd_spawn
+            _load_lib cmd_session
             ;;
         list|switch|status|cycle-layout)
             _load_lib output
             _load_lib state
             _load_lib tmux
+            _load_lib layout
             _load_lib github
             _load_lib cmd_session
             ;;
@@ -173,6 +176,8 @@ _load_libs_for_cmd() {
             _load_lib kill
             _load_lib github
             _load_lib dashboard
+            _load_lib cmd_spawn
+            _load_lib cmd_session
             _load_lib tui
             ;;
         queue)
