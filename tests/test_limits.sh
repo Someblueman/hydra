@@ -11,12 +11,21 @@ fail_count=0
 # shellcheck source=../lib/locks.sh
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/locks.sh"
+# shellcheck source=../lib/output.sh
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/output.sh"
 # shellcheck source=../lib/state.sh
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/state.sh"
 # shellcheck source=../lib/limits.sh
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/limits.sh"
+
+# Stub tmux for session counting tests (no tmux server required)
+# shellcheck disable=SC2329
+tmux_session_exists() {
+    return 0
+}
 
 # Common test helpers
 # shellcheck source=./helpers.sh

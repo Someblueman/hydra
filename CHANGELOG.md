@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-08-24
+
+### Added
+- **TUI redesign**: Two-panel detail sidebar on wide terminals, context footer, spawn wizard
+- **TUI key aliases**: `Enter` switches (same as `s`), `A` select-all, `D` dashboard, `f` preview follow
+- **TUI config**: `HYDRA_TUI_REFRESH_MS`, `HYDRA_TUI_ACTIVITY_INTERVAL`, wired `HYDRA_TUI_PREVIEW_LINES`
+- **Refactor**: Split god files into modules (`lib/cmd_*.sh`, `lib/tui_*.sh`, `lib/state_cache.sh`, `lib/maintenance.sh`)
+- **Worktree helpers**: `list_hydra_worktrees`, `branch_from_hydra_worktree_path` in `lib/paths.sh`
+
+### Changed
+- **TUI**: Expanded search filters session name, group, and AI tool
+- **TUI**: Activity detection uses cached pane hashes to reduce tmux load
+- **TUI**: Terminal resize handling; honors `HYDRA_NONINTERACTIVE` for kill confirmations
+- **Architecture**: `bin/hydra` slimmed to dispatcher (~470 lines); commands in `lib/cmd_*.sh`
+
+### Fixed
+- **Doctor/cleanup**: Orphan worktree detection uses `hydra-*` prefix (not repo basename)
+- **Regenerate**: Slash-containing branch names (e.g. `feature/test-1`) discovered correctly
+- **Spawn**: Rollback session/worktree/mapping when AI tool validation fails
+- **Queue**: Mixed `--agents` spawn queue entries use correct branch names and AI tools
+- **Queue**: Failed queue processing retains entry for retry
+- **Limits**: Active session count excludes dead mappings
+- **Limits**: Queue JSON output uses `json_escape`
+- **Messages**: Lock retry instead of unsafe fallback write on contention
+- **Switch**: fzf uses tab-separated fields; empty selection handled safely
+- **Dashboard**: Configurable pane join retries (`HYDRA_DASHBOARD_JOIN_RETRIES`)
+- **TUI**: Bulk group assignment calls `set_group`
+
 ## [1.4.2] - 2025-12-30
 
 ### Added

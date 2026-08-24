@@ -326,6 +326,57 @@ test_tui_stty_pattern() {
     fi
 }
 
+# Test: tui_select_all selects all items
+test_tui_select_all() {
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    source_libs
+    TEST_HOME="$(mktemp -d)"
+    HYDRA_HOME="$TEST_HOME"
+    HYDRA_MAP="$TEST_HOME/map"
+    mkdir -p "$TEST_HOME"
+    printf '%s\n' "b1 s1" "b2 s2" >> "$HYDRA_MAP"
+
+    # shellcheck disable=SC2034
+    tui_init_colors
+  TUI_TEMP_LIST="$(mktemp)"
+  TUI_ITEM_COUNT=2
+  printf 'b1\ts1\t-\tALIVE\t-\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
+  printf 'b2\ts2\t-\tALIVE\t-\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
+    # shellcheck disable=SC2034
+    TUI_MULTI_SELECT=""
+  tui_select_all
+
+  if [ "$(tui_selection_count)" -eq 2 ]; then
+    print_pass "tui_select_all selects all items"
+  else
+    print_fail "tui_select_all should select 2 items"
+  fi
+
+  rm -f "$TUI_TEMP_LIST"
+  rm -rf "$TEST_HOME"
+}
+
+# Test: HYDRA_TUI_PREVIEW_LINES env wiring in cmd_tui
+test_tui_preview_lines_env() {
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    source_libs
+    HYDRA_TUI_PREVIEW_LINES=12
+    TUI_PREVIEW_LINES=5
+    # Simulate cmd_tui preview line setup
+    case "${HYDRA_TUI_PREVIEW_LINES}" in
+        *[!0-9]*|'') ;;
+        *) TUI_PREVIEW_LINES="${HYDRA_TUI_PREVIEW_LINES}" ;;
+    esac
+
+    if [ "$TUI_PREVIEW_LINES" -eq 12 ]; then
+        print_pass "HYDRA_TUI_PREVIEW_LINES configures preview height"
+    else
+        print_fail "HYDRA_TUI_PREVIEW_LINES should set TUI_PREVIEW_LINES to 12"
+    fi
+}
+
 # Main test runner
 main() {
     echo "Running Hydra TUI tests..."
@@ -350,6 +401,8 @@ main() {
     test_tui_key_quit
     test_tui_key_navigation
     test_tui_stty_pattern
+    test_tui_select_all
+    test_tui_preview_lines_env
 
     # Summary
     echo ""

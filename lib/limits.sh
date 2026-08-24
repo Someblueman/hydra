@@ -40,7 +40,13 @@ get_active_session_count() {
         printf '%s' "0"
         return 0
     fi
-    wc -l < "$HYDRA_MAP" | tr -d ' '
+    _count=0
+    while IFS=' ' read -r _branch _session _rest; do
+        if [ -n "$_session" ] && tmux_session_exists "$_session"; then
+            _count=$((_count + 1))
+        fi
+    done < "$HYDRA_MAP"
+    printf '%s' "$_count"
 }
 
 # Check if spawning N sessions would exceed limit
@@ -215,10 +221,11 @@ list_queue() {
             # Handle null group for JSON
             if [ -z "$_q_group" ]; then
                 printf '{"branch":"%s","ai":"%s","group":null,"priority":%s,"requested_at":%s}' \
-                    "$_q_branch" "$_q_ai" "$_q_priority" "$_q_requested"
+                    "$(json_escape "$_q_branch")" "$(json_escape "$_q_ai")" "$_q_priority" "$_q_requested"
             else
                 printf '{"branch":"%s","ai":"%s","group":"%s","priority":%s,"requested_at":%s}' \
-                    "$_q_branch" "$_q_ai" "$_q_group" "$_q_priority" "$_q_requested"
+                    "$(json_escape "$_q_branch")" "$(json_escape "$_q_ai")" \
+                    "$(json_escape "$_q_group")" "$_q_priority" "$_q_requested"
             fi
         done
         printf ']}\n'
@@ -338,16 +345,14 @@ process_spawn_queue() {
             esac
         done < "$_qfile"
 
-        # Remove queue file before spawning (avoid double-spawn on failure)
-        rm -f "$_qfile"
-
-        # Attempt spawn (best-effort)
+        # Attempt spawn — keep queue file on failure for retry
         echo "Processing queued spawn: $_q_branch..." >&2
         if spawn_single "$_q_branch" "$_q_layout" "$_q_ai" "$_q_group" "" "" >/dev/null 2>&1; then
+            rm -f "$_qfile"
             _spawned=$((_spawned + 1))
             echo "  Spawned $_q_branch successfully" >&2
         else
-            echo "  Failed to spawn $_q_branch" >&2
+            echo "  Failed to spawn $_q_branch (queue entry retained)" >&2
         fi
     done
 

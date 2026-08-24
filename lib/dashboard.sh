@@ -135,14 +135,23 @@ collect_session_panes() {
                     pane_count_for_session=$((pane_count_for_session + 1))
                     collected=$((collected + 1))
                 else
-                    # Brief retry in case tmux state lags
-                    sleep 0.1
-                    if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION" 2>/dev/null; then
-                        echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
-                        tmux select-pane -t "$pane_id" -T "$branch" 2>/dev/null || true
-                        pane_count_for_session=$((pane_count_for_session + 1))
-                        collected=$((collected + 1))
-                    else
+                    # Retry join with configurable attempts
+                    _join_retries="${HYDRA_DASHBOARD_JOIN_RETRIES:-3}"
+                    _join_attempt=0
+                    _joined=0
+                    while [ "$_join_attempt" -lt "$_join_retries" ]; do
+                        sleep 0.1
+                        if tmux join-pane -s "$pane_id" -t "$DASHBOARD_SESSION" 2>/dev/null; then
+                            echo "$pane_id $session $window_id $branch" >> "$DASHBOARD_RESTORE_MAP"
+                            tmux select-pane -t "$pane_id" -T "$branch" 2>/dev/null || true
+                            pane_count_for_session=$((pane_count_for_session + 1))
+                            collected=$((collected + 1))
+                            _joined=1
+                            break
+                        fi
+                        _join_attempt=$((_join_attempt + 1))
+                    done
+                    if [ "$_joined" -eq 0 ]; then
                         echo "Warning: Failed to collect pane from session '$session'" >&2
                     fi
                 fi

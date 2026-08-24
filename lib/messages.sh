@@ -67,16 +67,20 @@ send_message() {
     filename="${timestamp}_${safe_sender}_${hash}"
     msg_file="$msg_dir/queue/$filename"
 
-    # Use atomic write via lock
-    if try_lock "msg_$target"; then
-        printf '%s\n' "$message" > "$msg_file"
-        release_lock "msg_$target"
-        return 0
-    else
-        # Fallback: write anyway (best effort)
-        printf '%s\n' "$message" > "$msg_file"
-        return 0
-    fi
+    # Use atomic write via lock with retries
+    _retries=0
+    while [ "$_retries" -lt 5 ]; do
+        if try_lock "msg_$target"; then
+            printf '%s\n' "$message" > "$msg_file"
+            release_lock "msg_$target"
+            return 0
+        fi
+        _retries=$((_retries + 1))
+        sleep 0.05
+    done
+
+    echo "Error: Failed to acquire message lock for '$target'" >&2
+    return 1
 }
 
 # =============================================================================
