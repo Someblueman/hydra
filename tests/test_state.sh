@@ -8,6 +8,8 @@ pass_count=0
 fail_count=0
 
 # Source the library under test and its dependencies
+# shellcheck disable=SC2034
+HYDRA_LIB_DIR="$(cd "$(dirname "$0")/../lib" && pwd)"
 # shellcheck source=../lib/locks.sh
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/locks.sh"  # Required for state.sh lock functions

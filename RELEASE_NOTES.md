@@ -1,57 +1,44 @@
-# Hydra v1.3.3 - Full Polish Release
+# Hydra v1.5.0 Release Notes
 
-A comprehensive polish release featuring TUI multi-select, bug fixes, performance improvements, and documentation updates.
+**Release date:** 2026-08-24
 
 ## Highlights
 
-### TUI Multi-Select
-Bulk operations are now a breeze with the new multi-select feature:
-- **SPACE** - Toggle selection on current session
-- **x** - Kill all selected sessions at once
-- **G** - Assign group to all selected sessions
-- **Esc** - Clear selection (press again to clear filters)
+Hydra 1.5.0 is a major usability and maintainability release: a refreshed TUI, comprehensive bugfixes from the 1.4.3 audit, and a full internal refactor that splits the largest source files into focused modules.
 
-Visual feedback includes `[x]` markers on selected items and a selection count in the header.
+## TUI Refresh
 
-### Bug Fixes
+- Two-panel layout with detail sidebar on terminals ≥100 columns wide
+- **Enter** now switches sessions (`s` still works)
+- **A** select all, **D** open dashboard, **f** preview follow mode
+- Interactive spawn wizard with AI tool picker
+- Search across branch, session, group, and AI tool
+- Configurable refresh via `HYDRA_TUI_REFRESH_MS`
 
-| Issue | Description |
-|-------|-------------|
-| Security | `cmd_switch` now validates numeric input and range bounds |
-| Broadcast | Fixed count always showing 0 (subshell variable loss) |
-| Bulk Spawn | Fixed off-by-one error causing switch to wrong session |
-| JSON | `json_escape` now handles newlines correctly |
+## Bugfixes
 
-### Performance Improvements
+- Doctor/cleanup/regenerate correctly find `../hydra-<branch>` worktrees (including slash branches)
+- Spawn rollback on invalid AI tool; queue fixes for mixed agents and failed retries
+- Session limits count live tmux sessions only
+- TUI bulk group assignment works via `set_group`
 
-- **Session caching**: `cmd_list` now caches all tmux sessions upfront instead of checking each entry
-- **Timestamp caching**: Single `date +%s` call per command instead of repeated calls
-- **POSIX optimization**: Replaced AWK field counting with shell word splitting in state.sh
+## Architecture
 
-### Documentation Updates
-
-README now includes:
-- `cleanup` command for removing stale locks and dead mappings
-- `tail` command for viewing session output
-- `broadcast` command for sending commands to all sessions
-- `wait-idle` command for automation workflows
-- `group` command for session organization
-- Missing environment variables: `HYDRA_SKIP_AI`, `HYDRA_DASHBOARD_NO_ATTACH`, `HYDRA_NONINTERACTIVE`, `HYDRA_REGENERATE_RUN_STARTUP`
-- `--json` flag documentation for `list` and `status`
-
-## New Test Suites
-
-- `test_switch.sh` - 8 tests for input validation
-- `test_json_output.sh` - 17 tests for JSON escaping and output validity
-
-Total tests: **227** (all passing)
+- `bin/hydra` is now a thin dispatcher
+- Commands live in `lib/cmd_*.sh`
+- TUI split into `lib/tui_*.sh`
+- State cache in `lib/state_cache.sh`
+- Shared maintenance checks in `lib/maintenance.sh`
 
 ## Upgrade
 
 ```sh
-git pull && sudo make install
+sudo ./install.sh   # or: sudo make install
+hydra version       # should show 1.5.0
 ```
 
-## Full Changelog
+No migration steps required for `~/.hydra` state files.
 
-See [CHANGELOG.md](CHANGELOG.md) for complete details.
+## Test Coverage
+
+Run `make test` — 25+ test suites including expanded paths and TUI tests.

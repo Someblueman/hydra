@@ -90,6 +90,20 @@ test_normalize_path() {
     assert_equal "/non/existent/path" "$result" "normalize_path should return unchanged non-existent path"
 }
 
+test_branch_from_hydra_worktree_path() {
+    echo "Testing branch_from_hydra_worktree_path..."
+
+    repo_root="$(get_repo_root)"
+    prefix="$(get_hydra_worktree_prefix "$repo_root")"
+    sample_path="${prefix}feature/test-1"
+
+    result="$(branch_from_hydra_worktree_path "$sample_path" "$repo_root")"
+    assert_equal "feature/test-1" "$result" "branch_from_hydra_worktree_path should handle slash branches"
+
+    branch_from_hydra_worktree_path "/not-a-hydra-path" "$repo_root" 2>/dev/null
+    assert_failure $? "branch_from_hydra_worktree_path should fail for non-hydra paths"
+}
+
 # Run all tests
 echo "Running paths.sh unit tests..."
 echo "================================"
@@ -97,6 +111,7 @@ echo "================================"
 test_get_repo_root
 test_get_worktree_path_for_branch
 test_normalize_path
+test_branch_from_hydra_worktree_path
 
 echo "================================"
 echo "Test Results:"

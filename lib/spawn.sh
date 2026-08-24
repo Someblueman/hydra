@@ -5,6 +5,76 @@
 # Provides session spawning capabilities for single and bulk operations.
 # Dependencies: locks.sh, paths.sh, git.sh, tmux.sh, state.sh, hooks.sh, yaml.sh
 
+# Roll back a partially created spawn (session, mapping, worktree)
+# Usage: spawn_rollback_session <session> <branch> <worktree_path>
+spawn_rollback_session() {
+    _session="$1"
+    _branch="$2"
+    _worktree_path="$3"
+
+    if [ -n "$_session" ]; then
+        kill_session "$_session" 2>/dev/null || true
+        release_session_lock "$_session" 2>/dev/null || true
+    fi
+    if [ -n "$_branch" ]; then
+        remove_mapping "$_branch" 2>/dev/null || true
+    fi
+    if [ -n "$_worktree_path" ]; then
+        delete_worktree "$_worktree_path" 2>/dev/null || true
+    fi
+}
+
+# Queue bulk spawns with same AI tool
+# Usage: queue_bulk_spawns <base_branch> <count> <ai_tool> <group> <layout>
+queue_bulk_spawns() {
+    _base="$1"
+    _count="$2"
+    _ai_tool="${3:-}"
+    _group="${4:-}"
+    _layout="${5:-default}"
+
+    if [ "$_count" -eq 1 ]; then
+        queue_spawn "$_base" "$_ai_tool" "$_group" "$_layout" "50" >/dev/null
+        return 0
+    fi
+
+    _i=1
+    while [ "$_i" -le "$_count" ]; do
+        queue_spawn "${_base}-${_i}" "$_ai_tool" "$_group" "$_layout" "50" >/dev/null
+        _i=$((_i + 1))
+    done
+}
+
+# Queue spawns from mixed agents spec (e.g. "claude:2,aider:1")
+# Usage: queue_mixed_spawns <base_branch> <agents_spec> <group> <layout>
+queue_mixed_spawns() {
+    _base_branch="$1"
+    _agents_spec="$2"
+    _group="${3:-}"
+    _layout="${4:-default}"
+    _session_num=1
+
+    while [ -n "$_agents_spec" ]; do
+        _pair="${_agents_spec%%,*}"
+        if [ "$_pair" = "$_agents_spec" ]; then
+            _agents_spec=""
+        else
+            _agents_spec="${_agents_spec#*,}"
+        fi
+
+        _agent="${_pair%%:*}"
+        _agent_count="${_pair#*:}"
+
+        _i=1
+        while [ "$_i" -le "$_agent_count" ]; do
+            _branch_name="${_base_branch}-${_session_num}"
+            queue_spawn "$_branch_name" "$_agent" "$_group" "$_layout" "50" >/dev/null
+            _session_num=$((_session_num + 1))
+            _i=$((_i + 1))
+        done
+    done
+}
+
 # Helper function to spawn a single session
 # Usage: spawn_single <branch> <layout> [ai_tool] [group] [deps] [pr_number] [template]
 # Returns: Session name on stdout, 1 on failure
@@ -126,6 +196,7 @@ spawn_single() {
             ai_tool="${HYDRA_AI_COMMAND:-claude}"
         fi
         if ! validate_ai_command "$ai_tool"; then
+            spawn_rollback_session "$session" "$branch" "$worktree_path"
             return 1
         fi
         echo "Starting $ai_tool in session '$session'..." >&2

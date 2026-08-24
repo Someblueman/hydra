@@ -165,16 +165,27 @@ hydra tui
 | Key | Action |
 |-----|--------|
 | `j/k`, arrows | Navigate sessions |
-| `Enter` | Switch to selected session |
+| `Enter` / `s` | Switch to selected session |
+| `n` | Spawn new session (interactive wizard) |
+| `d` | Kill selected session |
+| `D` | Open tmux dashboard |
+| `a` | Kill all sessions |
+| `A` | Select all sessions |
 | `Space` | Toggle selection (for bulk ops) |
-| `x` | Toggle all selections |
-| `G` | Select all |
-| `d` | Kill selected session(s) |
-| `t` | Set tag on session |
+| `x` | Bulk kill selected |
+| `G` | Bulk set group on selected |
+| `p` | Toggle preview panel |
+| `f` | Toggle preview follow mode |
+| `t` | Cycle tag on session |
 | `T` | Filter by tag |
-| `/` | Search/filter sessions |
+| `/` | Search (branch, session, group, AI) |
+| `i` | Show status output |
+| `r` | Regenerate sessions |
 | `?` | Show help overlay |
+| `Esc` | Clear selection / filters |
 | `q` | Quit |
+
+Environment variables: `HYDRA_TUI_PREVIEW_LINES`, `HYDRA_TUI_REFRESH_MS`, `HYDRA_TUI_ACTIVITY_INTERVAL`, `HYDRA_NONINTERACTIVE`.
 
 ## Development
 
