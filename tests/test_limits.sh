@@ -22,6 +22,7 @@ fail_count=0
 . "$(dirname "$0")/../lib/limits.sh"
 
 # Stub tmux for session counting tests (no tmux server required)
+# shellcheck disable=SC2317
 # shellcheck disable=SC2329
 tmux_session_exists() {
     return 0
