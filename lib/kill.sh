@@ -71,6 +71,8 @@ _kill_teardown() {
             echo "  Failed to kill tmux session '$_td_session'" >&2
             return 1
         fi
+    else
+        echo "  Session '$_td_session' not found, cleaning up mapping..."
     fi
 
     remove_mapping "$_td_branch"

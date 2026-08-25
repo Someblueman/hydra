@@ -174,8 +174,11 @@ test_tui_row_contract() {
     TUI_SELECTED=0
     TUI_OFFSET=0
     TUI_ROWS=24
+    # shellcheck disable=SC2034
     TUI_ACTIVITY_DIR=""
+    # shellcheck disable=SC2034
     TUI_SEARCH_PATTERN=""
+    # shellcheck disable=SC2034
     TUI_TAG_FILTER=""
     tui_init_tags
     tui_build_list

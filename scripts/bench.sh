@@ -77,10 +77,16 @@ for n in $COUNTS; do
         # shellcheck disable=SC1091
         . "$HYDRA_ROOT/lib/tui.sh"
         TUI_TEMP_LIST="$(mktemp)"
+        # Used by tui_build_list (sourced globals)
+        # shellcheck disable=SC2034
         TUI_ITEM_COUNT=0
+        # shellcheck disable=SC2034
         TUI_SELECTED=0
+        # shellcheck disable=SC2034
         TUI_OFFSET=0
+        # shellcheck disable=SC2034
         TUI_ROWS=24
+        # shellcheck disable=SC2034
         TUI_ACTIVITY_DIR=""
         _start="$(date +%s%N 2>/dev/null || date +%s)"
         tui_build_list

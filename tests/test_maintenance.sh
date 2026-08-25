@@ -20,6 +20,9 @@ HYDRA_LIB_DIR="$(cd "$(dirname "$0")/../lib" && pwd)"
 # shellcheck disable=SC1091
 . "$(dirname "$0")/helpers.sh"
 
+# Stub tmux for maintenance tests
+# shellcheck disable=SC2317
+# shellcheck disable=SC2329
 tmux_session_exists() {
     case "$1" in
         alive-session) return 0 ;;
