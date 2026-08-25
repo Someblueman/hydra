@@ -29,7 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hydra status` no longer treats deps/PR as part of the duration timestamp (`Illegal number`)
 - Kill preflights dirty/untracked worktrees before tearing down tmux or mappings
 - `hydra spawn` rolls back the session and worktree if the state map cannot be written
-- `hydra broadcast` treats a live agent process on `:0.0` as the agent pane even when the map stores `-`
+- `hydra kill` does not delete the worktree if mapping removal cannot be committed
+- `hydra broadcast` skips a live agent on `:0.0` (even when the map stores `-`) and may use `:0.0` again after that process exits
+- Session-qualified `broadcast --pane session:target` applies only to that session
+- `make bench` runs spawn/kill from a throwaway repo and does not sweep unrelated `bench-*` tmux sessions
 - Message inboxes are removed from kill and dead-mapping cleanup
 - Doctor/cleanup stale-lock detection matches empty `*.lock` directories
 - `hydra regenerate` preserves group, deps, PR, and timestamp

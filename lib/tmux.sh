@@ -176,9 +176,10 @@ find_broadcast_pane() {
     fi
 
     _fb_shell=""
-    _fb_has_agent_slot=0
+    _fb_has_live_agent=0
+    _fb_map_agent=0
     if [ -n "$_fb_ai" ] && [ "$_fb_ai" != "-" ]; then
-        _fb_has_agent_slot=1
+        _fb_map_agent=1
     fi
 
     while IFS=' ' read -r _fb_idx _fb_cmd; do
@@ -195,20 +196,25 @@ find_broadcast_pane() {
                 _fb_is_agent=1
                 ;;
         esac
-        # Default spawn stores "-" for AI but still launches the agent on :0.0.
-        # Treat a live agent process on the primary pane as an agent slot.
-        if [ "$_fb_idx" = "0.0" ] && [ "$_fb_is_agent" -eq 1 ]; then
-            _fb_has_agent_slot=1
-            continue
-        fi
-        if [ "$_fb_idx" = "0.0" ] && [ "$_fb_has_agent_slot" -eq 1 ]; then
-            continue
+        # Skip :0.0 only while a live agent occupies it. After the agent
+        # exits back to a shell, that pane is a valid broadcast target even
+        # if the map still records an AI tool. Unknown :0.0 commands still
+        # honor stored AI so we do not type into a renamed agent process.
+        if [ "$_fb_idx" = "0.0" ]; then
+            if [ "$_fb_is_agent" -eq 1 ]; then
+                _fb_has_live_agent=1
+                continue
+            fi
+            if [ "$_fb_is_shell" -eq 0 ] && [ "$_fb_map_agent" -eq 1 ]; then
+                _fb_has_live_agent=1
+                continue
+            fi
         fi
         if [ "$_fb_is_shell" -eq 1 ]; then
             _fb_shell="${_fb_session}:${_fb_idx}"
             break
         fi
-        if [ "$_fb_has_agent_slot" -eq 1 ] && [ "$_fb_idx" != "0.0" ]; then
+        if [ "$_fb_has_live_agent" -eq 1 ] && [ "$_fb_idx" != "0.0" ]; then
             # Non-primary pane even if command is not a classic shell name
             _fb_shell="${_fb_session}:${_fb_idx}"
             break
@@ -222,7 +228,7 @@ EOF
         return 0
     fi
 
-    if [ "$_fb_has_agent_slot" -eq 1 ]; then
+    if [ "$_fb_has_live_agent" -eq 1 ]; then
         return 1
     fi
 

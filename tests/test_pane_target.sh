@@ -88,12 +88,66 @@ test_find_broadcast_pane_detects_live_agent_when_map_blank() {
     assert_equal "hydra-feat:0.0" "$result" "no live agent allows :0.0 when map AI is -"
 }
 
+test_find_broadcast_pane_uses_shell_after_agent_exits() {
+    echo "Testing find_broadcast_pane uses :0.0 after agent exits..."
+
+    HYDRA_TEST_TMUX_SESSIONS="hydra-feat"
+    HYDRA_TEST_TMUX_PANES="$(printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        hydra-feat 0 0 1700000000 bash 0)"
+    export HYDRA_TEST_TMUX_SESSIONS HYDRA_TEST_TMUX_PANES
+
+    result="$(find_broadcast_pane "hydra-feat" "claude")"
+    assert_equal "hydra-feat:0.0" "$result" "stored AI does not skip a live shell on :0.0"
+}
+
+test_broadcast_session_qualified_pane() {
+    echo "Testing broadcast --pane session:target stays on that session..."
+
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/output.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/locks.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/state.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/cmd_session_ops.sh"
+
+    TEST_HOME="$(mktemp -d)"
+    HYDRA_HOME="$TEST_HOME"
+    HYDRA_MAP="$TEST_HOME/map"
+    export HYDRA_HOME HYDRA_MAP
+    printf '%s\n' "b1 hydra-a - - - - -" "b2 hydra-b - - - - -" > "$HYDRA_MAP"
+
+    log="$(mktemp)"
+    HYDRA_TEST_TMUX_LOG="$log"
+    HYDRA_TEST_TMUX_SESSIONS="$(printf '%s\n%s\n' hydra-a hydra-b)"
+    export HYDRA_TEST_TMUX_LOG HYDRA_TEST_TMUX_SESSIONS
+
+    cmd_broadcast --pane hydra-a:0.1 "echo hi" >/dev/null
+
+    hits="$(grep -c 'send-keys -t hydra-a:0.1' "$log" || true)"
+    assert_equal "1" "$hits" "session-qualified --pane sends once to that session"
+    if grep -q 'send-keys -t hydra-b' "$log"; then
+        echo "[FAIL] session-qualified --pane must not target other sessions"
+        fail_count=$((fail_count + 1))
+    else
+        echo "[PASS] session-qualified --pane must not target other sessions"
+        pass_count=$((pass_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    rm -f "$log"
+    rm -rf "$TEST_HOME"
+}
+
 echo "Running pane targeting tests..."
 echo "================================"
 test_send_keys_uses_primary_pane
 test_find_broadcast_pane_prefers_shell
 test_find_broadcast_pane_refuses_agent_only
 test_find_broadcast_pane_detects_live_agent_when_map_blank
+test_find_broadcast_pane_uses_shell_after_agent_exits
+test_broadcast_session_qualified_pane
 echo "================================"
 echo "Total:  $test_count"
 echo "Passed: $pass_count"

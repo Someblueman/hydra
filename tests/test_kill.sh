@@ -303,6 +303,58 @@ test_kill_cleans_messages() {
     cleanup_test_env "$test_dir"
 }
 
+test_kill_aborts_when_mapping_locked() {
+    echo ""
+    echo "Testing kill leaves worktree when mapping removal cannot commit..."
+
+    repo="$(mktemp -d)"
+    parent="$(dirname "$repo")"
+    git -C "$repo" init -q
+    git -C "$repo" config user.email "t@example.com"
+    git -C "$repo" config user.name "t"
+    echo x > "$repo/file"
+    git -C "$repo" add file
+    git -C "$repo" commit -q -m init
+    git -C "$repo" branch lock-kill
+    wt="$parent/hydra-lock-kill"
+    git -C "$repo" worktree add -q "$wt" lock-kill
+
+    HYDRA_HOME="$(mktemp -d)"
+    HYDRA_MAP="$HYDRA_HOME/map"
+    mkdir -p "$HYDRA_HOME/locks"
+    echo "lock-kill missing-session - - - - -" > "$HYDRA_MAP"
+    mkdir "$HYDRA_HOME/locks/state_map.lock"
+    export HYDRA_HOME HYDRA_MAP HYDRA_NONINTERACTIVE=1 HYDRA_LOCK_RETRIES=1
+
+    (
+        cd "$repo" || exit 1
+        kill_single_head "lock-kill" "missing-session" >/dev/null 2>&1
+    )
+    assert_failure $? "kill_single_head should fail when state_map lock is held"
+
+    if grep -q "lock-kill" "$HYDRA_MAP"; then
+        echo "[PASS] Mapping preserved when remove_mapping cannot commit"
+        pass_count=$((pass_count + 1))
+    else
+        echo "[FAIL] Mapping preserved when remove_mapping cannot commit"
+        fail_count=$((fail_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    if [ -d "$wt" ]; then
+        echo "[PASS] Worktree left in place after mapping-lock failure"
+        pass_count=$((pass_count + 1))
+    else
+        echo "[FAIL] Worktree left in place after mapping-lock failure"
+        fail_count=$((fail_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    git -C "$repo" worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
+    rm -rf "$repo" "$HYDRA_HOME"
+    unset HYDRA_LOCK_RETRIES
+}
+
 # =============================================================================
 # Run all tests
 # =============================================================================
@@ -320,6 +372,7 @@ test_kill_group_sessions_empty_group
 test_kill_group_sessions_nonexistent_group
 test_kill_dirty_worktree_preflight
 test_kill_cleans_messages
+test_kill_aborts_when_mapping_locked
 
 echo ""
 echo "================================"

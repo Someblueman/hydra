@@ -47,19 +47,23 @@ for n in $COUNTS; do
     git -C "$repo" add README
     git -C "$repo" commit -q -m init
 
+    # Spawn and time from the throwaway repo so branches/worktrees stay there.
+    export HYDRA_HOME="$home"
+    export HYDRA_ROOT
+    export HYDRA_SKIP_AI=1
+    export HYDRA_NONINTERACTIVE=1
+
     i=1
     while [ "$i" -le "$n" ]; do
-        env HYDRA_HOME="$home" HYDRA_ROOT="$HYDRA_ROOT" HYDRA_SKIP_AI=1 \
-            HYDRA_NONINTERACTIVE=1 \
-            "$HYDRA_BIN" spawn "bench-$i" >/dev/null 2>&1 || true
+        (cd "$repo" && "$HYDRA_BIN" spawn "bench-$i") >/dev/null 2>&1 || true
         i=$((i + 1))
     done
 
     echo ""
     echo "heads=$n"
-    _time_cmd "list" env HYDRA_HOME="$home" HYDRA_ROOT="$HYDRA_ROOT" "$HYDRA_BIN" list
-    _time_cmd "status" env HYDRA_HOME="$home" HYDRA_ROOT="$HYDRA_ROOT" "$HYDRA_BIN" status
-    _time_cmd "doctor" env HYDRA_HOME="$home" HYDRA_ROOT="$HYDRA_ROOT" "$HYDRA_BIN" doctor
+    _time_cmd "list" sh -c "cd \"$repo\" && \"$HYDRA_BIN\" list"
+    _time_cmd "status" sh -c "cd \"$repo\" && \"$HYDRA_BIN\" status"
+    _time_cmd "doctor" sh -c "cd \"$repo\" && \"$HYDRA_BIN\" doctor"
 
     # TUI refresh (tui_build_list) without an interactive terminal
     TUI_MS="$({
@@ -100,10 +104,16 @@ for n in $COUNTS; do
     })"
     printf '  tui_build_list: %sms\n' "$TUI_MS"
 
-    env HYDRA_HOME="$home" HYDRA_ROOT="$HYDRA_ROOT" HYDRA_NONINTERACTIVE=1 \
-        "$HYDRA_BIN" kill --all --force >/dev/null 2>&1 || true
-    tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^bench-' | while IFS= read -r s; do
-        tmux kill-session -t "$s" 2>/dev/null || true
-    done
+    (cd "$repo" && "$HYDRA_BIN" kill --all --force) >/dev/null 2>&1 || true
+    # Kill only sessions recorded for this isolated HYDRA_HOME, never a
+    # global bench-* prefix sweep of the shared tmux server.
+    if [ -f "$home/map" ]; then
+        awk '{ print $2 }' "$home/map" | while IFS= read -r _sess; do
+            if [ -n "$_sess" ]; then
+                tmux kill-session -t "$_sess" 2>/dev/null || true
+            fi
+        done
+    fi
+    unset HYDRA_HOME HYDRA_SKIP_AI HYDRA_NONINTERACTIVE
     rm -rf "$work"
 done

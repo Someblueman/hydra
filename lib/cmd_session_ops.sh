@@ -152,8 +152,16 @@ cmd_broadcast() {
             _target=""
             if [ -n "$explicit_pane" ]; then
                 case "$explicit_pane" in
-                    *:*) _target="$explicit_pane" ;;
-                    *) _target="${session}:${explicit_pane}" ;;
+                    *:*)
+                        _pane_session="${explicit_pane%%:*}"
+                        if [ -z "$_pane_session" ] || [ "$_pane_session" != "$session" ]; then
+                            continue
+                        fi
+                        _target="$explicit_pane"
+                        ;;
+                    *)
+                        _target="${session}:${explicit_pane}"
+                        ;;
                 esac
             else
                 _target="$(find_broadcast_pane "$session" "$_ai" 2>/dev/null || true)"

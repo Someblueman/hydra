@@ -75,7 +75,10 @@ _kill_teardown() {
         echo "  Session '$_td_session' not found, cleaning up mapping..."
     fi
 
-    remove_mapping "$_td_branch"
+    if ! remove_mapping "$_td_branch"; then
+        echo "  Failed to update mapping for '$_td_branch'; worktree left in place" >&2
+        return 1
+    fi
 
     _td_path="$(get_worktree_path_with_fallback "$_td_branch" || true)"
     if [ -n "$_td_path" ] && [ -d "$_td_path" ]; then
