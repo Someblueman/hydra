@@ -58,12 +58,25 @@ tmux_session_exists() {
         return 1
     fi
 
+    # Always live-probe. A loaded snapshot is for batch list/status/TUI
+    # observation only; mutation paths (spawn, send-keys, kill) must not
+    # miss a session created after the snapshot was taken.
+    tmux has-session -t "$session" 2>/dev/null
+}
+
+# Snapshot lookup for observation loops that just called tmux_load_snapshot.
+# Usage: tmux_snapshot_has_session <session_name>
+# Returns: 0 if the snapshot lists the session, else live tmux_session_exists
+tmux_snapshot_has_session() {
+    session="$1"
+    if [ -z "$session" ]; then
+        return 1
+    fi
     if [ -n "${_TMUX_SNAPSHOT_LOADED:-}" ]; then
         printf '%s\n' "$_TMUX_SNAPSHOT_SESSIONS" | grep -Fqx "$session"
         return $?
     fi
-
-    tmux has-session -t "$session" 2>/dev/null
+    tmux_session_exists "$session"
 }
 
 # Load a one-shot snapshot of sessions and panes for batch observation.
@@ -214,11 +227,6 @@ find_broadcast_pane() {
             _fb_shell="${_fb_session}:${_fb_idx}"
             break
         fi
-        if [ "$_fb_has_live_agent" -eq 1 ] && [ "$_fb_idx" != "0.0" ]; then
-            # Non-primary pane even if command is not a classic shell name
-            _fb_shell="${_fb_session}:${_fb_idx}"
-            break
-        fi
     done <<EOF
 $_fb_panes
 EOF
@@ -260,7 +268,7 @@ create_session() {
     
     # Create detached session with specified working directory
     tmux new-session -d -s "$session" -c "$start_dir" || return 1
-    
+    tmux_clear_snapshot
     return 0
 }
 
@@ -281,7 +289,7 @@ kill_session() {
     fi
     
     tmux kill-session -t "$session" || return 1
-    
+    tmux_clear_snapshot
     return 0
 }
 
