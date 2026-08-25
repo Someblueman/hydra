@@ -14,4 +14,7 @@ CLAUDE.md
 *.tmp
 
 # GitHub Actions
-.github/workflows/*.logROADMAP.md
+.github/workflows/*.log
+
+# Hydra runtime state (live state lives under $HYDRA_HOME, default ~/.hydra)
+.hydra/

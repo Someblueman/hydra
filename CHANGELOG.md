@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-08-25
+
+### Added
+- Public contract snapshot in `docs/CONTRACTS.md` (map fields, JSON, locks, TUI rows, send-keys targets)
+- Supported-platform statement (Linux and macOS, POSIX `sh`, `tmux >= 3.0`)
+- `make bench` / `scripts/bench.sh` for list, status, doctor, and TUI refresh timings at 5 and 20 heads
+- `tests/bin/tmux` stub for deterministic send-keys and pane-target tests
+- Broadcast `--pane` and `--force` for explicit pane targeting
+
+### Changed
+- State map writers share the `state_map` mkdir lock and fail closed if it cannot be acquired
+- Replacement files are created next to their destination before `mv`
+- Queue filenames sort by priority (high first) then request time, with a monotonic seq for FIFO
+- `json_escape` emits `\n` / `\r` / `\b` / `\f` and `\u00XX` for remaining C0 controls
+- Startup and agent launch always send keys to `session:0.0`
+- TUI list readers consume the eight-field tab row contract
+- TUI activity prefers `window_activity` from a batched pane snapshot; capture-pane hashing is fallback
+- `hydra list` / `status` use a tmux session snapshot instead of per-head `has-session` where loaded
+- Shell completion covers every command dispatched by `bin/hydra`
+
+### Fixed
+- `hydra status` no longer treats deps/PR as part of the duration timestamp (`Illegal number`)
+- Kill preflights dirty/untracked worktrees before tearing down tmux or mappings
+- Message inboxes are removed from kill and dead-mapping cleanup
+- Doctor/cleanup stale-lock detection matches empty `*.lock` directories
+- `hydra regenerate` preserves group, deps, PR, and timestamp
+- Malformed `.gitignore` entry; runtime `.hydra/` is no longer tracked
+
 ## [1.5.0] - 2026-08-24
 
 ### Added

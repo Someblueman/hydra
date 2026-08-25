@@ -225,6 +225,84 @@ test_kill_group_sessions_nonexistent_group() {
     cleanup_test_env "$test_dir"
 }
 
+test_kill_dirty_worktree_preflight() {
+    echo ""
+    echo "Testing kill_single_head refuses dirty worktree before teardown..."
+
+    repo="$(mktemp -d)"
+    parent="$(dirname "$repo")"
+    git -C "$repo" init -q
+    git -C "$repo" config user.email "t@example.com"
+    git -C "$repo" config user.name "t"
+    echo x > "$repo/file"
+    git -C "$repo" add file
+    git -C "$repo" commit -q -m init
+    git -C "$repo" branch dirty-kill
+    wt="$parent/hydra-dirty-kill"
+    git -C "$repo" worktree add -q "$wt" dirty-kill
+    echo dirty >> "$wt/file"
+
+    HYDRA_HOME="$(mktemp -d)"
+    HYDRA_MAP="$HYDRA_HOME/map"
+    export HYDRA_HOME HYDRA_MAP HYDRA_NONINTERACTIVE=1
+    echo "dirty-kill missing-session - - - - -" > "$HYDRA_MAP"
+
+    (
+        cd "$repo" || exit 1
+        kill_single_head "dirty-kill" "missing-session" >/dev/null 2>&1
+    )
+    exit_code=$?
+    assert_failure $exit_code "kill_single_head should fail on dirty worktree"
+
+    if grep -q "dirty-kill" "$HYDRA_MAP"; then
+        echo "[PASS] Mapping preserved when kill aborts"
+        pass_count=$((pass_count + 1))
+    else
+        echo "[FAIL] Mapping preserved when kill aborts"
+        fail_count=$((fail_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    if [ -d "$wt" ]; then
+        echo "[PASS] Dirty worktree left in place"
+        pass_count=$((pass_count + 1))
+    else
+        echo "[FAIL] Dirty worktree left in place"
+        fail_count=$((fail_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    git -C "$repo" worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
+    rm -rf "$repo" "$HYDRA_HOME"
+}
+
+test_kill_cleans_messages() {
+    echo ""
+    echo "Testing kill_single_head removes message inbox..."
+
+    test_dir="$(setup_test_env)"
+    HYDRA_HOME="$test_dir"
+    HYDRA_MAP="$test_dir/map"
+    export HYDRA_HOME HYDRA_MAP
+    echo "msg-branch missing-session - - - - -" > "$HYDRA_MAP"
+    mkdir -p "$HYDRA_HOME/messages/msg-branch/queue"
+    echo hi > "$HYDRA_HOME/messages/msg-branch/queue/1"
+
+    kill_single_head "msg-branch" "missing-session" >/dev/null 2>&1
+    assert_success $? "kill_single_head succeeds without a worktree"
+
+    if [ ! -d "$HYDRA_HOME/messages/msg-branch" ]; then
+        echo "[PASS] Message directory removed on kill"
+        pass_count=$((pass_count + 1))
+    else
+        echo "[FAIL] Message directory removed on kill"
+        fail_count=$((fail_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    cleanup_test_env "$test_dir"
+}
+
 # =============================================================================
 # Run all tests
 # =============================================================================
@@ -240,6 +318,8 @@ test_kill_all_sessions_empty_map
 test_kill_all_sessions_missing_map
 test_kill_group_sessions_empty_group
 test_kill_group_sessions_nonexistent_group
+test_kill_dirty_worktree_preflight
+test_kill_cleans_messages
 
 echo ""
 echo "================================"

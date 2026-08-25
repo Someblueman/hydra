@@ -34,11 +34,18 @@ _validate_and_repair_state_file() {
     done < "$HYDRA_MAP"
 
     if [ "$malformed" -gt 0 ]; then
+        if ! acquire_lock "state_map"; then
+            echo "Warning: State file has $malformed malformed line(s); lock busy, skipping repair" >&2
+            return 0
+        fi
+
         # Backup corrupted file
         cp "$HYDRA_MAP" "${HYDRA_MAP}.bak" 2>/dev/null || true
 
-        # Filter out malformed lines
-        tmpfile="$(mktemp)"
+        tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || {
+            release_lock "state_map"
+            return 1
+        }
         while IFS= read -r line; do
             [ -z "$line" ] && continue
             # Count fields using POSIX word splitting (perf: avoid awk)
@@ -48,7 +55,12 @@ _validate_and_repair_state_file() {
                 echo "$line" >> "$tmpfile"
             fi
         done < "$HYDRA_MAP"
-        mv "$tmpfile" "$HYDRA_MAP"
+        if ! atomic_replace "$HYDRA_MAP" "$tmpfile"; then
+            rm -f "$tmpfile"
+            release_lock "state_map"
+            return 1
+        fi
+        release_lock "state_map"
 
         echo "Warning: Repaired $malformed malformed line(s) in state file" >&2
         echo "  Backup saved to: ${HYDRA_MAP}.bak" >&2

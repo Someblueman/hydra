@@ -16,7 +16,7 @@ _hydra_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    commands="spawn list switch kill regenerate status doctor dashboard cycle-layout tui cleanup pr template completion version help"
+    commands="spawn list switch kill regenerate status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
     
     case "${prev}" in
@@ -237,6 +237,7 @@ _hydra_commands() {
         'status:Show health status of all heads'
         'doctor:Check system performance'
         'dashboard:View all sessions in a single dashboard'
+        'dashboard-exit:Exit the dashboard session'
         'cycle-layout:Cycle through tmux pane layouts'
         'tui:Interactive terminal UI for session management'
         'cleanup:Remove orphaned worktrees and mappings'
@@ -245,6 +246,13 @@ _hydra_commands() {
         'completion:Generate shell completion scripts'
         'version:Show version information'
         'help:Show help message'
+        'group:Show or set session groups'
+        'send:Queue a message to a session inbox'
+        'recv:Read messages for the current session'
+        'tail:View output from a session'
+        'broadcast:Send a command to sessions'
+        'wait-idle:Wait for sessions to become idle'
+        'queue:Inspect or process the spawn queue'
     )
     _describe 'command' commands
 }
@@ -292,6 +300,7 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'regenerate' -d 'Restore tmux
 complete -c hydra -f -n '__fish_use_subcommand' -a 'status' -d 'Show health status of all heads'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'doctor' -d 'Check system performance'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'dashboard' -d 'View all sessions in a single dashboard'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'dashboard-exit' -d 'Exit the dashboard session'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'cycle-layout' -d 'Cycle through tmux pane layouts'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'tui' -d 'Interactive terminal UI for session management'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'cleanup' -d 'Remove orphaned worktrees and mappings'
@@ -300,6 +309,13 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'template' -d 'Manage session
 complete -c hydra -f -n '__fish_use_subcommand' -a 'completion' -d 'Generate shell completion scripts'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'version' -d 'Show version information'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'help' -d 'Show help message'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'group' -d 'Show or set session groups'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'send' -d 'Queue a message to a session inbox'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'recv' -d 'Read messages for the current session'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'tail' -d 'View output from a session'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'broadcast' -d 'Send a command to sessions'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'wait-idle' -d 'Wait for sessions to become idle'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'queue' -d 'Inspect or process the spawn queue'
 
 # Complete flags
 complete -c hydra -f -n '__fish_use_subcommand' -s h -l help -d 'Show help message'

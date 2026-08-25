@@ -222,7 +222,7 @@ apply_yaml_config() {
             fi
             ;;
           START)
-            tmux send-keys -t "$session" "$f1" Enter 2>/dev/null || true
+            tmux send-keys -t "${session}:0.0" "$f1" Enter 2>/dev/null || true
             ;;
         esac
       done

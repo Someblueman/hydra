@@ -211,9 +211,9 @@ tui_render() {
         printf "\n"
     fi
 
-    # Render visible items (tab-delimited with 6 fields)
+    # Render visible items (tab-delimited: branch session ai status tag activity group pr)
     idx=0
-    while IFS='	' read -r branch session ai status tag activity; do
+    while IFS='	' read -r branch session ai status tag activity group pr; do
         [ -z "$branch" ] && continue
 
         # Skip items before visible range
@@ -263,6 +263,15 @@ tui_render() {
             esac
         fi
 
+        group_str=""
+        if [ -n "$group" ] && [ "$group" != "-" ]; then
+            group_str=" ${TUI_DIM}[$group]${TUI_RESET}"
+        fi
+        pr_str=""
+        if [ -n "$pr" ] && [ "$pr" != "-" ]; then
+            pr_str=" ${TUI_DIM}#${pr}${TUI_RESET}"
+        fi
+
         # Current session marker (uses cached TUI_CURRENT_SESSION)
         current_str=""
         if [ "$session" = "$TUI_CURRENT_SESSION" ]; then
@@ -270,7 +279,7 @@ tui_render() {
         fi
 
         # Build display line
-        line="$status_str $branch -> $session$ai_str$tag_str$current_str"
+        line="$status_str $branch -> $session$ai_str$tag_str$group_str$pr_str$current_str"
 
         # Multi-select indicator
         select_marker="  "

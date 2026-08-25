@@ -82,6 +82,8 @@ cmd_broadcast() {
     # Send a command to all sessions or a group
     broadcast_group=""
     command_text=""
+    force_pane=""
+    explicit_pane=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -90,9 +92,18 @@ cmd_broadcast() {
                 broadcast_group="$1"
                 shift
                 ;;
+            --force)
+                force_pane=1
+                shift
+                ;;
+            --pane)
+                shift
+                explicit_pane="$1"
+                shift
+                ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra broadcast [-g|--group <name>] <command>" >&2
+                echo "Usage: hydra broadcast [-g|--group <name>] [--pane <target>] [--force] <command>" >&2
                 return 1
                 ;;
             *)
@@ -105,7 +116,7 @@ cmd_broadcast() {
 
     if [ -z "$command_text" ]; then
         echo "Error: Command required" >&2
-        echo "Usage: hydra broadcast [-g|--group <name>] <command>" >&2
+        echo "Usage: hydra broadcast [-g|--group <name>] [--pane <target>] [--force] <command>" >&2
         return 1
     fi
 
@@ -138,8 +149,25 @@ cmd_broadcast() {
 
     echo "$mappings" | while IFS=' ' read -r branch session _ai _group; do
         if _session_exists_cached "$session"; then
-            echo "  Sending to $branch ($session)..."
-            tmux send-keys -t "$session" "$command_text" Enter 2>/dev/null || true
+            _target=""
+            if [ -n "$explicit_pane" ]; then
+                case "$explicit_pane" in
+                    *:*) _target="$explicit_pane" ;;
+                    *) _target="${session}:${explicit_pane}" ;;
+                esac
+            else
+                _target="$(find_broadcast_pane "$session" "$_ai" 2>/dev/null || true)"
+                if [ -z "$_target" ]; then
+                    if [ -n "$force_pane" ]; then
+                        _target="${session}:0.0"
+                    else
+                        echo "  Skipping $branch ($session): no shell pane (agent on :0.0; use --force or --pane)" >&2
+                        continue
+                    fi
+                fi
+            fi
+            echo "  Sending to $branch ($session) via $_target..."
+            tmux send-keys -t "$_target" "$command_text" Enter 2>/dev/null || true
             # Increment count in file
             _cnt="$(cat "$tmpcount")"
             printf "%d" "$((_cnt + 1))" > "$tmpcount"

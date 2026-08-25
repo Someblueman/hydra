@@ -271,6 +271,105 @@ test_without_external_deps() {
     cleanup_test_state "$(dirname "$test_map")"
 }
 
+# Test lock fail-closed and same-filesystem temps
+test_add_mapping_fail_closed() {
+    echo "Testing add_mapping fail-closed on lock contention..."
+
+    test_map="$(setup_test_state)"
+    HYDRA_MAP="$test_map"
+    HYDRA_HOME="$(dirname "$test_map")"
+    HYDRA_LOCK_RETRIES=1
+    export HYDRA_MAP HYDRA_HOME HYDRA_LOCK_RETRIES
+    mkdir -p "$HYDRA_HOME/locks"
+
+    echo "keep-branch keep-session claude g 1 - -" > "$HYDRA_MAP"
+    try_lock "state_map"
+    add_mapping "new-branch" "new-session" 2>/dev/null
+    assert_failure $? "add_mapping should fail when state_map lock is held"
+    if grep -q "new-branch" "$HYDRA_MAP"; then
+        echo "[FAIL] Map must not mutate after lock failure"
+        fail_count=$((fail_count + 1))
+    else
+        echo "[PASS] Map must not mutate after lock failure"
+        pass_count=$((pass_count + 1))
+    fi
+    test_count=$((test_count + 1))
+    release_lock "state_map"
+
+    unset HYDRA_LOCK_RETRIES
+    cleanup_test_state "$(dirname "$test_map")"
+}
+
+test_same_filesystem_temp() {
+    echo "Testing mktemp_adjacent stays next to dest..."
+
+    test_map="$(setup_test_state)"
+    dest_dir="$(dirname "$test_map")"
+    tmp="$(mktemp_adjacent "$test_map")"
+    assert_equal "$dest_dir" "$(dirname "$tmp")" "temp file is on the same directory as dest"
+    rm -f "$tmp"
+    cleanup_test_state "$dest_dir"
+}
+
+test_get_duration_since_invalid() {
+    echo "Testing get_duration_since rejects non-numeric input..."
+
+    result="$(get_duration_since "1700000100 depA,depB 42")"
+    assert_equal "0" "$result" "non-numeric timestamp yields 0 not arithmetic error"
+
+    result="$(get_duration_since "-")"
+    assert_equal "0" "$result" "placeholder timestamp yields 0"
+}
+
+test_state_cache_invalidation() {
+    echo "Testing state cache invalidation after write..."
+
+    test_map="$(setup_test_state)"
+    HYDRA_MAP="$test_map"
+    HYDRA_HOME="$(dirname "$test_map")"
+    export HYDRA_MAP HYDRA_HOME
+    _STATE_CACHE_LOADED=""
+
+    add_mapping "b1" "s1" "claude" "g" "100" "dep" "7"
+    result="$(get_session_for_branch "b1")"
+    assert_equal "s1" "$result" "cache returns session after add"
+
+    add_mapping "b1" "s2" "claude" "g" "100" "dep" "7"
+    result="$(get_session_for_branch "b1")"
+    assert_equal "s2" "$result" "cache invalidates and returns new session"
+
+    result="$(get_group_for_branch "b1")"
+    assert_equal "g" "$result" "group preserved through rewrite"
+    result="$(get_pr_for_branch "b1")"
+    assert_equal "7" "$result" "pr preserved through rewrite"
+
+    cleanup_test_state "$(dirname "$test_map")"
+}
+
+test_regenerate_field_preservation() {
+    echo "Testing regenerate-style metadata preservation..."
+
+    test_map="$(setup_test_state)"
+    HYDRA_MAP="$test_map"
+    HYDRA_HOME="$(dirname "$test_map")"
+    export HYDRA_MAP HYDRA_HOME
+    _STATE_CACHE_LOADED=""
+
+    add_mapping "feat" "old-sess" "aider" "backend" "123456" "dep1,dep2" "99"
+    stored_ai="$(get_ai_for_branch "feat")"
+    stored_group="$(get_group_for_branch "feat")"
+    stored_ts="$(get_timestamp_for_branch "feat")"
+    stored_deps="$(get_deps_for_branch "feat")"
+    stored_pr="$(get_pr_for_branch "feat")"
+    add_mapping "feat" "new-sess" "$stored_ai" "$stored_group" "$stored_ts" "$stored_deps" "$stored_pr"
+
+    line="$(grep "^feat " "$HYDRA_MAP")"
+    expected="feat new-sess aider backend 123456 dep1,dep2 99"
+    assert_equal "$expected" "$line" "regenerate rewrite preserves metadata except session"
+
+    cleanup_test_state "$(dirname "$test_map")"
+}
+
 # Run all tests
 echo "Running state.sh unit tests..."
 echo "================================"
@@ -283,6 +382,11 @@ test_get_branch_for_session
 test_list_mappings
 test_generate_session_name
 test_without_external_deps
+test_add_mapping_fail_closed
+test_same_filesystem_temp
+test_get_duration_since_invalid
+test_state_cache_invalidation
+test_regenerate_field_preservation
 
 echo "================================"
 echo "Test Results:"

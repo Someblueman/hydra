@@ -50,9 +50,27 @@ print_summary_failure() {
 # Usage: json_escape <string>
 # Returns: Escaped string on stdout
 json_escape() {
-    # Escape backslashes, double quotes, tabs, and convert newlines to spaces
-    # (newlines in branch/session names are not expected, but ensure valid JSON)
-    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | tr '\n' ' ' | sed 's/ $//'
+    # json_escape operates on POSIX C strings (NUL cannot appear in $1).
+    # Named JSON escapes for ", \, and common C0; remaining C0 as \\u00XX.
+    printf '%s' "$1" | od -An -v -tx1 | awk '
+    BEGIN {
+        for (i = 0; i < 256; i++) hex[sprintf("%02x", i)] = i
+    }
+    {
+        for (i = 1; i <= NF; i++) {
+            b = hex[tolower($i)]
+            if (b == 34) { printf "\\\""; continue }
+            if (b == 92) { printf "\\\\"; continue }
+            if (b == 8) { printf "\\b"; continue }
+            if (b == 9) { printf "\\t"; continue }
+            if (b == 10) { printf "\\n"; continue }
+            if (b == 12) { printf "\\f"; continue }
+            if (b == 13) { printf "\\r"; continue }
+            if (b < 32) { printf "\\u00%02x", b; continue }
+            printf "%c", b
+        }
+    }
+    '
 }
 
 # Output a JSON string key-value pair

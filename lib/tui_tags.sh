@@ -37,8 +37,15 @@ tui_set_tag() {
         return 1
     fi
 
-    # Create temp file for atomic update
-    _tmpfile="$(mktemp)" || return 1
+    if ! acquire_lock "tags"; then
+        echo "Error: Failed to acquire tags lock" >&2
+        return 1
+    fi
+
+    _tmpfile="$(mktemp_adjacent "$TUI_TAGS_FILE")" || {
+        release_lock "tags"
+        return 1
+    }
 
     # Copy all entries except the one being updated
     if [ -f "$TUI_TAGS_FILE" ]; then
@@ -54,11 +61,16 @@ tui_set_tag() {
         printf "%s %s\n" "$_branch" "$_tag" >> "$_tmpfile"
     fi
 
-    # Atomic move
-    mv "$_tmpfile" "$TUI_TAGS_FILE" 2>/dev/null || {
+    if [ ! -s "$_tmpfile" ]; then
+        : > "$_tmpfile"
+    fi
+
+    if ! atomic_replace "$TUI_TAGS_FILE" "$_tmpfile"; then
         rm -f "$_tmpfile"
+        release_lock "tags"
         return 1
-    }
+    fi
+    release_lock "tags"
     return 0
 }
 

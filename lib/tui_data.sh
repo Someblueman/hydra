@@ -22,6 +22,10 @@ tui_build_list() {
         return 0
     fi
 
+    # Batch tmux observation for this refresh
+    tmux_load_snapshot
+    _now="$(date +%s)"
+
     # Read mappings and write to temp file with status
     # Use tab as delimiter (safe - branch/session names can't contain tabs)
     while IFS=' ' read -r branch session ai group _ts _deps _pr; do
@@ -29,9 +33,16 @@ tui_build_list() {
 
         if tmux_session_exists "$session" 2>/dev/null; then
             sess_status="ALIVE"
-
-            # Activity check — skip capture-pane if cached hash is fresh
             activity="IDLE"
+
+            _win_act="$(tmux_snapshot_window_activity "$session")"
+            case "$_win_act" in
+                ''|*[!0-9]*) _win_act=0 ;;
+            esac
+            if [ "$_win_act" -gt 0 ] && [ "$((_now - _win_act))" -lt 5 ]; then
+                activity="BUSY"
+            elif [ "$_win_act" -eq 0 ]; then
+                # Fallback: pane hashing when window_activity is unavailable
             if [ -n "$TUI_ACTIVITY_DIR" ] && [ -d "$TUI_ACTIVITY_DIR" ]; then
                 hash_file="$TUI_ACTIVITY_DIR/${session}.hash"
                 time_file="$TUI_ACTIVITY_DIR/${session}.time"
@@ -70,6 +81,7 @@ tui_build_list() {
                         activity="BUSY"
                     fi
                 fi
+            fi
             fi
         else
             sess_status="DEAD"
@@ -130,7 +142,7 @@ tui_build_list() {
 
 # Get session data at index
 # Usage: tui_get_session_at <index>
-# Returns: session data on stdout (branch|session|ai|status)
+# Returns: session data on stdout (tab-separated: branch session ai status tag activity group pr)
 tui_get_session_at() {
     idx="$1"
     sed -n "$((idx + 1))p" "$TUI_TEMP_LIST"

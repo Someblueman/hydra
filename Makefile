@@ -1,7 +1,7 @@
 # Makefile for Hydra
 # POSIX-compliant build and lint tasks
 
-.PHONY: all lint test clean install dev-setup help
+.PHONY: all lint test clean install dev-setup bench help
 
 # Default target
 all: lint
@@ -20,17 +20,21 @@ lint:
 	done
 	@echo "All checks passed!"
 
-# Run tests
+# Run tests (skip helpers.sh — it is a library, not a suite)
 test:
 	@echo "Running tests..."
-	@if [ -d tests ] && [ -n "$$(ls -A tests/*.sh 2>/dev/null)" ]; then \
-		for test in tests/*.sh; do \
+	@if [ -d tests ] && [ -n "$$(ls -A tests/test_*.sh 2>/dev/null)" ]; then \
+		for test in tests/test_*.sh; do \
 			echo "Running $$test..."; \
 			sh "$$test" || exit 1; \
 		done; \
 	else \
 		echo "No tests found in tests/"; \
 	fi
+
+# Record shell baseline timings (not a CI gate; no speedup claims)
+bench:
+	@sh scripts/bench.sh
 
 # Clean temporary files
 clean:
@@ -64,6 +68,7 @@ help:
 	@echo "Hydra Makefile targets:"
 	@echo "  make lint      - Run ShellCheck and dash syntax validation"
 	@echo "  make test      - Run all tests"
+	@echo "  make bench     - Record list/status/doctor/TUI timings at 5 and 20 heads"
 	@echo "  make clean     - Remove temporary files"
 	@echo "  make install   - Install hydra to /usr/local/bin"
 	@echo "  make dev-setup - Set up development environment (git hooks)"
