@@ -48,7 +48,9 @@ and `mv` it into place so the rename stays on one filesystem.
 
 `json_escape` operates on POSIX C strings (NUL cannot appear). It escapes
 `"`, `\`, `\b`, `\t`, `\n`, `\f`, `\r`, and other C0 controls as `\u00XX`.
-Callers must never emit raw control characters inside JSON strings.
+Bytes 0x20–0xFF other than `"` and `\` (including UTF-8 payload bytes) are
+copied unchanged; a UTF-8 locale must not recode them. Callers must never
+emit raw control characters inside JSON strings.
 
 ## TUI row schema
 

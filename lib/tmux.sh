@@ -189,6 +189,18 @@ find_broadcast_pane() {
                 _fb_is_shell=1
                 ;;
         esac
+        _fb_is_agent=0
+        case "$_fb_cmd" in
+            claude|codex|cursor|copilot|aider|gemini)
+                _fb_is_agent=1
+                ;;
+        esac
+        # Default spawn stores "-" for AI but still launches the agent on :0.0.
+        # Treat a live agent process on the primary pane as an agent slot.
+        if [ "$_fb_idx" = "0.0" ] && [ "$_fb_is_agent" -eq 1 ]; then
+            _fb_has_agent_slot=1
+            continue
+        fi
         if [ "$_fb_idx" = "0.0" ] && [ "$_fb_has_agent_slot" -eq 1 ]; then
             continue
         fi

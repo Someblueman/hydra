@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - State map writers share the `state_map` mkdir lock and fail closed if it cannot be acquired
 - Replacement files are created next to their destination before `mv`
 - Queue filenames sort by priority (high first) then request time, with a monotonic seq for FIFO
-- `json_escape` emits `\n` / `\r` / `\b` / `\f` and `\u00XX` for remaining C0 controls
+- `json_escape` emits `\n` / `\r` / `\b` / `\f` and `\u00XX` for remaining C0 controls, and passes UTF-8 bytes through unchanged
 - Startup and agent launch always send keys to `session:0.0`
 - TUI list readers consume the eight-field tab row contract
 - TUI activity prefers `window_activity` from a batched pane snapshot; capture-pane hashing is fallback
@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `hydra status` no longer treats deps/PR as part of the duration timestamp (`Illegal number`)
 - Kill preflights dirty/untracked worktrees before tearing down tmux or mappings
+- `hydra spawn` rolls back the session and worktree if the state map cannot be written
+- `hydra broadcast` treats a live agent process on `:0.0` as the agent pane even when the map stores `-`
 - Message inboxes are removed from kill and dead-mapping cleanup
 - Doctor/cleanup stale-lock detection matches empty `*.lock` directories
 - `hydra regenerate` preserves group, deps, PR, and timestamp

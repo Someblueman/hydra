@@ -63,11 +63,37 @@ test_find_broadcast_pane_refuses_agent_only() {
     assert_failure $? "broadcast refuses when only the agent pane exists"
 }
 
+test_find_broadcast_pane_detects_live_agent_when_map_blank() {
+    echo "Testing find_broadcast_pane detects agent on :0.0 when map AI is -..."
+
+    HYDRA_TEST_TMUX_SESSIONS="hydra-feat"
+    HYDRA_TEST_TMUX_PANES="$(printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        hydra-feat 0 0 1700000000 claude 0)"
+    export HYDRA_TEST_TMUX_SESSIONS HYDRA_TEST_TMUX_PANES
+
+    find_broadcast_pane "hydra-feat" "-" >/dev/null 2>&1
+    assert_failure $? "broadcast refuses agent-only session even when map AI is -"
+
+    HYDRA_TEST_TMUX_PANES="$(printf '%s\t%s\t%s\t%s\t%s\t%s\n%s\t%s\t%s\t%s\t%s\t%s\n' \
+        hydra-feat 0 0 1700000000 claude 0 \
+        hydra-feat 0 1 1700000000 bash 0)"
+    export HYDRA_TEST_TMUX_PANES
+    result="$(find_broadcast_pane "hydra-feat" "-")"
+    assert_equal "hydra-feat:0.1" "$result" "blank map AI still prefers non-agent shell pane"
+
+    HYDRA_TEST_TMUX_PANES="$(printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        hydra-feat 0 0 1700000000 bash 0)"
+    export HYDRA_TEST_TMUX_PANES
+    result="$(find_broadcast_pane "hydra-feat" "-")"
+    assert_equal "hydra-feat:0.0" "$result" "no live agent allows :0.0 when map AI is -"
+}
+
 echo "Running pane targeting tests..."
 echo "================================"
 test_send_keys_uses_primary_pane
 test_find_broadcast_pane_prefers_shell
 test_find_broadcast_pane_refuses_agent_only
+test_find_broadcast_pane_detects_live_agent_when_map_blank
 echo "================================"
 echo "Total:  $test_count"
 echo "Passed: $pass_count"

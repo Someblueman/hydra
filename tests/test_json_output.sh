@@ -195,6 +195,21 @@ test_json_escape_mixed_special() {
     assert_equal 'say \"hello\\\\there\"' "$result" "Mixed quotes and backslashes escaped"
 }
 
+test_json_escape_utf8() {
+    echo ""
+    echo "Testing json_escape preserves UTF-8 bytes..."
+
+    # café: c3 a9 for é. Must round-trip even in a UTF-8 locale.
+    input="$(printf 'caf\303\251')"
+    result="$(LC_ALL=en_US.UTF-8 json_escape "$input")"
+    assert_equal "$input" "$result" "UTF-8 payload bytes are not recoded"
+
+    quoted="$(printf '"caf\303\251"')"
+    result="$(LC_ALL=en_US.UTF-8 json_escape "$quoted")"
+    expected="$(printf '\\"caf\303\251\\"')"
+    assert_equal "$expected" "$result" "UTF-8 with quotes still escapes quotes only"
+}
+
 # =============================================================================
 # Unit Tests for JSON helper functions
 # =============================================================================
@@ -406,6 +421,7 @@ main() {
     test_json_escape_cr_ff_bs
     test_json_escape_other_c0
     test_json_escape_mixed_special
+    test_json_escape_utf8
 
     # Unit tests for JSON helpers
     test_json_kv

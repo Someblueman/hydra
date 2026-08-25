@@ -51,26 +51,32 @@ print_summary_failure() {
 # Returns: Escaped string on stdout
 json_escape() {
     # json_escape operates on POSIX C strings (NUL cannot appear in $1).
-    # Named JSON escapes for ", \, and common C0; remaining C0 as \\u00XX.
-    printf '%s' "$1" | od -An -v -tx1 | awk '
-    BEGIN {
-        for (i = 0; i < 256; i++) hex[sprintf("%02x", i)] = i
+    # Named JSON escapes for ", \, and common C0; remaining C0 as \u00XX.
+    # Bytes >= 32 (including UTF-8 payload bytes) are emitted unchanged; do
+    # not use awk "%c" for that, because a UTF-8 locale recodes 0x80-0xFF.
+    printf '%s' "$1" | LC_ALL=C od -An -v -tu1 | {
+        while IFS= read -r _je_line || [ -n "$_je_line" ]; do
+            # shellcheck disable=SC2086
+            for _je_b in $_je_line; do
+                case "$_je_b" in
+                    34) printf '%s' '\"' ;;
+                    92) printf '%s' "\\\\" ;;
+                    8)  printf '%s' '\b' ;;
+                    9)  printf '%s' '\t' ;;
+                    10) printf '%s' '\n' ;;
+                    12) printf '%s' '\f' ;;
+                    13) printf '%s' '\r' ;;
+                    *)
+                        if [ "$_je_b" -lt 32 ]; then
+                            printf '\\u00%02x' "$_je_b"
+                        else
+                            printf '%b' "$(printf '\\%03o' "$_je_b")"
+                        fi
+                        ;;
+                esac
+            done
+        done
     }
-    {
-        for (i = 1; i <= NF; i++) {
-            b = hex[tolower($i)]
-            if (b == 34) { printf "\\\""; continue }
-            if (b == 92) { printf "\\\\"; continue }
-            if (b == 8) { printf "\\b"; continue }
-            if (b == 9) { printf "\\t"; continue }
-            if (b == 10) { printf "\\n"; continue }
-            if (b == 12) { printf "\\f"; continue }
-            if (b == 13) { printf "\\r"; continue }
-            if (b < 32) { printf "\\u00%02x", b; continue }
-            printf "%c", b
-        }
-    }
-    '
 }
 
 # Output a JSON string key-value pair
