@@ -170,6 +170,39 @@ add_mapping() {
     return 0
 }
 
+# Remove a branch-session mapping. Caller must hold the state_map lock.
+# Usage: _remove_mapping_locked <branch>
+# Returns: 0 on success, 1 on failure
+_remove_mapping_locked() {
+    branch="$1"
+
+    if [ -z "$branch" ]; then
+        echo "Error: Branch is required" >&2
+        return 1
+    fi
+
+    if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+        return 0
+    fi
+
+    _invalidate_state_cache
+
+    tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || return 1
+
+    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
+        if [ -n "$map_branch" ] && [ "$map_branch" != "$branch" ]; then
+            _format_map_line "$map_branch" "$map_session" "$map_ai" "$map_group" \
+                "$map_timestamp" "$map_deps" "$map_pr"
+        fi
+    done < "$HYDRA_MAP" > "$tmpfile"
+
+    if ! atomic_replace "$HYDRA_MAP" "$tmpfile"; then
+        rm -f "$tmpfile"
+        return 1
+    fi
+    return 0
+}
+
 # Remove a branch-session mapping
 # Usage: remove_mapping <branch>
 # Returns: 0 on success, 1 on failure
@@ -189,22 +222,7 @@ remove_mapping() {
         return 1
     fi
 
-    _invalidate_state_cache
-
-    tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || {
-        release_lock "state_map"
-        return 1
-    }
-
-    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
-        if [ -n "$map_branch" ] && [ "$map_branch" != "$branch" ]; then
-            _format_map_line "$map_branch" "$map_session" "$map_ai" "$map_group" \
-                "$map_timestamp" "$map_deps" "$map_pr"
-        fi
-    done < "$HYDRA_MAP" > "$tmpfile"
-
-    if ! atomic_replace "$HYDRA_MAP" "$tmpfile"; then
-        rm -f "$tmpfile"
+    if ! _remove_mapping_locked "$branch"; then
         release_lock "state_map"
         return 1
     fi
