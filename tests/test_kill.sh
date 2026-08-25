@@ -355,6 +355,49 @@ test_kill_aborts_when_mapping_locked() {
     unset HYDRA_LOCK_RETRIES
 }
 
+test_kill_preserves_session_when_mapping_locked() {
+    echo ""
+    echo "Testing kill does not destroy tmux when state_map lock is held..."
+
+    sess="hydra-lock-live-$$"
+    tmux new-session -d -s "$sess" 2>/dev/null || {
+        echo "[SKIP] tmux new-session failed"
+        return 0
+    }
+
+    HYDRA_HOME="$(mktemp -d)"
+    HYDRA_MAP="$HYDRA_HOME/map"
+    mkdir -p "$HYDRA_HOME/locks"
+    echo "lock-live $sess - - - - -" > "$HYDRA_MAP"
+    mkdir "$HYDRA_HOME/locks/state_map.lock"
+    export HYDRA_HOME HYDRA_MAP HYDRA_NONINTERACTIVE=1 HYDRA_LOCK_RETRIES=1
+
+    kill_single_head "lock-live" "$sess" >/dev/null 2>&1
+    assert_failure $? "kill_single_head should fail when state_map lock is held"
+
+    if tmux has-session -t "$sess" 2>/dev/null; then
+        echo "[PASS] tmux session left intact when map lock is held"
+        pass_count=$((pass_count + 1))
+    else
+        echo "[FAIL] tmux session left intact when map lock is held"
+        fail_count=$((fail_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    if grep -q "lock-live" "$HYDRA_MAP"; then
+        echo "[PASS] Mapping preserved with live session after lock failure"
+        pass_count=$((pass_count + 1))
+    else
+        echo "[FAIL] Mapping preserved with live session after lock failure"
+        fail_count=$((fail_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    tmux kill-session -t "$sess" 2>/dev/null || true
+    rm -rf "$HYDRA_HOME"
+    unset HYDRA_LOCK_RETRIES
+}
+
 # =============================================================================
 # Run all tests
 # =============================================================================
@@ -373,6 +416,7 @@ test_kill_group_sessions_nonexistent_group
 test_kill_dirty_worktree_preflight
 test_kill_cleans_messages
 test_kill_aborts_when_mapping_locked
+test_kill_preserves_session_when_mapping_locked
 
 echo ""
 echo "================================"
