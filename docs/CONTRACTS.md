@@ -68,10 +68,12 @@ Startup commands and agent launch target `session:0.0`, not the active pane.
 
 `hydra broadcast` sends to a non-agent shell pane when one exists. A live
 agent process on `:0.0` is skipped even if the map stores `-`; after that
-process exits and `:0.0` is a shell again, broadcast may use it. If the only
-pane is the agent (typical `default` layout), broadcast refuses unless
-`--force` (then `:0.0`) or `--pane` is given. A session-qualified `--pane`
-(`session:0.1`) applies only to that session.
+process exits and `:0.0` is a shell again, broadcast may use it. Only panes
+whose command is a recognized shell are chosen automatically. If the only
+pane is the agent (typical `default` layout), or the other panes are not
+shells, broadcast refuses unless `--force` (then `:0.0`) or `--pane` is
+given. A session-qualified `--pane` (`session:0.1`) applies only to that
+session.
 
 ## Environment
 
