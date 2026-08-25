@@ -139,7 +139,7 @@ cmd_list() {
             duration_human="$(format_duration "$duration_secs")"
 
             # Determine status (use snapshot loaded above)
-            if tmux_session_exists "$session"; then
+            if tmux_snapshot_has_session "$session"; then
                 status="active"
                 active=$((active + 1))
             else
@@ -284,7 +284,7 @@ cmd_list() {
             fi
 
             # Check if session still exists (use snapshot loaded above)
-            if tmux_session_exists "$session"; then
+            if tmux_snapshot_has_session "$session"; then
                 # Check if it's the current session
                 if [ "$session" = "$current_session" ]; then
                     echo "* $branch -> $session $status_line (current)"
@@ -313,7 +313,7 @@ cmd_switch() {
         # Build session list for fzf or simple menu (tab-separated: branch, session)
         sessions=""
         while IFS=' ' read -r branch session _rest; do
-            if tmux_session_exists "$session"; then
+            if tmux_snapshot_has_session "$session"; then
                 sessions="${sessions}${branch}	${session}
 "
             fi
@@ -564,7 +564,7 @@ cmd_status() {
                 fi
 
                 # Determine status
-                if tmux_session_exists "$session"; then
+                if tmux_snapshot_has_session "$session"; then
                     status="active"
                     active=$((active + 1))
                 else
@@ -665,7 +665,7 @@ cmd_status() {
                 fi
             fi
 
-            if tmux_session_exists "$session"; then
+            if tmux_snapshot_has_session "$session"; then
                 echo "  [OK] $branch -> $session $info"
                 active=$((active + 1))
             else
