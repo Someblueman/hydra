@@ -100,6 +100,46 @@ test_find_broadcast_pane_uses_shell_after_agent_exits() {
     assert_equal "hydra-feat:0.0" "$result" "stored AI does not skip a live shell on :0.0"
 }
 
+test_find_broadcast_pane_refuses_non_shell() {
+    echo "Testing find_broadcast_pane refuses vim/repl panes..."
+
+    HYDRA_TEST_TMUX_SESSIONS="hydra-feat"
+    HYDRA_TEST_TMUX_PANES="$(printf '%s\t%s\t%s\t%s\t%s\t%s\n%s\t%s\t%s\t%s\t%s\t%s\n' \
+        hydra-feat 0 0 1700000000 claude 0 \
+        hydra-feat 0 1 1700000000 vim 0)"
+    export HYDRA_TEST_TMUX_SESSIONS HYDRA_TEST_TMUX_PANES
+
+    find_broadcast_pane "hydra-feat" "claude" >/dev/null 2>&1
+    assert_failure $? "broadcast refuses when the other pane is not a shell"
+}
+
+test_send_keys_ignores_stale_snapshot() {
+    echo "Testing send_keys_to_session live-probes after snapshot..."
+
+    log="$(mktemp)"
+    HYDRA_TEST_TMUX_LOG="$log"
+    HYDRA_TEST_TMUX_SESSIONS="hydra-old"
+    export HYDRA_TEST_TMUX_LOG HYDRA_TEST_TMUX_SESSIONS
+    tmux_load_snapshot
+
+    HYDRA_TEST_TMUX_SESSIONS="$(printf '%s\n%s\n' hydra-old hydra-new)"
+    export HYDRA_TEST_TMUX_SESSIONS
+    send_keys_to_session "hydra-new" "claude"
+    assert_success $? "send_keys should see a session created after the snapshot"
+
+    if grep -q "send-keys -t hydra-new:0.0 claude" "$log"; then
+        echo "[PASS] send-keys reached the newly created session"
+        pass_count=$((pass_count + 1))
+    else
+        echo "[FAIL] send-keys reached the newly created session"
+        echo "  log: $(cat "$log")"
+        fail_count=$((fail_count + 1))
+    fi
+    test_count=$((test_count + 1))
+    tmux_clear_snapshot
+    rm -f "$log"
+}
+
 test_broadcast_session_qualified_pane() {
     echo "Testing broadcast --pane session:target stays on that session..."
 
@@ -147,6 +187,8 @@ test_find_broadcast_pane_prefers_shell
 test_find_broadcast_pane_refuses_agent_only
 test_find_broadcast_pane_detects_live_agent_when_map_blank
 test_find_broadcast_pane_uses_shell_after_agent_exits
+test_find_broadcast_pane_refuses_non_shell
+test_send_keys_ignores_stale_snapshot
 test_broadcast_session_qualified_pane
 echo "================================"
 echo "Total:  $test_count"

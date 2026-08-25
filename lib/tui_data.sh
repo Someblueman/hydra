@@ -31,7 +31,7 @@ tui_build_list() {
     while IFS=' ' read -r branch session ai group _ts _deps _pr; do
         [ -z "$branch" ] && continue
 
-        if tmux_session_exists "$session" 2>/dev/null; then
+        if tmux_snapshot_has_session "$session" 2>/dev/null; then
             sess_status="ALIVE"
             activity="IDLE"
 
@@ -172,7 +172,7 @@ tui_capture_preview() {
     fi
 
     # Check if session exists
-    if ! tmux_session_exists "$_session" 2>/dev/null; then
+    if ! tmux_snapshot_has_session "$_session" 2>/dev/null; then
         printf "%s(session not running)%s\n" "$TUI_DIM" "$TUI_RESET"
         return 0
     fi
