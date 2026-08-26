@@ -1,7 +1,11 @@
 # Makefile for Hydra
 # POSIX-compliant build and lint tasks
 
-.PHONY: all lint test clean install dev-setup bench help
+.PHONY: all lint test clean install uninstall test-install smoke-onboarding dev-setup bench help
+
+# Installation prefix (no root required when writable)
+PREFIX ?= /usr/local
+DESTDIR ?=
 
 # Default target
 all: lint
@@ -42,16 +46,22 @@ clean:
 	@find . -name "*~" -o -name "*.swp" -o -name ".*.swp" | xargs rm -f
 	@echo "Clean complete"
 
-# Install hydra to /usr/local/bin
+# Install hydra to $(PREFIX)/bin and $(PREFIX)/lib/hydra
+# Same layout and verification as ./install.sh
 install:
-	@echo "Installing hydra..."
-	@mkdir -p /usr/local/bin
-	@cp bin/hydra /usr/local/bin/hydra
-	@chmod +x /usr/local/bin/hydra
-	@mkdir -p /usr/local/lib/hydra
-	@cp lib/*.sh /usr/local/lib/hydra/
-	@echo "Installation complete"
-	@echo "Run 'hydra help' to get started"
+	PREFIX="$(PREFIX)" DESTDIR="$(DESTDIR)" sh ./install.sh
+
+# Remove files installed to $(PREFIX)
+uninstall:
+	PREFIX="$(PREFIX)" DESTDIR="$(DESTDIR)" sh ./uninstall.sh
+
+# Fresh-prefix install, verify, and uninstall
+test-install:
+	@sh tests/test_install.sh
+
+# Throwaway-repository, no-agent first-head path
+smoke-onboarding:
+	@sh tests/test_onboarding.sh
 
 # Set up development environment
 dev-setup:
@@ -70,6 +80,9 @@ help:
 	@echo "  make test      - Run all tests"
 	@echo "  make bench     - Record list/status/doctor/TUI timings at 5 and 20 heads"
 	@echo "  make clean     - Remove temporary files"
-	@echo "  make install   - Install hydra to /usr/local/bin"
+	@echo "  make install   - Install hydra to \$$PREFIX/bin (default /usr/local)"
+	@echo "  make uninstall - Remove hydra from \$$PREFIX"
+	@echo "  make test-install - Fresh-prefix install/uninstall tests"
+	@echo "  make smoke-onboarding - Throwaway-repo no-agent first-head smoke"
 	@echo "  make dev-setup - Set up development environment (git hooks)"
 	@echo "  make help      - Show this help message"

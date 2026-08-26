@@ -2,6 +2,22 @@
 # Hydra command handlers
 # POSIX-compliant shell script
 
+# Print a doctor failure with a concrete next action
+# Usage: doctor_fail <message> <next_action>
+doctor_fail() {
+    echo "  [FAIL] $1"
+    echo "         Next: $2"
+}
+
+# Print a doctor info line with optional next action
+# Usage: doctor_info <message> [next_action]
+doctor_info() {
+    echo "  [INFO] $1"
+    if [ -n "${2:-}" ]; then
+        echo "         Next: $2"
+    fi
+}
+
 cmd_doctor() {
     # Parse --fix flag
     fix_mode=0
@@ -21,58 +37,131 @@ cmd_doctor() {
     echo "================================="
     echo ""
 
-    # Check dependencies
-    echo "Checking dependencies..."
     errors=0
-    
-    # Check tmux
+
+    echo "Installation:"
+    echo "  Binary: ${HYDRA_BIN_CMD:-unknown}"
+    echo "  Libraries: ${HYDRA_LIB_DIR:-unknown}"
+    if [ -n "${HYDRA_ROOT:-}" ]; then
+        echo "  HYDRA_ROOT: $HYDRA_ROOT"
+    fi
+
+    _layout="unknown"
+    if [ -n "${HYDRA_ROOT:-}" ] && [ "$HYDRA_LIB_DIR" = "$HYDRA_ROOT/lib" ]; then
+        _layout="HYDRA_ROOT override"
+    elif [ -f "${HYDRA_BIN_DIR:-}/../lib/git.sh" ]; then
+        _layout="source checkout"
+    elif [ -f "${HYDRA_BIN_DIR:-}/../lib/hydra/git.sh" ]; then
+        _layout="PREFIX install"
+    elif [ "$HYDRA_LIB_DIR" = "/usr/local/lib/hydra" ]; then
+        _layout="legacy /usr/local"
+    fi
+    echo "  Layout: $_layout"
+
+    if [ -z "${HYDRA_LIB_DIR:-}" ] || [ ! -f "$HYDRA_LIB_DIR/git.sh" ]; then
+        doctor_fail "Library directory is missing or incomplete" \
+            "run bin/hydra from a source checkout, set HYDRA_ROOT, or reinstall with PREFIX=\$HOME/.local ./install.sh"
+        errors=$((errors + 1))
+    elif [ ! -x "${HYDRA_BIN_CMD:-}" ] && [ ! -f "${HYDRA_BIN_CMD:-}" ]; then
+        doctor_fail "Hydra binary path is not usable: ${HYDRA_BIN_CMD:-unset}" \
+            "reinstall with PREFIX=\$HOME/.local ./install.sh or run bin/hydra from the checkout"
+        errors=$((errors + 1))
+    else
+        print_success "Install and library paths resolve"
+    fi
+
+    echo ""
+    echo "Dependencies:"
+
     if command -v tmux >/dev/null 2>&1; then
-        if check_tmux_version; then
-            echo "  [OK] tmux $(tmux -V)"
+        if check_tmux_version 2>/dev/null; then
+            print_success "$(tmux -V) (need >= 3.0)"
         else
-            echo "  [FAIL] tmux version too old (need 3.0+)"
+            _tmux_ver="$(tmux -V 2>/dev/null || echo tmux)"
+            doctor_fail "$_tmux_ver is too old (need 3.0+)" \
+                "upgrade tmux to 3.0 or newer, then re-run hydra doctor"
             errors=$((errors + 1))
         fi
     else
-        echo "  [FAIL] tmux not installed"
+        doctor_fail "tmux is not installed" \
+            "install tmux 3.0 or newer (apt/brew), then re-run hydra doctor"
         errors=$((errors + 1))
     fi
-    
-    # Check git
+
     if command -v git >/dev/null 2>&1; then
-        echo "  [OK] $(git --version)"
+        print_success "$(git --version)"
     else
-        echo "  [FAIL] git not installed"
+        doctor_fail "git is not installed" \
+            "install git, then re-run hydra doctor"
         errors=$((errors + 1))
     fi
-    
-    # Check performance
+
     echo ""
-    echo "Running performance tests..."
-    
-    # Test command dispatch
-    start_time=$(date +%s%N 2>/dev/null || date +%s)
-    "$0" version >/dev/null 2>&1
-    end_time=$(date +%s%N 2>/dev/null || date +%s)
-    
-    if [ ${#start_time} -gt 10 ]; then
-        # Nanosecond precision available
-        elapsed=$(( (end_time - start_time) / 1000000 ))
-        echo "  Command dispatch: ${elapsed}ms"
+    echo "State:"
+    if [ -d "$HYDRA_HOME" ] && [ -w "$HYDRA_HOME" ]; then
+        print_success "HYDRA_HOME writable: $HYDRA_HOME"
     else
-        # Only second precision
-        echo "  Command dispatch: <1000ms (no precise timing available)"
+        doctor_fail "HYDRA_HOME is not writable: $HYDRA_HOME" \
+            "export HYDRA_HOME=\"\$HOME/.hydra\" and ensure that directory is writable"
+        errors=$((errors + 1))
     fi
-    
-    # Check state file
-    echo ""
-    echo "Checking state management..."
+
     if [ -f "$HYDRA_MAP" ]; then
         echo "  [OK] State file exists: $HYDRA_MAP"
         echo "    Size: $(wc -c < "$HYDRA_MAP") bytes"
         echo "    Entries: $(wc -l < "$HYDRA_MAP" | tr -d ' ')"
     else
-        echo "  [INFO] No state file (this is normal for new installations)"
+        doctor_info "No state file (this is normal for new installations)"
+    fi
+
+    echo ""
+    echo "Repository:"
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        _repo_root="$(get_repo_root 2>/dev/null || git rev-parse --show-toplevel)"
+        print_success "Git repository: $_repo_root"
+        _wt_parent="$(get_hydra_worktree_parent "$_repo_root" 2>/dev/null || dirname "$_repo_root")"
+        if [ -d "$_wt_parent" ] && [ -w "$_wt_parent" ]; then
+            print_success "Worktree parent writable: $_wt_parent"
+        else
+            doctor_fail "Worktree parent is not writable: $_wt_parent" \
+                "run hydra from a repository whose parent directory is writable, or see README Quick Start"
+            errors=$((errors + 1))
+        fi
+    else
+        doctor_info "Not in a git repository" \
+            "cd into a git repo, or create a throwaway repo (see README Quick Start)"
+    fi
+
+    echo ""
+    echo "Agents:"
+    _detected=""
+    for _agent in claude aider gemini codex cursor copilot; do
+        if command -v "$_agent" >/dev/null 2>&1; then
+            if [ -z "$_detected" ]; then
+                _detected="$_agent"
+            else
+                _detected="$_detected, $_agent"
+            fi
+        fi
+    done
+    if [ -n "$_detected" ]; then
+        print_success "Detected: $_detected"
+    else
+        doctor_info "No agent CLI detected" \
+            "export HYDRA_SKIP_AI=1 for a shell-only head, or install an agent (see README Quick Start)"
+    fi
+
+    echo ""
+    echo "Performance:"
+    start_time=$(date +%s%N 2>/dev/null || date +%s)
+    "$0" version >/dev/null 2>&1
+    end_time=$(date +%s%N 2>/dev/null || date +%s)
+
+    if [ ${#start_time} -gt 10 ]; then
+        elapsed=$(( (end_time - start_time) / 1000000 ))
+        echo "  Command dispatch: ${elapsed}ms"
+    else
+        echo "  Command dispatch: <1000ms (no precise timing available)"
     fi
 
     # Consistency checks
@@ -84,6 +173,7 @@ cmd_doctor() {
     dead_count="$(count_dead_sessions)"
     if [ "$dead_count" -gt 0 ]; then
         print_warning "Dead sessions: $dead_count (run 'hydra regenerate' to restore)"
+        echo "         Next: hydra regenerate   or   hydra doctor --fix"
         consistency_issues=$((consistency_issues + 1))
     else
         print_success "No dead sessions"
@@ -93,6 +183,7 @@ cmd_doctor() {
     orphan_wt="$(count_orphan_worktrees)"
     if [ "$orphan_wt" -gt 0 ]; then
         print_warning "Orphaned worktrees: $orphan_wt (run 'hydra cleanup' to remove)"
+        echo "         Next: hydra cleanup   or   hydra doctor --fix"
         consistency_issues=$((consistency_issues + 1))
     else
         print_success "No orphaned worktrees"
@@ -102,6 +193,7 @@ cmd_doctor() {
     stale_lock_count="$(count_stale_locks)"
     if [ "$stale_lock_count" -gt 0 ]; then
         print_warning "Stale locks: $stale_lock_count (run 'hydra cleanup' to remove)"
+        echo "         Next: hydra cleanup   or   hydra doctor --fix"
         consistency_issues=$((consistency_issues + 1))
     else
         print_success "No stale locks"
@@ -135,7 +227,7 @@ cmd_doctor() {
             echo "[WARN] Found $consistency_issues consistency issue(s). Run 'hydra doctor --fix' to auto-fix."
         fi
     else
-        echo "[FAIL] Found $errors issue(s). Please install missing dependencies."
+        echo "[FAIL] Found $errors issue(s). See Next: lines above for recovery."
         return 1
     fi
 }
@@ -233,4 +325,3 @@ EOF
     echo ""
     echo "Cleanup complete. Total items cleaned: $cleaned_total"
 }
-

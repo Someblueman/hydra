@@ -9,6 +9,7 @@ fail_count=0
 
 # Get the absolute path to hydra binary
 HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
+export HYDRA_SKIP_AI=1
 
 # CI environment detection
 if [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${CI:-}" ]; then

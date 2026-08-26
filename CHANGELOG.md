@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-08-26
+
+### Added
+- Non-root `PREFIX` install: `$PREFIX/bin/hydra` and `$PREFIX/lib/hydra` (`install.sh` and `make install`)
+- Matching `uninstall.sh` / `make uninstall` for the same prefix; optional `DESTDIR` staging
+- Install verification runs `hydra version` and prints exact binary and library paths
+- `hydra doctor` reports install layout, git/tmux versions, writable `HYDRA_HOME`, repo/worktree readiness, detected agents, and a `Next:` recovery for every failure
+- Fresh-prefix `make test-install` and throwaway-repo `make smoke-onboarding` tests
+- README five-minute Quick Start (run-from-source or prefix install, `HYDRA_SKIP_AI=1`, completions)
+
+### Changed
+- Library discovery: `HYDRA_ROOT`, source `../lib`, PREFIX `../lib/hydra`, then legacy `/usr/local/lib/hydra`
+- First-run errors name the failed precondition and the next command or doc action
+- Spawn fails if the selected agent is not on `PATH` unless `HYDRA_SKIP_AI=1`
+
+### Fixed
+- Installer and Make no longer require root or hard-code `/usr/local` as the only layout
+
 ## [1.5.1] - 2026-08-25
 
 ### Added

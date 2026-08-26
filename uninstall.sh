@@ -1,18 +1,22 @@
 #!/bin/sh
 # Uninstall script for hydra
 # POSIX-compliant uninstallation script
+# Removes $PREFIX/bin/hydra and $PREFIX/lib/hydra (default PREFIX=/usr/local).
 
 set -e
 
-# Check for root permissions
-if [ "$(id -u)" -ne 0 ]; then
-    echo "This script requires root permissions. Please run with sudo." >&2
-    exit 1
-fi
+usage() {
+    echo "Usage: [PREFIX=/usr/local] [DESTDIR=] ./uninstall.sh [--purge]" >&2
+    echo "  PREFIX    installation prefix (default: /usr/local)" >&2
+    echo "  DESTDIR   optional staging directory prepended to PREFIX" >&2
+    echo "  --purge   Remove user data non-interactively (HYDRA_HOME and ~/.hydra)" >&2
+    echo "" >&2
+    echo "Non-root example:" >&2
+    echo "  PREFIX=\$HOME/.local ./uninstall.sh" >&2
+}
 
 PURGE=false
 
-# Parse options
 while [ $# -gt 0 ]; do
     case "$1" in
         --purge)
@@ -20,26 +24,40 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         -h|--help)
-            echo "Usage: sudo ./uninstall.sh [--purge]" >&2
-            echo "  --purge   Remove user data non-interactively (HYDRA_HOME and ~/.hydra)" >&2
+            usage
             exit 0
             ;;
         *)
             echo "Error: Unknown option '$1'" >&2
-            echo "Usage: sudo ./uninstall.sh [--purge]" >&2
+            echo "Next: run ./uninstall.sh --help for usage" >&2
+            usage
             exit 1
             ;;
     esac
 done
 
-echo "Uninstalling hydra..."
+PREFIX="${PREFIX:-/usr/local}"
+DESTDIR="${DESTDIR:-}"
 
-# Installation directories
-BIN_DIR="/usr/local/bin"
-LIB_DIR="/usr/local/lib/hydra"
+case "$PREFIX" in
+    /*) ;;
+    *)
+        PREFIX="$(pwd)/$PREFIX"
+        ;;
+esac
+
+BIN_DIR="${DESTDIR}${PREFIX}/bin"
+LIB_DIR="${DESTDIR}${PREFIX}/lib/hydra"
+
+echo "Uninstalling hydra from $PREFIX..."
 
 # Remove the binary
 if [ -f "$BIN_DIR/hydra" ]; then
+    if [ ! -w "$BIN_DIR" ] && [ ! -w "$BIN_DIR/hydra" ]; then
+        echo "Error: PREFIX is not writable: $BIN_DIR" >&2
+        echo "Next: PREFIX=\$HOME/.local $0   or   sudo env PREFIX=$PREFIX $0" >&2
+        exit 1
+    fi
     echo "Removing hydra binary..."
     rm -f "$BIN_DIR/hydra"
 else
@@ -48,6 +66,11 @@ fi
 
 # Remove library directory
 if [ -d "$LIB_DIR" ]; then
+    if [ ! -w "$LIB_DIR" ] && [ ! -w "$(dirname "$LIB_DIR")" ]; then
+        echo "Error: PREFIX is not writable: $LIB_DIR" >&2
+        echo "Next: PREFIX=\$HOME/.local $0   or   sudo env PREFIX=$PREFIX $0" >&2
+        exit 1
+    fi
     echo "Removing library files..."
     rm -rf "$LIB_DIR"
 else
@@ -77,7 +100,7 @@ for USER_DATA in $CANDIDATE_DIRS; do
         *" $USER_DATA "*) continue ;;
         *) seen="$seen $USER_DATA" ;;
     esac
-    
+
     if [ -d "$USER_DATA" ]; then
         echo ""
         echo "User data found at $USER_DATA"
@@ -103,3 +126,5 @@ done
 
 echo ""
 echo "Hydra has been uninstalled."
+echo "Binary removed from: $BIN_DIR/hydra"
+echo "Libraries removed from: $LIB_DIR"

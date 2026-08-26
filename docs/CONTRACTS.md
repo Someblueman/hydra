@@ -1,6 +1,6 @@
 # Hydra 1.5 public contracts
 
-This document records which 1.5.0 behaviors remain public through 1.5.1.
+This document records which 1.5.0 behaviors remain public through 1.5.2.
 Internal function names, the in-process state cache, and TUI render details
 are not contracts.
 
@@ -81,7 +81,32 @@ Documented in the README: `HYDRA_HOME`, `HYDRA_ROOT`, `HYDRA_AI_COMMAND`,
 `HYDRA_SKIP_AI`, `HYDRA_NONINTERACTIVE`, and the other `HYDRA_*` variables
 listed there.
 
+## Installation
+
+Default prefix is `/usr/local`. Layout:
+
+```text
+$PREFIX/bin/hydra
+$PREFIX/lib/hydra/*.sh
+```
+
+`DESTDIR`, when set, is prepended to those paths (staged `make install`).
+Root is not required when `PREFIX` is writable. `install.sh` and `make install`
+produce the same layout and verification output: they run the installed
+`hydra version` and print the exact binary and library paths.
+
+Library discovery order:
+
+1. `$HYDRA_ROOT/lib` when `HYDRA_ROOT` is set and contains `git.sh`
+2. `$HYDRA_BIN_DIR/../lib` (run from a source checkout)
+3. `$HYDRA_BIN_DIR/../lib/hydra` (`PREFIX` install)
+4. `/usr/local/lib/hydra` (legacy fallback)
+
+Uninstall uses the same `PREFIX`/`DESTDIR` and removes only those installed
+files. `--purge` may remove `HYDRA_HOME` / `~/.hydra`; it never touches the
+source repository.
+
 ## Not covered
 
-State v2, instance IDs, events, native helpers, and non-root `PREFIX` install
-are later releases. Pre-2.0 internal library layout may change.
+State v2, instance IDs, events, and native helpers are later releases.
+Pre-2.0 internal library layout may change.

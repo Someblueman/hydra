@@ -597,24 +597,24 @@ experience without introducing new lifecycle architecture.
 
 #### Scope
 
-- [ ] Support installation to a writable `PREFIX` without root, with a matching
+- [x] Support installation to a writable `PREFIX` without root, with a matching
       uninstall path and equivalent behavior from `install.sh` and `make install`.
-- [ ] Document running directly from a source checkout as a supported evaluation
+- [x] Document running directly from a source checkout as a supported evaluation
       path that does not require installation.
-- [ ] Verify installation by running `hydra version`, confirming library discovery,
+- [x] Verify installation by running `hydra version`, confirming library discovery,
       and reporting the exact installed paths.
-- [ ] Expand `hydra doctor` to report Git and tmux versions, writable `HYDRA_HOME`,
+- [x] Expand `hydra doctor` to report Git and tmux versions, writable `HYDRA_HOME`,
       install/library consistency, repository and worktree readiness, detected agent
       CLIs, and a concrete remediation for every failure.
-- [ ] Replace the Quick Start with a replayable five-minute tour: install or run from
+- [x] Replace the Quick Start with a replayable five-minute tour: install or run from
       source, verify, create a disposable first head in a throwaway repository, list
       and enter it, then kill it and verify cleanup.
-- [ ] Make the existing shell-only path obvious for users with no agent installed,
+- [x] Make the existing shell-only path obvious for users with no agent installed,
       including the current `HYDRA_SKIP_AI=1` behavior.
-- [ ] Add shell-completion installation instructions for supported shells.
-- [ ] Rewrite first-run errors to name the failed precondition and the next command
+- [x] Add shell-completion installation instructions for supported shells.
+- [x] Rewrite first-run errors to name the failed precondition and the next command
       or documentation action the user should take.
-- [ ] Add fresh-home, fresh-prefix install/uninstall tests and a throwaway-repository
+- [x] Add fresh-home, fresh-prefix install/uninstall tests and a throwaway-repository
       onboarding smoke test that cannot create branches or worktrees in Hydra's own
       source repository.
 
@@ -1198,7 +1198,7 @@ recorded architecture decisions.
 
 | Decision | Blocks | Resolution evidence | Status |
 | --- | --- | --- | --- |
-| Installation prefix, layout, and version discovery | 1.5.2 onboarding | Fresh-prefix install/uninstall on macOS and Linux plus run-from-source parity | Open |
+| Installation prefix, layout, and version discovery | 1.5.2 onboarding | Fresh-prefix install/uninstall plus run-from-source parity | Accepted: `$PREFIX/bin` + `$PREFIX/lib/hydra`; relative discovery; `HYDRA_ROOT` first |
 | Default agent detection and no-agent selection | 1.6 guided onboarding | Clean-home fixtures with zero, one, and multiple detected agent CLIs | Open |
 | Project identity generation | State v2 | Collision, repo move, clone, and duplicate-branch fixtures | Open |
 | Physical state v2 representation | Migration and native reader | Shell simplicity, atomicity, malformed-input fixtures | Open |
@@ -1228,11 +1228,13 @@ These are bounded design gates, not permission for open-ended architecture work.
 ### Next: remove first-run friction
 
 1. Support non-root `PREFIX` installation, matching uninstall, and verified
-   run-from-source behavior.
+   run-from-source behavior. **Done in 1.5.2.**
 2. Expand `hydra doctor` into an actionable installation and readiness check.
+   **Done in 1.5.2.**
 3. Publish the five-minute throwaway-repository Quick Start with an obvious
-   no-agent path and shell-completion setup.
+   no-agent path and shell-completion setup. **Done in 1.5.2.**
 4. Protect that path with fresh-home install and onboarding smoke tests.
+   **Done in 1.5.2.**
 
 ### After that: ship the shell lifecycle foundation
 

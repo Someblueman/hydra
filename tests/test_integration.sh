@@ -235,9 +235,13 @@ test_doctor_command() {
     output="$("$HYDRA_BIN" doctor 2>&1)"
     exit_code=$?
     assert_success "$exit_code" "hydra doctor should succeed"
-    assert_contains "$output" "Checking dependencies" "Doctor output should contain dependencies check"
+    assert_contains "$output" "Dependencies:" "Doctor output should contain dependencies check"
+    assert_contains "$output" "Installation:" "Doctor should report install paths"
     assert_contains "$output" "tmux" "Doctor should check tmux"
     assert_contains "$output" "git" "Doctor should check git"
+    assert_contains "$output" "HYDRA_HOME" "Doctor should check writable HYDRA_HOME"
+    assert_contains "$output" "Agents:" "Doctor should report detected agents"
+    assert_contains "$output" "Libraries:" "Doctor should report library path"
     
     cleanup_test_env "$test_dir"
 }
@@ -351,7 +355,7 @@ test_issue_branch_cleanup() {
     
     # Create the branch and worktree
     echo "  Creating test branch '$test_branch'..."
-    output="$("$HYDRA_BIN" spawn "$test_branch" 2>&1)"
+    output="$(HYDRA_SKIP_AI=1 "$HYDRA_BIN" spawn "$test_branch" 2>&1)"
     exit_code=$?
     
     if [ "$exit_code" -ne 0 ]; then

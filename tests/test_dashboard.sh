@@ -7,6 +7,8 @@ TEST_REPO_DIR="/tmp/hydra_dashboard_test"
 TEST_BRANCHES="feature/test-1 feature/test-2 feature/test-3"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HYDRA_BIN="$SCRIPT_DIR/../bin/hydra"
+export HYDRA_SKIP_AI=1
+export HYDRA_NONINTERACTIVE=1
 
 # Colors for output (if supported)
 if [ -t 1 ] && command -v tput >/dev/null 2>&1; then

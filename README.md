@@ -31,15 +31,80 @@
 
 ## Quick Start
 
+Five-minute tour: install or run from source, verify, create a disposable head, then clean it up. No root and no agent CLI required.
+
 - Requirements: `git`, `tmux` (≥ 3.0). Optional: `fzf`, GitHub CLI, an AI CLI (`claude`, `aider`, `gemini`, etc.).
 - Supported platforms: Linux and macOS; POSIX `sh` (dash on Debian/Ubuntu); `tmux >= 3.0` and `git`. CI runs Ubuntu and macOS. Windows is not supported.
-- Public CLI, map, JSON, lock, and TUI-row contracts: [docs/CONTRACTS.md](docs/CONTRACTS.md).
-- Install:
-  - `git clone https://github.com/Someblueman/hydra && cd hydra && sudo ./install.sh`
-  - or `sudo make install`
-- Try it:
-  - `hydra spawn feature-x -l dev`
-  - `hydra list` • `hydra switch` • `hydra dashboard` • `hydra kill feature-x`
+- Public CLI, map, JSON, lock, install, and TUI-row contracts: [docs/CONTRACTS.md](docs/CONTRACTS.md).
+
+### 1. Install (or run from source)
+
+Non-root install to a writable prefix:
+
+```sh
+git clone https://github.com/Someblueman/hydra && cd hydra
+PREFIX=$HOME/.local ./install.sh
+# or: make install PREFIX=$HOME/.local
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+`sudo ./install.sh` and `sudo make install` still install to `/usr/local` (the default `PREFIX`).
+
+Or skip install and run from the checkout:
+
+```sh
+git clone https://github.com/Someblueman/hydra && cd hydra
+./bin/hydra version
+# If you invoke the binary from elsewhere: export HYDRA_ROOT=/path/to/hydra
+```
+
+### 2. Verify
+
+```sh
+hydra version          # Hydra version 1.5.2
+hydra doctor           # install paths, git/tmux, writable HYDRA_HOME, agents
+```
+
+### 3. Create a throwaway first head
+
+Use a disposable repository so Hydra does not create branches in a real project. No agent CLI is required:
+
+```sh
+mkdir /tmp/hydra-tour && cd /tmp/hydra-tour
+git init && git commit --allow-empty -m "tour"
+export HYDRA_SKIP_AI=1
+hydra spawn first-head
+hydra list
+hydra switch           # enter the session (fzf if installed)
+```
+
+`HYDRA_SKIP_AI=1` is the supported shell-only path. Spawn defaults to `claude` only when that variable is unset; if the agent is missing, Hydra names the recovery (`HYDRA_SKIP_AI=1` or install the agent).
+
+### 4. Clean up
+
+```sh
+hydra kill first-head
+hydra list             # empty
+```
+
+That leaves no Hydra tmux session, worktree, branch, or `HYDRA_HOME` map entry for `first-head`.
+
+### Shell completions
+
+Write completions into your user files (no root):
+
+```sh
+# bash
+hydra completion bash >> ~/.bashrc
+
+# zsh (ensure the directory is on fpath)
+mkdir -p ~/.zsh/completions
+hydra completion zsh > ~/.zsh/completions/_hydra
+
+# fish
+mkdir -p ~/.config/fish/completions
+hydra completion fish > ~/.config/fish/completions/hydra.fish
+```
 
 ## Demo
 
@@ -88,7 +153,7 @@ hydra wait-idle -g backend -s 10 # wait for group with 10s idle threshold
 hydra regenerate   # restore sessions after restart
 hydra status       # per-head health
 hydra status --json # JSON output
-hydra doctor       # performance diagnostics
+hydra doctor       # install, dependencies, and first-run readiness
 
 # Dashboard & TUI
 hydra dashboard                                    # multi-session overview
@@ -199,10 +264,15 @@ make help    # Show all targets
 
 ## Uninstall
 
+Use the same `PREFIX` you installed with:
+
 ```sh
-sudo ./uninstall.sh            # prompts to remove user data
-sudo ./uninstall.sh --purge    # non-interactive, remove user data
+PREFIX=$HOME/.local ./uninstall.sh            # prompts to remove user data
+PREFIX=$HOME/.local ./uninstall.sh --purge    # non-interactive, remove user data
+# or: make uninstall PREFIX=$HOME/.local
 ```
+
+Default `PREFIX` is `/usr/local` (may need `sudo` if you installed there).
 
 ## License
 
