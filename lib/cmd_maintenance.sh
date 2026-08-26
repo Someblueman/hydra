@@ -123,9 +123,8 @@ cmd_doctor() {
         if [ -d "$_wt_parent" ] && [ -w "$_wt_parent" ]; then
             print_success "Worktree parent writable: $_wt_parent"
         else
-            doctor_fail "Worktree parent is not writable: $_wt_parent" \
-                "run hydra from a repository whose parent directory is writable, or see README Quick Start"
-            errors=$((errors + 1))
+            print_warning "Worktree parent is not writable: $_wt_parent"
+            echo "         Next: run hydra spawn from a repository whose parent is writable (see README Quick Start)"
         fi
     else
         doctor_info "Not in a git repository" \

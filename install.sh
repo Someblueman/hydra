@@ -27,7 +27,7 @@ if [ $# -gt 0 ]; then
     exit 1
 fi
 
-SCRIPT_DIR="$(CDPATH= cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC_BIN="$SCRIPT_DIR/bin/hydra"
 SRC_LIB="$SCRIPT_DIR/lib"
 

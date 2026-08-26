@@ -9,7 +9,7 @@ fail_count=0
 # shellcheck disable=SC1091
 . "$(dirname "$0")/helpers.sh"
 
-REPO_ROOT="$(CDPATH= cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HYDRA_BIN="$REPO_ROOT/bin/hydra"
 
 assert_contains() {
@@ -43,17 +43,7 @@ repo_dir="$base_dir/repo"
 hydra_home="$base_dir/.hydra"
 mkdir -p "$repo_dir" "$hydra_home"
 
-cleanup() {
-    if [ -n "${branch:-}" ]; then
-        tmux kill-session -t "$branch" 2>/dev/null || true
-        (cd "$repo_dir" && HYDRA_HOME="$hydra_home" HYDRA_SKIP_AI=1 HYDRA_NONINTERACTIVE=1 \
-            "$HYDRA_BIN" kill "$branch" >/dev/null 2>&1) || true
-    fi
-    if [ -n "$base_dir" ] && [ -d "$base_dir" ]; then
-        rm -rf "$base_dir"
-    fi
-}
-trap cleanup EXIT INT TERM
+trap 'tmux kill-session -t "${branch:-}" 2>/dev/null || true; rm -rf "$base_dir"' EXIT INT TERM
 
 export HOME="$base_dir"
 export HYDRA_HOME="$hydra_home"
@@ -107,7 +97,7 @@ else
     assert_failure 0 "worktree lives under the throwaway parent"
 fi
 
-kill_out="$("$HYDRA_BIN" kill "$branch" 2>&1)"
+"$HYDRA_BIN" kill "$branch" >/dev/null 2>&1
 assert_success $? "hydra kill should clean up the first head"
 
 if tmux has-session -t "$branch" 2>/dev/null; then

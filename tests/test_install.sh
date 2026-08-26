@@ -9,7 +9,7 @@ fail_count=0
 # shellcheck disable=SC1091
 . "$(dirname "$0")/helpers.sh"
 
-REPO_ROOT="$(CDPATH= cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HYDRA_SRC="$REPO_ROOT/bin/hydra"
 ORIGINAL_HOME="${HOME:-}"
 
@@ -87,21 +87,11 @@ assert_contains "$output" "Libraries: $prefix1/lib/hydra" "install.sh should rep
 assert_file "$prefix1/bin/hydra" "install.sh installs the binary"
 assert_file "$prefix1/lib/hydra/git.sh" "install.sh installs libraries"
 
-ver_out="$(
-    unset HYDRA_ROOT
-    unset HYDRA_HOME
-    HOME="$home1"
-    "$prefix1/bin/hydra" version 2>&1
-)"
+ver_out="$(HOME="$home1" HYDRA_ROOT='' HYDRA_HOME='' "$prefix1/bin/hydra" version 2>&1)"
 assert_success $? "installed hydra version should succeed"
 assert_contains "$ver_out" "Hydra version 1.5.2" "installed hydra reports 1.5.2"
 
-doc_out="$(
-    unset HYDRA_ROOT
-    HOME="$home1"
-    HYDRA_HOME="$home1/.hydra"
-    "$prefix1/bin/hydra" doctor 2>&1
-)"
+doc_out="$(cd "$home1" && HOME="$home1" HYDRA_HOME="$home1/.hydra" HYDRA_ROOT='' "$prefix1/bin/hydra" doctor 2>&1)"
 assert_success $? "installed hydra doctor should succeed"
 assert_contains "$doc_out" "PREFIX install" "doctor should detect PREFIX layout"
 assert_contains "$doc_out" "$prefix1/lib/hydra" "doctor should name installed libraries"
@@ -138,11 +128,7 @@ assert_contains "$output" "Libraries: $prefix2/lib/hydra" "make install should r
 assert_file "$prefix2/bin/hydra" "make install installs the binary"
 assert_file "$prefix2/lib/hydra/git.sh" "make install installs libraries"
 
-ver_out="$(
-    unset HYDRA_ROOT
-    HOME="$home2"
-    "$prefix2/bin/hydra" version 2>&1
-)"
+ver_out="$(HOME="$home2" HYDRA_ROOT='' HYDRA_HOME='' "$prefix2/bin/hydra" version 2>&1)"
 assert_success $? "make-installed hydra version should succeed"
 assert_contains "$ver_out" "Hydra version" "make-installed hydra prints version"
 
@@ -160,23 +146,11 @@ rm -rf "$home2" "$prefix2"
 echo "Testing make install DESTDIR staging..."
 stage="$(mktemp -d)"
 home3="$(mktemp -d)"
-output="$(
-    cd "$REPO_ROOT" || exit 1
-    HOME="$home3"
-    export HOME
-    unset HYDRA_HOME
-    unset HYDRA_ROOT
-    make install PREFIX=/usr/local DESTDIR="$stage" 2>&1
-)"
+output="$(cd "$REPO_ROOT" && HOME="$home3" HYDRA_HOME='' HYDRA_ROOT='' make install PREFIX=/usr/local DESTDIR="$stage" 2>&1)"
 assert_success $? "make install DESTDIR should succeed"
 assert_file "$stage/usr/local/bin/hydra" "DESTDIR stages the binary"
 assert_file "$stage/usr/local/lib/hydra/git.sh" "DESTDIR stages libraries"
-ver_out="$(
-    unset HYDRA_ROOT
-    unset HYDRA_HOME
-    HOME="$home3"
-    "$stage/usr/local/bin/hydra" version 2>&1
-)"
+ver_out="$(HOME="$home3" HYDRA_ROOT='' HYDRA_HOME='' "$stage/usr/local/bin/hydra" version 2>&1)"
 assert_success $? "DESTDIR-staged hydra should discover sibling libraries"
 HOME="$home3" PREFIX=/usr/local DESTDIR="$stage" sh "$REPO_ROOT/uninstall.sh" --purge >/dev/null 2>&1 || true
 rm -rf "$stage" "$home3"
