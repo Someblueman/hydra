@@ -80,6 +80,21 @@ test_release_lock() {
     assert_success $? "release_lock should succeed for non-existent lock"
 }
 
+test_acquire_lock_fail_closed() {
+    echo "Testing acquire_lock fail-closed..."
+
+    HYDRA_LOCK_RETRIES=1
+    export HYDRA_LOCK_RETRIES
+    try_lock "held"
+    acquire_lock "held"
+    assert_failure $? "acquire_lock should fail when lock is held"
+    release_lock "held"
+    acquire_lock "held"
+    assert_success $? "acquire_lock should succeed when lock is free"
+    release_lock "held"
+    unset HYDRA_LOCK_RETRIES
+}
+
 # Test cleanup_stale_locks function
 test_cleanup_stale_locks() {
     echo "Testing cleanup_stale_locks..."
@@ -146,6 +161,7 @@ echo "================================"
 
 test_try_lock
 test_release_lock
+test_acquire_lock_fail_closed
 test_cleanup_stale_locks
 test_release_session_lock
 test_lock_without_home

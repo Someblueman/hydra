@@ -196,6 +196,50 @@ test_generate_completion_empty() {
     test_count=$((test_count + 1))
 }
 
+test_completion_includes_shipped_commands() {
+    echo "Testing completion lists shipped commands..."
+
+    bash_out=$(generate_completion bash)
+    zsh_out=$(generate_completion zsh)
+    fish_out=$(generate_completion fish)
+
+    for cmd in spawn list switch kill regenerate status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue; do
+        case "$bash_out" in
+            *"$cmd"*)
+                echo "[PASS] bash completion includes $cmd"
+                pass_count=$((pass_count + 1))
+                ;;
+            *)
+                echo "[FAIL] bash completion includes $cmd"
+                fail_count=$((fail_count + 1))
+                ;;
+        esac
+        test_count=$((test_count + 1))
+        case "$zsh_out" in
+            *"$cmd"*)
+                echo "[PASS] zsh completion includes $cmd"
+                pass_count=$((pass_count + 1))
+                ;;
+            *)
+                echo "[FAIL] zsh completion includes $cmd"
+                fail_count=$((fail_count + 1))
+                ;;
+        esac
+        test_count=$((test_count + 1))
+        case "$fish_out" in
+            *"$cmd"*)
+                echo "[PASS] fish completion includes $cmd"
+                pass_count=$((pass_count + 1))
+                ;;
+            *)
+                echo "[FAIL] fish completion includes $cmd"
+                fail_count=$((fail_count + 1))
+                ;;
+        esac
+        test_count=$((test_count + 1))
+    done
+}
+
 # Run all tests
 echo "=== Completion Tests ==="
 echo ""
@@ -211,6 +255,8 @@ echo ""
 test_generate_completion_unknown
 echo ""
 test_generate_completion_empty
+echo ""
+test_completion_includes_shipped_commands
 echo ""
 
 # Print summary

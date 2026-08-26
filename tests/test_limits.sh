@@ -335,6 +335,23 @@ test_list_queue_json() {
     cleanup_test_env
 }
 
+test_queue_priority_order() {
+    echo "Testing queue priority-before-time and FIFO..."
+
+    setup_test_env
+
+    queue_spawn "old-low" "claude" "" "default" "10" >/dev/null
+    queue_spawn "high" "claude" "" "default" "90" >/dev/null
+    queue_spawn "new-low" "claude" "" "default" "10" >/dev/null
+
+    order="$(find "$HYDRA_HOME/queue" -maxdepth 1 -name "*.queue" -type f | sort | while IFS= read -r f; do
+        grep '^branch=' "$f" | cut -d= -f2
+    done | tr '\n' ' ')"
+    assert_equal "high old-low new-low " "$order" "high priority before older low; FIFO within priority"
+
+    cleanup_test_env
+}
+
 # =============================================================================
 # Run Tests
 # =============================================================================
@@ -356,6 +373,7 @@ test_dequeue_spawn
 test_clear_queue
 test_list_queue_empty
 test_list_queue_json
+test_queue_priority_order
 
 echo ""
 echo "================================"

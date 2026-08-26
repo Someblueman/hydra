@@ -50,9 +50,33 @@ print_summary_failure() {
 # Usage: json_escape <string>
 # Returns: Escaped string on stdout
 json_escape() {
-    # Escape backslashes, double quotes, tabs, and convert newlines to spaces
-    # (newlines in branch/session names are not expected, but ensure valid JSON)
-    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/	/\\t/g' | tr '\n' ' ' | sed 's/ $//'
+    # json_escape operates on POSIX C strings (NUL cannot appear in $1).
+    # Named JSON escapes for ", \, and common C0; remaining C0 as \u00XX.
+    # Bytes >= 32 (including UTF-8 payload bytes) are emitted unchanged; do
+    # not use awk "%c" for that, because a UTF-8 locale recodes 0x80-0xFF.
+    printf '%s' "$1" | LC_ALL=C od -An -v -tu1 | {
+        while IFS= read -r _je_line || [ -n "$_je_line" ]; do
+            # shellcheck disable=SC2086
+            for _je_b in $_je_line; do
+                case "$_je_b" in
+                    34) printf '%s' '\"' ;;
+                    92) printf '%s' "\\\\" ;;
+                    8)  printf '%s' '\b' ;;
+                    9)  printf '%s' '\t' ;;
+                    10) printf '%s' '\n' ;;
+                    12) printf '%s' '\f' ;;
+                    13) printf '%s' '\r' ;;
+                    *)
+                        if [ "$_je_b" -lt 32 ]; then
+                            printf '\\u00%02x' "$_je_b"
+                        else
+                            printf '%b' "$(printf '\\%03o' "$_je_b")"
+                        fi
+                        ;;
+                esac
+            done
+        done
+    }
 }
 
 # Output a JSON string key-value pair

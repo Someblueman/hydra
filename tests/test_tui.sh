@@ -159,6 +159,41 @@ test_tui_build_list() {
     rm -rf "$TEST_HOME"
 }
 
+test_tui_row_contract() {
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    TEST_HOME="$(mktemp -d)"
+    HYDRA_HOME="$TEST_HOME"
+    HYDRA_MAP="$HYDRA_HOME/map"
+    mkdir -p "$HYDRA_HOME"
+    echo "b1 s1 claude grp 111 d1 9" > "$HYDRA_MAP"
+
+    source_libs
+    TUI_TEMP_LIST="$(mktemp)"
+    TUI_ITEM_COUNT=0
+    TUI_SELECTED=0
+    TUI_OFFSET=0
+    TUI_ROWS=24
+    # shellcheck disable=SC2034
+    TUI_ACTIVITY_DIR=""
+    # shellcheck disable=SC2034
+    TUI_SEARCH_PATTERN=""
+    # shellcheck disable=SC2034
+    TUI_TAG_FILTER=""
+    tui_init_tags
+    tui_build_list
+
+    fields="$(awk -F '	' 'NF { print NF; exit }' "$TUI_TEMP_LIST")"
+    if [ "$fields" = "8" ]; then
+        print_pass "TUI list rows have 8 tab-separated fields"
+    else
+        print_fail "TUI list rows should have 8 fields, got $fields ($(cat "$TUI_TEMP_LIST"))"
+    fi
+
+    rm -f "$TUI_TEMP_LIST"
+    rm -rf "$TEST_HOME"
+}
+
 # Test: Selection bounds checking
 test_tui_selection_bounds() {
     TESTS_RUN=$((TESTS_RUN + 1))
@@ -396,6 +431,7 @@ main() {
     test_tput_check
     test_tui_init_colors
     test_tui_build_list
+    test_tui_row_contract
     test_tui_selection_bounds
     test_tui_empty_list
     test_tui_key_quit

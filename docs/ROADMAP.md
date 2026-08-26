@@ -134,31 +134,31 @@ artifacts, native-aware installation, or native CI.
 
 ### 4.2 Known hardening work carried into 1.5.1
 
-- [ ] Wire message cleanup into kill and cleanup paths.
-- [ ] Align maintenance stale-lock detection with the actual `mkdir` lock format.
-- [ ] Make every state writer use the same lock; never mutate after lock acquisition
+- [x] Wire message cleanup into kill and cleanup paths.
+- [x] Align maintenance stale-lock detection with the actual `mkdir` lock format.
+- [x] Make every state writer use the same lock; never mutate after lock acquisition
       fails.
-- [ ] Create replacement files on the same filesystem as their destination before
+- [x] Create replacement files on the same filesystem as their destination before
       atomic rename.
-- [ ] Update shell completion for all commands shipped through 1.5.0.
-- [ ] Fix the known `hydra status` invalid-duration arithmetic path.
-- [ ] Preflight dirty-worktree handling before killing tmux or removing state so a
+- [x] Update shell completion for all commands shipped through 1.5.0.
+- [x] Fix the known `hydra status` invalid-duration arithmetic path.
+- [x] Preflight dirty-worktree handling before killing tmux or removing state so a
       failed worktree deletion cannot leave an untracked orphan.
-- [ ] Preserve group, dependency, pull-request, timestamp, and future metadata when
+- [x] Preserve group, dependency, pull-request, timestamp, and future metadata when
       regenerating a session.
-- [ ] Make queue ordering honor priority before request time, with stable FIFO order
+- [x] Make queue ordering honor priority before request time, with stable FIFO order
       within one priority.
-- [ ] Escape every required JSON control character and add byte-oriented fixtures.
-- [ ] Give broadcast and startup delivery an explicit pane/transport target; never
+- [x] Escape every required JSON control character and add byte-oriented fixtures.
+- [x] Give broadcast and startup delivery an explicit pane/transport target; never
       type into an agent prompt merely because that pane is active.
-- [ ] Define and correct the shell TUI row contract: the producer currently emits
+- [x] Define and correct the shell TUI row contract: the producer currently emits
       eight tab-separated fields while readers document or consume fewer fields and
       use a literal `\t` as `IFS` rather than an actual tab.
-- [ ] Add focused tests for maintenance, state-cache invalidation, messages, and TUI
+- [x] Add focused tests for maintenance, state-cache invalidation, messages, and TUI
       row parsing before using them as native parity oracles.
-- [ ] Fix the malformed `.gitignore` entry and stop tracking runtime state in the
+- [x] Fix the malformed `.gitignore` entry and stop tracking runtime state in the
       repository.
-- [ ] Document exactly which 1.5.0 behaviors are considered public contracts.
+- [x] Document exactly which 1.5.0 behaviors are considered public contracts.
 
 ### 4.3 Current onboarding friction
 
@@ -559,18 +559,18 @@ commands, hooks, and SSH. Each is a code-execution boundary.
 
 #### Scope
 
-- [ ] Complete the hardening list in section 4.2.
-- [ ] Add regression tests for status, lock failure, same-filesystem replacement,
+- [x] Complete the hardening list in section 4.2.
+- [x] Add regression tests for status, lock failure, same-filesystem replacement,
       message cleanup, kill ordering, regenerate preservation, queue priority, JSON
       control bytes, explicit pane targeting, and TUI framing.
-- [ ] Document the current state fields and behavior before migration.
-- [ ] Replace repeated per-head tmux probes with formatted batch queries where this
+- [x] Document the current state fields and behavior before migration.
+- [x] Replace repeated per-head tmux probes with formatted batch queries where this
       preserves the documented behavior.
-- [ ] Use `window_activity`, `pane_current_command`, and `pane_dead` as the primary
+- [x] Use `window_activity`, `pane_current_command`, and `pane_dead` as the primary
       shell activity/process observations; keep pane hashing only as a fallback.
-- [ ] Record baseline performance for list, TUI refresh, doctor, and pane capture at
+- [x] Record baseline performance for list, TUI refresh, doctor, and pane capture at
       5 and 20 heads.
-- [ ] Add a supported-platform statement for the shell-only release.
+- [x] Add a supported-platform statement for the shell-only release.
 
 #### Release gates
 
@@ -1220,10 +1220,10 @@ These are bounded design gates, not permission for open-ended architecture work.
 
 ### Now: finish the shell baseline
 
-1. Close the 1.5.1 defects and add focused regression tests.
+1. Close the 1.5.1 defects and add focused regression tests. **Done in 1.5.1.**
 2. Batch remaining tmux probes and establish the `window_activity`-based observation
-   contract.
-3. Capture benchmark fixtures for the current shell paths.
+   contract. **Done in 1.5.1.**
+3. Capture benchmark fixtures for the current shell paths. **`make bench` in 1.5.1.**
 
 ### Next: remove first-run friction
 

@@ -16,7 +16,7 @@ tests are plain POSIX shell scripts in `tests/*.sh`. There is no compiled build 
 ### Lint / Test / Run (standard commands, see `Makefile` and `README.md`)
 - Lint: `make lint` — runs ShellCheck (`--shell=sh --severity=style`) plus `dash -n`
   syntax checks on every shell file.
-- Test: `make test` — runs each `tests/*.sh` with `sh`. Passing runs still print
+- Test: `make test` — runs each `tests/test_*.sh` with `sh`. Passing runs still print
   `Error: ...` lines: those are expected error-path assertions, not failures. Judge
   success by the exit code and the `Failed: 0` summaries.
 
@@ -30,6 +30,3 @@ tests are plain POSIX shell scripts in `tests/*.sh`. There is no compiled build 
 - For non-interactive automation set `HYDRA_NONINTERACTIVE=1` (skips confirm prompts)
   and `HYDRA_SKIP_AI=1` (does not try to launch an AI CLI on spawn). Runtime state
   (the head->session map) lives in `~/.hydra/map`.
-- Known pre-existing issue (not an environment problem): `hydra status` can print
-  `Illegal number ...` from shell arithmetic on a duration field; `list`, `list --json`,
-  `spawn`, and `kill` all work correctly.

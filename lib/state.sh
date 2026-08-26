@@ -2,18 +2,40 @@
 # State management functions for Hydra
 # POSIX-compliant shell script
 
-# Load cache implementation (private API)
+# Load locks (required for fail-closed writers) then cache implementation
+_state_lib_dir="${HYDRA_LIB_DIR:-}"
+if [ -z "$_state_lib_dir" ]; then
+    _state_lib_dir="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)" || true
+fi
+if [ -z "${_LOCKS_MODULE_LOADED:-}" ] && [ -n "$_state_lib_dir" ] && [ -f "$_state_lib_dir/locks.sh" ]; then
+    # shellcheck disable=SC1090,SC1091
+    . "$_state_lib_dir/locks.sh"
+fi
 if [ -z "${_STATE_CACHE_MODULE_LOADED:-}" ]; then
-    _state_lib_dir="${HYDRA_LIB_DIR:-}"
-    if [ -z "$_state_lib_dir" ]; then
-        _state_lib_dir="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)" || true
-    fi
     if [ -n "$_state_lib_dir" ] && [ -f "$_state_lib_dir/state_cache.sh" ]; then
         # shellcheck disable=SC1090,SC1091
         . "$_state_lib_dir/state_cache.sh"
         _STATE_CACHE_MODULE_LOADED=1
     fi
 fi
+
+# Acquire the shared map lock or fail closed (no mutation).
+# Usage: _lock_state_map
+# Returns: 0 if held, 1 if not
+_lock_state_map() {
+    if ! acquire_lock "state_map"; then
+        echo "Error: Failed to acquire state lock" >&2
+        return 1
+    fi
+    return 0
+}
+
+# Format a 7-field map line
+# Usage: _format_map_line <branch> <session> <ai> <group> <timestamp> <deps> <pr>
+_format_map_line() {
+    printf '%s %s %s %s %s %s %s\n' \
+        "$1" "$2" "${3:--}" "${4:--}" "${5:--}" "${6:--}" "${7:--}"
+}
 
 # =============================================================================
 # Timestamp and Duration Helpers
@@ -70,6 +92,13 @@ get_duration_since() {
         return 0
     fi
 
+    case "$_ts" in
+        ''|*[!0-9]*)
+            echo "0"
+            return 0
+            ;;
+    esac
+
     _now="$(get_timestamp)"
     echo "$((_now - _ts))"
 }
@@ -108,24 +137,70 @@ add_mapping() {
     pr_field="${pr_number:-"-"}"
     mapping_line="$branch $session $ai_field $group_field $timestamp $deps_field $pr_field"
 
-    # Invalidate cache before write
+    if ! _lock_state_map; then
+        return 1
+    fi
+
     _invalidate_state_cache
 
-    # Use lock to make remove+add atomic
-    if try_lock "state_map"; then
-        # Remove existing mapping for this branch if any
-        remove_mapping "$branch" 2>/dev/null || true
-
-        echo "$mapping_line" >> "$HYDRA_MAP"
-
+    tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || {
         release_lock "state_map"
-        return 0
+        return 1
+    }
+
+    if [ -f "$HYDRA_MAP" ]; then
+        while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
+            if [ -n "$map_branch" ] && [ "$map_branch" != "$branch" ]; then
+                _format_map_line "$map_branch" "$map_session" "$map_ai" "$map_group" \
+                    "$map_timestamp" "$map_deps" "$map_pr"
+            fi
+        done < "$HYDRA_MAP" > "$tmpfile"
     else
-        # Fallback if lock fails - still try the operation
-        remove_mapping "$branch" 2>/dev/null || true
-        echo "$mapping_line" >> "$HYDRA_MAP"
+        : > "$tmpfile"
+    fi
+    printf '%s\n' "$mapping_line" >> "$tmpfile"
+
+    if ! atomic_replace "$HYDRA_MAP" "$tmpfile"; then
+        rm -f "$tmpfile"
+        release_lock "state_map"
+        return 1
+    fi
+
+    release_lock "state_map"
+    return 0
+}
+
+# Remove a branch-session mapping. Caller must hold the state_map lock.
+# Usage: _remove_mapping_locked <branch>
+# Returns: 0 on success, 1 on failure
+_remove_mapping_locked() {
+    branch="$1"
+
+    if [ -z "$branch" ]; then
+        echo "Error: Branch is required" >&2
+        return 1
+    fi
+
+    if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
         return 0
     fi
+
+    _invalidate_state_cache
+
+    tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || return 1
+
+    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
+        if [ -n "$map_branch" ] && [ "$map_branch" != "$branch" ]; then
+            _format_map_line "$map_branch" "$map_session" "$map_ai" "$map_group" \
+                "$map_timestamp" "$map_deps" "$map_pr"
+        fi
+    done < "$HYDRA_MAP" > "$tmpfile"
+
+    if ! atomic_replace "$HYDRA_MAP" "$tmpfile"; then
+        rm -f "$tmpfile"
+        return 1
+    fi
+    return 0
 }
 
 # Remove a branch-session mapping
@@ -143,25 +218,16 @@ remove_mapping() {
         return 0  # Nothing to remove
     fi
 
-    # Invalidate cache before write
-    _invalidate_state_cache
+    if ! _lock_state_map; then
+        return 1
+    fi
 
-    # Create temporary file
-    tmpfile="$(mktemp)" || return 1
-    trap 'rm -f "$tmpfile"' EXIT INT TERM
+    if ! _remove_mapping_locked "$branch"; then
+        release_lock "state_map"
+        return 1
+    fi
 
-    # Filter out the branch; preserve all columns for others
-    while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
-        if [ "$map_branch" != "$branch" ]; then
-            # Always use 7-field format for consistency
-            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
-        fi
-    done < "$HYDRA_MAP" > "$tmpfile"
-
-    # Replace original file
-    mv "$tmpfile" "$HYDRA_MAP"
-    trap - EXIT INT TERM
-
+    release_lock "state_map"
     return 0
 }
 
@@ -239,25 +305,30 @@ cleanup_mappings() {
         return 0
     fi
 
-    # Invalidate cache before write
+    if ! _lock_state_map; then
+        return 1
+    fi
+
     _invalidate_state_cache
 
-    # Create temporary file
-    tmpfile="$(mktemp)" || return 1
-    trap 'rm -f "$tmpfile"' EXIT INT TERM
+    tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || {
+        release_lock "state_map"
+        return 1
+    }
 
-    # Keep only valid mappings; preserve all fields
     while IFS=' ' read -r branch session ai group timestamp deps pr; do
-        if git_branch_exists "$branch" && tmux_session_exists "$session"; then
-            # Always use 7-field format for consistency
-            echo "$branch $session ${ai:-"-"} ${group:-"-"} ${timestamp:-"-"} ${deps:-"-"} ${pr:-"-"}"
+        if [ -n "$branch" ] && git_branch_exists "$branch" && tmux_session_exists "$session"; then
+            _format_map_line "$branch" "$session" "$ai" "$group" "$timestamp" "$deps" "$pr"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
 
-    # Replace original file
-    mv "$tmpfile" "$HYDRA_MAP"
-    trap - EXIT INT TERM
+    if ! atomic_replace "$HYDRA_MAP" "$tmpfile"; then
+        rm -f "$tmpfile"
+        release_lock "state_map"
+        return 1
+    fi
 
+    release_lock "state_map"
     return 0
 }
 
@@ -358,34 +429,43 @@ set_group() {
         return 1
     fi
 
-    # Invalidate cache before write
+    if ! _lock_state_map; then
+        return 1
+    fi
+
     _invalidate_state_cache
 
-    # Create temporary file
-    tmpfile="$(mktemp)" || return 1
-    trap 'rm -f "$tmpfile"' EXIT INT TERM
+    tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || {
+        release_lock "state_map"
+        return 1
+    }
 
     found=0
     while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
         if [ "$map_branch" = "$branch" ]; then
             found=1
-            # Set new group (or placeholder if clearing), preserve all other fields
-            echo "$map_branch $map_session ${map_ai:-"-"} ${group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
-        else
-            # Preserve existing entry with all fields
-            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
+            _format_map_line "$map_branch" "$map_session" "$map_ai" "${group:-"-"}" \
+                "$map_timestamp" "$map_deps" "$map_pr"
+        elif [ -n "$map_branch" ]; then
+            _format_map_line "$map_branch" "$map_session" "$map_ai" "$map_group" \
+                "$map_timestamp" "$map_deps" "$map_pr"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
 
     if [ "$found" -eq 0 ]; then
         echo "Error: Branch '$branch' not found in mappings" >&2
         rm -f "$tmpfile"
-        trap - EXIT INT TERM
+        release_lock "state_map"
         return 1
     fi
 
-    mv "$tmpfile" "$HYDRA_MAP"
-    trap - EXIT INT TERM
+    if ! atomic_replace "$HYDRA_MAP" "$tmpfile"; then
+        rm -f "$tmpfile"
+        release_lock "state_map"
+        return 1
+    fi
+
+    release_lock "state_map"
     return 0
 }
 
@@ -475,34 +555,43 @@ set_deps() {
         return 1
     fi
 
-    # Invalidate cache before write
+    if ! _lock_state_map; then
+        return 1
+    fi
+
     _invalidate_state_cache
 
-    # Create temporary file
-    tmpfile="$(mktemp)" || return 1
-    trap 'rm -f "$tmpfile"' EXIT INT TERM
+    tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || {
+        release_lock "state_map"
+        return 1
+    }
 
     found=0
     while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
         if [ "$map_branch" = "$branch" ]; then
             found=1
-            # Set new deps (or placeholder if clearing), preserve all other fields
-            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${deps:-"-"} ${map_pr:-"-"}"
-        else
-            # Preserve existing entry with all fields
-            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
+            _format_map_line "$map_branch" "$map_session" "$map_ai" "$map_group" \
+                "$map_timestamp" "${deps:-"-"}" "$map_pr"
+        elif [ -n "$map_branch" ]; then
+            _format_map_line "$map_branch" "$map_session" "$map_ai" "$map_group" \
+                "$map_timestamp" "$map_deps" "$map_pr"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
 
     if [ "$found" -eq 0 ]; then
         echo "Error: Branch '$branch' not found in mappings" >&2
         rm -f "$tmpfile"
-        trap - EXIT INT TERM
+        release_lock "state_map"
         return 1
     fi
 
-    mv "$tmpfile" "$HYDRA_MAP"
-    trap - EXIT INT TERM
+    if ! atomic_replace "$HYDRA_MAP" "$tmpfile"; then
+        rm -f "$tmpfile"
+        release_lock "state_map"
+        return 1
+    fi
+
+    release_lock "state_map"
     return 0
 }
 
@@ -523,33 +612,42 @@ set_pr_for_branch() {
         return 1
     fi
 
-    # Invalidate cache before write
+    if ! _lock_state_map; then
+        return 1
+    fi
+
     _invalidate_state_cache
 
-    # Create temporary file
-    tmpfile="$(mktemp)" || return 1
-    trap 'rm -f "$tmpfile"' EXIT INT TERM
+    tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || {
+        release_lock "state_map"
+        return 1
+    }
 
     found=0
     while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
         if [ "$map_branch" = "$branch" ]; then
             found=1
-            # Set new PR number (or placeholder if clearing), preserve all other fields
-            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${pr_number:-"-"}"
-        else
-            # Preserve existing entry with all fields
-            echo "$map_branch $map_session ${map_ai:-"-"} ${map_group:-"-"} ${map_timestamp:-"-"} ${map_deps:-"-"} ${map_pr:-"-"}"
+            _format_map_line "$map_branch" "$map_session" "$map_ai" "$map_group" \
+                "$map_timestamp" "$map_deps" "${pr_number:-"-"}"
+        elif [ -n "$map_branch" ]; then
+            _format_map_line "$map_branch" "$map_session" "$map_ai" "$map_group" \
+                "$map_timestamp" "$map_deps" "$map_pr"
         fi
     done < "$HYDRA_MAP" > "$tmpfile"
 
     if [ "$found" -eq 0 ]; then
         echo "Error: Branch '$branch' not found in mappings" >&2
         rm -f "$tmpfile"
-        trap - EXIT INT TERM
+        release_lock "state_map"
         return 1
     fi
 
-    mv "$tmpfile" "$HYDRA_MAP"
-    trap - EXIT INT TERM
+    if ! atomic_replace "$HYDRA_MAP" "$tmpfile"; then
+        rm -f "$tmpfile"
+        release_lock "state_map"
+        return 1
+    fi
+
+    release_lock "state_map"
     return 0
 }

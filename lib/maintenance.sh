@@ -80,64 +80,39 @@ $(list_hydra_worktrees "$_repo_root")
 EOF
 }
 
-# Count stale lock directories (older than 60 seconds)
+# Count stale lock directories (mkdir *.lock dirs older than 1 minute)
 # Usage: count_stale_locks
 # Returns: Count on stdout
 count_stale_locks() {
-    _stale=0
-    if [ ! -d "${HYDRA_HOME:-}/locks" ]; then
+    if [ -z "${HYDRA_HOME:-}" ] || [ ! -d "$HYDRA_HOME/locks" ]; then
         printf '%s' "0"
         return 0
     fi
-    for _lock_dir in "$HYDRA_HOME/locks"/*; do
-        [ -d "$_lock_dir" ] || continue
-        _lock_age=0
-        if [ -f "$_lock_dir/pid" ]; then
-            if command -v stat >/dev/null 2>&1; then
-                if stat --version 2>&1 | grep -q GNU; then
-                    _lock_mtime="$(stat -c %Y "$_lock_dir/pid" 2>/dev/null || echo 0)"
-                else
-                    _lock_mtime="$(stat -f %m "$_lock_dir/pid" 2>/dev/null || echo 0)"
-                fi
-                _now="$(date +%s)"
-                _lock_age=$((_now - _lock_mtime))
-            fi
-        fi
-        if [ "$_lock_age" -gt 60 ]; then
-            _stale=$((_stale + 1))
-        fi
-    done
-    printf '%s' "$_stale"
+    _stale="$(find "$HYDRA_HOME/locks" -name "*.lock" -type d -mmin +1 2>/dev/null | wc -l | tr -d ' ')"
+    printf '%s' "${_stale:-0}"
 }
 
-# Remove stale lock directories
+# Remove stale lock directories (mkdir *.lock dirs older than 1 minute)
 # Usage: clean_stale_locks
 # Returns: Number removed on stdout
 clean_stale_locks() {
-    _cleaned=0
-    if [ ! -d "${HYDRA_HOME:-}/locks" ]; then
+    if [ -z "${HYDRA_HOME:-}" ] || [ ! -d "$HYDRA_HOME/locks" ]; then
         printf '%s' "0"
         return 0
     fi
-    for _lock_dir in "$HYDRA_HOME/locks"/*; do
-        [ -d "$_lock_dir" ] || continue
-        _lock_age=0
-        if [ -f "$_lock_dir/pid" ]; then
-            if command -v stat >/dev/null 2>&1; then
-                if stat --version 2>&1 | grep -q GNU; then
-                    _lock_mtime="$(stat -c %Y "$_lock_dir/pid" 2>/dev/null || echo 0)"
-                else
-                    _lock_mtime="$(stat -f %m "$_lock_dir/pid" 2>/dev/null || echo 0)"
-                fi
-                _now="$(date +%s)"
-                _lock_age=$((_now - _lock_mtime))
+    _cleaned=0
+    # Collect paths first so rmdir does not race with find
+    _stale_list="$(find "$HYDRA_HOME/locks" -name "*.lock" -type d -mmin +1 2>/dev/null || true)"
+    if [ -n "$_stale_list" ]; then
+        while IFS= read -r _lock_dir; do
+            [ -n "$_lock_dir" ] || continue
+            if rmdir "$_lock_dir" 2>/dev/null; then
+                _cleaned=$((_cleaned + 1))
             fi
-        fi
-        if [ "$_lock_age" -gt 60 ]; then
-            rm -rf "$_lock_dir"
-            _cleaned=$((_cleaned + 1))
-        fi
-    done
+        done <<EOF
+$_stale_list
+EOF
+    fi
     printf '%s' "$_cleaned"
 }
 
@@ -150,16 +125,47 @@ clean_dead_mappings() {
         printf '%s' "0"
         return 0
     fi
-    _tmpfile="$(mktemp)"
+
+    if ! acquire_lock "state_map"; then
+        echo "Error: Failed to acquire state lock" >&2
+        printf '%s' "0"
+        return 1
+    fi
+
+    _tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || {
+        release_lock "state_map"
+        printf '%s' "0"
+        return 1
+    }
+    _dead_branches=""
     while IFS=' ' read -r _branch _session _ai _group _timestamp _deps _pr; do
         if [ -n "$_session" ] && tmux_session_exists "$_session"; then
             printf '%s %s %s %s %s %s %s\n' \
                 "$_branch" "$_session" "${_ai:--}" "${_group:--}" "${_timestamp:--}" "${_deps:--}" "${_pr:--}" >> "$_tmpfile"
         else
             _dead_cleaned=$((_dead_cleaned + 1))
+            if [ -n "$_branch" ]; then
+                _dead_branches="${_dead_branches}${_branch}
+"
+            fi
         fi
     done < "$HYDRA_MAP"
-    mv "$_tmpfile" "$HYDRA_MAP"
+    if ! atomic_replace "$HYDRA_MAP" "$_tmpfile"; then
+        rm -f "$_tmpfile"
+        release_lock "state_map"
+        printf '%s' "0"
+        return 1
+    fi
     _invalidate_state_cache
+    release_lock "state_map"
+
+    if [ -n "$_dead_branches" ] && command -v cleanup_messages_for_branch >/dev/null 2>&1; then
+        while IFS= read -r _dead_b; do
+            [ -n "$_dead_b" ] || continue
+            cleanup_messages_for_branch "$_dead_b"
+        done <<EOF
+$_dead_branches
+EOF
+    fi
     printf '%s' "$_dead_cleaned"
 }

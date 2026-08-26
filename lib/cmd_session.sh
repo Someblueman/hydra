@@ -110,16 +110,8 @@ cmd_list() {
     # Cache current session once before the loop (perf: issue #36)
     current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
 
-    # Cache all tmux sessions once to avoid repeated subprocess calls (perf: v1.3.3)
-    _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
-
-    # Helper to check session existence against cache
-    _session_exists_cached() {
-        echo "$_cached_tmux_sessions" | grep -qx "$1" 2>/dev/null
-    }
-
-    # Cache current timestamp once to avoid repeated date calls (perf: v1.3.3)
-    _cached_now="$(date +%s)"
+    # Batch tmux observation for this command
+    tmux_load_snapshot
 
     if [ -n "$json_output" ]; then
         # JSON output mode
@@ -139,15 +131,15 @@ cmd_list() {
 
             total=$((total + 1))
 
-            # Calculate duration (use cached timestamp for perf)
+            # Calculate duration (validated numeric subtraction)
             duration_secs=0
             if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
-                duration_secs="$((_cached_now - timestamp))"
+                duration_secs="$(get_duration_since "$timestamp")"
             fi
             duration_human="$(format_duration "$duration_secs")"
 
-            # Determine status (use cached check for perf)
-            if _session_exists_cached "$session"; then
+            # Determine status (use snapshot loaded above)
+            if tmux_snapshot_has_session "$session"; then
                 status="active"
                 active=$((active + 1))
             else
@@ -240,10 +232,10 @@ cmd_list() {
                 fi
             fi
 
-            # Calculate duration if timestamp exists (use cached timestamp for perf)
+            # Calculate duration if timestamp exists
             duration_str=""
             if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
-                duration_secs="$((_cached_now - timestamp))"
+                duration_secs="$(get_duration_since "$timestamp")"
                 duration_str="$(format_duration "$duration_secs")"
             fi
 
@@ -291,8 +283,8 @@ cmd_list() {
                 fi
             fi
 
-            # Check if session still exists (use cached check for perf)
-            if _session_exists_cached "$session"; then
+            # Check if session still exists (use snapshot loaded above)
+            if tmux_snapshot_has_session "$session"; then
                 # Check if it's the current session
                 if [ "$session" = "$current_session" ]; then
                     echo "* $branch -> $session $status_line (current)"
@@ -315,16 +307,13 @@ cmd_switch() {
 
     # If inside tmux, use tmux's interactive switcher
     if [ -n "${TMUX:-}" ]; then
-        # Cache all tmux sessions once to avoid repeated subprocess calls (perf)
-        _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
-        _session_exists_cached() {
-            echo "$_cached_tmux_sessions" | grep -qx "$1" 2>/dev/null
-        }
+        # Batch tmux observation for this command
+        tmux_load_snapshot
 
         # Build session list for fzf or simple menu (tab-separated: branch, session)
         sessions=""
         while IFS=' ' read -r branch session _rest; do
-            if _session_exists_cached "$session"; then
+            if tmux_snapshot_has_session "$session"; then
                 sessions="${sessions}${branch}	${session}
 "
             fi
@@ -566,7 +555,8 @@ cmd_status() {
         dead=0
 
         if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
-            while IFS=' ' read -r branch session ai group timestamp; do
+            tmux_load_snapshot
+            while IFS=' ' read -r branch session ai group timestamp deps pr; do
                 # Calculate duration
                 duration_secs=0
                 if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
@@ -574,7 +564,7 @@ cmd_status() {
                 fi
 
                 # Determine status
-                if tmux_session_exists "$session"; then
+                if tmux_snapshot_has_session "$session"; then
                     status="active"
                     active=$((active + 1))
                 else
@@ -653,7 +643,8 @@ cmd_status() {
         active=0
         dead=0
 
-        while IFS=' ' read -r branch session ai group timestamp; do
+        tmux_load_snapshot
+        while IFS=' ' read -r branch session ai group timestamp deps pr; do
             # Calculate duration if timestamp exists
             duration_str=""
             if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
@@ -674,7 +665,7 @@ cmd_status() {
                 fi
             fi
 
-            if tmux_session_exists "$session"; then
+            if tmux_snapshot_has_session "$session"; then
                 echo "  [OK] $branch -> $session $info"
                 active=$((active + 1))
             else

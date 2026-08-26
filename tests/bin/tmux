@@ -1,0 +1,90 @@
+#!/bin/sh
+# Deterministic tmux stub for Hydra unit tests.
+# Enable by prepending this directory to PATH.
+#
+# Environment:
+#   HYDRA_TEST_TMUX_LOG       append argv lines here
+#   HYDRA_TEST_TMUX_SESSIONS  newline-separated session names
+#   HYDRA_TEST_TMUX_PANES     lines of:
+#     session<TAB>window_index<TAB>pane_index<TAB>window_activity<TAB>command<TAB>dead
+
+if [ -n "${HYDRA_TEST_TMUX_LOG:-}" ]; then
+    # shellcheck disable=SC2124
+    printf '%s\n' "$*" >> "$HYDRA_TEST_TMUX_LOG"
+fi
+
+cmd="$1"
+[ -n "$cmd" ] && shift
+
+_has_session() {
+    _name="$1"
+    [ -n "$_name" ] || return 1
+    printf '%s\n' "${HYDRA_TEST_TMUX_SESSIONS:-}" | grep -Fqx "$_name"
+}
+
+case "$cmd" in
+    -V)
+        echo "tmux 3.3a"
+        exit 0
+        ;;
+    has-session)
+        _target=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -t) shift; _target="$1" ;;
+            esac
+            shift
+        done
+        _has_session "$_target"
+        exit $?
+        ;;
+    list-sessions)
+        if [ -n "${HYDRA_TEST_TMUX_SESSIONS:-}" ]; then
+            printf '%s\n' "$HYDRA_TEST_TMUX_SESSIONS"
+        fi
+        exit 0
+        ;;
+    list-panes)
+        _filter=""
+        _fmt=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -t) shift; _filter="$1"; shift ;;
+                -F) shift; _fmt="$1"; shift ;;
+                -a) shift ;;
+                *) shift ;;
+            esac
+        done
+        if [ -z "${HYDRA_TEST_TMUX_PANES:-}" ]; then
+            exit 0
+        fi
+        printf '%s\n' "$HYDRA_TEST_TMUX_PANES" | while IFS='	' read -r s w p act cmd dead; do
+            [ -n "$s" ] || continue
+            if [ -n "$_filter" ] && [ "$s" != "$_filter" ]; then
+                continue
+            fi
+            case "$_fmt" in
+                *window_index}.#{pane_index*)
+                    printf '%s.%s %s\n' "$w" "$p" "$cmd"
+                    ;;
+                *)
+                    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$s" "$w" "$p" "$act" "$cmd" "$dead"
+                    ;;
+            esac
+        done
+        exit 0
+        ;;
+    send-keys|kill-session|new-session|rename-session|switch-client|attach-session|select-pane|select-window|split-window|kill-pane|select-layout|set-window-option|display-message)
+        if [ "$cmd" = "display-message" ]; then
+            echo "${HYDRA_TEST_TMUX_CURRENT:-}"
+        fi
+        exit 0
+        ;;
+    capture-pane)
+        echo "${HYDRA_TEST_TMUX_CAPTURE:-pane}"
+        exit 0
+        ;;
+    *)
+        exit 0
+        ;;
+esac

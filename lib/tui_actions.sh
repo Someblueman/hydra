@@ -257,7 +257,7 @@ tui_action_kill_all() {
             # Kill all except current session
             killed=0
             skipped=0
-            while IFS='	' read -r branch session _ai _status _tag _activity; do
+            while IFS='	' read -r branch session _ai _status _tag _activity _group _pr; do
                 [ -z "$branch" ] && continue
                 if [ "$session" = "$TUI_CURRENT_SESSION" ]; then
                     skipped=1

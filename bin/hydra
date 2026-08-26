@@ -11,7 +11,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="1.5.0"
+HYDRA_VERSION="1.5.1"
 
 # Source helper libraries
 # Enhanced library detection with multiple fallback paths
@@ -95,6 +95,7 @@ _load_libs_for_cmd() {
             ;;
         list|switch|status|cycle-layout)
             _load_lib output
+            _load_lib locks
             _load_lib state
             _load_lib tmux
             _load_lib layout
@@ -108,6 +109,7 @@ _load_libs_for_cmd() {
             _load_lib git
             _load_lib tmux
             _load_lib state
+            _load_lib messages
             _load_lib kill
             _load_lib limits
             _load_lib spawn
@@ -153,6 +155,7 @@ _load_libs_for_cmd() {
             _load_lib git
             _load_lib locks
             _load_lib output
+            _load_lib messages
             _load_lib spawn
             _load_lib cmd_spawn
             _load_lib cmd_maintenance
@@ -297,6 +300,8 @@ Commands:
   broadcast         Send a command to multiple sessions
                     Options:
                       -g, --group <name>       Target specific group
+                      --pane <target>          Explicit tmux pane (window.pane or session:window.pane)
+                      --force                  Send to :0.0 even if that pane is the agent
   wait-idle         Wait for sessions to become idle
                     Options:
                       -g, --group <name>       Wait for specific group

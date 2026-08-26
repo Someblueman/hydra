@@ -133,6 +133,9 @@ queue_spawn() {
     _group="${3:-}"
     _layout="${4:-default}"
     _priority="${5:-50}"
+    case "$_priority" in
+        ''|*[!0-9]*) _priority=50 ;;
+    esac
 
     if [ -z "$_branch" ]; then
         echo "Error: Branch name required" >&2
@@ -144,17 +147,31 @@ queue_spawn() {
     _timestamp="$(date +%s)"
     _safe_branch="$(printf '%s' "$_branch" | sed 's/[^a-zA-Z0-9_-]/_/g')"
 
-    # Format priority as 3-digit number (001-099)
-    _priority_fmt="$(printf '%03d' "$_priority")"
+    # Invert so higher priority sorts first under lexicographic find|sort
+    _sort_pri="$(printf '%03d' $((999 - _priority)))"
 
-    # Generate unique filename with PID for uniqueness
-    _seq="$$"
-    _filename="${_timestamp}_${_safe_branch}_${_seq}_${_priority_fmt}.queue"
-    _filepath="$(_get_queue_dir)/$_filename"
+    if ! acquire_lock "queue_add"; then
+        echo "Error: Failed to acquire queue lock" >&2
+        return 1
+    fi
 
-    # Atomic write with lock
-    if try_lock "queue_add"; then
-        cat > "$_filepath" <<EOF
+    _qdir="$(_get_queue_dir)"
+    _seq_file="$_qdir/.seq"
+    _seq=1
+    if [ -f "$_seq_file" ]; then
+        _seq="$(cat "$_seq_file" 2>/dev/null || echo 1)"
+        case "$_seq" in
+            ''|*[!0-9]*) _seq=1 ;;
+            *) _seq=$((_seq + 1)) ;;
+        esac
+    fi
+    printf '%s\n' "$_seq" > "$_seq_file"
+    _seq_fmt="$(printf '%06d' "$_seq")"
+
+    _filename="${_sort_pri}_${_timestamp}_${_seq_fmt}_${_safe_branch}.queue"
+    _filepath="$_qdir/$_filename"
+
+    cat > "$_filepath" <<EOF
 branch=$_branch
 ai_tool=$_ai_tool
 group=$_group
@@ -162,13 +179,9 @@ layout=$_layout
 priority=$_priority
 requested_at=$_timestamp
 EOF
-        release_lock "queue_add"
-        printf '%s' "$_filepath"
-        return 0
-    fi
-
-    echo "Error: Failed to acquire queue lock" >&2
-    return 1
+    release_lock "queue_add"
+    printf '%s' "$_filepath"
+    return 0
 }
 
 # Get count of queued spawns

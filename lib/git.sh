@@ -246,8 +246,45 @@ create_worktree() {
     return 0
 }
 
+# Check whether a worktree is safe to remove (dirty / untracked policy).
+# Usage: check_worktree_removable <path>
+# Returns: 0 if removal may proceed, 1 if dirty or the user aborted
+check_worktree_removable() {
+    path="$1"
+
+    if [ -z "$path" ] || [ ! -d "$path" ]; then
+        return 0
+    fi
+
+    if ! git -C "$path" diff --quiet -- 2>/dev/null || ! git -C "$path" diff --cached --quiet -- 2>/dev/null; then
+        echo "Error: Worktree has uncommitted changes" >&2
+        echo "Please commit or stash your changes first" >&2
+        return 1
+    fi
+
+    if [ -n "$(git -C "$path" ls-files --others --exclude-standard -- 2>/dev/null)" ]; then
+        if [ -z "${HYDRA_NONINTERACTIVE:-}" ] && [ -z "${CI:-}" ]; then
+            echo "Warning: Worktree has untracked files" >&2
+            printf "Continue anyway? [y/N] "
+            read -r response
+            case "$response" in
+                [yY][eE][sS]|[yY])
+                    ;;
+                *)
+                    echo "Aborted" >&2
+                    return 1
+                    ;;
+            esac
+        else
+            echo "Warning: Worktree has untracked files (proceeding in non-interactive mode)" >&2
+        fi
+    fi
+
+    return 0
+}
+
 # Delete a git worktree safely
-# Usage: delete_worktree <path> [force]
+# Usage: delete_worktree <path> [force|skip_preflight]
 # Returns: 0 on success, 1 on failure
 delete_worktree() {
     path="$1"
@@ -275,33 +312,10 @@ delete_worktree() {
         _invalidate_worktree_cache
         return 0
     fi
-    
-    # Check for uncommitted changes
-    if ! git -C "$path" diff --quiet -- 2>/dev/null || ! git -C "$path" diff --cached --quiet -- 2>/dev/null; then
-        echo "Error: Worktree has uncommitted changes" >&2
-        echo "Please commit or stash your changes first" >&2
-        return 1
-    fi
-    
-    # Check for untracked files (optional warning)
-    if [ -n "$(git -C "$path" ls-files --others --exclude-standard -- 2>/dev/null)" ]; then
-        # Check if we're in non-interactive mode
-        if [ -z "${HYDRA_NONINTERACTIVE:-}" ] && [ -z "${CI:-}" ]; then
-            # Interactive mode - prompt user
-            echo "Warning: Worktree has untracked files" >&2
-            printf "Continue anyway? [y/N] "
-            read -r response
-            case "$response" in
-                [yY][eE][sS]|[yY])
-                    ;;
-                *)
-                    echo "Aborted" >&2
-                    return 1
-                    ;;
-            esac
-        else
-            # Non-interactive mode - proceed with warning
-            echo "Warning: Worktree has untracked files (proceeding in non-interactive mode)" >&2
+
+    if [ "$force" != "skip_preflight" ]; then
+        if ! check_worktree_removable "$path"; then
+            return 1
         fi
     fi
     

@@ -168,9 +168,11 @@ var="${VAR:-default}"
 
 #### Temporary Files
 ```sh
-# Create safely
-tmpfile="$(mktemp)" || exit 1
-trap 'rm -f "$tmpfile"' EXIT INT TERM
+# Create the temp file on the same filesystem as the destination, then rename.
+# Bare mktemp usually lands in /tmp; mv across devices is not atomic.
+tmpfile="$(mktemp_adjacent "$dest")" || exit 1
+# write to "$tmpfile"...
+atomic_replace "$dest" "$tmpfile" || { rm -f "$tmpfile"; exit 1; }
 ```
 
 ### Resources

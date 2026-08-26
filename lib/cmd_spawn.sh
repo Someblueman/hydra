@@ -424,7 +424,12 @@ cmd_regenerate() {
         if create_session "$session" "$dir"; then
             # Preserve any stored AI tool for this branch
             stored_ai="$(get_ai_for_branch "$branch" 2>/dev/null || true)"
-            add_mapping "$branch" "$session" "$stored_ai"
+            stored_group="$(get_group_for_branch "$branch" 2>/dev/null || true)"
+            stored_ts="$(get_timestamp_for_branch "$branch" 2>/dev/null || true)"
+            stored_deps="$(get_deps_for_branch "$branch" 2>/dev/null || true)"
+            stored_pr="$(get_pr_for_branch "$branch" 2>/dev/null || true)"
+            add_mapping "$branch" "$session" "$stored_ai" "$stored_group" \
+                "${stored_ts:-}" "$stored_deps" "$stored_pr"
             regenerated=$((regenerated + 1))
             # Release any reserved session name lock
             release_session_lock "$session" 2>/dev/null || true

@@ -20,7 +20,8 @@ spawn_rollback_session() {
         remove_mapping "$_branch" 2>/dev/null || true
     fi
     if [ -n "$_worktree_path" ]; then
-        delete_worktree "$_worktree_path" 2>/dev/null || true
+        # Force: this is abort of a spawn we just created.
+        delete_worktree "$_worktree_path" "force" 2>/dev/null || true
     fi
 }
 
@@ -161,7 +162,9 @@ spawn_single() {
 
     # Add mapping (persist selected AI tool, group, deps, and PR if provided)
     if ! add_mapping "$branch" "$session" "${ai_tool:-}" "${group:-}" "" "${deps:-}" "${pr_number:-}"; then
-        echo "Warning: Failed to save branch-session mapping" >&2
+        echo "Error: Failed to save branch-session mapping" >&2
+        spawn_rollback_session "$session" "$branch" "$worktree_path"
+        return 1
     fi
 
     # Apply YAML config if present; otherwise custom/built-in layout

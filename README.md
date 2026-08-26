@@ -32,6 +32,8 @@
 ## Quick Start
 
 - Requirements: `git`, `tmux` (≥ 3.0). Optional: `fzf`, GitHub CLI, an AI CLI (`claude`, `aider`, `gemini`, etc.).
+- Supported platforms: Linux and macOS; POSIX `sh` (dash on Debian/Ubuntu); `tmux >= 3.0` and `git`. CI runs Ubuntu and macOS. Windows is not supported.
+- Public CLI, map, JSON, lock, and TUI-row contracts: [docs/CONTRACTS.md](docs/CONTRACTS.md).
 - Install:
   - `git clone https://github.com/Someblueman/hydra && cd hydra && sudo ./install.sh`
   - or `sudo make install`

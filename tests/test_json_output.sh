@@ -152,8 +152,38 @@ test_json_escape_newlines() {
     input="$(printf 'hello\nworld')"
     result="$(json_escape "$input")"
 
-    # Newlines should be converted to spaces
-    assert_equal "hello world" "$result" "Newlines converted to spaces"
+    # Newlines should be escaped as \n
+    assert_equal 'hello\nworld' "$result" "Newlines escaped as \\n"
+}
+
+test_json_escape_cr_ff_bs() {
+    echo ""
+    echo "Testing json_escape with CR, FF, and backspace..."
+
+    input="$(printf 'a\rb')"
+    result="$(json_escape "$input")"
+    assert_equal 'a\rb' "$result" "CR escaped as \\r"
+
+    input="$(printf 'a\fb')"
+    result="$(json_escape "$input")"
+    assert_equal 'a\fb' "$result" "FF escaped as \\f"
+
+    input="$(printf 'a\bb')"
+    result="$(json_escape "$input")"
+    assert_equal 'a\bb' "$result" "BS escaped as \\b"
+}
+
+test_json_escape_other_c0() {
+    echo ""
+    echo "Testing json_escape with other C0 bytes..."
+
+    input="$(printf 'a\001b')"
+    result="$(json_escape "$input")"
+    assert_equal 'a\u0001b' "$result" "SOH escaped as \\u0001"
+
+    input="$(printf 'a\037b')"
+    result="$(json_escape "$input")"
+    assert_equal 'a\u001fb' "$result" "US escaped as \\u001f"
 }
 
 test_json_escape_mixed_special() {
@@ -163,6 +193,21 @@ test_json_escape_mixed_special() {
     # String with quotes and backslashes
     result="$(json_escape 'say "hello\\there"')"
     assert_equal 'say \"hello\\\\there\"' "$result" "Mixed quotes and backslashes escaped"
+}
+
+test_json_escape_utf8() {
+    echo ""
+    echo "Testing json_escape preserves UTF-8 bytes..."
+
+    # café: c3 a9 for é. Must round-trip even in a UTF-8 locale.
+    input="$(printf 'caf\303\251')"
+    result="$(LC_ALL=en_US.UTF-8 json_escape "$input")"
+    assert_equal "$input" "$result" "UTF-8 payload bytes are not recoded"
+
+    quoted="$(printf '"caf\303\251"')"
+    result="$(LC_ALL=en_US.UTF-8 json_escape "$quoted")"
+    expected="$(printf '\\"caf\303\251\\"')"
+    assert_equal "$expected" "$result" "UTF-8 with quotes still escapes quotes only"
 }
 
 # =============================================================================
@@ -323,6 +368,41 @@ test_status_json() {
     cleanup_test_env
 }
 
+test_status_json_seven_field_map() {
+    echo ""
+    echo "Testing hydra status --json with deps and pr fields..."
+
+    setup_test_env
+    HYDRA_MAP="$HYDRA_HOME/map"
+    timestamp="$(date +%s)"
+    echo "stat-branch missing-sess claude grp $timestamp depA,depB 42" > "$HYDRA_MAP"
+
+    output="$(env HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" status --json 2>&1)" || true
+
+    if echo "$output" | grep -q "Illegal number"; then
+        echo "[FAIL] status must not print Illegal number"
+        fail_count=$((fail_count + 1))
+    else
+        echo "[PASS] status must not print Illegal number"
+        pass_count=$((pass_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    if validate_json "$output"; then
+        echo "[PASS] status --json with 7-field map is valid JSON"
+        pass_count=$((pass_count + 1))
+    else
+        echo "[FAIL] status --json with 7-field map is valid JSON"
+        echo "  Output: $output"
+        fail_count=$((fail_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    assert_contains "$output" "duration_seconds" "JSON contains duration_seconds"
+
+    cleanup_test_env
+}
+
 # =============================================================================
 # Main test runner
 # =============================================================================
@@ -338,7 +418,10 @@ main() {
     test_json_escape_backslashes
     test_json_escape_tabs
     test_json_escape_newlines
+    test_json_escape_cr_ff_bs
+    test_json_escape_other_c0
     test_json_escape_mixed_special
+    test_json_escape_utf8
 
     # Unit tests for JSON helpers
     test_json_kv
@@ -355,6 +438,7 @@ main() {
     test_list_json_empty
     test_list_json_with_sessions
     test_status_json
+    test_status_json_seven_field_map
 
     # Report results
     echo ""
