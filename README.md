@@ -54,8 +54,9 @@ Or skip install and run from the checkout:
 
 ```sh
 git clone https://github.com/Someblueman/hydra && cd hydra
-./bin/hydra version
-# If you invoke the binary from elsewhere: export HYDRA_ROOT=/path/to/hydra
+export HYDRA_ROOT="$PWD"
+export PATH="$HYDRA_ROOT/bin:$PATH"
+hydra version
 ```
 
 ### 2. Verify
@@ -84,6 +85,7 @@ hydra switch           # enter the session (fzf if installed)
 
 ```sh
 hydra kill first-head
+git branch -D first-head # remove the disposable tour branch
 hydra list             # empty
 ```
 

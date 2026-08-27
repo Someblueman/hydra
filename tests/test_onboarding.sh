@@ -64,6 +64,13 @@ assert_contains "$doc_out" "source checkout" "doctor detects source layout"
 assert_contains "$doc_out" "HYDRA_HOME writable" "doctor reports writable home"
 assert_contains "$doc_out" "Agents:" "doctor reports agents"
 
+# Replay the documented run-from-source PATH setup before leaving the checkout.
+export HYDRA_ROOT="$REPO_ROOT"
+export PATH="$HYDRA_ROOT/bin:$PATH"
+path_ver_out="$(hydra version 2>&1)"
+assert_success $? "documented run-from-source PATH setup should find hydra"
+assert_contains "$path_ver_out" "Hydra version" "PATH-resolved hydra runs from source"
+
 # --- throwaway repo first head ---
 echo "Testing throwaway-repository first head..."
 cd "$repo_dir" || exit 1
@@ -75,12 +82,12 @@ git add README.md
 git commit -m "init" >/dev/null 2>&1
 
 branch="first-head"
-spawn_out="$("$HYDRA_BIN" spawn "$branch" 2>&1)"
+spawn_out="$(hydra spawn "$branch" 2>&1)"
 assert_success $? "HYDRA_SKIP_AI=1 spawn should succeed without an agent"
 assert_contains "$spawn_out" "Creating worktree" "spawn creates a worktree"
 assert_contains "$spawn_out" "Creating tmux session" "spawn creates a tmux session"
 
-list_out="$("$HYDRA_BIN" list 2>&1)"
+list_out="$(hydra list 2>&1)"
 assert_success $? "hydra list should succeed after spawn"
 assert_contains "$list_out" "$branch" "list shows the first head"
 
@@ -97,7 +104,7 @@ else
     assert_failure 0 "worktree lives under the throwaway parent"
 fi
 
-"$HYDRA_BIN" kill "$branch" >/dev/null 2>&1
+hydra kill "$branch" >/dev/null 2>&1
 assert_success $? "hydra kill should clean up the first head"
 
 if tmux has-session -t "$branch" 2>/dev/null; then
@@ -116,6 +123,14 @@ if [ -f "$HYDRA_HOME/map" ] && grep -q "$branch" "$HYDRA_HOME/map" 2>/dev/null; 
     assert_failure 0 "state map no longer lists the first head"
 else
     assert_success 0 "state map no longer lists the first head"
+fi
+
+git branch -D "$branch" >/dev/null 2>&1
+assert_success $? "Quick Start should remove the disposable branch"
+if git show-ref --verify --quiet "refs/heads/$branch"; then
+    assert_failure 0 "disposable branch is gone after cleanup"
+else
+    assert_success 0 "disposable branch is gone after cleanup"
 fi
 
 # --- missing agent recovery (only when claude is absent) ---
