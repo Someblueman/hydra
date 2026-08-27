@@ -10,6 +10,7 @@ validate_ai_command() {
     
     if [ -z "$command" ]; then
         echo "Error: AI command cannot be empty" >&2
+        echo "Next: export HYDRA_SKIP_AI=1 for a shell-only head, or set HYDRA_AI_COMMAND" >&2
         return 1
     fi
     
@@ -20,6 +21,7 @@ validate_ai_command() {
         *)
             echo "Error: Unsupported AI command: $command" >&2
             echo "Supported: claude, codex, cursor, copilot, aider, gemini" >&2
+            echo "Next: export HYDRA_SKIP_AI=1 for a shell-only head, or pass --ai with a supported tool" >&2
             return 1
             ;;
     esac
@@ -30,7 +32,8 @@ validate_ai_command() {
 # Returns: 0 if tmux >= 3.0, 1 otherwise
 check_tmux_version() {
     if ! command -v tmux >/dev/null 2>&1; then
-        echo "Error: tmux not found in PATH" >&2
+        echo "Error: tmux is not installed or not on PATH" >&2
+        echo "Next: install tmux 3.0 or newer (apt/brew), then run hydra doctor" >&2
         return 1
     fi
     
@@ -43,6 +46,7 @@ check_tmux_version() {
     
     if [ "$major_num" -lt 3 ]; then
         echo "Error: tmux version $version is too old (need >= 3.0)" >&2
+        echo "Next: upgrade tmux to 3.0 or newer, then run hydra doctor" >&2
         return 1
     fi
     

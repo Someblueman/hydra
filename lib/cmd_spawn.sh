@@ -396,6 +396,7 @@ cmd_regenerate() {
     # Get repository root
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         echo "Error: Not in a git repository" >&2
+        echo "Next: cd into an existing git repo, or create a throwaway repo (see README Quick Start)" >&2
         return 1
     fi
     

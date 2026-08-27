@@ -13,6 +13,8 @@ test_dir=""
 
 # Hydra binary path - use current directory's hydra
 HYDRA_BIN="${HYDRA_BIN:-$original_dir/bin/hydra}"
+export HYDRA_SKIP_AI=1
+export HYDRA_NONINTERACTIVE=1
 
 # Test helper functions
 # shellcheck disable=SC2329

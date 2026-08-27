@@ -11,7 +11,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="1.5.1"
+HYDRA_VERSION="1.5.2"
 
 # Source helper libraries
 # Enhanced library detection with multiple fallback paths
@@ -33,24 +33,28 @@ else
     HYDRA_BIN_DIR="$(dirname "$HYDRA_BIN_PATH")"
 fi
 
-# Try multiple paths to find the library directory
-if [ -d "$HYDRA_BIN_DIR/../lib" ] && [ -f "$HYDRA_BIN_DIR/../lib/git.sh" ]; then
-    # Running from source - resolve to absolute path
+# Library discovery (1.5.2): HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra, legacy
+if [ -n "${HYDRA_ROOT:-}" ] && [ -d "$HYDRA_ROOT/lib" ] && [ -f "$HYDRA_ROOT/lib/git.sh" ]; then
+    HYDRA_LIB_DIR="$(cd "$HYDRA_ROOT/lib" && pwd)"
+elif [ -d "$HYDRA_BIN_DIR/../lib" ] && [ -f "$HYDRA_BIN_DIR/../lib/git.sh" ]; then
+    # Running from a source checkout: bin/../lib
     HYDRA_LIB_DIR="$(cd "$HYDRA_BIN_DIR/../lib" && pwd)"
+elif [ -d "$HYDRA_BIN_DIR/../lib/hydra" ] && [ -f "$HYDRA_BIN_DIR/../lib/hydra/git.sh" ]; then
+    # PREFIX install: $PREFIX/bin/hydra -> $PREFIX/lib/hydra
+    HYDRA_LIB_DIR="$(cd "$HYDRA_BIN_DIR/../lib/hydra" && pwd)"
 elif [ -d "/usr/local/lib/hydra" ] && [ -f "/usr/local/lib/hydra/git.sh" ]; then
-    # Installed location
+    # Legacy default prefix
     HYDRA_LIB_DIR="/usr/local/lib/hydra"
-elif [ -n "${HYDRA_ROOT:-}" ] && [ -d "$HYDRA_ROOT/lib" ] && [ -f "$HYDRA_ROOT/lib/git.sh" ]; then
-    # Environment variable override
-    HYDRA_LIB_DIR="$HYDRA_ROOT/lib"
 else
     echo "Error: Cannot find hydra library directory" >&2
+    echo "Precondition: libraries must resolve from the binary (source ../lib or PREFIX ../lib/hydra)." >&2
     echo "Searched in:" >&2
-    echo "  - $HYDRA_BIN_DIR/../lib (source)" >&2
-    echo "  - /usr/local/lib/hydra (installed)" >&2
     [ -n "${HYDRA_ROOT:-}" ] && echo "  - $HYDRA_ROOT/lib (HYDRA_ROOT)" >&2
-    echo "" >&2
-    echo "Please ensure hydra is properly installed or set HYDRA_ROOT environment variable" >&2
+    echo "  - $HYDRA_BIN_DIR/../lib (source checkout)" >&2
+    echo "  - $HYDRA_BIN_DIR/../lib/hydra (PREFIX install)" >&2
+    echo "  - /usr/local/lib/hydra (legacy)" >&2
+    echo "Next: run bin/hydra from a source checkout, set HYDRA_ROOT to that checkout, or reinstall with PREFIX=\$HOME/.local ./install.sh" >&2
+    echo "See README Quick Start." >&2
     exit 1
 fi
 
@@ -226,17 +230,29 @@ _load_libs_for_cmd() {
 
 # Export paths for downstream helpers (e.g., safe tmux run-shell bindings)
 export HYDRA_LIB_DIR
+export HYDRA_BIN_DIR
 # Resolve the absolute path to the current hydra binary for secure bindings
 HYDRA_BIN_CMD="${HYDRA_BIN_PATH}"
 export HYDRA_BIN_CMD
 
 # Initialize Hydra home directory
 init_hydra_home() {
-    if [ ! -d "$HYDRA_HOME" ]; then
-        mkdir -p "$HYDRA_HOME"
+    if ! mkdir -p "$HYDRA_HOME" 2>/dev/null; then
+        echo "Error: HYDRA_HOME is not writable: $HYDRA_HOME" >&2
+        echo "Next: export HYDRA_HOME=\"\$HOME/.hydra\" and ensure that directory is writable, or see README Quick Start" >&2
+        exit 1
+    fi
+    if [ ! -w "$HYDRA_HOME" ]; then
+        echo "Error: HYDRA_HOME is not writable: $HYDRA_HOME" >&2
+        echo "Next: chmod u+w \"$HYDRA_HOME\" or export HYDRA_HOME to a writable directory (see README Quick Start)" >&2
+        exit 1
     fi
     if [ ! -f "$HYDRA_MAP" ]; then
-        touch "$HYDRA_MAP"
+        if ! touch "$HYDRA_MAP" 2>/dev/null; then
+            echo "Error: Cannot create state map at $HYDRA_MAP" >&2
+            echo "Next: ensure HYDRA_HOME is writable (export HYDRA_HOME=\"\$HOME/.hydra\")" >&2
+            exit 1
+        fi
     fi
 }
 
@@ -311,7 +327,7 @@ Commands:
   status            Show health status of all heads
                     Options:
                       -j, --json               Output in JSON format
-  doctor            Check system health and consistency
+  doctor            Check install, dependencies, and first-run readiness
                     Options:
                       -f, --fix                Auto-fix detected issues
   cleanup           Remove dead mappings, stale locks, and orphaned worktrees
@@ -358,6 +374,7 @@ Examples:
 Environment:
   HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
   HYDRA_AI_COMMAND  Default AI tool (default: claude)
+  HYDRA_SKIP_AI     Set to 1 to spawn a shell-only head (no agent CLI)
   HYDRA_ROOT        Override hydra installation path (for library discovery)
   HYDRA_DASHBOARD_PANES_PER_SESSION  Panes per session for dashboard (1, N, or all)
   HYDRA_MAX_SESSIONS  Maximum active sessions (default: unlimited)

@@ -6,6 +6,8 @@ pass_count=0
 fail_count=0
 
 HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
+export HYDRA_SKIP_AI=1
+export HYDRA_NONINTERACTIVE=1
 
 assert_true() {
     cond="$1"

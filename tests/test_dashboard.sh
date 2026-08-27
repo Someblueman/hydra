@@ -5,8 +5,12 @@
 # Test configuration
 TEST_REPO_DIR="/tmp/hydra_dashboard_test"
 TEST_BRANCHES="feature/test-1 feature/test-2 feature/test-3"
+UNRELATED_TEST_DIR="/tmp/hydra-unrelated-dashboard-$$"
+UNRELATED_TEST_SESSION="hydra-unrelated-dashboard-$$"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HYDRA_BIN="$SCRIPT_DIR/../bin/hydra"
+export HYDRA_SKIP_AI=1
+export HYDRA_NONINTERACTIVE=1
 
 # Colors for output (if supported)
 if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
@@ -37,6 +41,21 @@ print_error() {
     echo "${RED}[ERROR]${RESET} $1"
 }
 
+cleanup_test_directories() {
+    rm -rf "$TEST_REPO_DIR" /tmp/test_hydra_home 2>/dev/null || true
+
+    for branch in $TEST_BRANCHES; do
+        worktree_path="/tmp/hydra-$branch"
+        rm -rf "$worktree_path" 2>/dev/null || true
+
+        # Slash-containing branch names share a test-owned parent.
+        parent_dir="$(dirname "$worktree_path")"
+        if [ "$parent_dir" != "/tmp" ]; then
+            rmdir "$parent_dir" 2>/dev/null || true
+        fi
+    done
+}
+
 # Comprehensive pre-test cleanup
 cleanup_all_test_sessions() {
     print_status "Performing comprehensive pre-test cleanup..."
@@ -44,54 +63,21 @@ cleanup_all_test_sessions() {
     # Kill all test-related tmux sessions
     tmux list-sessions -F '#{session_name}' 2>/dev/null | while IFS= read -r session; do
         case "$session" in
-            feature_test*|test-*|hydra-*|test_*)
+            feature_test-1|feature_test-2|feature_test-3|hydra-dashboard|hydra-dash-sanity|test-init)
                 print_status "  Cleaning up session: $session"
                 tmux kill-session -t "$session" 2>/dev/null || true
                 ;;
         esac
     done
-    
-    # Clean up test directories
-    rm -rf "$TEST_REPO_DIR" 2>/dev/null || true
-    rm -rf /tmp/hydra-* 2>/dev/null || true
-    rm -rf /tmp/test_hydra_home 2>/dev/null || true
-    
-    # Clean up any test HYDRA_HOME directories
-    find /tmp -maxdepth 2 -name ".hydra" -type d 2>/dev/null | while IFS= read -r dir; do
-        parent="$(dirname "$dir")"
-        case "$parent" in
-            /tmp/hydra*|/tmp/test*)
-                print_status "  Removing test hydra home: $dir"
-                rm -rf "$dir" 2>/dev/null || true
-                ;;
-        esac
-    done
+
+    cleanup_test_directories
 }
 
 # Setup test environment
 setup_test_repo() {
     print_status "Setting up test repository..."
-    
-    # Clean up any existing test directory
-    rm -rf "$TEST_REPO_DIR"
-    
-    # Clean up all hydra worktrees from previous runs
-    # First remove top-level hydra-* directories
-    rm -rf /tmp/hydra-* 2>/dev/null || true
-    
-    # Then handle worktrees with slashes in branch names (e.g., feature/test-1)
-    # These create subdirectories like /tmp/hydra-feature/test-1
-    for branch in $TEST_BRANCHES; do
-        worktree_path="/tmp/hydra-$branch"
-        if [ -d "$worktree_path" ]; then
-            rm -rf "$worktree_path" 2>/dev/null || true
-        fi
-        # Clean up parent directory if empty (e.g., /tmp/hydra-feature)
-        parent_dir="$(dirname "$worktree_path")"
-        if [ -d "$parent_dir" ] && [ "$parent_dir" != "/tmp" ]; then
-            rmdir "$parent_dir" 2>/dev/null || true
-        fi
-    done
+
+    cleanup_test_directories
     
     # Create test repository
     mkdir -p "$TEST_REPO_DIR"
@@ -564,6 +550,10 @@ test_multi_pane_collection_env() {
 # Cleanup test environment
 cleanup_test_env() {
     print_status "Cleaning up test environment..."
+
+    # Remove only the unrelated sentinels created by this test.
+    tmux kill-session -t "$UNRELATED_TEST_SESSION" 2>/dev/null || true
+    rmdir "$UNRELATED_TEST_DIR" 2>/dev/null || true
     
     cd "$TEST_REPO_DIR" || return 0
     
@@ -587,21 +577,7 @@ cleanup_test_env() {
     
     # Remove test repository and worktrees
     cd /tmp || return 0
-    rm -rf "$TEST_REPO_DIR"
-    # Remove all hydra worktrees, including those with slashes in branch names
-    rm -rf /tmp/hydra-* 2>/dev/null || true
-    # Also remove any parent directories created by branch names with slashes
-    for branch in $TEST_BRANCHES; do
-        worktree_path="/tmp/hydra-$branch"
-        if [ -d "$worktree_path" ]; then
-            rm -rf "$worktree_path" 2>/dev/null || true
-        fi
-        # Clean up parent directory if empty
-        parent_dir="$(dirname "$worktree_path")"
-        if [ -d "$parent_dir" ] && [ "$parent_dir" != "/tmp" ]; then
-            rmdir "$parent_dir" 2>/dev/null || true
-        fi
-    done
+    cleanup_test_directories
     
     print_status "Test environment cleaned up"
 }
@@ -635,9 +611,23 @@ main() {
     
     # Set up cleanup trap
     trap cleanup_test_env EXIT INT TERM
+
+    # A dashboard test run must not sweep unrelated hydra-* resources.
+    mkdir -p "$UNRELATED_TEST_DIR"
+    tmux new-session -d -s "$UNRELATED_TEST_SESSION"
     
     # Perform comprehensive cleanup before starting tests
     cleanup_all_test_sessions
+    if [ ! -d "$UNRELATED_TEST_DIR" ]; then
+        print_error "Pre-test cleanup removed an unrelated hydra-* directory"
+        exit 1
+    fi
+    if ! tmux has-session -t "$UNRELATED_TEST_SESSION" 2>/dev/null; then
+        print_error "Pre-test cleanup killed an unrelated hydra-* tmux session"
+        exit 1
+    fi
+    tmux kill-session -t "$UNRELATED_TEST_SESSION" 2>/dev/null || true
+    rmdir "$UNRELATED_TEST_DIR" 2>/dev/null || true
     
     # Run tests
     test_failed=0

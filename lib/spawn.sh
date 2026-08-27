@@ -76,6 +76,26 @@ queue_mixed_spawns() {
     done
 }
 
+# Confirm an allowlisted AI command exists on PATH
+# Usage: ensure_ai_on_path <command>
+# Returns: 0 if found, 1 if missing
+ensure_ai_on_path() {
+    _ai="$1"
+    if [ -z "$_ai" ]; then
+        echo "Error: AI command cannot be empty" >&2
+        echo "Next: export HYDRA_SKIP_AI=1 for a shell-only head, or set HYDRA_AI_COMMAND to an installed agent" >&2
+        echo "See README Quick Start." >&2
+        return 1
+    fi
+    if ! command -v "$_ai" >/dev/null 2>&1; then
+        echo "Error: AI command '$_ai' is not installed or not on PATH" >&2
+        echo "Next: export HYDRA_SKIP_AI=1 to spawn a shell-only head, install '$_ai', or set HYDRA_AI_COMMAND" >&2
+        echo "See README Quick Start for the five-minute no-agent tour." >&2
+        return 1
+    fi
+    return 0
+}
+
 # Helper function to spawn a single session
 # Usage: spawn_single <branch> <layout> [ai_tool] [group] [deps] [pr_number] [template]
 # Returns: Session name on stdout, 1 on failure
@@ -110,7 +130,19 @@ spawn_single() {
     # Check if we're in a git repository
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         echo "Error: Not in a git repository" >&2
+        echo "Next: cd into an existing git repo, or create a throwaway repo (see README Quick Start)" >&2
         return 1
+    fi
+
+    # Fail fast if an agent is required but missing (before creating a worktree)
+    if [ -z "${HYDRA_SKIP_AI:-}" ]; then
+        _probe_ai="${ai_tool:-${HYDRA_AI_COMMAND:-claude}}"
+        if ! validate_ai_command "$_probe_ai"; then
+            return 1
+        fi
+        if ! ensure_ai_on_path "$_probe_ai"; then
+            return 1
+        fi
     fi
 
     # Get worktree path using consolidated path function
@@ -199,6 +231,10 @@ spawn_single() {
             ai_tool="${HYDRA_AI_COMMAND:-claude}"
         fi
         if ! validate_ai_command "$ai_tool"; then
+            spawn_rollback_session "$session" "$branch" "$worktree_path"
+            return 1
+        fi
+        if ! ensure_ai_on_path "$ai_tool"; then
             spawn_rollback_session "$session" "$branch" "$worktree_path"
             return 1
         fi
@@ -359,6 +395,9 @@ spawn_bulk_mixed() {
         fi
 
         if ! validate_ai_command "$agent"; then
+            return 1
+        fi
+        if [ -z "${HYDRA_SKIP_AI:-}" ] && ! ensure_ai_on_path "$agent"; then
             return 1
         fi
 
