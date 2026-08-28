@@ -30,7 +30,12 @@ branch_has_mapping() {
     if [ -z "$_branch" ] || [ ! -f "${HYDRA_MAP:-}" ] || [ ! -s "$HYDRA_MAP" ]; then
         return 1
     fi
-    grep -q "^${_branch} " "$HYDRA_MAP" 2>/dev/null
+    while IFS=' ' read -r _mapped_branch _rest; do
+        if [ "$_mapped_branch" = "$_branch" ]; then
+            return 0
+        fi
+    done < "$HYDRA_MAP"
+    return 1
 }
 
 # Count hydra worktrees without a state mapping

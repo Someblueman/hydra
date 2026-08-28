@@ -346,6 +346,46 @@ test_state_cache_invalidation() {
     cleanup_test_state "$(dirname "$test_map")"
 }
 
+test_state_cache_distinct_keys() {
+    echo "Testing state cache keeps distinct branch identities..."
+
+    test_map="$(setup_test_state)"
+    HYDRA_MAP="$test_map"
+    HYDRA_HOME="$(dirname "$test_map")"
+    export HYDRA_MAP HYDRA_HOME
+    _invalidate_state_cache
+
+    printf '%s\n' \
+        "foo-bar sess-dash - - 1 - -" \
+        "foo_bar sess-under - - 2 - -" > "$HYDRA_MAP"
+
+    result="$(get_session_for_branch "foo-bar")"
+    assert_equal "sess-dash" "$result" "punctuation-distinct branches do not collide"
+    result="$(get_session_for_branch "foo_bar")"
+    assert_equal "sess-under" "$result" "underscore branch keeps its own session"
+
+    cleanup_test_state "$(dirname "$test_map")"
+}
+
+test_state_cache_removal_invalidation() {
+    echo "Testing state cache removes deleted mappings..."
+
+    test_map="$(setup_test_state)"
+    HYDRA_MAP="$test_map"
+    HYDRA_HOME="$(dirname "$test_map")"
+    export HYDRA_MAP HYDRA_HOME
+    _invalidate_state_cache
+
+    add_mapping "removed-branch" "removed-session"
+    _load_state_cache
+    remove_mapping "removed-branch"
+
+    get_session_for_branch "removed-branch" >/dev/null 2>&1
+    assert_failure $? "removed mapping is absent after cache reload"
+
+    cleanup_test_state "$(dirname "$test_map")"
+}
+
 test_regenerate_field_preservation() {
     echo "Testing regenerate-style metadata preservation..."
 
@@ -386,6 +426,8 @@ test_add_mapping_fail_closed
 test_same_filesystem_temp
 test_get_duration_since_invalid
 test_state_cache_invalidation
+test_state_cache_distinct_keys
+test_state_cache_removal_invalidation
 test_regenerate_field_preservation
 
 echo "================================"

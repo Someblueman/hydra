@@ -136,7 +136,8 @@ recv_messages() {
 
         # Parse filename: timestamp_sender_hash
         filename="$(basename "$msg_file")"
-        sender="$(echo "$filename" | cut -d'_' -f2)"
+        sender="${filename#*_}"
+        sender="${sender%_*}"
 
         # Read and output message
         message="$(cat "$msg_file")"

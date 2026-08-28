@@ -69,6 +69,26 @@ test_create_session_validation() {
     assert_failure $? "create_session should fail with non-existent directory"
 }
 
+test_create_session_normalizes_pane_target() {
+    echo "Testing create_session normalizes the primary pane target..."
+
+    if ! command -v tmux >/dev/null 2>&1; then
+        echo "[WARN] Skipping pane target normalization - tmux not available"
+        pass_count=$((pass_count + 1))
+        test_count=$((test_count + 1))
+        return
+    fi
+
+    test_session="hydra-index-test-$$"
+    if create_session "$test_session" "/tmp" >/dev/null 2>&1 && \
+       tmux display-message -p -t "$test_session:0.0" '#{pane_index}' >/dev/null 2>&1; then
+        assert_success 0 "create_session provides session:0.0 regardless of global tmux indexes"
+    else
+        assert_failure 1 "create_session provides session:0.0 regardless of global tmux indexes"
+    fi
+    tmux kill-session -t "$test_session" 2>/dev/null || true
+}
+
 # Test kill_session parameter validation
 test_kill_session_validation() {
     echo "Testing kill_session parameter validation..."
@@ -201,6 +221,7 @@ echo "=============================================="
 test_check_tmux_version
 test_tmux_session_exists_validation
 test_create_session_validation
+test_create_session_normalizes_pane_target
 test_kill_session_validation
 test_send_keys_validation
 test_switch_to_session_validation

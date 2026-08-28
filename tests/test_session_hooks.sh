@@ -68,6 +68,7 @@ printf '%s\n' "echo from-startup" > .hydra/startup
 
 out="$("$HYDRA_BIN" spawn hooks-test 2>&1 || true)"
 assert_contains "$out" "Creating worktree for branch 'hooks-test'" "spawn started"
+assert_contains "$out" "Session 'hooks-test' created successfully" "spawn completed"
 
 # Verify hooks side-effects
 if [ -f "$HYDRA_HOME/pre.txt" ]; then
@@ -90,4 +91,3 @@ if [ "$fail_count" -gt 0 ]; then
 else
     exit 0
 fi
-

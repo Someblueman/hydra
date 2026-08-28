@@ -188,6 +188,12 @@ test_recv_messages() {
     assert_contains "$output" "FROM sender1: Message 1" "First message received"
     assert_contains "$output" "FROM sender2: Message 2" "Second message received"
 
+    ensure_message_dir "sender-name-test"
+    msg_dir="$(get_message_dir "sender-name-test")"
+    echo "Underscore sender" > "$msg_dir/queue/1735344002_sender_with_under_789"
+    output=$(recv_messages "sender-name-test")
+    assert_contains "$output" "FROM sender_with_under: Underscore sender" "Sender underscores are preserved"
+
     # Messages should be removed (not peek mode)
     msg_count=0
     for f in "$msg_dir/queue"/*; do

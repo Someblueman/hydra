@@ -113,10 +113,25 @@ test_clean_dead_mappings_cleans_messages() {
     cleanup_env
 }
 
+test_branch_has_mapping_matches_literal_branch() {
+    echo "Testing branch_has_mapping uses literal branch identity..."
+    setup_env
+
+    echo "feature/x alive-session - - - - -" > "$HYDRA_MAP"
+
+    branch_has_mapping "feature/x"
+    assert_success $? "Exact branch name is found"
+    branch_has_mapping "feature.x"
+    assert_failure $? "Regex-like branch name does not match a different branch"
+
+    cleanup_env
+}
+
 echo "Running maintenance.sh unit tests..."
 echo "================================"
 test_count_stale_locks_mkdir_format
 test_clean_dead_mappings_cleans_messages
+test_branch_has_mapping_matches_literal_branch
 echo "================================"
 echo "Test Results:"
 echo "Total:  $test_count"
