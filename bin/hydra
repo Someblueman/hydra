@@ -141,7 +141,24 @@ _load_libs_for_cmd() {
             _load_lib profiles
             _load_lib lifecycle
             _load_lib notify
+            _load_lib operations
             _load_lib cmd_evidence
+            ;;
+        exec|diff|review|provenance)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib operations
+            _load_lib cmd_operations
             ;;
         spawn)
             _load_lib output
@@ -158,6 +175,7 @@ _load_libs_for_cmd() {
             _load_lib profiles
             _load_lib lifecycle
             _load_lib notify
+            _load_lib operations
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
@@ -175,6 +193,7 @@ _load_libs_for_cmd() {
             _load_lib identity
             _load_lib state_v2
             _load_lib lifecycle
+            _load_lib operations
             _load_lib layout
             _load_lib github
             _load_lib cmd_session
@@ -391,6 +410,10 @@ Commands:
   adapter ingest    Ingest a canonical provider-neutral adapter event
   resume <head>     Create a new instance using durable resume metadata
   notify            Configure rate-limited local lifecycle notifications
+  exec              Run an out-of-band command in selected worktrees
+  diff <head>       Show changes from the recorded base reference
+  review <head>     Summarize Git review evidence from the recorded base
+  provenance <head> Show recorded task, profile, version, and trust provenance
   list              List all active Hydra heads
                     Options:
                       -g, --group <name>       Filter by group
@@ -552,6 +575,22 @@ main() {
         notify)
             shift
             cmd_notify "$@"
+            ;;
+        exec)
+            shift
+            cmd_exec "$@"
+            ;;
+        diff)
+            shift
+            cmd_diff "$@"
+            ;;
+        review)
+            shift
+            cmd_review "$@"
+            ;;
+        provenance)
+            shift
+            cmd_provenance "$@"
             ;;
         list)
             shift

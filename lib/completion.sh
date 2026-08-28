@@ -16,7 +16,7 @@ _hydra_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    commands="spawn init agent capabilities path lifecycle outcome wait adapter resume notify list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
+    commands="spawn init agent capabilities path lifecycle outcome wait adapter resume notify exec diff review provenance list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
     
     case "${prev}" in
@@ -126,9 +126,15 @@ _hydra_completion() {
     if [[ "${COMP_WORDS[@]}" =~ list ]]; then
         case "${cur}" in
             -*)
-                COMPREPLY=($(compgen -W "--json --deps --no-pr-status --refresh-pr-status" -- ${cur}))
+                COMPREPLY=($(compgen -W "--json --deps --git --no-pr-status --refresh-pr-status" -- ${cur}))
                 return 0
                 ;;
+        esac
+    fi
+
+    if [[ "${COMP_WORDS[@]}" =~ exec ]]; then
+        case "${cur}" in
+            -*) COMPREPLY=($(compgen -W "--branch --group --all --jobs --timeout --json --shell --allow-shell" -- ${cur})); return 0 ;;
         esac
     fi
 
@@ -218,8 +224,26 @@ _hydra() {
                     _arguments \
                         '--json[Output in JSON format]' \
                         '--deps[Show dependency tree]' \
+                        '--git[Show Git evidence from the recorded base]' \
                         '--no-pr-status[Skip fetching PR status]' \
                         '--refresh-pr-status[Force refresh PR status cache]'
+                    ;;
+                exec)
+                    _arguments \
+                        '*--branch[Select a head]:branch:_hydra_sessions' \
+                        '--group[Select a group]:group:' \
+                        '--all[Select all heads]' \
+                        '--jobs[Maximum parallel commands]:jobs:(1 2 4 8 16)' \
+                        '--timeout[Per-command timeout in seconds]:seconds:' \
+                        '--json[Output versioned JSON]' \
+                        '--shell[Execute an explicitly trusted shell string]:command:' \
+                        '--allow-shell[Acknowledge shell-string execution]'
+                    ;;
+                diff)
+                    _arguments '--stat[Show diff statistics]' '--name-only[Show changed paths]' '--json[Output versioned JSON]' '1:branch:_hydra_sessions'
+                    ;;
+                review|provenance)
+                    _arguments '--json[Output versioned JSON]' '1:branch:_hydra_sessions'
                     ;;
                 template)
                     _arguments '1:subcommand:(list create show edit delete)'
@@ -264,6 +288,10 @@ _hydra_commands() {
         'adapter:Ingest provider-neutral lifecycle events'
         'resume:Resume a head as a new instance'
         'notify:Configure lifecycle notifications'
+        'exec:Run a bounded command across selected worktrees'
+        'diff:Show changes from the recorded base reference'
+        'review:Summarize Git review evidence'
+        'provenance:Show recorded head provenance'
         'list:List all active Hydra heads'
         'switch:Switch to a different head (interactive)'
         'kill:Remove a worktree and its tmux session'
@@ -339,6 +367,10 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'wait' -d 'Wait for durable l
 complete -c hydra -f -n '__fish_use_subcommand' -a 'adapter' -d 'Ingest provider-neutral lifecycle events'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'resume' -d 'Resume a head as a new instance'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'notify' -d 'Configure lifecycle notifications'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'exec' -d 'Run a bounded command across selected worktrees'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'diff' -d 'Show changes from the recorded base reference'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'review' -d 'Summarize Git review evidence'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'provenance' -d 'Show recorded head provenance'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'list' -d 'List all active Hydra heads'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'switch' -d 'Switch to a different head (interactive)'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'kill' -d 'Remove a worktree and its tmux session'
@@ -391,8 +423,22 @@ complete -c hydra -f -n '__fish_seen_subcommand_from spawn; and not __fish_seen_
 # Complete list command
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l json -d 'Output in JSON format'
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l deps -d 'Show dependency tree'
+complete -c hydra -f -n '__fish_seen_subcommand_from list' -l git -d 'Show Git evidence from the recorded base'
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l no-pr-status -d 'Skip fetching PR status'
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l refresh-pr-status -d 'Force refresh PR status cache'
+
+# Complete exec and Git evidence commands
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l branch -d 'Select a head'
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l group -d 'Select a group'
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l all -d 'Select all heads'
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l jobs -d 'Maximum parallel commands' -a '1 2 4 8 16'
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l timeout -d 'Per-command timeout in seconds'
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l json -d 'Output versioned JSON'
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l shell -d 'Execute an explicitly trusted shell string'
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l allow-shell -d 'Acknowledge shell-string execution'
+complete -c hydra -f -n '__fish_seen_subcommand_from diff' -l stat -d 'Show diff statistics'
+complete -c hydra -f -n '__fish_seen_subcommand_from diff' -l name-only -d 'Show changed paths'
+complete -c hydra -f -n '__fish_seen_subcommand_from diff review provenance' -l json -d 'Output versioned JSON'
 
 # Complete template command
 complete -c hydra -f -n '__fish_seen_subcommand_from template' -a 'list create show edit delete'

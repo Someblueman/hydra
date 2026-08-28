@@ -168,6 +168,11 @@ cmd_resume() {
         tmux kill-session -t "$_cr_session" 2>/dev/null || true
         return 1
     fi
+    provenance_capture_instance "$_cr_branch" resume "$_cr_recipe" || {
+        tmux kill-session -t "$_cr_session" 2>/dev/null || true
+        lifecycle_write_head_scalar "$_cr_branch" desired-state failed 2>/dev/null || true
+        return 1
+    }
     _cr_profile_field="$_cr_profile"
     [ "$_cr_profile_field" != none ] || _cr_profile_field=none
     add_mapping "$_cr_branch" "$_cr_session" "$_cr_profile_field" \

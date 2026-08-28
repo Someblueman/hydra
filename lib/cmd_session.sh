@@ -10,6 +10,7 @@ cmd_list() {
     show_deps=""
     no_pr_status=""
     refresh_pr_status=""
+    show_git=""
     while [ $# -gt 0 ]; do
         case "$1" in
             -g|--group)
@@ -37,9 +38,13 @@ cmd_list() {
                 refresh_pr_status="1"
                 shift
                 ;;
+            --git)
+                show_git="1"
+                shift
+                ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra list [-g|--group <name>] [--groups] [--json] [--deps] [--no-pr-status] [--refresh-pr-status]" >&2
+                echo "Usage: hydra list [-g|--group <name>] [--groups] [--json] [--deps] [--git] [--no-pr-status] [--refresh-pr-status]" >&2
                 exit 1
                 ;;
             *)
@@ -186,7 +191,16 @@ cmd_list() {
 
             # Build JSON object
             lifecycle_snapshot "$branch"
-            printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s, "deps": %s, "pr": %s, "pr_status": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s}\n' \
+            git_json=null
+            if [ -n "$show_git" ] && [ -n "$LIFECYCLE_SNAPSHOT_INSTANCE" ]; then
+                _clg_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
+                _clg_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref" 2>/dev/null || true)"
+                if [ -d "$_clg_worktree" ] && [ -n "$_clg_base" ]; then
+                    operations_git_counts "$_clg_worktree" "$_clg_base"
+                    git_json="{\"base_ref\":\"$_clg_base\",\"ahead\":$OPERATIONS_AHEAD,\"behind\":$OPERATIONS_BEHIND,\"dirty_paths\":$OPERATIONS_DIRTY}"
+                fi
+            fi
+            printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s, "deps": %s, "pr": %s, "pr_status": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s, "git": %s}\n' \
                 "$(json_escape "$branch")" \
                 "$(json_escape "$session")" \
                 "$ai_json" \
@@ -204,7 +218,8 @@ cmd_list() {
                 "$(json_escape "$LIFECYCLE_SNAPSHOT_OBSERVED")" \
                 "$(json_escape "$LIFECYCLE_SNAPSHOT_CONFIDENCE")" \
                 "$(json_escape "$LIFECYCLE_SNAPSHOT_LIVENESS")" \
-                "$LIFECYCLE_SNAPSHOT_COMPLETE" >> "$tmpjson"
+                "$LIFECYCLE_SNAPSHOT_COMPLETE" \
+                "$git_json" >> "$tmpjson"
         done < "$HYDRA_MAP"
 
         # Output JSON
@@ -293,6 +308,16 @@ cmd_list() {
             # Check if session still exists (use snapshot loaded above)
             lifecycle_snapshot "$branch"
             status_line="$status_line [declared: ${LIFECYCLE_SNAPSHOT_OUTCOME:-none}] [observed: $LIFECYCLE_SNAPSHOT_OBSERVED/$LIFECYCLE_SNAPSHOT_CONFIDENCE] [live: $LIFECYCLE_SNAPSHOT_LIVENESS]"
+            if [ -n "$show_git" ] && [ -n "$LIFECYCLE_SNAPSHOT_INSTANCE" ]; then
+                _clg_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
+                _clg_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref" 2>/dev/null || true)"
+                if [ -d "$_clg_worktree" ] && [ -n "$_clg_base" ]; then
+                    operations_git_counts "$_clg_worktree" "$_clg_base"
+                    status_line="$status_line [git: +$OPERATIONS_AHEAD/-$OPERATIONS_BEHIND dirty=$OPERATIONS_DIRTY]"
+                else
+                    status_line="$status_line [git: unavailable]"
+                fi
+            fi
             if tmux_snapshot_has_session "$session"; then
                 # Check if it's the current session
                 if [ "$session" = "$current_session" ]; then

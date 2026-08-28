@@ -309,6 +309,14 @@ spawn_single() {
         spawn_rollback_session "$session" "$branch" "$worktree_path"
         return 1
     }
+    provenance_capture_head "$branch" || {
+        spawn_rollback_session "$session" "$branch" "$worktree_path"
+        return 1
+    }
+    provenance_capture_instance "$branch" launch "$launch_command" || {
+        spawn_rollback_session "$session" "$branch" "$worktree_path"
+        return 1
+    }
 
     tmux set-environment -t "$session" HYDRA_PROJECT_ID "$project_id" 2>/dev/null || true
     tmux set-environment -t "$session" HYDRA_HEAD_ID "$head_id" 2>/dev/null || true
