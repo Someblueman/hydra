@@ -212,9 +212,8 @@ Per-head profile, task, identity, worktree path, instance, and lifecycle event a
 stored in project-scoped state v2. See [profiles](docs/PROFILES.md),
 [state](docs/STATE.md), [events](docs/EVENTS.md), and
 [automation](docs/AUTOMATION.md). Security, out-of-band execution, provenance, and
-release evidence are documented in [security](docs/SECURITY.md),
-[operations](docs/OPERATIONS.md), [provenance](docs/PROVENANCE.md), and
-[release evidence](docs/RELEASE_EVIDENCE.md).
+related contracts are documented in [security](docs/SECURITY.md),
+[operations](docs/OPERATIONS.md), and [provenance](docs/PROVENANCE.md).
 
 ## YAML Config (optional)
 

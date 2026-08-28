@@ -711,9 +711,6 @@ semantics using the shell implementation first.
 - A task -> spawn -> handoff -> declared outcome -> resume or teardown scenario has
   an inspectable event and provenance history.
 
-Reproducible gate-to-test mapping and the exact lifecycle scenario are published in
-[`RELEASE_EVIDENCE.md`](RELEASE_EVIDENCE.md).
-
 #### Deferred
 
 - All C code, native TUI work, general workflows, automated integration, and fleet

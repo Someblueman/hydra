@@ -94,10 +94,8 @@ make lint
 make test
 ```
 
-The full gate-to-test mapping and lifecycle scenario are in
-[`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md). Security, automation,
-operations, provenance, state, and lifecycle contracts are documented under
-[`docs/`](docs/).
+Security, automation, operations, provenance, state, and lifecycle contracts are
+documented under [`docs/`](docs/).
 
 ## Deferred
 
