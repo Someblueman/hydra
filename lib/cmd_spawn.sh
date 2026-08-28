@@ -22,6 +22,7 @@ cmd_spawn() {
     task_source=""
     prompt_file=""
     use_issue_body=""
+    completion_policy=declared-done
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -68,6 +69,12 @@ cmd_spawn() {
                 use_issue_body="1"
                 task_source="issue"
                 shift
+                ;;
+            --completion-policy)
+                [ $# -ge 2 ] || { echo "Error: --completion-policy requires declared-done, observed-exit-zero, or either" >&2; exit 1; }
+                completion_policy="$2"
+                case "$completion_policy" in declared-done|observed-exit-zero|either) ;; *) echo "Error: invalid completion policy '$completion_policy'" >&2; exit 1 ;; esac
+                shift 2
                 ;;
             --agents)
                 shift
@@ -269,7 +276,7 @@ cmd_spawn() {
     fi
 
     if [ -n "$dry_run" ]; then
-        spawn_dry_run "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$pr_num" "$template_name" "$task_text"
+        spawn_dry_run "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$pr_num" "$template_name" "$task_text" "$completion_policy"
         return $?
     fi
 
@@ -358,7 +365,7 @@ cmd_spawn() {
         spawn_pr_num="$pr_num"
     fi
 
-    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num" "$template_name" "$task_text")"; then
+    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num" "$template_name" "$task_text" "$completion_policy")"; then
         # Handle --pr-new: create a draft PR after spawn
         if [ -n "$pr_new" ]; then
             _load_lib github
@@ -468,83 +475,37 @@ cmd_queue() {
 }
 
 cmd_regenerate() {
-    echo "Regenerating tmux sessions for existing worktrees..."
-    
-    # Best-effort cleanup of stale session-name locks
+    echo "Regenerating dead heads as new lifecycle instances..."
     cleanup_stale_locks 2>/dev/null || true
-
-    # Get repository root
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        echo "Error: Not in a git repository" >&2
-        echo "Next: cd into an existing git repo, or create a throwaway repo (see README Quick Start)" >&2
-        return 1
+    if { [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; } && \
+       ! hydra_get_project_id >/dev/null 2>&1; then
+        echo "No Hydra heads to regenerate"
+        return 0
     fi
-    
-    repo_root="$(get_repo_root)" || return 1
-    
-    # Find all hydra worktrees via git worktree list
+    hydra_get_project_id >/dev/null 2>&1 || {
+        echo "Error: project is not initialized; run hydra init first" >&2
+        return 1
+    }
     regenerated=0
     skipped=0
-    
-    while IFS='	' read -r branch dir; do
-        [ -z "$branch" ] || [ -z "$dir" ] && continue
-        
-        # Check if session already exists
-        existing_session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
-        if [ -n "$existing_session" ] && tmux_session_exists "$existing_session"; then
-            echo "Session already exists for '$branch', skipping..."
+    failed=0
+    while IFS=' ' read -r branch session _ai _group _timestamp _deps _pr; do
+        [ -n "$branch" ] || continue
+        if [ -n "$session" ] && tmux_session_exists "$session"; then
+            echo "Session already exists for '$branch'; skipping"
             skipped=$((skipped + 1))
             continue
         fi
-        
-        # Generate session name
-        session="$(generate_session_name "$branch")"
-        
-        # Create session
-        echo "Creating session '$session' for branch '$branch'..."
-        if create_session "$session" "$dir"; then
-            # Preserve any stored AI tool for this branch
-            stored_ai="$(get_ai_for_branch "$branch" 2>/dev/null || true)"
-            stored_group="$(get_group_for_branch "$branch" 2>/dev/null || true)"
-            stored_ts="$(get_timestamp_for_branch "$branch" 2>/dev/null || true)"
-            stored_deps="$(get_deps_for_branch "$branch" 2>/dev/null || true)"
-            stored_pr="$(get_pr_for_branch "$branch" 2>/dev/null || true)"
-            add_mapping "$branch" "$session" "$stored_ai" "$stored_group" \
-                "${stored_ts:-}" "$stored_deps" "$stored_pr"
+        if cmd_resume "$branch"; then
             regenerated=$((regenerated + 1))
-            # Release any reserved session name lock
-            release_session_lock "$session" 2>/dev/null || true
-            # Apply YAML config if available; else apply custom/built-in default
-            repo_root_for_dir="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || dirname "$dir")"
-            if [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$dir" "$repo_root_for_dir" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
-                apply_yaml_config "$cfgpath" "$session" "$dir" "$repo_root_for_dir"
-            else
-                apply_custom_layout_or_default "default" "$session" "$dir" "$repo_root_for_dir"
-                # Optionally run startup commands on regenerate only if explicitly enabled
-                if [ -n "${HYDRA_REGENERATE_RUN_STARTUP:-}" ]; then
-                    run_startup_commands "$session" "$dir" "$repo_root_for_dir"
-                fi
-            fi
-            # Optionally auto-launch stored AI tool in the regenerated session
-            if [ -n "$stored_ai" ]; then
-                if validate_ai_command "$stored_ai"; then
-                    echo "Starting $stored_ai in session '$session'..." >&2
-                    send_keys_to_session "$session" "$stored_ai"
-                else
-                    echo "Warning: Stored AI tool '$stored_ai' is invalid; skipping launch" >&2
-                fi
-            fi
         else
-            echo "Failed to create session for '$branch'" >&2
-            # Release any reserved session name lock
-            release_session_lock "$session" 2>/dev/null || true
+            failed=$((failed + 1))
         fi
-    done <<EOF
-$(list_hydra_worktrees "$repo_root")
-EOF
-    
+    done < "$HYDRA_MAP"
     echo ""
     echo "Regeneration complete:"
     echo "  Created: $regenerated"
     echo "  Skipped: $skipped"
+    echo "  Failed: $failed"
+    [ "$failed" -eq 0 ]
 }

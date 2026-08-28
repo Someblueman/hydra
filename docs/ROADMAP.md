@@ -649,17 +649,17 @@ semantics using the shell implementation first.
 - [x] Namespace state and worktree identity by project.
 - [x] Implement versioned JSONL events with verify, tail, filter, retention, and
       repair behavior.
-- [ ] Implement instance-scoped declared outcomes, observed status, liveness, and
+- [x] Implement instance-scoped declared outcomes, observed status, liveness, and
       explicit completion policies.
-- [ ] Make dependencies name the evidence or state they require instead of treating
+- [x] Make dependencies name the evidence or state they require instead of treating
       session disappearance as success.
-- [ ] Add `hydra wait` over durable state, using `tmux wait-for` only as an optional
+- [x] Add `hydra wait` over durable state, using `tmux wait-for` only as an optional
       wake-up accelerator with rechecks and timeouts.
 - [x] Add agent profiles with launch, prompt, resume, environment, capability, and
       lifecycle-adapter declarations.
-- [ ] Ship capability-probed hook adapters only for verified agent surfaces; all
+- [x] Ship capability-probed hook adapters only for verified agent surfaces; all
       adapters translate into the provider-neutral Hydra lifecycle/event schema.
-- [ ] Add one generic adapter-ingest command that validates structured stdin,
+- [x] Add one generic adapter-ingest command that validates structured stdin,
       correlates the active instance, and emits generic lifecycle events.
 - [x] Add `hydra agent list`, `show`, `doctor`, and `init`, plus
       `hydra capabilities --json` for agents and automation.
@@ -671,15 +671,15 @@ semantics using the shell implementation first.
       never silently default to an unavailable agent executable.
 - [x] Add task injection through `spawn --prompt`, `--prompt-file`, and issue-body
       input, recording the resolved task in head state.
-- [ ] Add durable resume metadata plus `hydra resume`; regenerate creates a new
+- [x] Add durable resume metadata plus `hydra resume`; regenerate creates a new
       instance while preserving head history.
-- [ ] Add policy-controlled pane history, archival, and teardown behavior with size,
+- [x] Add policy-controlled pane history, archival, and teardown behavior with size,
       retention, redaction, and permission controls.
-- [ ] Stream bootstrap/setup output, export explicit non-secret `HYDRA_*` identity
+- [x] Stream bootstrap/setup output, export explicit non-secret `HYDRA_*` identity
       and path variables, and support dry-run plus pre/post teardown hooks.
-- [ ] Add typed messages and safe-point steering with delivery receipts; inbox-only
+- [x] Add typed messages and safe-point steering with delivery receipts; inbox-only
       remains the universal fallback.
-- [ ] Add rate-limited local notification sinks for named lifecycle events without
+- [x] Add rate-limited local notification sinks for named lifecycle events without
       requiring the TUI to be running.
 - [ ] Add `hydra exec` for out-of-band commands across selected worktrees with
       bounded parallelism, captured results, and explicit trust behavior.

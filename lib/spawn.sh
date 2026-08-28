@@ -12,6 +12,14 @@ spawn_rollback_session() {
     _branch="$2"
     _worktree_path="$3"
 
+    if [ -n "$_branch" ] && command -v lifecycle_load_head >/dev/null 2>&1 && \
+       lifecycle_load_head "$_branch" >/dev/null 2>&1; then
+        lifecycle_write_head_scalar "$_branch" desired-state failed 2>/dev/null || true
+        lifecycle_set_observed "$_branch" failed hydra exact 2>/dev/null || true
+        event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" \
+            lifecycle.spawn-failed hydra local '{}' >/dev/null 2>&1 || true
+    fi
+
     if [ -n "$_session" ]; then
         kill_session "$_session" 2>/dev/null || true
         release_session_lock "$_session" 2>/dev/null || true
@@ -107,6 +115,7 @@ spawn_dry_run() {
     _sdr_pr="${6:--}"
     _sdr_template="${7:--}"
     _sdr_task="${8:-}"
+    _sdr_policy="${9:-declared-done}"
     _sdr_project="$(hydra_get_project_id 2>/dev/null)" || {
         echo "Error: project is not initialized" >&2
         echo "Next: hydra init --profile $_sdr_profile   or   hydra init --no-agent" >&2
@@ -147,6 +156,7 @@ spawn_dry_run() {
     echo "  pr: ${_sdr_pr:--}"
     echo "  template: ${_sdr_template:--}"
     echo "  task_bytes: $(printf '%s' "$_sdr_task" | LC_ALL=C wc -c | tr -d ' ') (content redacted)"
+    echo "  completion_policy: $_sdr_policy"
     _sdr_config="$(project_repo_config 2>/dev/null || true)"
     if [ -f "$_sdr_config" ]; then
         if project_is_trusted; then
@@ -178,6 +188,7 @@ spawn_single() {
     pr_number="${6:-}"
     template="${7:-}"
     task="${8:-}"
+    completion_policy="${9:-declared-done}"
 
     # Wait for dependencies if specified
     if [ -n "$deps" ] && [ "$deps" != "-" ]; then
@@ -211,6 +222,11 @@ spawn_single() {
         project_id="$(hydra_ensure_project_id)" || return 1
     fi
     project_activate_state_v2 "$project_id" || return 1
+    if state_v2_find_head_by_branch "$project_id" "$branch" >/dev/null 2>&1; then
+        echo "Error: durable head state already exists for '$branch'" >&2
+        echo "Next: use 'hydra resume $branch' to create a new instance" >&2
+        return 1
+    fi
     head_id="$(hydra_new_id head "$project_id|$branch")" || return 1
     instance_id="$(hydra_new_id instance "$head_id|$branch")" || return 1
     worktree_path="$(project_worktree_path "$project_id" "$head_id")" || return 1
@@ -289,6 +305,10 @@ spawn_single() {
     }
     head_id="$committed_head"
     head_dir="$(state_v2_head_dir "$project_id" "$head_id")" || return 1
+    lifecycle_write_head_scalar "$branch" completion-policy "$completion_policy" || {
+        spawn_rollback_session "$session" "$branch" "$worktree_path"
+        return 1
+    }
 
     tmux set-environment -t "$session" HYDRA_PROJECT_ID "$project_id" 2>/dev/null || true
     tmux set-environment -t "$session" HYDRA_HEAD_ID "$head_id" 2>/dev/null || true
@@ -344,6 +364,11 @@ spawn_single() {
             return 1
         fi
     fi
+
+    lifecycle_set_observed "$branch" running hydra exact || {
+        spawn_rollback_session "$session" "$branch" "$worktree_path"
+        return 1
+    }
 
     # Run post-spawn hook (best-effort)
     run_hook post-spawn "$worktree_path" "$repo_root" "$session" "$branch"

@@ -87,6 +87,11 @@ _kill_teardown() {
     _td_branch="$1"
     _td_session="$2"
 
+    if command -v lifecycle_prepare_teardown >/dev/null 2>&1; then
+        lifecycle_prepare_teardown "$_td_branch" "$_td_session" \
+            "${HYDRA_TEARDOWN_TRANSCRIPT_POLICY:-none}" || return 1
+    fi
+
     # Hold the map lock before any irreversible tmux teardown so lock
     # contention cannot destroy the session while leaving the mapping.
     if ! _lock_state_map; then
@@ -125,6 +130,10 @@ _kill_teardown() {
 
     if command -v cleanup_messages_for_branch >/dev/null 2>&1; then
         cleanup_messages_for_branch "$_td_branch"
+    fi
+
+    if command -v lifecycle_finish_teardown >/dev/null 2>&1; then
+        lifecycle_finish_teardown "$_td_branch" "$_td_session" || return 1
     fi
 
     return 0

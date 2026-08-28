@@ -52,7 +52,8 @@ get_message_lock() {
 ensure_message_dir() {
     branch="$1"
     msg_dir="$(get_message_dir "$branch")"
-    mkdir -p "$msg_dir/queue" "$msg_dir/archive" 2>/dev/null || return 1
+    mkdir -p "$msg_dir/queue" "$msg_dir/archive" "$msg_dir/metadata" "$msg_dir/receipts" 2>/dev/null || return 1
+    chmod 700 "$msg_dir" "$msg_dir/queue" "$msg_dir/archive" "$msg_dir/metadata" "$msg_dir/receipts" 2>/dev/null || true
     return 0
 }
 
@@ -61,12 +62,17 @@ ensure_message_dir() {
 # =============================================================================
 
 # Send a message to a session's queue
-# Usage: send_message <target_branch> <message> [sender_branch]
+# Usage: send_message <target_branch> <message> [sender_branch] [type] [delivery]
 # Returns: 0 on success, 1 on failure
 send_message() {
     target="$1"
     message="$2"
     sender="${3:-}"
+    msg_type="${4:-note}"
+    delivery="${5:-inbox}"
+
+    case "$msg_type" in note|request|steer|handoff|cancel) ;; *) echo "Error: unsupported message type '$msg_type'" >&2; return 1 ;; esac
+    case "$delivery" in inbox|safe-point) ;; *) echo "Error: delivery must be inbox or safe-point" >&2; return 1 ;; esac
 
     if [ -z "$target" ] || [ -z "$message" ]; then
         echo "Error: Target branch and message are required" >&2
@@ -91,13 +97,56 @@ send_message() {
     safe_sender="$(printf '%s' "$sender" | sed 's/[^a-zA-Z0-9_-]/_/g')"
     filename="${timestamp}_${safe_sender}_${hash}"
     msg_file="$msg_dir/queue/$filename"
+    meta_file="$msg_dir/metadata/$filename"
+    receipt_file="$msg_dir/receipts/$filename"
+    target_instance=""
+    if command -v hydra_get_project_id >/dev/null 2>&1 && command -v state_v2_find_head_by_branch >/dev/null 2>&1; then
+        _sm_project="$(hydra_get_project_id 2>/dev/null || true)"
+        _sm_head="$(state_v2_find_head_by_branch "$_sm_project" "$target" 2>/dev/null || true)"
+        if [ -n "$_sm_head" ]; then
+            _sm_head_dir="$(state_v2_head_dir "$_sm_project" "$_sm_head")"
+            target_instance="$(sed -n '1p' "$_sm_head_dir/current-instance" 2>/dev/null || true)"
+        fi
+    fi
 
     # Use atomic write via lock with retries
     _retries=0
     while [ "$_retries" -lt 5 ]; do
         if try_lock "$msg_lock" "message append"; then
-            printf '%s\n' "$message" > "$msg_file"
+            while [ -e "$msg_file" ] || [ -e "$meta_file" ] || [ -e "$receipt_file" ]; do
+                hash=$((hash + 1))
+                filename="${timestamp}_${safe_sender}_${hash}"
+                msg_file="$msg_dir/queue/$filename"
+                meta_file="$msg_dir/metadata/$filename"
+                receipt_file="$msg_dir/receipts/$filename"
+            done
+            _sm_body_tmp="$(mktemp_adjacent "$msg_file")" || { release_lock "$msg_lock"; return 1; }
+            _sm_meta_tmp="$(mktemp_adjacent "$meta_file")" || { rm -f "$_sm_body_tmp"; release_lock "$msg_lock"; return 1; }
+            _sm_receipt_tmp="$(mktemp_adjacent "$receipt_file")" || { rm -f "$_sm_body_tmp" "$_sm_meta_tmp"; release_lock "$msg_lock"; return 1; }
+            printf '%s\n' "$message" > "$_sm_body_tmp"
+            {
+                printf 'type=%s\n' "$msg_type"
+                printf 'delivery=%s\n' "$delivery"
+                printf 'sender=%s\n' "$sender"
+                printf 'target=%s\n' "$target"
+                printf 'target_instance=%s\n' "$target_instance"
+                printf 'queued_at=%s\n' "$timestamp"
+            } > "$_sm_meta_tmp"
+            {
+                printf 'status=queued\n'
+                printf 'updated_at=%s\n' "$timestamp"
+                printf 'target_instance=%s\n' "$target_instance"
+            } > "$_sm_receipt_tmp"
+            chmod 600 "$_sm_body_tmp" "$_sm_meta_tmp" "$_sm_receipt_tmp" 2>/dev/null || true
+            if ! atomic_replace "$meta_file" "$_sm_meta_tmp" || \
+               ! atomic_replace "$receipt_file" "$_sm_receipt_tmp" || \
+               ! atomic_replace "$msg_file" "$_sm_body_tmp"; then
+                rm -f "$_sm_body_tmp" "$_sm_meta_tmp" "$_sm_receipt_tmp"
+                release_lock "$msg_lock"
+                return 1
+            fi
             release_lock "$msg_lock"
+            printf '%s\n' "$filename"
             return 0
         fi
         _retries=$((_retries + 1))
@@ -118,6 +167,38 @@ send_message() {
 #   --peek    Don't remove messages after reading
 #   --archive Move to archive instead of delete
 # Returns: Messages on stdout (format: "FROM sender: message"), 0 if any, 1 if none
+_message_write_receipt_locked() {
+    _mwr_dir="$1"
+    _mwr_id="$2"
+    _mwr_status="$3"
+    _mwr_instance="$4"
+    case "$_mwr_status" in queued|delivered|stale) ;; *) return 1 ;; esac
+    _mwr_path="$_mwr_dir/receipts/$_mwr_id"
+    _mwr_tmp="$(mktemp_adjacent "$_mwr_path")" || return 1
+    printf 'status=%s\nupdated_at=%s\ntarget_instance=%s\n' \
+        "$_mwr_status" "$(date +%s)" "$_mwr_instance" > "$_mwr_tmp"
+    chmod 600 "$_mwr_tmp" 2>/dev/null || true
+    if ! atomic_replace "$_mwr_path" "$_mwr_tmp"; then
+        rm -f "$_mwr_tmp"
+        return 1
+    fi
+}
+
+message_write_receipt() {
+    _mwr_branch="$1"
+    _mwr_id="$2"
+    _mwr_status="$3"
+    _mwr_instance="$4"
+    _mwr_dir="$(get_message_dir "$_mwr_branch")"
+    _mwr_lock="$(get_message_lock "$_mwr_branch")"
+    acquire_lock "$_mwr_lock" "message receipt update" || return 1
+    if ! _message_write_receipt_locked "$_mwr_dir" "$_mwr_id" "$_mwr_status" "$_mwr_instance"; then
+        release_lock "$_mwr_lock"
+        return 1
+    fi
+    release_lock "$_mwr_lock"
+}
+
 recv_messages() {
     branch=""
     peek=0
@@ -157,6 +238,10 @@ recv_messages() {
     for msg_file in "$queue_dir"/*; do
         [ -f "$msg_file" ] || continue
 
+        msg_lock="$(get_message_lock "$branch")"
+        acquire_lock "$msg_lock" "message receive" || return 1
+        [ -f "$msg_file" ] || { release_lock "$msg_lock"; continue; }
+
         msg_count=$((msg_count + 1))
 
         # Parse filename: timestamp_sender_hash
@@ -164,9 +249,34 @@ recv_messages() {
         sender="${filename#*_}"
         sender="${sender%_*}"
 
-        # Read and output message
+        meta_file="$msg_dir/metadata/$filename"
+        msg_type="$(sed -n 's/^type=//p' "$meta_file" 2>/dev/null || true)"
+        delivery="$(sed -n 's/^delivery=//p' "$meta_file" 2>/dev/null || true)"
+        target_instance="$(sed -n 's/^target_instance=//p' "$meta_file" 2>/dev/null || true)"
+        msg_type="${msg_type:-note}"
+        delivery="${delivery:-inbox}"
+        current_instance=""
+        if command -v hydra_get_project_id >/dev/null 2>&1 && command -v state_v2_find_head_by_branch >/dev/null 2>&1; then
+            _rm_project="$(hydra_get_project_id 2>/dev/null || true)"
+            _rm_head="$(state_v2_find_head_by_branch "$_rm_project" "$branch" 2>/dev/null || true)"
+            if [ -n "$_rm_head" ]; then
+                _rm_head_dir="$(state_v2_head_dir "$_rm_project" "$_rm_head")"
+                current_instance="$(sed -n '1p' "$_rm_head_dir/current-instance" 2>/dev/null || true)"
+            fi
+        fi
+        if [ -n "$target_instance" ] && [ "$target_instance" != "$current_instance" ]; then
+            _message_write_receipt_locked "$msg_dir" "$filename" stale "$target_instance" || { release_lock "$msg_lock"; return 1; }
+            mv "$msg_file" "$msg_dir/archive/$filename" 2>/dev/null || rm -f "$msg_file"
+            release_lock "$msg_lock"
+            continue
+        fi
+
         message="$(cat "$msg_file")"
-        printf 'FROM %s: %s\n' "$sender" "$message"
+        if [ -f "$meta_file" ]; then
+            printf 'FROM %s [%s/%s]: %s\n' "$sender" "$msg_type" "$delivery" "$message"
+        else
+            printf 'FROM %s: %s\n' "$sender" "$message"
+        fi
 
         # Handle message cleanup
         if [ "$peek" -eq 0 ]; then
@@ -175,7 +285,11 @@ recv_messages() {
             else
                 rm -f "$msg_file"
             fi
+            if [ -f "$meta_file" ]; then
+                _message_write_receipt_locked "$msg_dir" "$filename" delivered "$current_instance" || { release_lock "$msg_lock"; return 1; }
+            fi
         fi
+        release_lock "$msg_lock"
     done
 
     if [ "$msg_count" -eq 0 ]; then
@@ -183,6 +297,32 @@ recv_messages() {
     fi
 
     return 0
+}
+
+message_receipts() {
+    _mr_branch="$1"
+    _mr_json="${2:-}"
+    _mr_dir="$(get_message_dir "$_mr_branch")"
+    if [ "$_mr_json" = --json ]; then
+        printf '{"schema_version":1,"ok":true,"command":"receipts","data":{"branch":"%s","receipts":[' "$(json_escape "$_mr_branch")"
+    fi
+    _mr_first=1
+    for _mr_file in "$_mr_dir"/receipts/*; do
+        [ -f "$_mr_file" ] || continue
+        _mr_id="$(basename "$_mr_file")"
+        _mr_status="$(sed -n 's/^status=//p' "$_mr_file")"
+        _mr_at="$(sed -n 's/^updated_at=//p' "$_mr_file")"
+        _mr_instance="$(sed -n 's/^target_instance=//p' "$_mr_file")"
+        if [ "$_mr_json" = --json ]; then
+            [ "$_mr_first" -eq 1 ] || printf ','
+            _mr_first=0
+            printf '{"message_id":"%s","status":"%s","updated_at":%s,"target_instance":%s}' \
+                "$(json_escape "$_mr_id")" "$(json_escape "$_mr_status")" "${_mr_at:-0}" "$(json_string_or_null "$_mr_instance")"
+        else
+            printf '%s %s instance=%s updated=%s\n' "$_mr_id" "$_mr_status" "${_mr_instance:-unknown}" "${_mr_at:-unknown}"
+        fi
+    done
+    [ "$_mr_json" != --json ] || printf ']}}\n'
 }
 
 # Count pending messages for a branch
@@ -259,7 +399,18 @@ cleanup_messages_for_branch() {
 
     msg_dir="$(get_message_dir "$branch")"
     if [ -d "$msg_dir" ]; then
-        rm -rf "$msg_dir" 2>/dev/null || true
+        case "$msg_dir" in
+            "$HYDRA_HOME"/state/v2/projects/*/heads/*/messages)
+                _cmb_lock="$(get_message_lock "$branch")"
+                acquire_lock "$_cmb_lock" "archive messages on teardown" || return 1
+                for _cmb_file in "$msg_dir"/queue/*; do
+                    [ -f "$_cmb_file" ] || continue
+                    mv "$_cmb_file" "$msg_dir/archive/" 2>/dev/null || true
+                done
+                release_lock "$_cmb_lock"
+                ;;
+            *) rm -rf "$msg_dir" 2>/dev/null || true ;;
+        esac
     fi
 
     return 0

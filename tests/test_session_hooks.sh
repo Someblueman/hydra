@@ -66,6 +66,8 @@ chmod +x .hydra/hooks/layout
 # Startup commands file (not asserting execution due to non-interactive)
 printf '%s\n' "echo from-startup" > .hydra/startup
 
+"$HYDRA_BIN" init --no-agent --trust >/dev/null 2>&1 || exit 1
+
 out="$("$HYDRA_BIN" spawn hooks-test 2>&1 || true)"
 assert_contains "$out" "Creating worktree for branch 'hooks-test'" "spawn started"
 assert_contains "$out" "Session 'hooks-test' created successfully" "spawn completed"

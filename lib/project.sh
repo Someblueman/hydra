@@ -19,7 +19,13 @@ project_write_host_value() {
     _pwhv_dir="$(project_host_dir)" || return 1
     mkdir -p "$_pwhv_dir" || return 1
     chmod 700 "$_pwhv_dir" 2>/dev/null || true
-    state_v2_write_scalar "$_pwhv_dir/$_pwhv_name" "$_pwhv_value"
+    _pwhv_lock="project_config_$(printf '%s' "$_pwhv_dir" | cksum | cut -d' ' -f1)"
+    acquire_lock "$_pwhv_lock" "project host configuration" || return 1
+    if ! state_v2_write_scalar "$_pwhv_dir/$_pwhv_name" "$_pwhv_value"; then
+        release_lock "$_pwhv_lock"
+        return 1
+    fi
+    release_lock "$_pwhv_lock"
 }
 
 project_repo_config() {
@@ -29,8 +35,21 @@ project_repo_config() {
 
 project_config_hash() {
     _pch_config="$(project_repo_config)" || return 1
-    [ -f "$_pch_config" ] || { printf '%s\n' none; return 0; }
-    hydra_hash < "$_pch_config"
+    _pch_dir="$(dirname "$_pch_config")"
+    [ -d "$_pch_dir" ] || { printf '%s\n' none; return 0; }
+    _pch_manifest="$(mktemp)" || return 1
+    find "$_pch_dir" -type f ! -name local.yml -print | sort | while IFS= read -r _pch_file; do
+        _pch_relative="${_pch_file#"$_pch_dir"/}"
+        case "$_pch_relative" in *'
+'*|*''*) exit 1 ;; esac
+        printf '%s %s\n' "$_pch_relative" "$(hydra_hash < "$_pch_file")"
+    done > "$_pch_manifest" || { rm -f "$_pch_manifest"; return 1; }
+    if [ -s "$_pch_manifest" ]; then
+        hydra_hash < "$_pch_manifest"
+    else
+        printf '%s\n' none
+    fi
+    rm -f "$_pch_manifest"
 }
 
 project_is_trusted() {

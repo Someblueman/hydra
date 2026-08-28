@@ -107,6 +107,14 @@ json_kv_null() {
     printf '"%s": null' "$1"
 }
 
+json_string_or_null() {
+    if [ -n "${1:-}" ]; then
+        printf '"%s"' "$(json_escape "$1")"
+    else
+        printf 'null'
+    fi
+}
+
 # Stable automation envelope for successful commands.
 # Usage: json_success <command> <data-json>
 json_success() {

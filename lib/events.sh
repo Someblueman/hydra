@@ -62,7 +62,12 @@ event_emit() {
     [ -f "$_ee_file" ] || : > "$_ee_file"
     _ee_lock="events_${_ee_project}_${_ee_head}"
     acquire_lock "$_ee_lock" "event append" || return 1
-    _ee_sequence="$(awk 'END { print NR + 1 }' "$_ee_file")"
+    _ee_last_sequence="$(tail -n 1 "$_ee_file" 2>/dev/null | sed -n 's/.*"sequence":\([0-9][0-9]*\).*/\1/p')"
+    if [ -n "$_ee_last_sequence" ]; then
+        _ee_sequence=$((_ee_last_sequence + 1))
+    else
+        _ee_sequence=1
+    fi
     _ee_id="$(hydra_new_id evt "$_ee_project|$_ee_head|$_ee_instance|$_ee_sequence")" || {
         release_lock "$_ee_lock"; return 1;
     }
@@ -76,6 +81,9 @@ event_emit() {
     fi
     printf '%s\n' "$_ee_line" >> "$_ee_file" || { release_lock "$_ee_lock"; return 1; }
     release_lock "$_ee_lock"
+    if command -v notify_event >/dev/null 2>&1; then
+        notify_event "$_ee_type" "$_ee_project" "$_ee_head" || true
+    fi
     printf '%s\n' "$_ee_id"
 }
 

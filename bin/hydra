@@ -127,6 +127,22 @@ _load_libs_for_cmd() {
             _load_lib profiles
             _load_lib cmd_lifecycle
             ;;
+        lifecycle|outcome|wait|adapter|resume|notify)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib notify
+            _load_lib cmd_evidence
+            ;;
         spawn)
             _load_lib output
             _load_lib paths
@@ -140,6 +156,8 @@ _load_libs_for_cmd() {
             _load_lib events
             _load_lib project
             _load_lib profiles
+            _load_lib lifecycle
+            _load_lib notify
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
@@ -154,6 +172,9 @@ _load_libs_for_cmd() {
             _load_lib locks
             _load_lib state
             _load_lib tmux
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib lifecycle
             _load_lib layout
             _load_lib github
             _load_lib cmd_session
@@ -167,6 +188,11 @@ _load_libs_for_cmd() {
             _load_lib state
             _load_lib identity
             _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib lifecycle
+            _load_lib notify
+            _load_lib hooks
             _load_lib messages
             _load_lib kill
             _load_lib limits
@@ -202,10 +228,18 @@ _load_libs_for_cmd() {
             _load_lib tmux
             _load_lib layout
             _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib notify
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
             _load_lib cmd_spawn
+            _load_lib cmd_evidence
             ;;
         doctor|cleanup)
             _load_lib paths
@@ -339,6 +373,7 @@ Commands:
                       --prompt <text>          Record and inject task text at launch
                       --prompt-file <path>     Read task text from a file
                       --issue-body             Use --issue body as task text
+                      --completion-policy <p>  declared-done, observed-exit-zero, or either
                       --agents <spec>          Mixed agents (e.g., "claude:2,aider:1")
                       -g, --group <name>       Assign to a group for bulk operations
                       --after <deps>           Wait for sessions to complete (e.g., "branch1,branch2")
@@ -350,6 +385,12 @@ Commands:
   agent             List, show, diagnose, or initialize agent profiles
   capabilities      Print machine-readable Hydra and agent capabilities
   path [<branch>]   Print the stored worktree path for a head
+  lifecycle <head>  Show declared outcome, observed status, and liveness
+  outcome <head>    Declare an instance-scoped outcome
+  wait <head>       Wait for durable lifecycle evidence
+  adapter ingest    Ingest a canonical provider-neutral adapter event
+  resume <head>     Create a new instance using durable resume metadata
+  notify            Configure rate-limited local lifecycle notifications
   list              List all active Hydra heads
                     Options:
                       -g, --group <name>       Filter by group
@@ -487,6 +528,30 @@ main() {
         path)
             shift
             cmd_path "$@"
+            ;;
+        lifecycle)
+            shift
+            cmd_lifecycle "$@"
+            ;;
+        outcome)
+            shift
+            cmd_outcome "$@"
+            ;;
+        wait)
+            shift
+            cmd_wait "$@"
+            ;;
+        adapter)
+            shift
+            cmd_adapter "$@"
+            ;;
+        resume)
+            shift
+            cmd_resume "$@"
+            ;;
+        notify)
+            shift
+            cmd_notify "$@"
             ;;
         list)
             shift

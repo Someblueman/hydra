@@ -173,9 +173,9 @@ test_is_dep_complete_no_session() {
     setup_test_env
     test_dir="$TEST_DIR"
 
-    # No sessions in map, so dependency is complete
+    # Missing durable state cannot satisfy a dependency.
     is_dep_complete "nonexistent-branch" 2>/dev/null
-    assert_success $? "is_dep_complete should return success (complete) for non-existent branch"
+    assert_failure $? "is_dep_complete should reject a non-existent branch"
 
     cleanup_test_env "$test_dir"
 }
@@ -190,21 +190,9 @@ test_is_dep_complete_with_mapping() {
     # Add a mapping (session won't actually exist, but mapping does)
     echo "active-branch active-session - - - - -" >> "$HYDRA_MAP"
 
-    # Branch has a mapping, so it depends on whether the session exists
-    # Since the tmux session won't exist in test, it should be considered complete
+    # A dead/missing tmux session is not lifecycle evidence.
     is_dep_complete "active-branch" 2>/dev/null
-    # This will return based on whether the tmux session exists
-    # In test environment (no tmux), session won't exist, so it's complete
-    exit_code=$?
-
-    if [ "$exit_code" -eq 0 ]; then
-        echo "[PASS] is_dep_complete returns complete for mapping with no actual session"
-        pass_count=$((pass_count + 1))
-    else
-        echo "[PASS] is_dep_complete returns incomplete for mapping (session check behavior)"
-        pass_count=$((pass_count + 1))
-    fi
-    test_count=$((test_count + 1))
+    assert_failure $? "is_dep_complete does not treat session disappearance as success"
 
     cleanup_test_env "$test_dir"
 }
@@ -248,7 +236,7 @@ test_check_deps_complete_nonexistent() {
 
     # Non-existent branches have no sessions, so they're complete
     check_deps_complete "nonexistent1,nonexistent2" 2>/dev/null
-    assert_success $? "check_deps_complete should succeed for non-existent branches (they're complete)"
+    assert_failure $? "check_deps_complete should keep non-existent branches pending"
 
     cleanup_test_env "$test_dir"
 }

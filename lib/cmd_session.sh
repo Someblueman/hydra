@@ -185,7 +185,8 @@ cmd_list() {
             fi
 
             # Build JSON object
-            printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s, "deps": %s, "pr": %s, "pr_status": %s}\n' \
+            lifecycle_snapshot "$branch"
+            printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s, "deps": %s, "pr": %s, "pr_status": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s}\n' \
                 "$(json_escape "$branch")" \
                 "$(json_escape "$session")" \
                 "$ai_json" \
@@ -197,7 +198,13 @@ cmd_list() {
                 "$is_current" \
                 "$deps_json" \
                 "$pr_json" \
-                "$pr_status_json" >> "$tmpjson"
+                "$pr_status_json" \
+                "$(json_string_or_null "$LIFECYCLE_SNAPSHOT_INSTANCE")" \
+                "$(json_string_or_null "$LIFECYCLE_SNAPSHOT_OUTCOME")" \
+                "$(json_escape "$LIFECYCLE_SNAPSHOT_OBSERVED")" \
+                "$(json_escape "$LIFECYCLE_SNAPSHOT_CONFIDENCE")" \
+                "$(json_escape "$LIFECYCLE_SNAPSHOT_LIVENESS")" \
+                "$LIFECYCLE_SNAPSHOT_COMPLETE" >> "$tmpjson"
         done < "$HYDRA_MAP"
 
         # Output JSON
@@ -284,6 +291,8 @@ cmd_list() {
             fi
 
             # Check if session still exists (use snapshot loaded above)
+            lifecycle_snapshot "$branch"
+            status_line="$status_line [declared: ${LIFECYCLE_SNAPSHOT_OUTCOME:-none}] [observed: $LIFECYCLE_SNAPSHOT_OBSERVED/$LIFECYCLE_SNAPSHOT_CONFIDENCE] [live: $LIFECYCLE_SNAPSHOT_LIVENESS]"
             if tmux_snapshot_has_session "$session"; then
                 # Check if it's the current session
                 if [ "$session" = "$current_session" ]; then
@@ -375,6 +384,7 @@ cmd_kill() {
     kill_all=false
     force=false
     kill_group=""
+    transcript_policy=none
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -385,6 +395,12 @@ cmd_kill() {
             --force)
                 force=true
                 shift
+                ;;
+            --transcript)
+                [ $# -ge 2 ] || { echo "Error: --transcript requires none, redacted, or full" >&2; return 1; }
+                transcript_policy="$2"
+                case "$transcript_policy" in none|redacted|full) ;; *) echo "Error: invalid transcript policy '$transcript_policy'" >&2; return 1 ;; esac
+                shift 2
                 ;;
             -g|--group)
                 shift
@@ -412,6 +428,8 @@ cmd_kill() {
                 ;;
         esac
     done
+    HYDRA_TEARDOWN_TRANSCRIPT_POLICY="$transcript_policy"
+    export HYDRA_TEARDOWN_TRANSCRIPT_POLICY
 
     # Check mutual exclusivity
     if [ "$kill_all" = true ] && [ -n "$branch" ]; then
@@ -464,7 +482,7 @@ cmd_kill() {
         echo "Killing $count sessions in group '$kill_group'..."
         echo "$mappings" | while IFS=' ' read -r b _s _a _g; do
             echo "  Killing $b..."
-            kill_single_head "$b" 2>/dev/null || true
+            kill_single_head "$b" "$_s" 2>/dev/null || true
         done
         echo "Done"
         return 0
@@ -578,12 +596,19 @@ cmd_status() {
                     ai_json="\"$(json_escape "$ai")\""
                 fi
 
-                printf '{"branch": "%s", "session": "%s", "ai": %s, "status": "%s", "duration_seconds": %s}\n' \
+                lifecycle_snapshot "$branch"
+                printf '{"branch": "%s", "session": "%s", "ai": %s, "status": "%s", "duration_seconds": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s}\n' \
                     "$(json_escape "$branch")" \
                     "$(json_escape "$session")" \
                     "$ai_json" \
                     "$status" \
-                    "$duration_secs" >> "$tmpjson"
+                    "$duration_secs" \
+                    "$(json_string_or_null "$LIFECYCLE_SNAPSHOT_INSTANCE")" \
+                    "$(json_string_or_null "$LIFECYCLE_SNAPSHOT_OUTCOME")" \
+                    "$(json_escape "$LIFECYCLE_SNAPSHOT_OBSERVED")" \
+                    "$(json_escape "$LIFECYCLE_SNAPSHOT_CONFIDENCE")" \
+                    "$(json_escape "$LIFECYCLE_SNAPSHOT_LIVENESS")" \
+                    "$LIFECYCLE_SNAPSHOT_COMPLETE" >> "$tmpjson"
             done < "$HYDRA_MAP"
         fi
 
@@ -665,11 +690,13 @@ cmd_status() {
                 fi
             fi
 
+            lifecycle_snapshot "$branch"
+            lifecycle_info="[declared: ${LIFECYCLE_SNAPSHOT_OUTCOME:-none}] [observed: $LIFECYCLE_SNAPSHOT_OBSERVED/$LIFECYCLE_SNAPSHOT_CONFIDENCE] [live: $LIFECYCLE_SNAPSHOT_LIVENESS]"
             if tmux_snapshot_has_session "$session"; then
-                echo "  [OK] $branch -> $session $info"
+                echo "  [OK] $branch -> $session $info $lifecycle_info"
                 active=$((active + 1))
             else
-                echo "  [DEAD] $branch -> $session $info"
+                echo "  [DEAD] $branch -> $session $info $lifecycle_info"
                 dead=$((dead + 1))
             fi
         done < "$HYDRA_MAP"
@@ -689,4 +716,3 @@ cmd_status() {
 cmd_cycle_layout() {
     cycle_layout
 }
-

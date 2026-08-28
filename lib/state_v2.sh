@@ -175,6 +175,11 @@ state_v2_create_head() {
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/instance-id" "$_sv2ch_instance" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/session" "$_sv2ch_session" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/started-at" "$_sv2ch_created" || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/observed-status" starting || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/observed-source" hydra || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/observed-confidence" exact || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/observed-at" "$_sv2ch_created" || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/observed-exit-code" "" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/provider-session-id" "$_sv2ch_provider_session"; then
         rm -rf "$_sv2ch_tmp"
         release_lock "$_sv2ch_lock"

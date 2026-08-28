@@ -64,11 +64,13 @@ cmd_init() {
     [ -f "$_ci_exclude" ] || : > "$_ci_exclude"
     grep -Fqx '.hydra/local.yml' "$_ci_exclude" 2>/dev/null || printf '%s\n' '.hydra/local.yml' >> "$_ci_exclude"
     _ci_local="$_ci_config_dir/local.yml"
+    _ci_local_tmp="$(mktemp_adjacent "$_ci_local")" || return 1
     {
         echo "version: 1"
         echo "worktree_root: $_ci_worktree_root"
-    } > "$_ci_local"
-    chmod 600 "$_ci_local" 2>/dev/null || true
+    } > "$_ci_local_tmp"
+    chmod 600 "$_ci_local_tmp" 2>/dev/null || true
+    atomic_replace "$_ci_local" "$_ci_local_tmp" || return 1
 
     if [ "$_ci_trust" -eq 1 ]; then
         project_set_trusted || return 1

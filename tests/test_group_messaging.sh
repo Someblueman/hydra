@@ -238,6 +238,24 @@ test_count_messages() {
     cleanup_test_env
 }
 
+test_typed_message_receipts() {
+    echo "Testing typed safe-point messages and receipts..."
+    setup_test_env
+
+    message_id="$(send_message target "Pause after the current edit" sender steer safe-point)"
+    assert_success $? "typed safe-point message queues"
+    msg_dir="$(get_message_dir target)"
+    assert_contains "$(cat "$msg_dir/metadata/$message_id")" "type=steer" "message metadata records type"
+    assert_contains "$(cat "$msg_dir/metadata/$message_id")" "delivery=safe-point" "message metadata records safe-point delivery"
+    assert_contains "$(cat "$msg_dir/receipts/$message_id")" "status=queued" "queued receipt is durable"
+
+    output="$(recv_messages target)"
+    assert_contains "$output" "[steer/safe-point]" "safe-point message is delivered only through inbox receive"
+    assert_contains "$(cat "$msg_dir/receipts/$message_id")" "status=delivered" "receive writes a delivery receipt"
+
+    cleanup_test_env
+}
+
 # =============================================================================
 # Group Workflow Tests (CLI validation only - no tmux required)
 # =============================================================================
@@ -319,6 +337,7 @@ test_ensure_message_dir
 test_send_message
 test_recv_messages
 test_count_messages
+test_typed_message_receipts
 
 echo ""
 echo "--- Group Workflow Validation Tests ---"
