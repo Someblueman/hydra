@@ -104,21 +104,22 @@ assert_contains() {
 }
 
 # Setup test environment
+TEST_DIR=""
 setup_test_env() {
-    test_dir="$(mktemp -d)" || {
+    TEST_DIR="$(mktemp -d)" || {
         echo "Error: Failed to create temporary directory" >&2
         return 1
     }
-    trap 'if [ -n "$test_dir" ] && [ -d "$test_dir" ]; then rm -rf "$test_dir"; fi' EXIT INT TERM
-    HYDRA_HOME="$test_dir/.hydra"
+    trap 'if [ -n "$TEST_DIR" ] && [ -d "$TEST_DIR" ]; then rm -rf "$TEST_DIR"; fi' EXIT INT TERM
+    HYDRA_HOME="$TEST_DIR/.hydra"
     export HYDRA_HOME
-    echo "$test_dir"
 }
 
 cleanup_test_env() {
     test_dir="$1"
     rm -rf "$test_dir"
     unset HYDRA_HOME
+    TEST_DIR=""
     trap - EXIT INT TERM
 }
 
@@ -190,7 +191,8 @@ test_unknown_command() {
 test_list_command_empty() {
     echo "Testing hydra list command with empty state..."
     
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
     
     output="$("$HYDRA_BIN" list 2>&1)"
     exit_code=$?
@@ -230,7 +232,8 @@ test_status_command() {
 test_doctor_command() {
     echo "Testing hydra doctor command..."
     
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
     
     output="$("$HYDRA_BIN" doctor 2>&1)"
     exit_code=$?
@@ -250,9 +253,13 @@ test_doctor_command() {
 test_regenerate_command_empty() {
     echo "Testing hydra regenerate command with empty state..."
     
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
+
+    repo_dir="$test_dir/repo"
+    git init -q "$repo_dir"
     
-    output="$("$HYDRA_BIN" regenerate 2>&1)"
+    output="$(cd "$repo_dir" && "$HYDRA_BIN" regenerate 2>&1)"
     exit_code=$?
     assert_success "$exit_code" "hydra regenerate should succeed even when empty"
     
@@ -263,7 +270,8 @@ test_regenerate_command_empty() {
 test_spawn_command_validation() {
     echo "Testing hydra spawn command parameter validation..."
     
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
     
     # Test spawn without branch argument
     output="$("$HYDRA_BIN" spawn 2>&1)"
@@ -278,7 +286,8 @@ test_spawn_command_validation() {
 test_kill_command_validation() {
     echo "Testing hydra kill command parameter validation..."
     
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
     
     # Test kill without branch argument
     output="$("$HYDRA_BIN" kill 2>&1)"
@@ -286,6 +295,21 @@ test_kill_command_validation() {
     assert_failure "$exit_code" "hydra kill without branch should fail"
     assert_contains "$output" "Error: Branch name required" "Should report missing argument error"
     
+    cleanup_test_env "$test_dir"
+}
+
+# Test hydra pr with its optional branch omitted
+test_pr_command_optional_branch() {
+    echo "Testing hydra pr command without a branch..."
+
+    setup_test_env
+    test_dir="$TEST_DIR"
+
+    output="$(TMUX='' "$HYDRA_BIN" pr 2>&1)"
+    exit_code=$?
+    assert_failure "$exit_code" "hydra pr outside a session should fail cleanly"
+    assert_contains "$output" "Not in a Hydra session" "hydra pr reports the intended usage error"
+
     cleanup_test_env "$test_dir"
 }
 
@@ -339,12 +363,19 @@ test_issue_branch_cleanup() {
     fi
     
     # Create isolated test environment
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
+
+    repo_parent="$test_dir/project space"
+    repo_root="$repo_parent/repo"
+    git init -q "$repo_root"
+    git -C "$repo_root" config user.email "hydra-tests@example.invalid"
+    git -C "$repo_root" config user.name "Hydra Tests"
+    git -C "$repo_root" commit --allow-empty -q -m "initial"
     
     # Create a test branch name that looks like an issue branch
     test_branch="issue-999-test-cleanup-$(date +%s)"
-    repo_root="$(git rev-parse --show-toplevel)"
-    expected_worktree="$repo_root/../hydra-$test_branch"
+    expected_worktree="$repo_parent/hydra-$test_branch"
     
     # Skip if tmux is not available
     if ! command -v tmux >/dev/null 2>&1; then
@@ -355,11 +386,12 @@ test_issue_branch_cleanup() {
     
     # Create the branch and worktree
     echo "  Creating test branch '$test_branch'..."
-    output="$(HYDRA_SKIP_AI=1 "$HYDRA_BIN" spawn "$test_branch" 2>&1)"
+    output="$(cd "$repo_root" && HYDRA_SKIP_AI=1 HYDRA_NONINTERACTIVE=1 "$HYDRA_BIN" spawn "$test_branch" 2>&1)"
     exit_code=$?
     
     if [ "$exit_code" -ne 0 ]; then
         echo "[WARN] Skipping - spawn failed (might be in non-terminal environment)"
+        cleanup_test_env "$test_dir"
         return
     fi
     
@@ -371,7 +403,7 @@ test_issue_branch_cleanup() {
     fi
     
     # Check that branch exists in worktree list
-    worktree_exists="$(git worktree list | grep -c "$test_branch" || true)"
+    worktree_exists="$(git -C "$repo_root" worktree list | grep -c "$test_branch" || true)"
     if [ "$worktree_exists" -gt 0 ]; then
         assert_success 0 "Branch appears in git worktree list"
     else
@@ -380,7 +412,7 @@ test_issue_branch_cleanup() {
     
     # Now kill the branch
     echo "  Killing test branch '$test_branch'..."
-    output="$("$HYDRA_BIN" kill "$test_branch" 2>&1)"
+    output="$(cd "$repo_root" && HYDRA_NONINTERACTIVE=1 "$HYDRA_BIN" kill "$test_branch" 2>&1)"
     exit_code=$?
     echo "  Kill output: $output"
     echo "  Kill exit code: $exit_code"
@@ -394,7 +426,7 @@ test_issue_branch_cleanup() {
     fi
     
     # Verify branch is no longer in worktree list
-    worktree_exists="$(git worktree list | grep -c "$test_branch" || true)"
+    worktree_exists="$(git -C "$repo_root" worktree list | grep -c "$test_branch" || true)"
     if [ "$worktree_exists" -eq 0 ]; then
         assert_success 0 "Branch no longer appears in git worktree list"
     else
@@ -451,6 +483,7 @@ test_doctor_command
 test_regenerate_command_empty
 test_spawn_command_validation
 test_kill_command_validation
+test_pr_command_optional_branch
 test_hydra_home_init
 test_issue_branch_cleanup
 

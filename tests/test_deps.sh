@@ -27,19 +27,21 @@ fail_count=0
 . "$(dirname "$0")/helpers.sh"
 
 # Setup test environment
+TEST_DIR=""
 setup_test_env() {
-    test_dir="$(mktemp -d)"
-    mkdir -p "$test_dir"
-    HYDRA_HOME="$test_dir"
-    HYDRA_MAP="$test_dir/map"
+    TEST_DIR="$(mktemp -d)"
+    mkdir -p "$TEST_DIR"
+    HYDRA_HOME="$TEST_DIR"
+    HYDRA_MAP="$TEST_DIR/map"
     export HYDRA_HOME HYDRA_MAP
     touch "$HYDRA_MAP"
-    echo "$test_dir"
 }
 
 cleanup_test_env() {
     test_dir="$1"
     rm -rf "$test_dir"
+    unset HYDRA_HOME HYDRA_MAP
+    TEST_DIR=""
 }
 
 # =============================================================================
@@ -50,7 +52,8 @@ test_validate_deps_spec_empty() {
     echo ""
     echo "Testing validate_deps_spec with empty spec..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     validate_deps_spec "" 2>/dev/null
     assert_failure $? "validate_deps_spec should fail with empty spec"
@@ -62,7 +65,8 @@ test_validate_deps_spec_single() {
     echo ""
     echo "Testing validate_deps_spec with single branch..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     validate_deps_spec "feature-branch" 2>/dev/null
     assert_success $? "validate_deps_spec should succeed with single branch"
@@ -74,7 +78,8 @@ test_validate_deps_spec_multiple() {
     echo ""
     echo "Testing validate_deps_spec with multiple branches..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     validate_deps_spec "branch1,branch2,branch3" 2>/dev/null
     assert_success $? "validate_deps_spec should succeed with multiple branches"
@@ -86,7 +91,8 @@ test_validate_deps_spec_invalid_chars() {
     echo ""
     echo "Testing validate_deps_spec with invalid characters..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     validate_deps_spec "branch;rm -rf /" 2>/dev/null
     assert_failure $? "validate_deps_spec should fail with semicolon"
@@ -104,7 +110,8 @@ test_validate_deps_spec_empty_in_list() {
     echo ""
     echo "Testing validate_deps_spec with empty entry in list..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     validate_deps_spec "branch1,,branch2" 2>/dev/null
     assert_failure $? "validate_deps_spec should fail with empty entry"
@@ -120,7 +127,8 @@ test_check_circular_deps_no_deps() {
     echo ""
     echo "Testing check_circular_deps with no dependencies..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     check_circular_deps "branch" "" 2>/dev/null
     assert_success $? "check_circular_deps should succeed with no deps"
@@ -132,7 +140,8 @@ test_check_circular_deps_self_reference() {
     echo ""
     echo "Testing check_circular_deps with self-reference..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     check_circular_deps "branch1" "branch1" 2>/dev/null
     assert_failure $? "check_circular_deps should fail when branch depends on itself"
@@ -144,7 +153,8 @@ test_check_circular_deps_no_cycle() {
     echo ""
     echo "Testing check_circular_deps with no cycle..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     check_circular_deps "branch3" "branch1,branch2" 2>/dev/null
     assert_success $? "check_circular_deps should succeed with no cycle"
@@ -160,7 +170,8 @@ test_is_dep_complete_no_session() {
     echo ""
     echo "Testing is_dep_complete with no session..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     # No sessions in map, so dependency is complete
     is_dep_complete "nonexistent-branch" 2>/dev/null
@@ -173,7 +184,8 @@ test_is_dep_complete_with_mapping() {
     echo ""
     echo "Testing is_dep_complete with active mapping..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     # Add a mapping (session won't actually exist, but mapping does)
     echo "active-branch active-session - - - - -" >> "$HYDRA_MAP"
@@ -205,7 +217,8 @@ test_check_deps_complete_empty() {
     echo ""
     echo "Testing check_deps_complete with empty deps..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     check_deps_complete "" 2>/dev/null
     assert_success $? "check_deps_complete should succeed with empty deps"
@@ -217,7 +230,8 @@ test_check_deps_complete_dash() {
     echo ""
     echo "Testing check_deps_complete with dash (no deps)..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     check_deps_complete "-" 2>/dev/null
     assert_success $? "check_deps_complete should succeed with dash"
@@ -229,7 +243,8 @@ test_check_deps_complete_nonexistent() {
     echo ""
     echo "Testing check_deps_complete with non-existent branches..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
 
     # Non-existent branches have no sessions, so they're complete
     check_deps_complete "nonexistent1,nonexistent2" 2>/dev/null

@@ -80,15 +80,15 @@ assert_contains() {
 }
 
 # Setup test environment
+TEST_DIR=""
 setup_test_env() {
-    test_dir="$(mktemp -d)" || {
+    TEST_DIR="$(mktemp -d)" || {
         echo "Error: Failed to create temporary directory" >&2
         return 1
     }
-    HYDRA_HOME="$test_dir/.hydra"
+    HYDRA_HOME="$TEST_DIR/.hydra"
     export HYDRA_HOME
     mkdir -p "$HYDRA_HOME"
-    echo "$test_dir"
 }
 
 cleanup_test_env() {
@@ -103,6 +103,7 @@ cleanup_test_env() {
     done
     rm -rf "$test_dir"
     unset HYDRA_HOME
+    TEST_DIR=""
 }
 
 # Create mock sessions for testing
@@ -123,7 +124,8 @@ test_switch_nonnumeric_input() {
     echo ""
     echo "Testing switch with non-numeric input..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
     setup_mock_sessions "$test_dir"
 
     # We need to be inside tmux for this test
@@ -168,7 +170,8 @@ test_switch_empty_input() {
     echo ""
     echo "Testing switch with empty input..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
     setup_mock_sessions "$test_dir"
 
     # Run switch with empty input (just Enter)
@@ -206,7 +209,8 @@ test_switch_zero_input() {
     echo ""
     echo "Testing switch with zero input..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
     setup_mock_sessions "$test_dir"
 
     test_script="$test_dir/test_script.sh"
@@ -243,7 +247,8 @@ test_switch_out_of_range_high() {
     echo ""
     echo "Testing switch with out-of-range high input..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
     setup_mock_sessions "$test_dir"  # Creates 3 sessions
 
     test_script="$test_dir/test_script.sh"
@@ -281,7 +286,8 @@ test_switch_negative_input() {
     echo ""
     echo "Testing switch with negative input..."
 
-    test_dir="$(setup_test_env)"
+    setup_test_env
+    test_dir="$TEST_DIR"
     setup_mock_sessions "$test_dir"
 
     test_script="$test_dir/test_script.sh"
