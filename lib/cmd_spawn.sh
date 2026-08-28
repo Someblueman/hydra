@@ -426,14 +426,12 @@ cmd_queue() {
                 shift
                 ;;
             -*)
-                echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra queue [clear|remove <branch>|process] [--json]" >&2
-                exit 1
+                cli_error queue invalid_input "Unknown option '$1'" "run hydra queue --json"
+                return 1
                 ;;
             *)
-                echo "Error: Unknown action '$1'" >&2
-                echo "Usage: hydra queue [clear|remove <branch>|process] [--json]" >&2
-                exit 1
+                cli_error queue invalid_input "Unknown action '$1'" "run hydra queue --json"
+                return 1
                 ;;
         esac
     done
@@ -441,24 +439,39 @@ cmd_queue() {
     case "$action" in
         clear)
             count="$(clear_queue)"
-            echo "Cleared $count queued spawn(s)"
+            if [ -n "$json_output" ]; then
+                json_success queue "{\"action\":\"clear\",\"cleared\":$count}"
+            else
+                echo "Cleared $count queued spawn(s)"
+            fi
             ;;
         remove)
             if [ -z "$target_branch" ]; then
-                echo "Error: Branch name required" >&2
-                echo "Usage: hydra queue remove <branch>" >&2
-                exit 1
+                cli_error queue invalid_input "Branch name required" "run hydra queue remove <branch> --json"
+                return 1
             fi
             if dequeue_spawn "$target_branch"; then
-                echo "Removed '$target_branch' from queue"
+                if [ -n "$json_output" ]; then
+                    json_success queue "{\"action\":\"remove\",\"branch\":\"$(json_escape "$target_branch")\"}"
+                else
+                    echo "Removed '$target_branch' from queue"
+                fi
             else
-                echo "Branch '$target_branch' not found in queue"
-                exit 1
+                if [ -n "$json_output" ]; then
+                    json_error queue not_found "Branch '$target_branch' not found in queue" "inspect with hydra queue --json"
+                else
+                    echo "Branch '$target_branch' not found in queue"
+                fi
+                return 1
             fi
             ;;
         process)
             spawned="$(process_spawn_queue)"
-            echo "Processed queue: $spawned session(s) spawned"
+            if [ -n "$json_output" ]; then
+                json_success queue "{\"action\":\"process\",\"spawned\":$spawned}"
+            else
+                echo "Processed queue: $spawned session(s) spawned"
+            fi
             ;;
         *)
             # Default: list queue

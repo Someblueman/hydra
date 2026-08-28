@@ -227,7 +227,7 @@ list_queue() {
     _qdir="$(_get_queue_dir)"
 
     if [ -n "$_json_output" ]; then
-        printf '{"queue": ['
+        printf '{"schema_version":1,"ok":true,"command":"queue","data":{"queue":['
         _first=1
         for _qfile in $(find "$_qdir" -maxdepth 1 -name "*.queue" -type f 2>/dev/null | sort); do
             [ -f "$_qfile" ] || continue
@@ -260,7 +260,7 @@ list_queue() {
                     "$(json_escape "$_q_group")" "$_q_priority" "$_q_requested"
             fi
         done
-        printf ']}\n'
+        printf ']}}\n'
     else
         _count=0
         for _qfile in $(find "$_qdir" -maxdepth 1 -name "*.queue" -type f 2>/dev/null | sort); do

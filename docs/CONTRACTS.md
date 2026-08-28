@@ -16,9 +16,15 @@ are not contracts.
 - `hydra kill` checks worktree dirtiness **before** killing tmux or removing
   the mapping. `--force` on `kill --all` only skips the confirmation prompt.
 
-## State map
+## State
 
-Runtime file: `$HYDRA_HOME/map` (default `~/.hydra/map`).
+State v2 under `$HYDRA_HOME/state/v2/projects/<project_id>` is authoritative for
+1.6 identity, heads, instances, tasks, lifecycle, events, messages, exec results,
+and provenance. Opaque validated IDs, not user labels, are filesystem keys.
+
+The legacy migration input is `$HYDRA_HOME/map` (default `~/.hydra/map`). Each
+active v2 project also maintains a project-scoped `compat-map` projection for
+remaining legacy readers. Both use seven space-separated fields per line:
 
 Seven space-separated fields per line:
 
@@ -46,8 +52,11 @@ and `mv` it into place so the rename stays on one filesystem.
 
 ## JSON
 
-`list --json`, `status --json`, `recv --json`, `queue --json`, and
-`group status --json` emit JSON objects/arrays.
+Every command that accepts `--json` emits JSON envelope v1 with
+`schema_version`, `ok`, `command`, and either `data` or `error`. This includes
+`list`, `status`, `recv`/`receipts`, `queue`, `group status`, `init`,
+`capabilities`, `lifecycle`, `wait`, `exec`, `diff`, `review`, and `provenance`.
+JSON failures return nonzero. Unknown fields must be ignored.
 
 `json_escape` operates on POSIX C strings (NUL cannot appear). It escapes
 `"`, `\`, `\b`, `\t`, `\n`, `\f`, `\r`, and other C0 controls as `\u00XX`.
@@ -114,6 +123,9 @@ source repository.
 The accepted identity, state v2, Events v1, and lifecycle contracts are in
 [`adr/0001-identity-state-events-locks.md`](adr/0001-identity-state-events-locks.md),
 [`STATE.md`](STATE.md), [`EVENTS.md`](EVENTS.md), and
-[`LIFECYCLE.md`](LIFECYCLE.md). The seven-field map remains the active runtime
-format until migration and command integration are complete on the 1.6 branch.
-Native helpers remain deferred. Pre-2.0 internal library layout may change.
+[`LIFECYCLE.md`](LIFECYCLE.md). State v2 is the active authority; the seven-field
+project map is a compatibility projection only. Security, automation, operations,
+and provenance boundaries are documented in [`SECURITY.md`](SECURITY.md),
+[`AUTOMATION.md`](AUTOMATION.md), [`OPERATIONS.md`](OPERATIONS.md), and
+[`PROVENANCE.md`](PROVENANCE.md). Native helpers remain deferred. Pre-2.0 internal
+library layout may change.

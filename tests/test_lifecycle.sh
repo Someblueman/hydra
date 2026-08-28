@@ -47,6 +47,13 @@ assert_success $? "task-aware head spawns"
 project_id="$(sed -n '1p' .git/hydra/project-id)"
 head_dir="$(find "$HYDRA_HOME/state/v2/projects/$project_id/heads" -type f -name branch -exec sh -c '[ "$(sed -n "1p" "$1")" = lifecycle-test ] && dirname "$1"' sh {} \;)"
 old_instance="$(sed -n '1p' "$head_dir/current-instance")"
+observed_before="$(sed -n '1p' "$head_dir/instances/$old_instance/observed-status")"
+printf '%s\n' 'not-json' | "$HYDRA_BIN" adapter ingest lifecycle-test >/dev/null 2>&1
+assert_failure $? "malformed adapter input is rejected"
+printf '{"schema_version":2,"instance_id":"%s","kind":"observed","status":"idle"}\n' "$old_instance" | \
+    "$HYDRA_BIN" adapter ingest lifecycle-test >/dev/null 2>&1
+assert_failure $? "adapter schema version skew is rejected"
+assert_equal "$observed_before" "$(sed -n '1p' "$head_dir/instances/$old_instance/observed-status")" "missed or rejected adapter events leave deterministic fallback state"
 lifecycle_json="$("$HYDRA_BIN" lifecycle lifecycle-test --json)"
 printf '%s' "$lifecycle_json" | grep -q '^{' && printf '%s' "$lifecycle_json" | grep -q '"schema_version":1'
 assert_success $? "lifecycle emits the versioned JSON envelope"
@@ -56,6 +63,11 @@ printf '{"schema_version":1,"instance_id":"%s","kind":"observed","status":"idle"
     "$HYDRA_BIN" adapter ingest lifecycle-test >/dev/null
 assert_success $? "canonical adapter observation is accepted"
 assert_equal idle "$(sed -n '1p' "$head_dir/instances/$old_instance/observed-status")" "adapter updates observed status"
+
+"$HYDRA_BIN" send --type handoff --delivery safe-point lifecycle-test "Implementation ready for declared outcome" >/dev/null
+assert_success $? "typed handoff is queued without pane injection"
+receipts_json="$("$HYDRA_BIN" recv --receipts lifecycle-test --json)"
+case "$receipts_json" in *'"command":"receipts"'*'"status":"queued"'*) assert_success 0 "handoff receipt is correlated to the active instance" ;; *) assert_success 1 "handoff receipt is correlated to the active instance" ;; esac
 
 "$HYDRA_BIN" notify enable lifecycle.declared --sink terminal --interval 60 >/dev/null
 assert_success $? "local lifecycle notification is configured"

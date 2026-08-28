@@ -60,6 +60,15 @@ EOF
     [ -s "$_osh_file" ] || { echo "Error: selection contains no available worktrees" >&2; return 1; }
 }
 
+operations_signal_tree() (
+    _ost_pid="$1"
+    _ost_signal="$2"
+    for _ost_child in $(ps -eo pid=,ppid= 2>/dev/null | awk -v parent="$_ost_pid" '$2 == parent { print $1 }'); do
+        operations_signal_tree "$_ost_child" "$_ost_signal"
+    done
+    kill "-$_ost_signal" "$_ost_pid" 2>/dev/null || true
+)
+
 operations_exec_worker() {
     _oew_run="$1"
     _oew_head="$2"
@@ -87,9 +96,9 @@ operations_exec_worker() {
             wait "$_oew_timer" || exit 0
             if kill -0 "$_oew_pid" 2>/dev/null; then
                 : > "$_oew_timed"
-                kill -TERM "$_oew_pid" 2>/dev/null || true
+                operations_signal_tree "$_oew_pid" TERM
                 sleep 1
-                kill -KILL "$_oew_pid" 2>/dev/null || true
+                operations_signal_tree "$_oew_pid" KILL
             fi
         ) >/dev/null 2>&1 &
         _oew_watchdog=$!

@@ -303,7 +303,7 @@ test_group_status_validation() {
 
     # Test empty group JSON output
     output="$(HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" group status nonexistent --json 2>&1)"
-    assert_contains "$output" '"sessions": []' "group status --json handles empty group"
+    assert_contains "$output" '"sessions":[]' "group status --json handles empty group"
     cleanup_test_env
 }
 

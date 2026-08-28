@@ -24,6 +24,16 @@ hydra wait feature --for outcome=done --timeout 300
 hydra resume feature
 ```
 
+A typed handoff remains an inbox action, never pane injection:
+
+```sh
+hydra send --type handoff --delivery safe-point feature "Ready for verification"
+hydra recv --receipts feature --json
+```
+
+The queued/delivered/stale receipt targets one instance and is inspectable alongside
+the lifecycle event and provenance history.
+
 Completion policies are `declared-done`, `observed-exit-zero`, and `either`. They
 can be selected at spawn with `--completion-policy`. Dependencies are
 comma-separated `branch[:condition]` entries; a bare branch means its completion

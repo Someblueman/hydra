@@ -14,6 +14,7 @@ cmd_list() {
     while [ $# -gt 0 ]; do
         case "$1" in
             -g|--group)
+                [ $# -ge 2 ] || { cli_error list invalid_input "--group requires a name" "run hydra list --help"; return 1; }
                 shift
                 filter_group="$1"
                 shift
@@ -43,19 +44,19 @@ cmd_list() {
                 shift
                 ;;
             -*)
-                echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra list [-g|--group <name>] [--groups] [--json] [--deps] [--git] [--no-pr-status] [--refresh-pr-status]" >&2
-                exit 1
+                cli_error list invalid_input "Unknown option '$1'" "run hydra help"
+                return 1
                 ;;
             *)
-                echo "Error: Unexpected argument '$1'" >&2
-                exit 1
+                cli_error list invalid_input "Unexpected argument '$1'" "run hydra help"
+                return 1
                 ;;
         esac
     done
 
     # Show dependency tree if requested
     if [ -n "$show_deps" ]; then
+        [ -z "$json_output" ] || { cli_error list unsupported_combination "--deps does not have a JSON representation" "use hydra list --json without --deps"; return 1; }
         _load_lib deps
         echo "Session Dependencies:"
         echo ""
@@ -75,7 +76,7 @@ cmd_list() {
                 count="$(list_mappings_for_group "$g" | wc -l | tr -d ' ')"
                 printf '{"name": "%s", "count": %s}\n' "$(json_escape "$g")" "$count" >> "$tmpjson"
             done
-            printf '{"groups": ['
+            printf '{"schema_version":1,"ok":true,"command":"list","data":{"groups":['
             first=1
             while IFS= read -r line; do
                 if [ "$first" -eq 1 ]; then
@@ -85,7 +86,7 @@ cmd_list() {
                 fi
                 printf '%s' "$line"
             done < "$tmpjson"
-            printf ']}\n'
+            printf ']}}\n'
             rm -f "$tmpjson"
             trap - EXIT
         else
@@ -105,7 +106,7 @@ cmd_list() {
     # Check if we have any mappings
     if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
         if [ -n "$json_output" ]; then
-            printf '{"sessions": [], "total": 0, "active": 0, "dead": 0}\n'
+            json_success list '{"sessions":[],"total":0,"active":0,"dead":0}'
         else
             echo "No active Hydra heads"
         fi
@@ -223,7 +224,7 @@ cmd_list() {
         done < "$HYDRA_MAP"
 
         # Output JSON
-        printf '{"sessions": ['
+        printf '{"schema_version":1,"ok":true,"command":"list","data":{"sessions":['
         first=1
         while IFS= read -r line; do
             if [ "$first" -eq 1 ]; then
@@ -233,7 +234,7 @@ cmd_list() {
             fi
             printf '%s' "$line"
         done < "$tmpjson"
-        printf '], "total": %s, "active": %s, "dead": %s}\n' "$total" "$active" "$dead"
+        printf '],"total":%s,"active":%s,"dead":%s}}\n' "$total" "$active" "$dead"
 
         rm -f "$tmpjson"
         trap - EXIT
@@ -567,13 +568,12 @@ cmd_status() {
                 shift
                 ;;
             -*)
-                echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra status [--json]" >&2
-                exit 1
+                cli_error status invalid_input "Unknown option '$1'" "run hydra status --json"
+                return 1
                 ;;
             *)
-                echo "Error: Unexpected argument '$1'" >&2
-                exit 1
+                cli_error status invalid_input "Unexpected argument '$1'" "run hydra status --json"
+                return 1
                 ;;
         esac
     done
@@ -638,7 +638,7 @@ cmd_status() {
         fi
 
         # Build final JSON
-        printf '{'
+        printf '{"schema_version":1,"ok":true,"command":"status","data":{'
         printf '"system": {"hydra_version": "%s", "tmux_version": "%s", "git_version": "%s"}' \
             "$(json_escape "$HYDRA_VERSION")" \
             "$(json_escape "$tmux_ver")" \
@@ -661,7 +661,7 @@ cmd_status() {
         fi
 
         printf '], "summary": {"active": %s, "dead": %s}' "$active" "$dead"
-        printf '}\n'
+        printf '}}\n'
 
         rm -f "$tmpjson"
         trap - EXIT

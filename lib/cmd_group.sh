@@ -70,14 +70,14 @@ cmd_group_wait() {
                 shift
                 ;;
             -*)
-                echo "Error: Unknown option '$1'" >&2
+                cli_error "group status" invalid_input "Unknown option '$1'" "run hydra group status <name> --json"
                 return 1
                 ;;
             *)
                 if [ -z "$group_name" ]; then
                     group_name="$1"
                 else
-                    echo "Error: Unexpected argument '$1'" >&2
+                    cli_error "group status" invalid_input "Unexpected argument '$1'" "run hydra group status <name> --json"
                     return 1
                 fi
                 shift
@@ -186,8 +186,7 @@ cmd_group_status() {
     done
 
     if [ -z "$group_name" ]; then
-        echo "Error: Group name required" >&2
-        echo "Usage: hydra group status <group-name> [--json]" >&2
+        cli_error "group status" invalid_input "Group name required" "run hydra group status <name> --json"
         return 1
     fi
 
@@ -196,7 +195,7 @@ cmd_group_status() {
 
     if [ -z "$mappings" ]; then
         if [ -n "$json_output" ]; then
-            printf '{"group": "%s", "sessions": [], "total": 0, "active": 0, "dead": 0}\n' \
+            printf '{"schema_version":1,"ok":true,"command":"group status","data":{"group":"%s","sessions":[],"total":0,"active":0,"dead":0}}\n' \
                 "$(json_escape "$group_name")"
         else
             echo "No sessions found in group '$group_name'"
@@ -233,7 +232,7 @@ cmd_group_status() {
 
     if [ -n "$json_output" ]; then
         # JSON output
-        printf '{"group": "%s", "sessions": [' "$(json_escape "$group_name")"
+        printf '{"schema_version":1,"ok":true,"command":"group status","data":{"group":"%s","sessions":[' "$(json_escape "$group_name")"
         first=1
         while IFS='|' read -r branch session status ai duration_secs deps pr; do
             [ "$first" -eq 1 ] && first=0 || printf ','
@@ -263,7 +262,7 @@ cmd_group_status() {
                 dead) dead=$((dead + 1)) ;;
             esac
         done < "$tmp_sessions"
-        printf '], "total": %d, "active": %d, "dead": %d}\n' "$total" "$active" "$dead"
+        printf '],"total":%d,"active":%d,"dead":%d}}\n' "$total" "$active" "$dead"
     else
         # Human-readable output
         echo "Group Status: $group_name"
@@ -436,12 +435,11 @@ cmd_recv() {
                 if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then receipt_branch="$1"; shift; fi
                 ;;
             -*)
-                echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra recv [--peek] [--json]" >&2
+                cli_error recv invalid_input "Unknown option '$1'" "run hydra recv --json"
                 return 1
                 ;;
             *)
-                echo "Error: Unexpected argument '$1'" >&2
+                cli_error recv invalid_input "Unexpected argument '$1'" "run hydra recv --json"
                 return 1
                 ;;
         esac
@@ -449,7 +447,7 @@ cmd_recv() {
 
     if [ "$receipts" -eq 1 ]; then
         [ -n "$receipt_branch" ] || receipt_branch="$(get_current_branch 2>/dev/null || true)"
-        [ -n "$receipt_branch" ] || { echo "Error: receipt branch required outside a Hydra session" >&2; return 1; }
+        [ -n "$receipt_branch" ] || { cli_error receipts invalid_input "receipt branch required outside a Hydra session" "pass hydra recv --receipts <branch> --json"; return 1; }
         if [ -n "$json_output" ]; then message_receipts "$receipt_branch" --json; else message_receipts "$receipt_branch"; fi
         return $?
     fi
@@ -457,13 +455,13 @@ cmd_recv() {
     # Get current branch
     current_session="$(get_current_session 2>/dev/null || true)"
     if [ -z "$current_session" ]; then
-        echo "Error: Not in a Hydra session" >&2
+        cli_error recv not_in_session "Not in a Hydra session" "run inside a Hydra tmux session"
         return 1
     fi
 
     branch="$(get_branch_for_session "$current_session" 2>/dev/null || true)"
     if [ -z "$branch" ]; then
-        echo "Error: Cannot determine branch for current session" >&2
+        cli_error recv state_unavailable "Cannot determine branch for current session" "run hydra state verify"
         return 1
     fi
 
@@ -472,7 +470,7 @@ cmd_recv() {
         msg_dir="$(get_message_dir "$branch")"
         queue_dir="$msg_dir/queue"
 
-        printf '{"branch": "%s", "messages": [' "$(json_escape "$branch")"
+        printf '{"schema_version":1,"ok":true,"command":"recv","data":{"branch":"%s","messages":[' "$(json_escape "$branch")"
 
         first=1
         if [ -d "$queue_dir" ]; then
@@ -535,7 +533,7 @@ cmd_recv() {
             done
         fi
 
-        printf ']}\n'
+        printf ']}}\n'
     else
         # Human-readable output
         recv_opts=""

@@ -12,7 +12,7 @@ fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_LEGACY_MAP="$HYDRA_HOME/map"
 HYDRA_MAP="$HYDRA_LEGACY_MAP"
-HYDRA_VERSION="1.5.2"
+HYDRA_VERSION="1.6.0"
 
 # State v2 keeps the legacy seven-field view as a project-scoped compatibility
 # projection while older commands are migrated to scalar records.
@@ -61,7 +61,7 @@ else
     HYDRA_BIN_DIR="$(dirname "$HYDRA_BIN_PATH")"
 fi
 
-# Library discovery (1.5.2): HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra, legacy
+# Library discovery: HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra, legacy
 if [ -n "${HYDRA_ROOT:-}" ] && [ -d "$HYDRA_ROOT/lib" ] && [ -f "$HYDRA_ROOT/lib/git.sh" ]; then
     HYDRA_LIB_DIR="$(cd "$HYDRA_ROOT/lib" && pwd)"
 elif [ -d "$HYDRA_BIN_DIR/../lib" ] && [ -f "$HYDRA_BIN_DIR/../lib/git.sh" ]; then
@@ -411,6 +411,15 @@ Commands:
   resume <head>     Create a new instance using durable resume metadata
   notify            Configure rate-limited local lifecycle notifications
   exec              Run an out-of-band command in selected worktrees
+                    Options:
+                      --branch <head>          Select one head (repeatable)
+                      --group <name>           Select one group
+                      --all                    Select all active project heads
+                      --jobs <1-16>            Bounded parallelism (default 4)
+                      --timeout <seconds>      Per-command timeout (default 300)
+                      --json                   Versioned results
+                      --shell <text>           Trusted shell-string mode
+                      --allow-shell            Explicit shell execution acknowledgement
   diff <head>       Show changes from the recorded base reference
   review <head>     Summarize Git review evidence from the recorded base
   provenance <head> Show recorded task, profile, version, and trust provenance
@@ -420,6 +429,7 @@ Commands:
                       --groups                 List all groups with session counts
                       -j, --json               Output in JSON format
                       --deps                   Show dependency tree
+                      --git                    Show recorded-base Git evidence
                       --no-pr-status           Skip fetching PR status (faster)
                       --refresh-pr-status      Force refresh PR status cache
   switch            Switch to a different head (interactive)
@@ -526,6 +536,18 @@ EOF
 
 # Main command dispatcher
 main() {
+    HYDRA_JSON_REQUESTED=0
+    case "${1:-}" in
+        init|capabilities|lifecycle|wait|exec|diff|review|provenance|list|status|group|recv|queue)
+            for _main_arg in "$@"; do
+                case "$_main_arg" in
+                    --) break ;;
+                    -j|--json) HYDRA_JSON_REQUESTED=1 ;;
+                esac
+            done
+            ;;
+    esac
+    export HYDRA_JSON_REQUESTED
     init_hydra_home
 
     # Load only the libraries needed for this command

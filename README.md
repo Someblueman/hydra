@@ -62,7 +62,7 @@ hydra version
 ### 2. Verify
 
 ```sh
-hydra version          # Hydra version 1.5.2
+hydra version          # Hydra version 1.6.0
 hydra doctor           # install paths, git/tmux, writable HYDRA_HOME, agents
 ```
 
@@ -136,6 +136,7 @@ hydra spawn exp --agents "claude:2,aider:1"
 # Inspect & switch
 hydra list              # list all sessions
 hydra list --json       # JSON output for scripting
+hydra list --git        # add recorded-base Git evidence
 hydra list -g mygroup   # filter by group
 hydra switch            # interactive (fzf if available)
 
@@ -156,6 +157,16 @@ hydra broadcast "make test"      # send command to all sessions
 hydra broadcast -g backend "..."  # send to specific group
 hydra wait-idle                  # wait for sessions to become idle
 hydra wait-idle -g backend -s 10 # wait for group with 10s idle threshold
+
+# Durable lifecycle and out-of-band operations
+hydra lifecycle feature-x --json
+hydra send --type handoff --delivery safe-point feature-x "Ready for review"
+hydra outcome feature-x done --actor agent
+hydra wait feature-x --for outcome=done --timeout 300
+hydra exec --branch feature-x --timeout 300 -- make test
+hydra diff feature-x --stat
+hydra review feature-x --json
+hydra provenance feature-x --json
 
 # System
 hydra init --profile claude --trust
@@ -200,7 +211,10 @@ hydra tui                                          # interactive session manager
 Per-head profile, task, identity, worktree path, instance, and lifecycle event are
 stored in project-scoped state v2. See [profiles](docs/PROFILES.md),
 [state](docs/STATE.md), [events](docs/EVENTS.md), and
-[automation](docs/AUTOMATION.md).
+[automation](docs/AUTOMATION.md). Security, out-of-band execution, provenance, and
+release evidence are documented in [security](docs/SECURITY.md),
+[operations](docs/OPERATIONS.md), [provenance](docs/PROVENANCE.md), and
+[release evidence](docs/RELEASE_EVIDENCE.md).
 
 ## YAML Config (optional)
 

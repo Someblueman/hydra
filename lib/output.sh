@@ -131,3 +131,18 @@ json_error() {
         "$(json_escape "$1")" "$(json_escape "$2")" \
         "$(json_escape "$3")" "$(json_escape "${4:-}")"
 }
+
+# Emit one stable JSON error when --json/-j was requested, otherwise a concise
+# human diagnostic. Callers return a nonzero status after invoking this helper.
+cli_error() {
+    _cli_command="$1"
+    _cli_code="$2"
+    _cli_message="$3"
+    _cli_recovery="${4:-}"
+    if [ "${HYDRA_JSON_REQUESTED:-0}" -eq 1 ]; then
+        json_error "$_cli_command" "$_cli_code" "$_cli_message" "$_cli_recovery"
+    else
+        echo "Error: $_cli_message" >&2
+        [ -z "$_cli_recovery" ] || echo "Next: $_cli_recovery" >&2
+    fi
+}

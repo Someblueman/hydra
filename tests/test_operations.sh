@@ -91,10 +91,18 @@ shell_json="$("$HYDRA_BIN" exec --branch operations-test --shell 'printf shell-o
 assert_success $? "trusted acknowledged shell-string exec succeeds"
 case "$shell_json" in *'"stdout":"shell-ok"'*) assert_success 0 "shell-string output is captured" ;; *) assert_success 1 "shell-string output is captured" ;; esac
 
-timeout_json="$("$HYDRA_BIN" exec --branch operations-test --timeout 1 --json -- sleep 5 2>/dev/null)"
+child_pid_file="$test_root/timeout-child.pid"
+# shellcheck disable=SC2016 # $! and $1 are intentionally expanded by the child shell.
+timeout_json="$("$HYDRA_BIN" exec --branch operations-test --timeout 1 --json -- sh -c 'sleep 20 & echo $! > "$1"; wait' sh "$child_pid_file" 2>/dev/null)"
 timeout_code=$?
 assert_failure "$timeout_code" "timed-out exec returns failure"
 case "$timeout_json" in *'"exit_code":124'*) assert_success 0 "timed-out exec records status 124" ;; *) assert_success 1 "timed-out exec records status 124" ;; esac
+child_pid="$(sed -n '1p' "$child_pid_file")"
+if kill -0 "$child_pid" 2>/dev/null; then
+    assert_success 1 "timeout terminates command descendants"
+else
+    assert_success 0 "timeout terminates command descendants"
+fi
 
 run_dir="$(find "$HYDRA_HOME/state/v2/projects/$project_id/exec" -type f -name stdout -print | head -1 | xargs dirname)"
 assert_equal 600 "$(stat -f '%Lp' "$run_dir/stdout" 2>/dev/null || stat -c '%a' "$run_dir/stdout")" "captured exec output is private"

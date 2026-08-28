@@ -681,14 +681,14 @@ semantics using the shell implementation first.
       remains the universal fallback.
 - [x] Add rate-limited local notification sinks for named lifecycle events without
       requiring the TUI to be running.
-- [ ] Add `hydra exec` for out-of-band commands across selected worktrees with
+- [x] Add `hydra exec` for out-of-band commands across selected worktrees with
       bounded parallelism, captured results, and explicit trust behavior.
-- [ ] Add `hydra diff`, `hydra review`, and `hydra list --git` over recorded base refs
+- [x] Add `hydra diff`, `hydra review`, and `hydra list --git` over recorded base refs
       and Git porcelain.
-- [ ] Add versioned JSON success and error output to automation-relevant commands.
-- [ ] Add per-head provenance containing resolved profiles, tasks, versions, trusted
+- [x] Add versioned JSON success and error output to automation-relevant commands.
+- [x] Add per-head provenance containing resolved profiles, tasks, versions, trusted
       configuration hashes, and lifecycle sources.
-- [ ] Publish state, lifecycle, agent-adapter, security, and automation documentation
+- [x] Publish state, lifecycle, agent-adapter, security, and automation documentation
       with the release.
 
 #### Release gates
@@ -710,6 +710,9 @@ semantics using the shell implementation first.
 - `hydra exec` cannot confuse out-of-band command execution with agent steering.
 - A task -> spawn -> handoff -> declared outcome -> resume or teardown scenario has
   an inspectable event and provenance history.
+
+Reproducible gate-to-test mapping and the exact lifecycle scenario are published in
+[`RELEASE_EVIDENCE.md`](RELEASE_EVIDENCE.md).
 
 #### Deferred
 

@@ -9,19 +9,18 @@ cmd_init() {
     _ci_json=0
     while [ $# -gt 0 ]; do
         case "$1" in
-            --profile) [ $# -ge 2 ] || { echo "Error: --profile requires a name" >&2; return 1; }; _ci_profile="$2"; shift 2 ;;
+            --profile) [ $# -ge 2 ] || { cli_error init invalid_input "--profile requires a name" "run hydra agent list"; return 1; }; _ci_profile="$2"; shift 2 ;;
             --no-agent) _ci_profile=none; shift ;;
             --trust) _ci_trust=1; shift ;;
-            --worktree-root) [ $# -ge 2 ] || { echo "Error: --worktree-root requires a path" >&2; return 1; }; _ci_worktree_root="$2"; shift 2 ;;
+            --worktree-root) [ $# -ge 2 ] || { cli_error init invalid_input "--worktree-root requires a path" "pass an absolute or project-relative path"; return 1; }; _ci_worktree_root="$2"; shift 2 ;;
             --force) _ci_force=1; shift ;;
             -j|--json) _ci_json=1; shift ;;
-            *) echo "Error: unknown init option '$1'" >&2; return 1 ;;
+            *) cli_error init invalid_input "unknown init option '$1'" "run hydra help"; return 1 ;;
         esac
     done
 
     _ci_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-        [ "$_ci_json" -eq 0 ] || json_error init not_git_repository "Not in a Git repository" "cd into a repository and retry"
-        [ "$_ci_json" -eq 1 ] || echo "Error: hydra init must run inside a Git repository" >&2
+        cli_error init not_git_repository "hydra init must run inside a Git repository" "cd into a repository and retry"
         return 1
     }
     _ci_project="$(hydra_ensure_project_id)" || return 1
@@ -152,7 +151,7 @@ cmd_agent() {
 }
 
 cmd_capabilities() {
-    [ "${1:-}" = "--json" ] || { echo "Usage: hydra capabilities --json" >&2; return 1; }
+    [ "${1:-}" = "--json" ] && [ $# -eq 1 ] || { cli_error capabilities invalid_input "--json is required and must be the only argument" "run hydra capabilities --json"; return 1; }
     _cc_tmp="$(mktemp)" || return 1
     profile_list | while IFS= read -r _cc_name; do
         [ -n "$_cc_name" ] || continue

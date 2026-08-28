@@ -13,7 +13,7 @@ cmd_exec() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --branch)
-                [ $# -ge 2 ] || return 1
+                [ $# -ge 2 ] || { cli_error exec invalid_input "--branch requires a head" "run hydra exec --help"; return 1; }
                 if [ -n "$_ce_branches" ]; then
                     _ce_branches="$(printf '%s\n%s' "$_ce_branches" "$2")"
                 else
@@ -21,42 +21,42 @@ cmd_exec() {
                 fi
                 shift 2
                 ;;
-            --group) [ $# -ge 2 ] || return 1; _ce_group="$2"; shift 2 ;;
+            --group) [ $# -ge 2 ] || { cli_error exec invalid_input "--group requires a name" "run hydra exec --help"; return 1; }; _ce_group="$2"; shift 2 ;;
             --all) _ce_all=1; shift ;;
-            --jobs) [ $# -ge 2 ] || return 1; _ce_jobs="$2"; shift 2 ;;
-            --timeout) [ $# -ge 2 ] || return 1; _ce_timeout="$2"; shift 2 ;;
+            --jobs) [ $# -ge 2 ] || { cli_error exec invalid_input "--jobs requires an integer" "choose 1 through 16"; return 1; }; _ce_jobs="$2"; shift 2 ;;
+            --timeout) [ $# -ge 2 ] || { cli_error exec invalid_input "--timeout requires seconds" "pass a non-negative integer"; return 1; }; _ce_timeout="$2"; shift 2 ;;
             --json) _ce_json=1; shift ;;
-            --shell) [ $# -ge 2 ] || return 1; _ce_shell="$2"; shift 2 ;;
+            --shell) [ $# -ge 2 ] || { cli_error exec invalid_input "--shell requires a command string" "pass --allow-shell after reviewing it"; return 1; }; _ce_shell="$2"; shift 2 ;;
             --allow-shell) _ce_allow_shell=1; shift ;;
             --) shift; break ;;
             *) break ;;
         esac
     done
-    case "$_ce_jobs:$_ce_timeout" in *[!0-9:]*) echo "Error: jobs and timeout must be integers" >&2; return 1 ;; esac
-    [ "$_ce_jobs" -ge 1 ] && [ "$_ce_jobs" -le 16 ] || { echo "Error: jobs must be between 1 and 16" >&2; return 1; }
+    case "$_ce_jobs:$_ce_timeout" in *[!0-9:]*) cli_error exec invalid_input "jobs and timeout must be integers" "use --jobs 1..16 and a non-negative --timeout"; return 1 ;; esac
+    [ "$_ce_jobs" -ge 1 ] && [ "$_ce_jobs" -le 16 ] || { cli_error exec invalid_input "jobs must be between 1 and 16" "choose a bounded worker count"; return 1; }
     if [ -n "$_ce_shell" ]; then
-        [ $# -eq 0 ] || { echo "Error: --shell cannot be combined with argv after --" >&2; return 1; }
+        [ $# -eq 0 ] || { cli_error exec invalid_input "--shell cannot be combined with argv after --" "choose argv mode or shell-string mode"; return 1; }
         if [ "$_ce_allow_shell" -ne 1 ] || ! project_is_trusted; then
-            echo "Error: shell execution requires --allow-shell and currently trusted project configuration" >&2
+            cli_error exec trust_required "shell execution requires --allow-shell and currently trusted project configuration" "review config, run hydra init --trust, and pass --allow-shell"
             return 1
         fi
         set -- sh -c "$_ce_shell"
     else
-        [ $# -gt 0 ] || { echo "Usage: hydra exec [selection] [--jobs N] [--timeout N] -- command [args...]" >&2; return 1; }
+        [ $# -gt 0 ] || { cli_error exec invalid_input "command argv is required" "place the command after --"; return 1; }
     fi
     _ce_selectors=0
     [ -z "$_ce_branches" ] || _ce_selectors=$((_ce_selectors + 1))
     [ -z "$_ce_group" ] || _ce_selectors=$((_ce_selectors + 1))
     [ "$_ce_all" -eq 0 ] || _ce_selectors=$((_ce_selectors + 1))
     [ "$_ce_selectors" -le 1 ] || {
-        echo "Error: --branch, --group, and --all are mutually exclusive selection modes" >&2
+        cli_error exec invalid_input "--branch, --group, and --all are mutually exclusive selection modes" "choose exactly one selection mode"
         return 1
     }
-    _ce_project="$(hydra_get_project_id)" || return 1
+    _ce_project="$(hydra_get_project_id)" || { cli_error exec not_initialized "Hydra project identity is unavailable" "run hydra init"; return 1; }
     LIFECYCLE_PROJECT_ID="$_ce_project"
     export LIFECYCLE_PROJECT_ID
     _ce_selection="$(mktemp)" || return 1
-    operations_select_heads "$_ce_selection" "$_ce_branches" "$_ce_group" "$_ce_all" || { rm -f "$_ce_selection"; return 1; }
+    operations_select_heads "$_ce_selection" "$_ce_branches" "$_ce_group" "$_ce_all" || { rm -f "$_ce_selection"; cli_error exec selection_failed "No executable head selection was resolved" "inspect with hydra list"; return 1; }
     _ce_run="$(hydra_new_id run "$_ce_project|exec")" || { rm -f "$_ce_selection"; return 1; }
     _ce_run_dir="$HYDRA_STATE_V2_ROOT/projects/$_ce_project/exec/$_ce_run"
     mkdir -p "$_ce_run_dir" || { rm -f "$_ce_selection"; return 1; }
@@ -110,18 +110,18 @@ cmd_exec() {
 
 cmd_diff() {
     _cd_branch="${1:-}"
-    [ -n "$_cd_branch" ] || { echo "Usage: hydra diff <branch> [--stat|--name-only|--json]" >&2; return 1; }
+    [ -n "$_cd_branch" ] && [ "$_cd_branch" != --json ] || { cli_error diff invalid_input "head is required" "run hydra diff <head> --json"; return 1; }
     shift
     _cd_mode="patch"
     _cd_json=0
     while [ $# -gt 0 ]; do
-        case "$1" in --stat) _cd_mode=stat ;; --name-only) _cd_mode=name-only ;; --json) _cd_json=1 ;; *) return 1 ;; esac
+        case "$1" in --stat) _cd_mode=stat ;; --name-only) _cd_mode=name-only ;; --json) _cd_json=1 ;; *) cli_error diff invalid_input "unknown option '$1'" "run hydra diff <head> --json"; return 1 ;; esac
         shift
     done
-    lifecycle_load_head "$_cd_branch" || return 1
+    lifecycle_load_head "$_cd_branch" || { cli_error diff not_found "Head '$_cd_branch' is unavailable" "inspect with hydra list"; return 1; }
     _cd_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree")"
     _cd_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref")"
-    [ -d "$_cd_worktree" ] || { echo "Error: worktree is unavailable" >&2; return 1; }
+    [ -d "$_cd_worktree" ] || { cli_error diff worktree_unavailable "worktree is unavailable" "run hydra lifecycle $_cd_branch"; return 1; }
     case "$_cd_mode" in
         stat) _cd_output="$(git -C "$_cd_worktree" diff --stat "$_cd_base" --)" ;;
         name-only) _cd_output="$(git -C "$_cd_worktree" diff --name-only "$_cd_base" --)" ;;
@@ -136,16 +136,16 @@ cmd_diff() {
 
 cmd_review() {
     _crv_branch="${1:-}"
-    [ -n "$_crv_branch" ] || { echo "Usage: hydra review <branch> [--json]" >&2; return 1; }
+    [ -n "$_crv_branch" ] && [ "$_crv_branch" != --json ] || { cli_error review invalid_input "head is required" "run hydra review <head> --json"; return 1; }
     shift
     _crv_json=0
     if [ $# -eq 1 ] && [ "$1" = --json ]; then
         _crv_json=1
     elif [ $# -ne 0 ]; then
-        echo "Usage: hydra review <branch> [--json]" >&2
+        cli_error review invalid_input "unexpected arguments" "run hydra review <head> --json"
         return 1
     fi
-    lifecycle_load_head "$_crv_branch" || return 1
+    lifecycle_load_head "$_crv_branch" || { cli_error review not_found "Head '$_crv_branch' is unavailable" "inspect with hydra list"; return 1; }
     _crv_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree")"
     _crv_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref")"
     [ -d "$_crv_worktree" ] || return 1
@@ -176,18 +176,18 @@ EOF
 
 cmd_provenance() {
     _cpv_branch="${1:-}"
-    [ -n "$_cpv_branch" ] || { echo "Usage: hydra provenance <branch> [--json]" >&2; return 1; }
+    [ -n "$_cpv_branch" ] && [ "$_cpv_branch" != --json ] || { cli_error provenance invalid_input "head is required" "run hydra provenance <head> --json"; return 1; }
     shift
     _cpv_json=0
     if [ $# -eq 1 ] && [ "$1" = --json ]; then
         _cpv_json=1
     elif [ $# -ne 0 ]; then
-        echo "Usage: hydra provenance <branch> [--json]" >&2
+        cli_error provenance invalid_input "unexpected arguments" "run hydra provenance <head> --json"
         return 1
     fi
-    lifecycle_load_head "$_cpv_branch" || return 1
+    lifecycle_load_head "$_cpv_branch" || { cli_error provenance not_found "Head '$_cpv_branch' is unavailable" "inspect with hydra list"; return 1; }
     _cpv_dir="$LIFECYCLE_HEAD_DIR/provenance"
-    [ -d "$_cpv_dir" ] || { echo "Error: provenance is unavailable for this migrated head" >&2; return 1; }
+    [ -d "$_cpv_dir" ] || { cli_error provenance unavailable "provenance is unavailable for this migrated head" "resume or recreate the head to capture provenance"; return 1; }
     if [ "$_cpv_json" -eq 1 ]; then
         json_success provenance "{\"branch\":\"$(json_escape "$_cpv_branch")\",\"project_id\":\"$LIFECYCLE_PROJECT_ID\",\"head_id\":\"$LIFECYCLE_HEAD_ID\",\"instance_id\":\"$LIFECYCLE_INSTANCE_ID\",\"hydra_version\":\"$(json_escape "$(sed -n '1p' "$_cpv_dir/hydra-version")")\",\"base_ref\":\"$(sed -n '1p' "$_cpv_dir/base-ref")\",\"task_hash\":\"$(sed -n '1p' "$_cpv_dir/task-hash")\",\"task_bytes\":$(sed -n '1p' "$_cpv_dir/task-bytes"),\"trusted_config_hash\":\"$(sed -n '1p' "$_cpv_dir/trusted-config-hash")\",\"profile\":\"$(json_escape "$(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/resolved-profile")")\",\"profile_version\":\"$(json_escape "$(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/profile-version")")\"}"
     else

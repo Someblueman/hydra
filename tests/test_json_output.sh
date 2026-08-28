@@ -68,6 +68,22 @@ assert_contains() {
     fi
 }
 
+assert_envelope() {
+    output="$1"
+    command="$2"
+    ok="$3"
+    message="$4"
+    if validate_json "$output" && \
+       printf '%s' "$output" | grep -Fq '"schema_version":1' && \
+       printf '%s' "$output" | grep -Fq "\"ok\":$ok" && \
+       printf '%s' "$output" | grep -Fq "\"command\":\"$command\""; then
+        assert_success 0 "$message"
+    else
+        echo "  Output: $output"
+        assert_success 1 "$message"
+    fi
+}
+
 # Validate JSON syntax (improved checks beyond just balanced braces)
 validate_json() {
     json="$1"
@@ -418,6 +434,63 @@ test_status_json_seven_field_map() {
     cleanup_test_env
 }
 
+test_versioned_command_envelopes() {
+    echo ""
+    echo "Testing versioned command envelopes..."
+
+    setup_test_env
+
+    output="$("$HYDRA_BIN" list --json)"
+    assert_envelope "$output" list true "list success uses JSON v1"
+
+    output="$("$HYDRA_BIN" status --json)"
+    assert_envelope "$output" status true "status success uses JSON v1"
+
+    output="$("$HYDRA_BIN" queue --json)"
+    assert_envelope "$output" queue true "queue success uses JSON v1"
+
+    output="$("$HYDRA_BIN" group status empty --json)"
+    assert_envelope "$output" "group status" true "group status success uses JSON v1"
+
+    output="$("$HYDRA_BIN" list --bad --json 2>/dev/null)" || list_code=$?
+    list_code="${list_code:-0}"
+    if [ "$list_code" -ne 0 ]; then assert_success 0 "JSON error exits nonzero"; else assert_success 1 "JSON error exits nonzero"; fi
+    assert_envelope "$output" list false "list validation failure uses JSON v1"
+
+    output="$(TMUX='' "$HYDRA_BIN" recv --json 2>/dev/null)" || recv_code=$?
+    recv_code="${recv_code:-0}"
+    if [ "$recv_code" -ne 0 ]; then assert_success 0 "recv JSON error exits nonzero"; else assert_success 1 "recv JSON error exits nonzero"; fi
+    assert_envelope "$output" recv false "recv failure uses JSON v1"
+
+    output="$("$HYDRA_BIN" queue remove absent --json 2>/dev/null)" || queue_code=$?
+    queue_code="${queue_code:-0}"
+    if [ "$queue_code" -ne 0 ]; then assert_success 0 "queue JSON error exits nonzero"; else assert_success 1 "queue JSON error exits nonzero"; fi
+    assert_envelope "$output" queue false "queue failure uses JSON v1"
+
+    output="$("$HYDRA_BIN" lifecycle absent --json 2>/dev/null)" || lifecycle_code=$?
+    lifecycle_code="${lifecycle_code:-0}"
+    if [ "$lifecycle_code" -ne 0 ]; then assert_success 0 "lifecycle JSON error exits nonzero"; else assert_success 1 "lifecycle JSON error exits nonzero"; fi
+    assert_envelope "$output" lifecycle false "lifecycle failure uses JSON v1"
+
+    output="$("$HYDRA_BIN" wait absent --json 2>/dev/null)" || wait_code=$?
+    wait_code="${wait_code:-0}"
+    if [ "$wait_code" -ne 0 ]; then assert_success 0 "wait JSON error exits nonzero"; else assert_success 1 "wait JSON error exits nonzero"; fi
+    assert_envelope "$output" wait false "wait failure uses JSON v1"
+
+    output="$("$HYDRA_BIN" exec --json --jobs invalid -- true 2>/dev/null)" || exec_code=$?
+    exec_code="${exec_code:-0}"
+    if [ "$exec_code" -ne 0 ]; then assert_success 0 "exec JSON error exits nonzero"; else assert_success 1 "exec JSON error exits nonzero"; fi
+    assert_envelope "$output" exec false "exec validation failure uses JSON v1"
+
+    mkdir -p "$_TEST_DIR/not-a-repo"
+    output="$(cd "$_TEST_DIR/not-a-repo" && "$HYDRA_BIN" init --json 2>/dev/null)" || init_code=$?
+    init_code="${init_code:-0}"
+    if [ "$init_code" -ne 0 ]; then assert_success 0 "init JSON error exits nonzero"; else assert_success 1 "init JSON error exits nonzero"; fi
+    assert_envelope "$output" init false "init failure uses JSON v1"
+
+    cleanup_test_env
+}
+
 # =============================================================================
 # Main test runner
 # =============================================================================
@@ -455,6 +528,7 @@ main() {
     test_list_json_with_sessions
     test_status_json
     test_status_json_seven_field_map
+    test_versioned_command_envelopes
 
     # Report results
     echo ""

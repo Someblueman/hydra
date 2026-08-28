@@ -3,12 +3,12 @@
 
 cmd_lifecycle() {
     _cl_branch="${1:-}"
-    [ -n "$_cl_branch" ] || { echo "Usage: hydra lifecycle <branch> [--json]" >&2; return 1; }
+    [ -n "$_cl_branch" ] && [ "$_cl_branch" != --json ] || { cli_error lifecycle invalid_input "head is required" "run hydra lifecycle <head> --json"; return 1; }
     shift
     _cl_json=0
-    [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --json ]; } || { echo "Usage: hydra lifecycle <branch> [--json]" >&2; return 1; }
+    [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --json ]; } || { cli_error lifecycle invalid_input "unexpected arguments" "run hydra lifecycle <head> --json"; return 1; }
     [ $# -eq 0 ] || _cl_json=1
-    lifecycle_load_head "$_cl_branch" || return 1
+    lifecycle_load_head "$_cl_branch" || { cli_error lifecycle not_found "Head '$_cl_branch' is unavailable" "inspect with hydra list"; return 1; }
     _cl_outcome="$(lifecycle_read declared-outcome)"
     _cl_observed="$(lifecycle_read observed-status)"
     _cl_confidence="$(lifecycle_read observed-confidence)"
@@ -53,21 +53,21 @@ cmd_outcome() {
 
 cmd_wait() {
     _cw_branch="${1:-}"
-    [ -n "$_cw_branch" ] || { echo "Usage: hydra wait <branch> [--for <condition>] [--timeout <seconds>] [--json]" >&2; return 1; }
+    [ -n "$_cw_branch" ] && [ "$_cw_branch" != --json ] || { cli_error wait invalid_input "head is required" "run hydra wait <head> --json"; return 1; }
     shift
     _cw_condition=complete
     _cw_timeout=300
     _cw_json=0
     while [ $# -gt 0 ]; do
         case "$1" in
-            --for) [ $# -ge 2 ] || return 1; _cw_condition="$2"; shift 2 ;;
-            --timeout) [ $# -ge 2 ] || return 1; _cw_timeout="$2"; shift 2 ;;
+            --for) [ $# -ge 2 ] || { cli_error wait invalid_input "--for requires a condition" "inspect hydra lifecycle <head>"; return 1; }; _cw_condition="$2"; shift 2 ;;
+            --timeout) [ $# -ge 2 ] || { cli_error wait invalid_input "--timeout requires seconds" "pass a non-negative integer"; return 1; }; _cw_timeout="$2"; shift 2 ;;
             --json) _cw_json=1; shift ;;
-            *) echo "Error: unknown wait option '$1'" >&2; return 1 ;;
+            *) cli_error wait invalid_input "unknown wait option '$1'" "run hydra wait <head> --json"; return 1 ;;
         esac
     done
-    case "$_cw_timeout" in ''|*[!0-9]*) echo "Error: timeout must be a non-negative integer" >&2; return 1 ;; esac
-    lifecycle_load_head "$_cw_branch" || return 1
+    case "$_cw_timeout" in ''|*[!0-9]*) cli_error wait invalid_input "timeout must be a non-negative integer" "pass --timeout <seconds>"; return 1 ;; esac
+    lifecycle_load_head "$_cw_branch" || { cli_error wait not_found "Head '$_cw_branch' is unavailable" "inspect with hydra list"; return 1; }
     _cw_instance="$LIFECYCLE_INSTANCE_ID"
     _cw_started="$(date +%s)"
     while :; do
