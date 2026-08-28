@@ -45,6 +45,9 @@ test_try_lock() {
     fi
     test_count=$((test_count + 1))
 
+    assert_equal "$$" "$(sed -n '1p' "$HYDRA_HOME/locks/test_lock_1.lock/pid")" "lock records owner PID"
+    assert_equal "test_lock_1" "$(sed -n '1p' "$HYDRA_HOME/locks/test_lock_1.lock/operation")" "lock records operation"
+
     # Test acquiring same lock fails (already held)
     try_lock "test_lock_1"
     assert_failure $? "try_lock should fail when lock already held"
@@ -113,6 +116,31 @@ test_cleanup_stale_locks() {
     rmdir "$HYDRA_HOME/locks/stale_test.lock" 2>/dev/null || true
 }
 
+test_cleanup_dead_local_lock() {
+    echo "Testing evidence-based stale lock cleanup..."
+
+    dead_lock="$HYDRA_HOME/locks/dead-local.lock"
+    foreign_lock="$HYDRA_HOME/locks/foreign.lock"
+    mkdir -p "$dead_lock" "$foreign_lock"
+    printf '99999999\n' > "$dead_lock/pid"
+    hostname > "$dead_lock/host"
+    printf '99999999\n' > "$foreign_lock/pid"
+    printf 'different-host\n' > "$foreign_lock/host"
+
+    cleanup_stale_locks
+    if [ ! -d "$dead_lock" ]; then
+        assert_success 0 "dead same-host lock is removed"
+    else
+        assert_success 1 "dead same-host lock is removed"
+    fi
+    if [ -d "$foreign_lock" ]; then
+        assert_success 0 "foreign-host lock is preserved"
+    else
+        assert_success 1 "foreign-host lock is preserved"
+    fi
+    rm -rf "$foreign_lock"
+}
+
 # Test release_session_lock function
 test_release_session_lock() {
     echo "Testing release_session_lock..."
@@ -163,6 +191,7 @@ test_try_lock
 test_release_lock
 test_acquire_lock_fail_closed
 test_cleanup_stale_locks
+test_cleanup_dead_local_lock
 test_release_session_lock
 test_lock_without_home
 

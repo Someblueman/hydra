@@ -642,7 +642,7 @@ semantics using the shell implementation first.
 
 #### Scope
 
-- [ ] Accept the identity architecture decision.
+- [x] Accept the identity architecture decision.
 - [ ] Specify state v2, events v1, lifecycle v1, JSON success/error v1, and the shared
       lock protocol.
 - [ ] Implement state verify, backup, migration dry-run, migration, and rollback.
@@ -1200,8 +1200,8 @@ recorded architecture decisions.
 | --- | --- | --- | --- |
 | Installation prefix, layout, and version discovery | 1.5.2 onboarding | Fresh-prefix install/uninstall plus run-from-source parity | Accepted: `$PREFIX/bin` + `$PREFIX/lib/hydra`; relative discovery; `HYDRA_ROOT` first |
 | Default agent detection and no-agent selection | 1.6 guided onboarding | Clean-home fixtures with zero, one, and multiple detected agent CLIs | Open |
-| Project identity generation | State v2 | Collision, repo move, clone, and duplicate-branch fixtures | Open |
-| Physical state v2 representation | Migration and native reader | Shell simplicity, atomicity, malformed-input fixtures | Open |
+| Project identity generation | State v2 | Collision, repo move, clone, and duplicate-branch fixtures | Accepted: opaque ID in Git common dir; ADR 0001 |
+| Physical state v2 representation | Migration and native reader | Shell simplicity, atomicity, malformed-input fixtures | Accepted: per-head scalar directory; ADR 0001 |
 | Pane-history default, retention, and redaction policy | Lifecycle release | Secret-bearing fixtures, permissions, disk growth, recovery value | Open |
 | Agent adapter packaging and capability matrix | Lifecycle release | Verified vendor fixtures, trust boundaries, version-skew fallback | Open |
 | Worktree-root default and stored-path migration | Lifecycle release | Multiple repositories, repo moves, wrong-cwd kill, recovery fixtures | Open |

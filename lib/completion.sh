@@ -16,7 +16,7 @@ _hydra_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    commands="spawn list switch kill regenerate status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
+    commands="spawn list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
     
     case "${prev}" in
@@ -131,10 +131,18 @@ _hydra_completion() {
     # Check if we're completing template subcommand
     if [[ "${COMP_WORDS[@]}" =~ template ]]; then
         case "${prev}" in
-            template)
+        template)
                 COMPREPLY=($(compgen -W "list create show edit delete" -- ${cur}))
-                return 0
-                ;;
+            return 0
+            ;;
+        state)
+            COMPREPLY=($(compgen -W "verify backup migrate rollback" -- ${cur}))
+            return 0
+            ;;
+        events)
+            COMPREPLY=($(compgen -W "verify tail filter retain repair" -- ${cur}))
+            return 0
+            ;;
         esac
     fi
 
@@ -206,6 +214,12 @@ _hydra() {
                 template)
                     _arguments '1:subcommand:(list create show edit delete)'
                     ;;
+                state)
+                    _arguments '1:subcommand:(verify backup migrate rollback)'
+                    ;;
+                events)
+                    _arguments '1:subcommand:(verify tail filter retain repair)'
+                    ;;
                 dashboard)
                     _arguments \
                         '(-p --panes-per-session)'{-p,--panes-per-session}'[Panes to collect per session]:value:(1 2 3 4 5 6 7 8 9 10 all)'
@@ -234,6 +248,8 @@ _hydra_commands() {
         'switch:Switch to a different head (interactive)'
         'kill:Remove a worktree and its tmux session'
         'regenerate:Restore tmux sessions for existing worktrees'
+        'state:Verify, back up, migrate, or roll back durable state'
+        'events:Verify, tail, filter, retain, or repair head events'
         'status:Show health status of all heads'
         'doctor:Check system performance'
         'dashboard:View all sessions in a single dashboard'
@@ -297,6 +313,8 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'list' -d 'List all active Hy
 complete -c hydra -f -n '__fish_use_subcommand' -a 'switch' -d 'Switch to a different head (interactive)'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'kill' -d 'Remove a worktree and its tmux session'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'regenerate' -d 'Restore tmux sessions for existing worktrees'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'state' -d 'Verify, back up, migrate, or roll back durable state'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'events' -d 'Verify, tail, filter, retain, or repair head events'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'status' -d 'Show health status of all heads'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'doctor' -d 'Check system performance'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'dashboard' -d 'View all sessions in a single dashboard'

@@ -1,6 +1,7 @@
-# Hydra 1.5 public contracts
+# Hydra public contracts
 
-This document records which 1.5.0 behaviors remain public through 1.5.2.
+This document records which 1.5 behaviors remain public and the accepted 1.6
+foundation contracts.
 Internal function names, the in-process state cache, and TUI render details
 are not contracts.
 
@@ -31,10 +32,12 @@ name.
 
 ## Locks
 
-Locks are empty directories `$HYDRA_HOME/locks/<name>.lock` created with
-`mkdir`. There is no `pid` file in 1.5.1. Stale locks are directories whose
-mtime is older than one minute (`find -mmin +1`). Doctor and cleanup use that
-same format.
+Locks are directories `$HYDRA_HOME/locks/<name>.lock` created atomically with
+`mkdir`. Each new lock records owner PID, host, creation time, and operation in
+mode-0600 scalar files. A partially written owner record is still a held lock.
+Cleanup removes a lock automatically only when its host matches this host and
+its recorded PID is no longer live; age alone is not evidence of staleness.
+Metadata-free legacy locks remain held until explicitly recovered.
 
 ## Atomic replacement
 
@@ -106,7 +109,11 @@ Uninstall uses the same `PREFIX`/`DESTDIR` and removes only those installed
 files. `--purge` may remove `HYDRA_HOME` / `~/.hydra`; it never touches the
 source repository.
 
-## Not covered
+## 1.6 foundation
 
-State v2, instance IDs, events, and native helpers are later releases.
-Pre-2.0 internal library layout may change.
+The accepted identity, state v2, Events v1, and lifecycle contracts are in
+[`adr/0001-identity-state-events-locks.md`](adr/0001-identity-state-events-locks.md),
+[`STATE.md`](STATE.md), [`EVENTS.md`](EVENTS.md), and
+[`LIFECYCLE.md`](LIFECYCLE.md). The seven-field map remains the active runtime
+format until migration and command integration are complete on the 1.6 branch.
+Native helpers remain deferred. Pre-2.0 internal library layout may change.
