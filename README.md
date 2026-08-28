@@ -73,13 +73,16 @@ Use a disposable repository so Hydra does not create branches in a real project.
 ```sh
 mkdir /tmp/hydra-tour && cd /tmp/hydra-tour
 git init && git commit --allow-empty -m "tour"
-export HYDRA_SKIP_AI=1
-hydra spawn first-head
+hydra init --no-agent --trust
+hydra spawn first-head --no-agent --prompt "Inspect this throwaway project"
 hydra list
+hydra path first-head   # stored identity-scoped worktree path
 hydra switch           # enter the session (fzf if installed)
 ```
 
-`HYDRA_SKIP_AI=1` is the supported shell-only path. Spawn defaults to `claude` only when that variable is unset; if the agent is missing, Hydra names the recovery (`HYDRA_SKIP_AI=1` or install the agent).
+`--no-agent` is the first-class shell-only path. Without an explicit or configured
+profile, Hydra selects one only when exactly one supported executable is positively
+detected; zero agents select `none`, while multiple agents require an explicit choice.
 
 ### 4. Clean up
 
@@ -119,6 +122,9 @@ If you want to generate GIFs yourself, you can use the [VHS project](https://git
 ```sh
 # Create a new head for a branch (tmux + worktree)
 hydra spawn feature-branch [-l default|dev|full]
+hydra spawn feature-branch --dry-run --no-agent
+hydra spawn feature-branch --profile claude --prompt "Implement the task"
+hydra spawn feature-branch --profile codex --prompt-file task.md
 
 # From a GitHub issue
 hydra spawn --issue 123
@@ -152,6 +158,11 @@ hydra wait-idle                  # wait for sessions to become idle
 hydra wait-idle -g backend -s 10 # wait for group with 10s idle threshold
 
 # System
+hydra init --profile claude --trust
+hydra agent list
+hydra capabilities --json
+hydra state verify
+hydra events tail
 hydra regenerate   # restore sessions after restart
 hydra status       # per-head health
 hydra status --json # JSON output
@@ -176,17 +187,20 @@ hydra tui                                          # interactive session manager
 | Variable | Description |
 |----------|-------------|
 | `HYDRA_HOME` | Runtime dir (default `~/.hydra`) |
-| `HYDRA_AI_COMMAND` | Default AI tool (`claude`) |
+| `HYDRA_AI_COMMAND` | Legacy default agent override; prefer project profiles |
 | `HYDRA_ROOT` | Force library discovery when running from source |
 | `HYDRA_DASHBOARD_PANES_PER_SESSION` | `1`, `N`, or `all` |
-| `HYDRA_SKIP_AI` | Skip auto-starting AI tool on spawn |
+| `HYDRA_SKIP_AI` | Legacy shell-only switch; prefer `spawn --no-agent` |
 | `HYDRA_DASHBOARD_NO_ATTACH` | Create dashboard without attaching |
 | `HYDRA_NONINTERACTIVE` | Skip all confirmation prompts (for CI/automation) |
 | `HYDRA_REGENERATE_RUN_STARTUP` | Run startup commands on regenerate |
 | `HYDRA_ALLOW_ADVANCED_REFS` | Relax branch charset validation (use with care) |
 | `HYDRA_DISABLE_YAML` | Disable YAML config parsing |
 
-Per‑head AI selection is persisted: `hydra spawn <branch> --ai <tool>` shows in `hydra list/status` and is reused by `hydra regenerate`.
+Per-head profile, task, identity, worktree path, instance, and lifecycle event are
+stored in project-scoped state v2. See [profiles](docs/PROFILES.md),
+[state](docs/STATE.md), [events](docs/EVENTS.md), and
+[automation](docs/AUTOMATION.md).
 
 ## YAML Config (optional)
 
@@ -206,6 +220,8 @@ startup:
   - echo "Project ready"
 ```
 
+- Repository-controlled setup is inert until its exact config hash is accepted with
+  `hydra init --trust`; changing the file requires renewed trust.
 - On spawn/regenerate: windows and panes are applied. `startup` runs on spawn, and on regenerate only if `HYDRA_REGENERATE_RUN_STARTUP=1`.
 - Minimal parser supports the fields above; values are plain strings.
 

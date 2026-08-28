@@ -106,3 +106,20 @@ json_kv_bool() {
 json_kv_null() {
     printf '"%s": null' "$1"
 }
+
+# Stable automation envelope for successful commands.
+# Usage: json_success <command> <data-json>
+json_success() {
+    _js_data="${2:-}"
+    [ -n "$_js_data" ] || _js_data='{}'
+    printf '{"schema_version":1,"ok":true,"command":"%s","data":%s}\n' \
+        "$(json_escape "$1")" "$_js_data"
+}
+
+# Stable automation envelope for command failures.
+# Usage: json_error <command> <code> <message> <recovery>
+json_error() {
+    printf '{"schema_version":1,"ok":false,"command":"%s","error":{"code":"%s","message":"%s","recovery":"%s"}}\n' \
+        "$(json_escape "$1")" "$(json_escape "$2")" \
+        "$(json_escape "$3")" "$(json_escape "${4:-}")"
+}

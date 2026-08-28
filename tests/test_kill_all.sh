@@ -103,10 +103,21 @@ cleanup_test_sessions() {
     if [ -n "${HYDRA_HOME:-}" ] && [ -f "$HYDRA_HOME/map" ]; then
         : > "$HYDRA_HOME/map"
     fi
+    find "${HYDRA_HOME:-/nonexistent}/state/v2/projects" -name compat-map -type f \
+        -exec sh -c ': > "$1"' sh {} \; 2>/dev/null || true
     
     # Remove any hydra-* worktrees under our unique base dir
     if [ -n "$test_base_dir" ] && [ -d "$test_base_dir" ]; then
         rm -rf "$test_base_dir"/hydra-*
+    fi
+}
+
+current_map_path() {
+    project_id="$(sed -n '1p' .git/hydra/project-id 2>/dev/null || true)"
+    if [ -n "$project_id" ]; then
+        printf '%s/state/v2/projects/%s/compat-map\n' "$HYDRA_HOME" "$project_id"
+    else
+        printf '%s/map\n' "$HYDRA_HOME"
     fi
 }
 
@@ -198,7 +209,7 @@ test_kill_all_partial_failure() {
     "$HYDRA_BIN" spawn "$K2" >/dev/null 2>&1
     
     # Create a mapping for a non-existent session
-    echo "killtest-phantom-$suffix killtest-phantom-session" >> "$HYDRA_HOME/map"
+    echo "killtest-phantom-$suffix killtest-phantom-session" >> "$(current_map_path)"
     
     # Kill all with force
     output="$("$HYDRA_BIN" kill --all --force 2>&1)"

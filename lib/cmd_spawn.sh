@@ -8,6 +8,7 @@ cmd_spawn() {
     layout="default"
     count=1
     ai_tool=""
+    explicit_profile=""
     agents_spec=""
     issue_num=""
     group=""
@@ -15,6 +16,12 @@ cmd_spawn() {
     pr_num=""
     pr_new=""
     template_name=""
+    no_agent=""
+    dry_run=""
+    task_text=""
+    task_source=""
+    prompt_file=""
+    use_issue_body=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -28,9 +35,38 @@ cmd_spawn() {
                 count="$1"
                 shift
                 ;;
-            --ai)
+            --ai|--profile)
+                [ $# -ge 2 ] || { echo "Error: $1 requires a profile name" >&2; exit 1; }
+                ai_tool="$2"
+                explicit_profile="$2"
+                shift 2
+                ;;
+            --no-agent)
+                no_agent="1"
                 shift
-                ai_tool="$1"
+                ;;
+            --dry-run)
+                dry_run="1"
+                shift
+                ;;
+            --prompt)
+                [ $# -ge 2 ] || { echo "Error: --prompt requires task text" >&2; exit 1; }
+                [ -z "$task_source" ] || { echo "Error: choose only one task source" >&2; exit 1; }
+                task_text="$2"
+                task_source="prompt"
+                shift 2
+                ;;
+            --prompt-file)
+                [ $# -ge 2 ] || { echo "Error: --prompt-file requires a path" >&2; exit 1; }
+                [ -z "$task_source" ] || { echo "Error: choose only one task source" >&2; exit 1; }
+                prompt_file="$2"
+                task_source="file"
+                shift 2
+                ;;
+            --issue-body)
+                [ -z "$task_source" ] || { echo "Error: choose only one task source" >&2; exit 1; }
+                use_issue_body="1"
+                task_source="issue"
                 shift
                 ;;
             --agents)
@@ -136,10 +172,49 @@ cmd_spawn() {
         echo "       hydra spawn --pr <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
         exit 1
     fi
-    
+
+    if [ -n "$no_agent" ] && { [ -n "$explicit_profile" ] || [ -n "$agents_spec" ]; }; then
+        echo "Error: --no-agent cannot be combined with --profile/--ai" >&2
+        exit 1
+    fi
+    if [ -z "$agents_spec" ]; then
+        if [ -n "$no_agent" ] || [ -n "${HYDRA_SKIP_AI:-}" ]; then
+            ai_tool=none
+            HYDRA_SKIP_AI=1
+            export HYDRA_SKIP_AI
+        fi
+        ai_tool="$(profile_resolve "$ai_tool")" || exit 1
+        if [ "$ai_tool" = none ]; then
+            HYDRA_SKIP_AI=1
+            export HYDRA_SKIP_AI
+        fi
+    fi
+
+    if [ -n "$prompt_file" ]; then
+        [ -f "$prompt_file" ] && [ -r "$prompt_file" ] || {
+            echo "Error: prompt file is not readable: $prompt_file" >&2
+            exit 1
+        }
+        task_bytes="$(LC_ALL=C wc -c < "$prompt_file" | tr -d ' ')"
+        [ "$task_bytes" -le 65536 ] || { echo "Error: task input exceeds 65536 bytes" >&2; exit 1; }
+        task_text="$(sed -n '1,$p' "$prompt_file")"
+    fi
+    if [ -n "$use_issue_body" ]; then
+        [ -n "$issue_num" ] || { echo "Error: --issue-body requires --issue <number>" >&2; exit 1; }
+        task_text="$(get_issue_body "$issue_num")" || exit 1
+    fi
+    task_bytes="$(printf '%s' "$task_text" | LC_ALL=C wc -c | tr -d ' ')"
+    [ "$task_bytes" -le 65536 ] || { echo "Error: task input exceeds 65536 bytes" >&2; exit 1; }
+
     # Validate count
     if ! echo "$count" | grep -q '^[0-9]\+$' || [ "$count" -lt 1 ] || [ "$count" -gt 10 ]; then
         echo "Error: Count must be a number between 1 and 10" >&2
+        exit 1
+    fi
+
+    if { [ -n "$task_source" ] || [ -n "$dry_run" ]; } && \
+       { [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; }; then
+        echo "Error: task injection and dry-run currently require a single head" >&2
         exit 1
     fi
 
@@ -168,7 +243,7 @@ cmd_spawn() {
     fi
 
     # Handle mutually exclusive options
-    if [ -n "$agents_spec" ] && [ -n "$ai_tool" ]; then
+    if [ -n "$agents_spec" ] && [ -n "$explicit_profile" ]; then
         echo "Error: Cannot use both --ai and --agents options" >&2
         exit 1
     fi
@@ -191,6 +266,11 @@ cmd_spawn() {
         if ! check_circular_deps "$branch" "$after_deps"; then
             exit 1
         fi
+    fi
+
+    if [ -n "$dry_run" ]; then
+        spawn_dry_run "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$pr_num" "$template_name" "$task_text"
+        return $?
     fi
 
     # Check resource limits before spawning
@@ -278,7 +358,7 @@ cmd_spawn() {
         spawn_pr_num="$pr_num"
     fi
 
-    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num" "$template_name")"; then
+    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num" "$template_name" "$task_text")"; then
         # Handle --pr-new: create a draft PR after spawn
         if [ -n "$pr_new" ]; then
             _load_lib github
@@ -468,4 +548,3 @@ EOF
     echo "  Created: $regenerated"
     echo "  Skipped: $skipped"
 }
-

@@ -16,7 +16,7 @@ _hydra_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    commands="spawn list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
+    commands="spawn init agent capabilities path list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
     
     case "${prev}" in
@@ -112,7 +112,7 @@ _hydra_completion() {
 
         case "${cur}" in
             -*)
-                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --agents -i --issue --pr --pr-new --after -t --template" -- ${cur}))
+                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --profile --no-agent --dry-run --prompt --prompt-file --issue-body --agents -i --issue --pr --pr-new --after -t --template" -- ${cur}))
                 return 0
                 ;;
         esac
@@ -196,6 +196,12 @@ _hydra() {
                         '(-l --layout)'{-l,--layout}'[Layout to use]:layout:(default dev full)' \
                         '(-n --count)'{-n,--count}'[Number of sessions to spawn]:count:(1 2 3 4 5 6 7 8 9 10)' \
                         '--ai[AI tool to use]:ai:(claude aider codex cursor copilot gemini)' \
+                        '--profile[Agent profile to use]:profile:(none claude codex cursor copilot aider gemini)' \
+                        '--no-agent[Create a plain shell head]' \
+                        '--dry-run[Print plan without mutation]' \
+                        '--prompt[Task text]:task:' \
+                        '--prompt-file[Read task from file]:file:_files' \
+                        '--issue-body[Use issue body as task]' \
                         '--agents[Mixed agents specification]:agents:' \
                         '(-i --issue)'{-i,--issue}'[Create from GitHub issue]:issue:' \
                         '--pr[Create from GitHub PR]:pr:' \
@@ -244,6 +250,10 @@ _hydra() {
 _hydra_commands() {
     local commands; commands=(
         'spawn:Create a new worktree and tmux session'
+        'init:Initialize project identity, trust, profile, and worktree root'
+        'agent:Manage agent profiles'
+        'capabilities:Print machine-readable capabilities'
+        'path:Print a stored worktree path'
         'list:List all active Hydra heads'
         'switch:Switch to a different head (interactive)'
         'kill:Remove a worktree and its tmux session'
@@ -309,6 +319,10 @@ generate_fish_completion() {
 
 # Complete commands
 complete -c hydra -f -n '__fish_use_subcommand' -a 'spawn' -d 'Create a new worktree and tmux session'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'init' -d 'Initialize project identity, trust, profile, and worktree root'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'agent' -d 'Manage agent profiles'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'capabilities' -d 'Print machine-readable capabilities'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'path' -d 'Print a stored worktree path'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'list' -d 'List all active Hydra heads'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'switch' -d 'Switch to a different head (interactive)'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'kill' -d 'Remove a worktree and its tmux session'
@@ -343,6 +357,12 @@ complete -c hydra -f -n '__fish_use_subcommand' -s v -l version -d 'Show version
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s l -l layout -d 'Layout to use' -a 'default dev full'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s n -l count -d 'Number of sessions to spawn' -a '1 2 3 4 5 6 7 8 9 10'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to use' -a 'claude aider codex cursor copilot gemini'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l profile -d 'Agent profile' -a 'none claude codex cursor copilot aider gemini'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l no-agent -d 'Create a plain shell head'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l dry-run -d 'Print plan without mutation'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l prompt -d 'Task text'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l prompt-file -d 'Read task from file'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l issue-body -d 'Use issue body as task'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l agents -d 'Mixed agents specification (e.g., claude:2,aider:1)'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s i -l issue -d 'Create from GitHub issue number'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l pr -d 'Create from GitHub PR number'
@@ -359,6 +379,9 @@ complete -c hydra -f -n '__fish_seen_subcommand_from list' -l refresh-pr-status 
 
 # Complete template command
 complete -c hydra -f -n '__fish_seen_subcommand_from template' -a 'list create show edit delete'
+complete -c hydra -f -n '__fish_seen_subcommand_from agent' -a 'list show doctor init'
+complete -c hydra -f -n '__fish_seen_subcommand_from state' -a 'verify backup migrate rollback'
+complete -c hydra -f -n '__fish_seen_subcommand_from events' -a 'verify tail filter retain repair'
 
 # Complete dashboard flags
 complete -c hydra -f -n '__fish_seen_subcommand_from dashboard' -s p -l panes-per-session -d 'Panes to collect per session' -a '1 2 3 4 5 6 7 8 9 10 all'

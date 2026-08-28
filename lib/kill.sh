@@ -27,15 +27,37 @@ get_worktree_path_with_fallback() {
         return 1
     fi
 
-    # Try primary method: calculate from repo root
-    if _path="$(get_worktree_path_for_branch "$_branch" 2>/dev/null)"; then
-        echo "$_path"
+    # State v2 stores the authoritative path and does not recompute it from cwd.
+    if command -v hydra_get_project_id >/dev/null 2>&1 && \
+       command -v state_v2_find_head_by_branch >/dev/null 2>&1; then
+        _path_project="$(hydra_get_project_id 2>/dev/null || true)"
+        _path_head="$(state_v2_find_head_by_branch "$_path_project" "$_branch" 2>/dev/null || true)"
+        if [ -n "$_path_head" ]; then
+            _path_head_dir="$(state_v2_head_dir "$_path_project" "$_path_head" 2>/dev/null || true)"
+            _path="$(sed -n '1p' "$_path_head_dir/worktree" 2>/dev/null || true)"
+            if [ -n "$_path" ]; then
+                printf '%s\n' "$_path"
+                return 0
+            fi
+        fi
+    fi
+
+    # Try the legacy calculated path when it exists.
+    _legacy_path="$(get_worktree_path_for_branch "$_branch" 2>/dev/null || true)"
+    if [ -n "$_legacy_path" ] && [ -d "$_legacy_path" ]; then
+        printf '%s\n' "$_legacy_path"
         return 0
     fi
 
     # Fallback: use git worktree list to find existing worktree
     if _path="$(find_worktree_path "$_branch" 2>/dev/null)"; then
         echo "$_path"
+        return 0
+    fi
+
+    # Preserve the legacy query behavior for a not-yet-created branch.
+    if [ -n "$_legacy_path" ]; then
+        printf '%s\n' "$_legacy_path"
         return 0
     fi
 

@@ -10,6 +10,11 @@ dependencies, PR, desired state, completion policy, and current instance. Instan
 directories retain launch history. Task, lifecycle, resume, transcript, and
 provenance records extend the same head rather than creating another authority.
 
+During the shell-command migration, each project also has a seven-field `compat-map`
+projection used by unchanged 1.5 readers. It is project-scoped and is not shareable
+state. New durable task, identity, path, instance, and event data live only in the v2
+head records.
+
 Commands:
 
 ```sh
@@ -24,4 +29,3 @@ Verification is read-only. Migration accepts the legacy seven-field map only whe
 every record is well formed, creates a backup first, then writes complete per-head
 records using same-filesystem replacement. Rollback accepts only a generated backup
 under the current `HYDRA_HOME`.
-

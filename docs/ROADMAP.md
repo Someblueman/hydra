@@ -643,11 +643,11 @@ semantics using the shell implementation first.
 #### Scope
 
 - [x] Accept the identity architecture decision.
-- [ ] Specify state v2, events v1, lifecycle v1, JSON success/error v1, and the shared
+- [x] Specify state v2, events v1, lifecycle v1, JSON success/error v1, and the shared
       lock protocol.
-- [ ] Implement state verify, backup, migration dry-run, migration, and rollback.
-- [ ] Namespace state and worktree identity by project.
-- [ ] Implement versioned JSONL events with verify, tail, filter, retention, and
+- [x] Implement state verify, backup, migration dry-run, migration, and rollback.
+- [x] Namespace state and worktree identity by project.
+- [x] Implement versioned JSONL events with verify, tail, filter, retention, and
       repair behavior.
 - [ ] Implement instance-scoped declared outcomes, observed status, liveness, and
       explicit completion policies.
@@ -655,21 +655,21 @@ semantics using the shell implementation first.
       session disappearance as success.
 - [ ] Add `hydra wait` over durable state, using `tmux wait-for` only as an optional
       wake-up accelerator with rechecks and timeouts.
-- [ ] Add agent profiles with launch, prompt, resume, environment, capability, and
+- [x] Add agent profiles with launch, prompt, resume, environment, capability, and
       lifecycle-adapter declarations.
 - [ ] Ship capability-probed hook adapters only for verified agent surfaces; all
       adapters translate into the provider-neutral Hydra lifecycle/event schema.
 - [ ] Add one generic adapter-ingest command that validates structured stdin,
       correlates the active instance, and emits generic lifecycle events.
-- [ ] Add `hydra agent list`, `show`, `doctor`, and `init`, plus
+- [x] Add `hydra agent list`, `show`, `doctor`, and `init`, plus
       `hydra capabilities --json` for agents and automation.
-- [ ] Add `hydra init` for project identity, trust, profiles, bootstrap, worktree-root,
+- [x] Add `hydra init` for project identity, trust, profiles, bootstrap, worktree-root,
       and local-ignore configuration; workflow initialization follows in 1.9.
-- [ ] Add `spawn --dry-run` and a first-class `--no-agent` mode so users can inspect
+- [x] Add `spawn --dry-run` and a first-class `--no-agent` mode so users can inspect
       setup and create a plain shell head without environment variables.
-- [ ] Select an explicit, configured, or positively detected agent profile—or none;
+- [x] Select an explicit, configured, or positively detected agent profile—or none;
       never silently default to an unavailable agent executable.
-- [ ] Add task injection through `spawn --prompt`, `--prompt-file`, and issue-body
+- [x] Add task injection through `spawn --prompt`, `--prompt-file`, and issue-body
       input, recording the resolved task in head state.
 - [ ] Add durable resume metadata plus `hydra resume`; regenerate creates a new
       instance while preserving head history.

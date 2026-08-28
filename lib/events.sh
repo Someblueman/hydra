@@ -51,7 +51,8 @@ event_emit() {
     _ee_type="$4"
     _ee_actor_kind="${5:-hydra}"
     _ee_actor_id="${6:-local}"
-    _ee_payload="${7:-{}}"
+    _ee_payload="${7:-}"
+    [ -n "$_ee_payload" ] || _ee_payload='{}'
     hydra_valid_id "$_ee_project" && hydra_valid_id "$_ee_head" && \
         hydra_valid_id "$_ee_instance" || return 1
     case "$_ee_type" in ''|*[!a-z0-9._-]*) return 1 ;; esac
@@ -114,4 +115,3 @@ event_retain_file() {
     atomic_replace "$_ert_file" "$_ert_tmp" || return 1
     printf '%s\n' "$_ert_archive"
 }
-

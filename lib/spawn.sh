@@ -96,8 +96,78 @@ ensure_ai_on_path() {
     return 0
 }
 
+# Print a complete, non-mutating plan for one head.
+# Usage: spawn_dry_run <branch> <layout> <profile> <group> <deps> <pr> <template> <task>
+spawn_dry_run() {
+    _sdr_branch="$1"
+    _sdr_layout="$2"
+    _sdr_profile="$3"
+    _sdr_group="${4:--}"
+    _sdr_deps="${5:--}"
+    _sdr_pr="${6:--}"
+    _sdr_template="${7:--}"
+    _sdr_task="${8:-}"
+    _sdr_project="$(hydra_get_project_id 2>/dev/null)" || {
+        echo "Error: project is not initialized" >&2
+        echo "Next: hydra init --profile $_sdr_profile   or   hydra init --no-agent" >&2
+        return 1
+    }
+    _sdr_head="$(hydra_new_id head "$_sdr_project|$_sdr_branch|dry-run")" || return 1
+    _sdr_instance="$(hydra_new_id instance "$_sdr_head|dry-run")" || return 1
+    _sdr_worktree="$(project_worktree_path "$_sdr_project" "$_sdr_head")" || return 1
+    _sdr_head_dir="$(state_v2_head_dir "$_sdr_project" "$_sdr_head")" || return 1
+    _sdr_task_file="$_sdr_head_dir/task"
+    if [ "$_sdr_profile" != none ]; then
+        _sdr_provider=""
+        _sdr_task_arg=""
+        [ -z "$_sdr_task" ] || _sdr_task_arg="$_sdr_task_file"
+        [ "$(profile_field "$_sdr_profile" resume_mode)" != session-id ] || \
+            _sdr_provider="$(profile_new_provider_id "$_sdr_profile" "$_sdr_instance")"
+        _sdr_launch="$(profile_launch_command "$_sdr_profile" "$_sdr_task_arg" "$_sdr_provider")" || return 1
+    else
+        _sdr_launch="(plain shell; no agent)"
+    fi
+
+    echo "Hydra spawn plan (no changes will be made)"
+    echo "  project_id: $_sdr_project"
+    echo "  head_id: $_sdr_head"
+    echo "  instance_id: $_sdr_instance"
+    echo "  branch: $_sdr_branch"
+    echo "  worktree: $_sdr_worktree"
+    if git_branch_exists "$_sdr_branch"; then
+        echo "  git: git worktree add -- <worktree> $_sdr_branch"
+    else
+        echo "  git: git worktree add -b $_sdr_branch -- <worktree>"
+    fi
+    echo "  layout: $_sdr_layout"
+    echo "  profile: $_sdr_profile"
+    echo "  launch: $_sdr_launch"
+    echo "  group: ${_sdr_group:--}"
+    echo "  dependencies: ${_sdr_deps:--}"
+    echo "  pr: ${_sdr_pr:--}"
+    echo "  template: ${_sdr_template:--}"
+    echo "  task_bytes: $(printf '%s' "$_sdr_task" | LC_ALL=C wc -c | tr -d ' ') (content redacted)"
+    _sdr_config="$(project_repo_config 2>/dev/null || true)"
+    if [ -f "$_sdr_config" ]; then
+        if project_is_trusted; then
+            echo "  setup commands (trusted):"
+            _sdr_setup="$(parse_setup_commands "$_sdr_config")"
+            if [ -n "$_sdr_setup" ]; then
+                printf '%s\n' "$_sdr_setup" | sed 's/^/    - /'
+            else
+                echo "    (none)"
+            fi
+        else
+            echo "  setup commands: blocked (repository config is not trusted or changed)"
+        fi
+    else
+        echo "  setup commands: (none)"
+    fi
+    echo "  state: create head and instance, then emit lifecycle.started"
+}
+
 # Helper function to spawn a single session
-# Usage: spawn_single <branch> <layout> [ai_tool] [group] [deps] [pr_number] [template]
+# Usage: spawn_single <branch> <layout> [profile] [group] [deps] [pr_number] [template] [task]
 # Returns: Session name on stdout, 1 on failure
 spawn_single() {
     branch="$1"
@@ -107,6 +177,7 @@ spawn_single() {
     deps="${5:-}"
     pr_number="${6:-}"
     template="${7:-}"
+    task="${8:-}"
 
     # Wait for dependencies if specified
     if [ -n "$deps" ] && [ "$deps" != "-" ]; then
@@ -134,20 +205,29 @@ spawn_single() {
         return 1
     fi
 
-    # Fail fast if an agent is required but missing (before creating a worktree)
-    if [ -z "${HYDRA_SKIP_AI:-}" ]; then
-        _probe_ai="${ai_tool:-${HYDRA_AI_COMMAND:-claude}}"
-        if ! validate_ai_command "$_probe_ai"; then
-            return 1
-        fi
-        if ! ensure_ai_on_path "$_probe_ai"; then
-            return 1
-        fi
-    fi
-
-    # Get worktree path using consolidated path function
-    worktree_path="$(get_worktree_path_for_branch "$branch")" || return 1
     repo_root="$(get_repo_root)" || return 1
+    project_id="$(hydra_get_project_id 2>/dev/null || true)"
+    if [ -z "$project_id" ]; then
+        project_id="$(hydra_ensure_project_id)" || return 1
+    fi
+    project_activate_state_v2 "$project_id" || return 1
+    head_id="$(hydra_new_id head "$project_id|$branch")" || return 1
+    instance_id="$(hydra_new_id instance "$head_id|$branch")" || return 1
+    worktree_path="$(project_worktree_path "$project_id" "$head_id")" || return 1
+    base_ref="$(git rev-parse HEAD 2>/dev/null)" || return 1
+    spawn_timestamp="$(date +%s)"
+    provider_session_id=""
+    if [ "$ai_tool" != none ] && [ "$(profile_field "$ai_tool" resume_mode)" = session-id ]; then
+        provider_session_id="$(profile_new_provider_id "$ai_tool" "$instance_id")" || return 1
+    fi
+    planned_head_dir="$(state_v2_head_dir "$project_id" "$head_id")" || return 1
+    planned_task_file="$planned_head_dir/task"
+    launch_command=""
+    if [ "$ai_tool" != none ]; then
+        planned_task_arg=""
+        [ -z "$task" ] || planned_task_arg="$planned_task_file"
+        launch_command="$(profile_launch_command "$ai_tool" "$planned_task_arg" "$provider_session_id")" || return 1
+    fi
 
     # Check if branch already has a session
     existing_session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
@@ -193,11 +273,42 @@ spawn_single() {
     release_session_lock "$session" 2>/dev/null || true
 
     # Add mapping (persist selected AI tool, group, deps, and PR if provided)
-    if ! add_mapping "$branch" "$session" "${ai_tool:-}" "${group:-}" "" "${deps:-}" "${pr_number:-}"; then
+    if ! add_mapping "$branch" "$session" "${ai_tool:-}" "${group:-}" "$spawn_timestamp" "${deps:-}" "${pr_number:-}"; then
         echo "Error: Failed to save branch-session mapping" >&2
         spawn_rollback_session "$session" "$branch" "$worktree_path"
         return 1
     fi
+
+    # Commit durable identity and task before any agent process sees the task.
+    committed_head="$(state_v2_create_head "$project_id" "$branch" "$session" "$ai_tool" \
+        "${group:--}" "$spawn_timestamp" "${deps:--}" "${pr_number:--}" "$repo_root" \
+        "$head_id" "$instance_id" "$worktree_path" "$task" "$base_ref" "$provider_session_id")" || {
+        echo "Error: Failed to commit durable head state" >&2
+        spawn_rollback_session "$session" "$branch" "$worktree_path"
+        return 1
+    }
+    head_id="$committed_head"
+    head_dir="$(state_v2_head_dir "$project_id" "$head_id")" || return 1
+
+    tmux set-environment -t "$session" HYDRA_PROJECT_ID "$project_id" 2>/dev/null || true
+    tmux set-environment -t "$session" HYDRA_HEAD_ID "$head_id" 2>/dev/null || true
+    tmux set-environment -t "$session" HYDRA_INSTANCE_ID "$instance_id" 2>/dev/null || true
+    tmux set-environment -t "$session" HYDRA_BRANCH "$branch" 2>/dev/null || true
+    tmux set-environment -t "$session" HYDRA_WORKTREE "$worktree_path" 2>/dev/null || true
+    tmux set-environment -t "$session" HYDRA_STATE_DIR "$head_dir" 2>/dev/null || true
+    tmux set-environment -t "$session" HYDRA_TASK_FILE "$head_dir/task" 2>/dev/null || true
+    identity_export="export HYDRA_PROJECT_ID=$(profile_shell_quote "$project_id") HYDRA_HEAD_ID=$(profile_shell_quote "$head_id") HYDRA_INSTANCE_ID=$(profile_shell_quote "$instance_id") HYDRA_BRANCH=$(profile_shell_quote "$branch") HYDRA_WORKTREE=$(profile_shell_quote "$worktree_path") HYDRA_STATE_DIR=$(profile_shell_quote "$head_dir") HYDRA_TASK_FILE=$(profile_shell_quote "$head_dir/task")"
+    send_keys_to_session "$session" "$identity_export" || {
+        echo "Error: Failed to export head identity into session" >&2
+        spawn_rollback_session "$session" "$branch" "$worktree_path"
+        return 1
+    }
+    event_emit "$project_id" "$head_id" "$instance_id" lifecycle.started hydra local \
+        "{\"profile\":\"$(json_escape "$ai_tool")\"}" >/dev/null || {
+        echo "Error: Failed to record lifecycle event" >&2
+        spawn_rollback_session "$session" "$branch" "$worktree_path"
+        return 1
+    }
 
     # Apply YAML config if present; otherwise custom/built-in layout
     # If template specified, use it as base config (merged with session config)
@@ -226,20 +337,12 @@ spawn_single() {
     fi
 
     # Start AI tool unless explicitly skipped (e.g., demos/CI)
-    if [ -z "${HYDRA_SKIP_AI:-}" ]; then
-        if [ -z "$ai_tool" ]; then
-            ai_tool="${HYDRA_AI_COMMAND:-claude}"
-        fi
-        if ! validate_ai_command "$ai_tool"; then
-            spawn_rollback_session "$session" "$branch" "$worktree_path"
-            return 1
-        fi
-        if ! ensure_ai_on_path "$ai_tool"; then
-            spawn_rollback_session "$session" "$branch" "$worktree_path"
-            return 1
-        fi
+    if [ "$ai_tool" != none ]; then
         echo "Starting $ai_tool in session '$session'..." >&2
-        send_keys_to_session "$session" "$ai_tool"
+        if ! send_keys_to_session "$session" "$launch_command"; then
+            spawn_rollback_session "$session" "$branch" "$worktree_path"
+            return 1
+        fi
     fi
 
     # Run post-spawn hook (best-effort)

@@ -118,6 +118,21 @@ test_json_escape_plain_text() {
     assert_equal "hello world" "$result" "Plain text unchanged"
 }
 
+test_json_envelopes() {
+    echo ""
+    echo "Testing versioned JSON envelopes..."
+
+    success="$(json_success fixture '{}')"
+    assert_equal '{"schema_version":1,"ok":true,"command":"fixture","data":{}}' "$success" "Success envelope is stable JSON v1"
+    validate_json "$success"
+    assert_success $? "Success envelope validates"
+
+    failure="$(json_error fixture invalid_input 'bad input' 'retry safely')"
+    assert_equal '{"schema_version":1,"ok":false,"command":"fixture","error":{"code":"invalid_input","message":"bad input","recovery":"retry safely"}}' "$failure" "Error envelope is stable JSON v1"
+    validate_json "$failure"
+    assert_success $? "Error envelope validates"
+}
+
 test_json_escape_double_quotes() {
     echo ""
     echo "Testing json_escape with double quotes..."
@@ -429,6 +444,7 @@ main() {
     test_json_kv_num
     test_json_kv_bool
     test_json_kv_null
+    test_json_envelopes
 
     # Integration tests
     echo ""

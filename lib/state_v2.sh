@@ -42,6 +42,18 @@ state_v2_write_scalar() {
     fi
 }
 
+state_v2_write_text() {
+    _sv2wt_path="$1"
+    _sv2wt_value="$2"
+    _sv2wt_tmp="$(mktemp_adjacent "$_sv2wt_path")" || return 1
+    printf '%s' "$_sv2wt_value" > "$_sv2wt_tmp"
+    chmod 600 "$_sv2wt_tmp" 2>/dev/null || true
+    if ! atomic_replace "$_sv2wt_path" "$_sv2wt_tmp"; then
+        rm -f "$_sv2wt_tmp"
+        return 1
+    fi
+}
+
 state_v2_init_project() {
     _sv2ip_project="$1"
     _sv2ip_root="$2"
@@ -101,6 +113,12 @@ state_v2_create_head() {
     _sv2ch_deps="${7:--}"
     _sv2ch_pr="${8:--}"
     _sv2ch_root="${9:-$(git rev-parse --show-toplevel 2>/dev/null || true)}"
+    _sv2ch_requested_head="${10:-}"
+    _sv2ch_requested_instance="${11:-}"
+    _sv2ch_worktree="${12:-}"
+    _sv2ch_task="${13:-}"
+    _sv2ch_base_ref="${14:-}"
+    _sv2ch_provider_session="${15:-}"
 
     [ -n "$_sv2ch_branch" ] && [ -n "$_sv2ch_session" ] || return 1
     state_v2_init_project "$_sv2ch_project" "$_sv2ch_root" || return 1
@@ -112,12 +130,22 @@ state_v2_create_head() {
         return 0
     fi
 
-    _sv2ch_head="$(hydra_new_id head "$_sv2ch_project|$_sv2ch_branch")" || {
-        release_lock "$_sv2ch_lock"; return 1;
-    }
-    _sv2ch_instance="$(hydra_new_id instance "$_sv2ch_head|$_sv2ch_session")" || {
-        release_lock "$_sv2ch_lock"; return 1;
-    }
+    if [ -n "$_sv2ch_requested_head" ]; then
+        hydra_valid_id "$_sv2ch_requested_head" || { release_lock "$_sv2ch_lock"; return 1; }
+        _sv2ch_head="$_sv2ch_requested_head"
+    else
+        _sv2ch_head="$(hydra_new_id head "$_sv2ch_project|$_sv2ch_branch")" || {
+            release_lock "$_sv2ch_lock"; return 1;
+        }
+    fi
+    if [ -n "$_sv2ch_requested_instance" ]; then
+        hydra_valid_id "$_sv2ch_requested_instance" || { release_lock "$_sv2ch_lock"; return 1; }
+        _sv2ch_instance="$_sv2ch_requested_instance"
+    else
+        _sv2ch_instance="$(hydra_new_id instance "$_sv2ch_head|$_sv2ch_session")" || {
+            release_lock "$_sv2ch_lock"; return 1;
+        }
+    fi
     _sv2ch_dir="$(state_v2_head_dir "$_sv2ch_project" "$_sv2ch_head")" || {
         release_lock "$_sv2ch_lock"; return 1;
     }
@@ -141,9 +169,13 @@ state_v2_create_head() {
        ! state_v2_write_scalar "$_sv2ch_tmp/current-instance" "$_sv2ch_instance" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/desired-state" "running" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/completion-policy" "declared" || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/worktree" "$_sv2ch_worktree" || \
+       ! state_v2_write_text "$_sv2ch_tmp/task" "$_sv2ch_task" || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/base-ref" "$_sv2ch_base_ref" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/instance-id" "$_sv2ch_instance" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/session" "$_sv2ch_session" || \
-       ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/started-at" "$_sv2ch_created"; then
+       ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/started-at" "$_sv2ch_created" || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/provider-session-id" "$_sv2ch_provider_session"; then
         rm -rf "$_sv2ch_tmp"
         release_lock "$_sv2ch_lock"
         return 1
@@ -196,8 +228,12 @@ state_v2_verify() {
         [ -d "$_sv2v_project" ] || continue
         _sv2v_project_id="$(basename "$_sv2v_project")"
         if ! hydra_valid_id "$_sv2v_project_id" || \
-           [ "$(sed -n '1p' "$_sv2v_project/project-id" 2>/dev/null || true)" != "$_sv2v_project_id" ]; then
+           [ "$(sed -n '1p' "$_sv2v_project/project-id" 2>/dev/null || true)" != "$_sv2v_project_id" ] || \
+           [ -z "$(sed -n '1p' "$_sv2v_project/repo-root" 2>/dev/null || true)" ]; then
             echo "state v2: invalid project record $_sv2v_project" >&2
+            _sv2v_errors=1
+        fi
+        if [ -f "$_sv2v_project/compat-map" ] && ! state_v2_verify_legacy_map "$_sv2v_project/compat-map"; then
             _sv2v_errors=1
         fi
         for _sv2v_head in "$_sv2v_project"/heads/head_*; do
@@ -207,11 +243,27 @@ state_v2_verify() {
             if ! hydra_valid_id "$_sv2v_head_id" || \
                [ "$(sed -n '1p' "$_sv2v_head/head-id" 2>/dev/null || true)" != "$_sv2v_head_id" ] || \
                [ -z "$(sed -n '1p' "$_sv2v_head/branch" 2>/dev/null || true)" ] || \
+               [ -z "$(sed -n '1p' "$_sv2v_head/session" 2>/dev/null || true)" ] || \
                ! hydra_valid_id "$_sv2v_instance" || \
-               [ ! -d "$_sv2v_head/instances/$_sv2v_instance" ]; then
+               [ ! -d "$_sv2v_head/instances/$_sv2v_instance" ] || \
+               [ "$(sed -n '1p' "$_sv2v_head/instances/$_sv2v_instance/instance-id" 2>/dev/null || true)" != "$_sv2v_instance" ]; then
                 echo "state v2: invalid head record $_sv2v_head" >&2
                 _sv2v_errors=1
             fi
+            if command -v event_verify_file >/dev/null 2>&1 && \
+               ! event_verify_file "$_sv2v_head/events/events.jsonl"; then
+                _sv2v_errors=1
+            fi
+            _sv2v_branch="$(sed -n '1p' "$_sv2v_head/branch" 2>/dev/null || true)"
+            for _sv2v_other in "$_sv2v_project"/heads/head_*; do
+                [ -d "$_sv2v_other" ] || continue
+                [ "$_sv2v_other" = "$_sv2v_head" ] && continue
+                if [ "$(sed -n '1p' "$_sv2v_other/branch" 2>/dev/null || true)" = "$_sv2v_branch" ]; then
+                    echo "state v2: duplicate branch identity '$_sv2v_branch' in $_sv2v_project" >&2
+                    _sv2v_errors=1
+                    break
+                fi
+            done
         done
     done
     return "$_sv2v_errors"
@@ -254,6 +306,8 @@ state_v2_migrate() {
         state_v2_create_head "$_sv2m_project" "$_b" "$_s" "${_a:--}" \
             "${_g:--}" "${_t:-$(date +%s)}" "${_d:--}" "${_p:--}" "$_sv2m_root" >/dev/null || return 1
     done < "$HYDRA_MAP"
+    cp "$HYDRA_MAP" "$HYDRA_STATE_V2_ROOT/projects/$_sv2m_project/compat-map" || return 1
+    chmod 600 "$HYDRA_STATE_V2_ROOT/projects/$_sv2m_project/compat-map" 2>/dev/null || true
     state_v2_write_scalar "$HYDRA_HOME/state/active-schema" "2" || return 1
     echo "Migrated $_sv2m_count head(s) to state v2"
     echo "Backup: $_sv2m_backup"

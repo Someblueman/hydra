@@ -3,7 +3,7 @@
 # POSIX-compliant shell script
 #
 # Provides inter-session messaging via file-based queues.
-# Messages are stored in ~/.hydra/messages/<branch>/queue/
+# State v2 messages are stored under the project/head identity.
 
 # =============================================================================
 # Message Directory Management
@@ -17,9 +17,33 @@ get_message_dir() {
     if [ -z "$branch" ]; then
         return 1
     fi
-    # Sanitize branch name for filesystem (same pattern as state.sh)
+    if command -v hydra_get_project_id >/dev/null 2>&1 && \
+       command -v state_v2_find_head_by_branch >/dev/null 2>&1; then
+        _gmd_project="$(hydra_get_project_id 2>/dev/null || true)"
+        _gmd_head="$(state_v2_find_head_by_branch "$_gmd_project" "$branch" 2>/dev/null || true)"
+        if [ -n "$_gmd_head" ]; then
+            _gmd_head_dir="$(state_v2_head_dir "$_gmd_project" "$_gmd_head")" || return 1
+            printf '%s/messages\n' "$_gmd_head_dir"
+            return 0
+        fi
+    fi
+    # Legacy fallback for unmigrated tests and state.
     safe_branch="$(printf '%s' "$branch" | sed 's/[^a-zA-Z0-9_-]/_/g')"
     echo "${HYDRA_HOME:-$HOME/.hydra}/messages/$safe_branch"
+}
+
+get_message_lock() {
+    _gml_branch="$1"
+    if command -v hydra_get_project_id >/dev/null 2>&1 && \
+       command -v state_v2_find_head_by_branch >/dev/null 2>&1; then
+        _gml_project="$(hydra_get_project_id 2>/dev/null || true)"
+        _gml_head="$(state_v2_find_head_by_branch "$_gml_project" "$_gml_branch" 2>/dev/null || true)"
+        if [ -n "$_gml_head" ]; then
+            printf 'messages_%s_%s\n' "$_gml_project" "$_gml_head"
+            return 0
+        fi
+    fi
+    printf 'messages_%s\n' "$(printf '%s' "$_gml_branch" | cksum | cut -d' ' -f1)"
 }
 
 # Ensure message directories exist for a branch
@@ -58,6 +82,7 @@ send_message() {
     ensure_message_dir "$target" || return 1
 
     msg_dir="$(get_message_dir "$target")"
+    msg_lock="$(get_message_lock "$target")"
 
     # Generate unique filename: timestamp_sender_hash
     timestamp="$(date +%s)"
@@ -70,9 +95,9 @@ send_message() {
     # Use atomic write via lock with retries
     _retries=0
     while [ "$_retries" -lt 5 ]; do
-        if try_lock "msg_$target"; then
+        if try_lock "$msg_lock" "message append"; then
             printf '%s\n' "$message" > "$msg_file"
-            release_lock "msg_$target"
+            release_lock "$msg_lock"
             return 0
         fi
         _retries=$((_retries + 1))
@@ -208,17 +233,17 @@ get_current_branch() {
 # Returns: 0 always
 cleanup_old_messages() {
     days="${1:-7}"
-    msg_base="${HYDRA_HOME:-$HOME/.hydra}/messages"
+    msg_base="${HYDRA_HOME:-$HOME/.hydra}"
 
     if [ ! -d "$msg_base" ]; then
         return 0
     fi
 
     # Find and remove archived messages older than N days
-    find "$msg_base" -path "*/archive/*" -type f -mtime +"$days" -delete 2>/dev/null || true
+    find "$msg_base" -path "*/messages/archive/*" -type f -mtime +"$days" -delete 2>/dev/null || true
 
     # Remove empty directories
-    find "$msg_base" -type d -empty -delete 2>/dev/null || true
+    find "$msg_base" -path "*/messages/*" -type d -empty -delete 2>/dev/null || true
 
     return 0
 }

@@ -76,6 +76,19 @@ run_setup_commands() {
         return 0
     fi
 
+    # Repository-controlled commands are inert until the exact config content
+    # has been trusted on this host. User-owned HYDRA_HOME config remains active.
+    case "$_cfgpath" in
+        "$HYDRA_HOME"/*) ;;
+        *)
+            if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted; then
+                echo "Error: repository setup config is not trusted or changed" >&2
+                echo "Next: review .hydra/config.yml and run 'hydra init --trust'" >&2
+                return 1
+            fi
+            ;;
+    esac
+
     # Parse setup commands to temp file (avoids subshell issues with while loop)
     _tmpfile="$(mktemp)"
     parse_setup_commands "$_cfgpath" > "$_tmpfile"
