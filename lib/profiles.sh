@@ -26,8 +26,12 @@ profile_field() {
     _pf_field="$2"
     if profile_builtin_exists "$_pf_name"; then
         case "$_pf_field" in
-            executable) [ "$_pf_name" = none ] && printf '%s\n' none || printf '%s\n' "$_pf_name" ;;
-            tier) [ "$_pf_name" = none ] && printf '0\n' || printf '1\n' ;;
+            executable)
+                if [ "$_pf_name" = none ]; then printf '%s\n' none; else printf '%s\n' "$_pf_name"; fi
+                ;;
+            tier)
+                if [ "$_pf_name" = none ]; then printf '0\n'; else printf '1\n'; fi
+                ;;
             prompt_mode)
                 case "$_pf_name" in claude|codex) printf 'task-file\n' ;; *) printf 'none\n' ;; esac
                 ;;

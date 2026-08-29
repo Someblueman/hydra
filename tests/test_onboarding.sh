@@ -152,6 +152,23 @@ else
     assert_success 0 "disposable branch is gone after cleanup"
 fi
 
+# HYDRA_SKIP_SETUP suppresses setup commands but must not bypass trust for the
+# rest of repository-controlled YAML.
+untrusted_marker="$base_dir/untrusted-yaml-ran"
+mkdir -p .hydra
+printf 'startup:\n  - touch %s\n' "$untrusted_marker" > .hydra/config.yml
+untrusted_out="$(HYDRA_SKIP_SETUP=1 hydra spawn untrusted-config --no-agent 2>&1)"
+untrusted_code=$?
+assert_failure "$untrusted_code" "skip-setup cannot bypass repository config trust"
+assert_contains "$untrusted_out" "not trusted or changed" "untrusted YAML names the trust boundary"
+if [ ! -e "$untrusted_marker" ] && ! tmux has-session -t untrusted-config 2>/dev/null; then
+    assert_success 0 "untrusted YAML executes no startup command"
+else
+    assert_failure 0 "untrusted YAML executes no startup command"
+fi
+git branch -D untrusted-config >/dev/null 2>&1 || true
+rm -f .hydra/config.yml
+
 # --- not in a git repository ---
 echo "Testing not-in-git-repo first-run error..."
 nogit="$(mktemp -d)"

@@ -3,11 +3,20 @@
 
 cmd_lifecycle() {
     _cl_branch="${1:-}"
-    [ -n "$_cl_branch" ] && [ "$_cl_branch" != --json ] || { cli_error lifecycle invalid_input "head is required" "run hydra lifecycle <head> --json"; return 1; }
+    if [ -z "$_cl_branch" ] || [ "$_cl_branch" = --json ]; then
+        cli_error lifecycle invalid_input "head is required" "run hydra lifecycle <head> --json"
+        return 1
+    fi
     shift
     _cl_json=0
-    [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --json ]; } || { cli_error lifecycle invalid_input "unexpected arguments" "run hydra lifecycle <head> --json"; return 1; }
-    [ $# -eq 0 ] || _cl_json=1
+    if [ $# -eq 0 ]; then
+        :
+    elif [ $# -eq 1 ] && [ "$1" = --json ]; then
+        _cl_json=1
+    else
+        cli_error lifecycle invalid_input "unexpected arguments" "run hydra lifecycle <head> --json"
+        return 1
+    fi
     lifecycle_load_head "$_cl_branch" || { cli_error lifecycle not_found "Head '$_cl_branch' is unavailable" "inspect with hydra list"; return 1; }
     _cl_outcome="$(lifecycle_read declared-outcome)"
     _cl_observed="$(lifecycle_read observed-status)"
@@ -33,7 +42,10 @@ cmd_lifecycle() {
 cmd_outcome() {
     _co_branch="${1:-}"
     _co_status="${2:-}"
-    [ -n "$_co_branch" ] && [ -n "$_co_status" ] || { echo "Usage: hydra outcome <branch> <done|failed|blocked|abandoned|canceled> [--actor <human|agent>] [--summary <text>]" >&2; return 1; }
+    if [ -z "$_co_branch" ] || [ -z "$_co_status" ]; then
+        echo "Usage: hydra outcome <branch> <done|failed|blocked|abandoned|canceled> [--actor <human|agent>] [--summary <text>]" >&2
+        return 1
+    fi
     shift 2
     _co_actor=human
     _co_summary=""
@@ -53,7 +65,10 @@ cmd_outcome() {
 
 cmd_wait() {
     _cw_branch="${1:-}"
-    [ -n "$_cw_branch" ] && [ "$_cw_branch" != --json ] || { cli_error wait invalid_input "head is required" "run hydra wait <head> --json"; return 1; }
+    if [ -z "$_cw_branch" ] || [ "$_cw_branch" = --json ]; then
+        cli_error wait invalid_input "head is required" "run hydra wait <head> --json"
+        return 1
+    fi
     shift
     _cw_condition=complete
     _cw_timeout=300
@@ -73,7 +88,11 @@ cmd_wait() {
     while :; do
         lifecycle_load_head "$_cw_branch" || return 1
         if [ "$LIFECYCLE_INSTANCE_ID" != "$_cw_instance" ]; then
-            echo "Error: current instance changed while waiting" >&2
+            if [ "$_cw_json" -eq 1 ]; then
+                json_error wait instance_changed "Current instance changed while waiting" "inspect with hydra lifecycle $_cw_branch"
+            else
+                echo "Error: current instance changed while waiting" >&2
+            fi
             return 3
         fi
         if lifecycle_condition_met "$_cw_branch" "$_cw_condition"; then
@@ -107,7 +126,10 @@ cmd_wait() {
 cmd_adapter() {
     [ "${1:-}" = ingest ] || { echo "Usage: hydra adapter ingest <branch>" >&2; return 1; }
     _ca_branch="${2:-}"
-    [ -n "$_ca_branch" ] && [ $# -eq 2 ] || { echo "Usage: hydra adapter ingest <branch>" >&2; return 1; }
+    if [ -z "$_ca_branch" ] || [ $# -ne 2 ]; then
+        echo "Usage: hydra adapter ingest <branch>" >&2
+        return 1
+    fi
     _ca_input="$(LC_ALL=C dd bs=8193 count=1 2>/dev/null)"
     _ca_bytes="$(printf '%s' "$_ca_input" | LC_ALL=C wc -c | tr -d ' ')"
     [ "$_ca_bytes" -le 8192 ] || { echo "Error: adapter input exceeds 8192 bytes" >&2; return 1; }
@@ -115,10 +137,10 @@ cmd_adapter() {
     _ca_instance="$(printf '%s' "$_ca_compact" | sed -n 's/^{"schema_version":1,"instance_id":"\([a-z0-9_]*\)","kind":"[a-z]*","status":"[a-z-]*"}$/\1/p')"
     _ca_kind="$(printf '%s' "$_ca_compact" | sed -n 's/^{"schema_version":1,"instance_id":"[a-z0-9_]*","kind":"\([a-z]*\)","status":"[a-z-]*"}$/\1/p')"
     _ca_status="$(printf '%s' "$_ca_compact" | sed -n 's/^{"schema_version":1,"instance_id":"[a-z0-9_]*","kind":"[a-z]*","status":"\([a-z-]*\)"}$/\1/p')"
-    [ -n "$_ca_instance" ] && [ -n "$_ca_kind" ] && [ -n "$_ca_status" ] || {
+    if [ -z "$_ca_instance" ] || [ -z "$_ca_kind" ] || [ -z "$_ca_status" ]; then
         echo "Error: malformed adapter event; use canonical adapter JSON v1" >&2
         return 1
-    }
+    fi
     lifecycle_load_head "$_ca_branch" || return 1
     [ "$_ca_instance" = "$LIFECYCLE_INSTANCE_ID" ] || {
         echo "Error: stale adapter event for non-current instance" >&2
@@ -132,9 +154,44 @@ cmd_adapter() {
     echo "Accepted adapter event for $_ca_branch instance $_ca_instance"
 }
 
+_cmd_resume_abort() {
+    _cra_branch="$1"
+    _cra_session="$2"
+    _cra_map_updated="$3"
+    _cra_had_mapping="$4"
+    _cra_old_session="$5"
+    _cra_old_ai="$6"
+    _cra_old_group="$7"
+    _cra_old_timestamp="$8"
+    _cra_old_deps="$9"
+    shift 9
+    _cra_old_pr="$1"
+    tmux kill-session -t "$_cra_session" 2>/dev/null || true
+    release_session_lock "$_cra_session" 2>/dev/null || true
+    lifecycle_abort_new_instance "$_cra_branch" 2>/dev/null || {
+        echo "Error: failed to restore the prior lifecycle instance" >&2
+    }
+    if [ "$_cra_map_updated" -eq 1 ]; then
+        if [ "$_cra_had_mapping" -eq 1 ]; then
+            add_mapping "$_cra_branch" "$_cra_old_session" "$_cra_old_ai" "$_cra_old_group" \
+                "$_cra_old_timestamp" "$_cra_old_deps" "$_cra_old_pr" 2>/dev/null || {
+                echo "Error: failed to restore the prior compatibility mapping" >&2
+            }
+        else
+            remove_mapping "$_cra_branch" 2>/dev/null || {
+                echo "Error: failed to remove the aborted compatibility mapping" >&2
+            }
+        fi
+    fi
+    return 1
+}
+
 cmd_resume() {
     _cr_branch="${1:-}"
-    [ -n "$_cr_branch" ] && [ $# -eq 1 ] || { echo "Usage: hydra resume <branch>" >&2; return 1; }
+    if [ -z "$_cr_branch" ] || [ $# -ne 1 ]; then
+        echo "Usage: hydra resume <branch>" >&2
+        return 1
+    fi
     lifecycle_load_head "$_cr_branch" || return 1
     _cr_old_instance="$LIFECYCLE_INSTANCE_ID"
     _cr_old_dir="$LIFECYCLE_INSTANCE_DIR"
@@ -149,8 +206,31 @@ cmd_resume() {
         create_worktree "$_cr_branch" "$_cr_worktree" || return 1
     fi
     _cr_profile="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/profile" 2>/dev/null || true)"
-    [ -n "$_cr_profile" ] && [ "$_cr_profile" != - ] || _cr_profile=none
+    if [ -z "$_cr_profile" ] || [ "$_cr_profile" = - ]; then
+        _cr_profile=none
+    fi
     _cr_provider="$(sed -n '1p' "$_cr_old_dir/provider-session-id" 2>/dev/null || true)"
+    _cr_had_mapping=0
+    _cr_map_session=""
+    _cr_map_ai=-
+    _cr_map_group=-
+    _cr_map_timestamp=-
+    _cr_map_deps=-
+    _cr_map_pr=-
+    if [ -f "$HYDRA_MAP" ]; then
+        while IFS=' ' read -r _cr_read_branch _cr_read_session _cr_read_ai _cr_read_group _cr_read_timestamp _cr_read_deps _cr_read_pr; do
+            if [ "$_cr_read_branch" = "$_cr_branch" ]; then
+                _cr_had_mapping=1
+                _cr_map_session="$_cr_read_session"
+                _cr_map_ai="$_cr_read_ai"
+                _cr_map_group="$_cr_read_group"
+                _cr_map_timestamp="$_cr_read_timestamp"
+                _cr_map_deps="$_cr_read_deps"
+                _cr_map_pr="$_cr_read_pr"
+                break
+            fi
+        done < "$HYDRA_MAP"
+    fi
     _cr_recipe=""
     if [ "$_cr_profile" != none ]; then
         profile_executable_path "$_cr_profile" >/dev/null || {
@@ -164,13 +244,15 @@ cmd_resume() {
     fi
     _cr_session="$(generate_session_name "$_cr_branch")" || return 1
     create_session "$_cr_session" "$_cr_worktree" || return 1
+    release_session_lock "$_cr_session" 2>/dev/null || true
     if ! lifecycle_new_instance "$_cr_branch" "$_cr_session" "$_cr_provider" "$_cr_recipe"; then
         tmux kill-session -t "$_cr_session" 2>/dev/null || true
         return 1
     fi
+    _cr_map_updated=0
     provenance_capture_instance "$_cr_branch" resume "$_cr_recipe" || {
-        tmux kill-session -t "$_cr_session" 2>/dev/null || true
-        lifecycle_write_head_scalar "$_cr_branch" desired-state failed 2>/dev/null || true
+        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
+            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
         return 1
     }
     _cr_profile_field="$_cr_profile"
@@ -178,9 +260,11 @@ cmd_resume() {
     add_mapping "$_cr_branch" "$_cr_session" "$_cr_profile_field" \
         "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/group")" "$(date +%s)" \
         "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/dependencies")" "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/pr")" || {
-        tmux kill-session -t "$_cr_session" 2>/dev/null || true
+        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
+            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
         return 1
     }
+    _cr_map_updated=1
     for _cr_pair in \
         "HYDRA_PROJECT_ID=$LIFECYCLE_PROJECT_ID" \
         "HYDRA_HEAD_ID=$LIFECYCLE_HEAD_ID" \
@@ -192,10 +276,27 @@ cmd_resume() {
         tmux set-environment -t "$_cr_session" "${_cr_pair%%=*}" "${_cr_pair#*=}" 2>/dev/null || true
     done
     _cr_export="export HYDRA_PROJECT_ID=$(profile_shell_quote "$LIFECYCLE_PROJECT_ID") HYDRA_HEAD_ID=$(profile_shell_quote "$LIFECYCLE_HEAD_ID") HYDRA_INSTANCE_ID=$(profile_shell_quote "$LIFECYCLE_INSTANCE_ID") HYDRA_BRANCH=$(profile_shell_quote "$_cr_branch") HYDRA_WORKTREE=$(profile_shell_quote "$_cr_worktree") HYDRA_STATE_DIR=$(profile_shell_quote "$LIFECYCLE_HEAD_DIR") HYDRA_TASK_FILE=$(profile_shell_quote "$LIFECYCLE_HEAD_DIR/task")"
-    send_keys_to_session "$_cr_session" "$_cr_export" || return 1
-    [ -z "$_cr_recipe" ] || send_keys_to_session "$_cr_session" "$_cr_recipe" || return 1
+    send_keys_to_session "$_cr_session" "$_cr_export" || {
+        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
+            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
+        return 1
+    }
+    if [ -n "$_cr_recipe" ] && ! send_keys_to_session "$_cr_session" "$_cr_recipe"; then
+        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
+            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
+        return 1
+    fi
     event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" lifecycle.resumed hydra local \
-        "{\"previous_instance_id\":\"$_cr_old_instance\",\"profile\":\"$(json_escape "$_cr_profile")\"}" >/dev/null || return 1
-    lifecycle_set_observed "$_cr_branch" running hydra exact || return 1
+        "{\"previous_instance_id\":\"$_cr_old_instance\",\"profile\":\"$(json_escape "$_cr_profile")\"}" >/dev/null || {
+        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
+            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
+        return 1
+    }
+    lifecycle_set_observed "$_cr_branch" running hydra exact || {
+        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
+            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
+        return 1
+    }
+    lifecycle_commit_new_instance || echo "Warning: could not remove resume rollback metadata" >&2
     echo "Resumed $_cr_branch in $_cr_session (instance $LIFECYCLE_INSTANCE_ID)"
 }

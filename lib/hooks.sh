@@ -47,11 +47,6 @@ run_setup_commands() {
     _wt="$1"
     _repo="$2"
 
-    # Check skip flag
-    if [ -n "${HYDRA_SKIP_SETUP:-}" ]; then
-        return 0
-    fi
-
     # Locate YAML config
     _cfgpath=""
     # Check worktree first
@@ -81,13 +76,19 @@ run_setup_commands() {
     case "$_cfgpath" in
         "$HYDRA_HOME"/*) ;;
         *)
-            if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted; then
+            _cfgroot="$(dirname "$(dirname "$_cfgpath")")"
+            if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$_cfgroot"; then
                 echo "Error: repository setup config is not trusted or changed" >&2
                 echo "Next: review .hydra/config.yml and run 'hydra init --trust'" >&2
                 return 1
             fi
             ;;
     esac
+
+    # Skipping setup suppresses commands, not the repository trust boundary.
+    if [ -n "${HYDRA_SKIP_SETUP:-}" ]; then
+        return 0
+    fi
 
     # Parse setup commands to temp file (avoids subshell issues with while loop)
     _tmpfile="$(mktemp)"
@@ -192,7 +193,7 @@ run_hook() {
         case "$hook" in
             "$HYDRA_HOME"/*) ;;
             *)
-                if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted; then
+                if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$(dirname "$confdir")"; then
                     echo "Warning: skipped untrusted repository hook '$name'" >&2
                     return 0
                 fi
@@ -215,8 +216,20 @@ apply_custom_layout_or_default() {
 
     confdir="$(locate_config_dir "$wt" "$repo" 2>/dev/null || true)"
     if [ -n "$confdir" ] && [ -f "$confdir/hooks/layout" ]; then
-        HYDRA_SESSION="$target_session" HYDRA_WORKTREE="$wt" sh "$confdir/hooks/layout" || true
-        return 0
+        case "$confdir" in
+            "$HYDRA_HOME"/*)
+                HYDRA_SESSION="$target_session" HYDRA_WORKTREE="$wt" sh "$confdir/hooks/layout" || true
+                return 0
+                ;;
+            *)
+                if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$(dirname "$confdir")"; then
+                    echo "Warning: skipped untrusted repository layout hook" >&2
+                else
+                    HYDRA_SESSION="$target_session" HYDRA_WORKTREE="$wt" sh "$confdir/hooks/layout" || true
+                    return 0
+                fi
+                ;;
+        esac
     fi
     # Fallback to built-in layouts: split panes anchored to worktree path
     case "$layout" in
@@ -255,6 +268,15 @@ run_startup_commands() {
     if [ ! -f "$start_file" ]; then
         return 0
     fi
+    case "$start_file" in
+        "$HYDRA_HOME"/*) ;;
+        *)
+            if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$(dirname "$(dirname "$start_file")")"; then
+                echo "Warning: skipped untrusted repository startup commands" >&2
+                return 0
+            fi
+            ;;
+    esac
     # Read and send each non-empty, non-comment line
     while IFS= read -r line || [ -n "$line" ]; do
         # Trim leading/trailing whitespace

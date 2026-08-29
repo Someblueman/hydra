@@ -151,7 +151,10 @@ cmd_agent() {
 }
 
 cmd_capabilities() {
-    [ "${1:-}" = "--json" ] && [ $# -eq 1 ] || { cli_error capabilities invalid_input "--json is required and must be the only argument" "run hydra capabilities --json"; return 1; }
+    if [ "${1:-}" != "--json" ] || [ $# -ne 1 ]; then
+        cli_error capabilities invalid_input "--json is required and must be the only argument" "run hydra capabilities --json"
+        return 1
+    fi
     _cc_tmp="$(mktemp)" || return 1
     profile_list | while IFS= read -r _cc_name; do
         [ -n "$_cc_name" ] || continue

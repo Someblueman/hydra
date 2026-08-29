@@ -82,6 +82,14 @@ fi
 
 group_json="$("$HYDRA_BIN" exec --group release --jobs 2 --timeout 5 --json -- printf '%s' group-ok)"
 case "$group_json" in *'"branch":"operations-test"'*'"stdout":"group-ok"'*) assert_success 0 "exec selects a named group" ;; *) assert_success 1 "exec selects a named group" ;; esac
+"$HYDRA_BIN" group operations-test verification >/dev/null
+assert_success $? "public group mutation succeeds"
+assert_equal verification "$(sed -n '1p' "$head_dir/group")" "group mutation updates authoritative state v2"
+mutated_group_json="$("$HYDRA_BIN" exec --group verification --json -- printf '%s' regrouped)"
+case "$mutated_group_json" in *'"branch":"operations-test"'*'"stdout":"regrouped"'*) assert_success 0 "exec observes a mutated authoritative group" ;; *) assert_success 1 "exec observes a mutated authoritative group" ;; esac
+"$HYDRA_BIN" group operations-test --clear >/dev/null
+assert_success $? "public group clear succeeds"
+assert_equal - "$(sed -n '1p' "$head_dir/group")" "group clear updates authoritative state v2"
 
 "$HYDRA_BIN" exec --branch operations-test --all -- true >/dev/null 2>&1
 assert_failure $? "exec rejects ambiguous selection modes"

@@ -120,7 +120,9 @@ state_v2_create_head() {
     _sv2ch_base_ref="${14:-}"
     _sv2ch_provider_session="${15:-}"
 
-    [ -n "$_sv2ch_branch" ] && [ -n "$_sv2ch_session" ] || return 1
+    if [ -z "$_sv2ch_branch" ] || [ -z "$_sv2ch_session" ]; then
+        return 1
+    fi
     state_v2_init_project "$_sv2ch_project" "$_sv2ch_root" || return 1
     _sv2ch_lock="state_${_sv2ch_project}"
     acquire_lock "$_sv2ch_lock" "state head create" || return 1
@@ -297,7 +299,11 @@ state_v2_migrate() {
         echo "  source: $HYDRA_MAP"
         echo "  destination: $HYDRA_STATE_V2_ROOT"
         echo "  project root: $_sv2m_root"
-        echo "  create project identity: $(hydra_get_project_id >/dev/null 2>&1 && echo no || echo yes)"
+        _sv2m_create_identity=yes
+        if hydra_get_project_id >/dev/null 2>&1; then
+            _sv2m_create_identity=no
+        fi
+        echo "  create project identity: $_sv2m_create_identity"
         echo "  migrate heads: $_sv2m_count"
         echo "  backup: $HYDRA_HOME/backups/state-<timestamp>-<pid>"
         return 0
@@ -318,6 +324,14 @@ state_v2_migrate() {
     echo "Backup: $_sv2m_backup"
 }
 
+_state_v2_release_locks_file() {
+    _sv2rl_file="$1"
+    [ -f "$_sv2rl_file" ] || return 0
+    while IFS= read -r _sv2rl_name; do
+        [ -z "$_sv2rl_name" ] || release_lock "$_sv2rl_name"
+    done < "$_sv2rl_file"
+}
+
 state_v2_rollback() {
     _sv2r_backup="$1"
     case "$_sv2r_backup" in
@@ -326,13 +340,111 @@ state_v2_rollback() {
     esac
     [ -d "$_sv2r_backup" ] || { echo "Error: backup does not exist: $_sv2r_backup" >&2; return 1; }
     _sv2r_guard="$HYDRA_HOME/state"
-    [ -n "$HYDRA_HOME" ] && [ "$_sv2r_guard" != "/state" ] || return 1
-    rm -rf "$_sv2r_guard"
-    [ ! -d "$_sv2r_backup/state" ] || cp -R "$_sv2r_backup/state" "$_sv2r_guard"
-    if [ -f "$_sv2r_backup/map" ]; then
-        cp "$_sv2r_backup/map" "$HYDRA_MAP"
-    else
-        : > "$HYDRA_MAP"
+    _sv2r_map_target="${HYDRA_LEGACY_MAP:-$HYDRA_HOME/map}"
+    if [ -z "$HYDRA_HOME" ] || [ "$_sv2r_guard" = "/state" ]; then
+        return 1
     fi
+
+    _sv2r_locks="$(mktemp)" || return 1
+    if ! acquire_lock state_map "state rollback barrier"; then
+        rm -f "$_sv2r_locks"
+        echo "Error: state rollback requires idle state writers" >&2
+        return 1
+    fi
+    printf '%s\n' state_map >> "$_sv2r_locks"
+    for _sv2r_project_dir in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
+        [ -d "$_sv2r_project_dir" ] || continue
+        _sv2r_project="$(basename "$_sv2r_project_dir")"
+        hydra_valid_id "$_sv2r_project" || {
+            _state_v2_release_locks_file "$_sv2r_locks"
+            rm -f "$_sv2r_locks"
+            return 1
+        }
+        for _sv2r_lock in "project_${_sv2r_project}" "state_${_sv2r_project}"; do
+            if ! acquire_lock "$_sv2r_lock" "state rollback barrier"; then
+                _state_v2_release_locks_file "$_sv2r_locks"
+                rm -f "$_sv2r_locks"
+                echo "Error: state rollback requires idle state writers" >&2
+                return 1
+            fi
+            printf '%s\n' "$_sv2r_lock" >> "$_sv2r_locks"
+        done
+        for _sv2r_head_dir in "$_sv2r_project_dir"/heads/head_*; do
+            [ -d "$_sv2r_head_dir" ] || continue
+            _sv2r_head="$(basename "$_sv2r_head_dir")"
+            hydra_valid_id "$_sv2r_head" || continue
+            _sv2r_lock="events_${_sv2r_project}_${_sv2r_head}"
+            if ! acquire_lock "$_sv2r_lock" "state rollback barrier"; then
+                _state_v2_release_locks_file "$_sv2r_locks"
+                rm -f "$_sv2r_locks"
+                echo "Error: state rollback requires idle event writers" >&2
+                return 1
+            fi
+            printf '%s\n' "$_sv2r_lock" >> "$_sv2r_locks"
+        done
+    done
+
+    _sv2r_stage="$(mktemp -d "$HYDRA_HOME/.state-rollback.XXXXXX")" || {
+        _state_v2_release_locks_file "$_sv2r_locks"
+        rm -f "$_sv2r_locks"
+        return 1
+    }
+    if [ -d "$_sv2r_backup/state" ]; then
+        cp -R "$_sv2r_backup/state" "$_sv2r_stage/restored-state" || {
+            rm -rf "$_sv2r_stage"
+            _state_v2_release_locks_file "$_sv2r_locks"
+            rm -f "$_sv2r_locks"
+            return 1
+        }
+    fi
+    _sv2r_map_tmp="$(mktemp_adjacent "$_sv2r_map_target")" || {
+        rm -rf "$_sv2r_stage"
+        _state_v2_release_locks_file "$_sv2r_locks"
+        rm -f "$_sv2r_locks"
+        return 1
+    }
+    if [ -f "$_sv2r_backup/map" ]; then
+        cp "$_sv2r_backup/map" "$_sv2r_map_tmp" || {
+            rm -f "$_sv2r_map_tmp"
+            rm -rf "$_sv2r_stage"
+            _state_v2_release_locks_file "$_sv2r_locks"
+            rm -f "$_sv2r_locks"
+            return 1
+        }
+    else
+        : > "$_sv2r_map_tmp"
+    fi
+
+    if [ -d "$_sv2r_guard" ]; then
+        mv "$_sv2r_guard" "$_sv2r_stage/previous-state" || {
+            rm -f "$_sv2r_map_tmp"
+            rm -rf "$_sv2r_stage"
+            _state_v2_release_locks_file "$_sv2r_locks"
+            rm -f "$_sv2r_locks"
+            return 1
+        }
+    fi
+    if [ -d "$_sv2r_stage/restored-state" ] && ! mv "$_sv2r_stage/restored-state" "$_sv2r_guard"; then
+        [ ! -d "$_sv2r_stage/previous-state" ] || mv "$_sv2r_stage/previous-state" "$_sv2r_guard"
+        rm -f "$_sv2r_map_tmp"
+        rm -rf "$_sv2r_stage"
+        _state_v2_release_locks_file "$_sv2r_locks"
+        rm -f "$_sv2r_locks"
+        return 1
+    fi
+    if ! atomic_replace "$_sv2r_map_target" "$_sv2r_map_tmp"; then
+        [ ! -d "$_sv2r_guard" ] || mv "$_sv2r_guard" "$_sv2r_stage/failed-state"
+        [ ! -d "$_sv2r_stage/previous-state" ] || mv "$_sv2r_stage/previous-state" "$_sv2r_guard"
+        rm -f "$_sv2r_map_tmp"
+        rm -rf "$_sv2r_stage"
+        _state_v2_release_locks_file "$_sv2r_locks"
+        rm -f "$_sv2r_locks"
+        return 1
+    fi
+    rm -rf "$_sv2r_stage"
+    _state_v2_release_locks_file "$_sv2r_locks"
+    rm -f "$_sv2r_locks"
+    HYDRA_MAP="$_sv2r_map_target"
+    export HYDRA_MAP
     echo "Rolled back state from $_sv2r_backup"
 }

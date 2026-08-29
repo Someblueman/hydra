@@ -29,12 +29,17 @@ project_write_host_value() {
 }
 
 project_repo_config() {
-    _prc_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+    _prc_root="${1:-}"
+    if [ -z "$_prc_root" ]; then
+        _prc_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+    fi
+    [ -d "$_prc_root" ] || return 1
     printf '%s/.hydra/config.yml\n' "$_prc_root"
 }
 
 project_config_hash() {
-    _pch_config="$(project_repo_config)" || return 1
+    _pch_root="${1:-}"
+    _pch_config="$(project_repo_config "$_pch_root")" || return 1
     _pch_dir="$(dirname "$_pch_config")"
     [ -d "$_pch_dir" ] || { printf '%s\n' none; return 0; }
     _pch_manifest="$(mktemp)" || return 1
@@ -53,9 +58,10 @@ project_config_hash() {
 }
 
 project_is_trusted() {
+    _pit_root="${1:-}"
     _pit_recorded="$(project_host_value trusted-config-hash 2>/dev/null || true)"
     [ -n "$_pit_recorded" ] || return 1
-    _pit_current="$(project_config_hash)" || return 1
+    _pit_current="$(project_config_hash "$_pit_root")" || return 1
     [ "$_pit_recorded" = "$_pit_current" ]
 }
 
@@ -83,7 +89,9 @@ project_worktree_root() {
 project_worktree_path() {
     _pwp_project="$1"
     _pwp_head="$2"
-    hydra_valid_id "$_pwp_project" && hydra_valid_id "$_pwp_head" || return 1
+    if ! hydra_valid_id "$_pwp_project" || ! hydra_valid_id "$_pwp_head"; then
+        return 1
+    fi
     _pwp_root="$(project_worktree_root "$_pwp_project")" || return 1
     printf '%s/%s\n' "$_pwp_root" "$_pwp_head"
 }

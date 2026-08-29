@@ -87,7 +87,7 @@ event_emit() {
     printf '%s\n' "$_ee_id"
 }
 
-event_repair_file() {
+_event_repair_file_locked() {
     _erf_file="$1"
     [ -f "$_erf_file" ] || return 1
     _erf_tmp="$(mktemp_adjacent "$_erf_file")" || return 1
@@ -108,7 +108,21 @@ event_repair_file() {
     printf '%s\n' "$_erf_backup"
 }
 
-event_retain_file() {
+event_repair_file() {
+    _erf_file="$1"
+    _erf_project="$2"
+    _erf_head="$3"
+    hydra_valid_id "$_erf_project" || return 1
+    hydra_valid_id "$_erf_head" || return 1
+    _erf_lock="events_${_erf_project}_${_erf_head}"
+    acquire_lock "$_erf_lock" "event repair" "$_erf_head" || return 1
+    _event_repair_file_locked "$_erf_file"
+    _erf_status=$?
+    release_lock "$_erf_lock"
+    return "$_erf_status"
+}
+
+_event_retain_file_locked() {
     _ert_file="$1"
     _ert_max="$2"
     case "$_ert_max" in ''|*[!0-9]*) return 1 ;; esac
@@ -122,4 +136,19 @@ event_retain_file() {
     tail -n "$_ert_max" "$_ert_file" > "$_ert_tmp" || { rm -f "$_ert_tmp"; return 1; }
     atomic_replace "$_ert_file" "$_ert_tmp" || return 1
     printf '%s\n' "$_ert_archive"
+}
+
+event_retain_file() {
+    _ert_file="$1"
+    _ert_max="$2"
+    _ert_project="$3"
+    _ert_head="$4"
+    hydra_valid_id "$_ert_project" || return 1
+    hydra_valid_id "$_ert_head" || return 1
+    _ert_lock="events_${_ert_project}_${_ert_head}"
+    acquire_lock "$_ert_lock" "event retention" "$_ert_head" || return 1
+    _event_retain_file_locked "$_ert_file" "$_ert_max"
+    _ert_status=$?
+    release_lock "$_ert_lock"
+    return "$_ert_status"
 }

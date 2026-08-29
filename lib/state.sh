@@ -418,6 +418,10 @@ get_group_for_branch() {
 set_group() {
     branch="$1"
     group="$2"
+    group_field="${group:--}"
+    state_lock=""
+    state_group_path=""
+    previous_state_group=""
 
     if [ -z "$branch" ]; then
         echo "Error: Branch is required" >&2
@@ -429,14 +433,43 @@ set_group() {
         return 1
     fi
 
+    if [ "$(sed -n '1p' "$HYDRA_HOME/state/active-schema" 2>/dev/null || true)" = "2" ]; then
+        project_id="$(hydra_get_project_id 2>/dev/null)" || {
+            echo "Error: Project identity is unavailable" >&2
+            return 1
+        }
+        state_lock="state_${project_id}"
+    fi
+
     if ! _lock_state_map; then
         return 1
+    fi
+    if [ -n "$state_lock" ]; then
+        acquire_lock "$state_lock" "update head group" || {
+            echo "Error: Failed to acquire durable state lock" >&2
+            release_lock state_map
+            return 1
+        }
+        head_id="$(state_v2_find_head_by_branch "$project_id" "$branch" 2>/dev/null)" || {
+            echo "Error: Durable head state for '$branch' is unavailable" >&2
+            release_lock "$state_lock"
+            release_lock state_map
+            return 1
+        }
+        head_dir="$(state_v2_head_dir "$project_id" "$head_id")" || {
+            release_lock "$state_lock"
+            release_lock state_map
+            return 1
+        }
+        state_group_path="$head_dir/group"
+        previous_state_group="$(sed -n '1p' "$state_group_path" 2>/dev/null || true)"
     fi
 
     _invalidate_state_cache
 
     tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || {
         release_lock "state_map"
+        [ -z "$state_lock" ] || release_lock "$state_lock"
         return 1
     }
 
@@ -444,7 +477,7 @@ set_group() {
     while IFS=' ' read -r map_branch map_session map_ai map_group map_timestamp map_deps map_pr; do
         if [ "$map_branch" = "$branch" ]; then
             found=1
-            _format_map_line "$map_branch" "$map_session" "$map_ai" "${group:-"-"}" \
+            _format_map_line "$map_branch" "$map_session" "$map_ai" "$group_field" \
                 "$map_timestamp" "$map_deps" "$map_pr"
         elif [ -n "$map_branch" ]; then
             _format_map_line "$map_branch" "$map_session" "$map_ai" "$map_group" \
@@ -456,16 +489,29 @@ set_group() {
         echo "Error: Branch '$branch' not found in mappings" >&2
         rm -f "$tmpfile"
         release_lock "state_map"
+        [ -z "$state_lock" ] || release_lock "$state_lock"
+        return 1
+    fi
+
+    if [ -n "$state_group_path" ] && ! state_v2_write_scalar "$state_group_path" "$group_field"; then
+        rm -f "$tmpfile"
+        release_lock "state_map"
+        release_lock "$state_lock"
         return 1
     fi
 
     if ! atomic_replace "$HYDRA_MAP" "$tmpfile"; then
         rm -f "$tmpfile"
+        if [ -n "$state_group_path" ]; then
+            state_v2_write_scalar "$state_group_path" "$previous_state_group" 2>/dev/null || true
+        fi
         release_lock "state_map"
+        [ -z "$state_lock" ] || release_lock "$state_lock"
         return 1
     fi
 
     release_lock "state_map"
+    [ -z "$state_lock" ] || release_lock "$state_lock"
     return 0
 }
 

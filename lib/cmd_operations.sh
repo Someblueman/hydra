@@ -33,7 +33,10 @@ cmd_exec() {
         esac
     done
     case "$_ce_jobs:$_ce_timeout" in *[!0-9:]*) cli_error exec invalid_input "jobs and timeout must be integers" "use --jobs 1..16 and a non-negative --timeout"; return 1 ;; esac
-    [ "$_ce_jobs" -ge 1 ] && [ "$_ce_jobs" -le 16 ] || { cli_error exec invalid_input "jobs must be between 1 and 16" "choose a bounded worker count"; return 1; }
+    if [ "$_ce_jobs" -lt 1 ] || [ "$_ce_jobs" -gt 16 ]; then
+        cli_error exec invalid_input "jobs must be between 1 and 16" "choose a bounded worker count"
+        return 1
+    fi
     if [ -n "$_ce_shell" ]; then
         [ $# -eq 0 ] || { cli_error exec invalid_input "--shell cannot be combined with argv after --" "choose argv mode or shell-string mode"; return 1; }
         if [ "$_ce_allow_shell" -ne 1 ] || ! project_is_trusted; then
@@ -110,7 +113,10 @@ cmd_exec() {
 
 cmd_diff() {
     _cd_branch="${1:-}"
-    [ -n "$_cd_branch" ] && [ "$_cd_branch" != --json ] || { cli_error diff invalid_input "head is required" "run hydra diff <head> --json"; return 1; }
+    if [ -z "$_cd_branch" ] || [ "$_cd_branch" = --json ]; then
+        cli_error diff invalid_input "head is required" "run hydra diff <head> --json"
+        return 1
+    fi
     shift
     _cd_mode="patch"
     _cd_json=0
@@ -136,7 +142,10 @@ cmd_diff() {
 
 cmd_review() {
     _crv_branch="${1:-}"
-    [ -n "$_crv_branch" ] && [ "$_crv_branch" != --json ] || { cli_error review invalid_input "head is required" "run hydra review <head> --json"; return 1; }
+    if [ -z "$_crv_branch" ] || [ "$_crv_branch" = --json ]; then
+        cli_error review invalid_input "head is required" "run hydra review <head> --json"
+        return 1
+    fi
     shift
     _crv_json=0
     if [ $# -eq 1 ] && [ "$1" = --json ]; then
@@ -176,7 +185,10 @@ EOF
 
 cmd_provenance() {
     _cpv_branch="${1:-}"
-    [ -n "$_cpv_branch" ] && [ "$_cpv_branch" != --json ] || { cli_error provenance invalid_input "head is required" "run hydra provenance <head> --json"; return 1; }
+    if [ -z "$_cpv_branch" ] || [ "$_cpv_branch" = --json ]; then
+        cli_error provenance invalid_input "head is required" "run hydra provenance <head> --json"
+        return 1
+    fi
     shift
     _cpv_json=0
     if [ $# -eq 1 ] && [ "$1" = --json ]; then

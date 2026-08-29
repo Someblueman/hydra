@@ -7,9 +7,9 @@ cmd_state() {
     case "$_cs_action" in
         verify)
             if [ "$(sed -n '1p' "$HYDRA_HOME/state/active-schema" 2>/dev/null || true)" = "2" ]; then
-                state_v2_verify
+                state_v2_verify || return 1
             else
-                state_v2_verify_legacy_map "$HYDRA_MAP"
+                state_v2_verify_legacy_map "$HYDRA_MAP" || return 1
             fi
             echo "State is valid"
             ;;
@@ -74,9 +74,9 @@ cmd_events() {
             [ -n "$_ce_type" ] || { echo "Usage: hydra events filter --type <type>" >&2; return 1; }
             grep -F "\"type\":\"$(json_escape "$_ce_type")\"" "$_ce_file" || true
             ;;
-        repair) _ce_backup="$(event_repair_file "$_ce_file")" && echo "Corrupt input saved to $_ce_backup" ;;
+        repair) _ce_backup="$(event_repair_file "$_ce_file" "$1" "$2")" && echo "Corrupt input saved to $_ce_backup" ;;
         retain)
-            _ce_archive="$(event_retain_file "$_ce_file" "$_ce_max")" || return 1
+            _ce_archive="$(event_retain_file "$_ce_file" "$_ce_max" "$1" "$2")" || return 1
             [ -z "$_ce_archive" ] || echo "Archive: $_ce_archive"
             ;;
         *) echo "Usage: hydra events <verify|tail|filter|repair|retain>" >&2; return 1 ;;

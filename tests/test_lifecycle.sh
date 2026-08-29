@@ -12,6 +12,8 @@ export HYDRA_NONINTERACTIVE=1
 
 # shellcheck disable=SC1091
 . "$(dirname "$0")/helpers.sh"
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/locks.sh"
 
 cleanup() {
     tmux kill-session -t lifecycle-test 2>/dev/null || true
@@ -89,8 +91,22 @@ assert_success $? "opt-in transcript is bounded and redacted"
 assert_equal 600 "$(stat -f '%Lp' "$transcript" 2>/dev/null || stat -c '%a' "$transcript")" "transcript permissions are private"
 grep -q "pre lifecycle-test $old_instance" "$HOOK_LOG" && grep -q "post lifecycle-test $old_instance" "$HOOK_LOG"
 assert_success $? "trusted pre/post teardown hooks receive instance identity"
+wait_json_file="$test_root/wait-instance-change.json"
+wait_code_file="$test_root/wait-instance-change.code"
+(
+    "$HYDRA_BIN" wait lifecycle-test --for observed=idle --timeout 10 --json > "$wait_json_file" 2>/dev/null
+    printf '%s\n' "$?" > "$wait_code_file"
+) &
+wait_pid=$!
+sleep 1
 "$HYDRA_BIN" resume lifecycle-test >/dev/null
 assert_success $? "head resumes from durable metadata"
+wait "$wait_pid"
+assert_equal 3 "$(sed -n '1p' "$wait_code_file")" "JSON wait detects current-instance replacement"
+case "$(sed -n '1p' "$wait_json_file")" in
+    *'"schema_version":1'*'"ok":false'*'"code":"instance_changed"'*) assert_success 0 "instance-change wait failure uses JSON v1" ;;
+    *) assert_success 1 "instance-change wait failure uses JSON v1" ;;
+esac
 new_instance="$(sed -n '1p' "$head_dir/current-instance")"
 if [ "$new_instance" != "$old_instance" ]; then
     assert_success 0 "resume creates a new instance"
@@ -121,6 +137,20 @@ if [ ! -f "$head_dir/transcripts/$new_instance.txt" ]; then
     assert_success 0 "default teardown persists no transcript"
 else
     assert_success 1 "default teardown persists no transcript"
+fi
+
+stable_instance="$(sed -n '1p' "$head_dir/current-instance")"
+stable_ended="$(sed -n '1p' "$head_dir/instances/$stable_instance/ended-at" 2>/dev/null || true)"
+try_lock state_map "test resume mapping failure"
+HYDRA_LOCK_RETRIES=1 "$HYDRA_BIN" resume lifecycle-test >/dev/null 2>&1
+assert_failure $? "resume fails when compatibility mapping cannot commit"
+release_lock state_map
+assert_equal "$stable_instance" "$(sed -n '1p' "$head_dir/current-instance")" "failed resume restores the prior current instance"
+assert_equal "$stable_ended" "$(sed -n '1p' "$head_dir/instances/$stable_instance/ended-at" 2>/dev/null || true)" "failed resume restores prior lifecycle metadata"
+if [ ! -f "$head_dir/instances/$stable_instance/superseded-by" ] && ! tmux has-session -t lifecycle-test 2>/dev/null; then
+    assert_success 0 "failed resume leaves no ghost successor or session"
+else
+    assert_success 1 "failed resume leaves no ghost successor or session"
 fi
 
 echo "======================================"

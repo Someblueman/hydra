@@ -198,10 +198,10 @@ cmd_spawn() {
     fi
 
     if [ -n "$prompt_file" ]; then
-        [ -f "$prompt_file" ] && [ -r "$prompt_file" ] || {
+        if [ ! -f "$prompt_file" ] || [ ! -r "$prompt_file" ]; then
             echo "Error: prompt file is not readable: $prompt_file" >&2
             exit 1
-        }
+        fi
         task_bytes="$(LC_ALL=C wc -c < "$prompt_file" | tr -d ' ')"
         [ "$task_bytes" -le 65536 ] || { echo "Error: task input exceeds 65536 bytes" >&2; exit 1; }
         task_text="$(sed -n '1,$p' "$prompt_file")"

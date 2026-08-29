@@ -6,10 +6,10 @@ operations_append_head() {
     _oah_branch="$2"
     lifecycle_load_head "$_oah_branch" || return 1
     _oah_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
-    [ -n "$_oah_worktree" ] && [ -d "$_oah_worktree" ] || {
+    if [ -z "$_oah_worktree" ] || [ ! -d "$_oah_worktree" ]; then
         echo "Error: worktree for '$_oah_branch' is unavailable" >&2
         return 1
-    }
+    fi
     if grep -Fxq "$LIFECYCLE_HEAD_ID" "$_oah_file" 2>/dev/null; then
         echo "Error: head '$_oah_branch' was selected more than once" >&2
         return 1
@@ -26,7 +26,9 @@ operations_load_selected_head() {
     OPERATIONS_BRANCH="$(sed -n '1p' "$_olsh_dir/branch")"
     OPERATIONS_WORKTREE="$(sed -n '1p' "$_olsh_dir/worktree")"
     OPERATIONS_BASE="$(sed -n '1p' "$_olsh_dir/base-ref")"
-    [ -n "$OPERATIONS_BRANCH" ] && [ -d "$OPERATIONS_WORKTREE" ] && [ -n "$OPERATIONS_BASE" ] || return 1
+    if [ -z "$OPERATIONS_BRANCH" ] || [ ! -d "$OPERATIONS_WORKTREE" ] || [ -z "$OPERATIONS_BASE" ]; then
+        return 1
+    fi
     export OPERATIONS_HEAD_ID OPERATIONS_BRANCH OPERATIONS_WORKTREE OPERATIONS_BASE
 }
 

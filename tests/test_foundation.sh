@@ -34,6 +34,9 @@ mkdir -p "$HYDRA_HOME" "$repo"
 # shellcheck source=../lib/events.sh
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/events.sh"
+# shellcheck source=../lib/cmd_foundation.sh
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/cmd_foundation.sh"
 
 cleanup() {
     cd / 2>/dev/null || true
@@ -114,14 +117,32 @@ event_file="$(event_file_for_head "$project_id" "$head_id")"
 event_verify_file "$event_file"
 assert_success $? "event stream verifies schema and sequence"
 assert_equal "2" "$(wc -l < "$event_file" | tr -d ' ')" "event stream contains both events"
-event_retain_file "$event_file" 1 >/dev/null
+event_lock="events_${project_id}_${head_id}"
+try_lock "$event_lock" "test held event writer"
+HYDRA_LOCK_RETRIES=1
+export HYDRA_LOCK_RETRIES
+event_retain_file "$event_file" 1 "$project_id" "$head_id" >/dev/null 2>&1
+assert_failure $? "event retention refuses a concurrent writer"
+assert_equal "2" "$(wc -l < "$event_file" | tr -d ' ')" "failed retention preserves concurrent event input"
+release_lock "$event_lock"
+unset HYDRA_LOCK_RETRIES
+event_retain_file "$event_file" 1 "$project_id" "$head_id" >/dev/null
 assert_success $? "event retention archives before truncating"
 event_verify_file "$event_file"
 assert_success $? "retained stream preserves valid sequence"
 printf 'partial' >> "$event_file"
 event_verify_file "$event_file" >/dev/null 2>&1
 assert_failure $? "partial event is detected"
-repair_backup="$(event_repair_file "$event_file")"
+try_lock "$event_lock" "test held event writer"
+HYDRA_LOCK_RETRIES=1
+export HYDRA_LOCK_RETRIES
+event_repair_file "$event_file" "$project_id" "$head_id" >/dev/null 2>&1
+assert_failure $? "event repair refuses a concurrent writer"
+grep -q partial "$event_file"
+assert_success $? "failed event repair preserves corrupt input"
+release_lock "$event_lock"
+unset HYDRA_LOCK_RETRIES
+repair_backup="$(event_repair_file "$event_file" "$project_id" "$head_id")"
 assert_success $? "event repair preserves corrupt input"
 if [ -f "$repair_backup" ]; then
     assert_success 0 "event repair backup exists"
@@ -163,10 +184,32 @@ state_v2_verify
 assert_success $? "migrated state verifies"
 HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" state verify >/dev/null
 assert_success $? "state command verifies active schema v2"
+printf '999\n' > "$HYDRA_STATE_V2_ROOT/schema-version"
+verify_output="$(cmd_state verify 2>&1)"
+verify_status=$?
+assert_failure "$verify_status" "state handler propagates verification failure without errexit"
+case "$verify_output" in
+    *"State is valid"*) assert_failure 0 "failed verification does not print success" ;;
+    *) assert_success 0 "failed verification does not print success" ;;
+esac
+printf '2\n' > "$HYDRA_STATE_V2_ROOT/schema-version"
 printf 'changed\n' > "$HYDRA_MAP"
+migrated_project="$(hydra_get_project_id)"
+try_lock "state_${migrated_project}" "test active state writer"
+HYDRA_LOCK_RETRIES=1
+export HYDRA_LOCK_RETRIES
+state_v2_rollback "$backup_path" >/dev/null 2>&1
+assert_failure $? "rollback refuses a concurrent state writer"
+assert_equal changed "$(sed -n '1p' "$HYDRA_MAP")" "failed rollback preserves current state"
+release_lock "state_${migrated_project}"
+unset HYDRA_LOCK_RETRIES
+HYDRA_LEGACY_MAP="$HYDRA_HOME/map"
+HYDRA_MAP="$HYDRA_STATE_V2_ROOT/projects/$migrated_project/compat-map"
+export HYDRA_LEGACY_MAP HYDRA_MAP
 state_v2_rollback "$backup_path" >/dev/null
 assert_success $? "rollback succeeds with generated backup"
-assert_equal "legacy-branch legacy-session claude group 123 dep 9" "$(sed -n '1p' "$HYDRA_MAP")" "rollback restores the legacy map"
+assert_equal "$HYDRA_LEGACY_MAP" "$HYDRA_MAP" "rollback selects the legacy map outside restored state"
+assert_equal "legacy-branch legacy-session claude group 123 dep 9" "$(sed -n '1p' "$HYDRA_LEGACY_MAP")" "rollback restores the legacy map"
 
 echo "====================================="
 echo "Test Results:"

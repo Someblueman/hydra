@@ -177,6 +177,78 @@ lifecycle_condition_met() {
     esac
 }
 
+_lifecycle_backup_scalar() {
+    _lbs_path="$1"
+    _lbs_dir="$2"
+    _lbs_name="$3"
+    if [ -f "$_lbs_path" ]; then
+        cp "$_lbs_path" "$_lbs_dir/$_lbs_name"
+    else
+        : > "$_lbs_dir/$_lbs_name.absent"
+    fi
+}
+
+_lifecycle_restore_scalar() {
+    _lrs_path="$1"
+    _lrs_dir="$2"
+    _lrs_name="$3"
+    if [ -f "$_lrs_dir/$_lrs_name.absent" ]; then
+        rm -f "$_lrs_path"
+    else
+        state_v2_write_scalar "$_lrs_path" "$(sed -n '1p' "$_lrs_dir/$_lrs_name")"
+    fi
+}
+
+_lifecycle_restore_instance_locked() {
+    _lril_backup="$1"
+    _lril_head_dir="$2"
+    _lril_previous_dir="$3"
+    _lril_new_dir="$4"
+    _lifecycle_restore_scalar "$_lril_head_dir/session" "$_lril_backup" head-session || return 1
+    _lifecycle_restore_scalar "$_lril_head_dir/desired-state" "$_lril_backup" head-desired || return 1
+    _lifecycle_restore_scalar "$_lril_previous_dir/superseded-by" "$_lril_backup" previous-superseded || return 1
+    _lifecycle_restore_scalar "$_lril_previous_dir/ended-at" "$_lril_backup" previous-ended || return 1
+    _lifecycle_restore_scalar "$_lril_head_dir/current-instance" "$_lril_backup" head-current || return 1
+    case "$_lril_new_dir" in
+        "$_lril_head_dir"/instances/instance_*) rm -rf "$_lril_new_dir" ;;
+        *) return 1 ;;
+    esac
+}
+
+lifecycle_abort_new_instance() {
+    _lani_branch="$1"
+    _lani_backup="${LIFECYCLE_ROLLBACK_DIR:-}"
+    case "$_lani_backup" in "$HYDRA_HOME"/.lifecycle-rollback.*) ;; *) return 1 ;; esac
+    [ -d "$_lani_backup" ] || return 1
+    lifecycle_load_head "$_lani_branch" || return 1
+    _lani_new="$LIFECYCLE_INSTANCE_ID"
+    _lani_new_dir="$LIFECYCLE_INSTANCE_DIR"
+    _lani_previous="$(sed -n '1p' "$_lani_backup/head-current")"
+    hydra_valid_id "$_lani_previous" || return 1
+    _lani_previous_dir="$LIFECYCLE_HEAD_DIR/instances/$_lani_previous"
+    _lani_lock="state_${LIFECYCLE_PROJECT_ID}"
+    acquire_lock "$_lani_lock" "abort lifecycle instance" "$LIFECYCLE_HEAD_ID" || return 1
+    if [ "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/current-instance" 2>/dev/null || true)" != "$_lani_new" ] || \
+       ! _lifecycle_restore_instance_locked "$_lani_backup" "$LIFECYCLE_HEAD_DIR" "$_lani_previous_dir" "$_lani_new_dir"; then
+        release_lock "$_lani_lock"
+        return 1
+    fi
+    release_lock "$_lani_lock"
+    rm -rf "$_lani_backup"
+    LIFECYCLE_INSTANCE_ID="$_lani_previous"
+    LIFECYCLE_INSTANCE_DIR="$_lani_previous_dir"
+    unset LIFECYCLE_ROLLBACK_DIR
+    export LIFECYCLE_INSTANCE_ID LIFECYCLE_INSTANCE_DIR
+}
+
+lifecycle_commit_new_instance() {
+    _lcni_backup="${LIFECYCLE_ROLLBACK_DIR:-}"
+    case "$_lcni_backup" in "$HYDRA_HOME"/.lifecycle-rollback.*) ;; *) return 1 ;; esac
+    [ -d "$_lcni_backup" ] || return 1
+    rm -rf "$_lcni_backup"
+    unset LIFECYCLE_ROLLBACK_DIR
+}
+
 lifecycle_new_instance() {
     _lni_branch="$1"
     _lni_session="$2"
@@ -188,7 +260,21 @@ lifecycle_new_instance() {
     _lni_new_dir="$LIFECYCLE_HEAD_DIR/instances/$_lni_new"
     _lni_lock="state_${LIFECYCLE_PROJECT_ID}"
     acquire_lock "$_lni_lock" "create lifecycle instance" "$LIFECYCLE_HEAD_ID" || return 1
-    mkdir -p "$_lni_new_dir" || { release_lock "$_lni_lock"; return 1; }
+    _lni_rollback="$(mktemp -d "$HYDRA_HOME/.lifecycle-rollback.XXXXXX")" || {
+        release_lock "$_lni_lock"
+        return 1
+    }
+    chmod 700 "$_lni_rollback" 2>/dev/null || true
+    if ! _lifecycle_backup_scalar "$LIFECYCLE_HEAD_DIR/current-instance" "$_lni_rollback" head-current || \
+       ! _lifecycle_backup_scalar "$LIFECYCLE_HEAD_DIR/session" "$_lni_rollback" head-session || \
+       ! _lifecycle_backup_scalar "$LIFECYCLE_HEAD_DIR/desired-state" "$_lni_rollback" head-desired || \
+       ! _lifecycle_backup_scalar "$LIFECYCLE_INSTANCE_DIR/superseded-by" "$_lni_rollback" previous-superseded || \
+       ! _lifecycle_backup_scalar "$LIFECYCLE_INSTANCE_DIR/ended-at" "$_lni_rollback" previous-ended || \
+       ! mkdir -p "$_lni_new_dir"; then
+        rm -rf "$_lni_rollback"
+        release_lock "$_lni_lock"
+        return 1
+    fi
     chmod 700 "$_lni_new_dir" 2>/dev/null || true
     _lni_now="$(date +%s)"
     if ! state_v2_write_scalar "$_lni_new_dir/instance-id" "$_lni_new" || \
@@ -201,6 +287,8 @@ lifecycle_new_instance() {
        ! state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/current-instance" "$_lni_new" || \
        ! state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/session" "$_lni_session" || \
        ! state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/desired-state" running; then
+        _lifecycle_restore_instance_locked "$_lni_rollback" "$LIFECYCLE_HEAD_DIR" "$LIFECYCLE_INSTANCE_DIR" "$_lni_new_dir" 2>/dev/null || true
+        rm -rf "$_lni_rollback"
         release_lock "$_lni_lock"
         return 1
     fi
@@ -208,7 +296,8 @@ lifecycle_new_instance() {
     LIFECYCLE_PREVIOUS_INSTANCE="$_lni_previous"
     LIFECYCLE_INSTANCE_ID="$_lni_new"
     LIFECYCLE_INSTANCE_DIR="$_lni_new_dir"
-    export LIFECYCLE_PREVIOUS_INSTANCE LIFECYCLE_INSTANCE_ID LIFECYCLE_INSTANCE_DIR
+    LIFECYCLE_ROLLBACK_DIR="$_lni_rollback"
+    export LIFECYCLE_PREVIOUS_INSTANCE LIFECYCLE_INSTANCE_ID LIFECYCLE_INSTANCE_DIR LIFECYCLE_ROLLBACK_DIR
 }
 
 lifecycle_archive_transcript() {
