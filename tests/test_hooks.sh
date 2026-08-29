@@ -28,7 +28,7 @@ TEST_PROJECT_TRUSTED=1
 TEST_TRUST_ROOT=""
 
 # Called indirectly by functions sourced from lib/hooks.sh.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 project_is_trusted() {
     TEST_TRUST_ROOT="${1:-}"
     [ "$TEST_PROJECT_TRUSTED" -eq 1 ]
