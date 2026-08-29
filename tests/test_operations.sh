@@ -113,7 +113,11 @@ else
 fi
 
 run_dir="$(find "$HYDRA_HOME/state/v2/projects/$project_id/exec" -type f -name stdout -print | head -1 | xargs dirname)"
-assert_equal 600 "$(stat -f '%Lp' "$run_dir/stdout" 2>/dev/null || stat -c '%a' "$run_dir/stdout")" "captured exec output is private"
+case "$(uname -s)" in
+    Darwin) output_mode="$(stat -f '%Lp' "$run_dir/stdout")" ;;
+    *) output_mode="$(stat -c '%a' "$run_dir/stdout")" ;;
+esac
+assert_equal 600 "$output_mode" "captured exec output is private"
 
 git -C "$worktree" restore -- tracked.txt
 "$HYDRA_BIN" kill operations-test >/dev/null
