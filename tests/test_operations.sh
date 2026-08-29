@@ -70,6 +70,23 @@ observed_before="$(sed -n '1p' "$head_dir/instances/$instance_id/observed-status
 exec_json="$("$HYDRA_BIN" exec --branch operations-test --jobs 1 --timeout 5 --json -- printf '%s' 'exec-ok')"
 assert_success $? "argv-safe out-of-band exec succeeds"
 case "$exec_json" in *'"command":"exec"'*'"exit_code":0'*'"stdout":"exec-ok"'*) assert_success 0 "exec captures a versioned result" ;; *) assert_success 1 "exec captures a versioned result" ;; esac
+bounded_json_file="$test_root/bounded-exec.json"
+HYDRA_EXEC_MAX_BYTES=16 "$HYDRA_BIN" exec --branch operations-test --json -- sh -c \
+    'awk '\''BEGIN { for (i = 0; i < 200000; i++) printf "x" }'\''; awk '\''BEGIN { for (i = 0; i < 200000; i++) printf "y" }'\'' >&2; sleep 2' \
+    > "$bounded_json_file" &
+bounded_pid=$!
+sleep 1
+oversized_capture="$(find "$HYDRA_HOME/state/v2/projects/$project_id/exec" -type f \
+    \( -name stdout -o -name stderr -o -name '.stdout.full' -o -name '.stderr.full' \) \
+    -size +16c -print -quit)"
+assert_equal "" "$oversized_capture" "exec capture remains bounded while the command is running"
+wait "$bounded_pid"
+assert_success $? "bounded exec completes without closing the command streams"
+bounded_json="$(cat "$bounded_json_file")"
+case "$bounded_json" in
+    *'"stdout":"xxxxxxxxxxxxxxxx"'*'"stderr":"yyyyyyyyyyyyyyyy"'*) assert_success 0 "exec returns capped stdout and stderr" ;;
+    *) assert_success 1 "exec returns capped stdout and stderr" ;;
+esac
 grep -q '"type":"exec.completed"' "$head_dir/events/events.jsonl"
 assert_success $? "exec records a distinct non-steering event"
 declared_after="$(sed -n '1p' "$head_dir/instances/$instance_id/declared-outcome" 2>/dev/null || true)"

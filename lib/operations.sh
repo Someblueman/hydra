@@ -71,6 +71,18 @@ operations_signal_tree() (
     kill "-$_ost_signal" "$_ost_pid" 2>/dev/null || true
 )
 
+operations_capture_stream() (
+    _ocs_fifo="$1"
+    _ocs_output="$2"
+    _ocs_max="$3"
+    exec 3< "$_ocs_fifo" || exit 1
+    : > "$_ocs_output" || exit 1
+    if [ "$_ocs_max" -gt 0 ]; then
+        head -c "$_ocs_max" <&3 > "$_ocs_output"
+    fi
+    cat <&3 >/dev/null
+)
+
 operations_exec_worker() {
     _oew_run="$1"
     _oew_head="$2"
@@ -82,11 +94,19 @@ operations_exec_worker() {
     _oew_dir="$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/exec/$_oew_run/$_oew_head"
     mkdir -p "$_oew_dir" || return 0
     chmod 700 "$_oew_dir" 2>/dev/null || true
-    _oew_stdout="$_oew_dir/.stdout.full"
-    _oew_stderr="$_oew_dir/.stderr.full"
+    _oew_stdout_pipe="$_oew_dir/.stdout.pipe"
+    _oew_stderr_pipe="$_oew_dir/.stderr.pipe"
     _oew_timed="$_oew_dir/.timed-out"
+    if ! mkfifo "$_oew_stdout_pipe" "$_oew_stderr_pipe"; then
+        rm -f "$_oew_stdout_pipe" "$_oew_stderr_pipe"
+        return 0
+    fi
+    operations_capture_stream "$_oew_stdout_pipe" "$_oew_dir/stdout" "$_oew_max" &
+    _oew_stdout_pid=$!
+    operations_capture_stream "$_oew_stderr_pipe" "$_oew_dir/stderr" "$_oew_max" &
+    _oew_stderr_pid=$!
     _oew_started="$(date +%s)"
-    (cd "$_oew_worktree" && exec "$@") > "$_oew_stdout" 2> "$_oew_stderr" &
+    (cd "$_oew_worktree" && exec "$@") > "$_oew_stdout_pipe" 2> "$_oew_stderr_pipe" &
     _oew_pid=$!
     _oew_watchdog=""
     if [ "$_oew_timeout" -gt 0 ]; then
@@ -110,9 +130,9 @@ operations_exec_worker() {
         kill "$_oew_watchdog" 2>/dev/null || true
         wait "$_oew_watchdog" 2>/dev/null || true
     fi
+    wait "$_oew_stdout_pid" 2>/dev/null || true
+    wait "$_oew_stderr_pid" 2>/dev/null || true
     if [ -f "$_oew_timed" ]; then _oew_status=124; else _oew_status="$_oew_wait_status"; fi
-    tail -c "$_oew_max" "$_oew_stdout" > "$_oew_dir/stdout" 2>/dev/null || : > "$_oew_dir/stdout"
-    tail -c "$_oew_max" "$_oew_stderr" > "$_oew_dir/stderr" 2>/dev/null || : > "$_oew_dir/stderr"
     printf '%s\n' "$_oew_status" > "$_oew_dir/status"
     printf '%s\n' "$_oew_branch" > "$_oew_dir/branch"
     printf '%s\n' "$_oew_started" > "$_oew_dir/started-at"
@@ -122,7 +142,7 @@ operations_exec_worker() {
         "$_oew_dir/branch" "$_oew_dir/started-at" "$_oew_dir/finished-at" "$_oew_dir/argv-hash" 2>/dev/null || true
     : > "$_oew_dir/complete"
     chmod 600 "$_oew_dir/complete" 2>/dev/null || true
-    rm -f "$_oew_stdout" "$_oew_stderr" "$_oew_timed"
+    rm -f "$_oew_stdout_pipe" "$_oew_stderr_pipe" "$_oew_timed"
     _oew_instance="$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/heads/$_oew_head/current-instance" 2>/dev/null || true)"
     if hydra_valid_id "$_oew_instance"; then
         event_emit "$LIFECYCLE_PROJECT_ID" "$_oew_head" "$_oew_instance" exec.completed hydra local \
