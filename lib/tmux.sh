@@ -272,6 +272,27 @@ create_session() {
     
     # Create detached session with specified working directory
     tmux new-session -d -s "$session" -c "$start_dir" || return 1
+
+    # Hydra's public pane-target contract is session:0.0. Normalize indexes even
+    # when the user's global tmux configuration starts windows or panes at 1.
+    _created_window="$(tmux display-message -p -t "$session" '#{window_index}' 2>/dev/null)" || {
+        tmux kill-session -t "$session" 2>/dev/null || true
+        return 1
+    }
+    tmux set-option -t "$session" base-index 0 >/dev/null || {
+        tmux kill-session -t "$session" 2>/dev/null || true
+        return 1
+    }
+    tmux set-window-option -t "$session" pane-base-index 0 >/dev/null || {
+        tmux kill-session -t "$session" 2>/dev/null || true
+        return 1
+    }
+    if [ "$_created_window" != "0" ]; then
+        tmux move-window -s "$session:$_created_window" -t "$session:0" || {
+            tmux kill-session -t "$session" 2>/dev/null || true
+            return 1
+        }
+    fi
     tmux_clear_snapshot
     return 0
 }

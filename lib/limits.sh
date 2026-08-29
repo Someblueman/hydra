@@ -109,7 +109,25 @@ get_available_capacity() {
 # Usage: _get_queue_dir
 # Returns: Queue directory path on stdout
 _get_queue_dir() {
+    if command -v hydra_get_project_id >/dev/null 2>&1; then
+        _gqd_project="$(hydra_get_project_id 2>/dev/null || true)"
+        if [ -n "$_gqd_project" ]; then
+            printf '%s' "${HYDRA_HOME:-$HOME/.hydra}/state/v2/projects/$_gqd_project/queue"
+            return 0
+        fi
+    fi
     printf '%s' "${HYDRA_HOME:-$HOME/.hydra}/queue"
+}
+
+_get_queue_lock() {
+    if command -v hydra_get_project_id >/dev/null 2>&1; then
+        _gql_project="$(hydra_get_project_id 2>/dev/null || true)"
+        if [ -n "$_gql_project" ]; then
+            printf 'queue_%s\n' "$_gql_project"
+            return 0
+        fi
+    fi
+    printf 'queue_legacy\n'
 }
 
 # Ensure queue directory exists
@@ -150,7 +168,8 @@ queue_spawn() {
     # Invert so higher priority sorts first under lexicographic find|sort
     _sort_pri="$(printf '%03d' $((999 - _priority)))"
 
-    if ! acquire_lock "queue_add"; then
+    _queue_lock="$(_get_queue_lock)"
+    if ! acquire_lock "$_queue_lock" "queue append"; then
         echo "Error: Failed to acquire queue lock" >&2
         return 1
     fi
@@ -179,7 +198,7 @@ layout=$_layout
 priority=$_priority
 requested_at=$_timestamp
 EOF
-    release_lock "queue_add"
+    release_lock "$_queue_lock"
     printf '%s' "$_filepath"
     return 0
 }
@@ -208,7 +227,7 @@ list_queue() {
     _qdir="$(_get_queue_dir)"
 
     if [ -n "$_json_output" ]; then
-        printf '{"queue": ['
+        printf '{"schema_version":1,"ok":true,"command":"queue","data":{"queue":['
         _first=1
         for _qfile in $(find "$_qdir" -maxdepth 1 -name "*.queue" -type f 2>/dev/null | sort); do
             [ -f "$_qfile" ] || continue
@@ -241,7 +260,7 @@ list_queue() {
                     "$(json_escape "$_q_group")" "$_q_priority" "$_q_requested"
             fi
         done
-        printf ']}\n'
+        printf ']}}\n'
     else
         _count=0
         for _qfile in $(find "$_qdir" -maxdepth 1 -name "*.queue" -type f 2>/dev/null | sort); do

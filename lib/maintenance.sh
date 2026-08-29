@@ -30,7 +30,12 @@ branch_has_mapping() {
     if [ -z "$_branch" ] || [ ! -f "${HYDRA_MAP:-}" ] || [ ! -s "$HYDRA_MAP" ]; then
         return 1
     fi
-    grep -q "^${_branch} " "$HYDRA_MAP" 2>/dev/null
+    while IFS=' ' read -r _mapped_branch _rest; do
+        if [ "$_mapped_branch" = "$_branch" ]; then
+            return 0
+        fi
+    done < "$HYDRA_MAP"
+    return 1
 }
 
 # Count hydra worktrees without a state mapping
@@ -80,7 +85,7 @@ $(list_hydra_worktrees "$_repo_root")
 EOF
 }
 
-# Count stale lock directories (mkdir *.lock dirs older than 1 minute)
+# Count lock directories with dead same-host owner evidence.
 # Usage: count_stale_locks
 # Returns: Count on stdout
 count_stale_locks() {
@@ -88,11 +93,19 @@ count_stale_locks() {
         printf '%s' "0"
         return 0
     fi
-    _stale="$(find "$HYDRA_HOME/locks" -name "*.lock" -type d -mmin +1 2>/dev/null | wc -l | tr -d ' ')"
-    printf '%s' "${_stale:-0}"
+    _stale=0
+    while IFS= read -r _lock_dir; do
+        [ -n "$_lock_dir" ] || continue
+        if lock_dir_is_stale "$_lock_dir"; then
+            _stale=$((_stale + 1))
+        fi
+    done <<EOF
+$(find "$HYDRA_HOME/locks" -name "*.lock" -type d 2>/dev/null)
+EOF
+    printf '%s' "$_stale"
 }
 
-# Remove stale lock directories (mkdir *.lock dirs older than 1 minute)
+# Remove lock directories with dead same-host owner evidence.
 # Usage: clean_stale_locks
 # Returns: Number removed on stdout
 clean_stale_locks() {
@@ -101,12 +114,12 @@ clean_stale_locks() {
         return 0
     fi
     _cleaned=0
-    # Collect paths first so rmdir does not race with find
-    _stale_list="$(find "$HYDRA_HOME/locks" -name "*.lock" -type d -mmin +1 2>/dev/null || true)"
+    # Collect paths first; removal rechecks owner evidence to avoid a race.
+    _stale_list="$(find "$HYDRA_HOME/locks" -name "*.lock" -type d 2>/dev/null || true)"
     if [ -n "$_stale_list" ]; then
         while IFS= read -r _lock_dir; do
             [ -n "$_lock_dir" ] || continue
-            if rmdir "$_lock_dir" 2>/dev/null; then
+            if remove_stale_lock_dir "$_lock_dir" 2>/dev/null; then
                 _cleaned=$((_cleaned + 1))
             fi
         done <<EOF

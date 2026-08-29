@@ -47,11 +47,6 @@ run_setup_commands() {
     _wt="$1"
     _repo="$2"
 
-    # Check skip flag
-    if [ -n "${HYDRA_SKIP_SETUP:-}" ]; then
-        return 0
-    fi
-
     # Locate YAML config
     _cfgpath=""
     # Check worktree first
@@ -73,6 +68,25 @@ run_setup_commands() {
 
     # No config found
     if [ -z "$_cfgpath" ]; then
+        return 0
+    fi
+
+    # Repository-controlled commands are inert until the exact config content
+    # has been trusted on this host. User-owned HYDRA_HOME config remains active.
+    case "$_cfgpath" in
+        "$HYDRA_HOME"/*) ;;
+        *)
+            _cfgroot="$(dirname "$(dirname "$_cfgpath")")"
+            if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$_cfgroot"; then
+                echo "Error: repository setup config is not trusted or changed" >&2
+                echo "Next: review .hydra/config.yml and run 'hydra init --trust'" >&2
+                return 1
+            fi
+            ;;
+    esac
+
+    # Skipping setup suppresses commands, not the repository trust boundary.
+    if [ -n "${HYDRA_SKIP_SETUP:-}" ]; then
         return 0
     fi
 
@@ -102,17 +116,13 @@ run_setup_commands() {
 
         echo "[setup] ($_current/$_total) $_cmd" >&2
 
-        # Run command in worktree directory
-        # Use temp file to capture output while preserving exit code
-        _outfile="$(mktemp)"
-        (cd "$_wt" && sh -c "$_cmd") >"$_outfile" 2>&1
-        _exit_code=$?
-
-        # Display output with prefix
-        if [ -s "$_outfile" ]; then
-            sed 's/^/[setup]   /' < "$_outfile" >&2
-        fi
-        rm -f "$_outfile"
+        # Stream output while a sidecar scalar preserves the command exit code.
+        _statusfile="$(mktemp)"
+        (if cd "$_wt" && sh -c "$_cmd"; then _setup_rc=0; else _setup_rc=$?; fi; \
+            printf '%s\n' "$_setup_rc" > "$_statusfile") 2>&1 | \
+            sed 's/^/[setup]   /' >&2
+        _exit_code="$(sed -n '1p' "$_statusfile" 2>/dev/null || echo 1)"
+        rm -f "$_statusfile"
 
         if [ "$_exit_code" -ne 0 ]; then
             _failed=1
@@ -180,7 +190,19 @@ run_hook() {
     fi
     hook="$confdir/hooks/$name"
     if [ -f "$hook" ]; then
-        HYDRA_SESSION="$hook_session" HYDRA_WORKTREE="$wt" HYDRA_BRANCH="$branch" sh "$hook" || true
+        case "$hook" in
+            "$HYDRA_HOME"/*) ;;
+            *)
+                if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$(dirname "$confdir")"; then
+                    echo "Warning: skipped untrusted repository hook '$name'" >&2
+                    return 0
+                fi
+                ;;
+        esac
+        HYDRA_SESSION="$hook_session" HYDRA_WORKTREE="$wt" HYDRA_BRANCH="$branch" \
+            HYDRA_PROJECT_ID="${LIFECYCLE_PROJECT_ID:-${project_id:-}}" \
+            HYDRA_HEAD_ID="${LIFECYCLE_HEAD_ID:-${head_id:-}}" \
+            HYDRA_INSTANCE_ID="${LIFECYCLE_INSTANCE_ID:-${instance_id:-}}" sh "$hook" || true
     fi
 }
 
@@ -194,8 +216,20 @@ apply_custom_layout_or_default() {
 
     confdir="$(locate_config_dir "$wt" "$repo" 2>/dev/null || true)"
     if [ -n "$confdir" ] && [ -f "$confdir/hooks/layout" ]; then
-        HYDRA_SESSION="$target_session" HYDRA_WORKTREE="$wt" sh "$confdir/hooks/layout" || true
-        return 0
+        case "$confdir" in
+            "$HYDRA_HOME"/*)
+                HYDRA_SESSION="$target_session" HYDRA_WORKTREE="$wt" sh "$confdir/hooks/layout" || true
+                return 0
+                ;;
+            *)
+                if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$(dirname "$confdir")"; then
+                    echo "Warning: skipped untrusted repository layout hook" >&2
+                else
+                    HYDRA_SESSION="$target_session" HYDRA_WORKTREE="$wt" sh "$confdir/hooks/layout" || true
+                    return 0
+                fi
+                ;;
+        esac
     fi
     # Fallback to built-in layouts: split panes anchored to worktree path
     case "$layout" in
@@ -234,6 +268,15 @@ run_startup_commands() {
     if [ ! -f "$start_file" ]; then
         return 0
     fi
+    case "$start_file" in
+        "$HYDRA_HOME"/*) ;;
+        *)
+            if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$(dirname "$(dirname "$start_file")")"; then
+                echo "Warning: skipped untrusted repository startup commands" >&2
+                return 0
+            fi
+            ;;
+    esac
     # Read and send each non-empty, non-comment line
     while IFS= read -r line || [ -n "$line" ]; do
         # Trim leading/trailing whitespace

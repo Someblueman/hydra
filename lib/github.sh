@@ -66,6 +66,18 @@ fetch_issue_details() {
     fi
 }
 
+# Fetch an issue body as task text without parsing JSON in shell.
+# Usage: get_issue_body <issue_number>
+get_issue_body() {
+    issue_num="$1"
+    validate_issue_number "$issue_num" || return 1
+    check_gh_cli || return 1
+    gh issue view "$issue_num" --json body --jq '.body' 2>/dev/null || {
+        echo "Error: Failed to fetch issue #$issue_num body" >&2
+        return 1
+    }
+}
+
 # Sanitize text for use in branch names
 # Usage: sanitize_branch_name <text>
 # Returns: Sanitized text on stdout

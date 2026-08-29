@@ -8,6 +8,7 @@ cmd_spawn() {
     layout="default"
     count=1
     ai_tool=""
+    explicit_profile=""
     agents_spec=""
     issue_num=""
     group=""
@@ -15,6 +16,13 @@ cmd_spawn() {
     pr_num=""
     pr_new=""
     template_name=""
+    no_agent=""
+    dry_run=""
+    task_text=""
+    task_source=""
+    prompt_file=""
+    use_issue_body=""
+    completion_policy=declared-done
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -28,10 +36,45 @@ cmd_spawn() {
                 count="$1"
                 shift
                 ;;
-            --ai)
+            --ai|--profile)
+                [ $# -ge 2 ] || { echo "Error: $1 requires a profile name" >&2; exit 1; }
+                ai_tool="$2"
+                explicit_profile="$2"
+                shift 2
+                ;;
+            --no-agent)
+                no_agent="1"
                 shift
-                ai_tool="$1"
+                ;;
+            --dry-run)
+                dry_run="1"
                 shift
+                ;;
+            --prompt)
+                [ $# -ge 2 ] || { echo "Error: --prompt requires task text" >&2; exit 1; }
+                [ -z "$task_source" ] || { echo "Error: choose only one task source" >&2; exit 1; }
+                task_text="$2"
+                task_source="prompt"
+                shift 2
+                ;;
+            --prompt-file)
+                [ $# -ge 2 ] || { echo "Error: --prompt-file requires a path" >&2; exit 1; }
+                [ -z "$task_source" ] || { echo "Error: choose only one task source" >&2; exit 1; }
+                prompt_file="$2"
+                task_source="file"
+                shift 2
+                ;;
+            --issue-body)
+                [ -z "$task_source" ] || { echo "Error: choose only one task source" >&2; exit 1; }
+                use_issue_body="1"
+                task_source="issue"
+                shift
+                ;;
+            --completion-policy)
+                [ $# -ge 2 ] || { echo "Error: --completion-policy requires declared-done, observed-exit-zero, or either" >&2; exit 1; }
+                completion_policy="$2"
+                case "$completion_policy" in declared-done|observed-exit-zero|either) ;; *) echo "Error: invalid completion policy '$completion_policy'" >&2; exit 1 ;; esac
+                shift 2
                 ;;
             --agents)
                 shift
@@ -136,10 +179,49 @@ cmd_spawn() {
         echo "       hydra spawn --pr <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
         exit 1
     fi
-    
+
+    if [ -n "$no_agent" ] && { [ -n "$explicit_profile" ] || [ -n "$agents_spec" ]; }; then
+        echo "Error: --no-agent cannot be combined with --profile/--ai" >&2
+        exit 1
+    fi
+    if [ -z "$agents_spec" ]; then
+        if [ -n "$no_agent" ] || [ -n "${HYDRA_SKIP_AI:-}" ]; then
+            ai_tool=none
+            HYDRA_SKIP_AI=1
+            export HYDRA_SKIP_AI
+        fi
+        ai_tool="$(profile_resolve "$ai_tool")" || exit 1
+        if [ "$ai_tool" = none ]; then
+            HYDRA_SKIP_AI=1
+            export HYDRA_SKIP_AI
+        fi
+    fi
+
+    if [ -n "$prompt_file" ]; then
+        if [ ! -f "$prompt_file" ] || [ ! -r "$prompt_file" ]; then
+            echo "Error: prompt file is not readable: $prompt_file" >&2
+            exit 1
+        fi
+        task_bytes="$(LC_ALL=C wc -c < "$prompt_file" | tr -d ' ')"
+        [ "$task_bytes" -le 65536 ] || { echo "Error: task input exceeds 65536 bytes" >&2; exit 1; }
+        task_text="$(sed -n '1,$p' "$prompt_file")"
+    fi
+    if [ -n "$use_issue_body" ]; then
+        [ -n "$issue_num" ] || { echo "Error: --issue-body requires --issue <number>" >&2; exit 1; }
+        task_text="$(get_issue_body "$issue_num")" || exit 1
+    fi
+    task_bytes="$(printf '%s' "$task_text" | LC_ALL=C wc -c | tr -d ' ')"
+    [ "$task_bytes" -le 65536 ] || { echo "Error: task input exceeds 65536 bytes" >&2; exit 1; }
+
     # Validate count
     if ! echo "$count" | grep -q '^[0-9]\+$' || [ "$count" -lt 1 ] || [ "$count" -gt 10 ]; then
         echo "Error: Count must be a number between 1 and 10" >&2
+        exit 1
+    fi
+
+    if { [ -n "$task_source" ] || [ -n "$dry_run" ]; } && \
+       { [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; }; then
+        echo "Error: task injection and dry-run currently require a single head" >&2
         exit 1
     fi
 
@@ -168,7 +250,7 @@ cmd_spawn() {
     fi
 
     # Handle mutually exclusive options
-    if [ -n "$agents_spec" ] && [ -n "$ai_tool" ]; then
+    if [ -n "$agents_spec" ] && [ -n "$explicit_profile" ]; then
         echo "Error: Cannot use both --ai and --agents options" >&2
         exit 1
     fi
@@ -191,6 +273,11 @@ cmd_spawn() {
         if ! check_circular_deps "$branch" "$after_deps"; then
             exit 1
         fi
+    fi
+
+    if [ -n "$dry_run" ]; then
+        spawn_dry_run "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$pr_num" "$template_name" "$task_text" "$completion_policy"
+        return $?
     fi
 
     # Check resource limits before spawning
@@ -278,7 +365,7 @@ cmd_spawn() {
         spawn_pr_num="$pr_num"
     fi
 
-    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num" "$template_name")"; then
+    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num" "$template_name" "$task_text" "$completion_policy")"; then
         # Handle --pr-new: create a draft PR after spawn
         if [ -n "$pr_new" ]; then
             _load_lib github
@@ -339,14 +426,12 @@ cmd_queue() {
                 shift
                 ;;
             -*)
-                echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra queue [clear|remove <branch>|process] [--json]" >&2
-                exit 1
+                cli_error queue invalid_input "Unknown option '$1'" "run hydra queue --json"
+                return 1
                 ;;
             *)
-                echo "Error: Unknown action '$1'" >&2
-                echo "Usage: hydra queue [clear|remove <branch>|process] [--json]" >&2
-                exit 1
+                cli_error queue invalid_input "Unknown action '$1'" "run hydra queue --json"
+                return 1
                 ;;
         esac
     done
@@ -354,24 +439,39 @@ cmd_queue() {
     case "$action" in
         clear)
             count="$(clear_queue)"
-            echo "Cleared $count queued spawn(s)"
+            if [ -n "$json_output" ]; then
+                json_success queue "{\"action\":\"clear\",\"cleared\":$count}"
+            else
+                echo "Cleared $count queued spawn(s)"
+            fi
             ;;
         remove)
             if [ -z "$target_branch" ]; then
-                echo "Error: Branch name required" >&2
-                echo "Usage: hydra queue remove <branch>" >&2
-                exit 1
+                cli_error queue invalid_input "Branch name required" "run hydra queue remove <branch> --json"
+                return 1
             fi
             if dequeue_spawn "$target_branch"; then
-                echo "Removed '$target_branch' from queue"
+                if [ -n "$json_output" ]; then
+                    json_success queue "{\"action\":\"remove\",\"branch\":\"$(json_escape "$target_branch")\"}"
+                else
+                    echo "Removed '$target_branch' from queue"
+                fi
             else
-                echo "Branch '$target_branch' not found in queue"
-                exit 1
+                if [ -n "$json_output" ]; then
+                    json_error queue not_found "Branch '$target_branch' not found in queue" "inspect with hydra queue --json"
+                else
+                    echo "Branch '$target_branch' not found in queue"
+                fi
+                return 1
             fi
             ;;
         process)
             spawned="$(process_spawn_queue)"
-            echo "Processed queue: $spawned session(s) spawned"
+            if [ -n "$json_output" ]; then
+                json_success queue "{\"action\":\"process\",\"spawned\":$spawned}"
+            else
+                echo "Processed queue: $spawned session(s) spawned"
+            fi
             ;;
         *)
             # Default: list queue
@@ -388,84 +488,37 @@ cmd_queue() {
 }
 
 cmd_regenerate() {
-    echo "Regenerating tmux sessions for existing worktrees..."
-    
-    # Best-effort cleanup of stale session-name locks
+    echo "Regenerating dead heads as new lifecycle instances..."
     cleanup_stale_locks 2>/dev/null || true
-
-    # Get repository root
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        echo "Error: Not in a git repository" >&2
-        echo "Next: cd into an existing git repo, or create a throwaway repo (see README Quick Start)" >&2
-        return 1
+    if { [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; } && \
+       ! hydra_get_project_id >/dev/null 2>&1; then
+        echo "No Hydra heads to regenerate"
+        return 0
     fi
-    
-    repo_root="$(get_repo_root)" || return 1
-    
-    # Find all hydra worktrees via git worktree list
+    hydra_get_project_id >/dev/null 2>&1 || {
+        echo "Error: project is not initialized; run hydra init first" >&2
+        return 1
+    }
     regenerated=0
     skipped=0
-    
-    while IFS='	' read -r branch dir; do
-        [ -z "$branch" ] || [ -z "$dir" ] && continue
-        
-        # Check if session already exists
-        existing_session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
-        if [ -n "$existing_session" ] && tmux_session_exists "$existing_session"; then
-            echo "Session already exists for '$branch', skipping..."
+    failed=0
+    while IFS=' ' read -r branch session _ai _group _timestamp _deps _pr; do
+        [ -n "$branch" ] || continue
+        if [ -n "$session" ] && tmux_session_exists "$session"; then
+            echo "Session already exists for '$branch'; skipping"
             skipped=$((skipped + 1))
             continue
         fi
-        
-        # Generate session name
-        session="$(generate_session_name "$branch")"
-        
-        # Create session
-        echo "Creating session '$session' for branch '$branch'..."
-        if create_session "$session" "$dir"; then
-            # Preserve any stored AI tool for this branch
-            stored_ai="$(get_ai_for_branch "$branch" 2>/dev/null || true)"
-            stored_group="$(get_group_for_branch "$branch" 2>/dev/null || true)"
-            stored_ts="$(get_timestamp_for_branch "$branch" 2>/dev/null || true)"
-            stored_deps="$(get_deps_for_branch "$branch" 2>/dev/null || true)"
-            stored_pr="$(get_pr_for_branch "$branch" 2>/dev/null || true)"
-            add_mapping "$branch" "$session" "$stored_ai" "$stored_group" \
-                "${stored_ts:-}" "$stored_deps" "$stored_pr"
+        if cmd_resume "$branch"; then
             regenerated=$((regenerated + 1))
-            # Release any reserved session name lock
-            release_session_lock "$session" 2>/dev/null || true
-            # Apply YAML config if available; else apply custom/built-in default
-            repo_root_for_dir="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || dirname "$dir")"
-            if [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$dir" "$repo_root_for_dir" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
-                apply_yaml_config "$cfgpath" "$session" "$dir" "$repo_root_for_dir"
-            else
-                apply_custom_layout_or_default "default" "$session" "$dir" "$repo_root_for_dir"
-                # Optionally run startup commands on regenerate only if explicitly enabled
-                if [ -n "${HYDRA_REGENERATE_RUN_STARTUP:-}" ]; then
-                    run_startup_commands "$session" "$dir" "$repo_root_for_dir"
-                fi
-            fi
-            # Optionally auto-launch stored AI tool in the regenerated session
-            if [ -n "$stored_ai" ]; then
-                if validate_ai_command "$stored_ai"; then
-                    echo "Starting $stored_ai in session '$session'..." >&2
-                    send_keys_to_session "$session" "$stored_ai"
-                else
-                    echo "Warning: Stored AI tool '$stored_ai' is invalid; skipping launch" >&2
-                fi
-            fi
         else
-            echo "Failed to create session for '$branch'" >&2
-            # Release any reserved session name lock
-            release_session_lock "$session" 2>/dev/null || true
+            failed=$((failed + 1))
         fi
-    done <<EOF
-$(list_hydra_worktrees "$repo_root")
-EOF
-    
+    done < "$HYDRA_MAP"
     echo ""
     echo "Regeneration complete:"
     echo "  Created: $regenerated"
     echo "  Skipped: $skipped"
+    echo "  Failed: $failed"
+    [ "$failed" -eq 0 ]
 }
-

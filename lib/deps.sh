@@ -8,7 +8,8 @@
 
 # Validate a dependency specification
 # Usage: validate_deps_spec <deps_spec>
-# deps_spec: "branch1" or "branch1,branch2,branch3" (comma-separated)
+# deps_spec: comma-separated branch[:condition] entries. A bare branch requires
+# its explicit completion policy; examples: api:outcome=done,lint:observed=exited.
 # Returns: 0 if valid, 1 if invalid (prints error)
 validate_deps_spec() {
     deps_spec="$1"
@@ -18,9 +19,9 @@ validate_deps_spec() {
         return 1
     fi
 
-    # Check for invalid characters (only allow alphanumeric, dash, underscore, slash, comma)
+    # Conditions are restricted lifecycle evidence selectors, never shell input.
     case "$deps_spec" in
-        *[!a-zA-Z0-9_/,-]*)
+        *[!a-zA-Z0-9_/,.=:-]*)
             echo "Error: Invalid characters in dependency specification" >&2
             return 1
             ;;
@@ -41,10 +42,15 @@ validate_deps_spec() {
             return 1
         fi
 
-        # Check if dependency has a session (it should exist to depend on it)
-        if ! get_session_for_branch "$dep" >/dev/null 2>&1; then
-            echo "Warning: Dependency '$dep' has no active session" >&2
-            # Not an error - the session might be spawned later or already completed
+        dep_branch="${dep%%:*}"
+        dep_condition=complete
+        [ "$dep_branch" = "$dep" ] || dep_condition="${dep#*:}"
+        case "$dep_condition" in
+            complete|outcome=done|outcome=failed|outcome=blocked|outcome=terminal|observed=exited|observed=failed|liveness=stopped) ;;
+            *) echo "Error: Unsupported dependency evidence '$dep_condition'" >&2; return 1 ;;
+        esac
+        if ! state_v2_find_head_by_branch "$(hydra_get_project_id 2>/dev/null || true)" "$dep_branch" >/dev/null 2>&1; then
+            echo "Warning: Dependency '$dep_branch' has no durable head state" >&2
         fi
     done
 
@@ -71,6 +77,7 @@ _check_circular_helper() {
         fi
 
         [ -z "$dep" ] && continue
+        dep="${dep%%:*}"
 
         # Check if already visited (cycle!)
         case "$_DEPS_VISITED" in
@@ -114,27 +121,16 @@ check_circular_deps() {
 # Dependency Completion
 # =============================================================================
 
-# Check if a single dependency is complete (session no longer exists)
-# Usage: is_dep_complete <branch>
-# Returns: 0 if complete (no session), 1 if still running
+# Check if a single dependency's required durable evidence is present.
+# Usage: is_dep_complete <branch[:condition]>
+# Session disappearance is never completion evidence.
 is_dep_complete() {
-    dep_branch="$1"
-
-    # Get the session for this dependency
-    dep_session="$(get_session_for_branch "$dep_branch" 2>/dev/null || true)"
-
-    # If no session found in mapping, dependency is complete
-    if [ -z "$dep_session" ]; then
-        return 0
-    fi
-
-    # If session exists in tmux, dependency is still running
-    if tmux_session_exists "$dep_session"; then
-        return 1
-    fi
-
-    # Session was in mapping but tmux session is gone - dependency complete
-    return 0
+    dep_spec="$1"
+    dep_branch="${dep_spec%%:*}"
+    dep_condition=complete
+    [ "$dep_branch" = "$dep_spec" ] || dep_condition="${dep_spec#*:}"
+    command -v lifecycle_condition_met >/dev/null 2>&1 || return 1
+    lifecycle_condition_met "$dep_branch" "$dep_condition" >/dev/null 2>&1
 }
 
 # Check if all dependencies are complete
@@ -252,7 +248,8 @@ get_dependents() {
                 remaining="${remaining#*,}"
             fi
 
-            if [ "$dep" = "$target" ]; then
+            dep_branch="${dep%%:*}"
+            if [ "$dep_branch" = "$target" ]; then
                 if [ -n "$dependents" ]; then
                     dependents="$dependents $map_branch"
                 else

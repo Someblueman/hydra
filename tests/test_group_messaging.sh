@@ -188,6 +188,12 @@ test_recv_messages() {
     assert_contains "$output" "FROM sender1: Message 1" "First message received"
     assert_contains "$output" "FROM sender2: Message 2" "Second message received"
 
+    ensure_message_dir "sender-name-test"
+    msg_dir="$(get_message_dir "sender-name-test")"
+    echo "Underscore sender" > "$msg_dir/queue/1735344002_sender_with_under_789"
+    output=$(recv_messages "sender-name-test")
+    assert_contains "$output" "FROM sender_with_under: Underscore sender" "Sender underscores are preserved"
+
     # Messages should be removed (not peek mode)
     msg_count=0
     for f in "$msg_dir/queue"/*; do
@@ -228,6 +234,24 @@ test_count_messages() {
     ensure_message_dir "empty-test"
     result=$(count_messages "empty-test")
     assert_equal "0" "$result" "count_messages returns 0 for empty queue"
+
+    cleanup_test_env
+}
+
+test_typed_message_receipts() {
+    echo "Testing typed safe-point messages and receipts..."
+    setup_test_env
+
+    message_id="$(send_message target "Pause after the current edit" sender steer safe-point)"
+    assert_success $? "typed safe-point message queues"
+    msg_dir="$(get_message_dir target)"
+    assert_contains "$(cat "$msg_dir/metadata/$message_id")" "type=steer" "message metadata records type"
+    assert_contains "$(cat "$msg_dir/metadata/$message_id")" "delivery=safe-point" "message metadata records safe-point delivery"
+    assert_contains "$(cat "$msg_dir/receipts/$message_id")" "status=queued" "queued receipt is durable"
+
+    output="$(recv_messages target)"
+    assert_contains "$output" "[steer/safe-point]" "safe-point message is delivered only through inbox receive"
+    assert_contains "$(cat "$msg_dir/receipts/$message_id")" "status=delivered" "receive writes a delivery receipt"
 
     cleanup_test_env
 }
@@ -279,7 +303,7 @@ test_group_status_validation() {
 
     # Test empty group JSON output
     output="$(HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" group status nonexistent --json 2>&1)"
-    assert_contains "$output" '"sessions": []' "group status --json handles empty group"
+    assert_contains "$output" '"sessions":[]' "group status --json handles empty group"
     cleanup_test_env
 }
 
@@ -313,6 +337,7 @@ test_ensure_message_dir
 test_send_message
 test_recv_messages
 test_count_messages
+test_typed_message_receipts
 
 echo ""
 echo "--- Group Workflow Validation Tests ---"

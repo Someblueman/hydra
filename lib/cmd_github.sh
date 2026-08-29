@@ -4,11 +4,14 @@
 
 cmd_pr() {
     # Create or show PR for a branch
-    branch="$1"
+    branch="${1:-}"
 
     # If no branch specified, use current session's branch
     if [ -z "$branch" ]; then
-        current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
+        current_session=""
+        if [ -n "${TMUX:-}" ]; then
+            current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
+        fi
         if [ -z "$current_session" ]; then
             echo "Error: Not in a Hydra session and no branch specified" >&2
             echo "Usage: hydra pr [<branch>]" >&2
@@ -198,4 +201,3 @@ EOF
             ;;
     esac
 }
-

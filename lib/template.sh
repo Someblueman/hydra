@@ -231,11 +231,15 @@ apply_template() {
     fi
 
     if [ -n "$_session_cfg" ]; then
-        {
-            echo ""
-            echo "# Session-level overrides from: $_session_cfg"
-            cat "$_session_cfg"
-        } >> "$_merged"
+        if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$_wt"; then
+            echo "Warning: skipped untrusted repository template overrides" >&2
+        else
+            {
+                echo ""
+                echo "# Session-level overrides from: $_session_cfg"
+                cat "$_session_cfg"
+            } >> "$_merged"
+        fi
     fi
 
     printf '%s' "$_merged"

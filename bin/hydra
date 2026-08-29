@@ -10,8 +10,36 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
     HOME="$(cd ~ && pwd)"
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
-HYDRA_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="1.5.2"
+HYDRA_LEGACY_MAP="$HYDRA_HOME/map"
+HYDRA_MAP="$HYDRA_LEGACY_MAP"
+HYDRA_VERSION="1.6.0"
+
+# State v2 keeps the legacy seven-field view as a project-scoped compatibility
+# projection while older commands are migrated to scalar records.
+select_hydra_map() {
+    HYDRA_MAP="$HYDRA_LEGACY_MAP"
+    if [ "$(sed -n '1p' "$HYDRA_HOME/state/active-schema" 2>/dev/null || true)" != "2" ]; then
+        return 0
+    fi
+    _shm_common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+    [ -n "$_shm_common" ] || return 0
+    case "$_shm_common" in
+        /*) ;;
+        *)
+            _shm_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+            [ -n "$_shm_root" ] || return 0
+            _shm_common="$_shm_root/$_shm_common"
+            ;;
+    esac
+    _shm_project="$(sed -n '1p' "$_shm_common/hydra/project-id" 2>/dev/null || true)"
+    case "$_shm_project" in
+        project_*)
+            _shm_suffix="${_shm_project#project_}"
+            case "$_shm_suffix" in ''|*[!0-9a-f]*) return 0 ;; esac
+            HYDRA_MAP="$HYDRA_HOME/state/v2/projects/$_shm_project/compat-map"
+            ;;
+    esac
+}
 
 # Source helper libraries
 # Enhanced library detection with multiple fallback paths
@@ -33,7 +61,7 @@ else
     HYDRA_BIN_DIR="$(dirname "$HYDRA_BIN_PATH")"
 fi
 
-# Library discovery (1.5.2): HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra, legacy
+# Library discovery: HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra, legacy
 if [ -n "${HYDRA_ROOT:-}" ] && [ -d "$HYDRA_ROOT/lib" ] && [ -f "$HYDRA_ROOT/lib/git.sh" ]; then
     HYDRA_LIB_DIR="$(cd "$HYDRA_ROOT/lib" && pwd)"
 elif [ -d "$HYDRA_BIN_DIR/../lib" ] && [ -f "$HYDRA_BIN_DIR/../lib/git.sh" ]; then
@@ -80,6 +108,58 @@ _load_libs_for_cmd() {
     case "$1" in
         version|help|-v|--version|-h|--help)
             ;;
+        state|events)
+            _load_lib output
+            _load_lib locks
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib cmd_foundation
+            ;;
+        init|agent|capabilities|path)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib project
+            _load_lib profiles
+            _load_lib cmd_lifecycle
+            ;;
+        lifecycle|outcome|wait|adapter|resume|notify)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib notify
+            _load_lib operations
+            _load_lib cmd_evidence
+            ;;
+        exec|diff|review|provenance)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib operations
+            _load_lib cmd_operations
+            ;;
         spawn)
             _load_lib output
             _load_lib paths
@@ -88,6 +168,14 @@ _load_libs_for_cmd() {
             _load_lib tmux
             _load_lib layout
             _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib notify
+            _load_lib operations
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
@@ -102,6 +190,10 @@ _load_libs_for_cmd() {
             _load_lib locks
             _load_lib state
             _load_lib tmux
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib lifecycle
+            _load_lib operations
             _load_lib layout
             _load_lib github
             _load_lib cmd_session
@@ -113,6 +205,13 @@ _load_libs_for_cmd() {
             _load_lib git
             _load_lib tmux
             _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib lifecycle
+            _load_lib notify
+            _load_lib hooks
             _load_lib messages
             _load_lib kill
             _load_lib limits
@@ -124,6 +223,8 @@ _load_libs_for_cmd() {
             _load_lib state
             _load_lib tmux
             _load_lib locks
+            _load_lib identity
+            _load_lib state_v2
             _load_lib messages
             _load_lib cmd_group
             ;;
@@ -146,10 +247,18 @@ _load_libs_for_cmd() {
             _load_lib tmux
             _load_lib layout
             _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib notify
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
             _load_lib cmd_spawn
+            _load_lib cmd_evidence
             ;;
         doctor|cleanup)
             _load_lib paths
@@ -191,6 +300,8 @@ _load_libs_for_cmd() {
             _load_lib output
             _load_lib state
             _load_lib locks
+            _load_lib identity
+            _load_lib state_v2
             _load_lib limits
             _load_lib spawn
             _load_lib cmd_spawn
@@ -247,6 +358,12 @@ init_hydra_home() {
         echo "Next: chmod u+w \"$HYDRA_HOME\" or export HYDRA_HOME to a writable directory (see README Quick Start)" >&2
         exit 1
     fi
+    select_hydra_map
+    _ihh_map_dir="$(dirname "$HYDRA_MAP")"
+    if ! mkdir -p "$_ihh_map_dir" 2>/dev/null; then
+        echo "Error: Cannot create state directory: $_ihh_map_dir" >&2
+        exit 1
+    fi
     if [ ! -f "$HYDRA_MAP" ]; then
         if ! touch "$HYDRA_MAP" 2>/dev/null; then
             echo "Error: Cannot create state map at $HYDRA_MAP" >&2
@@ -269,6 +386,13 @@ Commands:
                       -l, --layout <layout>    Apply tmux layout
                       -n, --count <number>     Spawn multiple sessions (1-10)
                       --ai <tool>              Specify AI tool (claude, aider, gemini, etc.)
+                      --profile <name>         Select a launch/resume profile
+                      --no-agent              Create a first-class plain shell head
+                      --dry-run               Print the resolved plan without mutation
+                      --prompt <text>          Record and inject task text at launch
+                      --prompt-file <path>     Read task text from a file
+                      --issue-body             Use --issue body as task text
+                      --completion-policy <p>  declared-done, observed-exit-zero, or either
                       --agents <spec>          Mixed agents (e.g., "claude:2,aider:1")
                       -g, --group <name>       Assign to a group for bulk operations
                       --after <deps>           Wait for sessions to complete (e.g., "branch1,branch2")
@@ -276,12 +400,36 @@ Commands:
                       -t, --template <name>    Apply session template
   spawn --issue <#> Create a head from a GitHub issue
   spawn --pr <#>    Create a head from an existing GitHub PR
+  init              Initialize project identity, trust, profile, and worktree root
+  agent             List, show, diagnose, or initialize agent profiles
+  capabilities      Print machine-readable Hydra and agent capabilities
+  path [<branch>]   Print the stored worktree path for a head
+  lifecycle <head>  Show declared outcome, observed status, and liveness
+  outcome <head>    Declare an instance-scoped outcome
+  wait <head>       Wait for durable lifecycle evidence
+  adapter ingest    Ingest a canonical provider-neutral adapter event
+  resume <head>     Create a new instance using durable resume metadata
+  notify            Configure rate-limited local lifecycle notifications
+  exec              Run an out-of-band command in selected worktrees
+                    Options:
+                      --branch <head>          Select one head (repeatable)
+                      --group <name>           Select one group
+                      --all                    Select all active project heads
+                      --jobs <1-16>            Bounded parallelism (default 4)
+                      --timeout <seconds>      Per-command timeout (default 300)
+                      --json                   Versioned results
+                      --shell <text>           Trusted shell-string mode
+                      --allow-shell            Explicit shell execution acknowledgement
+  diff <head>       Show changes from the recorded base reference
+  review <head>     Summarize Git review evidence from the recorded base
+  provenance <head> Show recorded task, profile, version, and trust provenance
   list              List all active Hydra heads
                     Options:
                       -g, --group <name>       Filter by group
                       --groups                 List all groups with session counts
                       -j, --json               Output in JSON format
                       --deps                   Show dependency tree
+                      --git                    Show recorded-base Git evidence
                       --no-pr-status           Skip fetching PR status (faster)
                       --refresh-pr-status      Force refresh PR status cache
   switch            Switch to a different head (interactive)
@@ -324,6 +472,8 @@ Commands:
                       -s, --seconds <N>        Idle threshold (default: 10)
                       -t, --timeout <N>        Max wait time (default: 300)
   regenerate        Restore tmux sessions for existing worktrees
+  state             Verify, back up, migrate, or roll back durable state
+  events            Verify, tail, filter, retain, or repair head events
   status            Show health status of all heads
                     Options:
                       -j, --json               Output in JSON format
@@ -374,7 +524,7 @@ Examples:
 Environment:
   HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
   HYDRA_AI_COMMAND  Default AI tool (default: claude)
-  HYDRA_SKIP_AI     Set to 1 to spawn a shell-only head (no agent CLI)
+  HYDRA_SKIP_AI     Legacy shell-only switch (prefer spawn --no-agent)
   HYDRA_ROOT        Override hydra installation path (for library discovery)
   HYDRA_DASHBOARD_PANES_PER_SESSION  Panes per session for dashboard (1, N, or all)
   HYDRA_MAX_SESSIONS  Maximum active sessions (default: unlimited)
@@ -386,6 +536,18 @@ EOF
 
 # Main command dispatcher
 main() {
+    HYDRA_JSON_REQUESTED=0
+    case "${1:-}" in
+        init|capabilities|lifecycle|wait|exec|diff|review|provenance|list|status|group|recv|queue)
+            for _main_arg in "$@"; do
+                case "$_main_arg" in
+                    --) break ;;
+                    -j|--json) HYDRA_JSON_REQUESTED=1 ;;
+                esac
+            done
+            ;;
+    esac
+    export HYDRA_JSON_REQUESTED
     init_hydra_home
 
     # Load only the libraries needed for this command
@@ -395,6 +557,62 @@ main() {
         spawn)
             shift
             cmd_spawn "$@"
+            ;;
+        init)
+            shift
+            cmd_init "$@"
+            ;;
+        agent)
+            shift
+            cmd_agent "$@"
+            ;;
+        capabilities)
+            shift
+            cmd_capabilities "$@"
+            ;;
+        path)
+            shift
+            cmd_path "$@"
+            ;;
+        lifecycle)
+            shift
+            cmd_lifecycle "$@"
+            ;;
+        outcome)
+            shift
+            cmd_outcome "$@"
+            ;;
+        wait)
+            shift
+            cmd_wait "$@"
+            ;;
+        adapter)
+            shift
+            cmd_adapter "$@"
+            ;;
+        resume)
+            shift
+            cmd_resume "$@"
+            ;;
+        notify)
+            shift
+            cmd_notify "$@"
+            ;;
+        exec)
+            shift
+            cmd_exec "$@"
+            ;;
+        diff)
+            shift
+            cmd_diff "$@"
+            ;;
+        review)
+            shift
+            cmd_review "$@"
+            ;;
+        provenance)
+            shift
+            cmd_provenance "$@"
             ;;
         list)
             shift
@@ -443,6 +661,14 @@ main() {
         regenerate)
             shift
             cmd_regenerate "$@"
+            ;;
+        state)
+            shift
+            cmd_state "$@"
+            ;;
+        events)
+            shift
+            cmd_events "$@"
             ;;
         status)
             shift

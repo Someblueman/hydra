@@ -642,53 +642,53 @@ semantics using the shell implementation first.
 
 #### Scope
 
-- [ ] Accept the identity architecture decision.
-- [ ] Specify state v2, events v1, lifecycle v1, JSON success/error v1, and the shared
+- [x] Accept the identity architecture decision.
+- [x] Specify state v2, events v1, lifecycle v1, JSON success/error v1, and the shared
       lock protocol.
-- [ ] Implement state verify, backup, migration dry-run, migration, and rollback.
-- [ ] Namespace state and worktree identity by project.
-- [ ] Implement versioned JSONL events with verify, tail, filter, retention, and
+- [x] Implement state verify, backup, migration dry-run, migration, and rollback.
+- [x] Namespace state and worktree identity by project.
+- [x] Implement versioned JSONL events with verify, tail, filter, retention, and
       repair behavior.
-- [ ] Implement instance-scoped declared outcomes, observed status, liveness, and
+- [x] Implement instance-scoped declared outcomes, observed status, liveness, and
       explicit completion policies.
-- [ ] Make dependencies name the evidence or state they require instead of treating
+- [x] Make dependencies name the evidence or state they require instead of treating
       session disappearance as success.
-- [ ] Add `hydra wait` over durable state, using `tmux wait-for` only as an optional
+- [x] Add `hydra wait` over durable state, using `tmux wait-for` only as an optional
       wake-up accelerator with rechecks and timeouts.
-- [ ] Add agent profiles with launch, prompt, resume, environment, capability, and
+- [x] Add agent profiles with launch, prompt, resume, environment, capability, and
       lifecycle-adapter declarations.
-- [ ] Ship capability-probed hook adapters only for verified agent surfaces; all
+- [x] Ship capability-probed hook adapters only for verified agent surfaces; all
       adapters translate into the provider-neutral Hydra lifecycle/event schema.
-- [ ] Add one generic adapter-ingest command that validates structured stdin,
+- [x] Add one generic adapter-ingest command that validates structured stdin,
       correlates the active instance, and emits generic lifecycle events.
-- [ ] Add `hydra agent list`, `show`, `doctor`, and `init`, plus
+- [x] Add `hydra agent list`, `show`, `doctor`, and `init`, plus
       `hydra capabilities --json` for agents and automation.
-- [ ] Add `hydra init` for project identity, trust, profiles, bootstrap, worktree-root,
+- [x] Add `hydra init` for project identity, trust, profiles, bootstrap, worktree-root,
       and local-ignore configuration; workflow initialization follows in 1.9.
-- [ ] Add `spawn --dry-run` and a first-class `--no-agent` mode so users can inspect
+- [x] Add `spawn --dry-run` and a first-class `--no-agent` mode so users can inspect
       setup and create a plain shell head without environment variables.
-- [ ] Select an explicit, configured, or positively detected agent profile—or none;
+- [x] Select an explicit, configured, or positively detected agent profile—or none;
       never silently default to an unavailable agent executable.
-- [ ] Add task injection through `spawn --prompt`, `--prompt-file`, and issue-body
+- [x] Add task injection through `spawn --prompt`, `--prompt-file`, and issue-body
       input, recording the resolved task in head state.
-- [ ] Add durable resume metadata plus `hydra resume`; regenerate creates a new
+- [x] Add durable resume metadata plus `hydra resume`; regenerate creates a new
       instance while preserving head history.
-- [ ] Add policy-controlled pane history, archival, and teardown behavior with size,
+- [x] Add policy-controlled pane history, archival, and teardown behavior with size,
       retention, redaction, and permission controls.
-- [ ] Stream bootstrap/setup output, export explicit non-secret `HYDRA_*` identity
+- [x] Stream bootstrap/setup output, export explicit non-secret `HYDRA_*` identity
       and path variables, and support dry-run plus pre/post teardown hooks.
-- [ ] Add typed messages and safe-point steering with delivery receipts; inbox-only
+- [x] Add typed messages and safe-point steering with delivery receipts; inbox-only
       remains the universal fallback.
-- [ ] Add rate-limited local notification sinks for named lifecycle events without
+- [x] Add rate-limited local notification sinks for named lifecycle events without
       requiring the TUI to be running.
-- [ ] Add `hydra exec` for out-of-band commands across selected worktrees with
+- [x] Add `hydra exec` for out-of-band commands across selected worktrees with
       bounded parallelism, captured results, and explicit trust behavior.
-- [ ] Add `hydra diff`, `hydra review`, and `hydra list --git` over recorded base refs
+- [x] Add `hydra diff`, `hydra review`, and `hydra list --git` over recorded base refs
       and Git porcelain.
-- [ ] Add versioned JSON success and error output to automation-relevant commands.
-- [ ] Add per-head provenance containing resolved profiles, tasks, versions, trusted
+- [x] Add versioned JSON success and error output to automation-relevant commands.
+- [x] Add per-head provenance containing resolved profiles, tasks, versions, trusted
       configuration hashes, and lifecycle sources.
-- [ ] Publish state, lifecycle, agent-adapter, security, and automation documentation
+- [x] Publish state, lifecycle, agent-adapter, security, and automation documentation
       with the release.
 
 #### Release gates
@@ -1200,8 +1200,8 @@ recorded architecture decisions.
 | --- | --- | --- | --- |
 | Installation prefix, layout, and version discovery | 1.5.2 onboarding | Fresh-prefix install/uninstall plus run-from-source parity | Accepted: `$PREFIX/bin` + `$PREFIX/lib/hydra`; relative discovery; `HYDRA_ROOT` first |
 | Default agent detection and no-agent selection | 1.6 guided onboarding | Clean-home fixtures with zero, one, and multiple detected agent CLIs | Open |
-| Project identity generation | State v2 | Collision, repo move, clone, and duplicate-branch fixtures | Open |
-| Physical state v2 representation | Migration and native reader | Shell simplicity, atomicity, malformed-input fixtures | Open |
+| Project identity generation | State v2 | Collision, repo move, clone, and duplicate-branch fixtures | Accepted: opaque ID in Git common dir; ADR 0001 |
+| Physical state v2 representation | Migration and native reader | Shell simplicity, atomicity, malformed-input fixtures | Accepted: per-head scalar directory; ADR 0001 |
 | Pane-history default, retention, and redaction policy | Lifecycle release | Secret-bearing fixtures, permissions, disk growth, recovery value | Open |
 | Agent adapter packaging and capability matrix | Lifecycle release | Verified vendor fixtures, trust boundaries, version-skew fallback | Open |
 | Worktree-root default and stored-path migration | Lifecycle release | Multiple repositories, repo moves, wrong-cwd kill, recovery fixtures | Open |

@@ -31,10 +31,23 @@ locate_yaml_config() {
 
 # Apply YAML config: create windows/panes and send startup commands
 # Supports window dir and env, pane split/dir/env
-# Usage: apply_yaml_config <config_path> <session> <worktree> <repo_root>
+# Usage: apply_yaml_config <config_path> <session> <worktree> <repo_root> [user-template]
 apply_yaml_config() {
-    cfg="$1"; session="$2"; wt="$3"; repo="$4"
+    cfg="$1"; session="$2"; wt="$3"; repo="$4"; config_source="${5:-repository}"
     [ -f "$cfg" ] || return 0
+    if [ "$config_source" != user-template ]; then
+        case "$cfg" in
+            "$HYDRA_HOME"/*) ;;
+            *)
+                config_root="$(dirname "$(dirname "$cfg")")"
+                if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$config_root"; then
+                    echo "Error: repository YAML config is not trusted or changed" >&2
+                    echo "Next: review .hydra/config.yml and run 'hydra init --trust'" >&2
+                    return 1
+                fi
+                ;;
+        esac
+    fi
 
     awk '
       function ltrim(s){ sub(/^[[:space:]]+/,"",s); return s }

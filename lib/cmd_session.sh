@@ -10,9 +10,11 @@ cmd_list() {
     show_deps=""
     no_pr_status=""
     refresh_pr_status=""
+    show_git=""
     while [ $# -gt 0 ]; do
         case "$1" in
             -g|--group)
+                [ $# -ge 2 ] || { cli_error list invalid_input "--group requires a name" "run hydra list --help"; return 1; }
                 shift
                 filter_group="$1"
                 shift
@@ -37,20 +39,24 @@ cmd_list() {
                 refresh_pr_status="1"
                 shift
                 ;;
+            --git)
+                show_git="1"
+                shift
+                ;;
             -*)
-                echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra list [-g|--group <name>] [--groups] [--json] [--deps] [--no-pr-status] [--refresh-pr-status]" >&2
-                exit 1
+                cli_error list invalid_input "Unknown option '$1'" "run hydra help"
+                return 1
                 ;;
             *)
-                echo "Error: Unexpected argument '$1'" >&2
-                exit 1
+                cli_error list invalid_input "Unexpected argument '$1'" "run hydra help"
+                return 1
                 ;;
         esac
     done
 
     # Show dependency tree if requested
     if [ -n "$show_deps" ]; then
+        [ -z "$json_output" ] || { cli_error list unsupported_combination "--deps does not have a JSON representation" "use hydra list --json without --deps"; return 1; }
         _load_lib deps
         echo "Session Dependencies:"
         echo ""
@@ -70,7 +76,7 @@ cmd_list() {
                 count="$(list_mappings_for_group "$g" | wc -l | tr -d ' ')"
                 printf '{"name": "%s", "count": %s}\n' "$(json_escape "$g")" "$count" >> "$tmpjson"
             done
-            printf '{"groups": ['
+            printf '{"schema_version":1,"ok":true,"command":"list","data":{"groups":['
             first=1
             while IFS= read -r line; do
                 if [ "$first" -eq 1 ]; then
@@ -80,7 +86,7 @@ cmd_list() {
                 fi
                 printf '%s' "$line"
             done < "$tmpjson"
-            printf ']}\n'
+            printf ']}}\n'
             rm -f "$tmpjson"
             trap - EXIT
         else
@@ -100,7 +106,7 @@ cmd_list() {
     # Check if we have any mappings
     if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
         if [ -n "$json_output" ]; then
-            printf '{"sessions": [], "total": 0, "active": 0, "dead": 0}\n'
+            json_success list '{"sessions":[],"total":0,"active":0,"dead":0}'
         else
             echo "No active Hydra heads"
         fi
@@ -185,7 +191,17 @@ cmd_list() {
             fi
 
             # Build JSON object
-            printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s, "deps": %s, "pr": %s, "pr_status": %s}\n' \
+            lifecycle_snapshot "$branch"
+            git_json=null
+            if [ -n "$show_git" ] && [ -n "$LIFECYCLE_SNAPSHOT_INSTANCE" ]; then
+                _clg_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
+                _clg_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref" 2>/dev/null || true)"
+                if [ -d "$_clg_worktree" ] && [ -n "$_clg_base" ]; then
+                    operations_git_counts "$_clg_worktree" "$_clg_base"
+                    git_json="{\"base_ref\":\"$_clg_base\",\"ahead\":$OPERATIONS_AHEAD,\"behind\":$OPERATIONS_BEHIND,\"dirty_paths\":$OPERATIONS_DIRTY}"
+                fi
+            fi
+            printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s, "deps": %s, "pr": %s, "pr_status": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s, "git": %s}\n' \
                 "$(json_escape "$branch")" \
                 "$(json_escape "$session")" \
                 "$ai_json" \
@@ -197,11 +213,18 @@ cmd_list() {
                 "$is_current" \
                 "$deps_json" \
                 "$pr_json" \
-                "$pr_status_json" >> "$tmpjson"
+                "$pr_status_json" \
+                "$(json_string_or_null "$LIFECYCLE_SNAPSHOT_INSTANCE")" \
+                "$(json_string_or_null "$LIFECYCLE_SNAPSHOT_OUTCOME")" \
+                "$(json_escape "$LIFECYCLE_SNAPSHOT_OBSERVED")" \
+                "$(json_escape "$LIFECYCLE_SNAPSHOT_CONFIDENCE")" \
+                "$(json_escape "$LIFECYCLE_SNAPSHOT_LIVENESS")" \
+                "$LIFECYCLE_SNAPSHOT_COMPLETE" \
+                "$git_json" >> "$tmpjson"
         done < "$HYDRA_MAP"
 
         # Output JSON
-        printf '{"sessions": ['
+        printf '{"schema_version":1,"ok":true,"command":"list","data":{"sessions":['
         first=1
         while IFS= read -r line; do
             if [ "$first" -eq 1 ]; then
@@ -211,7 +234,7 @@ cmd_list() {
             fi
             printf '%s' "$line"
         done < "$tmpjson"
-        printf '], "total": %s, "active": %s, "dead": %s}\n' "$total" "$active" "$dead"
+        printf '],"total":%s,"active":%s,"dead":%s}}\n' "$total" "$active" "$dead"
 
         rm -f "$tmpjson"
         trap - EXIT
@@ -284,6 +307,18 @@ cmd_list() {
             fi
 
             # Check if session still exists (use snapshot loaded above)
+            lifecycle_snapshot "$branch"
+            status_line="$status_line [declared: ${LIFECYCLE_SNAPSHOT_OUTCOME:-none}] [observed: $LIFECYCLE_SNAPSHOT_OBSERVED/$LIFECYCLE_SNAPSHOT_CONFIDENCE] [live: $LIFECYCLE_SNAPSHOT_LIVENESS]"
+            if [ -n "$show_git" ] && [ -n "$LIFECYCLE_SNAPSHOT_INSTANCE" ]; then
+                _clg_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
+                _clg_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref" 2>/dev/null || true)"
+                if [ -d "$_clg_worktree" ] && [ -n "$_clg_base" ]; then
+                    operations_git_counts "$_clg_worktree" "$_clg_base"
+                    status_line="$status_line [git: +$OPERATIONS_AHEAD/-$OPERATIONS_BEHIND dirty=$OPERATIONS_DIRTY]"
+                else
+                    status_line="$status_line [git: unavailable]"
+                fi
+            fi
             if tmux_snapshot_has_session "$session"; then
                 # Check if it's the current session
                 if [ "$session" = "$current_session" ]; then
@@ -375,6 +410,7 @@ cmd_kill() {
     kill_all=false
     force=false
     kill_group=""
+    transcript_policy=none
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -385,6 +421,12 @@ cmd_kill() {
             --force)
                 force=true
                 shift
+                ;;
+            --transcript)
+                [ $# -ge 2 ] || { echo "Error: --transcript requires none, redacted, or full" >&2; return 1; }
+                transcript_policy="$2"
+                case "$transcript_policy" in none|redacted|full) ;; *) echo "Error: invalid transcript policy '$transcript_policy'" >&2; return 1 ;; esac
+                shift 2
                 ;;
             -g|--group)
                 shift
@@ -412,6 +454,8 @@ cmd_kill() {
                 ;;
         esac
     done
+    HYDRA_TEARDOWN_TRANSCRIPT_POLICY="$transcript_policy"
+    export HYDRA_TEARDOWN_TRANSCRIPT_POLICY
 
     # Check mutual exclusivity
     if [ "$kill_all" = true ] && [ -n "$branch" ]; then
@@ -464,7 +508,7 @@ cmd_kill() {
         echo "Killing $count sessions in group '$kill_group'..."
         echo "$mappings" | while IFS=' ' read -r b _s _a _g; do
             echo "  Killing $b..."
-            kill_single_head "$b" 2>/dev/null || true
+            kill_single_head "$b" "$_s" 2>/dev/null || true
         done
         echo "Done"
         return 0
@@ -524,13 +568,12 @@ cmd_status() {
                 shift
                 ;;
             -*)
-                echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra status [--json]" >&2
-                exit 1
+                cli_error status invalid_input "Unknown option '$1'" "run hydra status --json"
+                return 1
                 ;;
             *)
-                echo "Error: Unexpected argument '$1'" >&2
-                exit 1
+                cli_error status invalid_input "Unexpected argument '$1'" "run hydra status --json"
+                return 1
                 ;;
         esac
     done
@@ -578,17 +621,24 @@ cmd_status() {
                     ai_json="\"$(json_escape "$ai")\""
                 fi
 
-                printf '{"branch": "%s", "session": "%s", "ai": %s, "status": "%s", "duration_seconds": %s}\n' \
+                lifecycle_snapshot "$branch"
+                printf '{"branch": "%s", "session": "%s", "ai": %s, "status": "%s", "duration_seconds": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s}\n' \
                     "$(json_escape "$branch")" \
                     "$(json_escape "$session")" \
                     "$ai_json" \
                     "$status" \
-                    "$duration_secs" >> "$tmpjson"
+                    "$duration_secs" \
+                    "$(json_string_or_null "$LIFECYCLE_SNAPSHOT_INSTANCE")" \
+                    "$(json_string_or_null "$LIFECYCLE_SNAPSHOT_OUTCOME")" \
+                    "$(json_escape "$LIFECYCLE_SNAPSHOT_OBSERVED")" \
+                    "$(json_escape "$LIFECYCLE_SNAPSHOT_CONFIDENCE")" \
+                    "$(json_escape "$LIFECYCLE_SNAPSHOT_LIVENESS")" \
+                    "$LIFECYCLE_SNAPSHOT_COMPLETE" >> "$tmpjson"
             done < "$HYDRA_MAP"
         fi
 
         # Build final JSON
-        printf '{'
+        printf '{"schema_version":1,"ok":true,"command":"status","data":{'
         printf '"system": {"hydra_version": "%s", "tmux_version": "%s", "git_version": "%s"}' \
             "$(json_escape "$HYDRA_VERSION")" \
             "$(json_escape "$tmux_ver")" \
@@ -611,7 +661,7 @@ cmd_status() {
         fi
 
         printf '], "summary": {"active": %s, "dead": %s}' "$active" "$dead"
-        printf '}\n'
+        printf '}}\n'
 
         rm -f "$tmpjson"
         trap - EXIT
@@ -665,11 +715,13 @@ cmd_status() {
                 fi
             fi
 
+            lifecycle_snapshot "$branch"
+            lifecycle_info="[declared: ${LIFECYCLE_SNAPSHOT_OUTCOME:-none}] [observed: $LIFECYCLE_SNAPSHOT_OBSERVED/$LIFECYCLE_SNAPSHOT_CONFIDENCE] [live: $LIFECYCLE_SNAPSHOT_LIVENESS]"
             if tmux_snapshot_has_session "$session"; then
-                echo "  [OK] $branch -> $session $info"
+                echo "  [OK] $branch -> $session $info $lifecycle_info"
                 active=$((active + 1))
             else
-                echo "  [DEAD] $branch -> $session $info"
+                echo "  [DEAD] $branch -> $session $info $lifecycle_info"
                 dead=$((dead + 1))
             fi
         done < "$HYDRA_MAP"
@@ -689,4 +741,3 @@ cmd_status() {
 cmd_cycle_layout() {
     cycle_layout
 }
-

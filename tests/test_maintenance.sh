@@ -44,19 +44,22 @@ cleanup_env() {
     rm -rf "$TEST_DIR"
 }
 
-test_count_stale_locks_mkdir_format() {
-    echo "Testing count_stale_locks with mkdir lock dirs..."
+test_stale_locks_require_owner_evidence() {
+    echo "Testing stale locks require dead same-host owner evidence..."
     setup_env
 
     mkdir -p "$HYDRA_HOME/locks/fresh.lock"
     mkdir -p "$HYDRA_HOME/locks/old.lock"
+    mkdir -p "$HYDRA_HOME/locks/dead.lock"
     touch -t 202001010000 "$HYDRA_HOME/locks/old.lock"
+    printf '99999999\n' > "$HYDRA_HOME/locks/dead.lock/pid"
+    hostname > "$HYDRA_HOME/locks/dead.lock/host"
 
     result="$(count_stale_locks)"
-    assert_equal "1" "$result" "count_stale_locks should see the aged mkdir lock"
+    assert_equal "1" "$result" "only dead same-host lock is stale"
 
     cleaned="$(clean_stale_locks)"
-    assert_equal "1" "$cleaned" "clean_stale_locks should remove the aged mkdir lock"
+    assert_equal "1" "$cleaned" "clean_stale_locks removes only evidenced stale lock"
 
     if [ -d "$HYDRA_HOME/locks/fresh.lock" ]; then
         echo "[PASS] Fresh lock directory preserved"
@@ -67,11 +70,20 @@ test_count_stale_locks_mkdir_format() {
     fi
     test_count=$((test_count + 1))
 
-    if [ ! -d "$HYDRA_HOME/locks/old.lock" ]; then
-        echo "[PASS] Stale mkdir lock removed"
+    if [ -d "$HYDRA_HOME/locks/old.lock" ]; then
+        echo "[PASS] Aged metadata-free lock preserved"
         pass_count=$((pass_count + 1))
     else
-        echo "[FAIL] Stale mkdir lock removed"
+        echo "[FAIL] Aged metadata-free lock preserved"
+        fail_count=$((fail_count + 1))
+    fi
+    test_count=$((test_count + 1))
+
+    if [ ! -d "$HYDRA_HOME/locks/dead.lock" ]; then
+        echo "[PASS] Dead same-host lock removed"
+        pass_count=$((pass_count + 1))
+    else
+        echo "[FAIL] Dead same-host lock removed"
         fail_count=$((fail_count + 1))
     fi
     test_count=$((test_count + 1))
@@ -113,10 +125,25 @@ test_clean_dead_mappings_cleans_messages() {
     cleanup_env
 }
 
+test_branch_has_mapping_matches_literal_branch() {
+    echo "Testing branch_has_mapping uses literal branch identity..."
+    setup_env
+
+    echo "feature/x alive-session - - - - -" > "$HYDRA_MAP"
+
+    branch_has_mapping "feature/x"
+    assert_success $? "Exact branch name is found"
+    branch_has_mapping "feature.x"
+    assert_failure $? "Regex-like branch name does not match a different branch"
+
+    cleanup_env
+}
+
 echo "Running maintenance.sh unit tests..."
 echo "================================"
-test_count_stale_locks_mkdir_format
+test_stale_locks_require_owner_evidence
 test_clean_dead_mappings_cleans_messages
+test_branch_has_mapping_matches_literal_branch
 echo "================================"
 echo "Test Results:"
 echo "Total:  $test_count"

@@ -131,13 +131,9 @@ validate_worktree_path() {
         return 1
     fi
     
-    # Disallow control chars and whitespace to avoid ambiguous paths
+    # Disallow control characters. Spaces are valid when arguments stay quoted.
     if printf '%s' "$path" | grep -q '[[:cntrl:]]'; then
         echo "Error: Path contains control characters: $path" >&2
-        return 1
-    fi
-    if printf '%s' "$path" | grep -q '[[:space:]]'; then
-        echo "Error: Path cannot contain whitespace: $path" >&2
         return 1
     fi
     
@@ -169,7 +165,7 @@ validate_worktree_path() {
     # Restrict to a conservative safe character set (unless advanced refs allowed)
     if [ -z "${HYDRA_ALLOW_ADVANCED_REFS:-}" ]; then
         case "$path" in
-            *[!A-Za-z0-9._/-]* )
+            *[!A-Za-z0-9._/\ -]* )
                 echo "Error: Path contains unsupported characters: $path" >&2
                 return 1
                 ;;

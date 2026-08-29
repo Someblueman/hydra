@@ -71,6 +71,7 @@ windows:
         split: h
 YAML
 
+"$HYDRA_BIN" init --no-agent --trust >/dev/null 2>&1 || exit 1
 "$HYDRA_BIN" spawn yaml-test >/dev/null 2>&1 || true
 
 # Check that windows were created

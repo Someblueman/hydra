@@ -24,6 +24,15 @@ fail_count=0
 
 # Global test directory
 TEST_DIR=""
+TEST_PROJECT_TRUSTED=1
+TEST_TRUST_ROOT=""
+
+# Called indirectly by functions sourced from lib/hooks.sh.
+# shellcheck disable=SC2317,SC2329
+project_is_trusted() {
+    TEST_TRUST_ROOT="${1:-}"
+    [ "$TEST_PROJECT_TRUSTED" -eq 1 ]
+}
 
 # Setup test environment
 setup_test_env() {
@@ -40,6 +49,8 @@ cleanup_test_env() {
         rm -rf "$TEST_DIR"
     fi
     TEST_DIR=""
+    TEST_PROJECT_TRUSTED=1
+    TEST_TRUST_ROOT=""
 }
 
 # =============================================================================
@@ -242,6 +253,25 @@ test_apply_custom_layout_default_fallback() {
     cleanup_test_env
 }
 
+test_apply_custom_layout_blocks_untrusted_hook() {
+    echo "Testing apply_custom_layout_or_default blocks an untrusted hook..."
+
+    setup_test_env
+    mkdir -p "$TEST_DIR/worktree/.hydra/hooks"
+    # Preserve the variable for expansion by the hook when Hydra runs it.
+    # shellcheck disable=SC2016
+    printf '%s\n' '#!/bin/sh' 'touch "$HYDRA_WORKTREE/untrusted_layout.txt"' > "$TEST_DIR/worktree/.hydra/hooks/layout"
+    chmod +x "$TEST_DIR/worktree/.hydra/hooks/layout"
+    TEST_PROJECT_TRUSTED=0
+
+    apply_custom_layout_or_default "default" "test-session" "$TEST_DIR/worktree" "$TEST_DIR/repo" >/dev/null 2>&1
+    [ ! -f "$TEST_DIR/worktree/untrusted_layout.txt" ]
+    assert_success $? "Untrusted layout hook should be skipped"
+    assert_equal "$TEST_DIR/worktree" "$TEST_TRUST_ROOT" "Layout trust checks the hook's source worktree"
+
+    cleanup_test_env
+}
+
 # =============================================================================
 # Test: run_startup_commands (requires careful mocking)
 # =============================================================================
@@ -253,6 +283,21 @@ test_run_startup_commands_no_file() {
     # No startup file
     run_startup_commands "test-session" "$TEST_DIR/worktree" "$TEST_DIR/repo"
     assert_success $? "Should succeed when no startup file exists"
+
+    cleanup_test_env
+}
+
+test_run_startup_commands_blocks_untrusted_file() {
+    echo "Testing run_startup_commands blocks an untrusted startup file..."
+
+    setup_test_env
+    printf '%s\n' 'touch untrusted_startup.txt' > "$TEST_DIR/worktree/.hydra/startup"
+    TEST_PROJECT_TRUSTED=0
+
+    run_startup_commands "test-session" "$TEST_DIR/worktree" "$TEST_DIR/repo" >/dev/null 2>&1
+    [ ! -f "$TEST_DIR/worktree/untrusted_startup.txt" ]
+    assert_success $? "Untrusted startup commands should be skipped"
+    assert_equal "$TEST_DIR/worktree" "$TEST_TRUST_ROOT" "Startup trust checks the file's source worktree"
 
     cleanup_test_env
 }
@@ -328,10 +373,12 @@ test_run_hook_failure_ignored
 echo ""
 test_apply_custom_layout_uses_hook
 test_apply_custom_layout_default_fallback
+test_apply_custom_layout_blocks_untrusted_hook
 
 # run_startup_commands tests
 echo ""
 test_run_startup_commands_no_file
+test_run_startup_commands_blocks_untrusted_file
 test_run_startup_commands_parses_file
 test_run_startup_commands_skips_comments
 

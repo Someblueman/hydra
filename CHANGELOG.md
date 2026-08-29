@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-08-29
+
+### Added
+
+- Project-, head-, and instance-scoped state v2 with reversible migration, backups,
+  verification, opaque IDs, cross-project isolation, and versioned JSONL events
+- Independent declared outcome, observed status, and liveness channels; explicit
+  completion policies; durable waits; stale-instance rejection; resume history
+- Agent profiles, capability reporting, trusted project initialization, task-aware
+  spawn/dry-run/no-agent paths, and safe task-file injection
+- Provider-neutral adapter ingest with bounded canonical JSON v1 validation and a
+  dated capability matrix that makes absent adapters explicit
+- Typed inbox/safe-point messages and receipts, rate-limited local lifecycle
+  notifications, bounded transcripts, and trusted teardown hooks
+- `hydra exec` with bounded parallelism, timeouts, private captured results, argv-safe
+  execution, and separately authorized trusted shell-string mode
+- Recorded-base `hydra diff`, `hydra review`, `hydra list --git`, and per-head
+  `hydra provenance` views
+- Versioned JSON success/error envelopes across automation-relevant `--json` commands
+- State, lifecycle, adapter, automation, security, operations, provenance, and release
+  evidence documentation
+
+### Changed
+
+- Dependencies require named durable evidence instead of treating a missing tmux
+  session as success
+- Repository configuration and hooks execute only while their exact content hash is
+  trusted; a change invalidates trust
+- Regenerate and resume create a new instance and preserve prior instance history
+- State and message mutations use evidence-bearing shared locks and atomic replacement
+
+### Fixed
+
+- Timeout watchdogs now terminate the command process tree without retaining output
+  pipes for the full timeout
+- Shell integration fixtures isolate `HYDRA_HOME`, tmux state, branches, and worktrees
+  and clean only resources they own
+- State cache keys, sender identity, worktree paths with spaces, optional PR input,
+  and tmux `:0.0` pane targeting are handled literally and reliably
+
 ## [1.5.2] - 2026-08-26
 
 ### Added
