@@ -172,7 +172,10 @@ cmd_collision() {
         esac
         shift
     done
-    [ -n "$_cco_left" ] && [ -n "$_cco_right" ] || { cli_error collision invalid_input "two heads are required" "run hydra collision <left> <right>"; return 1; }
+    if [ -z "$_cco_left" ] || [ -z "$_cco_right" ]; then
+        cli_error collision invalid_input "two heads are required" "run hydra collision <left> <right>"
+        return 1
+    fi
     _cco_rows="$(parallel_collision_rows "$_cco_left" "$_cco_right")" || return 1
     _cco_tab="$(printf '\t')"
     if [ "$_cco_json" -eq 1 ]; then
@@ -286,7 +289,10 @@ cmd_gate() {
                     *) cli_error gate invalid_input "expected --name or --" "run hydra gate run <head> --name <name> -- <command>"; return 1 ;;
                 esac
             done
-            [ -n "$_cg_name" ] && [ $# -gt 0 ] || { cli_error gate invalid_input "gate name and command are required" "run hydra gate run <head> --name <name> -- <command>"; return 1; }
+            if [ -z "$_cg_name" ] || [ $# -eq 0 ]; then
+                cli_error gate invalid_input "gate name and command are required" "run hydra gate run <head> --name <name> -- <command>"
+                return 1
+            fi
             if _cg_run="$(parallel_gate_run "$_cg_branch" "$_cg_name" "$@")"; then
                 echo "Gate $_cg_name passed: $_cg_run"
             else
