@@ -90,11 +90,76 @@ hydra_core_run_bounded() {
 hydra_core_snapshot_valid() {
     _hcsv_file="$1"
     [ "$(wc -l < "$_hcsv_file" | tr -d ' ')" = "1" ] || return 1
-    _hcsv_line="$(sed -n '1p' "$_hcsv_file")"
-    case "$_hcsv_line" in
-        '{"schema_version":1,"ok":true,"command":"snapshot","data":{"state_schema":2,"projects":'*',"heads":['*']}}') return 0 ;;
-        *) return 1 ;;
-    esac
+    LC_ALL=C awk '
+        function take(value) {
+            if (substr(line, position, length(value)) != value) return 0
+            position += length(value)
+            return 1
+        }
+        function number( digit) {
+            digit = substr(line, position, 1)
+            if (digit !~ /[0-9]/) return 0
+            if (digit == "0") {
+                position++
+                return substr(line, position, 1) !~ /[0-9]/
+            }
+            while (substr(line, position, 1) ~ /[0-9]/) position++
+            return 1
+        }
+        function json_string(escape, char, offset) {
+            if (substr(line, position, 1) != "\"") return 0
+            position++
+            while (position <= length(line)) {
+                char = substr(line, position, 1)
+                if (char == "\"") {
+                    position++
+                    return 1
+                }
+                if (char == "\\") {
+                    position++
+                    escape = substr(line, position, 1)
+                    if (escape == "u") {
+                        for (offset = 1; offset <= 4; offset++) {
+                            position++
+                            if (substr(line, position, 1) !~ /[0-9A-Fa-f]/) return 0
+                        }
+                    } else if (escape !~ /^["\\\/bfnrt]$/) {
+                        return 0
+                    }
+                } else if (char ~ /[[:cntrl:]]/) {
+                    return 0
+                }
+                position++
+            }
+            return 0
+        }
+        function head() {
+            return take("{\"project_id\":") && json_string() &&
+                take(",\"head_id\":") && json_string() &&
+                take(",\"branch\":") && json_string() &&
+                take(",\"desired_state\":") && json_string() &&
+                take(",\"current_instance\":") && json_string() && take("}")
+        }
+        BEGIN { valid = 1 }
+        NR != 1 { valid = 0; exit }
+        {
+            line = $0
+            position = 1
+            if (!take("{\"schema_version\":1,\"ok\":true,\"command\":\"snapshot\",\"data\":{\"state_schema\":2,\"projects\":")) valid = 0
+            if (valid && !number()) valid = 0
+            if (valid && !take(",\"heads\":[")) valid = 0
+            if (valid && substr(line, position, 1) != "]") {
+                if (!head()) valid = 0
+                while (valid && substr(line, position, 1) == ",") {
+                    position++
+                    if (!head()) valid = 0
+                }
+            }
+            if (valid && !take("]}}")) valid = 0
+            if (valid && position != length(line) + 1) valid = 0
+        }
+        END { exit valid && NR == 1 ? 0 : 1 }
+    ' "$_hcsv_file"
 }
 
 hydra_snapshot_native() {

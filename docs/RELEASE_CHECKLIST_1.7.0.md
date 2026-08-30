@@ -23,9 +23,9 @@ otool -L build/hydra-core
 Observed results:
 
 - ShellCheck style and `dash -n` passed for every shell file.
-- The complete shell suite passed, including 26 parallel-safety, 25 guarded
+- The complete shell suite passed, including 27 parallel-safety, 27 guarded
   integration, and 27 worktree-operation assertions.
-- Native C unit and 33 protocol/parity/fallback assertions passed; UBSan passed on
+- Native C unit and 36 protocol/parity/fallback assertions passed; UBSan passed on
   local macOS. The Linux CI lane adds ASan to UBSan.
 - Fresh shell-only install, successful in-place upgrade with state preservation,
   and uninstall passed 40 assertions; offline/source native
@@ -34,9 +34,11 @@ Observed results:
 - Clean-home no-agent onboarding passed 39 assertions and left no source-repository
   branch or worktree debris.
 - The macOS arm64 20-head snapshot benchmark reported shell cold/p50/p95 of
-  5459/5277/5459 ms and native cold/p50/p95 of 84/73/84 ms for that run.
+  1740/1716/1740 ms and native cold/p50/p95 of 48/48/50 ms for that run. Native
+  p95 was 34.8x faster (97.1% lower elapsed time).
 - The tmux 3.5a control prototype returned all 30 markers in both paths and measured
-  97 ms for bounded polling versus 9 ms for one control-mode attachment.
+  94 ms for bounded polling versus 8 ms for one control-mode attachment, an 11.8x
+  improvement (91.5% lower elapsed time).
 - `otool -L` reported only `/usr/lib/libSystem.B.dylib` for the local arm64 helper.
 
 The GitHub workflow defines the same strict native build, parity, sanitizer,
@@ -73,10 +75,11 @@ hydra land integration-head --into main --gate ready --dry-run
 hydra land integration-head --into main --gate ready
 ```
 
-The 25 passing assertions verify typed input selection and secret refusal, captured
-and approved evidence, merge simulation, exact-gate invalidation after commit change,
-pre-operation bundles, base advancement, successful landing and teardown, plus a
-second conflicting sync that aborts cleanly and records recovered failure evidence.
+The 27 passing assertions verify typed input selection and secret refusal, captured
+and approved evidence, merge simulation (including modify/delete conflicts),
+exact-gate invalidation after commit change, source and target pre-operation bundles,
+base advancement, successful landing and teardown, plus a second conflicting sync
+that aborts cleanly and records recovered failure evidence.
 
 ## Publication boundary
 

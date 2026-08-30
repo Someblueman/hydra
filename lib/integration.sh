@@ -152,15 +152,16 @@ integration_archive_locked() {
     _ia_branch="$1"
     _ia_kind="$2"
     _ia_source="$3"
+    _ia_worktree="$4"
     parallel_head_load "$_ia_branch" || return 1
     _ia_run="$(hydra_new_id run "$PARALLEL_HEAD_ID|$_ia_kind")" || return 1
     _ia_root="$PARALLEL_HEAD_DIR/archives/$_ia_kind/$_ia_run"
     mkdir -p "$_ia_root" || return 1
     if ! state_v2_write_scalar "$_ia_root/run-id" "$_ia_run" || \
-       ! state_v2_write_scalar "$_ia_root/pre-head" "$(git -C "$PARALLEL_WORKTREE" rev-parse HEAD)" || \
+       ! state_v2_write_scalar "$_ia_root/pre-head" "$(git -C "$_ia_worktree" rev-parse HEAD)" || \
        ! state_v2_write_scalar "$_ia_root/source" "$_ia_source" || \
        ! state_v2_write_scalar "$_ia_root/created-at" "$(date +%s)" || \
-       ! git -C "$PARALLEL_WORKTREE" bundle create "$_ia_root/pre-operation.bundle" HEAD >/dev/null 2>&1; then
+       ! git -C "$_ia_worktree" bundle create "$_ia_root/pre-operation.bundle" HEAD >/dev/null 2>&1; then
         return 1
     fi
     INTEGRATION_ARCHIVE_DIR="$_ia_root"
@@ -172,13 +173,13 @@ integration_merge_dry_run() {
     _imdr_worktree="$1"
     _imdr_left="$2"
     _imdr_right="$3"
-    _imdr_base="$(git -C "$_imdr_worktree" merge-base "$_imdr_left" "$_imdr_right")" || return 1
-    _imdr_output="$(git -C "$_imdr_worktree" merge-tree "$_imdr_base" "$_imdr_left" "$_imdr_right")" || return 1
-    if printf '%s\n' "$_imdr_output" | grep -E '(<<<<<<<|changed in both|added in both)' >/dev/null 2>&1; then
+    git -C "$_imdr_worktree" merge-base "$_imdr_left" "$_imdr_right" >/dev/null || return 1
+    if git -C "$_imdr_worktree" merge-tree --write-tree "$_imdr_left" "$_imdr_right" >/dev/null 2>&1; then
+        echo "Merge simulation completed without a predicted conflict"
+    else
         echo "Merge simulation predicts a conflict"
         return 1
     fi
-    echo "Merge simulation completed without a predicted conflict"
 }
 
 integration_sync() {
@@ -210,8 +211,11 @@ integration_sync() {
         return 1
     }
     if [ "$_is_dry" -eq 1 ]; then
-        integration_merge_dry_run "$_is_worktree" HEAD "$_is_source_commit"
-        _is_status=$?
+        if integration_merge_dry_run "$_is_worktree" HEAD "$_is_source_commit"; then
+            _is_status=0
+        else
+            _is_status=$?
+        fi
         integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
         return "$_is_status"
     fi
@@ -221,7 +225,7 @@ integration_sync() {
         integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
         return 1
     fi
-    integration_archive_locked "$_is_branch" sync "$_is_source_commit" || {
+    integration_archive_locked "$_is_branch" sync "$_is_source_commit" "$_is_worktree" || {
         integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
         return 1
     }
@@ -297,8 +301,11 @@ integration_land() {
         return 1
     }
     if [ "$_il_dry" -eq 1 ]; then
-        integration_merge_dry_run "$_il_target_worktree" HEAD "$_il_source_ref"
-        _il_status=$?
+        if integration_merge_dry_run "$_il_target_worktree" HEAD "$_il_source_ref"; then
+            _il_status=0
+        else
+            _il_status=$?
+        fi
         integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
         return "$_il_status"
     fi
@@ -312,7 +319,7 @@ integration_land() {
         integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
         return 1
     fi
-    integration_archive_locked "$_il_branch" land "$_il_target" || {
+    integration_archive_locked "$_il_branch" land "$_il_source_ref" "$_il_target_worktree" || {
         integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
         return 1
     }

@@ -124,7 +124,7 @@ printf '%s\n' \
     '  --version)' \
     '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 1.7.0 protocol 1" ;; esac ;;' \
     '  snapshot)' \
-    '    case "${FAKE_CORE_MODE:-}" in malformed) echo not-json ;; crash) exit 9 ;; *) echo not-json ;; esac ;;' \
+    '    case "${FAKE_CORE_MODE:-}" in malformed) echo not-json ;; shape) echo '\''{"schema_version":1,"ok":true,"command":"snapshot","data":{"state_schema":2,"projects":1,"heads":[{"project_id":false}]}}'\'' ;; crash) exit 9 ;; *) echo not-json ;; esac ;;' \
     'esac' > "$fake_core"
 chmod +x "$fake_core"
 
@@ -147,6 +147,7 @@ else
     assert_success 0 "native timeout terminates helper descendants"
 fi
 assert_fallback malformed malformed-output "$fake_core"
+assert_fallback shape malformed-output "$fake_core"
 
 printf '\nTests: %s, Passed: %s, Failed: %s\n' "$test_count" "$pass_count" "$fail_count"
 [ "$fail_count" -eq 0 ]

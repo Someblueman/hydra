@@ -84,8 +84,10 @@ case "$left_claim" in claim_*) assert_success 0 "claim receives an opaque identi
 right_claim_output="$("$HYDRA_BIN" claim add parallel-right --path 'src/*' --access read --reason review --expires-at "$expiry")"
 assert_success $? "read claim is recorded"
 right_claim="$(printf '%s\n' "$right_claim_output" | awk '{print $2}')"
+"$HYDRA_BIN" claim add parallel-right --path 'src/api/*' --access read --reason api-review --expires-at "$expiry" >/dev/null
+assert_success $? "nested read claim is recorded"
 collision_output="$("$HYDRA_BIN" collision parallel-left parallel-right)"
-case "$collision_output" in *'claim'*'src/*'*'overlap'*'src/shared.txt'*'predicted-conflict'*'src/shared.txt'*) assert_success 0 "collision analysis keeps claim, overlap, and prediction distinct" ;; *) assert_success 1 "collision analysis keeps claim, overlap, and prediction distinct" ;; esac
+case "$collision_output" in *'claim'*'src/api/*'*'overlap'*'src/shared.txt'*'predicted-conflict'*'src/shared.txt'*) assert_success 0 "collision analysis detects intersecting claims and keeps findings distinct" ;; *) assert_success 1 "collision analysis detects intersecting claims and keeps findings distinct" ;; esac
 
 git -C "$left_worktree" checkout -- docs/readme.md
 git -C "$left_worktree" add src/shared.txt

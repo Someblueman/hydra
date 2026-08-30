@@ -190,6 +190,23 @@ parallel_scope_rows() {
     done
 }
 
+parallel_claim_pattern_intersection() {
+    _pcpi_left="$1"
+    _pcpi_right="$2"
+    if [ "$_pcpi_left" = "$_pcpi_right" ]; then
+        printf '%s\n' "$_pcpi_left"
+        return 0
+    fi
+    # Comparing the stored patterns directly catches the documented nested
+    # prefix form (for example src/* and src/api/*) without evaluating either
+    # value as shell code.
+    # shellcheck disable=SC2254 # Stored claim values are intentionally patterns.
+    case "$_pcpi_right" in $_pcpi_left) printf '%s\n' "$_pcpi_right"; return 0 ;; esac
+    # shellcheck disable=SC2254 # Stored claim values are intentionally patterns.
+    case "$_pcpi_left" in $_pcpi_right) printf '%s\n' "$_pcpi_left"; return 0 ;; esac
+    return 1
+}
+
 parallel_collision_claim_rows() {
     _pccr_left="$1"
     _pccr_right="$2"
@@ -205,10 +222,11 @@ parallel_collision_claim_rows() {
         for _pccr_b in "$_pccr_root"/claim_*; do
             [ -d "$_pccr_b" ] || continue
             [ "$(sed -n '1p' "$_pccr_b/owner-head")" = "$_pccr_right" ] || continue
-            [ "$(sed -n '1p' "$_pccr_b/path-pattern")" = "$_pccr_pattern" ] || continue
+            _pccr_other_pattern="$(sed -n '1p' "$_pccr_b/path-pattern")"
+            _pccr_intersection="$(parallel_claim_pattern_intersection "$_pccr_pattern" "$_pccr_other_pattern")" || continue
             _pccr_other_access="$(sed -n '1p' "$_pccr_b/access")"
             if [ "$_pccr_access" = write ] || [ "$_pccr_other_access" = write ]; then
-                printf 'claim\t%s\n' "$_pccr_pattern"
+                printf 'claim\t%s\n' "$_pccr_intersection"
             fi
         done
     done | LC_ALL=C sort -u

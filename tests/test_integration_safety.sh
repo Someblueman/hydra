@@ -100,6 +100,10 @@ git -C "$worktree" commit -qm landed
 assert_success $? "post-sync land gate is rerun against the new commit"
 "$HYDRA_BIN" gate approve integration-head --name ready --by human-reviewer >/dev/null
 assert_success $? "post-sync land gate is approved"
+printf 'target only\n' > target-only.txt
+git add target-only.txt
+git commit -qm target-only
+target_pre="$(git rev-parse HEAD)"
 mkdir -p "$HYDRA_HOME/locks/integration_target_${project_id}.lock"
 HYDRA_LOCK_RETRIES=1 "$HYDRA_BIN" land integration-head --into main --gate ready --dry-run >/dev/null 2>&1
 assert_failure $? "land refuses a concurrent target integration operation"
@@ -108,6 +112,13 @@ rmdir "$HYDRA_HOME/locks/integration_target_${project_id}.lock"
 assert_success $? "land dry-run simulates without mutation"
 "$HYDRA_BIN" land integration-head --into main --gate ready >/dev/null
 assert_success $? "approved clean head lands"
+land_archive="$(find "$HYDRA_HOME/state/v2/projects/$project_id/heads/$head_id/archives/land" -mindepth 1 -maxdepth 1 -type d | head -1)"
+if [ "$(sed -n '1p' "$land_archive/pre-head")" = "$target_pre" ] && \
+   git bundle list-heads "$land_archive/pre-operation.bundle" | grep -q "^$target_pre "; then
+    assert_success 0 "land archives the target commit before merging"
+else
+    assert_success 1 "land archives the target commit before merging"
+fi
 if [ -f landed.txt ] && ! tmux has-session -t integration-head 2>/dev/null && [ ! -d "$worktree" ]; then
     assert_success 0 "successful land merges and tears down the head"
 else
@@ -117,17 +128,18 @@ fi
 "$HYDRA_BIN" spawn conflict-head --no-agent >/dev/null
 assert_success $? "conflict recovery head spawns"
 conflict_worktree="$("$HYDRA_BIN" path conflict-head)"
-printf 'head side\n' > "$conflict_worktree/tracked.txt"
-git -C "$conflict_worktree" add tracked.txt
-git -C "$conflict_worktree" commit -qm head-conflict
+git -C "$conflict_worktree" rm -q tracked.txt
+git -C "$conflict_worktree" commit -qm head-delete
 printf 'main side\n' > tracked.txt
 git add tracked.txt
-git commit -qm main-conflict
+git commit -qm main-modify
 "$HYDRA_BIN" gate run conflict-head --name ready -- true >/dev/null
 assert_success $? "conflict head gate passes"
 "$HYDRA_BIN" gate approve conflict-head --name ready --by human-reviewer >/dev/null
 assert_success $? "conflict head gate is approved"
 conflict_pre="$(git -C "$conflict_worktree" rev-parse HEAD)"
+"$HYDRA_BIN" sync conflict-head --from main --gate ready --dry-run >/dev/null 2>&1
+assert_failure $? "sync dry-run detects a modify/delete conflict"
 "$HYDRA_BIN" sync conflict-head --from main --gate ready >/dev/null 2>&1
 assert_failure $? "conflicting sync fails"
 if [ "$(git -C "$conflict_worktree" rev-parse HEAD)" = "$conflict_pre" ] && \
