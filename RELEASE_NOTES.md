@@ -1,88 +1,66 @@
-# Hydra v1.6.0 Release Notes
+# Hydra v1.7.0 Release Notes
 
-**Release date:** 2026-08-29
+**Release date:** 2026-08-30
 
 ## Highlights
 
-Hydra 1.6.0 gives each project, head, and agent instance durable identity and
-evidence. Tasks can now be injected at spawn, lifecycle state can be inspected and
-waited on without inferring success from a missing tmux session, and a head can be
-resumed while retaining its prior instance history.
+Hydra 1.7.0 makes parallel heads safer to coordinate and proves a small optional
+native acceleration without moving mutation or policy out of the shell CLI.
 
-The implementation remains a single POSIX shell CLI. No compiler or background
-daemon is required.
+Shell-only installation remains fully supported. No compiler, native artifact, or
+background daemon is required.
 
-## Project-safe state and lifecycle
+## Parallel safety
 
-- State v2 namespaces heads by project and uses opaque head and instance IDs, so
-  identical branch names in separate repositories do not collide.
-- Versioned JSONL events retain inspectable lifecycle and coordination history.
-- Declared outcome, observed status, and liveness are independent channels; none is
-  presented as a passed gate or human approval.
-- Dependencies name the durable evidence they require instead of treating a missing
-  tmux session as success.
-- `hydra wait` watches durable conditions with timeouts and stale-instance detection.
-- `hydra resume` and regenerate create a new instance while retaining prior history
-  and rejecting stale observations, messages, and receipts.
+- `claim`, `scope`, and `collision` expose intent, accepted change boundaries, and
+  claim/overlap/predicted/observed conflict evidence without presenting overlap as a
+  guaranteed conflict or scope as a sandbox.
+- Locked per-head ports, Compose names, and database names are unique and released
+  during successful teardown.
+- Verification command evidence and human approval are separate, and approval is
+  valid only for the exact verified commit and worktree status.
+- Typed context packs include only selected diffs, hashed file manifests, notes,
+  bounded history, and artifact references; likely secret paths are rejected.
 
-## Task-aware agents and coordination
+## Guarded integration and recovery
 
-- `hydra init` records project identity, profile defaults, local worktree policy, and
-  an explicit trust decision for repository configuration.
-- Built-in and custom agent profiles declare launch, prompt, resume, capability, and
-  adapter behavior. `hydra agent list`, `show`, and `doctor` expose the result.
-- `spawn --prompt`, `--prompt-file`, issue-body input, `--dry-run`, and `--no-agent`
-  support inspectable task delivery without pane typing or a required AI CLI.
-- Provider-neutral adapter input is bounded, schema-validated, and correlated to the
-  current instance. Missing, malformed, version-skewed, and stale input cannot invent
-  lifecycle progress.
-- Typed inbox and safe-point messages have instance-scoped delivery receipts.
-- Rate-limited local lifecycle notifications work without the TUI or a daemon.
+- `sync` and `land` require clean worktrees and current approved gates, simulate
+  merges, archive the prior commit and a Git bundle, and abort conflicts back to the
+  exact clean pre-operation commit.
+- `du` separates worktree and state usage. Named `gc` policies and worktree doctor
+  actions default to dry-run and preserve dirty/untracked work unless separately
+  authorized.
 
-## Operations and evidence
+## Optional read-only native core
 
-- `hydra exec` runs argv-safe commands across selected worktrees with bounded
-  parallelism, per-command timeouts, private captured results, and explicit trust for
-  shell-string mode.
-- `hydra diff`, `hydra review`, and `hydra list --git` inspect changes relative to
-  each head's recorded base commit.
-- `hydra provenance` records resolved profiles, task hashes, tool versions, trusted
-  configuration hashes, launch or resume mode, and lifecycle sources.
-- Automation-relevant `--json` commands use a versioned success/error envelope.
-- Teardown stores no transcript by default. Bounded redacted retention and raw
-  retention are explicit policies, and trusted teardown hooks receive only documented
-  non-secret identity variables.
+- Protocol v1 accepts only capability reporting, state/event validation, canonical
+  JSON encoding, and snapshot aggregation. Shell remains the mutation authority.
+- `hydra snapshot --native` is explicit. Absence, protocol or release-version skew,
+  crash, timeout, malformed output, and permissions all fall back to byte-equivalent
+  shell output.
+- Offline artifacts carry checksum, OS/architecture, and dependency metadata and are
+  verified against exact Hydra/core version agreement before atomic replacement.
+- The reproducible 20-head macOS arm64 benchmark measured native snapshot p95 at 84
+  ms versus 5459 ms for shell in that run. This claim applies only to snapshot.
 
-## Upgrade from 1.5.x
+## Upgrade from 1.6.x
 
 Install the new version using the same prefix as the existing installation:
 
 ```sh
 git pull
-PREFIX=$HOME/.local ./install.sh   # or: make install PREFIX=$HOME/.local
-hydra version                      # should show 1.6.0
+PREFIX=$HOME/.local ./install.sh
+hydra version                      # should show 1.7.0
 hydra doctor
 ```
 
-If `$HYDRA_HOME/map` contains existing heads, migrate it from inside the repository
-that owns those mappings before initializing or creating new 1.6 heads:
+No state migration is required from 1.6. To build and install the optional helper:
 
 ```sh
-hydra state verify
-hydra state migrate --dry-run
-hydra state migrate
+HYDRA_INSTALL_CORE=required HYDRA_BUILD_CORE=1 \
+  PREFIX=$HOME/.local ./install.sh
+hydra snapshot --native
 ```
-
-Migration validates the complete legacy map and creates a backup before activating
-state v2. Keep the printed backup path; if rollback is required, run:
-
-```sh
-hydra state rollback "$HOME/.hydra/backups/state-<timestamp>-<pid>"
-```
-
-An empty legacy map requires no migration. State v2 keeps a project-scoped
-seven-field compatibility projection for remaining legacy display and session
-helpers.
 
 ## Validation and documentation
 
@@ -92,12 +70,14 @@ Run the release gates from the repository root:
 git diff --check
 make lint
 make test
+make test-all
+make test-install test-native-install smoke-onboarding
 ```
 
-Security, automation, operations, provenance, state, and lifecycle contracts are
-documented under [`docs/`](docs/).
+Parallel safety, native architecture/distribution, protocol, versioning, and the
+tmux control-mode prototype are documented under [`docs/`](docs/).
 
 ## Deferred
 
-Native C helpers, a native TUI, general workflow automation, automated integration,
-and fleet operations remain planned for later releases.
+Native writes, native workflow policy/YAML, a public C ABI, the native TUI, general
+workflows, and fleet operations remain deferred.

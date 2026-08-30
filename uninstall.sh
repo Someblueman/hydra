@@ -48,6 +48,7 @@ esac
 
 BIN_DIR="${DESTDIR}${PREFIX}/bin"
 LIB_DIR="${DESTDIR}${PREFIX}/lib/hydra"
+CORE_DIR="${DESTDIR}${PREFIX}/libexec/hydra"
 
 echo "Uninstalling hydra from $PREFIX..."
 
@@ -62,6 +63,11 @@ if [ -f "$BIN_DIR/hydra" ]; then
     rm -f "$BIN_DIR/hydra"
 else
     echo "Hydra binary not found at $BIN_DIR/hydra"
+fi
+
+if [ -d "$CORE_DIR" ]; then
+    echo "Removing native helper files..."
+    rm -rf "$CORE_DIR"
 fi
 
 # Remove library directory
@@ -128,3 +134,4 @@ echo ""
 echo "Hydra has been uninstalled."
 echo "Binary removed from: $BIN_DIR/hydra"
 echo "Libraries removed from: $LIB_DIR"
+echo "Native helper removed from: $CORE_DIR"

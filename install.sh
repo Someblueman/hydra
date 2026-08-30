@@ -9,6 +9,9 @@ usage() {
     echo "Usage: [PREFIX=/usr/local] [DESTDIR=] ./install.sh" >&2
     echo "  PREFIX    installation prefix (default: /usr/local)" >&2
     echo "  DESTDIR   optional staging directory prepended to PREFIX" >&2
+    echo "  HYDRA_INSTALL_CORE  auto (default), never, or required" >&2
+    echo "  HYDRA_BUILD_CORE=1  build the optional core from this checkout" >&2
+    echo "  HYDRA_CORE_ARTIFACT offline hydra-core path with adjacent metadata" >&2
     echo "" >&2
     echo "Non-root example:" >&2
     echo "  PREFIX=\$HOME/.local ./install.sh" >&2
@@ -30,6 +33,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC_BIN="$SCRIPT_DIR/bin/hydra"
 SRC_LIB="$SCRIPT_DIR/lib"
+HYDRA_VERSION="$(sed -n 's/^HYDRA_VERSION="\([^"]*\)"$/\1/p' "$SRC_BIN" | sed -n '1p')"
 
 PREFIX="${PREFIX:-/usr/local}"
 DESTDIR="${DESTDIR:-}"
@@ -43,11 +47,26 @@ esac
 
 BIN_DIR="${DESTDIR}${PREFIX}/bin"
 LIB_DIR="${DESTDIR}${PREFIX}/lib/hydra"
+CORE_DIR="${DESTDIR}${PREFIX}/libexec/hydra"
+CORE_MODE="${HYDRA_INSTALL_CORE:-auto}"
+
+case "$CORE_MODE" in
+    auto|never|required) ;;
+    *)
+        echo "Error: HYDRA_INSTALL_CORE must be auto, never, or required" >&2
+        exit 1
+        ;;
+esac
 
 if [ ! -f "$SRC_BIN" ] || [ ! -d "$SRC_LIB" ]; then
     echo "Error: This script must be run from a hydra source checkout" >&2
     echo "Precondition: bin/hydra and lib/ must exist next to install.sh" >&2
     echo "Next: cd to the hydra directory and run: PREFIX=\$HOME/.local ./install.sh" >&2
+    exit 1
+fi
+
+if [ -z "$HYDRA_VERSION" ]; then
+    echo "Error: cannot determine Hydra version from bin/hydra" >&2
     exit 1
 fi
 
@@ -90,6 +109,126 @@ for lib_file in "$SRC_LIB"/*.sh; do
     fi
 done
 
+core_hash() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    else
+        echo "Error: native installation requires sha256sum or shasum" >&2
+        return 1
+    fi
+}
+
+CORE_SOURCE=""
+CORE_CHECKSUM=""
+CORE_PLATFORM=""
+CORE_DEPENDENCIES=""
+CORE_SOURCE_REF=""
+if [ "$CORE_MODE" != never ]; then
+    if [ "${HYDRA_BUILD_CORE:-0}" = 1 ]; then
+        echo "Building optional read-only native helper..."
+        make -C "$SCRIPT_DIR" build-core
+    fi
+    if [ -n "${HYDRA_CORE_ARTIFACT:-}" ]; then
+        CORE_SOURCE="$HYDRA_CORE_ARTIFACT"
+        CORE_CHECKSUM="$CORE_SOURCE.sha256"
+        CORE_PLATFORM="$CORE_SOURCE.platform"
+        CORE_DEPENDENCIES="$CORE_SOURCE.dependencies"
+        CORE_SOURCE_REF="$CORE_SOURCE.source"
+        for metadata in "$CORE_CHECKSUM" "$CORE_PLATFORM" "$CORE_DEPENDENCIES" "$CORE_SOURCE_REF"; do
+            if [ ! -f "$metadata" ]; then
+                echo "Error: offline native artifact metadata is missing: $metadata" >&2
+                exit 1
+            fi
+        done
+    elif [ -x "$SCRIPT_DIR/build/hydra-core" ]; then
+        CORE_SOURCE="$SCRIPT_DIR/build/hydra-core"
+    fi
+fi
+
+if [ "$CORE_MODE" = required ] && [ -z "$CORE_SOURCE" ]; then
+    echo "Error: native helper is required but no artifact is available" >&2
+    echo "Next: set HYDRA_BUILD_CORE=1 or HYDRA_CORE_ARTIFACT=/path/to/hydra-core" >&2
+    exit 1
+fi
+
+if [ -n "$CORE_SOURCE" ]; then
+    [ -x "$CORE_SOURCE" ] || {
+        echo "Error: native artifact is not executable: $CORE_SOURCE" >&2
+        exit 1
+    }
+    ensure_writable "$CORE_DIR"
+    expected_platform="$(uname -s) $(uname -m)"
+    if [ -n "$CORE_PLATFORM" ] && [ "$(sed -n '1p' "$CORE_PLATFORM")" != "$expected_platform" ]; then
+        echo "Error: native artifact platform does not match this host" >&2
+        echo "Expected: $expected_platform" >&2
+        echo "Artifact: $(sed -n '1p' "$CORE_PLATFORM")" >&2
+        exit 1
+    fi
+    if [ -n "$CORE_CHECKSUM" ]; then
+        expected_hash="$(awk 'NR == 1 {print $1}' "$CORE_CHECKSUM")"
+        actual_hash="$(core_hash "$CORE_SOURCE")"
+        if [ -z "$expected_hash" ] || [ "$actual_hash" != "$expected_hash" ]; then
+            echo "Error: native artifact checksum verification failed" >&2
+            exit 1
+        fi
+    else
+        actual_hash="$(core_hash "$CORE_SOURCE")"
+    fi
+    if [ "$("$CORE_SOURCE" --protocol-version 2>/dev/null || true)" != 1 ] || \
+       [ "$("$CORE_SOURCE" --version 2>/dev/null || true)" != "Hydra core $HYDRA_VERSION protocol 1" ]; then
+        echo "Error: native artifact version handshake failed" >&2
+        exit 1
+    fi
+
+    core_stage="$(mktemp "$CORE_DIR/.hydra-core.XXXXXX")"
+    checksum_stage="$core_stage.sha256"
+    platform_stage="$core_stage.platform"
+    dependencies_stage="$core_stage.dependencies"
+    source_stage="$core_stage.source"
+    cp "$CORE_SOURCE" "$core_stage"
+    chmod +x "$core_stage"
+    printf '%s  hydra-core\n' "$actual_hash" > "$checksum_stage"
+    printf '%s\n' "$expected_platform" > "$platform_stage"
+    if [ -n "$CORE_SOURCE_REF" ]; then
+        cp "$CORE_SOURCE_REF" "$source_stage"
+    elif source_commit="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null)"; then
+        printf '%s\n' "$source_commit" > "$source_stage"
+    else
+        printf 'hydra-%s-source-tree\n' "$HYDRA_VERSION" > "$source_stage"
+    fi
+    if [ -n "$CORE_DEPENDENCIES" ]; then
+        cp "$CORE_DEPENDENCIES" "$dependencies_stage"
+    elif command -v otool >/dev/null 2>&1; then
+        otool -L "$core_stage" > "$dependencies_stage"
+    elif command -v ldd >/dev/null 2>&1; then
+        ldd "$core_stage" > "$dependencies_stage"
+    else
+        printf 'dependency inspection unavailable on %s\n' "$expected_platform" > "$dependencies_stage"
+    fi
+
+    for installed in hydra-core hydra-core.sha256 hydra-core.platform hydra-core.dependencies hydra-core.source; do
+        if [ -e "$CORE_DIR/$installed" ]; then
+            mv -f "$CORE_DIR/$installed" "$CORE_DIR/$installed.rollback"
+        fi
+    done
+    if mv "$core_stage" "$CORE_DIR/hydra-core" && \
+       mv "$checksum_stage" "$CORE_DIR/hydra-core.sha256" && \
+       mv "$platform_stage" "$CORE_DIR/hydra-core.platform" && \
+       mv "$source_stage" "$CORE_DIR/hydra-core.source" && \
+       mv "$dependencies_stage" "$CORE_DIR/hydra-core.dependencies"; then
+        echo "Installed optional native helper for $expected_platform"
+    else
+        echo "Error: native artifact replacement failed; restoring prior helper" >&2
+        for installed in hydra-core hydra-core.sha256 hydra-core.platform hydra-core.dependencies hydra-core.source; do
+            rm -f "$CORE_DIR/$installed"
+            [ ! -e "$CORE_DIR/$installed.rollback" ] || mv -f "$CORE_DIR/$installed.rollback" "$CORE_DIR/$installed"
+        done
+        exit 1
+    fi
+fi
+
 if [ ! -x "$BIN_DIR/hydra" ]; then
     echo "Error: Installation failed: $BIN_DIR/hydra is not executable" >&2
     echo "Next: PREFIX=\$HOME/.local $0 or see README Quick Start" >&2
@@ -118,6 +257,7 @@ echo ""
 echo "$ver_out"
 echo "Binary: $BIN_DIR/hydra"
 echo "Libraries: $LIB_DIR"
+[ -z "$CORE_SOURCE" ] || echo "Native core: $CORE_DIR/hydra-core"
 echo ""
 echo "Run 'hydra doctor' to verify readiness, or see README Quick Start."
 echo ""

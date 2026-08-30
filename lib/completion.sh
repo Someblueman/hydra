@@ -16,7 +16,7 @@ _hydra_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    commands="spawn init agent capabilities path lifecycle outcome wait adapter resume notify exec diff review provenance list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
+    commands="spawn init agent capabilities path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
     
     case "${prev}" in
@@ -44,6 +44,13 @@ _hydra_completion() {
             esac
             return 0
             ;;
+        claim) COMPREPLY=($(compgen -W "add list remove" -- ${cur})); return 0 ;;
+        scope) COMPREPLY=($(compgen -W "set show check" -- ${cur})); return 0 ;;
+        resource) COMPREPLY=($(compgen -W "allocate status env release" -- ${cur})); return 0 ;;
+        gate) COMPREPLY=($(compgen -W "run approve status" -- ${cur})); return 0 ;;
+        context) COMPREPLY=($(compgen -W "create" -- ${cur})); return 0 ;;
+        worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
+        snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
         kill)
             # Complete with git branch names or --all flag
             case "${cur}" in
@@ -116,7 +123,7 @@ _hydra_completion() {
 
         case "${cur}" in
             -*)
-                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --profile --no-agent --dry-run --prompt --prompt-file --issue-body --completion-policy --agents -i --issue --pr --pr-new --after -t --template" -- ${cur}))
+                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --profile --no-agent --dry-run --prompt --prompt-file --issue-body --completion-policy --scope-read --scope-write --agents -i --issue --pr --pr-new --after -t --template" -- ${cur}))
                 return 0
                 ;;
         esac
@@ -136,6 +143,45 @@ _hydra_completion() {
         case "${cur}" in
             -*) COMPREPLY=($(compgen -W "--branch --group --all --jobs --timeout --json --shell --allow-shell" -- ${cur})); return 0 ;;
         esac
+    fi
+
+    if [[ "${COMP_WORDS[@]}" =~ claim ]]; then
+        case "${prev}" in --access) COMPREPLY=($(compgen -W "read write" -- ${cur})); return 0 ;; esac
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--path --access --reason --expires-at --json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ scope ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--read --write --json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ collision ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ resource ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--port --compose-project --database --json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ gate ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--name --by --reason --json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ context ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--diff --file --note --history --artifact --json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ sync ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--from --gate --dry-run" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ land ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--into --gate --dry-run --keep-head" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ du ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ gc ]]; then
+        case "${prev}" in --policy) COMPREPLY=($(compgen -W "orphaned stopped archives" -- ${cur})); return 0 ;; esac
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--policy --apply --dry-run --include-dirty --older-than" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ worktree ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--reason --dry-run --apply" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ snapshot ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;; esac
     fi
 
     # Check if we're completing template subcommand
@@ -212,6 +258,8 @@ _hydra() {
                         '--prompt[Task text]:task:' \
                         '--prompt-file[Read task from file]:file:_files' \
                         '--issue-body[Use issue body as task]' \
+                        '*--scope-read[Read-only repository-relative scope]:pattern:' \
+                        '*--scope-write[Writable repository-relative scope]:pattern:' \
                         '--agents[Mixed agents specification]:agents:' \
                         '(-i --issue)'{-i,--issue}'[Create from GitHub issue]:issue:' \
                         '--pr[Create from GitHub PR]:pr:' \
@@ -244,6 +292,42 @@ _hydra() {
                     ;;
                 review|provenance)
                     _arguments '--json[Output versioned JSON]' '1:branch:_hydra_sessions'
+                    ;;
+                claim)
+                    _arguments '1:subcommand:(add list remove)' '--path[Path pattern]:pattern:' '--access[Access mode]:access:(read write)' '--reason[Claim reason]:text:' '--expires-at[Expiry epoch]:epoch:' '--json[Output versioned JSON]'
+                    ;;
+                scope)
+                    _arguments '1:subcommand:(set show check)' '*--read[Read-only path pattern]:pattern:' '*--write[Writable path pattern]:pattern:' '--json[Output versioned JSON]'
+                    ;;
+                collision)
+                    _arguments '--json[Output versioned JSON]' '1:left head:_hydra_sessions' '2:right head:_hydra_sessions'
+                    ;;
+                resource)
+                    _arguments '1:subcommand:(allocate status env release)' '*--port[Port allocation NAME=START-END]:range:' '--compose-project[Compose project name]:name:' '--database[Database name]:name:' '--json[Output versioned JSON]'
+                    ;;
+                gate)
+                    _arguments '1:subcommand:(run approve status)' '--name[Gate name]:name:' '--by[Approval actor]:actor:' '--reason[Approval reason]:text:' '--json[Output versioned JSON]'
+                    ;;
+                context)
+                    _arguments '1:subcommand:(create)' '--diff[Include selected diff]' '*--file[Add a manifest file]:file:_files' '--note[Add a note]:text:' '--history[Include bounded history]:count:' '*--artifact[Add an artifact reference]:artifact:_files' '--json[Output versioned JSON]'
+                    ;;
+                sync)
+                    _arguments '--from[Source ref]:ref:' '--gate[Approved gate]:name:' '--dry-run[Simulate without mutation]' '1:head:_hydra_sessions'
+                    ;;
+                land)
+                    _arguments '--into[Current target branch]:branch:_hydra_branches' '--gate[Approved gate]:name:' '--dry-run[Simulate without mutation]' '--keep-head[Keep source head after landing]' '1:head:_hydra_sessions'
+                    ;;
+                du)
+                    _arguments '--json[Output versioned JSON]'
+                    ;;
+                gc)
+                    _arguments '--policy[Cleanup policy]:policy:(orphaned stopped archives)' '--apply[Apply selected policy]' '--dry-run[Report without mutation]' '--include-dirty[Allow explicit dirty removal]' '--older-than[Archive age in days]:days:'
+                    ;;
+                worktree)
+                    _arguments '1:subcommand:(doctor)' '2:action:(status lock unlock move repair prune)' '--reason[Lock reason]:text:' '--dry-run[Report without mutation]' '--apply[Apply repair or prune]'
+                    ;;
+                snapshot)
+                    _arguments '--native[Try the optional read-only native helper]' '--json[Output canonical JSON]'
                     ;;
                 template)
                     _arguments '1:subcommand:(list create show edit delete)'
@@ -292,6 +376,18 @@ _hydra_commands() {
         'diff:Show changes from the recorded base reference'
         'review:Summarize Git review evidence'
         'provenance:Show recorded head provenance'
+        'claim:Manage expiring path intent claims'
+        'scope:Set or check per-head read/write scopes'
+        'collision:Classify possible cross-head conflicts'
+        'resource:Manage per-head ports and environment names'
+        'gate:Capture and explicitly approve verification evidence'
+        'context:Create a typed context pack'
+        'sync:Safely merge a named ref into a head'
+        'land:Safely merge an approved head into the current branch'
+        'du:Report worktree and state disk usage'
+        'gc:Apply a named cleanup policy'
+        'worktree:Run worktree doctor actions'
+        'snapshot:Emit canonical state JSON'
         'list:List all active Hydra heads'
         'switch:Switch to a different head (interactive)'
         'kill:Remove a worktree and its tmux session'
@@ -371,6 +467,18 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'exec' -d 'Run a bounded comm
 complete -c hydra -f -n '__fish_use_subcommand' -a 'diff' -d 'Show changes from the recorded base reference'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'review' -d 'Summarize Git review evidence'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'provenance' -d 'Show recorded head provenance'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'claim' -d 'Manage expiring path intent claims'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'scope' -d 'Set or check per-head read/write scopes'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'collision' -d 'Classify possible cross-head conflicts'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'resource' -d 'Manage per-head resources'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'gate' -d 'Capture and approve verification evidence'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'context' -d 'Create a typed context pack'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'sync' -d 'Safely merge a named ref into a head'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'land' -d 'Safely merge an approved head into the current branch'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'du' -d 'Report per-head disk usage'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'gc' -d 'Apply a named cleanup policy'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'worktree' -d 'Run worktree doctor actions'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'snapshot' -d 'Emit canonical state JSON'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'list' -d 'List all active Hydra heads'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'switch' -d 'Switch to a different head (interactive)'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'kill' -d 'Remove a worktree and its tmux session'
@@ -412,6 +520,8 @@ complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l prompt -d 'Task t
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l prompt-file -d 'Read task from file'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l issue-body -d 'Use issue body as task'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l completion-policy -d 'Completion evidence policy' -a 'declared-done observed-exit-zero either'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l scope-read -d 'Record a read-only path pattern'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l scope-write -d 'Record a writable path pattern'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l agents -d 'Mixed agents specification (e.g., claude:2,aider:1)'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s i -l issue -d 'Create from GitHub issue number'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l pr -d 'Create from GitHub PR number'
@@ -447,6 +557,43 @@ complete -c hydra -f -n '__fish_seen_subcommand_from state' -a 'verify backup mi
 complete -c hydra -f -n '__fish_seen_subcommand_from events' -a 'verify tail filter retain repair'
 complete -c hydra -f -n '__fish_seen_subcommand_from adapter' -a 'ingest'
 complete -c hydra -f -n '__fish_seen_subcommand_from notify' -a 'enable disable list test'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim' -a 'add list remove'
+complete -c hydra -f -n '__fish_seen_subcommand_from scope' -a 'set show check'
+complete -c hydra -f -n '__fish_seen_subcommand_from resource' -a 'allocate status env release'
+complete -c hydra -f -n '__fish_seen_subcommand_from gate' -a 'run approve status'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -a 'create'
+complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -a 'doctor'
+complete -c hydra -f -n '__fish_seen_subcommand_from snapshot' -l native -d 'Try the optional read-only native helper'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l path -d 'Path pattern'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l access -d 'Access mode' -a 'read write'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l reason -d 'Claim reason'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l expires-at -d 'Expiry epoch'
+complete -c hydra -f -n '__fish_seen_subcommand_from scope' -l read -d 'Read-only path pattern'
+complete -c hydra -f -n '__fish_seen_subcommand_from scope' -l write -d 'Writable path pattern'
+complete -c hydra -f -n '__fish_seen_subcommand_from resource' -l port -d 'Port allocation NAME=START-END'
+complete -c hydra -f -n '__fish_seen_subcommand_from resource' -l compose-project -d 'Compose project name'
+complete -c hydra -f -n '__fish_seen_subcommand_from resource' -l database -d 'Database name'
+complete -c hydra -f -n '__fish_seen_subcommand_from gate' -l name -d 'Gate name'
+complete -c hydra -f -n '__fish_seen_subcommand_from gate' -l by -d 'Approval actor'
+complete -c hydra -f -n '__fish_seen_subcommand_from gate' -l reason -d 'Approval reason'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -l diff -d 'Include selected diff'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -l file -d 'Add a manifest file'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -l note -d 'Add a note'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -l history -d 'Include bounded history'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -l artifact -d 'Add an artifact reference'
+complete -c hydra -f -n '__fish_seen_subcommand_from sync' -l from -d 'Source ref'
+complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l gate -d 'Approved gate'
+complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l dry-run -d 'Simulate without mutation'
+complete -c hydra -f -n '__fish_seen_subcommand_from land' -l into -d 'Current target branch'
+complete -c hydra -f -n '__fish_seen_subcommand_from land' -l keep-head -d 'Keep source head after landing'
+complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l policy -d 'Cleanup policy' -a 'orphaned stopped archives'
+complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l apply -d 'Apply selected policy'
+complete -c hydra -f -n '__fish_seen_subcommand_from gc worktree' -l dry-run -d 'Report without mutation'
+complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l include-dirty -d 'Allow explicit dirty removal'
+complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l older-than -d 'Archive age in days'
+complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -l reason -d 'Lock reason'
+complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -l apply -d 'Apply repair or prune'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim scope collision resource gate context du snapshot' -l json -d 'Output versioned JSON'
 
 # Complete dashboard flags
 complete -c hydra -f -n '__fish_seen_subcommand_from dashboard' -s p -l panes-per-session -d 'Panes to collect per session' -a '1 2 3 4 5 6 7 8 9 10 all'

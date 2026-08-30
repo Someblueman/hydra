@@ -18,3 +18,7 @@ CLAUDE.md
 
 # Hydra runtime state (live state lives under $HYDRA_HOME, default ~/.hydra)
 .hydra/
+
+# Generated native build and packaging outputs
+build/
+dist/

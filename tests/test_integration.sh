@@ -174,6 +174,13 @@ test_help_command() {
     exit_code=$?
     assert_success "$exit_code" "hydra with no arguments should show help"
     assert_contains "$output" "Usage:" "No arguments should show help"
+
+    command_help_status=0
+    for command in claim scope collision resource gate context sync land du gc worktree snapshot; do
+        command_help="$("$HYDRA_BIN" "$command" --help 2>&1)" || command_help_status=1
+        case "$command_help" in *Usage:*) ;; *) command_help_status=1 ;; esac
+    done
+    assert_success "$command_help_status" "all 1.7 commands provide discoverable command help"
 }
 
 # Test hydra unknown command

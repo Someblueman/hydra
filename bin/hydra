@@ -12,7 +12,7 @@ fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_LEGACY_MAP="$HYDRA_HOME/map"
 HYDRA_MAP="$HYDRA_LEGACY_MAP"
-HYDRA_VERSION="1.6.0"
+HYDRA_VERSION="1.7.0"
 
 # State v2 keeps the legacy seven-field view as a project-scoped compatibility
 # projection while older commands are migrated to scalar records.
@@ -116,6 +116,14 @@ _load_libs_for_cmd() {
             _load_lib events
             _load_lib cmd_foundation
             ;;
+        snapshot)
+            _load_lib output
+            _load_lib locks
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib core
+            _load_lib cmd_core
+            ;;
         init|agent|capabilities|path)
             _load_lib output
             _load_lib paths
@@ -160,6 +168,64 @@ _load_libs_for_cmd() {
             _load_lib operations
             _load_lib cmd_operations
             ;;
+        claim|scope|collision|resource|gate)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib operations
+            _load_lib parallel
+            _load_lib cmd_parallel
+            ;;
+        context|sync|land)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib events
+            _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib notify
+            _load_lib hooks
+            _load_lib messages
+            _load_lib operations
+            _load_lib parallel
+            _load_lib integration
+            _load_lib kill
+            _load_lib limits
+            _load_lib spawn
+            _load_lib cmd_integration
+            ;;
+        du|gc|worktree)
+            _load_lib output
+            _load_lib paths
+            _load_lib locks
+            _load_lib git
+            _load_lib tmux
+            _load_lib state
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib parallel
+            _load_lib integration
+            _load_lib worktree_ops
+            _load_lib cmd_worktree_ops
+            ;;
         spawn)
             _load_lib output
             _load_lib paths
@@ -176,6 +242,7 @@ _load_libs_for_cmd() {
             _load_lib lifecycle
             _load_lib notify
             _load_lib operations
+            _load_lib parallel
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
@@ -210,6 +277,7 @@ _load_libs_for_cmd() {
             _load_lib events
             _load_lib project
             _load_lib lifecycle
+            _load_lib parallel
             _load_lib notify
             _load_lib hooks
             _load_lib messages
@@ -393,6 +461,8 @@ Commands:
                       --prompt-file <path>     Read task text from a file
                       --issue-body             Use --issue body as task text
                       --completion-policy <p>  declared-done, observed-exit-zero, or either
+                      --scope-read <pattern>   Inject and record a read-only path scope
+                      --scope-write <pattern>  Inject and record a writable path scope
                       --agents <spec>          Mixed agents (e.g., "claude:2,aider:1")
                       -g, --group <name>       Assign to a group for bulk operations
                       --after <deps>           Wait for sessions to complete (e.g., "branch1,branch2")
@@ -423,6 +493,18 @@ Commands:
   diff <head>       Show changes from the recorded base reference
   review <head>     Summarize Git review evidence from the recorded base
   provenance <head> Show recorded task, profile, version, and trust provenance
+  claim             Add, list, or remove expiring path intent claims
+  scope             Set, show, or check read/write head scopes
+  collision         Classify claim, overlap, predicted, and observed conflicts
+  resource          Allocate, inspect, export, or release per-head resources
+  gate              Run verification gates and record explicit approvals
+  context           Create typed, explicit context packs without implicit files
+  sync <head>       Safely merge a named ref into a clean, approved head
+  land <head>       Safely merge an approved head into the current target branch
+  du                Report per-head worktree and durable-state disk usage
+  gc                Apply explicit orphaned, stopped, or archive cleanup policies
+  worktree doctor   Inspect, lock, unlock, move, repair, or prune Git worktrees
+  snapshot          Emit canonical state JSON; --native tries the optional core
   list              List all active Hydra heads
                     Options:
                       -g, --group <name>       Filter by group
@@ -531,6 +613,8 @@ Environment:
                       When limit is reached, spawns are queued for later
   HYDRA_SKIP_SETUP  Set to 1 to skip environment setup commands
   HYDRA_SETUP_CONTINUE  Set to 1 to continue spawn even if setup fails
+  HYDRA_CORE        Explicit optional hydra-core executable
+  HYDRA_CORE_TIMEOUT_SECONDS  Native handshake/command timeout (default: 2)
 EOF
 }
 
@@ -538,7 +622,7 @@ EOF
 main() {
     HYDRA_JSON_REQUESTED=0
     case "${1:-}" in
-        init|capabilities|lifecycle|wait|exec|diff|review|provenance|list|status|group|recv|queue)
+        init|capabilities|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
             for _main_arg in "$@"; do
                 case "$_main_arg" in
                     --) break ;;
@@ -613,6 +697,54 @@ main() {
         provenance)
             shift
             cmd_provenance "$@"
+            ;;
+        claim)
+            shift
+            cmd_claim "$@"
+            ;;
+        scope)
+            shift
+            cmd_scope "$@"
+            ;;
+        collision)
+            shift
+            cmd_collision "$@"
+            ;;
+        resource)
+            shift
+            cmd_resource "$@"
+            ;;
+        gate)
+            shift
+            cmd_gate "$@"
+            ;;
+        context)
+            shift
+            cmd_context "$@"
+            ;;
+        sync)
+            shift
+            cmd_sync "$@"
+            ;;
+        land)
+            shift
+            cmd_land "$@"
+            ;;
+        du)
+            shift
+            cmd_du "$@"
+            ;;
+        gc)
+            shift
+            cmd_gc "$@"
+            ;;
+        worktree)
+            shift
+            cmd_worktree "$@"
+            ;;
+        snapshot)
+            shift
+            cmd_snapshot "$@"
             ;;
         list)
             shift

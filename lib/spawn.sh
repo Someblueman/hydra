@@ -116,6 +116,7 @@ spawn_dry_run() {
     _sdr_template="${7:--}"
     _sdr_task="${8:-}"
     _sdr_policy="${9:-declared-done}"
+    _sdr_scopes="${10:-}"
     _sdr_project="$(hydra_get_project_id 2>/dev/null)" || {
         echo "Error: project is not initialized" >&2
         echo "Next: hydra init --profile $_sdr_profile   or   hydra init --no-agent" >&2
@@ -157,6 +158,12 @@ spawn_dry_run() {
     echo "  template: ${_sdr_template:--}"
     echo "  task_bytes: $(printf '%s' "$_sdr_task" | LC_ALL=C wc -c | tr -d ' ') (content redacted)"
     echo "  completion_policy: $_sdr_policy"
+    if [ -n "$_sdr_scopes" ]; then
+        echo "  scopes:"
+        printf '%s\n' "$_sdr_scopes" | sed 's/^/    - /'
+    else
+        echo "  scopes: (none)"
+    fi
     _sdr_config="$(project_repo_config 2>/dev/null || true)"
     if [ -f "$_sdr_config" ]; then
         if project_is_trusted; then
@@ -177,7 +184,7 @@ spawn_dry_run() {
 }
 
 # Helper function to spawn a single session
-# Usage: spawn_single <branch> <layout> [profile] [group] [deps] [pr_number] [template] [task]
+# Usage: spawn_single <branch> <layout> [profile] [group] [deps] [pr_number] [template] [task] [completion_policy] [scopes]
 # Returns: Session name on stdout, 1 on failure
 spawn_single() {
     branch="$1"
@@ -189,6 +196,7 @@ spawn_single() {
     template="${7:-}"
     task="${8:-}"
     completion_policy="${9:-declared-done}"
+    scopes="${10:-}"
 
     # Wait for dependencies if specified
     if [ -n "$deps" ] && [ "$deps" != "-" ]; then
@@ -254,8 +262,11 @@ spawn_single() {
     fi
 
     # Create worktree
+    project_worktree_lock="worktree_project_${project_id}"
+    acquire_lock "$project_worktree_lock" "spawn worktree creation" "$head_id" || return 1
     echo "Creating worktree for branch '$branch'..." >&2
     if ! create_worktree "$branch" "$worktree_path"; then
+        release_lock "$project_worktree_lock"
         return 1
     fi
 
@@ -265,6 +276,7 @@ spawn_single() {
         if [ -z "${HYDRA_SETUP_CONTINUE:-}" ]; then
             # Clean up worktree and abort
             delete_worktree "$worktree_path" 2>/dev/null || true
+            release_lock "$project_worktree_lock"
             return 1
         fi
         echo "Warning: Continuing despite setup failure (HYDRA_SETUP_CONTINUE set)" >&2
@@ -283,6 +295,7 @@ spawn_single() {
         # Release any reserved session name lock
         release_session_lock "$session" 2>/dev/null || true
         delete_worktree "$worktree_path" 2>/dev/null || true
+        release_lock "$project_worktree_lock"
         return 1
     fi
     # Release the reserved session name lock now that session is created
@@ -292,17 +305,20 @@ spawn_single() {
     if ! add_mapping "$branch" "$session" "${ai_tool:-}" "${group:-}" "$spawn_timestamp" "${deps:-}" "${pr_number:-}"; then
         echo "Error: Failed to save branch-session mapping" >&2
         spawn_rollback_session "$session" "$branch" "$worktree_path"
+        release_lock "$project_worktree_lock"
         return 1
     fi
 
     # Commit durable identity and task before any agent process sees the task.
     committed_head="$(state_v2_create_head "$project_id" "$branch" "$session" "$ai_tool" \
         "${group:--}" "$spawn_timestamp" "${deps:--}" "${pr_number:--}" "$repo_root" \
-        "$head_id" "$instance_id" "$worktree_path" "$task" "$base_ref" "$provider_session_id")" || {
+        "$head_id" "$instance_id" "$worktree_path" "$task" "$base_ref" "$provider_session_id" "$scopes")" || {
         echo "Error: Failed to commit durable head state" >&2
         spawn_rollback_session "$session" "$branch" "$worktree_path"
+        release_lock "$project_worktree_lock"
         return 1
     }
+    release_lock "$project_worktree_lock"
     head_id="$committed_head"
     head_dir="$(state_v2_head_dir "$project_id" "$head_id")" || return 1
     lifecycle_write_head_scalar "$branch" completion-policy "$completion_policy" || {

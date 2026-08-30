@@ -122,6 +122,7 @@ test_bulk_spawn_confirmation() {
 # Test valid AI tools including gemini
 test_valid_ai_tools() {
     echo "Testing valid AI tools including gemini..."
+    setup_test_env
     
     # Test gemini is accepted
     output="$("$HYDRA_BIN" spawn test-gemini --agents 'gemini:2' 2>&1 || true)"
@@ -148,6 +149,8 @@ test_valid_ai_tools() {
         test_count=$((test_count + 1))
         echo "[PASS] Should accept mixed agents with gemini"
     fi
+
+    teardown_test_env
 }
 
 # Run all tests

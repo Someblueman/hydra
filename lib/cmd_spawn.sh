@@ -23,6 +23,7 @@ cmd_spawn() {
     prompt_file=""
     use_issue_body=""
     completion_policy=declared-done
+    scope_rules=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -74,6 +75,19 @@ cmd_spawn() {
                 [ $# -ge 2 ] || { echo "Error: --completion-policy requires declared-done, observed-exit-zero, or either" >&2; exit 1; }
                 completion_policy="$2"
                 case "$completion_policy" in declared-done|observed-exit-zero|either) ;; *) echo "Error: invalid completion policy '$completion_policy'" >&2; exit 1 ;; esac
+                shift 2
+                ;;
+            --scope-read|--scope-write)
+                [ $# -ge 2 ] || { echo "Error: $1 requires a repository-relative pattern" >&2; exit 1; }
+                _csp_mode="${1#--scope-}"
+                parallel_validate_path_pattern "$2" || { echo "Error: invalid scope pattern '$2'" >&2; exit 1; }
+                _csp_tab="$(printf '\t')"
+                if [ -n "$scope_rules" ]; then
+                    scope_rules="$scope_rules
+$_csp_mode$_csp_tab$2"
+                else
+                    scope_rules="$_csp_mode$_csp_tab$2"
+                fi
                 shift 2
                 ;;
             --agents)
@@ -210,6 +224,25 @@ cmd_spawn() {
         [ -n "$issue_num" ] || { echo "Error: --issue-body requires --issue <number>" >&2; exit 1; }
         task_text="$(get_issue_body "$issue_num")" || exit 1
     fi
+    if [ -n "$scope_rules" ]; then
+        _csp_instructions="Hydra scope (coordination guidance, not a security boundary):"
+        _csp_tab="$(printf '\t')"
+        while IFS="$_csp_tab" read -r _csp_mode _csp_pattern; do
+            _csp_instructions="$_csp_instructions
+- $_csp_mode: $_csp_pattern"
+        done <<EOF
+$scope_rules
+EOF
+        _csp_instructions="$_csp_instructions
+Do not modify read-only or out-of-scope paths. Before declaring completion, run: hydra scope check $branch"
+        if [ -n "$task_text" ]; then
+            task_text="$task_text
+
+$_csp_instructions"
+        else
+            task_text="$_csp_instructions"
+        fi
+    fi
     task_bytes="$(printf '%s' "$task_text" | LC_ALL=C wc -c | tr -d ' ')"
     [ "$task_bytes" -le 65536 ] || { echo "Error: task input exceeds 65536 bytes" >&2; exit 1; }
 
@@ -222,6 +255,10 @@ cmd_spawn() {
     if { [ -n "$task_source" ] || [ -n "$dry_run" ]; } && \
        { [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; }; then
         echo "Error: task injection and dry-run currently require a single head" >&2
+        exit 1
+    fi
+    if [ -n "$scope_rules" ] && { [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; }; then
+        echo "Error: scoped spawn currently requires a single head" >&2
         exit 1
     fi
 
@@ -276,7 +313,7 @@ cmd_spawn() {
     fi
 
     if [ -n "$dry_run" ]; then
-        spawn_dry_run "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$pr_num" "$template_name" "$task_text" "$completion_policy"
+        spawn_dry_run "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$pr_num" "$template_name" "$task_text" "$completion_policy" "$scope_rules"
         return $?
     fi
 
@@ -365,7 +402,7 @@ cmd_spawn() {
         spawn_pr_num="$pr_num"
     fi
 
-    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num" "$template_name" "$task_text" "$completion_policy")"; then
+    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num" "$template_name" "$task_text" "$completion_policy" "$scope_rules")"; then
         # Handle --pr-new: create a draft PR after spawn
         if [ -n "$pr_new" ]; then
             _load_lib github
