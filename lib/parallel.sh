@@ -322,9 +322,9 @@ parallel_resource_allocate() {
         _pra_start="${_pra_range%-*}"
         _pra_end="${_pra_range#*-}"
         case "$_pra_start:$_pra_end" in *[!0-9:]*) rm -rf "$_pra_tmp"; release_lock "$_pra_lock"; return 1 ;; esac
-        [ "$_pra_start" -ge 1 ] && [ "$_pra_end" -le 65535 ] && [ "$_pra_start" -le "$_pra_end" ] || {
-            rm -rf "$_pra_tmp"; release_lock "$_pra_lock"; return 1;
-        }
+        if [ "$_pra_start" -lt 1 ] || [ "$_pra_end" -gt 65535 ] || [ "$_pra_start" -gt "$_pra_end" ]; then
+            rm -rf "$_pra_tmp"; release_lock "$_pra_lock"; return 1
+        fi
         _pra_port="$_pra_start"
         while [ "$_pra_port" -le "$_pra_end" ]; do
             if ! parallel_resource_port_used "$_pra_root" "$_pra_port" && \
@@ -474,12 +474,12 @@ parallel_gate_approve() {
         release_lock "$_pga_lock"
         return 1
     }
-    [ "$(sed -n '1p' "$_pga_gate/latest-status" 2>/dev/null || true)" = 0 ] && \
-        [ "$(sed -n '1p' "$_pga_gate/latest-head-commit" 2>/dev/null || true)" = "$_pga_commit" ] && \
-        [ "$(sed -n '1p' "$_pga_gate/latest-worktree-hash" 2>/dev/null || true)" = "$_pga_worktree_hash" ] || {
-            release_lock "$_pga_lock"
-            return 1
-        }
+    if [ "$(sed -n '1p' "$_pga_gate/latest-status" 2>/dev/null || true)" != 0 ] || \
+       [ "$(sed -n '1p' "$_pga_gate/latest-head-commit" 2>/dev/null || true)" != "$_pga_commit" ] || \
+       [ "$(sed -n '1p' "$_pga_gate/latest-worktree-hash" 2>/dev/null || true)" != "$_pga_worktree_hash" ]; then
+        release_lock "$_pga_lock"
+        return 1
+    fi
     if ! state_v2_write_scalar "$_pga_gate/approved-by" "$_pga_actor" || \
        ! state_v2_write_scalar "$_pga_gate/approved-at" "$(date +%s)" || \
        ! state_v2_write_scalar "$_pga_gate/approval-reason" "$_pga_reason"; then
