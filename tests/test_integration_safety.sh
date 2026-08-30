@@ -36,6 +36,7 @@ git config user.email test@example.com
 printf 'base\n' > tracked.txt
 git add tracked.txt
 git commit -qm init
+git branch -M main
 
 echo "Running Hydra 1.7 integration-safety tests..."
 echo "============================================"
