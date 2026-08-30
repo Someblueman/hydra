@@ -12,14 +12,14 @@ hydra_hash() {
 hydra_new_id() {
     _hni_kind="$1"
     _hni_seed="${2:-}"
-    case "$_hni_kind" in project|head|instance|run|step|evt) ;; *) return 1 ;; esac
+    case "$_hni_kind" in project|head|instance|run|step|evt|claim|pack) ;; *) return 1 ;; esac
     _hni_hash="$(printf '%s\n' "$_hni_kind|$_hni_seed|$(date +%s)|$$" | hydra_hash)" || return 1
     printf '%s_%s\n' "$_hni_kind" "$(printf '%.20s' "$_hni_hash")"
 }
 
 hydra_valid_id() {
     case "$1" in
-        project_*|head_*|instance_*|run_*|step_*|evt_*) ;;
+        project_*|head_*|instance_*|run_*|step_*|evt_*|claim_*|pack_*) ;;
         *) return 1 ;;
     esac
     _hvi_suffix="${1#*_}"

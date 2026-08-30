@@ -119,6 +119,7 @@ state_v2_create_head() {
     _sv2ch_task="${13:-}"
     _sv2ch_base_ref="${14:-}"
     _sv2ch_provider_session="${15:-}"
+    _sv2ch_scopes="${16:-}"
 
     if [ -z "$_sv2ch_branch" ] || [ -z "$_sv2ch_session" ]; then
         return 1
@@ -173,6 +174,7 @@ state_v2_create_head() {
        ! state_v2_write_scalar "$_sv2ch_tmp/completion-policy" "declared" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/worktree" "$_sv2ch_worktree" || \
        ! state_v2_write_text "$_sv2ch_tmp/task" "$_sv2ch_task" || \
+       ! state_v2_write_text "$_sv2ch_tmp/scopes" "$_sv2ch_scopes" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/base-ref" "$_sv2ch_base_ref" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/instance-id" "$_sv2ch_instance" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/session" "$_sv2ch_session" || \

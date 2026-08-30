@@ -88,3 +88,44 @@ jobs:
           echo "Checking $script with ${{ matrix.shell }}..."
           ${{ matrix.shell }} -n "$script"
         done
+
+  native:
+    name: Native Core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install shell dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux
+
+    - name: Install shell dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: brew install tmux shellcheck
+
+    - name: Build and test native protocol
+      run: make build-core test-c test-parity
+
+    - name: Package exact source commit
+      run: |
+        package_dir="$(make package-core | tail -n 1)"
+        test "$(cat "$package_dir/hydra-core.source")" = "$(git rev-parse HEAD)"
+
+    - name: Run sanitizer tests
+      run: make sanitize
+
+    - name: Qualify shell-only and offline native installs
+      run: make test-install test-native-install
+
+    - name: Inspect release dependencies
+      run: |
+        if command -v otool >/dev/null 2>&1; then
+          otool -L build/hydra-core
+        else
+          ldd build/hydra-core
+        fi

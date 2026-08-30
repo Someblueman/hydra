@@ -89,7 +89,7 @@ assert_file "$prefix1/lib/hydra/git.sh" "install.sh installs libraries"
 
 ver_out="$(HOME="$home1" HYDRA_ROOT='' HYDRA_HOME='' "$prefix1/bin/hydra" version 2>&1)"
 assert_success $? "installed hydra version should succeed"
-assert_contains "$ver_out" "Hydra version 1.6.0" "installed hydra reports 1.6.0"
+assert_contains "$ver_out" "Hydra version 1.7.0" "installed hydra reports 1.7.0"
 
 doc_out="$(cd "$home1" && HOME="$home1" HYDRA_HOME="$home1/.hydra" HYDRA_ROOT='' "$prefix1/bin/hydra" doctor 2>&1)"
 assert_success $? "installed hydra doctor should succeed"

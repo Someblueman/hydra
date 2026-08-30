@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-08-30
+
+### Added
+
+- Expiring path claims, injected read/write scopes, four-category collision analysis,
+  locked per-head resource allocation, and evidence-bearing verification gates with
+  separate human approval
+- Explicit typed context packs and guarded `sync`/`land` integration with merge
+  simulation, pre-operation archives, dry runs, exact gate binding, teardown, and
+  clean recovery from conflicts
+- Per-head `du`, policy-driven `gc`, and worktree doctor lock, unlock, move, repair,
+  and prune operations that preserve dirty/untracked work by default
+- Optional read-only C99 `hydra-core` protocol v1 for capabilities, state/event
+  validation, canonical JSON strings, and snapshot aggregation
+- Strict native build, unit, parity, sanitizer, benchmark, packaging, and macOS/Linux
+  CI lanes, including absent, skewed, crashing, timing-out, malformed, and
+  non-executable helper fixtures
+- Offline/source native installation with SHA-256, platform, dependency, exact
+  version/protocol verification, atomic replacement, and rollback preservation
+- Reproducible tmux control-mode prototype and published parallel-safety, native
+  architecture/distribution, and versioning guidance
+
+### Changed
+
+- Shell remains the only mutation authority; native snapshot dispatch is explicit
+  with `hydra snapshot --native` and deterministically falls back to canonical shell
+- Completions and CLI help cover all 1.7 coordination, integration, disk, worktree,
+  and snapshot commands
+
+### Security
+
+- Context packs include only selected typed inputs, hash file manifests instead of
+  copying file contents, and reject likely secret-bearing paths
+- Gate approval is invalidated by any commit or worktree-status change
+- Resource, claim, archive, and teardown records remain project-scoped and locked
+
 ## [1.6.0] - 2026-08-29
 
 ### Added

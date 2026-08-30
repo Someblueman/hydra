@@ -62,7 +62,7 @@ hydra version
 ### 2. Verify
 
 ```sh
-hydra version          # Hydra version 1.6.0
+hydra version          # Hydra version 1.7.0
 hydra doctor           # install paths, git/tmux, writable HYDRA_HOME, agents
 ```
 
@@ -168,6 +168,19 @@ hydra diff feature-x --stat
 hydra review feature-x --json
 hydra provenance feature-x --json
 
+# Parallel safety and guarded integration
+hydra claim add feature-x --path 'lib/*' --access write --reason refactor --expires-at 1790000000
+hydra scope check feature-x --json
+hydra collision feature-x feature-y --json
+hydra resource allocate feature-x --port http=3000-3999
+hydra gate run feature-x --name acceptance -- make test
+hydra context create feature-x --diff --history 5
+hydra sync feature-x --from main --gate acceptance --dry-run
+hydra land feature-x --into main --gate acceptance --dry-run
+hydra du
+hydra gc --policy orphaned --dry-run
+hydra worktree doctor status
+
 # System
 hydra init --profile claude --trust
 hydra agent list
@@ -178,6 +191,7 @@ hydra regenerate   # restore sessions after restart
 hydra status       # per-head health
 hydra status --json # JSON output
 hydra doctor       # install, dependencies, and first-run readiness
+hydra snapshot --native # explicitly try the optional read-only native helper
 
 # Dashboard & TUI
 hydra dashboard                                    # multi-session overview
@@ -207,6 +221,8 @@ hydra tui                                          # interactive session manager
 | `HYDRA_REGENERATE_RUN_STARTUP` | Run startup commands on regenerate |
 | `HYDRA_ALLOW_ADVANCED_REFS` | Relax branch charset validation (use with care) |
 | `HYDRA_DISABLE_YAML` | Disable YAML config parsing |
+| `HYDRA_CORE` | Explicit optional `hydra-core` executable for native qualification |
+| `HYDRA_CORE_TIMEOUT_SECONDS` | Native handshake/command timeout (default `2`) |
 
 Per-head profile, task, identity, worktree path, instance, and lifecycle event are
 stored in project-scoped state v2. See [profiles](docs/PROFILES.md),
@@ -214,6 +230,9 @@ stored in project-scoped state v2. See [profiles](docs/PROFILES.md),
 [automation](docs/AUTOMATION.md). Security, out-of-band execution, provenance, and
 related contracts are documented in [security](docs/SECURITY.md),
 [operations](docs/OPERATIONS.md), and [provenance](docs/PROVENANCE.md).
+Parallel coordination and native distribution are documented in
+[parallel safety](docs/PARALLEL_SAFETY.md) and the
+[optional native core](docs/NATIVE_CORE.md).
 
 ## YAML Config (optional)
 

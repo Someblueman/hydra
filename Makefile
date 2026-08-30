@@ -1,7 +1,16 @@
 # Makefile for Hydra
 # POSIX-compliant build and lint tasks
 
-.PHONY: all lint test clean install uninstall test-install smoke-onboarding dev-setup bench help
+.PHONY: all lint test test-all clean install uninstall test-install test-native-install smoke-onboarding \
+	dev-setup bench build-core test-c test-parity sanitize-core sanitizer \
+	sanitize bench-core benchmark-core package-core help
+
+CC ?= cc
+AR ?= ar
+CFLAGS ?= -O2
+CORE_CFLAGS = $(CFLAGS) -std=c99 -Wall -Wextra -Werror -pedantic -Isrc
+BUILD_DIR ?= build
+SANITIZER_FLAGS ?= $(shell if [ "$$(uname -s)" = Darwin ]; then printf '%s' '-fsanitize=undefined'; else printf '%s' '-fsanitize=address,undefined'; fi)
 
 # Installation prefix (no root required when writable)
 PREFIX ?= /usr/local
@@ -29,12 +38,54 @@ test:
 	@echo "Running tests..."
 	@if [ -d tests ] && [ -n "$$(ls -A tests/test_*.sh 2>/dev/null)" ]; then \
 		for test in tests/test_*.sh; do \
+			case "$$test" in tests/test_core.sh|tests/test_native_install.sh) continue ;; esac; \
 			echo "Running $$test..."; \
 			sh "$$test" || exit 1; \
 		done; \
 	else \
 		echo "No tests found in tests/"; \
 	fi
+
+# Optional read-only native helper. The shell CLI remains the mutation authority.
+build-core: $(BUILD_DIR)/hydra-core
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+$(BUILD_DIR)/libhydra.o: src/libhydra.c src/libhydra.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -c src/libhydra.c -o $@
+
+$(BUILD_DIR)/libhydra.a: $(BUILD_DIR)/libhydra.o
+	$(AR) rcs $@ $<
+
+$(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a
+	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(BUILD_DIR)/libhydra.a -o $@
+
+$(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
+	$(CC) $(CORE_CFLAGS) tests/c/test_libhydra.c $(BUILD_DIR)/libhydra.a -o $@
+
+test-c: $(BUILD_DIR)/test-libhydra
+	$(BUILD_DIR)/test-libhydra
+
+test-parity: build-core
+	@sh tests/test_core.sh
+
+test-all: lint test test-c test-parity test-install test-native-install smoke-onboarding
+
+sanitize-core:
+	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-c
+
+sanitizer: sanitize-core
+
+sanitize: sanitize-core
+
+bench-core: build-core
+	@sh scripts/bench-core.sh
+
+benchmark-core: bench-core
+
+package-core: build-core
+	@sh scripts/package-core.sh
 
 # Record shell baseline timings (not a CI gate; no speedup claims)
 bench:
@@ -44,6 +95,7 @@ bench:
 clean:
 	@echo "Cleaning temporary files..."
 	@find . -name "*~" -o -name "*.swp" -o -name ".*.swp" | xargs rm -f
+	@rm -rf build
 	@echo "Clean complete"
 
 # Install hydra to $(PREFIX)/bin and $(PREFIX)/lib/hydra
@@ -57,7 +109,10 @@ uninstall:
 
 # Fresh-prefix install, verify, and uninstall
 test-install:
-	@sh tests/test_install.sh
+	@HYDRA_INSTALL_CORE=never sh tests/test_install.sh
+
+test-native-install: build-core
+	@sh tests/test_native_install.sh
 
 # Throwaway-repository, no-agent first-head path
 smoke-onboarding:
@@ -77,12 +132,20 @@ dev-setup:
 help:
 	@echo "Hydra Makefile targets:"
 	@echo "  make lint      - Run ShellCheck and dash syntax validation"
-	@echo "  make test      - Run all tests"
+	@echo "  make test      - Run the shell-only test suite"
+	@echo "  make build-core - Build the optional read-only native helper"
+	@echo "  make test-c    - Run native library unit tests"
+	@echo "  make test-parity - Verify shell/native protocol parity and fallbacks"
+	@echo "  make test-all  - Run shell/native, install, parity, and onboarding acceptance"
+	@echo "  make sanitize  - Run supported native sanitizer tests"
+	@echo "  make bench-core - Compare shell and native snapshot timings"
 	@echo "  make bench     - Record list/status/doctor/TUI timings at 5 and 20 heads"
 	@echo "  make clean     - Remove temporary files"
 	@echo "  make install   - Install hydra to \$$PREFIX/bin (default /usr/local)"
 	@echo "  make uninstall - Remove hydra from \$$PREFIX"
 	@echo "  make test-install - Fresh-prefix install/uninstall tests"
+	@echo "  make test-native-install - Offline native install, handshake, and rollback tests"
+	@echo "  make package-core - Create a checksummed platform-qualified core artifact"
 	@echo "  make smoke-onboarding - Throwaway-repo no-agent first-head smoke"
 	@echo "  make dev-setup - Set up development environment (git hooks)"
 	@echo "  make help      - Show this help message"

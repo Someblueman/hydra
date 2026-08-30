@@ -132,6 +132,13 @@ _kill_teardown() {
         cleanup_messages_for_branch "$_td_branch"
     fi
 
+    if command -v parallel_release_head_records >/dev/null 2>&1; then
+        if ! parallel_release_head_records "$_td_branch"; then
+            echo "  Parallel claims or resources remain recorded for recovery" >&2
+            return 1
+        fi
+    fi
+
     if command -v lifecycle_finish_teardown >/dev/null 2>&1; then
         lifecycle_finish_teardown "$_td_branch" "$_td_session" || return 1
     fi

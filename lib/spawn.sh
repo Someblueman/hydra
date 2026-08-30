@@ -116,6 +116,7 @@ spawn_dry_run() {
     _sdr_template="${7:--}"
     _sdr_task="${8:-}"
     _sdr_policy="${9:-declared-done}"
+    _sdr_scopes="${10:-}"
     _sdr_project="$(hydra_get_project_id 2>/dev/null)" || {
         echo "Error: project is not initialized" >&2
         echo "Next: hydra init --profile $_sdr_profile   or   hydra init --no-agent" >&2
@@ -157,6 +158,12 @@ spawn_dry_run() {
     echo "  template: ${_sdr_template:--}"
     echo "  task_bytes: $(printf '%s' "$_sdr_task" | LC_ALL=C wc -c | tr -d ' ') (content redacted)"
     echo "  completion_policy: $_sdr_policy"
+    if [ -n "$_sdr_scopes" ]; then
+        echo "  scopes:"
+        printf '%s\n' "$_sdr_scopes" | sed 's/^/    - /'
+    else
+        echo "  scopes: (none)"
+    fi
     _sdr_config="$(project_repo_config 2>/dev/null || true)"
     if [ -f "$_sdr_config" ]; then
         if project_is_trusted; then
@@ -177,7 +184,7 @@ spawn_dry_run() {
 }
 
 # Helper function to spawn a single session
-# Usage: spawn_single <branch> <layout> [profile] [group] [deps] [pr_number] [template] [task]
+# Usage: spawn_single <branch> <layout> [profile] [group] [deps] [pr_number] [template] [task] [completion_policy] [scopes]
 # Returns: Session name on stdout, 1 on failure
 spawn_single() {
     branch="$1"
@@ -189,6 +196,7 @@ spawn_single() {
     template="${7:-}"
     task="${8:-}"
     completion_policy="${9:-declared-done}"
+    scopes="${10:-}"
 
     # Wait for dependencies if specified
     if [ -n "$deps" ] && [ "$deps" != "-" ]; then
@@ -298,7 +306,7 @@ spawn_single() {
     # Commit durable identity and task before any agent process sees the task.
     committed_head="$(state_v2_create_head "$project_id" "$branch" "$session" "$ai_tool" \
         "${group:--}" "$spawn_timestamp" "${deps:--}" "${pr_number:--}" "$repo_root" \
-        "$head_id" "$instance_id" "$worktree_path" "$task" "$base_ref" "$provider_session_id")" || {
+        "$head_id" "$instance_id" "$worktree_path" "$task" "$base_ref" "$provider_session_id" "$scopes")" || {
         echo "Error: Failed to commit durable head state" >&2
         spawn_rollback_session "$session" "$branch" "$worktree_path"
         return 1

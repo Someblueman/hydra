@@ -723,40 +723,40 @@ native acceleration over stable contracts.
 
 #### Scope
 
-- [ ] Add `hydra claim` intent claims with owner, path pattern, access mode, reason,
+- [x] Add `hydra claim` intent claims with owner, path pattern, access mode, reason,
       and expiry.
-- [ ] Add scoped heads with injected scope instructions and a gate that identifies
+- [x] Add scoped heads with injected scope instructions and a gate that identifies
       out-of-scope changes without pretending sparse checkout is a security boundary.
-- [ ] Add collision analysis that distinguishes declared claims, changed-file
+- [x] Add collision analysis that distinguishes declared claims, changed-file
       overlap, textual conflict risk, and actual merge simulation.
-- [ ] Add per-head environment profiles covering ports, compose project names,
+- [x] Add per-head environment profiles covering ports, compose project names,
       database names, and cleanup, with atomic allocation where shared resources are
       reserved.
-- [ ] Add verification gates with captured evidence and explicit human approval
+- [x] Add verification gates with captured evidence and explicit human approval
       gates.
-- [ ] Add typed context packs containing selected diffs, manifests, notes, history,
+- [x] Add typed context packs containing selected diffs, manifests, notes, history,
       and artifact references without silently bundling secrets.
-- [ ] Add safe `hydra sync` and `hydra land` primitives with preflight, gate, archive,
+- [x] Add safe `hydra sync` and `hydra land` primitives with preflight, gate, archive,
       teardown, dry-run, and recoverable failure behavior.
-- [ ] Add `hydra du` and policy-driven `hydra gc` with dry-run and preservation of
+- [x] Add `hydra du` and policy-driven `hydra gc` with dry-run and preservation of
       dirty or untracked work by default.
-- [ ] Add worktree doctor actions around Git lock, unlock, move, repair, and dry-run
+- [x] Add worktree doctor actions around Git lock, unlock, move, repair, and dry-run
       prune behavior.
-- [ ] Add `src/`, `tests/c/`, internal `libhydra`, and a read-only `hydra-core`
+- [x] Add `src/`, `tests/c/`, internal `libhydra`, and a read-only `hydra-core`
       scaffold in a minor release.
-- [ ] Accept shell/native command protocol v1 before integrating the helper into any
+- [x] Accept shell/native command protocol v1 before integrating the helper into any
       shell command.
-- [ ] Add `make build-core`, `make test-c`, `make test-parity`, `make test-all`,
+- [x] Add `make build-core`, `make test-c`, `make test-parity`, `make test-all`,
       sanitizer, and benchmark targets.
-- [ ] Implement only capability reporting, state/event validation, canonical JSON,
+- [x] Implement only capability reporting, state/event validation, canonical JSON,
       and read-only snapshot aggregation in the first native slice.
-- [ ] Extend the 1.5.2 installer contract to native artifacts, adding offline/source,
+- [x] Extend the 1.5.2 installer contract to native artifacts, adding offline/source,
       checksum, architecture, version-handshake, and rollback behavior.
-- [ ] Add supported macOS and Linux native CI plus native-present, native-absent, and
+- [x] Add supported macOS and Linux native CI plus native-present, native-absent, and
       version-skew qualification.
-- [ ] Prototype tmux control mode against bounded polling and publish reproducible
+- [x] Prototype tmux control mode against bounded polling and publish reproducible
       reliability and performance findings before committing the TUI to it.
-- [ ] Publish native architecture/distribution and parallel-safety documentation.
+- [x] Publish native architecture/distribution and parallel-safety documentation.
 
 #### Release gates
 
@@ -1205,7 +1205,7 @@ recorded architecture decisions.
 | Pane-history default, retention, and redaction policy | Lifecycle release | Secret-bearing fixtures, permissions, disk growth, recovery value | Open |
 | Agent adapter packaging and capability matrix | Lifecycle release | Verified vendor fixtures, trust boundaries, version-skew fallback | Open |
 | Worktree-root default and stored-path migration | Lifecycle release | Multiple repositories, repo moves, wrong-cwd kill, recovery fixtures | Open |
-| Supported native OS/architecture matrix | Native distribution | CI availability and release artifact tests | Open |
+| Supported native OS/architecture matrix | Native distribution | CI availability and release artifact tests | Accepted for 1.7: current GitHub-hosted macOS and Ubuntu runner architectures; every artifact remains exact-platform qualified |
 | tmux control mode versus bounded polling | Native TUI | Reliability and performance prototype | Open |
 | Trusted repository configuration UX | Profiles/workflows/bootstrap | Threat model and noninteractive policy tests | Open |
 | Workflow YAML subset | Workflow release | Schema fixtures, duplicate-key rejection, error quality | Open |
