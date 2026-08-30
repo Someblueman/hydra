@@ -56,7 +56,10 @@ cmd_sync() {
             *) cli_error sync invalid_input "unknown option '$1'" "use --from, --gate, or --dry-run"; return 1 ;;
         esac
     done
-    [ -n "$_csy_from" ] && [ -n "$_csy_gate" ] || { cli_error sync invalid_input "--from and --gate are required" "name an approved verification gate and source ref"; return 1; }
+    if [ -z "$_csy_from" ] || [ -z "$_csy_gate" ]; then
+        cli_error sync invalid_input "--from and --gate are required" "name an approved verification gate and source ref"
+        return 1
+    fi
     if _csy_run="$(integration_sync "$_csy_branch" "$_csy_from" "$_csy_gate" "$_csy_dry")"; then
         if [ "$_csy_dry" -eq 1 ]; then printf '%s\n' "$_csy_run"; else echo "Sync completed: $_csy_run"; fi
     else
@@ -78,7 +81,10 @@ cmd_land() {
             *) cli_error land invalid_input "unknown option '$1'" "use --into, --gate, --dry-run, or --keep-head"; return 1 ;;
         esac
     done
-    [ -n "$_cl_into" ] && [ -n "$_cl_gate" ] || { cli_error land invalid_input "--into and --gate are required" "name the current target branch and an approved gate"; return 1; }
+    if [ -z "$_cl_into" ] || [ -z "$_cl_gate" ]; then
+        cli_error land invalid_input "--into and --gate are required" "name the current target branch and an approved gate"
+        return 1
+    fi
     if _cl_run="$(integration_land "$_cl_branch" "$_cl_into" "$_cl_gate" "$_cl_dry" "$_cl_keep")"; then
         if [ "$_cl_dry" -eq 1 ]; then printf '%s\n' "$_cl_run"; else echo "Land completed: $_cl_run"; fi
     else
