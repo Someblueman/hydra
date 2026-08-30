@@ -145,6 +145,45 @@ _hydra_completion() {
         esac
     fi
 
+    if [[ "${COMP_WORDS[@]}" =~ claim ]]; then
+        case "${prev}" in --access) COMPREPLY=($(compgen -W "read write" -- ${cur})); return 0 ;; esac
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--path --access --reason --expires-at --json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ scope ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--read --write --json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ collision ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ resource ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--port --compose-project --database --json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ gate ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--name --by --reason --json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ context ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--diff --file --note --history --artifact --json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ sync ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--from --gate --dry-run" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ land ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--into --gate --dry-run --keep-head" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ du ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--json" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ gc ]]; then
+        case "${prev}" in --policy) COMPREPLY=($(compgen -W "orphaned stopped archives" -- ${cur})); return 0 ;; esac
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--policy --apply --dry-run --include-dirty --older-than" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ worktree ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--reason --dry-run --apply" -- ${cur})); return 0 ;; esac
+    fi
+    if [[ "${COMP_WORDS[@]}" =~ snapshot ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;; esac
+    fi
+
     # Check if we're completing template subcommand
     if [[ "${COMP_WORDS[@]}" =~ template ]]; then
         case "${prev}" in
@@ -255,22 +294,37 @@ _hydra() {
                     _arguments '--json[Output versioned JSON]' '1:branch:_hydra_sessions'
                     ;;
                 claim)
-                    _arguments '1:subcommand:(add list remove)'
+                    _arguments '1:subcommand:(add list remove)' '--path[Path pattern]:pattern:' '--access[Access mode]:access:(read write)' '--reason[Claim reason]:text:' '--expires-at[Expiry epoch]:epoch:' '--json[Output versioned JSON]'
                     ;;
                 scope)
-                    _arguments '1:subcommand:(set show check)'
+                    _arguments '1:subcommand:(set show check)' '*--read[Read-only path pattern]:pattern:' '*--write[Writable path pattern]:pattern:' '--json[Output versioned JSON]'
+                    ;;
+                collision)
+                    _arguments '--json[Output versioned JSON]' '1:left head:_hydra_sessions' '2:right head:_hydra_sessions'
                     ;;
                 resource)
-                    _arguments '1:subcommand:(allocate status env release)'
+                    _arguments '1:subcommand:(allocate status env release)' '*--port[Port allocation NAME=START-END]:range:' '--compose-project[Compose project name]:name:' '--database[Database name]:name:' '--json[Output versioned JSON]'
                     ;;
                 gate)
-                    _arguments '1:subcommand:(run approve status)'
+                    _arguments '1:subcommand:(run approve status)' '--name[Gate name]:name:' '--by[Approval actor]:actor:' '--reason[Approval reason]:text:' '--json[Output versioned JSON]'
                     ;;
                 context)
-                    _arguments '1:subcommand:(create)'
+                    _arguments '1:subcommand:(create)' '--diff[Include selected diff]' '*--file[Add a manifest file]:file:_files' '--note[Add a note]:text:' '--history[Include bounded history]:count:' '*--artifact[Add an artifact reference]:artifact:_files' '--json[Output versioned JSON]'
+                    ;;
+                sync)
+                    _arguments '--from[Source ref]:ref:' '--gate[Approved gate]:name:' '--dry-run[Simulate without mutation]' '1:head:_hydra_sessions'
+                    ;;
+                land)
+                    _arguments '--into[Current target branch]:branch:_hydra_branches' '--gate[Approved gate]:name:' '--dry-run[Simulate without mutation]' '--keep-head[Keep source head after landing]' '1:head:_hydra_sessions'
+                    ;;
+                du)
+                    _arguments '--json[Output versioned JSON]'
+                    ;;
+                gc)
+                    _arguments '--policy[Cleanup policy]:policy:(orphaned stopped archives)' '--apply[Apply selected policy]' '--dry-run[Report without mutation]' '--include-dirty[Allow explicit dirty removal]' '--older-than[Archive age in days]:days:'
                     ;;
                 worktree)
-                    _arguments '1:subcommand:(doctor)'
+                    _arguments '1:subcommand:(doctor)' '2:action:(status lock unlock move repair prune)' '--reason[Lock reason]:text:' '--dry-run[Report without mutation]' '--apply[Apply repair or prune]'
                     ;;
                 snapshot)
                     _arguments '--native[Try the optional read-only native helper]' '--json[Output canonical JSON]'
@@ -510,6 +564,36 @@ complete -c hydra -f -n '__fish_seen_subcommand_from gate' -a 'run approve statu
 complete -c hydra -f -n '__fish_seen_subcommand_from context' -a 'create'
 complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -a 'doctor'
 complete -c hydra -f -n '__fish_seen_subcommand_from snapshot' -l native -d 'Try the optional read-only native helper'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l path -d 'Path pattern'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l access -d 'Access mode' -a 'read write'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l reason -d 'Claim reason'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l expires-at -d 'Expiry epoch'
+complete -c hydra -f -n '__fish_seen_subcommand_from scope' -l read -d 'Read-only path pattern'
+complete -c hydra -f -n '__fish_seen_subcommand_from scope' -l write -d 'Writable path pattern'
+complete -c hydra -f -n '__fish_seen_subcommand_from resource' -l port -d 'Port allocation NAME=START-END'
+complete -c hydra -f -n '__fish_seen_subcommand_from resource' -l compose-project -d 'Compose project name'
+complete -c hydra -f -n '__fish_seen_subcommand_from resource' -l database -d 'Database name'
+complete -c hydra -f -n '__fish_seen_subcommand_from gate' -l name -d 'Gate name'
+complete -c hydra -f -n '__fish_seen_subcommand_from gate' -l by -d 'Approval actor'
+complete -c hydra -f -n '__fish_seen_subcommand_from gate' -l reason -d 'Approval reason'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -l diff -d 'Include selected diff'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -l file -d 'Add a manifest file'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -l note -d 'Add a note'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -l history -d 'Include bounded history'
+complete -c hydra -f -n '__fish_seen_subcommand_from context' -l artifact -d 'Add an artifact reference'
+complete -c hydra -f -n '__fish_seen_subcommand_from sync' -l from -d 'Source ref'
+complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l gate -d 'Approved gate'
+complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l dry-run -d 'Simulate without mutation'
+complete -c hydra -f -n '__fish_seen_subcommand_from land' -l into -d 'Current target branch'
+complete -c hydra -f -n '__fish_seen_subcommand_from land' -l keep-head -d 'Keep source head after landing'
+complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l policy -d 'Cleanup policy' -a 'orphaned stopped archives'
+complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l apply -d 'Apply selected policy'
+complete -c hydra -f -n '__fish_seen_subcommand_from gc worktree' -l dry-run -d 'Report without mutation'
+complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l include-dirty -d 'Allow explicit dirty removal'
+complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l older-than -d 'Archive age in days'
+complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -l reason -d 'Lock reason'
+complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -l apply -d 'Apply repair or prune'
+complete -c hydra -f -n '__fish_seen_subcommand_from claim scope collision resource gate context du snapshot' -l json -d 'Output versioned JSON'
 
 # Complete dashboard flags
 complete -c hydra -f -n '__fish_seen_subcommand_from dashboard' -s p -l panes-per-session -d 'Panes to collect per session' -a '1 2 3 4 5 6 7 8 9 10 all'

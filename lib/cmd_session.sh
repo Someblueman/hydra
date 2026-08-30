@@ -532,7 +532,7 @@ cmd_kill() {
     fi
     
     # Skip confirmation in non-interactive environments (CI, tests)
-    if [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
+    if [ "$force" != true ] && [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
         # Interactive mode - ask for confirmation
         printf "Kill hydra head '%s' (session: %s)? [y/N] " "$branch" "$session"
         read -r response

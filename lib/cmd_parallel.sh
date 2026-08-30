@@ -2,6 +2,7 @@
 # Hydra 1.7 parallel-safety command handlers.
 
 cmd_claim() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra claim add <head> --path <pattern> --access read|write --reason <text> --expires-at <epoch>' '       hydra claim list [--json]' '       hydra claim remove <claim-id>'; return 0 ;; esac
     _cc_action="${1:-list}"
     [ $# -eq 0 ] || shift
     case "$_cc_action" in
@@ -68,6 +69,7 @@ EOF
 }
 
 cmd_scope() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra scope set <head> [--read <pattern>] [--write <pattern>]' '       hydra scope show <head>' '       hydra scope check <head> [--json]'; return 0 ;; esac
     _cs_action="${1:-}"
     [ -n "$_cs_action" ] || { cli_error scope invalid_input "action is required" "use set, show, or check"; return 1; }
     shift
@@ -155,6 +157,7 @@ EOF
 }
 
 cmd_collision() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra collision <left-head> <right-head> [--json]'; return 0 ;; esac
     _cco_json=0
     _cco_left="" _cco_right=""
     while [ $# -gt 0 ]; do
@@ -192,6 +195,7 @@ EOF
 }
 
 cmd_resource() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra resource allocate <head> [--port NAME=START-END] [--compose-project <name>] [--database <name>]' '       hydra resource status <head> [--json]' '       hydra resource env <head>' '       hydra resource release <head>'; return 0 ;; esac
     _cr_action="${1:-}"
     [ -n "$_cr_action" ] || { cli_error resource invalid_input "action is required" "use allocate, status, env, or release"; return 1; }
     shift
@@ -265,6 +269,7 @@ EOF
 }
 
 cmd_gate() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra gate run <head> --name <name> -- <command> [args...]' '       hydra gate approve <head> --name <name> --by <actor> [--reason <text>]' '       hydra gate status <head> [--json]'; return 0 ;; esac
     _cg_action="${1:-}"
     [ -n "$_cg_action" ] || { cli_error gate invalid_input "action is required" "use run, approve, or status"; return 1; }
     shift

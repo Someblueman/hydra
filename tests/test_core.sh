@@ -120,7 +120,7 @@ printf '%s\n' \
     '#!/bin/sh' \
     'case "${1:-}" in' \
     '  --protocol-version)' \
-    '    case "${FAKE_CORE_MODE:-}" in skew) echo 99 ;; hang) sleep 3 ;; crash) exit 9 ;; *) echo 1 ;; esac ;;' \
+    '    case "${FAKE_CORE_MODE:-}" in skew) echo 99 ;; hang) sleep 3 ;; descendant) sleep 20 & echo $! > "$FAKE_CORE_CHILD_PID"; wait ;; crash) exit 9 ;; *) echo 1 ;; esac ;;' \
     '  --version)' \
     '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 1.7.0 protocol 1" ;; esac ;;' \
     '  snapshot)' \
@@ -136,6 +136,16 @@ assert_fallback skew protocol-skew "$fake_core"
 assert_fallback version-skew version-skew "$fake_core"
 assert_fallback crash protocol-failure "$fake_core"
 assert_fallback hang protocol-timeout "$fake_core"
+descendant_pid_file="$test_root/descendant.pid"
+FAKE_CORE_CHILD_PID="$descendant_pid_file"
+export FAKE_CORE_CHILD_PID
+assert_fallback descendant protocol-timeout "$fake_core"
+descendant_pid="$(sed -n '1p' "$descendant_pid_file")"
+if kill -0 "$descendant_pid" 2>/dev/null; then
+    assert_success 1 "native timeout terminates helper descendants"
+else
+    assert_success 0 "native timeout terminates helper descendants"
+fi
 assert_fallback malformed malformed-output "$fake_core"
 
 printf '\nTests: %s, Passed: %s, Failed: %s\n' "$test_count" "$pass_count" "$fail_count"

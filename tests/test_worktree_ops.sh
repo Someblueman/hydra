@@ -75,12 +75,23 @@ orphan_preserved="$("$HYDRA_BIN" gc --policy orphaned --apply)"
 case "$orphan_preserved" in *'preserved-dirty'*"$orphan_path"*) assert_success 0 "GC preserves dirty orphaned worktrees by default" ;; *) assert_success 1 "GC preserves dirty orphaned worktrees by default" ;; esac
 if [ -d "$orphan_path" ]; then assert_success 0 "dirty orphan remains attached"; else assert_success 1 "dirty orphan remains attached"; fi
 rm -f "$orphan_path/untracked.txt"
+project_id="$(sed -n '1p' .git/hydra/project-id)"
+mkdir -p "$HYDRA_HOME/locks/worktree_project_${project_id}.lock"
+HYDRA_LOCK_RETRIES=1 "$HYDRA_BIN" gc --policy orphaned --apply >/dev/null 2>&1
+assert_failure $? "orphan GC refuses a concurrent project worktree operation"
+if [ -d "$orphan_path" ]; then assert_success 0 "contended GC leaves the orphan untouched"; else assert_success 1 "contended GC leaves the orphan untouched"; fi
+rmdir "$HYDRA_HOME/locks/worktree_project_${project_id}.lock"
 orphan_removed="$("$HYDRA_BIN" gc --policy orphaned --apply)"
 case "$orphan_removed" in *'removed-orphan'*"$orphan_path"*) assert_success 0 "GC removes a clean orphan under explicit policy" ;; *) assert_success 1 "GC removes a clean orphan under explicit policy" ;; esac
 if [ ! -d "$orphan_path" ]; then assert_success 0 "clean orphan worktree is removed"; else assert_success 1 "clean orphan worktree is removed"; fi
 
 tmux kill-session -t storage-head
 move_target="$worktree_root/moved-storage-head"
+"$HYDRA_BIN" worktree doctor move storage-head "$move_target" --dry-run >/dev/null 2>&1
+assert_failure $? "doctor refuses a missing-session head still marked running"
+if [ -d "$worktree" ] && [ ! -e "$move_target" ]; then assert_success 0 "rejected move leaves paths unchanged"; else assert_success 1 "rejected move leaves paths unchanged"; fi
+head_dir="$(find "$HYDRA_HOME/state/v2/projects/$project_id/heads" -mindepth 1 -maxdepth 1 -type d -name 'head_*' | head -1)"
+printf 'stopped\n' > "$head_dir/desired-state"
 move_dry="$("$HYDRA_BIN" worktree doctor move storage-head "$move_target" --dry-run)"
 case "$move_dry" in *'would-move'*"$worktree"*"$move_target"*) assert_success 0 "worktree move has a non-mutating dry-run" ;; *) assert_success 1 "worktree move has a non-mutating dry-run" ;; esac
 if [ -d "$worktree" ] && [ ! -e "$move_target" ]; then assert_success 0 "move dry-run leaves paths unchanged"; else assert_success 1 "move dry-run leaves paths unchanged"; fi

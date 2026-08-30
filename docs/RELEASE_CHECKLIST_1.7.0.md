@@ -23,11 +23,12 @@ otool -L build/hydra-core
 Observed results:
 
 - ShellCheck style and `dash -n` passed for every shell file.
-- The complete shell suite passed, including 26 parallel-safety, 23 guarded
-  integration, and 23 worktree-operation assertions.
-- Native C unit and 29 protocol/parity/fallback assertions passed; UBSan passed on
+- The complete shell suite passed, including 26 parallel-safety, 25 guarded
+  integration, and 27 worktree-operation assertions.
+- Native C unit and 33 protocol/parity/fallback assertions passed; UBSan passed on
   local macOS. The Linux CI lane adds ASan to UBSan.
-- Fresh shell-only install/uninstall passed 37 assertions; offline/source native
+- Fresh shell-only install, successful in-place upgrade with state preservation,
+  and uninstall passed 40 assertions; offline/source native
   install, checksum, platform, dependency, source identity, handshake, preservation,
   discovery, source-archive provenance, and uninstall passed 19 assertions.
 - Clean-home no-agent onboarding passed 39 assertions and left no source-repository
@@ -72,7 +73,7 @@ hydra land integration-head --into main --gate ready --dry-run
 hydra land integration-head --into main --gate ready
 ```
 
-The 23 passing assertions verify typed input selection and secret refusal, captured
+The 25 passing assertions verify typed input selection and secret refusal, captured
 and approved evidence, merge simulation, exact-gate invalidation after commit change,
 pre-operation bundles, base advancement, successful landing and teardown, plus a
 second conflicting sync that aborts cleanly and records recovered failure evidence.

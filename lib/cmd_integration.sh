@@ -2,6 +2,7 @@
 # Typed context, sync, and land command handlers.
 
 cmd_context() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra context create <head> [--diff] [--file <path>] [--note <text>] [--history <count>] [--artifact <path>] [--json]'; return 0 ;; esac
     _ccx_action="${1:-}"
     [ "$_ccx_action" = create ] || { cli_error context invalid_input "action must be create" "run hydra context create <head> [options]"; return 1; }
     shift
@@ -44,6 +45,7 @@ $2"; else _ccx_artifacts="$2"; fi
 }
 
 cmd_sync() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra sync <head> --from <ref> --gate <name> [--dry-run]'; return 0 ;; esac
     _csy_branch="${1:-}"
     [ -n "$_csy_branch" ] || { cli_error sync invalid_input "head is required" "run hydra sync <head> --from <ref> --gate <name> [--dry-run]"; return 1; }
     shift
@@ -68,6 +70,7 @@ cmd_sync() {
 }
 
 cmd_land() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra land <head> --into <branch> --gate <name> [--dry-run] [--keep-head]'; return 0 ;; esac
     _cl_branch="${1:-}"
     [ -n "$_cl_branch" ] || { cli_error land invalid_input "head is required" "run hydra land <head> --into <branch> --gate <name> [--dry-run] [--keep-head]"; return 1; }
     shift

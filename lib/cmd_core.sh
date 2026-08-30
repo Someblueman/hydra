@@ -1,6 +1,7 @@
 #!/bin/sh
 
 cmd_snapshot() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra snapshot [--native] [--json]'; return 0 ;; esac
     _cs_native=0
     while [ $# -gt 0 ]; do
         case "$1" in

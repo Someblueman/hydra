@@ -2,6 +2,7 @@
 # Disk accounting, policy GC, and worktree doctor commands.
 
 cmd_du() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra du [--json]'; return 0 ;; esac
     _cdu_json=0
     [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --json ]; } || return 1
     [ $# -eq 0 ] || _cdu_json=1
@@ -27,6 +28,7 @@ EOF
 }
 
 cmd_gc() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra gc --policy orphaned|stopped|archives [--dry-run|--apply] [--include-dirty] [--older-than <days>]'; return 0 ;; esac
     _cgc_policy="" _cgc_apply=0 _cgc_include_dirty=0 _cgc_days=30
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -47,6 +49,7 @@ cmd_gc() {
 }
 
 cmd_worktree() {
+    case "${1:-}" in -h|--help) printf '%s\n' 'Usage: hydra worktree doctor status' '       hydra worktree doctor lock|unlock <head> [--dry-run]' '       hydra worktree doctor move <head> <path> [--dry-run]' '       hydra worktree doctor repair [--dry-run|--apply]' '       hydra worktree doctor prune [--apply]'; return 0 ;; esac
     [ "${1:-}" = doctor ] || { cli_error worktree invalid_input "expected doctor" "run hydra worktree doctor <action>"; return 1; }
     shift
     _cwd_action="${1:-status}"

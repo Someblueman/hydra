@@ -238,6 +238,37 @@ test_completion_includes_shipped_commands() {
         esac
         test_count=$((test_count + 1))
     done
+
+    option_status=0
+    for mapping in \
+        claim:path claim:access claim:reason claim:expires-at claim:json \
+        scope:read scope:write scope:json collision:json \
+        resource:port resource:compose-project resource:database resource:json \
+        gate:name gate:by gate:reason gate:json \
+        context:diff context:file context:note context:history context:artifact context:json \
+        sync:from sync:gate sync:dry-run land:into land:gate land:dry-run land:keep-head \
+        du:json gc:policy gc:apply gc:dry-run gc:include-dirty gc:older-than \
+        worktree:reason worktree:dry-run worktree:apply snapshot:native snapshot:json; do
+        command="${mapping%%:*}"
+        option="${mapping#*:}"
+        printf '%s\n' "$bash_out" | awk -v start="=~ $command ]]" -v needle="--$option" '
+            index($0, start) { block = 1 }
+            block && index($0, needle) { found = 1 }
+            block && /^    fi$/ { exit }
+            END { exit found ? 0 : 1 }
+        ' || option_status=1
+        printf '%s\n' "$zsh_out" | awk -v start="                $command)" -v needle="--$option" '
+            index($0, start) { block = 1 }
+            block && index($0, needle) { found = 1 }
+            block && /                    ;;/ { exit }
+            END { exit found ? 0 : 1 }
+        ' || option_status=1
+        printf '%s\n' "$fish_out" | awk -v command="$command" -v option="-l $option" '
+            index($0, "__fish_seen_subcommand_from") && index($0, command) && index($0, option) { found = 1 }
+            END { exit found ? 0 : 1 }
+        ' || option_status=1
+    done
+    assert_success "$option_status" "all completion generators map every 1.7 option to its command"
 }
 
 # Run all tests

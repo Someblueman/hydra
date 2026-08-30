@@ -72,6 +72,12 @@ upstream_commit="$(git rev-parse HEAD)"
 assert_success $? "sync verification gate passes"
 "$HYDRA_BIN" gate approve integration-head --name ready --by human-reviewer >/dev/null
 assert_success $? "sync verification gate is explicitly approved"
+project_id="$(sed -n '1p' "$repo/.git/hydra/project-id")"
+head_id="$(basename "$(find "$HYDRA_HOME/state/v2/projects/$project_id/heads" -mindepth 1 -maxdepth 1 -type d -name 'head_*' | head -1)")"
+mkdir -p "$HYDRA_HOME/locks/integration_${head_id}.lock"
+HYDRA_LOCK_RETRIES=1 "$HYDRA_BIN" sync integration-head --from main --gate ready --dry-run >/dev/null 2>&1
+assert_failure $? "sync refuses a concurrent integration operation"
+rmdir "$HYDRA_HOME/locks/integration_${head_id}.lock"
 "$HYDRA_BIN" sync integration-head --from main --gate ready --dry-run >/dev/null
 assert_success $? "sync dry-run simulates without mutation"
 "$HYDRA_BIN" sync integration-head --from main --gate ready >/dev/null
@@ -93,6 +99,10 @@ git -C "$worktree" commit -qm landed
 assert_success $? "post-sync land gate is rerun against the new commit"
 "$HYDRA_BIN" gate approve integration-head --name ready --by human-reviewer >/dev/null
 assert_success $? "post-sync land gate is approved"
+mkdir -p "$HYDRA_HOME/locks/integration_target_${project_id}.lock"
+HYDRA_LOCK_RETRIES=1 "$HYDRA_BIN" land integration-head --into main --gate ready --dry-run >/dev/null 2>&1
+assert_failure $? "land refuses a concurrent target integration operation"
+rmdir "$HYDRA_HOME/locks/integration_target_${project_id}.lock"
 "$HYDRA_BIN" land integration-head --into main --gate ready --dry-run >/dev/null
 assert_success $? "land dry-run simulates without mutation"
 "$HYDRA_BIN" land integration-head --into main --gate ready >/dev/null

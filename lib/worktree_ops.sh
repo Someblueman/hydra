@@ -33,6 +33,8 @@ worktree_gc_orphaned_rows() {
     parallel_project_load || return 1
     _wgor_root="$(project_worktree_root "$PARALLEL_PROJECT_ID")" || return 1
     _wgor_repo="$(get_repo_root)" || return 1
+    _wgor_lock="worktree_project_${PARALLEL_PROJECT_ID}"
+    acquire_lock "$_wgor_lock" "orphaned worktree GC" || return 1
     git -C "$_wgor_repo" worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r _wgor_path; do
         [ "$_wgor_path" != "$_wgor_repo" ] || continue
         case "$_wgor_path" in "$_wgor_root"/*) ;; *) continue ;; esac
@@ -56,6 +58,9 @@ worktree_gc_orphaned_rows() {
             printf 'failed\t%s\n' "$_wgor_path"
         fi
     done
+    _wgor_status=$?
+    release_lock "$_wgor_lock"
+    return "$_wgor_status"
 }
 
 worktree_gc_stopped_rows() {
@@ -66,8 +71,17 @@ worktree_gc_stopped_rows() {
     for _wgsr_head in "$PARALLEL_PROJECT_DIR"/heads/head_*; do
         [ -d "$_wgsr_head" ] || continue
         [ "$(sed -n '1p' "$_wgsr_head/desired-state" 2>/dev/null || true)" = stopped ] || continue
+        _wgsr_lock="head_$(basename "$_wgsr_head")"
+        acquire_lock "$_wgsr_lock" "stopped worktree GC" "$(basename "$_wgsr_head")" || return 1
+        if [ "$(sed -n '1p' "$_wgsr_head/desired-state" 2>/dev/null || true)" != stopped ]; then
+            release_lock "$_wgsr_lock"
+            continue
+        fi
         _wgsr_path="$(sed -n '1p' "$_wgsr_head/worktree" 2>/dev/null || true)"
-        [ -d "$_wgsr_path" ] || continue
+        if [ ! -d "$_wgsr_path" ]; then
+            release_lock "$_wgsr_lock"
+            continue
+        fi
         _wgsr_dirty="$(git -C "$_wgsr_path" status --porcelain=v1 2>/dev/null || true)"
         if [ -n "$_wgsr_dirty" ] && [ "$_wgsr_include_dirty" -eq 0 ]; then
             printf 'preserved-dirty\t%s\n' "$_wgsr_path"
@@ -80,6 +94,7 @@ worktree_gc_stopped_rows() {
         else
             printf 'failed\t%s\n' "$_wgsr_path"
         fi
+        release_lock "$_wgsr_lock"
     done
 }
 
@@ -90,20 +105,32 @@ worktree_gc_archive_rows() {
     parallel_project_load || return 1
     _wgar_now="$(date +%s)"
     _wgar_age=$((_wgar_days * 86400))
-    for _wgar_parent in "$PARALLEL_PROJECT_DIR"/heads/head_*/context-packs "$PARALLEL_PROJECT_DIR"/heads/head_*/archives/*; do
-        [ -d "$_wgar_parent" ] || continue
-        for _wgar_dir in "$_wgar_parent"/*; do
-            [ -d "$_wgar_dir" ] || continue
-            _wgar_created="$(sed -n '1p' "$_wgar_dir/created-at" 2>/dev/null || true)"
-            case "$_wgar_created" in ''|*[!0-9]*) continue ;; esac
-            [ $((_wgar_now - _wgar_created)) -ge "$_wgar_age" ] || continue
-            if [ "$_wgar_apply" -eq 0 ]; then
-                printf 'would-remove-archive\t%s\n' "$_wgar_dir"
-            else
-                rm -rf "$_wgar_dir"
-                printf 'removed-archive\t%s\n' "$_wgar_dir"
-            fi
+    for _wgar_head in "$PARALLEL_PROJECT_DIR"/heads/head_*; do
+        [ -d "$_wgar_head" ] || continue
+        _wgar_head_id="$(basename "$_wgar_head")"
+        _wgar_context_lock="context_${_wgar_head_id}"
+        _wgar_integration_lock="integration_${_wgar_head_id}"
+        acquire_lock "$_wgar_context_lock" "context archive GC" "$_wgar_head_id" || return 1
+        acquire_lock "$_wgar_integration_lock" "integration archive GC" "$_wgar_head_id" || {
+            release_lock "$_wgar_context_lock"
+            return 1
+        }
+        for _wgar_parent in "$_wgar_head/context-packs" "$_wgar_head"/archives/*; do
+            [ -d "$_wgar_parent" ] || continue
+            for _wgar_dir in "$_wgar_parent"/*; do
+                [ -d "$_wgar_dir" ] || continue
+                _wgar_created="$(sed -n '1p' "$_wgar_dir/created-at" 2>/dev/null || true)"
+                case "$_wgar_created" in ''|*[!0-9]*) continue ;; esac
+                [ $((_wgar_now - _wgar_created)) -ge "$_wgar_age" ] || continue
+                if [ "$_wgar_apply" -eq 0 ]; then
+                    printf 'would-remove-archive\t%s\n' "$_wgar_dir"
+                else
+                    rm -rf "$_wgar_dir"
+                    printf 'removed-archive\t%s\n' "$_wgar_dir"
+                fi
+            done
         done
+        integration_release_locks "$_wgar_integration_lock" "$_wgar_context_lock"
     done
 }
 
@@ -141,21 +168,31 @@ worktree_doctor_move() {
     parallel_head_load "$_wdm_branch" || return 1
     parallel_validate_path_pattern "${_wdm_target#/}" || return 1
     [ ! -e "$_wdm_target" ] || return 1
+    _wdm_lock="head_${PARALLEL_HEAD_ID}"
+    acquire_lock "$_wdm_lock" "worktree path move" "$PARALLEL_HEAD_ID" || return 1
     _wdm_session="$(sed -n '1p' "$PARALLEL_HEAD_DIR/session")"
     if tmux_session_exists "$_wdm_session"; then
         echo "Error: stop the tmux session before moving its worktree" >&2
+        release_lock "$_wdm_lock"
         return 1
     fi
-    integration_require_clean "$PARALLEL_WORKTREE" "head '$_wdm_branch'" || return 1
+    if [ "$(sed -n '1p' "$PARALLEL_HEAD_DIR/desired-state" 2>/dev/null || true)" != stopped ]; then
+        echo "Error: mark the head stopped before moving its worktree" >&2
+        release_lock "$_wdm_lock"
+        return 1
+    fi
+    integration_require_clean "$PARALLEL_WORKTREE" "head '$_wdm_branch'" || {
+        release_lock "$_wdm_lock"
+        return 1
+    }
     if [ "$_wdm_dry" -eq 1 ]; then
         printf 'would-move\t%s\t%s\n' "$PARALLEL_WORKTREE" "$_wdm_target"
+        release_lock "$_wdm_lock"
         return 0
     fi
     _wdm_old="$PARALLEL_WORKTREE"
-    git -C "$(get_repo_root)" worktree move "$_wdm_old" "$_wdm_target" || return 1
-    _wdm_lock="head_${PARALLEL_HEAD_ID}"
-    acquire_lock "$_wdm_lock" "worktree path move" "$PARALLEL_HEAD_ID" || {
-        git -C "$(get_repo_root)" worktree move "$_wdm_target" "$_wdm_old" >/dev/null 2>&1 || true
+    git -C "$(get_repo_root)" worktree move "$_wdm_old" "$_wdm_target" || {
+        release_lock "$_wdm_lock"
         return 1
     }
     if ! state_v2_write_scalar "$PARALLEL_HEAD_DIR/worktree" "$_wdm_target"; then
@@ -177,8 +214,14 @@ worktree_doctor_repair() {
         if [ "$_wdr_apply" -eq 0 ]; then
             printf 'would-repair\t%s\n' "$_wdr_path"
         else
-            git -C "$_wdr_repo" worktree repair "$_wdr_path" || return 1
+            _wdr_lock="head_$(basename "$_wdr_head")"
+            acquire_lock "$_wdr_lock" "worktree repair" "$(basename "$_wdr_head")" || return 1
+            git -C "$_wdr_repo" worktree repair "$_wdr_path" || {
+                release_lock "$_wdr_lock"
+                return 1
+            }
             printf 'repaired\t%s\n' "$_wdr_path"
+            release_lock "$_wdr_lock"
         fi
     done
 }
@@ -189,6 +232,12 @@ worktree_doctor_prune() {
     if [ "$_wdp_apply" -eq 0 ]; then
         git -C "$_wdp_repo" worktree prune --dry-run --verbose
     else
+        parallel_project_load || return 1
+        _wdp_lock="worktree_project_${PARALLEL_PROJECT_ID}"
+        acquire_lock "$_wdp_lock" "worktree prune" || return 1
         git -C "$_wdp_repo" worktree prune --verbose
+        _wdp_status=$?
+        release_lock "$_wdp_lock"
+        return "$_wdp_status"
     fi
 }

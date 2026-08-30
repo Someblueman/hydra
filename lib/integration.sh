@@ -141,25 +141,28 @@ EOF
     printf '%s\n' "$_icc_root/$_icc_pack"
 }
 
-integration_archive() {
+integration_release_locks() {
+    for _irl_lock in "$@"; do
+        [ -z "$_irl_lock" ] || release_lock "$_irl_lock"
+    done
+}
+
+# Caller holds the per-head integration lock.
+integration_archive_locked() {
     _ia_branch="$1"
     _ia_kind="$2"
     _ia_source="$3"
     parallel_head_load "$_ia_branch" || return 1
     _ia_run="$(hydra_new_id run "$PARALLEL_HEAD_ID|$_ia_kind")" || return 1
     _ia_root="$PARALLEL_HEAD_DIR/archives/$_ia_kind/$_ia_run"
-    _ia_lock="integration_${PARALLEL_HEAD_ID}"
-    acquire_lock "$_ia_lock" "$_ia_kind archive" "$PARALLEL_HEAD_ID" || return 1
-    mkdir -p "$_ia_root" || { release_lock "$_ia_lock"; return 1; }
+    mkdir -p "$_ia_root" || return 1
     if ! state_v2_write_scalar "$_ia_root/run-id" "$_ia_run" || \
        ! state_v2_write_scalar "$_ia_root/pre-head" "$(git -C "$PARALLEL_WORKTREE" rev-parse HEAD)" || \
        ! state_v2_write_scalar "$_ia_root/source" "$_ia_source" || \
        ! state_v2_write_scalar "$_ia_root/created-at" "$(date +%s)" || \
        ! git -C "$PARALLEL_WORKTREE" bundle create "$_ia_root/pre-operation.bundle" HEAD >/dev/null 2>&1; then
-        release_lock "$_ia_lock"
         return 1
     fi
-    release_lock "$_ia_lock"
     INTEGRATION_ARCHIVE_DIR="$_ia_root"
     INTEGRATION_RUN_ID="$_ia_run"
     export INTEGRATION_ARCHIVE_DIR INTEGRATION_RUN_ID
@@ -185,25 +188,53 @@ integration_sync() {
     _is_dry="$4"
     parallel_head_load "$_is_branch" || return 1
     _is_worktree="$PARALLEL_WORKTREE"
-    integration_require_clean "$_is_worktree" "head '$_is_branch'" || return 1
+    _is_integration_lock="integration_${PARALLEL_HEAD_ID}"
+    _is_gate_lock="gate_${PARALLEL_HEAD_ID}_${_is_gate}"
+    acquire_lock "$_is_integration_lock" "sync operation" "$PARALLEL_HEAD_ID" || return 1
+    acquire_lock "$_is_gate_lock" "sync gate barrier" "$PARALLEL_HEAD_ID" || {
+        release_lock "$_is_integration_lock"
+        return 1
+    }
+    integration_require_clean "$_is_worktree" "head '$_is_branch'" || {
+        integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
+        return 1
+    }
     integration_gate_approved "$_is_branch" "$_is_gate" || {
         echo "Error: gate '$_is_gate' is not both passing and explicitly approved" >&2
+        integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
         return 1
     }
     _is_source_commit="$(git -C "$_is_worktree" rev-parse --verify "$_is_source^{commit}" 2>/dev/null)" || {
         echo "Error: source ref '$_is_source' is unavailable" >&2
+        integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
         return 1
     }
     if [ "$_is_dry" -eq 1 ]; then
         integration_merge_dry_run "$_is_worktree" HEAD "$_is_source_commit"
-        return $?
+        _is_status=$?
+        integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
+        return "$_is_status"
     fi
-    integration_archive "$_is_branch" sync "$_is_source_commit" || return 1
+    if ! integration_require_clean "$_is_worktree" "head '$_is_branch'" || \
+       ! integration_gate_approved "$_is_branch" "$_is_gate"; then
+        echo "Error: sync preflight changed before merge; nothing was changed" >&2
+        integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
+        return 1
+    fi
+    integration_archive_locked "$_is_branch" sync "$_is_source_commit" || {
+        integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
+        return 1
+    }
     _is_pre="$(git -C "$_is_worktree" rev-parse HEAD)"
     if git -C "$_is_worktree" merge --no-edit "$_is_source_commit" \
         > "$INTEGRATION_ARCHIVE_DIR/merge.stdout" 2> "$INTEGRATION_ARCHIVE_DIR/merge.stderr"; then
-        state_v2_write_scalar "$PARALLEL_HEAD_DIR/base-ref" "$_is_source_commit" || return 1
-        state_v2_write_scalar "$INTEGRATION_ARCHIVE_DIR/result" success || return 1
+        if ! state_v2_write_scalar "$PARALLEL_HEAD_DIR/base-ref" "$_is_source_commit" || \
+           ! state_v2_write_scalar "$INTEGRATION_ARCHIVE_DIR/result" success; then
+            integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
+            echo "Error: sync merged but durable result recording requires recovery; archive: $INTEGRATION_ARCHIVE_DIR" >&2
+            return 1
+        fi
+        integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
         printf '%s\n' "$INTEGRATION_RUN_ID"
         return 0
     fi
@@ -211,10 +242,12 @@ integration_sync() {
     if [ "$(git -C "$_is_worktree" rev-parse HEAD)" != "$_is_pre" ] || \
        [ -n "$(git -C "$_is_worktree" status --porcelain=v1)" ]; then
         state_v2_write_scalar "$INTEGRATION_ARCHIVE_DIR/result" recovery-required || true
+        integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
         echo "Error: sync failed and automatic recovery is incomplete; archive: $INTEGRATION_ARCHIVE_DIR" >&2
         return 1
     fi
     state_v2_write_scalar "$INTEGRATION_ARCHIVE_DIR/result" recovered || true
+    integration_release_locks "$_is_gate_lock" "$_is_integration_lock"
     echo "Error: sync conflict was aborted; head restored; archive: $INTEGRATION_ARCHIVE_DIR" >&2
     return 1
 }
@@ -227,24 +260,62 @@ integration_land() {
     _il_keep="$5"
     parallel_head_load "$_il_branch" || return 1
     _il_source_worktree="$PARALLEL_WORKTREE"
-    _il_source_ref="$(git -C "$_il_source_worktree" rev-parse HEAD)" || return 1
     _il_target_worktree="$(get_repo_root)" || return 1
+    _il_integration_lock="integration_${PARALLEL_HEAD_ID}"
+    _il_target_lock="integration_target_${LIFECYCLE_PROJECT_ID}"
+    _il_gate_lock="gate_${PARALLEL_HEAD_ID}_${_il_gate}"
+    acquire_lock "$_il_integration_lock" "land source operation" "$PARALLEL_HEAD_ID" || return 1
+    acquire_lock "$_il_target_lock" "land target operation" "$PARALLEL_HEAD_ID" || {
+        release_lock "$_il_integration_lock"
+        return 1
+    }
+    acquire_lock "$_il_gate_lock" "land gate barrier" "$PARALLEL_HEAD_ID" || {
+        integration_release_locks "$_il_target_lock" "$_il_integration_lock"
+        return 1
+    }
     _il_current="$(git -C "$_il_target_worktree" branch --show-current)"
     [ "$_il_current" = "$_il_target" ] || {
         echo "Error: land target '$_il_target' is not the current branch '$_il_current'" >&2
+        integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
         return 1
     }
-    integration_require_clean "$_il_source_worktree" "source head '$_il_branch'" || return 1
-    integration_require_clean "$_il_target_worktree" "target branch '$_il_target'" || return 1
+    integration_require_clean "$_il_source_worktree" "source head '$_il_branch'" || {
+        integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
+        return 1
+    }
+    integration_require_clean "$_il_target_worktree" "target branch '$_il_target'" || {
+        integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
+        return 1
+    }
     integration_gate_approved "$_il_branch" "$_il_gate" || {
         echo "Error: gate '$_il_gate' is not both passing and explicitly approved" >&2
+        integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
+        return 1
+    }
+    _il_source_ref="$(git -C "$_il_source_worktree" rev-parse HEAD)" || {
+        integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
         return 1
     }
     if [ "$_il_dry" -eq 1 ]; then
         integration_merge_dry_run "$_il_target_worktree" HEAD "$_il_source_ref"
-        return $?
+        _il_status=$?
+        integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
+        return "$_il_status"
     fi
-    integration_archive "$_il_branch" land "$_il_target" || return 1
+    _il_current="$(git -C "$_il_target_worktree" branch --show-current)"
+    if [ "$_il_current" != "$_il_target" ] || \
+       ! integration_require_clean "$_il_source_worktree" "source head '$_il_branch'" || \
+       ! integration_require_clean "$_il_target_worktree" "target branch '$_il_target'" || \
+       ! integration_gate_approved "$_il_branch" "$_il_gate" || \
+       [ "$(git -C "$_il_source_worktree" rev-parse HEAD)" != "$_il_source_ref" ]; then
+        echo "Error: land preflight changed before merge; nothing was changed" >&2
+        integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
+        return 1
+    fi
+    integration_archive_locked "$_il_branch" land "$_il_target" || {
+        integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
+        return 1
+    }
     _il_pre="$(git -C "$_il_target_worktree" rev-parse HEAD)"
     if ! git -C "$_il_target_worktree" merge --no-ff --no-edit "$_il_source_ref" \
         > "$INTEGRATION_ARCHIVE_DIR/merge.stdout" 2> "$INTEGRATION_ARCHIVE_DIR/merge.stderr"; then
@@ -252,14 +323,21 @@ integration_land() {
         if [ "$(git -C "$_il_target_worktree" rev-parse HEAD)" != "$_il_pre" ] || \
            [ -n "$(git -C "$_il_target_worktree" status --porcelain=v1)" ]; then
             state_v2_write_scalar "$INTEGRATION_ARCHIVE_DIR/result" recovery-required || true
+            integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
             echo "Error: land failed and automatic recovery is incomplete; archive: $INTEGRATION_ARCHIVE_DIR" >&2
             return 1
         fi
         state_v2_write_scalar "$INTEGRATION_ARCHIVE_DIR/result" recovered || true
+        integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
         echo "Error: land conflict was aborted; target restored; archive: $INTEGRATION_ARCHIVE_DIR" >&2
         return 1
     fi
-    state_v2_write_scalar "$INTEGRATION_ARCHIVE_DIR/result" success || return 1
+    if ! state_v2_write_scalar "$INTEGRATION_ARCHIVE_DIR/result" success; then
+        integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
+        echo "Error: land merged but durable result recording requires recovery; archive: $INTEGRATION_ARCHIVE_DIR" >&2
+        return 1
+    fi
+    integration_release_locks "$_il_gate_lock" "$_il_target_lock" "$_il_integration_lock"
     if [ "$_il_keep" -eq 0 ]; then
         _il_session="$(sed -n '1p' "$PARALLEL_HEAD_DIR/session")"
         kill_single_head "$_il_branch" "$_il_session" || {

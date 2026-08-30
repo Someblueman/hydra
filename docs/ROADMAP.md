@@ -113,11 +113,11 @@ Hydra will not:
 
 ---
 
-## 4. Current Baseline
+## 4. Historical Baseline and Delivered Foundations
 
-### 4.1 Shipped: 1.5.0
+### 4.1 Historical shipped baseline: 1.5.0
 
-Hydra 1.5.0 is released. The current repository contains:
+At the 1.5.0 tag, the repository contained:
 
 - a single POSIX shell command dispatcher in [`bin/hydra`](../bin/hydra);
 - modular command, state, tmux, TUI, Git, maintenance, and workflow-adjacent shell
@@ -129,8 +129,9 @@ Hydra 1.5.0 is released. The current repository contains:
 - shell lint and tests through the current [`Makefile`](../Makefile) and
   [CI workflow](../.github/workflows/ci.yml).
 
-The repository does not yet contain `src/`, `tests/c/`, a C build target, native
-artifacts, native-aware installation, or native CI.
+That tag did not contain `src/`, `tests/c/`, a C build target, native artifacts,
+native-aware installation, or native CI. Those capabilities are delivered by the
+1.7.0 scope below.
 
 ### 4.2 Known hardening work carried into 1.5.1
 
@@ -160,7 +161,7 @@ artifacts, native-aware installation, or native CI.
       repository.
 - [x] Document exactly which 1.5.0 behaviors are considered public contracts.
 
-### 4.3 Current onboarding friction
+### 4.3 Historical onboarding friction addressed in 1.5.2
 
 - The documented installer and Make target assume root access and hard-code
   `/usr/local` rather than accepting a user-writable prefix.
@@ -1302,8 +1303,8 @@ because adjacent products change quickly.
 
 | Claim category | Confidence | Basis and limitation |
 | --- | --- | --- |
-| Current 1.5.0 baseline and missing native infrastructure | High | Direct inspection of the tagged repository, build, install, CI, shell libraries, and tests |
-| Current installation and first-run friction | High | Direct inspection of README Quick Start, installer, Makefile, spawn defaults, doctor checks, and integration tests |
+| Historical 1.5.0 baseline and missing native infrastructure | High | Direct inspection of the 1.5.0 tagged repository, build, install, CI, shell libraries, and tests |
+| Historical installation and first-run friction addressed in 1.5.2 | High | Direct inspection of the earlier README Quick Start, installer, Makefile, spawn defaults, doctor checks, and integration tests |
 | Cross-repository identity, locking, parsing, and lifecycle gaps | High | Directly implied by current global branch-keyed state and mixed-format roadmap proposals |
 | 1.5.1 kill, regenerate, queue, JSON, locking, and repository-hygiene defects | High | Direct inspection of the current shell implementation and repository state |
 | Read-heavy and terminal-oriented C boundary | High | Matches the current subprocess-heavy TUI and avoids duplicate mutation policy |

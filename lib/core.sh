@@ -49,6 +49,15 @@ hydra_core_path() {
 }
 
 # Writes captured stdout/stderr into the supplied directory and returns 124 on timeout.
+hydra_core_signal_tree() (
+    _hcst_pid="$1"
+    _hcst_signal="$2"
+    for _hcst_child in $(ps -eo pid=,ppid= 2>/dev/null | awk -v parent="$_hcst_pid" '$2 == parent { print $1 }'); do
+        hydra_core_signal_tree "$_hcst_child" "$_hcst_signal"
+    done
+    kill "-$_hcst_signal" "$_hcst_pid" 2>/dev/null || true
+)
+
 hydra_core_run_bounded() {
     _hcr_dir="$1"
     shift
@@ -65,9 +74,9 @@ hydra_core_run_bounded() {
         wait "$_hcr_sleep" || exit 0
         if kill -0 "$_hcr_pid" 2>/dev/null; then
             : > "$_hcr_dir/timed-out"
-            kill "$_hcr_pid" 2>/dev/null || true
+            hydra_core_signal_tree "$_hcr_pid" TERM
             sleep 1
-            kill -9 "$_hcr_pid" 2>/dev/null || true
+            hydra_core_signal_tree "$_hcr_pid" KILL
         fi
     ) >/dev/null 2>&1 &
     _hcr_watchdog=$!

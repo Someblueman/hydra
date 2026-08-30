@@ -96,6 +96,22 @@ assert_success $? "installed hydra doctor should succeed"
 assert_contains "$doc_out" "PREFIX install" "doctor should detect PREFIX layout"
 assert_contains "$doc_out" "$prefix1/lib/hydra" "doctor should name installed libraries"
 
+# Replace the installed binary with an older version marker, then reinstall into
+# the same prefix. User state lives outside PREFIX and must survive the upgrade.
+sed 's/HYDRA_VERSION="1.7.0"/HYDRA_VERSION="1.6.0"/' "$prefix1/bin/hydra" > "$prefix1/bin/hydra.upgrade"
+mv "$prefix1/bin/hydra.upgrade" "$prefix1/bin/hydra"
+chmod +x "$prefix1/bin/hydra"
+mkdir -p "$home1/.hydra"
+printf '%s\n' 'preserve-upgrade-state' > "$home1/.hydra/upgrade-marker"
+(
+    cd "$REPO_ROOT" || exit 1
+    PREFIX="$prefix1" HYDRA_INSTALL_CORE=never sh ./install.sh 2>&1
+) >/dev/null
+assert_success $? "install.sh should upgrade an existing PREFIX"
+upgrade_ver="$(HOME="$home1" HYDRA_ROOT='' HYDRA_HOME='' "$prefix1/bin/hydra" version 2>&1)"
+assert_contains "$upgrade_ver" "Hydra version 1.7.0" "upgrade replaces the older binary"
+assert_equal "preserve-upgrade-state" "$(sed -n '1p' "$home1/.hydra/upgrade-marker")" "upgrade preserves HYDRA_HOME state"
+
 un_out="$(
     cd "$REPO_ROOT" || exit 1
     PREFIX="$prefix1" sh ./uninstall.sh --purge 2>&1

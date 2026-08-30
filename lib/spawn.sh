@@ -262,8 +262,11 @@ spawn_single() {
     fi
 
     # Create worktree
+    project_worktree_lock="worktree_project_${project_id}"
+    acquire_lock "$project_worktree_lock" "spawn worktree creation" "$head_id" || return 1
     echo "Creating worktree for branch '$branch'..." >&2
     if ! create_worktree "$branch" "$worktree_path"; then
+        release_lock "$project_worktree_lock"
         return 1
     fi
 
@@ -273,6 +276,7 @@ spawn_single() {
         if [ -z "${HYDRA_SETUP_CONTINUE:-}" ]; then
             # Clean up worktree and abort
             delete_worktree "$worktree_path" 2>/dev/null || true
+            release_lock "$project_worktree_lock"
             return 1
         fi
         echo "Warning: Continuing despite setup failure (HYDRA_SETUP_CONTINUE set)" >&2
@@ -291,6 +295,7 @@ spawn_single() {
         # Release any reserved session name lock
         release_session_lock "$session" 2>/dev/null || true
         delete_worktree "$worktree_path" 2>/dev/null || true
+        release_lock "$project_worktree_lock"
         return 1
     fi
     # Release the reserved session name lock now that session is created
@@ -300,6 +305,7 @@ spawn_single() {
     if ! add_mapping "$branch" "$session" "${ai_tool:-}" "${group:-}" "$spawn_timestamp" "${deps:-}" "${pr_number:-}"; then
         echo "Error: Failed to save branch-session mapping" >&2
         spawn_rollback_session "$session" "$branch" "$worktree_path"
+        release_lock "$project_worktree_lock"
         return 1
     fi
 
@@ -309,8 +315,10 @@ spawn_single() {
         "$head_id" "$instance_id" "$worktree_path" "$task" "$base_ref" "$provider_session_id" "$scopes")" || {
         echo "Error: Failed to commit durable head state" >&2
         spawn_rollback_session "$session" "$branch" "$worktree_path"
+        release_lock "$project_worktree_lock"
         return 1
     }
+    release_lock "$project_worktree_lock"
     head_id="$committed_head"
     head_dir="$(state_v2_head_dir "$project_id" "$head_id")" || return 1
     lifecycle_write_head_scalar "$branch" completion-policy "$completion_policy" || {
