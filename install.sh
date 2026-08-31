@@ -12,6 +12,9 @@ usage() {
     echo "  HYDRA_INSTALL_CORE  auto (default), never, or required" >&2
     echo "  HYDRA_BUILD_CORE=1  build the optional core from this checkout" >&2
     echo "  HYDRA_CORE_ARTIFACT offline hydra-core path with adjacent metadata" >&2
+    echo "  HYDRA_INSTALL_TUI   auto (default), never, or required" >&2
+    echo "  HYDRA_BUILD_TUI=1   build the optional native TUI from this checkout" >&2
+    echo "  HYDRA_TUI_ARTIFACT  offline hydra-tui path with adjacent metadata" >&2
     echo "" >&2
     echo "Non-root example:" >&2
     echo "  PREFIX=\$HOME/.local ./install.sh" >&2
@@ -49,11 +52,19 @@ BIN_DIR="${DESTDIR}${PREFIX}/bin"
 LIB_DIR="${DESTDIR}${PREFIX}/lib/hydra"
 CORE_DIR="${DESTDIR}${PREFIX}/libexec/hydra"
 CORE_MODE="${HYDRA_INSTALL_CORE:-auto}"
+TUI_MODE="${HYDRA_INSTALL_TUI:-auto}"
 
 case "$CORE_MODE" in
     auto|never|required) ;;
     *)
         echo "Error: HYDRA_INSTALL_CORE must be auto, never, or required" >&2
+        exit 1
+        ;;
+esac
+case "$TUI_MODE" in
+    auto|never|required) ;;
+    *)
+        echo "Error: HYDRA_INSTALL_TUI must be auto, never, or required" >&2
         exit 1
         ;;
 esac
@@ -229,6 +240,110 @@ if [ -n "$CORE_SOURCE" ]; then
     fi
 fi
 
+TUI_SOURCE=""
+TUI_CHECKSUM=""
+TUI_PLATFORM=""
+TUI_DEPENDENCIES=""
+TUI_SOURCE_REF=""
+if [ "$TUI_MODE" != never ]; then
+    if [ "${HYDRA_BUILD_TUI:-0}" = 1 ]; then
+        echo "Building optional native mission-control TUI..."
+        make -C "$SCRIPT_DIR" build-tui
+    fi
+    if [ -n "${HYDRA_TUI_ARTIFACT:-}" ]; then
+        TUI_SOURCE="$HYDRA_TUI_ARTIFACT"
+        TUI_CHECKSUM="$TUI_SOURCE.sha256"
+        TUI_PLATFORM="$TUI_SOURCE.platform"
+        TUI_DEPENDENCIES="$TUI_SOURCE.dependencies"
+        TUI_SOURCE_REF="$TUI_SOURCE.source"
+        for metadata in "$TUI_CHECKSUM" "$TUI_PLATFORM" "$TUI_DEPENDENCIES" "$TUI_SOURCE_REF"; do
+            if [ ! -f "$metadata" ]; then
+                echo "Error: offline native TUI artifact metadata is missing: $metadata" >&2
+                exit 1
+            fi
+        done
+    elif [ -x "$SCRIPT_DIR/build/hydra-tui" ]; then
+        TUI_SOURCE="$SCRIPT_DIR/build/hydra-tui"
+    fi
+fi
+
+if [ "$TUI_MODE" = required ] && [ -z "$TUI_SOURCE" ]; then
+    echo "Error: native TUI is required but no artifact is available" >&2
+    echo "Next: set HYDRA_BUILD_TUI=1 or HYDRA_TUI_ARTIFACT=/path/to/hydra-tui" >&2
+    exit 1
+fi
+
+if [ -n "$TUI_SOURCE" ]; then
+    [ -x "$TUI_SOURCE" ] || {
+        echo "Error: native TUI artifact is not executable: $TUI_SOURCE" >&2
+        exit 1
+    }
+    ensure_writable "$CORE_DIR"
+    expected_platform="$(uname -s) $(uname -m)"
+    if [ -n "$TUI_PLATFORM" ] && [ "$(sed -n '1p' "$TUI_PLATFORM")" != "$expected_platform" ]; then
+        echo "Error: native TUI artifact platform does not match this host" >&2
+        exit 1
+    fi
+    if [ -n "$TUI_CHECKSUM" ]; then
+        expected_hash="$(awk 'NR == 1 {print $1}' "$TUI_CHECKSUM")"
+        actual_hash="$(core_hash "$TUI_SOURCE")"
+        if [ -z "$expected_hash" ] || [ "$actual_hash" != "$expected_hash" ]; then
+            echo "Error: native TUI artifact checksum verification failed" >&2
+            exit 1
+        fi
+    else
+        actual_hash="$(core_hash "$TUI_SOURCE")"
+    fi
+    if [ "$("$TUI_SOURCE" --protocol-version 2>/dev/null || true)" != 2 ] || \
+       [ "$("$TUI_SOURCE" --version 2>/dev/null || true)" != "Hydra TUI $HYDRA_VERSION protocol 2" ]; then
+        echo "Error: native TUI artifact version handshake failed" >&2
+        exit 1
+    fi
+
+    tui_stage="$(mktemp "$CORE_DIR/.hydra-tui.XXXXXX")"
+    tui_checksum_stage="$tui_stage.sha256"
+    tui_platform_stage="$tui_stage.platform"
+    tui_dependencies_stage="$tui_stage.dependencies"
+    tui_source_stage="$tui_stage.source"
+    cp "$TUI_SOURCE" "$tui_stage"
+    chmod +x "$tui_stage"
+    printf '%s  hydra-tui\n' "$actual_hash" > "$tui_checksum_stage"
+    printf '%s\n' "$expected_platform" > "$tui_platform_stage"
+    if [ -n "$TUI_SOURCE_REF" ]; then
+        cp "$TUI_SOURCE_REF" "$tui_source_stage"
+    elif source_commit="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null)"; then
+        printf '%s\n' "$source_commit" > "$tui_source_stage"
+    else
+        printf 'hydra-%s-source-tree\n' "$HYDRA_VERSION" > "$tui_source_stage"
+    fi
+    if [ -n "$TUI_DEPENDENCIES" ]; then
+        cp "$TUI_DEPENDENCIES" "$tui_dependencies_stage"
+    elif command -v otool >/dev/null 2>&1; then
+        otool -L "$tui_stage" > "$tui_dependencies_stage"
+    elif command -v ldd >/dev/null 2>&1; then
+        ldd "$tui_stage" > "$tui_dependencies_stage"
+    else
+        printf 'dependency inspection unavailable on %s\n' "$expected_platform" > "$tui_dependencies_stage"
+    fi
+    for installed in hydra-tui hydra-tui.sha256 hydra-tui.platform hydra-tui.dependencies hydra-tui.source; do
+        if [ -e "$CORE_DIR/$installed" ]; then mv -f "$CORE_DIR/$installed" "$CORE_DIR/$installed.rollback"; fi
+    done
+    if mv "$tui_stage" "$CORE_DIR/hydra-tui" && \
+       mv "$tui_checksum_stage" "$CORE_DIR/hydra-tui.sha256" && \
+       mv "$tui_platform_stage" "$CORE_DIR/hydra-tui.platform" && \
+       mv "$tui_source_stage" "$CORE_DIR/hydra-tui.source" && \
+       mv "$tui_dependencies_stage" "$CORE_DIR/hydra-tui.dependencies"; then
+        echo "Installed optional native TUI for $expected_platform"
+    else
+        echo "Error: native TUI artifact replacement failed; restoring prior TUI" >&2
+        for installed in hydra-tui hydra-tui.sha256 hydra-tui.platform hydra-tui.dependencies hydra-tui.source; do
+            rm -f "$CORE_DIR/$installed"
+            [ ! -e "$CORE_DIR/$installed.rollback" ] || mv -f "$CORE_DIR/$installed.rollback" "$CORE_DIR/$installed"
+        done
+        exit 1
+    fi
+fi
+
 if [ ! -x "$BIN_DIR/hydra" ]; then
     echo "Error: Installation failed: $BIN_DIR/hydra is not executable" >&2
     echo "Next: PREFIX=\$HOME/.local $0 or see README Quick Start" >&2
@@ -258,6 +373,7 @@ echo "$ver_out"
 echo "Binary: $BIN_DIR/hydra"
 echo "Libraries: $LIB_DIR"
 [ -z "$CORE_SOURCE" ] || echo "Native core: $CORE_DIR/hydra-core"
+[ -z "$TUI_SOURCE" ] || echo "Native TUI: $CORE_DIR/hydra-tui"
 echo ""
 echo "Run 'hydra doctor' to verify readiness, or see README Quick Start."
 echo ""

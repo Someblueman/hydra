@@ -115,6 +115,50 @@ tui_main_loop() {
 # Usage: cmd_tui
 # Returns: 0 on success, 1 on failure
 cmd_tui() {
+    case "${1:-}" in
+        --basic)
+            shift
+            [ $# -eq 0 ] || {
+                echo "Error: hydra tui --basic does not accept additional arguments" >&2
+                return 2
+            }
+            ;;
+        --native)
+            shift
+            tui_native_run "$@"
+            return $?
+            ;;
+        --capabilities)
+            shift
+            if [ "${1:-}" = --json ]; then
+                shift
+                [ $# -eq 0 ] || return 2
+                tui_native_capabilities 1
+            else
+                [ $# -eq 0 ] || return 2
+                tui_native_capabilities 0
+            fi
+            return $?
+            ;;
+        --data)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_emit_data
+            return $?
+            ;;
+        --headless-fixture)
+            shift
+            tui_native_exec --headless-fixture "$@"
+            return $?
+            ;;
+        '') ;;
+        *)
+            echo "Error: unknown TUI option '$1'" >&2
+            echo "Usage: hydra tui [--basic|--native|--capabilities [--json]|--headless-fixture FILE ...]" >&2
+            return 2
+            ;;
+    esac
+
     # Check if in terminal
     if [ ! -t 0 ] || [ ! -t 1 ]; then
         echo "Error: TUI requires an interactive terminal" >&2

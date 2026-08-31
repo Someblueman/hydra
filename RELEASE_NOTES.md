@@ -1,83 +1,83 @@
-# Hydra v1.7.0 Release Notes
+# Hydra v1.8.0 Release Notes
 
 **Release date:** 2026-08-30
 
 ## Highlights
 
-Hydra 1.7.0 makes parallel heads safer to coordinate and proves a small optional
-native acceleration without moving mutation or policy out of the shell CLI.
+Hydra 1.8.0 adds optional native mission control over the lifecycle and coordination
+contracts established in 1.6 and 1.7. The shell CLI remains the mutation authority,
+and the maintained basic shell TUI remains the default through the first patch
+release.
 
-Shell-only installation remains fully supported. No compiler, native artifact, or
-background daemon is required.
+## Native mission control
 
-## Parallel safety
+- `hydra tui --native` provides head list/detail, coordination, and recovery views,
+  keyboard navigation and search, selected-pane preview, and a fixed local-action
+  palette.
+- Declared outcome, observed status and confidence, liveness, stale state, and
+  unavailable state remain visibly distinct. Event, signal, message, gate, claim,
+  scope, queue, resource, diff, and approval counts come from inspectable records.
+- Native mutations use argv-safe execution of the shell CLI. There is no command
+  string interpolation, natural-language command parser, native state writer, or
+  native notification delivery.
+- Recovery findings cover malformed state, stale same-host locks, dead sessions,
+  orphan worktrees, interrupted transitions, and teardown failures without applying
+  recovery automatically.
 
-- `claim`, `scope`, and `collision` expose intent, accepted change boundaries, and
-  claim/overlap/predicted/observed conflict evidence without presenting overlap as a
-  guaranteed conflict or scope as a sandbox.
-- Locked per-head ports, Compose names, and database names are unique and released
-  during successful teardown.
-- Verification command evidence and human approval are separate, and approval is
-  valid only for the exact verified commit and worktree status.
-- Typed context packs include only selected diffs, hashed file manifests, notes,
-  bounded history, and artifact references; likely secret paths are rejected.
+## Terminal and fallback behavior
 
-## Guarded integration and recovery
+- `hydra tui` and `hydra tui --basic` use the existing shell TUI. `--native` is an
+  explicit opt-in; `--capabilities` explains availability and dispatch policy.
+- The native UI restores terminal state on normal exit and termination signals,
+  clips narrow/resize layouts, works without color, and fails clearly for `TERM=dumb`
+  or non-TTY input/output.
+- Pane and fixture data are untrusted. Control and invalid bytes are replaced before
+  rendering; paste, escape sequences, preview bytes, and record counts are bounded.
+- The production refresh path uses bounded polling. The tmux control-mode prototype
+  did not yet prove reconnect and flow-control reliability, so it is not enabled.
 
-- `sync` and `land` require clean worktrees and current approved gates, simulate
-  merges, archive the prior commit and a Git bundle, and abort conflicts back to the
-  exact clean pre-operation commit.
-- `du` separates worktree and state usage. Named `gc` policies and worktree doctor
-  actions default to dry-run and preserve dirty/untracked work unless separately
-  authorized.
+## Build and installation
 
-## Optional read-only native core
+```sh
+make build-tui test-tui
+make sanitize
 
-- Protocol v1 accepts only capability reporting, state/event validation, canonical
-  JSON encoding, and snapshot aggregation. Shell remains the mutation authority.
-- `hydra snapshot --native` is explicit. Absence, protocol or release-version skew,
-  crash, timeout, malformed output, and permissions all fall back to byte-equivalent
-  shell output.
-- Offline artifacts carry checksum, OS/architecture, and dependency metadata and are
-  verified against exact Hydra/core version agreement before atomic replacement.
-- The reproducible 20-head macOS arm64 benchmark measured native snapshot p95 at 84
-  ms versus 5459 ms for shell in that run. This claim applies only to snapshot.
+HYDRA_INSTALL_TUI=required HYDRA_BUILD_TUI=1 \
+  PREFIX=$HOME/.local ./install.sh
+```
 
-## Upgrade from 1.6.x
+Offline TUI artifacts carry checksum, OS/architecture, dependency, and source
+metadata and receive exact version/protocol verification before atomic replacement.
+Use `HYDRA_INSTALL_TUI=never` for a shell-only installation.
 
-Install the new version using the same prefix as the existing installation:
+## Upgrade from 1.7.x
 
 ```sh
 git pull
 PREFIX=$HOME/.local ./install.sh
-hydra version                      # should show 1.7.0
-hydra doctor
+hydra version                 # should show 1.8.0
+hydra tui --capabilities
+hydra tui --basic             # unchanged fallback
 ```
 
-No state migration is required from 1.6. To build and install the optional helper:
+No state migration is required from 1.7. The native TUI consumes the existing shell
+and state-v2 contracts.
 
-```sh
-HYDRA_INSTALL_CORE=required HYDRA_BUILD_CORE=1 \
-  PREFIX=$HOME/.local ./install.sh
-hydra snapshot --native
-```
-
-## Validation and documentation
-
-Run the release gates from the repository root:
+## Validation
 
 ```sh
 git diff --check
 make lint
-make test
 make test-all
-make test-install test-native-install smoke-onboarding
+make sanitize
 ```
 
-Parallel safety, native architecture/distribution, protocol, versioning, and the
-tmux control-mode prototype are documented under [`docs/`](docs/).
+The deterministic terminal lane uses `hydra tui --headless-fixture` at explicit
+sizes and frame counts. Hosted exact-candidate CI and manual terminal/accessibility
+review remain release-publication evidence, separate from local implementation.
 
 ## Deferred
 
-Native writes, native workflow policy/YAML, a public C ABI, the native TUI, general
-workflows, and fleet operations remain deferred.
+Native-by-default dispatch, tmux control-mode production observation, mouse support,
+animations, themes, workflow editing, fleet view, and natural-language commands
+remain deferred.

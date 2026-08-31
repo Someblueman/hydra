@@ -476,18 +476,22 @@ sparklines, and advanced visualization are post-MVP.
 
 Before native-by-default dispatch:
 
-- [ ] SIGINT, SIGTERM, SIGHUP, normal exit, and internal error restore terminal state.
-- [ ] `TERM=dumb`, missing color support, non-TTY stdin/stdout, and broken pipes fail
+- [x] SIGINT, SIGTERM, SIGHUP, normal exit, and internal error restore terminal state.
+- [x] `TERM=dumb`, missing color support, non-TTY stdin/stdout, and broken pipes fail
       cleanly or dispatch to the shell fallback.
-- [ ] Resize races and narrow terminals are covered.
-- [ ] UTF-8, invalid byte sequences, combining characters, and wide characters do
+- [x] Resize races and narrow terminals are covered.
+- [x] UTF-8, invalid byte sequences, combining characters, and wide characters do
       not corrupt the renderer or memory.
-- [ ] Escape-sequence ambiguity, bracketed paste, mouse input, and timeouts are
+- [x] Escape-sequence ambiguity, bracketed paste, mouse input, and timeouts are
       bounded even when optional features are disabled.
-- [ ] Pane output is treated as untrusted terminal data and cannot inject commands
+- [x] Pane output is treated as untrusted terminal data and cannot inject commands
       into Hydra's input parser.
-- [ ] A deterministic headless fixture mode renders a fixed number of frames at an
+- [x] A deterministic headless fixture mode renders a fixed number of frames at an
       explicit terminal size without depending on platform-specific `script(1)`.
+
+These checks are covered by deterministic fixture tests plus the real pseudo-terminal
+harness in `tests/c/test_tui_pty.c`. The separate 1.8 release gate still requires the
+same acceptance to pass hosted Linux and macOS CI for the exact candidate commit.
 
 ---
 
@@ -788,36 +792,36 @@ native acceleration over stable contracts.
 
 #### Scope
 
-- [ ] Implement the terminal-safe native TUI MVP from section 6.6.
-- [ ] Use tmux control mode if the prototype met reliability and performance gates;
+- [x] Implement the terminal-safe native TUI MVP from section 6.6.
+- [x] Use tmux control mode if the prototype met reliability and performance gates;
       otherwise use measured bounded polling.
-- [ ] Show declared, observed, liveness, stale, and unavailable status distinctly.
-- [ ] Show event, signal, message, and gate summaries without inventing agent state.
-- [ ] Add claims, collision, scope, queue, resource, Git-diff, and approval views over
+- [x] Show declared, observed, liveness, stale, and unavailable status distinctly.
+- [x] Show event, signal, message, and gate summaries without inventing agent state.
+- [x] Add claims, collision, scope, queue, resource, Git-diff, and approval views over
       existing CLI/state contracts.
-- [ ] Delegate all mutations to the shell CLI with argument-safe execution.
-- [ ] Add command palette search over explicit local actions, not a natural-language
+- [x] Delegate all mutations to the shell CLI with argument-safe execution.
+- [x] Add command palette search over explicit local actions, not a natural-language
       command interpreter.
-- [ ] Add a recovery board for stale locks, dead sessions, orphan worktrees, teardown
+- [x] Add a recovery board for stale locks, dead sessions, orphan worktrees, teardown
       failures, and interrupted lifecycle transitions.
-- [ ] Surface existing notification and adapter capability status without making the
+- [x] Surface existing notification and adapter capability status without making the
       TUI responsible for delivering lifecycle events.
-- [ ] Add `hydra tui --native`, `hydra tui --basic`, capability diagnostics, and the
+- [x] Add `hydra tui --native`, `hydra tui --basic`, capability diagnostics, and the
       deterministic headless fixture mode.
-- [ ] Keep native dispatch opt-in through the first patch release.
-- [ ] Publish native/basic TUI behavior, fallback, keymap, accessibility, and recovery
+- [x] Keep native dispatch opt-in through the first patch release.
+- [x] Publish native/basic TUI behavior, fallback, keymap, accessibility, and recovery
       documentation.
 
 #### Release gates
 
-- Terminal acceptance in section 6.7 passes on the supported platform matrix.
-- Native and shell lists agree for clean, stale, malformed, and changing state.
-- Native crashes do not corrupt state or leave the terminal unusable.
-- Interactive latency and CPU usage meet measured budgets at 5, 20, and 100 heads.
-- A manual accessibility review covers keyboard-only use, no-color mode, narrow
+- [ ] Terminal acceptance in section 6.7 passes on the supported platform matrix.
+- [x] Native and shell lists agree for clean, stale, malformed, and changing state.
+- [x] Native crashes do not corrupt state or leave the terminal unusable.
+- [x] Interactive latency and CPU usage meet measured budgets at 5, 20, and 100 heads.
+- [x] A manual accessibility review covers keyboard-only use, no-color mode, narrow
   terminals, and readable status language.
-- Every dashboard state links to its inspectable source record and confidence.
-- Basic shell TUI data and actions remain functional without native files; native
+- [x] Every dashboard state links to its inspectable source record and confidence.
+- [x] Basic shell TUI data and actions remain functional without native files; native
   render-only features do not require shell reimplementation.
 
 #### Deferred

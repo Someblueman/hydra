@@ -74,6 +74,12 @@ branch  session  ai  status  tag  activity  group  pr
 
 `status` is `ALIVE` or `DEAD`. `activity` is `BUSY`, `IDLE`, or `-`.
 
+Hydra 1.8 keeps that basic shell TUI and adds an internal escaped-tabular protocol
+between `hydra tui --data` and `hydra-tui`. It begins with `HYDRA_TUI<TAB>2` and
+contains bounded `H` head and `R` recovery records. Native dispatch is opt-in in
+1.8.0. The native process delegates mutations to the shell executable with an argv;
+the tabular adapter is not a general automation API.
+
 ## tmux send-keys
 
 Startup commands and agent launch target `session:0.0`, not the active pane.

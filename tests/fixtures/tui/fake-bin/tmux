@@ -1,0 +1,31 @@
+#!/bin/sh
+
+if [ -n "${HYDRA_TEST_TMUX_SOCKET:-}" ] && [ -n "${HYDRA_REAL_TMUX:-}" ]; then
+    exec "$HYDRA_REAL_TMUX" -L "$HYDRA_TEST_TMUX_SOCKET" "$@"
+fi
+
+case "${1:-}" in
+    -V) printf 'tmux 3.4\n' ;;
+    list-sessions)
+        printf '%s' "${FAKE_TMUX_SESSIONS:-}" | tr ',' '\n'
+        ;;
+    list-panes)
+        printf '%s' "${FAKE_TMUX_SESSIONS:-}" | tr ',' '\n' | while IFS= read -r session; do
+            [ -n "$session" ] || continue
+            printf '%s\t0\t0\t0\tsh\t0\n' "$session"
+        done
+        ;;
+    display-message) exit 0 ;;
+    has-session)
+        wanted=""
+        while [ $# -gt 0 ]; do
+            if [ "$1" = -t ] && [ $# -ge 2 ]; then wanted="$2"; break; fi
+            shift
+        done
+        printf '%s' "${FAKE_TMUX_SESSIONS:-}" | tr ',' '\n' | grep -Fqx "$wanted"
+        ;;
+    capture-pane)
+        printf 'pane text q :kill \033[2J remains display-only\n'
+        ;;
+    *) exit 1 ;;
+esac

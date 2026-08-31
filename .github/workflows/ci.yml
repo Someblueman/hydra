@@ -90,7 +90,7 @@ jobs:
         done
 
   native:
-    name: Native Core (${{ matrix.os }})
+    name: Native Core and TUI (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: lint
     strategy:
@@ -108,13 +108,15 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: brew install tmux shellcheck
 
-    - name: Build and test native protocol
-      run: make build-core test-c test-parity
+    - name: Build and test native protocol and mission control
+      run: make build-core build-tui test-c test-tui test-tui-pty test-parity
 
     - name: Package exact source commit
       run: |
         package_dir="$(make package-core | tail -n 1)"
         test "$(cat "$package_dir/hydra-core.source")" = "$(git rev-parse HEAD)"
+        tui_package_dir="$(make package-tui | tail -n 1)"
+        test "$(cat "$tui_package_dir/hydra-tui.source")" = "$(git rev-parse HEAD)"
 
     - name: Run sanitizer tests
       run: make sanitize
