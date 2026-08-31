@@ -334,10 +334,26 @@ cmd_list() {
 }
 
 cmd_switch() {
+    if [ "$#" -gt 1 ]; then
+        cli_error switch invalid_input "Expected at most one branch" "run hydra switch [branch]"
+        return 1
+    fi
+
     # Interactive session switcher
     if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
         echo "No active Hydra heads to switch to"
         return 1
+    fi
+
+    if [ "$#" -eq 1 ]; then
+        _cs_branch="$1"
+        _cs_session="$(get_session_for_branch "$_cs_branch" 2>/dev/null || true)"
+        if [ -z "$_cs_session" ]; then
+            cli_error switch not_found "No Hydra head found for branch '$_cs_branch'" "run hydra list"
+            return 1
+        fi
+        switch_to_session "$_cs_session"
+        return $?
     fi
 
     # If inside tmux, use tmux's interactive switcher

@@ -65,6 +65,9 @@ static struct app *active_app;
 static volatile sig_atomic_t stop_requested;
 static volatile sig_atomic_t stop_signal;
 
+static struct head *selected_head(struct app *app);
+static void retarget_selection(struct app *app);
+
 static void copy_text(char *dst, size_t size, const char *src) {
     if (size == 0U) return;
     snprintf(dst, size, "%s", src == NULL ? "" : src);
@@ -308,7 +311,9 @@ static void capture_preview(struct app *app) {
     bool timed_out = false;
     char *argv[8];
     if (!app->preview || app->model.head_count == 0U) return;
-    snprintf(target, sizeof(target), "%s:0.0", app->model.heads[app->selected].session);
+    retarget_selection(app);
+    if (selected_head(app) == NULL) return;
+    snprintf(target, sizeof(target), "%s:0.0", selected_head(app)->session);
     argv[0] = (char *)"tmux"; argv[1] = (char *)"capture-pane"; argv[2] = (char *)"-p";
     argv[3] = (char *)"-S"; argv[4] = (char *)"-8"; argv[5] = (char *)"-t";
     argv[6] = target; argv[7] = NULL;
@@ -451,9 +456,52 @@ static bool head_matches(const struct head *head, const char *search) {
            strstr(head->group, search) != NULL || strstr(head->profile, search) != NULL;
 }
 
+static struct head *selected_head(struct app *app) {
+    if (app->selected >= app->model.head_count) return NULL;
+    if (!head_matches(&app->model.heads[app->selected], app->search)) return NULL;
+    return &app->model.heads[app->selected];
+}
+
+static void retarget_selection(struct app *app) {
+    size_t index;
+    if (selected_head(app) != NULL) return;
+    for (index = 0U; index < app->model.head_count; index++) {
+        if (head_matches(&app->model.heads[index], app->search)) {
+            app->selected = index;
+            return;
+        }
+    }
+    app->selected = app->model.head_count;
+}
+
+static void move_selection(struct app *app, int direction) {
+    size_t index;
+    retarget_selection(app);
+    if (selected_head(app) == NULL) return;
+    if (direction > 0) {
+        for (index = app->selected + 1U; index < app->model.head_count; index++) {
+            if (head_matches(&app->model.heads[index], app->search)) {
+                app->selected = index;
+                return;
+            }
+        }
+    } else {
+        index = app->selected;
+        while (index > 0U) {
+            index--;
+            if (head_matches(&app->model.heads[index], app->search)) {
+                app->selected = index;
+                return;
+            }
+        }
+    }
+}
+
 static void render_list(struct app *app) {
     size_t index;
+    size_t visible = 0U;
     int available = app->rows - 7;
+    retarget_selection(app);
     if (app->cols < 80) linef(app, "HEADS  status       branch");
     else linef(app, "HEADS  status      declared       observed/confidence      branch");
     for (index = 0U; index < app->model.head_count && available > 0; index++) {
@@ -467,15 +515,16 @@ static void render_list(struct app *app) {
                   head->declared[0] == '\0' ? "none" : head->declared,
                   head->observed, head->confidence, head->branch);
         }
+        visible++;
         available--;
     }
     if (app->model.head_count == 0U) linef(app, "  No Hydra heads. Open the palette (:) to spawn one.");
+    else if (visible == 0U) linef(app, "  No heads match the current search.");
 }
 
 static void render_detail(struct app *app) {
-    const struct head *head;
-    if (app->model.head_count == 0U) { linef(app, "No selected head."); return; }
-    head = &app->model.heads[app->selected];
+    const struct head *head = selected_head(app);
+    if (head == NULL) { linef(app, "No selected head matching the current search."); return; }
     linef(app, "HEAD DETAIL  %s", head->branch);
     linef(app, "session: %s   profile: %s   group: %s   PR: %s", head->session, head->profile, head->group, head->pr);
     linef(app, "declared: %s   desired: %s", head->declared[0] == '\0' ? "none" : head->declared, head->desired);
@@ -517,8 +566,8 @@ static void render_coordination(struct app *app) {
         available--;
     }
     linef(app, "Use : to inspect claims, collisions, scopes, queue, resources, diffs, or approvals.");
-    if (app->model.head_count > 0U) {
-        const struct head *head = &app->model.heads[app->selected];
+    if (selected_head(app) != NULL) {
+        const struct head *head = selected_head(app);
         linef(app, "selected sources (exact): lifecycle/events/messages/scopes/gates under %s", head->source);
         linef(app, "inspect claims: hydra claim list");
         linef(app, "inspect scopes: hydra scope show %s", head->branch);
@@ -604,7 +653,7 @@ static const struct palette_action palette[] = {
 static void execute_palette(struct app *app, const char *query) {
     size_t index;
     const struct palette_action *chosen = NULL;
-    struct head *head = app->model.head_count == 0U ? NULL : &app->model.heads[app->selected];
+    struct head *head = selected_head(app);
     char branch[TEXT] = "";
     if (query[0] == '\0') {
         copy_text(app->notice, sizeof(app->notice), "action search canceled");
@@ -694,8 +743,8 @@ static void handle_escape(struct app *app) {
         if ((unsigned char)ch >= 0x40U && (unsigned char)ch <= 0x7eU) break;
     }
     sequence[count] = '\0';
-    if (strcmp(sequence, "A") == 0 && app->selected > 0U) app->selected--;
-    else if (strcmp(sequence, "B") == 0 && app->selected + 1U < app->model.head_count) app->selected++;
+    if (strcmp(sequence, "A") == 0) move_selection(app, -1);
+    else if (strcmp(sequence, "B") == 0) move_selection(app, 1);
     else if (strcmp(sequence, "200~") == 0) {
         (void)clock_gettime(CLOCK_MONOTONIC, &started);
         while (consumed++ < 8192U) {
@@ -713,7 +762,10 @@ static void handle_escape(struct app *app) {
 static void interactive_prompt(struct app *app, char prefix) {
     char query[TEXT];
     if (prompt_text(app, prefix == '/' ? "Search heads: " : "Action search: ", query, sizeof(query)) != 0) return;
-    if (prefix == '/') copy_text(app->search, sizeof(app->search), query);
+    if (prefix == '/') {
+        copy_text(app->search, sizeof(app->search), query);
+        retarget_selection(app);
+    }
     else execute_palette(app, query);
 }
 
@@ -751,10 +803,13 @@ static int interactive_main(struct app *app) {
         render(app, 0U, false);
         if (read_key(500, &key) <= 0) continue;
         if (key == 'q') app->running = false;
-        else if (key == 'j' && app->selected + 1U < app->model.head_count) app->selected++;
-        else if (key == 'k' && app->selected > 0U) app->selected--;
+        else if (key == 'j') move_selection(app, 1);
+        else if (key == 'k') move_selection(app, -1);
         else if (key == 'v') app->view = (app->view + 1) % 4;
-        else if (key == '\r' || key == '\n') app->view = 1;
+        else if (key == '\r' || key == '\n') {
+            if (selected_head(app) != NULL) app->view = 1;
+            else copy_text(app->notice, sizeof(app->notice), "no matching head selected");
+        }
         else if (key == '/') interactive_prompt(app, '/');
         else if (key == ':') interactive_prompt(app, ':');
         else if (key == 'p') { app->preview = !app->preview; capture_preview(app); }

@@ -524,7 +524,7 @@ Commands:
                       --git                    Show recorded-base Git evidence
                       --no-pr-status           Skip fetching PR status (faster)
                       --refresh-pr-status      Force refresh PR status cache
-  switch            Switch to a different head (interactive)
+  switch [branch]   Switch to a head directly, or choose interactively
   kill <branch>     Remove a worktree and its tmux session
   kill --all        Kill all hydra sessions
   kill --group <n>  Kill all sessions in a group

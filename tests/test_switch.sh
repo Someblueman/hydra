@@ -382,6 +382,39 @@ test_validate_choice_helper() {
     assert_success "$exit_code" "Boundary input (3 of 3) accepted"
 }
 
+test_direct_branch_switch() {
+    echo ""
+    echo "Testing direct branch switching..."
+
+    setup_test_env
+    test_dir="$TEST_DIR"
+    fake_bin="$test_dir/bin"
+    tmux_log="$test_dir/tmux.log"
+    mkdir -p "$fake_bin"
+    printf '%s\n' 'feature/direct target-session none default' > "$HYDRA_HOME/map"
+    cat > "$fake_bin/tmux" <<'SCRIPT'
+#!/bin/sh
+case "$1" in
+    has-session) exit 0 ;;
+    switch-client|attach-session) printf '%s\n' "$*" >> "$TMUX_LOG" ;;
+    *) exit 1 ;;
+esac
+SCRIPT
+    chmod +x "$fake_bin/tmux"
+
+    TMUX=inside TMUX_LOG="$tmux_log" PATH="$fake_bin:$PATH" \
+        "$HYDRA_BIN" switch feature/direct
+    assert_contains "$(sed -n '1p' "$tmux_log")" "switch-client -t target-session" \
+        "Direct switch targets the selected branch inside tmux"
+
+    TMUX='' TMUX_LOG="$tmux_log" PATH="$fake_bin:$PATH" \
+        "$HYDRA_BIN" switch feature/direct
+    assert_contains "$(sed -n '2p' "$tmux_log")" "attach-session -t target-session" \
+        "Direct switch attaches to the selected branch outside tmux"
+
+    cleanup_test_env "$test_dir"
+}
+
 # Run all tests
 main() {
     echo "=========================================="
@@ -390,6 +423,7 @@ main() {
 
     # Unit tests for validation logic
     test_validate_choice_helper
+    test_direct_branch_switch
 
     # Integration tests (require tmux)
     if command -v tmux >/dev/null 2>&1; then

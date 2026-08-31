@@ -77,7 +77,8 @@ hydra init --no-agent --trust
 hydra spawn first-head --no-agent --prompt "Inspect this throwaway project"
 hydra list
 hydra path first-head   # stored identity-scoped worktree path
-hydra switch           # enter the session (fzf if installed)
+hydra switch my-work   # enter that head directly
+hydra switch           # choose interactively (fzf if installed)
 ```
 
 `--no-agent` is the first-class shell-only path. Without an explicit or configured
@@ -138,6 +139,7 @@ hydra list              # list all sessions
 hydra list --json       # JSON output for scripting
 hydra list --git        # add recorded-base Git evidence
 hydra list -g mygroup   # filter by group
+hydra switch feature/ui # enter a named head directly
 hydra switch            # interactive (fzf if available)
 
 # Manage

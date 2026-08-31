@@ -231,6 +231,16 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "feature-stale\n", 14U);
     result(wait_for_marker(&session, "search: feature-stale", 1000),
            "keyboard-only search returns to raw mode");
+    write_input(session.master, "k\r", 2U);
+    result(wait_for_marker(&session, "HEAD DETAIL  feature-stale", 1000),
+           "filtered navigation and detail stay on the visible head");
+    write_input(session.master, "/", 1U);
+    (void)wait_for_marker(&session, "Search heads:", 1000);
+    write_input(session.master, "does-not-exist\n", 15U);
+    (void)wait_for_marker(&session, "search: does-not-exist", 1000);
+    write_input(session.master, "\r", 1U);
+    result(wait_for_marker(&session, "notice: no matching head selected", 1000),
+           "head actions are disabled when the search has no match");
     write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads:", 1000);
     write_input(session.master, "\n", 1U);
