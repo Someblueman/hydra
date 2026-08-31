@@ -360,6 +360,20 @@ static void capture_preview(struct app *app) {
     }
 }
 
+static void write_terminal(const char *data, size_t length) {
+    size_t written = 0U;
+    while (written < length) {
+        ssize_t result = write(STDOUT_FILENO, data + written, length - written);
+        if (result > 0) {
+            written += (size_t)result;
+        } else if (result < 0 && errno == EINTR) {
+            continue;
+        } else {
+            break;
+        }
+    }
+}
+
 static void restore_terminal(struct app *app) {
     if (app != NULL && app->raw) {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &app->saved);
@@ -367,7 +381,7 @@ static void restore_terminal(struct app *app) {
     }
     if (isatty(STDOUT_FILENO)) {
         static const char reset[] = "\033[0m\033[?25h\n";
-        (void)write(STDOUT_FILENO, reset, sizeof(reset) - 1U);
+        write_terminal(reset, sizeof(reset) - 1U);
     }
 }
 
@@ -388,7 +402,7 @@ static int enter_raw(struct app *app) {
     raw.c_cc[VTIME] = 1;
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) return -1;
     app->raw = true;
-    (void)write(STDOUT_FILENO, "\033[?25l", 6U);
+    write_terminal("\033[?25l", 6U);
     return 0;
 }
 
