@@ -39,6 +39,22 @@ static void sleep_ms(long milliseconds) {
     while (nanosleep(&delay, &delay) != 0 && errno == EINTR) { }
 }
 
+static void write_input(int fd, const char *data, size_t length) {
+    size_t written = 0U;
+    while (written < length) {
+        ssize_t result = write(fd, data + written, length - written);
+        if (result > 0) {
+            written += (size_t)result;
+        } else if (result < 0 && errno == EINTR) {
+            continue;
+        } else {
+            fprintf(stderr, "failed to write pseudo-terminal input: %s\n",
+                    result == 0 ? "short write" : strerror(errno));
+            exit(1);
+        }
+    }
+}
+
 static long long monotonic_ms(void) {
     struct timespec value;
     (void)clock_gettime(CLOCK_MONOTONIC, &value);
@@ -187,29 +203,29 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     const char mouse[] = "\033[<0;12;4M";
     result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open real pseudo-terminal");
     result(wait_for_raw(&session), "interactive TUI enters raw mode");
-    (void)write(session.master, "j\r", 2U);
+    write_input(session.master, "j\r", 2U);
     result(wait_for_marker(&session, "HEAD DETAIL  feature-stale", 1000),
            "keyboard navigation opens the selected head detail");
-    (void)write(session.master, "\033[A\r", 4U);
+    write_input(session.master, "\033[A\r", 4U);
     result(wait_for_marker(&session, "HEAD DETAIL  feature-live", 1000),
            "arrow-key navigation remains bounded and deterministic");
-    (void)write(session.master, "/", 1U);
+    write_input(session.master, "/", 1U);
     result(wait_for_marker(&session, "Search heads:", 1000), "keyboard search prompt is reachable");
-    (void)write(session.master, "feature-stale\n", 14U);
+    write_input(session.master, "feature-stale\n", 14U);
     result(wait_for_marker(&session, "search: feature-stale", 1000),
            "keyboard-only search returns to raw mode");
-    (void)write(session.master, "/", 1U);
+    write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads:", 1000);
-    (void)write(session.master, "\n", 1U);
+    write_input(session.master, "\n", 1U);
     result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000),
            "keyboard-only search can be cleared");
-    (void)write(session.master, paste, sizeof(paste) - 1U);
+    write_input(session.master, paste, sizeof(paste) - 1U);
     sleep_ms(150);
     result(still_running(&session), "bracketed paste cannot inject quit or actions");
-    (void)write(session.master, mouse, sizeof(mouse) - 1U);
+    write_input(session.master, mouse, sizeof(mouse) - 1U);
     sleep_ms(100);
     result(still_running(&session), "disabled mouse input is bounded and ignored");
-    (void)write(session.master, "p", 1U);
+    write_input(session.master, "p", 1U);
     sleep_ms(150);
     result(still_running(&session), "untrusted pane output cannot enter the input parser");
     memset(&size, 0, sizeof(size));
@@ -219,7 +235,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     (void)ioctl(session.master, TIOCSWINSZ, &size);
     sleep_ms(100);
     result(still_running(&session), "resize race remains interactive at the minimum layout");
-    (void)write(session.master, "q", 1U);
+    write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0, "normal exit succeeds");
     result(terminal_restored(&session), "normal exit restores exact terminal state");
     close_session(&session);
@@ -261,7 +277,7 @@ static void test_crash_fallback(const char *dispatch, const char *fake_bin) {
            "open crash-fallback pseudo-terminal");
     result(wait_for_marker(&session, "Hydra TUI", 3000),
            "native crash restores the terminal before basic fallback");
-    (void)write(session.master, "q", 1U);
+    write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0, "basic fallback exits cleanly after native crash");
     result(terminal_restored(&session), "native crash and basic fallback restore exact terminal state");
     close_session(&session);
@@ -282,7 +298,7 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
     ready = monotonic_ms();
     sleep_ms(2200);
     drain_output(session.master);
-    (void)write(session.master, "q", 1U);
+    write_input(session.master, "q", 1U);
     status = wait_for_exit(&session);
     ended = monotonic_ms();
     (void)times(&after);

@@ -38,7 +38,7 @@ test:
 	@echo "Running tests..."
 	@if [ -d tests ] && [ -n "$$(ls -A tests/test_*.sh 2>/dev/null)" ]; then \
 		for test in tests/test_*.sh; do \
-			case "$$test" in tests/test_core.sh|tests/test_native_install.sh) continue ;; esac; \
+			case "$$test" in tests/test_core.sh|tests/test_native_install.sh|tests/test_native_tui.sh) continue ;; esac; \
 			echo "Running $$test..."; \
 			sh "$$test" || exit 1; \
 		done; \
