@@ -39,26 +39,43 @@ static void sleep_ms(long milliseconds) {
     while (nanosleep(&delay, &delay) != 0 && errno == EINTR) { }
 }
 
+static long long monotonic_ms(void) {
+    struct timespec value;
+    (void)clock_gettime(CLOCK_MONOTONIC, &value);
+    return (long long)value.tv_sec * 1000LL + value.tv_nsec / 1000000LL;
+}
+
 static void write_input(int fd, const char *data, size_t length) {
     size_t written = 0U;
+    long long deadline = monotonic_ms() + 1000LL;
     while (written < length) {
         ssize_t result = write(fd, data + written, length - written);
         if (result > 0) {
             written += (size_t)result;
         } else if (result < 0 && errno == EINTR) {
             continue;
+        } else if (result < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            fd_set writefds;
+            struct timeval timeout;
+            long long remaining = deadline - monotonic_ms();
+            int ready;
+            if (remaining <= 0LL) break;
+            FD_ZERO(&writefds);
+            FD_SET(fd, &writefds);
+            timeout.tv_sec = (time_t)(remaining / 1000LL);
+            timeout.tv_usec = (suseconds_t)((remaining % 1000LL) * 1000LL);
+            ready = select(fd + 1, NULL, &writefds, NULL, &timeout);
+            if (ready > 0 || (ready < 0 && errno == EINTR)) continue;
+            break;
         } else {
-            fprintf(stderr, "failed to write pseudo-terminal input: %s\n",
-                    result == 0 ? "short write" : strerror(errno));
-            exit(1);
+            break;
         }
     }
-}
-
-static long long monotonic_ms(void) {
-    struct timespec value;
-    (void)clock_gettime(CLOCK_MONOTONIC, &value);
-    return (long long)value.tv_sec * 1000LL + value.tv_nsec / 1000000LL;
+    if (written != length) {
+        fprintf(stderr, "failed to write pseudo-terminal input: %s\n",
+                errno == 0 ? "short write" : strerror(errno));
+        exit(1);
+    }
 }
 
 static void drain_output(int fd) {
