@@ -137,11 +137,21 @@ _load_libs_for_cmd() {
             ;;
         workflow)
             _load_lib output
+            _load_lib paths
             _load_lib locks
             _load_lib git
+            _load_lib tmux
+            _load_lib state
             _load_lib identity
             _load_lib state_v2
+            _load_lib events
             _load_lib project
+            _load_lib profiles
+            _load_lib lifecycle
+            _load_lib operations
+            _load_lib parallel
+            _load_lib messages
+            _load_lib limits
             _load_lib workflow
             _load_lib cmd_workflow
             ;;
