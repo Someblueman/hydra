@@ -135,6 +135,16 @@ _load_libs_for_cmd() {
             _load_lib profiles
             _load_lib cmd_lifecycle
             ;;
+        workflow)
+            _load_lib output
+            _load_lib locks
+            _load_lib git
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib project
+            _load_lib workflow
+            _load_lib cmd_workflow
+            ;;
         lifecycle|outcome|wait|adapter|resume|notify)
             _load_lib output
             _load_lib paths
@@ -483,6 +493,9 @@ Commands:
   init              Initialize project identity, trust, profile, and worktree root
   agent             List, show, diagnose, or initialize agent profiles
   capabilities      Print machine-readable Hydra and agent capabilities
+  workflow          List, show, validate, or dry-run static workflow definitions
+                    Usage: hydra workflow list
+                           hydra workflow <show|validate|dry-run> <id|path>
   path [<branch>]   Print the stored worktree path for a head
   lifecycle <head>  Show declared outcome, observed status, and liveness
   outcome <head>    Declare an instance-scoped outcome
@@ -672,6 +685,10 @@ main() {
         path)
             shift
             cmd_path "$@"
+            ;;
+        workflow)
+            shift
+            cmd_workflow "$@"
             ;;
         lifecycle)
             shift
