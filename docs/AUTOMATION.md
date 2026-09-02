@@ -36,6 +36,14 @@ canonical adapter-ingest format documented in [AGENT_ADAPTERS.md](AGENT_ADAPTERS
 `wait` returns 0 when satisfied, 2 on timeout, and 3 if the current instance changes.
 Typed message receipts are available through `hydra recv --receipts <branch> --json`.
 
+Finite orchestration uses `hydra workflow validate`, `dry-run`, `run`, `status`,
+`cancel`, and `resume`. `workflow status <run-id> --json` has schema version 1 and
+reports recorded step states and attempt counts. The resolved definition and manifest
+are written before the first command. Retry is bounded and limited to explicitly
+idempotent steps; cancellation either terminates running command trees or records the
+residual PIDs. Verified integration remains a separate, explicit local operation and
+never follows a successful workflow automatically.
+
 Out-of-band automation uses `hydra exec ... --json -- command`. Hydra completing the
 batch is distinct from each workload exit status: the envelope contains every
 captured result, while any nonzero or timed-out workload makes the process exit

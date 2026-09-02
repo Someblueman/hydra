@@ -33,7 +33,7 @@ echo "Running native TUI tests..."
 echo "==========================="
 
 assert_equal "2" "$("$tui" --protocol-version)" "native TUI protocol handshake"
-assert_equal "Hydra TUI 1.8.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
+assert_equal "Hydra TUI 1.9.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
 
 "$tui" --headless-fixture "$fixture" --size 80x24 --frames 2 > "$test_root/heads.out"
 assert_success $? "headless fixture renders deterministically"

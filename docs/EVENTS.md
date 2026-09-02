@@ -21,3 +21,8 @@ hydra events retain --max-events 1000
 hydra events repair
 ```
 
+Workflow runs have a separate run-scoped `events.jsonl` because they may span several
+heads. Its schema version 1 records a unique monotonic sequence, UTC time, run ID,
+nullable step ID, transition type, and bounded detail. Step and run scalar state is
+authoritative; the stream is the ordered audit trail. Event writers use a run-local
+directory lock so parallel steps cannot reuse a sequence number.

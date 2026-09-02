@@ -11,6 +11,10 @@ shell string can do anything that user can do.
   --trust` records their exact content hash for this host. Any relevant content
   change invalidates that decision. `.hydra/local.yml` is host-local, ignored by
   Git, mode 0600, and excluded from the repository trust hash.
+- Repository workflow definitions share that trust boundary. All workflow commands
+  refuse a repository definition whose `.hydra` hash is absent or changed; an
+  explicit definition outside `.hydra` can be inspected or run directly. Command
+  strings additionally require `allow_shell: true`; argv is the default.
 - Built-in profiles resolve one known executable name. Custom profiles require an
   existing absolute executable path and are recorded as user-declared. Hydra does
   not infer provider hooks from executable presence.
@@ -54,3 +58,9 @@ Hydra protects against accidental cross-project state collisions, stale instance
 evidence, shell interpolation, and unlocked concurrent writes. It does not defend
 against a malicious process running as the same user, a compromised executable, or
 host filesystem administrators.
+
+Verified integration executes user-supplied gates in a disposable worktree with the
+invoking user's permissions. Approval is a separate current binding to the verified
+result. Promotion rechecks the target ref, candidate commits, manifest, approval, and
+clean worktree under the project integration lock; it updates only a local branch and
+never pushes.

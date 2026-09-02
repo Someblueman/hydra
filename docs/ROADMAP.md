@@ -836,33 +836,34 @@ verified change.
 
 #### Workflow scope
 
-- [ ] Add a strict, documented workflow schema and reject unsupported YAML.
-- [ ] Add list, show, validate, dry-run, run, status, cancel, and resume commands.
-- [ ] Support bounded `spawn`, `wait`, `exec`, `message`, `gate`, `approve`, `kill`,
+- [x] Add a strict, documented workflow schema and reject unsupported YAML.
+- [x] Add list, show, validate, dry-run, run, status, cancel, and resume commands.
+- [x] Support bounded `spawn`, `wait`, `exec`, `message`, `gate`, `approve`, `kill`,
       and parallel fan-out/join steps.
-- [ ] Build workflow execution on the accepted `hydra wait`, `exec`, lifecycle,
+- [x] Build workflow execution on the accepted `hydra wait`, `exec`, lifecycle,
       profile, gate, and resource contracts rather than reimplementing them.
-- [ ] Persist a resolved workflow copy and run manifest before execution.
-- [ ] Define atomic step transitions, run ownership, heartbeat/lease, stale-run
+- [x] Persist a resolved workflow copy and run manifest before execution.
+- [x] Define atomic step transitions, run ownership, heartbeat/lease, stale-run
       recovery, and cancellation behavior.
-- [ ] Define retry idempotency and require explicit policy for non-idempotent steps.
-- [ ] Add resource limits, queue fairness, per-run parallelism, and disk safeguards.
+- [x] Define retry idempotency and require explicit policy for non-idempotent steps.
+- [x] Add resource limits, stable source-order scheduling, per-run parallelism, and
+      disk safeguards.
 - [ ] Add a file-backed dynamic task pool only after the static DAG path demonstrates
       a real need for workers to claim tasks at runtime.
 
 #### Integration worktree
 
-- [ ] Add `hydra integrate <run-or-group> --dry-run`.
-- [ ] Create an isolated, disposable integration worktree from an explicit base.
-- [ ] Preview merge order and conflicts before mutation.
-- [ ] Apply changes only inside the integration worktree.
-- [ ] Run required verification gates and produce an integration report.
-- [ ] Require explicit promotion or approval before updating the target branch.
-- [ ] Preserve failed integration state or remove it through a recoverable cleanup
+- [x] Add `hydra integrate <run-or-group> --dry-run`.
+- [x] Create an isolated, disposable integration worktree from an explicit base.
+- [x] Preview merge order and conflicts before mutation.
+- [x] Apply changes only inside the integration worktree.
+- [x] Run required verification gates and produce an integration report.
+- [x] Require explicit promotion or approval before updating the target branch.
+- [x] Preserve failed integration state or remove it through a recoverable cleanup
       command chosen by the user.
-- [ ] Add a guarded merge train only after single-run integration, `land`, conflict
+- [x] Add a guarded merge train only after single-run integration, `land`, conflict
       preview, provenance, and gate recovery meet their acceptance criteria.
-- [ ] Publish workflow schema, automation, cancellation, recovery, and integration
+- [x] Publish workflow schema, automation, cancellation, recovery, and integration
       documentation with exercised examples.
 
 #### Release gates

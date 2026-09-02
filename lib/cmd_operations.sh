@@ -1,6 +1,15 @@
 #!/bin/sh
 # CLI handlers for execution, Git evidence, and provenance.
 
+cmd_exec_cancel_workers() {
+    _cecw_file="$1"
+    [ -f "$_cecw_file" ] || return 0
+    while IFS= read -r _cecw_pid; do
+        case "$_cecw_pid" in ''|*[!0-9]*) continue ;; esac
+        operations_signal_tree "$_cecw_pid" TERM
+    done < "$_cecw_file"
+}
+
 cmd_exec() {
     _ce_branches=""
     _ce_group=""
@@ -64,6 +73,9 @@ cmd_exec() {
     _ce_run_dir="$HYDRA_STATE_V2_ROOT/projects/$_ce_project/exec/$_ce_run"
     mkdir -p "$_ce_run_dir" || { rm -f "$_ce_selection"; return 1; }
     chmod 700 "$_ce_run_dir" 2>/dev/null || true
+    _ce_workers="$_ce_run_dir/worker-pids"
+    : > "$_ce_workers"
+    trap 'cmd_exec_cancel_workers "$_ce_workers"; exit 143' HUP INT TERM
     _ce_max="${HYDRA_EXEC_MAX_BYTES:-1048576}"
     case "$_ce_max" in ''|*[!0-9]*) rm -f "$_ce_selection"; return 1 ;; esac
     _ce_active=0
@@ -71,6 +83,7 @@ cmd_exec() {
     while IFS= read -r _ce_head; do
         if ! operations_load_selected_head "$_ce_head"; then _ce_selection_error=1; break; fi
         operations_exec_worker "$_ce_run" "$_ce_head" "$OPERATIONS_BRANCH" "$OPERATIONS_WORKTREE" "$_ce_timeout" "$_ce_max" "$@" &
+        printf '%s\n' "$!" >> "$_ce_workers"
         _ce_active=$((_ce_active + 1))
         if [ "$_ce_active" -ge "$_ce_jobs" ]; then
             wait
@@ -78,7 +91,8 @@ cmd_exec() {
         fi
     done < "$_ce_selection"
     wait
-    if [ "$_ce_selection_error" -eq 1 ]; then rm -f "$_ce_selection"; return 1; fi
+    trap - HUP INT TERM
+    if [ "$_ce_selection_error" -eq 1 ]; then rm -f "$_ce_selection" "$_ce_workers"; return 1; fi
     _ce_failed=0
     if [ "$_ce_json" -eq 1 ]; then
         printf '{"schema_version":1,"ok":true,"command":"exec","data":{"run_id":"%s","results":[' "$_ce_run"
@@ -105,9 +119,9 @@ cmd_exec() {
             [ ! -s "$_ce_result/stderr" ] || sed 's/^/    stderr: /' "$_ce_result/stderr" >&2
         fi
     done < "$_ce_selection"
-    if [ "$_ce_selection_error" -eq 1 ]; then rm -f "$_ce_selection"; return 1; fi
+    if [ "$_ce_selection_error" -eq 1 ]; then rm -f "$_ce_selection" "$_ce_workers"; return 1; fi
     [ "$_ce_json" -eq 0 ] || printf ']}}\n'
-    rm -f "$_ce_selection"
+    rm -f "$_ce_selection" "$_ce_workers"
     [ "$_ce_failed" -eq 0 ]
 }
 

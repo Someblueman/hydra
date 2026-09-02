@@ -15,6 +15,11 @@ are not contracts.
   error and do not write. They do not fall back to an unlocked write.
 - `hydra kill` checks worktree dirtiness **before** killing tmux or removing
   the mapping. `--force` on `kill --all` only skips the confirmation prompt.
+- `hydra workflow` accepts strict schema version 1 and exposes list, show, validate,
+  dry-run, run, status, cancel, and resume. Every step declares idempotency.
+- `hydra integrate` creates an isolated report/worktree and requires separate current
+  approval before local promotion. `integrate train` runs gates after each immutable
+  ordered candidate. Neither mode pushes.
 
 ## State
 
