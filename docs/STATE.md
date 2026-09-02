@@ -36,3 +36,12 @@ Head directories remain after teardown so instance, event, transcript, receipt, 
 provenance history can be inspected. The project compatibility map lists only active
 heads. Regenerate and resume retain the head ID, create a new instance ID, and mark
 the prior instance as superseded.
+
+Workflow runs live below `projects/<project_id>/workflows/runs/<run_id>`. A run is
+published atomically only after its resolved definition, graph, manifest, bindings,
+initial step states, and empty event stream exist. Per-step attempt directories retain
+stdout, stderr, exit status, and the authoritative attempt. Integration reports live
+below `projects/<project_id>/integrations/<run_id>` and retain the immutable candidate
+manifest, initial target, gates, merge output, verification evidence, approval, and
+recovery action. Cleanup removes only the recorded disposable worktree; it preserves
+the report.

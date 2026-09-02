@@ -20,6 +20,8 @@ sed -n '/^```yaml$/,/^```$/p' "$ROOT_DIR/docs/workflows.md" | sed '1d;$d' > "$va
 
 "$HYDRA_BIN" workflow validate "$valid" > "$TEST_ROOT/out" 2>&1
 assert_success "$?" "accepts documented schema"
+"$HYDRA_BIN" workflow validate "$ROOT_DIR/examples/workflows/local-review.yml" > "$TEST_ROOT/example" 2>&1
+assert_success "$?" "shipped no-agent workflow example validates"
 "$HYDRA_BIN" workflow show "$valid" > "$TEST_ROOT/show1" 2>&1
 "$HYDRA_BIN" workflow show "$valid" > "$TEST_ROOT/show2" 2>&1
 cmp -s "$TEST_ROOT/show1" "$TEST_ROOT/show2"

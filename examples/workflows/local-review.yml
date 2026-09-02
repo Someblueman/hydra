@@ -1,0 +1,39 @@
+version: 1
+id: local-review
+description: Run two bounded local checks in parallel and join their results
+parallelism: 2
+resources:
+  disk_mb: 1024
+  max_heads: 1
+steps:
+  - id: create
+    kind: spawn
+    needs: []
+    retry: 0
+    idempotent: false
+    args:
+      branch: hydra-local-review
+  - id: shell-tests
+    kind: exec
+    needs: [create]
+    retry: 1
+    idempotent: true
+    args:
+      head: hydra-local-review
+      argv: [sh, -n, bin/hydra]
+  - id: shell-lint
+    kind: exec
+    needs: [create]
+    retry: 1
+    idempotent: true
+    args:
+      head: hydra-local-review
+      argv: [git, diff, --check]
+  - id: complete
+    kind: exec
+    needs: [shell-tests, shell-lint]
+    retry: 0
+    idempotent: true
+    args:
+      head: hydra-local-review
+      argv: [true]

@@ -62,7 +62,7 @@ hydra version
 ### 2. Verify
 
 ```sh
-hydra version          # Hydra version 1.8.0
+hydra version          # Hydra version 1.9.0
 hydra doctor           # install paths, git/tmux, writable HYDRA_HOME, agents
 ```
 
@@ -170,6 +170,14 @@ hydra diff feature-x --stat
 hydra review feature-x --json
 hydra provenance feature-x --json
 
+# Finite trusted workflows
+hydra workflow validate examples/workflows/local-review.yml
+hydra workflow dry-run examples/workflows/local-review.yml
+hydra workflow run examples/workflows/local-review.yml
+hydra workflow status run_ID --json
+hydra workflow cancel run_ID
+hydra workflow resume run_ID
+
 # Parallel safety and guarded integration
 hydra claim add feature-x --path 'lib/*' --access write --reason refactor --expires-at 1790000000
 hydra scope check feature-x --json
@@ -179,6 +187,14 @@ hydra gate run feature-x --name acceptance -- make test
 hydra context create feature-x --diff --history 5
 hydra sync feature-x --from main --gate acceptance --dry-run
 hydra land feature-x --into main --gate acceptance --dry-run
+hydra integrate release-group --base main --target main --dry-run
+hydra integrate release-group --base main --target main --execute --gate 'make test'
+hydra integrate train release-group --base main --target main --execute --gate 'make test'
+hydra integrate status run_ID
+hydra integrate resume run_ID
+hydra integrate approve run_ID --by reviewer
+hydra integrate promote run_ID       # local promotion; never pushes
+hydra integrate cleanup run_ID --apply
 hydra du
 hydra gc --policy orphaned --dry-run
 hydra worktree doctor status
@@ -236,7 +252,8 @@ stored in project-scoped state v2. See [profiles](docs/PROFILES.md),
 related contracts are documented in [security](docs/SECURITY.md),
 [operations](docs/OPERATIONS.md), and [provenance](docs/PROVENANCE.md).
 Parallel coordination and native distribution are documented in
-[parallel safety](docs/PARALLEL_SAFETY.md) and the
+[parallel safety](docs/PARALLEL_SAFETY.md), [workflows and verified
+integration](docs/workflows.md), and the
 [optional native core](docs/NATIVE_CORE.md). Native/basic dispatch, terminal safety,
 keymaps, accessibility, and recovery are documented in
 [native mission control](docs/NATIVE_TUI.md).
@@ -280,7 +297,7 @@ Add `.hydra/` scripts to customize lifecycle:
 
 ## TUI
 
-Hydra keeps the existing feature-rich shell TUI as the 1.8.0 default and adds an
+Hydra keeps the existing feature-rich shell TUI as the 1.9.0 default and includes an
 opt-in native mission-control UI over the same shell-owned state.
 
 ```sh

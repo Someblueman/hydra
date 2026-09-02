@@ -1,83 +1,53 @@
-# Hydra v1.8.0 Release Notes
+# Hydra v1.9.0 Release Notes
 
-**Release date:** 2026-08-30
+Release date: 2026-09-02
+
+Hydra 1.9.0 closes the local coordination loop: a trusted finite workflow can create
+and operate parallel heads, preserve authoritative results across interruption, and
+feed completed candidates into an isolated verified integration or guarded merge
+train. Promotion remains an explicit local action and never pushes.
 
 ## Highlights
 
-Hydra 1.8.0 adds optional native mission control over the lifecycle and coordination
-contracts established in 1.6 and 1.7. The shell CLI remains the mutation authority,
-and the maintained basic shell TUI remains the default through the first patch
-release.
+- Workflow schema v1 rejects unknown keys and unsupported YAML constructs, requires
+  explicit idempotency, and supports `spawn`, `wait`, `exec`, `message`, `gate`,
+  `approve`, and `kill` steps.
+- The runner persists its resolved definition and manifest before execution, honors
+  bounded parallelism/retries/resources, propagates cancellation, and resumes stale
+  runs without replaying completed effects.
+- Verified integration previews candidate order, bases, claims, overlaps, and
+  predicted conflicts before creating a disposable worktree.
+- Integration reports retain immutable candidates and target, merge/gate evidence,
+  approval, result tree, observed failures, and a concrete recovery command.
+- `hydra integrate train` verifies after every candidate and promotes the complete
+  result only after current approval and binding revalidation.
+- Bash, Zsh, and Fish completions, an offline workflow example, and a fully local
+  workflow-to-integration acceptance fixture ship with the release candidate.
 
-## Native mission control
-
-- `hydra tui --native` provides head list/detail, coordination, and recovery views,
-  keyboard navigation and search, selected-pane preview, and a fixed local-action
-  palette.
-- Declared outcome, observed status and confidence, liveness, stale state, and
-  unavailable state remain visibly distinct. Event, signal, message, gate, claim,
-  scope, queue, resource, diff, and approval counts come from inspectable records.
-- Native mutations use argv-safe execution of the shell CLI. There is no command
-  string interpolation, natural-language command parser, native state writer, or
-  native notification delivery.
-- Recovery findings cover malformed state, stale same-host locks, dead sessions,
-  orphan worktrees, interrupted transitions, and teardown failures without applying
-  recovery automatically.
-
-## Terminal and fallback behavior
-
-- `hydra tui` and `hydra tui --basic` use the existing shell TUI. `--native` is an
-  explicit opt-in; `--capabilities` explains availability and dispatch policy.
-- The native UI restores terminal state on normal exit and termination signals,
-  clips narrow/resize layouts, works without color, and fails clearly for `TERM=dumb`
-  or non-TTY input/output.
-- Pane and fixture data are untrusted. Control and invalid bytes are replaced before
-  rendering; paste, escape sequences, preview bytes, and record counts are bounded.
-- The production refresh path uses bounded polling. The tmux control-mode prototype
-  did not yet prove reconnect and flow-control reliability, so it is not enabled.
-
-## Build and installation
+## Quick start
 
 ```sh
-make build-tui test-tui
-make sanitize
+hydra init --no-agent --trust
+hydra workflow validate examples/workflows/local-review.yml
+hydra workflow dry-run examples/workflows/local-review.yml
+hydra workflow run examples/workflows/local-review.yml
 
-HYDRA_INSTALL_TUI=required HYDRA_BUILD_TUI=1 \
-  PREFIX=$HOME/.local ./install.sh
+hydra integrate train release-group --base main --target main --dry-run --gate 'make test'
+hydra integrate train release-group --base main --target main --execute --gate 'make test'
+hydra integrate approve run_ID --by reviewer
+hydra integrate promote run_ID
 ```
 
-Offline TUI artifacts carry checksum, OS/architecture, dependency, and source
-metadata and receive exact version/protocol verification before atomic replacement.
-Use `HYDRA_INSTALL_TUI=never` for a shell-only installation.
+`hydra workflow status`, `cancel`, and `resume` manage workflow runs. Integration
+failures use the recovery command printed by `hydra integrate status run_ID`.
 
-## Upgrade from 1.7.x
+## Compatibility and safety
 
-```sh
-git pull
-PREFIX=$HOME/.local ./install.sh
-hydra version                 # should show 1.8.0
-hydra tui --capabilities
-hydra tui --basic             # unchanged fallback
-```
+The shell CLI remains the mutation authority. Native core protocol v1 and native TUI
+protocol v2 are unchanged; their release handshakes now report 1.9.0. Existing 1.8
+state remains valid. Repository workflows share the `.hydra` trust boundary, argv is
+the default execution form, and no workflow/integration command pushes or publishes.
 
-No state migration is required from 1.7. The native TUI consumes the existing shell
-and state-v2 contracts.
-
-## Validation
-
-```sh
-git diff --check
-make lint
-make test-all
-make sanitize
-```
-
-The deterministic terminal lane uses `hydra tui --headless-fixture` at explicit
-sizes and frame counts. Hosted exact-candidate CI and manual terminal/accessibility
-review remain release-publication evidence, separate from local implementation.
-
-## Deferred
-
-Native-by-default dispatch, tmux control-mode production observation, mouse support,
-animations, themes, workflow editing, fleet view, and natural-language commands
-remain deferred.
+See [docs/workflows.md](docs/workflows.md) and
+[docs/RELEASE_CHECKLIST_1.9.0.md](docs/RELEASE_CHECKLIST_1.9.0.md) for contracts and
+the exact-candidate qualification/publication boundary.

@@ -63,7 +63,7 @@ $(BUILD_DIR)/libhydra.a: $(BUILD_DIR)/libhydra.o
 $(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/hydra-tui: src/hydra_tui.c | $(BUILD_DIR)
+$(BUILD_DIR)/hydra-tui: src/hydra_tui.c src/hydra_tui_model.inc src/hydra_tui_ui.inc src/hydra_tui_main.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) src/hydra_tui.c -o $@
 
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a

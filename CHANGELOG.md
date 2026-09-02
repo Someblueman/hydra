@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-09-02
+
+### Added
+
+- Strict static workflow schema v1 with trusted lookup, validation, dry-run, durable
+  run manifests, bounded fan-out/join execution, cancellation, and crash recovery
+- Explicit idempotency and retry policy, per-run parallelism, stable scheduling,
+  resource bounds, disk safeguards, correlated events, and authoritative attempts
+- Isolated verified integration worktrees with candidate/base bindings, conflict
+  preview, verification reports, explicit approval, local promotion, and cleanup
+- Guarded local merge trains with per-candidate gates, exact failure reports,
+  cancellation/resume, and all-or-nothing target promotion
+- Bash, Zsh, and Fish completion plus an offline local workflow example and
+  workflow-to-integration acceptance coverage
+
+### Changed
+
+- Hydra, native core, and native TUI release handshakes now report 1.9.0; protocol
+  versions remain unchanged
+- Completed candidate groups and workflow runs can feed the same verified integration
+  path; no integration or workflow operation pushes a branch
+
+### Security
+
+- Repository workflow execution is bound to the existing `.hydra` trust hash
+- Shell-string workflow commands require explicit `allow_shell: true`; argv remains
+  the default
+- Promotion revalidates the immutable manifest, candidates, verified result,
+  approval, clean worktree, and target ref under a project lock
+
 ## [1.8.0] - 2026-08-30
 
 ### Added

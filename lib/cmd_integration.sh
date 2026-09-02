@@ -94,3 +94,122 @@ cmd_land() {
         return $?
     fi
 }
+
+cmd_integrate() {
+    case "${1:-}" in
+        -h|--help|'')
+            printf '%s\n' \
+                'Usage: hydra integrate <run-or-group> --base <ref> --target <ref> --dry-run' \
+                '       hydra integrate <run-or-group> --base <ref> --target <ref> --execute [--gate <command>]...' \
+                '       hydra integrate train <run-or-group> --base <ref> --target <ref> --dry-run' \
+                '       hydra integrate train <run-or-group> --base <ref> --target <ref> --execute [--gate <command>]...' \
+                '       hydra integrate status <integration-run>' \
+                '       hydra integrate cancel <integration-run>' \
+                '       hydra integrate resume <integration-run>' \
+                '       hydra integrate approve <integration-run> --by <actor>' \
+                '       hydra integrate promote <integration-run>' \
+                '       hydra integrate cleanup <integration-run> --apply'
+            [ -n "${1:-}" ]
+            return
+            ;;
+        status|report)
+            [ "$#" -eq 2 ] || return 1
+            integration_verified_status "$2"
+            return
+            ;;
+        promote)
+            [ "$#" -eq 2 ] || return 1
+            integration_verified_promote "$2"
+            return
+            ;;
+        cancel)
+            [ "$#" -eq 2 ] || return 1
+            integration_verified_cancel "$2"
+            return
+            ;;
+        resume)
+            [ "$#" -eq 2 ] || return 1
+            integration_verified_resume "$2"
+            return
+            ;;
+        cleanup)
+            if [ "$#" -eq 2 ]; then
+                integration_verified_status "$2"
+                return
+            fi
+            [ "$#" -eq 3 ] && [ "$3" = --apply ] || return 1
+            integration_verified_cleanup "$2"
+            return
+            ;;
+        approve)
+            [ "$#" -eq 4 ] && [ "$3" = --by ] || return 1
+            integration_verified_approve "$2" "$4"
+            return
+            ;;
+    esac
+
+    _ci_mode=integration
+    if [ "$1" = train ]; then
+        [ "$#" -ge 2 ] || return 1
+        _ci_mode=train
+        _ci_selector="$2"
+        shift 2
+    else
+        _ci_selector="$1"
+        shift
+    fi
+    _ci_base=""
+    _ci_target=""
+    _ci_action=""
+    _ci_tmp="$(mktemp -d "${TMPDIR:-/tmp}/hydra-integrate.XXXXXX")" || return 1
+    _ci_gates="$_ci_tmp/gates.argv"
+    : > "$_ci_gates"
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --base)
+                [ "$#" -ge 2 ] || { rm -rf "$_ci_tmp"; return 1; }
+                _ci_base="$2"
+                shift 2
+                ;;
+            --target|--into)
+                [ "$#" -ge 2 ] || { rm -rf "$_ci_tmp"; return 1; }
+                _ci_target="$2"
+                shift 2
+                ;;
+            --dry-run)
+                [ -z "$_ci_action" ] || { rm -rf "$_ci_tmp"; return 1; }
+                _ci_action=dry-run
+                shift
+                ;;
+            --execute)
+                [ -z "$_ci_action" ] || { rm -rf "$_ci_tmp"; return 1; }
+                _ci_action=execute
+                shift
+                ;;
+            --gate)
+                [ "$#" -ge 2 ] || { rm -rf "$_ci_tmp"; return 1; }
+                case "$2" in *'
+'*|*'	'*) rm -rf "$_ci_tmp"; return 1 ;; esac
+                printf '%s\n' "$2" >> "$_ci_gates"
+                shift 2
+                ;;
+            *)
+                echo "Error: unknown integrate option '$1'" >&2
+                rm -rf "$_ci_tmp"
+                return 1
+                ;;
+        esac
+    done
+    if [ -z "$_ci_base" ] || [ -z "$_ci_target" ] || [ -z "$_ci_action" ]; then
+        echo "Error: --base, --target, and --dry-run or --execute are required" >&2
+        rm -rf "$_ci_tmp"
+        return 1
+    fi
+    case "$_ci_action" in
+        dry-run) integration_verified_preview "$_ci_selector" "$_ci_base" "$_ci_target" "$_ci_gates" "$_ci_mode" ;;
+        execute) integration_verified_execute "$_ci_selector" "$_ci_base" "$_ci_target" "$_ci_gates" "$_ci_mode" ;;
+    esac
+    _ci_status=$?
+    rm -rf "$_ci_tmp"
+    return "$_ci_status"
+}

@@ -8,6 +8,15 @@ pass_count=0
 fail_count=0
 
 # Source the library under test
+# shellcheck source=../lib/completion_bash.sh
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/completion_bash.sh"
+# shellcheck source=../lib/completion_zsh.sh
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/completion_zsh.sh"
+# shellcheck source=../lib/completion_fish.sh
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/completion_fish.sh"
 # shellcheck source=../lib/completion.sh
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/completion.sh"
@@ -203,7 +212,7 @@ test_completion_includes_shipped_commands() {
     zsh_out=$(generate_completion zsh)
     fish_out=$(generate_completion fish)
 
-    for cmd in spawn init agent capabilities path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue; do
+    for cmd in spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue; do
         case "$bash_out" in
             *"$cmd"*)
                 echo "[PASS] bash completion includes $cmd"
@@ -247,6 +256,8 @@ test_completion_includes_shipped_commands() {
         gate:name gate:by gate:reason gate:json \
         context:diff context:file context:note context:history context:artifact context:json \
         sync:from sync:gate sync:dry-run land:into land:gate land:dry-run land:keep-head \
+        workflow:json integrate:base integrate:target integrate:into integrate:dry-run \
+        integrate:execute integrate:gate integrate:by integrate:apply \
         du:json gc:policy gc:apply gc:dry-run gc:include-dirty gc:older-than \
         worktree:reason worktree:dry-run worktree:apply snapshot:native snapshot:json; do
         command="${mapping%%:*}"
@@ -268,7 +279,7 @@ test_completion_includes_shipped_commands() {
             END { exit found ? 0 : 1 }
         ' || option_status=1
     done
-    assert_success "$option_status" "all completion generators map every 1.7 option to its command"
+    assert_success "$option_status" "all completion generators map shipped options to their commands"
 }
 
 # Run all tests
