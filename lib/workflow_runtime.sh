@@ -47,11 +47,27 @@ workflow_pid_alive() {
     kill -0 "$1" 2>/dev/null
 }
 
+workflow_run_owner_active() {
+    _wroa_dir="$1"
+    _wroa_pid="$(sed -n '1p' "$_wroa_dir/owner-pid" 2>/dev/null || true)"
+    workflow_pid_alive "$_wroa_pid"
+}
+
+workflow_run_owner_fresh() {
+    _wrof_dir="$1"
+    workflow_run_owner_active "$_wrof_dir" || return 1
+    _wrof_heartbeat="$(sed -n '1p' "$_wrof_dir/heartbeat-at" 2>/dev/null || true)"
+    case "$_wrof_heartbeat" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$(($(date +%s) - _wrof_heartbeat))" -le 15 ]
+}
+
 workflow_bindings_match() {
     _wbm_dir="$1"
+    _wbm_base="$(sed -n '1p' "$_wbm_dir/base-commit")"
     [ "$(sed -n '1p' "$_wbm_dir/schema-version")" = 1 ] &&
     [ "$(sed -n '1p' "$_wbm_dir/project-id")" = "$(hydra_get_project_id)" ] &&
-    git cat-file -e "$(sed -n '1p' "$_wbm_dir/base-commit")^{commit}" 2>/dev/null &&
+    git cat-file -e "$_wbm_base^{commit}" 2>/dev/null &&
+    [ "$(git rev-parse HEAD 2>/dev/null || true)" = "$_wbm_base" ] &&
     [ "$(git hash-object "$_wbm_dir/resolved.yml")" = "$(sed -n '1p' "$_wbm_dir/definition-hash")" ]
 }
 
@@ -85,9 +101,12 @@ workflow_step_command() {
                 [ -z "$_wsc_timeout" ] || set -- "$@" --timeout "$_wsc_timeout"
                 set -- "$@" --
                 _wsc_oldifs="$IFS"
+                _wsc_oldflags="$-"
                 IFS=,
+                set -f
                 for _wsc_arg in $_wsc_argv; do set -- "$@" "$_wsc_arg"; done
                 IFS="$_wsc_oldifs"
+                case "$_wsc_oldflags" in *f*) ;; *) set +f ;; esac
             else
                 set -- exec
                 [ -z "$_wsc_head" ] || set -- "$@" --branch "$_wsc_head"
@@ -99,9 +118,12 @@ workflow_step_command() {
             set -- gate run "$_wsc_head" --name "$_wsc_name" --
             if [ -n "$_wsc_argv" ]; then
                 _wsc_oldifs="$IFS"
+                _wsc_oldflags="$-"
                 IFS=,
+                set -f
                 for _wsc_arg in $_wsc_argv; do set -- "$@" "$_wsc_arg"; done
                 IFS="$_wsc_oldifs"
+                case "$_wsc_oldflags" in *f*) ;; *) set +f ;; esac
             else
                 [ "$_wsc_allow" = true ] || return 2
                 set -- "$@" sh -c "$_wsc_command"
@@ -196,11 +218,14 @@ workflow_start_step() {
     _wss_id="$2"
     _wss_line="$(awk -F '\t' -v id="$_wss_id" '$1=="step" && $2==id {print; exit}' "$_wss_dir/graph.tsv")"
     _wss_oldifs="$IFS"
+    _wss_oldflags="$-"
     IFS="$(printf '\t')"
+    set -f
     # The runtime TSV uses explicit '-' placeholders for every empty field.
     # shellcheck disable=SC2086
     set -- $_wss_line
     IFS="$_wss_oldifs"
+    case "$_wss_oldflags" in *f*) ;; *) set +f ;; esac
     shift
     _wss_id="$1"
     _wss_kind="$2"
@@ -220,7 +245,7 @@ workflow_start_step() {
     (
         _ws_command_pid=""
         _ws_cancelled=0
-        trap '_ws_cancelled=1; [ -z "$_ws_command_pid" ] || kill -TERM "$_ws_command_pid" 2>/dev/null || true' HUP INT TERM
+        trap '_ws_cancelled=1; [ -z "$_ws_command_pid" ] || operations_signal_tree "$_ws_command_pid" TERM' HUP INT TERM
         workflow_step_command "$_wss_kind" "$@" >"$_wss_attempt_dir/stdout" 2>"$_wss_attempt_dir/stderr" &
         _ws_command_pid=$!
         workflow_atomic_scalar "$_wss_sd/command-pid" "$_ws_command_pid"
@@ -271,7 +296,7 @@ workflow_cancel_steps() {
                 _wcs_worker="$(sed -n '1p' "$_wcs_sd/worker-pid" 2>/dev/null || true)"
                 _wcs_command="$(sed -n '1p' "$_wcs_sd/command-pid" 2>/dev/null || true)"
                 if workflow_pid_alive "$_wcs_command"; then
-                    kill -TERM "$_wcs_command" 2>/dev/null || true
+                    operations_signal_tree "$_wcs_command" TERM
                 fi
                 if workflow_pid_alive "$_wcs_worker"; then
                     kill -TERM "$_wcs_worker" 2>/dev/null || true
@@ -291,7 +316,7 @@ workflow_drive() {
     _wd_drive_lock="$_wd_dir/.drive.lock"
     if ! mkdir "$_wd_drive_lock" 2>/dev/null; then
         _wd_existing="$(sed -n '1p' "$_wd_dir/owner-pid" 2>/dev/null || true)"
-        workflow_pid_alive "$_wd_existing" && {
+        workflow_run_owner_active "$_wd_dir" && {
             cli_error workflow already_running "workflow owner is still alive" "wait or cancel the run"
             return 1
         }

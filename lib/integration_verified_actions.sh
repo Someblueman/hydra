@@ -48,10 +48,42 @@ integration_verified_resume() {
     _ivrs_dir="$(integration_verified_root)/$1"
     [ -d "$_ivrs_dir" ] || { echo "Error: integration report not found" >&2; return 1; }
     _ivrs_state="$(sed -n '1p' "$_ivrs_dir/state")"
+    if [ "$_ivrs_state" = assembling ]; then
+        _ivrs_owner="$(sed -n '1p' "$_ivrs_dir/owner-pid" 2>/dev/null || true)"
+        if integration_pid_alive "$_ivrs_owner"; then
+            echo "Error: integration owner is still active" >&2
+            return 1
+        fi
+        _ivrs_child="$(sed -n '1p' "$_ivrs_dir/active-child" 2>/dev/null || true)"
+        if integration_pid_alive "$_ivrs_child"; then
+            operations_signal_tree "$_ivrs_child" TERM
+            _ivrs_wait=0
+            while integration_pid_alive "$_ivrs_child" && [ "$_ivrs_wait" -lt 50 ]; do
+                sleep 0.1
+                _ivrs_wait=$((_ivrs_wait + 1))
+            done
+            integration_pid_alive "$_ivrs_child" && operations_signal_tree "$_ivrs_child" KILL
+            _ivrs_wait=0
+            while integration_pid_alive "$_ivrs_child" && [ "$_ivrs_wait" -lt 50 ]; do
+                sleep 0.1
+                _ivrs_wait=$((_ivrs_wait + 1))
+            done
+            if integration_pid_alive "$_ivrs_child"; then
+                echo "Error: residual integration child is still active" >&2
+                return 1
+            fi
+        fi
+        rm -f "$_ivrs_dir/active-child"
+        integration_verified_record_failure "$_ivrs_dir" interrupted interruption \
+            "$(sed -n '1p' "$_ivrs_dir/current-candidate" 2>/dev/null || true)" "" \
+            "hydra integrate resume $1"
+        _ivrs_state=interrupted
+    fi
     case "$_ivrs_state" in interrupted|cancelled|verification-failed|resource-refused) ;; *) echo "Error: integration state '$_ivrs_state' is not resumable" >&2; return 1 ;; esac
     _ivrs_project="$(hydra_get_project_id)" || return 1
     _ivrs_project_dir="$(state_v2_project_dir "$_ivrs_project")" || return 1
     _ivrs_lock="integration_target_${_ivrs_project}"
+    remove_stale_lock_dir "$HYDRA_HOME/locks/$_ivrs_lock.lock" 2>/dev/null || true
     acquire_lock "$_ivrs_lock" "verified integration resume" || return 1
     _ivrs_worktree="$(sed -n '1p' "$_ivrs_dir/worktree")"
     _ivrs_target_ref="$(sed -n '1p' "$_ivrs_dir/target-ref")"

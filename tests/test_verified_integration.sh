@@ -27,6 +27,16 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+wait_for_file() {
+    _tvif_file="$1"
+    _tvif_count=0
+    while [ ! -f "$_tvif_file" ] && [ "$_tvif_count" -lt 100 ]; do
+        sleep 0.1
+        _tvif_count=$((_tvif_count + 1))
+    done
+    [ -f "$_tvif_file" ]
+}
+
 mkdir -p "$repo"
 cd "$repo" || exit 1
 git init -q
@@ -70,6 +80,46 @@ assert_success $? "dry-run reports order, bases, gates, target, and path"
 run="$("$HYDRA_BIN" integrate verified --base "$base_commit" --target main --execute --gate 'test -f one.txt' --gate 'test -f two.txt')"
 assert_success $? "clean candidates assemble and verify in order"
 assert_equal "$before" "$(git rev-parse main)" "assembly leaves target unchanged"
+"$HYDRA_BIN" integrate status ../config.yml >/dev/null 2>&1
+assert_failure $? "integration actions reject traversing run IDs"
+
+cat > "$test_root/crash-gate.sh" <<'EOF'
+#!/bin/sh
+[ -f "$1" ] && exit 0
+: > "$1"
+sleep 30 &
+printf '%s\n' "$!" > "$3"
+: > "$2"
+wait
+EOF
+chmod +x "$test_root/crash-gate.sh"
+"$HYDRA_BIN" integrate verified --base "$base_commit" --target main --execute \
+    --gate "sh $test_root/crash-gate.sh $test_root/crash-once $test_root/crash-started $test_root/crash-child" \
+    > "$test_root/crash-run.out" 2>&1 &
+crash_owner=$!
+wait_for_file "$test_root/crash-started" || exit 1
+crash_run="$(sed -n '1p' "$test_root/crash-run.out")"
+crash_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/integrations/$crash_run" -print | sed -n '1p')"
+kill -KILL "$crash_owner" 2>/dev/null || true
+wait "$crash_owner" 2>/dev/null || true
+find "$HYDRA_HOME/locks" -type d -name 'integration_target_*.lock' -print | grep -q .
+assert_success $? "owner crash leaves the serialized target lock for recovery"
+"$HYDRA_BIN" integrate resume "$crash_run" >/dev/null
+assert_success $? "stale assembling integration removes its stale lock and resumes"
+assert_equal verified "$(sed -n '1p' "$crash_dir/state")" "crash recovery revalidates the integration"
+kill -0 "$(sed -n '1p' "$test_root/crash-child")" 2>/dev/null
+assert_failure $? "crash recovery terminates the abandoned gate descendant"
+"$HYDRA_BIN" integrate cleanup "$crash_run" --apply >/dev/null
+
+mutation_output="$("$HYDRA_BIN" integrate verified --base "$base_commit" --target main --execute --gate 'touch gate-output; false' 2>/dev/null)"
+assert_failure $? "a mutating gate cannot produce a verified result"
+mutation_run="$(printf '%s\n' "$mutation_output" | sed -n '1p')"
+mutation_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/integrations/$mutation_run" -print | sed -n '1p')"
+assert_equal gate-mutation "$(sed -n '1p' "$mutation_dir/failure-class")" "gate mutation has a distinct failure class"
+grep -q 'remove gate-created changes.*hydra integrate resume' "$mutation_dir/recovery-action"
+assert_success $? "gate mutation records an actionable recovery path"
+rm -f "$(sed -n '1p' "$mutation_dir/worktree")/gate-output"
+"$HYDRA_BIN" integrate cleanup "$mutation_run" --apply >/dev/null
 "$HYDRA_BIN" integrate promote "$run" >/dev/null 2>&1
 assert_failure $? "promotion requires explicit current approval"
 "$HYDRA_BIN" integrate approve "$run" --by tester

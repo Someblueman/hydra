@@ -97,6 +97,14 @@ cmd_land() {
 
 cmd_integrate() {
     case "${1:-}" in
+        status|report|promote|cancel|resume|cleanup|approve)
+            if [ "$#" -lt 2 ] || ! hydra_valid_id "$2"; then
+                echo "Error: invalid integration run ID" >&2
+                return 1
+            fi
+            ;;
+    esac
+    case "${1:-}" in
         -h|--help|'')
             printf '%s\n' \
                 'Usage: hydra integrate <run-or-group> --base <ref> --target <ref> --dry-run' \

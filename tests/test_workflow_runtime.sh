@@ -61,6 +61,9 @@ git branch -M main
 git add .hydra/config.yml
 git commit -qm config
 
+"$HYDRA_BIN" workflow status ../config.yml >/dev/null 2>&1
+assert_failure $? "workflow commands reject traversing run IDs"
+
 cat > "$test_root/barrier.sh" <<'EOF'
 #!/bin/sh
 set -eu
@@ -143,6 +146,38 @@ assert_success $? "events correlate run and step identities"
 if [ -s "$parallel_dir/manifest.tsv" ] && [ -s "$parallel_dir/resolved.yml" ] && [ -s "$parallel_dir/graph.tsv" ]; then manifest_status=0; else manifest_status=1; fi
 assert_success "$manifest_status" "resolved workflow and manifest exist before execution evidence"
 
+sleep 30 &
+terminal_owner=$!
+printf '%s\n' "$terminal_owner" > "$parallel_dir/owner-pid"
+"$HYDRA_BIN" workflow cancel "$parallel_run" >/dev/null 2>&1
+assert_failure $? "terminal workflow refuses cancellation"
+kill -0 "$terminal_owner" 2>/dev/null
+assert_success $? "terminal workflow cancellation does not signal a reused owner PID"
+kill "$terminal_owner" 2>/dev/null || true
+wait "$terminal_owner" 2>/dev/null || true
+
+cat > "$test_root/glob-message.yml" <<'EOF'
+version: 1
+id: literal-glob-message
+parallelism: 1
+resources:
+  disk_mb: 1
+  max_heads: 1
+steps:
+  - id: send-literal
+    kind: message
+    needs: []
+    retry: 0
+    idempotent: false
+    args:
+      head: workflow-a
+      message: '*'
+EOF
+"$HYDRA_BIN" workflow run "$test_root/glob-message.yml" >/dev/null
+assert_success $? "runtime decoding preserves a glob scalar"
+glob_message="$(find "$HYDRA_HOME/state/v2/projects" -path '*/messages/queue/*' -type f | sed -n '1p')"
+assert_equal "*" "$(sed -n '1p' "$glob_message")" "runtime dispatches the literal glob without pathname expansion"
+
 cat > "$test_root/retry.sh" <<'EOF'
 #!/bin/sh
 set -eu
@@ -217,6 +252,51 @@ assert_equal cancelled "$(sed -n '1p' "$cancel_dir/state")" "cancelled run recor
 if [ ! -s "$cancel_dir/residual-children.tsv" ] && [ ! -f "$test_root/cancel-completed" ]; then cancel_status=0; else cancel_status=1; fi
 assert_success "$cancel_status" "cancellation leaves no reported or completed child command"
 
+cat > "$test_root/gate-tree.sh" <<'EOF'
+#!/bin/sh
+started="$1"
+child_file="$2"
+sleep 30 &
+child=$!
+printf '%s\n' "$child" > "$child_file"
+: > "$started"
+wait "$child"
+EOF
+chmod +x "$test_root/gate-tree.sh"
+cat > "$test_root/gate-cancel.yml" <<EOF
+version: 1
+id: gate-tree-cancellation
+parallelism: 1
+resources:
+  disk_mb: 1
+  max_heads: 1
+steps:
+  - id: gate-tree
+    kind: gate
+    needs: []
+    retry: 0
+    idempotent: true
+    args:
+      head: workflow-a
+      name: cancellation-tree
+      argv: [sh, $test_root/gate-tree.sh, $test_root/gate-started, $test_root/gate-child-pid]
+EOF
+"$HYDRA_BIN" workflow run "$test_root/gate-cancel.yml" > "$test_root/gate-cancel.out" 2>&1 &
+gate_runner=$!
+wait_for_file "$test_root/gate-started" || exit 1
+gate_run="$(sed -n '1p' "$test_root/gate-cancel.out")"
+"$HYDRA_BIN" workflow cancel "$gate_run" >/dev/null
+assert_success $? "gate workflow cancellation reaches the command tree"
+wait "$gate_runner" 2>/dev/null || true
+gate_child="$(sed -n '1p' "$test_root/gate-child-pid")"
+gate_wait=0
+while kill -0 "$gate_child" 2>/dev/null && [ "$gate_wait" -lt 50 ]; do
+    sleep 0.1
+    gate_wait=$((gate_wait + 1))
+done
+kill -0 "$gate_child" 2>/dev/null
+assert_failure $? "gate workflow cancellation leaves no descendant process"
+
 cat > "$test_root/effect.sh" <<'EOF'
 #!/bin/sh
 set -eu
@@ -279,6 +359,11 @@ while { kill -0 "$resume_command" 2>/dev/null || kill -0 "$resume_worker" 2>/dev
     sleep 0.1
     resume_wait=$((resume_wait + 1))
 done
+resume_base="$(git rev-parse HEAD)"
+git commit --allow-empty -qm advanced-after-interruption
+"$HYDRA_BIN" workflow resume "$resume_run" >/dev/null 2>&1
+assert_failure $? "resume rejects a checkout advanced beyond the recorded base"
+git switch --detach -q "$resume_base"
 "$HYDRA_BIN" workflow resume "$resume_run" >/dev/null
 assert_success $? "stale run resumes its retryable interrupted step"
 assert_equal succeeded "$(sed -n '1p' "$resume_dir/state")" "resumed run reaches success"

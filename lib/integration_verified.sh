@@ -205,6 +205,12 @@ integration_verified_run_gates() {
         rm -f "$_ivg_report/active-child"
         state_v2_write_scalar "$_ivg_dir/exit-status" "$_ivg_status"
         state_v2_write_scalar "$_ivg_dir/completed-at" "$(date +%s)"
+        if [ -n "$(git -C "$_ivg_worktree" status --porcelain=v1 2>/dev/null || true)" ]; then
+            integration_verified_record_failure "$_ivg_report" verification-failed gate-mutation \
+                "$_ivg_candidate_branch" "$_ivg_gate_n" \
+                "remove gate-created changes from $_ivg_worktree, then hydra integrate resume $(sed -n '1p' "$_ivg_report/run-id")"
+            return 1
+        fi
         if [ "$_ivg_status" -ne 0 ]; then
             integration_verified_record_failure "$_ivg_report" verification-failed gate "$_ivg_candidate_branch" "$_ivg_gate_n" "hydra integrate resume $(sed -n '1p' "$_ivg_report/run-id")"
             return 1
@@ -356,5 +362,4 @@ integration_verified_execute() {
     release_lock "$_ive_lock"
     [ "$_ive_status" -eq 0 ] || return "$_ive_status"
 }
-
 

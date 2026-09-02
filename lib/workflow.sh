@@ -54,7 +54,9 @@ workflow_require_trust() {
 workflow_list() {
     _wl_dir="$(workflow_dir)" || return 1
     [ -d "$_wl_dir" ] || return 0
-    find "$_wl_dir" -type f \( -name '*.yml' -o -name '*.yaml' \) -maxdepth 1 2>/dev/null |
+    for _wl_candidate in "$_wl_dir"/*.yml "$_wl_dir"/*.yaml; do
+        [ -f "$_wl_candidate" ] && printf '%s\n' "$_wl_candidate"
+    done |
         LC_ALL=C sort | while IFS= read -r _wl_file; do
             workflow_require_trust "$_wl_file" || exit 1
             workflow_parse "$_wl_file" identity || exit 1
@@ -208,5 +210,4 @@ workflow_parse() {
         print "No commands will be executed; Git, tmux, worktrees, and run state are unchanged."
     }' "$_wp_file"
 }
-
 

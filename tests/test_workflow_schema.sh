@@ -31,6 +31,17 @@ assert_success "$?" "dry-run accepts a valid DAG"
 grep -q 'NON-IDEMPOTENT BOUNDARY' "$TEST_ROOT/dry"
 assert_success "$?" "dry-run explains idempotency boundaries"
 
+list_repo="$TEST_ROOT/list-repo"
+mkdir -p "$list_repo/.hydra/workflows"
+git -C "$list_repo" init -q
+git -C "$list_repo" config user.name Test
+git -C "$list_repo" config user.email test@example.com
+cp "$valid" "$list_repo/.hydra/workflows/listed.yml"
+(cd "$list_repo" && "$HYDRA_BIN" init --no-agent --trust >/dev/null && "$HYDRA_BIN" workflow list) > "$TEST_ROOT/list" 2>&1
+assert_success "$?" "workflow list uses a POSIX directory scan"
+grep -q '^review-change$' "$TEST_ROOT/list"
+assert_success "$?" "workflow list reports repository definitions"
+
 reject() {
     _r_name="$1"
     _r_text="$2"
