@@ -51,6 +51,7 @@ _hydra_completion() {
         context) COMPREPLY=($(compgen -W "create" -- ${cur})); return 0 ;;
         worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
         snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
+        tui) COMPREPLY=($(compgen -W "--basic --native --capabilities" -- ${cur})); return 0 ;;
         kill)
             # Complete with git branch names or --all flag
             case "${cur}" in
@@ -389,7 +390,7 @@ _hydra_commands() {
         'worktree:Run worktree doctor actions'
         'snapshot:Emit canonical state JSON'
         'list:List all active Hydra heads'
-        'switch:Switch to a different head (interactive)'
+        'switch:Switch to a different head'
         'kill:Remove a worktree and its tmux session'
         'regenerate:Restore tmux sessions for existing worktrees'
         'state:Verify, back up, migrate, or roll back durable state'
@@ -480,7 +481,7 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'gc' -d 'Apply a named cleanu
 complete -c hydra -f -n '__fish_use_subcommand' -a 'worktree' -d 'Run worktree doctor actions'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'snapshot' -d 'Emit canonical state JSON'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'list' -d 'List all active Hydra heads'
-complete -c hydra -f -n '__fish_use_subcommand' -a 'switch' -d 'Switch to a different head (interactive)'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'switch' -d 'Switch to a different head'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'kill' -d 'Remove a worktree and its tmux session'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'regenerate' -d 'Restore tmux sessions for existing worktrees'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'state' -d 'Verify, back up, migrate, or roll back durable state'
@@ -491,6 +492,9 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'dashboard' -d 'View all sess
 complete -c hydra -f -n '__fish_use_subcommand' -a 'dashboard-exit' -d 'Exit the dashboard session'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'cycle-layout' -d 'Cycle through tmux pane layouts'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'tui' -d 'Interactive terminal UI for session management'
+complete -c hydra -f -n '__fish_seen_subcommand_from tui' -l basic -d 'Use maintained shell TUI'
+complete -c hydra -f -n '__fish_seen_subcommand_from tui' -l native -d 'Use native mission control'
+complete -c hydra -f -n '__fish_seen_subcommand_from tui' -l capabilities -d 'Show TUI capability diagnostics'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'cleanup' -d 'Remove orphaned worktrees and mappings'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'pr' -d 'Create or show GitHub PR for a session'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'template' -d 'Manage session templates'

@@ -40,11 +40,13 @@ echo "Running native install tests..."
 echo "==============================="
 
 HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_CORE_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-core.sh" >/dev/null
+HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_TUI_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-tui.sh" >/dev/null
 prefix="$test_root/offline-prefix"
 home="$test_root/home"
 mkdir -p "$home"
-HOME="$home" PREFIX="$prefix" HYDRA_INSTALL_CORE=required \
-    HYDRA_CORE_ARTIFACT="$package/hydra-core" sh "$repo_root/install.sh" > "$test_root/install.out" 2>&1
+HOME="$home" PREFIX="$prefix" HYDRA_INSTALL_CORE=required HYDRA_INSTALL_TUI=required \
+    HYDRA_CORE_ARTIFACT="$package/hydra-core" HYDRA_TUI_ARTIFACT="$package/hydra-tui" \
+    sh "$repo_root/install.sh" > "$test_root/install.out" 2>&1
 assert_success $? "offline native installation succeeds"
 assert_file "$prefix/libexec/hydra/hydra-core" "offline install places native helper"
 assert_file "$prefix/libexec/hydra/hydra-core.sha256" "offline install records checksum"
@@ -52,6 +54,18 @@ assert_file "$prefix/libexec/hydra/hydra-core.platform" "offline install records
 assert_file "$prefix/libexec/hydra/hydra-core.dependencies" "offline install records dependency declaration"
 assert_file "$prefix/libexec/hydra/hydra-core.source" "offline install records qualified source identity"
 assert_equal "1" "$("$prefix/libexec/hydra/hydra-core" --protocol-version)" "installed core protocol handshake"
+assert_file "$prefix/libexec/hydra/hydra-tui" "offline install places native TUI"
+assert_file "$prefix/libexec/hydra/hydra-tui.sha256" "offline install records native TUI checksum"
+assert_file "$prefix/libexec/hydra/hydra-tui.platform" "offline install records native TUI platform"
+assert_file "$prefix/libexec/hydra/hydra-tui.dependencies" "offline install records native TUI dependencies"
+assert_file "$prefix/libexec/hydra/hydra-tui.source" "offline install records native TUI source identity"
+assert_equal "2" "$("$prefix/libexec/hydra/hydra-tui" --protocol-version)" "installed TUI protocol handshake"
+HOME="$home" HYDRA_HOME="$home/.hydra" "$prefix/bin/hydra" tui --capabilities --json > "$test_root/tui-capabilities.json"
+if grep -Fq '"native":true' "$test_root/tui-capabilities.json"; then
+    assert_success 0 "installed CLI discovers adjacent native TUI"
+else
+    assert_success 1 "installed CLI discovers adjacent native TUI"
+fi
 mkdir -p "$home/.hydra/state/v2/projects"
 printf '2\n' > "$home/.hydra/state/v2/schema-version"
 HOME="$home" HYDRA_HOME="$home/.hydra" "$prefix/bin/hydra" snapshot --native \
@@ -59,6 +73,7 @@ HOME="$home" HYDRA_HOME="$home/.hydra" "$prefix/bin/hydra" snapshot --native \
 assert_success $? "installed CLI discovers adjacent native helper"
 assert_equal "" "$(sed -n '1p' "$test_root/installed-snapshot.err")" "installed native helper needs no fallback"
 installed_hash="$(file_hash "$prefix/libexec/hydra/hydra-core")"
+installed_tui_hash="$(file_hash "$prefix/libexec/hydra/hydra-tui")"
 
 bad="$test_root/bad"
 mkdir -p "$bad"
@@ -71,6 +86,18 @@ HOME="$home" PREFIX="$prefix" HYDRA_INSTALL_CORE=required \
     HYDRA_CORE_ARTIFACT="$bad/hydra-core" sh "$repo_root/install.sh" > "$test_root/bad.out" 2>&1
 assert_failure $? "checksum mismatch rejects offline artifact"
 assert_equal "$installed_hash" "$(file_hash "$prefix/libexec/hydra/hydra-core")" "checksum failure preserves installed core"
+
+bad_tui="$test_root/bad-tui"
+mkdir -p "$bad_tui"
+cp "$package/hydra-tui" "$bad_tui/hydra-tui"
+cp "$package/hydra-tui.platform" "$bad_tui/hydra-tui.platform"
+cp "$package/hydra-tui.dependencies" "$bad_tui/hydra-tui.dependencies"
+cp "$package/hydra-tui.source" "$bad_tui/hydra-tui.source"
+printf '0000  hydra-tui\n' > "$bad_tui/hydra-tui.sha256"
+HOME="$home" PREFIX="$prefix" HYDRA_INSTALL_CORE=never HYDRA_INSTALL_TUI=required \
+    HYDRA_TUI_ARTIFACT="$bad_tui/hydra-tui" sh "$repo_root/install.sh" > "$test_root/bad-tui.out" 2>&1
+assert_failure $? "checksum mismatch rejects offline native TUI artifact"
+assert_equal "$installed_tui_hash" "$(file_hash "$prefix/libexec/hydra/hydra-tui")" "checksum failure preserves installed native TUI"
 
 fake="$test_root/version-skew"
 mkdir -p "$fake"
@@ -97,9 +124,11 @@ source_prefix="$test_root/source-prefix"
 source_home="$test_root/source-home"
 mkdir -p "$source_home"
 HOME="$source_home" PREFIX="$source_prefix" HYDRA_INSTALL_CORE=required HYDRA_BUILD_CORE=1 \
+    HYDRA_INSTALL_TUI=required HYDRA_BUILD_TUI=1 \
     sh "$repo_root/install.sh" > "$test_root/source.out" 2>&1
 assert_success $? "source build and native installation succeeds"
 assert_file "$source_prefix/libexec/hydra/hydra-core" "source workflow installs native helper"
+assert_file "$source_prefix/libexec/hydra/hydra-tui" "source workflow installs native TUI"
 HOME="$source_home" PREFIX="$source_prefix" sh "$repo_root/uninstall.sh" --purge >/dev/null 2>&1
 
 archive_checkout="$test_root/source-archive"
@@ -109,11 +138,15 @@ mkdir -p "$archive_checkout" "$archive_home"
 cp "$repo_root/Makefile" "$repo_root/install.sh" "$archive_checkout/"
 cp -R "$repo_root/bin" "$repo_root/lib" "$repo_root/src" "$archive_checkout/"
 HOME="$archive_home" PREFIX="$archive_prefix" HYDRA_INSTALL_CORE=required HYDRA_BUILD_CORE=1 \
+    HYDRA_INSTALL_TUI=required HYDRA_BUILD_TUI=1 \
     sh "$archive_checkout/install.sh" > "$test_root/archive-source.out" 2>&1
 assert_success $? "source archive without Git metadata installs native helper"
-assert_equal "hydra-1.7.0-source-tree" \
+assert_equal "hydra-1.8.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-core.source")" \
     "source archive records explicit non-commit provenance"
+assert_equal "hydra-1.8.0-source-tree" \
+    "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-tui.source")" \
+    "source archive records explicit native TUI provenance"
 
 missing_prefix="$test_root/missing-prefix"
 HOME="$test_root" PREFIX="$missing_prefix" HYDRA_INSTALL_CORE=required \

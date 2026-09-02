@@ -62,7 +62,7 @@ hydra version
 ### 2. Verify
 
 ```sh
-hydra version          # Hydra version 1.7.0
+hydra version          # Hydra version 1.8.0
 hydra doctor           # install paths, git/tmux, writable HYDRA_HOME, agents
 ```
 
@@ -77,7 +77,8 @@ hydra init --no-agent --trust
 hydra spawn first-head --no-agent --prompt "Inspect this throwaway project"
 hydra list
 hydra path first-head   # stored identity-scoped worktree path
-hydra switch           # enter the session (fzf if installed)
+hydra switch my-work   # enter that head directly
+hydra switch           # choose interactively (fzf if installed)
 ```
 
 `--no-agent` is the first-class shell-only path. Without an explicit or configured
@@ -138,6 +139,7 @@ hydra list              # list all sessions
 hydra list --json       # JSON output for scripting
 hydra list --git        # add recorded-base Git evidence
 hydra list -g mygroup   # filter by group
+hydra switch feature/ui # enter a named head directly
 hydra switch            # interactive (fzf if available)
 
 # Manage
@@ -195,7 +197,9 @@ hydra snapshot --native # explicitly try the optional read-only native helper
 
 # Dashboard & TUI
 hydra dashboard                                    # multi-session overview
-hydra tui                                          # interactive session manager
+hydra tui                                          # maintained basic shell TUI
+hydra tui --native                                 # opt-in native mission control
+hydra tui --capabilities                           # native/basic diagnostics
 ```
 
 ## Layouts
@@ -223,6 +227,7 @@ hydra tui                                          # interactive session manager
 | `HYDRA_DISABLE_YAML` | Disable YAML config parsing |
 | `HYDRA_CORE` | Explicit optional `hydra-core` executable for native qualification |
 | `HYDRA_CORE_TIMEOUT_SECONDS` | Native handshake/command timeout (default `2`) |
+| `HYDRA_TUI_BIN` | Explicit optional `hydra-tui` executable for qualification |
 
 Per-head profile, task, identity, worktree path, instance, and lifecycle event are
 stored in project-scoped state v2. See [profiles](docs/PROFILES.md),
@@ -232,7 +237,9 @@ related contracts are documented in [security](docs/SECURITY.md),
 [operations](docs/OPERATIONS.md), and [provenance](docs/PROVENANCE.md).
 Parallel coordination and native distribution are documented in
 [parallel safety](docs/PARALLEL_SAFETY.md) and the
-[optional native core](docs/NATIVE_CORE.md).
+[optional native core](docs/NATIVE_CORE.md). Native/basic dispatch, terminal safety,
+keymaps, accessibility, and recovery are documented in
+[native mission control](docs/NATIVE_TUI.md).
 
 ## YAML Config (optional)
 
@@ -273,11 +280,22 @@ Add `.hydra/` scripts to customize lifecycle:
 
 ## TUI
 
-Interactive terminal UI for managing sessions with real-time updates.
+Hydra keeps the existing feature-rich shell TUI as the 1.8.0 default and adds an
+opt-in native mission-control UI over the same shell-owned state.
 
 ```sh
-hydra tui
+hydra tui                  # basic shell TUI
+hydra tui --basic          # explicit basic mode
+hydra tui --native         # native list/detail/coordination/recovery views
+hydra tui --capabilities   # availability and observation diagnostics
 ```
+
+The native keymap is deliberately small: `j`/`k` or arrows navigate, `Enter` opens
+detail, `v` cycles views, `/` searches heads, `:` searches explicit actions, `p`
+toggles a sanitized pane preview, and `q` exits. Its mutations are delegated to the
+shell CLI with argument-vector execution. See [Native mission control](docs/NATIVE_TUI.md).
+
+The larger keymap below belongs to the maintained basic shell TUI.
 
 | Key | Action |
 |-----|--------|

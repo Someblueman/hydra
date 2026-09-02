@@ -55,7 +55,7 @@ _tui_load_modules() {
     if [ -z "$_tdir" ]; then
         _tdir="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)" || true
     fi
-    for _mod in tui_init tui_data tui_tags tui_render tui_input tui_actions tui_main; do
+    for _mod in tui_init tui_data tui_tags tui_render tui_input tui_actions tui_native tui_main; do
         # shellcheck disable=SC1090
         . "$_tdir/${_mod}.sh"
     done

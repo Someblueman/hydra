@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-08-30
+
+### Added
+
+- Optional C99 `hydra-tui` mission control with list, detail, coordination, recovery,
+  search, sanitized pane preview, resize handling, and explicit source/confidence
+  rendering
+- Distinct declared, observed, liveness, stale, and unavailable states plus event,
+  signal, message, gate, claim, scope, queue, resource, diff, and approval summaries
+- Searchable fixed-action palette whose spawn, switch, kill, and regenerate actions
+  delegate to the shell CLI with argv-safe process execution
+- Recovery board for malformed state, stale locks, dead sessions, orphan worktrees,
+  interrupted transitions, and teardown failures
+- `hydra tui --native`, `--basic`, capability diagnostics, and a deterministic
+  headless fixture renderer with explicit frame and terminal-size bounds
+- Checksummed platform-qualified native TUI packaging, offline/source installation,
+  sanitizer coverage, and Linux/macOS hosted build/test configuration
+- Native/basic behavior, fallback, keymap, accessibility, terminal safety, and
+  recovery documentation
+
+### Changed
+
+- The basic shell TUI remains the default for 1.8.0; native dispatch is opt-in
+- Native observation uses measured bounded polling because the control-mode prototype
+  did not yet qualify reconnect and flow-control reliability
+- Hydra/core/TUI release handshakes now report 1.8.0 while protocol v1 remains stable
+
+### Security
+
+- Pane and fixture bytes are treated as untrusted and cannot emit terminal controls
+  or feed the action parser
+- Bracketed paste, unknown escape sequences, terminal dimensions, record counts, and
+  preview capture are bounded
+- Native code performs no state mutation or notification delivery
+
 ## [1.7.0] - 2026-08-30
 
 ### Added

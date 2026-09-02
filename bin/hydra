@@ -12,7 +12,7 @@ fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_LEGACY_MAP="$HYDRA_HOME/map"
 HYDRA_MAP="$HYDRA_LEGACY_MAP"
-HYDRA_VERSION="1.7.0"
+HYDRA_VERSION="1.8.0"
 
 # State v2 keeps the legacy seven-field view as a project-scoped compatibility
 # projection while older commands are migrated to scalar records.
@@ -350,14 +350,24 @@ _load_libs_for_cmd() {
             _load_lib output
             _load_lib paths
             _load_lib locks
+            _load_lib identity
             _load_lib git
             _load_lib tmux
             _load_lib layout
             _load_lib state
+            _load_lib state_v2
+            _load_lib project
+            _load_lib profiles
+            _load_lib notify
+            _load_lib events
+            _load_lib lifecycle
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
             _load_lib kill
+            _load_lib limits
+            _load_lib maintenance
+            _load_lib parallel
             _load_lib github
             _load_lib dashboard
             _load_lib cmd_spawn
@@ -514,7 +524,7 @@ Commands:
                       --git                    Show recorded-base Git evidence
                       --no-pr-status           Skip fetching PR status (faster)
                       --refresh-pr-status      Force refresh PR status cache
-  switch            Switch to a different head (interactive)
+  switch [branch]   Switch to a head directly, or choose interactively
   kill <branch>     Remove a worktree and its tmux session
   kill --all        Kill all hydra sessions
   kill --group <n>  Kill all sessions in a group
@@ -566,7 +576,11 @@ Commands:
   dashboard         View all sessions in a single dashboard
                     Options:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session
-  tui               Interactive terminal UI for managing sessions
+  tui               Interactive terminal UI and opt-in native mission control
+                    Options:
+                      --basic                  Use the maintained shell TUI (default)
+                      --native                 Use native mission control
+                      --capabilities [--json]  Show TUI availability and dispatch policy
   cycle-layout      Cycle through tmux pane layouts
   queue             View and manage pending spawn queue
                     Subcommands:
@@ -615,6 +629,7 @@ Environment:
   HYDRA_SETUP_CONTINUE  Set to 1 to continue spawn even if setup fails
   HYDRA_CORE        Explicit optional hydra-core executable
   HYDRA_CORE_TIMEOUT_SECONDS  Native handshake/command timeout (default: 2)
+  HYDRA_TUI_BIN     Explicit optional hydra-tui executable
 EOF
 }
 
