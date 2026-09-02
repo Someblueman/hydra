@@ -32,7 +32,9 @@ integration_verified_cancel() {
     [ "$_ivca_state" = assembling ] || return 1
     state_v2_write_scalar "$_ivca_dir/cancel-requested" "$(date +%s)"
     _ivca_owner="$(sed -n '1p' "$_ivca_dir/owner-pid" 2>/dev/null || true)"
-    integration_pid_alive "$_ivca_owner" && kill -TERM "$_ivca_owner" 2>/dev/null || true
+    if integration_pid_alive "$_ivca_owner"; then
+        kill -TERM "$_ivca_owner" 2>/dev/null || true
+    fi
     _ivca_wait=0
     while [ "$(sed -n '1p' "$_ivca_dir/state")" = assembling ] && [ "$_ivca_wait" -lt 50 ]; do
         sleep 0.1
@@ -169,4 +171,3 @@ integration_verified_cleanup() {
     state_v2_write_scalar "$_ivc_dir/cleanup" removed
     state_v2_write_scalar "$_ivc_dir/cleaned-at" "$(date +%s)"
 }
-

@@ -137,12 +137,16 @@ cmd_integrate() {
                 integration_verified_status "$2"
                 return
             fi
-            [ "$#" -eq 3 ] && [ "$3" = --apply ] || return 1
+            if [ "$#" -ne 3 ] || [ "$3" != --apply ]; then
+                return 1
+            fi
             integration_verified_cleanup "$2"
             return
             ;;
         approve)
-            [ "$#" -eq 4 ] && [ "$3" = --by ] || return 1
+            if [ "$#" -ne 4 ] || [ "$3" != --by ]; then
+                return 1
+            fi
             integration_verified_approve "$2" "$4"
             return
             ;;

@@ -86,7 +86,10 @@ cmd_workflow() {
             workflow_drive "$_cw_dir"
             ;;
         status)
-            [ "$#" -ge 2 ] && [ "$#" -le 3 ] || { cli_error workflow invalid_arguments "status requires a run ID and optional --json" "run hydra workflow --help"; return 1; }
+            if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+                cli_error workflow invalid_arguments "status requires a run ID and optional --json" "run hydra workflow --help"
+                return 1
+            fi
             _cw_runs="$(workflow_runs_dir)" || return 1; _cw_dir="$_cw_runs/$2"; [ -d "$_cw_dir" ] || { cli_error workflow run_not_found "workflow run not found: $2" "inspect the project workflow runs"; return 1; }
             _cw_state="$(sed -n '1p' "$_cw_dir/state")"; _cw_owner="$(sed -n '1p' "$_cw_dir/owner-pid" 2>/dev/null || true)"
             _cw_heartbeat="$(sed -n '1p' "$_cw_dir/heartbeat-at" 2>/dev/null || printf 0)"
@@ -103,7 +106,10 @@ cmd_workflow() {
             [ "$#" -eq 2 ] || { cli_error workflow invalid_arguments "cancel requires a run ID" "run hydra workflow --help"; return 1; }
             _cw_runs="$(workflow_runs_dir)" || return 1; _cw_dir="$_cw_runs/$2"; [ -d "$_cw_dir" ] || return 1
             workflow_atomic_scalar "$_cw_dir/cancel-requested" "$(date +%s)"; workflow_event "$_cw_dir" "" run.cancel_requested
-            _cw_owner="$(sed -n '1p' "$_cw_dir/owner-pid" 2>/dev/null || true)"; workflow_pid_alive "$_cw_owner" && kill -TERM "$_cw_owner" 2>/dev/null || true
+            _cw_owner="$(sed -n '1p' "$_cw_dir/owner-pid" 2>/dev/null || true)"
+            if workflow_pid_alive "$_cw_owner"; then
+                kill -TERM "$_cw_owner" 2>/dev/null || true
+            fi
             if ! workflow_pid_alive "$_cw_owner"; then
                 workflow_drive "$_cw_dir" || true
             fi

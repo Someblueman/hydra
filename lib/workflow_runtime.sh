@@ -270,9 +270,15 @@ workflow_cancel_steps() {
             running)
                 _wcs_worker="$(sed -n '1p' "$_wcs_sd/worker-pid" 2>/dev/null || true)"
                 _wcs_command="$(sed -n '1p' "$_wcs_sd/command-pid" 2>/dev/null || true)"
-                workflow_pid_alive "$_wcs_command" && kill -TERM "$_wcs_command" 2>/dev/null || true
-                workflow_pid_alive "$_wcs_worker" && kill -TERM "$_wcs_worker" 2>/dev/null || true
-                workflow_pid_alive "$_wcs_worker" && printf '%s\t%s\t%s\n' "$(basename "$_wcs_sd")" "$_wcs_worker" "$_wcs_command" >> "$_wcs_dir/residual-children.tsv"
+                if workflow_pid_alive "$_wcs_command"; then
+                    kill -TERM "$_wcs_command" 2>/dev/null || true
+                fi
+                if workflow_pid_alive "$_wcs_worker"; then
+                    kill -TERM "$_wcs_worker" 2>/dev/null || true
+                fi
+                if workflow_pid_alive "$_wcs_worker"; then
+                    printf '%s\t%s\t%s\n' "$(basename "$_wcs_sd")" "$_wcs_worker" "$_wcs_command" >> "$_wcs_dir/residual-children.tsv"
+                fi
                 ;;
         esac
     done <<EOF
@@ -312,11 +318,20 @@ workflow_drive() {
         if [ ! -f "$_wd_dir/cancel-requested" ]; then
             _wd_slots=$((_wd_parallelism - _wd_active))
             while [ "$_wd_slots" -gt 0 ]; do
-                _wd_next="$(awk -F '\t' '$1=="step" {print $2}' "$_wd_dir/graph.tsv" | while IFS= read -r _wd_id; do [ "$(sed -n '1p' "$_wd_dir/steps/$_wd_id/state")" = ready ] && { printf '%s\n' "$_wd_id"; break; }; done || true)"
+                _wd_next="$(awk -F '\t' '$1=="step" {print $2}' "$_wd_dir/graph.tsv" | while IFS= read -r _wd_id; do
+                    if [ "$(sed -n '1p' "$_wd_dir/steps/$_wd_id/state")" = ready ]; then
+                        printf '%s\n' "$_wd_id"
+                        break
+                    fi
+                done || true)"
                 [ -n "$_wd_next" ] || break
                 _wd_next_kind="$(awk -F '\t' -v id="$_wd_next" '$1=="step" && $2==id { print $3; exit }' "$_wd_dir/graph.tsv")"
                 if [ "$_wd_next_kind" = spawn ]; then
-                    _wd_spawn_active="$(awk -F '\t' '$1=="step" && $3=="spawn" { print $2 }' "$_wd_dir/graph.tsv" | while IFS= read -r _wd_spawn_id; do [ "$(sed -n '1p' "$_wd_dir/steps/$_wd_spawn_id/state")" = running ] && printf 'running\n'; done | grep -Ec '^running$' || true)"
+                    _wd_spawn_active="$(awk -F '\t' '$1=="step" && $3=="spawn" { print $2 }' "$_wd_dir/graph.tsv" | while IFS= read -r _wd_spawn_id; do
+                        if [ "$(sed -n '1p' "$_wd_dir/steps/$_wd_spawn_id/state")" = running ]; then
+                            printf 'running\n'
+                        fi
+                    done | grep -Ec '^running$' || true)"
                     [ "$_wd_spawn_active" -eq 0 ] || break
                 fi
                 if ! workflow_disk_available "$_wd_dir"; then
@@ -366,4 +381,3 @@ workflow_drive() {
         sleep 1
     done
 }
-
