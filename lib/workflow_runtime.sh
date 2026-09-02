@@ -298,9 +298,6 @@ workflow_cancel_steps() {
                 if workflow_pid_alive "$_wcs_command"; then
                     operations_signal_tree "$_wcs_command" TERM
                 fi
-                if workflow_pid_alive "$_wcs_worker"; then
-                    kill -TERM "$_wcs_worker" 2>/dev/null || true
-                fi
                 _wcs_worker_state="$(ps -o stat= -p "$_wcs_worker" 2>/dev/null | sed -n '1p' | tr -d ' ')"
                 case "$_wcs_worker_state" in Z*) wait "$_wcs_worker" 2>/dev/null || true ;; esac
                 if workflow_pid_alive "$_wcs_worker"; then
