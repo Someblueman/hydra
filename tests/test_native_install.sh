@@ -138,13 +138,13 @@ mkdir -p "$archive_checkout" "$archive_home"
 cp "$repo_root/Makefile" "$repo_root/install.sh" "$archive_checkout/"
 cp -R "$repo_root/bin" "$repo_root/lib" "$repo_root/src" "$archive_checkout/"
 HOME="$archive_home" PREFIX="$archive_prefix" HYDRA_INSTALL_CORE=required HYDRA_BUILD_CORE=1 \
-    HYDRA_INSTALL_TUI=required HYDRA_BUILD_TUI=1 \
     sh "$archive_checkout/install.sh" > "$test_root/archive-source.out" 2>&1
-assert_success $? "source archive without Git metadata installs native helper"
-assert_equal "hydra-1.9.0-source-tree" \
+assert_success $? "source archive auto-builds native TUI without Git metadata"
+assert_file "$archive_prefix/libexec/hydra/hydra-tui" "auto install builds and installs native TUI when a compiler is available"
+assert_equal "hydra-2.0.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-core.source")" \
     "source archive records explicit non-commit provenance"
-assert_equal "hydra-1.9.0-source-tree" \
+assert_equal "hydra-2.0.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-tui.source")" \
     "source archive records explicit native TUI provenance"
 

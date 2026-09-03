@@ -132,10 +132,9 @@ Commands:
   dashboard         View all sessions in a single dashboard
                     Options:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session
-  tui               Interactive terminal UI and opt-in native mission control
+  tui               Native mission control with visible basic fallback
                     Options:
-                      --basic                  Use the maintained shell TUI (default)
-                      --native                 Use native mission control
+                      --basic                  Use the maintained shell TUI explicitly
                       --capabilities [--json]  Show TUI availability and dispatch policy
   cycle-layout      Cycle through tmux pane layouts
   queue             View and manage pending spawn queue
@@ -434,5 +433,4 @@ main() {
             ;;
     esac
 }
-
 

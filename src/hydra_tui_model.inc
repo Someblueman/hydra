@@ -231,6 +231,50 @@ static int refresh_model(struct app *app) {
     return 0;
 }
 
+static void refresh_current_session(struct app *app) {
+    int pipefd[2], status = 0, ready, attempt;
+    pid_t pid;
+    ssize_t length = 0;
+    posix_spawn_file_actions_t actions;
+    char output[TEXT] = "";
+    char *argv[] = {(char *)"tmux", (char *)"display-message", (char *)"-p",
+                    (char *)"#{session_name}", NULL};
+    struct timeval timeout = {1, 0};
+    struct timespec delay = {0, 50000000L};
+    app->current_session[0] = '\0';
+    if (getenv("TMUX") == NULL || pipe(pipefd) != 0) return;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addclose(&actions, pipefd[0]);
+    posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
+    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addclose(&actions, pipefd[1]);
+    if (posix_spawnp(&pid, "tmux", &actions, NULL, argv, environ) != 0) {
+        posix_spawn_file_actions_destroy(&actions);
+        close(pipefd[0]); close(pipefd[1]); return;
+    }
+    posix_spawn_file_actions_destroy(&actions);
+    close(pipefd[1]);
+    {
+        fd_set readfds;
+        FD_ZERO(&readfds); FD_SET(pipefd[0], &readfds);
+        ready = select(pipefd[0] + 1, &readfds, NULL, NULL, &timeout);
+    }
+    if (ready > 0) length = read(pipefd[0], output, sizeof(output) - 1U);
+    close(pipefd[0]);
+    for (attempt = 0; attempt < 20; attempt++) {
+        ready = waitpid(pid, &status, WNOHANG);
+        if (ready == pid) break;
+        if (ready < 0 && errno != EINTR) break;
+        (void)nanosleep(&delay, NULL);
+    }
+    if (ready != pid) { (void)kill(pid, SIGKILL); (void)waitpid(pid, &status, 0); }
+    if (length > 0 && ready == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        output[length] = '\0';
+        output[strcspn(output, "\r\n")] = '\0';
+        copy_text(app->current_session, sizeof(app->current_session), output);
+    }
+}
+
 static void capture_preview(struct app *app) {
     int pipefd[2], status = 0, waited;
     pid_t pid;
@@ -296,5 +340,4 @@ static void capture_preview(struct app *app) {
         copy_text(app->preview_text, sizeof(app->preview_text), timed_out ? "preview timed out" : "preview unavailable");
     }
 }
-
 

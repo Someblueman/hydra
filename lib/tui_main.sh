@@ -74,12 +74,9 @@ tui_main_loop() {
             continue
         fi
 
-        # Periodic refresh (or follow mode for preview)
+        # Periodic refresh
         _do_refresh=0
         if [ "$loop_count" -ge "$refresh_every" ] || [ "$loop_count" -eq 0 ]; then
-            _do_refresh=1
-        fi
-        if [ "$TUI_PREVIEW_FOLLOW" -eq 1 ] && [ "$TUI_PREVIEW_VISIBLE" -eq 1 ]; then
             _do_refresh=1
         fi
         if [ "$_do_refresh" -eq 1 ]; then
@@ -123,11 +120,6 @@ cmd_tui() {
                 return 2
             }
             ;;
-        --native)
-            shift
-            tui_native_run "$@"
-            return $?
-            ;;
         --capabilities)
             shift
             if [ "${1:-}" = --json ]; then
@@ -151,10 +143,13 @@ cmd_tui() {
             tui_native_exec --headless-fixture "$@"
             return $?
             ;;
-        '') ;;
+        '')
+            tui_native_run
+            return $?
+            ;;
         *)
             echo "Error: unknown TUI option '$1'" >&2
-            echo "Usage: hydra tui [--basic|--native|--capabilities [--json]|--headless-fixture FILE ...]" >&2
+            echo "Usage: hydra tui [--basic|--capabilities [--json]|--headless-fixture FILE ...]" >&2
             return 2
             ;;
     esac

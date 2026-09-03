@@ -71,10 +71,10 @@ emit raw control characters inside JSON strings.
 
 ## TUI row schema
 
-`tui_build_list` writes one row per head, eight TAB-separated fields:
+`tui_build_list` writes one row per head, seven TAB-separated fields:
 
 ```text
-branch  session  ai  status  tag  activity  group  pr
+branch  session  ai  status  activity  group  pr
 ```
 
 `status` is `ALIVE` or `DEAD`. `activity` is `BUSY`, `IDLE`, or `-`.

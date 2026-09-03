@@ -109,6 +109,9 @@ _hydra() {
                 snapshot)
                     _arguments '--native[Try the optional read-only native helper]' '--json[Output canonical JSON]'
                     ;;
+                tui)
+                    _arguments '--basic[Use the maintained shell TUI]' '--capabilities[Show TUI capability diagnostics]'
+                    ;;
                 template)
                     _arguments '1:subcommand:(list create show edit delete)'
                     ;;
@@ -225,5 +228,4 @@ _hydra_templates() {
 _hydra "$@"
 EOF
 }
-
 

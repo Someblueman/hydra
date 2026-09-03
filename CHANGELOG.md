@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Native TUI keyboard help, a dashboard palette action, and structured spawn prompts
+  for branch, profile, template, and layout, all delegated to the shell CLI
+- Native TUI branch-stable multi-selection, select-all, and bulk group assignment
+  through explicit shell CLI arguments
+- Native TUI bulk kill through the public confirming shell command, with a bounded
+  tmux lookup that excludes the current session
+
+### Changed
+
+- `hydra tui` now launches native mission control by default when available and falls
+  back visibly to `hydra tui --basic`
+- Source installation auto-builds the native TUI when a C99 toolchain is available;
+  `HYDRA_INSTALL_TUI=never` preserves a compiler-free shell-only install
+- Hydra, native core, and native TUI version handshakes now report 2.0.0; protocol
+  versions remain unchanged
+
+### Removed
+
+- Basic TUI tag mutation and filtering, including its separate non-authoritative tag
+  store
+- The basic TUI's one-key kill-all shortcut; select-all plus confirmed bulk kill and
+  the public `hydra kill --all` command remain available
+- The redundant preview-follow toggle; preview content continues to update on the
+  normal bounded refresh cycle
+- The redundant `hydra tui --native` mode now that native mission control is the
+  default
+
 ## [1.9.0] - 2026-09-02
 
 ### Added

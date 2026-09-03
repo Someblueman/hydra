@@ -59,34 +59,6 @@ surface accumulated during the 1.x releases.
 - [ ] Publish a consolidated security and trust model covering local configuration,
       agents, workflows, artifacts, and prerequisites for remote coordination.
 
-### Native TUI cutover
-
-Make `hydra tui` launch native mission control by default when a qualified native
-binary is available. Keep `hydra tui --basic` as the explicit recovery path and fall
-back visibly to it when the native binary is absent, incompatible, unsuitable for the
-terminal, or exits with a recoverable failure. The shell CLI remains the only mutation
-and policy authority.
-
-- [ ] Move the normal install and source-build paths to install or discover the
-      qualified native TUI by default while preserving a compiler-free shell install.
-- [ ] Change `hydra tui` and capability reporting to native-first dispatch with the
-      basic shell TUI as fallback.
-- [ ] Remove the redundant `--native` mode after the default changes; retain `--basic`
-      and `--capabilities`.
-- [ ] Close the shell-only action gaps below before changing the default.
-- [ ] Update CLI help, completions, README, native documentation, packaging metadata,
-      and version handshakes in the same change.
-
-| Shell-only behavior | 2.0 disposition |
-| --- | --- |
-| Spawn wizard options for agent/profile, template, and layout | **Migrate:** build argv from explicit fields and invoke the public shell CLI |
-| Open the tmux dashboard | **Migrate:** add an explicit native palette action for `hydra dashboard` |
-| Multi-select, select all, bulk kill, and bulk group assignment | **Migrate:** preserve current-session safety and confirmation through public CLI commands |
-| Keyboard help overlay | **Migrate:** document the retained native keys and actions in-product |
-| One-key kill-all shortcut | **Remove:** select-all plus confirmed bulk kill is the safer non-duplicated path; `hydra kill --all` remains available in the CLI |
-| TUI-only tag mutation and tag filtering | **Remove:** the separate tags file is not authoritative lifecycle or project state |
-| Preview-follow toggle | **Remove:** native preview already refreshes on the bounded observation cycle |
-
 ### Acceptance
 
 - One unchanged release commit passes shell-only, native, parity, migration,

@@ -63,7 +63,7 @@ $(BUILD_DIR)/libhydra.a: $(BUILD_DIR)/libhydra.o
 $(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/hydra-tui: src/hydra_tui.c src/hydra_tui_model.inc src/hydra_tui_ui.inc src/hydra_tui_main.inc | $(BUILD_DIR)
+$(BUILD_DIR)/hydra-tui: src/hydra_tui.c src/hydra_tui_model.inc src/hydra_tui_ui.inc src/hydra_tui_actions.inc src/hydra_tui_main.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) src/hydra_tui.c -o $@
 
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
@@ -80,7 +80,6 @@ test-tui: build-tui
 
 test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 	@mkdir -p "$(CURDIR)/$(BUILD_DIR)/test-tui-home"
-	@: > "$(CURDIR)/$(BUILD_DIR)/test-tui-home/tags"
 	@: > "$(CURDIR)/$(BUILD_DIR)/test-tui-home/map"
 	@before="$$(find "$(CURDIR)/$(BUILD_DIR)/test-tui-home" -type f -exec cksum {} \; | sort | cksum)"; \
 	HYDRA_HOME="$(CURDIR)/$(BUILD_DIR)/test-tui-home" \

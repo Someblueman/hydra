@@ -62,7 +62,7 @@ hydra version
 ### 2. Verify
 
 ```sh
-hydra version          # Hydra version 1.9.0
+hydra version          # Hydra version 2.0.0
 hydra doctor           # install paths, git/tmux, writable HYDRA_HOME, agents
 ```
 
@@ -213,8 +213,8 @@ hydra snapshot --native # explicitly try the optional read-only native helper
 
 # Dashboard & TUI
 hydra dashboard                                    # multi-session overview
-hydra tui                                          # maintained basic shell TUI
-hydra tui --native                                 # opt-in native mission control
+hydra tui                                          # native mission control; visible basic fallback
+hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
 ```
 
@@ -297,20 +297,27 @@ Add `.hydra/` scripts to customize lifecycle:
 
 ## TUI
 
-Hydra keeps the existing feature-rich shell TUI as the 1.9.0 default and includes an
-opt-in native mission-control UI over the same shell-owned state.
+Hydra launches native mission control by default when its qualified executable is
+available and falls back visibly to the basic shell TUI over the same shell-owned
+state.
+
+The source installer builds the native TUI automatically when a C99 toolchain is
+available. Set `HYDRA_INSTALL_TUI=never` for a compiler-free shell-only install.
 
 ```sh
-hydra tui                  # basic shell TUI
+hydra tui                  # native-first with visible basic fallback
 hydra tui --basic          # explicit basic mode
-hydra tui --native         # native list/detail/coordination/recovery views
 hydra tui --capabilities   # availability and observation diagnostics
 ```
 
 The native keymap is deliberately small: `j`/`k` or arrows navigate, `Enter` opens
 detail, `v` cycles views, `/` searches heads, `:` searches explicit actions, `p`
-toggles a sanitized pane preview, and `q` exits. Its mutations are delegated to the
-shell CLI with argument-vector execution. See [Native mission control](docs/NATIVE_TUI.md).
+toggles a sanitized pane preview, `?` opens keyboard help, and `q` exits. The action
+palette includes the tmux dashboard. Mutations are delegated to the shell CLI with
+argument-vector execution; native spawn prompts for branch, profile, template, and
+layout, while `Space`/`A` select heads and `G` assigns the selection to a group. `x`
+kills selected heads through the confirming shell command and skips the current tmux
+session. See [Native mission control](docs/NATIVE_TUI.md).
 
 The larger keymap below belongs to the maintained basic shell TUI.
 
@@ -321,15 +328,11 @@ The larger keymap below belongs to the maintained basic shell TUI.
 | `n` | Spawn new session (interactive wizard) |
 | `d` | Kill selected session |
 | `D` | Open tmux dashboard |
-| `a` | Kill all sessions |
 | `A` | Select all sessions |
 | `Space` | Toggle selection (for bulk ops) |
 | `x` | Bulk kill selected |
 | `G` | Bulk set group on selected |
 | `p` | Toggle preview panel |
-| `f` | Toggle preview follow mode |
-| `t` | Cycle tag on session |
-| `T` | Filter by tag |
 | `/` | Search (branch, session, group, AI) |
 | `i` | Show status output |
 | `r` | Regenerate sessions |

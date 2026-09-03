@@ -27,6 +27,53 @@ tui_get_key() {
     printf "%s" "$key"
 }
 
+# Check if an index is selected
+tui_is_selected() {
+    _idx="$1"
+    case " $TUI_MULTI_SELECT " in
+        *" $_idx "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Toggle selection for an index
+tui_toggle_select() {
+    _idx="$1"
+    if tui_is_selected "$_idx"; then
+        TUI_MULTI_SELECT="$(echo " $TUI_MULTI_SELECT " | sed "s/ $_idx / /g" | tr -s ' ' | sed 's/^ *//;s/ *$//')"
+    elif [ -z "$TUI_MULTI_SELECT" ]; then
+        TUI_MULTI_SELECT="$_idx"
+    else
+        TUI_MULTI_SELECT="$TUI_MULTI_SELECT $_idx"
+    fi
+}
+
+tui_clear_selection() {
+    TUI_MULTI_SELECT=""
+}
+
+tui_selection_count() {
+    if [ -z "$TUI_MULTI_SELECT" ]; then
+        echo "0"
+    else
+        echo "$TUI_MULTI_SELECT" | tr ' ' '\n' | grep -c .
+    fi
+}
+
+# Select all visible items
+tui_select_all() {
+    TUI_MULTI_SELECT=""
+    _i=0
+    while [ "$_i" -lt "$TUI_ITEM_COUNT" ]; do
+        if [ -z "$TUI_MULTI_SELECT" ]; then
+            TUI_MULTI_SELECT="$_i"
+        else
+            TUI_MULTI_SELECT="$TUI_MULTI_SELECT $_i"
+        fi
+        _i=$((_i + 1))
+    done
+}
+
 # Handle keypress
 # Usage: tui_handle_key <key>
 # Returns: 0 to continue, 1 to exit
@@ -76,10 +123,6 @@ tui_handle_key() {
             # Regenerate sessions
             tui_action_regenerate
             ;;
-        a)
-            # Kill all sessions
-            tui_action_kill_all
-            ;;
         A)
             # Select all (alias)
             tui_select_all
@@ -87,15 +130,6 @@ tui_handle_key() {
         i|I)
             # Show status
             tui_action_status
-            ;;
-        t)
-            # Cycle tag for selected session
-            tui_action_tag
-            ;;
-        T)
-            # Cycle tag filter
-            tui_cycle_tag_filter
-            tui_build_list
             ;;
         "/")
             # Enter search mode
@@ -130,15 +164,6 @@ tui_handle_key() {
             fi
             TUI_NEEDS_REDRAW=1
             ;;
-        f|F)
-            # Toggle preview follow mode
-            if [ "$TUI_PREVIEW_FOLLOW" -eq 0 ]; then
-                TUI_PREVIEW_FOLLOW=1
-            else
-                TUI_PREVIEW_FOLLOW=0
-            fi
-            TUI_NEEDS_REDRAW=1
-            ;;
         *)
             # Handle escape key for clearing filters and selection
             # Check if key is escape (octal 033, hex 1b)
@@ -146,9 +171,8 @@ tui_handle_key() {
                 # Clear selection first, then filters
                 if [ "$(tui_selection_count)" -gt 0 ]; then
                     tui_clear_selection
-                elif [ -n "$TUI_SEARCH_PATTERN" ] || [ -n "$TUI_TAG_FILTER" ]; then
+                elif [ -n "$TUI_SEARCH_PATTERN" ]; then
                     TUI_SEARCH_PATTERN=""
-                    TUI_TAG_FILTER=""
                     tui_build_list
                 fi
             fi

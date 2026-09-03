@@ -1,9 +1,14 @@
 #!/bin/sh
 # Native mission-control dispatch and its escaped tabular read boundary.
 
+tui_native_candidate_is_qualified() {
+    [ -x "$1" ] || return 1
+    [ "$("$1" --version 2>/dev/null || true)" = "Hydra TUI $HYDRA_VERSION protocol 2" ]
+}
+
 tui_native_find_binary() {
     if [ -n "${HYDRA_TUI_BIN:-}" ]; then
-        [ -x "$HYDRA_TUI_BIN" ] || return 1
+        tui_native_candidate_is_qualified "$HYDRA_TUI_BIN" || return 1
         printf '%s\n' "$HYDRA_TUI_BIN"
         return 0
     fi
@@ -11,7 +16,7 @@ tui_native_find_binary() {
         "$HYDRA_BIN_DIR/../build/hydra-tui" \
         "$HYDRA_BIN_DIR/../libexec/hydra/hydra-tui" \
         "$HYDRA_BIN_DIR/../lib/hydra/hydra-tui"; do
-        if [ -x "$_tnfb_candidate" ]; then
+        if tui_native_candidate_is_qualified "$_tnfb_candidate"; then
             printf '%s\n' "$_tnfb_candidate"
             return 0
         fi
@@ -28,12 +33,12 @@ tui_native_capabilities() {
     fi
     if [ "$_tnc_json" -eq 1 ]; then
         printf '{"schema_version":1,"ok":true,"command":"tui capabilities","data":{'
-        printf '"default_mode":"basic","basic":true,"native":%s,' "$_tnc_native"
+        printf '"default_mode":"native","fallback_mode":"basic","basic":true,"native":%s,' "$_tnc_native"
         printf '"native_path":%s,' "$(json_string_or_null "$_tnc_path")"
         printf '"observation":"bounded-polling","tmux_control_mode":false,'
         printf '"headless_fixture":true,"mutation_authority":"shell-cli"}}\n'
     else
-        printf 'default mode: basic (native remains opt-in for 1.8.0)\n'
+        printf 'default mode: native (visible basic fallback)\n'
         printf 'basic TUI: available\n'
         if [ "$_tnc_native" = true ]; then
             printf 'native TUI: available at %s\n' "$_tnc_path"
@@ -252,6 +257,9 @@ tui_native_run() {
     fi
     _tnr_binary="$(tui_native_find_binary 2>/dev/null || true)"
     if [ -z "$_tnr_binary" ]; then
+        if [ -n "$_tnr_saved_stty" ]; then
+            stty "$_tnr_saved_stty" 2>/dev/null || true
+        fi
         echo "Warning: native TUI is unavailable; starting the basic TUI" >&2
         cmd_tui --basic
         return $?

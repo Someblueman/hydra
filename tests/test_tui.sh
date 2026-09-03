@@ -178,16 +178,13 @@ test_tui_row_contract() {
     TUI_ACTIVITY_DIR=""
     # shellcheck disable=SC2034
     TUI_SEARCH_PATTERN=""
-    # shellcheck disable=SC2034
-    TUI_TAG_FILTER=""
-    tui_init_tags
     tui_build_list
 
     fields="$(awk -F '	' 'NF { print NF; exit }' "$TUI_TEMP_LIST")"
-    if [ "$fields" = "8" ]; then
-        print_pass "TUI list rows have 8 tab-separated fields"
+    if [ "$fields" = "7" ]; then
+        print_pass "TUI list rows have 7 tab-separated fields"
     else
-        print_fail "TUI list rows should have 8 fields, got $fields ($(cat "$TUI_TEMP_LIST"))"
+        print_fail "TUI list rows should have 7 fields, got $fields ($(cat "$TUI_TEMP_LIST"))"
     fi
 
     rm -f "$TUI_TEMP_LIST"
@@ -336,6 +333,31 @@ test_tui_key_navigation() {
     rm -rf "$TEST_HOME"
 }
 
+# Test: removed basic-only shortcuts are ignored
+test_tui_removed_shortcuts() {
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    source_libs
+    TUI_ITEM_COUNT=1
+    TUI_SELECTED=0
+    TUI_MULTI_SELECT=""
+    TUI_SEARCH_PATTERN="needle"
+
+    tui_handle_key "a"
+    tui_handle_key "t"
+    tui_handle_key "T"
+    tui_handle_key "f"
+    if ! command -v tui_action_kill_all >/dev/null 2>&1 &&
+       ! command -v tui_action_tag >/dev/null 2>&1 &&
+       ! command -v tui_cycle_tag_filter >/dev/null 2>&1 &&
+       [ -z "${TUI_PREVIEW_FOLLOW+x}" ] &&
+       [ "$TUI_SEARCH_PATTERN" = "needle" ]; then
+        print_pass "Removed basic-only shortcuts are ignored"
+    else
+        print_fail "Removed basic-only shortcuts should not dispatch actions"
+    fi
+}
+
 # Test: Terminal state save/restore pattern
 test_tui_stty_pattern() {
     TESTS_RUN=$((TESTS_RUN + 1))
@@ -376,8 +398,8 @@ test_tui_select_all() {
     tui_init_colors
   TUI_TEMP_LIST="$(mktemp)"
   TUI_ITEM_COUNT=2
-  printf 'b1\ts1\t-\tALIVE\t-\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
-  printf 'b2\ts2\t-\tALIVE\t-\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
+  printf 'b1\ts1\t-\tALIVE\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
+  printf 'b2\ts2\t-\tALIVE\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
     # shellcheck disable=SC2034
     TUI_MULTI_SELECT=""
   tui_select_all
@@ -436,6 +458,7 @@ main() {
     test_tui_empty_list
     test_tui_key_quit
     test_tui_key_navigation
+    test_tui_removed_shortcuts
     test_tui_stty_pattern
     test_tui_select_all
     test_tui_preview_lines_env

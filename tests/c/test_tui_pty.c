@@ -218,7 +218,11 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     struct winsize size;
     const char paste[] = "\033[200~pasted-q-:kill\033[201~";
     const char mouse[] = "\033[<0;12;4M";
+    (void)setenv("TMUX", "test", 1);
+    (void)setenv("FAKE_TMUX_CURRENT_SESSION", "hydra-feature-live", 1);
     result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open real pseudo-terminal");
+    (void)unsetenv("TMUX");
+    (void)unsetenv("FAKE_TMUX_CURRENT_SESSION");
     result(wait_for_raw(&session), "interactive TUI enters raw mode");
     write_input(session.master, "j\r", 2U);
     result(wait_for_marker(&session, "HEAD DETAIL  feature-stale", 1000),
@@ -255,6 +259,48 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "p", 1U);
     sleep_ms(150);
     result(still_running(&session), "untrusted pane output cannot enter the input parser");
+    write_input(session.master, "?", 1U);
+    result(wait_for_marker(&session, "KEYBOARD HELP", 1000), "keyboard help is available in-product");
+    write_input(session.master, "?", 1U);
+    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "keyboard help closes in raw mode");
+    write_input(session.master, ":", 1U);
+    result(wait_for_marker(&session, "Action search:", 1000), "dashboard action search is reachable");
+    write_input(session.master, "dashboard\n", 10U);
+    result(wait_for_marker(&session, "FAKE DASHBOARD", 1000), "dashboard delegates to the shell CLI");
+    write_input(session.master, "\n", 1U);
+    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "dashboard returns to native raw mode");
+    write_input(session.master, ":", 1U);
+    (void)wait_for_marker(&session, "Action search:", 1000);
+    write_input(session.master, "spawn\n", 6U);
+    (void)wait_for_marker(&session, "Branch to spawn:", 1000);
+    write_input(session.master, "feature-native\n", 15U);
+    (void)wait_for_marker(&session, "Profile (blank=project default, none=no agent):", 1000);
+    write_input(session.master, "codex\n", 6U);
+    (void)wait_for_marker(&session, "Template (optional):", 1000);
+    write_input(session.master, "review\n", 7U);
+    (void)wait_for_marker(&session, "Layout (blank=default, dev, full):", 1000);
+    write_input(session.master, "full\n", 5U);
+    result(wait_for_marker(&session, "FAKE SPAWN spawn feature-native --profile codex --template review --layout full", 1000),
+           "spawn builds explicit profile, template, and layout argv");
+    write_input(session.master, "\n", 1U);
+    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "spawn returns to native raw mode");
+    write_input(session.master, "A", 1U);
+    result(wait_for_marker(&session, "3 selected", 1000), "select-all marks every visible head");
+    write_input(session.master, "G", 1U);
+    (void)wait_for_marker(&session, "Group for selected heads:", 1000);
+    write_input(session.master, "release\n", 8U);
+    result(wait_for_marker(&session,
+           "FAKE GROUP group create release feature-live feature-stale feature-unavailable", 1000),
+           "bulk group assignment delegates explicit selected branches to the shell CLI");
+    write_input(session.master, "\n", 1U);
+    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "bulk group returns to native raw mode");
+    write_input(session.master, "A", 1U);
+    (void)wait_for_marker(&session, "3 selected", 1000);
+    write_input(session.master, "x", 1U);
+    result(wait_for_marker(&session, "Bulk kill complete: 2 command(s), 1 current skipped", 1000),
+           "bulk kill delegates non-current branches and preserves the current session");
+    write_input(session.master, "\n", 1U);
+    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "bulk kill returns to native raw mode");
     memset(&size, 0, sizeof(size));
     size.ws_col = 41; size.ws_row = 10;
     (void)ioctl(session.master, TIOCSWINSZ, &size);

@@ -33,7 +33,7 @@ echo "Running native TUI tests..."
 echo "==========================="
 
 assert_equal "2" "$("$tui" --protocol-version)" "native TUI protocol handshake"
-assert_equal "Hydra TUI 1.9.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
+assert_equal "Hydra TUI 2.0.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
 
 "$tui" --headless-fixture "$fixture" --size 80x24 --frames 2 > "$test_root/heads.out"
 assert_success $? "headless fixture renders deterministically"
@@ -96,7 +96,7 @@ if cmp -s "$test_root/no-color.out" "$test_root/no-color-option.out"; then
 else
     assert_success 1 "environment and explicit no-color modes preserve identical status language"
 fi
-contains "> LIVE         feature-live" "$test_root/no-color.out" "narrow head list preserves status and branch identity"
+contains ">  LIVE         feature-live" "$test_root/no-color.out" "narrow head list preserves status and branch identity"
 
 broken_pipe="$test_root/broken-pipe"
 mkfifo "$broken_pipe"
@@ -111,14 +111,32 @@ assert_failure $? "TERM=dumb fails cleanly"
 "$tui" > /dev/null 2>&1
 assert_failure $? "non-TTY invocation fails cleanly"
 
-printf '#!/bin/sh\nexit 4\n' > "$test_root/native-transient"
+# shellcheck disable=SC2016
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.0.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
 chmod +x "$test_root/native-transient"
-HYDRA_TUI_BIN="$test_root/native-transient" "$repo_root/bin/hydra" tui --native > /dev/null 2> "$test_root/fallback.err"
+HYDRA_TUI_BIN="$test_root/native-transient" "$repo_root/bin/hydra" tui > /dev/null 2> "$test_root/fallback.err"
 assert_failure $? "non-TTY basic fallback still fails cleanly"
 contains "starting the basic TUI" "$test_root/fallback.err" "transient native failure dispatches to basic fallback"
 
+# shellcheck disable=SC2016
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.0.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
+chmod +x "$test_root/native-success"
+HYDRA_TUI_BIN="$test_root/native-success" "$repo_root/bin/hydra" tui > "$test_root/default.out"
+contains "NATIVE DEFAULT" "$test_root/default.out" "plain tui dispatches to a qualified native executable"
+
+printf '#!/bin/sh\necho "Hydra TUI 1.9.0 protocol 2"\n' > "$test_root/native-skew"
+chmod +x "$test_root/native-skew"
+HYDRA_TUI_BIN="$test_root/native-skew" "$repo_root/bin/hydra" tui > /dev/null 2> "$test_root/skew.err"
+assert_failure $? "version-skewed native TUI falls back cleanly"
+contains "native TUI is unavailable" "$test_root/skew.err" "version-skewed native TUI is rejected before dispatch"
+
+"$repo_root/bin/hydra" tui --native > /dev/null 2> "$test_root/removed-native.err"
+assert_failure $? "removed --native mode fails closed"
+contains "unknown TUI option '--native'" "$test_root/removed-native.err" "removed --native mode is not retained as a shim"
+
 HYDRA_TUI_BIN="$tui" "$repo_root/bin/hydra" tui --capabilities --json > "$test_root/capabilities.json"
-contains '"default_mode":"basic"' "$test_root/capabilities.json" "native dispatch remains opt-in"
+contains '"default_mode":"native"' "$test_root/capabilities.json" "capability diagnostics report native-first dispatch"
+contains '"fallback_mode":"basic"' "$test_root/capabilities.json" "capability diagnostics report the basic fallback"
 contains '"mutation_authority":"shell-cli"' "$test_root/capabilities.json" "capability diagnostics name shell mutation authority"
 
 adapter_home="$test_root/adapter-home"

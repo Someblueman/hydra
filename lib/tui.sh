@@ -18,15 +18,12 @@ TUI_RUNNING=1           # Main loop control
 TUI_CURRENT_SESSION=""  # Cached current tmux session name
 TUI_NEEDS_REDRAW=1      # Flag to avoid unnecessary redraws
 TUI_HELP_VISIBLE=0      # Help overlay visibility flag
-TUI_TAGS_FILE=""        # Path to tags storage file
-TUI_TAG_FILTER=""       # Current tag filter (empty = show all)
 TUI_SEARCH_MODE=0       # Search/filter input mode active
 TUI_SEARCH_PATTERN=""   # Current search pattern
 TUI_ACTIVITY_DIR=""     # Directory for activity tracking
 TUI_MULTI_SELECT=""     # Space-separated list of selected indices (multi-select mode)
 TUI_PREVIEW_VISIBLE=0   # Preview panel visibility (0=hidden, 1=visible)
 TUI_PREVIEW_LINES=5     # Number of preview lines to show
-TUI_PREVIEW_FOLLOW=0    # Follow mode for preview (auto-refresh)
 TUI_WIDE_COLS=100       # Minimum width for two-panel layout
 TUI_HINT_SHOWN=0        # One-time keybinding hint shown
 TUI_LAST_COLS=0         # Track terminal resize
@@ -55,7 +52,7 @@ _tui_load_modules() {
     if [ -z "$_tdir" ]; then
         _tdir="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)" || true
     fi
-    for _mod in tui_init tui_data tui_tags tui_render tui_input tui_actions tui_native tui_main; do
+    for _mod in tui_init tui_data tui_render tui_input tui_actions tui_native tui_main; do
         # shellcheck disable=SC1090
         . "$_tdir/${_mod}.sh"
     done

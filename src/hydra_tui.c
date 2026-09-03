@@ -18,7 +18,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define HYDRA_TUI_VERSION "1.9.0"
+#define HYDRA_TUI_VERSION "2.0.0"
 #define HYDRA_TUI_PROTOCOL 2
 #define MAX_HEADS 512
 #define MAX_RECOVERY 512
@@ -54,7 +54,10 @@ struct app {
     size_t selected;
     int view;
     int rows, cols;
-    bool raw, no_color, preview, running;
+    bool raw, no_color, preview, help, running;
+    char marked[MAX_HEADS][TEXT];
+    size_t marked_count;
+    char current_session[TEXT];
     char search[TEXT];
     char notice[TEXT];
     char preview_text[4096];
@@ -71,4 +74,3 @@ static void retarget_selection(struct app *app);
 #include "hydra_tui_model.inc"
 #include "hydra_tui_ui.inc"
 #include "hydra_tui_main.inc"
-
