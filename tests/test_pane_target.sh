@@ -163,7 +163,7 @@ test_broadcast_session_qualified_pane() {
 
     TEST_PROJECT_ID=project_0123456789abcdefabcd
     export HYDRA_HOME HYDRA_STATE_V2_ROOT TEST_PROJECT_ID
-    # shellcheck disable=SC2329
+    # shellcheck disable=SC2317,SC2329
     hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
     state_v2_create_head "$TEST_PROJECT_ID" b1 hydra-a - - 100 - - "$TEST_HOME/repo" >/dev/null
     state_v2_create_head "$TEST_PROJECT_ID" b2 hydra-b - - 100 - - "$TEST_HOME/repo" >/dev/null

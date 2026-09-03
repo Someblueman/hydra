@@ -32,7 +32,7 @@ setup_test_env() {
     . "$SCRIPT_DIR/../lib/state.sh"
     . "$SCRIPT_DIR/../lib/messages.sh"
     TEST_PROJECT_ID=project_0123456789abcdefabcd
-    # shellcheck disable=SC2329
+    # shellcheck disable=SC2317,SC2329
     hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
     for branch in feature-a feature/test-branch test-branch target-branch recv-test \
         sender-name-test peek-test count-test empty-test target; do

@@ -17,7 +17,7 @@ export HYDRA_SKIP_AI=1
 export HYDRA_NONINTERACTIVE=1
 
 # Test helper functions
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 assert_contains() {
     haystack="$1"
     needle="$2"

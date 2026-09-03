@@ -73,7 +73,7 @@ source_libs() {
     # Source TUI library
     . "$HYDRA_LIB_DIR/tui.sh"
 
-    # shellcheck disable=SC2329
+    # shellcheck disable=SC2317,SC2329
     hydra_get_project_id() { printf '%s\n' "$TUI_TEST_PROJECT"; }
 }
 
