@@ -1,9 +1,38 @@
 #!/bin/sh
 # Native mission-control dispatch and its escaped tabular read boundary.
 
+HYDRA_TUI_TIMEOUT_SECONDS="${HYDRA_TUI_TIMEOUT_SECONDS:-2}"
+
 tui_native_candidate_is_qualified() {
     [ -x "$1" ] || return 1
-    [ "$("$1" --version 2>/dev/null || true)" = "Hydra TUI $HYDRA_VERSION protocol 2" ]
+    case "$HYDRA_TUI_TIMEOUT_SECONDS" in ''|*[!0-9]*|0) HYDRA_TUI_TIMEOUT_SECONDS=2 ;; esac
+    _tnciq_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-tui-handshake.XXXXXX")" || return 1
+    "$1" --version > "$_tnciq_dir/stdout" 2>/dev/null &
+    _tnciq_pid=$!
+    (
+        _tnciq_sleep=""
+        trap '[ -z "$_tnciq_sleep" ] || kill "$_tnciq_sleep" 2>/dev/null; exit 0' TERM HUP INT
+        sleep "$HYDRA_TUI_TIMEOUT_SECONDS" &
+        _tnciq_sleep=$!
+        wait "$_tnciq_sleep" || exit 0
+        if kill -0 "$_tnciq_pid" 2>/dev/null; then
+            : > "$_tnciq_dir/timed-out"
+            kill "$_tnciq_pid" 2>/dev/null || true
+            sleep 1
+            kill -9 "$_tnciq_pid" 2>/dev/null || true
+        fi
+    ) >/dev/null 2>&1 &
+    _tnciq_watchdog=$!
+    if wait "$_tnciq_pid"; then _tnciq_status=0; else _tnciq_status=$?; fi
+    kill "$_tnciq_watchdog" 2>/dev/null || true
+    wait "$_tnciq_watchdog" 2>/dev/null || true
+    if [ -f "$_tnciq_dir/timed-out" ] || [ "$_tnciq_status" -ne 0 ] || \
+       [ "$(wc -l < "$_tnciq_dir/stdout" | tr -d ' ')" != 1 ] || \
+       [ "$(sed -n '1p' "$_tnciq_dir/stdout")" != "Hydra TUI $HYDRA_VERSION protocol 2" ]; then
+        rm -rf "$_tnciq_dir"
+        return 1
+    fi
+    rm -rf "$_tnciq_dir"
 }
 
 tui_native_find_binary() {

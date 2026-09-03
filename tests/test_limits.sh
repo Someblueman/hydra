@@ -273,6 +273,43 @@ test_queue_spawn_multiple() {
     cleanup_test_env
 }
 
+test_queue_atomic_and_serial_processing() {
+    echo "Testing atomic queue publication and serialized processing..."
+    setup_test_env
+
+    # shellcheck disable=SC2317,SC2329
+    ( atomic_replace() { return 1; }; queue_spawn "not-published" none "" default 50 >/dev/null 2>&1 )
+    assert_failure $? "failed atomic publication rejects the queue entry"
+    assert_equal "0" "$(get_queue_count)" "failed publication exposes no partial queue file"
+
+    queue_spawn "only-once" none "" default 50 >/dev/null
+    spawn_log="$TEST_DIR/spawn.log"
+    release_file="$TEST_DIR/release-process"
+    second_code="$TEST_DIR/second.code"
+    (
+        # shellcheck disable=SC2317,SC2329
+        spawn_single() {
+            printf 'attempt\n' >> "$spawn_log"
+            while [ ! -f "$release_file" ]; do sleep 0.05; done
+            return 1
+        }
+        HYDRA_LOCK_RETRIES=20 process_spawn_queue >/dev/null 2>&1 &
+        first_pid=$!
+        while [ ! -s "$spawn_log" ]; do sleep 0.05; done
+        ( HYDRA_LOCK_RETRIES=1 process_spawn_queue >/dev/null 2>&1; printf '%s\n' "$?" > "$second_code" ) &
+        second_pid=$!
+        sleep 0.2
+        : > "$release_file"
+        wait "$first_pid"
+        wait "$second_pid"
+    )
+    assert_equal "1" "$(wc -l < "$spawn_log" | tr -d ' ')" "concurrent processors cannot attempt the same entry"
+    assert_failure "$(sed -n '1p' "$second_code")" "a concurrent queue processor fails closed"
+    assert_equal "1" "$(get_queue_count)" "failed processing retains the queued request"
+
+    cleanup_test_env
+}
+
 test_dequeue_spawn() {
     echo "Testing dequeue_spawn..."
 
@@ -377,6 +414,7 @@ test_would_exceed_limit_over
 test_get_available_capacity
 test_queue_spawn
 test_queue_spawn_multiple
+test_queue_atomic_and_serial_processing
 test_dequeue_spawn
 test_clear_queue
 test_list_queue_empty

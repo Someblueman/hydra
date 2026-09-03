@@ -66,6 +66,13 @@ echo "==========================="
 assert_equal "2" "$("$tui" --protocol-version)" "native TUI protocol handshake"
 assert_equal "Hydra TUI 2.0.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
 
+awk 'BEGIN { FS = OFS = "\t" } $1 == "H" && !changed { $13 = "invalid"; changed = 1 } { print }' \
+    "$fixture" > "$test_root/invalid-number.tsv"
+"$tui" --headless-fixture "$test_root/invalid-number.tsv" --size 80x24 \
+    > /dev/null 2> "$test_root/invalid-number.err"
+assert_failure $? "malformed native numeric fields fail closed"
+contains "invalid numeric field" "$test_root/invalid-number.err" "numeric protocol failure is explicit"
+
 "$tui" --headless-fixture "$fixture" --size 80x24 --frames 2 > "$test_root/heads.out"
 assert_success $? "headless fixture renders deterministically"
 assert_equal "2" "$(grep -c '^FRAME ' "$test_root/heads.out")" "explicit frame bound is honored"
@@ -154,6 +161,20 @@ printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.0.0 protocol 
 chmod +x "$test_root/native-success"
 HYDRA_TUI_BIN="$test_root/native-success" "$repo_root/bin/hydra" tui > "$test_root/default.out"
 contains "NATIVE DEFAULT" "$test_root/default.out" "plain tui dispatches to a qualified native executable"
+
+# shellcheck disable=SC2016
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && sleep 5\n' > "$test_root/native-hanging"
+chmod +x "$test_root/native-hanging"
+_timeout_started="$(date +%s)"
+HYDRA_TUI_TIMEOUT_SECONDS=1 HYDRA_TUI_BIN="$test_root/native-hanging" \
+    "$repo_root/bin/hydra" tui --capabilities --json > "$test_root/hanging-capabilities.json"
+_timeout_elapsed=$(($(date +%s) - _timeout_started))
+contains '"native":false' "$test_root/hanging-capabilities.json" "hung native qualification falls back visibly"
+if [ "$_timeout_elapsed" -lt 4 ]; then
+    assert_success 0 "native qualification is bounded"
+else
+    assert_success 1 "native qualification is bounded"
+fi
 
 printf '#!/bin/sh\necho "Hydra TUI 1.9.0 protocol 2"\n' > "$test_root/native-skew"
 chmod +x "$test_root/native-skew"

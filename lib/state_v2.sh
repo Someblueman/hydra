@@ -54,6 +54,13 @@ state_v2_write_text() {
     fi
 }
 
+state_v2_scalar_valid() {
+    [ -f "$1" ] && LC_ALL=C awk '
+        index($0, "\r") || NR > 1 { invalid = 1 }
+        END { exit !(NR == 1 && !invalid) }
+    ' "$1"
+}
+
 state_v2_init_project() {
     _sv2ip_project="$1"
     _sv2ip_root="$2"
@@ -210,15 +217,18 @@ state_v2_verify() {
         echo "state v2: schema-version is missing" >&2
         return 1
     }
-    [ "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" = "2" ] || {
+    if ! state_v2_scalar_valid "$HYDRA_STATE_V2_ROOT/schema-version" || \
+       [ "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" != "2" ]; then
         echo "state v2: unsupported schema version" >&2
         return 1
-    }
+    fi
     _sv2v_errors=0
     for _sv2v_project in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
         [ -d "$_sv2v_project" ] || continue
         _sv2v_project_id="$(basename "$_sv2v_project")"
         if ! hydra_valid_id "$_sv2v_project_id" || \
+           ! state_v2_scalar_valid "$_sv2v_project/project-id" || \
+           ! state_v2_scalar_valid "$_sv2v_project/repo-root" || \
            [ "$(sed -n '1p' "$_sv2v_project/project-id" 2>/dev/null || true)" != "$_sv2v_project_id" ] || \
            [ -z "$(sed -n '1p' "$_sv2v_project/repo-root" 2>/dev/null || true)" ]; then
             echo "state v2: invalid project record $_sv2v_project" >&2
@@ -230,13 +240,16 @@ state_v2_verify() {
             _sv2v_instance="$(sed -n '1p' "$_sv2v_head/current-instance" 2>/dev/null || true)"
             _sv2v_required_missing=0
             for _sv2v_file in head-id branch session profile group created-at dependencies pr \
-                current-instance desired-state completion-policy worktree task scopes base-ref; do
+                current-instance desired-state completion-policy worktree base-ref; do
+                state_v2_scalar_valid "$_sv2v_head/$_sv2v_file" || _sv2v_required_missing=1
+            done
+            for _sv2v_file in task scopes; do
                 [ -f "$_sv2v_head/$_sv2v_file" ] || _sv2v_required_missing=1
             done
             _sv2v_instance_required_missing=0
             for _sv2v_file in instance-id session started-at observed-status observed-source \
                 observed-confidence observed-at observed-exit-code provider-session-id; do
-                [ -f "$_sv2v_head/instances/$_sv2v_instance/$_sv2v_file" ] || \
+                state_v2_scalar_valid "$_sv2v_head/instances/$_sv2v_instance/$_sv2v_file" || \
                     _sv2v_instance_required_missing=1
             done
             if ! hydra_valid_id "$_sv2v_head_id" || \
@@ -274,12 +287,18 @@ state_v2_verify() {
 
 state_v2_backup() {
     _sv2b_stamp="$(date +%Y%m%dT%H%M%S)-$$"
-    _sv2b_dir="$HYDRA_HOME/backups/state-$_sv2b_stamp"
-    mkdir -p "$_sv2b_dir" || return 1
+    mkdir -p "$HYDRA_HOME/backups" || return 1
+    _sv2b_dir="$(mktemp -d "$HYDRA_HOME/backups/state-$_sv2b_stamp.XXXXXX")" || return 1
     chmod 700 "$_sv2b_dir" 2>/dev/null || true
-    [ ! -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" ] || \
-        cp "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" "$_sv2b_dir/map"
-    [ ! -d "$HYDRA_HOME/state" ] || cp -R "$HYDRA_HOME/state" "$_sv2b_dir/state"
+    if [ -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" ]; then
+        cp "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" "$_sv2b_dir/map" || { rm -rf "$_sv2b_dir"; return 1; }
+    else
+        : > "$_sv2b_dir/map.absent" || { rm -rf "$_sv2b_dir"; return 1; }
+    fi
+    if [ ! -d "$HYDRA_HOME/state" ] || ! cp -R "$HYDRA_HOME/state" "$_sv2b_dir/state"; then
+        rm -rf "$_sv2b_dir"
+        return 1
+    fi
     printf '%s\n' "$_sv2b_dir"
 }
 
@@ -325,7 +344,7 @@ state_v2_migrate() {
         echo "State migration plan:"
         echo "  remove verified 1.9 compatibility projections: $_sv2m_count"
         echo "  remove inactive global 1.x map: $([ -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" ] && echo yes || echo no)"
-        echo "  backup: $HYDRA_HOME/backups/state-<timestamp>-<pid>"
+        echo "  backup: $HYDRA_HOME/backups/state-<timestamp>-<pid>.<unique>"
         echo "  verify authoritative state v2 after migration: yes"
         return 0
     fi
@@ -358,6 +377,12 @@ state_v2_rollback() {
         *) echo "Error: backup must be under $HYDRA_HOME/backups" >&2; return 1 ;;
     esac
     [ -d "$_sv2r_backup" ] || { echo "Error: backup does not exist: $_sv2r_backup" >&2; return 1; }
+    if [ ! -d "$_sv2r_backup/state" ] || \
+       { [ -f "$_sv2r_backup/map" ] && [ -f "$_sv2r_backup/map.absent" ]; } || \
+       { [ ! -f "$_sv2r_backup/map" ] && [ ! -f "$_sv2r_backup/map.absent" ]; }; then
+        echo "Error: backup is incomplete: $_sv2r_backup" >&2
+        return 1
+    fi
     _sv2r_guard="$HYDRA_HOME/state"
     _sv2r_map_target="${HYDRA_1X_MAP:-$HYDRA_HOME/map}"
     if [ -z "$HYDRA_HOME" ] || [ "$_sv2r_guard" = "/state" ]; then
@@ -416,22 +441,21 @@ state_v2_rollback() {
             return 1
         }
     fi
-    _sv2r_map_tmp="$(mktemp_adjacent "$_sv2r_map_target")" || {
-        rm -rf "$_sv2r_stage"
-        _state_v2_release_locks_file "$_sv2r_locks"
-        rm -f "$_sv2r_locks"
-        return 1
-    }
+    _sv2r_map_tmp=""
     if [ -f "$_sv2r_backup/map" ]; then
-        cp "$_sv2r_backup/map" "$_sv2r_map_tmp" || {
-            rm -f "$_sv2r_map_tmp"
+        _sv2r_map_tmp="$(mktemp_adjacent "$_sv2r_map_target")" || {
             rm -rf "$_sv2r_stage"
             _state_v2_release_locks_file "$_sv2r_locks"
             rm -f "$_sv2r_locks"
             return 1
         }
-    else
-        : > "$_sv2r_map_tmp"
+        cp "$_sv2r_backup/map" "$_sv2r_map_tmp" || {
+            [ -z "$_sv2r_map_tmp" ] || rm -f "$_sv2r_map_tmp"
+            rm -rf "$_sv2r_stage"
+            _state_v2_release_locks_file "$_sv2r_locks"
+            rm -f "$_sv2r_locks"
+            return 1
+        }
     fi
 
     if [ -d "$_sv2r_guard" ]; then
@@ -445,16 +469,17 @@ state_v2_rollback() {
     fi
     if [ -d "$_sv2r_stage/restored-state" ] && ! mv "$_sv2r_stage/restored-state" "$_sv2r_guard"; then
         [ ! -d "$_sv2r_stage/previous-state" ] || mv "$_sv2r_stage/previous-state" "$_sv2r_guard"
-        rm -f "$_sv2r_map_tmp"
+        [ -z "$_sv2r_map_tmp" ] || rm -f "$_sv2r_map_tmp"
         rm -rf "$_sv2r_stage"
         _state_v2_release_locks_file "$_sv2r_locks"
         rm -f "$_sv2r_locks"
         return 1
     fi
-    if ! atomic_replace "$_sv2r_map_target" "$_sv2r_map_tmp"; then
+    if { [ -n "$_sv2r_map_tmp" ] && ! atomic_replace "$_sv2r_map_target" "$_sv2r_map_tmp"; } || \
+       { [ -z "$_sv2r_map_tmp" ] && ! rm -f "$_sv2r_map_target"; }; then
         [ ! -d "$_sv2r_guard" ] || mv "$_sv2r_guard" "$_sv2r_stage/failed-state"
         [ ! -d "$_sv2r_stage/previous-state" ] || mv "$_sv2r_stage/previous-state" "$_sv2r_guard"
-        rm -f "$_sv2r_map_tmp"
+        [ -z "$_sv2r_map_tmp" ] || rm -f "$_sv2r_map_tmp"
         rm -rf "$_sv2r_stage"
         _state_v2_release_locks_file "$_sv2r_locks"
         rm -f "$_sv2r_locks"

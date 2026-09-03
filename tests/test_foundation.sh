@@ -86,6 +86,10 @@ instance_id="$(sed -n '1p' "$head_dir/current-instance")"
 assert_success 0 "head records a current instance"
 state_v2_verify
 assert_success $? "state v2 verifies complete records"
+printf 'running\nstopped\n' > "$head_dir/desired-state"
+state_v2_verify >/dev/null 2>&1
+assert_failure $? "state verification rejects multiline scalar records"
+state_v2_write_scalar "$head_dir/desired-state" running
 
 spaced_head="$(state_v2_create_head "$project_id" 'feature with spaces' spaced-session - - 100 - - "$repo")"
 spaced_dir="$(state_v2_head_dir "$project_id" "$spaced_head")"
@@ -173,6 +177,13 @@ fi
 printf '%s\n' "$dry_output" | grep -q 'remove verified 1.9 compatibility projections: 1'
 assert_success $? "migration dry-run reports exact projection count"
 
+backup_count_before="$(find "$HYDRA_HOME/backups" -maxdepth 1 -type d -name 'state-*' 2>/dev/null | wc -l | tr -d ' ')"
+# shellcheck disable=SC2317,SC2329
+( cp() { return 1; }; state_v2_backup >/dev/null 2>&1 )
+assert_failure $? "backup fails when a source cannot be copied"
+backup_count_after="$(find "$HYDRA_HOME/backups" -maxdepth 1 -type d -name 'state-*' 2>/dev/null | wc -l | tr -d ' ')"
+assert_equal "$backup_count_before" "$backup_count_after" "failed backup leaves no incomplete recovery point"
+
 migrate_output="$(state_v2_migrate)"
 assert_success $? "migration writes state v2"
 backup_path="$(printf '%s\n' "$migrate_output" | sed -n 's/^Backup: //p')"
@@ -194,6 +205,12 @@ case "$verify_output" in
     *) assert_success 0 "failed verification does not print success" ;;
 esac
 printf '2\n' > "$HYDRA_STATE_V2_ROOT/schema-version"
+incomplete_backup="$HYDRA_HOME/backups/state-incomplete"
+mkdir -p "$incomplete_backup"
+: > "$incomplete_backup/map.absent"
+state_v2_rollback "$incomplete_backup" >/dev/null 2>&1
+assert_failure $? "rollback rejects a backup without durable state"
+assert_equal 2 "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" "incomplete backup rejection preserves current state"
 try_lock "state_${project_id}" "test active state writer"
 HYDRA_LOCK_RETRIES=1
 export HYDRA_LOCK_RETRIES
@@ -206,6 +223,18 @@ state_v2_rollback "$backup_path" >/dev/null
 assert_success $? "rollback succeeds with generated backup"
 assert_equal "$legacy_row" "$(sed -n '1p' "$HYDRA_1X_MAP")" "rollback restores the global 1.x map for downgrade"
 assert_equal "$legacy_row" "$(sed -n '1p' "$legacy_project_dir/compat-map")" "rollback restores the 1.9 project projection"
+
+rm -f "$HYDRA_1X_MAP"
+absent_map_backup="$(state_v2_backup)"
+assert_success $? "backup records an absent legacy map"
+printf 'stale projection\n' > "$HYDRA_1X_MAP"
+state_v2_rollback "$absent_map_backup" >/dev/null
+assert_success $? "rollback restores a backup with no legacy map"
+if [ ! -e "$HYDRA_1X_MAP" ]; then
+    assert_success 0 "rollback preserves exact legacy-map absence"
+else
+    assert_success 1 "rollback preserves exact legacy-map absence"
+fi
 
 echo "====================================="
 echo "Test Results:"

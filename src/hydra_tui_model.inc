@@ -10,13 +10,15 @@ static void copy_text(char *dst, size_t size, const char *src) {
     dst[length] = '\0';
 }
 
-static unsigned parse_unsigned(const char *value) {
+static bool parse_unsigned(const char *value, unsigned *result) {
     char *end = NULL;
     unsigned long parsed;
+    if (value == NULL) return false;
     errno = 0;
-    parsed = strtoul(value == NULL ? "" : value, &end, 10);
-    if (errno != 0 || end == value || *end != '\0' || parsed > 1000000UL) return 0U;
-    return (unsigned)parsed;
+    parsed = strtoul(value, &end, 10);
+    if (errno != 0 || end == value || *end != '\0' || parsed > 1000000UL) return false;
+    *result = (unsigned)parsed;
+    return true;
 }
 
 static size_t split_fields(char *line, char **fields, size_t capacity) {
@@ -75,23 +77,27 @@ static int load_model_stream(FILE *input, struct model *model, char *error, size
             copy_text(head->observed, sizeof(head->observed), fields[9]);
             copy_text(head->confidence, sizeof(head->confidence), fields[10]);
             copy_text(head->instance, sizeof(head->instance), fields[11]);
-            head->events = parse_unsigned(fields[12]);
-            head->signals = parse_unsigned(fields[13]);
-            head->messages = parse_unsigned(fields[14]);
-            head->claims = parse_unsigned(fields[15]);
-            head->scopes = parse_unsigned(fields[16]);
-            head->queue = parse_unsigned(fields[17]);
-            head->resources = parse_unsigned(fields[18]);
-            head->diff = parse_unsigned(fields[19]);
-            head->gates = parse_unsigned(fields[20]);
-            head->approved = parse_unsigned(fields[21]);
+            if (!parse_unsigned(fields[12], &head->events) ||
+                !parse_unsigned(fields[13], &head->signals) ||
+                !parse_unsigned(fields[14], &head->messages) ||
+                !parse_unsigned(fields[15], &head->claims) ||
+                !parse_unsigned(fields[16], &head->scopes) ||
+                !parse_unsigned(fields[17], &head->queue) ||
+                !parse_unsigned(fields[18], &head->resources) ||
+                !parse_unsigned(fields[19], &head->diff) ||
+                !parse_unsigned(fields[20], &head->gates) ||
+                !parse_unsigned(fields[21], &head->approved) ||
+                !parse_unsigned(fields[28], &head->notifications)) {
+                copy_text(error, error_size, "native data contains an invalid numeric field");
+                free(line);
+                return -1;
+            }
             copy_text(head->desired, sizeof(head->desired), fields[22]);
             copy_text(head->source, sizeof(head->source), fields[23]);
             copy_text(head->head_id, sizeof(head->head_id), fields[24]);
             copy_text(head->adapter, sizeof(head->adapter), fields[25]);
             copy_text(head->adapter_confidence, sizeof(head->adapter_confidence), fields[26]);
             copy_text(head->adapter_source, sizeof(head->adapter_source), fields[27]);
-            head->notifications = parse_unsigned(fields[28]);
             copy_text(head->notification_source, sizeof(head->notification_source), fields[29]);
         } else if (count == 6U && strcmp(fields[0], "R") == 0) {
             struct recovery *recovery;

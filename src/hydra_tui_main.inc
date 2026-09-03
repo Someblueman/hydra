@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[index], "--size") == 0 && index + 1 < argc) {
             if (parse_size(argv[++index], &app.cols, &app.rows) != 0) { usage(stderr); return 2; }
         } else if (strcmp(argv[index], "--frames") == 0 && index + 1 < argc) {
-            frames = parse_unsigned(argv[++index]); if (frames == 0U || frames > 100U) return 2;
+            if (!parse_unsigned(argv[++index], &frames) || frames == 0U || frames > 100U) return 2;
         } else if (strcmp(argv[index], "--view") == 0 && index + 1 < argc) {
             const char *view = argv[++index];
             if (strcmp(view, "heads") == 0) app.view = 0;
@@ -50,4 +50,3 @@ int main(int argc, char **argv) {
     }
     return interactive_main(&app);
 }
-

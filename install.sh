@@ -245,6 +245,15 @@ TUI_CHECKSUM=""
 TUI_PLATFORM=""
 TUI_DEPENDENCIES=""
 TUI_SOURCE_REF=""
+if [ "$TUI_MODE" = never ] && [ -d "$CORE_DIR" ]; then
+    ensure_writable "$CORE_DIR"
+    for installed in hydra-tui hydra-tui.sha256 hydra-tui.platform hydra-tui.dependencies hydra-tui.source; do
+        rm -f "$CORE_DIR/$installed" "$CORE_DIR/$installed.rollback" || {
+            echo "Error: could not remove installed native TUI: $CORE_DIR/$installed" >&2
+            exit 1
+        }
+    done
+fi
 if [ "$TUI_MODE" != never ]; then
     if [ "${HYDRA_BUILD_TUI:-0}" = 1 ]; then
         echo "Building native mission-control TUI..."

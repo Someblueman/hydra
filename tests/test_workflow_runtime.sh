@@ -135,6 +135,12 @@ assert_success $? "static DAG executes successfully"
 parallel_run="$(sed -n '1p' "$test_root/parallel.out")"
 parallel_dir="$(run_dir_for "$parallel_run")"
 assert_equal succeeded "$(sed -n '1p' "$parallel_dir/state")" "run records a terminal success"
+parallel_json="$("$HYDRA_BIN" workflow status "$parallel_run" --json)"
+case "$parallel_json" in
+    *'"schema_version":1'*'"ok":true'*'"command":"workflow status"'*'"data":{'*)
+        assert_success 0 "workflow status uses the public JSON envelope" ;;
+    *) assert_success 1 "workflow status uses the public JSON envelope" ;;
+esac
 assert_equal 1 "$(sed -n '1p' "$parallel_dir/steps/barrier-a/attempts")" "first fan-out step runs once"
 assert_equal 1 "$(sed -n '1p' "$parallel_dir/steps/barrier-b/attempts")" "second fan-out step runs once"
 if [ -f "$test_root/barrier-a" ] && [ -f "$test_root/barrier-b" ]; then parallel_status=0; else parallel_status=1; fi

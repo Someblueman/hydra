@@ -75,6 +75,20 @@ assert_equal "" "$(sed -n '1p' "$test_root/installed-snapshot.err")" "installed 
 installed_hash="$(file_hash "$prefix/libexec/hydra/hydra-core")"
 installed_tui_hash="$(file_hash "$prefix/libexec/hydra/hydra-tui")"
 
+shell_only_prefix="$test_root/shell-only-prefix"
+mkdir -p "$shell_only_prefix/libexec/hydra"
+for installed in hydra-tui hydra-tui.sha256 hydra-tui.platform hydra-tui.dependencies hydra-tui.source; do
+    cp "$prefix/libexec/hydra/$installed" "$shell_only_prefix/libexec/hydra/$installed"
+done
+HOME="$home" PREFIX="$shell_only_prefix" HYDRA_INSTALL_CORE=never HYDRA_INSTALL_TUI=never \
+    sh "$repo_root/install.sh" > "$test_root/shell-only.out" 2>&1
+assert_success $? "shell-only installation succeeds over an existing native TUI"
+if find "$shell_only_prefix/libexec/hydra" -name 'hydra-tui*' -print | grep . >/dev/null; then
+    assert_success 1 "shell-only installation removes the native TUI and metadata"
+else
+    assert_success 0 "shell-only installation removes the native TUI and metadata"
+fi
+
 bad="$test_root/bad"
 mkdir -p "$bad"
 cp "$package/hydra-core" "$bad/hydra-core"

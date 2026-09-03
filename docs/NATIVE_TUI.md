@@ -100,7 +100,7 @@ hydra tui --headless-fixture tests/fixtures/tui/native-v2.tsv \
 
 The fixture begins with `HYDRA_TUI<TAB>2`, followed by bounded `H` head records and
 `R` recovery records. Malformed handshakes or records fail closed. This format is an
-internal 1.8 native/basic parity boundary, not the general automation API; scripts
+internal 2.0 native/basic parity boundary, not the general automation API; scripts
 should use the documented CLI JSON envelopes.
 
 `make bench-tui` creates 5, 20, and 100 live sessions on one isolated tmux socket,

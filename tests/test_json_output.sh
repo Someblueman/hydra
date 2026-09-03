@@ -314,6 +314,26 @@ test_versioned_command_envelopes() {
     if [ "$wait_code" -ne 0 ]; then assert_success 0 "wait JSON error exits nonzero"; else assert_success 1 "wait JSON error exits nonzero"; fi
     assert_envelope "$output" wait false "wait failure uses JSON v1"
 
+    output="$("$HYDRA_BIN" workflow status run_aaaaaaaaaaaaaaaa --json 2>/dev/null)" || workflow_code=$?
+    workflow_code="${workflow_code:-0}"
+    if [ "$workflow_code" -ne 0 ]; then assert_success 0 "workflow JSON error exits nonzero"; else assert_success 1 "workflow JSON error exits nonzero"; fi
+    assert_envelope "$output" "workflow status" false "workflow failure uses JSON v1"
+
+    output="$("$HYDRA_BIN" collision absent-left absent-right --json 2>/dev/null)" || collision_code=$?
+    collision_code="${collision_code:-0}"
+    if [ "$collision_code" -ne 0 ]; then assert_success 0 "collision JSON error exits nonzero"; else assert_success 1 "collision JSON error exits nonzero"; fi
+    assert_envelope "$output" collision false "collision missing-head failure uses JSON v1"
+
+    output="$("$HYDRA_BIN" resource status absent --json 2>/dev/null)" || resource_code=$?
+    resource_code="${resource_code:-0}"
+    if [ "$resource_code" -ne 0 ]; then assert_success 0 "resource JSON error exits nonzero"; else assert_success 1 "resource JSON error exits nonzero"; fi
+    assert_envelope "$output" "resource status" false "resource missing-head failure uses JSON v1"
+
+    output="$("$HYDRA_BIN" gate status absent --json 2>/dev/null)" || gate_code=$?
+    gate_code="${gate_code:-0}"
+    if [ "$gate_code" -ne 0 ]; then assert_success 0 "gate JSON error exits nonzero"; else assert_success 1 "gate JSON error exits nonzero"; fi
+    assert_envelope "$output" "gate status" false "gate missing-head failure uses JSON v1"
+
     output="$("$HYDRA_BIN" exec --json --jobs invalid -- true 2>/dev/null)" || exec_code=$?
     exec_code="${exec_code:-0}"
     if [ "$exec_code" -ne 0 ]; then assert_success 0 "exec JSON error exits nonzero"; else assert_success 1 "exec JSON error exits nonzero"; fi

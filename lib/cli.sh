@@ -192,7 +192,7 @@ EOF
 main() {
     HYDRA_JSON_REQUESTED=0
     case "${1:-}" in
-        init|capabilities|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
+        init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
             for _main_arg in "$@"; do
                 case "$_main_arg" in
                     --) break ;;

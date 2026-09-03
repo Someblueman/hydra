@@ -26,23 +26,37 @@ lifecycle_read() {
     sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/$_lr_path" 2>/dev/null || true
 }
 
+_lifecycle_load_head_locked() {
+    _llhl_branch="$1"
+    _llhl_operation="$2"
+    _llhl_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    LIFECYCLE_STATE_LOCK="state_${_llhl_project}"
+    LIFECYCLE_STATE_LOCK_OWNED=0
+    if [ "${HYDRA_HELD_STATE_LOCK:-}" != "$LIFECYCLE_STATE_LOCK" ]; then
+        acquire_lock "$LIFECYCLE_STATE_LOCK" "$_llhl_operation" || return 1
+        LIFECYCLE_STATE_LOCK_OWNED=1
+    fi
+    if ! lifecycle_load_head "$_llhl_branch"; then
+        [ "$LIFECYCLE_STATE_LOCK_OWNED" -eq 0 ] || release_lock "$LIFECYCLE_STATE_LOCK"
+        return 1
+    fi
+}
+
+_lifecycle_release_head_lock() {
+    [ "$LIFECYCLE_STATE_LOCK_OWNED" -eq 0 ] || release_lock "$LIFECYCLE_STATE_LOCK"
+}
+
 lifecycle_write_head_scalar() {
     _lwhs_branch="$1"
     _lwhs_name="$2"
     _lwhs_value="$3"
     case "$_lwhs_name" in ''|*[!a-z0-9-]*) return 1 ;; esac
-    lifecycle_load_head "$_lwhs_branch" || return 1
-    _lwhs_lock="state_${LIFECYCLE_PROJECT_ID}"
-    if [ "${HYDRA_HELD_STATE_LOCK:-}" = "$_lwhs_lock" ]; then
-        state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/$_lwhs_name" "$_lwhs_value"
-        return $?
-    fi
-    acquire_lock "$_lwhs_lock" "update lifecycle head" "$LIFECYCLE_HEAD_ID" || return 1
+    _lifecycle_load_head_locked "$_lwhs_branch" "update lifecycle head" || return 1
     if ! state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/$_lwhs_name" "$_lwhs_value"; then
-        release_lock "$_lwhs_lock"
+        _lifecycle_release_head_lock
         return 1
     fi
-    release_lock "$_lwhs_lock"
+    _lifecycle_release_head_lock
 }
 
 lifecycle_write_instance_scalar() {
@@ -50,18 +64,12 @@ lifecycle_write_instance_scalar() {
     _lwis_name="$2"
     _lwis_value="$3"
     case "$_lwis_name" in ''|*[!a-z0-9-]*) return 1 ;; esac
-    lifecycle_load_head "$_lwis_branch" || return 1
-    _lwis_lock="state_${LIFECYCLE_PROJECT_ID}"
-    if [ "${HYDRA_HELD_STATE_LOCK:-}" = "$_lwis_lock" ]; then
-        state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/$_lwis_name" "$_lwis_value"
-        return $?
-    fi
-    acquire_lock "$_lwis_lock" "update lifecycle instance" "$LIFECYCLE_HEAD_ID" || return 1
+    _lifecycle_load_head_locked "$_lwis_branch" "update lifecycle instance" || return 1
     if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/$_lwis_name" "$_lwis_value"; then
-        release_lock "$_lwis_lock"
+        _lifecycle_release_head_lock
         return 1
     fi
-    release_lock "$_lwis_lock"
+    _lifecycle_release_head_lock
 }
 
 lifecycle_set_outcome() {
@@ -72,19 +80,17 @@ lifecycle_set_outcome() {
     _lso_summary="${5:-}"
     case "$_lso_outcome" in done|failed|blocked|abandoned|canceled) ;; *) return 1 ;; esac
     case "$_lso_actor_kind" in human|agent|adapter|hydra) ;; *) return 1 ;; esac
-    lifecycle_load_head "$_lso_branch" || return 1
-    _lso_lock="state_${LIFECYCLE_PROJECT_ID}"
-    acquire_lock "$_lso_lock" "declare lifecycle outcome" "$LIFECYCLE_HEAD_ID" || return 1
+    _lifecycle_load_head_locked "$_lso_branch" "declare lifecycle outcome" || return 1
     _lso_now="$(date +%s)"
     if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/declared-outcome" "$_lso_outcome" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/outcome-actor-kind" "$_lso_actor_kind" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/outcome-actor-id" "$_lso_actor_id" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/outcome-at" "$_lso_now" || \
        ! state_v2_write_text "$LIFECYCLE_INSTANCE_DIR/outcome-summary" "$_lso_summary"; then
-        release_lock "$_lso_lock"
+        _lifecycle_release_head_lock
         return 1
     fi
-    release_lock "$_lso_lock"
+    _lifecycle_release_head_lock
     event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" \
         lifecycle.declared "$_lso_actor_kind" "$_lso_actor_id" \
         "{\"outcome\":\"$(json_escape "$_lso_outcome")\"}" >/dev/null
@@ -99,23 +105,17 @@ lifecycle_set_observed() {
     case "$_lso_status" in starting|running|idle|exited|failed|unavailable) ;; *) return 1 ;; esac
     case "$_lso_confidence" in exact|reported|inferred|unavailable) ;; *) return 1 ;; esac
     case "$_lso_exit_code" in ''|*[!0-9]*) [ -z "$_lso_exit_code" ] || return 1 ;; esac
-    lifecycle_load_head "$_lso_branch" || return 1
-    _lso_lock="state_${LIFECYCLE_PROJECT_ID}"
-    _lso_owns_lock=0
-    if [ "${HYDRA_HELD_STATE_LOCK:-}" != "$_lso_lock" ]; then
-        acquire_lock "$_lso_lock" "record observed lifecycle" "$LIFECYCLE_HEAD_ID" || return 1
-        _lso_owns_lock=1
-    fi
+    _lifecycle_load_head_locked "$_lso_branch" "record observed lifecycle" || return 1
     _lso_now="$(date +%s)"
     if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-status" "$_lso_status" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-source" "$_lso_source" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-confidence" "$_lso_confidence" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-at" "$_lso_now" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-exit-code" "$_lso_exit_code"; then
-        [ "$_lso_owns_lock" -eq 0 ] || release_lock "$_lso_lock"
+        _lifecycle_release_head_lock
         return 1
     fi
-    [ "$_lso_owns_lock" -eq 0 ] || release_lock "$_lso_lock"
+    _lifecycle_release_head_lock
     _lso_exit_json=null
     [ -z "$_lso_exit_code" ] || _lso_exit_json="$_lso_exit_code"
     event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" \
@@ -266,12 +266,19 @@ lifecycle_new_instance() {
     _lni_session="$2"
     _lni_provider="$3"
     _lni_recipe="$4"
-    lifecycle_load_head "$_lni_branch" || return 1
+    _lni_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    _lni_lock="state_${_lni_project}"
+    acquire_lock "$_lni_lock" "create lifecycle instance" || return 1
+    if ! lifecycle_load_head "$_lni_branch"; then
+        release_lock "$_lni_lock"
+        return 1
+    fi
     _lni_previous="$LIFECYCLE_INSTANCE_ID"
-    _lni_new="$(hydra_new_id instance "$LIFECYCLE_HEAD_ID|$_lni_session|resume")" || return 1
+    _lni_new="$(hydra_new_id instance "$LIFECYCLE_HEAD_ID|$_lni_session|resume")" || {
+        release_lock "$_lni_lock"
+        return 1
+    }
     _lni_new_dir="$LIFECYCLE_HEAD_DIR/instances/$_lni_new"
-    _lni_lock="state_${LIFECYCLE_PROJECT_ID}"
-    acquire_lock "$_lni_lock" "create lifecycle instance" "$LIFECYCLE_HEAD_ID" || return 1
     _lni_rollback="$(mktemp -d "$HYDRA_HOME/.lifecycle-rollback.XXXXXX")" || {
         release_lock "$_lni_lock"
         return 1

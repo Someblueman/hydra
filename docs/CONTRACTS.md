@@ -27,11 +27,11 @@ failure. Success has:
 Failure has:
 
 ```json
-{"schema_version":1,"ok":false,"command":"list","error":{"code":"invalid_input","message":"...","next":"..."}}
+{"schema_version":1,"ok":false,"command":"list","error":{"code":"invalid_input","message":"...","recovery":"..."}}
 ```
 
 `schema_version`, `ok`, `command`, and the matching `data` or `error` member are
-required. Error `code`, `message`, and `next` are required strings. Envelope v1 is
+required. Error `code`, `message`, and `recovery` are required strings. Envelope v1 is
 used by `init`, `capabilities`, `list`, `status`, `group status`, `recv`, `receipts`,
 `queue`, `lifecycle`, `wait`, `exec`, `diff`, `review`, `provenance`, `workflow`,
 `collision`, `resource`, `gate`, `du`, and `snapshot` where their help documents

@@ -189,7 +189,11 @@ queue_spawn() {
     _filename="${_sort_pri}_${_timestamp}_${_seq_fmt}_${_safe_branch}.queue"
     _filepath="$_qdir/$_filename"
 
-    cat > "$_filepath" <<EOF
+    _queue_tmp="$(mktemp_adjacent "$_filepath")" || {
+        release_lock "$_queue_lock"
+        return 1
+    }
+    cat > "$_queue_tmp" <<EOF
 branch=$_branch
 ai_tool=$_ai_tool
 group=$_group
@@ -197,6 +201,12 @@ layout=$_layout
 priority=$_priority
 requested_at=$_timestamp
 EOF
+    chmod 600 "$_queue_tmp" 2>/dev/null || true
+    if ! atomic_replace "$_filepath" "$_queue_tmp"; then
+        rm -f "$_queue_tmp"
+        release_lock "$_queue_lock"
+        return 1
+    fi
     release_lock "$_queue_lock"
     printf '%s' "$_filepath"
     return 0
@@ -312,16 +322,20 @@ dequeue_spawn() {
 
     _ensure_queue_dir || return 1
     _qdir="$(_get_queue_dir)" || return 1
+    _queue_lock="$(_get_queue_lock)" || return 1
+    acquire_lock "$_queue_lock" "queue removal" || return 1
 
     for _qfile in "$_qdir"/*.queue; do
         [ -f "$_qfile" ] || continue
 
         if grep -q "^branch=$_target_branch$" "$_qfile" 2>/dev/null; then
-            rm -f "$_qfile"
+            rm -f "$_qfile" || { release_lock "$_queue_lock"; return 1; }
+            release_lock "$_queue_lock"
             return 0
         fi
     done
 
+    release_lock "$_queue_lock"
     return 1
 }
 
@@ -331,9 +345,11 @@ dequeue_spawn() {
 clear_queue() {
     _ensure_queue_dir || return 1
     _qdir="$(_get_queue_dir)" || return 1
-
-    _count="$(get_queue_count)"
-    rm -f "$_qdir"/*.queue 2>/dev/null
+    _queue_lock="$(_get_queue_lock)" || return 1
+    acquire_lock "$_queue_lock" "queue clear" || return 1
+    _count="$(find "$_qdir" -maxdepth 1 -name "*.queue" -type f 2>/dev/null | wc -l | tr -d ' ')"
+    rm -f "$_qdir"/*.queue 2>/dev/null || { release_lock "$_queue_lock"; return 1; }
+    release_lock "$_queue_lock"
     printf '%s' "$_count"
 }
 
@@ -344,11 +360,15 @@ clear_queue() {
 process_spawn_queue() {
     _ensure_queue_dir || return 1
     _qdir="$(_get_queue_dir)" || return 1
+    _queue_lock="$(_get_queue_lock)" || return 1
+    _process_lock="${_queue_lock}_process"
+    acquire_lock "$_process_lock" "queue processing" || return 1
 
     # Check if any capacity available
     if is_limit_enabled; then
         _capacity="$(get_available_capacity)"
         if [ "$_capacity" = "0" ]; then
+            release_lock "$_process_lock"
             printf '%s' "0"
             return 0
         fi
@@ -365,6 +385,15 @@ process_spawn_queue() {
             break
         fi
 
+        acquire_lock "$_queue_lock" "queue claim" || {
+            release_lock "$_process_lock"
+            return 1
+        }
+        if [ ! -f "$_qfile" ]; then
+            release_lock "$_queue_lock"
+            continue
+        fi
+
         # Parse queue entry
         _q_branch="" _q_ai="" _q_group="" _q_layout=""
         while IFS='=' read -r _key _val; do
@@ -375,11 +404,21 @@ process_spawn_queue() {
                 layout) _q_layout="$_val" ;;
             esac
         done < "$_qfile"
+        release_lock "$_queue_lock"
 
         # Attempt spawn — keep queue file on failure for retry
         echo "Processing queued spawn: $_q_branch..." >&2
         if spawn_single "$_q_branch" "$_q_layout" "$_q_ai" "$_q_group" "" "" >/dev/null 2>&1; then
-            rm -f "$_qfile"
+            acquire_lock "$_queue_lock" "queue completion" || {
+                release_lock "$_process_lock"
+                return 1
+            }
+            rm -f "$_qfile" || {
+                release_lock "$_queue_lock"
+                release_lock "$_process_lock"
+                return 1
+            }
+            release_lock "$_queue_lock"
             _spawned=$((_spawned + 1))
             echo "  Spawned $_q_branch successfully" >&2
         else
@@ -387,5 +426,6 @@ process_spawn_queue() {
         fi
     done
 
+    release_lock "$_process_lock"
     printf '%s' "$_spawned"
 }

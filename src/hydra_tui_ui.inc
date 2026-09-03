@@ -85,10 +85,20 @@ static const char *display_status(const struct head *head) {
     return "STOPPED";
 }
 
+static bool contains_folded(const char *text, const char *search) {
+    size_t length = strlen(search);
+    if (length == 0U) return true;
+    while (*text != '\0') {
+        if (strncasecmp(text, search, length) == 0) return true;
+        text++;
+    }
+    return false;
+}
+
 static bool head_matches(const struct head *head, const char *search) {
     if (search[0] == '\0') return true;
-    return strstr(head->branch, search) != NULL || strstr(head->session, search) != NULL ||
-           strstr(head->group, search) != NULL || strstr(head->profile, search) != NULL;
+    return contains_folded(head->branch, search) || contains_folded(head->session, search) ||
+           contains_folded(head->group, search) || contains_folded(head->profile, search);
 }
 
 static struct head *selected_head(struct app *app) {
