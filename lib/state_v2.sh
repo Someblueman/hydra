@@ -289,26 +289,26 @@ _state_v2_projection_matches() {
     [ -f "$_sv2pm_map" ] || return 0
     while IFS=' ' read -r _sv2pm_branch _sv2pm_session _sv2pm_profile _sv2pm_group \
         _sv2pm_created _sv2pm_deps _sv2pm_pr _sv2pm_extra || [ -n "${_sv2pm_branch:-}" ]; do
-        [ -n "${_sv2pm_branch:-}" ] && [ -n "${_sv2pm_session:-}" ] && \
-            [ -z "${_sv2pm_extra:-}" ] || {
+        if [ -z "${_sv2pm_branch:-}" ] || [ -z "${_sv2pm_session:-}" ] || \
+            [ -n "${_sv2pm_extra:-}" ]; then
             echo "Error: malformed 1.9 compatibility projection: $_sv2pm_map" >&2
             return 1
-        }
+        fi
         _sv2pm_head="$(state_v2_find_head_by_branch "$(basename "$_sv2pm_project_dir")" \
             "$_sv2pm_branch" 2>/dev/null)" || {
             echo "Error: compatibility projection has no durable head: $_sv2pm_branch" >&2
             return 1
         }
         _sv2pm_dir="$_sv2pm_project_dir/heads/$_sv2pm_head"
-        [ "$(sed -n '1p' "$_sv2pm_dir/session")" = "$_sv2pm_session" ] && \
-        [ "$(sed -n '1p' "$_sv2pm_dir/profile")" = "${_sv2pm_profile:--}" ] && \
-        [ "$(sed -n '1p' "$_sv2pm_dir/group")" = "${_sv2pm_group:--}" ] && \
-        [ "$(sed -n '1p' "$_sv2pm_dir/created-at")" = "${_sv2pm_created:--}" ] && \
-        [ "$(sed -n '1p' "$_sv2pm_dir/dependencies")" = "${_sv2pm_deps:--}" ] && \
-        [ "$(sed -n '1p' "$_sv2pm_dir/pr")" = "${_sv2pm_pr:--}" ] || {
+        if [ "$(sed -n '1p' "$_sv2pm_dir/session")" != "$_sv2pm_session" ] || \
+            [ "$(sed -n '1p' "$_sv2pm_dir/profile")" != "${_sv2pm_profile:--}" ] || \
+            [ "$(sed -n '1p' "$_sv2pm_dir/group")" != "${_sv2pm_group:--}" ] || \
+            [ "$(sed -n '1p' "$_sv2pm_dir/created-at")" != "${_sv2pm_created:--}" ] || \
+            [ "$(sed -n '1p' "$_sv2pm_dir/dependencies")" != "${_sv2pm_deps:--}" ] || \
+            [ "$(sed -n '1p' "$_sv2pm_dir/pr")" != "${_sv2pm_pr:--}" ]; then
             echo "Error: compatibility projection diverges from durable head: $_sv2pm_branch" >&2
             return 1
-        }
+        fi
     done < "$_sv2pm_map"
 }
 
