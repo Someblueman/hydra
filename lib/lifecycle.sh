@@ -33,6 +33,10 @@ lifecycle_write_head_scalar() {
     case "$_lwhs_name" in ''|*[!a-z0-9-]*) return 1 ;; esac
     lifecycle_load_head "$_lwhs_branch" || return 1
     _lwhs_lock="state_${LIFECYCLE_PROJECT_ID}"
+    if [ "${HYDRA_HELD_STATE_LOCK:-}" = "$_lwhs_lock" ]; then
+        state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/$_lwhs_name" "$_lwhs_value"
+        return $?
+    fi
     acquire_lock "$_lwhs_lock" "update lifecycle head" "$LIFECYCLE_HEAD_ID" || return 1
     if ! state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/$_lwhs_name" "$_lwhs_value"; then
         release_lock "$_lwhs_lock"
@@ -48,6 +52,10 @@ lifecycle_write_instance_scalar() {
     case "$_lwis_name" in ''|*[!a-z0-9-]*) return 1 ;; esac
     lifecycle_load_head "$_lwis_branch" || return 1
     _lwis_lock="state_${LIFECYCLE_PROJECT_ID}"
+    if [ "${HYDRA_HELD_STATE_LOCK:-}" = "$_lwis_lock" ]; then
+        state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/$_lwis_name" "$_lwis_value"
+        return $?
+    fi
     acquire_lock "$_lwis_lock" "update lifecycle instance" "$LIFECYCLE_HEAD_ID" || return 1
     if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/$_lwis_name" "$_lwis_value"; then
         release_lock "$_lwis_lock"
@@ -93,17 +101,21 @@ lifecycle_set_observed() {
     case "$_lso_exit_code" in ''|*[!0-9]*) [ -z "$_lso_exit_code" ] || return 1 ;; esac
     lifecycle_load_head "$_lso_branch" || return 1
     _lso_lock="state_${LIFECYCLE_PROJECT_ID}"
-    acquire_lock "$_lso_lock" "record observed lifecycle" "$LIFECYCLE_HEAD_ID" || return 1
+    _lso_owns_lock=0
+    if [ "${HYDRA_HELD_STATE_LOCK:-}" != "$_lso_lock" ]; then
+        acquire_lock "$_lso_lock" "record observed lifecycle" "$LIFECYCLE_HEAD_ID" || return 1
+        _lso_owns_lock=1
+    fi
     _lso_now="$(date +%s)"
     if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-status" "$_lso_status" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-source" "$_lso_source" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-confidence" "$_lso_confidence" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-at" "$_lso_now" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-exit-code" "$_lso_exit_code"; then
-        release_lock "$_lso_lock"
+        [ "$_lso_owns_lock" -eq 0 ] || release_lock "$_lso_lock"
         return 1
     fi
-    release_lock "$_lso_lock"
+    [ "$_lso_owns_lock" -eq 0 ] || release_lock "$_lso_lock"
     _lso_exit_json=null
     [ -z "$_lso_exit_code" ] || _lso_exit_json="$_lso_exit_code"
     event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" \

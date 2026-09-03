@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `HYDRA_INSTALL_TUI=never` preserves a compiler-free shell-only install
 - Hydra, native core, and native TUI version handshakes now report 2.0.0; protocol
   versions remain unchanged
+- State-v2 per-head scalar records are now the only runtime authority for list,
+  status, group, dependency, messaging, limits, maintenance, dashboard, completion,
+  basic TUI, and native TUI readers
+- The stable 2.0 contracts now define JSON/error negotiation, lifecycle and workflow
+  evidence, native/basic parity, supported platforms, upgrades, deprecation windows,
+  and the consolidated local trust model
 
 ### Removed
 
@@ -35,6 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   normal bounded refresh cycle
 - The redundant `hydra tui --native` mode now that native mission control is the
   default
+- Runtime dual-writing and reading of the seven-field project `compat-map`, the
+  global map fallback, and the in-process state-map cache
+
+### Migration
+
+- `hydra state migrate --dry-run` verifies state v2 and every retained 1.9
+  compatibility projection without mutation
+- `hydra state migrate` backs up the full state tree, removes only verified 1.9
+  projections and the inactive global map, then verifies state again
+- `hydra state rollback` fails closed around active state/event writers and restores
+  1.9 projections only for an intentional downgrade
 
 ## [1.9.0] - 2026-09-02
 

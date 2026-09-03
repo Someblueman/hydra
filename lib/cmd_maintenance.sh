@@ -106,10 +106,10 @@ cmd_doctor() {
         errors=$((errors + 1))
     fi
 
-    if [ -f "$HYDRA_MAP" ]; then
-        echo "  [OK] State file exists: $HYDRA_MAP"
-        echo "    Size: $(wc -c < "$HYDRA_MAP") bytes"
-        echo "    Entries: $(wc -l < "$HYDRA_MAP" | tr -d ' ')"
+    _doctor_project_dir="$(_state_project_dir 2>/dev/null || true)"
+    if [ -d "$_doctor_project_dir" ]; then
+        echo "  [OK] State v2 project exists: $_doctor_project_dir"
+        echo "    Active heads: $(state_list_heads | wc -l | tr -d ' ')"
     else
         doctor_info "No state file (this is normal for new installations)"
     fi
@@ -147,7 +147,7 @@ cmd_doctor() {
         print_success "Detected: $_detected"
     else
         doctor_info "No agent CLI detected" \
-            "export HYDRA_SKIP_AI=1 for a shell-only head, or install an agent (see README Quick Start)"
+            "pass spawn --no-agent for a shell-only head, or install an agent (see README Quick Start)"
     fi
 
     echo ""
@@ -260,14 +260,14 @@ cmd_cleanup() {
     print_info "Cleaned $stale_cleaned stale lock(s)"
     cleaned_total=$((cleaned_total + stale_cleaned))
 
-    # Clean dead session mappings
+    # Clean dead head records
     echo ""
-    echo "Cleaning dead session mappings..."
-    dead_cleaned="$(clean_dead_mappings)"
+    echo "Cleaning dead head records..."
+    dead_cleaned="$(clean_dead_heads)"
     if [ "$dead_cleaned" -gt 0 ]; then
-        echo "  Removed $dead_cleaned dead mapping(s)"
+        echo "  Marked $dead_cleaned dead head(s) stopped"
     fi
-    print_info "Cleaned $dead_cleaned dead mapping(s)"
+    print_info "Cleaned $dead_cleaned dead head record(s)"
     cleaned_total=$((cleaned_total + dead_cleaned))
 
     # Find and offer to clean orphaned worktrees

@@ -6,11 +6,7 @@ cmd_state() {
     [ $# -eq 0 ] || shift
     case "$_cs_action" in
         verify)
-            if [ "$(sed -n '1p' "$HYDRA_HOME/state/active-schema" 2>/dev/null || true)" = "2" ]; then
-                state_v2_verify || return 1
-            else
-                state_v2_verify_legacy_map "$HYDRA_MAP" || return 1
-            fi
+            state_v2_verify || return 1
             echo "State is valid"
             ;;
         backup)

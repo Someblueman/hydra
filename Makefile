@@ -80,7 +80,7 @@ test-tui: build-tui
 
 test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 	@mkdir -p "$(CURDIR)/$(BUILD_DIR)/test-tui-home"
-	@: > "$(CURDIR)/$(BUILD_DIR)/test-tui-home/map"
+	@: > "$(CURDIR)/$(BUILD_DIR)/test-tui-home/sentinel"
 	@before="$$(find "$(CURDIR)/$(BUILD_DIR)/test-tui-home" -type f -exec cksum {} \; | sort | cksum)"; \
 	HYDRA_HOME="$(CURDIR)/$(BUILD_DIR)/test-tui-home" \
 		HYDRA_TEST_BIN="$(CURDIR)/bin/hydra" \

@@ -11,7 +11,7 @@ The dashboard uses tmux's `join-pane` and `move-pane` commands to temporarily re
 ### 1. Pane Collection
 When you run `hydra dashboard`, the system:
 - Creates a dedicated `hydra-dashboard` session
-- Iterates through all active Hydra sessions from the mapping file
+- Iterates through all active Hydra sessions from state v2
 - Moves the first pane from each session to the dashboard
 - Records the original location for restoration
 
@@ -26,7 +26,7 @@ The dashboard automatically arranges panes based on count:
 When exiting (via 'q' key or Ctrl-C):
 - Each pane is moved back to its original window/session
 - The dashboard session is destroyed
-- All mappings are cleaned up
+- All heads are durably stopped
 
 ## Usage Example
 

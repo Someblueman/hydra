@@ -10,37 +10,9 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
     HOME="$(cd ~ && pwd)"
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
-HYDRA_LEGACY_MAP="$HYDRA_HOME/map"
-HYDRA_MAP="$HYDRA_LEGACY_MAP"
+HYDRA_1X_MAP="$HYDRA_HOME/map"
 HYDRA_VERSION="2.0.0"
-export HYDRA_VERSION
-
-# State v2 keeps the legacy seven-field view as a project-scoped compatibility
-# projection while older commands are migrated to scalar records.
-select_hydra_map() {
-    HYDRA_MAP="$HYDRA_LEGACY_MAP"
-    if [ "$(sed -n '1p' "$HYDRA_HOME/state/active-schema" 2>/dev/null || true)" != "2" ]; then
-        return 0
-    fi
-    _shm_common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
-    [ -n "$_shm_common" ] || return 0
-    case "$_shm_common" in
-        /*) ;;
-        *)
-            _shm_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-            [ -n "$_shm_root" ] || return 0
-            _shm_common="$_shm_root/$_shm_common"
-            ;;
-    esac
-    _shm_project="$(sed -n '1p' "$_shm_common/hydra/project-id" 2>/dev/null || true)"
-    case "$_shm_project" in
-        project_*)
-            _shm_suffix="${_shm_project#project_}"
-            case "$_shm_suffix" in ''|*[!0-9a-f]*) return 0 ;; esac
-            HYDRA_MAP="$HYDRA_HOME/state/v2/projects/$_shm_project/compat-map"
-            ;;
-    esac
-}
+export HYDRA_VERSION HYDRA_1X_MAP
 
 # Source helper libraries
 # Enhanced library detection with multiple fallback paths
@@ -270,10 +242,12 @@ _load_libs_for_cmd() {
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
+            _load_lib spawn_bulk
             _load_lib github
             _load_lib limits
             _load_lib kill
             _load_lib cmd_spawn
+            _load_lib cmd_list
             _load_lib cmd_session
             ;;
         list|switch|status|cycle-layout)
@@ -287,6 +261,7 @@ _load_libs_for_cmd() {
             _load_lib operations
             _load_lib layout
             _load_lib github
+            _load_lib cmd_list
             _load_lib cmd_session
             ;;
         kill)
@@ -319,16 +294,23 @@ _load_libs_for_cmd() {
             _load_lib state_v2
             _load_lib messages
             _load_lib cmd_group
+            _load_lib cmd_messages
             ;;
         pr|template)
+            _load_lib locks
             _load_lib state
+            _load_lib identity
+            _load_lib state_v2
             _load_lib github
             _load_lib template
             _load_lib cmd_github
             ;;
         tail|broadcast|wait-idle)
+            _load_lib locks
             _load_lib state
             _load_lib tmux
+            _load_lib identity
+            _load_lib state_v2
             _load_lib cmd_session_ops
             ;;
         regenerate)
@@ -349,7 +331,7 @@ _load_libs_for_cmd() {
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
-            _load_lib cmd_spawn
+            _load_lib cmd_queue
             _load_lib cmd_evidence
             ;;
         doctor|cleanup)
@@ -359,15 +341,20 @@ _load_libs_for_cmd() {
             _load_lib state
             _load_lib git
             _load_lib locks
+            _load_lib identity
+            _load_lib state_v2
             _load_lib output
             _load_lib messages
             _load_lib spawn
-            _load_lib cmd_spawn
+            _load_lib cmd_queue
             _load_lib cmd_maintenance
             ;;
         dashboard|dashboard-exit)
+            _load_lib locks
             _load_lib state
             _load_lib tmux
+            _load_lib identity
+            _load_lib state_v2
             _load_lib dashboard
             ;;
         tui)
@@ -388,6 +375,7 @@ _load_libs_for_cmd() {
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
+            _load_lib spawn_bulk
             _load_lib kill
             _load_lib limits
             _load_lib maintenance
@@ -395,7 +383,10 @@ _load_libs_for_cmd() {
             _load_lib github
             _load_lib dashboard
             _load_lib cmd_spawn
+            _load_lib cmd_queue
+            _load_lib cmd_list
             _load_lib cmd_session
+            _load_lib cmd_messages
             _load_lib tui
             ;;
         queue)
@@ -406,7 +397,7 @@ _load_libs_for_cmd() {
             _load_lib state_v2
             _load_lib limits
             _load_lib spawn
-            _load_lib cmd_spawn
+            _load_lib cmd_queue
             ;;
         completion)
             _load_lib completion_bash
@@ -429,13 +420,17 @@ _load_libs_for_cmd() {
             _load_lib hooks
             _load_lib yaml
             _load_lib spawn
+            _load_lib spawn_bulk
             _load_lib kill
             _load_lib limits
             _load_lib maintenance
             _load_lib tui
             _load_lib cmd_spawn
+            _load_lib cmd_queue
+            _load_lib cmd_list
             _load_lib cmd_session
             _load_lib cmd_group
+            _load_lib cmd_messages
             _load_lib cmd_github
             _load_lib cmd_session_ops
             _load_lib cmd_maintenance
@@ -462,19 +457,6 @@ init_hydra_home() {
         echo "Error: HYDRA_HOME is not writable: $HYDRA_HOME" >&2
         echo "Next: chmod u+w \"$HYDRA_HOME\" or export HYDRA_HOME to a writable directory (see README Quick Start)" >&2
         exit 1
-    fi
-    select_hydra_map
-    _ihh_map_dir="$(dirname "$HYDRA_MAP")"
-    if ! mkdir -p "$_ihh_map_dir" 2>/dev/null; then
-        echo "Error: Cannot create state directory: $_ihh_map_dir" >&2
-        exit 1
-    fi
-    if [ ! -f "$HYDRA_MAP" ]; then
-        if ! touch "$HYDRA_MAP" 2>/dev/null; then
-            echo "Error: Cannot create state map at $HYDRA_MAP" >&2
-            echo "Next: ensure HYDRA_HOME is writable (export HYDRA_HOME=\"\$HOME/.hydra\")" >&2
-            exit 1
-        fi
     fi
 }
 

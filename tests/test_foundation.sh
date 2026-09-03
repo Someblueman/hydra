@@ -9,12 +9,10 @@ fail_count=0
 test_root="$(mktemp -d)"
 repo="$test_root/repo"
 HYDRA_HOME="$test_root/home"
-HYDRA_MAP="$HYDRA_HOME/map"
 HYDRA_LIB_DIR="$(cd "$(dirname "$0")/../lib" && pwd)"
 HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
-export HYDRA_HOME HYDRA_MAP HYDRA_LIB_DIR
+export HYDRA_HOME HYDRA_LIB_DIR
 mkdir -p "$HYDRA_HOME" "$repo"
-: > "$HYDRA_MAP"
 
 # shellcheck source=helpers.sh
 # shellcheck disable=SC1091
@@ -154,28 +152,31 @@ assert_success $? "repaired stream verifies"
 HYDRA_HOME="$test_root/home" "$HYDRA_BIN" events verify --project "$project_id" --head "$head_id" >/dev/null
 assert_success $? "events command verifies an explicit head"
 
-# Migration and rollback use a fresh home to prove the full reversible path.
+# Migration and rollback use a fresh home to prove the 1.9 projection retirement.
 HYDRA_HOME="$test_root/migrate-home"
-HYDRA_MAP="$HYDRA_HOME/map"
+HYDRA_1X_MAP="$HYDRA_HOME/map"
 HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
-export HYDRA_HOME HYDRA_MAP HYDRA_STATE_V2_ROOT
+export HYDRA_HOME HYDRA_1X_MAP HYDRA_STATE_V2_ROOT
 mkdir -p "$HYDRA_HOME"
-printf '%s\n' 'legacy-branch legacy-session claude group 123 dep 9' > "$HYDRA_MAP"
-rm -f "$(hydra_project_identity_file)"
+legacy_row='legacy-branch legacy-session claude group 123 dep 9'
+state_v2_create_head "$project_id" legacy-branch legacy-session claude group 123 dep 9 "$repo" >/dev/null
+legacy_project_dir="$(state_v2_project_dir "$project_id")"
+printf '%s\n' "$legacy_row" > "$legacy_project_dir/compat-map"
+printf '%s\n' "$legacy_row" > "$HYDRA_1X_MAP"
 dry_output="$(state_v2_migrate --dry-run)"
 assert_success $? "migration dry-run succeeds"
-if [ ! -e "$HYDRA_STATE_V2_ROOT" ] && ! hydra_get_project_id >/dev/null 2>&1; then
-    assert_success 0 "migration dry-run does not mutate state or identity"
+if [ -f "$legacy_project_dir/compat-map" ] && [ -f "$HYDRA_1X_MAP" ]; then
+    assert_success 0 "migration dry-run does not mutate compatibility projections"
 else
-    assert_success 1 "migration dry-run does not mutate state or identity"
+    assert_success 1 "migration dry-run does not mutate compatibility projections"
 fi
-printf '%s\n' "$dry_output" | grep -q 'migrate heads: 1'
-assert_success $? "migration dry-run reports exact head count"
+printf '%s\n' "$dry_output" | grep -q 'remove verified 1.9 compatibility projections: 1'
+assert_success $? "migration dry-run reports exact projection count"
 
 migrate_output="$(state_v2_migrate)"
 assert_success $? "migration writes state v2"
 backup_path="$(printf '%s\n' "$migrate_output" | sed -n 's/^Backup: //p')"
-if [ -d "$backup_path" ] && [ -f "$backup_path/map" ]; then
+if [ -d "$backup_path" ] && [ -f "$backup_path/map" ] && [ -f "$backup_path/state/v2/schema-version" ]; then
     assert_success 0 "migration creates a recoverable backup"
 else
     assert_success 1 "migration creates a recoverable backup"
@@ -193,23 +194,18 @@ case "$verify_output" in
     *) assert_success 0 "failed verification does not print success" ;;
 esac
 printf '2\n' > "$HYDRA_STATE_V2_ROOT/schema-version"
-printf 'changed\n' > "$HYDRA_MAP"
-migrated_project="$(hydra_get_project_id)"
-try_lock "state_${migrated_project}" "test active state writer"
+try_lock "state_${project_id}" "test active state writer"
 HYDRA_LOCK_RETRIES=1
 export HYDRA_LOCK_RETRIES
 state_v2_rollback "$backup_path" >/dev/null 2>&1
 assert_failure $? "rollback refuses a concurrent state writer"
-assert_equal changed "$(sed -n '1p' "$HYDRA_MAP")" "failed rollback preserves current state"
-release_lock "state_${migrated_project}"
+assert_equal 2 "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" "failed rollback preserves current state"
+release_lock "state_${project_id}"
 unset HYDRA_LOCK_RETRIES
-HYDRA_LEGACY_MAP="$HYDRA_HOME/map"
-HYDRA_MAP="$HYDRA_STATE_V2_ROOT/projects/$migrated_project/compat-map"
-export HYDRA_LEGACY_MAP HYDRA_MAP
 state_v2_rollback "$backup_path" >/dev/null
 assert_success $? "rollback succeeds with generated backup"
-assert_equal "$HYDRA_LEGACY_MAP" "$HYDRA_MAP" "rollback selects the legacy map outside restored state"
-assert_equal "legacy-branch legacy-session claude group 123 dep 9" "$(sed -n '1p' "$HYDRA_LEGACY_MAP")" "rollback restores the legacy map"
+assert_equal "$legacy_row" "$(sed -n '1p' "$HYDRA_1X_MAP")" "rollback restores the global 1.x map for downgrade"
+assert_equal "$legacy_row" "$(sed -n '1p' "$legacy_project_dir/compat-map")" "rollback restores the 1.9 project projection"
 
 echo "====================================="
 echo "Test Results:"

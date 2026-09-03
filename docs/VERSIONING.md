@@ -27,3 +27,23 @@ not implementation size, determines the version number.
 Use `-rc.N` prereleases when packaging or platform qualification needs public testing.
 Tags and hosted releases are cut only from the exact commit that passed shell-only,
 native, parity, install, onboarding, and applicable security/recovery gates.
+
+## Deprecation after 2.0
+
+A public CLI option, environment variable, JSON field, protocol, or documented
+on-disk contract may be deprecated only in a released version. The announcement must
+name the replacement, compatibility impact, and earliest removal release.
+
+- A compatible public interface receives at least one minor-release window before
+  removal and remains functional throughout that window.
+- A security flaw or integrity risk may require immediate removal. The release notes
+  must explain the exception and provide the safest available migration.
+- Provisional interfaces explicitly labeled internal or experimental may change
+  without a window; that label must exist before users depend on the interface.
+- Durable formats are never abandoned in place. A removal release includes a
+  verified migration and rollback path from the immediately preceding stable
+  release.
+
+Hydra does not add pass-through aliases, dual writers, or zombie decoders merely to
+stage a removal. During a declared window, the existing implementation remains the
+single path; the removal release replaces it atomically.

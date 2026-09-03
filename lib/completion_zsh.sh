@@ -210,10 +210,8 @@ _hydra_branches() {
 
 _hydra_sessions() {
     local sessions
-    if [[ -f "${HYDRA_MAP:-$HOME/.hydra/map}" ]]; then
-        sessions=(${(f)"$(awk '{print $1}' "${HYDRA_MAP:-$HOME/.hydra/map}" 2>/dev/null)"})
-        _describe 'session' sessions
-    fi
+    sessions=(${(f)"$(command hydra list --json 2>/dev/null | tr '{' '\n' | sed -n 's/.*"branch": "\([^"]*\)".*/\1/p')"})
+    _describe 'head' sessions
 }
 
 _hydra_templates() {
@@ -228,4 +226,3 @@ _hydra_templates() {
 _hydra "$@"
 EOF
 }
-

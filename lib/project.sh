@@ -99,18 +99,5 @@ project_worktree_path() {
 project_activate_state_v2() {
     _pas_project="$1"
     _pas_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
-    _pas_legacy_map="${HYDRA_LEGACY_MAP:-${HYDRA_MAP:-$HYDRA_HOME/map}}"
-    if [ -s "$_pas_legacy_map" ] && \
-       [ "$(sed -n '1p' "$HYDRA_HOME/state/active-schema" 2>/dev/null || true)" != "2" ]; then
-        echo "Error: legacy state must be migrated before project initialization" >&2
-        echo "Next: hydra state migrate --dry-run && hydra state migrate" >&2
-        return 1
-    fi
-    state_v2_init_project "$_pas_project" "$_pas_root" || return 1
-    _pas_project_dir="$(state_v2_project_dir "$_pas_project")" || return 1
-    [ -f "$_pas_project_dir/compat-map" ] || : > "$_pas_project_dir/compat-map"
-    chmod 600 "$_pas_project_dir/compat-map" 2>/dev/null || true
-    state_v2_write_scalar "$HYDRA_HOME/state/active-schema" "2" || return 1
-    HYDRA_MAP="$_pas_project_dir/compat-map"
-    export HYDRA_MAP
+    state_v2_init_project "$_pas_project" "$_pas_root"
 }

@@ -35,7 +35,7 @@ Five-minute tour: install or run from source, verify, create a disposable head, 
 
 - Requirements: `git`, `tmux` (≥ 3.0). Optional: `fzf`, GitHub CLI, an AI CLI (`claude`, `aider`, `gemini`, etc.).
 - Supported platforms: Linux and macOS; POSIX `sh` (dash on Debian/Ubuntu); `tmux >= 3.0` and `git`. CI runs Ubuntu and macOS. Windows is not supported.
-- Public CLI, map, JSON, lock, install, and TUI-row contracts: [docs/CONTRACTS.md](docs/CONTRACTS.md).
+- Public CLI, state, JSON, lock, install, and TUI contracts: [docs/CONTRACTS.md](docs/CONTRACTS.md).
 
 ### 1. Install (or run from source)
 
@@ -93,7 +93,7 @@ git branch -D first-head # remove the disposable tour branch
 hydra list             # empty
 ```
 
-That leaves no Hydra tmux session, worktree, branch, or `HYDRA_HOME` map entry for `first-head`.
+That leaves no Hydra tmux session, worktree, branch, or active state entry for `first-head`.
 
 ### Shell completions
 
@@ -145,7 +145,7 @@ hydra switch            # interactive (fzf if available)
 # Manage
 hydra kill feature-branch
 hydra kill --all [--force]
-hydra cleanup           # remove dead mappings, stale locks, orphaned worktrees
+hydra cleanup           # stop dead heads; remove stale locks and orphaned worktrees
 
 # Group operations
 hydra group feature-x backend    # assign to group
@@ -232,10 +232,10 @@ hydra tui --capabilities                           # native/basic diagnostics
 | Variable | Description |
 |----------|-------------|
 | `HYDRA_HOME` | Runtime dir (default `~/.hydra`) |
-| `HYDRA_AI_COMMAND` | Legacy default agent override; prefer project profiles |
+| `HYDRA_AI_COMMAND` | Default agent override; project profiles are preferred |
 | `HYDRA_ROOT` | Force library discovery when running from source |
 | `HYDRA_DASHBOARD_PANES_PER_SESSION` | `1`, `N`, or `all` |
-| `HYDRA_SKIP_AI` | Legacy shell-only switch; prefer `spawn --no-agent` |
+| `HYDRA_SKIP_AI` | Non-interactive shell-only default; `spawn --no-agent` is explicit |
 | `HYDRA_DASHBOARD_NO_ATTACH` | Create dashboard without attaching |
 | `HYDRA_NONINTERACTIVE` | Skip all confirmation prompts (for CI/automation) |
 | `HYDRA_REGENERATE_RUN_STARTUP` | Run startup commands on regenerate |
@@ -257,6 +257,11 @@ integration](docs/workflows.md), and the
 [optional native core](docs/NATIVE_CORE.md). Native/basic dispatch, terminal safety,
 keymaps, accessibility, and recovery are documented in
 [native mission control](docs/NATIVE_TUI.md).
+
+Supported systems and upgrade policy are in [docs/SUPPORT.md](docs/SUPPORT.md).
+Existing 1.9 installations should follow
+[docs/MIGRATING_TO_2.0.md](docs/MIGRATING_TO_2.0.md) before removing their state
+backup.
 
 ## YAML Config (optional)
 

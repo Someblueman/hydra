@@ -3,9 +3,10 @@
 > - **Status:** canonical outstanding-work backlog
 > - **Snapshot:** 3 September 2026
 > - **Current release:** `v1.9.0` at `02b1cfb`
-> - **Current target:** `2.0.0` stable local orchestration interface
+> - **Next release candidate:** `2.0.0` stable local orchestration interface
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
->   [Release policy](VERSIONING.md) · [Contracts](CONTRACTS.md)
+>   [Release policy](VERSIONING.md) · [Contracts](CONTRACTS.md) ·
+>   [2.0 release checklist](RELEASE_CHECKLIST_2.0.0.md)
 
 ## Purpose
 
@@ -37,47 +38,6 @@ version number is chosen at release time from compatibility impact.
 - Hydra does not silently copy secrets, auto-merge without policy and approval, or
   present heuristic agent observations as authoritative state.
 - Performance claims require reproducible measurements.
-
-## Current target: 2.0.0 stable local orchestration interface
-
-Commit to the local contracts that survived real use and remove the transitional
-surface accumulated during the 1.x releases.
-
-### Scope
-
-- [ ] Remove superseded pre-2.0 commands and state compatibility paths, including the
-      remaining project `compat-map` projection.
-- [ ] Declare the supported JSON success/error schemas and protocol negotiation rules
-      stable, removing provisional or duplicate surfaces.
-- [ ] Declare the supported workflow, event, manifest, completion, and integration
-      contracts stable.
-- [ ] Declare the supported agent profile, adapter capability, task, resume,
-      transcript, scope, and basic/native TUI contracts stable.
-- [ ] Define supported platform and upgrade policies.
-- [ ] Define deprecation windows for post-2.0 public interfaces.
-- [ ] Provide a complete migration guide from the last 1.x release.
-- [ ] Publish a consolidated security and trust model covering local configuration,
-      agents, workflows, artifacts, and prerequisites for remote coordination.
-
-### Acceptance
-
-- One unchanged release commit passes shell-only, native, parity, migration,
-  lifecycle, workflow, integration, and security qualification.
-- Release artifacts and checksums are produced from that exact commit.
-- Documentation examples are exercised in CI or a replayable release checklist.
-- State migration has dry-run, backup, verification, interruption, and rollback
-  coverage.
-- No foundational migration or compatibility path is deferred merely to preserve an
-  accidental 1.x format.
-- CLI help, completions, README, contract documents, and examples agree.
-- The 1.x-to-2.0 upgrade path is demonstrated without losing local work or evidence.
-- Native and basic TUIs expose the same retained actions; removed actions are absent
-  from both implementations and their documentation.
-- Every native mutation delegates to a public shell CLI command with explicit argv;
-  the native process does not write Hydra state.
-- Native-first dispatch and visible basic fallback pass deterministic, PTY, crash,
-  timeout, version-skew, unsuitable-terminal, shell-only install, macOS, and Linux
-  qualification.
 
 ## Post-2.0 backlog
 

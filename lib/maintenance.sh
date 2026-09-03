@@ -5,12 +5,12 @@
 # Shared logic for doctor and cleanup commands.
 # Dependencies: state.sh, tmux.sh, paths.sh, locks.sh
 
-# Count mappings whose tmux session no longer exists
+# Count active head records whose tmux session no longer exists
 # Usage: count_dead_sessions
 # Returns: Count on stdout
 count_dead_sessions() {
     _dead=0
-    if [ -z "${HYDRA_MAP:-}" ] || [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+    if ! state_has_heads; then
         printf '%s' "0"
         return 0
     fi
@@ -18,23 +18,25 @@ count_dead_sessions() {
         if [ -n "$_session" ] && ! tmux_session_exists "$_session"; then
             _dead=$((_dead + 1))
         fi
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(state_list_heads)
+EOF
     printf '%s' "$_dead"
 }
 
-# Check if a branch has a mapping in the state file
-# Usage: branch_has_mapping <branch>
-# Returns: 0 if mapped, 1 otherwise
-branch_has_mapping() {
+# Check if a branch has an active head record.
+branch_has_active_head() {
     _branch="$1"
-    if [ -z "$_branch" ] || [ ! -f "${HYDRA_MAP:-}" ] || [ ! -s "$HYDRA_MAP" ]; then
+    if [ -z "$_branch" ]; then
         return 1
     fi
     while IFS=' ' read -r _mapped_branch _rest; do
         if [ "$_mapped_branch" = "$_branch" ]; then
             return 0
         fi
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(state_list_heads)
+EOF
     return 1
 }
 
@@ -54,7 +56,7 @@ count_orphan_worktrees() {
     _orphan=0
     while IFS='	' read -r _branch _path; do
         [ -z "$_branch" ] && continue
-        if ! branch_has_mapping "$_branch"; then
+        if ! branch_has_active_head "$_branch"; then
             _orphan=$((_orphan + 1))
         fi
     done <<EOF
@@ -77,7 +79,7 @@ list_orphan_worktree_paths() {
 
     while IFS='	' read -r _branch _path; do
         [ -z "$_branch" ] && continue
-        if ! branch_has_mapping "$_branch"; then
+        if ! branch_has_active_head "$_branch"; then
             printf '%s\n' "$_path"
         fi
     done <<EOF
@@ -129,48 +131,29 @@ EOF
     printf '%s' "$_cleaned"
 }
 
-# Remove dead session mappings from state file
-# Usage: clean_dead_mappings
+# Mark head records with dead sessions as stopped.
 # Returns: Number removed on stdout
-clean_dead_mappings() {
+clean_dead_heads() {
     _dead_cleaned=0
-    if [ -z "${HYDRA_MAP:-}" ] || [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+    if ! state_has_heads; then
         printf '%s' "0"
         return 0
     fi
 
-    if ! acquire_lock "state_map"; then
-        echo "Error: Failed to acquire state lock" >&2
-        printf '%s' "0"
-        return 1
-    fi
-
-    _tmpfile="$(mktemp_adjacent "$HYDRA_MAP")" || {
-        release_lock "state_map"
-        printf '%s' "0"
-        return 1
-    }
     _dead_branches=""
     while IFS=' ' read -r _branch _session _ai _group _timestamp _deps _pr; do
         if [ -n "$_session" ] && tmux_session_exists "$_session"; then
-            printf '%s %s %s %s %s %s %s\n' \
-                "$_branch" "$_session" "${_ai:--}" "${_group:--}" "${_timestamp:--}" "${_deps:--}" "${_pr:--}" >> "$_tmpfile"
-        else
+            :
+        elif state_update_field "$_branch" desired-state stopped; then
             _dead_cleaned=$((_dead_cleaned + 1))
             if [ -n "$_branch" ]; then
                 _dead_branches="${_dead_branches}${_branch}
 "
             fi
         fi
-    done < "$HYDRA_MAP"
-    if ! atomic_replace "$HYDRA_MAP" "$_tmpfile"; then
-        rm -f "$_tmpfile"
-        release_lock "state_map"
-        printf '%s' "0"
-        return 1
-    fi
-    _invalidate_state_cache
-    release_lock "state_map"
+    done <<EOF
+$(state_list_heads)
+EOF
 
     if [ -n "$_dead_branches" ] && command -v cleanup_messages_for_branch >/dev/null 2>&1; then
         while IFS= read -r _dead_b; do

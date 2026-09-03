@@ -29,6 +29,37 @@ contains() {
     fi
 }
 
+seed_state_head() (
+    _ssh_home="$1"
+    _ssh_project="$2"
+    _ssh_repo="$3"
+    _ssh_branch="$4"
+    _ssh_session="$5"
+    _ssh_profile="$6"
+    HYDRA_HOME="$_ssh_home"
+    HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
+    export HYDRA_HOME HYDRA_STATE_V2_ROOT
+    # shellcheck disable=SC1091
+    . "$repo_root/lib/locks.sh"
+    # shellcheck disable=SC1091
+    . "$repo_root/lib/identity.sh"
+    # shellcheck disable=SC1091
+    . "$repo_root/lib/state_v2.sh"
+    state_v2_create_head "$_ssh_project" "$_ssh_branch" "$_ssh_session" \
+        "$_ssh_profile" - 1 - - "$_ssh_repo"
+)
+
+seed_malformed_head() {
+    _smh_home="$1"
+    _smh_project="$2"
+    _smh_branch="$3"
+    _smh_id="$4"
+    _smh_dir="$_smh_home/state/v2/projects/$_smh_project/heads/$_smh_id"
+    mkdir -p "$_smh_dir"
+    printf '%s\n' "$_smh_id" > "$_smh_dir/head-id"
+    printf '%s\n' "$_smh_branch" > "$_smh_dir/branch"
+}
+
 echo "Running native TUI tests..."
 echo "==========================="
 
@@ -151,12 +182,13 @@ printf '%s\n' \
 printf '%s\n' /usr/bin/true > "$adapter_home/profiles/custom/executable"
 printf '%s\n' hook-v1 > "$adapter_home/profiles/custom/adapter"
 printf '%s\n' user-declared > "$adapter_home/profiles/custom/confidence"
-printf '%s\n' \
-    'adapter-live adapter-live custom - 1 - -' \
-    'adapter-malformed adapter-malformed - - 1 - - extra' > "$adapter_home/map"
+seed_state_head "$adapter_home" project_aaaaaaaaaaaaaaaa "$adapter_repo" \
+    adapter-live adapter-live custom >/dev/null
+seed_malformed_head "$adapter_home" project_aaaaaaaaaaaaaaaa adapter-malformed \
+    head_bbbbbbbbbbbbbbbb
 (cd "$adapter_repo" && HYDRA_HOME="$adapter_home" "$repo_root/bin/hydra" tui --data) > "$test_root/adapter.tsv"
 assert_equal "HYDRA_TUI	2" "$(sed -n '1p' "$test_root/adapter.tsv")" "shell adapter publishes protocol handshake"
-assert_equal "2" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/adapter.tsv")" "shell adapter preserves basic head-list cardinality"
+assert_equal "1" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/adapter.tsv")" "shell adapter publishes valid durable heads"
 contains "R	malformed-state	adapter-malformed" "$test_root/adapter.tsv" "malformed state is an explicit recovery finding"
 contains "hook-v1	user-declared	$adapter_home/profiles/custom" "$test_root/adapter.tsv" \
     "live adapter exposes recorded capability and confidence"
@@ -166,39 +198,55 @@ contains "/.git/hydra/notifications" "$test_root/adapter.tsv" "live adapter link
 assert_success $? "native renderer accepts the live shell adapter boundary"
 
 parity_home="$test_root/parity-home"
-mkdir -p "$parity_home"
-printf '%s\n' \
-    'clean session-clean none - 1 - -' \
-    'stale session-stale none - 1 - -' \
-    'malformed session-malformed none - 1 - - extra' > "$parity_home/map"
-PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" FAKE_TMUX_SESSIONS=session-clean HYDRA_HOME="$parity_home" \
-    "$repo_root/bin/hydra" list --json --no-pr-status > "$test_root/basic-list.json"
-PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" FAKE_TMUX_SESSIONS=session-clean HYDRA_HOME="$parity_home" \
-    "$repo_root/bin/hydra" tui --data > "$test_root/native-list.tsv"
-assert_equal "3" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/native-list.tsv")" \
-    "native and basic lists preserve clean, stale, and malformed cardinality"
+parity_repo="$test_root/parity-repo"
+parity_project=project_cccccccccccccccc
+mkdir -p "$parity_home" "$parity_repo"
+git -C "$parity_repo" init -q
+mkdir -p "$parity_repo/.git/hydra"
+printf '%s\n' "$parity_project" > "$parity_repo/.git/hydra/project-id"
+seed_state_head "$parity_home" "$parity_project" "$parity_repo" clean session-clean none >/dev/null
+seed_state_head "$parity_home" "$parity_project" "$parity_repo" stale session-stale none >/dev/null
+seed_malformed_head "$parity_home" "$parity_project" malformed head_dddddddddddddddd
+(cd "$parity_repo" && PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" \
+    FAKE_TMUX_SESSIONS=session-clean HYDRA_HOME="$parity_home" \
+    "$repo_root/bin/hydra" list --json --no-pr-status) > "$test_root/basic-list.json"
+(cd "$parity_repo" && PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" \
+    FAKE_TMUX_SESSIONS=session-clean HYDRA_HOME="$parity_home" \
+    "$repo_root/bin/hydra" tui --data) > "$test_root/native-list.tsv"
+assert_equal "2" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/native-list.tsv")" \
+    "native adapter publishes the two valid durable heads"
+contains '"total":2' "$test_root/basic-list.json" "basic list publishes the same valid head cardinality"
 contains '"branch": "clean"' "$test_root/basic-list.json" "basic list includes clean head"
 contains 'H	clean	session-clean' "$test_root/native-list.tsv" "native list includes clean head"
 contains '"status": "active"' "$test_root/basic-list.json" "basic list reports live clean status"
 contains 'H	clean	session-clean	none	-	-	active	live' "$test_root/native-list.tsv" "native list agrees on live clean status"
 contains 'R	malformed-state	malformed' "$test_root/native-list.tsv" "native list preserves malformed-state evidence"
 
-printf '%s\n' 'changing-a session-a none - 1 - -' > "$parity_home/map.one"
-printf '%s\n' 'changing-a session-a none - 1 - -' 'changing-b session-b none - 1 - -' > "$parity_home/map.two"
+changing_home="$test_root/changing-home"
+changing_repo="$test_root/changing-repo"
+changing_project=project_eeeeeeeeeeeeeeee
+mkdir -p "$changing_home" "$changing_repo"
+git -C "$changing_repo" init -q
+mkdir -p "$changing_repo/.git/hydra"
+printf '%s\n' "$changing_project" > "$changing_repo/.git/hydra/project-id"
+seed_state_head "$changing_home" "$changing_project" "$changing_repo" changing-a session-a none >/dev/null
+changing_head="$(seed_state_head "$changing_home" "$changing_project" "$changing_repo" changing-b session-b none)"
+changing_state="$changing_home/state/v2/projects/$changing_project/heads/$changing_head/desired-state"
 (
     change_index=0
     while [ "$change_index" -lt 40 ]; do
-        if [ $((change_index % 2)) -eq 0 ]; then change_source="$parity_home/map.one"; else change_source="$parity_home/map.two"; fi
-        cp "$change_source" "$parity_home/map.next"
-        mv "$parity_home/map.next" "$parity_home/map"
+        if [ $((change_index % 2)) -eq 0 ]; then change_value=running; else change_value=stopped; fi
+        printf '%s\n' "$change_value" > "$changing_state.next"
+        mv "$changing_state.next" "$changing_state"
         change_index=$((change_index + 1))
     done
 ) &
 change_pid=$!
 change_index=0
 while [ "$change_index" -lt 20 ]; do
-    PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" FAKE_TMUX_SESSIONS=session-a HYDRA_HOME="$parity_home" \
-        "$repo_root/bin/hydra" tui --data > "$test_root/changing.tsv"
+    (cd "$changing_repo" && PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" \
+        FAKE_TMUX_SESSIONS=session-a HYDRA_HOME="$changing_home" \
+        "$repo_root/bin/hydra" tui --data) > "$test_root/changing.tsv"
     "$tui" --headless-fixture "$test_root/changing.tsv" --size 80x24 > /dev/null || break
     change_index=$((change_index + 1))
 done

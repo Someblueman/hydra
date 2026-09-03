@@ -67,9 +67,7 @@ setup_test_env() {
     
     # Isolate hydra state in this base dir
     export HYDRA_HOME="$test_base_dir/.hydra"
-    export HYDRA_MAP="$HYDRA_HOME/map"
     mkdir -p "$HYDRA_HOME"
-    : > "$HYDRA_MAP"
     
     # Initialize a git repository
     git init >/dev/null 2>&1
@@ -99,25 +97,9 @@ cleanup_test_sessions() {
         esac
     done
     
-    # Clear hydra map
-    if [ -n "${HYDRA_HOME:-}" ] && [ -f "$HYDRA_HOME/map" ]; then
-        : > "$HYDRA_HOME/map"
-    fi
-    find "${HYDRA_HOME:-/nonexistent}/state/v2/projects" -name compat-map -type f \
-        -exec sh -c ': > "$1"' sh {} \; 2>/dev/null || true
-    
     # Remove any hydra-* worktrees under our unique base dir
     if [ -n "$test_base_dir" ] && [ -d "$test_base_dir" ]; then
         rm -rf "$test_base_dir"/hydra-*
-    fi
-}
-
-current_map_path() {
-    project_id="$(sed -n '1p' .git/hydra/project-id 2>/dev/null || true)"
-    if [ -n "$project_id" ]; then
-        printf '%s/state/v2/projects/%s/compat-map\n' "$HYDRA_HOME" "$project_id"
-    else
-        printf '%s/map\n' "$HYDRA_HOME"
     fi
 }
 
@@ -162,11 +144,11 @@ test_kill_all_force() {
     sessions_after="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E -c "^(${BR1}|${BR2}|${BR3})$")"
     assert_equal "0" "$sessions_after" "Should have 0 test sessions after kill"
     
-    # Verify map is empty
-    if [ -n "${HYDRA_HOME:-}" ] && [ -f "$HYDRA_HOME/map" ]; then
-        map_lines="$(grep -E -c "(${BR1}|${BR2}|${BR3})" "$HYDRA_HOME/map" 2>/dev/null)"
-        assert_equal "0" "$map_lines" "Map should have no test-kill entries"
-    fi
+    list_after="$("$HYDRA_BIN" list --json)"
+    case "$list_after" in
+        *"$BR1"*|*"$BR2"*|*"$BR3"*) assert_equal clean dirty "Stopped heads are absent from active state" ;;
+        *) assert_equal clean clean "Stopped heads are absent from active state" ;;
+    esac
 }
 
 # Test: kill --all in non-interactive mode without force
@@ -208,17 +190,18 @@ test_kill_all_partial_failure() {
     "$HYDRA_BIN" spawn "$K1" >/dev/null 2>&1
     "$HYDRA_BIN" spawn "$K2" >/dev/null 2>&1
     
-    # Create a mapping for a non-existent session
-    echo "killtest-phantom-$suffix killtest-phantom-session" >> "$(current_map_path)"
+    phantom="killtest-phantom-$suffix"
+    "$HYDRA_BIN" spawn "$phantom" >/dev/null 2>&1
+    tmux kill-session -t "$phantom" 2>/dev/null || true
     
     # Kill all with force
     output="$("$HYDRA_BIN" kill --all --force 2>&1)"
     
     assert_contains "$output" "$K1" "Should list $K1"
     assert_contains "$output" "$K2" "Should list $K2"
-    assert_contains "$output" "killtest-phantom-$suffix" "Should list phantom mapping"
-    assert_contains "$output" "Session 'killtest-phantom-session' not found" "Should report phantom session not found"
-    assert_contains "$output" "Succeeded: 3" "Should count phantom cleanup as success"
+    assert_contains "$output" "$phantom" "Should list dead durable head"
+    assert_contains "$output" "Session '$phantom' not found" "Should report dead session not found"
+    assert_contains "$output" "Succeeded: 3" "Should count dead-head cleanup as success"
     
     # Verify real sessions were killed
     sessions_after="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E -c "^(${K1}|${K2})$")"

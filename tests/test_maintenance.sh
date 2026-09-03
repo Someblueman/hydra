@@ -5,10 +5,17 @@
 test_count=0
 pass_count=0
 fail_count=0
+HYDRA_HOME="${TMPDIR:-/tmp}/hydra-maintenance-unused"
 
 HYDRA_LIB_DIR="$(cd "$(dirname "$0")/../lib" && pwd)"
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/locks.sh"
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/output.sh"
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/identity.sh"
+# shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/state_v2.sh"
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/tmux.sh"
 # shellcheck disable=SC1091
@@ -33,11 +40,18 @@ tmux_session_exists() {
 setup_env() {
     TEST_DIR="$(mktemp -d)"
     HYDRA_HOME="$TEST_DIR"
-    HYDRA_MAP="$TEST_DIR/map"
-    export HYDRA_HOME HYDRA_MAP
+    HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
+    TEST_PROJECT_ID=project_0123456789abcdefabcd
+    export HYDRA_HOME HYDRA_STATE_V2_ROOT TEST_PROJECT_ID
     mkdir -p "$HYDRA_HOME/locks"
-    touch "$HYDRA_MAP"
-    _STATE_CACHE_LOADED=""
+    state_v2_init_project "$TEST_PROJECT_ID" "$TEST_DIR/repo"
+}
+
+# shellcheck disable=SC2329
+hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
+
+add_test_head() {
+    state_v2_create_head "$TEST_PROJECT_ID" "$1" "$2" - - 100 - - "$TEST_DIR/repo" >/dev/null
 }
 
 cleanup_env() {
@@ -91,33 +105,34 @@ test_stale_locks_require_owner_evidence() {
     cleanup_env
 }
 
-test_clean_dead_mappings_cleans_messages() {
-    echo "Testing clean_dead_mappings removes message dirs..."
+test_clean_dead_heads_cleans_messages() {
+    echo "Testing clean_dead_heads removes message dirs..."
     setup_env
 
-    echo "dead-branch dead-session - - - - -" > "$HYDRA_MAP"
-    echo "live-branch alive-session - - - - -" >> "$HYDRA_MAP"
-    mkdir -p "$HYDRA_HOME/messages/dead-branch/queue"
-    echo "msg" > "$HYDRA_HOME/messages/dead-branch/queue/1"
-    mkdir -p "$HYDRA_HOME/messages/live-branch/queue"
+    add_test_head dead-branch dead-session
+    add_test_head live-branch alive-session
+    dead_messages="$(get_message_dir dead-branch)"
+    ensure_message_dir dead-branch
+    ensure_message_dir live-branch
+    echo "msg" > "$dead_messages/queue/1"
 
-    result="$(clean_dead_mappings)"
-    assert_equal "1" "$result" "One dead mapping removed"
+    result="$(clean_dead_heads)"
+    assert_equal "1" "$result" "One dead head stopped"
 
-    if [ ! -d "$HYDRA_HOME/messages/dead-branch" ]; then
-        echo "[PASS] Message dir removed for dead mapping"
+    if [ ! -f "$dead_messages/queue/1" ] && [ -f "$dead_messages/archive/1" ]; then
+        echo "[PASS] Dead-head messages archived"
         pass_count=$((pass_count + 1))
     else
-        echo "[FAIL] Message dir removed for dead mapping"
+        echo "[FAIL] Dead-head messages archived"
         fail_count=$((fail_count + 1))
     fi
     test_count=$((test_count + 1))
 
-    if grep -q "live-branch" "$HYDRA_MAP"; then
-        echo "[PASS] Live mapping preserved"
+    if state_list_heads | grep -q '^live-branch '; then
+        echo "[PASS] Live head preserved"
         pass_count=$((pass_count + 1))
     else
-        echo "[FAIL] Live mapping preserved"
+        echo "[FAIL] Live head preserved"
         fail_count=$((fail_count + 1))
     fi
     test_count=$((test_count + 1))
@@ -125,15 +140,15 @@ test_clean_dead_mappings_cleans_messages() {
     cleanup_env
 }
 
-test_branch_has_mapping_matches_literal_branch() {
-    echo "Testing branch_has_mapping uses literal branch identity..."
+test_branch_has_active_head_matches_literal_branch() {
+    echo "Testing branch_has_active_head uses literal branch identity..."
     setup_env
 
-    echo "feature/x alive-session - - - - -" > "$HYDRA_MAP"
+    add_test_head feature/x alive-session
 
-    branch_has_mapping "feature/x"
+    branch_has_active_head "feature/x"
     assert_success $? "Exact branch name is found"
-    branch_has_mapping "feature.x"
+    branch_has_active_head "feature.x"
     assert_failure $? "Regex-like branch name does not match a different branch"
 
     cleanup_env
@@ -142,8 +157,8 @@ test_branch_has_mapping_matches_literal_branch() {
 echo "Running maintenance.sh unit tests..."
 echo "================================"
 test_stale_locks_require_owner_evidence
-test_clean_dead_mappings_cleans_messages
-test_branch_has_mapping_matches_literal_branch
+test_clean_dead_heads_cleans_messages
+test_branch_has_active_head_matches_literal_branch
 echo "================================"
 echo "Test Results:"
 echo "Total:  $test_count"

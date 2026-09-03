@@ -18,7 +18,7 @@ tui_build_list() {
     : > "$TUI_TEMP_LIST"
     TUI_ITEM_COUNT=0
 
-    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+    if ! state_has_heads; then
         return 0
     fi
 
@@ -26,7 +26,7 @@ tui_build_list() {
     tmux_load_snapshot
     _now="$(date +%s)"
 
-    # Read mappings and write to temp file with status
+    # Read active head records and write to temp file with status
     # Use tab as delimiter (safe - branch/session names can't contain tabs)
     while IFS=' ' read -r branch session ai group _ts _deps _pr; do
         [ -z "$branch" ] && continue
@@ -116,7 +116,9 @@ tui_build_list() {
             "$branch" "$session" "${ai:--}" "$sess_status" "$activity" \
             "${group:--}" "${_pr:--}" >> "$TUI_TEMP_LIST"
         TUI_ITEM_COUNT=$((TUI_ITEM_COUNT + 1))
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(state_list_heads)
+EOF
 
     # Adjust selection if out of bounds
     if [ "$TUI_ITEM_COUNT" -gt 0 ]; then

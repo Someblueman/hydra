@@ -17,33 +17,17 @@ get_message_dir() {
     if [ -z "$branch" ]; then
         return 1
     fi
-    if command -v hydra_get_project_id >/dev/null 2>&1 && \
-       command -v state_v2_find_head_by_branch >/dev/null 2>&1; then
-        _gmd_project="$(hydra_get_project_id 2>/dev/null || true)"
-        _gmd_head="$(state_v2_find_head_by_branch "$_gmd_project" "$branch" 2>/dev/null || true)"
-        if [ -n "$_gmd_head" ]; then
-            _gmd_head_dir="$(state_v2_head_dir "$_gmd_project" "$_gmd_head")" || return 1
-            printf '%s/messages\n' "$_gmd_head_dir"
-            return 0
-        fi
-    fi
-    # Legacy fallback for unmigrated tests and state.
-    safe_branch="$(printf '%s' "$branch" | sed 's/[^a-zA-Z0-9_-]/_/g')"
-    echo "${HYDRA_HOME:-$HOME/.hydra}/messages/$safe_branch"
+    _gmd_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    _gmd_head="$(state_v2_find_head_by_branch "$_gmd_project" "$branch" 2>/dev/null)" || return 1
+    _gmd_head_dir="$(state_v2_head_dir "$_gmd_project" "$_gmd_head")" || return 1
+    printf '%s/messages\n' "$_gmd_head_dir"
 }
 
 get_message_lock() {
     _gml_branch="$1"
-    if command -v hydra_get_project_id >/dev/null 2>&1 && \
-       command -v state_v2_find_head_by_branch >/dev/null 2>&1; then
-        _gml_project="$(hydra_get_project_id 2>/dev/null || true)"
-        _gml_head="$(state_v2_find_head_by_branch "$_gml_project" "$_gml_branch" 2>/dev/null || true)"
-        if [ -n "$_gml_head" ]; then
-            printf 'messages_%s_%s\n' "$_gml_project" "$_gml_head"
-            return 0
-        fi
-    fi
-    printf 'messages_%s\n' "$(printf '%s' "$_gml_branch" | cksum | cut -d' ' -f1)"
+    _gml_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    _gml_head="$(state_v2_find_head_by_branch "$_gml_project" "$_gml_branch" 2>/dev/null)" || return 1
+    printf 'messages_%s_%s\n' "$_gml_project" "$_gml_head"
 }
 
 # Ensure message directories exist for a branch
@@ -51,7 +35,7 @@ get_message_lock() {
 # Returns: 0 on success
 ensure_message_dir() {
     branch="$1"
-    msg_dir="$(get_message_dir "$branch")"
+    msg_dir="$(get_message_dir "$branch")" || return 1
     mkdir -p "$msg_dir/queue" "$msg_dir/archive" "$msg_dir/metadata" "$msg_dir/receipts" 2>/dev/null || return 1
     chmod 700 "$msg_dir" "$msg_dir/queue" "$msg_dir/archive" "$msg_dir/metadata" "$msg_dir/receipts" 2>/dev/null || true
     return 0
@@ -87,8 +71,8 @@ send_message() {
     # Ensure message directory exists
     ensure_message_dir "$target" || return 1
 
-    msg_dir="$(get_message_dir "$target")"
-    msg_lock="$(get_message_lock "$target")"
+    msg_dir="$(get_message_dir "$target")" || return 1
+    msg_lock="$(get_message_lock "$target")" || return 1
 
     # Generate unique filename: timestamp_sender_hash
     timestamp="$(date +%s)"
@@ -224,7 +208,7 @@ recv_messages() {
         return 1
     fi
 
-    msg_dir="$(get_message_dir "$branch")"
+    msg_dir="$(get_message_dir "$branch")" || return 1
     queue_dir="$msg_dir/queue"
 
     if [ ! -d "$queue_dir" ]; then
@@ -336,7 +320,7 @@ count_messages() {
         return
     fi
 
-    msg_dir="$(get_message_dir "$branch")"
+    msg_dir="$(get_message_dir "$branch")" || return 1
     queue_dir="$msg_dir/queue"
 
     if [ ! -d "$queue_dir" ]; then
@@ -397,7 +381,7 @@ cleanup_messages_for_branch() {
         return 0
     fi
 
-    msg_dir="$(get_message_dir "$branch")"
+    msg_dir="$(get_message_dir "$branch")" || return 1
     if [ -d "$msg_dir" ]; then
         case "$msg_dir" in
             "$HYDRA_HOME"/state/v2/projects/*/heads/*/messages)

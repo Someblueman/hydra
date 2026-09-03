@@ -1,142 +1,122 @@
-# Hydra public contracts
+# Hydra 2.0 public contracts
 
-This document records which 1.5 behaviors remain public and the accepted 1.6
-foundation contracts.
-Internal function names, the in-process state cache, and TUI render details
-are not contracts.
+Hydra 2.0 commits to the local interfaces below. Internal shell function names,
+module layout, renderer details, caches, and on-disk temporary files are not public
+contracts.
 
-## CLI
+## Compatibility and negotiation
 
-- Commands dispatched by `bin/hydra` (including `group`, `send`, `recv`, `tail`,
-  `broadcast`, `wait-idle`, `queue`, and `dashboard-exit`) are part of the
-  user-facing command set. Shell completion covers that set.
-- `hydra version` / `--version` print `Hydra version <semver>`.
-- Mutating commands fail closed on lock acquisition failure: they print an
-  error and do not write. They do not fall back to an unlocked write.
-- `hydra kill` checks worktree dirtiness **before** killing tmux or removing
-  the mapping. `--force` on `kill --all` only skips the confirmation prompt.
-- `hydra workflow` accepts strict schema version 1 and exposes list, show, validate,
-  dry-run, run, status, cancel, and resume. Every step declares idempotency.
-- `hydra integrate` creates an isolated report/worktree and requires separate current
-  approval before local promotion. `integrate train` runs gates after each immutable
-  ordered candidate. Neither mode pushes.
+- `hydra version` and `--version` print `Hydra version <semver>`.
+- CLI syntax documented by `hydra help` is public. An incompatible removal requires
+  a major release and the deprecation policy in [VERSIONING.md](VERSIONING.md).
+- Machine interfaces reject unsupported schema or protocol versions. They do not
+  guess, silently downgrade, or accept a different format as a fallback.
+- Readers ignore unknown JSON object fields within a supported schema version.
+- The shell CLI is the only mutation authority. Native processes receive bounded,
+  versioned input and invoke public shell commands with an argument vector.
 
-## State
+## JSON envelope v1
 
-State v2 under `$HYDRA_HOME/state/v2/projects/<project_id>` is authoritative for
-1.6 identity, heads, instances, tasks, lifecycle, events, messages, exec results,
-and provenance. Opaque validated IDs, not user labels, are filesystem keys.
+Every documented `--json` command emits exactly one JSON object and exits nonzero on
+failure. Success has:
 
-The legacy migration input is `$HYDRA_HOME/map` (default `~/.hydra/map`). Each
-active v2 project also maintains a project-scoped `compat-map` projection for
-remaining legacy readers. Both use seven space-separated fields per line:
-
-Seven space-separated fields per line:
-
-```text
-branch session ai_tool group timestamp deps pr_number
+```json
+{"schema_version":1,"ok":true,"command":"list","data":{}}
 ```
 
-Optional fields use `-` as a placeholder. Timestamp is a Unix epoch in
-seconds. `hydra regenerate` preserves every field except the tmux session
-name.
+Failure has:
 
-## Locks
-
-Locks are directories `$HYDRA_HOME/locks/<name>.lock` created atomically with
-`mkdir`. Each new lock records owner PID, host, creation time, and operation in
-mode-0600 scalar files. A partially written owner record is still a held lock.
-Cleanup removes a lock automatically only when its host matches this host and
-its recorded PID is no longer live; age alone is not evidence of staleness.
-Metadata-free legacy locks remain held until explicitly recovered.
-
-## Atomic replacement
-
-Writers create a temp file in the destination directory (`mktemp_adjacent`)
-and `mv` it into place so the rename stays on one filesystem.
-
-## JSON
-
-Every command that accepts `--json` emits JSON envelope v1 with
-`schema_version`, `ok`, `command`, and either `data` or `error`. This includes
-`list`, `status`, `recv`/`receipts`, `queue`, `group status`, `init`,
-`capabilities`, `lifecycle`, `wait`, `exec`, `diff`, `review`, and `provenance`.
-JSON failures return nonzero. Unknown fields must be ignored.
-
-`json_escape` operates on POSIX C strings (NUL cannot appear). It escapes
-`"`, `\`, `\b`, `\t`, `\n`, `\f`, `\r`, and other C0 controls as `\u00XX`.
-Bytes 0x20–0xFF other than `"` and `\` (including UTF-8 payload bytes) are
-copied unchanged; a UTF-8 locale must not recode them. Callers must never
-emit raw control characters inside JSON strings.
-
-## TUI row schema
-
-`tui_build_list` writes one row per head, seven TAB-separated fields:
-
-```text
-branch  session  ai  status  activity  group  pr
+```json
+{"schema_version":1,"ok":false,"command":"list","error":{"code":"invalid_input","message":"...","next":"..."}}
 ```
 
-`status` is `ALIVE` or `DEAD`. `activity` is `BUSY`, `IDLE`, or `-`.
+`schema_version`, `ok`, `command`, and the matching `data` or `error` member are
+required. Error `code`, `message`, and `next` are required strings. Envelope v1 is
+used by `init`, `capabilities`, `list`, `status`, `group status`, `recv`, `receipts`,
+`queue`, `lifecycle`, `wait`, `exec`, `diff`, `review`, `provenance`, `workflow`,
+`collision`, `resource`, `gate`, `du`, and `snapshot` where their help documents
+`--json`.
 
-Hydra 1.8 keeps that basic shell TUI and adds an internal escaped-tabular protocol
-between `hydra tui --data` and `hydra-tui`. It begins with `HYDRA_TUI<TAB>2` and
-contains bounded `H` head and `R` recovery records. Native dispatch is opt-in in
-1.8.0. The native process delegates mutations to the shell executable with an argv;
-the tabular adapter is not a general automation API.
+`json_escape` accepts POSIX C strings (there is no NUL). It escapes JSON syntax and
+C0 controls and preserves other UTF-8 bytes.
 
-## tmux send-keys
+## Durable state v2
 
-Startup commands and agent launch target `session:0.0`, not the active pane.
+`$HYDRA_HOME/state/v2` with `schema-version` equal to `2` is the only runtime state
+authority. Projects, heads, instances, workflow runs, integration reports, messages,
+claims, resources, gates, and provenance use validated opaque IDs as path keys.
+Human labels are scalar values, never path identity. See [STATE.md](STATE.md).
 
-`hydra broadcast` sends to a non-agent shell pane when one exists. A live
-agent process on `:0.0` is skipped even if the map stores `-`; after that
-process exits and `:0.0` is a shell again, broadcast may use it. Only panes
-whose command is a recognized shell are chosen automatically. If the only
-pane is the agent (typical `default` layout), or the other panes are not
-shells, broadcast refuses unless `--force` (then `:0.0`) or `--pane` is
-given. A session-qualified `--pane` (`session:0.1`) applies only to that
-session.
+The seven-field global map and project `compat-map` are not 2.0 runtime formats.
+`hydra state migrate` may read verified 1.9 projections solely to retire them after a
+backup. Rollback restores those files only so a user can downgrade to 1.9.
 
-## Environment
+Writers use project- or record-scoped directory locks and adjacent-file rename.
+Failure to acquire a lock is a failed mutation; there is no unlocked write path.
+Head history remains after teardown with `desired-state=stopped`.
 
-Documented in the README: `HYDRA_HOME`, `HYDRA_ROOT`, `HYDRA_AI_COMMAND`,
-`HYDRA_SKIP_AI`, `HYDRA_NONINTERACTIVE`, and the other `HYDRA_*` variables
-listed there.
+## Events, lifecycle, and completion
 
-## Installation
+- Events are append-only JSON Lines schema v1 with ordered sequence numbers,
+  correlated project/head/instance IDs, and repair/retention under the event lock.
+- Declared outcome, observed provider status, and tmux liveness are independent.
+- Completion policies are `declared-done`, `observed-exit-zero`, and `either`.
+  Session disappearance alone is not task completion.
+- Resume retains the head ID, creates a new instance, and marks the old instance as
+  superseded. Stale-instance adapter input is rejected.
+- Teardown defaults to no transcript. `redacted` and `full` are explicit policies;
+  retained transcripts are bounded and instance-scoped.
 
-Default prefix is `/usr/local`. Layout:
+See [EVENTS.md](EVENTS.md), [LIFECYCLE.md](LIFECYCLE.md), and
+[MESSAGING.md](MESSAGING.md).
+
+## Profiles, tasks, adapters, and scopes
+
+- Built-in and custom profile fields, confidence labels, and resolution order are
+  defined in [PROFILES.md](PROFILES.md).
+- Task text is resolved before launch, stored privately, and delivered as one quoted
+  argument. Events contain only its hash and byte count.
+- Adapter input is bounded canonical JSON schema v1 and must name the current
+  instance. Capability confidence never upgrades an observation into authority.
+- Read/write scopes and expiring claims are advisory coordination constraints. Gate
+  approval is a separate exact binding to verification evidence.
+
+## Workflows and integration
+
+Workflow definition schema v1 is the stable finite-DAG contract. Definitions use the
+documented restricted YAML subset, every step declares idempotency, argv is the
+default execution form, and shell strings require both `allow_shell: true` and a
+current repository trust decision. Durable manifests bind resolved definitions,
+inputs, attempts, outputs, events, cancellation, and recovery.
+
+Integration manifests bind the target, initial target ref, ordered immutable
+candidates, gates, merge output, verification result, approval, and recovery action.
+Promotion revalidates those bindings under a project lock, updates only a local ref,
+and never pushes. See [workflows.md](workflows.md).
+
+## TUI protocols and parity
+
+The basic TUI row is seven tab-separated fields:
 
 ```text
-$PREFIX/bin/hydra
-$PREFIX/lib/hydra/*.sh
+branch  session  profile  status  activity  group  pr
 ```
 
-`DESTDIR`, when set, is prepended to those paths (staged `make install`).
-Root is not required when `PREFIX` is writable. `install.sh` and `make install`
-produce the same layout and verification output: they run the installed
-`hydra version` and print the exact binary and library paths.
+The internal native adapter begins with `HYDRA_TUI<TAB>2`, followed by bounded `H`
+head and `R` recovery rows whose fields contain no tabs or newlines. Unsupported
+protocol versions fail closed. This adapter is not a general automation API.
 
-Library discovery order:
+Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. Both
+retain navigation, search, refresh, preview, switch, spawn, group assignment,
+dashboard, regenerate, confirmed kill, and help behavior. Native mutations execute
+the public shell CLI with explicit argv and never write Hydra state directly. See
+[NATIVE_TUI.md](NATIVE_TUI.md).
 
-1. `$HYDRA_ROOT/lib` when `HYDRA_ROOT` is set and contains `git.sh`
-2. `$HYDRA_BIN_DIR/../lib` (run from a source checkout)
-3. `$HYDRA_BIN_DIR/../lib/hydra` (`PREFIX` install)
-4. `/usr/local/lib/hydra` (legacy fallback)
+## Process, install, and platform contracts
 
-Uninstall uses the same `PREFIX`/`DESTDIR` and removes only those installed
-files. `--purge` may remove `HYDRA_HOME` / `~/.hydra`; it never touches the
-source repository.
+Startup and agent launch target `session:0.0`. Broadcast automatically selects only
+a recognized shell pane; `--force` or `--pane` is required to target anything else.
 
-## 1.6 foundation
-
-The accepted identity, state v2, Events v1, and lifecycle contracts are in
-[`adr/0001-identity-state-events-locks.md`](adr/0001-identity-state-events-locks.md),
-[`STATE.md`](STATE.md), [`EVENTS.md`](EVENTS.md), and
-[`LIFECYCLE.md`](LIFECYCLE.md). State v2 is the active authority; the seven-field
-project map is a compatibility projection only. Security, automation, operations,
-and provenance boundaries are documented in [`SECURITY.md`](SECURITY.md),
-[`AUTOMATION.md`](AUTOMATION.md), [`OPERATIONS.md`](OPERATIONS.md), and
-[`PROVENANCE.md`](PROVENANCE.md). Native helpers remain deferred. Pre-2.0 internal
-library layout may change.
+Source and prefix installs provide `bin/hydra`, `lib/hydra/*.sh`, and an optional
+qualified `hydra-tui`. Core shell operation requires POSIX `sh`, Git, and tmux 3.0 or
+newer on supported macOS and Linux systems. See [SUPPORT.md](SUPPORT.md).

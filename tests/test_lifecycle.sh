@@ -145,10 +145,10 @@ fi
 
 stable_instance="$(sed -n '1p' "$head_dir/current-instance")"
 stable_ended="$(sed -n '1p' "$head_dir/instances/$stable_instance/ended-at" 2>/dev/null || true)"
-try_lock state_map "test resume mapping failure"
+try_lock "state_${project_id}" "test resume state failure"
 HYDRA_LOCK_RETRIES=1 "$HYDRA_BIN" resume lifecycle-test >/dev/null 2>&1
-assert_failure $? "resume fails when compatibility mapping cannot commit"
-release_lock state_map
+assert_failure $? "resume fails when durable state cannot commit"
+release_lock "state_${project_id}"
 assert_equal "$stable_instance" "$(sed -n '1p' "$head_dir/current-instance")" "failed resume restores the prior current instance"
 assert_equal "$stable_ended" "$(sed -n '1p' "$head_dir/instances/$stable_instance/ended-at" 2>/dev/null || true)" "failed resume restores prior lifecycle metadata"
 if [ ! -f "$head_dir/instances/$stable_instance/superseded-by" ] && ! tmux has-session -t lifecycle-test 2>/dev/null; then

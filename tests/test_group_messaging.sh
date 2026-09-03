@@ -20,16 +20,24 @@ setup_test_env() {
     TEST_HOME="$(mktemp -d)"
     export TEST_HOME
     export HYDRA_HOME="$TEST_HOME/.hydra"
-    export HYDRA_MAP="$HYDRA_HOME/map"
+    export HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
     mkdir -p "$HYDRA_HOME"
-    : > "$HYDRA_MAP"
 
     # Source required libraries
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     . "$SCRIPT_DIR/../lib/locks.sh"
-    . "$SCRIPT_DIR/../lib/state.sh"
     . "$SCRIPT_DIR/../lib/output.sh"
+    . "$SCRIPT_DIR/../lib/identity.sh"
+    . "$SCRIPT_DIR/../lib/state_v2.sh"
+    . "$SCRIPT_DIR/../lib/state.sh"
     . "$SCRIPT_DIR/../lib/messages.sh"
+    TEST_PROJECT_ID=project_0123456789abcdefabcd
+    # shellcheck disable=SC2329
+    hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
+    for branch in feature-a feature/test-branch test-branch target-branch recv-test \
+        sender-name-test peek-test count-test empty-test target; do
+        state_v2_create_head "$TEST_PROJECT_ID" "$branch" "$(printf '%s' "$branch" | tr / _)" - - 100 - - "$TEST_HOME/repo" >/dev/null
+    done
 }
 
 cleanup_test_env() {
@@ -102,13 +110,15 @@ test_get_message_dir() {
     setup_test_env
 
     result="$(get_message_dir "feature-a")"
-    expected="$HYDRA_HOME/messages/feature-a"
+    feature_head="$(state_v2_find_head_by_branch "$TEST_PROJECT_ID" feature-a)"
+    expected="$HYDRA_STATE_V2_ROOT/projects/$TEST_PROJECT_ID/heads/$feature_head/messages"
     assert_equal "$expected" "$result" "get_message_dir returns correct path"
 
-    # Test branch name sanitization
+    # Branch labels resolve through their opaque durable head identity.
     result="$(get_message_dir "feature/test-branch")"
-    expected="$HYDRA_HOME/messages/feature_test-branch"
-    assert_equal "$expected" "$result" "get_message_dir sanitizes branch names"
+    slash_head="$(state_v2_find_head_by_branch "$TEST_PROJECT_ID" feature/test-branch)"
+    expected="$HYDRA_STATE_V2_ROOT/projects/$TEST_PROJECT_ID/heads/$slash_head/messages"
+    assert_equal "$expected" "$result" "get_message_dir resolves opaque head identity"
 
     # Test empty branch
     get_message_dir "" 2>/dev/null && result=0 || result=1

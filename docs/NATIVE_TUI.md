@@ -41,7 +41,7 @@ work, allocated resources, changed files, gates, and approvals. The action palet
 opens the existing shell views for claims, collisions, scopes, queue, resources,
 Git diff, and gates. Every detail names its inspectable state record.
 
-The recovery board reports evidence-backed dead sessions, malformed map records,
+The recovery board reports evidence-backed dead sessions, malformed state records,
 stale same-host locks, orphan worktrees, interrupted lifecycle state, and teardown
 failures. Suggestions are inspect-first commands; recovery does not run
 automatically.

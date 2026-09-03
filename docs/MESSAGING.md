@@ -17,5 +17,5 @@ receipt. Messages target the current instance. After resume, unread messages for
 prior instance are archived as stale and are not delivered to the new instance.
 
 Message bodies are not copied into lifecycle events or notifications. Teardown
-archives unread state-v2 messages and retains their receipts; legacy global queues
-retain their existing cleanup behavior.
+archives unread state-v2 messages and retains their receipts. Hydra 2.0 has no
+global message-queue fallback.

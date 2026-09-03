@@ -138,10 +138,10 @@ else
     assert_success 0 "worktree is gone after kill"
 fi
 
-if grep -q "$branch" "$HYDRA_HOME/state/v2/projects/$project_id/compat-map" 2>/dev/null; then
-    assert_failure 0 "state map no longer lists the first head"
+if [ "$(sed -n '1p' "$head_dir/desired-state")" != stopped ]; then
+    assert_failure 0 "durable state marks the first head stopped"
 else
-    assert_success 0 "state map no longer lists the first head"
+    assert_success 0 "durable state marks the first head stopped"
 fi
 
 git branch -D "$branch" >/dev/null 2>&1

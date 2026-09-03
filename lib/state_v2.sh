@@ -120,10 +120,15 @@ state_v2_create_head() {
     _sv2ch_base_ref="${14:-}"
     _sv2ch_provider_session="${15:-}"
     _sv2ch_scopes="${16:-}"
+    _sv2ch_completion_policy="${17:-declared-done}"
 
     if [ -z "$_sv2ch_branch" ] || [ -z "$_sv2ch_session" ]; then
         return 1
     fi
+    case "$_sv2ch_completion_policy" in
+        declared-done|observed-exit-zero|either) ;;
+        *) return 1 ;;
+    esac
     state_v2_init_project "$_sv2ch_project" "$_sv2ch_root" || return 1
     _sv2ch_lock="state_${_sv2ch_project}"
     acquire_lock "$_sv2ch_lock" "state head create" || return 1
@@ -171,7 +176,7 @@ state_v2_create_head() {
        ! state_v2_write_scalar "$_sv2ch_tmp/pr" "$_sv2ch_pr" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/current-instance" "$_sv2ch_instance" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/desired-state" "running" || \
-       ! state_v2_write_scalar "$_sv2ch_tmp/completion-policy" "declared" || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/completion-policy" "$_sv2ch_completion_policy" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/worktree" "$_sv2ch_worktree" || \
        ! state_v2_write_text "$_sv2ch_tmp/task" "$_sv2ch_task" || \
        ! state_v2_write_text "$_sv2ch_tmp/scopes" "$_sv2ch_scopes" || \
@@ -200,29 +205,6 @@ state_v2_create_head() {
     printf '%s\n' "$_sv2ch_head"
 }
 
-state_v2_verify_legacy_map() {
-    _sv2vl_map="${1:-$HYDRA_MAP}"
-    [ -f "$_sv2vl_map" ] || return 0
-    _sv2vl_errors=0
-    _sv2vl_line=0
-    while IFS=' ' read -r _b _s _a _g _t _d _p _extra || [ -n "${_b:-}" ]; do
-        _sv2vl_line=$((_sv2vl_line + 1))
-        if [ -z "${_b:-}" ] || [ -z "${_s:-}" ] || [ -n "${_extra:-}" ]; then
-            echo "state v1: malformed line $_sv2vl_line" >&2
-            _sv2vl_errors=1
-            continue
-        fi
-        case "${_t:--}" in
-            -) ;;
-            ''|*[!0-9]*)
-                echo "state v1: invalid timestamp on line $_sv2vl_line" >&2
-                _sv2vl_errors=1
-                ;;
-        esac
-    done < "$_sv2vl_map"
-    return "$_sv2vl_errors"
-}
-
 state_v2_verify() {
     [ -f "$HYDRA_STATE_V2_ROOT/schema-version" ] || {
         echo "state v2: schema-version is missing" >&2
@@ -242,19 +224,31 @@ state_v2_verify() {
             echo "state v2: invalid project record $_sv2v_project" >&2
             _sv2v_errors=1
         fi
-        if [ -f "$_sv2v_project/compat-map" ] && ! state_v2_verify_legacy_map "$_sv2v_project/compat-map"; then
-            _sv2v_errors=1
-        fi
         for _sv2v_head in "$_sv2v_project"/heads/head_*; do
             [ -d "$_sv2v_head" ] || continue
             _sv2v_head_id="$(basename "$_sv2v_head")"
             _sv2v_instance="$(sed -n '1p' "$_sv2v_head/current-instance" 2>/dev/null || true)"
+            _sv2v_required_missing=0
+            for _sv2v_file in head-id branch session profile group created-at dependencies pr \
+                current-instance desired-state completion-policy worktree task scopes base-ref; do
+                [ -f "$_sv2v_head/$_sv2v_file" ] || _sv2v_required_missing=1
+            done
+            _sv2v_instance_required_missing=0
+            for _sv2v_file in instance-id session started-at observed-status observed-source \
+                observed-confidence observed-at observed-exit-code provider-session-id; do
+                [ -f "$_sv2v_head/instances/$_sv2v_instance/$_sv2v_file" ] || \
+                    _sv2v_instance_required_missing=1
+            done
             if ! hydra_valid_id "$_sv2v_head_id" || \
                [ "$(sed -n '1p' "$_sv2v_head/head-id" 2>/dev/null || true)" != "$_sv2v_head_id" ] || \
                [ -z "$(sed -n '1p' "$_sv2v_head/branch" 2>/dev/null || true)" ] || \
                [ -z "$(sed -n '1p' "$_sv2v_head/session" 2>/dev/null || true)" ] || \
+               [ "$_sv2v_required_missing" -ne 0 ] || \
+               ! grep -Eq '^(running|stopping|stopped)$' "$_sv2v_head/desired-state" 2>/dev/null || \
+               ! grep -Eq '^(declared-done|observed-exit-zero|either)$' "$_sv2v_head/completion-policy" 2>/dev/null || \
                ! hydra_valid_id "$_sv2v_instance" || \
                [ ! -d "$_sv2v_head/instances/$_sv2v_instance" ] || \
+               [ "$_sv2v_instance_required_missing" -ne 0 ] || \
                [ "$(sed -n '1p' "$_sv2v_head/instances/$_sv2v_instance/instance-id" 2>/dev/null || true)" != "$_sv2v_instance" ]; then
                 echo "state v2: invalid head record $_sv2v_head" >&2
                 _sv2v_errors=1
@@ -283,46 +277,69 @@ state_v2_backup() {
     _sv2b_dir="$HYDRA_HOME/backups/state-$_sv2b_stamp"
     mkdir -p "$_sv2b_dir" || return 1
     chmod 700 "$_sv2b_dir" 2>/dev/null || true
-    [ ! -f "$HYDRA_MAP" ] || cp "$HYDRA_MAP" "$_sv2b_dir/map"
+    [ ! -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" ] || \
+        cp "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" "$_sv2b_dir/map"
     [ ! -d "$HYDRA_HOME/state" ] || cp -R "$HYDRA_HOME/state" "$_sv2b_dir/state"
     printf '%s\n' "$_sv2b_dir"
 }
 
+_state_v2_projection_matches() {
+    _sv2pm_project_dir="$1"
+    _sv2pm_map="$_sv2pm_project_dir/compat-map"
+    [ -f "$_sv2pm_map" ] || return 0
+    while IFS=' ' read -r _sv2pm_branch _sv2pm_session _sv2pm_profile _sv2pm_group \
+        _sv2pm_created _sv2pm_deps _sv2pm_pr _sv2pm_extra || [ -n "${_sv2pm_branch:-}" ]; do
+        [ -n "${_sv2pm_branch:-}" ] && [ -n "${_sv2pm_session:-}" ] && \
+            [ -z "${_sv2pm_extra:-}" ] || {
+            echo "Error: malformed 1.9 compatibility projection: $_sv2pm_map" >&2
+            return 1
+        }
+        _sv2pm_head="$(state_v2_find_head_by_branch "$(basename "$_sv2pm_project_dir")" \
+            "$_sv2pm_branch" 2>/dev/null)" || {
+            echo "Error: compatibility projection has no durable head: $_sv2pm_branch" >&2
+            return 1
+        }
+        _sv2pm_dir="$_sv2pm_project_dir/heads/$_sv2pm_head"
+        [ "$(sed -n '1p' "$_sv2pm_dir/session")" = "$_sv2pm_session" ] && \
+        [ "$(sed -n '1p' "$_sv2pm_dir/profile")" = "${_sv2pm_profile:--}" ] && \
+        [ "$(sed -n '1p' "$_sv2pm_dir/group")" = "${_sv2pm_group:--}" ] && \
+        [ "$(sed -n '1p' "$_sv2pm_dir/created-at")" = "${_sv2pm_created:--}" ] && \
+        [ "$(sed -n '1p' "$_sv2pm_dir/dependencies")" = "${_sv2pm_deps:--}" ] && \
+        [ "$(sed -n '1p' "$_sv2pm_dir/pr")" = "${_sv2pm_pr:--}" ] || {
+            echo "Error: compatibility projection diverges from durable head: $_sv2pm_branch" >&2
+            return 1
+        }
+    done < "$_sv2pm_map"
+}
+
 state_v2_migrate() {
     _sv2m_dry_run="${1:-}"
-    _sv2m_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-        echo "Error: state migration must run inside the repository owning these v1 mappings" >&2
-        return 1
-    }
-    state_v2_verify_legacy_map "$HYDRA_MAP" || return 1
-    _sv2m_count="$(awk 'NF { count++ } END { print count + 0 }' "$HYDRA_MAP" 2>/dev/null || echo 0)"
-    if [ "$_sv2m_dry_run" = "--dry-run" ]; then
+    state_v2_verify || return 1
+    _sv2m_count=0
+    for _sv2m_project in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
+        [ -d "$_sv2m_project" ] || continue
+        _state_v2_projection_matches "$_sv2m_project" || return 1
+        [ ! -f "$_sv2m_project/compat-map" ] || _sv2m_count=$((_sv2m_count + 1))
+    done
+    if [ "$_sv2m_dry_run" = --dry-run ]; then
         echo "State migration plan:"
-        echo "  source: $HYDRA_MAP"
-        echo "  destination: $HYDRA_STATE_V2_ROOT"
-        echo "  project root: $_sv2m_root"
-        _sv2m_create_identity=yes
-        if hydra_get_project_id >/dev/null 2>&1; then
-            _sv2m_create_identity=no
-        fi
-        echo "  create project identity: $_sv2m_create_identity"
-        echo "  migrate heads: $_sv2m_count"
+        echo "  remove verified 1.9 compatibility projections: $_sv2m_count"
+        echo "  remove inactive global 1.x map: $([ -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" ] && echo yes || echo no)"
         echo "  backup: $HYDRA_HOME/backups/state-<timestamp>-<pid>"
+        echo "  verify authoritative state v2 after migration: yes"
         return 0
     fi
-
     _sv2m_backup="$(state_v2_backup)" || return 1
-    _sv2m_project="$(hydra_ensure_project_id)" || return 1
-    state_v2_init_project "$_sv2m_project" "$_sv2m_root" || return 1
-    while IFS=' ' read -r _b _s _a _g _t _d _p _extra || [ -n "${_b:-}" ]; do
-        [ -n "${_b:-}" ] || continue
-        state_v2_create_head "$_sv2m_project" "$_b" "$_s" "${_a:--}" \
-            "${_g:--}" "${_t:-$(date +%s)}" "${_d:--}" "${_p:--}" "$_sv2m_root" >/dev/null || return 1
-    done < "$HYDRA_MAP"
-    cp "$HYDRA_MAP" "$HYDRA_STATE_V2_ROOT/projects/$_sv2m_project/compat-map" || return 1
-    chmod 600 "$HYDRA_STATE_V2_ROOT/projects/$_sv2m_project/compat-map" 2>/dev/null || true
-    state_v2_write_scalar "$HYDRA_HOME/state/active-schema" "2" || return 1
-    echo "Migrated $_sv2m_count head(s) to state v2"
+    for _sv2m_project in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
+        [ -d "$_sv2m_project" ] || continue
+        rm -f "$_sv2m_project/compat-map" || return 1
+    done
+    rm -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" || return 1
+    state_v2_verify || {
+        echo "Error: post-migration verification failed; rollback with: hydra state rollback $_sv2m_backup" >&2
+        return 1
+    }
+    echo "Removed $_sv2m_count compatibility projection(s)"
     echo "Backup: $_sv2m_backup"
 }
 
@@ -342,18 +359,18 @@ state_v2_rollback() {
     esac
     [ -d "$_sv2r_backup" ] || { echo "Error: backup does not exist: $_sv2r_backup" >&2; return 1; }
     _sv2r_guard="$HYDRA_HOME/state"
-    _sv2r_map_target="${HYDRA_LEGACY_MAP:-$HYDRA_HOME/map}"
+    _sv2r_map_target="${HYDRA_1X_MAP:-$HYDRA_HOME/map}"
     if [ -z "$HYDRA_HOME" ] || [ "$_sv2r_guard" = "/state" ]; then
         return 1
     fi
 
     _sv2r_locks="$(mktemp)" || return 1
-    if ! acquire_lock state_map "state rollback barrier"; then
+    if ! acquire_lock state_rollback "state rollback barrier"; then
         rm -f "$_sv2r_locks"
         echo "Error: state rollback requires idle state writers" >&2
         return 1
     fi
-    printf '%s\n' state_map >> "$_sv2r_locks"
+    printf '%s\n' state_rollback >> "$_sv2r_locks"
     for _sv2r_project_dir in "$HYDRA_STATE_V2_ROOT"/projects/project_*; do
         [ -d "$_sv2r_project_dir" ] || continue
         _sv2r_project="$(basename "$_sv2r_project_dir")"
@@ -446,7 +463,5 @@ state_v2_rollback() {
     rm -rf "$_sv2r_stage"
     _state_v2_release_locks_file "$_sv2r_locks"
     rm -f "$_sv2r_locks"
-    HYDRA_MAP="$_sv2r_map_target"
-    export HYDRA_MAP
     echo "Rolled back state from $_sv2r_backup"
 }

@@ -10,7 +10,7 @@ validate_ai_command() {
     
     if [ -z "$command" ]; then
         echo "Error: AI command cannot be empty" >&2
-        echo "Next: export HYDRA_SKIP_AI=1 for a shell-only head, or set HYDRA_AI_COMMAND" >&2
+        echo "Next: pass --no-agent for a shell-only head, or set HYDRA_AI_COMMAND" >&2
         return 1
     fi
     
@@ -21,7 +21,7 @@ validate_ai_command() {
         *)
             echo "Error: Unsupported AI command: $command" >&2
             echo "Supported: claude, codex, cursor, copilot, aider, gemini" >&2
-            echo "Next: export HYDRA_SKIP_AI=1 for a shell-only head, or pass --ai with a supported tool" >&2
+            echo "Next: pass --no-agent for a shell-only head, or pass --ai with a supported tool" >&2
             return 1
             ;;
     esac

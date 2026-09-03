@@ -157,32 +157,11 @@ cmd_adapter() {
 _cmd_resume_abort() {
     _cra_branch="$1"
     _cra_session="$2"
-    _cra_map_updated="$3"
-    _cra_had_mapping="$4"
-    _cra_old_session="$5"
-    _cra_old_ai="$6"
-    _cra_old_group="$7"
-    _cra_old_timestamp="$8"
-    _cra_old_deps="$9"
-    shift 9
-    _cra_old_pr="$1"
     tmux kill-session -t "$_cra_session" 2>/dev/null || true
     release_session_lock "$_cra_session" 2>/dev/null || true
     lifecycle_abort_new_instance "$_cra_branch" 2>/dev/null || {
         echo "Error: failed to restore the prior lifecycle instance" >&2
     }
-    if [ "$_cra_map_updated" -eq 1 ]; then
-        if [ "$_cra_had_mapping" -eq 1 ]; then
-            add_mapping "$_cra_branch" "$_cra_old_session" "$_cra_old_ai" "$_cra_old_group" \
-                "$_cra_old_timestamp" "$_cra_old_deps" "$_cra_old_pr" 2>/dev/null || {
-                echo "Error: failed to restore the prior compatibility mapping" >&2
-            }
-        else
-            remove_mapping "$_cra_branch" 2>/dev/null || {
-                echo "Error: failed to remove the aborted compatibility mapping" >&2
-            }
-        fi
-    fi
     return 1
 }
 
@@ -210,27 +189,6 @@ cmd_resume() {
         _cr_profile=none
     fi
     _cr_provider="$(sed -n '1p' "$_cr_old_dir/provider-session-id" 2>/dev/null || true)"
-    _cr_had_mapping=0
-    _cr_map_session=""
-    _cr_map_ai=-
-    _cr_map_group=-
-    _cr_map_timestamp=-
-    _cr_map_deps=-
-    _cr_map_pr=-
-    if [ -f "$HYDRA_MAP" ]; then
-        while IFS=' ' read -r _cr_read_branch _cr_read_session _cr_read_ai _cr_read_group _cr_read_timestamp _cr_read_deps _cr_read_pr; do
-            if [ "$_cr_read_branch" = "$_cr_branch" ]; then
-                _cr_had_mapping=1
-                _cr_map_session="$_cr_read_session"
-                _cr_map_ai="$_cr_read_ai"
-                _cr_map_group="$_cr_read_group"
-                _cr_map_timestamp="$_cr_read_timestamp"
-                _cr_map_deps="$_cr_read_deps"
-                _cr_map_pr="$_cr_read_pr"
-                break
-            fi
-        done < "$HYDRA_MAP"
-    fi
     _cr_recipe=""
     if [ "$_cr_profile" != none ]; then
         profile_executable_path "$_cr_profile" >/dev/null || {
@@ -249,22 +207,10 @@ cmd_resume() {
         tmux kill-session -t "$_cr_session" 2>/dev/null || true
         return 1
     fi
-    _cr_map_updated=0
     provenance_capture_instance "$_cr_branch" resume "$_cr_recipe" || {
-        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
-            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
+        _cmd_resume_abort "$_cr_branch" "$_cr_session"
         return 1
     }
-    _cr_profile_field="$_cr_profile"
-    [ "$_cr_profile_field" != none ] || _cr_profile_field=none
-    add_mapping "$_cr_branch" "$_cr_session" "$_cr_profile_field" \
-        "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/group")" "$(date +%s)" \
-        "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/dependencies")" "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/pr")" || {
-        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
-            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
-        return 1
-    }
-    _cr_map_updated=1
     for _cr_pair in \
         "HYDRA_PROJECT_ID=$LIFECYCLE_PROJECT_ID" \
         "HYDRA_HEAD_ID=$LIFECYCLE_HEAD_ID" \
@@ -277,24 +223,20 @@ cmd_resume() {
     done
     _cr_export="export HYDRA_PROJECT_ID=$(profile_shell_quote "$LIFECYCLE_PROJECT_ID") HYDRA_HEAD_ID=$(profile_shell_quote "$LIFECYCLE_HEAD_ID") HYDRA_INSTANCE_ID=$(profile_shell_quote "$LIFECYCLE_INSTANCE_ID") HYDRA_BRANCH=$(profile_shell_quote "$_cr_branch") HYDRA_WORKTREE=$(profile_shell_quote "$_cr_worktree") HYDRA_STATE_DIR=$(profile_shell_quote "$LIFECYCLE_HEAD_DIR") HYDRA_TASK_FILE=$(profile_shell_quote "$LIFECYCLE_HEAD_DIR/task")"
     send_keys_to_session "$_cr_session" "$_cr_export" || {
-        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
-            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
+        _cmd_resume_abort "$_cr_branch" "$_cr_session"
         return 1
     }
     if [ -n "$_cr_recipe" ] && ! send_keys_to_session "$_cr_session" "$_cr_recipe"; then
-        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
-            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
+        _cmd_resume_abort "$_cr_branch" "$_cr_session"
         return 1
     fi
     event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" lifecycle.resumed hydra local \
         "{\"previous_instance_id\":\"$_cr_old_instance\",\"profile\":\"$(json_escape "$_cr_profile")\"}" >/dev/null || {
-        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
-            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
+        _cmd_resume_abort "$_cr_branch" "$_cr_session"
         return 1
     }
     lifecycle_set_observed "$_cr_branch" running hydra exact || {
-        _cmd_resume_abort "$_cr_branch" "$_cr_session" "$_cr_map_updated" "$_cr_had_mapping" \
-            "$_cr_map_session" "$_cr_map_ai" "$_cr_map_group" "$_cr_map_timestamp" "$_cr_map_deps" "$_cr_map_pr"
+        _cmd_resume_abort "$_cr_branch" "$_cr_session"
         return 1
     }
     lifecycle_commit_new_instance || echo "Warning: could not remove resume rollback metadata" >&2
