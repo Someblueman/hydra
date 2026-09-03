@@ -65,7 +65,9 @@ state_list_heads() {
         _state_head_is_active "$_slh_dir" || continue
         _slh_branch="$(sed -n '1p' "$_slh_dir/branch" 2>/dev/null || true)"
         _slh_session="$(sed -n '1p' "$_slh_dir/session" 2>/dev/null || true)"
-        [ -n "$_slh_branch" ] && [ -n "$_slh_session" ] || continue
+        if [ -z "$_slh_branch" ] || [ -z "$_slh_session" ]; then
+            continue
+        fi
         printf '%s %s %s %s %s %s %s\n' \
             "$_slh_branch" "$_slh_session" \
             "$(_state_read_or_dash "$_slh_dir/profile")" \
