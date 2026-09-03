@@ -1,8 +1,13 @@
 /* Model parsing, adapter refresh, and pane preview. */
 
 static void copy_text(char *dst, size_t size, const char *src) {
+    size_t length = 0U;
     if (size == 0U) return;
-    snprintf(dst, size, "%s", src == NULL ? "" : src);
+    if (src != NULL) {
+        while (length + 1U < size && src[length] != '\0') length++;
+        memmove(dst, src, length);
+    }
+    dst[length] = '\0';
 }
 
 static unsigned parse_unsigned(const char *value) {
@@ -340,4 +345,3 @@ static void capture_preview(struct app *app) {
         copy_text(app->preview_text, sizeof(app->preview_text), timed_out ? "preview timed out" : "preview unavailable");
     }
 }
-
