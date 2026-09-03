@@ -26,11 +26,6 @@ native, parity, install, package, onboarding, and PTY suite. The state migration
 tests cover dry-run, backup, post-migration verification, writer interruption, failed
 rollback preservation, and successful downgrade restoration.
 
-Also replay [MIGRATING_TO_2.0.md](MIGRATING_TO_2.0.md) against a copy of a real 1.9
-`HYDRA_HOME`, comparing `list`, `path`, `lifecycle`, provenance, and event
-verification before and after. Never use the only copy of active state for this
-replay.
-
 ## Hosted qualification
 
 - [ ] The exact candidate passes current Ubuntu and macOS CI.
