@@ -47,7 +47,7 @@ setup_env() {
     state_v2_init_project "$TEST_PROJECT_ID" "$TEST_DIR/repo"
 }
 
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
 
 add_test_head() {
