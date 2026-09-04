@@ -1,9 +1,9 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 3 September 2026
-> - **Current release:** `v1.9.0` at `02b1cfb`
-> - **Next release candidate:** `2.0.0` stable local orchestration interface
+> - **Snapshot:** 4 September 2026
+> - **Current release:** `v2.0.0` stable local orchestration interface
+> - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   [Release policy](VERSIONING.md) · [Contracts](CONTRACTS.md) ·
 >   [2.0 release checklist](RELEASE_CHECKLIST_2.0.0.md)
