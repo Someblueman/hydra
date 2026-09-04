@@ -1,24 +1,26 @@
 # Native mission control
 
-Hydra 1.8 adds an optional C99 terminal UI over the same shell-owned lifecycle and
-coordination records as the basic POSIX-shell TUI. The native UI reads and renders;
-the shell CLI remains the only mutation and policy authority.
+Hydra includes a C99 terminal UI over the same shell-owned lifecycle and coordination
+records as the basic POSIX-shell TUI. The native UI reads and renders; the shell CLI
+remains the only mutation and policy authority.
 
 ## Dispatch and fallback
 
 ```sh
-hydra tui                 # maintained basic shell TUI; still the 1.8.0 default
-hydra tui --basic         # explicit basic TUI
-hydra tui --native        # explicit native TUI
+hydra tui                 # native-first; visibly falls back to the basic TUI
+hydra tui --basic         # explicit basic recovery path
 hydra tui --capabilities  # availability and observation diagnostics
 ```
 
-Native dispatch is intentionally opt-in through the first 1.8 patch release. An
-explicit `--native` request falls back visibly to the basic TUI when the native
-binary is missing, the terminal is unsuitable, or the native process reports a
-recoverable failure. Invalid native arguments and user interrupt signals remain
-fail-closed. `HYDRA_TUI_BIN` selects a qualified native binary during testing or
-custom installation.
+Plain `hydra tui` falls back visibly to the basic TUI when the native binary is
+missing, the terminal is unsuitable, or the native process reports a recoverable
+failure. Invalid native arguments and user interrupt signals remain fail-closed.
+`HYDRA_TUI_BIN` selects a qualified native binary during testing or custom
+installation.
+
+The normal source installer builds and installs the native TUI when `make` and a C99
+compiler are available. `HYDRA_INSTALL_TUI=never` keeps a compiler-free shell-only
+installation, where plain `hydra tui` visibly enters the basic fallback.
 
 The production refresh path uses one shell snapshot every two seconds with a
 two-second subprocess timeout, plus an optional selected-preview `tmux capture-pane`
@@ -39,7 +41,7 @@ work, allocated resources, changed files, gates, and approvals. The action palet
 opens the existing shell views for claims, collisions, scopes, queue, resources,
 Git diff, and gates. Every detail names its inspectable state record.
 
-The recovery board reports evidence-backed dead sessions, malformed map records,
+The recovery board reports evidence-backed dead sessions, malformed state records,
 stale same-host locks, orphan worktrees, interrupted lifecycle state, and teardown
 failures. Suggestions are inspect-first commands; recovery does not run
 automatically.
@@ -59,11 +61,18 @@ the shell lifecycle path.
 | `/` | Search branch, session, group, or profile |
 | `:` | Search explicit local actions |
 | `p` | Toggle the sanitized selected-pane preview |
+| `Space` / `A` | Toggle selection / select all visible heads |
+| `x` | Kill selected heads through the shell CLI; skip the current tmux session |
+| `G` | Assign selected heads to a group through the shell CLI |
+| `?` | Toggle in-product keyboard and action help |
 | `q` | Exit and restore terminal state |
 
 The palette is a fixed action list, not a natural-language command interpreter.
-Spawn, switch, kill, and regenerate are executed as an argument vector through the
-shell CLI. Commands are never assembled into a shell string.
+Spawn prompts separately for branch, profile, template, and layout, then executes
+those fields as an argument vector through the shell CLI. Switch, kill, regenerate,
+and dashboard use the same argv boundary. Commands are never assembled into a shell
+string. Bulk kill performs a bounded tmux lookup for current-session safety, then
+runs the public, confirming `hydra kill <branch>` command for each remaining head.
 
 ## Terminal safety and accessibility
 
@@ -91,7 +100,7 @@ hydra tui --headless-fixture tests/fixtures/tui/native-v2.tsv \
 
 The fixture begins with `HYDRA_TUI<TAB>2`, followed by bounded `H` head records and
 `R` recovery records. Malformed handshakes or records fail closed. This format is an
-internal 1.8 native/basic parity boundary, not the general automation API; scripts
+internal 2.0 native/basic parity boundary, not the general automation API; scripts
 should use the documented CLI JSON envelopes.
 
 `make bench-tui` creates 5, 20, and 100 live sessions on one isolated tmux socket,

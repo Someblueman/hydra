@@ -18,7 +18,7 @@ tui_build_list() {
     : > "$TUI_TEMP_LIST"
     TUI_ITEM_COUNT=0
 
-    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+    if ! state_has_heads; then
         return 0
     fi
 
@@ -26,7 +26,7 @@ tui_build_list() {
     tmux_load_snapshot
     _now="$(date +%s)"
 
-    # Read mappings and write to temp file with status
+    # Read active head records and write to temp file with status
     # Use tab as delimiter (safe - branch/session names can't contain tabs)
     while IFS=' ' read -r branch session ai group _ts _deps _pr; do
         [ -z "$branch" ] && continue
@@ -88,16 +88,6 @@ tui_build_list() {
             activity="-"
         fi
 
-        # Get tag for this branch
-        tag="$(tui_get_tag "$branch")"
-
-        # Apply tag filter if set
-        if [ -n "$TUI_TAG_FILTER" ]; then
-            if [ "$tag" != "$TUI_TAG_FILTER" ]; then
-                continue
-            fi
-        fi
-
         # Apply search pattern filter if set (branch, session, group, ai)
         if [ -n "$TUI_SEARCH_PATTERN" ]; then
             _search_lower="$(printf '%s' "$TUI_SEARCH_PATTERN" | tr '[:upper:]' '[:lower:]')"
@@ -121,12 +111,14 @@ tui_build_list() {
             fi
         fi
 
-        # Format: branch<TAB>session<TAB>ai<TAB>status<TAB>tag<TAB>activity<TAB>group<TAB>pr
-        printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
-            "$branch" "$session" "${ai:--}" "$sess_status" "${tag:--}" "$activity" \
+        # Format: branch<TAB>session<TAB>ai<TAB>status<TAB>activity<TAB>group<TAB>pr
+        printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+            "$branch" "$session" "${ai:--}" "$sess_status" "$activity" \
             "${group:--}" "${_pr:--}" >> "$TUI_TEMP_LIST"
         TUI_ITEM_COUNT=$((TUI_ITEM_COUNT + 1))
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(state_list_heads)
+EOF
 
     # Adjust selection if out of bounds
     if [ "$TUI_ITEM_COUNT" -gt 0 ]; then
@@ -142,7 +134,7 @@ tui_build_list() {
 
 # Get session data at index
 # Usage: tui_get_session_at <index>
-# Returns: session data on stdout (tab-separated: branch session ai status tag activity group pr)
+# Returns: session data on stdout (tab-separated: branch session ai status activity group pr)
 tui_get_session_at() {
     idx="$1"
     sed -n "$((idx + 1))p" "$TUI_TEMP_LIST"

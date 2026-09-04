@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define HYDRA_CORE_VERSION "1.9.0"
+#define HYDRA_CORE_VERSION "2.0.0"
 #define HYDRA_PROTOCOL_VERSION 1
 
 int hydra_json_write_string(FILE *out, const char *value);

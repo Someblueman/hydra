@@ -47,7 +47,9 @@ print_skip() {
 source_libs() {
     # Set up required globals
     HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
-    HYDRA_MAP="$HYDRA_HOME/map"
+    HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
+    TUI_TEST_PROJECT=project_0123456789abcdefabcd
+    export HYDRA_HOME HYDRA_STATE_V2_ROOT TUI_TEST_PROJECT
 
     # Source output first (no deps)
     . "$HYDRA_LIB_DIR/output.sh"
@@ -58,6 +60,10 @@ source_libs() {
     # Source locks (no deps)
     . "$HYDRA_LIB_DIR/locks.sh"
 
+    . "$HYDRA_LIB_DIR/identity.sh"
+
+    . "$HYDRA_LIB_DIR/state_v2.sh"
+
     # Source tmux (no deps)
     . "$HYDRA_LIB_DIR/tmux.sh"
 
@@ -66,6 +72,13 @@ source_libs() {
 
     # Source TUI library
     . "$HYDRA_LIB_DIR/tui.sh"
+
+    # shellcheck disable=SC2317,SC2329
+    hydra_get_project_id() { printf '%s\n' "$TUI_TEST_PROJECT"; }
+}
+
+tui_add_test_head() {
+    state_v2_create_head "$TUI_TEST_PROJECT" "$1" "$2" "${3:--}" "${4:--}" "${5:-100}" "${6:--}" "${7:--}" "$HYDRA_HOME/repo" >/dev/null
 }
 
 # Test: TUI requires interactive terminal
@@ -130,14 +143,11 @@ test_tui_build_list() {
     # Create temporary test environment
     TEST_HOME="$(mktemp -d)"
     HYDRA_HOME="$TEST_HOME"
-    HYDRA_MAP="$HYDRA_HOME/map"
     mkdir -p "$HYDRA_HOME"
 
-    # Create mock session data
-    echo "test-branch-1 test_session_1" > "$HYDRA_MAP"
-    echo "test-branch-2 test_session_2 claude" >> "$HYDRA_MAP"
-
     source_libs
+    tui_add_test_head test-branch-1 test_session_1
+    tui_add_test_head test-branch-2 test_session_2 claude
 
     # Create temp file for list
     TUI_TEMP_LIST="$(mktemp)"
@@ -164,11 +174,10 @@ test_tui_row_contract() {
 
     TEST_HOME="$(mktemp -d)"
     HYDRA_HOME="$TEST_HOME"
-    HYDRA_MAP="$HYDRA_HOME/map"
     mkdir -p "$HYDRA_HOME"
-    echo "b1 s1 claude grp 111 d1 9" > "$HYDRA_MAP"
 
     source_libs
+    tui_add_test_head b1 s1 claude grp 111 d1 9
     TUI_TEMP_LIST="$(mktemp)"
     TUI_ITEM_COUNT=0
     TUI_SELECTED=0
@@ -178,16 +187,13 @@ test_tui_row_contract() {
     TUI_ACTIVITY_DIR=""
     # shellcheck disable=SC2034
     TUI_SEARCH_PATTERN=""
-    # shellcheck disable=SC2034
-    TUI_TAG_FILTER=""
-    tui_init_tags
     tui_build_list
 
     fields="$(awk -F '	' 'NF { print NF; exit }' "$TUI_TEMP_LIST")"
-    if [ "$fields" = "8" ]; then
-        print_pass "TUI list rows have 8 tab-separated fields"
+    if [ "$fields" = "7" ]; then
+        print_pass "TUI list rows have 7 tab-separated fields"
     else
-        print_fail "TUI list rows should have 8 fields, got $fields ($(cat "$TUI_TEMP_LIST"))"
+        print_fail "TUI list rows should have 7 fields, got $fields ($(cat "$TUI_TEMP_LIST"))"
     fi
 
     rm -f "$TUI_TEMP_LIST"
@@ -201,14 +207,11 @@ test_tui_selection_bounds() {
     # Create temporary test environment
     TEST_HOME="$(mktemp -d)"
     HYDRA_HOME="$TEST_HOME"
-    HYDRA_MAP="$HYDRA_HOME/map"
     mkdir -p "$HYDRA_HOME"
 
-    # Create mock session data
-    echo "branch-1 session_1" > "$HYDRA_MAP"
-    echo "branch-2 session_2" >> "$HYDRA_MAP"
-
     source_libs
+    tui_add_test_head branch-1 session_1
+    tui_add_test_head branch-2 session_2
 
     # Initialize state (TUI_OFFSET and TUI_ROWS used by tui_build_list)
     TUI_TEMP_LIST="$(mktemp)"
@@ -238,12 +241,10 @@ test_tui_selection_bounds() {
 test_tui_empty_list() {
     TESTS_RUN=$((TESTS_RUN + 1))
 
-    # Create temporary test environment with empty map
+    # Create temporary test environment with no active heads
     TEST_HOME="$(mktemp -d)"
     HYDRA_HOME="$TEST_HOME"
-    HYDRA_MAP="$HYDRA_HOME/map"
     mkdir -p "$HYDRA_HOME"
-    touch "$HYDRA_MAP"  # Empty file
 
     source_libs
 
@@ -296,15 +297,12 @@ test_tui_key_navigation() {
     # Create temporary test environment
     TEST_HOME="$(mktemp -d)"
     HYDRA_HOME="$TEST_HOME"
-    HYDRA_MAP="$HYDRA_HOME/map"
     mkdir -p "$HYDRA_HOME"
 
-    # Create mock sessions
-    echo "branch-1 session_1" > "$HYDRA_MAP"
-    echo "branch-2 session_2" >> "$HYDRA_MAP"
-    echo "branch-3 session_3" >> "$HYDRA_MAP"
-
     source_libs
+    tui_add_test_head branch-1 session_1
+    tui_add_test_head branch-2 session_2
+    tui_add_test_head branch-3 session_3
 
     # Initialize state (variables used by tui_build_list and tui_handle_key)
     TUI_TEMP_LIST="$(mktemp)"
@@ -336,6 +334,31 @@ test_tui_key_navigation() {
     rm -rf "$TEST_HOME"
 }
 
+# Test: removed basic-only shortcuts are ignored
+test_tui_removed_shortcuts() {
+    TESTS_RUN=$((TESTS_RUN + 1))
+
+    source_libs
+    TUI_ITEM_COUNT=1
+    TUI_SELECTED=0
+    TUI_MULTI_SELECT=""
+    TUI_SEARCH_PATTERN="needle"
+
+    tui_handle_key "a"
+    tui_handle_key "t"
+    tui_handle_key "T"
+    tui_handle_key "f"
+    if ! command -v tui_action_kill_all >/dev/null 2>&1 &&
+       ! command -v tui_action_tag >/dev/null 2>&1 &&
+       ! command -v tui_cycle_tag_filter >/dev/null 2>&1 &&
+       [ -z "${TUI_PREVIEW_FOLLOW+x}" ] &&
+       [ "$TUI_SEARCH_PATTERN" = "needle" ]; then
+        print_pass "Removed basic-only shortcuts are ignored"
+    else
+        print_fail "Removed basic-only shortcuts should not dispatch actions"
+    fi
+}
+
 # Test: Terminal state save/restore pattern
 test_tui_stty_pattern() {
     TESTS_RUN=$((TESTS_RUN + 1))
@@ -365,19 +388,19 @@ test_tui_stty_pattern() {
 test_tui_select_all() {
     TESTS_RUN=$((TESTS_RUN + 1))
 
-    source_libs
     TEST_HOME="$(mktemp -d)"
     HYDRA_HOME="$TEST_HOME"
-    HYDRA_MAP="$TEST_HOME/map"
     mkdir -p "$TEST_HOME"
-    printf '%s\n' "b1 s1" "b2 s2" >> "$HYDRA_MAP"
+    source_libs
+    tui_add_test_head b1 s1
+    tui_add_test_head b2 s2
 
     # shellcheck disable=SC2034
     tui_init_colors
   TUI_TEMP_LIST="$(mktemp)"
   TUI_ITEM_COUNT=2
-  printf 'b1\ts1\t-\tALIVE\t-\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
-  printf 'b2\ts2\t-\tALIVE\t-\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
+  printf 'b1\ts1\t-\tALIVE\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
+  printf 'b2\ts2\t-\tALIVE\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
     # shellcheck disable=SC2034
     TUI_MULTI_SELECT=""
   tui_select_all
@@ -436,6 +459,7 @@ main() {
     test_tui_empty_list
     test_tui_key_quit
     test_tui_key_navigation
+    test_tui_removed_shortcuts
     test_tui_stty_pattern
     test_tui_select_all
     test_tui_preview_lines_env

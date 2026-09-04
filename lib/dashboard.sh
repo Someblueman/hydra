@@ -58,7 +58,7 @@ create_dashboard_session() {
 #   - "all"                  -> collect all panes from each session
 # Returns: 0 on success, 1 on failure
 collect_session_panes() {
-    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+    if ! state_has_heads; then
         echo "Error: No active Hydra sessions found" >&2
         return 1
     fi
@@ -158,7 +158,9 @@ collect_session_panes() {
             done
         done
         IFS="$OLDIFS"
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(state_list_heads)
+EOF
     
     if [ "$collected" -eq 0 ]; then
         echo "Error: No panes could be collected" >&2
@@ -332,7 +334,7 @@ cmd_dashboard() {
     fi
     
     # Check if we have any active sessions
-    if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+    if ! state_has_heads; then
         echo "No active Hydra sessions found"
         echo "Use 'hydra spawn <branch>' to create sessions first"
         exit 1
@@ -344,7 +346,9 @@ cmd_dashboard() {
         if tmux_session_exists "$session"; then
             active_count=$((active_count + 1))
         fi
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(state_list_heads)
+EOF
     
     if [ "$active_count" -eq 0 ]; then
         echo "No active Hydra sessions found"
@@ -406,7 +410,7 @@ cmd_dashboard_exit() {
     cleanup_dashboard
     
     # Try to switch back to a regular session if possible
-    if [ -f "$HYDRA_MAP" ] && [ -s "$HYDRA_MAP" ]; then
+    if state_has_heads; then
         # Find first active session to switch to
         while IFS=' ' read -r branch session _ai _group _ts; do
             if tmux_session_exists "$session"; then
@@ -414,7 +418,9 @@ cmd_dashboard_exit() {
                 switch_to_session "$session"
                 return 0
             fi
-        done < "$HYDRA_MAP"
+        done <<EOF
+$(state_list_heads)
+EOF
     fi
     
     # If no sessions available, just detach

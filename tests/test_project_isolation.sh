@@ -57,10 +57,10 @@ assert_success $? "repository A spawns shared branch"
 run_hydra "$repo_b" spawn shared-branch --no-agent --prompt 'task B' >/dev/null 2>&1
 assert_success $? "repository B spawns shared branch"
 
-map_a="$hydra_home/state/v2/projects/$project_a/compat-map"
-map_b="$hydra_home/state/v2/projects/$project_b/compat-map"
-session_a="$(awk '$1 == "shared-branch" { print $2 }' "$map_a")"
-session_b="$(awk '$1 == "shared-branch" { print $2 }' "$map_b")"
+head_dir_a="$(find "$hydra_home/state/v2/projects/$project_a/heads" -maxdepth 1 -type d -name 'head_*' | sed -n '1p')"
+head_dir_b="$(find "$hydra_home/state/v2/projects/$project_b/heads" -maxdepth 1 -type d -name 'head_*' | sed -n '1p')"
+session_a="$(sed -n '1p' "$head_dir_a/session")"
+session_b="$(sed -n '1p' "$head_dir_b/session")"
 if [ -n "$session_a" ] && [ -n "$session_b" ] && [ "$session_a" != "$session_b" ]; then
     assert_success 0 "same branch label has distinct live session identity"
 else

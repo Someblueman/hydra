@@ -33,13 +33,33 @@ make_head() {
     _mh_instance="$3"
     _mh_branch="$4"
     _mh_dir="$HYDRA_STATE_V2_ROOT/projects/$_mh_project/heads/$_mh_head"
-    mkdir -p "$_mh_dir/instances/$_mh_instance"
+    _mh_instance_dir="$_mh_dir/instances/$_mh_instance"
+    mkdir -p "$_mh_instance_dir" "$_mh_dir/events/archive"
     write_scalar "$_mh_dir/head-id" "$_mh_head"
     write_scalar "$_mh_dir/branch" "$_mh_branch"
     write_scalar "$_mh_dir/session" "session-$_mh_head"
+    write_scalar "$_mh_dir/profile" -
+    write_scalar "$_mh_dir/group" -
+    write_scalar "$_mh_dir/created-at" 100
+    write_scalar "$_mh_dir/dependencies" -
+    write_scalar "$_mh_dir/pr" -
     write_scalar "$_mh_dir/current-instance" "$_mh_instance"
     write_scalar "$_mh_dir/desired-state" running
-    write_scalar "$_mh_dir/instances/$_mh_instance/instance-id" "$_mh_instance"
+    write_scalar "$_mh_dir/completion-policy" declared-done
+    write_scalar "$_mh_dir/worktree" "/tmp/$_mh_head"
+    write_scalar "$_mh_dir/task" ""
+    write_scalar "$_mh_dir/scopes" ""
+    write_scalar "$_mh_dir/base-ref" main
+    write_scalar "$_mh_instance_dir/instance-id" "$_mh_instance"
+    write_scalar "$_mh_instance_dir/session" "session-$_mh_head"
+    write_scalar "$_mh_instance_dir/started-at" 100
+    write_scalar "$_mh_instance_dir/observed-status" starting
+    write_scalar "$_mh_instance_dir/observed-source" hydra
+    write_scalar "$_mh_instance_dir/observed-confidence" exact
+    write_scalar "$_mh_instance_dir/observed-at" 100
+    write_scalar "$_mh_instance_dir/observed-exit-code" ""
+    write_scalar "$_mh_instance_dir/provider-session-id" ""
+    : > "$_mh_dir/events/events.jsonl"
 }
 
 make_project() {
@@ -122,7 +142,7 @@ printf '%s\n' \
     '  --protocol-version)' \
     '    case "${FAKE_CORE_MODE:-}" in skew) echo 99 ;; hang) sleep 3 ;; descendant) sleep 20 & echo $! > "$FAKE_CORE_CHILD_PID"; wait ;; crash) exit 9 ;; *) echo 1 ;; esac ;;' \
     '  --version)' \
-    '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 1.9.0 protocol 1" ;; esac ;;' \
+    '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 2.0.0 protocol 1" ;; esac ;;' \
     '  snapshot)' \
     '    case "${FAKE_CORE_MODE:-}" in malformed) echo not-json ;; shape) echo '\''{"schema_version":1,"ok":true,"command":"snapshot","data":{"state_schema":2,"projects":1,"heads":[{"project_id":false}]}}'\'' ;; crash) exit 9 ;; *) echo not-json ;; esac ;;' \
     'esac' > "$fake_core"

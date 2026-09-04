@@ -3,6 +3,6 @@ H	feature-live	hydra-feature-live	codex	alpha	42	active	live	done	idle	exact	ins
 H	feature-stale	hydra-feature-stale	claude	beta	-	dead	stopped		running	reported	instance_bbbbbbbbbbbbbbbb	8	1	0	2	1	1	0	7	1	0	running	/tmp/hydra/state/head_stale	head_bbbbbbbbbbbbbbbb	none	verified-local-help	hydra capabilities --json	2	/tmp/hydra/state/notifications
 H	feature-unavailable	hydra-feature-unavailable	-	-	-	dead	unavailable		unavailable	unavailable		0	0	0	0	0	0	0	0	0	0	unavailable	/tmp/hydra/map		none	exact	hydra capabilities --json	2	/tmp/hydra/state/notifications
 R	dead-session	feature-stale	/tmp/hydra/map	exact	hydra doctor
-R	stale-lock	state_map.lock	/tmp/hydra/locks/state_map.lock	exact	hydra doctor
+R	stale-lock	state_project_0123456789abcdefabcd.lock	/tmp/hydra/locks/state_project_0123456789abcdefabcd.lock	exact	hydra doctor
 R	orphan-worktree	hydra-orphan	/tmp/hydra-orphan	exact	hydra gc --policy orphaned --dry-run
 R	teardown-failure	feature-stale	/tmp/hydra/state/head_stale	exact	hydra worktree doctor status

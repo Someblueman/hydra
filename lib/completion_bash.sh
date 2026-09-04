@@ -9,6 +9,10 @@ generate_bash_completion() {
 # Bash completion for hydra
 # Source this file or place it in /etc/bash_completion.d/
 
+_hydra_active_heads() {
+    command hydra list --json 2>/dev/null | tr '{' '\n' | sed -n 's/.*"branch": "\([^"]*\)".*/\1/p'
+}
+
 _hydra_completion() {
     local cur prev opts commands
     COMPREPLY=()
@@ -52,7 +56,7 @@ _hydra_completion() {
         integrate) COMPREPLY=($(compgen -W "train status report cancel resume approve promote cleanup" -- ${cur})); return 0 ;;
         worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
         snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
-        tui) COMPREPLY=($(compgen -W "--basic --native --capabilities" -- ${cur})); return 0 ;;
+        tui) COMPREPLY=($(compgen -W "--basic --capabilities" -- ${cur})); return 0 ;;
         kill)
             # Complete with git branch names or --all flag
             case "${cur}" in
@@ -67,11 +71,8 @@ _hydra_completion() {
             return 0
             ;;
         switch)
-            # Complete with hydra session names from map file
-            if [ -f "${HYDRA_MAP:-$HOME/.hydra/map}" ]; then
-                local sessions=$(awk '{print $1}' "${HYDRA_MAP:-$HOME/.hydra/map}" 2>/dev/null)
-                COMPREPLY=($(compgen -W "${sessions}" -- ${cur}))
-            fi
+            local sessions=$(_hydra_active_heads)
+            COMPREPLY=($(compgen -W "${sessions}" -- ${cur}))
             return 0
             ;;
         -l|--layout)
@@ -110,11 +111,8 @@ _hydra_completion() {
                 return 0
                 ;;
             --after)
-                # Complete with hydra session branches
-                if [ -f "${HYDRA_MAP:-$HOME/.hydra/map}" ]; then
-                    local branches=$(awk '{print $1}' "${HYDRA_MAP:-$HOME/.hydra/map}" 2>/dev/null)
-                    COMPREPLY=($(compgen -W "${branches}" -- ${cur}))
-                fi
+                local branches=$(_hydra_active_heads)
+                COMPREPLY=($(compgen -W "${branches}" -- ${cur}))
                 return 0
                 ;;
             --completion-policy)
@@ -212,10 +210,8 @@ _hydra_completion() {
 
     # Complete pr command with hydra session branches
     if [[ "${COMP_WORDS[@]}" =~ " pr" ]]; then
-        if [ -f "${HYDRA_MAP:-$HOME/.hydra/map}" ]; then
-            local branches=$(awk '{print $1}' "${HYDRA_MAP:-$HOME/.hydra/map}" 2>/dev/null)
-            COMPREPLY=($(compgen -W "${branches}" -- ${cur}))
-        fi
+        local branches=$(_hydra_active_heads)
+        COMPREPLY=($(compgen -W "${branches}" -- ${cur}))
         return 0
     fi
     
@@ -234,5 +230,3 @@ _hydra_completion() {
 complete -F _hydra_completion hydra
 EOF
 }
-
-

@@ -17,7 +17,7 @@ export HYDRA_SKIP_AI=1
 export HYDRA_NONINTERACTIVE=1
 
 # Test helper functions
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 assert_contains() {
     haystack="$1"
     needle="$2"
@@ -41,7 +41,6 @@ setup_test_env() {
     test_dir="$(mktemp -d)" || exit 1
     trap 'if [ -n "$test_dir" ] && [ -d "$test_dir" ]; then rm -rf "$test_dir"; fi' EXIT INT TERM
     export HYDRA_HOME="$test_dir/.hydra"
-    export HYDRA_MAP="$HYDRA_HOME/map"
     
     # Initialize git repo
     cd "$test_dir" || exit 1

@@ -231,7 +231,7 @@ get_dependents() {
     target="$1"
     dependents=""
 
-    if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+    if ! state_has_heads; then
         return 0
     fi
 
@@ -258,7 +258,9 @@ get_dependents() {
                 break
             fi
         done
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(state_list_heads)
+EOF
 
     echo "$dependents"
 }
@@ -303,7 +305,7 @@ build_dep_tree() {
 # Usage: build_full_dep_tree
 # Returns: Formatted tree on stdout
 build_full_dep_tree() {
-    if [ -z "$HYDRA_MAP" ] || [ ! -f "$HYDRA_MAP" ]; then
+    if ! state_has_heads; then
         return 0
     fi
 
@@ -320,7 +322,9 @@ build_full_dep_tree() {
                 has_deps="$map_branch"
             fi
         fi
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(state_list_heads)
+EOF
 
     # Print sessions with dependencies
     if [ -n "$has_deps" ]; then

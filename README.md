@@ -35,7 +35,7 @@ Five-minute tour: install or run from source, verify, create a disposable head, 
 
 - Requirements: `git`, `tmux` (≥ 3.0). Optional: `fzf`, GitHub CLI, an AI CLI (`claude`, `aider`, `gemini`, etc.).
 - Supported platforms: Linux and macOS; POSIX `sh` (dash on Debian/Ubuntu); `tmux >= 3.0` and `git`. CI runs Ubuntu and macOS. Windows is not supported.
-- Public CLI, map, JSON, lock, install, and TUI-row contracts: [docs/CONTRACTS.md](docs/CONTRACTS.md).
+- Public CLI, state, JSON, lock, install, and TUI contracts: [docs/CONTRACTS.md](docs/CONTRACTS.md).
 
 ### 1. Install (or run from source)
 
@@ -62,7 +62,7 @@ hydra version
 ### 2. Verify
 
 ```sh
-hydra version          # Hydra version 1.9.0
+hydra version          # Hydra version 2.0.0
 hydra doctor           # install paths, git/tmux, writable HYDRA_HOME, agents
 ```
 
@@ -93,7 +93,7 @@ git branch -D first-head # remove the disposable tour branch
 hydra list             # empty
 ```
 
-That leaves no Hydra tmux session, worktree, branch, or `HYDRA_HOME` map entry for `first-head`.
+That leaves no Hydra tmux session, worktree, branch, or active state entry for `first-head`.
 
 ### Shell completions
 
@@ -145,7 +145,7 @@ hydra switch            # interactive (fzf if available)
 # Manage
 hydra kill feature-branch
 hydra kill --all [--force]
-hydra cleanup           # remove dead mappings, stale locks, orphaned worktrees
+hydra cleanup           # stop dead heads; remove stale locks and orphaned worktrees
 
 # Group operations
 hydra group feature-x backend    # assign to group
@@ -213,8 +213,8 @@ hydra snapshot --native # explicitly try the optional read-only native helper
 
 # Dashboard & TUI
 hydra dashboard                                    # multi-session overview
-hydra tui                                          # maintained basic shell TUI
-hydra tui --native                                 # opt-in native mission control
+hydra tui                                          # native mission control; visible basic fallback
+hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
 ```
 
@@ -232,10 +232,10 @@ hydra tui --capabilities                           # native/basic diagnostics
 | Variable | Description |
 |----------|-------------|
 | `HYDRA_HOME` | Runtime dir (default `~/.hydra`) |
-| `HYDRA_AI_COMMAND` | Legacy default agent override; prefer project profiles |
+| `HYDRA_AI_COMMAND` | Default agent override; project profiles are preferred |
 | `HYDRA_ROOT` | Force library discovery when running from source |
 | `HYDRA_DASHBOARD_PANES_PER_SESSION` | `1`, `N`, or `all` |
-| `HYDRA_SKIP_AI` | Legacy shell-only switch; prefer `spawn --no-agent` |
+| `HYDRA_SKIP_AI` | Non-interactive shell-only default; `spawn --no-agent` is explicit |
 | `HYDRA_DASHBOARD_NO_ATTACH` | Create dashboard without attaching |
 | `HYDRA_NONINTERACTIVE` | Skip all confirmation prompts (for CI/automation) |
 | `HYDRA_REGENERATE_RUN_STARTUP` | Run startup commands on regenerate |
@@ -257,6 +257,11 @@ integration](docs/workflows.md), and the
 [optional native core](docs/NATIVE_CORE.md). Native/basic dispatch, terminal safety,
 keymaps, accessibility, and recovery are documented in
 [native mission control](docs/NATIVE_TUI.md).
+
+Supported systems and upgrade policy are in [docs/SUPPORT.md](docs/SUPPORT.md).
+Existing 1.9 installations should follow
+[docs/MIGRATING_TO_2.0.md](docs/MIGRATING_TO_2.0.md) before removing their state
+backup.
 
 ## YAML Config (optional)
 
@@ -297,20 +302,27 @@ Add `.hydra/` scripts to customize lifecycle:
 
 ## TUI
 
-Hydra keeps the existing feature-rich shell TUI as the 1.9.0 default and includes an
-opt-in native mission-control UI over the same shell-owned state.
+Hydra launches native mission control by default when its qualified executable is
+available and falls back visibly to the basic shell TUI over the same shell-owned
+state.
+
+The source installer builds the native TUI automatically when a C99 toolchain is
+available. Set `HYDRA_INSTALL_TUI=never` for a compiler-free shell-only install.
 
 ```sh
-hydra tui                  # basic shell TUI
+hydra tui                  # native-first with visible basic fallback
 hydra tui --basic          # explicit basic mode
-hydra tui --native         # native list/detail/coordination/recovery views
 hydra tui --capabilities   # availability and observation diagnostics
 ```
 
 The native keymap is deliberately small: `j`/`k` or arrows navigate, `Enter` opens
 detail, `v` cycles views, `/` searches heads, `:` searches explicit actions, `p`
-toggles a sanitized pane preview, and `q` exits. Its mutations are delegated to the
-shell CLI with argument-vector execution. See [Native mission control](docs/NATIVE_TUI.md).
+toggles a sanitized pane preview, `?` opens keyboard help, and `q` exits. The action
+palette includes the tmux dashboard. Mutations are delegated to the shell CLI with
+argument-vector execution; native spawn prompts for branch, profile, template, and
+layout, while `Space`/`A` select heads and `G` assigns the selection to a group. `x`
+kills selected heads through the confirming shell command and skips the current tmux
+session. See [Native mission control](docs/NATIVE_TUI.md).
 
 The larger keymap below belongs to the maintained basic shell TUI.
 
@@ -321,15 +333,11 @@ The larger keymap below belongs to the maintained basic shell TUI.
 | `n` | Spawn new session (interactive wizard) |
 | `d` | Kill selected session |
 | `D` | Open tmux dashboard |
-| `a` | Kill all sessions |
 | `A` | Select all sessions |
 | `Space` | Toggle selection (for bulk ops) |
 | `x` | Bulk kill selected |
 | `G` | Bulk set group on selected |
 | `p` | Toggle preview panel |
-| `f` | Toggle preview follow mode |
-| `t` | Cycle tag on session |
-| `T` | Filter by tag |
 | `/` | Search (branch, session, group, AI) |
 | `i` | Show status output |
 | `r` | Regenerate sessions |

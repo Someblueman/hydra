@@ -47,12 +47,21 @@ Setup and hook output streams to the caller rather than being silently persisted
 Users should still treat worktree paths, branch names, diffs, and agent output as
 sensitive project metadata.
 
+Context packs and workflow artifacts are explicit selections. Context packs record
+file hashes rather than copying implicit repository contents and reject likely
+secret-bearing paths. Workflow and integration stdout/stderr may contain arbitrary
+tool output; they remain private local evidence and must be reviewed before sharing.
+Hydra does not upload artifacts, transcripts, messages, credentials, or repository
+content.
+
 ## Recovery and integrity
 
-Mutating writers use adjacent temporary files plus rename and the shared directory
-lock protocol. Stale-lock cleanup requires a matching host and a dead owner PID;
-age alone is insufficient. State migration creates a generated backup before schema
-activation, and rollback accepts only a backup under the current `HYDRA_HOME`.
+Mutating writers use adjacent temporary files plus rename and scoped directory locks.
+Stale-lock cleanup requires a matching host and a dead owner PID; age alone is
+insufficient. The 1.9-to-2.0 migration verifies durable state and compatibility
+projections, creates a generated backup, removes only the projections, and verifies
+again. Rollback accepts only a backup under the current `HYDRA_HOME` and fails while
+state or event writers are active.
 
 Hydra protects against accidental cross-project state collisions, stale instance
 evidence, shell interpolation, and unlocked concurrent writes. It does not defend
@@ -64,3 +73,12 @@ invoking user's permissions. Approval is a separate current binding to the verif
 result. Promotion rechecks the target ref, candidate commits, manifest, approval, and
 clean worktree under the project integration lock; it updates only a local branch and
 never pushes.
+
+## Remote coordination prerequisites
+
+Hydra 2.0 has no remote coordination contract. A future remote feature must use an
+explicitly trusted transport and host identity, negotiate Hydra and protocol
+versions, separate read-only observation from mutation capabilities, preserve one
+authority for each live state record, bound timeouts and concurrency, and fail closed
+on authentication, host-key, version, or capability mismatch. It must not copy local
+secrets or treat a live state tree as authoritative on two hosts.

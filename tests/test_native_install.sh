@@ -75,6 +75,20 @@ assert_equal "" "$(sed -n '1p' "$test_root/installed-snapshot.err")" "installed 
 installed_hash="$(file_hash "$prefix/libexec/hydra/hydra-core")"
 installed_tui_hash="$(file_hash "$prefix/libexec/hydra/hydra-tui")"
 
+shell_only_prefix="$test_root/shell-only-prefix"
+mkdir -p "$shell_only_prefix/libexec/hydra"
+for installed in hydra-tui hydra-tui.sha256 hydra-tui.platform hydra-tui.dependencies hydra-tui.source; do
+    cp "$prefix/libexec/hydra/$installed" "$shell_only_prefix/libexec/hydra/$installed"
+done
+HOME="$home" PREFIX="$shell_only_prefix" HYDRA_INSTALL_CORE=never HYDRA_INSTALL_TUI=never \
+    sh "$repo_root/install.sh" > "$test_root/shell-only.out" 2>&1
+assert_success $? "shell-only installation succeeds over an existing native TUI"
+if find "$shell_only_prefix/libexec/hydra" -name 'hydra-tui*' -print | grep . >/dev/null; then
+    assert_success 1 "shell-only installation removes the native TUI and metadata"
+else
+    assert_success 0 "shell-only installation removes the native TUI and metadata"
+fi
+
 bad="$test_root/bad"
 mkdir -p "$bad"
 cp "$package/hydra-core" "$bad/hydra-core"
@@ -138,13 +152,13 @@ mkdir -p "$archive_checkout" "$archive_home"
 cp "$repo_root/Makefile" "$repo_root/install.sh" "$archive_checkout/"
 cp -R "$repo_root/bin" "$repo_root/lib" "$repo_root/src" "$archive_checkout/"
 HOME="$archive_home" PREFIX="$archive_prefix" HYDRA_INSTALL_CORE=required HYDRA_BUILD_CORE=1 \
-    HYDRA_INSTALL_TUI=required HYDRA_BUILD_TUI=1 \
     sh "$archive_checkout/install.sh" > "$test_root/archive-source.out" 2>&1
-assert_success $? "source archive without Git metadata installs native helper"
-assert_equal "hydra-1.9.0-source-tree" \
+assert_success $? "source archive auto-builds native TUI without Git metadata"
+assert_file "$archive_prefix/libexec/hydra/hydra-tui" "auto install builds and installs native TUI when a compiler is available"
+assert_equal "hydra-2.0.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-core.source")" \
     "source archive records explicit non-commit provenance"
-assert_equal "hydra-1.9.0-source-tree" \
+assert_equal "hydra-2.0.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-tui.source")" \
     "source archive records explicit native TUI provenance"
 

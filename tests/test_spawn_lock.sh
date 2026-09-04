@@ -1,11 +1,12 @@
 #!/bin/sh
-# Spawn rolls back when the state map lock cannot be acquired.
+# Spawn rolls back when the authoritative project-state lock cannot be acquired.
 
 test_count=0
 pass_count=0
 fail_count=0
 
-HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+HYDRA_BIN="$REPO_ROOT/bin/hydra"
 export HYDRA_NONINTERACTIVE=1
 export HYDRA_SKIP_AI=1
 export HYDRA_LOCK_RETRIES=1
@@ -19,9 +20,7 @@ setup() {
     cd "$test_base_dir/repo" || exit 1
 
     export HYDRA_HOME="$test_base_dir/.hydra"
-    export HYDRA_MAP="$HYDRA_HOME/map"
     mkdir -p "$HYDRA_HOME/locks"
-    : > "$HYDRA_MAP"
 
     git init >/dev/null 2>&1
     git config user.name "Test User"
@@ -29,6 +28,8 @@ setup() {
     echo "# Test" > README.md
     git add README.md
     git commit -m "init" >/dev/null 2>&1
+    "$HYDRA_BIN" init --no-agent --trust >/dev/null
+    project_id="$(sed -n '1p' .git/hydra/project-id)"
 }
 
 cleanup() {
@@ -40,35 +41,34 @@ cleanup() {
     fi
 }
 
-test_spawn_rolls_back_when_map_lock_held() {
-    echo "Testing spawn rolls back when state_map lock is held..."
+test_spawn_rolls_back_when_state_lock_held() {
+    echo "Testing spawn rolls back when the project-state lock is held..."
     setup
     branch="lockfail-spawn"
-    mkdir "$HYDRA_HOME/locks/state_map.lock"
+    mkdir "$HYDRA_HOME/locks/state_${project_id}.lock"
 
     output="$("$HYDRA_BIN" spawn "$branch" 2>&1)"
     exit_code=$?
-    assert_failure "$exit_code" "spawn should fail when the state map lock is held"
+    assert_failure "$exit_code" "spawn should fail when the project-state lock is held"
 
     case "$output" in
-        *"Failed to acquire state lock"*|*"Failed to save branch-session mapping"*)
-            echo "[PASS] spawn reports mapping/lock failure"
+        *"Failed to acquire"*|*"Failed to persist state"*|*"Failed to commit durable head state"*)
+            echo "[PASS] spawn reports state-lock failure"
             pass_count=$((pass_count + 1))
             ;;
         *)
-            echo "[FAIL] spawn reports mapping/lock failure"
+            echo "[FAIL] spawn reports state-lock failure"
             echo "  Output: $output"
             fail_count=$((fail_count + 1))
             ;;
     esac
     test_count=$((test_count + 1))
 
-    if [ ! -s "$HYDRA_MAP" ] || ! grep -q "$branch" "$HYDRA_MAP" 2>/dev/null; then
-        echo "[PASS] map has no entry for the aborted spawn"
+    if ! "$HYDRA_BIN" list --json | grep -q "\"branch\": \"$branch\""; then
+        echo "[PASS] durable state has no active head for the aborted spawn"
         pass_count=$((pass_count + 1))
     else
-        echo "[FAIL] map has no entry for the aborted spawn"
-        echo "  Map: $(cat "$HYDRA_MAP")"
+        echo "[FAIL] durable state has no active head for the aborted spawn"
         fail_count=$((fail_count + 1))
     fi
     test_count=$((test_count + 1))
@@ -95,9 +95,55 @@ test_spawn_rolls_back_when_map_lock_held() {
     cleanup
 }
 
+test_post_commit_rollback_retires_head() {
+    echo "Testing rollback after durable head commit..."
+    setup
+    branch="postcommit-rollback"
+    "$HYDRA_BIN" spawn "$branch" --no-agent >/dev/null
+    worktree_path="$("$HYDRA_BIN" path "$branch")"
+
+    HYDRA_LIB_DIR="$REPO_ROOT/lib"
+    export HYDRA_LIB_DIR
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/locks.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/identity.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/state_v2.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/state.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/tmux.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/git.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/lifecycle.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/events.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/spawn.sh"
+
+    session_name="$(get_session_for_branch "$branch")"
+    spawn_rollback_session "$session_name" "$branch" "$worktree_path"
+    assert_success $? "post-commit rollback succeeds"
+    if ! "$HYDRA_BIN" list --json | grep -Fq "\"branch\": \"$branch\""; then
+        assert_success 0 "post-commit rollback removes the head from active state"
+    else
+        assert_success 1 "post-commit rollback removes the head from active state"
+    fi
+    if ! tmux has-session -t "$session_name" 2>/dev/null && [ ! -d "$worktree_path" ]; then
+        assert_success 0 "post-commit rollback removes runtime resources"
+    else
+        assert_success 1 "post-commit rollback removes runtime resources"
+    fi
+
+    cleanup
+}
+
 echo "Running spawn lock rollback tests..."
 echo "================================"
-test_spawn_rolls_back_when_map_lock_held
+test_spawn_rolls_back_when_state_lock_held
+test_post_commit_rollback_retires_head
 echo "================================"
 echo "Total:  $test_count"
 echo "Passed: $pass_count"

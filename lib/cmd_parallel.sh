@@ -176,7 +176,18 @@ cmd_collision() {
         cli_error collision invalid_input "two heads are required" "run hydra collision <left> <right>"
         return 1
     fi
-    _cco_rows="$(parallel_collision_rows "$_cco_left" "$_cco_right")" || return 1
+    if ! parallel_head_load "$_cco_left" >/dev/null 2>&1; then
+        cli_error collision head_not_found "head not found: $_cco_left" "inspect active heads with hydra list"
+        return 1
+    fi
+    if ! parallel_head_load "$_cco_right" >/dev/null 2>&1; then
+        cli_error collision head_not_found "head not found: $_cco_right" "inspect active heads with hydra list"
+        return 1
+    fi
+    _cco_rows="$(parallel_collision_rows "$_cco_left" "$_cco_right")" || {
+        cli_error collision invalid_input "collision comparison failed" "choose two distinct active heads"
+        return 1
+    }
     _cco_tab="$(printf '\t')"
     if [ "$_cco_json" -eq 1 ]; then
         printf '{"schema_version":1,"ok":true,"command":"collision","data":{"left":"%s","right":"%s","findings":[' "$(json_escape "$_cco_left")" "$(json_escape "$_cco_right")"
@@ -240,7 +251,14 @@ $_cr_name$_cr_tab$_cr_range"; else _cr_ports="$_cr_name$_cr_tab$_cr_range"; fi
             _cr_json=0
             [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --json ] && [ "$_cr_action" = status ]; } || return 1
             [ $# -eq 0 ] || _cr_json=1
-            _cr_rows="$(parallel_resource_rows "$_cr_branch")" || return 1
+            if ! parallel_head_load "$_cr_branch" >/dev/null 2>&1; then
+                cli_error "resource $_cr_action" head_not_found "head not found: $_cr_branch" "inspect active heads with hydra list"
+                return 1
+            fi
+            _cr_rows="$(parallel_resource_rows "$_cr_branch")" || {
+                cli_error "resource $_cr_action" not_found "no resources recorded for $_cr_branch" "allocate resources before inspecting them"
+                return 1
+            }
             _cr_tab="$(printf '\t')"
             if [ "$_cr_action" = env ]; then
                 while IFS="$_cr_tab" read -r _cr_kind _cr_name _cr_value; do
@@ -321,7 +339,14 @@ cmd_gate() {
             _cg_json=0
             [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --json ]; } || return 1
             [ $# -eq 0 ] || _cg_json=1
-            _cg_rows="$(parallel_gate_rows "$_cg_branch")" || return 1
+            if ! parallel_head_load "$_cg_branch" >/dev/null 2>&1; then
+                cli_error "gate status" head_not_found "head not found: $_cg_branch" "inspect active heads with hydra list"
+                return 1
+            fi
+            _cg_rows="$(parallel_gate_rows "$_cg_branch")" || {
+                cli_error "gate status" unavailable "gate status could not be read for $_cg_branch" "verify durable state with hydra state verify"
+                return 1
+            }
             _cg_tab="$(printf '\t')"
             if [ "$_cg_json" -eq 1 ]; then
                 printf '{"schema_version":1,"ok":true,"command":"gate status","data":{"branch":"%s","gates":[' "$(json_escape "$_cg_branch")"

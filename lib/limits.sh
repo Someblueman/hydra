@@ -36,7 +36,7 @@ is_limit_enabled() {
 # Usage: get_active_session_count
 # Returns: Count on stdout
 get_active_session_count() {
-    if [ -z "${HYDRA_MAP:-}" ] || [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+    if ! state_has_heads; then
         printf '%s' "0"
         return 0
     fi
@@ -45,7 +45,9 @@ get_active_session_count() {
         if [ -n "$_session" ] && tmux_session_exists "$_session"; then
             _count=$((_count + 1))
         fi
-    done < "$HYDRA_MAP"
+    done <<EOF
+$(state_list_heads)
+EOF
     printf '%s' "$_count"
 }
 
@@ -109,32 +111,29 @@ get_available_capacity() {
 # Usage: _get_queue_dir
 # Returns: Queue directory path on stdout
 _get_queue_dir() {
-    if command -v hydra_get_project_id >/dev/null 2>&1; then
-        _gqd_project="$(hydra_get_project_id 2>/dev/null || true)"
-        if [ -n "$_gqd_project" ]; then
-            printf '%s' "${HYDRA_HOME:-$HOME/.hydra}/state/v2/projects/$_gqd_project/queue"
-            return 0
-        fi
-    fi
-    printf '%s' "${HYDRA_HOME:-$HOME/.hydra}/queue"
+    command -v hydra_get_project_id >/dev/null 2>&1 || {
+        echo "Error: project identity support is unavailable" >&2
+        return 1
+    }
+    _gqd_project="$(hydra_get_project_id 2>/dev/null)" || {
+        echo "Error: queue operations require an initialized Hydra project" >&2
+        return 1
+    }
+    [ -n "$_gqd_project" ] || return 1
+    printf '%s' "${HYDRA_HOME:-$HOME/.hydra}/state/v2/projects/$_gqd_project/queue"
 }
 
 _get_queue_lock() {
-    if command -v hydra_get_project_id >/dev/null 2>&1; then
-        _gql_project="$(hydra_get_project_id 2>/dev/null || true)"
-        if [ -n "$_gql_project" ]; then
-            printf 'queue_%s\n' "$_gql_project"
-            return 0
-        fi
-    fi
-    printf 'queue_legacy\n'
+    _gql_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    [ -n "$_gql_project" ] || return 1
+    printf 'queue_%s\n' "$_gql_project"
 }
 
 # Ensure queue directory exists
 # Usage: _ensure_queue_dir
 # Returns: 0 on success, 1 on failure
 _ensure_queue_dir() {
-    _qdir="$(_get_queue_dir)"
+    _qdir="$(_get_queue_dir)" || return 1
     mkdir -p "$_qdir" 2>/dev/null || return 1
 }
 
@@ -168,13 +167,13 @@ queue_spawn() {
     # Invert so higher priority sorts first under lexicographic find|sort
     _sort_pri="$(printf '%03d' $((999 - _priority)))"
 
-    _queue_lock="$(_get_queue_lock)"
+    _queue_lock="$(_get_queue_lock)" || return 1
     if ! acquire_lock "$_queue_lock" "queue append"; then
         echo "Error: Failed to acquire queue lock" >&2
         return 1
     fi
 
-    _qdir="$(_get_queue_dir)"
+    _qdir="$(_get_queue_dir)" || { release_lock "$_queue_lock"; return 1; }
     _seq_file="$_qdir/.seq"
     _seq=1
     if [ -f "$_seq_file" ]; then
@@ -190,7 +189,11 @@ queue_spawn() {
     _filename="${_sort_pri}_${_timestamp}_${_seq_fmt}_${_safe_branch}.queue"
     _filepath="$_qdir/$_filename"
 
-    cat > "$_filepath" <<EOF
+    _queue_tmp="$(mktemp_adjacent "$_filepath")" || {
+        release_lock "$_queue_lock"
+        return 1
+    }
+    cat > "$_queue_tmp" <<EOF
 branch=$_branch
 ai_tool=$_ai_tool
 group=$_group
@@ -198,6 +201,12 @@ layout=$_layout
 priority=$_priority
 requested_at=$_timestamp
 EOF
+    chmod 600 "$_queue_tmp" 2>/dev/null || true
+    if ! atomic_replace "$_filepath" "$_queue_tmp"; then
+        rm -f "$_queue_tmp"
+        release_lock "$_queue_lock"
+        return 1
+    fi
     release_lock "$_queue_lock"
     printf '%s' "$_filepath"
     return 0
@@ -207,8 +216,8 @@ EOF
 # Usage: get_queue_count
 # Returns: Count on stdout
 get_queue_count() {
-    _ensure_queue_dir
-    _qdir="$(_get_queue_dir)"
+    _ensure_queue_dir || return 1
+    _qdir="$(_get_queue_dir)" || return 1
     # Use find to count .queue files, handle empty directory
     _count="$(find "$_qdir" -maxdepth 1 -name "*.queue" -type f 2>/dev/null | wc -l | tr -d ' ')"
     printf '%s' "$_count"
@@ -223,8 +232,8 @@ list_queue() {
         _json_output="1"
     fi
 
-    _ensure_queue_dir
-    _qdir="$(_get_queue_dir)"
+    _ensure_queue_dir || return 1
+    _qdir="$(_get_queue_dir)" || return 1
 
     if [ -n "$_json_output" ]; then
         printf '{"schema_version":1,"ok":true,"command":"queue","data":{"queue":['
@@ -311,18 +320,22 @@ dequeue_spawn() {
         return 1
     fi
 
-    _ensure_queue_dir
-    _qdir="$(_get_queue_dir)"
+    _ensure_queue_dir || return 1
+    _qdir="$(_get_queue_dir)" || return 1
+    _queue_lock="$(_get_queue_lock)" || return 1
+    acquire_lock "$_queue_lock" "queue removal" || return 1
 
     for _qfile in "$_qdir"/*.queue; do
         [ -f "$_qfile" ] || continue
 
         if grep -q "^branch=$_target_branch$" "$_qfile" 2>/dev/null; then
-            rm -f "$_qfile"
+            rm -f "$_qfile" || { release_lock "$_queue_lock"; return 1; }
+            release_lock "$_queue_lock"
             return 0
         fi
     done
 
+    release_lock "$_queue_lock"
     return 1
 }
 
@@ -330,11 +343,13 @@ dequeue_spawn() {
 # Usage: clear_queue
 # Returns: Number of entries cleared on stdout
 clear_queue() {
-    _ensure_queue_dir
-    _qdir="$(_get_queue_dir)"
-
-    _count="$(get_queue_count)"
-    rm -f "$_qdir"/*.queue 2>/dev/null
+    _ensure_queue_dir || return 1
+    _qdir="$(_get_queue_dir)" || return 1
+    _queue_lock="$(_get_queue_lock)" || return 1
+    acquire_lock "$_queue_lock" "queue clear" || return 1
+    _count="$(find "$_qdir" -maxdepth 1 -name "*.queue" -type f 2>/dev/null | wc -l | tr -d ' ')"
+    rm -f "$_qdir"/*.queue 2>/dev/null || { release_lock "$_queue_lock"; return 1; }
+    release_lock "$_queue_lock"
     printf '%s' "$_count"
 }
 
@@ -343,13 +358,17 @@ clear_queue() {
 # Returns: Number of spawned sessions on stdout
 # Note: Runs best-effort, does not fail if spawns fail
 process_spawn_queue() {
-    _ensure_queue_dir
-    _qdir="$(_get_queue_dir)"
+    _ensure_queue_dir || return 1
+    _qdir="$(_get_queue_dir)" || return 1
+    _queue_lock="$(_get_queue_lock)" || return 1
+    _process_lock="${_queue_lock}_process"
+    acquire_lock "$_process_lock" "queue processing" || return 1
 
     # Check if any capacity available
     if is_limit_enabled; then
         _capacity="$(get_available_capacity)"
         if [ "$_capacity" = "0" ]; then
+            release_lock "$_process_lock"
             printf '%s' "0"
             return 0
         fi
@@ -366,6 +385,15 @@ process_spawn_queue() {
             break
         fi
 
+        acquire_lock "$_queue_lock" "queue claim" || {
+            release_lock "$_process_lock"
+            return 1
+        }
+        if [ ! -f "$_qfile" ]; then
+            release_lock "$_queue_lock"
+            continue
+        fi
+
         # Parse queue entry
         _q_branch="" _q_ai="" _q_group="" _q_layout=""
         while IFS='=' read -r _key _val; do
@@ -376,11 +404,21 @@ process_spawn_queue() {
                 layout) _q_layout="$_val" ;;
             esac
         done < "$_qfile"
+        release_lock "$_queue_lock"
 
         # Attempt spawn — keep queue file on failure for retry
         echo "Processing queued spawn: $_q_branch..." >&2
         if spawn_single "$_q_branch" "$_q_layout" "$_q_ai" "$_q_group" "" "" >/dev/null 2>&1; then
-            rm -f "$_qfile"
+            acquire_lock "$_queue_lock" "queue completion" || {
+                release_lock "$_process_lock"
+                return 1
+            }
+            rm -f "$_qfile" || {
+                release_lock "$_queue_lock"
+                release_lock "$_process_lock"
+                return 1
+            }
+            release_lock "$_queue_lock"
             _spawned=$((_spawned + 1))
             echo "  Spawned $_q_branch successfully" >&2
         else
@@ -388,5 +426,6 @@ process_spawn_queue() {
         fi
     done
 
+    release_lock "$_process_lock"
     printf '%s' "$_spawned"
 }

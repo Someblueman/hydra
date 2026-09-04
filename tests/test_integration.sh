@@ -347,11 +347,11 @@ test_hydra_home_init() {
         fi
         
         test_count=$((test_count + 1))
-        if [ -f "$HYDRA_HOME/map" ]; then
-            echo "[PASS] Map file should be created"
+        if [ ! -e "$HYDRA_HOME/map" ]; then
+            echo "[PASS] Global 1.x map should not be created"
             pass_count=$((pass_count + 1))
         else
-            echo "[FAIL] Map file should be created (path: $HYDRA_HOME/map)"
+            echo "[FAIL] Global 1.x map should not be created"
             fail_count=$((fail_count + 1))
         fi
     fi
@@ -360,99 +360,9 @@ test_hydra_home_init() {
 }
 
 # Test hydra spawn and kill cycle for issue branches
-test_issue_branch_cleanup() {
-    echo "Testing issue branch spawn and kill cycle..."
-    
-    # Only run if we're in a git repository
-    if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        echo "[WARN] Skipping issue branch test - not in a git repository"
-        return
-    fi
-    
-    # Create isolated test environment
-    setup_test_env
-    test_dir="$TEST_DIR"
+# shellcheck disable=SC1091
+. "$(dirname "$0")/integration_issue_cases.sh"
 
-    repo_parent="$test_dir/project space"
-    repo_root="$repo_parent/repo"
-    git init -q "$repo_root"
-    git -C "$repo_root" config user.email "hydra-tests@example.invalid"
-    git -C "$repo_root" config user.name "Hydra Tests"
-    git -C "$repo_root" commit --allow-empty -q -m "initial"
-    
-    # Create a test branch name that looks like an issue branch
-    test_branch="issue-999-test-cleanup-$(date +%s)"
-    expected_worktree="$repo_parent/hydra-$test_branch"
-    
-    # Skip if tmux is not available
-    if ! command -v tmux >/dev/null 2>&1; then
-        echo "[WARN] Skipping issue branch test - tmux not available"
-        cleanup_test_env "$test_dir"
-        return
-    fi
-    
-    # Create the branch and worktree
-    echo "  Creating test branch '$test_branch'..."
-    output="$(cd "$repo_root" && HYDRA_SKIP_AI=1 HYDRA_NONINTERACTIVE=1 "$HYDRA_BIN" spawn "$test_branch" 2>&1)"
-    exit_code=$?
-    
-    if [ "$exit_code" -ne 0 ]; then
-        echo "[WARN] Skipping - spawn failed (might be in non-terminal environment)"
-        cleanup_test_env "$test_dir"
-        return
-    fi
-    
-    # Check that worktree was created
-    if [ -d "$expected_worktree" ]; then
-        assert_success 0 "Worktree directory was created at expected location"
-    else
-        assert_failure 1 "Worktree directory was not created at expected location"
-    fi
-    
-    # Check that branch exists in worktree list
-    worktree_exists="$(git -C "$repo_root" worktree list | grep -c "$test_branch" || true)"
-    if [ "$worktree_exists" -gt 0 ]; then
-        assert_success 0 "Branch appears in git worktree list"
-    else
-        assert_failure 1 "Branch does not appear in git worktree list"
-    fi
-    
-    # Now kill the branch
-    echo "  Killing test branch '$test_branch'..."
-    output="$(cd "$repo_root" && HYDRA_NONINTERACTIVE=1 "$HYDRA_BIN" kill "$test_branch" 2>&1)"
-    exit_code=$?
-    echo "  Kill output: $output"
-    echo "  Kill exit code: $exit_code"
-    assert_success "$exit_code" "hydra kill should succeed"
-    
-    # Verify worktree was removed
-    if [ ! -d "$expected_worktree" ]; then
-        assert_success 0 "Worktree directory was successfully removed"
-    else
-        assert_failure 1 "Worktree directory still exists after kill"
-    fi
-    
-    # Verify branch is no longer in worktree list
-    worktree_exists="$(git -C "$repo_root" worktree list | grep -c "$test_branch" || true)"
-    if [ "$worktree_exists" -eq 0 ]; then
-        assert_success 0 "Branch no longer appears in git worktree list"
-    else
-        assert_failure 1 "Branch still appears in git worktree list after kill"
-    fi
-    
-    # Verify mapping was removed
-    if [ -f "$HYDRA_HOME/map" ]; then
-        mapping_exists="$(grep -c "$test_branch" "$HYDRA_HOME/map" 2>/dev/null || true)"
-        if [ "$mapping_exists" -eq 0 ]; then
-            assert_success 0 "Branch mapping was removed from state file"
-        else
-            assert_failure 1 "Branch mapping still exists in state file"
-        fi
-    fi
-    
-    # Clean up test environment
-    cleanup_test_env "$test_dir"
-}
 
 # Test that hydra binary is executable and has correct shebang
 test_hydra_binary() {

@@ -72,10 +72,6 @@ tui_init() {
     TUI_OFFSET=0
     TUI_ITEM_COUNT=0
     TUI_RUNNING=1
-    TUI_TAG_FILTER=""
-
-    # Initialize tags subsystem
-    tui_init_tags
 
     return 0
 }

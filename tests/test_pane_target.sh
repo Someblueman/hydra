@@ -143,20 +143,30 @@ test_send_keys_ignores_stale_snapshot() {
 test_broadcast_session_qualified_pane() {
     echo "Testing broadcast --pane session:target stays on that session..."
 
+    TEST_HOME="$(mktemp -d)"
+    HYDRA_HOME="$TEST_HOME"
+    HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
+    export HYDRA_HOME HYDRA_STATE_V2_ROOT
+
     # shellcheck disable=SC1091
     . "$HYDRA_LIB_DIR/output.sh"
     # shellcheck disable=SC1091
     . "$HYDRA_LIB_DIR/locks.sh"
     # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/identity.sh"
+    # shellcheck disable=SC1091
+    . "$HYDRA_LIB_DIR/state_v2.sh"
+    # shellcheck disable=SC1091
     . "$HYDRA_LIB_DIR/state.sh"
     # shellcheck disable=SC1091
     . "$HYDRA_LIB_DIR/cmd_session_ops.sh"
 
-    TEST_HOME="$(mktemp -d)"
-    HYDRA_HOME="$TEST_HOME"
-    HYDRA_MAP="$TEST_HOME/map"
-    export HYDRA_HOME HYDRA_MAP
-    printf '%s\n' "b1 hydra-a - - - - -" "b2 hydra-b - - - - -" > "$HYDRA_MAP"
+    TEST_PROJECT_ID=project_0123456789abcdefabcd
+    export HYDRA_HOME HYDRA_STATE_V2_ROOT TEST_PROJECT_ID
+    # shellcheck disable=SC2317,SC2329
+    hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
+    state_v2_create_head "$TEST_PROJECT_ID" b1 hydra-a - - 100 - - "$TEST_HOME/repo" >/dev/null
+    state_v2_create_head "$TEST_PROJECT_ID" b2 hydra-b - - 100 - - "$TEST_HOME/repo" >/dev/null
 
     log="$(mktemp)"
     HYDRA_TEST_TMUX_LOG="$log"

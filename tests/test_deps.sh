@@ -32,15 +32,13 @@ setup_test_env() {
     TEST_DIR="$(mktemp -d)"
     mkdir -p "$TEST_DIR"
     HYDRA_HOME="$TEST_DIR"
-    HYDRA_MAP="$TEST_DIR/map"
-    export HYDRA_HOME HYDRA_MAP
-    touch "$HYDRA_MAP"
+    export HYDRA_HOME
 }
 
 cleanup_test_env() {
     test_dir="$1"
     rm -rf "$test_dir"
-    unset HYDRA_HOME HYDRA_MAP
+    unset HYDRA_HOME
     TEST_DIR=""
 }
 
@@ -180,17 +178,14 @@ test_is_dep_complete_no_session() {
     cleanup_test_env "$test_dir"
 }
 
-test_is_dep_complete_with_mapping() {
+test_is_dep_complete_without_lifecycle_evidence() {
     echo ""
-    echo "Testing is_dep_complete with active mapping..."
+    echo "Testing is_dep_complete without lifecycle evidence..."
 
     setup_test_env
     test_dir="$TEST_DIR"
 
-    # Add a mapping (session won't actually exist, but mapping does)
-    echo "active-branch active-session - - - - -" >> "$HYDRA_MAP"
-
-    # A dead/missing tmux session is not lifecycle evidence.
+    # A missing durable lifecycle cannot satisfy a dependency.
     is_dep_complete "active-branch" 2>/dev/null
     assert_failure $? "is_dep_complete does not treat session disappearance as success"
 
@@ -257,7 +252,7 @@ test_check_circular_deps_no_deps
 test_check_circular_deps_self_reference
 test_check_circular_deps_no_cycle
 test_is_dep_complete_no_session
-test_is_dep_complete_with_mapping
+test_is_dep_complete_without_lifecycle_evidence
 test_check_deps_complete_empty
 test_check_deps_complete_dash
 test_check_deps_complete_nonexistent

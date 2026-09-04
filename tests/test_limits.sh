@@ -6,6 +6,7 @@
 test_count=0
 pass_count=0
 fail_count=0
+HYDRA_HOME="${TMPDIR:-/tmp}/hydra-limits-unused"
 
 # Source the library under test and its dependencies
 # shellcheck source=../lib/locks.sh
@@ -14,6 +15,10 @@ fail_count=0
 # shellcheck source=../lib/output.sh
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/output.sh"
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/identity.sh"
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/state_v2.sh"
 # shellcheck source=../lib/state.sh
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/state.sh"
@@ -42,13 +47,19 @@ setup_test_env() {
     # Create unique test directory
     TEST_DIR="$(mktemp -d)"
     HYDRA_HOME="$TEST_DIR"
-    HYDRA_MAP="$TEST_DIR/map"
-    export TEST_DIR HYDRA_HOME HYDRA_MAP
-    mkdir -p "$TEST_DIR/queue"
+    HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
+    TEST_PROJECT_ID=project_0123456789abcdefabcd
+    export TEST_DIR HYDRA_HOME HYDRA_STATE_V2_ROOT TEST_PROJECT_ID
     mkdir -p "$TEST_DIR/locks"
-    touch "$HYDRA_MAP"
-    # Reset state cache
-    _STATE_CACHE_LOADED=""
+    state_v2_init_project "$TEST_PROJECT_ID" "$TEST_DIR/repo"
+}
+
+# Called indirectly by the queue and state libraries.
+# shellcheck disable=SC2317,SC2329
+hydra_get_project_id() { printf '%s\n' "$TEST_PROJECT_ID"; }
+
+add_test_head() {
+    state_v2_create_head "$TEST_PROJECT_ID" "$1" "$2" "${3:--}" "${4:--}" 100 - - "$TEST_DIR/repo" >/dev/null
 }
 
 cleanup_test_env() {
@@ -57,9 +68,7 @@ cleanup_test_env() {
     fi
     TEST_DIR=""
     HYDRA_HOME=""
-    HYDRA_MAP=""
-    # Reset state cache after cleanup
-    _STATE_CACHE_LOADED=""
+    HYDRA_STATE_V2_ROOT=""
 }
 
 # =============================================================================
@@ -108,13 +117,12 @@ test_is_limit_enabled() {
 # =============================================================================
 
 test_get_active_session_count_empty() {
-    echo "Testing get_active_session_count with empty map..."
+    echo "Testing get_active_session_count with no active heads..."
 
     setup_test_env
 
-    # Empty map
     result="$(get_active_session_count)"
-    assert_equal "0" "$result" "Empty map should return 0"
+    assert_equal "0" "$result" "No active heads should return 0"
 
     cleanup_test_env
 }
@@ -124,10 +132,9 @@ test_get_active_session_count_with_sessions() {
 
     setup_test_env
 
-    # Add some sessions to map
-    echo "branch1 session1 claude - - - -" > "$HYDRA_MAP"
-    echo "branch2 session2 aider grp1 - - -" >> "$HYDRA_MAP"
-    echo "branch3 session3 gemini - - - -" >> "$HYDRA_MAP"
+    add_test_head branch1 session1 claude
+    add_test_head branch2 session2 aider grp1
+    add_test_head branch3 session3 gemini
 
     result="$(get_active_session_count)"
     assert_equal "3" "$result" "Should count all sessions"
@@ -163,8 +170,8 @@ test_would_exceed_limit_under() {
     assert_failure $? "3 sessions should not exceed limit of 5 with 0 active"
 
     # Add 2 sessions
-    echo "branch1 session1 - - - - -" > "$HYDRA_MAP"
-    echo "branch2 session2 - - - - -" >> "$HYDRA_MAP"
+    add_test_head branch1 session1
+    add_test_head branch2 session2
 
     # 2 active + 2 requested = 4, should not exceed 5
     would_exceed_limit 2
@@ -182,8 +189,8 @@ test_would_exceed_limit_over() {
     export HYDRA_MAX_SESSIONS
 
     # Add 2 sessions
-    echo "branch1 session1 - - - - -" > "$HYDRA_MAP"
-    echo "branch2 session2 - - - - -" >> "$HYDRA_MAP"
+    add_test_head branch1 session1
+    add_test_head branch2 session2
 
     # 2 active + 4 requested = 6, should exceed 5
     would_exceed_limit 4
@@ -208,11 +215,11 @@ test_get_available_capacity() {
     export HYDRA_MAX_SESSIONS
 
     result="$(get_available_capacity)"
-    assert_equal "5" "$result" "Should return 5 with empty map and limit of 5"
+    assert_equal "5" "$result" "Should return 5 with no active heads and limit of 5"
 
     # Add 2 sessions
-    echo "branch1 session1 - - - - -" > "$HYDRA_MAP"
-    echo "branch2 session2 - - - - -" >> "$HYDRA_MAP"
+    add_test_head branch1 session1
+    add_test_head branch2 session2
 
     result="$(get_available_capacity)"
     assert_equal "3" "$result" "Should return 3 with 2 active and limit of 5"
@@ -238,7 +245,7 @@ test_queue_spawn() {
     assert_equal "1" "$count" "Should have 1 queued entry"
 
     # Check file contents
-    qfile="$(find "$HYDRA_HOME/queue" -name "*.queue" -type f | head -1)"
+    qfile="$(find "$(_get_queue_dir)" -name "*.queue" -type f | head -1)"
     if [ -f "$qfile" ]; then
         grep -q "branch=feature-test" "$qfile"
         assert_success $? "Queue file should contain branch"
@@ -262,6 +269,43 @@ test_queue_spawn_multiple() {
 
     count="$(get_queue_count)"
     assert_equal "3" "$count" "Should have 3 queued entries"
+
+    cleanup_test_env
+}
+
+test_queue_atomic_and_serial_processing() {
+    echo "Testing atomic queue publication and serialized processing..."
+    setup_test_env
+
+    # shellcheck disable=SC2317,SC2329
+    ( atomic_replace() { return 1; }; queue_spawn "not-published" none "" default 50 >/dev/null 2>&1 )
+    assert_failure $? "failed atomic publication rejects the queue entry"
+    assert_equal "0" "$(get_queue_count)" "failed publication exposes no partial queue file"
+
+    queue_spawn "only-once" none "" default 50 >/dev/null
+    spawn_log="$TEST_DIR/spawn.log"
+    release_file="$TEST_DIR/release-process"
+    second_code="$TEST_DIR/second.code"
+    (
+        # shellcheck disable=SC2317,SC2329
+        spawn_single() {
+            printf 'attempt\n' >> "$spawn_log"
+            while [ ! -f "$release_file" ]; do sleep 0.05; done
+            return 1
+        }
+        HYDRA_LOCK_RETRIES=20 process_spawn_queue >/dev/null 2>&1 &
+        first_pid=$!
+        while [ ! -s "$spawn_log" ]; do sleep 0.05; done
+        ( HYDRA_LOCK_RETRIES=1 process_spawn_queue >/dev/null 2>&1; printf '%s\n' "$?" > "$second_code" ) &
+        second_pid=$!
+        sleep 0.2
+        : > "$release_file"
+        wait "$first_pid"
+        wait "$second_pid"
+    )
+    assert_equal "1" "$(wc -l < "$spawn_log" | tr -d ' ')" "concurrent processors cannot attempt the same entry"
+    assert_failure "$(sed -n '1p' "$second_code")" "a concurrent queue processor fails closed"
+    assert_equal "1" "$(get_queue_count)" "failed processing retains the queued request"
 
     cleanup_test_env
 }
@@ -344,7 +388,8 @@ test_queue_priority_order() {
     queue_spawn "high" "claude" "" "default" "90" >/dev/null
     queue_spawn "new-low" "claude" "" "default" "10" >/dev/null
 
-    order="$(find "$HYDRA_HOME/queue" -maxdepth 1 -name "*.queue" -type f | sort | while IFS= read -r f; do
+    queue_dir="$(_get_queue_dir)"
+    order="$(find "$queue_dir" -maxdepth 1 -name "*.queue" -type f | sort | while IFS= read -r f; do
         grep '^branch=' "$f" | cut -d= -f2
     done | tr '\n' ' ')"
     assert_equal "high old-low new-low " "$order" "high priority before older low; FIFO within priority"
@@ -369,6 +414,7 @@ test_would_exceed_limit_over
 test_get_available_capacity
 test_queue_spawn
 test_queue_spawn_multiple
+test_queue_atomic_and_serial_processing
 test_dequeue_spawn
 test_clear_queue
 test_list_queue_empty

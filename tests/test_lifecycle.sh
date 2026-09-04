@@ -14,6 +14,16 @@ export HYDRA_NONINTERACTIVE=1
 . "$(dirname "$0")/helpers.sh"
 # shellcheck disable=SC1091
 . "$(dirname "$0")/../lib/locks.sh"
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/output.sh"
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/identity.sh"
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/state_v2.sh"
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/events.sh"
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../lib/lifecycle.sh"
 
 cleanup() {
     tmux kill-session -t lifecycle-test 2>/dev/null || true
@@ -145,10 +155,10 @@ fi
 
 stable_instance="$(sed -n '1p' "$head_dir/current-instance")"
 stable_ended="$(sed -n '1p' "$head_dir/instances/$stable_instance/ended-at" 2>/dev/null || true)"
-try_lock state_map "test resume mapping failure"
+try_lock "state_${project_id}" "test resume state failure"
 HYDRA_LOCK_RETRIES=1 "$HYDRA_BIN" resume lifecycle-test >/dev/null 2>&1
-assert_failure $? "resume fails when compatibility mapping cannot commit"
-release_lock state_map
+assert_failure $? "resume fails when durable state cannot commit"
+release_lock "state_${project_id}"
 assert_equal "$stable_instance" "$(sed -n '1p' "$head_dir/current-instance")" "failed resume restores the prior current instance"
 assert_equal "$stable_ended" "$(sed -n '1p' "$head_dir/instances/$stable_instance/ended-at" 2>/dev/null || true)" "failed resume restores prior lifecycle metadata"
 if [ ! -f "$head_dir/instances/$stable_instance/superseded-by" ] && ! tmux has-session -t lifecycle-test 2>/dev/null; then
@@ -156,6 +166,47 @@ if [ ! -f "$head_dir/instances/$stable_instance/superseded-by" ] && ! tmux has-s
 else
     assert_success 1 "failed resume leaves no ghost successor or session"
 fi
+
+replacement_instance=instance_aaaaaaaaaaaaaaaa
+race_observed="$(
+    cp -R "$head_dir/instances/$stable_instance" "$head_dir/instances/$replacement_instance"
+    state_v2_write_scalar "$head_dir/instances/$replacement_instance/instance-id" "$replacement_instance"
+    race_hook=0
+    # shellcheck disable=SC2317,SC2329
+    acquire_lock() {
+        if [ "$race_hook" -eq 0 ]; then
+            state_v2_write_scalar "$head_dir/current-instance" "$replacement_instance"
+            race_hook=1
+        fi
+        return 0
+    }
+    # shellcheck disable=SC2317,SC2329
+    release_lock() { :; }
+    lifecycle_set_observed lifecycle-test idle race exact >/dev/null
+    sed -n '1p' "$head_dir/instances/$replacement_instance/observed-status"
+)"
+assert_equal idle "$race_observed" "observation resolves the current instance after taking the state lock"
+
+replacement_resume=instance_bbbbbbbbbbbbbbbb
+race_previous="$(
+    cp -R "$head_dir/instances/$stable_instance" "$head_dir/instances/$replacement_resume"
+    state_v2_write_scalar "$head_dir/instances/$replacement_resume/instance-id" "$replacement_resume"
+    state_v2_write_scalar "$head_dir/current-instance" "$stable_instance"
+    race_hook=0
+    # shellcheck disable=SC2317,SC2329
+    acquire_lock() {
+        if [ "$race_hook" -eq 0 ]; then
+            state_v2_write_scalar "$head_dir/current-instance" "$replacement_resume"
+            race_hook=1
+        fi
+        return 0
+    }
+    # shellcheck disable=SC2317,SC2329
+    release_lock() { :; }
+    lifecycle_new_instance lifecycle-test race-session '' resume >/dev/null
+    printf '%s\n' "$LIFECYCLE_PREVIOUS_INSTANCE"
+)"
+assert_equal "$replacement_resume" "$race_previous" "resume resolves the previous instance after taking the state lock"
 
 echo "======================================"
 echo "Test Results:"

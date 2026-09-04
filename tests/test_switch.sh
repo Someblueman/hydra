@@ -87,8 +87,14 @@ setup_test_env() {
         return 1
     }
     HYDRA_HOME="$TEST_DIR/.hydra"
-    export HYDRA_HOME
-    mkdir -p "$HYDRA_HOME"
+    export HYDRA_HOME HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
+    mkdir -p "$HYDRA_HOME" "$TEST_DIR/repo"
+    cd "$TEST_DIR/repo"
+    git init -q
+    git config user.name Test
+    git config user.email test@example.com
+    git commit --allow-empty -qm init
+    "$HYDRA_BIN" init --no-agent --trust >/dev/null
 }
 
 cleanup_test_env() {
@@ -101,6 +107,7 @@ cleanup_test_env() {
                 ;;
         esac
     done
+    cd "$(dirname "$HYDRA_BIN")"
     rm -rf "$test_dir"
     unset HYDRA_HOME
     TEST_DIR=""
@@ -108,14 +115,9 @@ cleanup_test_env() {
 
 # Create mock sessions for testing
 setup_mock_sessions() {
-    test_dir="$1"
-    HYDRA_MAP="$HYDRA_HOME/map"
-
     # Create 3 test sessions
     for i in 1 2 3; do
-        session_name="test-switch-session-$i"
-        tmux new-session -d -s "$session_name" 2>/dev/null || true
-        echo "test-branch-$i $session_name claude default" >> "$HYDRA_MAP"
+        "$HYDRA_BIN" spawn "test-switch-$i" --no-agent >/dev/null
     done
 }
 
@@ -391,7 +393,11 @@ test_direct_branch_switch() {
     fake_bin="$test_dir/bin"
     tmux_log="$test_dir/tmux.log"
     mkdir -p "$fake_bin"
-    printf '%s\n' 'feature/direct target-session none default' > "$HYDRA_HOME/map"
+    "$HYDRA_BIN" spawn feature/direct --no-agent >/dev/null
+    tmux kill-session -t feature_direct 2>/dev/null || true
+    project_id="$(sed -n '1p' .git/hydra/project-id)"
+    head_dir="$(find "$HYDRA_HOME/state/v2/projects/$project_id/heads" -type f -name branch -exec dirname {} \; | sed -n '1p')"
+    printf 'target-session\n' > "$head_dir/session"
     cat > "$fake_bin/tmux" <<'SCRIPT'
 #!/bin/sh
 case "$1" in

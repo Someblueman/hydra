@@ -1,9 +1,43 @@
 #!/bin/sh
 # Native mission-control dispatch and its escaped tabular read boundary.
 
+HYDRA_TUI_TIMEOUT_SECONDS="${HYDRA_TUI_TIMEOUT_SECONDS:-2}"
+
+tui_native_candidate_is_qualified() {
+    [ -x "$1" ] || return 1
+    case "$HYDRA_TUI_TIMEOUT_SECONDS" in ''|*[!0-9]*|0) HYDRA_TUI_TIMEOUT_SECONDS=2 ;; esac
+    _tnciq_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-tui-handshake.XXXXXX")" || return 1
+    "$1" --version > "$_tnciq_dir/stdout" 2>/dev/null &
+    _tnciq_pid=$!
+    (
+        _tnciq_sleep=""
+        trap '[ -z "$_tnciq_sleep" ] || kill "$_tnciq_sleep" 2>/dev/null; exit 0' TERM HUP INT
+        sleep "$HYDRA_TUI_TIMEOUT_SECONDS" &
+        _tnciq_sleep=$!
+        wait "$_tnciq_sleep" || exit 0
+        if kill -0 "$_tnciq_pid" 2>/dev/null; then
+            : > "$_tnciq_dir/timed-out"
+            kill "$_tnciq_pid" 2>/dev/null || true
+            sleep 1
+            kill -9 "$_tnciq_pid" 2>/dev/null || true
+        fi
+    ) >/dev/null 2>&1 &
+    _tnciq_watchdog=$!
+    if wait "$_tnciq_pid"; then _tnciq_status=0; else _tnciq_status=$?; fi
+    kill "$_tnciq_watchdog" 2>/dev/null || true
+    wait "$_tnciq_watchdog" 2>/dev/null || true
+    if [ -f "$_tnciq_dir/timed-out" ] || [ "$_tnciq_status" -ne 0 ] || \
+       [ "$(wc -l < "$_tnciq_dir/stdout" | tr -d ' ')" != 1 ] || \
+       [ "$(sed -n '1p' "$_tnciq_dir/stdout")" != "Hydra TUI $HYDRA_VERSION protocol 2" ]; then
+        rm -rf "$_tnciq_dir"
+        return 1
+    fi
+    rm -rf "$_tnciq_dir"
+}
+
 tui_native_find_binary() {
     if [ -n "${HYDRA_TUI_BIN:-}" ]; then
-        [ -x "$HYDRA_TUI_BIN" ] || return 1
+        tui_native_candidate_is_qualified "$HYDRA_TUI_BIN" || return 1
         printf '%s\n' "$HYDRA_TUI_BIN"
         return 0
     fi
@@ -11,7 +45,7 @@ tui_native_find_binary() {
         "$HYDRA_BIN_DIR/../build/hydra-tui" \
         "$HYDRA_BIN_DIR/../libexec/hydra/hydra-tui" \
         "$HYDRA_BIN_DIR/../lib/hydra/hydra-tui"; do
-        if [ -x "$_tnfb_candidate" ]; then
+        if tui_native_candidate_is_qualified "$_tnfb_candidate"; then
             printf '%s\n' "$_tnfb_candidate"
             return 0
         fi
@@ -28,12 +62,12 @@ tui_native_capabilities() {
     fi
     if [ "$_tnc_json" -eq 1 ]; then
         printf '{"schema_version":1,"ok":true,"command":"tui capabilities","data":{'
-        printf '"default_mode":"basic","basic":true,"native":%s,' "$_tnc_native"
+        printf '"default_mode":"native","fallback_mode":"basic","basic":true,"native":%s,' "$_tnc_native"
         printf '"native_path":%s,' "$(json_string_or_null "$_tnc_path")"
         printf '"observation":"bounded-polling","tmux_control_mode":false,'
         printf '"headless_fixture":true,"mutation_authority":"shell-cli"}}\n'
     else
-        printf 'default mode: basic (native remains opt-in for 1.8.0)\n'
+        printf 'default mode: native (visible basic fallback)\n'
         printf 'basic TUI: available\n'
         if [ "$_tnc_native" = true ]; then
             printf 'native TUI: available at %s\n' "$_tnc_path"
@@ -94,13 +128,32 @@ tui_native_set_profile_status() {
     esac
 }
 
+tui_native_emit_invalid_heads() {
+    _tneih_project_dir="$1"
+    [ -d "$_tneih_project_dir/heads" ] || return 0
+    for _tneih_dir in "$_tneih_project_dir"/heads/head_*; do
+        [ -d "$_tneih_dir" ] || continue
+        _tneih_id="$(basename "$_tneih_dir")"
+        _tneih_branch="$(sed -n '1p' "$_tneih_dir/branch" 2>/dev/null || true)"
+        _tneih_instance="$(sed -n '1p' "$_tneih_dir/current-instance" 2>/dev/null || true)"
+        if ! hydra_valid_id "$_tneih_id" || \
+           [ "$(sed -n '1p' "$_tneih_dir/head-id" 2>/dev/null || true)" != "$_tneih_id" ] || \
+           [ -z "$_tneih_branch" ] || \
+           [ -z "$(sed -n '1p' "$_tneih_dir/session" 2>/dev/null || true)" ] || \
+           ! hydra_valid_id "$_tneih_instance" || \
+           [ ! -d "$_tneih_dir/instances/$_tneih_instance" ] || \
+           [ "$(sed -n '1p' "$_tneih_dir/instances/$_tneih_instance/instance-id" 2>/dev/null || true)" != "$_tneih_instance" ]; then
+            printf 'R\tmalformed-state\t%s\t%s\texact\thydra state verify\n' \
+                "$(tui_native_safe_field "${_tneih_branch:-$_tneih_id}")" \
+                "$(tui_native_safe_field "$_tneih_dir")"
+        fi
+    done
+}
+
 # Protocol v2: one H row per head and one R row per recovery finding.
 # Fields never contain tabs or newlines. The first row is the protocol handshake.
 tui_native_emit_data() {
     printf 'HYDRA_TUI\t2\n'
-    [ -f "$HYDRA_MAP" ] || return 0
-
-    _tned_map_source="$(tui_native_safe_field "$HYDRA_MAP")"
     tmux_load_snapshot
     _tned_project_id="$(hydra_get_project_id 2>/dev/null || true)"
     _tned_project_dir=""
@@ -113,17 +166,14 @@ tui_native_emit_data() {
     if [ -s "$_tned_notification_source" ]; then
         _tned_notification_count="$(awk 'NF == 3 { n++ } END { print n + 0 }' "$_tned_notification_source" 2>/dev/null || printf '0\n')"
     fi
-    _tned_snapshot_rows="$(HYDRA_TUI_SESSION_SNAPSHOT="${_TMUX_SNAPSHOT_SESSIONS:-}" awk -v map="$HYDRA_MAP" '
+    _tned_state_source="$(tui_native_safe_field "$_tned_project_dir")"
+    _tned_snapshot_rows="$(state_list_heads | HYDRA_TUI_SESSION_SNAPSHOT="${_TMUX_SNAPSHOT_SESSIONS:-}" awk '
         BEGIN {
             sessions = ENVIRON["HYDRA_TUI_SESSION_SNAPSHOT"]
             count = split(sessions, names, "\n")
             for (i = 1; i <= count; i++) if (names[i] != "") live[names[i]] = 1
-            while ((getline line < map) > 0) {
-                split(line, fields, " ")
-                print ((fields[2] in live) ? "active" : "dead") " " line
-            }
-            close(map)
         }
+        { print (($2 in live) ? "active" : "dead") " " $0 }
     ')"
 
     while IFS=' ' read -r _tned_status _tned_branch _tned_session _tned_ai _tned_group _tned_created _tned_deps _tned_pr _tned_extra; do
@@ -137,8 +187,8 @@ tui_native_emit_data() {
         _tned_instance="" _tned_profile="${_tned_ai:--}" _tned_desired=unavailable
         _tned_events=0 _tned_signals=0 _tned_messages=0 _tned_claims=0 _tned_scopes=0
         _tned_queue=0 _tned_resources=0 _tned_diff=0 _tned_gates=0 _tned_approved=0
-        _tned_source="$HYDRA_MAP"
-        _tned_source_safe="$_tned_map_source"
+        _tned_source="$_tned_project_dir"
+        _tned_source_safe="$_tned_state_source"
         _tned_head_id=""
         _tned_head_dir=""
 
@@ -205,11 +255,11 @@ tui_native_emit_data() {
 
         if [ "$_tned_status" = dead ]; then
             printf 'R\tdead-session\t%s\t%s\texact\thydra doctor\n' \
-                "$_tned_branch" "$_tned_map_source"
+                "$_tned_branch" "$_tned_state_source"
         fi
         if [ -n "${_tned_extra:-}" ]; then
             printf 'R\tmalformed-state\t%s\t%s\texact\thydra state verify\n' \
-                "$_tned_branch" "$_tned_map_source"
+                "$_tned_branch" "$_tned_state_source"
         fi
         if [ "$_tned_desired" = stopping ] && [ -n "$_tned_head_dir" ]; then
             printf 'R\tteardown-failure\t%s\t%s\texact\thydra worktree doctor status\n' \
@@ -220,6 +270,10 @@ tui_native_emit_data() {
     done <<EOF
 $_tned_snapshot_rows
 EOF
+
+    if [ -n "$_tned_project_dir" ]; then
+        tui_native_emit_invalid_heads "$_tned_project_dir"
+    fi
 
     if [ -d "$HYDRA_HOME/locks" ]; then
         find "$HYDRA_HOME/locks" -name '*.lock' -type d 2>/dev/null | while IFS= read -r _tned_lock; do
@@ -252,6 +306,9 @@ tui_native_run() {
     fi
     _tnr_binary="$(tui_native_find_binary 2>/dev/null || true)"
     if [ -z "$_tnr_binary" ]; then
+        if [ -n "$_tnr_saved_stty" ]; then
+            stty "$_tnr_saved_stty" 2>/dev/null || true
+        fi
         echo "Warning: native TUI is unavailable; starting the basic TUI" >&2
         cmd_tui --basic
         return $?

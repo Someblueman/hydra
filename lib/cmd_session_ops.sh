@@ -122,18 +122,18 @@ cmd_broadcast() {
 
     # Get sessions to broadcast to
     if [ -n "$broadcast_group" ]; then
-        mappings="$(list_mappings_for_group "$broadcast_group")"
+        mappings="$(state_list_heads_for_group "$broadcast_group")"
         if [ -z "$mappings" ]; then
             echo "No sessions found in group '$broadcast_group'"
             return 1
         fi
         echo "Broadcasting to group '$broadcast_group'..."
     else
-        if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+        if ! state_has_heads; then
             echo "No active sessions"
             return 1
         fi
-        mappings="$(cat "$HYDRA_MAP")"
+        mappings="$(state_list_heads)"
         echo "Broadcasting to all sessions..."
     fi
 
@@ -225,18 +225,18 @@ cmd_wait_idle() {
 
     # Get sessions to monitor
     if [ -n "$wait_group" ]; then
-        mappings="$(list_mappings_for_group "$wait_group")"
+        mappings="$(state_list_heads_for_group "$wait_group")"
         if [ -z "$mappings" ]; then
             echo "No sessions found in group '$wait_group'"
             return 1
         fi
         echo "Waiting for group '$wait_group' to become idle..."
     else
-        if [ ! -f "$HYDRA_MAP" ] || [ ! -s "$HYDRA_MAP" ]; then
+        if ! state_has_heads; then
             echo "No active sessions"
             return 0
         fi
-        mappings="$(cat "$HYDRA_MAP")"
+        mappings="$(state_list_heads)"
         echo "Waiting for all sessions to become idle..."
     fi
 
@@ -312,4 +312,3 @@ cmd_wait_idle() {
         sleep 2
     done
 }
-

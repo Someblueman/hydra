@@ -51,7 +51,6 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'dashboard-exit' -d 'Exit the
 complete -c hydra -f -n '__fish_use_subcommand' -a 'cycle-layout' -d 'Cycle through tmux pane layouts'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'tui' -d 'Interactive terminal UI for session management'
 complete -c hydra -f -n '__fish_seen_subcommand_from tui' -l basic -d 'Use maintained shell TUI'
-complete -c hydra -f -n '__fish_seen_subcommand_from tui' -l native -d 'Use native mission control'
 complete -c hydra -f -n '__fish_seen_subcommand_from tui' -l capabilities -d 'Show TUI capability diagnostics'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'cleanup' -d 'Remove orphaned worktrees and mappings'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'pr' -d 'Create or show GitHub PR for a session'
@@ -177,12 +176,10 @@ complete -c hydra -f -n '__fish_seen_subcommand_from kill' -l all -d 'Kill all h
 complete -c hydra -f -n '__fish_seen_subcommand_from kill' -l force -d 'Skip confirmation prompt'
 complete -c hydra -f -n '__fish_seen_subcommand_from kill' -l transcript -d 'Transcript policy' -a 'none redacted full'
 
-# Complete switch command with hydra sessions
-complete -c hydra -f -n '__fish_seen_subcommand_from switch' -a '(test -f "$HYDRA_MAP"; or test -f "$HOME/.hydra/map"; and awk "{print \$1}" "$HYDRA_MAP" "$HOME/.hydra/map" 2>/dev/null)'
+# Complete switch command with active Hydra heads
+complete -c hydra -f -n '__fish_seen_subcommand_from switch' -a '(hydra list --json 2>/dev/null | tr "{" "\n" | sed -n "s/.*\\\"branch\\\": \\\"\\([^\\\"]*\\)\\\".*/\\1/p")'
 
 # Complete pr command with hydra sessions
-complete -c hydra -f -n '__fish_seen_subcommand_from pr' -a '(test -f "$HYDRA_MAP"; or test -f "$HOME/.hydra/map"; and awk "{print \$1}" "$HYDRA_MAP" "$HOME/.hydra/map" 2>/dev/null)'
+complete -c hydra -f -n '__fish_seen_subcommand_from pr' -a '(hydra list --json 2>/dev/null | tr "{" "\n" | sed -n "s/.*\\\"branch\\\": \\\"\\([^\\\"]*\\)\\\".*/\\1/p")'
 EOF
 }
-
-

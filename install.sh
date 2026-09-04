@@ -12,8 +12,8 @@ usage() {
     echo "  HYDRA_INSTALL_CORE  auto (default), never, or required" >&2
     echo "  HYDRA_BUILD_CORE=1  build the optional core from this checkout" >&2
     echo "  HYDRA_CORE_ARTIFACT offline hydra-core path with adjacent metadata" >&2
-    echo "  HYDRA_INSTALL_TUI   auto (default), never, or required" >&2
-    echo "  HYDRA_BUILD_TUI=1   build the optional native TUI from this checkout" >&2
+    echo "  HYDRA_INSTALL_TUI   auto-build when possible (default), never, or required" >&2
+    echo "  HYDRA_BUILD_TUI=1   require building the native TUI from this checkout" >&2
     echo "  HYDRA_TUI_ARTIFACT  offline hydra-tui path with adjacent metadata" >&2
     echo "" >&2
     echo "Non-root example:" >&2
@@ -245,10 +245,33 @@ TUI_CHECKSUM=""
 TUI_PLATFORM=""
 TUI_DEPENDENCIES=""
 TUI_SOURCE_REF=""
+if [ "$TUI_MODE" = never ] && [ -d "$CORE_DIR" ]; then
+    ensure_writable "$CORE_DIR"
+    for installed in hydra-tui hydra-tui.sha256 hydra-tui.platform hydra-tui.dependencies hydra-tui.source; do
+        rm -f "$CORE_DIR/$installed" "$CORE_DIR/$installed.rollback" || {
+            echo "Error: could not remove installed native TUI: $CORE_DIR/$installed" >&2
+            exit 1
+        }
+    done
+fi
 if [ "$TUI_MODE" != never ]; then
     if [ "${HYDRA_BUILD_TUI:-0}" = 1 ]; then
-        echo "Building optional native mission-control TUI..."
+        echo "Building native mission-control TUI..."
         make -C "$SCRIPT_DIR" build-tui
+    elif [ -z "${HYDRA_TUI_ARTIFACT:-}" ] && command -v make >/dev/null 2>&1; then
+        tui_compiler="${CC:-cc}"
+        tui_compiler="${tui_compiler%% *}"
+        tui_needs_build=0
+        if [ ! -x "$SCRIPT_DIR/build/hydra-tui" ] || \
+           [ "$("$SCRIPT_DIR/build/hydra-tui" --version 2>/dev/null || true)" != "Hydra TUI $HYDRA_VERSION protocol 2" ]; then
+            tui_needs_build=1
+        fi
+        if [ "$tui_needs_build" -eq 1 ] && command -v "$tui_compiler" >/dev/null 2>&1; then
+            echo "Building native mission-control TUI by default..."
+            if ! make -C "$SCRIPT_DIR" build-tui; then
+                echo "Warning: native TUI build failed; installing the basic shell fallback only" >&2
+            fi
+        fi
     fi
     if [ -n "${HYDRA_TUI_ARTIFACT:-}" ]; then
         TUI_SOURCE="$HYDRA_TUI_ARTIFACT"
@@ -262,8 +285,11 @@ if [ "$TUI_MODE" != never ]; then
                 exit 1
             fi
         done
-    elif [ -x "$SCRIPT_DIR/build/hydra-tui" ]; then
+    elif [ -x "$SCRIPT_DIR/build/hydra-tui" ] && \
+         [ "$("$SCRIPT_DIR/build/hydra-tui" --version 2>/dev/null || true)" = "Hydra TUI $HYDRA_VERSION protocol 2" ]; then
         TUI_SOURCE="$SCRIPT_DIR/build/hydra-tui"
+    elif [ -x "$SCRIPT_DIR/build/hydra-tui" ]; then
+        echo "Warning: ignoring stale local native TUI; installing the basic shell fallback only" >&2
     fi
 fi
 
@@ -333,7 +359,7 @@ if [ -n "$TUI_SOURCE" ]; then
        mv "$tui_platform_stage" "$CORE_DIR/hydra-tui.platform" && \
        mv "$tui_source_stage" "$CORE_DIR/hydra-tui.source" && \
        mv "$tui_dependencies_stage" "$CORE_DIR/hydra-tui.dependencies"; then
-        echo "Installed optional native TUI for $expected_platform"
+        echo "Installed native TUI for $expected_platform"
     else
         echo "Error: native TUI artifact replacement failed; restoring prior TUI" >&2
         for installed in hydra-tui hydra-tui.sha256 hydra-tui.platform hydra-tui.dependencies hydra-tui.source; do

@@ -15,7 +15,7 @@ case "${1:-}" in
             printf '%s\t0\t0\t0\tsh\t0\n' "$session"
         done
         ;;
-    display-message) exit 0 ;;
+    display-message) printf '%s\n' "${FAKE_TMUX_CURRENT_SESSION:-}" ;;
     has-session)
         wanted=""
         while [ $# -gt 0 ]; do

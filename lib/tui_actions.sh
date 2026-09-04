@@ -231,56 +231,6 @@ tui_action_regenerate() {
     tui_build_list
 }
 
-# Action: Kill all sessions
-# Usage: tui_action_kill_all
-tui_action_kill_all() {
-    if [ "$TUI_ITEM_COUNT" -eq 0 ]; then
-        return 0
-    fi
-
-    tui_pause_for_interaction
-
-    if [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
-        printf "%sWARNING: This will kill ALL Hydra sessions!%s\n" "$TUI_RED" "$TUI_RESET"
-        if [ -n "$TUI_CURRENT_SESSION" ]; then
-            printf "%s(Current session '%s' will be skipped)%s\n" "$TUI_YELLOW" "$TUI_CURRENT_SESSION" "$TUI_RESET"
-        fi
-        printf "Are you sure? [y/N] "
-        read -r confirm
-    else
-        confirm="y"
-    fi
-
-    case "$confirm" in
-        [yY]|[yY][eE][sS])
-            printf "\n"
-            # Kill all except current session
-            killed=0
-            skipped=0
-            while IFS='	' read -r branch session _ai _status _tag _activity _group _pr; do
-                [ -z "$branch" ] && continue
-                if [ "$session" = "$TUI_CURRENT_SESSION" ]; then
-                    skipped=1
-                    continue
-                fi
-                if kill_single_head "$branch" "$session" 2>/dev/null; then
-                    killed=$((killed + 1))
-                fi
-            done < "$TUI_TEMP_LIST"
-            printf "%s[OK] Killed %d session(s)%s\n" "$TUI_GREEN" "$killed" "$TUI_RESET"
-            if [ "$skipped" -eq 1 ]; then
-                printf "%s(Skipped current session)%s\n" "$TUI_YELLOW" "$TUI_RESET"
-            fi
-            ;;
-        *)
-            printf "\nCancelled.\n"
-            ;;
-    esac
-
-    tui_resume_after_interaction
-    tui_build_list
-}
-
 # Action: Show status
 # Usage: tui_action_status
 tui_action_status() {
@@ -289,31 +239,6 @@ tui_action_status() {
     cmd_status
 
     tui_resume_after_interaction
-}
-
-# Action: Cycle tag for selected session
-# Usage: tui_action_tag
-tui_action_tag() {
-    if [ "$TUI_ITEM_COUNT" -eq 0 ]; then
-        return 0
-    fi
-
-    # Get selected item
-    selected_line="$(tui_get_session_at "$TUI_SELECTED")"
-    if [ -z "$selected_line" ]; then
-        return 0
-    fi
-
-    branch="$(printf '%s' "$selected_line" | cut -f1)"
-    if [ -z "$branch" ]; then
-        return 0
-    fi
-
-    # Cycle the tag
-    tui_cycle_tag "$branch"
-
-    # Rebuild list to reflect changes
-    tui_build_list
 }
 
 # Action: Bulk kill selected sessions

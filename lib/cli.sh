@@ -128,14 +128,13 @@ Commands:
   doctor            Check install, dependencies, and first-run readiness
                     Options:
                       -f, --fix                Auto-fix detected issues
-  cleanup           Remove dead mappings, stale locks, and orphaned worktrees
+  cleanup           Stop dead heads and remove stale locks and orphaned worktrees
   dashboard         View all sessions in a single dashboard
                     Options:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session
-  tui               Interactive terminal UI and opt-in native mission control
+  tui               Native mission control with visible basic fallback
                     Options:
-                      --basic                  Use the maintained shell TUI (default)
-                      --native                 Use native mission control
+                      --basic                  Use the maintained shell TUI explicitly
                       --capabilities [--json]  Show TUI availability and dispatch policy
   cycle-layout      Cycle through tmux pane layouts
   queue             View and manage pending spawn queue
@@ -176,7 +175,7 @@ Examples:
 Environment:
   HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
   HYDRA_AI_COMMAND  Default AI tool (default: claude)
-  HYDRA_SKIP_AI     Legacy shell-only switch (prefer spawn --no-agent)
+  HYDRA_SKIP_AI     Non-interactive shell-only default
   HYDRA_ROOT        Override hydra installation path (for library discovery)
   HYDRA_DASHBOARD_PANES_PER_SESSION  Panes per session for dashboard (1, N, or all)
   HYDRA_MAX_SESSIONS  Maximum active sessions (default: unlimited)
@@ -193,7 +192,7 @@ EOF
 main() {
     HYDRA_JSON_REQUESTED=0
     case "${1:-}" in
-        init|capabilities|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
+        init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
             for _main_arg in "$@"; do
                 case "$_main_arg" in
                     --) break ;;
@@ -434,5 +433,3 @@ main() {
             ;;
     esac
 }
-
-

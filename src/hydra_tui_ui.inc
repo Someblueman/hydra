@@ -85,10 +85,20 @@ static const char *display_status(const struct head *head) {
     return "STOPPED";
 }
 
+static bool contains_folded(const char *text, const char *search) {
+    size_t length = strlen(search);
+    if (length == 0U) return true;
+    while (*text != '\0') {
+        if (strncasecmp(text, search, length) == 0) return true;
+        text++;
+    }
+    return false;
+}
+
 static bool head_matches(const struct head *head, const char *search) {
     if (search[0] == '\0') return true;
-    return strstr(head->branch, search) != NULL || strstr(head->session, search) != NULL ||
-           strstr(head->group, search) != NULL || strstr(head->profile, search) != NULL;
+    return contains_folded(head->branch, search) || contains_folded(head->session, search) ||
+           contains_folded(head->group, search) || contains_folded(head->profile, search);
 }
 
 static struct head *selected_head(struct app *app) {
@@ -132,21 +142,67 @@ static void move_selection(struct app *app, int direction) {
     }
 }
 
+static size_t marked_index(const struct app *app, const char *branch) {
+    size_t index;
+    for (index = 0U; index < app->marked_count; index++) {
+        if (strcmp(app->marked[index], branch) == 0) return index;
+    }
+    return MAX_HEADS;
+}
+
+static void toggle_mark(struct app *app) {
+    struct head *head = selected_head(app);
+    size_t index;
+    if (head == NULL) return;
+    index = marked_index(app, head->branch);
+    if (index < app->marked_count) {
+        app->marked_count--;
+        if (index < app->marked_count) {
+            memmove(app->marked[index], app->marked[index + 1U],
+                    (app->marked_count - index) * sizeof(app->marked[0]));
+        }
+    } else if (app->marked_count < MAX_HEADS) {
+        copy_text(app->marked[app->marked_count++], TEXT, head->branch);
+    }
+}
+
+static void select_all_visible(struct app *app) {
+    size_t index;
+    app->marked_count = 0U;
+    for (index = 0U; index < app->model.head_count; index++) {
+        if (head_matches(&app->model.heads[index], app->search)) {
+            copy_text(app->marked[app->marked_count++], TEXT, app->model.heads[index].branch);
+        }
+    }
+}
+
+static const struct head *head_for_branch(const struct app *app, const char *branch) {
+    size_t index;
+    for (index = 0U; index < app->model.head_count; index++) {
+        if (strcmp(app->model.heads[index].branch, branch) == 0) return &app->model.heads[index];
+    }
+    return NULL;
+}
+
 static void render_list(struct app *app) {
     size_t index;
     size_t visible = 0U;
     int available = app->rows - 7;
     retarget_selection(app);
-    if (app->cols < 80) linef(app, "HEADS  status       branch");
-    else linef(app, "HEADS  status      declared       observed/confidence      branch");
+    if (app->cols < 80) linef(app, "HEADS   status       branch");
+    else linef(app, "HEADS   status      declared       observed/confidence      branch");
     for (index = 0U; index < app->model.head_count && available > 0; index++) {
         const struct head *head = &app->model.heads[index];
         if (!head_matches(head, app->search)) continue;
         if (app->cols < 80) {
-            linef(app, "%c %-12s %s", index == app->selected ? '>' : ' ', display_status(head), head->branch);
+            linef(app, "%c%c %-12s %s", index == app->selected ? '>' : ' ',
+                  marked_index(app, head->branch) < app->marked_count ? '*' : ' ',
+                  display_status(head), head->branch);
         } else {
-            linef(app, "%c %-11s %-14s %-11s/%-11s %s",
-                  index == app->selected ? '>' : ' ', display_status(head),
+            linef(app, "%c%c %-11s %-14s %-11s/%-11s %s",
+                  index == app->selected ? '>' : ' ',
+                  marked_index(app, head->branch) < app->marked_count ? '*' : ' ',
+                  display_status(head),
                   head->declared[0] == '\0' ? "none" : head->declared,
                   head->observed, head->confidence, head->branch);
         }
@@ -226,134 +282,43 @@ static void render_recovery(struct app *app) {
     linef(app, "Recovery actions are suggestions only; open : and inspect before mutation.");
 }
 
+static void render_help(struct app *app) {
+    linef(app, "KEYBOARD HELP");
+    linef(app, "  j / k, arrows  move through heads");
+    linef(app, "  Enter          open selected-head detail");
+    linef(app, "  v              cycle heads, detail, coordination, recovery");
+    linef(app, "  /              search branch, session, group, or profile");
+    linef(app, "  :              search explicit local actions");
+    linef(app, "  p              toggle sanitized pane preview");
+    linef(app, "  Space / A      toggle selection / select all visible heads");
+    linef(app, "  G              assign selected heads to a group");
+    linef(app, "  x              kill selected heads (current session is skipped)");
+    linef(app, "  ?              close this help");
+    linef(app, "  q              exit and restore terminal state");
+    linef(app, "Actions include spawn, switch, kill, regenerate, dashboard, status,");
+    linef(app, "claims, collisions, scopes, queue, resources, git diff, approvals,");
+    linef(app, "and recovery inspection. Mutations run through explicit shell CLI argv.");
+}
+
 static void render(struct app *app, unsigned frame, bool headless) {
     if (headless) linef(app, "FRAME %u %dx%d", frame, app->cols, app->rows);
     else printf("\033[H\033[2J");
-    linef(app, "HYDRA MISSION CONTROL  native 1.9.0  bounded-polling  view=%s",
+    linef(app, "HYDRA MISSION CONTROL  native %s  bounded-polling  view=%s", HYDRA_TUI_VERSION,
           app->view == 0 ? "heads" : app->view == 1 ? "detail" : app->view == 2 ? "coordination" : "recovery");
     linef(app, "source confidence is explicit; no agent state is inferred");
     if (app->search[0] != '\0') linef(app, "search: %s", app->search);
-    if (app->view == 0) render_list(app);
+    if (app->help) render_help(app);
+    else if (app->view == 0) render_list(app);
     else if (app->view == 1) render_detail(app);
     else if (app->view == 2) render_coordination(app);
     else render_recovery(app);
     if (app->notice[0] != '\0') linef(app, "notice: %s", app->notice);
-    linef(app, "j/k move  Enter detail  / search  : actions  v view  p preview  q quit");
+    if (app->marked_count > 0U) linef(app, "%zu selected  x kill  G assign group", app->marked_count);
+    linef(app, "j/k move  Space mark  A all  x kill  G group  / search  : actions  ? help  q quit");
     fflush(stdout);
 }
 
-static int run_argv(struct app *app, char *const argv[]) {
-    pid_t pid;
-    int status = 0;
-    restore_terminal(app);
-    printf("\033[H\033[2J");
-    fflush(stdout);
-    if (posix_spawnp(&pid, app->hydra, NULL, NULL, argv, environ) != 0) {
-        perror("hydra action");
-        status = 1;
-    } else if (waitpid(pid, &status, 0) < 0) {
-        status = 1;
-    }
-    printf("\nPress Enter to return to Mission Control...");
-    fflush(stdout);
-    while (getchar() != '\n' && !feof(stdin)) { }
-    clearerr(stdin);
-    if (enter_raw(app) != 0) {
-        app->running = false;
-        return -1;
-    }
-    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
-}
-
-static int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) {
-    restore_terminal(app);
-    printf("\n%s", prompt);
-    fflush(stdout);
-    if (fgets(buffer, (int)size, stdin) == NULL) buffer[0] = '\0';
-    buffer[strcspn(buffer, "\r\n")] = '\0';
-    if (enter_raw(app) != 0) {
-        app->running = false;
-        return -1;
-    }
-    return 0;
-}
-
-struct palette_action { const char *name; int kind; };
-static const struct palette_action palette[] = {
-    {"switch", 1}, {"kill", 2}, {"regenerate", 3}, {"spawn", 4}, {"status", 5},
-    {"claims", 6}, {"collisions", 7}, {"scopes", 8}, {"queue", 9},
-    {"resources", 10}, {"git diff", 11}, {"approvals", 12}, {"recovery inspect", 13}
-};
-
-static void execute_palette(struct app *app, const char *query) {
-    size_t index;
-    const struct palette_action *chosen = NULL;
-    struct head *head = selected_head(app);
-    char branch[TEXT] = "";
-    if (query[0] == '\0') {
-        copy_text(app->notice, sizeof(app->notice), "action search canceled");
-        return;
-    }
-    for (index = 0U; index < sizeof(palette) / sizeof(palette[0]); index++) {
-        if (strstr(palette[index].name, query) != NULL) { chosen = &palette[index]; break; }
-    }
-    if (chosen == NULL) { copy_text(app->notice, sizeof(app->notice), "no explicit local action matched"); return; }
-    if (chosen->kind == 4) {
-        char *argv[4];
-        if (prompt_text(app, "Branch to spawn: ", branch, sizeof(branch)) != 0 || branch[0] == '\0') return;
-        argv[0] = (char *)app->hydra; argv[1] = (char *)"spawn"; argv[2] = branch; argv[3] = NULL;
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 3) {
-        char *argv[] = {(char *)app->hydra, (char *)"regenerate", NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 5) {
-        char *argv[] = {(char *)app->hydra, (char *)"status", NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 6) {
-        char *argv[] = {(char *)app->hydra, (char *)"claim", (char *)"list", NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 9) {
-        char *argv[] = {(char *)app->hydra, (char *)"queue", NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 13) {
-        char *argv[] = {(char *)app->hydra, (char *)"doctor", NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (head == NULL) { copy_text(app->notice, sizeof(app->notice), "select a head for that action"); return; }
-    if (chosen->kind == 1 || chosen->kind == 2) {
-        char *argv[] = {(char *)app->hydra, (char *)(chosen->kind == 1 ? "switch" : "kill"), head->branch, NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 7) {
-        char other[TEXT] = "";
-        char *argv[5];
-        if (prompt_text(app, "Compare with head: ", other, sizeof(other)) != 0 || other[0] == '\0') return;
-        argv[0] = (char *)app->hydra; argv[1] = (char *)"collision";
-        argv[2] = head->branch; argv[3] = other; argv[4] = NULL;
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 8) {
-        char *argv[] = {(char *)app->hydra, (char *)"scope", (char *)"show", head->branch, NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 10) {
-        char *argv[] = {(char *)app->hydra, (char *)"resource", (char *)"status", head->branch, NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 11) {
-        char *argv[] = {(char *)app->hydra, (char *)"diff", head->branch, NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 12) {
-        char *argv[] = {(char *)app->hydra, (char *)"gate", (char *)"status", head->branch, NULL};
-        (void)run_argv(app, argv);
-    }
-}
+#include "hydra_tui_actions.inc"
 
 static int read_key(int timeout_ms, char *key) {
     fd_set readfds;
@@ -425,6 +390,7 @@ static int interactive_main(struct app *app) {
     signal(SIGINT, signal_handler); signal(SIGTERM, signal_handler); signal(SIGHUP, signal_handler);
     signal(SIGPIPE, signal_handler);
     if (refresh_model(app) != 0 && app->model.head_count == 0U) return 4;
+    refresh_current_session(app);
     if (enter_raw(app) != 0) return 4;
     app->running = true;
     while (app->running && !stop_requested) {
@@ -432,6 +398,7 @@ static int interactive_main(struct app *app) {
         update_size(app);
         if (now - last_refresh >= 2) {
             (void)refresh_model(app);
+            refresh_current_session(app);
             capture_preview(app);
             last_refresh = now;
         }
@@ -448,10 +415,13 @@ static int interactive_main(struct app *app) {
         else if (key == '/') interactive_prompt(app, '/');
         else if (key == ':') interactive_prompt(app, ':');
         else if (key == 'p') { app->preview = !app->preview; capture_preview(app); }
+        else if (key == ' ') toggle_mark(app);
+        else if (key == 'A') select_all_visible(app);
+        else if (key == 'x' && app->marked_count > 0U) kill_marked_action(app);
+        else if (key == 'G' && app->marked_count > 0U) group_marked_action(app);
+        else if (key == '?') app->help = !app->help;
         else if (key == 27) handle_escape(app);
     }
     restore_terminal(app);
     return stop_signal == 0 ? 0 : 128 + stop_signal;
 }
-
-

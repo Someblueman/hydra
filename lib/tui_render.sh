@@ -9,7 +9,7 @@ tui_render_help() {
     if [ "$TUI_COLS" -lt 60 ]; then
         box_width=$((TUI_COLS - 4))
     fi
-    box_height=26
+    box_height=22
 
     # Center the box
     start_col=$(( (TUI_COLS - box_width) / 2 ))
@@ -72,15 +72,11 @@ tui_render_help() {
     tui_help_line "n" "Spawn new session (wizard)"
     tui_help_line "d" "Kill selected session"
     tui_help_line "D" "Open dashboard"
-    tui_help_line "a" "Kill all sessions"
     tui_help_line "A" "Select all sessions"
     tui_help_line "r" "Regenerate sessions"
-    tui_help_line "t" "Cycle tag (wip/review/priority)"
-    tui_help_line "T" "Filter by tag"
     tui_help_line "/" "Search (branch/session/group/ai)"
     tui_help_line "i" "Show session status"
     tui_help_line "p" "Toggle preview panel"
-    tui_help_line "f" "Toggle preview follow mode"
     tui_help_line "?" "Show this help"
     tui_help_line "SPACE" "Toggle multi-select"
     tui_help_line "x" "Bulk kill selected"
@@ -145,18 +141,9 @@ tui_render() {
     fi
 
     # Show active filters
-    if [ -n "$TUI_TAG_FILTER" ] || [ -n "$TUI_SEARCH_PATTERN" ]; then
-        filter_info=""
-        if [ -n "$TUI_TAG_FILTER" ]; then
-            filter_info="tag:$TUI_TAG_FILTER"
-        fi
-        if [ -n "$TUI_SEARCH_PATTERN" ]; then
-            if [ -n "$filter_info" ]; then
-                filter_info="$filter_info, "
-            fi
-            filter_info="${filter_info}search:\"$TUI_SEARCH_PATTERN\""
-        fi
-        printf "%s[Filter: %s] (Esc to clear)%s\n" "$TUI_YELLOW" "$filter_info" "$TUI_RESET"
+    if [ -n "$TUI_SEARCH_PATTERN" ]; then
+        printf "%s[Filter: search:\"%s\"] (Esc to clear)%s\n" \
+            "$TUI_YELLOW" "$TUI_SEARCH_PATTERN" "$TUI_RESET"
     fi
 
     # Handle empty list
@@ -164,9 +151,6 @@ tui_render() {
         if [ -n "$TUI_SEARCH_PATTERN" ]; then
             printf "\n%s  No sessions matching '%s'%s\n" "$TUI_YELLOW" "$TUI_SEARCH_PATTERN" "$TUI_RESET"
             printf "\n  Press Esc to clear search\n"
-        elif [ -n "$TUI_TAG_FILTER" ]; then
-            printf "\n%s  No sessions with tag '%s'%s\n" "$TUI_YELLOW" "$TUI_TAG_FILTER" "$TUI_RESET"
-            printf "\n  Press 'T' to change filter\n"
         else
             printf "\n%s  No active Hydra sessions%s\n" "$TUI_YELLOW" "$TUI_RESET"
             printf "\n  Press 'n' to spawn a new session\n"
@@ -211,9 +195,9 @@ tui_render() {
         printf "\n"
     fi
 
-    # Render visible items (tab-delimited: branch session ai status tag activity group pr)
+    # Render visible items (tab-delimited: branch session ai status activity group pr)
     idx=0
-    while IFS='	' read -r branch session ai status tag activity group pr; do
+    while IFS='	' read -r branch session ai status activity group pr; do
         [ -z "$branch" ] && continue
 
         # Skip items before visible range
@@ -244,25 +228,6 @@ tui_render() {
             ai_str=" ${TUI_BLUE}[$ai]${TUI_RESET}"
         fi
 
-        # Tag indicator with colors ("-" is placeholder for none)
-        tag_str=""
-        if [ -n "$tag" ] && [ "$tag" != "-" ]; then
-            case "$tag" in
-                "wip")
-                    tag_str=" ${TUI_YELLOW}[WIP]${TUI_RESET}"
-                    ;;
-                "review")
-                    tag_str=" ${TUI_BLUE}[REVIEW]${TUI_RESET}"
-                    ;;
-                "priority")
-                    tag_str=" ${TUI_RED}[PRIORITY]${TUI_RESET}"
-                    ;;
-                *)
-                    tag_str=" ${TUI_DIM}[$tag]${TUI_RESET}"
-                    ;;
-            esac
-        fi
-
         group_str=""
         if [ -n "$group" ] && [ "$group" != "-" ]; then
             group_str=" ${TUI_DIM}[$group]${TUI_RESET}"
@@ -279,7 +244,7 @@ tui_render() {
         fi
 
         # Build display line
-        line="$status_str $branch -> $session$ai_str$tag_str$group_str$pr_str$current_str"
+        line="$status_str $branch -> $session$ai_str$group_str$pr_str$current_str"
 
         # Multi-select indicator
         select_marker="  "
@@ -310,7 +275,7 @@ tui_render() {
         _selected_branch=""
         _selected_session=""
         _selected_status=""
-        while IFS='	' read -r _b _s _a _st _tag _act _grp _pr; do
+        while IFS='	' read -r _b _s _a _st _act _grp _pr; do
             if [ "$_selected_idx" -eq "$TUI_SELECTED" ]; then
                 _selected_branch="$_b"
                 _selected_session="$_s"
@@ -355,11 +320,6 @@ tui_render() {
     _footer_extra=""
     if [ "$TUI_PREVIEW_VISIBLE" -eq 1 ]; then
         _footer_extra=" | p=hide"
-        if [ "$TUI_PREVIEW_FOLLOW" -eq 1 ]; then
-            _footer_extra="${_footer_extra} | f=follow:on"
-        else
-            _footer_extra="${_footer_extra} | f=follow:off"
-        fi
     else
         _footer_extra=" | p=preview"
     fi

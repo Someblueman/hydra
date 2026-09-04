@@ -9,5 +9,17 @@ case "${1:-}:${2:-}" in
             cat "$fixture_dir/native-v2.tsv"
         fi
         ;;
+    dashboard:)
+        printf '%s\n' "FAKE DASHBOARD"
+        ;;
+    spawn:*)
+        printf 'FAKE SPAWN %s\n' "$*"
+        ;;
+    group:create)
+        printf 'FAKE GROUP %s\n' "$*"
+        ;;
+    kill:*)
+        printf 'FAKE KILL %s\n' "$*"
+        ;;
     *) exit 1 ;;
 esac

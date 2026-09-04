@@ -1,17 +1,24 @@
 /* Model parsing, adapter refresh, and pane preview. */
 
 static void copy_text(char *dst, size_t size, const char *src) {
+    size_t length = 0U;
     if (size == 0U) return;
-    snprintf(dst, size, "%s", src == NULL ? "" : src);
+    if (src != NULL) {
+        while (length + 1U < size && src[length] != '\0') length++;
+        memmove(dst, src, length);
+    }
+    dst[length] = '\0';
 }
 
-static unsigned parse_unsigned(const char *value) {
+static bool parse_unsigned(const char *value, unsigned *result) {
     char *end = NULL;
     unsigned long parsed;
+    if (value == NULL) return false;
     errno = 0;
-    parsed = strtoul(value == NULL ? "" : value, &end, 10);
-    if (errno != 0 || end == value || *end != '\0' || parsed > 1000000UL) return 0U;
-    return (unsigned)parsed;
+    parsed = strtoul(value, &end, 10);
+    if (errno != 0 || end == value || *end != '\0' || parsed > 1000000UL) return false;
+    *result = (unsigned)parsed;
+    return true;
 }
 
 static size_t split_fields(char *line, char **fields, size_t capacity) {
@@ -70,23 +77,27 @@ static int load_model_stream(FILE *input, struct model *model, char *error, size
             copy_text(head->observed, sizeof(head->observed), fields[9]);
             copy_text(head->confidence, sizeof(head->confidence), fields[10]);
             copy_text(head->instance, sizeof(head->instance), fields[11]);
-            head->events = parse_unsigned(fields[12]);
-            head->signals = parse_unsigned(fields[13]);
-            head->messages = parse_unsigned(fields[14]);
-            head->claims = parse_unsigned(fields[15]);
-            head->scopes = parse_unsigned(fields[16]);
-            head->queue = parse_unsigned(fields[17]);
-            head->resources = parse_unsigned(fields[18]);
-            head->diff = parse_unsigned(fields[19]);
-            head->gates = parse_unsigned(fields[20]);
-            head->approved = parse_unsigned(fields[21]);
+            if (!parse_unsigned(fields[12], &head->events) ||
+                !parse_unsigned(fields[13], &head->signals) ||
+                !parse_unsigned(fields[14], &head->messages) ||
+                !parse_unsigned(fields[15], &head->claims) ||
+                !parse_unsigned(fields[16], &head->scopes) ||
+                !parse_unsigned(fields[17], &head->queue) ||
+                !parse_unsigned(fields[18], &head->resources) ||
+                !parse_unsigned(fields[19], &head->diff) ||
+                !parse_unsigned(fields[20], &head->gates) ||
+                !parse_unsigned(fields[21], &head->approved) ||
+                !parse_unsigned(fields[28], &head->notifications)) {
+                copy_text(error, error_size, "native data contains an invalid numeric field");
+                free(line);
+                return -1;
+            }
             copy_text(head->desired, sizeof(head->desired), fields[22]);
             copy_text(head->source, sizeof(head->source), fields[23]);
             copy_text(head->head_id, sizeof(head->head_id), fields[24]);
             copy_text(head->adapter, sizeof(head->adapter), fields[25]);
             copy_text(head->adapter_confidence, sizeof(head->adapter_confidence), fields[26]);
             copy_text(head->adapter_source, sizeof(head->adapter_source), fields[27]);
-            head->notifications = parse_unsigned(fields[28]);
             copy_text(head->notification_source, sizeof(head->notification_source), fields[29]);
         } else if (count == 6U && strcmp(fields[0], "R") == 0) {
             struct recovery *recovery;
@@ -231,6 +242,50 @@ static int refresh_model(struct app *app) {
     return 0;
 }
 
+static void refresh_current_session(struct app *app) {
+    int pipefd[2], status = 0, ready, attempt;
+    pid_t pid;
+    ssize_t length = 0;
+    posix_spawn_file_actions_t actions;
+    char output[TEXT] = "";
+    char *argv[] = {(char *)"tmux", (char *)"display-message", (char *)"-p",
+                    (char *)"#{session_name}", NULL};
+    struct timeval timeout = {1, 0};
+    struct timespec delay = {0, 50000000L};
+    app->current_session[0] = '\0';
+    if (getenv("TMUX") == NULL || pipe(pipefd) != 0) return;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addclose(&actions, pipefd[0]);
+    posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
+    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addclose(&actions, pipefd[1]);
+    if (posix_spawnp(&pid, "tmux", &actions, NULL, argv, environ) != 0) {
+        posix_spawn_file_actions_destroy(&actions);
+        close(pipefd[0]); close(pipefd[1]); return;
+    }
+    posix_spawn_file_actions_destroy(&actions);
+    close(pipefd[1]);
+    {
+        fd_set readfds;
+        FD_ZERO(&readfds); FD_SET(pipefd[0], &readfds);
+        ready = select(pipefd[0] + 1, &readfds, NULL, NULL, &timeout);
+    }
+    if (ready > 0) length = read(pipefd[0], output, sizeof(output) - 1U);
+    close(pipefd[0]);
+    for (attempt = 0; attempt < 20; attempt++) {
+        ready = waitpid(pid, &status, WNOHANG);
+        if (ready == pid) break;
+        if (ready < 0 && errno != EINTR) break;
+        (void)nanosleep(&delay, NULL);
+    }
+    if (ready != pid) { (void)kill(pid, SIGKILL); (void)waitpid(pid, &status, 0); }
+    if (length > 0 && ready == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        output[length] = '\0';
+        output[strcspn(output, "\r\n")] = '\0';
+        copy_text(app->current_session, sizeof(app->current_session), output);
+    }
+}
+
 static void capture_preview(struct app *app) {
     int pipefd[2], status = 0, waited;
     pid_t pid;
@@ -296,5 +351,3 @@ static void capture_preview(struct app *app) {
         copy_text(app->preview_text, sizeof(app->preview_text), timed_out ? "preview timed out" : "preview unavailable");
     }
 }
-
-
