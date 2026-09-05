@@ -54,7 +54,7 @@ struct app {
     struct model model;
     const char *hydra;
     size_t selected, recovery_selected;
-    int view;
+    int view, theme;
     int hit_rows[MAX_HEADS], hit_cols, hit_height, hit_view;
     size_t hit_items[MAX_HEADS], hit_count;
     bool hit_tabs;

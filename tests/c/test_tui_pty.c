@@ -117,7 +117,8 @@ static int open_session(struct session *session, const char *tui, const char *hy
             dup2(session->slave, STDERR_FILENO) < 0) _exit(121);
         if (session->slave > STDERR_FILENO) close(session->slave);
         setenv("TERM", "xterm-256color", 1);
-        setenv("NO_COLOR", "1", 1);
+        if (getenv("HYDRA_TEST_COLOR") != NULL) unsetenv("NO_COLOR");
+        else setenv("NO_COLOR", "1", 1);
         snprintf(path, sizeof(path), "%s:%s", fake_bin, old_path == NULL ? "" : old_path);
         setenv("PATH", path, 1);
         execl(tui, tui, "--hydra", hydra, (char *)NULL);
@@ -214,6 +215,7 @@ static void close_session(struct session *session) {
 }
 
 #include "test_tui_mouse.inc"
+#include "test_tui_themes.inc"
 
 static void test_small_list(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
@@ -417,6 +419,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     printf("Running native TUI pseudo-terminal tests...\n");
+    test_themes(argv[1], argv[2], argv[3]);
     test_mouse(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);

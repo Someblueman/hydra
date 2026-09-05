@@ -160,6 +160,15 @@ else
 fi
 contains "feature-live" "$test_root/no-color.out" "narrow head list preserves status and branch identity"
 
+HYDRA_TUI_THEME=dark "$tui" --headless-fixture "$fixture" --size 54x12 > "$test_root/theme.out"
+cmp -s "$test_root/theme.out" "$test_root/no-color.out"
+assert_success $? "themes preserve headless layout and status text"
+HYDRA_TUI_THEME=invalid "$tui" --theme light --headless-fixture "$fixture" > /dev/null
+assert_success $? "explicit theme overrides the environment"
+"$tui" --theme invalid --headless-fixture "$fixture" > /dev/null 2> "$test_root/theme-error"
+assert_equal "2" "$?" "unknown theme fails before entering terminal mode"
+contains "terminal, dark, or light" "$test_root/theme-error" "invalid theme names explain supported choices"
+
 broken_pipe="$test_root/broken-pipe"
 mkfifo "$broken_pipe"
 "$tui" --headless-fixture "$fixture" --size 120x40 --frames 100 > "$broken_pipe" &
