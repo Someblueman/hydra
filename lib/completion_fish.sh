@@ -9,6 +9,13 @@ generate_fish_completion() {
 # Fish completion for hydra
 
 # Complete commands
+complete -c hydra -f -n '__fish_use_subcommand' -a 'remote' -d 'Manage OpenSSH aliases'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'fleet' -d 'Inspect trusted remote installations'
+complete -c hydra -f -n '__fish_seen_subcommand_from remote' -a 'add remove list'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet' -a 'handshake list doctor bootstrap package init spawn signal cancel workflow attach export import reconcile watch tui'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet' -l json
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet' -l jobs -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet' -l timeout -r
 complete -c hydra -f -n '__fish_use_subcommand' -a 'spawn' -d 'Create a new worktree and tmux session'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'init' -d 'Initialize project identity, trust, profile, and worktree root'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'agent' -d 'Manage agent profiles'

@@ -63,39 +63,6 @@ smallest coherent scope and its acceptance boundaries, then release it when read
 Priority may change with observed use. The numbered priorities build on fleet
 transport rather than expanding the pilot into a distributed scheduler.
 
-### Fleet pilot
-
-Observe and coordinate trusted Hydra installations over SSH using stable local
-contracts, without introducing a server or shared runtime database.
-
-#### Candidate scope
-
-- [ ] Add remote aliases that defer host resolution to OpenSSH.
-- [ ] Add a remote handshake exposing Hydra version, protocol versions,
-      capabilities, project mappings, and native availability.
-- [ ] Add explicit bootstrap of a pinned compatible shell Hydra on a trusted host;
-      Git and tmux remain prerequisites.
-- [ ] Add bounded-parallel, read-only fleet list and doctor aggregation.
-- [ ] Add remote attach through ordinary `ssh -t ... tmux attach` behavior.
-- [ ] Add explicit remote spawn, signal, cancel, and workflow operations only for
-      compatible capabilities.
-- [ ] Add per-host timeouts, offline state, partial results, and cancellation.
-- [ ] Reuse SSH multiplexing when configured or explicitly enabled.
-- [ ] Add a native TUI fleet view only after the CLI protocol is stable.
-- [ ] Add export/import for declarative project configuration and historical run
-      bundles, excluding live tmux mappings and host-local locks.
-- [ ] Add wake/reconcile behavior after sleep or network loss.
-
-#### Acceptance boundaries
-
-- Host-key failures, authentication failures, timeouts, partial outages, and version
-  mismatch are distinct machine-readable outcomes.
-- One offline host cannot block local or other-host visibility beyond its timeout.
-- Remote mutations fail closed when the required capability is unavailable.
-- No live state file is treated as authoritative on two hosts.
-- Remote arguments survive spaces and metacharacters without shell injection.
-- Sleep and reconnect reconcile state without losing local work.
-
 ### Candidate features
 
 Select these priorities in dependency order, with independently useful scope.
@@ -294,6 +261,8 @@ Delivered work is intentionally absent from this roadmap. Use these records inst
 - [CHANGELOG.md](../CHANGELOG.md) for shipped features and compatibility changes;
 - [CONTRACTS.md](CONTRACTS.md), [STATE.md](STATE.md), [EVENTS.md](EVENTS.md), and
   [AUTOMATION.md](AUTOMATION.md) for current local interfaces;
+- [FLEET.md](FLEET.md) and [FLEET_ACCEPTANCE.md](FLEET_ACCEPTANCE.md) for the
+  implemented fleet pilot awaiting release;
 - [workflows.md](workflows.md) for workflow and integration behavior;
 - [NATIVE_CORE.md](NATIVE_CORE.md) and [NATIVE_TUI.md](NATIVE_TUI.md) for optional
   native behavior;

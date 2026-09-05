@@ -6,7 +6,7 @@ static int parse_size(const char *value, int *cols, int *rows) {
 }
 
 static void usage(FILE *out) {
-    fputs("usage: hydra-tui [--version|--protocol-version|--hydra PATH|--headless-fixture FILE --size COLSxROWS --frames N [--view heads|detail|coordination|recovery]]\n", out);
+    fputs("usage: hydra-tui [--version|--protocol-version|--diagnostics|--hydra PATH|--headless-fixture FILE --size COLSxROWS --frames N [--view heads|detail|coordination|recovery]]\n", out);
 }
 
 int main(int argc, char **argv) {
@@ -27,6 +27,7 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[index], "--protocol-version") == 0) {
             printf("%d\n", HYDRA_TUI_PROTOCOL); return 0;
         } else if (strcmp(argv[index], "--hydra") == 0 && index + 1 < argc) app.hydra = argv[++index];
+        else if (strcmp(argv[index], "--fleet") == 0) app.fleet = true;
         else if (strcmp(argv[index], "--headless-fixture") == 0 && index + 1 < argc) fixture = argv[++index];
         else if (strcmp(argv[index], "--size") == 0 && index + 1 < argc) {
             if (parse_size(argv[++index], &app.cols, &app.rows) != 0) { usage(stderr); return 2; }
@@ -39,7 +40,8 @@ int main(int argc, char **argv) {
             else if (strcmp(view, "coordination") == 0) app.view = 2;
             else if (strcmp(view, "recovery") == 0) app.view = 3;
             else return 2;
-        } else if (strcmp(argv[index], "--no-color") == 0) app.no_color = true;
+        } else if (strcmp(argv[index], "--diagnostics") == 0) { app.diagnostics = true; app.view = 1; }
+        else if (strcmp(argv[index], "--no-color") == 0) app.no_color = true;
         else { usage(stderr); return 2; }
     }
     if (fixture != NULL) {

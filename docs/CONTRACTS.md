@@ -120,3 +120,11 @@ a recognized shell pane; `--force` or `--pane` is required to target anything el
 Source and prefix installs provide `bin/hydra`, `lib/hydra/*.sh`, and an optional
 qualified `hydra-tui`. Core shell operation requires POSIX `sh`, Git, and tmux 3.0 or
 newer on supported macOS and Linux systems. See [SUPPORT.md](SUPPORT.md).
+
+## Fleet pilot (unreleased)
+
+[Fleet protocol 1](FLEET.md) is an optional C/OpenSSH coordinator. Its one-request
+stdin JSON boundary negotiates capabilities before mutations, transports argv
+without shell interpolation, and delegates head/workflow mutations to the local
+shell CLI. Fleet's alias, package, and inert bundle stores are distinct from live
+state v2. Lost mutation responses never cause automatic replay.

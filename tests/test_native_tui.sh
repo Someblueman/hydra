@@ -79,33 +79,57 @@ assert_equal "2" "$(grep -c '^FRAME ' "$test_root/heads.out")" "explicit frame b
 contains "LIVE" "$test_root/heads.out" "live state is distinct"
 contains "STALE" "$test_root/heads.out" "stale state is distinct"
 contains "UNAVAILABLE" "$test_root/heads.out" "unavailable state is distinct"
-contains "done" "$test_root/heads.out" "declared state is shown"
-contains "reported" "$test_root/heads.out" "observed state carries confidence"
+if grep -Eq 'instance_|source:|confidence|bounded-polling' "$test_root/heads.out"; then
+    assert_success 1 "default list hides internal diagnostics"
+else
+    assert_success 0 "default list hides internal diagnostics"
+fi
 
 "$tui" --headless-fixture "$fixture" --size 100x28 --frames 1 --view detail > "$test_root/detail.out"
-contains "events: 12   signals: 2   messages: 3   gates: 2 (1 approved)" "$test_root/detail.out" "event signal message and gate summaries render"
-contains "adapter: none   confidence: verified-local-help" "$test_root/detail.out" "adapter capability and confidence are explicit"
-contains "notifications: 2 configured; delivery delegated" "$test_root/detail.out" "notification configuration and responsibility are explicit"
-contains "lifecycle source: /tmp/hydra/state/head_live" "$test_root/detail.out" "dashboard state links to its source record"
-
-"$tui" --headless-fixture "$fixture" --size 80x24 --frames 1 --view coordination > "$test_root/coordination.out"
-contains "COORDINATION" "$test_root/coordination.out" "coordination view renders"
-contains "claims scopes queue resources diff gates" "$test_root/coordination.out" "coordination view names existing contracts"
-contains "selected sources (exact):" "$test_root/coordination.out" "coordination aggregates declare source confidence"
-contains "inspect claims: hydra claim list" "$test_root/coordination.out" "claims link to an inspectable source command"
-contains "inspect scopes: hydra scope show feature-live" "$test_root/coordination.out" "scopes link to an inspectable source command"
-contains "inspect gates: hydra gate status feature-live" "$test_root/coordination.out" "gates link to an inspectable source command"
-contains "inspect queue: hydra queue" "$test_root/coordination.out" "queue links to an inspectable source command"
-contains "inspect resources: hydra resource status feature-live" "$test_root/coordination.out" \
-    "resources link to an inspectable source command"
-contains "inspect diff: hydra diff feature-live" "$test_root/coordination.out" "diff links to an inspectable source command"
-
-"$tui" --headless-fixture "$fixture" --size 54x12 --frames 1 --view recovery > "$test_root/recovery.out"
+contains "Changes     4" "$test_root/detail.out" "details summarize actionable work"
+contains "Reported outcome: done" "$test_root/detail.out" "task outcome is distinct from session status"
+if grep -Eq 'instance_|lifecycle source:|adapter source:' "$test_root/detail.out"; then
+    assert_success 1 "default details hide identifiers and source paths"
+else
+    assert_success 0 "default details hide identifiers and source paths"
+fi
+"$tui" --headless-fixture "$fixture" --size 100x28 --diagnostics > "$test_root/diagnostics.out"
+contains "lifecycle source: /tmp/hydra/state/head_live" "$test_root/diagnostics.out" "diagnostics retain inspectable sources"
+contains "confidence: verified-local-help" "$test_root/diagnostics.out" "diagnostics retain evidence confidence"
+"$tui" --headless-fixture "$fixture" --size 80x24 --view coordination > "$test_root/coordination.out"
+contains "Gates       1 of 2 approved" "$test_root/coordination.out" "coordination focuses on selected head"
+"$tui" --headless-fixture "$fixture" --size 54x12 --view recovery > "$test_root/recovery.out"
 contains "RECOVERY BOARD" "$test_root/recovery.out" "narrow recovery board renders"
 contains "dead-session" "$test_root/recovery.out" "dead sessions are recoverable findings"
 contains "stale-lock" "$test_root/recovery.out" "stale locks are recoverable findings"
 contains "orphan-worktree" "$test_root/recovery.out" "orphan worktrees are recoverable findings"
 contains "teardown-failure" "$test_root/recovery.out" "teardown failures are recoverable findings"
+for view in heads detail coordination recovery; do
+    "$tui" --headless-fixture "$fixture" --size 40x10 --view "$view" > "$test_root/bounded.out"
+    assert_equal "11" "$(wc -l < "$test_root/bounded.out" | tr -d ' ')" "$view fits ten rows plus frame marker"
+    awk 'length > 39 {exit 1}' "$test_root/bounded.out"
+    assert_success $? "$view respects terminal width"
+    tail -n 1 "$test_root/bounded.out" > "$test_root/footer.out"
+    contains "? help" "$test_root/footer.out" "$view keeps actions visible"
+done
+
+# Column separators and panel edges must be invariant across varying values.
+awk 'BEGIN {FS = OFS = "\t"}
+$1 == "H" && !changed++ {for (i = 0; i < 120; i++) { $2 = $2 "x"; $4 = $4 "y" }}
+{print}' "$fixture" > "$test_root/columns.tsv"
+"$tui" --headless-fixture "$test_root/columns.tsv" --size 100x24 > "$test_root/columns.out"
+awk '
+/^\| [ >*][ *] [^ ]/ {
+    if (length != 99) exit 1
+    positions = ""
+    for (i = 1; i <= length; i++) if (substr($0, i, 1) == "|") positions = positions ":" i
+    if (rows++ && positions != expected) exit 1
+    expected = positions
+}
+END { if (rows != 4) exit 1 }
+' "$test_root/columns.out"
+assert_success $? "table headers, cells, and borders have identical fixed columns"
+contains "+- Heads" "$test_root/columns.out" "head list is enclosed in a named panel"
 
 printf 'WRONG\t1\n' > "$test_root/bad.tsv"
 "$tui" --headless-fixture "$test_root/bad.tsv" --size 80x24 > /dev/null 2>&1
@@ -134,7 +158,7 @@ if cmp -s "$test_root/no-color.out" "$test_root/no-color-option.out"; then
 else
     assert_success 1 "environment and explicit no-color modes preserve identical status language"
 fi
-contains ">  LIVE         feature-live" "$test_root/no-color.out" "narrow head list preserves status and branch identity"
+contains "feature-live" "$test_root/no-color.out" "narrow head list preserves status and branch identity"
 
 broken_pipe="$test_root/broken-pipe"
 mkfifo "$broken_pipe"
@@ -273,6 +297,12 @@ while [ "$change_index" -lt 20 ]; do
 done
 wait "$change_pid"
 assert_equal "20" "$change_index" "changing state remains a complete native/basic snapshot"
+
+"$tui" --fleet --headless-fixture "$repo_root/tests/fixtures/tui/fleet-v1.tsv" --size 100x24 > "$test_root/fleet.txt"
+contains 'DESIRED' "$test_root/fleet.txt" 'fleet labels durable desired state explicitly'
+contains 'ovh' "$test_root/fleet.txt" 'fleet identifies remote hosts in their own column'
+contains 'feature' "$test_root/fleet.txt" 'fleet identifies the remote branch'
+contains 'a attach  c interrupt' "$test_root/fleet.txt" 'fleet advertises only remote-safe actions'
 
 printf '\nTests: %d, Passed: %d, Failed: %d\n' "$test_count" "$pass_count" "$fail_count"
 [ "$fail_count" -eq 0 ]

@@ -32,6 +32,12 @@ Commands:
   spawn --pr <#>    Create a head from an existing GitHub PR
   init              Initialize project identity, trust, profile, and worktree root
   agent             List, show, diagnose, or initialize agent profiles
+  remote            Manage OpenSSH aliases: add NAME [USER@]SSH_ALIAS, remove NAME, list
+  fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
+                    Commands: list, doctor, handshake, bootstrap, package, init, spawn,
+                              signal, cancel, workflow, attach, export, import,
+                              reconcile, watch, tui (see fleet help)
+                    Options: --project PATH, --instance ID, --jobs 1-16, --timeout 1-300
   capabilities      Print machine-readable Hydra and agent capabilities
   workflow          Run or inspect finite, recoverable workflow definitions
                     Usage: hydra workflow list
@@ -192,7 +198,7 @@ EOF
 main() {
     HYDRA_JSON_REQUESTED=0
     case "${1:-}" in
-        init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
+        remote|fleet|init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
             for _main_arg in "$@"; do
                 case "$_main_arg" in
                     --) break ;;
@@ -219,6 +225,13 @@ main() {
         agent)
             shift
             cmd_agent "$@"
+            ;;
+        fleet-local)
+            shift
+            cmd_fleet_local "$@"
+            ;;
+        remote|fleet)
+            cmd_fleet_dispatch "$@"
             ;;
         capabilities)
             shift

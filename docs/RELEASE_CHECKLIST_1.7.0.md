@@ -1,5 +1,10 @@
 # Hydra 1.7.0 release qualification
 
+> Historical qualification document, retained as written for this release.
+> Unchecked items below are not a current release-status tracker. See the
+> [published releases](https://github.com/Someblueman/hydra/releases) for publication
+> status and the [rolling release checklist](RELEASE_CHECKLIST.md) for new releases.
+
 This checklist records local qualification on 2026-08-30 from
 `feature/1.7.0-release-closeout`. It does not claim a tag, hosted release, or hosted
 Linux/macOS CI run before those publication steps occur.

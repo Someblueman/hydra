@@ -31,25 +31,32 @@ instead of becoming an unqualified event authority.
 
 ## Views and confidence
 
-The head list and detail view keep declared outcome, observed status, observation
-confidence, desired state, and liveness separate. The renderer labels stale and
-unavailable state explicitly and never turns pane activity or process existence
-into an agent-completion claim.
+The head list puts branch identity first, followed by session status. Wider
+terminals also show the agent and reported outcome. Session liveness never implies
+agent completion; stale and unavailable sessions remain explicit. Fleet lists use
+host-qualified names and label **desired state**, without claiming live activity.
 
-The coordination view summarizes events, signals, messages, claims, scopes, queued
-work, allocated resources, changed files, gates, and approvals. The action palette
-opens the existing shell views for claims, collisions, scopes, queue, resources,
-Git diff, and gates. Every detail names its inspectable state record.
+Details focus on agent, session, reported outcome, changed files, messages, and
+gates. `p` opens terminal output in the detail view. `d` opens diagnostics with
+raw state, confidence, adapter information, source paths, and instance identifiers.
+These fields remain inspectable without crowding the everyday views.
 
-The recovery board reports evidence-backed dead sessions, malformed state records,
-stale same-host locks, orphan worktrees, interrupted lifecycle state, and teardown
-failures. Suggestions are inspect-first commands; recovery does not run
-automatically.
+Coordination focuses on the selected head's changes, gates, scopes, queue, and
+resources. The action palette opens the corresponding shell commands. Recovery
+lists findings; use `j/k` to select one and `d` to inspect its source and suggested
+command. Recovery never runs automatically.
 
-Adapter capability and confidence come from the selected recorded profile and link
-to `hydra capabilities --json` or the custom profile directory. The configured
-notification count and source file are shown while delivery remains delegated to
-the shell lifecycle path.
+The title bar and view navigation sit above a bordered content panel. Lists use
+fixed, padded columns with visible separators and a selected-head summary below
+the table on larger terminals; narrower terminals show fewer
+columns. Long values are clipped within their own cells and remain available in
+details. Selected rows have a full-width highlight; unavailable local sessions
+use a warning color. Details separate identity, work summary, and terminal output
+into named areas.
+
+Rendering respects terminal height and reserves the footer for actions. Long head
+and recovery lists follow the selection. Color highlights the title and selected
+row; selection markers and labels remain usable with `NO_COLOR` or `--no-color`.
 
 ## Keyboard map
 
@@ -60,7 +67,9 @@ the shell lifecycle path.
 | `v` | Cycle heads, detail, coordination, and recovery views |
 | `/` | Search branch, session, group, or profile |
 | `:` | Search explicit local actions |
-| `p` | Toggle the sanitized selected-pane preview |
+| `p` | Open details and toggle sanitized terminal output |
+| `d` | Toggle diagnostics for the selected head or recovery finding |
+| `Esc` | Return to heads and clear search, help, and diagnostics |
 | `Space` / `A` | Toggle selection / select all visible heads |
 | `x` | Kill selected heads through the shell CLI; skip the current tmux session |
 | `G` | Assign selected heads to a group through the shell CLI |

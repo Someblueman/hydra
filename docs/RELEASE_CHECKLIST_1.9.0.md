@@ -1,5 +1,10 @@
 # Hydra 1.9.0 release checklist
 
+> Historical qualification document, retained as written for this release.
+> Unchecked items below are not a current release-status tracker. See the
+> [published releases](https://github.com/Someblueman/hydra/releases) for publication
+> status and the [rolling release checklist](RELEASE_CHECKLIST.md) for new releases.
+
 This checklist separates the implemented candidate and local qualification from Git
 publication. Nothing in the workflow or integration feature pushes, merges a hosted
 PR, tags, or publishes a release.

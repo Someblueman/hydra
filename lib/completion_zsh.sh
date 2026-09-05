@@ -21,6 +21,12 @@ _hydra() {
     case $state in
         args)
             case $words[1] in
+                remote)
+                    _arguments '1:action:(add remove list)' '*:argument:'
+                    ;;
+                fleet)
+                    _arguments '1:action:(handshake list doctor bootstrap package init spawn signal cancel workflow attach export import reconcile watch tui)' '*:argument:'
+                    ;;
                 spawn)
                     _arguments \
                         '(-l --layout)'{-l,--layout}'[Layout to use]:layout:(default dev full)' \
@@ -144,6 +150,8 @@ _hydra() {
 
 _hydra_commands() {
     local commands; commands=(
+        'remote:Manage OpenSSH aliases'
+        'fleet:Inspect trusted remote installations'
         'spawn:Create a new worktree and tmux session'
         'init:Initialize project identity, trust, profile, and worktree root'
         'agent:Manage agent profiles'

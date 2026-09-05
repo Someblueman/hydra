@@ -1,372 +1,186 @@
-<div align="center">
-    <a href="https://github.com/Someblueman/hydra">
-        <img width="300" height="200" src="assets/hydra.png" alt="Hydra Logo">
-    </a>
-    <br>
-    <div style="display: flex;">
-        <a href="https://github.com/Someblueman/hydra/actions?query=workflow%3Aci">
-            <img src="https://github.com/Someblueman/hydra/workflows/CI/badge.svg" alt="CI Status">
-        </a>
-        <a href="https://github.com/Someblueman/hydra/releases">
-            <img src="https://img.shields.io/github/release/Someblueman/hydra.svg" alt="Latest Release">
-        </a>
-        <a href="https://github.com/Someblueman/hydra/stargazers">
-            <img src="https://img.shields.io/github/stars/Someblueman/hydra.svg" alt="GitHub Stars">
-        </a>
-        <a href="https://github.com/Someblueman/hydra/blob/main/LICENSE">
-            <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
-        </a>
-        <a>
-            <img src="https://img.shields.io/badge/POSIX-compliant-brightgreen.svg" alt="POSIX Compliant">
-        </a>
-    </div>
-    <h1>Hydra</h1>
-    <p>
-        <b>POSIX tmux + git worktree orchestrator for parallel “heads”</b>
-    </p>
-    <p>
-        One tmux session + worktree per branch. Fast switches, layouts, YAML, and a multi-session dashboard; optional GitHub issues and AI agents.
-    </p>
-</div>
+# Hydra
 
-## Quick Start
+**Native mission control for coding agents, worktrees, and remote fleets.**
 
-Five-minute tour: install or run from source, verify, create a disposable head, then clean it up. No root and no agent CLI required.
+Hydra coordinates coding agents across local projects and remote SSH hosts. Give
+each task its own branch, working directory, and terminal session, monitor work
+from the native TUI, and bring changes together through review and verification.
 
-- Requirements: `git`, `tmux` (≥ 3.0). Optional: `fzf`, GitHub CLI, an AI CLI (`claude`, `aider`, `gemini`, etc.).
-- Supported platforms: Linux and macOS; POSIX `sh` (dash on Debian/Ubuntu); `tmux >= 3.0` and `git`. CI runs Ubuntu and macOS. Windows is not supported.
-- Public CLI, state, JSON, lock, install, and TUI contracts: [docs/CONTRACTS.md](docs/CONTRACTS.md).
+It runs on macOS and Linux without a daemon, database, or cloud account. Git holds
+your code, tmux keeps sessions running, and SSH connects your hosts. You can also
+use ordinary shell sessions alongside agents.
 
-### 1. Install (or run from source)
+[![CI](https://github.com/Someblueman/hydra/workflows/CI/badge.svg)](https://github.com/Someblueman/hydra/actions)
+[![Release](https://img.shields.io/github/v/release/Someblueman/hydra)](https://github.com/Someblueman/hydra/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Non-root install to a writable prefix:
+![Hydra: native mission control, real agent output, and remote fleet attach](assets/demos/quick-tour.gif)
+
+[Demo transcript and recording instructions](assets/demos/README.md)
+
+## What you can do
+
+- **Lead from native mission control.** Browse heads, inspect activity and changes,
+  and launch actions from the native C TUI. The shell TUI provides a fallback.
+- **Run coding agents across your fleet.** Select agent profiles and task prompts,
+  bootstrap trusted SSH hosts, launch remote heads and workflows, and attach to
+  their sessions. Inspect host-qualified heads in the native fleet view.
+- **Work in parallel.** Create isolated heads with named agent profiles, task
+  prompts, and terminal layouts. Switch between them without changing directories
+  or disturbing another task's working tree.
+- **See what is happening.** Inspect sessions from native mission control, a tmux
+  dashboard, or the CLI. Query structured state and retain lifecycle history.
+- **Coordinate work.** Run finite workflows, exchange messages, declare file
+  scopes, and detect collisions between heads.
+- **Review and integrate.** Inspect diffs and provenance, run verification gates,
+  and use guarded integration commands to assemble changes.
+
+Hydra coordinates processes and records evidence. Agent activity does not imply
+that a task is complete or that its changes are correct.
+
+## Installation
+
+You need Git, tmux 3.0 or newer, Make, and a C99 compiler. Fleet additionally needs
+`pkg-config` and JSON-C development files (`brew install json-c pkg-config` on
+macOS, or `apt install libjson-c-dev pkg-config` on Ubuntu). The installer builds
+the native TUI; build the fleet coordinator before installing.
 
 ```sh
-git clone https://github.com/Someblueman/hydra && cd hydra
-PREFIX=$HOME/.local ./install.sh
-# or: make install PREFIX=$HOME/.local
+git clone https://github.com/Someblueman/hydra.git
+cd hydra
+make build-fleet
+PREFIX="$HOME/.local" ./install.sh
 export PATH="$HOME/.local/bin:$PATH"
-```
-
-`sudo ./install.sh` and `sudo make install` still install to `/usr/local` (the default `PREFIX`).
-
-Or skip install and run from the checkout:
-
-```sh
-git clone https://github.com/Someblueman/hydra && cd hydra
-export HYDRA_ROOT="$PWD"
-export PATH="$HYDRA_ROOT/bin:$PATH"
 hydra version
+hydra doctor
 ```
 
-### 2. Verify
+Add `$HOME/.local/bin` to your shell's `PATH` to keep the command available in new
+terminals. You can also run `bin/hydra` directly from a checkout without installing.
+GitHub CLI, `fzf`, and coding agents are optional integrations. For a compiler-free
+local installation, skip `make build-fleet` and set `HYDRA_INSTALL_TUI=never` when
+running the installer.
+
+Upgrading from 1.9? Follow the [2.0 migration guide](docs/MIGRATING_TO_2.0.md),
+including its backup and verification steps. See [platform support](docs/SUPPORT.md)
+for installation and upgrade guarantees.
+
+## Start a task
+
+From a Git repository with an initial commit:
 
 ```sh
-hydra version          # Hydra version 2.0.0
-hydra doctor           # install paths, git/tmux, writable HYDRA_HOME, agents
-```
-
-### 3. Create a throwaway first head
-
-Use a disposable repository so Hydra does not create branches in a real project. No agent CLI is required:
-
-```sh
-mkdir /tmp/hydra-tour && cd /tmp/hydra-tour
-git init && git commit --allow-empty -m "tour"
 hydra init --no-agent --trust
-hydra spawn first-head --no-agent --prompt "Inspect this throwaway project"
+HYDRA_NO_SWITCH=1 hydra spawn feature/search --no-agent
 hydra list
-hydra path first-head   # stored identity-scoped worktree path
-hydra switch my-work   # enter that head directly
-hydra switch           # choose interactively (fzf if installed)
+hydra switch feature/search
 ```
 
-`--no-agent` is the first-class shell-only path. Without an explicit or configured
-profile, Hydra selects one only when exactly one supported executable is positively
-detected; zero agents select `none`, while multiple agents require an explicit choice.
+A *head* is a branch with its own worktree and tmux session. `spawn` normally
+attaches immediately; `HYDRA_NO_SWITCH=1` leaves you in the current terminal.
+`switch` attaches to the named session. Detach with `Ctrl-b`, then `d`, to return to your original terminal.
+`init --trust` accepts the current repository-controlled Hydra configuration;
+review existing configuration before accepting it.
 
-### 4. Clean up
-
-```sh
-hydra kill first-head
-git branch -D first-head # remove the disposable tour branch
-hydra list             # empty
-```
-
-That leaves no Hydra tmux session, worktree, branch, or active state entry for `first-head`.
-
-### Shell completions
-
-Write completions into your user files (no root):
+To use a coding agent, select an installed profile explicitly:
 
 ```sh
-# bash
-hydra completion bash >> ~/.bashrc
-
-# zsh (ensure the directory is on fpath)
-mkdir -p ~/.zsh/completions
-hydra completion zsh > ~/.zsh/completions/_hydra
-
-# fish
-mkdir -p ~/.config/fish/completions
-hydra completion fish > ~/.config/fish/completions/hydra.fish
-```
-
-## Demo
-
-<img alt="Hydra" src="assets/demos/quick-tour.gif" width="600" />
-
-If you want to generate GIFs yourself, you can use the [VHS project](https://github.com/charmbracelet/vhs) from Charm
-
-## Core Commands
-
-```sh
-# Create a new head for a branch (tmux + worktree)
-hydra spawn feature-branch [-l default|dev|full]
-hydra spawn feature-branch --dry-run --no-agent
-hydra spawn feature-branch --profile claude --prompt "Implement the task"
-hydra spawn feature-branch --profile codex --prompt-file task.md
-
-# From a GitHub issue
-hydra spawn --issue 123
-
-# Bulk and mixed agents
-hydra spawn feature -n 3 --ai aider
-hydra spawn exp --agents "claude:2,aider:1"
-
-# Inspect & switch
-hydra list              # list all sessions
-hydra list --json       # JSON output for scripting
-hydra list --git        # add recorded-base Git evidence
-hydra list -g mygroup   # filter by group
-hydra switch feature/ui # enter a named head directly
-hydra switch            # interactive (fzf if available)
-
-# Manage
-hydra kill feature-branch
-hydra kill --all [--force]
-hydra cleanup           # stop dead heads; remove stale locks and orphaned worktrees
-
-# Group operations
-hydra group feature-x backend    # assign to group
-hydra group feature-x            # show group
-hydra group feature-x --clear    # remove from group
-
-# Session output
-hydra tail feature-x             # view last 50 lines of session output
-hydra tail feature-x -f          # follow session output continuously
-hydra broadcast "make test"      # send command to all sessions
-hydra broadcast -g backend "..."  # send to specific group
-hydra wait-idle                  # wait for sessions to become idle
-hydra wait-idle -g backend -s 10 # wait for group with 10s idle threshold
-
-# Durable lifecycle and out-of-band operations
-hydra lifecycle feature-x --json
-hydra send --type handoff --delivery safe-point feature-x "Ready for review"
-hydra outcome feature-x done --actor agent
-hydra wait feature-x --for outcome=done --timeout 300
-hydra exec --branch feature-x --timeout 300 -- make test
-hydra diff feature-x --stat
-hydra review feature-x --json
-hydra provenance feature-x --json
-
-# Finite trusted workflows
-hydra workflow validate examples/workflows/local-review.yml
-hydra workflow dry-run examples/workflows/local-review.yml
-hydra workflow run examples/workflows/local-review.yml
-hydra workflow status run_ID --json
-hydra workflow cancel run_ID
-hydra workflow resume run_ID
-
-# Parallel safety and guarded integration
-hydra claim add feature-x --path 'lib/*' --access write --reason refactor --expires-at 1790000000
-hydra scope check feature-x --json
-hydra collision feature-x feature-y --json
-hydra resource allocate feature-x --port http=3000-3999
-hydra gate run feature-x --name acceptance -- make test
-hydra context create feature-x --diff --history 5
-hydra sync feature-x --from main --gate acceptance --dry-run
-hydra land feature-x --into main --gate acceptance --dry-run
-hydra integrate release-group --base main --target main --dry-run
-hydra integrate release-group --base main --target main --execute --gate 'make test'
-hydra integrate train release-group --base main --target main --execute --gate 'make test'
-hydra integrate status run_ID
-hydra integrate resume run_ID
-hydra integrate approve run_ID --by reviewer
-hydra integrate promote run_ID       # local promotion; never pushes
-hydra integrate cleanup run_ID --apply
-hydra du
-hydra gc --policy orphaned --dry-run
-hydra worktree doctor status
-
-# System
-hydra init --profile claude --trust
 hydra agent list
-hydra capabilities --json
-hydra state verify
-hydra events tail
-hydra regenerate   # restore sessions after restart
-hydra status       # per-head health
-hydra status --json # JSON output
-hydra doctor       # install, dependencies, and first-run readiness
-hydra snapshot --native # explicitly try the optional read-only native helper
-
-# Dashboard & TUI
-hydra dashboard                                    # multi-session overview
-hydra tui                                          # native mission control; visible basic fallback
-hydra tui --basic                                  # explicit basic shell TUI
-hydra tui --capabilities                           # native/basic diagnostics
+hydra spawn feature/tests --profile codex --prompt "Add tests for search"
 ```
 
-## Layouts
+Agents run in the head's worktree. Choose `--no-agent` whenever you want a regular
+shell. [Profiles and task inputs](docs/PROFILES.md) describes selection and setup.
 
-- `default`: Single full-screen pane
-- `dev`: Two panes (editor ~70% left, terminal right)
-- `full`: Three panes (editor top-left, terminal top-right, logs bottom)
-- Cycle in-session with `Ctrl-L`.
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `HYDRA_HOME` | Runtime dir (default `~/.hydra`) |
-| `HYDRA_AI_COMMAND` | Default agent override; project profiles are preferred |
-| `HYDRA_ROOT` | Force library discovery when running from source |
-| `HYDRA_DASHBOARD_PANES_PER_SESSION` | `1`, `N`, or `all` |
-| `HYDRA_SKIP_AI` | Non-interactive shell-only default; `spawn --no-agent` is explicit |
-| `HYDRA_DASHBOARD_NO_ATTACH` | Create dashboard without attaching |
-| `HYDRA_NONINTERACTIVE` | Skip all confirmation prompts (for CI/automation) |
-| `HYDRA_REGENERATE_RUN_STARTUP` | Run startup commands on regenerate |
-| `HYDRA_ALLOW_ADVANCED_REFS` | Relax branch charset validation (use with care) |
-| `HYDRA_DISABLE_YAML` | Disable YAML config parsing |
-| `HYDRA_CORE` | Explicit optional `hydra-core` executable for native qualification |
-| `HYDRA_CORE_TIMEOUT_SECONDS` | Native handshake/command timeout (default `2`) |
-| `HYDRA_TUI_BIN` | Explicit optional `hydra-tui` executable for qualification |
-
-Per-head profile, task, identity, worktree path, instance, and lifecycle event are
-stored in project-scoped state v2. See [profiles](docs/PROFILES.md),
-[state](docs/STATE.md), [events](docs/EVENTS.md), and
-[automation](docs/AUTOMATION.md). Security, out-of-band execution, provenance, and
-related contracts are documented in [security](docs/SECURITY.md),
-[operations](docs/OPERATIONS.md), and [provenance](docs/PROVENANCE.md).
-Parallel coordination and native distribution are documented in
-[parallel safety](docs/PARALLEL_SAFETY.md), [workflows and verified
-integration](docs/workflows.md), and the
-[optional native core](docs/NATIVE_CORE.md). Native/basic dispatch, terminal safety,
-keymaps, accessibility, and recovery are documented in
-[native mission control](docs/NATIVE_TUI.md).
-
-Supported systems and upgrade policy are in [docs/SUPPORT.md](docs/SUPPORT.md).
-Existing 1.9 installations should follow
-[docs/MIGRATING_TO_2.0.md](docs/MIGRATING_TO_2.0.md) before removing their state
-backup.
-
-## YAML Config (optional)
-
-Place `.hydra/config.yml` in the worktree or repo root to declare windows/panes and optional startup commands:
-
-```yaml
-windows:
-  - name: editor
-    panes:
-      - cmd: nvim
-      - cmd: bash
-        split: v
-  - name: server
-    panes:
-      - cmd: npm run dev
-startup:
-  - echo "Project ready"
-```
-
-- Repository-controlled setup is inert until its exact config hash is accepted with
-  `hydra init --trust`; changing the file requires renewed trust.
-- On spawn/regenerate: windows and panes are applied. `startup` runs on spawn, and on regenerate only if `HYDRA_REGENERATE_RUN_STARTUP=1`.
-- Minimal parser supports the fields above; values are plain strings.
-
-## Hooks (optional)
-
-Add `.hydra/` scripts to customize lifecycle:
-
-- `hooks/pre-spawn`: runs before tmux session; env: `HYDRA_WORKTREE`, `HYDRA_BRANCH`.
-- `hooks/layout`: override built‑in layouts; env: `HYDRA_SESSION`, `HYDRA_WORKTREE`.
-- `startup`: one command per line; sent to the main pane after spawn.
-- `hooks/post-spawn`: after layout/startup; env: `HYDRA_SESSION`, `HYDRA_WORKTREE`, `HYDRA_BRANCH`.
-
-## Dashboard
-
-- Shows panes from all heads in one tmux window; exits with `q` and restores everything.
-- Collect more than one pane per head with `--panes-per-session <N|all>` or `HYDRA_DASHBOARD_PANES_PER_SESSION`.
-
-## TUI
-
-Hydra launches native mission control by default when its qualified executable is
-available and falls back visibly to the basic shell TUI over the same shell-owned
-state.
-
-The source installer builds the native TUI automatically when a C99 toolchain is
-available. Set `HYDRA_INSTALL_TUI=never` for a compiler-free shell-only install.
+## Inspect and finish
 
 ```sh
-hydra tui                  # native-first with visible basic fallback
-hydra tui --basic          # explicit basic mode
-hydra tui --capabilities   # availability and observation diagnostics
+hydra tui                         # native mission control, with basic fallback
+hydra diff feature/search --stat
+hydra exec --branch feature/search -- make test
+hydra review feature/search --json
 ```
 
-The native keymap is deliberately small: `j`/`k` or arrows navigate, `Enter` opens
-detail, `v` cycles views, `/` searches heads, `:` searches explicit actions, `p`
-toggles a sanitized pane preview, `?` opens keyboard help, and `q` exits. The action
-palette includes the tmux dashboard. Mutations are delegated to the shell CLI with
-argument-vector execution; native spawn prompts for branch, profile, template, and
-layout, while `Space`/`A` select heads and `G` assigns the selection to a group. `x`
-kills selected heads through the confirming shell command and skips the current tmux
-session. See [Native mission control](docs/NATIVE_TUI.md).
+Use `hydra tui --basic` for the shell interface. In native mission control,
+`j`/`k` navigate, `Enter` opens details, `p` shows terminal output, and `:` opens
+actions. Use `d` for diagnostics, `Esc` to return to heads, `?` for help, and `q`
+to exit. The [dashboard](docs/dashboard-demo.md) brings live panes into one tmux view.
 
-The larger keymap below belongs to the maintained basic shell TUI.
+After reviewing and preserving the work you need, stop the head from your original
+terminal:
 
-| Key | Action |
-|-----|--------|
-| `j/k`, arrows | Navigate sessions |
-| `Enter` / `s` | Switch to selected session |
-| `n` | Spawn new session (interactive wizard) |
-| `d` | Kill selected session |
-| `D` | Open tmux dashboard |
-| `A` | Select all sessions |
-| `Space` | Toggle selection (for bulk ops) |
-| `x` | Bulk kill selected |
-| `G` | Bulk set group on selected |
-| `p` | Toggle preview panel |
-| `/` | Search (branch, session, group, AI) |
-| `i` | Show status output |
-| `r` | Regenerate sessions |
-| `?` | Show help overlay |
-| `Esc` | Clear selection / filters |
-| `q` | Quit |
+```sh
+hydra kill feature/search
+```
 
-Environment variables: `HYDRA_TUI_PREVIEW_LINES`, `HYDRA_TUI_REFRESH_MS`, `HYDRA_TUI_ACTIVITY_INTERVAL`, `HYDRA_NONINTERACTIVE`.
+Stopping a head removes its session and worktree and retains lifecycle history.
+Its Git branch remains available. See [operations](docs/OPERATIONS.md) and
+[verified integration](docs/workflows.md) for review, recovery, and landing changes.
+
+## Manage a fleet
+
+Register trusted SSH hosts, bootstrap a pinned Hydra package, and coordinate work
+across their existing repositories. Fleet supports remote agent-backed heads,
+workflow execution and cancellation, interactive attach, and explicit transfers of
+configuration and workflow history.
+
+```sh
+hydra remote add build ubuntu@build-host
+# Bootstrap a matching package as described in the fleet setup guide.
+hydra fleet list --json
+hydra fleet spawn build --project /srv/project -- feature/search --profile codex \
+  --prompt "Implement search and run the project tests"
+hydra fleet tui
+```
+
+The native fleet view shows heads by host and supports attach and confirmed
+interrupts. Agent executables and repositories live on the host that runs the work.
+See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements, remote
+workflows, and recovery behavior.
+
+## Documentation
+
+| Topic | Guide |
+| --- | --- |
+| Commands, layouts, hooks, configuration, and TUI keys | [Usage](docs/USAGE.md) |
+| Remote hosts, bootstrap, and fleet operations | [Fleet](docs/FLEET.md) |
+| Agent profiles and prompts | [Profiles](docs/PROFILES.md) |
+| Workflows and guarded integration | [Workflows](docs/workflows.md) |
+| Scopes, collisions, resources, and gates | [Parallel safety](docs/PARALLEL_SAFETY.md) |
+| Lifecycle, messaging, and automation | [Automation](docs/AUTOMATION.md) · [Events](docs/EVENTS.md) |
+| State, recovery, and provenance | [State](docs/STATE.md) · [Operations](docs/OPERATIONS.md) · [Provenance](docs/PROVENANCE.md) |
+| Native helpers and terminal behavior | [Native core](docs/NATIVE_CORE.md) · [Native TUI](docs/NATIVE_TUI.md) |
+| Public interfaces and trust boundaries | [Contracts](docs/CONTRACTS.md) · [Security](docs/SECURITY.md) |
+| Releases and upcoming work | [Release notes](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) |
 
 ## Development
 
+The CLI and lifecycle orchestration use POSIX shell; optional native helpers use C.
+Source qualification needs GNU Make, ShellCheck, dash, Git, tmux, and a C compiler.
+The fleet build additionally needs pkg-config and JSON-C development files.
+
 ```sh
-make lint    # ShellCheck + dash syntax
-make test    # Run tests in tests/*.sh
-make help    # Show all targets
+make lint       # ShellCheck and shell syntax
+make test-all   # Complete acceptance suite, including native and PTY checks
+make sanitize   # Native sanitizer checks
+make help       # Build, package, and focused test targets
 ```
+
+Contributions should include checks appropriate to their scope. Versions after
+2.0 are chosen at release time from compatibility impact; see the
+[versioning policy](docs/VERSIONING.md) and [release checklist](docs/RELEASE_CHECKLIST.md).
 
 ## Uninstall
 
-Use the same `PREFIX` you installed with:
+Use the same prefix as installation:
 
 ```sh
-PREFIX=$HOME/.local ./uninstall.sh            # prompts to remove user data
-PREFIX=$HOME/.local ./uninstall.sh --purge    # non-interactive, remove user data
-# or: make uninstall PREFIX=$HOME/.local
+PREFIX="$HOME/.local" ./uninstall.sh
 ```
 
-Default `PREFIX` is `/usr/local` (may need `sudo` if you installed there).
+The uninstaller prompts about removing user data. See `./uninstall.sh --help` for
+options before choosing a non-interactive purge.
 
 ## License
 
-MIT
+[MIT](LICENSE)

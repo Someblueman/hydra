@@ -1,5 +1,10 @@
 # Hydra 1.8.0 release checklist
 
+> Historical qualification document, retained as written for this release.
+> Unchecked items below are not a current release-status tracker. See the
+> [published releases](https://github.com/Someblueman/hydra/releases) for publication
+> status and the [rolling release checklist](RELEASE_CHECKLIST.md) for new releases.
+
 This checklist separates implemented behavior, local qualification, and publication.
 The feature remains on `feature/1.8.0-native-tui` until an exact candidate commit is
 authorized and qualified.

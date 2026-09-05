@@ -1,5 +1,10 @@
 # Hydra 2.0.0 release checklist
 
+> Historical qualification document, retained as written for this release.
+> Unchecked items below are not a current release-status tracker. See the
+> [published releases](https://github.com/Someblueman/hydra/releases) for publication
+> status and the [rolling release checklist](RELEASE_CHECKLIST.md) for new releases.
+
 This checklist qualifies one immutable candidate. Record the candidate commit before
 running commands; tag, artifacts, checksums, and the hosted release must resolve to
 that same commit.

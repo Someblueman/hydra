@@ -19,12 +19,20 @@ _hydra_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    commands="spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
+    commands="remote fleet spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
     
     case "${prev}" in
         hydra)
             COMPREPLY=($(compgen -W "${commands} ${opts}" -- ${cur}))
+            return 0
+            ;;
+        remote)
+            COMPREPLY=($(compgen -W "add remove list" -- "${cur}"))
+            return 0
+            ;;
+        fleet)
+            COMPREPLY=($(compgen -W "handshake list doctor bootstrap package init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
             return 0
             ;;
         spawn)

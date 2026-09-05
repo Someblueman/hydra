@@ -81,6 +81,19 @@ _load_libs_for_cmd() {
     case "$1" in
         version|help|-v|--version|-h|--help)
             ;;
+        fleet-local)
+            _load_lib output
+            _load_lib locks
+            _load_lib git
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib lifecycle
+            _load_lib cmd_fleet_local
+            ;;
+        remote|fleet)
+            _load_lib output
+            _load_lib cmd_fleet
+            ;;
         state|events)
             _load_lib output
             _load_lib locks

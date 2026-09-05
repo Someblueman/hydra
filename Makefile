@@ -38,7 +38,7 @@ test:
 	@echo "Running tests..."
 	@if [ -d tests ] && [ -n "$$(ls -A tests/test_*.sh 2>/dev/null)" ]; then \
 		for test in tests/test_*.sh; do \
-			case "$$test" in tests/test_core.sh|tests/test_native_install.sh|tests/test_native_tui.sh) continue ;; esac; \
+			case "$$test" in tests/test_core.sh|tests/test_native_install.sh|tests/test_native_tui.sh|tests/test_fleet.sh) continue ;; esac; \
 			echo "Running $$test..."; \
 			sh "$$test" || exit 1; \
 		done; \
@@ -63,7 +63,7 @@ $(BUILD_DIR)/libhydra.a: $(BUILD_DIR)/libhydra.o
 $(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/hydra-tui: src/hydra_tui.c src/hydra_tui_model.inc src/hydra_tui_ui.inc src/hydra_tui_actions.inc src/hydra_tui_main.inc | $(BUILD_DIR)
+$(BUILD_DIR)/hydra-tui: src/hydra_tui.c src/hydra_tui_model.inc src/hydra_tui_ui.inc src/hydra_tui_render.inc src/hydra_tui_actions.inc src/hydra_tui_main.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) src/hydra_tui.c -o $@
 
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
@@ -97,7 +97,7 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 test-parity: build-core
 	@sh tests/test_core.sh
 
-test-all: lint test test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
+test-all: lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
 sanitize-core:
 	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-c
@@ -108,7 +108,7 @@ sanitize-tui:
 
 sanitizer: sanitize-core
 
-sanitize: sanitize-core sanitize-tui
+sanitize: sanitize-core sanitize-tui sanitize-fleet
 
 bench-core: build-core
 	@sh scripts/bench-core.sh
@@ -191,3 +191,25 @@ help:
 	@echo "  make smoke-onboarding - Throwaway-repo no-agent first-head smoke"
 	@echo "  make dev-setup - Set up development environment (git hooks)"
 	@echo "  make help      - Show this help message"
+
+# Optional fleet coordinator; JSON-C is statically linked into this executable.
+FLEET_SOURCES = $(wildcard src/fleet/*.c)
+FLEET_JSON_CFLAGS = $(shell pkg-config --cflags json-c)
+FLEET_JSON_LIB = $(shell pkg-config --variable=libdir json-c)/libjson-c.a
+
+.PHONY: build-fleet test-fleet
+build-fleet: $(BUILD_DIR)/hydra-fleet
+
+$(BUILD_DIR)/hydra-fleet: $(FLEET_SOURCES) src/fleet/fleet.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(FLEET_SOURCES) $(FLEET_JSON_LIB) -lm -o $@
+
+$(BUILD_DIR)/test-fleet: tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+
+test-fleet: build-fleet $(BUILD_DIR)/test-fleet
+	$(BUILD_DIR)/test-fleet
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_fleet.sh
+
+.PHONY: sanitize-fleet
+sanitize-fleet:
+	$(MAKE) BUILD_DIR=build/fleet-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-fleet

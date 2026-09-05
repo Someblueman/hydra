@@ -195,3 +195,18 @@ static void execute_palette(struct app *app, const char *query) {
         (void)run_argv(app, argv);
     }
 }
+
+/* Fleet actions carry host, project and observed instance to the public CLI. */
+static void fleet_action(struct app *app, bool attach) {
+    struct head *head = selected_head(app);
+    char confirm[TEXT] = "";
+    char *argv[12];
+    if (head == NULL || head->remote_host[0] == '\0') return;
+    if (!attach && (prompt_text(app, "Interrupt remote head? Type yes: ", confirm, sizeof(confirm)) != 0 || strcmp(confirm, "yes") != 0)) return;
+    argv[0] = (char *)app->hydra; argv[1] = (char *)"fleet";
+    argv[2] = (char *)(attach ? "attach" : "cancel"); argv[3] = head->remote_host;
+    argv[4] = (char *)"--project"; argv[5] = head->remote_project;
+    argv[6] = (char *)"--instance"; argv[7] = head->instance;
+    argv[8] = (char *)"--"; argv[9] = head->remote_branch; argv[10] = NULL;
+    (void)run_argv(app, argv);
+}

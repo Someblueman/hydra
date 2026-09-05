@@ -30,6 +30,7 @@
 extern char **environ;
 
 struct head {
+    char remote_host[128], remote_project[SOURCE_TEXT], remote_branch[TEXT];
     char branch[TEXT], session[TEXT], profile[TEXT], group[TEXT], pr[TEXT];
     char status[32], liveness[32], declared[64], observed[64], confidence[64];
     char instance[TEXT], desired[64], source[SOURCE_TEXT], head_id[TEXT];
@@ -52,10 +53,10 @@ struct model {
 struct app {
     struct model model;
     const char *hydra;
-    size_t selected;
+    size_t selected, recovery_selected;
     int view;
-    int rows, cols;
-    bool raw, no_color, preview, help, running;
+    int rows, cols, line, limit;
+    bool raw, no_color, preview, help, running, fleet, diagnostics, paint, boxed;
     char marked[MAX_HEADS][TEXT];
     size_t marked_count;
     char current_session[TEXT];

@@ -28,6 +28,31 @@ Use `-rc.N` prereleases when packaging or platform qualification needs public te
 Tags and hosted releases are cut only from the exact commit that passed shell-only,
 native, parity, install, onboarding, and applicable security/recovery gates.
 
+## Rolling delivery
+
+Keep `main` releasable and deliver one independently useful backlog slice at a time.
+There is no scheduled release train and no requirement to publish every merge.
+Use [the reusable release checklist](RELEASE_CHECKLIST.md) when a slice is ready.
+
+During development, describe changes under `Unreleased` in the changelog. At release
+preparation, choose the version from the accumulated compatibility impact, update
+all executable version handshakes together, and finalize the notes. Do not infer
+compatibility solely from commit titles or the number of changes.
+
+Qualify the resulting merge commit on `main`, even when the PR checks passed.
+Prepare a draft release with all archives and checksums before publication. Prefer
+GitHub release immutability so published tags and assets cannot drift; configure it
+explicitly in repository settings before the next publication. An incorrect
+published release is corrected by a new version, never by replacing its assets.
+
+Stable users install a numbered release. Contributors may run `main` from source,
+but a passing development commit is not a published stable release. Use a numbered
+release candidate when wider testing is needed, and qualify the final stable
+commit after replacing prerelease version strings.
+
+Publication remains an explicit maintainer action. Automated qualification and
+artifact preparation must not grant ordinary PR workflows release-write access.
+
 ## Deprecation after 2.0
 
 A public CLI option, environment variable, JSON field, protocol, or documented

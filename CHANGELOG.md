@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Optional C fleet coordinator with pinned SSH bootstrap, negotiated host capabilities,
+  bounded observations, instance-checked interrupts, remote spawn/workflows/attach,
+  explicit configuration and terminal-history bundles, and reconnect observation.
+- Native fleet view with host-qualified heads, recorded desired state, attach, and
+  confirmed interrupt actions delegated to the public CLI. JSON-C is statically
+  linked into the fleet helper; core shell operation has no added dependency.
+- Reusable rolling release checklist with release-time SemVer and draft-first
+  artifact publication guidance.
+
+### Changed
+
+- Simplified native mission control with branch-first lists, focused details,
+  on-demand diagnostics, bordered panels, fixed table columns, a title bar,
+  full-row selection highlighting, a selected-head summary, and a fixed action footer.
+  Head and recovery lists follow selection in short terminals; Escape returns to
+  heads and clears search. Refreshed the real-agent and fleet demo with neutral
+  host labels and a private SSH recording alias.
+
 ## [2.0.0] - 2026-09-04
 
 ### Added

@@ -213,6 +213,21 @@ static void close_session(struct session *session) {
     close(session->slave);
 }
 
+static void test_small_list(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    result(open_session(&session, tui, hydra, fake_bin, 40, 10) == 0, "open minimum-size terminal");
+    result(wait_for_raw(&session), "small list enters raw mode");
+    write_input(session.master, "/", 1U);
+    (void)wait_for_marker(&session, "Search heads:", 1000);
+    write_input(session.master, "feature\n", 8U);
+    (void)wait_for_marker(&session, "Search: feature", 1000);
+    write_input(session.master, "jj", 2U);
+    result(wait_for_marker(&session, ">  feature-unavail", 1000), "selection scrolls into view in a short filtered list");
+    write_input(session.master, "q", 1U);
+    result(wait_for_exit(&session) == 0 && terminal_restored(&session), "small list exits with exact terminal restoration");
+    close_session(&session);
+}
+
 static void test_interaction(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     struct winsize size;
@@ -230,10 +245,14 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "\033[A\r", 4U);
     result(wait_for_marker(&session, "HEAD DETAIL  feature-live", 1000),
            "arrow-key navigation remains bounded and deterministic");
+    write_input(session.master, "d", 1U);
+    result(wait_for_marker(&session, "lifecycle source:", 1000), "diagnostics are reachable on demand");
+    write_input(session.master, "\033", 1U);
+    result(wait_for_marker(&session, "[Heads]", 1000), "Escape returns to the head list");
     write_input(session.master, "/", 1U);
     result(wait_for_marker(&session, "Search heads:", 1000), "keyboard search prompt is reachable");
     write_input(session.master, "FEATURE-STALE\n", 14U);
-    result(wait_for_marker(&session, "search: FEATURE-STALE", 1000),
+    result(wait_for_marker(&session, "Search: FEATURE-STALE", 1000),
            "keyboard-only search is case-insensitive and returns to raw mode");
     write_input(session.master, "k\r", 2U);
     result(wait_for_marker(&session, "HEAD DETAIL  feature-stale", 1000),
@@ -241,9 +260,9 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads:", 1000);
     write_input(session.master, "does-not-exist\n", 15U);
-    (void)wait_for_marker(&session, "search: does-not-exist", 1000);
+    (void)wait_for_marker(&session, "Search: does-not-exist", 1000);
     write_input(session.master, "\r", 1U);
-    result(wait_for_marker(&session, "notice: no matching head selected", 1000),
+    result(wait_for_marker(&session, "no matching head selected", 1000),
            "head actions are disabled when the search has no match");
     write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads:", 1000);
@@ -285,7 +304,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "\n", 1U);
     result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "spawn returns to native raw mode");
     write_input(session.master, "A", 1U);
-    result(wait_for_marker(&session, "3 selected", 1000), "select-all marks every visible head");
+    result(wait_for_marker(&session, "3 marked", 1000), "select-all marks every visible head");
     write_input(session.master, "G", 1U);
     (void)wait_for_marker(&session, "Group for selected heads:", 1000);
     write_input(session.master, "release\n", 8U);
@@ -295,7 +314,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "\n", 1U);
     result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "bulk group returns to native raw mode");
     write_input(session.master, "A", 1U);
-    (void)wait_for_marker(&session, "3 selected", 1000);
+    (void)wait_for_marker(&session, "3 marked", 1000);
     write_input(session.master, "x", 1U);
     result(wait_for_marker(&session, "Bulk kill complete: 2 command(s), 1 current skipped", 1000),
            "bulk kill delegates non-current branches and preserves the current session");
@@ -393,6 +412,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     printf("Running native TUI pseudo-terminal tests...\n");
+    test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
     test_signal(argv[1], argv[2], argv[3], SIGINT, "SIGINT");
     test_signal(argv[1], argv[2], argv[3], SIGTERM, "SIGTERM");
