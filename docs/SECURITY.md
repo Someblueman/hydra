@@ -74,11 +74,20 @@ result. Promotion rechecks the target ref, candidate commits, manifest, approval
 clean worktree under the project integration lock; it updates only a local branch and
 never pushes.
 
-## Remote coordination prerequisites
+## Fleet coordination (unreleased)
 
-Hydra 2.0 has no remote coordination contract. A future remote feature must use an
-explicitly trusted transport and host identity, negotiate Hydra and protocol
-versions, separate read-only observation from mutation capabilities, preserve one
-authority for each live state record, bound timeouts and concurrency, and fail closed
-on authentication, host-key, version, or capability mismatch. It must not copy local
-secrets or treat a live state tree as authoritative on two hosts.
+Fleet uses strict host-key verification and noninteractive OpenSSH authentication.
+It negotiates capabilities before remote operations. Fixed transport commands carry
+JSON argv on stdin; repository paths, task text, and workflow arguments are never
+shell-interpolated. Head interrupts recheck the observed instance under the local
+lifecycle lock. Local trust checks remain authoritative.
+
+Pinned bootstrap verifies the package and installer hashes, allowlists install
+paths, qualifies the staged shell/helper, and atomically publishes an immutable
+prefix. Source packages must be trusted: checksums establish byte identity, not
+publisher identity. Configuration import remains untrusted; historical bundles stay
+outside runtime state. No live state, host lock, or trust record is shared.
+
+Transport loss after dispatch can leave an unknown mutation outcome. Inspect the
+remote authority before retrying; reconnect observation does not replay mutations.
+See [FLEET.md](FLEET.md) for boundaries and supported operations.

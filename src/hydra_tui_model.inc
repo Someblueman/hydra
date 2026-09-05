@@ -40,7 +40,7 @@ static int load_model_stream(FILE *input, struct model *model, char *error, size
     char *line = NULL;
     size_t line_size = 0U;
     ssize_t length;
-    bool handshake = false;
+    bool handshake = false, fleet_stream = false;
     memset(model, 0, sizeof(*model));
     while ((length = getline(&line, &line_size, input)) >= 0) {
         char *fields[40];
@@ -49,15 +49,32 @@ static int load_model_stream(FILE *input, struct model *model, char *error, size
         if (length > 0 && line[length - 1] == '\r') line[--length] = '\0';
         count = split_fields(line, fields, sizeof(fields) / sizeof(fields[0]));
         if (!handshake) {
-            if (count != 2U || strcmp(fields[0], "HYDRA_TUI") != 0 || strcmp(fields[1], "2") != 0) {
+            if (count != 2U || !((strcmp(fields[0], "HYDRA_TUI") == 0 && strcmp(fields[1], "2") == 0) || (strcmp(fields[0], "HYDRA_FLEET_TUI") == 0 && strcmp(fields[1], "1") == 0))) {
                 copy_text(error, error_size, "native data protocol handshake failed");
                 free(line);
                 return -1;
             }
+            fleet_stream = strcmp(fields[0], "HYDRA_FLEET_TUI") == 0;
             handshake = true;
             continue;
         }
-        if (count == 30U && strcmp(fields[0], "H") == 0) {
+        if (fleet_stream && count == 7U && strcmp(fields[0], "F") == 0) {
+            struct head *head;
+            if (model->head_count >= MAX_HEADS || strlen(fields[1]) >= 128U || strlen(fields[2]) >= SOURCE_TEXT || strlen(fields[3]) >= TEXT || strlen(fields[4]) >= TEXT || strlen(fields[5]) >= TEXT) {
+                copy_text(error, error_size, "fleet row exceeds native bounds"); free(line); return -1;
+            }
+            head = &model->heads[model->head_count++];
+            copy_text(head->remote_host, sizeof(head->remote_host), fields[1]);
+            copy_text(head->remote_project, sizeof(head->remote_project), fields[2]);
+            copy_text(head->remote_branch, sizeof(head->remote_branch), fields[3]);
+            (void)snprintf(head->branch, sizeof(head->branch), "%.80s/%.170s", fields[1], fields[3]);
+            copy_text(head->head_id, sizeof(head->head_id), fields[4]);
+            copy_text(head->instance, sizeof(head->instance), fields[5]);
+            copy_text(head->desired, sizeof(head->desired), fields[6]);
+            copy_text(head->status, sizeof(head->status), fields[6]);
+            copy_text(head->liveness, sizeof(head->liveness), "unknown");
+            copy_text(head->source, sizeof(head->source), "remote durable state");
+        } else if (!fleet_stream && count == 30U && strcmp(fields[0], "H") == 0) {
             struct head *head;
             if (model->head_count >= MAX_HEADS) {
                 copy_text(error, error_size, "native data exceeds the 512-head safety bound");
@@ -147,7 +164,7 @@ static int refresh_model(struct app *app) {
     bool failed = false, timed_out = false;
     char buffer[8192];
     char error[TEXT] = "";
-    char *argv[] = {(char *)app->hydra, (char *)"tui", (char *)"--data", NULL};
+    char *argv[] = {(char *)app->hydra, (char *)(app->fleet ? "fleet" : "tui"), (char *)(app->fleet ? "tui-data" : "--data"), NULL};
     if (pipe(pipefd) != 0) return -1;
     posix_spawn_file_actions_init(&actions);
     posix_spawnattr_init(&attributes);
@@ -182,7 +199,7 @@ static int refresh_model(struct app *app) {
         (void)clock_gettime(CLOCK_MONOTONIC, &now);
         elapsed_ms = (long)(now.tv_sec - started.tv_sec) * 1000L +
                      (long)(now.tv_nsec - started.tv_nsec) / 1000000L;
-        remaining_ms = 2000L - elapsed_ms;
+        remaining_ms = (app->fleet ? 3500L : 2000L) - elapsed_ms;
         if (remaining_ms <= 0L) { timed_out = true; break; }
         FD_ZERO(&readfds); FD_SET(pipefd[0], &readfds);
         timeout.tv_sec = remaining_ms / 1000L;
@@ -233,6 +250,12 @@ static int refresh_model(struct app *app) {
         return -1;
     }
     fclose(input);
+    if (app->fleet && app->selected < app->model.head_count) {
+        const struct head *previous = &app->model.heads[app->selected]; size_t index;
+        for (index = 0; index < next->head_count; index++) {
+            if (strcmp(previous->head_id, next->heads[index].head_id) == 0 && strcmp(previous->remote_host, next->heads[index].remote_host) == 0) { app->selected = index; break; }
+        }
+    }
     app->model = *next;
     free(next);
     if (app->selected >= app->model.head_count && app->model.head_count > 0U) {
@@ -287,6 +310,7 @@ static void refresh_current_session(struct app *app) {
 }
 
 static void capture_preview(struct app *app) {
+    if (app->fleet) return;
     int pipefd[2], status = 0, waited;
     pid_t pid;
     ssize_t length;

@@ -157,8 +157,7 @@ integration_verified_promote() {
         return 1
     fi
     while IFS="$(printf '\t')" read -r _ivpr_head _ivpr_branch _ivpr_commit _ivpr_base; do
-        _ivpr_hd="$(state_v2_project_dir "$_ivpr_project")/heads/$_ivpr_head"
-        if [ "$(git -C "$(sed -n '1p' "$_ivpr_hd/worktree")" rev-parse HEAD 2>/dev/null || true)" != "$_ivpr_commit" ]; then
+        if ! integration_verified_candidate_current "$(state_v2_project_dir "$_ivpr_project")" "$_ivpr_head" "$_ivpr_branch" "$_ivpr_commit"; then
             release_lock "$_ivpr_lock"
             echo "Error: candidate binding is stale; target unchanged" >&2
             return 1

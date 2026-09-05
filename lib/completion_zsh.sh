@@ -21,6 +21,16 @@ _hydra() {
     case $state in
         args)
             case $words[1] in
+                remote)
+                    _arguments '1:action:(add remove list)' '*:argument:'
+                    ;;
+                fleet)
+                    if [[ $words[2] == task ]]; then
+                        _arguments '1:action:(task)' '2:task action:(prepare inspect submit start status cancel logs result inspect-result collect collected help)' '--source[Repository for prepare or owner/work for logs]:source:' '--spec[Task specification]:file:_files' '--input[Prepared package]:file:_files' '--output[New package file]:file:_files' '--key[Stable submission key]:key:' '--id[Accepted task ID]:task ID:' '--trust-spec[Authorize exact task digest]:SHA256:' '--stream[Log stream]:stream:(stdout stderr)' '--offset[Byte offset]:offset:' '--limit[Page bytes]:limit:' '--step[Workflow log step]:step:' '--attempt[Workflow attempt]:attempt:' '--timeout[Result transport deadline]:seconds:' '--into[Collection repository]:directory:_files -/' '--format[Collection output]:format:(candidates)'
+                    else
+                        _arguments '1:action:(handshake list doctor bootstrap package task init spawn signal cancel workflow attach export import reconcile watch tui)' '*:argument:'
+                    fi
+                    ;;
                 spawn)
                     _arguments \
                         '(-l --layout)'{-l,--layout}'[Layout to use]:layout:(default dev full)' \
@@ -144,6 +154,8 @@ _hydra() {
 
 _hydra_commands() {
     local commands; commands=(
+        'remote:Manage OpenSSH aliases'
+        'fleet:Inspect trusted remote installations'
         'spawn:Create a new worktree and tmux session'
         'init:Initialize project identity, trust, profile, and worktree root'
         'agent:Manage agent profiles'

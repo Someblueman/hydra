@@ -1,69 +1,25 @@
-# Hydra Dashboard Demo
+# Live tmux dashboard
 
-The dashboard feature allows you to view all active Hydra sessions in a single unified view.
-
-## How it Works
-
-The dashboard uses tmux's `join-pane` and `move-pane` commands to temporarily relocate panes from multiple sessions into a single dashboard session. When you exit the dashboard, all panes are restored to their original sessions.
-
-## Technical Implementation
-
-### 1. Pane Collection
-When you run `hydra dashboard`, the system:
-- Creates a dedicated `hydra-dashboard` session
-- Iterates through all active Hydra sessions from state v2
-- Moves the first pane from each session to the dashboard
-- Records the original location for restoration
-
-### 2. Layout Management
-The dashboard automatically arranges panes based on count:
-- 1 pane: Full screen
-- 2 panes: Side by side (even-horizontal)
-- 3-4 panes: 2x2 grid (tiled)
-- 5+ panes: Optimal grid (tiled)
-
-### 3. Restoration
-When exiting (via 'q' key or Ctrl-C):
-- Each pane is moved back to its original window/session
-- The dashboard session is destroyed
-- All heads are durably stopped
-
-## Usage Example
+`hydra dashboard` gathers panes from active heads into one tmux window. Use it to
+watch several terminals at once; use [native mission control](NATIVE_TUI.md) for
+head details, search, and explicit actions.
 
 ```sh
-# Assuming you have multiple active sessions
-$ hydra list
-BRANCH              SESSION             STATUS     PATH
-feature-auth        feature_auth        active     ../hydra-feature-auth
-feature-ui          feature_ui          active     ../hydra-feature-ui
-bugfix-api          bugfix_api          active     ../hydra-bugfix-api
-
-# Launch the dashboard
-$ hydra dashboard
-Dashboard ready. Press 'q' to exit and restore panes.
-
-# The dashboard will show all three sessions in a grid
-# Press 'q' to exit and restore all panes
+hydra dashboard                         # first pane from each head
+hydra dashboard --panes-per-session 2    # up to two panes per head
+hydra dashboard --panes-per-session all  # every pane
 ```
 
-## Key Features
+The dashboard temporarily moves live panes using tmux. These are real terminals,
+not read-only screenshots: input can reach their running processes. Press `q` to
+exit and restore panes to their original sessions. Exiting the dashboard does not
+stop the heads.
 
-1. **Non-disruptive**: Original sessions remain intact, just temporarily missing a pane
-2. **Automatic cleanup**: Trap handlers ensure panes are restored even on unexpected exit
-3. **Session safety**: If dashboard crashes, panes can be manually moved back
-4. **Performance**: Uses native tmux commands for instant pane manipulation
+The layout adapts to the number of collected panes. More panes mean less room for
+each terminal; select fewer panes when output becomes difficult to read.
 
-## Limitations
+Cleanup attempts to restore panes on exit and handled interruption. If restoration
+fails, inspect the warning and the remaining tmux panes before removing a session.
+Do not assume a forced process termination completed restoration.
 
-1. Only the first pane from each session is shown
-2. Dashboard is read-only by design (for safety)
-3. Requires tmux ≥ 3.0 for reliable pane manipulation
-4. Maximum useful sessions: ~9 (3x3 grid)
-
-## Error Handling
-
-The dashboard includes several safety mechanisms:
-- Prevents multiple dashboard instances
-- Validates sessions exist before collecting panes
-- Records restoration data before moving panes
-- Handles missing sessions gracefully
+For a reproducible first-run recording, see the [quick tour](../assets/demos/README.md).

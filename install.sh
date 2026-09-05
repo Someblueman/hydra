@@ -9,6 +9,7 @@ usage() {
     echo "Usage: [PREFIX=/usr/local] [DESTDIR=] ./install.sh" >&2
     echo "  PREFIX    installation prefix (default: /usr/local)" >&2
     echo "  DESTDIR   optional staging directory prepended to PREFIX" >&2
+    echo "  HYDRA_INSTALL_FLEET auto copies a prebuilt helper; required or never" >&2
     echo "  HYDRA_INSTALL_CORE  auto (default), never, or required" >&2
     echo "  HYDRA_BUILD_CORE=1  build the optional core from this checkout" >&2
     echo "  HYDRA_CORE_ARTIFACT offline hydra-core path with adjacent metadata" >&2
@@ -110,6 +111,10 @@ ensure_writable "$LIB_DIR"
 echo "Installing hydra binary..."
 cp "$SRC_BIN" "$BIN_DIR/hydra"
 chmod +x "$BIN_DIR/hydra"
+
+if [ -f "$SCRIPT_DIR/scripts/install-fleet.sh" ]; then
+    sh "$SCRIPT_DIR/scripts/install-fleet.sh" "$SCRIPT_DIR/build/hydra-fleet" "$CORE_DIR"
+fi
 
 echo "Installing library files..."
 for lib_file in "$SRC_LIB"/*.sh; do

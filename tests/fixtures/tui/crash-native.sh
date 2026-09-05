@@ -6,4 +6,5 @@ if [ "${1:-}" = --version ]; then
 fi
 
 stty -echo -icanon min 0 time 1
+printf '\033[?1000h\033[?1006h'
 kill -SEGV "$$"

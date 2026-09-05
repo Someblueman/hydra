@@ -78,6 +78,11 @@ cmd_exec() {
     trap 'cmd_exec_cancel_workers "$_ce_workers"; exit 143' HUP INT TERM
     _ce_max="${HYDRA_EXEC_MAX_BYTES:-1048576}"
     case "$_ce_max" in ''|*[!0-9]*) rm -f "$_ce_selection"; return 1 ;; esac
+    # Publish the durable run identity before workers start. The JSON document
+    # still completes only after execution; its prefix is not completion evidence.
+    if [ "$_ce_json" -eq 1 ]; then
+        printf '{"schema_version":1,"ok":true,"command":"exec","data":{"run_id":"%s","results":[' "$_ce_run"
+    fi
     _ce_active=0
     _ce_selection_error=0
     while IFS= read -r _ce_head; do
@@ -94,9 +99,7 @@ cmd_exec() {
     trap - HUP INT TERM
     if [ "$_ce_selection_error" -eq 1 ]; then rm -f "$_ce_selection" "$_ce_workers"; return 1; fi
     _ce_failed=0
-    if [ "$_ce_json" -eq 1 ]; then
-        printf '{"schema_version":1,"ok":true,"command":"exec","data":{"run_id":"%s","results":[' "$_ce_run"
-    else
+    if [ "$_ce_json" -ne 1 ]; then
         echo "Exec run $_ce_run"
     fi
     _ce_first=1

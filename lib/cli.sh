@@ -13,8 +13,8 @@ Commands:
                     Options:
                       -l, --layout <layout>    Apply tmux layout
                       -n, --count <number>     Spawn multiple sessions (1-10)
-                      --ai <tool>              Specify AI tool (claude, aider, gemini, etc.)
-                      --profile <name>         Select a launch/resume profile
+                      --profile <name>         Select an agent profile
+                      --ai <tool>              Override the AI executable
                       --no-agent              Create a first-class plain shell head
                       --dry-run               Print the resolved plan without mutation
                       --prompt <text>          Record and inject task text at launch
@@ -32,6 +32,12 @@ Commands:
   spawn --pr <#>    Create a head from an existing GitHub PR
   init              Initialize project identity, trust, profile, and worktree root
   agent             List, show, diagnose, or initialize agent profiles
+  remote            Manage OpenSSH aliases: add NAME [USER@]SSH_ALIAS, remove NAME, list
+  fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
+                    Commands: list, doctor, handshake, bootstrap, package, init, spawn,
+                              signal, cancel, workflow, attach, export, import,
+                              reconcile, watch, tui, task (see fleet help)
+                    Options: --project PATH, --instance ID, --jobs 1-16, --timeout 1-300
   capabilities      Print machine-readable Hydra and agent capabilities
   workflow          Run or inspect finite, recoverable workflow definitions
                     Usage: hydra workflow list
@@ -109,12 +115,12 @@ Commands:
                     Options:
                       -n, --lines <N>          Number of lines (default: 50)
                       -f, --follow             Continuously watch output
-  broadcast         Send a command to multiple sessions
+  broadcast         Expert utility: type text into tmux panes
                     Options:
                       -g, --group <name>       Target specific group
                       --pane <target>          Explicit tmux pane (window.pane or session:window.pane)
                       --force                  Send to :0.0 even if that pane is the agent
-  wait-idle         Wait for sessions to become idle
+  wait-idle         Expert utility: wait for terminal inactivity
                     Options:
                       -g, --group <name>       Wait for specific group
                       -s, --seconds <N>        Idle threshold (default: 10)
@@ -152,25 +158,20 @@ Options:
   -h, --help        Show this help message
 
 Examples:
-  hydra spawn feature-x                    # Create single session
-  hydra spawn feature-x -n 3               # Create 3 sessions (feature-x-1, feature-x-2, feature-x-3)
-  hydra spawn feature-x -n 3 --ai aider    # Create 3 sessions with aider
-  hydra spawn feature-x --ai gemini        # Create session with Google Gemini CLI
-  hydra spawn exp --agents "claude:2,aider:1"  # Create 2 claude + 1 aider sessions
-  hydra spawn --issue 42                   # Create session from GitHub issue #42
-  hydra spawn feature-x -g project-a       # Create session in group 'project-a'
-  hydra list --groups                      # Show all groups
-  hydra list -g project-a                  # List sessions in group 'project-a'
-  hydra group feature-x project-a          # Assign feature-x to group 'project-a'
-  hydra tail feature-x                     # View last 50 lines of output
-  hydra tail feature-x -f                  # Follow output in real-time
-  hydra broadcast "git status"             # Send command to all sessions
-  hydra broadcast -g project-a "make test" # Send command to group
-  hydra wait-idle -g project-a             # Wait for group to finish
-  hydra kill feature-x                     # Kill a specific session
-  hydra kill --all                         # Kill all sessions (with confirmation)
-  hydra kill --all --force                 # Kill all sessions without confirmation
-  hydra kill -g project-a                  # Kill all sessions in group 'project-a'
+  hydra init --no-agent --trust            # After reviewing repository configuration
+  hydra spawn feature-x --profile codex --prompt "Add tests"
+  hydra spawn scratch --no-agent          # Plain shell head
+  hydra list                              # Inspect active heads
+  hydra exec --branch feature-x -- make test
+  hydra send feature-x "Please review the failing test"  # Queue an inbox message
+  hydra recv --peek                        # Read from inside the receiving head
+  hydra diff feature-x --stat
+  hydra gate run feature-x --name tests -- make test
+  hydra kill feature-x                    # After preserving the work you need
+
+Terminal inactivity is an observation, not task completion. Use lifecycle/outcome
+records for declared outcomes and exec/gate results for command verification.
+See docs/USAGE.md for grouped command recipes and expert terminal utilities.
 
 Environment:
   HYDRA_HOME        Directory for runtime files (default: ~/.hydra)
@@ -192,7 +193,7 @@ EOF
 main() {
     HYDRA_JSON_REQUESTED=0
     case "${1:-}" in
-        init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
+        remote|fleet|init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
             for _main_arg in "$@"; do
                 case "$_main_arg" in
                     --) break ;;
@@ -219,6 +220,13 @@ main() {
         agent)
             shift
             cmd_agent "$@"
+            ;;
+        fleet-local)
+            shift
+            cmd_fleet_local "$@"
+            ;;
+        remote|fleet)
+            cmd_fleet_dispatch "$@"
             ;;
         capabilities)
             shift

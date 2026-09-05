@@ -1,0 +1,345 @@
+# Remote tasks (unreleased)
+
+This unreleased implementation provides package preparation, durable submission,
+detached command/workflow execution, status, cancellation, and bounded log retrieval.
+Launch requires explicit authorization of the specification digest. Verified result
+snapshots can be downloaded and collected into isolated local refs for the existing
+integration flow. See [local and real-host qualification](REMOTE_TASK_ACCEPTANCE.md)
+for tested boundaries and the remaining release/publication gates.
+
+## Prepare and preview
+
+Choose an exact commit with `git rev-parse HEAD`, an explicit registered host alias,
+and the receiving project path. Write a JSON specification, replacing `COMMIT`
+with the full lowercase commit ID:
+
+```json
+{
+  "schema_version": 1,
+  "host": "build",
+  "project": "/srv/project",
+  "source": {"commit": "COMMIT"},
+  "work": {"kind": "exec", "argv": ["make", "test"]},
+  "inputs": ["context/task.txt"],
+  "outputs": ["test-results.json"],
+  "capabilities": ["exec"],
+  "completion": "command-exit",
+  "limits": {
+    "transport_seconds": 30,
+    "queue_seconds": 60,
+    "startup_seconds": 60,
+    "execution_seconds": 120,
+    "cancellation_seconds": 10,
+    "log_bytes": 65536,
+    "artifact_bytes": 65536
+  }
+}
+```
+
+```sh
+hydra fleet task prepare --source /path/to/repository \
+  --spec /path/to/task.json --output /tmp/task-package.json
+hydra fleet task inspect --input /tmp/task-package.json
+```
+
+The preparation response previews the host, project, exact commit, selected input
+paths, byte counts and SHA-256 hashes, output declarations, limits, package size,
+and specification digest. It omits the actual transferred file contents. Inspect
+checks the specification digest, bundle checksum and Git validity, exact source
+commit, input checksums, and paths. It does not contact the destination or certify
+that host's capabilities or trust. Git and either `shasum` or `sha256sum` are needed
+locally. Submission checks the receiving host's project mapping and dependencies.
+
+For an existing finite workflow use
+`"work": {"kind": "workflow", "path": ".hydra/workflows/build.yml"}` and
+`"completion": "workflow-success"`. The path must be a regular file in the exact
+source commit. Preparation does not execute it or grant repository trust.
+
+## Transfer and binding contract
+
+Package schema 1 contains `spec`, `spec_sha256`, `bundle_hex`, and `input_hex`, plus
+`schema_version`. The normalized specification includes a source
+`bundle_sha256` and an input manifest of `{path, sha256, bytes}` records in the
+same order as `input_hex`. Its SHA-256 covers compact JSON emitted after schema
+validation in canonical field order; input, output, capability, and argv array
+order is significant. Unknown object fields fail validation. Consumers validate
+and normalize before comparing the specification digest. Checksums detect changes;
+they are not signatures or a substitute for SSH host authentication.
+
+The bundle contains the exact commit and reachable Git history under one ref,
+`refs/heads/task-source`. No other branch refs, hooks, Git configuration, environment
+values, credentials, or unselected working-tree files are copied. **Committed
+history is included**; choose source history appropriate for the trusted destination.
+Dirty tracked files remain untouched and are excluded unless explicitly selected
+as inputs. Input paths are relative to the source directory and can select
+untracked files. Only regular files are accepted; no path component may be a
+symlink. Binary input bytes are preserved. Inputs are separate package payloads,
+not modifications to the source commit.
+
+All paths reject traversal, absolute paths, empty components, control characters,
+backslashes, colons, `.git` components, and the reserved `.hydra-task` directory.
+Source containing the reserved directory, submodules, or Git LFS pointers fails
+preflight. Submodule/LFS materialization is not implemented. A missing workflow
+file, unavailable commit, or failed Git command also fails preparation. Source
+preparation uses an isolated temporary bare repository without checkout or hooks;
+temporary files are removed on normal success and failure.
+
+Specifications are at most 64 KiB; packages at most 4 MiB. Selected inputs total at
+most 512 KiB across at most 64 files. The bundle's hex representation is at most
+3 MiB during preparation. Outputs have at most 64 declared paths, argv at most 128
+strings of 4096 bytes, and capabilities at most 32 names. Log/artifact limits each
+range from 1 byte to 512 KiB. Transport/cancellation limits range from 1 to 300
+seconds; queue/startup/execution limits from 1 second to 7 days.
+Log bounds apply to each captured stream. The artifact budget applies to the total
+bytes across all declared outputs in a result snapshot. The runner enforces queue, startup, and execution
+deadlines and a separate cancellation grace period.
+Each preparation/inspection Git subprocess has a 60-second deadline.
+
+Output package files are private (mode 0600) and must not already exist. Reuse the
+same prepared package for future submission retries: preparing again can produce
+different Git pack bytes and therefore a different digest. No automatic retry or
+mutation is performed by either command.
+
+## Durable acceptance and reconciliation
+
+Initialize the destination project using the remote installation and state
+directory selected by the alias. Review its configuration before explicitly
+trusting it for execution; submission does not copy a local trust decision.
+New Hydra homes are created privately regardless of the login umask. Task storage
+refuses an existing home or task directory writable by other users, and never
+changes its permissions automatically. Select a private `--home` when registering
+the alias if the current home is deliberately shared.
+
+```sh
+hydra fleet init build --project /srv/project -- --no-agent --json
+hydra fleet task submit build --input /tmp/task-package.json --key build-change-1 \
+  --trust-spec SHA256_FROM_PREVIEW
+hydra fleet task status build --id task_ID_FROM_RECEIPT
+```
+
+The selected alias must match the prepared specification. The receiver requires
+an existing registered project mapping, working Git/tmux/Hydra executables, and
+supported required capabilities. The receiver recognizes the existing local `exec`,
+`workflow`, `git`, and `tmux` capabilities. Other required names fail explicitly;
+executable detection does not qualify provider prompt delivery or resume.
+The handshake advertises task protocol 1 with `task-accept`, `task-start`,
+`task-status`, `task-cancel`, `task-logs`, and `task-result`.
+
+Acceptance atomically publishes a nonempty private directory under
+`$HYDRA_HOME/fleet/tasks/task_ID`, containing the validated `package.json`, immutable
+`acceptance.json`, and initial `state.json`. Files and directory entries are synced
+before acknowledging acceptance. The receipt binds the task ID, specification
+digest, submission key, canonical receiving project path/identity, and recorded
+acceptance time. Initial runtime reads `state: accepted` and
+`launch_intent: pending`. This is acceptance evidence, not activity or completion.
+Task metadata is separate from head/instance and workflow-attempt state.
+
+Keys are scoped to **one receiving host and its selected `HYDRA_HOME`, across all
+projects**. They contain 1–128 letters, digits, dots, underscores, or hyphens and
+start with a letter or digit. Reusing a key with the same validated specification
+returns the original receipt, including after the original project disappears.
+Changing the specification, including its destination, returns
+`submission_conflict`. Concurrent submitters publish only one acceptance; losing
+an acknowledgment does not grant permission to create another task. A handle is
+host-qualified: the same key on another host/state directory is a separate task.
+
+If a dispatched submission loses its response, the client reports
+`outcome_unknown`. Repeat the **same package and key** to reconcile. No automatic
+mutation retry occurs. Handshake failures mean this call did not dispatch a
+submission; they do not erase any earlier acceptance. Status during an outage
+reports the transport failure without claiming a terminal task state. Submission
+uses the specification's transport deadline independently for handshake and
+request; status, standalone start, cancel, and logs use 5 seconds for each. A transport timeout
+does not stop a detached task owner.
+
+Acceptance records and keys currently have no automatic expiry. Retain them for
+the lifetime of recovery and result collection. Deleting this state loses the
+deduplication guarantee; it is not an execution retry mechanism. Incomplete or
+corrupt published state returns `recovery_required` and is never replaced by a
+repeat submission. An unpublished `.accept.*` directory is not an accepted task.
+The receiver rejects symlinked task storage and directories writable by another
+user. These protections preserve metadata integrity; tasks are not an operating
+system sandbox.
+
+## Receiver-owned execution
+
+`submit --trust-spec HASH` authorizes the exact transferred code, task, and Hydra
+configuration, and starts the receiving-host owner before returning its response.
+The decision is recorded in the receiving task's `launch.json`; no local project
+trust file or credentials are imported. Without the flag, submission only stages
+acceptance. To launch a previously accepted task after reviewing it:
+
+```sh
+hydra fleet task start build --id task_ID --trust-spec SPEC_SHA256
+```
+
+A permanent launch claim is synced before forking. The detached owner retains a
+kernel file lock through startup and execution; its descendants do not retain the
+lock after exec. Repeated start requests return the existing task or report its
+uncertainty. They never remove the claim or repeat an execution. SSH disconnect
+does not signal the detached owner. If the owner dies before recording a terminal
+state, status reports `outcome_unknown` alongside the recorded state. Reboot or
+lost-owner recovery never silently resumes or restarts external work.
+
+The owner creates a private checkout from the verified bundle and initializes a
+dedicated Hydra project/worktree root. It uses the public shell CLI for `init`,
+`spawn`, `exec`, `provenance`, and `workflow run`. The originally mapped project and
+its dirty work remain untouched. Bundle materialization disables Git system/global
+configuration and hooks; execution restores the receiving host's Git configuration.
+Credentials remain host-local. Selected inputs are read-only-by-convention regular
+files under the task's private `inputs/`; commands receive their absolute directory
+as `HYDRA_TASK_INPUT_DIR`. Input contents are never treated as environment settings.
+
+Command tasks create one no-agent head and retain its provenance plus the actual
+exec run response in `provenance.json` and `attempt.json`. Workflow tasks retain the
+actual workflow run ID; its existing attempt/gate records remain authoritative.
+`succeeded` means the declared command-exit or workflow-success policy passed; it
+does not imply all agent sessions stopped, a human approved changes, or changes
+were integrated. Missing execution evidence is not invented.
+
+Queue time runs from recorded acceptance to launch, with clock reversal refused.
+Startup uses one monotonic deadline across checkout, initialization, and head
+creation. Execution has its own monotonic deadline around the shell CLI process
+group. `queue_deadline`, `startup_deadline`, and `execution_deadline` are separate
+failure reasons. The owner records bounded `stdout` and `stderr` files, an exit
+status, and available run identity. The owner seals an immutable result snapshot
+after completion; collection never infers success from a live worktree.
+
+
+## Logs and cancellation
+
+```sh
+hydra fleet task logs build --id task_ID --stream stdout --offset 0 --limit 4096
+hydra fleet task logs build --id task_ID --source work --stream stderr
+hydra fleet task logs build --id task_ID --source work --step build --attempt 1
+hydra fleet task cancel build --id task_ID
+```
+
+Logs default to `--source owner`: bounded supervisor stdout/stderr captured across
+startup and execution. `--source work` reads the existing exec worker files, or a
+workflow's explicitly selected step and attempt (default attempt 1). Exec records
+its real run ID before workers finish; an incomplete JSON response is never
+completion evidence. Small exec writes may remain buffered until the stream closes.
+Workflow logs reflect what the local engine has recorded;
+this is not a promise of live output from every agent harness.
+
+Responses include exact bytes as `hex`, a terminal-safe ASCII `text_preview`,
+`next_offset`, and the available byte count. Use the same source, stream, and
+step/attempt selectors for subsequent pages. `eof` describes the current snapshot;
+more bytes can appear while work runs. Missing logs return `available: false`.
+Each page is at most 65536 bytes, offsets are 0–524288, and only the specification's
+per-stream log budget is exposed. `limit_reached` means the exposed stream reached its budget; `truncated` means
+additional stored bytes were excluded. Supervisor capture also records actual
+truncation in runtime state. Reads reject symlinks,
+nonregular files, malformed ranges, and unsafe selectors.
+
+Cancellation first records a durable request. Status distinguishes `requested`,
+`delivered`, `confirmed_stopped`, and `unknown`; a lost cancellation response is
+`outcome_unknown`, so inspect the same task. An accepted task can be cancelled
+without launch. A live owner signals its managed command process group, allows
+the specification's cancellation grace period, and escalates within that bound.
+`confirmed_stopped` covers managed commands, not arbitrary detached descendants.
+Separate agent sessions without independent stop evidence leave cancellation
+unknown. Existing terminal tasks return `already_terminal`. A missing owner is
+never treated as stopped, and cancellation never replays work or deletes the
+retained worktrees. Task execution runs trusted code, not an OS sandbox.
+
+
+## Receiver-completion result snapshots
+
+```sh
+hydra fleet task result build --id task_ID --output /tmp/task-result.json
+hydra fleet task inspect-result --input /tmp/task-result.json
+```
+
+After command/workflow execution ends, the owner snapshots the verified source,
+observed result commits, declared artifacts, and existing attempt/gate records.
+Status reports `result_state: sealing`, then `ready` or `unavailable`, with a
+`result_error` stage when capture fails. If the owner disappears while sealing,
+status reports `unknown`; an already-published valid snapshot remains downloadable. Inspection previews the manifest and
+checksums without printing the encoded bundle or file payloads. A terminal
+command policy and a usable result snapshot are separate facts. Startup failures,
+owner loss, missing/unsafe outputs, exhausted size limits, and missing evidence
+can leave no usable snapshot. Downloads never repair or recapture changed work.
+
+Each output path must identify one regular file in exactly one recorded task head.
+For multi-head workflows, use unique output paths; missing or ambiguous paths fail
+snapshot creation. Every component is opened without following symlinks. Binary
+bytes and per-file SHA-256 checksums are preserved. The total declared artifact
+budget is enforced. Results also include head and instance IDs, branch labels,
+actual commits, dirty-worktree flags, and a bundle containing the original source
+plus result commits. Result commits must descend from the submitted source.
+Hydra does not commit dirty work on the agent's behalf. Only explicitly declared
+uncommitted artifacts are copied; other uncommitted files stay remote.
+
+Existing exec, workflow step/attempt, and gate records are copied from an explicit
+allowlist, with checksums, up to 512 KiB across 256 evidence files. Raw command argv,
+configuration, trust files, environment, live owner/PID files, and credentials are
+not exported as evidence. Committed Git history remains included, as in source
+preparation. A result package is at most 4 MiB plus its small checksum envelope,
+with at most 64 result heads and 64 artifacts. Oversize evidence fails explicitly;
+it is not silently shortened into apparent proof.
+
+The owner validates and durably publishes `result.json` once. Subsequent downloads
+verify and return that snapshot, even if a remote worktree has since changed.
+The client independently checks the result/specification digests, file paths and
+checksums, declared artifact bindings, Git bundle contents, exact refs/commits,
+and ancestry before creating an optional mode-0600 output file. Existing output
+files are never replaced. Result downloads use a 30-second transport deadline per
+handshake/request; `--timeout 1..300` overrides it. Transport failure does not
+re-execute the task. Results are not local integration approvals.
+
+The result envelope has `schema_version: 1`, `result_sha256`, and `result`.
+The digest covers compact JSON for `result`, which contains `schema_version`,
+`receipt`, canonical prepared `spec`, `heads`, `artifacts`, `evidence`,
+`bundle_sha256`, and `bundle_hex`. File records contain `path`, `bytes`, `sha256`,
+and `hex`; artifacts additionally bind `head_id`. This is a separately verified
+result format, not a restorable copy of live Hydra runtime state.
+
+
+## Collect and integrate
+
+```sh
+hydra fleet task collect build --id task_ID --into /path/to/local/repository
+# An already downloaded snapshot can also be collected while the host is offline.
+hydra fleet task collect --input /tmp/task-result.json --into /path/to/local/repository
+hydra fleet task collected --id collection_ID --into /path/to/local/repository
+
+# Run inside an initialized local Hydra repository.
+hydra integrate task:collection_ID --base main --target main --dry-run
+hydra integrate task:collection_ID --base main --target main --execute --gate 'make test'
+hydra integrate approve run_ID --by reviewer
+hydra integrate promote run_ID
+```
+
+Collection verifies the snapshot before writing local data. It stores the envelope,
+checksummed artifacts, and evidence under the repository's common Git directory:
+`hydra/task-results/collection_ID/`. Artifact and evidence files have separate
+subdirectories; they are not extracted over checkout files. Git objects are imported
+from the entire verified bundle, including result commits when the source commit
+already exists locally. Compare-and-set transactions install direct refs under
+`refs/hydra/tasks/collection_ID/`, with `source` and one ref per recorded result head.
+The destination repository must use the same Git object format as the source.
+
+A collection ID binds the immutable host alias, task ID, and specification digest.
+Repeated collection returns the same bindings. A different result digest for that
+identity is refused. Collection preserves `HEAD`, ordinary branch refs, the index,
+`FETCH_HEAD`, dirty files, and untracked files. It never checks out code, restores
+live Hydra state, imports trust decisions, or grants integration approval. Missing
+private files/refs from an interrupted installation can be completed by collecting
+the same snapshot again; existing altered files, symbolic refs, and changed ref
+values are refused rather than overwritten. Private extraction walks directory
+descriptors without following symlinks, including on retries.
+
+`collected` checks the stored snapshot, extracted file checksums, and current refs.
+`--format candidates` emits validated tab-separated integration candidates and
+requires a successful task with clean, committed result heads. Dirty remote work
+remains collectable evidence but is not an integration candidate. The task must
+commit its intended changes before finishing if they are to be integrated.
+
+The existing integration engine assembles those exact commits in its isolated
+worktree, runs local gates, and preserves its normal explicit approval and target
+promotion rules. It rechecks collected refs before merging candidates and before
+promotion. Remote gate records are retained evidence, not local approval. Candidate
+rows use `remote_HEAD_ID`, an isolated ref, the exact result commit, and the exact
+source commit; they do not create synthetic local head/instance records.

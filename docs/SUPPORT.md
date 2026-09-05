@@ -12,7 +12,8 @@ Hydra 2.0 supports current macOS and Linux systems with:
 The shell CLI and basic TUI require no compiler. The optional native TUI requires a
 C99 compiler when built from source; release artifacts are qualified on macOS and
 Linux. Windows, WSL-specific behavior, BSD userlands without the documented tools,
-and remote multi-host coordination are not supported contracts.
+and remote multi-host coordination are not supported 2.0 contracts. The
+[unreleased fleet pilot](FLEET.md) documents its separate support boundaries.
 
 Optional `fzf`, `gh`, and agent executables add only their documented features.
 Their absence must not prevent shell-only local orchestration.

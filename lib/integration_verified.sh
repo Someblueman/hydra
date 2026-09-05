@@ -23,12 +23,32 @@ integration_verified_ref() {
     printf '%s\n' "$_ivref"
 }
 
+integration_verified_candidate_current() {
+    case "$2" in
+        remote_head_*)
+            case "$3" in refs/hydra/tasks/collection_*/"${2#remote_}") ;; *) return 1 ;; esac
+            if git symbolic-ref --quiet "$3" >/dev/null 2>&1; then return 1; fi
+            [ "$(git rev-parse --verify "$3^{commit}" 2>/dev/null || true)" = "$4" ]
+            ;;
+        *)
+            _ivcc_worktree="$(sed -n '1p' "$1/heads/$2/worktree" 2>/dev/null || true)"
+            [ -n "$_ivcc_worktree" ] && [ "$(git -C "$_ivcc_worktree" rev-parse HEAD 2>/dev/null || true)" = "$4" ]
+            ;;
+    esac
+}
+
 integration_verified_select() {
     _ivs_selector="$1"
     _ivs_output="$2"
     _ivs_project="$3"
     _ivs_project_dir="$4"
     : > "$_ivs_output"
+    case "$_ivs_selector" in
+        task:collection_*)
+            "$HYDRA_BIN_CMD" fleet task collected --into "$(pwd)" --id "${_ivs_selector#task:}" --format candidates > "$_ivs_output"
+            return
+            ;;
+    esac
     _ivs_workflow="$_ivs_project_dir/workflows/runs/$_ivs_selector"
     if [ -d "$_ivs_workflow" ]; then
         [ "$(sed -n '1p' "$_ivs_workflow/state" 2>/dev/null || true)" = succeeded ] || {
@@ -248,9 +268,7 @@ $_ivct_line
 EOF
         state_v2_write_scalar "$_ivct_report/current-candidate" "$_ivct_branch"
         state_v2_write_scalar "$_ivct_report/progress-stage" merge
-        _ivct_head_dir="$_ivct_project_dir/heads/$_ivct_head"
-        _ivct_candidate_worktree="$(sed -n '1p' "$_ivct_head_dir/worktree")"
-        if [ "$(git -C "$_ivct_candidate_worktree" rev-parse HEAD 2>/dev/null || true)" != "$_ivct_commit" ]; then
+        if ! integration_verified_candidate_current "$_ivct_project_dir" "$_ivct_head" "$_ivct_branch" "$_ivct_commit"; then
             integration_verified_record_failure "$_ivct_report" stale-candidate stale-candidate "$_ivct_branch" "" "hydra integrate cleanup $_ivct_run --apply"
             return 1
         fi
