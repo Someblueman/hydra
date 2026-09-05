@@ -168,7 +168,7 @@ make help       # Build, package, and focused test targets
 
 Contributions should include checks appropriate to their scope. Versions after
 2.0 are chosen at release time from compatibility impact; see the
-[versioning policy](docs/VERSIONING.md) and [release checklist](docs/RELEASE_CHECKLIST.md).
+[release policy](docs/VERSIONING.md).
 
 ## Uninstall
 

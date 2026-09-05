@@ -110,6 +110,6 @@ the earlier test pins were removed after evidence was captured.
 
 The working tree is uncommitted. Hosted checks on a reviewed/merged commit,
 release-time version assignment, final archive production, and publication remain
-explicit next actions under [the release checklist](RELEASE_CHECKLIST.md). Pilot
+explicit next actions under [the release policy](VERSIONING.md). Pilot
 bounds are 16 hosts, INT-only head signalling, and explicit selected bundles;
 there is no distributed scheduler or automatic mutation retry.

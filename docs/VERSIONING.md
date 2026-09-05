@@ -32,7 +32,7 @@ native, parity, install, onboarding, and applicable security/recovery gates.
 
 Keep `main` releasable and deliver one independently useful backlog slice at a time.
 There is no scheduled release train and no requirement to publish every merge.
-Use [the reusable release checklist](RELEASE_CHECKLIST.md) when a slice is ready.
+A ready slice must meet the [release definition of done](ROADMAP.md#release-definition-of-done).
 
 During development, describe changes under `Unreleased` in the changelog. At release
 preparation, choose the version from the accumulated compatibility impact, update

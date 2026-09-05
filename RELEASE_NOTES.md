@@ -45,5 +45,5 @@ actions, the one-key kill-all shortcut, preview-follow toggle, and redundant
 
 See [docs/MIGRATING_TO_2.0.md](docs/MIGRATING_TO_2.0.md),
 [docs/CONTRACTS.md](docs/CONTRACTS.md), and
-[docs/RELEASE_CHECKLIST_2.0.0.md](docs/RELEASE_CHECKLIST_2.0.0.md) for the migration,
+[docs/VERSIONING.md](docs/VERSIONING.md) for the migration,
 stable interfaces, and exact-candidate release boundary.

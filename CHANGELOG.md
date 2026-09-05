@@ -15,8 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Native fleet view with host-qualified heads, recorded desired state, attach, and
   confirmed interrupt actions delegated to the public CLI. JSON-C is statically
   linked into the fleet helper; core shell operation has no added dependency.
-- Reusable rolling release checklist with release-time SemVer and draft-first
-  artifact publication guidance.
+- Release policy with release-time SemVer and draft-first artifact publication
+  guidance.
 
 ### Changed
 
