@@ -48,4 +48,11 @@ int task_result_evidence(json_object *files, const char *directory, json_object 
 json_object *task_result_verify(json_object *envelope);
 int task_result_seal(const char *directory, json_object *state);
 int task_result_bindings(json_object *result, const char *scratch);
+int task_owned_directory(int parent, const char *name, bool create);
+int task_collection_root(const char *project, char root[F_PATH], bool create);
+json_object *task_collect(const char *project, json_object *envelope);
+json_object *task_collected(const char *project, const char *id);
+json_object *task_collection_cli(int argc, char **argv);
+int task_collection_refs(const char *project, const char *id, json_object *result, const char *bundle, bool install);
+int task_collection_file(const char *root, const char *relative, const char *hex);
 #endif

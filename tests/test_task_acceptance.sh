@@ -280,6 +280,9 @@ done
 grep -q '"result_state":"unavailable"' "$fixture/unsafe-output-status"
 if task result build --id "$unsafe_id" > "$fixture/result-error"; then exit 1; fi
 grep -q '"code":"result_unavailable"' "$fixture/result-error"
+# This fixture extension is linted separately by make lint.
+# shellcheck disable=SC1091
+. "$root/tests/task_collection_cases.sh"
 # Killing an owner cannot authorize a second execution. Stop it before terminating
 # its child, so it cannot reap the child or publish a completion before the crash.
 sed "s@\[\"true\"\]@[\"sh\",\"-c\",\"printf started > $fixture/crash-started; sleep 30\"]@" "$fixture/spec" > "$fixture/crash-spec"

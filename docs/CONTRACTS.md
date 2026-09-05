@@ -143,6 +143,10 @@ confirmation is scoped to managed commands; missing owner evidence stays unknown
 `task-result` returns an immutable receiver-completion snapshot with checksummed
 artifacts/evidence and an exact source/result Git bundle. Both endpoints validate
 the result envelope before use; downloads never recapture changed worktrees.
-Local-ref installation and integration of these snapshots remain under implementation.
+Collection installs verified snapshots beneath the common Git directory and uses
+compare-and-set direct refs under `refs/hydra/tasks/collection_ID/`. Repeated
+collection preserves checkout/index/ordinary refs; changed private bindings fail.
+`integrate task:collection_ID` consumes successful clean commits through the existing
+local gate, approval, and promotion flow without restoring remote live state.
 Fleet stdin rejects embedded NUL bytes
 and input beyond its 8 MiB bound instead of accepting a truncated JSON prefix.

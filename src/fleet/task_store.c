@@ -9,9 +9,9 @@
 
 /* The explicitly configured home may resolve through a user-owned symlink.
  * Within it, task storage never follows links or uses writable shared directories. */
-static int owned_directory(int parent, const char *name) {
+int task_owned_directory(int parent, const char *name, bool create) {
     struct stat st; int fd;
-    if (mkdirat(parent, name, 0700) && errno != EEXIST) return -1;
+    if (create && mkdirat(parent, name, 0700) && errno != EEXIST) return -1;
     fd = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
     if (fd < 0) return -1;
     if (fstat(fd, &st) || st.st_uid != geteuid() || (st.st_mode & 0022)) { close(fd); return -1; }
@@ -24,8 +24,8 @@ int task_store_root(char root[F_PATH]) {
     if (f_mkdirs(f_home) || !realpath(f_home, home)) return -1;
     home_fd = open(home, O_RDONLY | O_DIRECTORY | O_NOFOLLOW); if (home_fd < 0) return -1;
     if (fstat(home_fd, &st) || st.st_uid != geteuid() || (st.st_mode & 0022)) goto done;
-    fleet_fd = owned_directory(home_fd, "fleet"); if (fleet_fd < 0) goto done;
-    tasks_fd = owned_directory(fleet_fd, "tasks"); if (tasks_fd < 0) goto done;
+    fleet_fd = task_owned_directory(home_fd, "fleet", true); if (fleet_fd < 0) goto done;
+    tasks_fd = task_owned_directory(fleet_fd, "tasks", true); if (tasks_fd < 0) goto done;
     if (f_path(fleet_path, sizeof(fleet_path), home, "fleet") || f_path(root, F_PATH, fleet_path, "tasks")) goto done;
     status = 0;
 done:
