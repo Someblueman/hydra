@@ -16,8 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Durable receiving-host task acceptance with pending launch intent, immutable
   receipts, project/dependency preflight, and submission-key deduplication across
   concurrent clients and lost acknowledgments. Task status preserves transport
-  failures and corrupt-state uncertainty. Detached execution and result collection
-  remain under implementation.
+  failures and corrupt-state uncertainty.
+- Explicit digest-authorized detached task execution through the existing shell
+  exec/workflow engine, preserving real run/provenance evidence and selected inputs.
+  Durable launch claims prevent replay after owner loss; queue, startup, and
+  execution deadlines remain distinct. Cancellation and result collection remain
+  under implementation.
 - Optional C fleet coordinator with OpenSSH host aliases, pinned bootstrap,
   capability negotiation, bounded parallel list/doctor observations, and explicit
   reconcile/watch after connection loss. Partial results retain reachable hosts;

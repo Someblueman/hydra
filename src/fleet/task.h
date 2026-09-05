@@ -24,4 +24,8 @@ int task_store_root(char root[F_PATH]);
 int task_sync_dir(const char *path);
 int task_write_json(const char *directory, const char *name, json_object *value, bool replace);
 json_object *task_read_record(const char *directory, const char *name);
+json_object *task_start(const char *id, const char *trust);
+bool task_owner_active(const char *directory);
+bool task_runtime_valid(json_object *state);
+void task_execute(const char *directory, json_object *package, json_object *state);
 #endif

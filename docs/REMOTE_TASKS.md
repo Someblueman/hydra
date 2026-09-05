@@ -1,10 +1,9 @@
 # Remote task packages (unreleased)
 
-This unreleased implementation provides local `prepare`/`inspect` and durable
-receiving-host `submit`/`status`. Submission currently records acceptance and a
-pending launch intent; **it does not yet launch work**. Detached execution,
-cancellation, and result collection remain under implementation. The roadmap
-item remains open.
+This unreleased implementation provides package preparation, durable submission,
+detached command/workflow execution, and task status. Launch requires explicit
+authorization of the specification digest. Cancellation, public log retrieval,
+and result collection remain under implementation. The roadmap item remains open.
 
 ## Prepare and preview
 
@@ -89,7 +88,9 @@ most 512 KiB across at most 64 files. The bundle's hex representation is at most
 strings of 4096 bytes, and capabilities at most 32 names. Log/artifact limits each
 range from 1 byte to 512 KiB. Transport/cancellation limits range from 1 to 300
 seconds; queue/startup/execution limits from 1 second to 7 days. These execution
-limits are bound declarations in this slice, not yet enforced by a task runner.
+Log bounds apply to each captured stream; artifact limits remain declarations
+until collection is implemented. The runner enforces queue, startup, and execution
+deadlines; cancellation is still under implementation.
 Each preparation/inspection Git subprocess has a 60-second deadline.
 
 Output package files are private (mode 0600) and must not already exist. Reuse the
@@ -105,7 +106,8 @@ trusting it for execution; submission does not copy a local trust decision.
 
 ```sh
 hydra fleet init build --project /srv/project -- --no-agent --json
-hydra fleet task submit build --input /tmp/task-package.json --key build-change-1
+hydra fleet task submit build --input /tmp/task-package.json --key build-change-1 \
+  --trust-spec SHA256_FROM_PREVIEW
 hydra fleet task status build --id task_ID_FROM_RECEIPT
 ```
 
@@ -114,14 +116,15 @@ an existing registered project mapping, working Git/tmux/Hydra executables, and
 supported required capabilities. This slice recognizes the existing local `exec`,
 `workflow`, `git`, and `tmux` capabilities. Other required names fail explicitly;
 executable detection does not qualify provider prompt delivery or resume.
-The handshake advertises task protocol 1 with `task-accept` and `task-status`.
+The handshake advertises task protocol 1 with `task-accept`, `task-start`, and
+`task-status`.
 
 Acceptance atomically publishes a nonempty private directory under
 `$HYDRA_HOME/fleet/tasks/task_ID`, containing the validated `package.json`, immutable
 `acceptance.json`, and initial `state.json`. Files and directory entries are synced
 before acknowledging acceptance. The receipt binds the task ID, specification
 digest, submission key, canonical receiving project path/identity, and recorded
-acceptance time. Its runtime currently reads `state: accepted` and
+acceptance time. Initial runtime reads `state: accepted` and
 `launch_intent: pending`. This is acceptance evidence, not activity or completion.
 Task metadata is separate from head/instance and workflow-attempt state.
 
@@ -140,8 +143,8 @@ mutation retry occurs. Handshake failures mean this call did not dispatch a
 submission; they do not erase any earlier acceptance. Status during an outage
 reports the transport failure without claiming a terminal task state. Submission
 uses the specification's transport deadline independently for handshake and
-request; status uses 5 seconds for each. Queue/startup/execution/cancellation
-deadlines remain declarations until the runner slice is implemented.
+request; status and standalone start use 5 seconds for each. A transport timeout
+does not stop a detached task owner.
 
 Acceptance records and keys currently have no automatic expiry. Retain them for
 the lifetime of recovery and result collection. Deleting this state loses the
@@ -151,3 +154,47 @@ repeat submission. An unpublished `.accept.*` directory is not an accepted task.
 The receiver rejects symlinked task storage and directories writable by another
 user. These protections preserve metadata integrity; tasks are not an operating
 system sandbox.
+
+## Receiver-owned execution
+
+`submit --trust-spec HASH` authorizes the exact transferred code, task, and Hydra
+configuration, and starts the receiving-host owner before returning its response.
+The decision is recorded in the receiving task's `launch.json`; no local project
+trust file or credentials are imported. Without the flag, submission only stages
+acceptance. To launch a previously accepted task after reviewing it:
+
+```sh
+hydra fleet task start build --id task_ID --trust-spec SPEC_SHA256
+```
+
+A permanent launch claim is synced before forking. The detached owner retains a
+kernel file lock through startup and execution; its descendants do not retain the
+lock after exec. Repeated start requests return the existing task or report its
+uncertainty. They never remove the claim or repeat an execution. SSH disconnect
+does not signal the detached owner. If the owner dies before recording a terminal
+state, status reports `outcome_unknown` alongside the recorded state. Reboot or
+lost-owner recovery never silently resumes or restarts external work.
+
+The owner creates a private checkout from the verified bundle and initializes a
+dedicated Hydra project/worktree root. It uses the public shell CLI for `init`,
+`spawn`, `exec`, `provenance`, and `workflow run`. The originally mapped project and
+its dirty work remain untouched. Bundle materialization disables Git system/global
+configuration and hooks; execution restores the receiving host's Git configuration.
+Credentials remain host-local. Selected inputs are read-only-by-convention regular
+files under the task's private `inputs/`; commands receive their absolute directory
+as `HYDRA_TASK_INPUT_DIR`. Input contents are never treated as environment settings.
+
+Command tasks create one no-agent head and retain its provenance plus the actual
+exec run response in `provenance.json` and `attempt.json`. Workflow tasks retain the
+actual workflow run ID; its existing attempt/gate records remain authoritative.
+`succeeded` means the declared command-exit or workflow-success policy passed; it
+does not imply all agent sessions stopped, a human approved changes, or changes
+were integrated. Missing execution evidence is not invented.
+
+Queue time runs from recorded acceptance to launch, with clock reversal refused.
+Startup uses one monotonic deadline across checkout, initialization, and head
+creation. Execution has its own monotonic deadline around the shell CLI process
+group. `queue_deadline`, `startup_deadline`, and `execution_deadline` are separate
+failure reasons. The owner records bounded `stdout` and `stderr` files, an exit
+status, and available run identity. These are inspectable files pending public log
+retrieval. Cancellation and artifact/result collection are not yet qualified.

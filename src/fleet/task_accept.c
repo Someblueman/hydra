@@ -11,14 +11,17 @@ static bool task_id(const char *id) { return id && !strncmp(id, "task_", 5) && t
 static json_object *receipt(const char *directory, const char *id, const char *digest) {
     json_object *accepted = task_read_record(directory, "acceptance.json"), *state = task_read_record(directory, "state.json"), *result = NULL;
     const char *stored_id = f_string(accepted, "task_id"), *stored_digest = f_string(accepted, "spec_sha256");
-    const char *current = f_string(state, "state"), *intent = f_string(state, "launch_intent");
+    const char *current = f_string(state, "state");
     if (!f_number_is(accepted, "schema_version", 1) || !stored_id || strcmp(stored_id, id) || !task_hex(stored_digest, 64) ||
         !f_string(accepted, "project") || !f_string(accepted, "project_id") || !f_string(accepted, "submission_key") ||
-        !json_object_is_type(f_field(accepted, "accepted_at"), json_type_int) || !f_number_is(state, "schema_version", 1) ||
-        !current || strcmp(current, "accepted") || !intent || strcmp(intent, "pending")) goto done;
+        !json_object_is_type(f_field(accepted, "accepted_at"), json_type_int) || !task_runtime_valid(state)) goto done;
     if (digest && strcmp(stored_digest, digest)) {
         result = f_error("fleet-task-submit", "submission_conflict", "this receiving-host submission key already binds a different task specification");
         goto done;
+    }
+    if ((!strcmp(current, "starting") || !strcmp(current, "running")) && !task_owner_active(directory)) {
+        f_string_add(state, "recorded_state", current); f_string_add(state, "state", "outcome_unknown");
+        f_string_add(state, "failure", "owner_unavailable");
     }
     json_object_object_add(accepted, "runtime", json_object_get(state));
     result = f_success("fleet-task", json_object_get(accepted));
@@ -125,10 +128,20 @@ done:
     json_object_put(binding); json_object_put(accepted); json_object_put(state); json_object_put(inspected); return result;
 }
 json_object *task_serve(json_object *request) {
-    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", NULL};
+    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", NULL};
     const char *operation = f_string(request, "operation");
     if (!task_keys(request, keys) || !operation) return f_error("fleet-task", "invalid_input", "invalid task request");
-    if (!strcmp(operation, "submit") && !f_field(request, "task_id")) return task_accept(f_field(request, "package"), f_string(request, "submission_key"));
-    if (!strcmp(operation, "status") && !f_field(request, "package") && !f_field(request, "submission_key")) return task_status(f_string(request, "task_id"));
+    if (!strcmp(operation, "submit") && !f_field(request, "task_id")) {
+        const char *trust = f_string(request, "trust_spec"), *digest = f_string(f_field(request, "package"), "spec_sha256"); json_object *accepted;
+        if (f_field(request, "trust_spec") && (!task_hex(trust, 64) || !digest || strcmp(trust, digest))) return f_error("fleet-task-submit", "trust_required", "--trust-spec must match the prepared specification digest");
+        accepted = task_accept(f_field(request, "package"), f_string(request, "submission_key"));
+        if (trust && json_object_get_boolean(f_field(accepted, "ok"))) {
+            json_object *started = task_start(f_string(f_field(accepted, "data"), "task_id"), trust);
+            json_object_put(accepted); return started;
+        }
+        return accepted;
+    }
+    if (!strcmp(operation, "status") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_status(f_string(request, "task_id"));
+    if (!strcmp(operation, "start") && !f_field(request, "package") && !f_field(request, "submission_key")) return task_start(f_string(request, "task_id"), f_string(request, "trust_spec"));
     return f_error("fleet-task", "invalid_input", "unknown task operation or conflicting fields");
 }
