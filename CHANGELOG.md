@@ -20,8 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Explicit digest-authorized detached task execution through the existing shell
   exec/workflow engine, preserving real run/provenance evidence and selected inputs.
   Durable launch claims prevent replay after owner loss; queue, startup, and
-  execution deadlines remain distinct. Cancellation and result collection remain
-  under implementation.
+  execution deadlines remain distinct. Result collection remains under implementation.
+- Durable remote-task cancellation with requested/delivered/confirmed/unknown
+  outcomes and a separate grace deadline. Bounded paginated logs expose real owner
+  and exec/workflow output, preserve exact bytes, and retain work after cancellation.
 - Optional C fleet coordinator with OpenSSH host aliases, pinned bootstrap,
   capability negotiation, bounded parallel list/doctor observations, and explicit
   reconcile/watch after connection loss. Partial results retain reachable hosts;

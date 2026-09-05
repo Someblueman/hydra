@@ -136,5 +136,9 @@ and `task-status`: receiver-owned receipts and pending launch intent are publish
 durably, and keys deduplicate across projects in one receiving-host state directory.
 `task-start` adds an explicitly authorized detached owner, permanent launch claim,
 and existing shell exec/workflow attempt identity. Loss of the owner is unknown,
-never permission to replay. Fleet stdin rejects embedded NUL bytes
+never permission to replay. `task-cancel` records cancellation independently from
+transport acknowledgment; `task-logs` returns bounded byte ranges from owner or
+recorded worker streams with stable run/step/attempt selectors. Cancellation
+confirmation is scoped to managed commands; missing owner evidence stays unknown.
+Fleet stdin rejects embedded NUL bytes
 and input beyond its 8 MiB bound instead of accepting a truncated JSON prefix.

@@ -13,7 +13,17 @@
 #define F_PATH 4096
 #define F_PROTOCOL 1
 #define F_VERSION "2.0.0"
-struct f_capture { char *out, *err; int status; bool timeout; };
+struct f_capture { char *out, *err; int status; bool timeout, cancelled, stop_unknown; };
+/* Borrowed log descriptors and stop context; remaining budgets span invocations. */
+struct f_control {
+    bool (*stop)(void *context);
+    void (*observe)(void *context, const char *stdout_text);
+    void *context;
+    unsigned grace_seconds;
+    int log_fd[2];
+    size_t remaining[2];
+    bool truncated, log_error, stop_unknown;
+};
 struct f_remote { char name[128], target[256], hydra[F_PATH], home[F_PATH]; bool multiplex; };
 extern volatile sig_atomic_t f_stopped;
 extern const char *f_home, *f_hydra;
@@ -36,6 +46,7 @@ bool f_name(const char *value);
 bool f_target(const char *value);
 void f_capture_free(struct f_capture *cap);
 int f_run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap);
+int f_run_controlled(char *const argv[], unsigned seconds, struct f_capture *cap, struct f_control *control);
 char *f_quote(const char *value);
 int f_ssh(const struct f_remote *remote, const char *command, const char *input, size_t size, unsigned seconds, bool tty, struct f_capture *cap);
 int f_remote_load(const char *name, struct f_remote *remote);

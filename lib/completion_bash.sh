@@ -25,7 +25,8 @@ _hydra_completion() {
         case ${COMP_WORDS[3]:-} in
             submit) COMPREPLY=($(compgen -W "--input --key --trust-spec" -- "${cur}")); return 0 ;;
             start) COMPREPLY=($(compgen -W "--id --trust-spec" -- "${cur}")); return 0 ;;
-            status) COMPREPLY=($(compgen -W "--id" -- "${cur}")); return 0 ;;
+            logs) COMPREPLY=($(compgen -W "--id --source --stream --offset --limit --step --attempt" -- "${cur}")); return 0 ;;
+            status|cancel) COMPREPLY=($(compgen -W "--id" -- "${cur}")); return 0 ;;
         esac
     fi
     
@@ -43,7 +44,7 @@ _hydra_completion() {
             return 0
             ;;
         task)
-            COMPREPLY=($(compgen -W "prepare inspect submit start status help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "prepare inspect submit start status cancel logs help" -- "${cur}"))
             return 0
             ;;
         prepare)

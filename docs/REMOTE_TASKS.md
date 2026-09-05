@@ -1,9 +1,9 @@
 # Remote task packages (unreleased)
 
 This unreleased implementation provides package preparation, durable submission,
-detached command/workflow execution, and task status. Launch requires explicit
-authorization of the specification digest. Cancellation, public log retrieval,
-and result collection remain under implementation. The roadmap item remains open.
+detached command/workflow execution, status, cancellation, and bounded log retrieval.
+Launch requires explicit authorization of the specification digest. Result
+collection remains under implementation. The roadmap item remains open.
 
 ## Prepare and preview
 
@@ -87,10 +87,10 @@ most 512 KiB across at most 64 files. The bundle's hex representation is at most
 3 MiB during preparation. Outputs have at most 64 declared paths, argv at most 128
 strings of 4096 bytes, and capabilities at most 32 names. Log/artifact limits each
 range from 1 byte to 512 KiB. Transport/cancellation limits range from 1 to 300
-seconds; queue/startup/execution limits from 1 second to 7 days. These execution
+seconds; queue/startup/execution limits from 1 second to 7 days.
 Log bounds apply to each captured stream; artifact limits remain declarations
 until collection is implemented. The runner enforces queue, startup, and execution
-deadlines; cancellation is still under implementation.
+deadlines and a separate cancellation grace period.
 Each preparation/inspection Git subprocess has a 60-second deadline.
 
 Output package files are private (mode 0600) and must not already exist. Reuse the
@@ -116,8 +116,8 @@ an existing registered project mapping, working Git/tmux/Hydra executables, and
 supported required capabilities. This slice recognizes the existing local `exec`,
 `workflow`, `git`, and `tmux` capabilities. Other required names fail explicitly;
 executable detection does not qualify provider prompt delivery or resume.
-The handshake advertises task protocol 1 with `task-accept`, `task-start`, and
-`task-status`.
+The handshake advertises task protocol 1 with `task-accept`, `task-start`,
+`task-status`, `task-cancel`, and `task-logs`.
 
 Acceptance atomically publishes a nonempty private directory under
 `$HYDRA_HOME/fleet/tasks/task_ID`, containing the validated `package.json`, immutable
@@ -143,7 +143,7 @@ mutation retry occurs. Handshake failures mean this call did not dispatch a
 submission; they do not erase any earlier acceptance. Status during an outage
 reports the transport failure without claiming a terminal task state. Submission
 uses the specification's transport deadline independently for handshake and
-request; status and standalone start use 5 seconds for each. A transport timeout
+request; status, standalone start, cancel, and logs use 5 seconds for each. A transport timeout
 does not stop a detached task owner.
 
 Acceptance records and keys currently have no automatic expiry. Retain them for
@@ -196,5 +196,43 @@ Startup uses one monotonic deadline across checkout, initialization, and head
 creation. Execution has its own monotonic deadline around the shell CLI process
 group. `queue_deadline`, `startup_deadline`, and `execution_deadline` are separate
 failure reasons. The owner records bounded `stdout` and `stderr` files, an exit
-status, and available run identity. These are inspectable files pending public log
-retrieval. Cancellation and artifact/result collection are not yet qualified.
+status, and available run identity. Artifact/result collection is not yet qualified.
+
+
+## Logs and cancellation
+
+```sh
+hydra fleet task logs build --id task_ID --stream stdout --offset 0 --limit 4096
+hydra fleet task logs build --id task_ID --source work --stream stderr
+hydra fleet task logs build --id task_ID --source work --step build --attempt 1
+hydra fleet task cancel build --id task_ID
+```
+
+Logs default to `--source owner`: bounded supervisor stdout/stderr captured across
+startup and execution. `--source work` reads the existing exec worker files, or a
+workflow's explicitly selected step and attempt (default attempt 1). Exec records
+its real run ID before workers finish; an incomplete JSON response is never
+completion evidence. Small exec writes may remain buffered until the stream closes.
+Workflow logs reflect what the local engine has recorded;
+this is not a promise of live output from every agent harness.
+
+Responses include exact bytes as `hex`, a terminal-safe ASCII `text_preview`,
+`next_offset`, and the available byte count. Use the same source, stream, and
+step/attempt selectors for subsequent pages. `eof` describes the current snapshot;
+more bytes can appear while work runs. Missing logs return `available: false`.
+Each page is at most 65536 bytes, offsets are 0–524288, and only the specification's
+per-stream log budget is exposed. `limit_reached` means the exposed stream reached its budget; `truncated` means
+additional stored bytes were excluded. Supervisor capture also records actual
+truncation in runtime state. Reads reject symlinks,
+nonregular files, malformed ranges, and unsafe selectors.
+
+Cancellation first records a durable request. Status distinguishes `requested`,
+`delivered`, `confirmed_stopped`, and `unknown`; a lost cancellation response is
+`outcome_unknown`, so inspect the same task. An accepted task can be cancelled
+without launch. A live owner signals its managed command process group, allows
+the specification's cancellation grace period, and escalates within that bound.
+`confirmed_stopped` covers managed commands, not arbitrary detached descendants.
+Separate agent sessions without independent stop evidence leave cancellation
+unknown. Existing terminal tasks return `already_terminal`. A missing owner is
+never treated as stopped, and cancellation never replays work or deletes the
+retained worktrees. Task execution runs trusted code, not an OS sandbox.

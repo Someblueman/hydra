@@ -23,6 +23,7 @@ static json_object *receipt(const char *directory, const char *id, const char *d
         f_string_add(state, "recorded_state", current); f_string_add(state, "state", "outcome_unknown");
         f_string_add(state, "failure", "owner_unavailable");
     }
+    task_cancel_view(directory, stored_digest, state);
     json_object_object_add(accepted, "runtime", json_object_get(state));
     result = f_success("fleet-task", json_object_get(accepted));
 done:
@@ -128,9 +129,14 @@ done:
     json_object_put(binding); json_object_put(accepted); json_object_put(state); json_object_put(inspected); return result;
 }
 json_object *task_serve(json_object *request) {
-    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", NULL};
+    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", "stream", "offset", "limit", "source", "step", "attempt", NULL};
     const char *operation = f_string(request, "operation");
     if (!task_keys(request, keys) || !operation) return f_error("fleet-task", "invalid_input", "invalid task request");
+    if (strcmp(operation, "logs") && (f_field(request, "stream") || f_field(request, "offset") || f_field(request, "limit") || f_field(request, "source") || f_field(request, "step") || f_field(request, "attempt"))) return f_error("fleet-task", "invalid_input", "log options require the logs operation");
+    if (!strcmp(operation, "logs") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) {
+        return task_logs(f_string(request, "task_id"), request);
+    }
+    if (!strcmp(operation, "cancel") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_cancel(f_string(request, "task_id"));
     if (!strcmp(operation, "submit") && !f_field(request, "task_id")) {
         const char *trust = f_string(request, "trust_spec"), *digest = f_string(f_field(request, "package"), "spec_sha256"); json_object *accepted;
         if (f_field(request, "trust_spec") && (!task_hex(trust, 64) || !digest || strcmp(trust, digest))) return f_error("fleet-task-submit", "trust_required", "--trust-spec must match the prepared specification digest");

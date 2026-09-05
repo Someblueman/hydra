@@ -30,7 +30,7 @@ if [ -f "$HYDRA_TEST_TRANSPORT/offline" ]; then exit 255; fi
 request="$(mktemp "$HYDRA_TEST_TRANSPORT/request.XXXXXX")"
 trap 'rm -f "$request"' 0
 cat > "$request"
-if [ -f "$HYDRA_TEST_TRANSPORT/lose-ack" ] && grep -Eq '"operation":"(submit|start)"' "$request"; then
+if [ -f "$HYDRA_TEST_TRANSPORT/lose-ack" ] && grep -Eq '"operation":"(submit|start|cancel)"' "$request"; then
     /bin/sh -c "$2" < "$request" > "$HYDRA_TEST_TRANSPORT/lost-response"
     rm "$HYDRA_TEST_TRANSPORT/lose-ack"
     exit 255
@@ -277,6 +277,85 @@ for phase in startup execution; do
     grep -q "\"failure\":\"${phase}_deadline\"" "$phase_prefix-status"
     rm -f "$fixture/transport/slow-clone"
 done
+# Storage corruption is recovery-required, never a reason to replace acceptance.
+task cancel build --id "$lost_id" > "$fixture/pending-cancel"
+grep -q '"state":"cancelled"' "$fixture/pending-cancel"
+grep -q '"cancellation_scope":"not_launched"' "$fixture/pending-cancel"
+[ ! -e "$fixture/host/fleet/tasks/$lost_id/launch.json" ]
+task logs build --id "$lost_id" > "$fixture/no-logs"
+grep -q '"available":false' "$fixture/no-logs"
+task cancel build --id "$crash_id" > "$fixture/unknown-cancel"
+grep -q '"cancellation":"unknown"' "$fixture/unknown-cancel"
+grep -q '"cancel_requested_at":' "$fixture/unknown-cancel"
+
+task logs build --id "$execution_id" --limit 16 > "$fixture/log-chunk"
+expected="$(od -An -tx1 -N16 "$fixture/host/fleet/tasks/$execution_id/stdout" | tr -d ' \n')"
+grep -q "\"hex\":\"$expected\"" "$fixture/log-chunk"
+grep -q '"next_offset":16' "$fixture/log-chunk"
+task logs build --id "$execution_id" --offset 16 --limit 16 > "$fixture/log-chunk"
+grep -q '"next_offset":32' "$fixture/log-chunk"
+if task logs build --id "$execution_id" --offset -1 >/dev/null; then exit 1; fi
+if task logs build --id "$execution_id" --limit 65537 >/dev/null; then exit 1; fi
+mv "$fixture/host/fleet/tasks/$execution_id/stderr" "$fixture/saved-stderr"
+ln -s "$fixture/source/context" "$fixture/host/fleet/tasks/$execution_id/stderr"
+if task logs build --id "$execution_id" --stream stderr > "$fixture/error"; then exit 1; fi
+grep -q '"code":"invalid_log"' "$fixture/error"
+rm "$fixture/host/fleet/tasks/$execution_id/stderr"
+mv "$fixture/saved-stderr" "$fixture/host/fleet/tasks/$execution_id/stderr"
+
+# Cancel real running commands and workflows without losing their worktrees.
+printf "printf running > '%s'; sleep 30\n" "$fixture/wf-cancel-started" >> "$fixture/source/task-work.sh"
+git -C "$fixture/source" add task-work.sh
+git -C "$fixture/source" -c commit.gpgSign=false commit -qm cancellable-workflow
+cancel_commit="$(git -C "$fixture/source" rev-parse HEAD)"
+for kind in exec workflow; do
+    if [ "$kind" = exec ]; then
+        sed -e 's/crash-started/cancel-started/' -e 's@sleep 30@printf live-worker-output; head -c 5000 /dev/zero; exec 1>\&-; sleep 30@' -e 's/"cancellation_seconds":10/"cancellation_seconds":1/' "$fixture/crash-spec" > "$fixture/control-spec"
+        marker="$fixture/cancel-started"
+    else
+        sed -e "s/$workflow_commit/$cancel_commit/" -e 's/"cancellation_seconds":10/"cancellation_seconds":2/' "$fixture/workflow-spec" > "$fixture/control-spec"
+        marker="$fixture/wf-cancel-started"
+    fi
+    task prepare --source "$fixture/source" --spec "$fixture/control-spec" --output "$fixture/cancel-$kind-package" > "$fixture/control-preview"
+    control_digest="$(sed -n 's/.*"spec_sha256":"\([^"]*\)".*/\1/p' "$fixture/control-preview")"
+    task submit build --input "$fixture/cancel-$kind-package" --key "cancel-$kind" --trust-spec "$control_digest" > "$fixture/control-receipt"
+    control_id="$(sed -n 's/.*"task_id":"\([^"]*\)".*/\1/p' "$fixture/control-receipt")"
+    attempt=0
+    while [ ! -f "$marker" ] && [ "$attempt" -lt 100 ]; do sleep 0.1; attempt=$((attempt + 1)); done
+    [ -f "$marker" ]
+    task logs build --id "$control_id" > "$fixture/live-logs"
+    grep -q '"available":true' "$fixture/live-logs"
+    if [ "$kind" = exec ]; then
+        task logs build --id "$control_id" --source work > "$fixture/worker-logs"
+        grep -q '"text_preview":"live-worker-output?' "$fixture/worker-logs"
+        grep -q '"run_id":"run_' "$fixture/worker-logs"
+        grep -q '"state":"running"' "$fixture/worker-logs"
+        grep -q '"available_bytes":4096' "$fixture/worker-logs"
+        grep -q '"limit_reached":true' "$fixture/worker-logs"
+        grep -q '"hex":"6c6976652d776f726b65722d6f757470757400' "$fixture/worker-logs"
+        task logs build --id "$control_id" --source work --offset 4096 > "$fixture/worker-end"
+        grep -q '"hex":""' "$fixture/worker-end"
+        if task logs build --id "$control_id" --source work --step invalid >/dev/null; then exit 1; fi
+    else
+        task logs build --id "$control_id" --source work --step work --attempt 1 > "$fixture/worker-logs"
+        grep -q '"available":true' "$fixture/worker-logs"
+        if task logs build --id "$control_id" --source work --step ../escape >/dev/null; then exit 1; fi
+    fi
+    : > "$fixture/transport/lose-ack"
+    if task cancel build --id "$control_id" > "$fixture/error"; then exit 1; fi
+    grep -q '"code":"outcome_unknown"' "$fixture/error"
+    attempt=0
+    while [ "$attempt" -lt 100 ]; do
+        task status build --id "$control_id" > "$fixture/control-status"
+        if grep -q '"state":"cancelled"' "$fixture/control-status"; then break; fi
+        sleep 0.1; attempt=$((attempt + 1))
+    done
+    grep -q '"cancellation":"confirmed_stopped"' "$fixture/control-status" || { cat "$fixture/control-status"; exit 1; }
+    [ -d "$fixture/host/fleet/tasks/$control_id/workspace/.git" ]
+    task cancel build --id "$control_id" > "$fixture/repeat-cancel"
+    grep -q '"cancel_response":"already_terminal"' "$fixture/repeat-cancel"
+done
+
 # Storage corruption is recovery-required, never a reason to replace acceptance.
 printf '{}' > "$fixture/host/fleet/tasks/$id/state.json"
 if task submit build --input "$fixture/package" --key same-key > "$fixture/error"; then exit 1; fi

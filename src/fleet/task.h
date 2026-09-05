@@ -28,4 +28,15 @@ json_object *task_start(const char *id, const char *trust);
 bool task_owner_active(const char *directory);
 bool task_runtime_valid(json_object *state);
 void task_execute(const char *directory, json_object *package, json_object *state);
+struct task_control {
+    struct f_control process;
+    const char *directory, *digest;
+    json_object *state;
+    bool cancel_seen;
+};
+int task_control_open(struct task_control *control, const char *directory, const char *digest, json_object *state, json_object *limits);
+void task_control_close(struct task_control *control);
+void task_cancel_view(const char *directory, const char *digest, json_object *state);
+json_object *task_cancel(const char *id);
+json_object *task_logs(const char *id, json_object *request);
 #endif
