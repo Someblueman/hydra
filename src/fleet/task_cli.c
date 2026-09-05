@@ -5,10 +5,10 @@
 json_object *task_cli(int argc, char **argv) {
     const char *source = NULL, *spec_path = NULL, *input = NULL, *output = NULL;
     json_object *parsed = NULL, *result; int i;
-    if (argc && (!strcmp(argv[0], "submit") || !strcmp(argv[0], "status") || !strcmp(argv[0], "start") || !strcmp(argv[0], "cancel") || !strcmp(argv[0], "logs"))) return task_remote_cli(argc, argv);
+    if (argc && (!strcmp(argv[0], "submit") || !strcmp(argv[0], "status") || !strcmp(argv[0], "start") || !strcmp(argv[0], "cancel") || !strcmp(argv[0], "logs") || !strcmp(argv[0], "result"))) return task_remote_cli(argc, argv);
     if (!argc || !strcmp(argv[0], "help") || !strcmp(argv[0], "--help")) {
         json_object *data = json_object_new_object();
-        f_string_add(data, "usage", "fleet task prepare --source DIR --spec FILE --output PACKAGE; fleet task inspect --input PACKAGE; fleet task submit HOST --input PACKAGE --key KEY [--trust-spec HASH]; fleet task start HOST --id TASK_ID --trust-spec HASH; fleet task status HOST --id TASK_ID; fleet task cancel HOST --id TASK_ID; fleet task logs HOST --id TASK_ID [--source owner|work] [--stream stdout|stderr] [--offset N] [--limit N] [--step NAME --attempt N]");
+        f_string_add(data, "usage", "fleet task prepare --source DIR --spec FILE --output PACKAGE; fleet task inspect --input PACKAGE; fleet task submit HOST --input PACKAGE --key KEY [--trust-spec HASH]; fleet task start HOST --id TASK_ID --trust-spec HASH; fleet task result HOST --id TASK_ID [--output FILE] [--timeout SECONDS]; fleet task inspect-result --input FILE; fleet task status HOST --id TASK_ID; fleet task cancel HOST --id TASK_ID; fleet task logs HOST --id TASK_ID [--source owner|work] [--stream stdout|stderr] [--offset N] [--limit N] [--step NAME --attempt N]");
         return f_success("fleet-task-help", data);
     }
     for (i = 1; i < argc; i++) {
@@ -35,6 +35,17 @@ json_object *task_cli(int argc, char **argv) {
             json_object_object_add(preview, "transfer_bytes", json_object_new_int64((int64_t)strlen(encoded)));
             json_object_object_add(preview, "spec", json_object_get(f_field(package, "spec")));
             json_object_put(result); return f_success("fleet-task-prepare", preview);
+        }
+        return result;
+    }
+    if (!strcmp(argv[0], "inspect-result") && input && !source && !spec_path && !output) {
+        parsed = f_read_json(input, TASK_PACKAGE_LIMIT + 1024);
+        result = task_result_verify(parsed); json_object_put(parsed);
+        if (json_object_get_boolean(f_field(result, "ok"))) {
+            json_object *data = f_field(result, "data"); const char *arrays[] = {"artifacts", "evidence"}; size_t j, k;
+            json_object_object_del(data, "bundle_hex");
+            for (j = 0; j < 2; j++) for (k = 0; k < json_object_array_length(f_field(data, arrays[j])); k++)
+                json_object_object_del(json_object_array_get_idx(f_field(data, arrays[j]), k), "hex");
         }
         return result;
     }

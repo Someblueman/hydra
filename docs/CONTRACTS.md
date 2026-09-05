@@ -140,5 +140,9 @@ never permission to replay. `task-cancel` records cancellation independently fro
 transport acknowledgment; `task-logs` returns bounded byte ranges from owner or
 recorded worker streams with stable run/step/attempt selectors. Cancellation
 confirmation is scoped to managed commands; missing owner evidence stays unknown.
+`task-result` returns an immutable receiver-completion snapshot with checksummed
+artifacts/evidence and an exact source/result Git bundle. Both endpoints validate
+the result envelope before use; downloads never recapture changed worktrees.
+Local-ref installation and integration of these snapshots remain under implementation.
 Fleet stdin rejects embedded NUL bytes
 and input beyond its 8 MiB bound instead of accepting a truncated JSON prefix.

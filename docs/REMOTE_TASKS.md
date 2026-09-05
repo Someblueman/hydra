@@ -2,8 +2,9 @@
 
 This unreleased implementation provides package preparation, durable submission,
 detached command/workflow execution, status, cancellation, and bounded log retrieval.
-Launch requires explicit authorization of the specification digest. Result
-collection remains under implementation. The roadmap item remains open.
+Launch requires explicit authorization of the specification digest. Verified result
+snapshots can be downloaded; installation into local refs and integration remain
+under implementation. The roadmap item remains open.
 
 ## Prepare and preview
 
@@ -88,8 +89,8 @@ most 512 KiB across at most 64 files. The bundle's hex representation is at most
 strings of 4096 bytes, and capabilities at most 32 names. Log/artifact limits each
 range from 1 byte to 512 KiB. Transport/cancellation limits range from 1 to 300
 seconds; queue/startup/execution limits from 1 second to 7 days.
-Log bounds apply to each captured stream; artifact limits remain declarations
-until collection is implemented. The runner enforces queue, startup, and execution
+Log bounds apply to each captured stream. The artifact budget applies to the total
+bytes across all declared outputs in a result snapshot. The runner enforces queue, startup, and execution
 deadlines and a separate cancellation grace period.
 Each preparation/inspection Git subprocess has a 60-second deadline.
 
@@ -117,7 +118,7 @@ supported required capabilities. This slice recognizes the existing local `exec`
 `workflow`, `git`, and `tmux` capabilities. Other required names fail explicitly;
 executable detection does not qualify provider prompt delivery or resume.
 The handshake advertises task protocol 1 with `task-accept`, `task-start`,
-`task-status`, `task-cancel`, and `task-logs`.
+`task-status`, `task-cancel`, `task-logs`, and `task-result`.
 
 Acceptance atomically publishes a nonempty private directory under
 `$HYDRA_HOME/fleet/tasks/task_ID`, containing the validated `package.json`, immutable
@@ -236,3 +237,55 @@ Separate agent sessions without independent stop evidence leave cancellation
 unknown. Existing terminal tasks return `already_terminal`. A missing owner is
 never treated as stopped, and cancellation never replays work or deletes the
 retained worktrees. Task execution runs trusted code, not an OS sandbox.
+
+
+## Receiver-completion result snapshots
+
+```sh
+hydra fleet task result build --id task_ID --output /tmp/task-result.json
+hydra fleet task inspect-result --input /tmp/task-result.json
+```
+
+After command/workflow execution ends, the owner snapshots the verified source,
+observed result commits, declared artifacts, and existing attempt/gate records.
+Status reports `result_state: sealing`, then `ready` or `unavailable`, with a
+`result_error` stage when capture fails. If the owner disappears while sealing,
+status reports `unknown`; an already-published valid snapshot remains downloadable. Inspection previews the manifest and
+checksums without printing the encoded bundle or file payloads. A terminal
+command policy and a usable result snapshot are separate facts. Startup failures,
+owner loss, missing/unsafe outputs, exhausted size limits, and missing evidence
+can leave no usable snapshot. Downloads never repair or recapture changed work.
+
+Each output path must identify one regular file in exactly one recorded task head.
+For multi-head workflows, use unique output paths; missing or ambiguous paths fail
+snapshot creation. Every component is opened without following symlinks. Binary
+bytes and per-file SHA-256 checksums are preserved. The total declared artifact
+budget is enforced. Results also include head and instance IDs, branch labels,
+actual commits, dirty-worktree flags, and a bundle containing the original source
+plus result commits. Result commits must descend from the submitted source.
+Hydra does not commit dirty work on the agent's behalf. Only explicitly declared
+uncommitted artifacts are copied; other uncommitted files stay remote.
+
+Existing exec, workflow step/attempt, and gate records are copied from an explicit
+allowlist, with checksums, up to 512 KiB across 256 evidence files. Raw command argv,
+configuration, trust files, environment, live owner/PID files, and credentials are
+not exported as evidence. Committed Git history remains included, as in source
+preparation. A result package is at most 4 MiB plus its small checksum envelope,
+with at most 64 result heads and 64 artifacts. Oversize evidence fails explicitly;
+it is not silently shortened into apparent proof.
+
+The owner validates and durably publishes `result.json` once. Subsequent downloads
+verify and return that snapshot, even if a remote worktree has since changed.
+The client independently checks the result/specification digests, file paths and
+checksums, declared artifact bindings, Git bundle contents, exact refs/commits,
+and ancestry before creating an optional mode-0600 output file. Existing output
+files are never replaced. Result downloads use a 30-second transport deadline per
+handshake/request; `--timeout 1..300` overrides it. Transport failure does not
+re-execute the task. Results are not local integration approvals.
+
+The result envelope has `schema_version: 1`, `result_sha256`, and `result`.
+The digest covers compact JSON for `result`, which contains `schema_version`,
+`receipt`, canonical prepared `spec`, `heads`, `artifacts`, `evidence`,
+`bundle_sha256`, and `bundle_hex`. File records contain `path`, `bytes`, `sha256`,
+and `hex`; artifacts additionally bind `head_id`. This is a separately verified
+result format, not a restorable copy of live Hydra runtime state.

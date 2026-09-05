@@ -200,10 +200,11 @@ WORK
 git -C "$fixture/source" add .hydra/workflows/remote.yml task-work.sh
 git -C "$fixture/source" -c commit.gpgSign=false commit -qm workflow
 workflow_commit="$(git -C "$fixture/source" rev-parse HEAD)"
-printf 'selected task input\n' > "$fixture/source/context"
+printf 'selected task input\000binary tail\n' > "$fixture/source/context"
 sed -e "s/$commit/$workflow_commit/" \
     -e 's@"work":{"kind":"exec","argv":\["true"\]}@"work":{"kind":"workflow","path":".hydra/workflows/remote.yml"}@' \
     -e 's@"inputs":\[\]@"inputs":["context"]@' \
+    -e 's/"outputs":\[\]/"outputs":["result.txt"]/' \
     -e 's/command-exit/workflow-success/' "$fixture/spec" > "$fixture/workflow-spec"
 task prepare --source "$fixture/source" --spec "$fixture/workflow-spec" --output "$fixture/workflow-package" > "$fixture/workflow-preview"
 workflow_digest="$(sed -n 's/.*"spec_sha256":"\([^"]*\)".*/\1/p' "$fixture/workflow-preview")"
@@ -222,6 +223,63 @@ grep -q '"run_id":"run_' "$fixture/workflow-status"
 for output in "$fixture/host/fleet/tasks/$workflow_id"/heads/*/result.txt; do
     cmp "$fixture/source/context" "$output"
 done
+# The owner seals results before downloads; later edits cannot change that snapshot.
+for sealed_id in "$workflow_id" "$execution_id"; do
+    attempt=0
+    while [ "$attempt" -lt 100 ]; do
+        task status build --id "$sealed_id" > "$fixture/seal-status"
+        if grep -q '"result_state":"ready"' "$fixture/seal-status"; then break; fi
+        if grep -q '"result_state":"unavailable"' "$fixture/seal-status"; then cat "$fixture/seal-status"; exit 1; fi
+        sleep 0.1; attempt=$((attempt + 1))
+    done
+    grep -q '"result_state":"ready"' "$fixture/seal-status"
+done
+task result build --id "$workflow_id" > "$fixture/workflow-result"
+grep -q '"result_sha256":' "$fixture/workflow-result"
+grep -q '"path":"result.txt"' "$fixture/workflow-result"
+grep -q '"dirty":true' "$fixture/workflow-result"
+grep -q 'latest-head-commit' "$fixture/workflow-result"
+for output in "$fixture/host/fleet/tasks/$workflow_id"/heads/*/result.txt; do
+    printf changed > "$output"
+done
+task result build --id "$workflow_id" > "$fixture/repeated-result"
+cmp "$fixture/workflow-result" "$fixture/repeated-result"
+task result build --id "$execution_id" > "$fixture/exec-result"
+grep -q '"path":"attempt.json"' "$fixture/exec-result"
+grep -q '"dirty":false' "$fixture/exec-result"
+task result build --id "$workflow_id" --output "$fixture/result-package" > "$fixture/result-preview"
+task inspect-result --input "$fixture/result-package" > "$fixture/inspected-result"
+if grep -Eq '"(hex|bundle_hex)":' "$fixture/inspected-result"; then exit 1; fi
+# Simulate the final state write being lost after the immutable snapshot exists.
+cp "$fixture/host/fleet/tasks/$workflow_id/state.json" "$fixture/sealed-state"
+sed 's/"result_state":"ready"/"result_state":"sealing"/' "$fixture/sealed-state" > "$fixture/host/fleet/tasks/$workflow_id/state.json"
+task status build --id "$workflow_id" > "$fixture/seal-recovery"
+grep -q '"result_state":"unknown"' "$fixture/seal-recovery"
+task result build --id "$workflow_id" --output "$fixture/recovered-result" >/dev/null
+cmp "$fixture/result-package" "$fixture/recovered-result"
+cp "$fixture/sealed-state" "$fixture/host/fleet/tasks/$workflow_id/state.json"
+"$(dirname "$HYDRA_FLEET_BIN")/test-task-result" "$fixture/result-package"
+sed 's/"result_sha256":"./"result_sha256":"z/' "$fixture/result-package" > "$fixture/bad-result"
+if task inspect-result --input "$fixture/bad-result" > "$fixture/result-error"; then exit 1; fi
+grep -q '"code":"invalid_result"' "$fixture/result-error"
+if task result build --id "$workflow_id" --output "$fixture/result-package" > "$fixture/result-error"; then exit 1; fi
+grep -q '"code":"io_failed"' "$fixture/result-error"
+
+# A command that emits a symlink cannot produce a valid artifact snapshot.
+sed -e 's@\["true"\]@["ln","-s","/dev/null","result.txt"]@' -e 's/"outputs":\[\]/"outputs":["result.txt"]/' "$fixture/spec" > "$fixture/unsafe-output-spec"
+task prepare --source "$fixture/source" --spec "$fixture/unsafe-output-spec" --output "$fixture/unsafe-output-package" > "$fixture/unsafe-output-preview"
+unsafe_digest="$(sed -n 's/.*"spec_sha256":"\([^"]*\)".*/\1/p' "$fixture/unsafe-output-preview")"
+task submit build --input "$fixture/unsafe-output-package" --key unsafe-output --trust-spec "$unsafe_digest" > "$fixture/unsafe-output-receipt"
+unsafe_id="$(sed -n 's/.*"task_id":"\([^"]*\)".*/\1/p' "$fixture/unsafe-output-receipt")"
+attempt=0
+while [ "$attempt" -lt 100 ]; do
+    task status build --id "$unsafe_id" > "$fixture/unsafe-output-status"
+    if grep -q '"result_state":"unavailable"' "$fixture/unsafe-output-status"; then break; fi
+    sleep 0.1; attempt=$((attempt + 1))
+done
+grep -q '"result_state":"unavailable"' "$fixture/unsafe-output-status"
+if task result build --id "$unsafe_id" > "$fixture/result-error"; then exit 1; fi
+grep -q '"code":"result_unavailable"' "$fixture/result-error"
 # Killing an owner cannot authorize a second execution. Stop it before terminating
 # its child, so it cannot reap the child or publish a completion before the crash.
 sed "s@\[\"true\"\]@[\"sh\",\"-c\",\"printf started > $fixture/crash-started; sleep 30\"]@" "$fixture/spec" > "$fixture/crash-spec"
