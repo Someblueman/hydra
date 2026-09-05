@@ -4,11 +4,11 @@ Fleet coordinates up to 16 trusted Hydra hosts through OpenSSH. It provides pinn
 bootstrap, observation, remote head and workflow operations, interactive attach,
 explicit configuration/history transport, and a native fleet view.
 
-The in-progress [remote task interface](REMOTE_TASKS.md) adds source package
-preparation, durable receiver acceptance, submission-key deduplication, and task
-status. Explicit digest authorization starts a detached receiving-host owner for
-command or workflow execution. Cancellation and result collection are still under
-implementation. Existing direct remote workflow calls remain synchronous.
+The [remote task interface](REMOTE_TASKS.md) prepares exact source/input packages,
+persists receiver-owned acceptance and execution, and supports disconnected
+command/workflow runs, bounded logs, cancellation, and verified result collection.
+Successful committed results enter the existing local integration and approval
+flow. Existing direct remote workflow calls remain synchronous.
 
 ## Architecture and installation
 
