@@ -72,6 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Render native TUI action feedback before idle model refreshes can clear it,
+  and retain paired theme markers in terminal interaction checks.
+
 - Clarified the task-test cleanup guard for CI ShellCheck compatibility and added
   fleet installation acceptance for modes, helper identity, rejection safety, and
   uninstall.

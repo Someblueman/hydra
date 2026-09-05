@@ -283,7 +283,7 @@ static void interactive_prompt(struct app *app, char prefix) {
 }
 
 static int interactive_main(struct app *app) {
-    time_t last_refresh = 0;
+    time_t last_refresh;
     char key;
     if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
         fputs("hydra-tui requires interactive stdin/stdout; use --headless-fixture for deterministic rendering\n", stderr);
@@ -306,18 +306,22 @@ static int interactive_main(struct app *app) {
 
     refresh_current_session(app);
     if (enter_raw(app) != 0) return 4;
+    capture_preview(app);
+    last_refresh = time(NULL);
     app->running = true;
     while (app->running && !stop_requested) {
-        time_t now = time(NULL);
         update_size(app);
-        if (now - last_refresh >= 2) {
-            (void)refresh_model(app);
-            refresh_current_session(app);
-            capture_preview(app);
-            last_refresh = now;
-        }
         render(app, 0U, false);
-        if (read_key(500, &key) <= 0) continue;
+        if (read_key(500, &key) <= 0) {
+            time_t now = time(NULL);
+            if (now - last_refresh >= 2) {
+                (void)refresh_model(app);
+                refresh_current_session(app);
+                capture_preview(app);
+                last_refresh = now;
+            }
+            continue;
+        }
         if (key == 'q') app->running = false;
         else if (key == 'j') move_selection(app, 1);
         else if (key == 'k') move_selection(app, -1);
