@@ -1,8 +1,39 @@
 # Contributing to Hydra
 
+## Build and verify
+
+The shell CLI in `bin/hydra` owns lifecycle mutations; optional C helpers live in
+`src/`. Runtime state is project-scoped state v2 under `$HYDRA_HOME/state/v2`.
+See [contracts](docs/CONTRACTS.md) before changing CLI, JSON, or durable records.
+
+Shell development needs Git, tmux 3.0+, Make, dash, and ShellCheck. Native builds
+need a C99 compiler; fleet additionally needs pkg-config and JSON-C development
+files. Run from source with `bin/hydra`; no installation is necessary.
+
+```sh
+make lint test                         # shell checks
+make build-core build-tui build-fleet   # optional native helpers
+make test-tui test-tui-pty sanitize-tui # focused native UI checks
+make test-fleet sanitize-fleet         # focused fleet checks
+make test-all                          # combined, parity, install and onboarding
+make sanitize                          # supported core/TUI/fleet sanitizers
+```
+
+Choose focused checks for a localized change; run applicable broader acceptance for
+contract, lifecycle, security, or native-memory changes. Expected error-path tests
+may print errors: use exit codes and failure summaries. Exercise spawn/kill examples
+in a disposable Git repository with isolated `HYDRA_HOME`, preserving real work.
+For the first-run path, use `make smoke-onboarding`.
+
+Keep changes cohesive and source/test files under 500 lines. Document behavior under
+Unreleased in the changelog. Follow [VERSIONING.md](docs/VERSIONING.md) for release
+time version assignment and publication; passing local checks is not a release.
+
 ## POSIX Compliance
 
-Hydra is strictly POSIX-compliant. All scripts must work with `/bin/sh` and pass validation with both ShellCheck and dash.
+Hydra's runtime shell scripts use POSIX `/bin/sh` and pass ShellCheck and dash
+validation. Native helpers use C99; generated Bash, Zsh, and Fish completions use
+their target shell syntax.
 
 ### Shebang
 
@@ -121,9 +152,9 @@ done < file.txt
 
 Before committing:
 
-1. Run `make lint` to check all scripts
-2. Test with dash: `dash -n script.sh`
-3. Test functionality with both sh and bash
+1. Run `make lint` (ShellCheck and dash syntax checks).
+2. Run the affected shell tests under `/bin/sh`.
+3. Use the broader checks above when the changed boundary requires them.
 
 ### Validation Tools
 

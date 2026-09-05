@@ -54,6 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Simplified everyday CLI examples around profiles, supervised `exec`, inbox
+  steering, and verification gates. Terminal broadcast and inactivity tools remain
+  available as expert utilities; inactivity is no longer described as completion.
+- Aligned contributor guidance with the C99 helpers, state-v2 contracts, focused
+  native checks, and combined installation/onboarding acceptance.
 - Simplified native mission control with branch-first lists, focused details,
   on-demand diagnostics, bordered panels, fixed table columns, a title bar,
   full-row selection highlighting, a selected-head summary, and a fixed action footer.
