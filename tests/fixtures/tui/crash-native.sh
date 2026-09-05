@@ -1,7 +1,7 @@
 #!/bin/sh
 
 if [ "${1:-}" = --version ]; then
-    echo "Hydra TUI 2.0.0 protocol 2"
+    echo "Hydra TUI 2.1.0 protocol 2"
     exit 0
 fi
 

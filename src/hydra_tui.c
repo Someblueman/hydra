@@ -19,7 +19,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define HYDRA_TUI_VERSION "2.0.0"
+#define HYDRA_TUI_VERSION "2.1.0"
 #define HYDRA_TUI_PROTOCOL 2
 #define MAX_HEADS 512
 #define MAX_RECOVERY 512

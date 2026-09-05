@@ -20,7 +20,7 @@ case "$1" in
     offline) echo 'Connection refused' >&2; exit 255 ;;
     slow) [ -z "${HYDRA_TEST_SSH_PID:-}" ] || echo $$ > "$HYDRA_TEST_SSH_PID"; exec sleep 30 ;;
     malformed) echo '{bad json'; exit ;;
-    skew) printf '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.0.0","fleet_protocol":9,"capabilities":[]}}\n'; exit ;;
+    skew) printf '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"2.1.0","fleet_protocol":9,"capabilities":[]}}\n'; exit ;;
 esac
 exec /bin/sh -c "$2"
 SSH

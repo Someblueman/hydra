@@ -246,7 +246,7 @@ Delivered work is intentionally absent from this roadmap. Use these records inst
 - [CONTRACTS.md](CONTRACTS.md), [STATE.md](STATE.md), [EVENTS.md](EVENTS.md), and
   [AUTOMATION.md](AUTOMATION.md) for current local interfaces;
 - [FLEET.md](FLEET.md) and [FLEET_ACCEPTANCE.md](FLEET_ACCEPTANCE.md) for the
-  implemented fleet pilot awaiting release;
+  implemented fleet capability and historical pilot qualification;
 - [REMOTE_TASKS.md](REMOTE_TASKS.md) and [REMOTE_TASK_ACCEPTANCE.md](REMOTE_TASK_ACCEPTANCE.md)
   for remote submission, disconnected execution, verified collection, and qualification;
 - [workflows.md](workflows.md) for workflow and integration behavior;
