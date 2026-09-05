@@ -15,13 +15,24 @@ static long milliseconds(void) {
     return ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
 }
 void f_capture_free(struct f_capture *cap) { free(cap->out); free(cap->err); memset(cap, 0, sizeof(*cap)); }
-int f_run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap) {
+static void capture_log(struct f_control *control, int stream, const char *bytes, size_t size) {
+    if (!control) return;
+    if (size > control->remaining[stream]) { size = control->remaining[stream]; control->truncated = true; }
+    while (size) {
+        ssize_t n = write(control->log_fd[stream], bytes, size);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) { control->log_error = true; return; }
+        size -= (size_t)n; bytes += n; control->remaining[stream] -= (size_t)n;
+    }
+}
+static int run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap, struct f_control *control) {
     int out[2] = {-1,-1}, err[2] = {-1,-1}, status = 0, result = -1;
     pid_t pid = -1; FILE *in = NULL; size_t used[2] = {0,0};
     long deadline; bool stopped = false;
     memset(cap, 0, sizeof(*cap)); cap->status = 1;
     cap->out = calloc(F_LIMIT + 1, 1); cap->err = calloc(F_LIMIT + 1, 1);
     if (!cap->out || !cap->err || !(in = tmpfile())) goto done;
+    if (control && control->stop && control->stop(control->context)) { cap->cancelled = true; cap->status = 130; result = 0; goto done; }
     if (size && fwrite(input, 1, size, in) != size) goto done;
     rewind(in);
     if (pipe(out) || pipe(err)) goto done;
@@ -41,18 +52,22 @@ int f_run(char *const argv[], const char *input, size_t size, unsigned seconds, 
     for (;;) {
         struct pollfd polls[2] = {{out[0], POLLIN, 0}, {err[0], POLLIN, 0}};
         int i;
-        if (!stopped && (f_stopped || milliseconds() >= deadline)) {
-            cap->timeout = !f_stopped; stopped = true;
-            (void)kill(-pid, SIGTERM); deadline = milliseconds() + 500;
+        if (!stopped && control && control->stop && control->stop(control->context)) cap->cancelled = true;
+        if (!stopped && (f_stopped || cap->cancelled || milliseconds() >= deadline)) {
+            cap->timeout = !f_stopped && !cap->cancelled; stopped = true;
+            (void)kill(-pid, SIGTERM); deadline = milliseconds() + (cap->cancelled ? (long)control->grace_seconds * 1000L : 500);
         }
-        if (stopped && milliseconds() >= deadline) (void)kill(-pid, SIGKILL);
+        if (stopped && milliseconds() >= deadline - (cap->cancelled ? 200 : 0)) (void)kill(-pid, SIGKILL);
         (void)poll(polls, 2, 50);
         for (i = 0; i < 2; i++) {
             int *fd = i ? &err[0] : &out[0];
             char *buffer = i ? cap->err : cap->out;
             if (*fd >= 0) {
                 ssize_t n = read(*fd, buffer + used[i], F_LIMIT - used[i]);
-                if (n > 0) used[i] += (size_t)n;
+                if (n > 0) {
+                    capture_log(control, i, buffer + used[i], (size_t)n); used[i] += (size_t)n;
+                    if (control && control->observe && !i) control->observe(control->context, cap->out);
+                }
                 if (n == 0 || used[i] == F_LIMIT || (n < 0 && errno != EAGAIN && errno != EINTR)) {
                     close(*fd); *fd = -1;
                     if (used[i] == F_LIMIT) { (void)kill(-pid, SIGKILL); stopped = true; deadline = 0; }
@@ -60,22 +75,29 @@ int f_run(char *const argv[], const char *input, size_t size, unsigned seconds, 
             }
         }
         /* Do not reap the group leader until its pipes close: its PID cannot be reused. */
-        if (out[0] < 0 && err[0] < 0) {
+        if (out[0] < 0 && err[0] < 0 && (!cap->cancelled || milliseconds() >= deadline - 200)) {
             pid_t waited = waitpid(pid, &status, WNOHANG);
             if (waited == pid) { pid = -1; break; }
         }
+        if (cap->cancelled && milliseconds() >= deadline) { cap->stop_unknown = true; control->stop_unknown = true; break; }
     }
-    cap->status = cap->timeout ? 124 : (f_stopped ? 130 : (WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status)));
+    cap->status = cap->timeout ? 124 : (f_stopped || cap->cancelled ? 130 : (WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status)));
     if (used[0] == F_LIMIT || used[1] == F_LIMIT) cap->status = 125;
     result = 0;
 done:
-    if (pid > 0) { kill(-pid, SIGKILL); while (waitpid(pid, &status, 0) < 0 && errno == EINTR) { } }
+    if (pid > 0) { kill(-pid, SIGKILL); while (waitpid(pid, &status, cap->stop_unknown ? WNOHANG : 0) < 0 && errno == EINTR) { } }
     if (in) fclose(in);
     if (out[0] >= 0) close(out[0]);
     if (out[1] >= 0) close(out[1]);
     if (err[0] >= 0) close(err[0]);
     if (err[1] >= 0) close(err[1]);
     return result;
+}
+int f_run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap) {
+    return run(argv, input, size, seconds, cap, NULL);
+}
+int f_run_controlled(char *const argv[], unsigned seconds, struct f_capture *cap, struct f_control *control) {
+    return run(argv, NULL, 0, seconds, cap, control);
 }
 char *f_quote(const char *value) {
     size_t n = strlen(value), at = 0; char *result;

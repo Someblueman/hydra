@@ -1,4 +1,5 @@
 #include "fleet.h"
+#include "task.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -27,9 +28,10 @@ json_object *f_cli(int argc, char **argv) {
     json_object *result, *request, *args; struct f_remote remote;
     if (argc < 1) return f_error("fleet", "invalid_input", "use hydra fleet help");
     action = argv[0];
+    if (!strcmp(action, "task")) return task_cli(argc - 1, argv + 1);
     if (!strcmp(action, "help") || !strcmp(action, "--help")) {
         json_object *data = json_object_new_object();
-        f_string_add(data, "usage", "fleet list|doctor|reconcile|watch [--timeout N --jobs N]; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet package --source DIR --binary FILE --output FILE; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path [--instance ID] [--input FILE --output FILE --run ID] -- ARGS");
+        f_string_add(data, "usage", "fleet list|doctor|reconcile|watch [--timeout N --jobs N]; fleet task help; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet package --source DIR --binary FILE --output FILE; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path [--instance ID] [--input FILE --output FILE --run ID] -- ARGS");
         return f_success("fleet-help", data);
     }
     for (i = 1; i < argc; i++) {

@@ -144,6 +144,7 @@ workflows, and recovery behavior.
 | --- | --- |
 | Commands, layouts, hooks, configuration, and TUI keys | [Usage](docs/USAGE.md) |
 | Remote hosts, bootstrap, and fleet operations | [Fleet](docs/FLEET.md) |
+| Submit, monitor, cancel, collect, and integrate remote tasks | [Remote tasks](docs/REMOTE_TASKS.md) |
 | Agent profiles and prompts | [Profiles](docs/PROFILES.md) |
 | Workflows and guarded integration | [Workflows](docs/workflows.md) |
 | Scopes, collisions, resources, and gates | [Parallel safety](docs/PARALLEL_SAFETY.md) |

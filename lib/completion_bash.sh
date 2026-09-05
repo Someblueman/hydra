@@ -21,6 +21,17 @@ _hydra_completion() {
 
     commands="remote fleet spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
+    if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && $COMP_CWORD -ge 5 ]]; then
+        case ${COMP_WORDS[3]:-} in
+            submit) COMPREPLY=($(compgen -W "--input --key --trust-spec" -- "${cur}")); return 0 ;;
+            start) COMPREPLY=($(compgen -W "--id --trust-spec" -- "${cur}")); return 0 ;;
+            collect) COMPREPLY=($(compgen -W "--id --input --into --timeout" -- "${cur}")); return 0 ;;
+            collected) COMPREPLY=($(compgen -W "--id --into --format" -- "${cur}")); return 0 ;;
+            result) COMPREPLY=($(compgen -W "--id --output --timeout" -- "${cur}")); return 0 ;;
+            logs) COMPREPLY=($(compgen -W "--id --source --stream --offset --limit --step --attempt" -- "${cur}")); return 0 ;;
+            status|cancel) COMPREPLY=($(compgen -W "--id" -- "${cur}")); return 0 ;;
+        esac
+    fi
     
     case "${prev}" in
         hydra)
@@ -32,7 +43,19 @@ _hydra_completion() {
             return 0
             ;;
         fleet)
-            COMPREPLY=($(compgen -W "handshake list doctor bootstrap package init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            COMPREPLY=($(compgen -W "handshake list doctor bootstrap package task init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            return 0
+            ;;
+        task)
+            COMPREPLY=($(compgen -W "prepare inspect submit start status cancel logs result inspect-result collect collected help" -- "${cur}"))
+            return 0
+            ;;
+        prepare)
+            COMPREPLY=($(compgen -W "--source --spec --output" -- "${cur}"))
+            return 0
+            ;;
+        inspect|inspect-result)
+            COMPREPLY=($(compgen -W "--input" -- "${cur}"))
             return 0
             ;;
         spawn)

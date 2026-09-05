@@ -33,12 +33,12 @@ lint:
 	done
 	@echo "All checks passed!"
 
-# Run tests (skip helpers.sh — it is a library, not a suite)
+# Run shell-only tests; native suites have build prerequisites in their own targets.
 test:
 	@echo "Running tests..."
 	@if [ -d tests ] && [ -n "$$(ls -A tests/test_*.sh 2>/dev/null)" ]; then \
 		for test in tests/test_*.sh; do \
-			case "$$test" in tests/test_core.sh|tests/test_native_install.sh|tests/test_native_tui.sh|tests/test_fleet.sh) continue ;; esac; \
+			case "$$test" in tests/test_core.sh|tests/test_native_install.sh|tests/test_native_tui.sh|tests/test_fleet.sh|tests/test_task_package.sh|tests/test_task_acceptance.sh) continue ;; esac; \
 			echo "Running $$test..."; \
 			sh "$$test" || exit 1; \
 		done; \
@@ -200,15 +200,24 @@ FLEET_JSON_LIB = $(shell pkg-config --variable=libdir json-c)/libjson-c.a
 .PHONY: build-fleet test-fleet
 build-fleet: $(BUILD_DIR)/hydra-fleet
 
-$(BUILD_DIR)/hydra-fleet: $(FLEET_SOURCES) src/fleet/fleet.h | $(BUILD_DIR)
+$(BUILD_DIR)/hydra-fleet: $(FLEET_SOURCES) src/fleet/fleet.h src/fleet/task.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(FLEET_SOURCES) $(FLEET_JSON_LIB) -lm -o $@
 
-$(BUILD_DIR)/test-fleet: tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-fleet: tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
 
-test-fleet: build-fleet $(BUILD_DIR)/test-fleet
+$(BUILD_DIR)/test-task-package: tests/c/test_task_package.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_task_package.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+
+$(BUILD_DIR)/test-task-result: tests/c/test_task_result.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_task_result.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+
+test-fleet: build-fleet $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
 	$(BUILD_DIR)/test-fleet
+	$(BUILD_DIR)/test-task-package
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_fleet.sh
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_task_package.sh
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_task_acceptance.sh
 
 .PHONY: sanitize-fleet
 sanitize-fleet:

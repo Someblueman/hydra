@@ -33,6 +33,18 @@ json_object *f_parse(const char *text) {
     json_tokener_free(tok);
     return obj;
 }
+json_object *f_read_json(const char *path, size_t limit) {
+    FILE *file; char *bytes; size_t length; json_object *object = NULL;
+    if (limit > F_LIMIT) return NULL;
+    file = path ? fopen(path, "rb") : stdin;
+    if (!file) return NULL;
+    bytes = malloc(limit + 1); if (!bytes) { if (path) fclose(file); return NULL; }
+    length = fread(bytes, 1, limit + 1, file);
+    if (!ferror(file) && length <= limit && !memchr(bytes, '\0', length)) {
+        bytes[length] = '\0'; object = f_parse(bytes);
+    }
+    free(bytes); if (path) fclose(file); return object;
+}
 json_object *f_field(json_object *obj, const char *key) {
     json_object *value = NULL;
     if (json_object_is_type(obj, json_type_object)) (void)json_object_object_get_ex(obj, key, &value);

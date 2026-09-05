@@ -128,3 +128,25 @@ stdin JSON boundary negotiates capabilities before mutations, transports argv
 without shell interpolation, and delegates head/workflow mutations to the local
 shell CLI. Fleet's alias, package, and inert bundle stores are distinct from live
 state v2. Lost mutation responses never cause automatic replay.
+
+[Task package schema 1](REMOTE_TASKS.md#transfer-and-binding-contract) binds an
+exact Git bundle, selected inputs, work, destination, completion policy, and limits
+for local preparation and validation. Task protocol 1 advertises `task-accept`
+and `task-status`: receiver-owned receipts and pending launch intent are published
+durably, and keys deduplicate across projects in one receiving-host state directory.
+`task-start` adds an explicitly authorized detached owner, permanent launch claim,
+and existing shell exec/workflow attempt identity. Loss of the owner is unknown,
+never permission to replay. `task-cancel` records cancellation independently from
+transport acknowledgment; `task-logs` returns bounded byte ranges from owner or
+recorded worker streams with stable run/step/attempt selectors. Cancellation
+confirmation is scoped to managed commands; missing owner evidence stays unknown.
+`task-result` returns an immutable receiver-completion snapshot with checksummed
+artifacts/evidence and an exact source/result Git bundle. Both endpoints validate
+the result envelope before use; downloads never recapture changed worktrees.
+Collection installs verified snapshots beneath the common Git directory and uses
+compare-and-set direct refs under `refs/hydra/tasks/collection_ID/`. Repeated
+collection preserves checkout/index/ordinary refs; changed private bindings fail.
+`integrate task:collection_ID` consumes successful clean commits through the existing
+local gate, approval, and promotion flow without restoring remote live state.
+Fleet stdin rejects embedded NUL bytes
+and input beyond its 8 MiB bound instead of accepting a truncated JSON prefix.

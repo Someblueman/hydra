@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Local remote-task package preparation and inspection, binding an exact Git
+  commit/bundle, selected binary inputs, destination, work, outputs, and limits.
+  Preview includes transfer size and checksums; unsafe paths, symlinked inputs,
+  submodules, and LFS pointers fail preflight.
+- Durable receiving-host task acceptance with pending launch intent, immutable
+  receipts, project/dependency preflight, and submission-key deduplication across
+  concurrent clients and lost acknowledgments. Task status preserves transport
+  failures and corrupt-state uncertainty.
+- Explicit digest-authorized detached task execution through the existing shell
+  exec/workflow engine, preserving real run/provenance evidence and selected inputs.
+  Durable launch claims prevent replay after owner loss; queue, startup, and
+  execution deadlines remain distinct.
+- Durable remote-task cancellation with requested/delivered/confirmed/unknown
+  outcomes and a separate grace deadline. Bounded paginated logs expose real owner
+  and exec/workflow output, preserve exact bytes, and retain work after cancellation.
+- Immutable receiver-completion task result snapshots with checksummed declared
+  artifacts, real commit/attempt/gate evidence, and independent client verification.
+  Downloads preserve binary bytes and refuse unsafe paths or mismatched digests;
+  collection installs isolated refs/artifacts without changing dirty checkout work.
+  Successful committed results feed the existing local integration, gate, approval,
+  and promotion flow, with stale-ref and symbolic-ref protection.
 - Optional C fleet coordinator with OpenSSH host aliases, pinned bootstrap,
   capability negotiation, bounded parallel list/doctor observations, and explicit
   reconcile/watch after connection loss. Partial results retain reachable hosts;
@@ -46,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- New Hydra homes are private even with a group-writable login umask; remote task
+  storage still refuses existing shared directories without changing permissions.
+- Result-head ref formatting checks truncation explicitly, including strict GCC
+  builds on Linux.
 - Mouse reporting is disabled for prompts, delegated commands, normal/signal exit,
   and basic-TUI fallback after a native crash. Malformed, overlong, legacy, release,
   drag, and modified mouse reports cannot select rows; resize invalidates old targets.
