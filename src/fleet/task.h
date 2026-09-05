@@ -39,4 +39,13 @@ void task_control_close(struct task_control *control);
 void task_cancel_view(const char *directory, const char *digest, json_object *state);
 json_object *task_cancel(const char *id);
 json_object *task_logs(const char *id, json_object *request);
+int task_git(const char *directory, char *const args[], struct f_capture *cap);
+int task_file_copy(const char *root, const char *relative, const char *destination);
+json_object *task_result(const char *id);
+json_object *task_result_heads(const char *directory, json_object *state, const char *scratch);
+int task_result_files(json_object *files, const char *root, const char *relative, const char *scratch, size_t *remaining);
+int task_result_evidence(json_object *files, const char *directory, json_object *state, json_object *heads, const char *scratch);
+json_object *task_result_verify(json_object *envelope);
+int task_result_seal(const char *directory, json_object *state);
+int task_result_bindings(json_object *result, const char *scratch);
 #endif

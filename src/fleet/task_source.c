@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 /* No checkout, filters, hooks, remotes, or working-tree writes during preparation. */
-static int git(const char *directory, char *const args[], struct f_capture *cap) {
+int task_git(const char *directory, char *const args[], struct f_capture *cap) {
     char *argv[32] = {"git", "--literal-pathspecs", "-c", "core.hooksPath=/dev/null", "-c", "protocol.file.allow=always", "-C", (char *)directory};
     size_t i;
     for (i = 0; args[i] && i < 22; i++) argv[i + 8] = args[i];
@@ -18,7 +18,7 @@ static int git(const char *directory, char *const args[], struct f_capture *cap)
     return cap->status;
 }
 static int git_ok(const char *directory, char *const args[]) {
-    struct f_capture cap = {0}; int status = git(directory, args, &cap);
+    struct f_capture cap = {0}; int status = task_git(directory, args, &cap);
     f_capture_free(&cap); return status;
 }
 static int init_bare(const char *directory, const char *commit) {
@@ -32,29 +32,29 @@ static int preflight(const char *directory, const char *commit, json_object *wor
     char *lfs[] = {"grep", "-I", "-l", "-e", "^version https://git-lfs.github.com/spec/v1$", (char *)commit, "--", NULL};
     char *exists[] = {"cat-file", "-e", object, NULL};
     char *line;
-    if (git(directory, type, &cap) || strcmp(cap.out, "commit\n")) goto done;
+    if (task_git(directory, type, &cap) || strcmp(cap.out, "commit\n")) goto done;
     f_capture_free(&cap);
-    if (git(directory, tree, &cap)) goto done;
+    if (task_git(directory, tree, &cap)) goto done;
     for (line = cap.out; line && *line;) {
         if (!strncmp(line, "160000 ", 7)) goto done;
         line = strchr(line, '\n'); if (!line) break; line++;
     }
     f_capture_free(&cap);
-    if (git(directory, lfs, &cap) != 1) goto done;
+    if (task_git(directory, lfs, &cap) != 1) goto done;
     f_capture_free(&cap);
     snprintf(object, sizeof(object), "%s:.hydra-task", commit);
-    if (git(directory, exists, &cap) == 0) goto done;
+    if (task_git(directory, exists, &cap) == 0) goto done;
     f_capture_free(&cap);
     if (!strcmp(f_string(work, "kind"), "workflow")) {
         char *file_type[] = {"ls-tree", (char *)commit, "--", (char *)f_string(work, "path"), NULL};
-        if (git(directory, file_type, &cap) || (strncmp(cap.out, "100644 ", 7) && strncmp(cap.out, "100755 ", 7))) goto done;
+        if (task_git(directory, file_type, &cap) || (strncmp(cap.out, "100644 ", 7) && strncmp(cap.out, "100755 ", 7))) goto done;
     }
     status = 0;
 done:
     f_capture_free(&cap); return status;
 }
 /* Walk every input component through directory descriptors; never follow links. */
-static int input_copy(const char *source, const char *relative, const char *destination) {
+int task_file_copy(const char *source, const char *relative, const char *destination) {
     char path[1024], *part, *next; int dir = -1, fd = -1, status = -1; struct stat st;
     char *bytes = NULL; size_t length = 0;
     if (!task_path(relative) || f_copy(path, sizeof(path), relative)) return -1;
@@ -87,7 +87,7 @@ static int inputs_prepare(const char *source, const char *scratch, json_object *
     if (f_path(path, sizeof(path), scratch, "input")) goto done;
     for (i = 0; i < json_object_array_length(selected); i++) {
         const char *relative = task_text(json_object_array_get_idx(selected, i)); char *hex; json_object *entry;
-        if (input_copy(source, relative, path) || f_hash(path, hash) || !(hex = f_hex_read(path))) goto done;
+        if (task_file_copy(source, relative, path) || f_hash(path, hash) || !(hex = f_hex_read(path))) goto done;
         unlink(path); total += strlen(hex) / 2;
         if (total > TASK_FILE_LIMIT) { free(hex); goto done; }
         entry = json_object_new_object(); f_string_add(entry, "path", relative); f_string_add(entry, "sha256", hash);
@@ -169,10 +169,10 @@ json_object *task_inspect(json_object *package) {
         char *resolve[] = {"rev-parse", "FETCH_HEAD", NULL}; struct f_capture cap = {0}; bool matches; char expected[128];
         if (init_bare(scratch, commit) || git_ok(scratch, verify)) goto clean;
         snprintf(expected, sizeof(expected), "%s refs/heads/task-source\n", commit);
-        matches = !git(scratch, heads, &cap) && !strcmp(cap.out, expected);
+        matches = !task_git(scratch, heads, &cap) && !strcmp(cap.out, expected);
         f_capture_free(&cap);
         if (!matches || git_ok(scratch, fetch)) goto clean;
-        matches = !git(scratch, resolve, &cap) && strlen(cap.out) == strlen(commit) + 1 && !strncmp(cap.out, commit, strlen(commit));
+        matches = !task_git(scratch, resolve, &cap) && strlen(cap.out) == strlen(commit) + 1 && !strncmp(cap.out, commit, strlen(commit));
         f_capture_free(&cap);
         if (!matches || preflight(scratch, commit, f_field(spec, "work"))) goto clean;
     }

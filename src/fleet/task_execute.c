@@ -115,6 +115,9 @@ failed:
 done:
     task_control_close(&control);
     json_object_object_add(state, "finished_at", json_object_new_int64((int64_t)time(NULL)));
+    f_string_add(state, "result_state", "sealing");
+    (void)task_write_json(directory, "state.json", state, true);
+    f_string_add(state, "result_state", task_result_seal(directory, state) ? "unavailable" : "ready");
     (void)task_write_json(directory, "state.json", state, true);
     free(global); free(system); json_object_put(evidence); f_capture_free(&cap);
 }

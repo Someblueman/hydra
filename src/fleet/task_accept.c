@@ -23,6 +23,9 @@ static json_object *receipt(const char *directory, const char *id, const char *d
         f_string_add(state, "recorded_state", current); f_string_add(state, "state", "outcome_unknown");
         f_string_add(state, "failure", "owner_unavailable");
     }
+    if (f_string(state, "result_state") && !strcmp(f_string(state, "result_state"), "sealing") && !task_owner_active(directory)) {
+        f_string_add(state, "result_state", "unknown"); f_string_add(state, "result_error", "owner_unavailable");
+    }
     task_cancel_view(directory, stored_digest, state);
     json_object_object_add(accepted, "runtime", json_object_get(state));
     result = f_success("fleet-task", json_object_get(accepted));
@@ -136,6 +139,7 @@ json_object *task_serve(json_object *request) {
     if (!strcmp(operation, "logs") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) {
         return task_logs(f_string(request, "task_id"), request);
     }
+    if (!strcmp(operation, "result") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_result(f_string(request, "task_id"));
     if (!strcmp(operation, "cancel") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_cancel(f_string(request, "task_id"));
     if (!strcmp(operation, "submit") && !f_field(request, "task_id")) {
         const char *trust = f_string(request, "trust_spec"), *digest = f_string(f_field(request, "package"), "spec_sha256"); json_object *accepted;

@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Durable remote-task cancellation with requested/delivered/confirmed/unknown
   outcomes and a separate grace deadline. Bounded paginated logs expose real owner
   and exec/workflow output, preserve exact bytes, and retain work after cancellation.
+- Immutable receiver-completion task result snapshots with checksummed declared
+  artifacts, real commit/attempt/gate evidence, and independent client verification.
+  Downloads preserve binary bytes and refuse unsafe paths or mismatched digests;
+  local-ref collection and integration remain under implementation.
 - Optional C fleet coordinator with OpenSSH host aliases, pinned bootstrap,
   capability negotiation, bounded parallel list/doctor observations, and explicit
   reconcile/watch after connection loss. Partial results retain reachable hosts;

@@ -26,7 +26,7 @@ _hydra() {
                     ;;
                 fleet)
                     if [[ $words[2] == task ]]; then
-                        _arguments '1:action:(task)' '2:task action:(prepare inspect submit start status cancel logs help)' '--source[Repository for prepare or owner/work for logs]:source:' '--spec[Task specification]:file:_files' '--input[Prepared package]:file:_files' '--output[New package file]:file:_files' '--key[Stable submission key]:key:' '--id[Accepted task ID]:task ID:' '--trust-spec[Authorize exact task digest]:SHA256:' '--stream[Log stream]:stream:(stdout stderr)' '--offset[Byte offset]:offset:' '--limit[Page bytes]:limit:' '--step[Workflow log step]:step:' '--attempt[Workflow attempt]:attempt:'
+                        _arguments '1:action:(task)' '2:task action:(prepare inspect submit start status cancel logs result inspect-result help)' '--source[Repository for prepare or owner/work for logs]:source:' '--spec[Task specification]:file:_files' '--input[Prepared package]:file:_files' '--output[New package file]:file:_files' '--key[Stable submission key]:key:' '--id[Accepted task ID]:task ID:' '--trust-spec[Authorize exact task digest]:SHA256:' '--stream[Log stream]:stream:(stdout stderr)' '--offset[Byte offset]:offset:' '--limit[Page bytes]:limit:' '--step[Workflow log step]:step:' '--attempt[Workflow attempt]:attempt:' '--timeout[Result transport deadline]:seconds:'
                     else
                         _arguments '1:action:(handshake list doctor bootstrap package task init spawn signal cancel workflow attach export import reconcile watch tui)' '*:argument:'
                     fi

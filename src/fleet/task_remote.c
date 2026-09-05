@@ -18,16 +18,19 @@ static bool uncertain(json_object *response) {
     return false;
 }
 json_object *task_remote_cli(int argc, char **argv) {
-    const char *host, *input = NULL, *key = NULL, *id = NULL, *trust = NULL; bool submit = !strcmp(argv[0], "submit"), start = !strcmp(argv[0], "start");
+    const char *host, *output = NULL, *timeout = NULL, *input = NULL, *key = NULL, *id = NULL, *trust = NULL; bool submit = !strcmp(argv[0], "submit"), start = !strcmp(argv[0], "start");
     const char *stream = NULL, *offset = NULL, *limit = NULL, *source = NULL, *step = NULL, *attempt = NULL; bool cancel = !strcmp(argv[0], "cancel"), logs = !strcmp(argv[0], "logs");
+    bool result_read = !strcmp(argv[0], "result");
     char capability[32]; unsigned log_offset = 0, log_limit = 4096;
     struct f_remote remote; json_object *package = NULL, *checked = NULL, *request = NULL, *response = NULL;
-    unsigned seconds = 5; int i;
+    unsigned seconds = result_read ? 30 : 5; int i;
     if (argc < 2 || !f_name(argv[1])) return f_error("fleet-task", "invalid_input", "select a registered host alias");
     host = argv[1];
     for (i = 2; i < argc; i++) {
         const char **destination;
-        if (!strcmp(argv[i], "--input") && submit) destination = &input;
+        if (!strcmp(argv[i], "--output") && result_read) destination = &output;
+        else if (!strcmp(argv[i], "--timeout") && result_read) destination = &timeout;
+        else if (!strcmp(argv[i], "--input") && submit) destination = &input;
         else if (!strcmp(argv[i], "--key") && submit) destination = &key;
         else if (!strcmp(argv[i], "--id") && !submit) destination = &id;
         else if (!strcmp(argv[i], "--trust-spec") && (start || submit)) destination = &trust;
@@ -42,6 +45,11 @@ json_object *task_remote_cli(int argc, char **argv) {
         *destination = argv[i];
     }
     if ((submit ? !input || !key : !id) || (start && !trust)) return f_error("fleet-task", "invalid_input", "required task options are missing");
+    if (timeout) {
+        unsigned long value = strtoul(timeout, NULL, 10);
+        if (strspn(timeout, "0123456789") != strlen(timeout) || value < 1 || value > 300) return f_error("fleet-task-result", "invalid_input", "timeout must be 1-300 seconds");
+        seconds = (unsigned)value;
+    }
     if (logs) {
         unsigned long value;
         if (attempt && (strspn(attempt, "0123456789") != strlen(attempt) || strtoul(attempt, NULL, 10) < 1 || strtoul(attempt, NULL, 10) > 10000)) return f_error("fleet-task-logs", "invalid_input", "attempt must be 1-10000");
@@ -83,6 +91,19 @@ json_object *task_remote_cli(int argc, char **argv) {
         bool valid = received && !strncmp(received, "task_", 5) && task_hex(received + 5, 64) && task_hex(digest, 64);
         if (valid) valid = submit ? received_key && !strcmp(received_key, key) && !strcmp(digest, f_string(package, "spec_sha256")) : !strcmp(received, id);
         if (!valid) { json_object_put(response); response = f_error("fleet-task", "invalid_response", "the receiver returned a task handle with inconsistent bindings"); }
+    }
+    if (result_read && json_object_get_boolean(f_field(response, "ok"))) {
+        json_object *data = f_field(response, "data"), *envelope = f_field(data, "collection"), *checked = task_result_verify(envelope);
+        const char *bound = f_string(f_field(f_field(envelope, "result"), "receipt"), "task_id");
+        const char *digest = f_string(f_field(f_field(envelope, "result"), "receipt"), "spec_sha256");
+        if (!json_object_get_boolean(f_field(checked, "ok")) || !bound || strcmp(bound, id) || !digest || strcmp(digest, f_string(data, "spec_sha256"))) {
+            json_object_put(response); response = f_error("fleet-task-result", "invalid_result", "the received snapshot failed independent validation or task binding");
+        } else if (output) {
+            const char *text = json_object_to_json_string_ext(envelope, JSON_C_TO_STRING_PLAIN);
+            if (f_write(output, text, strlen(text), false)) { json_object_put(response); response = f_error("fleet-task-result", "io_failed", "cannot create a new private result file; existing files are never replaced"); }
+            else { f_string_add(data, "file", output); f_string_add(data, "result_sha256", f_string(envelope, "result_sha256")); json_object_object_del(data, "collection"); }
+        }
+        json_object_put(checked);
     }
     if ((submit || start || cancel) && uncertain(response)) {
         json_object *wrapped = f_error("fleet-task", "outcome_unknown", submit ? "the acceptance response was lost or invalid; retry this same package and key to reconcile, never invent a new key" : "the mutation response was lost or invalid; inspect this task's status; execution is never replayed");
