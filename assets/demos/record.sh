@@ -83,6 +83,9 @@ export HYDRA_ROOT="$repo" HYDRA_HOME="$scratch/state" HYDRA_TUI_BIN="$repo/build
 export PATH="$scratch/bin:$repo/bin:$PATH"
 export HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
 unset HYDRA_SKIP_AI TMUX ENV BASH_ENV ZDOTDIR
+# This recording explicitly demonstrates color; normal NO_COLOR behavior is unchanged.
+unset NO_COLOR
+export HYDRA_TUI_THEME=terminal
 export HYDRA_DEMO_PROJECT="$scratch/project" HYDRA_DEMO_RESULT="$scratch/agent-result"
 export REMOTE_PROJECT="$remote/project" REMOTE_HEAD="fleet-${remote##*.}"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1

@@ -1,7 +1,5 @@
 /* Bounded terminal views. Diagnostics are an explicit detail mode. */
-static void style(const struct app *app, const char *sequence) {
-    if (app->paint) fputs(sequence, stdout);
-}
+#include "hydra_tui_theme.inc"
 
 /* Draw the border outside the content padding; title is sanitized by linef. */
 static void panel_edge(struct app *app, const char *title) {
@@ -20,9 +18,9 @@ static void panel_edge(struct app *app, const char *title) {
         border[3 + length] = ' ';
     }
     app->boxed = false;
-    style(app, "\033[36m");
+    style(app, TONE_BORDER);
     linef(app, "%s", border);
-    style(app, "\033[0m");
+    style(app, TONE_BASE);
     app->boxed = boxed;
 }
 
@@ -33,9 +31,9 @@ static void head_row(struct app *app, const struct head *head, bool selected) {
     const char *outcome = head == NULL ? "REPORTED" : head->declared[0] ? head->declared : "-";
     char cursor = selected ? '>' : ' ';
     char mark = head != NULL && marked_index(app, head->branch) < app->marked_count ? '*' : ' ';
-    if (head == NULL) style(app, "\033[1m");
-    else if (selected) style(app, "\033[1;30;46m");
-    else if (!app->fleet && strcmp(status, "LIVE") != 0) style(app, "\033[33m");
+    if (head == NULL) style(app, TONE_STRONG);
+    else if (selected) style(app, TONE_SELECTED);
+    else if (!app->fleet && strcmp(status, "LIVE") != 0) style(app, TONE_WARNING);
     if (app->cols >= 100 && !app->fleet) {
         int width = app->cols - 54;
         linef(app, "%c%c %-*.*s | %-11.11s | %-14.14s | %-12.12s", cursor, mark, width, width, name, status, agent, outcome);
@@ -47,7 +45,7 @@ static void head_row(struct app *app, const struct head *head, bool selected) {
         int width = app->cols - 22;
         linef(app, "%c%c %-*.*s | %-11.11s", cursor, mark, width, width, name, status);
     }
-    style(app, "\033[0m");
+    style(app, TONE_BASE);
 }
 
 static void detail_pair(struct app *app, const char *left_label, const char *left,
@@ -82,6 +80,7 @@ static void render_list(struct app *app) {
         if (!head_matches(head, app->search)) continue;
         if (ordinal++ < start) continue;
         if (available-- <= 0) break;
+        record_hit(app, index);
         head_row(app, head, index == app->selected);
     }
     if (count == 0U) linef(app, app->search[0] ? "No matching heads. Esc clears search." :
@@ -91,9 +90,9 @@ static void render_list(struct app *app) {
         const struct head *head = selected_head(app);
         linef(app, "");
         panel_edge(app, "SELECTED HEAD");
-        style(app, "\033[1m");
+        style(app, TONE_STRONG);
         linef(app, "%s", head->branch);
-        style(app, "\033[0m");
+        style(app, TONE_BASE);
         if (app->fleet) {
             detail_pair(app, "Host", head->remote_host, "Desired", head->desired);
             linef(app, "a Attach to terminal   c Interrupt   Enter Details");
@@ -142,9 +141,9 @@ static void render_detail(struct app *app) {
     const struct head *head = selected_head(app);
     if (head == NULL) { linef(app, "No selected head. Esc returns to the list."); return; }
     if (app->diagnostics) { render_diagnostics(app); return; }
-    style(app, "\033[1m");
+    style(app, TONE_STRONG);
     linef(app, "HEAD DETAIL  %s", head->branch);
-    style(app, "\033[0m");
+    style(app, TONE_BASE);
     if (app->fleet) {
         linef(app, "Host: %s  |  Desired state: %s", head->remote_host, head->desired);
         linef(app, "Project: %s", head->remote_project);
@@ -206,9 +205,10 @@ static void render_recovery(struct app *app) {
     start = app->recovery_selected >= (size_t)available ? app->recovery_selected - (size_t)available + 1U : 0U;
     for (index = start; index < app->model.recovery_count && available-- > 0; index++) {
         const struct recovery *item = &app->model.recovery[index];
-        if (index == app->recovery_selected) style(app, "\033[7m");
+        record_hit(app, index);
+        if (index == app->recovery_selected) style(app, TONE_SELECTED);
         linef(app, "%c %-20.20s  %s", index == app->recovery_selected ? '>' : ' ', item->kind, item->label);
-        style(app, "\033[0m");
+        style(app, TONE_BASE);
     }
     linef(app, "j/k select  d inspect  |  %zu of %zu", app->recovery_selected + 1U, app->model.recovery_count);
 }
@@ -219,7 +219,7 @@ static void render_help(struct app *app) {
         linef(app, "j/k move  Enter detail  Esc back");
         linef(app, "v views  / search  d diagnostics");
         linef(app, app->fleet ? "a attach  c interrupt" : ": actions  p output  Space/A mark");
-        linef(app, app->fleet ? "? close help  q quit" : "G group  x kill  ? close  q quit");
+        linef(app, app->fleet ? "t theme  ? close help  q quit" : "G group x kill t theme ? help q quit");
         return;
     }
     linef(app, "j/k or arrows   Move between heads");
@@ -238,20 +238,25 @@ static void render_help(struct app *app) {
         linef(app, "G / x           Group / kill marked heads");
     }
     linef(app, "?               Close help");
+    linef(app, "Mouse           Click rows/tabs; wheel moves selection");
+    linef(app, "t               Cycle terminal / dark / light theme");
     linef(app, "q               Quit");
 }
 
 static void render(struct app *app, unsigned frame, bool headless) {
     static const char *views[] = {"Heads", "Details", "Coordination", "Recovery"};
+    app->hit_count = 0U;
+    app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
+    app->hit_tabs = app->cols >= 70 && !app->search[0];
     app->paint = !headless && !app->no_color;
     app->line = 0;
     app->limit = app->rows - 3;
     app->boxed = false;
     if (headless) printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
-    else printf("\033[H\033[2J");
-    style(app, "\033[1;30;44m");
+    else { style(app, TONE_BASE); printf("\033[H\033[2J"); }
+    style(app, TONE_TITLE);
     linef(app, "%-*s", app->cols - 1, app->fleet ? " HYDRA MISSION CONTROL / Fleet" : " HYDRA MISSION CONTROL");
-    style(app, "\033[0m");
+    style(app, TONE_BASE);
     if (app->search[0]) linef(app, "[%s]  Search: %s", views[app->view], app->search);
     else if (app->cols >= 70) linef(app, "%sHeads%s  %sDetails%s  %sCoordination%s  %sRecovery%s   v next",
         app->view == 0 ? "[" : " ", app->view == 0 ? "]" : " ",
@@ -272,11 +277,13 @@ static void render(struct app *app, unsigned frame, bool headless) {
     panel_edge(app, NULL);
     if (app->marked_count) linef(app, "%zu marked  x kill  G group%s%s", app->marked_count, app->notice[0] ? " | " : "", app->notice);
     else if (app->notice[0]) linef(app, "%s", app->notice);
-    else linef(app, "");
-    style(app, "\033[1m");
+    else if (!app->help && !app->diagnostics && (app->view == 0 || app->view == 3))
+        linef(app, app->hit_tabs ? "Click row/tab | Wheel moves selection | t theme" : "Click row | Wheel moves selection");
+    else linef(app, "t theme  |  v views  |  Esc back");
+    style(app, TONE_STRONG);
     if (app->cols < 60) linef(app, app->fleet ? "a attach  c interrupt  ? help  q quit" : "Enter open  : actions  ? help  q quit");
-    else if (app->view == 1 && !app->fleet) linef(app, "p output  d diagnostics  Esc back  ? help  q quit");
-    else linef(app, app->fleet ? "a attach  c interrupt  / search  ? help  q quit" : "Enter details  : actions  / search  ? help  q quit");
-    style(app, "\033[0m");
+    else if (app->view == 1 && !app->fleet) linef(app, "p output  d diagnostics  Esc back  t theme  ? help  q quit");
+    else linef(app, app->fleet ? "a attach  c interrupt  / search  t theme  ? help  q quit" : "Enter details  : actions  / search  t theme  ? help  q quit");
+    style(app, TONE_BASE);
     fflush(stdout);
 }

@@ -74,6 +74,7 @@ row; selection markers and labels remain usable with `NO_COLOR` or `--no-color`.
 | `x` | Kill selected heads through the shell CLI; skip the current tmux session |
 | `G` | Assign selected heads to a group through the shell CLI |
 | `?` | Toggle in-product keyboard and action help |
+| `t` | Cycle terminal, dark, and light palettes |
 | `q` | Exit and restore terminal state |
 
 The palette is a fixed action list, not a natural-language command interpreter.
@@ -82,6 +83,44 @@ those fields as an argument vector through the shell CLI. Switch, kill, regenera
 and dashboard use the same argv boundary. Commands are never assembled into a shell
 string. Bulk kill performs a bounded tmux lookup for current-session safety, then
 runs the public, confirming `hydra kill <branch>` command for each remaining head.
+
+## Mouse navigation
+
+Mouse navigation is enabled while the native UI owns the terminal. Click a head
+or recovery row to select it; the wheel over list rows moves selection exactly as
+`j/k` does, including filtered and scrolled lists. On terminals at least 70 columns
+wide, click a view tab to switch views. Enter opens the selected head; `d` inspects
+a recovery finding. Clicking a row never attaches, interrupts, or mutates a head.
+
+Headers, borders, empty space, help, and diagnostics do not select rows. Release,
+drag, modified clicks, and malformed reports are ignored. Hit targets come from
+the last painted frame; a resize invalidates them until the next render. At narrow
+widths or during search, use `v` for view navigation. Mouse reporting is disabled
+for prompts, delegated commands, and exit, including the basic fallback after a
+native crash. Terminal-native text selection may require holding Shift.
+
+Dragging layouts, workflow graphs, and historical sparklines remain
+outstanding. No new activity or progress metrics are inferred from session status
+or fleet desired state.
+
+## Themes
+
+The default `terminal` palette keeps the terminal's foreground/background and uses
+reverse video for the title and selected row. `dark` uses a black background with
+light text and cyan selection; `light` uses a light background with dark text and
+blue selection. The explicit dark/light palettes use fixed 256-color entries to avoid pastel
+or remapped ANSI base colors weakening contrast. Use `terminal` on terminals
+without 256-color support. Text markers, labels, and fixed column spacing carry
+the same meaning in every palette.
+
+Press `t` to cycle palettes without losing selection, search, or the current view.
+Set `HYDRA_TUI_THEME=terminal|dark|light` to choose a startup palette for
+`hydra tui` or `hydra fleet tui`. When invoking the native `hydra-tui` executable
+directly, `--theme terminal|dark|light` selects its startup palette.
+An explicit option overrides the environment. Theme changes apply to the current
+process; there is no saved layout/config file. Unknown names fail with a usage
+error before raw mode. `NO_COLOR` and `--no-color` suppress every palette, including
+when `t` is pressed. Headless fixture output remains plain and deterministic.
 
 ## Terminal safety and accessibility
 
@@ -93,8 +132,8 @@ runs the public, confirming `hydra kill <branch>` command for each remaining hea
   low-color terminals preserve all status meaning.
 - Pane and state bytes are untrusted. Control bytes and non-ASCII byte sequences are
   replaced before rendering; escape sequences cannot inject commands or terminal
-  controls. Bracketed paste and mouse/unknown escape sequences are bounded and
-  ignored.
+  controls. Bracketed paste and unknown escape sequences are bounded and ignored; SGR
+  mouse reports accept only bounded numeric coordinates and navigation buttons.
 - The layout clips to the current terminal size and the recovery view remains useful
   at narrow widths. All actions are keyboard accessible.
 

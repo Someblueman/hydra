@@ -6,7 +6,7 @@ static int parse_size(const char *value, int *cols, int *rows) {
 }
 
 static void usage(FILE *out) {
-    fputs("usage: hydra-tui [--version|--protocol-version|--diagnostics|--hydra PATH|--headless-fixture FILE --size COLSxROWS --frames N [--view heads|detail|coordination|recovery]]\n", out);
+    fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--version|--protocol-version|--diagnostics|--hydra PATH|--headless-fixture FILE --size COLSxROWS --frames N [--view heads|detail|coordination|recovery]]\n", out);
 }
 
 int main(int argc, char **argv) {
@@ -14,6 +14,7 @@ int main(int argc, char **argv) {
     const char *fixture = NULL;
     unsigned frames = 1U, frame;
     int index;
+    const char *theme = getenv("HYDRA_TUI_THEME");
     char error[TEXT] = "";
     memset(&app, 0, sizeof(app));
     signal(SIGPIPE, signal_handler);
@@ -41,8 +42,13 @@ int main(int argc, char **argv) {
             else if (strcmp(view, "recovery") == 0) app.view = 3;
             else return 2;
         } else if (strcmp(argv[index], "--diagnostics") == 0) { app.diagnostics = true; app.view = 1; }
+        else if (strcmp(argv[index], "--theme") == 0 && index + 1 < argc) theme = argv[++index];
         else if (strcmp(argv[index], "--no-color") == 0) app.no_color = true;
         else { usage(stderr); return 2; }
+    }
+    if (theme != NULL && !parse_theme(theme, &app.theme)) {
+        fputs("hydra-tui: theme must be terminal, dark, or light\n", stderr);
+        return 2;
     }
     if (fixture != NULL) {
         if (load_fixture(fixture, &app.model, error, sizeof(error)) != 0) { fprintf(stderr, "%s\n", error); return 2; }
