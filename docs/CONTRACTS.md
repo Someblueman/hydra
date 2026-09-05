@@ -128,3 +128,8 @@ stdin JSON boundary negotiates capabilities before mutations, transports argv
 without shell interpolation, and delegates head/workflow mutations to the local
 shell CLI. Fleet's alias, package, and inert bundle stores are distinct from live
 state v2. Lost mutation responses never cause automatic replay.
+
+[Task package schema 1](REMOTE_TASKS.md#transfer-and-binding-contract) binds an
+exact Git bundle, selected inputs, work, destination, completion policy, and limits
+for local preparation and validation. This unreleased preparation boundary does
+not yet advertise remote task acceptance or execution capabilities.

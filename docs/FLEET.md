@@ -4,6 +4,10 @@ Fleet coordinates up to 16 trusted Hydra hosts through OpenSSH. It provides pinn
 bootstrap, observation, remote head and workflow operations, interactive attach,
 explicit configuration/history transport, and a native fleet view.
 
+The in-progress remote task interface adds local [source package preparation and
+inspection](REMOTE_TASKS.md). Its durable receiving-host execution is not yet
+available; existing remote workflow calls remain synchronous.
+
 ## Architecture and installation
 
 The optional `hydra-fleet` executable is C. It owns JSON validation, SSH transport,

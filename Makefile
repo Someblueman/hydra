@@ -200,15 +200,20 @@ FLEET_JSON_LIB = $(shell pkg-config --variable=libdir json-c)/libjson-c.a
 .PHONY: build-fleet test-fleet
 build-fleet: $(BUILD_DIR)/hydra-fleet
 
-$(BUILD_DIR)/hydra-fleet: $(FLEET_SOURCES) src/fleet/fleet.h | $(BUILD_DIR)
+$(BUILD_DIR)/hydra-fleet: $(FLEET_SOURCES) src/fleet/fleet.h src/fleet/task.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(FLEET_SOURCES) $(FLEET_JSON_LIB) -lm -o $@
 
-$(BUILD_DIR)/test-fleet: tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-fleet: tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
 
-test-fleet: build-fleet $(BUILD_DIR)/test-fleet
+$(BUILD_DIR)/test-task-package: tests/c/test_task_package.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_task_package.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+
+test-fleet: build-fleet $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package
 	$(BUILD_DIR)/test-fleet
+	$(BUILD_DIR)/test-task-package
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_fleet.sh
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_task_package.sh
 
 .PHONY: sanitize-fleet
 sanitize-fleet:

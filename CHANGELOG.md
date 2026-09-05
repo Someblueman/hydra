@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Local remote-task package preparation and inspection, binding an exact Git
+  commit/bundle, selected binary inputs, destination, work, outputs, and limits.
+  Preview includes transfer size and checksums; unsafe paths, symlinked inputs,
+  submodules, and LFS pointers fail preflight. Durable task submission remains
+  under implementation.
 - Optional C fleet coordinator with OpenSSH host aliases, pinned bootstrap,
   capability negotiation, bounded parallel list/doctor observations, and explicit
   reconcile/watch after connection loss. Partial results retain reachable hosts;
