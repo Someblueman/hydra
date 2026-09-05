@@ -143,7 +143,10 @@ static bool wait_for_raw(struct session *session) {
     return false;
 }
 
-static bool wait_for_marker(struct session *session, const char *marker, long timeout_ms) {
+/* Keep both observations: one PTY read can contain the entire frame. */
+static bool wait_for_markers(struct session *session, const char *marker,
+                             const char *second, long timeout_ms) {
+    bool found = false, found_second = second == NULL;
     char captured[16384] = "";
     size_t used = 0U;
     long long deadline = monotonic_ms() + timeout_ms;
@@ -152,7 +155,9 @@ static bool wait_for_marker(struct session *session, const char *marker, long ti
         if (length > 0) {
             used += (size_t)length;
             captured[used] = '\0';
-            if (strstr(captured, marker) != NULL) return true;
+            found = found || strstr(captured, marker) != NULL;
+            found_second = found_second || (second != NULL && strstr(captured, second) != NULL);
+            if (found && found_second) return true;
             if (used > sizeof(captured) / 2U) {
                 memmove(captured, captured + used / 2U, used - used / 2U);
                 used -= used / 2U;
@@ -163,6 +168,10 @@ static bool wait_for_marker(struct session *session, const char *marker, long ti
         }
     }
     return false;
+}
+
+static bool wait_for_marker(struct session *session, const char *marker, long timeout_ms) {
+    return wait_for_markers(session, marker, NULL, timeout_ms);
 }
 
 static bool still_running(struct session *session) {
