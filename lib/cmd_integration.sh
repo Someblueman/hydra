@@ -111,6 +111,7 @@ cmd_integrate() {
                 '       hydra integrate <run-or-group> --base <ref> --target <ref> --execute [--gate <command>]...' \
                 '       hydra integrate train <run-or-group> --base <ref> --target <ref> --dry-run' \
                 '       hydra integrate train <run-or-group> --base <ref> --target <ref> --execute [--gate <command>]...' \
+                '       hydra integrate task:<collection-id> --base <ref> --target <ref> --execute [--gate <command>]...' \
                 '       hydra integrate status <integration-run>' \
                 '       hydra integrate cancel <integration-run>' \
                 '       hydra integrate resume <integration-run>' \

@@ -3,8 +3,8 @@
 This unreleased implementation provides package preparation, durable submission,
 detached command/workflow execution, status, cancellation, and bounded log retrieval.
 Launch requires explicit authorization of the specification digest. Verified result
-snapshots can be downloaded; installation into local refs and integration remain
-under implementation. The roadmap item remains open.
+snapshots can be downloaded and collected into isolated local refs for the existing
+integration flow. Real-host qualification is still pending. The roadmap item remains open.
 
 ## Prepare and preview
 
@@ -289,3 +289,51 @@ The digest covers compact JSON for `result`, which contains `schema_version`,
 `bundle_sha256`, and `bundle_hex`. File records contain `path`, `bytes`, `sha256`,
 and `hex`; artifacts additionally bind `head_id`. This is a separately verified
 result format, not a restorable copy of live Hydra runtime state.
+
+
+## Collect and integrate
+
+```sh
+hydra fleet task collect build --id task_ID --into /path/to/local/repository
+# An already downloaded snapshot can also be collected while the host is offline.
+hydra fleet task collect --input /tmp/task-result.json --into /path/to/local/repository
+hydra fleet task collected --id collection_ID --into /path/to/local/repository
+
+# Run inside an initialized local Hydra repository.
+hydra integrate task:collection_ID --base main --target main --dry-run
+hydra integrate task:collection_ID --base main --target main --execute --gate 'make test'
+hydra integrate approve run_ID --by reviewer
+hydra integrate promote run_ID
+```
+
+Collection verifies the snapshot before writing local data. It stores the envelope,
+checksummed artifacts, and evidence under the repository's common Git directory:
+`hydra/task-results/collection_ID/`. Artifact and evidence files have separate
+subdirectories; they are not extracted over checkout files. Git objects are imported
+from the entire verified bundle, including result commits when the source commit
+already exists locally. Compare-and-set transactions install direct refs under
+`refs/hydra/tasks/collection_ID/`, with `source` and one ref per recorded result head.
+The destination repository must use the same Git object format as the source.
+
+A collection ID binds the immutable host alias, task ID, and specification digest.
+Repeated collection returns the same bindings. A different result digest for that
+identity is refused. Collection preserves `HEAD`, ordinary branch refs, the index,
+`FETCH_HEAD`, dirty files, and untracked files. It never checks out code, restores
+live Hydra state, imports trust decisions, or grants integration approval. Missing
+private files/refs from an interrupted installation can be completed by collecting
+the same snapshot again; existing altered files, symbolic refs, and changed ref
+values are refused rather than overwritten. Private extraction walks directory
+descriptors without following symlinks, including on retries.
+
+`collected` checks the stored snapshot, extracted file checksums, and current refs.
+`--format candidates` emits validated tab-separated integration candidates and
+requires a successful task with clean, committed result heads. Dirty remote work
+remains collectable evidence but is not an integration candidate. The task must
+commit its intended changes before finishing if they are to be integrated.
+
+The existing integration engine assembles those exact commits in its isolated
+worktree, runs local gates, and preserves its normal explicit approval and target
+promotion rules. It rechecks collected refs before merging candidates and before
+promotion. Remote gate records are retained evidence, not local approval. Candidate
+rows use `remote_HEAD_ID`, an isolated ref, the exact result commit, and the exact
+source commit; they do not create synthetic local head/instance records.

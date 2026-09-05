@@ -13,7 +13,7 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'remote' -d 'Manage OpenSSH a
 complete -c hydra -f -n '__fish_use_subcommand' -a 'fleet' -d 'Inspect trusted remote installations'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote' -a 'add remove list'
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task' -a 'handshake list doctor bootstrap package task init spawn signal cancel workflow attach export import reconcile watch tui'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect submit start status cancel logs result inspect-result help'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect submit start status cancel logs result inspect-result collect collected help'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l source -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l spec -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l input -r
@@ -202,5 +202,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subc
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from logs' -l step -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from logs' -l attempt -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from result' -l timeout -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l into -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l format -r
 EOF
 }
