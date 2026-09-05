@@ -1,9 +1,10 @@
 # Remote task packages (unreleased)
 
-This is the source-preparation slice of remote task submission. `prepare` and
-`inspect` work locally. Receiver acceptance, detached execution, deduplication,
-cancellation, and result collection remain under implementation; preparing a
-package does not submit or launch work. The roadmap item remains open.
+This unreleased implementation provides local `prepare`/`inspect` and durable
+receiving-host `submit`/`status`. Submission currently records acceptance and a
+pending launch intent; **it does not yet launch work**. Detached execution,
+cancellation, and result collection remain under implementation. The roadmap
+item remains open.
 
 ## Prepare and preview
 
@@ -46,7 +47,7 @@ and specification digest. It omits the actual transferred file contents. Inspect
 checks the specification digest, bundle checksum and Git validity, exact source
 commit, input checksums, and paths. It does not contact the destination or certify
 that host's capabilities or trust. Git and either `shasum` or `sha256sum` are needed
-locally. Receiver dependency checks belong to the acceptance slice.
+locally. Submission checks the receiving host's project mapping and dependencies.
 
 For an existing finite workflow use
 `"work": {"kind": "workflow", "path": ".hydra/workflows/build.yml"}` and
@@ -95,3 +96,58 @@ Output package files are private (mode 0600) and must not already exist. Reuse t
 same prepared package for future submission retries: preparing again can produce
 different Git pack bytes and therefore a different digest. No automatic retry or
 mutation is performed by either command.
+
+## Durable acceptance and reconciliation
+
+Initialize the destination project using the remote installation and state
+directory selected by the alias. Review its configuration before explicitly
+trusting it for execution; submission does not copy a local trust decision.
+
+```sh
+hydra fleet init build --project /srv/project -- --no-agent --json
+hydra fleet task submit build --input /tmp/task-package.json --key build-change-1
+hydra fleet task status build --id task_ID_FROM_RECEIPT
+```
+
+The selected alias must match the prepared specification. The receiver requires
+an existing registered project mapping, working Git/tmux/Hydra executables, and
+supported required capabilities. This slice recognizes the existing local `exec`,
+`workflow`, `git`, and `tmux` capabilities. Other required names fail explicitly;
+executable detection does not qualify provider prompt delivery or resume.
+The handshake advertises task protocol 1 with `task-accept` and `task-status`.
+
+Acceptance atomically publishes a nonempty private directory under
+`$HYDRA_HOME/fleet/tasks/task_ID`, containing the validated `package.json`, immutable
+`acceptance.json`, and initial `state.json`. Files and directory entries are synced
+before acknowledging acceptance. The receipt binds the task ID, specification
+digest, submission key, canonical receiving project path/identity, and recorded
+acceptance time. Its runtime currently reads `state: accepted` and
+`launch_intent: pending`. This is acceptance evidence, not activity or completion.
+Task metadata is separate from head/instance and workflow-attempt state.
+
+Keys are scoped to **one receiving host and its selected `HYDRA_HOME`, across all
+projects**. They contain 1–128 letters, digits, dots, underscores, or hyphens and
+start with a letter or digit. Reusing a key with the same validated specification
+returns the original receipt, including after the original project disappears.
+Changing the specification, including its destination, returns
+`submission_conflict`. Concurrent submitters publish only one acceptance; losing
+an acknowledgment does not grant permission to create another task. A handle is
+host-qualified: the same key on another host/state directory is a separate task.
+
+If a dispatched submission loses its response, the client reports
+`outcome_unknown`. Repeat the **same package and key** to reconcile. No automatic
+mutation retry occurs. Handshake failures mean this call did not dispatch a
+submission; they do not erase any earlier acceptance. Status during an outage
+reports the transport failure without claiming a terminal task state. Submission
+uses the specification's transport deadline independently for handshake and
+request; status uses 5 seconds for each. Queue/startup/execution/cancellation
+deadlines remain declarations until the runner slice is implemented.
+
+Acceptance records and keys currently have no automatic expiry. Retain them for
+the lifetime of recovery and result collection. Deleting this state loses the
+deduplication guarantee; it is not an execution retry mechanism. Incomplete or
+corrupt published state returns `recovery_required` and is never replaced by a
+repeat submission. An unpublished `.accept.*` directory is not an accepted task.
+The receiver rejects symlinked task storage and directories writable by another
+user. These protections preserve metadata integrity; tasks are not an operating
+system sandbox.

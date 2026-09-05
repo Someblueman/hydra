@@ -214,6 +214,7 @@ test-fleet: build-fleet $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package
 	$(BUILD_DIR)/test-task-package
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_fleet.sh
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_task_package.sh
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_task_acceptance.sh
 
 .PHONY: sanitize-fleet
 sanitize-fleet:

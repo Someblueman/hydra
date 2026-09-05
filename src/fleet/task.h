@@ -16,4 +16,12 @@ int task_json_hash(json_object *object, const char *scratch, char digest[65]);
 json_object *task_prepare(const char *source, json_object *spec);
 json_object *task_inspect(json_object *package);
 json_object *task_cli(int argc, char **argv);
+json_object *task_remote_cli(int argc, char **argv);
+json_object *task_serve(json_object *request);
+json_object *task_accept(json_object *package, const char *key);
+json_object *task_status(const char *id);
+int task_store_root(char root[F_PATH]);
+int task_sync_dir(const char *path);
+int task_write_json(const char *directory, const char *name, json_object *value, bool replace);
+json_object *task_read_record(const char *directory, const char *name);
 #endif

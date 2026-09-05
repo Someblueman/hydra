@@ -22,9 +22,9 @@ int main(int argc, char **argv) {
         if (fd >= 0) unlink(temp);
         json_object_put(package); free(text);
     } else if (argc == 3 && !strcmp(argv[1], "fleet") && !strcmp(argv[2], "serve")) {
-        char *text = f_read(NULL, F_LIMIT); json_object *request = text ? f_parse(text) : NULL;
+        json_object *request = f_read_json(NULL, F_LIMIT);
         result = request ? f_serve(request) : f_error("fleet", "invalid_request", "expected one bounded JSON object");
-        json_object_put(request); free(text);
+        json_object_put(request);
     } else if (argc >= 2 && !strcmp(argv[1], "fleet")) result = f_cli(argc - 2, argv + 2);
     else result = f_error("fleet", "invalid_input", "invoke through hydra fleet or hydra remote");
     if (!result) return f_stopped ? 128 + f_stopped : 0;

@@ -19,6 +19,7 @@ extern volatile sig_atomic_t f_stopped;
 extern const char *f_home, *f_hydra;
 /* Returned JSON objects and capture buffers are caller-owned. */
 json_object *f_parse(const char *text);
+json_object *f_read_json(const char *path, size_t limit);
 json_object *f_error(const char *command, const char *code, const char *message);
 json_object *f_success(const char *command, json_object *data);
 bool f_number_is(json_object *obj, const char *key, int expected);
