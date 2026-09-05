@@ -82,6 +82,7 @@ static void render_list(struct app *app) {
         if (!head_matches(head, app->search)) continue;
         if (ordinal++ < start) continue;
         if (available-- <= 0) break;
+        record_hit(app, index);
         head_row(app, head, index == app->selected);
     }
     if (count == 0U) linef(app, app->search[0] ? "No matching heads. Esc clears search." :
@@ -206,6 +207,7 @@ static void render_recovery(struct app *app) {
     start = app->recovery_selected >= (size_t)available ? app->recovery_selected - (size_t)available + 1U : 0U;
     for (index = start; index < app->model.recovery_count && available-- > 0; index++) {
         const struct recovery *item = &app->model.recovery[index];
+        record_hit(app, index);
         if (index == app->recovery_selected) style(app, "\033[7m");
         linef(app, "%c %-20.20s  %s", index == app->recovery_selected ? '>' : ' ', item->kind, item->label);
         style(app, "\033[0m");
@@ -238,11 +240,15 @@ static void render_help(struct app *app) {
         linef(app, "G / x           Group / kill marked heads");
     }
     linef(app, "?               Close help");
+    linef(app, "Mouse           Click rows/tabs; wheel moves selection");
     linef(app, "q               Quit");
 }
 
 static void render(struct app *app, unsigned frame, bool headless) {
     static const char *views[] = {"Heads", "Details", "Coordination", "Recovery"};
+    app->hit_count = 0U;
+    app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
+    app->hit_tabs = app->cols >= 70 && !app->search[0];
     app->paint = !headless && !app->no_color;
     app->line = 0;
     app->limit = app->rows - 3;
@@ -272,7 +278,7 @@ static void render(struct app *app, unsigned frame, bool headless) {
     panel_edge(app, NULL);
     if (app->marked_count) linef(app, "%zu marked  x kill  G group%s%s", app->marked_count, app->notice[0] ? " | " : "", app->notice);
     else if (app->notice[0]) linef(app, "%s", app->notice);
-    else linef(app, "");
+    else linef(app, app->cols >= 70 ? "Click row to select | Wheel to move | Click tab to change view" : "Wheel moves selection | v views");
     style(app, "\033[1m");
     if (app->cols < 60) linef(app, app->fleet ? "a attach  c interrupt  ? help  q quit" : "Enter open  : actions  ? help  q quit");
     else if (app->view == 1 && !app->fleet) linef(app, "p output  d diagnostics  Esc back  ? help  q quit");

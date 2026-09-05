@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Native mouse navigation: click visible head/recovery rows and wide-screen view
+  tabs, or move selection with the wheel. Keyboard controls remain complete;
+  prompts, delegated commands, and exit disable mouse reporting.
+
 - Optional C fleet coordinator with pinned SSH bootstrap, negotiated host capabilities,
   bounded observations, instance-checked interrupts, remote spawn/workflows/attach,
   explicit configuration and terminal-history bundles, and reconnect observation.

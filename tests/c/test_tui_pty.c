@@ -213,6 +213,8 @@ static void close_session(struct session *session) {
     close(session->slave);
 }
 
+#include "test_tui_mouse.inc"
+
 static void test_small_list(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     result(open_session(&session, tui, hydra, fake_bin, 40, 10) == 0, "open minimum-size terminal");
@@ -274,7 +276,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     result(still_running(&session), "bracketed paste cannot inject quit or actions");
     write_input(session.master, mouse, sizeof(mouse) - 1U);
     sleep_ms(100);
-    result(still_running(&session), "disabled mouse input is bounded and ignored");
+    result(still_running(&session), "mouse over a non-list view is inert");
     write_input(session.master, "p", 1U);
     sleep_ms(150);
     result(still_running(&session), "untrusted pane output cannot enter the input parser");
@@ -343,6 +345,7 @@ static void test_signal(const char *tui, const char *hydra, const char *fake_bin
     snprintf(message, sizeof(message), "%s reaches interactive raw mode", name);
     result(wait_for_raw(&session), message);
     (void)kill(session.pid, signal_number);
+    result(wait_for_marker(&session, "\033[?1000l\033[?1006l", 1000), "signal disables mouse reporting");
     snprintf(message, sizeof(message), "%s exits with the signal category", name);
     result(wait_for_exit(&session) == 128 + signal_number, message);
     snprintf(message, sizeof(message), "%s restores exact terminal state", name);
@@ -367,6 +370,8 @@ static void test_crash_fallback(const char *dispatch, const char *fake_bin) {
     if (dispatch == NULL || dispatch[0] == '\0') return;
     result(open_session(&session, dispatch, "/usr/bin/false", fake_bin, 80, 24) == 0,
            "open crash-fallback pseudo-terminal");
+    result(wait_for_marker(&session, "\033[?1000l\033[?1006l", 3000),
+           "crash fallback disables mouse reporting");
     result(wait_for_marker(&session, "Hydra TUI", 3000),
            "native crash restores the terminal before basic fallback");
     write_input(session.master, "q", 1U);
@@ -412,6 +417,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     printf("Running native TUI pseudo-terminal tests...\n");
+    test_mouse(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
     test_signal(argv[1], argv[2], argv[3], SIGINT, "SIGINT");

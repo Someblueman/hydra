@@ -83,6 +83,25 @@ and dashboard use the same argv boundary. Commands are never assembled into a sh
 string. Bulk kill performs a bounded tmux lookup for current-session safety, then
 runs the public, confirming `hydra kill <branch>` command for each remaining head.
 
+## Mouse navigation
+
+Mouse navigation is enabled while the native UI owns the terminal. Click a head
+or recovery row to select it; the wheel over list rows moves selection exactly as
+`j/k` does, including filtered and scrolled lists. On terminals at least 70 columns
+wide, click a view tab to switch views. Enter opens the selected head; `d` inspects
+a recovery finding. Clicking a row never attaches, interrupts, or mutates a head.
+
+Headers, borders, empty space, help, and diagnostics do not select rows. Release,
+drag, modified clicks, and malformed reports are ignored. Hit targets come from
+the last painted frame; a resize invalidates them until the next render. At narrow
+widths or during search, use `v` for view navigation. Mouse reporting is disabled
+for prompts, delegated commands, and exit, including the basic fallback after a
+native crash. Terminal-native text selection may require holding Shift.
+
+Dragging layouts, workflow graphs, themes, and historical sparklines remain
+outstanding. No new activity or progress metrics are inferred from session status
+or fleet desired state.
+
 ## Terminal safety and accessibility
 
 - Normal exit and `SIGINT`, `SIGTERM`, or `SIGHUP` restore canonical input, cursor,
@@ -93,8 +112,8 @@ runs the public, confirming `hydra kill <branch>` command for each remaining hea
   low-color terminals preserve all status meaning.
 - Pane and state bytes are untrusted. Control bytes and non-ASCII byte sequences are
   replaced before rendering; escape sequences cannot inject commands or terminal
-  controls. Bracketed paste and mouse/unknown escape sequences are bounded and
-  ignored.
+  controls. Bracketed paste and unknown escape sequences are bounded and ignored; SGR
+  mouse reports accept only bounded numeric coordinates and navigation buttons.
 - The layout clips to the current terminal size and the recovery view remains useful
   at narrow widths. All actions are keyboard accessible.
 
