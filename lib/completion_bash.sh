@@ -23,7 +23,8 @@ _hydra_completion() {
     opts="-h --help -v --version"
     if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && $COMP_CWORD -ge 5 ]]; then
         case ${COMP_WORDS[3]:-} in
-            submit) COMPREPLY=($(compgen -W "--input --key" -- "${cur}")); return 0 ;;
+            submit) COMPREPLY=($(compgen -W "--input --key --trust-spec" -- "${cur}")); return 0 ;;
+            start) COMPREPLY=($(compgen -W "--id --trust-spec" -- "${cur}")); return 0 ;;
             status) COMPREPLY=($(compgen -W "--id" -- "${cur}")); return 0 ;;
         esac
     fi
@@ -42,7 +43,7 @@ _hydra_completion() {
             return 0
             ;;
         task)
-            COMPREPLY=($(compgen -W "prepare inspect submit status help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "prepare inspect submit start status help" -- "${cur}"))
             return 0
             ;;
         prepare)

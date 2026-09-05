@@ -6,8 +6,9 @@ explicit configuration/history transport, and a native fleet view.
 
 The in-progress [remote task interface](REMOTE_TASKS.md) adds source package
 preparation, durable receiver acceptance, submission-key deduplication, and task
-status. Accepted tasks currently retain a pending launch intent; detached execution
-is not yet available. Existing remote workflow calls remain synchronous.
+status. Explicit digest authorization starts a detached receiving-host owner for
+command or workflow execution. Cancellation and result collection are still under
+implementation. Existing direct remote workflow calls remain synchronous.
 
 ## Architecture and installation
 

@@ -134,5 +134,7 @@ exact Git bundle, selected inputs, work, destination, completion policy, and lim
 for local preparation and validation. Task protocol 1 advertises `task-accept`
 and `task-status`: receiver-owned receipts and pending launch intent are published
 durably, and keys deduplicate across projects in one receiving-host state directory.
-Execution capability is not yet advertised. Fleet stdin rejects embedded NUL bytes
+`task-start` adds an explicitly authorized detached owner, permanent launch claim,
+and existing shell exec/workflow attempt identity. Loss of the owner is unknown,
+never permission to replay. Fleet stdin rejects embedded NUL bytes
 and input beyond its 8 MiB bound instead of accepting a truncated JSON prefix.
