@@ -461,7 +461,7 @@ export HYDRA_BIN_CMD
 
 # Initialize Hydra home directory
 init_hydra_home() {
-    if ! mkdir -p "$HYDRA_HOME" 2>/dev/null; then
+    if ! (umask 077; mkdir -p "$HYDRA_HOME") 2>/dev/null; then
         echo "Error: HYDRA_HOME is not writable: $HYDRA_HOME" >&2
         echo "Next: export HYDRA_HOME=\"\$HOME/.hydra\" and ensure that directory is writable, or see README Quick Start" >&2
         exit 1

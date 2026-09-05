@@ -67,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- New Hydra homes are private even with a group-writable login umask; remote task
+  storage still refuses existing shared directories without changing permissions.
+- Result-head ref formatting checks truncation explicitly, including strict GCC
+  builds on Linux.
 - Mouse reporting is disabled for prompts, delegated commands, normal/signal exit,
   and basic-TUI fallback after a native crash. Malformed, overlong, legacy, release,
   drag, and modified mouse reports cannot select rows; resize invalidates old targets.

@@ -27,7 +27,8 @@ static json_object *head(const char *directory, const char *root, const char *id
     result = json_object_new_object(); f_string_add(result, "head_id", id); f_string_add(result, "instance_id", instance);
     f_string_add(result, "branch", branch); f_string_add(result, "commit", cap.out);
     f_string_add(result, "workspace", canonical);
-    snprintf(ref, sizeof(ref), "refs/heads/%s", id); f_string_add(result, "bundle_ref", ref);
+    if (snprintf(ref, sizeof(ref), "refs/heads/%s", id) >= (int)sizeof(ref)) goto bad;
+    f_string_add(result, "bundle_ref", ref);
     f_capture_free(&cap);
     if (task_git(canonical, dirty, &cap)) goto bad;
     json_object_object_add(result, "dirty", json_object_new_boolean(*cap.out != '\0')); f_capture_free(&cap);

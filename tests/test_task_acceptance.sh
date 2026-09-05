@@ -1,6 +1,8 @@
 #!/bin/sh
 # Public CLI over a controlled SSH boundary and the real receiver, state, and Git.
 set -eu
+# A common Ubuntu login umask must not create shared task-state ancestors.
+umask 002
 root="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
 cleanup() {
@@ -9,6 +11,16 @@ cleanup() {
     for workspace in "$fixture"/host/fleet/tasks/task_*/workspace; do
         [ -f "$workspace/.git/hydra/project-id" ] || continue
         (cd "$workspace" && HYDRA_HOME="$fixture/host" "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :
+    done
+    # Public teardown may refuse the deliberately dirty fixture worktrees. Remove
+    # only their remaining terminal instances before deleting disposable files.
+    for cleanup_head in "$fixture"/host/state/v2/projects/*/heads/*; do
+        [ -f "$cleanup_head/session" ] && [ -f "$cleanup_head/current-instance" ] || continue
+        cleanup_session="$(cat "$cleanup_head/session")"
+        cleanup_instance="$(cat "$cleanup_head/current-instance")"
+        cleanup_id="$(tmux display-message -p -t "=$cleanup_session" '#{session_id}' 2>/dev/null)" || continue
+        [ "$(tmux show-environment -t "$cleanup_id" HYDRA_INSTANCE_ID 2>/dev/null)" = "HYDRA_INSTANCE_ID=$cleanup_instance" ] || continue
+        tmux kill-session -t "$cleanup_id" 2>/dev/null || :
     done
     rm -rf "$fixture"
 }
@@ -127,6 +139,11 @@ grep -q '"code":"unmapped_project"' "$fixture/error"
 if task submit build --input "$fixture/unmapped-package" --key same-key > "$fixture/error"; then exit 1; fi
 grep -q '"code":"submission_conflict"' "$fixture/error"
 # A task-store symlink cannot redirect reads or acceptance publication.
+chmod g+w "$fixture/host"
+if task status build --id "$id" > "$fixture/error"; then exit 1; fi
+grep -q '"code":"io_failed"' "$fixture/error"
+[ -n "$(find "$fixture/host" -prune -perm -0020)" ]
+chmod g-w "$fixture/host"
 mv "$fixture/host/fleet/tasks" "$fixture/host/fleet/saved-tasks"
 ln -s "$fixture/host/fleet/saved-tasks" "$fixture/host/fleet/tasks"
 if task submit build --input "$fixture/package" --key same-key > "$fixture/error"; then exit 1; fi

@@ -1,10 +1,11 @@
-# Remote task packages (unreleased)
+# Remote tasks (unreleased)
 
 This unreleased implementation provides package preparation, durable submission,
 detached command/workflow execution, status, cancellation, and bounded log retrieval.
 Launch requires explicit authorization of the specification digest. Verified result
 snapshots can be downloaded and collected into isolated local refs for the existing
-integration flow. Real-host qualification is still pending. The roadmap item remains open.
+integration flow. See [local and real-host qualification](REMOTE_TASK_ACCEPTANCE.md)
+for tested boundaries and the remaining release/publication gates.
 
 ## Prepare and preview
 
@@ -104,6 +105,10 @@ mutation is performed by either command.
 Initialize the destination project using the remote installation and state
 directory selected by the alias. Review its configuration before explicitly
 trusting it for execution; submission does not copy a local trust decision.
+New Hydra homes are created privately regardless of the login umask. Task storage
+refuses an existing home or task directory writable by other users, and never
+changes its permissions automatically. Select a private `--home` when registering
+the alias if the current home is deliberately shared.
 
 ```sh
 hydra fleet init build --project /srv/project -- --no-agent --json
@@ -114,7 +119,7 @@ hydra fleet task status build --id task_ID_FROM_RECEIPT
 
 The selected alias must match the prepared specification. The receiver requires
 an existing registered project mapping, working Git/tmux/Hydra executables, and
-supported required capabilities. This slice recognizes the existing local `exec`,
+supported required capabilities. The receiver recognizes the existing local `exec`,
 `workflow`, `git`, and `tmux` capabilities. Other required names fail explicitly;
 executable detection does not qualify provider prompt delivery or resume.
 The handshake advertises task protocol 1 with `task-accept`, `task-start`,
@@ -197,7 +202,8 @@ Startup uses one monotonic deadline across checkout, initialization, and head
 creation. Execution has its own monotonic deadline around the shell CLI process
 group. `queue_deadline`, `startup_deadline`, and `execution_deadline` are separate
 failure reasons. The owner records bounded `stdout` and `stderr` files, an exit
-status, and available run identity. Artifact/result collection is not yet qualified.
+status, and available run identity. The owner seals an immutable result snapshot
+after completion; collection never infers success from a live worktree.
 
 
 ## Logs and cancellation
