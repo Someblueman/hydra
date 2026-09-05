@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static const char *capabilities[] = {"list", "doctor", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-start", NULL};
+static const char *capabilities[] = {"list", "doctor", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-start", "task-cancel", "task-logs", NULL};
 json_object *f_handshake(void) {
     json_object *data = json_object_new_object(), *caps = json_object_new_array(), *projects = json_object_new_array(), *native = json_object_new_object();
     char root[F_PATH]; DIR *dir; struct dirent *entry; size_t i;

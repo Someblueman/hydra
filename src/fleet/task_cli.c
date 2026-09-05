@@ -5,10 +5,10 @@
 json_object *task_cli(int argc, char **argv) {
     const char *source = NULL, *spec_path = NULL, *input = NULL, *output = NULL;
     json_object *parsed = NULL, *result; int i;
-    if (argc && (!strcmp(argv[0], "submit") || !strcmp(argv[0], "status") || !strcmp(argv[0], "start"))) return task_remote_cli(argc, argv);
+    if (argc && (!strcmp(argv[0], "submit") || !strcmp(argv[0], "status") || !strcmp(argv[0], "start") || !strcmp(argv[0], "cancel") || !strcmp(argv[0], "logs"))) return task_remote_cli(argc, argv);
     if (!argc || !strcmp(argv[0], "help") || !strcmp(argv[0], "--help")) {
         json_object *data = json_object_new_object();
-        f_string_add(data, "usage", "fleet task prepare --source DIR --spec FILE --output PACKAGE; fleet task inspect --input PACKAGE; fleet task submit HOST --input PACKAGE --key KEY [--trust-spec HASH]; fleet task start HOST --id TASK_ID --trust-spec HASH; fleet task status HOST --id TASK_ID");
+        f_string_add(data, "usage", "fleet task prepare --source DIR --spec FILE --output PACKAGE; fleet task inspect --input PACKAGE; fleet task submit HOST --input PACKAGE --key KEY [--trust-spec HASH]; fleet task start HOST --id TASK_ID --trust-spec HASH; fleet task status HOST --id TASK_ID; fleet task cancel HOST --id TASK_ID; fleet task logs HOST --id TASK_ID [--source owner|work] [--stream stdout|stderr] [--offset N] [--limit N] [--step NAME --attempt N]");
         return f_success("fleet-task-help", data);
     }
     for (i = 1; i < argc; i++) {
