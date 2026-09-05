@@ -19,7 +19,13 @@ Type "# Native mission control | Agents, tasks, and worktrees"
 Enter
 Type "hydra tui"
 Enter
-Sleep 5s
+Sleep 3s
+Type "t"
+Sleep 2s
+Type "t"
+Sleep 2s
+Type "t"
+Sleep 2s
 Type "/search"
 Enter
 Sleep 2s

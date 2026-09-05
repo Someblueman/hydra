@@ -337,6 +337,11 @@ static int interactive_main(struct app *app) {
         else if (key == 'A') select_all_visible(app);
         else if (key == 'x' && app->marked_count > 0U) kill_marked_action(app);
         else if (key == 'G' && app->marked_count > 0U) group_marked_action(app);
+        else if (key == 't') {
+            app->theme = (app->theme + 1) % 3;
+            snprintf(app->notice, sizeof(app->notice), "Theme: %s%s", theme_names[app->theme],
+                     app->no_color ? " (NO_COLOR)" : "");
+        }
         else if (key == '?') app->help = !app->help;
         else if (key == 27) handle_escape(app);
     }
