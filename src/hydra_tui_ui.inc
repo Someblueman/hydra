@@ -20,7 +20,7 @@ static void restore_terminal(struct app *app) {
         app->raw = false;
     }
     if (isatty(STDOUT_FILENO)) {
-        static const char reset[] = "\033[0m\033[?25h\n";
+        static const char reset[] = "\033[?1000l\033[?1006l\033[0m\033[?25h\n";
         write_terminal(reset, sizeof(reset) - 1U);
     }
 }
@@ -42,7 +42,10 @@ static int enter_raw(struct app *app) {
     raw.c_cc[VTIME] = 1;
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) return -1;
     app->raw = true;
-    write_terminal("\033[?25l", 6U);
+    {
+        static const char modes[] = "\033[?25l\033[?1000h\033[?1006h";
+        write_terminal(modes, sizeof(modes) - 1U);
+    }
     return 0;
 }
 
@@ -200,6 +203,13 @@ static const struct head *head_for_branch(const struct app *app, const char *bra
     return NULL;
 }
 
+/* Store only rows actually painted in the last frame, including filtered indices. */
+static void record_hit(struct app *app, size_t index) {
+    if (app->line >= app->limit || app->hit_count >= MAX_HEADS) return;
+    app->hit_rows[app->hit_count] = app->line + 1;
+    app->hit_items[app->hit_count++] = index;
+}
+
 #include "hydra_tui_render.inc"
 
 #include "hydra_tui_actions.inc"
@@ -216,9 +226,11 @@ static int read_key(int timeout_ms, char *key) {
     return read(STDIN_FILENO, key, 1U) == 1 ? 1 : -1;
 }
 
+#include "hydra_tui_mouse.inc"
+
 static void handle_escape(struct app *app) {
     static const char paste_end[] = "\033[201~";
-    char ch, sequence[16];
+    char ch, sequence[64];
     size_t count = 0U, matched = 0U, consumed = 0U;
     struct timespec started, now;
     if (read_key(20, &ch) <= 0) {
@@ -227,13 +239,24 @@ static void handle_escape(struct app *app) {
         return;
     }
     if (ch != '[') return;
-    while (count + 1U < sizeof(sequence) && read_key(20, &ch) > 0) {
-        sequence[count++] = ch;
+    /* Drain overlong CSI reports through their terminator, with both bounds. */
+    (void)clock_gettime(CLOCK_MONOTONIC, &started);
+    while (consumed++ < 8192U && read_key(20, &ch) > 0) {
+        if (count + 1U < sizeof(sequence)) sequence[count++] = ch;
         if ((unsigned char)ch >= 0x40U && (unsigned char)ch <= 0x7eU) break;
+        (void)clock_gettime(CLOCK_MONOTONIC, &now);
+        if (now.tv_sec - started.tv_sec >= 1) break;
     }
+    if (consumed >= sizeof(sequence)) return;
+    consumed = 0U;
     sequence[count] = '\0';
-    if (strcmp(sequence, "A") == 0) move_selection(app, -1);
+    if (sequence[0] == '<') handle_mouse(app, sequence);
+    else if (strcmp(sequence, "A") == 0) move_selection(app, -1);
     else if (strcmp(sequence, "B") == 0) move_selection(app, 1);
+    else if (strcmp(sequence, "M") == 0) {
+        /* Legacy X10 carries three bytes after CSI M; never treat them as keys. */
+        for (count = 0U; count < 3U; count++) if (read_key(20, &ch) <= 0) break;
+    }
     else if (strcmp(sequence, "200~") == 0) {
         (void)clock_gettime(CLOCK_MONOTONIC, &started);
         while (consumed++ < 8192U) {
