@@ -1,16 +1,18 @@
 #include "fleet.h"
+#include "task.h"
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-static const char *capabilities[] = {"list", "doctor", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", NULL};
+static const char *capabilities[] = {"list", "doctor", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", NULL};
 json_object *f_handshake(void) {
     json_object *data = json_object_new_object(), *caps = json_object_new_array(), *projects = json_object_new_array(), *native = json_object_new_object();
     char root[F_PATH]; DIR *dir; struct dirent *entry; size_t i;
     f_string_add(data, "hydra_version", F_VERSION);
     json_object_object_add(data, "fleet_protocol", json_object_new_int(F_PROTOCOL));
+    json_object_object_add(data, "task_protocol", json_object_new_int(1));
     json_object_object_add(data, "state_schema", json_object_new_int(2));
     json_object_object_add(data, "event_schema", json_object_new_int(1));
     json_object_object_add(data, "json_schema", json_object_new_int(1));
@@ -112,6 +114,7 @@ json_object *f_serve(json_object *request) {
         return f_error("fleet", "version_mismatch", "unsupported request protocol");
     if (!strcmp(action, "handshake")) return f_handshake();
     if (!strcmp(action, "list")) return snapshot();
+    if (!strcmp(action, "task")) return task_serve(request);
     if (args && !json_object_is_type(args, json_type_array)) return f_error("fleet", "invalid_input", "args must be an array");
     count = args ? json_object_array_length(args) : 0;
     if (count > 128) return f_error("fleet", "invalid_input", "too many command arguments");

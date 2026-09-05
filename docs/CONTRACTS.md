@@ -131,5 +131,8 @@ state v2. Lost mutation responses never cause automatic replay.
 
 [Task package schema 1](REMOTE_TASKS.md#transfer-and-binding-contract) binds an
 exact Git bundle, selected inputs, work, destination, completion policy, and limits
-for local preparation and validation. This unreleased preparation boundary does
-not yet advertise remote task acceptance or execution capabilities.
+for local preparation and validation. Task protocol 1 advertises `task-accept`
+and `task-status`: receiver-owned receipts and pending launch intent are published
+durably, and keys deduplicate across projects in one receiving-host state directory.
+Execution capability is not yet advertised. Fleet stdin rejects embedded NUL bytes
+and input beyond its 8 MiB bound instead of accepting a truncated JSON prefix.

@@ -21,6 +21,12 @@ _hydra_completion() {
 
     commands="remote fleet spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
+    if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && $COMP_CWORD -ge 5 ]]; then
+        case ${COMP_WORDS[3]:-} in
+            submit) COMPREPLY=($(compgen -W "--input --key" -- "${cur}")); return 0 ;;
+            status) COMPREPLY=($(compgen -W "--id" -- "${cur}")); return 0 ;;
+        esac
+    fi
     
     case "${prev}" in
         hydra)
@@ -36,7 +42,7 @@ _hydra_completion() {
             return 0
             ;;
         task)
-            COMPREPLY=($(compgen -W "prepare inspect help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "prepare inspect submit status help" -- "${cur}"))
             return 0
             ;;
         prepare)

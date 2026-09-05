@@ -2,22 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-static json_object *read_json(const char *path, size_t limit) {
-    FILE *file = fopen(path, "rb"); char *bytes; size_t length; json_object *object = NULL;
-    if (!file) return NULL;
-    bytes = malloc(limit + 1); if (!bytes) { fclose(file); return NULL; }
-    length = fread(bytes, 1, limit + 1, file);
-    if (!ferror(file) && length <= limit && !memchr(bytes, '\0', length)) {
-        bytes[length] = '\0'; object = f_parse(bytes);
-    }
-    free(bytes); fclose(file); return object;
-}
 json_object *task_cli(int argc, char **argv) {
     const char *source = NULL, *spec_path = NULL, *input = NULL, *output = NULL;
     json_object *parsed = NULL, *result; int i;
+    if (argc && (!strcmp(argv[0], "submit") || !strcmp(argv[0], "status"))) return task_remote_cli(argc, argv);
     if (!argc || !strcmp(argv[0], "help") || !strcmp(argv[0], "--help")) {
         json_object *data = json_object_new_object();
-        f_string_add(data, "usage", "fleet task prepare --source DIR --spec FILE --output PACKAGE; fleet task inspect --input PACKAGE");
+        f_string_add(data, "usage", "fleet task prepare --source DIR --spec FILE --output PACKAGE; fleet task inspect --input PACKAGE; fleet task submit HOST --input PACKAGE --key KEY; fleet task status HOST --id TASK_ID");
         return f_success("fleet-task-help", data);
     }
     for (i = 1; i < argc; i++) {
@@ -31,7 +22,7 @@ json_object *task_cli(int argc, char **argv) {
         *destination = argv[i];
     }
     if (!strcmp(argv[0], "prepare") && source && spec_path && output && !input) {
-        parsed = read_json(spec_path, 65536);
+        parsed = f_read_json(spec_path, 65536);
         result = task_prepare(source, parsed); json_object_put(parsed);
         if (json_object_get_boolean(f_field(result, "ok"))) {
             json_object *package = f_field(result, "data"), *preview = json_object_new_object();
@@ -48,7 +39,7 @@ json_object *task_cli(int argc, char **argv) {
         return result;
     }
     if (!strcmp(argv[0], "inspect") && input && !source && !spec_path && !output) {
-        parsed = read_json(input, TASK_PACKAGE_LIMIT);
+        parsed = f_read_json(input, TASK_PACKAGE_LIMIT);
         result = task_inspect(parsed); json_object_put(parsed); return result;
     }
     return f_error("fleet-task", "invalid_input", "use hydra fleet task help");
