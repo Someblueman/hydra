@@ -66,6 +66,9 @@ transport rather than expanding the pilot into a distributed scheduler.
 ### Candidate features
 
 Select these priorities in dependency order, with independently useful scope.
+Start priority 3's bounded adapter contract and harness qualification alongside
+remote submission in priority 1; they need not wait for all of priorities 1 and 2.
+Extend headless execution as the shared task and workflow contracts become ready.
 
 #### 1. Remote task submission and result collection
 
@@ -119,23 +122,39 @@ completed attempts and reports unresolved side effects.
 #### 3. Adapter conformance and headless execution
 
 Make agent interchangeability testable while retaining launch-only and no-agent
-workers. Scheduler decisions use capabilities, not provider names.
+workers. Scheduler decisions use capabilities, not provider names. Claude Code,
+Codex, Pi, and OpenCode are explicit qualification targets, not interchangeable
+claims of support based only on executable detection.
 
 - [ ] Publish a small versioned adapter contract and fixtures for task input,
       normalized observations, output bounds, safe-point delivery, cancellation,
       permission requests, and exact session resume where supported.
+- [ ] Support declarative executable and argument-vector configuration, task-prompt
+      delivery, and session-resume invocation wherever those declarations suffice.
+      Bind resume to a recorded session identity; "most recent session" is not exact
+      resume. Avoid shell-string templates and a general expression language.
+- [ ] Keep small provider adapters only for behavior requiring translation, such
+      as structured events or permission requests. Adding a harness must not require
+      new provider-specific branches in Hydra's core lifecycle or workflow policy.
 - [ ] Record executable version and probe date, distinguishing declared, probed,
       and observed capabilities. Fail before dependent work when a required
       capability is missing; never infer hooks from executable availability.
 - [ ] Add structured, noninteractive execution through the existing supervision
       path first. Keep provider flags and event decoders outside workflow policy.
-- [ ] Qualify two real agents and a plain script against the same local and remote
-      acceptance task, including malformed/partial events and stale instances.
+- [ ] Qualify Claude Code, Codex, Pi, OpenCode, and a plain script against the same
+      local and remote acceptance task. Verify prompt delivery, cancellation, and
+      exact session resume where supported, including malformed/partial events and
+      stale instances. Record unsupported capabilities explicitly; launch-only
+      support does not satisfy a prompt or resume requirement.
 - [ ] Keep raw provider payloads and transcripts opt-in with bounded retention.
       Treat exact cost limits and usage reporting as optional capabilities;
       unavailable values remain unknown.
 
-Acceptance: changing a compatible profile does not require changing workflow logic.
+Acceptance: add another harness through a profile declaration and, only where
+needed, a small adapter plus conformance fixtures, without modifying Hydra's core
+lifecycle or workflow policy. Changing a compatible profile does not require
+changing workflow logic. The named harnesses pass the shared task for their
+supported capabilities; missing required capabilities fail before dependent work.
 Unsupported resume fails explicitly, malformed output cannot alter authoritative
 state, and provider completion alone never passes a verification gate.
 
