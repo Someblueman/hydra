@@ -15,7 +15,8 @@ cleanup() {
     # Public teardown may refuse the deliberately dirty fixture worktrees. Remove
     # only their remaining terminal instances before deleting disposable files.
     for cleanup_head in "$fixture"/host/state/v2/projects/*/heads/*; do
-        [ -f "$cleanup_head/session" ] && [ -f "$cleanup_head/current-instance" ] || continue
+        [ -f "$cleanup_head/session" ] || continue
+        [ -f "$cleanup_head/current-instance" ] || continue
         cleanup_session="$(cat "$cleanup_head/session")"
         cleanup_instance="$(cat "$cleanup_head/current-instance")"
         cleanup_id="$(tmux display-message -p -t "=$cleanup_session" '#{session_id}' 2>/dev/null)" || continue

@@ -72,6 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Clarified the task-test cleanup guard for CI ShellCheck compatibility and added
+  fleet installation acceptance for modes, helper identity, rejection safety, and
+  uninstall.
 - New Hydra homes are private even with a group-writable login umask; remote task
   storage still refuses existing shared directories without changing permissions.
 - Result-head ref formatting checks truncation explicitly, including strict GCC
