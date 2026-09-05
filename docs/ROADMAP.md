@@ -182,13 +182,6 @@ does not invent completion or replay uncertain actions.
 
 ## Simplification alongside feature work
 
-- [ ] Align contributor instructions, CLI help, and examples with current state and
-      native-build contracts. Remove language equating terminal idleness with task
-      completion, and keep the first-run example internally consistent.
-- [ ] Teach `--profile` as the ordinary selector, `exec` for commands, and inboxes
-      for steering. Keep `broadcast` and `wait-idle` as expert terminal utilities,
-      outside correctness-sensitive workflows. Follow the public deprecation policy
-      before removing any option; this roadmap does not deprecate shipped commands.
 - [ ] Keep spawn queues, workflow scheduling, and future pools on one admission and
       execution path. Avoid separate policy implementations in native frontends.
 - [ ] Keep workflow syntax deliberately restricted. Use versioned fields and files

@@ -97,9 +97,13 @@ shell. [Profiles and task inputs](docs/PROFILES.md) describes selection and setu
 ```sh
 hydra tui                         # native mission control, with basic fallback
 hydra diff feature/search --stat
-hydra exec --branch feature/search -- make test
+hydra exec --branch feature/search -- make test # use your project's test command
 hydra review feature/search --json
 ```
+
+To steer an agent, queue an inbox message with `hydra send feature/search "Review
+the failing test"`; read it with `hydra recv --peek` inside that head. A queued
+message is not evidence of consumption or completion.
 
 Use `hydra tui --basic` for the shell interface. In native mission control,
 `j`/`k` navigate, `Enter` opens details, `p` shows terminal output, and `:` opens

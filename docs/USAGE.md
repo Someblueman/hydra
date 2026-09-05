@@ -1,7 +1,8 @@
 # Command and configuration guide
 
-See `hydra help` for complete command syntax. This guide covers the released local
-interface; the [fleet pilot](FLEET.md) is unreleased.
+See `hydra help` for complete command syntax. This guide covers the current branch.
+Fleet and [remote tasks](REMOTE_TASKS.md) are unreleased; see the [changelog](../CHANGELOG.md)
+for the boundary with the stable local interface.
 
 
 ```sh
@@ -15,7 +16,7 @@ hydra spawn feature-branch --profile codex --prompt-file task.md
 hydra spawn --issue 123
 
 # Bulk and mixed agents
-hydra spawn feature -n 3 --ai aider
+hydra spawn feature -n 3 --profile aider
 hydra spawn exp --agents "claude:2,aider:1"
 
 # Inspect & switch
@@ -39,17 +40,17 @@ hydra group feature-x --clear    # remove from group
 # Session output
 hydra tail feature-x             # view last 50 lines of session output
 hydra tail feature-x -f          # follow session output continuously
-hydra broadcast "make test"      # send command to all sessions
-hydra broadcast -g backend "..."  # send to specific group
-hydra wait-idle                  # wait for sessions to become idle
-hydra wait-idle -g backend -s 10 # wait for group with 10s idle threshold
 
-# Durable lifecycle and out-of-band operations
+# Commands and inbox steering
+hydra exec --branch feature-x --timeout 300 -- make test
+hydra exec --group backend --timeout 300 -- make test
+hydra send feature-x "Please review the failing test"
+hydra recv --peek               # run inside the receiving head
+
+# Durable lifecycle and review evidence
 hydra lifecycle feature-x --json
-hydra send --type handoff --delivery safe-point feature-x "Ready for review"
 hydra outcome feature-x done --actor agent
 hydra wait feature-x --for outcome=done --timeout 300
-hydra exec --branch feature-x --timeout 300 -- make test
 hydra diff feature-x --stat
 hydra review feature-x --json
 hydra provenance feature-x --json
@@ -100,6 +101,26 @@ hydra dashboard                                    # multi-session overview
 hydra tui                                          # native mission control; visible basic fallback
 hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
+```
+
+`--profile` selects an agent; `--no-agent` selects a plain shell. `exec` runs a
+command through Hydra's supervision and records its result. `send` queues steering
+in the head's inbox, and `recv` reads it from that head. Queuing a message does not
+prove the agent consumed it. Provider safe-point delivery requires the capability
+and receipt described in [automation](AUTOMATION.md).
+
+A declared `done` outcome is separate from verification: use `exec` or a named
+`gate` to record whether a command passed, then review before integration.
+
+## Expert terminal utilities
+
+These operate on tmux panes and terminal activity. `broadcast` does not provide
+`exec`'s command-result contract, and terminal inactivity does not establish task
+completion. Use them for interactive terminal work rather than workflow gates.
+
+```sh
+hydra broadcast -g backend "git status" # type text into the group's target panes
+hydra wait-idle -g backend -s 10        # wait for ten seconds of terminal inactivity
 ```
 
 ## Shell completions
