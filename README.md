@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://github.com/Someblueman/hydra">
+    <img width="300" height="200" src="assets/hydra.png" alt="Hydra Logo">
+  </a>
+</p>
+
 # Hydra
 
 **Native mission control for coding agents, worktrees, and remote fleets.**
