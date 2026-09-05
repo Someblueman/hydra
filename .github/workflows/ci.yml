@@ -102,14 +102,14 @@ jobs:
 
     - name: Install shell dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux
+      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux libjson-c-dev pkg-config
 
     - name: Install shell dependencies (macOS)
       if: matrix.os == 'macos-latest'
-      run: brew install tmux shellcheck
+      run: brew install tmux shellcheck json-c pkg-config
 
     - name: Build and test native protocol and mission control
-      run: make build-core build-tui test-c test-tui test-tui-pty test-parity
+      run: make build-fleet test-fleet build-core build-tui test-c test-tui test-tui-pty test-parity
 
     - name: Package exact source commit
       run: |

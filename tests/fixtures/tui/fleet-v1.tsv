@@ -1,0 +1,3 @@
+HYDRA_FLEET_TUI	1
+F	ovh	/tmp/project with space	feature	head_1234	instance_1234	running
+R	fleet	offline-host	timeout	observed	reconcile

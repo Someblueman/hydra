@@ -63,77 +63,19 @@ smallest coherent scope and its acceptance boundaries, then release it when read
 Priority may change with observed use. The numbered priorities build on fleet
 transport rather than expanding the pilot into a distributed scheduler.
 
-### Fleet pilot
-
-Observe and coordinate trusted Hydra installations over SSH using stable local
-contracts, without introducing a server or shared runtime database.
-
-#### Candidate scope
-
-- [ ] Add remote aliases that defer host resolution to OpenSSH.
-- [ ] Add a remote handshake exposing Hydra version, protocol versions,
-      capabilities, project mappings, and native availability.
-- [ ] Add explicit bootstrap of a pinned compatible shell Hydra on a trusted host;
-      Git and tmux remain prerequisites.
-- [ ] Add bounded-parallel, read-only fleet list and doctor aggregation.
-- [ ] Add remote attach through ordinary `ssh -t ... tmux attach` behavior.
-- [ ] Add explicit remote spawn, signal, cancel, and workflow operations only for
-      compatible capabilities.
-- [ ] Add per-host timeouts, offline state, partial results, and cancellation.
-- [ ] Reuse SSH multiplexing when configured or explicitly enabled.
-- [ ] Add a native TUI fleet view only after the CLI protocol is stable.
-- [ ] Add export/import for declarative project configuration and historical run
-      bundles, excluding live tmux mappings and host-local locks.
-- [ ] Add wake/reconcile behavior after sleep or network loss.
-
-#### Acceptance boundaries
-
-- Host-key failures, authentication failures, timeouts, partial outages, and version
-  mismatch are distinct machine-readable outcomes.
-- One offline host cannot block local or other-host visibility beyond its timeout.
-- Remote mutations fail closed when the required capability is unavailable.
-- No live state file is treated as authoritative on two hosts.
-- Remote arguments survive spaces and metacharacters without shell injection.
-- Sleep and reconnect reconcile state without losing local work.
-
 ### Candidate features
 
 Select these priorities in dependency order, with independently useful scope.
+Develop the bounded adapter contract and harness qualification alongside workflow
+inputs; neither needs to wait for the full approval-wait capability. Extend
+headless execution as the shared task and workflow contracts become ready.
+The implemented remote submission and collection interface is documented in
+[Remote tasks](REMOTE_TASKS.md), with [qualification evidence](REMOTE_TASK_ACCEPTANCE.md).
 
-#### 1. Remote task submission and result collection
+#### 1. Workflow inputs, outputs, and durable approval waits
 
-Make one task or finite workflow easy to offload to an explicitly chosen host.
-Reuse fleet transport and the existing local workflow engine; begin with an entire
-workflow on one host rather than a distributed graph.
-
-- [ ] Add an immutable task specification binding source/input digests, required
-      capabilities, placement, completion policy, outputs, and execution limits.
-      Reuse head/instance and workflow-attempt records beneath a stable task ID.
-- [ ] Add explicit project mapping and source preparation: exact fetchable commits
-      or verified Git bundles, plus selected task/context files. Preview the
-      destination and transfer contents; preflight dependencies, submodules, and LFS.
-- [ ] Persist submission acceptance and launch intent on the receiving host. Return
-      a durable task handle and let accepted work continue after client disconnect.
-- [ ] Bind a submission key to the specification digest. Repeating that key returns
-      the original task; a changed payload fails. Document deduplication scope and
-      retention, and reconcile lost acknowledgments without automatic replay.
-- [ ] Add task status, bounded logs, cancellation, and result collection. Return
-      attempt identity, source/result commits, gate evidence, and checksummed
-      artifacts; collect into isolated local refs for the existing integration flow.
-- [ ] Separate transport, queue, startup, execution, and cancellation deadlines.
-      Distinguish cancellation requested, delivered, confirmed stopped, and unknown.
-- [ ] Keep credentials and trust decisions host-local. Source transfer must not
-      silently copy environment values, hooks, or unrelated repository contents.
-
-Acceptance: submit, disconnect after acceptance, reconnect, and collect the exact
-result. Lose the acceptance response and retry the same key without creating a
-second task. Preserve uncertainty during outages, reject unsafe artifact paths and
-wrong digests, and make repeated collection harmless to dirty local work.
-
-#### 2. Workflow inputs, outputs, and durable approval waits
-
-Start the minimum task-input binding with remote submission, then extend the finite
-workflow contract without building a general expression or templating language.
+Extend remote tasks' selected input files into the finite workflow contract without
+building a general expression or templating language.
 
 - [ ] Add named file and small structured inputs, declared output manifests, and
       explicit references between steps. Validate required outputs, types, sizes,
@@ -149,30 +91,46 @@ Missing or changed outputs block dependents. Approval survives coordinator resta
 but becomes stale when its bound action or evidence changes. Resume preserves
 completed attempts and reports unresolved side effects.
 
-#### 3. Adapter conformance and headless execution
+#### 2. Adapter conformance and headless execution
 
 Make agent interchangeability testable while retaining launch-only and no-agent
-workers. Scheduler decisions use capabilities, not provider names.
+workers. Scheduler decisions use capabilities, not provider names. Claude Code,
+Codex, Pi, and OpenCode are explicit qualification targets, not interchangeable
+claims of support based only on executable detection.
 
 - [ ] Publish a small versioned adapter contract and fixtures for task input,
       normalized observations, output bounds, safe-point delivery, cancellation,
       permission requests, and exact session resume where supported.
+- [ ] Support declarative executable and argument-vector configuration, task-prompt
+      delivery, and session-resume invocation wherever those declarations suffice.
+      Bind resume to a recorded session identity; "most recent session" is not exact
+      resume. Avoid shell-string templates and a general expression language.
+- [ ] Keep small provider adapters only for behavior requiring translation, such
+      as structured events or permission requests. Adding a harness must not require
+      new provider-specific branches in Hydra's core lifecycle or workflow policy.
 - [ ] Record executable version and probe date, distinguishing declared, probed,
       and observed capabilities. Fail before dependent work when a required
       capability is missing; never infer hooks from executable availability.
 - [ ] Add structured, noninteractive execution through the existing supervision
       path first. Keep provider flags and event decoders outside workflow policy.
-- [ ] Qualify two real agents and a plain script against the same local and remote
-      acceptance task, including malformed/partial events and stale instances.
+- [ ] Qualify Claude Code, Codex, Pi, OpenCode, and a plain script against the same
+      local and remote acceptance task. Verify prompt delivery, cancellation, and
+      exact session resume where supported, including malformed/partial events and
+      stale instances. Record unsupported capabilities explicitly; launch-only
+      support does not satisfy a prompt or resume requirement.
 - [ ] Keep raw provider payloads and transcripts opt-in with bounded retention.
       Treat exact cost limits and usage reporting as optional capabilities;
       unavailable values remain unknown.
 
-Acceptance: changing a compatible profile does not require changing workflow logic.
+Acceptance: add another harness through a profile declaration and, only where
+needed, a small adapter plus conformance fixtures, without modifying Hydra's core
+lifecycle or workflow policy. Changing a compatible profile does not require
+changing workflow logic. The named harnesses pass the shared task for their
+supported capabilities; missing required capabilities fail before dependent work.
 Unsupported resume fails explicitly, malformed output cannot alter authoritative
 state, and provider completion alone never passes a verification gate.
 
-#### 4. Resource admission and simple placement
+#### 3. Resource admission and simple placement
 
 Start with explicit hosts and FIFO admission. Add automatic placement only after
 capacity and capability information can explain each decision.
@@ -189,7 +147,7 @@ Acceptance: concurrent submitters cannot exceed the host's admission limit; stal
 capacity observations cannot overbook it. An incompatible or full host explains why
 work is queued or refused. An offline host does not trigger an unsafe duplicate.
 
-#### 5. Run diagnostics and bounded retention
+#### 4. Run diagnostics and bounded retention
 
 Explain what needs attention through existing CLI and TUI surfaces.
 
@@ -206,7 +164,7 @@ Acceptance: an operator can identify a blocked task's owner, reason, and next ac
 without reading raw state files. Retention stays bounded while preserving active
 recovery and the documented deduplication window.
 
-#### 6. Dynamic task pools and schedules
+#### 5. Dynamic task pools and schedules
 
 Select this work only when real workloads need newly discovered tasks or persistent
 queues that finite workflows cannot express cleanly.
@@ -224,13 +182,6 @@ does not invent completion or replay uncertain actions.
 
 ## Simplification alongside feature work
 
-- [ ] Align contributor instructions, CLI help, and examples with current state and
-      native-build contracts. Remove language equating terminal idleness with task
-      completion, and keep the first-run example internally consistent.
-- [ ] Teach `--profile` as the ordinary selector, `exec` for commands, and inboxes
-      for steering. Keep `broadcast` and `wait-idle` as expert terminal utilities,
-      outside correctness-sensitive workflows. Follow the public deprecation policy
-      before removing any option; this roadmap does not deprecate shipped commands.
 - [ ] Keep spawn queues, workflow scheduling, and future pools on one admission and
       execution path. Avoid separate policy implementations in native frontends.
 - [ ] Keep workflow syntax deliberately restricted. Use versioned fields and files
@@ -294,6 +245,10 @@ Delivered work is intentionally absent from this roadmap. Use these records inst
 - [CHANGELOG.md](../CHANGELOG.md) for shipped features and compatibility changes;
 - [CONTRACTS.md](CONTRACTS.md), [STATE.md](STATE.md), [EVENTS.md](EVENTS.md), and
   [AUTOMATION.md](AUTOMATION.md) for current local interfaces;
+- [FLEET.md](FLEET.md) and [FLEET_ACCEPTANCE.md](FLEET_ACCEPTANCE.md) for the
+  implemented fleet pilot awaiting release;
+- [REMOTE_TASKS.md](REMOTE_TASKS.md) and [REMOTE_TASK_ACCEPTANCE.md](REMOTE_TASK_ACCEPTANCE.md)
+  for remote submission, disconnected execution, verified collection, and qualification;
 - [workflows.md](workflows.md) for workflow and integration behavior;
 - [NATIVE_CORE.md](NATIVE_CORE.md) and [NATIVE_TUI.md](NATIVE_TUI.md) for optional
   native behavior;

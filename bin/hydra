@@ -81,6 +81,19 @@ _load_libs_for_cmd() {
     case "$1" in
         version|help|-v|--version|-h|--help)
             ;;
+        fleet-local)
+            _load_lib output
+            _load_lib locks
+            _load_lib git
+            _load_lib identity
+            _load_lib state_v2
+            _load_lib lifecycle
+            _load_lib cmd_fleet_local
+            ;;
+        remote|fleet)
+            _load_lib output
+            _load_lib cmd_fleet
+            ;;
         state|events)
             _load_lib output
             _load_lib locks
@@ -448,7 +461,7 @@ export HYDRA_BIN_CMD
 
 # Initialize Hydra home directory
 init_hydra_home() {
-    if ! mkdir -p "$HYDRA_HOME" 2>/dev/null; then
+    if ! (umask 077; mkdir -p "$HYDRA_HOME") 2>/dev/null; then
         echo "Error: HYDRA_HOME is not writable: $HYDRA_HOME" >&2
         echo "Next: export HYDRA_HOME=\"\$HOME/.hydra\" and ensure that directory is writable, or see README Quick Start" >&2
         exit 1

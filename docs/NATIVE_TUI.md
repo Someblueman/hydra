@@ -31,25 +31,32 @@ instead of becoming an unqualified event authority.
 
 ## Views and confidence
 
-The head list and detail view keep declared outcome, observed status, observation
-confidence, desired state, and liveness separate. The renderer labels stale and
-unavailable state explicitly and never turns pane activity or process existence
-into an agent-completion claim.
+The head list puts branch identity first, followed by session status. Wider
+terminals also show the agent and reported outcome. Session liveness never implies
+agent completion; stale and unavailable sessions remain explicit. Fleet lists use
+host-qualified names and label **desired state**, without claiming live activity.
 
-The coordination view summarizes events, signals, messages, claims, scopes, queued
-work, allocated resources, changed files, gates, and approvals. The action palette
-opens the existing shell views for claims, collisions, scopes, queue, resources,
-Git diff, and gates. Every detail names its inspectable state record.
+Details focus on agent, session, reported outcome, changed files, messages, and
+gates. `p` opens terminal output in the detail view. `d` opens diagnostics with
+raw state, confidence, adapter information, source paths, and instance identifiers.
+These fields remain inspectable without crowding the everyday views.
 
-The recovery board reports evidence-backed dead sessions, malformed state records,
-stale same-host locks, orphan worktrees, interrupted lifecycle state, and teardown
-failures. Suggestions are inspect-first commands; recovery does not run
-automatically.
+Coordination focuses on the selected head's changes, gates, scopes, queue, and
+resources. The action palette opens the corresponding shell commands. Recovery
+lists findings; use `j/k` to select one and `d` to inspect its source and suggested
+command. Recovery never runs automatically.
 
-Adapter capability and confidence come from the selected recorded profile and link
-to `hydra capabilities --json` or the custom profile directory. The configured
-notification count and source file are shown while delivery remains delegated to
-the shell lifecycle path.
+The title bar and view navigation sit above a bordered content panel. Lists use
+fixed, padded columns with visible separators and a selected-head summary below
+the table on larger terminals; narrower terminals show fewer
+columns. Long values are clipped within their own cells and remain available in
+details. Selected rows have a full-width highlight; unavailable local sessions
+use a warning color. Details separate identity, work summary, and terminal output
+into named areas.
+
+Rendering respects terminal height and reserves the footer for actions. Long head
+and recovery lists follow the selection. Color highlights the title and selected
+row; selection markers and labels remain usable with `NO_COLOR` or `--no-color`.
 
 ## Keyboard map
 
@@ -60,11 +67,14 @@ the shell lifecycle path.
 | `v` | Cycle heads, detail, coordination, and recovery views |
 | `/` | Search branch, session, group, or profile |
 | `:` | Search explicit local actions |
-| `p` | Toggle the sanitized selected-pane preview |
+| `p` | Open details and toggle sanitized terminal output |
+| `d` | Toggle diagnostics for the selected head or recovery finding |
+| `Esc` | Return to heads and clear search, help, and diagnostics |
 | `Space` / `A` | Toggle selection / select all visible heads |
 | `x` | Kill selected heads through the shell CLI; skip the current tmux session |
 | `G` | Assign selected heads to a group through the shell CLI |
 | `?` | Toggle in-product keyboard and action help |
+| `t` | Cycle terminal, dark, and light palettes |
 | `q` | Exit and restore terminal state |
 
 The palette is a fixed action list, not a natural-language command interpreter.
@@ -73,6 +83,44 @@ those fields as an argument vector through the shell CLI. Switch, kill, regenera
 and dashboard use the same argv boundary. Commands are never assembled into a shell
 string. Bulk kill performs a bounded tmux lookup for current-session safety, then
 runs the public, confirming `hydra kill <branch>` command for each remaining head.
+
+## Mouse navigation
+
+Mouse navigation is enabled while the native UI owns the terminal. Click a head
+or recovery row to select it; the wheel over list rows moves selection exactly as
+`j/k` does, including filtered and scrolled lists. On terminals at least 70 columns
+wide, click a view tab to switch views. Enter opens the selected head; `d` inspects
+a recovery finding. Clicking a row never attaches, interrupts, or mutates a head.
+
+Headers, borders, empty space, help, and diagnostics do not select rows. Release,
+drag, modified clicks, and malformed reports are ignored. Hit targets come from
+the last painted frame; a resize invalidates them until the next render. At narrow
+widths or during search, use `v` for view navigation. Mouse reporting is disabled
+for prompts, delegated commands, and exit, including the basic fallback after a
+native crash. Terminal-native text selection may require holding Shift.
+
+Dragging layouts, workflow graphs, and historical sparklines remain
+outstanding. No new activity or progress metrics are inferred from session status
+or fleet desired state.
+
+## Themes
+
+The default `terminal` palette keeps the terminal's foreground/background and uses
+reverse video for the title and selected row. `dark` uses a black background with
+light text and cyan selection; `light` uses a light background with dark text and
+blue selection. The explicit dark/light palettes use fixed 256-color entries to avoid pastel
+or remapped ANSI base colors weakening contrast. Use `terminal` on terminals
+without 256-color support. Text markers, labels, and fixed column spacing carry
+the same meaning in every palette.
+
+Press `t` to cycle palettes without losing selection, search, or the current view.
+Set `HYDRA_TUI_THEME=terminal|dark|light` to choose a startup palette for
+`hydra tui` or `hydra fleet tui`. When invoking the native `hydra-tui` executable
+directly, `--theme terminal|dark|light` selects its startup palette.
+An explicit option overrides the environment. Theme changes apply to the current
+process; there is no saved layout/config file. Unknown names fail with a usage
+error before raw mode. `NO_COLOR` and `--no-color` suppress every palette, including
+when `t` is pressed. Headless fixture output remains plain and deterministic.
 
 ## Terminal safety and accessibility
 
@@ -84,8 +132,8 @@ runs the public, confirming `hydra kill <branch>` command for each remaining hea
   low-color terminals preserve all status meaning.
 - Pane and state bytes are untrusted. Control bytes and non-ASCII byte sequences are
   replaced before rendering; escape sequences cannot inject commands or terminal
-  controls. Bracketed paste and mouse/unknown escape sequences are bounded and
-  ignored.
+  controls. Bracketed paste and unknown escape sequences are bounded and ignored; SGR
+  mouse reports accept only bounded numeric coordinates and navigation buttons.
 - The layout clips to the current terminal size and the recovery view remains useful
   at narrow widths. All actions are keyboard accessible.
 

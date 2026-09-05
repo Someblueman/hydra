@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Local remote-task package preparation and inspection, binding an exact Git
+  commit/bundle, selected binary inputs, destination, work, outputs, and limits.
+  Preview includes transfer size and checksums; unsafe paths, symlinked inputs,
+  submodules, and LFS pointers fail preflight.
+- Durable receiving-host task acceptance with pending launch intent, immutable
+  receipts, project/dependency preflight, and submission-key deduplication across
+  concurrent clients and lost acknowledgments. Task status preserves transport
+  failures and corrupt-state uncertainty.
+- Explicit digest-authorized detached task execution through the existing shell
+  exec/workflow engine, preserving real run/provenance evidence and selected inputs.
+  Durable launch claims prevent replay after owner loss; queue, startup, and
+  execution deadlines remain distinct.
+- Durable remote-task cancellation with requested/delivered/confirmed/unknown
+  outcomes and a separate grace deadline. Bounded paginated logs expose real owner
+  and exec/workflow output, preserve exact bytes, and retain work after cancellation.
+- Immutable receiver-completion task result snapshots with checksummed declared
+  artifacts, real commit/attempt/gate evidence, and independent client verification.
+  Downloads preserve binary bytes and refuse unsafe paths or mismatched digests;
+  collection installs isolated refs/artifacts without changing dirty checkout work.
+  Successful committed results feed the existing local integration, gate, approval,
+  and promotion flow, with stale-ref and symbolic-ref protection.
+- Optional C fleet coordinator with OpenSSH host aliases, pinned bootstrap,
+  capability negotiation, bounded parallel list/doctor observations, and explicit
+  reconcile/watch after connection loss. Partial results retain reachable hosts;
+  reconnect does not replay mutations.
+- Instance-checked remote interrupts, spawn, workflow operations, and interactive
+  attach through the public shell CLI. Configuration and terminal workflow-history
+  bundles transfer only explicitly selected records; imported configuration remains
+  untrusted and imported history stays outside live runtime state.
+- Native fleet view with host-qualified heads, recorded desired state, recovery
+  findings, attach, and confirmed interrupt actions. Desired state does not imply
+  observed activity or task completion.
+- Prebuilt fleet-helper installation with `HYDRA_INSTALL_FLEET=auto|required|never`,
+  native fleet CI coverage, and real-host acceptance documentation. JSON-C is linked
+  statically into the optional helper; core shell operation has no added dependency.
+- Native terminal, dark, and light palettes with live `t` switching and
+  `HYDRA_TUI_THEME` startup selection. Direct `hydra-tui` invocation also accepts
+  `--theme`; explicit dark/light palettes use fixed 256-color entries, while
+  `NO_COLOR` and `--no-color` remain authoritative.
+- Native mouse navigation: click visible head/recovery rows and wide-screen view
+  tabs, or move selection with the wheel. Filtered and scrolled lists retain correct
+  row targets; keyboard controls remain complete and clicks never mutate heads.
+
+### Changed
+
+- Simplified everyday CLI examples around profiles, supervised `exec`, inbox
+  steering, and verification gates. Terminal broadcast and inactivity tools remain
+  available as expert utilities; inactivity is no longer described as completion.
+- Aligned contributor guidance with the C99 helpers, state-v2 contracts, focused
+  native checks, and combined installation/onboarding acceptance.
+- Simplified native mission control with branch-first lists, focused details,
+  on-demand diagnostics, bordered panels, fixed table columns, a title bar,
+  full-row selection highlighting, a selected-head summary, and a fixed action footer.
+  Head and recovery lists follow selection in short terminals; Escape returns to
+  heads and clears search.
+- Refreshed the real-agent and fleet demo with theme switching, neutral host labels,
+  and a private SSH recording alias. Simplified the README and moved detailed
+  command recipes into `docs/USAGE.md`.
+- Documented rolling delivery, release-time SemVer, draft-first publication, and
+  public deprecation windows. Versions remain assigned at release time.
+
+### Fixed
+
+- New Hydra homes are private even with a group-writable login umask; remote task
+  storage still refuses existing shared directories without changing permissions.
+- Result-head ref formatting checks truncation explicitly, including strict GCC
+  builds on Linux.
+- Mouse reporting is disabled for prompts, delegated commands, normal/signal exit,
+  and basic-TUI fallback after a native crash. Malformed, overlong, legacy, release,
+  drag, and modified mouse reports cannot select rows; resize invalidates old targets.
+- Explicit dark/light selection colors remain readable when a terminal remaps its
+  base ANSI palette, including pastel palettes and bold-black rendering.
+
+### Security
+
+- Fleet enforces strict SSH host-key checks, negotiated capabilities, bounded
+  transport, and instance-bound interrupts. Remote arguments travel as JSON argv
+  rather than shell-interpolated strings; bootstrap validates hashes and allowed
+  paths before publishing an immutable installation. Host-local trust, live state,
+  and locks are not copied between hosts.
+
+### Removed
+
+- Dated per-release checklists and the superseded regenerate demo. Release guidance
+  now points to `docs/VERSIONING.md` and the roadmap's release definition of done.
+
 ## [2.0.0] - 2026-09-04
 
 ### Added
