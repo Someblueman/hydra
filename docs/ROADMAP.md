@@ -1,7 +1,7 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 6 September 2026
+> - **Snapshot:** 7 September 2026
 > - **Current release:** `v2.0.0` stable local orchestration interface
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
@@ -10,11 +10,16 @@
 
 ## Purpose
 
-Hydra should be the most inspectable way to orchestrate engineering work locally
-and across trusted remote hosts, using interchangeable agents, real Git worktrees,
-and optional terminal interaction. Sending work remotely should be as ordinary as
-running it locally: submit a task and an exact code snapshot, disconnect, then
-inspect and collect a verified result.
+Hydra should let a user describe an objective, distribute the work, and receive an
+integrated result checked against their requirements: a working feature, research
+report, design, or another declared deliverable. The general pattern is decompose,
+execute, compose, and verify. Evidence supports the deliverable; a decision or a
+collection of successful subtasks does not replace it.
+
+Keep that experience simple across local and trusted remote hosts, using existing
+agents and ordinary tools. Submit exact inputs, disconnect, then inspect and collect
+the result. The DAG and recovery machinery should explain execution without making
+users design a distributed system for each objective.
 
 The same task and workflow should run with any worker that satisfies its required
 capabilities. Agent agnosticism does not imply identical provider features or
@@ -100,7 +105,47 @@ fixture tests and local authentication do not close another provider's remote
 requirement. Claude remains explicitly deferred rather than blocking the other
 implemented profiles.
 
-#### 3. Resource admission
+#### 3. Objective planning and deterministic DAG compilation
+
+Expose agent-assisted planning through the CLI and a versioned declarative plan.
+The agent interprets requirements; a deterministic compiler validates and resolves
+its proposal. Compilation checks an explicit contract, not the semantic truth of
+natural-language requirements. See [the implementation path](PLAN_COMPILATION.md)
+for interfaces, compiler stages, compatibility boundaries, and acceptance examples.
+
+- [ ] Define objective, deliverable, requirement, and plan records with stable IDs,
+      explicit constraints, assumptions, open questions, permitted effects, and
+      budgets. Tie requirements to final deliverables and their evaluation methods.
+      Missing material decisions remain visible rather than becoming guessed defaults.
+- [ ] Add a bounded JSON planning format and agent-readable CLI schema, validation,
+      diagnostics, and preview. Reuse existing workflow commands where possible;
+      keep one semantic model rather than separate CLI and DSL execution engines.
+- [ ] Compile accepted plans into a versioned resolved execution artifact. Check
+      cycles, artifact types/producers, requirement coverage, final composition and
+      verification, write conflicts, execution capabilities, authority, and budgets.
+      Emit stable diagnostics with field paths and actionable errors. Compilation
+      performs no worker execution, host mutation, or model calls.
+- [ ] Bind execution to the compiled artifact and its inputs, source, policy, and
+      compiler version. Preserve published workflow schema 1 behavior; unsupported
+      planned operations fail explicitly until their runtime capabilities exist.
+      Plan acceptance never grants unstated remote execution or publication rights.
+- [ ] Provide a planner recipe that discovers the schema, proposes a plan, reads
+      validation errors, and revises within a bounded budget. Keep clarification,
+      plan acceptance, execution, and final delivery distinct. Add MCP only if the
+      public CLI proves insufficient for a concrete agent client.
+- [ ] Qualify both a feature workflow that delivers integrated working code and a
+      research workflow that delivers a checked report. Include design or evidence
+      synthesis as productive work; check its output as a whole. Start with static
+      stages, then admit bounded follow-up plans for genuinely unknown work.
+
+Acceptance: an agent can propose, validate, revise, compile, preview, and execute a
+plan through public interfaces. Identical explicit inputs produce identical resolved
+DAGs; malformed, uncovered, cyclic, over-budget, or unauthorized plans cannot run.
+A complete requirements table alone cannot claim semantic adequacy. Changed plans
+invalidate their execution bindings. Successful child tasks without the declared
+final deliverable and its required checks do not count as objective completion.
+
+#### 4. Resource admission
 
 Start with explicit hosts and FIFO admission. Build this boundary alongside the
 first distributed DAG slice; automatic placement depends on it.
@@ -118,12 +163,13 @@ capacity observations cannot overbook it. An incompatible or full host explains 
 work is queued or refused. Queue deadlines and cancellation have bounded behavior;
 unknown execution does not silently release its claim.
 
-#### 4. Distributed DAG execution and independent validation
+#### 5. Distributed DAG execution and independent validation
 
 Extend the existing finite workflow DAG across explicitly selected hosts. Producers
 create artifacts, validators examine those exact artifacts, and a deterministic
-policy step combines their evidence. An assembler produces a new candidate that
-must be validated again. These are workflow roles, not separate scheduler services.
+policy step combines their evidence. Composition workers integrate code, reconcile
+designs, or synthesize reports; their new deliverables must be validated again.
+These are workflow roles, not separate scheduler services.
 
 - [ ] Add individual remote steps through the existing fleet task interface, with
       one durable coordinator per run. Persist the resolved graph, source/input
@@ -163,7 +209,7 @@ separates deterministic workflow decisions from effectful activities.
 steps through exact materials and products. These inform the design, not new runtime
 dependencies or claims that provenance proves correctness.
 
-#### 5. Load balancing across eligible hosts
+#### 6. Load balancing across eligible hosts
 
 Extend resource admission with automatic placement of **new, unassigned work**.
 Explicit host pinning remains available. Implement this after assignment recovery
@@ -210,7 +256,7 @@ execution risks during worker/network failures. Hydra should borrow the placemen
 ideas while retaining its stricter unknown-outcome boundary. These are design
 recommendations; no Hydra balancing prototype or performance qualification exists.
 
-#### 6. Run diagnostics and bounded retention
+#### 7. Run diagnostics and bounded retention
 
 Explain what needs attention through existing CLI and TUI surfaces.
 
@@ -227,7 +273,7 @@ Acceptance: an operator can identify a blocked task's owner, reason, and next ac
 without reading raw state files. Retention stays bounded while preserving active
 recovery and the documented deduplication window.
 
-#### 7. Dynamic task pools and schedules
+#### 8. Dynamic task pools and schedules
 
 Select this work only when real workloads need newly discovered tasks or persistent
 queues that finite workflows cannot express cleanly.
