@@ -93,6 +93,10 @@ cmd_agent() {
     _ca_action="${1:-list}"
     [ $# -eq 0 ] || shift
     case "$_ca_action" in
+        contract|probe|import)
+            _load_lib cmd_fleet
+            cmd_fleet_dispatch agent-profile "$_ca_action" "$@"
+            ;;
         list)
             printf '%-12s %-10s %-12s %s\n' PROFILE AVAILABLE TIER CONFIDENCE
             profile_list | while IFS= read -r _ca_name; do
@@ -146,7 +150,7 @@ cmd_agent() {
             }
             echo "Created agent profile '$_ca_name'"
             ;;
-        *) echo "Usage: hydra agent <list|show|doctor|init>" >&2; return 1 ;;
+        *) echo "Usage: hydra agent <list|show|doctor|init|contract|probe|import>" >&2; return 1 ;;
     esac
 }
 

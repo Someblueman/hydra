@@ -310,6 +310,39 @@ message_receipts() {
 }
 
 # Count pending messages for a branch
+# Drain only messages addressed to this exact instance at a turn boundary.
+# A receipt means copied into the caller's prompt transport, not model obedience.
+messages_safe_point() (
+    _msp_branch="$1" _msp_instance="$2" _msp_budget="$3"
+    case "$_msp_budget" in ''|*[!0-9]*) exit 1 ;; esac
+    [ "$_msp_budget" -le 65536 ] || exit 1
+    lifecycle_load_head "$_msp_branch" || exit 1
+    [ "$LIFECYCLE_INSTANCE_ID" = "$_msp_instance" ] || exit 1
+    _msp_dir="$(get_message_dir "$_msp_branch")" || exit 1
+    _msp_lock="$(get_message_lock "$_msp_branch")" || exit 1
+    acquire_lock "$_msp_lock" "deliver safe-point steering" || exit 1
+    trap 'release_lock "$_msp_lock"' 0
+    for _msp_file in "$_msp_dir"/queue/*; do
+        [ -f "$_msp_file" ] && [ ! -L "$_msp_file" ] || continue
+        _msp_id="${_msp_file##*/}"
+        _msp_meta="$_msp_dir/metadata/$_msp_id"
+        [ "$(sed -n 's/^delivery=//p' "$_msp_meta" 2>/dev/null)" = safe-point ] || continue
+        _msp_target="$(sed -n 's/^target_instance=//p' "$_msp_meta" 2>/dev/null)"
+        if [ "$_msp_target" != "$_msp_instance" ]; then
+            _message_write_receipt_locked "$_msp_dir" "$_msp_id" stale "$_msp_target" || exit 1
+            mv "$_msp_file" "$_msp_dir/archive/$_msp_id" || exit 1
+            continue
+        fi
+        _msp_bytes="$(wc -c < "$_msp_file" | tr -d ' ')"
+        [ "$_msp_bytes" -le "$_msp_budget" ] || break
+        cat "$_msp_file" || exit 1
+        _msp_budget=$((_msp_budget - _msp_bytes))
+        mv "$_msp_file" "$_msp_dir/archive/$_msp_id" || exit 1
+        _message_write_receipt_locked "$_msp_dir" "$_msp_id" delivered "$_msp_instance" || exit 1
+    done
+)
+
+# Count pending messages for a branch
 # Usage: count_messages <branch>
 # Returns: Count on stdout
 count_messages() {

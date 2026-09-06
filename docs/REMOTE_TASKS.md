@@ -55,6 +55,14 @@ For an existing finite workflow use
 `"completion": "workflow-success"`. The path must be a regular file in the exact
 source commit. Preparation does not execute it or grant repository trust.
 
+Workflows using the new contracts should declare `workflow-data`,
+`workflow-approval-wait`, or `agent-headless` in `capabilities`, as appropriate,
+alongside `workflow`. The receiving helper checks these before acceptance, so an
+older host refuses an unsupported task. Agent profiles and provider credentials
+must already exist on the receiving host; they are not copied from the client.
+See [workflow data and approvals](WORKFLOW_DATA.md) and
+[agent profiles](AGENT_CONTRACT.md) for their execution contracts.
+
 ## Transfer and binding contract
 
 Package schema 1 contains `spec`, `spec_sha256`, `bundle_hex`, and `input_hex`, plus
@@ -149,8 +157,11 @@ mutation retry occurs. Handshake failures mean this call did not dispatch a
 submission; they do not erase any earlier acceptance. Status during an outage
 reports the transport failure without claiming a terminal task state. Submission
 uses the specification's transport deadline independently for handshake and
-request; status, standalone start, cancel, and logs use 5 seconds for each. A transport timeout
-does not stop a detached task owner.
+request; status, standalone start, and logs use 5 seconds for each. Cancellation
+uses 30 seconds for each, with `--timeout 1..300` to override it, because cancelling
+a suspended approval also seals its result. A transport timeout does not stop a
+detached task owner. If cancellation reports `outcome_unknown`, inspect status
+before taking further action.
 
 Acceptance records and keys currently have no automatic expiry. Retain them for
 the lifetime of recovery and result collection. Deleting this state loses the

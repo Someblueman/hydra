@@ -1,0 +1,1 @@
+These bounded JSONL fixtures describe translation contract version 1. They are synthetic protocol examples, not live-provider qualification. Run them through `make test-fleet`; malformed, partial, permission and cancellation boundaries also run through the public CLI in `tests/test_agent_execution.sh`. Provider versions and live results must be recorded separately.

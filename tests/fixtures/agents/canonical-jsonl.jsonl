@@ -1,0 +1,6 @@
+{"schema_version":1,"type":"session","session_id":"fixture-session"}
+{"schema_version":1,"type":"observation","status":"running"}
+{"schema_version":1,"type":"usage","usage":{"input_tokens":17,"output_tokens":3,"cached_input_tokens":null,"cost_usd":null}}
+{"schema_version":1,"type":"result","text":"fixture artifact"}
+{"schema_version":1,"type":"permission","request_id":"permission_1"}
+{"schema_version":1,"type":"observation","status":"idle"}

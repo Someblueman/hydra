@@ -13,11 +13,11 @@
 #define F_PATH 4096
 #define F_PROTOCOL 1
 #define F_VERSION "2.1.0"
-struct f_capture { char *out, *err; int status; bool timeout, cancelled, stop_unknown; };
+struct f_capture { char *out, *err; size_t out_bytes, err_bytes; int status; bool timeout, cancelled, stop_unknown; };
 /* Borrowed log descriptors and stop context; remaining budgets span invocations. */
 struct f_control {
     bool (*stop)(void *context);
-    void (*observe)(void *context, const char *stdout_text);
+    void (*observe)(void *context, const char *stdout_text, size_t size);
     void *context;
     unsigned grace_seconds;
     int log_fd[2];
@@ -29,6 +29,7 @@ extern volatile sig_atomic_t f_stopped;
 extern const char *f_home, *f_hydra;
 /* Returned JSON objects and capture buffers are caller-owned. */
 json_object *f_parse(const char *text);
+json_object *f_parse_value(const char *text);
 json_object *f_read_json(const char *path, size_t limit);
 json_object *f_error(const char *command, const char *code, const char *message);
 json_object *f_success(const char *command, json_object *data);
@@ -46,7 +47,7 @@ bool f_name(const char *value);
 bool f_target(const char *value);
 void f_capture_free(struct f_capture *cap);
 int f_run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap);
-int f_run_controlled(char *const argv[], unsigned seconds, struct f_capture *cap, struct f_control *control);
+int f_run_controlled(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap, struct f_control *control);
 char *f_quote(const char *value);
 int f_ssh(const struct f_remote *remote, const char *command, const char *input, size_t size, unsigned seconds, bool tty, struct f_capture *cap);
 int f_remote_load(const char *name, struct f_remote *remote);

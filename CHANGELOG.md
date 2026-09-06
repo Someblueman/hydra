@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Named workflow file and structured inputs, sealed output manifests, and exact
+  artifact references that block dependents on missing or changed output.
+- Durable workflow approval waits with bound evidence, explicit decisions and
+  resume, stale-decision rejection, and remote task suspension and recovery.
+- Failure-class retry policies and durable backoff deadlines, preserving completed
+  attempts and reporting uncertain non-idempotent work for recovery.
+- Versioned declarative headless agent profiles, bounded event translation,
+  capability evidence, exact recorded-session resume, safe-point prompt delivery,
+  supervised cancellation, and opt-in bounded provider payload retention.
+
+- Fleet host authentication through native provider sign-in or preview-bound
+  copying of private credentials, with selected-provider merges for Pi/OpenCode.
+
+### Changed
+
+- Fleet task cancellation allows 30 seconds per transport phase and accepts a
+  bounded `--timeout` override so suspended approval result sealing can finish.
+- Interactive Codex restore requires an exact recorded session identity instead of
+  implicitly selecting the latest session. Older heads remain inspectable; see
+  [the migration instructions](docs/AGENT_CONTRACT.md#workflow-profiles-and-migration).
+
+Workflow-data acceptance is complete. Claude Code remote qualification is deferred
+until native host sign-in is available and remains on the outstanding roadmap.
+See [the acceptance record](docs/WORKFLOW_AGENT_ACCEPTANCE.md) for the local and
+remote provider matrix and exact evidence.
+
 ## [2.1.0] - 2026-09-05
 
 ### Added

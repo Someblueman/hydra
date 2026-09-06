@@ -9,7 +9,7 @@ static int64_t monotonic(void) { struct timespec ts; clock_gettime(CLOCK_MONOTON
 static int phase(char *const argv[], int64_t deadline, struct f_capture *cap, struct f_control *control) {
     int64_t left = deadline - monotonic();
     if (left <= 0) { cap->timeout = true; cap->status = 124; return -1; }
-    return f_run_controlled(argv, (unsigned)left, cap, control) || cap->status ? -1 : 0;
+    return f_run_controlled(argv, NULL, 0, (unsigned)left, cap, control) || cap->status ? -1 : 0;
 }
 static int step(char *const argv[], int64_t deadline, struct f_control *control) {
     struct f_capture cap = {0}; int status = phase(argv, deadline, &cap, control); f_capture_free(&cap); return status;
@@ -43,18 +43,24 @@ static int prepare(const char *directory, json_object *package, json_object *sta
     }
     return task_write_json(directory, "state.json", state, true);
 }
-void task_execute(const char *directory, json_object *package, json_object *state) {
+void task_execute(const char *directory, json_object *package, json_object *state, bool resume) {
     json_object *spec = f_field(package, "spec"), *work = f_field(spec, "work"), *limits = f_field(spec, "limits"), *evidence = NULL;
     struct f_capture cap = {0}; char bytes[32], home[F_PATH]; char *argv[140]; size_t n = 0, i;
     struct task_control control;
     const char *clear[] = {"HYDRA_PROJECT_ID", "HYDRA_HEAD_ID", "HYDRA_INSTANCE_ID", "HYDRA_STATE_DIR", "HYDRA_BRANCH", "HYDRA_WORKTREE", NULL};
     int64_t startup = monotonic() + json_object_get_int64(f_field(limits, "startup_seconds"));
+    int64_t execution = json_object_get_int64(f_field(limits, "execution_seconds")), execution_start;
     bool complete_response = false;
     bool command = !strcmp(f_string(work, "kind"), "exec");
     char *global = getenv("GIT_CONFIG_GLOBAL") ? strdup(getenv("GIT_CONFIG_GLOBAL")) : NULL;
     char *system = getenv("GIT_CONFIG_NOSYSTEM") ? strdup(getenv("GIT_CONFIG_NOSYSTEM")) : NULL;
     f_string_add(state, "work_kind", f_string(work, "kind"));
     if (task_control_open(&control, directory, f_string(package, "spec_sha256"), state, limits)) { f_string_add(state, "failure", "log_io_failed"); goto failed; }
+    if (resume) {
+        json_object *remaining = f_field(state, "execution_remaining_seconds");
+        if (!json_object_is_type(remaining, json_type_int) || json_object_get_int64(remaining) < 0 || json_object_get_int64(remaining) > execution) goto failed;
+        execution = json_object_get_int64(remaining);
+    }
     if (f_copy(home, sizeof(home), f_home)) goto failed;
     f_home = home;
     for (i = 0; clear[i]; i++) unsetenv(clear[i]);
@@ -64,7 +70,7 @@ void task_execute(const char *directory, json_object *package, json_object *stat
     json_object_object_add(state, "owner_pid", json_object_new_int64((int64_t)getpid()));
     f_string_add(state, "launch_intent", "started");
     if (task_write_json(directory, "state.json", state, true)) goto done;
-    if (prepare(directory, package, state, startup, &control.process)) { f_string_add(state, "failure", monotonic() >= startup ? "startup_deadline" : "startup_failed"); goto failed; }
+    if (resume ? task_workspace(directory, state) : prepare(directory, package, state, startup, &control.process)) { f_string_add(state, "failure", monotonic() >= startup ? "startup_deadline" : "startup_failed"); goto failed; }
     if (global) setenv("GIT_CONFIG_GLOBAL", global, 1); else unsetenv("GIT_CONFIG_GLOBAL");
     if (system) setenv("GIT_CONFIG_NOSYSTEM", system, 1); else unsetenv("GIT_CONFIG_NOSYSTEM");
     if (command) {
@@ -77,7 +83,7 @@ void task_execute(const char *directory, json_object *package, json_object *stat
         f_string_add(state, "execution_head_id", f_string(f_field(evidence, "data"), "head_id"));
         json_object_put(evidence); evidence = NULL; f_capture_free(&cap);
     }
-    f_string_add(state, "state", "running"); json_object_object_add(state, "started_at", json_object_new_int64((int64_t)time(NULL)));
+    f_string_add(state, "state", "running"); json_object_object_add(state, resume ? "resumed_at" : "started_at", json_object_new_int64((int64_t)time(NULL)));
     if (task_write_json(directory, "state.json", state, true)) goto done;
     argv[n++] = (char *)f_hydra;
     if (command) {
@@ -85,9 +91,12 @@ void task_execute(const char *directory, json_object *package, json_object *stat
         argv[n++] = "exec"; argv[n++] = "--branch"; argv[n++] = "task"; argv[n++] = "--json";
         argv[n++] = "--timeout"; argv[n++] = "0"; argv[n++] = "--";
         for (i = 0; i < json_object_array_length(args); i++) argv[n++] = (char *)task_text(json_object_array_get_idx(args, i));
-    } else { argv[n++] = "workflow"; argv[n++] = "run"; argv[n++] = (char *)f_string(work, "path"); }
+    } else { argv[n++] = "workflow"; argv[n++] = resume ? "resume" : "run"; argv[n++] = (char *)f_string(resume ? state : work, resume ? "run_id" : "path"); }
     argv[n] = NULL;
-    (void)phase(argv, monotonic() + json_object_get_int64(f_field(limits, "execution_seconds")), &cap, &control.process);
+    execution_start = monotonic();
+    (void)phase(argv, execution_start + execution, &cap, &control.process);
+    execution -= monotonic() - execution_start;
+    json_object_object_add(state, "execution_remaining_seconds", json_object_new_int64(execution > 0 ? execution : 0));
     json_object_object_add(state, "exit_status", json_object_new_int(cap.status));
     if (command && cap.out) {
         evidence = f_parse(cap.out);
@@ -97,7 +106,7 @@ void task_execute(const char *directory, json_object *package, json_object *stat
             f_string_add(state, "run_id", f_string(f_field(evidence, "data"), "run_id"));
             if (task_write_json(directory, "attempt.json", evidence, false)) goto failed;
         }
-    } else if (cap.out) {
+    } else if (cap.out && !resume) {
         char run[128]; size_t length = strcspn(cap.out, "\r\n");
         if (length < sizeof(run)) {
             memcpy(run, cap.out, length); run[length] = '\0';
@@ -107,6 +116,7 @@ void task_execute(const char *directory, json_object *package, json_object *stat
     if (cap.status == 125 || (!cap.status && (!f_string(state, "run_id") || (command && !complete_response)))) {
         f_string_add(state, "state", "outcome_unknown"); f_string_add(state, "failure", "execution_evidence_unavailable"); goto done;
     }
+    if (!command && cap.status == 3 && f_string(state, "run_id")) { f_string_add(state, "state", "waiting_approval"); goto done; }
     if (cap.status) { f_string_add(state, "failure", cap.timeout ? "execution_deadline" : "execution_failed"); goto failed; }
     f_string_add(state, "state", "succeeded"); goto done;
 failed:
@@ -114,10 +124,11 @@ failed:
     if (!f_string(state, "failure")) f_string_add(state, "failure", "evidence_unavailable");
 done:
     task_control_close(&control);
-    json_object_object_add(state, "finished_at", json_object_new_int64((int64_t)time(NULL)));
-    f_string_add(state, "result_state", "sealing");
-    (void)task_write_json(directory, "state.json", state, true);
-    f_string_add(state, "result_state", task_result_seal(directory, state) ? "unavailable" : "ready");
-    (void)task_write_json(directory, "state.json", state, true);
+    if (!strcmp(f_string(state, "state"), "waiting_approval")) {
+        (void)task_write_json(directory, "state.json", state, true);
+        goto released;
+    }
+    (void)task_finish(directory, state);
+released:
     free(global); free(system); json_object_put(evidence); f_capture_free(&cap);
 }

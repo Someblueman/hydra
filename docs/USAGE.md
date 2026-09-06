@@ -61,6 +61,8 @@ hydra workflow dry-run examples/workflows/local-review.yml
 hydra workflow run examples/workflows/local-review.yml
 hydra workflow status run_ID --json
 hydra workflow cancel run_ID
+hydra workflow requests run_ID --json
+hydra workflow decide run_ID step_REQUEST_ID approve --by reviewer
 hydra workflow resume run_ID
 
 # Parallel safety and guarded integration

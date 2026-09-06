@@ -20,12 +20,12 @@ static bool cancelled(void *context) {
     }
     json_object_put(request); return control->cancel_seen;
 }
-static void observe_run(void *context, const char *text) {
+static void observe_run(void *context, const char *text, size_t length) {
     struct task_control *control = context;
     const char *kind = f_string(control->state, "work_kind"), *project = f_string(control->state, "execution_project_id"), *start, *end;
     const char *prefix = "{\"schema_version\":1,\"ok\":true,\"command\":\"exec\",\"data\":{\"run_id\":\"";
     char run[128], path[F_PATH]; struct stat st; size_t size;
-    if (!kind || !project || f_string(control->state, "run_id")) return;
+    if (!kind || !project || f_string(control->state, "run_id") || memchr(text, '\0', length)) return;
     if (!strcmp(kind, "exec")) {
         if (strncmp(text, prefix, strlen(prefix))) return;
         start = text + strlen(prefix); end = strchr(start, '"');
@@ -48,9 +48,14 @@ int task_control_open(struct task_control *control, const char *directory, const
     for (i = 0; i < 2; i++) {
         char path[F_PATH];
         if (f_path(path, sizeof(path), directory, names[i])) return -1;
-        control->process.log_fd[i] = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+        bool resume = f_string(state, "run_id") != NULL;
+        struct stat st;
+        control->process.log_fd[i] = open(path, O_WRONLY | O_CREAT | (resume ? O_APPEND : O_EXCL) | O_NOFOLLOW, 0600);
         if (control->process.log_fd[i] < 0 || fcntl(control->process.log_fd[i], F_SETFD, FD_CLOEXEC)) return -1;
         control->process.remaining[i] = (size_t)json_object_get_int(f_field(limits, "log_bytes"));
+        if (fstat(control->process.log_fd[i], &st) || !S_ISREG(st.st_mode) || st.st_size < 0) return -1;
+        if ((uint64_t)st.st_size >= control->process.remaining[i]) control->process.remaining[i] = 0;
+        else control->process.remaining[i] -= (size_t)st.st_size;
     }
     return task_sync_dir(directory);
 }
@@ -63,7 +68,7 @@ static char *scalar(const char *directory, const char *name) {
 }
 /* Plain terminal heads are not executing agents. Other profiles need independent
  * shutdown evidence; stopping the CLI process cannot certify those sessions. */
-static bool no_agent_workers(json_object *state) {
+bool task_no_agent_workers(json_object *state) {
     const char *workspace = f_string(state, "workspace"); char common[F_PATH], root[F_PATH];
     char *project; DIR *dir; struct dirent *entry; bool quiet = true;
     if (!workspace) return true; /* No spawn step was reached. */
@@ -90,7 +95,7 @@ void task_control_close(struct task_control *control) {
     if (control->process.truncated) json_object_object_add(control->state, "log_truncated", json_object_new_boolean(true));
     if (control->process.log_error) f_string_add(control->state, "log_error", "io_failed");
     if (control->cancel_seen) {
-        bool confirmed = !control->process.stop_unknown && no_agent_workers(control->state);
+        bool confirmed = !control->process.stop_unknown && task_no_agent_workers(control->state);
         f_string_add(control->state, "cancellation", confirmed ? "confirmed_stopped" : "unknown");
         f_string_add(control->state, "cancellation_scope", "managed_commands");
         f_string_add(control->state, "state", confirmed ? "cancelled" : "outcome_unknown");

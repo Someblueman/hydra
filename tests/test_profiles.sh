@@ -32,7 +32,10 @@ echo "=============================="
 assert_equal none "$(profile_resolve none)" "none is a first-class profile"
 assert_equal task-file "$(profile_field claude prompt_mode)" "Claude task transport is declared"
 assert_equal session-id "$(profile_field claude resume_mode)" "Claude resume recipe is declared"
-assert_equal cwd-last "$(profile_field codex resume_mode)" "Codex fallback resume confidence is explicit"
+assert_equal exact-session "$(profile_field codex resume_mode)" "Codex resume requires an exact recorded session"
+assert_equal "'codex' resume 'recorded-session'" "$(profile_resume_command codex recorded-session)" "Codex resume selects only the supplied identity"
+profile_resume_command codex '' >/dev/null 2>&1
+assert_failure $? "Codex resume cannot select a most-recent session"
 
 fake_agent="$test_root/fake agent"
 fake_output="$test_root/args"

@@ -68,7 +68,9 @@ workflow_bindings_match() {
     [ "$(sed -n '1p' "$_wbm_dir/project-id")" = "$(hydra_get_project_id)" ] &&
     git cat-file -e "$_wbm_base^{commit}" 2>/dev/null &&
     [ "$(git rev-parse HEAD 2>/dev/null || true)" = "$_wbm_base" ] &&
-    [ "$(git hash-object "$_wbm_dir/resolved.yml")" = "$(sed -n '1p' "$_wbm_dir/definition-hash")" ]
+    [ "$(git hash-object "$_wbm_dir/resolved.yml")" = "$(sed -n '1p' "$_wbm_dir/definition-hash")" ] &&
+    [ "$(workflow_parse "$_wbm_dir/resolved.yml" runtime | git hash-object --stdin)" = "$(git hash-object "$_wbm_dir/graph.tsv")" ] &&
+    workflow_data_bindings_match "$_wbm_dir"
 }
 
 workflow_step_command() {
@@ -95,8 +97,30 @@ workflow_step_command() {
         approve) set -- gate approve "$_wsc_head" --name "$_wsc_name" --by "$_wsc_by"; [ -z "$_wsc_reason" ] || set -- "$@" --reason "$_wsc_reason" ;;
         kill) set -- kill "$_wsc_head"; [ "$_wsc_force" != true ] || set -- "$@" --force ;;
         exec)
-            if [ -n "$_wsc_argv" ]; then
-                set -- exec
+            if [ -n "$_wsc_profile" ]; then
+                _wsc_profile_args="$(awk -F '\t' -v id="$_wss_id" '$1=="profile_args" && $2==id {print $3 "\t" $4 "\t" $5 "\t" $6 "\t" $7}' "$_wss_dir/graph.tsv")"
+                _wsc_prompt_file="$(printf '%s\n' "$_wsc_profile_args" | cut -f1)"
+                _wsc_prompt_input="$(printf '%s\n' "$_wsc_profile_args" | cut -f2)"
+                _wsc_result_file="$(printf '%s\n' "$_wsc_profile_args" | cut -f3)"
+                _wsc_requires="$(printf '%s\n' "$_wsc_profile_args" | cut -f4)"
+                _wsc_resume_from="$(printf '%s\n' "$_wsc_profile_args" | cut -f5)"
+                if [ "$_wsc_prompt_input" != - ]; then
+                    _wsc_prompt="$HYDRA_WORKFLOW_INPUTS_DIR/$_wsc_prompt_input"
+                else
+                    _wsc_prompt="$("${HYDRA_BIN_CMD:-hydra}" path "$_wsc_head")/$_wsc_prompt_file"
+                fi
+                set -- exec --exit-code --json --branch "$_wsc_head" --profile "$_wsc_profile" --prompt-file "$_wsc_prompt"
+                [ "$_wsc_result_file" = - ] || set -- "$@" --result-file "$HYDRA_WORKFLOW_OUTPUTS_DIR/$_wsc_result_file"
+                [ "$_wsc_requires" = - ] || set -- "$@" --require "$_wsc_requires"
+                if [ "$_wsc_resume_from" != - ]; then
+                    _wsc_previous="$(sed -n '1p' "$_wss_dir/steps/$_wsc_resume_from/authoritative-attempt")"
+                    case "$_wsc_previous" in ''|*[!0-9]*) return 2 ;; esac
+                    _wsc_resume_id="$(cmd_fleet_dispatch agent-profile run-id "$_wss_dir/steps/$_wsc_resume_from/attempt-$_wsc_previous/stdout")" || return 2
+                    set -- "$@" --resume-run "$_wsc_resume_id"
+                fi
+                [ -z "$_wsc_timeout" ] || set -- "$@" --timeout "$_wsc_timeout"
+            elif [ -n "$_wsc_argv" ]; then
+                set -- exec --exit-code
                 [ -z "$_wsc_head" ] || set -- "$@" --branch "$_wsc_head"
                 [ -z "$_wsc_timeout" ] || set -- "$@" --timeout "$_wsc_timeout"
                 set -- "$@" --
@@ -108,7 +132,7 @@ workflow_step_command() {
                 IFS="$_wsc_oldifs"
                 case "$_wsc_oldflags" in *f*) ;; *) set +f ;; esac
             else
-                set -- exec
+                set -- exec --exit-code
                 [ -z "$_wsc_head" ] || set -- "$@" --branch "$_wsc_head"
                 [ -z "$_wsc_timeout" ] || set -- "$@" --timeout "$_wsc_timeout"
                 set -- "$@" --shell "$_wsc_command" --allow-shell
@@ -193,23 +217,7 @@ workflow_recover_running_steps() {
         workflow_pid_alive "$_wrr_pid" && continue
         _wrr_attempt="$(sed -n '1p' "$_wrr_sd/attempts")"
         _wrr_exit="$(sed -n '1p' "$_wrr_sd/attempt-$_wrr_attempt/exit-code" 2>/dev/null || true)"
-        if [ -n "$_wrr_exit" ]; then
-            if [ "$_wrr_exit" -eq 0 ]; then
-                workflow_atomic_scalar "$_wrr_sd/state" succeeded
-                workflow_atomic_scalar "$_wrr_sd/authoritative-attempt" "$_wrr_attempt"
-            elif [ "$_wrr_idem" = true ] && [ "$_wrr_attempt" -le "$_wrr_retry" ]; then
-                workflow_atomic_scalar "$_wrr_sd/state" ready
-            else
-                workflow_atomic_scalar "$_wrr_sd/state" failed
-                workflow_atomic_scalar "$_wrr_sd/authoritative-attempt" "$_wrr_attempt"
-            fi
-        elif [ "$_wrr_idem" = true ] && [ "$_wrr_attempt" -le "$_wrr_retry" ]; then
-            workflow_atomic_scalar "$_wrr_sd/state" ready
-            workflow_event "$_wrr_dir" "$_wrr_id" step.recovered "interrupted_attempt=$_wrr_attempt"
-        else
-            workflow_atomic_scalar "$_wrr_sd/state" recovery-required
-            workflow_event "$_wrr_dir" "$_wrr_id" step.recovery_required "uncertain_attempt=$_wrr_attempt"
-        fi
+        workflow_attempt_result "$_wrr_dir" "$_wrr_id" "$_wrr_retry" "$_wrr_idem" "${_wrr_exit:-unknown}"
     done < "$_wrr_dir/graph.tsv"
 }
 
@@ -233,49 +241,62 @@ workflow_start_step() {
     _wss_retry="$4"
     _wss_idem="$5"
     shift 5
+    if [ "$_wss_kind" = approval-wait ]; then
+        workflow_approval_create "$_wss_dir" "$_wss_id" "$1" "$7" "$6" "${11}"
+        return $?
+    fi
     _wss_sd="$_wss_dir/steps/$_wss_id"
     _wss_attempt="$(sed -n '1p' "$_wss_sd/attempts")"
     _wss_attempt=$((_wss_attempt + 1))
     _wss_attempt_dir="$_wss_sd/attempt-$_wss_attempt"
-    mkdir -p "$_wss_attempt_dir" || return 1
+    (umask 077; mkdir -p "$_wss_attempt_dir") || return 1
     workflow_atomic_scalar "$_wss_sd/attempts" "$_wss_attempt"
     workflow_atomic_scalar "$_wss_sd/state" running
     workflow_atomic_scalar "$_wss_sd/started-at" "$(date +%s)"
+    if [ "$_wss_kind" = approve ]; then
+        workflow_atomic_scalar "$_wss_attempt_dir/decision-source" workflow-policy || return 1
+    fi
     workflow_event "$_wss_dir" "$_wss_id" step.running "attempt=$_wss_attempt"
     (
         _ws_command_pid=""
         _ws_cancelled=0
         trap '_ws_cancelled=1; [ -z "$_ws_command_pid" ] || operations_signal_tree "$_ws_command_pid" TERM' HUP INT TERM
+        if ! workflow_approval_guard "$_wss_dir" "$_wss_id"; then
+            workflow_atomic_scalar "$_wss_sd/state" recovery-required
+            workflow_event "$_wss_dir" "$_wss_id" step.recovery_required stale_approval
+            exit 1
+        fi
+        if [ -f "$_wss_dir/data.json" ]; then
+            if ! workflow_data_definition_matches "$_wss_dir" ||
+                ! workflow_data_tool prepare "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" > "$_wss_attempt_dir/data-preparation.json"; then
+                workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
+                workflow_atomic_scalar "$_wss_sd/state" failed
+                workflow_event "$_wss_dir" "$_wss_id" step.failed invalid_inputs
+                exit 1
+            fi
+            HYDRA_WORKFLOW_INPUTS_DIR="$_wss_attempt_dir/inputs"
+            HYDRA_WORKFLOW_OUTPUTS_DIR="$_wss_attempt_dir/outputs"
+            export HYDRA_WORKFLOW_INPUTS_DIR HYDRA_WORKFLOW_OUTPUTS_DIR
+        fi
         workflow_step_command "$_wss_kind" "$@" >"$_wss_attempt_dir/stdout" 2>"$_wss_attempt_dir/stderr" &
         _ws_command_pid=$!
         workflow_atomic_scalar "$_wss_sd/command-pid" "$_ws_command_pid"
         if wait "$_ws_command_pid"; then _ws_code=0; else _ws_code=$?; fi
         trap - HUP INT TERM
+        [ "$_ws_cancelled" -eq 0 ] || _ws_code=143
+        if [ "$_ws_code" -eq 0 ] && [ -f "$_wss_dir/data.json" ]; then
+            if ! workflow_data_tool seal "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" > "$_wss_attempt_dir/data-seal.json"; then
+                _ws_code=1
+                workflow_event "$_wss_dir" "$_wss_id" step.invalid_outputs
+            fi
+        fi
         workflow_atomic_scalar "$_wss_attempt_dir/exit-code" "$_ws_code"
         workflow_atomic_scalar "$_wss_attempt_dir/completed-at" "$(date +%s)"
         if [ -f "$_wss_dir/cancel-requested" ]; then
             workflow_atomic_scalar "$_wss_sd/state" cancelled
             workflow_event "$_wss_dir" "$_wss_id" step.cancelled "attempt=$_wss_attempt"
-        elif [ "$_ws_cancelled" -eq 1 ]; then
-            if [ "$_wss_idem" = true ] && [ "$_wss_attempt" -le "$_wss_retry" ]; then
-                workflow_atomic_scalar "$_wss_sd/state" ready
-                workflow_event "$_wss_dir" "$_wss_id" step.recovered "interrupted_attempt=$_wss_attempt"
-            else
-                workflow_atomic_scalar "$_wss_sd/state" recovery-required
-                workflow_event "$_wss_dir" "$_wss_id" step.recovery_required "uncertain_attempt=$_wss_attempt"
-            fi
-        elif [ "$_ws_code" -eq 0 ]; then
-            workflow_atomic_scalar "$_wss_sd/authoritative-attempt" "$_wss_attempt"
-            workflow_atomic_scalar "$_wss_sd/state" succeeded
-            workflow_event "$_wss_dir" "$_wss_id" step.succeeded "attempt=$_wss_attempt"
-        elif [ "$_wss_attempt" -le "$_wss_retry" ] && [ "$_wss_idem" = true ]; then
-            workflow_atomic_scalar "$_wss_sd/state" retrying
-            workflow_event "$_wss_dir" "$_wss_id" step.retrying "attempt=$_wss_attempt"
-            workflow_atomic_scalar "$_wss_sd/state" ready
         else
-            workflow_atomic_scalar "$_wss_sd/authoritative-attempt" "$_wss_attempt"
-            workflow_atomic_scalar "$_wss_sd/state" failed
-            workflow_event "$_wss_dir" "$_wss_id" step.failed "attempt=$_wss_attempt exit=$_ws_code"
+            workflow_attempt_result "$_wss_dir" "$_wss_id" "$_wss_retry" "$_wss_idem" "$_ws_code"
         fi
     ) &
     workflow_atomic_scalar "$_wss_sd/worker-pid" "$!"
@@ -288,7 +309,7 @@ workflow_cancel_steps() {
         [ -n "$_wcs_sd" ] || continue
         _wcs_state="$(sed -n '1p' "$_wcs_sd/state")"
         case "$_wcs_state" in
-            queued|ready|retrying)
+            queued|ready|retrying|waiting-approval)
                 workflow_atomic_scalar "$_wcs_sd/state" cancelled
                 workflow_event "$_wcs_dir" "$(basename "$_wcs_sd")" step.cancelled request
                 ;;
@@ -326,6 +347,13 @@ workflow_drive() {
     workflow_atomic_scalar "$_wd_dir/heartbeat-at" "$(date +%s)" || return 1
     workflow_atomic_scalar "$_wd_dir/state" running || return 1
     workflow_event "$_wd_dir" "" run.running
+    if [ ! -f "$_wd_dir/cancel-requested" ]; then
+        workflow_approval_resume "$_wd_dir" || {
+            workflow_atomic_scalar "$_wd_dir/state" recovery-required
+            rm -rf "$_wd_drive_lock"
+            return 1
+        }
+    fi
     trap 'workflow_atomic_scalar "$_wd_dir/cancel-requested" "$(date +%s)"' HUP INT TERM
     _wd_parallelism="$(sed -n '1p' "$_wd_dir/parallelism")"
     while :; do
@@ -335,6 +363,7 @@ workflow_drive() {
             [ -f "$_wd_dir/cancel-started-at" ] || workflow_atomic_scalar "$_wd_dir/cancel-started-at" "$(date +%s)"
             workflow_cancel_steps "$_wd_dir"
         else
+            workflow_retry_ready "$_wd_dir"
             workflow_refresh_states "$_wd_dir"
         fi
 
@@ -371,6 +400,16 @@ workflow_drive() {
                 _wd_slots=$((_wd_slots - 1))
                 _wd_active=$((_wd_active + 1))
             done
+        fi
+
+        _wd_waiting="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^waiting-approval$' || true)"
+        _wd_runnable="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(ready|running|retrying)$' || true)"
+        if [ "$_wd_waiting" -gt 0 ] && [ "$_wd_runnable" -eq 0 ]; then
+            workflow_atomic_scalar "$_wd_dir/state" waiting-approval
+            workflow_event "$_wd_dir" "" run.waiting_approval
+            trap - HUP INT TERM
+            rm -rf "$_wd_drive_lock"
+            return 3
         fi
 
         _wd_nonterminal="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(queued|ready|running|retrying)$' || true)"

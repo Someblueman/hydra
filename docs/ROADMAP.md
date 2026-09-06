@@ -1,7 +1,7 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 5 September 2026
+> - **Snapshot:** 6 September 2026
 > - **Current release:** `v2.0.0` stable local orchestration interface
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
@@ -66,69 +66,26 @@ transport rather than expanding the pilot into a distributed scheduler.
 ### Candidate features
 
 Select these priorities in dependency order, with independently useful scope.
-Develop the bounded adapter contract and harness qualification alongside workflow
-inputs; neither needs to wait for the full approval-wait capability. Extend
-headless execution as the shared task and workflow contracts become ready.
 The implemented remote submission and collection interface is documented in
 [Remote tasks](REMOTE_TASKS.md), with [qualification evidence](REMOTE_TASK_ACCEPTANCE.md).
 
-#### 1. Workflow inputs, outputs, and durable approval waits
+#### 2. Adapter conformance and headless execution: remaining qualification
 
-Extend remote tasks' selected input files into the finite workflow contract without
-building a general expression or templating language.
+The workflow data, durable approval, retry, adapter-contract, and headless execution
+implementation is documented in [Workflow data](WORKFLOW_DATA.md) and
+[Agent contract](AGENT_CONTRACT.md). The [acceptance record](WORKFLOW_AGENT_ACCEPTANCE.md)
+contains the local harness matrix, remote qualifications, and failure-test evidence.
 
-- [ ] Add named file and small structured inputs, declared output manifests, and
-      explicit references between steps. Validate required outputs, types, sizes,
-      paths, and digests before releasing dependents.
-- [ ] Add a durable approval-wait step with a request ID, bound action/evidence,
-      decision, expiry where needed, and explicit resume. Distinguish a policy-issued
-      approval from a human decision; a supplied actor label is not authentication.
-- [ ] Extend bounded retries with failure classes and backoff. Recover from durable
-      attempt evidence; do not repeat an uncertain non-idempotent action.
+- [ ] Complete Claude Code's remote shared task after native host sign-in: verify
+      exact prompt delivery, recorded-session recall, and observed-process
+      cancellation. Its local qualification has passed. Remote sign-in and
+      qualification were explicitly deferred on 6 September 2026 until native host
+      sign-in is available; they are not counted as passed.
 
-Acceptance: one agent produces an artifact and another receives that exact artifact.
-Missing or changed outputs block dependents. Approval survives coordinator restart
-but becomes stale when its bound action or evidence changes. Resume preserves
-completed attempts and reports unresolved side effects.
-
-#### 2. Adapter conformance and headless execution
-
-Make agent interchangeability testable while retaining launch-only and no-agent
-workers. Scheduler decisions use capabilities, not provider names. Claude Code,
-Codex, Pi, and OpenCode are explicit qualification targets, not interchangeable
-claims of support based only on executable detection.
-
-- [ ] Publish a small versioned adapter contract and fixtures for task input,
-      normalized observations, output bounds, safe-point delivery, cancellation,
-      permission requests, and exact session resume where supported.
-- [ ] Support declarative executable and argument-vector configuration, task-prompt
-      delivery, and session-resume invocation wherever those declarations suffice.
-      Bind resume to a recorded session identity; "most recent session" is not exact
-      resume. Avoid shell-string templates and a general expression language.
-- [ ] Keep small provider adapters only for behavior requiring translation, such
-      as structured events or permission requests. Adding a harness must not require
-      new provider-specific branches in Hydra's core lifecycle or workflow policy.
-- [ ] Record executable version and probe date, distinguishing declared, probed,
-      and observed capabilities. Fail before dependent work when a required
-      capability is missing; never infer hooks from executable availability.
-- [ ] Add structured, noninteractive execution through the existing supervision
-      path first. Keep provider flags and event decoders outside workflow policy.
-- [ ] Qualify Claude Code, Codex, Pi, OpenCode, and a plain script against the same
-      local and remote acceptance task. Verify prompt delivery, cancellation, and
-      exact session resume where supported, including malformed/partial events and
-      stale instances. Record unsupported capabilities explicitly; launch-only
-      support does not satisfy a prompt or resume requirement.
-- [ ] Keep raw provider payloads and transcripts opt-in with bounded retention.
-      Treat exact cost limits and usage reporting as optional capabilities;
-      unavailable values remain unknown.
-
-Acceptance: add another harness through a profile declaration and, only where
-needed, a small adapter plus conformance fixtures, without modifying Hydra's core
-lifecycle or workflow policy. Changing a compatible profile does not require
-changing workflow logic. The named harnesses pass the shared task for their
-supported capabilities; missing required capabilities fail before dependent work.
-Unsupported resume fails explicitly, malformed output cannot alter authoritative
-state, and provider completion alone never passes a verification gate.
+Acceptance: Claude Code passes the same remote task already qualified with Codex,
+Pi, OpenCode, and a plain script. Keep the remaining qualification open until its
+actual provider execution and cancellation evidence are recorded; fixture tests
+and local authentication do not close it.
 
 #### 3. Resource admission and simple placement
 

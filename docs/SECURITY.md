@@ -91,3 +91,11 @@ outside runtime state. No live state, host lock, or trust record is shared.
 Transport loss after dispatch can leave an unknown mutation outcome. Inspect the
 remote authority before retrying; reconnect observation does not replay mutations.
 See [FLEET.md](FLEET.md) for boundaries and supported operations.
+
+## Agent credentials on fleet hosts
+
+`fleet auth` provides native provider sign-in and a preview-bound credential copy
+over SSH. Copy grants the receiving Unix account use of the selected credential.
+See [host authentication](HOST_AUTH.md) for private-file requirements, provider
+entry selection, sensitive transport handling, and concurrent refresh limits.
+Credentials remain outside task and configuration bundles.

@@ -218,6 +218,39 @@ retry_dir="$(run_dir_for "$retry_run")"
 assert_equal 2 "$(sed -n '1p' "$retry_dir/steps/retry/attempts")" "retry count is authoritative"
 assert_equal 2 "$(sed -n '1p' "$test_root/retry-count")" "retry side effect ran exactly twice"
 
+# A persisted backoff survives coordinator loss and preserves completed evidence.
+sed 's/retry: 1/retry: 1\n    retry_on: [failure]\n    retry_backoff: 4/; s/retry-count/backoff-count/' "$test_root/retry.yml" > "$test_root/backoff.yml"
+"$HYDRA_BIN" workflow run "$test_root/backoff.yml" > "$test_root/backoff.out" 2>&1 &
+backoff_runner=$!
+wait_for_file "$test_root/backoff-count" || exit 1
+backoff_run="$(sed -n '1p' "$test_root/backoff.out")"
+backoff_dir="$(run_dir_for "$backoff_run")"
+wait_for_file "$backoff_dir/steps/retry/attempt-1/retry-at" || exit 1
+backoff_at="$(cat "$backoff_dir/steps/retry/attempt-1/retry-at")"
+assert_equal failure "$(cat "$backoff_dir/steps/retry/attempt-1/failure-class")" "failed attempt records its failure class"
+assert_equal 1 "$(cat "$test_root/backoff-count")" "retry does not run before backoff"
+kill -KILL "$backoff_runner" 2>/dev/null || true
+wait "$backoff_runner" 2>/dev/null || true
+"$HYDRA_BIN" workflow resume "$backoff_run" >/dev/null
+assert_success $? "resume completes a retry with durable backoff"
+assert_equal "$backoff_at" "$(cat "$backoff_dir/steps/retry/attempt-1/retry-at")" "restart preserves retry deadline"
+assert_equal 2 "$(cat "$test_root/backoff-count")" "backoff recovery executes exactly one retry"
+if [ "$(cat "$backoff_dir/steps/retry/started-at")" -ge "$backoff_at" ]; then deadline_status=0; else deadline_status=1; fi
+assert_success "$deadline_status" "retry starts only after recorded deadline"
+
+sed 's/retry: 1/retry: 1\n    retry_on: [timeout]/; s/retry-count/class-count/' "$test_root/retry.yml" > "$test_root/classes.yml"
+"$HYDRA_BIN" workflow run "$test_root/classes.yml" > "$test_root/classes.out" 2>&1
+assert_failure $? "failure outside selected retry classes fails the run"
+assert_equal 1 "$(cat "$test_root/class-count")" "excluded failure class is never retried"
+
+sed 's/retry: 1/retry: 1\n    retry_on: [timeout]/; s@argv: .*@argv: [sleep, 3]\n      timeout: 1@' "$test_root/retry.yml" > "$test_root/timeout.yml"
+"$HYDRA_BIN" workflow run "$test_root/timeout.yml" > "$test_root/timeout.out" 2>&1
+assert_failure $? "timeout retry budget eventually exhausts"
+timeout_run="$(sed -n '1p' "$test_root/timeout.out")"
+timeout_dir="$(run_dir_for "$timeout_run")"
+assert_equal timeout "$(cat "$timeout_dir/steps/retry/attempt-1/failure-class")" "supervised timeout is classified from command status"
+assert_equal 2 "$(cat "$timeout_dir/steps/retry/attempts")" "timeout class permits its bounded retry"
+
 cat > "$test_root/long.sh" <<'EOF'
 #!/bin/sh
 set -eu

@@ -117,6 +117,10 @@ assert_success $? "trusted acknowledged shell-string exec succeeds"
 case "$shell_json" in *'"stdout":"shell-ok"'*) assert_success 0 "shell-string output is captured" ;; *) assert_success 1 "shell-string output is captured" ;; esac
 
 child_pid_file="$test_root/timeout-child.pid"
+"$HYDRA_BIN" exec --branch operations-test --exit-code -- sh -c 'exit 42' >/dev/null
+assert_equal 42 "$?" "single-head exit-code mode returns the actual command status"
+"$HYDRA_BIN" exec --group release --exit-code -- true >/dev/null 2>&1
+assert_failure "$?" "exit-code mode rejects multiple selected heads before execution"
 # shellcheck disable=SC2016 # $! and $1 are intentionally expanded by the child shell.
 timeout_json="$("$HYDRA_BIN" exec --branch operations-test --timeout 1 --json -- sh -c 'sleep 20 & echo $! > "$1"; wait' sh "$child_pid_file" 2>/dev/null)"
 timeout_code=$?

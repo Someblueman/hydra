@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"fixture-session"}
+{"type":"result","result":"fixture artifact","is_error":false,"usage":{"input_tokens":17,"output_tokens":3}}

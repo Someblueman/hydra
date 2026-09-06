@@ -8,6 +8,12 @@ cmd_exec_cancel_workers() {
         case "$_cecw_pid" in ''|*[!0-9]*) continue ;; esac
         operations_signal_tree "$_cecw_pid" TERM
     done < "$_cecw_file"
+    if [ -n "${_ce_profile:-}" ]; then
+        while IFS= read -r _cecw_pid; do
+            case "$_cecw_pid" in ''|*[!0-9]*) continue ;; esac
+            wait "$_cecw_pid" 2>/dev/null || true
+        done < "$_cecw_file"
+    fi
 }
 
 cmd_exec() {
@@ -17,8 +23,10 @@ cmd_exec() {
     _ce_jobs=4
     _ce_timeout=300
     _ce_json=0
+    _ce_exit_code=0
     _ce_shell=""
     _ce_allow_shell=0
+    _ce_profile="" _ce_prompt="" _ce_resume="" _ce_result_file="" _ce_require="" _ce_retain=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --branch)
@@ -35,6 +43,13 @@ cmd_exec() {
             --jobs) [ $# -ge 2 ] || { cli_error exec invalid_input "--jobs requires an integer" "choose 1 through 16"; return 1; }; _ce_jobs="$2"; shift 2 ;;
             --timeout) [ $# -ge 2 ] || { cli_error exec invalid_input "--timeout requires seconds" "pass a non-negative integer"; return 1; }; _ce_timeout="$2"; shift 2 ;;
             --json) _ce_json=1; shift ;;
+            --exit-code) _ce_exit_code=1; shift ;;
+            --profile) [ $# -ge 2 ] || return 1; _ce_profile="$2"; shift 2 ;;
+            --prompt-file) [ $# -ge 2 ] || return 1; _ce_prompt="$2"; shift 2 ;;
+            --resume-run) [ $# -ge 2 ] || return 1; _ce_resume="$2"; shift 2 ;;
+            --result-file) [ $# -ge 2 ] || return 1; _ce_result_file="$2"; shift 2 ;;
+            --require) [ $# -ge 2 ] || return 1; _ce_require="$2"; shift 2 ;;
+            --retain-raw) _ce_retain=1; shift ;;
             --shell) [ $# -ge 2 ] || { cli_error exec invalid_input "--shell requires a command string" "pass --allow-shell after reviewing it"; return 1; }; _ce_shell="$2"; shift 2 ;;
             --allow-shell) _ce_allow_shell=1; shift ;;
             --) shift; break ;;
@@ -46,7 +61,16 @@ cmd_exec() {
         cli_error exec invalid_input "jobs must be between 1 and 16" "choose a bounded worker count"
         return 1
     fi
-    if [ -n "$_ce_shell" ]; then
+    if [ -n "$_ce_profile" ]; then
+        [ $# -eq 0 ] && [ -z "$_ce_shell" ] && [ -n "$_ce_prompt" ] || { cli_error exec invalid_input "profile execution requires --prompt-file and no command argv" "use hydra agent contract <profile>"; return 1; }
+        case "$_ce_prompt" in /*) ;; *) _ce_prompt="$(pwd)/$_ce_prompt" ;; esac
+        _load_lib cmd_fleet
+        _ce_native="$(fleet_binary)" || return 1
+        "$_ce_native" agent-run preflight "$_ce_profile" "$_ce_prompt" "$_ce_require" >/dev/null || { cli_error exec capability_unavailable "profile preflight failed" "inspect hydra agent probe <profile> and required capabilities"; return 1; }
+    elif [ -n "$_ce_prompt$_ce_resume$_ce_result_file$_ce_require" ] || [ "$_ce_retain" -eq 1 ]; then
+        cli_error exec invalid_input "agent options require --profile" "use hydra exec --profile <name> --prompt-file <file>"
+        return 1
+    elif [ -n "$_ce_shell" ]; then
         [ $# -eq 0 ] || { cli_error exec invalid_input "--shell cannot be combined with argv after --" "choose argv mode or shell-string mode"; return 1; }
         if [ "$_ce_allow_shell" -ne 1 ] || ! project_is_trusted; then
             cli_error exec trust_required "shell execution requires --allow-shell and currently trusted project configuration" "review config, run hydra init --trust, and pass --allow-shell"
@@ -69,15 +93,25 @@ cmd_exec() {
     export LIFECYCLE_PROJECT_ID
     _ce_selection="$(mktemp)" || return 1
     operations_select_heads "$_ce_selection" "$_ce_branches" "$_ce_group" "$_ce_all" || { rm -f "$_ce_selection"; cli_error exec selection_failed "No executable head selection was resolved" "inspect with hydra list"; return 1; }
+    if { [ "$_ce_exit_code" -eq 1 ] || [ -n "$_ce_profile" ]; } && [ "$(wc -l < "$_ce_selection" | tr -d ' ')" -ne 1 ]; then
+        rm -f "$_ce_selection"
+        cli_error exec invalid_input "--exit-code and --profile require exactly one selected head" "use --branch <head>"
+        return 1
+    fi
     _ce_run="$(hydra_new_id run "$_ce_project|exec")" || { rm -f "$_ce_selection"; return 1; }
     _ce_run_dir="$HYDRA_STATE_V2_ROOT/projects/$_ce_project/exec/$_ce_run"
     mkdir -p "$_ce_run_dir" || { rm -f "$_ce_selection"; return 1; }
     chmod 700 "$_ce_run_dir" 2>/dev/null || true
     _ce_workers="$_ce_run_dir/worker-pids"
     : > "$_ce_workers"
-    trap 'cmd_exec_cancel_workers "$_ce_workers"; exit 143' HUP INT TERM
+    _ce_agent_lock=""
+    if [ -n "$_ce_profile" ]; then
+        _ce_agent_lock="agent_${_ce_project}_$(sed -n '1p' "$_ce_selection")"
+        acquire_lock "$_ce_agent_lock" "supervise headless agent" || { rm -f "$_ce_selection"; return 1; }
+    fi
+    trap 'cmd_exec_cancel_workers "$_ce_workers"; [ -z "$_ce_agent_lock" ] || release_lock "$_ce_agent_lock"; exit 143' HUP INT TERM
     _ce_max="${HYDRA_EXEC_MAX_BYTES:-1048576}"
-    case "$_ce_max" in ''|*[!0-9]*) rm -f "$_ce_selection"; return 1 ;; esac
+    case "$_ce_max" in ''|*[!0-9]*) rm -f "$_ce_selection"; [ -z "$_ce_agent_lock" ] || release_lock "$_ce_agent_lock"; trap - HUP INT TERM; return 1 ;; esac
     # Publish the durable run identity before workers start. The JSON document
     # still completes only after execution; its prefix is not completion evidence.
     if [ "$_ce_json" -eq 1 ]; then
@@ -87,6 +121,10 @@ cmd_exec() {
     _ce_selection_error=0
     while IFS= read -r _ce_head; do
         if ! operations_load_selected_head "$_ce_head"; then _ce_selection_error=1; break; fi
+        if [ -n "$_ce_profile" ]; then
+            _ce_agent_instance="$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/projects/$_ce_project/heads/$_ce_head/current-instance")"
+            set -- "$_ce_native" agent-run run "$_ce_profile" "$_ce_prompt" "$_ce_run_dir/$_ce_head" "$_ce_project" "$_ce_head" "$_ce_agent_instance" "$_ce_resume" "$_ce_result_file" "$_ce_timeout" "$_ce_require" "$_ce_retain"
+        fi
         operations_exec_worker "$_ce_run" "$_ce_head" "$OPERATIONS_BRANCH" "$OPERATIONS_WORKTREE" "$_ce_timeout" "$_ce_max" "$@" &
         printf '%s\n' "$!" >> "$_ce_workers"
         _ce_active=$((_ce_active + 1))
@@ -97,6 +135,7 @@ cmd_exec() {
     done < "$_ce_selection"
     wait
     trap - HUP INT TERM
+    [ -z "$_ce_agent_lock" ] || release_lock "$_ce_agent_lock"
     if [ "$_ce_selection_error" -eq 1 ]; then rm -f "$_ce_selection" "$_ce_workers"; return 1; fi
     _ce_failed=0
     if [ "$_ce_json" -ne 1 ]; then
@@ -125,6 +164,7 @@ cmd_exec() {
     if [ "$_ce_selection_error" -eq 1 ]; then rm -f "$_ce_selection" "$_ce_workers"; return 1; fi
     [ "$_ce_json" -eq 0 ] || printf ']}}\n'
     rm -f "$_ce_selection" "$_ce_workers"
+    [ "$_ce_exit_code" -eq 0 ] || return "$_ce_status"
     [ "$_ce_failed" -eq 0 ]
 }
 

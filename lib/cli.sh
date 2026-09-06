@@ -31,7 +31,7 @@ Commands:
   spawn --issue <#> Create a head from a GitHub issue
   spawn --pr <#>    Create a head from an existing GitHub PR
   init              Initialize project identity, trust, profile, and worktree root
-  agent             List, show, diagnose, or initialize agent profiles
+  agent             Inspect, probe, or import agent profiles
   remote            Manage OpenSSH aliases: add NAME [USER@]SSH_ALIAS, remove NAME, list
   fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
                     Commands: list, doctor, handshake, bootstrap, package, init, spawn,
@@ -55,6 +55,13 @@ Commands:
                       --branch <head>          Select one head (repeatable)
                       --group <name>           Select one group
                       --all                    Select all active project heads
+                      --exit-code             Return command status (one head only)
+                      --profile <name>         Run a declared headless agent
+                      --prompt-file <file>     Deliver a bounded task prompt
+                      --resume-run <run>       Resume its exact recorded session
+                      --result-file <file>     Capture a new answer artifact
+                      --require <caps>         Required comma-separated capabilities
+                      --retain-raw             Retain bounded provider stdout/stderr
                       --jobs <1-16>            Bounded parallelism (default 4)
                       --timeout <seconds>      Per-command timeout (default 300)
                       --json                   Versioned results

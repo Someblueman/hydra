@@ -105,6 +105,10 @@ workflow_parse() {
         if (k=="version") version=number(v,k,1,1)
         else if(k=="id"){ id=scalar(v,k); if(!valid_id(id)) fail(k,"invalid workflow ID") }
         else if(k=="description") description=scalar(v,k)
+        else if(k=="data") {
+            data=scalar(v,k)
+            if(data ~ /^\// || data ~ /(^|\/)\.\.?(\/|$)/ || data ~ /\/\// || data ~ /\/$/) fail(k,"must be a safe relative manifest path")
+        }
         else if(k=="parallelism") parallelism=number(v,k,1,16)
         else fail(k,"unknown top-level key")
     }
@@ -120,15 +124,22 @@ workflow_parse() {
         else if(k=="kind") kind[step]=scalar(v,field)
         else if(k=="needs") needs[step]=list(v,field)
         else if(k=="retry") retry[step]=number(v,field,0,10)
+        else if(k=="retry_backoff") backoff[step]=number(v,field,0,86400)
+        else if(k=="retry_on") {
+            retryon[step]=list(v,field)
+            nretry=split(retryon[step],retryclasses,",")
+            for(ri=1;ri<=nretry;ri++) if(retryclasses[ri] !~ /^(failure|timeout|interrupted|configuration)$/) fail(field,"unknown failure class " retryclasses[ri])
+        }
         else if(k=="idempotent") idem[step]=boolean(scalar(v,field),field)
         else fail(field,"unknown step key")
     }
     function set_arg(k,v, field) {
         field="steps[" step "].args." k; if(seen_arg[step,k]++) fail(field,"duplicate field")
         if(k=="argv") argv[step]=value_list(v,field)
+        else if(k=="requires") arg[step,k]=list(v,field)
         else if(k=="timeout") arg[step,k]=number(v,field,1,86400)
         else if(k=="force" || k=="allow_shell") arg[step,k]=boolean(scalar(v,field),field)
-        else if(k ~ /^(head|branch|group|profile|command|message|name|by|reason|completion_policy)$/) {
+        else if(k ~ /^(head|branch|group|profile|command|message|name|by|reason|completion_policy|prompt_file|prompt_input|result_file|resume_from)$/) {
             if(k=="command" && trim(v) ~ /^\[/) fail(field,"use argv for a command list")
             arg[step,k]=scalar(v,field)
         }
@@ -147,7 +158,7 @@ workflow_parse() {
         if(argv[i]!=""){out=out sep "argv=[" argv[i] "]"}
         return out
     }
-    BEGIN { parallelism=1; disk=10240; maxheads=16; argc=13; split("head branch group profile command message name by reason completion_policy timeout force allow_shell",argkeys," ") }
+    BEGIN { parallelism=1; disk=10240; maxheads=16; argc=18; split("head branch group profile command message name by reason completion_policy timeout force allow_shell prompt_file prompt_input result_file requires resume_from",argkeys," ") }
     {
         sub(/\r$/,""); raw=$0
         if(raw ~ /\t/) fail("line " NR,"tabs are unsupported")
@@ -170,27 +181,49 @@ workflow_parse() {
         if(step<1) fail("steps","at least one step is required")
         for(i=1;i<=step;i++){
             if(sid[i]=="") fail("steps[" i "].id","required"); if(ids[sid[i]]++) fail("steps[" sid[i] "].id","duplicate ID")
-            if(kind[i] !~ /^(spawn|wait|exec|message|gate|approve|kill)$/) fail("steps[" sid[i] "].kind","unsupported step kind " kind[i])
+            if(kind[i] !~ /^(spawn|wait|exec|message|gate|approve|approval-wait|kill)$/) fail("steps[" sid[i] "].kind","unsupported step kind " kind[i])
             if(retry[i]=="") retry[i]=0
+            if(backoff[i]=="") backoff[i]=0
+            if(!seen_step[i,"retry_on"]) retryon[i]="failure,timeout,interrupted,configuration"
             if(idem[i]=="") fail("steps[" sid[i] "].idempotent","required")
             if(retry[i]>0 && idem[i]!="true") fail("steps[" sid[i] "].retry","non-idempotent steps cannot retry")
             if(kind[i]=="spawn"){req(i,"branch"); spawn_count++} else if(kind[i]=="wait") req(i,"head"); else if(kind[i]=="message"){req(i,"head");req(i,"message")}
             else if(kind[i]=="gate"){req(i,"head");req(i,"name"); if(arg[i,"command"]=="" && argv[i]=="") fail("steps[" sid[i] "].args.command","command or argv is required")}
             else if(kind[i]=="approve"){req(i,"head");req(i,"name");req(i,"by")}
+            else if(kind[i]=="approval-wait"){
+                req(i,"head");req(i,"name")
+                if(retry[i]>0 || idem[i]!="false") fail("steps[" sid[i] "]","approval waits require retry 0 and idempotent false")
+                if(arg[i,"by"]!="") fail("steps[" sid[i] "].args.by","approval waits cannot predeclare a decision actor")
+            }
             else if(kind[i]=="kill") req(i,"head")
-            else if(kind[i]=="exec"){req(i,"head"); if(arg[i,"command"]=="" && argv[i]=="") fail("steps[" sid[i] "].args.command","command or argv is required")}
+            else if(kind[i]=="exec"){
+                req(i,"head")
+                if(arg[i,"profile"]!="") {
+                    if(arg[i,"command"]!="" || argv[i]!="") fail("steps[" sid[i] "].args","profile and command argv are mutually exclusive")
+                    if((arg[i,"prompt_file"]!="")+(arg[i,"prompt_input"]!="")!=1) fail("steps[" sid[i] "].args","profile requires exactly one prompt_file or prompt_input")
+                    if((arg[i,"prompt_input"]!="" || arg[i,"result_file"]!="") && data=="") fail("steps[" sid[i] "].args","named prompts and result files require a data manifest")
+                } else if(arg[i,"command"]=="" && argv[i]=="") fail("steps[" sid[i] "].args.command","command, argv, or profile is required")
+            }
+            for(k=14;k<=18;k++) if(seen_arg[i,argkeys[k]] && (kind[i]!="exec" || arg[i,"profile"]=="")) fail("steps[" sid[i] "].args." argkeys[k],"requires an exec profile")
+            for(k=14;k<=16;k++) if(arg[i,argkeys[k]]!="" && (arg[i,argkeys[k]] ~ /^\// || arg[i,argkeys[k]] ~ /(^|\/)\.\.?(\/|$)/ || arg[i,argkeys[k]] ~ /\/\// || arg[i,argkeys[k]] ~ /\/$/)) fail("steps[" sid[i] "].args." argkeys[k],"must be a safe relative path")
             if(arg[i,"command"]!="" && argv[i]!="") fail("steps[" sid[i] "].args","command and argv are ambiguous")
             if(arg[i,"command"]!="" && arg[i,"allow_shell"]!="true") fail("steps[" sid[i] "].args.allow_shell","must be true for command strings")
         }
         if(spawn_count>maxheads) fail("resources.max_heads","is smaller than the number of spawn steps")
         for(i=1;i<=step;i++){n=split(needs[i],a,",");for(j=1;j<=n && a[j]!="";j++){if(a[j]==sid[i])fail("steps[" sid[i] "].needs","self-dependency");if(!ids[a[j]])fail("steps[" sid[i] "].needs","missing dependency " a[j])}}
+        for(i=1;i<=step;i++) if(arg[i,"resume_from"]!="") {
+            found=0
+            for(j=1;j<=step;j++) if(sid[j]==arg[i,"resume_from"] && kind[j]=="exec" && arg[j,"profile"]==arg[i,"profile"] && arg[j,"head"]==arg[i,"head"] && edge(i,j)) found=1
+            if(!found) fail("steps[" sid[i] "].args.resume_from","must name a direct exec dependency with the same head and profile")
+        }
         for(i=1;i<=step;i++) visit(i)
         if(mode=="validate") exit 0
         if(mode=="identity"){print id;exit 0}
+        if(mode=="data"){if(data!="")print data;exit 0}
         if(mode=="normalized"){
-            print "version: 1"; print "id: " id; if(description!="") print "description: " description; print "parallelism: " parallelism
+            print "version: 1"; print "id: " id; if(data!="")print "data: " data; if(description!="") print "description: " description; print "parallelism: " parallelism
             print "resources:"; print "  disk_mb: " disk; print "  max_heads: " maxheads; print "steps:"
-            for(x=1;x<=on;x++){i=order[x];print "  - id: " sid[i];print "    kind: " kind[i];printf "    needs: [%s]\n",needs[i];print "    retry: " retry[i];print "    idempotent: " idem[i];print "    args:";for(k=1;k<=argc;k++)if(arg[i,argkeys[k]]!="")print "      " argkeys[k] ": " arg[i,argkeys[k]];if(argv[i]!="")print "      argv: [" argv[i] "]"}
+            for(x=1;x<=on;x++){i=order[x];print "  - id: " sid[i];print "    kind: " kind[i];printf "    needs: [%s]\n",needs[i];print "    retry: " retry[i];print "    idempotent: " idem[i];if(seen_step[i,"retry_backoff"])print "    retry_backoff: " backoff[i];if(seen_step[i,"retry_on"])print "    retry_on: [" retryon[i] "]";print "    args:";for(k=1;k<=argc;k++)if(arg[i,argkeys[k]]!="")print "      " argkeys[k] ": " (argkeys[k]=="requires"?"[" arg[i,argkeys[k]] "]":arg[i,argkeys[k]]);if(argv[i]!="")print "      argv: [" argv[i] "]"}
             exit 0
         }
         if(mode=="runtime"){
@@ -198,8 +231,10 @@ workflow_parse() {
             for(x=1;x<=on;x++){
                 i=order[x]
                 printf "step\t%s\t%s\t%s\t%d\t%s",sid[i],kind[i],(needs[i]==""?"-":needs[i]),retry[i],idem[i]
-                for(k=1;k<=argc;k++) printf "\t%s",(arg[i,argkeys[k]]==""?"-":arg[i,argkeys[k]])
+                for(k=1;k<=13;k++) printf "\t%s",(arg[i,argkeys[k]]==""?"-":arg[i,argkeys[k]])
                 printf "\t%s\n",(argv[i]==""?"-":argv[i])
+                if(kind[i]=="exec" && arg[i,"profile"]!="") {printf "profile_args\t%s",sid[i];for(k=14;k<=18;k++)printf "\t%s",(arg[i,argkeys[k]]==""?"-":arg[i,argkeys[k]]);printf "\n"}
+                if(seen_step[i,"retry_on"] || seen_step[i,"retry_backoff"]) printf "retry_policy\t%s\t%s\t%d\n",sid[i],(retryon[i]==""?"-":retryon[i]),backoff[i]
             }
             exit 0
         }

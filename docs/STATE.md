@@ -62,6 +62,12 @@ them. See [MIGRATING_TO_2.0.md](MIGRATING_TO_2.0.md) for the operator sequence.
 A workflow run is published only after its resolved definition, graph, manifest,
 bindings, initial step states, and empty event stream exist. Per-attempt directories
 retain stdout, stderr, exit status, and authoritative-attempt selection.
+Workflow attempts also record a failure class and an absolute retry deadline when
+backoff is scheduled; these survive coordinator restart. Optional data manifests
+bind `data.json`, `data-hash`, `inputs.json`, and per-attempt `outputs.json` and
+artifact snapshots. Approval requests live under `approvals/<request-id>` with
+immutable decision records; the step records its current request ID. See
+[Workflow data and approval waits](WORKFLOW_DATA.md).
 
 Integration reports retain their immutable candidate manifest, initial target,
 gates, merge output, verification evidence, approval, and recovery action. Cleanup

@@ -102,10 +102,15 @@ lifecycle_set_observed() {
     _lso_source="${3:-hydra}"
     _lso_confidence="${4:-exact}"
     _lso_exit_code="${5:-}"
+    _lso_expected_instance="${6:-}"
     case "$_lso_status" in starting|running|idle|exited|failed|unavailable) ;; *) return 1 ;; esac
     case "$_lso_confidence" in exact|reported|inferred|unavailable) ;; *) return 1 ;; esac
     case "$_lso_exit_code" in ''|*[!0-9]*) [ -z "$_lso_exit_code" ] || return 1 ;; esac
     _lifecycle_load_head_locked "$_lso_branch" "record observed lifecycle" || return 1
+    if [ -n "$_lso_expected_instance" ] && [ "$_lso_expected_instance" != "$LIFECYCLE_INSTANCE_ID" ]; then
+        _lifecycle_release_head_lock
+        return 1
+    fi
     _lso_now="$(date +%s)"
     if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-status" "$_lso_status" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/observed-source" "$_lso_source" || \

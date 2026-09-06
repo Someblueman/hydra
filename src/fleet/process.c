@@ -16,7 +16,7 @@ static long milliseconds(void) {
 }
 void f_capture_free(struct f_capture *cap) { free(cap->out); free(cap->err); memset(cap, 0, sizeof(*cap)); }
 static void capture_log(struct f_control *control, int stream, const char *bytes, size_t size) {
-    if (!control) return;
+    if (!control || control->log_fd[stream] < 0) return;
     if (size > control->remaining[stream]) { size = control->remaining[stream]; control->truncated = true; }
     while (size) {
         ssize_t n = write(control->log_fd[stream], bytes, size);
@@ -66,7 +66,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
                 ssize_t n = read(*fd, buffer + used[i], F_LIMIT - used[i]);
                 if (n > 0) {
                     capture_log(control, i, buffer + used[i], (size_t)n); used[i] += (size_t)n;
-                    if (control && control->observe && !i) control->observe(control->context, cap->out);
+                    if (control && control->observe && !i) control->observe(control->context, cap->out, used[0]);
                 }
                 if (n == 0 || used[i] == F_LIMIT || (n < 0 && errno != EAGAIN && errno != EINTR)) {
                     close(*fd); *fd = -1;
@@ -85,6 +85,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
     if (used[0] == F_LIMIT || used[1] == F_LIMIT) cap->status = 125;
     result = 0;
 done:
+    cap->out_bytes = used[0]; cap->err_bytes = used[1];
     if (pid > 0) { kill(-pid, SIGKILL); while (waitpid(pid, &status, cap->stop_unknown ? WNOHANG : 0) < 0 && errno == EINTR) { } }
     if (in) fclose(in);
     if (out[0] >= 0) close(out[0]);
@@ -96,8 +97,8 @@ done:
 int f_run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap) {
     return run(argv, input, size, seconds, cap, NULL);
 }
-int f_run_controlled(char *const argv[], unsigned seconds, struct f_capture *cap, struct f_control *control) {
-    return run(argv, NULL, 0, seconds, cap, control);
+int f_run_controlled(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap, struct f_control *control) {
+    return run(argv, input, size, seconds, cap, control);
 }
 char *f_quote(const char *value) {
     size_t n = strlen(value), at = 0; char *result;

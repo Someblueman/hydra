@@ -36,7 +36,7 @@ profile_field() {
                 case "$_pf_name" in claude|codex) printf 'task-file\n' ;; *) printf 'none\n' ;; esac
                 ;;
             resume_mode)
-                case "$_pf_name" in claude) printf 'session-id\n' ;; codex) printf 'cwd-last\n' ;; *) printf 'none\n' ;; esac
+                case "$_pf_name" in claude) printf 'session-id\n' ;; codex) printf 'exact-session\n' ;; *) printf 'none\n' ;; esac
                 ;;
             adapter) printf 'none\n' ;;
             confidence)
@@ -57,6 +57,7 @@ profile_list() {
     if [ -d "$HYDRA_HOME/profiles" ]; then
         for _pl_dir in "$HYDRA_HOME"/profiles/*; do
             [ -d "$_pl_dir" ] || continue
+            [ -f "$_pl_dir/executable" ] || continue
             basename "$_pl_dir"
         done
     fi
@@ -74,6 +75,10 @@ profile_executable_path() {
 profile_resolve() {
     _pr_requested="${1:-}"
     if [ -n "$_pr_requested" ]; then
+        if [ -f "$HYDRA_HOME/profiles/$_pr_requested/adapter.json" ]; then
+            echo "Error: '$_pr_requested' is a headless profile; use hydra exec --profile $_pr_requested --prompt-file <file>" >&2
+            return 1
+        fi
         profile_exists "$_pr_requested" || {
             echo "Error: unknown agent profile '$_pr_requested'" >&2
             return 1
@@ -155,7 +160,11 @@ profile_resume_command() {
             printf '%s --resume %s\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" \
                 "$(profile_shell_quote "$_prc_provider_id")"
             ;;
-        cwd-last) printf '%s resume --last\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" ;;
+        exact-session)
+            [ -n "$_prc_provider_id" ] || return 1
+            printf '%s resume %s\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" \
+                "$(profile_shell_quote "$_prc_provider_id")"
+            ;;
         *) return 1 ;;
     esac
 }
@@ -170,6 +179,7 @@ profile_create_custom() {
     [ -x "$_pcc_executable" ] || return 1
     case "$_pcc_prompt_mode" in none|task-file) ;; *) return 1 ;; esac
     _pcc_dir="$(profile_custom_dir "$_pcc_name")" || return 1
+    [ ! -e "$_pcc_dir/adapter.json" ] || return 1
     mkdir -p "$_pcc_dir" || return 1
     chmod 700 "$_pcc_dir" 2>/dev/null || true
     state_v2_write_scalar "$_pcc_dir/executable" "$_pcc_executable" || return 1

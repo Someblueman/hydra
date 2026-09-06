@@ -67,7 +67,7 @@ static int mapped_project(const char *requested, char canonical[F_PATH], char id
 }
 static bool dependencies(json_object *spec) {
     json_object *caps = f_field(spec, "capabilities"); size_t i;
-    const char *supported[] = {"exec", "workflow", "git", "tmux", NULL};
+    const char *supported[] = {"exec", "workflow", "git", "tmux", "agent-headless", "workflow-data", "workflow-approval-wait", NULL};
     for (i = 0; i < json_object_array_length(caps); i++) {
         const char *name = task_text(json_object_array_get_idx(caps, i)); size_t j;
         for (j = 0; supported[j] && strcmp(name, supported[j]); j++) {}
@@ -132,10 +132,14 @@ done:
     json_object_put(binding); json_object_put(accepted); json_object_put(state); json_object_put(inspected); return result;
 }
 json_object *task_serve(json_object *request) {
-    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", "stream", "offset", "limit", "source", "step", "attempt", NULL};
+    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", "stream", "offset", "limit", "source", "step", "attempt", "request_id", "decision", "by", NULL};
     const char *operation = f_string(request, "operation");
     if (!task_keys(request, keys) || !operation) return f_error("fleet-task", "invalid_input", "invalid task request");
+    if (strcmp(operation, "decide") && (f_field(request, "request_id") || f_field(request, "decision") || f_field(request, "by"))) return f_error("fleet-task", "invalid_input", "decision fields require decide");
     if (strcmp(operation, "logs") && (f_field(request, "stream") || f_field(request, "offset") || f_field(request, "limit") || f_field(request, "source") || f_field(request, "step") || f_field(request, "attempt"))) return f_error("fleet-task", "invalid_input", "log options require the logs operation");
+    if ((!strcmp(operation, "requests") || !strcmp(operation, "decide")) && !f_field(request, "package") && !f_field(request, "submission_key") &&
+        (strcmp(operation, "requests") || !f_field(request, "trust_spec"))) return task_approval(f_string(request, "task_id"), request);
+    if (!strcmp(operation, "resume") && !f_field(request, "package") && !f_field(request, "submission_key")) return task_resume(f_string(request, "task_id"), f_string(request, "trust_spec"));
     if (!strcmp(operation, "logs") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) {
         return task_logs(f_string(request, "task_id"), request);
     }

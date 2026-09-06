@@ -1,0 +1,3 @@
+{"type":"step_start","sessionID":"fixture-session"}
+{"type":"text","sessionID":"fixture-session","part":{"text":"fixture artifact"}}
+{"type":"step_finish","sessionID":"fixture-session","part":{"tokens":{"input":17,"output":3}}}

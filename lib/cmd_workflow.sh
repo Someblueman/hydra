@@ -12,7 +12,9 @@ cmd_workflow() {
                 '       hydra workflow run <id|path>' \
                 '       hydra workflow status <run-id> [--json]' \
                 '       hydra workflow cancel <run-id>' \
-                '       hydra workflow resume <run-id>'
+                '       hydra workflow resume <run-id>' \
+                '       hydra workflow requests <run-id> [--json]' \
+                '       hydra workflow decide <run-id> <request-id> approve|reject [--by <label>]'
             [ -n "$_cw_action" ]
             return
             ;;
@@ -24,6 +26,7 @@ cmd_workflow() {
             [ "$#" -eq 2 ] || { cli_error workflow invalid_arguments "$_cw_action requires exactly one workflow ID or path" "run hydra workflow --help"; return 1; }
             _cw_file="$(workflow_resolve "$2")" || return 1
             workflow_require_trust "$_cw_file" || return 1
+            workflow_data_validate "$_cw_file" || { cli_error workflow invalid_data "invalid workflow data manifest" "check declared paths, types, bounds, references and dependencies"; return 1; }
             case "$_cw_action" in
                 show) workflow_parse "$_cw_file" normalized ;;
                 validate)
@@ -38,6 +41,7 @@ cmd_workflow() {
             _cw_file="$(workflow_resolve "$2")" || return 1
             workflow_require_trust "$_cw_file" || return 1
             workflow_parse "$_cw_file" validate || return 1
+            workflow_data_validate "$_cw_file" || { cli_error workflow invalid_data "invalid workflow data manifest" "check declared paths, types, bounds, references and dependencies"; return 1; }
             _cw_runs="$(workflow_runs_dir)" || return 1; mkdir -p "$_cw_runs" || return 1
             _cw_project="$(hydra_get_project_id)" _cw_base="$(git rev-parse HEAD)"
             _cw_run="$(hydra_new_id run "$_cw_project|workflow|$_cw_file")" || return 1
@@ -47,6 +51,7 @@ cmd_workflow() {
             chmod 700 "$_cw_tmp" 2>/dev/null || true
             workflow_parse "$_cw_file" normalized > "$_cw_tmp/resolved.yml" || { rm -rf "$_cw_tmp"; return 1; }
             workflow_parse "$_cw_file" runtime > "$_cw_tmp/graph.tsv" || { rm -rf "$_cw_tmp"; return 1; }
+            workflow_data_initialize "$_cw_file" "$_cw_tmp" || { rm -rf "$_cw_tmp"; return 1; }
             _cw_hash="$(git hash-object "$_cw_tmp/resolved.yml")" _cw_created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             workflow_atomic_scalar "$_cw_tmp/run-id" "$_cw_run"
             workflow_atomic_scalar "$_cw_tmp/schema-version" 1
@@ -107,10 +112,10 @@ cmd_workflow() {
             hydra_valid_id "$2" || { cli_error workflow invalid_run_id "invalid workflow run ID: $2" "use a run ID reported by hydra workflow run"; return 1; }
             _cw_runs="$(workflow_runs_dir)" || return 1; _cw_dir="$_cw_runs/$2"; [ -d "$_cw_dir" ] || return 1
             _cw_state="$(sed -n '1p' "$_cw_dir/state")"
-            [ "$_cw_state" = running ] || { cli_error workflow not_running "workflow run is already terminal: $_cw_state" "inspect it with hydra workflow status $2"; return 1; }
+            case "$_cw_state" in running|waiting-approval) ;; *) cli_error workflow not_running "workflow run is already terminal: $_cw_state" "inspect it with hydra workflow status $2"; return 1 ;; esac
             workflow_atomic_scalar "$_cw_dir/cancel-requested" "$(date +%s)"; workflow_event "$_cw_dir" "" run.cancel_requested
             _cw_owner="$(sed -n '1p' "$_cw_dir/owner-pid" 2>/dev/null || true)"
-            if workflow_run_owner_active "$_cw_dir"; then
+            if [ "$_cw_state" = running ] && workflow_run_owner_active "$_cw_dir"; then
                 kill -TERM "$_cw_owner" 2>/dev/null || true
             else
                 workflow_drive "$_cw_dir" || true
@@ -124,6 +129,23 @@ cmd_workflow() {
                 return 1
             fi
             [ "$_cw_state" = cancelled ]
+            ;;
+        requests|decide)
+            if [ "$#" -lt 2 ] || ! hydra_valid_id "$2"; then cli_error workflow invalid_arguments "a valid run ID is required" "run hydra workflow --help"; return 1; fi
+            _cw_runs="$(workflow_runs_dir)" || return 1
+            _cw_dir="$_cw_runs/$2"
+            [ -d "$_cw_dir" ] || { cli_error workflow run_not_found "workflow run not found" "use a recorded run ID"; return 1; }
+            if [ "$_cw_action" = requests ]; then
+                [ "$#" -eq 2 ] || { [ "$#" -eq 3 ] && [ "$3" = --json ]; } || return 1
+                workflow_approval_list "$_cw_dir" "${3:-}"
+            else
+                [ "$#" -eq 4 ] || { [ "$#" -eq 6 ] && [ "$5" = --by ]; } || { cli_error workflow invalid_arguments "decide requires a request ID and approve or reject" "run hydra workflow --help"; return 1; }
+                workflow_approval_decide "$_cw_dir" "$3" "$4" "${6:-}" || {
+                    cli_error workflow stale_approval "request is unavailable, expired, changed, or already decided differently" "inspect requests; resume to refresh changed evidence before deciding"
+                    return 1
+                }
+                printf 'Decision recorded for %s; explicitly resume %s to continue.\n' "$3" "$2"
+            fi
             ;;
         resume)
             [ "$#" -eq 2 ] || { cli_error workflow invalid_arguments "resume requires a run ID" "run hydra workflow --help"; return 1; }

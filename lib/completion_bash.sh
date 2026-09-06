@@ -24,12 +24,14 @@ _hydra_completion() {
     if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && $COMP_CWORD -ge 5 ]]; then
         case ${COMP_WORDS[3]:-} in
             submit) COMPREPLY=($(compgen -W "--input --key --trust-spec" -- "${cur}")); return 0 ;;
-            start) COMPREPLY=($(compgen -W "--id --trust-spec" -- "${cur}")); return 0 ;;
+            decide) COMPREPLY=($(compgen -W "--id --trust-spec --request --decision --by" -- "${cur}")); return 0 ;;
+            start|resume) COMPREPLY=($(compgen -W "--id --trust-spec" -- "${cur}")); return 0 ;;
             collect) COMPREPLY=($(compgen -W "--id --input --into --timeout" -- "${cur}")); return 0 ;;
             collected) COMPREPLY=($(compgen -W "--id --into --format" -- "${cur}")); return 0 ;;
             result) COMPREPLY=($(compgen -W "--id --output --timeout" -- "${cur}")); return 0 ;;
             logs) COMPREPLY=($(compgen -W "--id --source --stream --offset --limit --step --attempt" -- "${cur}")); return 0 ;;
-            status|cancel) COMPREPLY=($(compgen -W "--id" -- "${cur}")); return 0 ;;
+            cancel) COMPREPLY=($(compgen -W "--id --timeout" -- "${cur}")); return 0 ;;
+            status) COMPREPLY=($(compgen -W "--id" -- "${cur}")); return 0 ;;
         esac
     fi
     
@@ -43,11 +45,15 @@ _hydra_completion() {
             return 0
             ;;
         fleet)
-            COMPREPLY=($(compgen -W "handshake list doctor bootstrap package task init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            COMPREPLY=($(compgen -W "handshake list doctor bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            return 0
+            ;;
+        auth)
+            COMPREPLY=($(compgen -W "status preview copy login help --agent --provider --source --approve --executable" -- "${cur}"))
             return 0
             ;;
         task)
-            COMPREPLY=($(compgen -W "prepare inspect submit start status cancel logs result inspect-result collect collected help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "prepare inspect submit start resume requests decide status cancel logs result inspect-result collect collected help" -- "${cur}"))
             return 0
             ;;
         prepare)
@@ -83,7 +89,7 @@ _hydra_completion() {
         resource) COMPREPLY=($(compgen -W "allocate status env release" -- ${cur})); return 0 ;;
         gate) COMPREPLY=($(compgen -W "run approve status" -- ${cur})); return 0 ;;
         context) COMPREPLY=($(compgen -W "create" -- ${cur})); return 0 ;;
-        workflow) COMPREPLY=($(compgen -W "list show validate dry-run run status cancel resume" -- ${cur})); return 0 ;;
+        workflow) COMPREPLY=($(compgen -W "list show validate dry-run run status cancel resume requests decide" -- ${cur})); return 0 ;;
         integrate) COMPREPLY=($(compgen -W "train status report cancel resume approve promote cleanup" -- ${cur})); return 0 ;;
         worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
         snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
@@ -172,7 +178,7 @@ _hydra_completion() {
 
     if [[ "${COMP_WORDS[@]}" =~ exec ]]; then
         case "${cur}" in
-            -*) COMPREPLY=($(compgen -W "--branch --group --all --jobs --timeout --json --shell --allow-shell" -- ${cur})); return 0 ;;
+            -*) COMPREPLY=($(compgen -W "--branch --group --all --jobs --timeout --json --exit-code --profile --prompt-file --resume-run --result-file --require --retain-raw --shell --allow-shell" -- ${cur})); return 0 ;;
         esac
     fi
 

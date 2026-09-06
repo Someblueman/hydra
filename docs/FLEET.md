@@ -14,7 +14,7 @@ flow. Existing direct remote workflow calls remain synchronous.
 
 The optional `hydra-fleet` executable is C. It owns JSON validation, SSH transport,
 bounded child processes, aggregation, and fleet configuration/bundles. OpenSSH owns
-host resolution, credentials, host keys, and connection sharing. Head and workflow
+host resolution, SSH credentials, host keys, and connection sharing. Head and workflow
 mutations invoke the existing shell CLI with argv; they do not write live Hydra
 state from C. There is no fleet daemon, database, scheduler, or mutation replay loop.
 
@@ -71,6 +71,12 @@ at `~/.local/share/hydra/fleet/HASH`. Only then does it update the local alias's
 executable path. Reusing a pin checks its installed bytes. It neither changes the
 host's default PATH nor upgrades another installation. Source versions and archive
 checksums are release identities; do not bootstrap unreviewed packages.
+
+## Authenticate agents
+
+Use `hydra fleet auth login HOST --agent NAME` for native sign-in, or preview and
+explicitly copy a supported local credential. See [host authentication](HOST_AUTH.md)
+for provider selection, credential locations, storage guarantees, and recovery.
 
 ## Observe and reconcile
 

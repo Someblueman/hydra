@@ -1,0 +1,4 @@
+{"type":"session","id":"fixture-session"}
+{"type":"agent_start"}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"fixture artifact"}],"stopReason":"stop","usage":{"input":17,"output":3,"cacheRead":0}}}
+{"type":"agent_end"}
