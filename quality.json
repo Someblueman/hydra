@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "roots": [
+    "bin/hydra",
+    "lib",
+    "scripts",
+    "tests",
+    "install.sh",
+    "uninstall.sh",
+    "assets/demos"
+  ],
+  "exclude": [
+    "*.c",
+    "*.h",
+    "*.py",
+    "__pycache__/*",
+    "*/__pycache__/*"
+  ],
+  "tools": {
+    "make": {
+      "command": [
+        "make"
+      ],
+      "version": "3.81",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
+    },
+    "shellcheck": {
+      "command": [
+        "shellcheck"
+      ],
+      "version": "0.11.0",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
+    }
+  },
+  "checks": [
+    {
+      "name": "Hydra native shell lint (ShellCheck and dash)",
+      "tool": "make",
+      "args": [
+        "lint"
+      ],
+      "patterns": [
+        "*.sh",
+        "bin/hydra"
+      ],
+      "files": false,
+      "stage": "fast",
+      "failure_codes": [
+        1,
+        2
+      ]
+    }
+  ],
+  "size": {
+    "limit": 500,
+    "mode": "review"
+  }
+}
