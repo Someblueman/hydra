@@ -69,7 +69,7 @@ Select these priorities in dependency order, with independently useful scope.
 The implemented remote submission and collection interface is documented in
 [Remote tasks](REMOTE_TASKS.md), with [qualification evidence](REMOTE_TASK_ACCEPTANCE.md).
 
-#### 2. Adapter conformance and headless execution: remaining qualification
+#### 2. Adapter conformance and headless execution: remaining live qualification
 
 The workflow data, durable approval, retry, adapter-contract, and headless execution
 implementation is documented in [Workflow data](WORKFLOW_DATA.md) and
@@ -82,10 +82,23 @@ contains the local harness matrix, remote qualifications, and failure-test evide
       qualification were explicitly deferred on 6 September 2026 until native host
       sign-in is available; they are not counted as passed.
 
-Acceptance: Claude Code passes the same remote task already qualified with Codex,
-Pi, OpenCode, and a plain script. Keep the remaining qualification open until its
-actual provider execution and cancellation evidence are recorded; fixture tests
-and local authentication do not close it.
+- [ ] Complete Cursor Agent's live prompt, recorded-session recall, and cancellation
+      checks after sign-in; its CLI probe and builtin conformance pass, but the
+      current local CLI is unauthenticated.
+- [ ] Qualify Antigravity and Cursor on the shared remote task once native host
+      authentication is available. Antigravity's local result-byte preservation,
+      recorded recall, and observed-process cancellation have passed.
+
+Antigravity (`agy`), Cursor Agent (`cursor`), and OpenCode (`opencode`) now have
+implemented interactive and headless profiles. See [supported agents](PROFILES.md)
+for their exact capabilities and authentication boundaries.
+
+Acceptance: retain each unqualified live-provider check until actual execution,
+independent result checks, and observed-process cancellation are recorded on its
+claimed host. The original Codex/Pi/OpenCode/plain remote task remains qualified;
+fixture tests and local authentication do not close another provider's remote
+requirement. Claude remains explicitly deferred rather than blocking the other
+implemented profiles.
 
 #### 3. Resource admission and simple placement
 

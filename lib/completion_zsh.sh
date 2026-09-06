@@ -26,7 +26,7 @@ _hydra() {
                     ;;
                 fleet)
                     if [[ $words[2] == auth ]]; then
-                        _arguments '1:action:(auth)' '2:auth action:(status preview copy login help)' '--agent[Agent]:agent:(codex pi opencode claude)' '--provider[Credential provider]:provider:' '--source[Private credential file]:file:_files' '--approve[Exact preview hash]:SHA256:' '--executable[Remote login executable]:path:'
+                        _arguments '1:action:(auth)' '2:auth action:(status preview copy login help)' '--agent[Agent]:agent:(codex pi opencode claude agy cursor)' '--provider[Credential provider]:provider:' '--source[Private credential file]:file:_files' '--approve[Exact preview hash]:SHA256:' '--executable[Remote login executable]:path:'
                     elif [[ $words[2] == task ]]; then
                         _arguments '1:action:(task)' '2:task action:(prepare inspect submit start resume requests decide status cancel logs result inspect-result collect collected help)' '--source[Repository for prepare or owner/work for logs]:source:' '--spec[Task specification]:file:_files' '--input[Prepared package]:file:_files' '--output[New package file]:file:_files' '--key[Stable submission key]:key:' '--id[Accepted task ID]:task ID:' '--request[Approval request ID]:request:' '--decision[Decision]:decision:(approve reject)' '--by[Actor label]:label:' '--trust-spec[Authorize exact task digest]:SHA256:' '--stream[Log stream]:stream:(stdout stderr)' '--offset[Byte offset]:offset:' '--limit[Page bytes]:limit:' '--step[Workflow log step]:step:' '--attempt[Workflow attempt]:attempt:' '--timeout[Result or cancellation transport deadline]:seconds:' '--into[Collection repository]:directory:_files -/' '--format[Collection output]:format:(candidates)'
                     else
@@ -37,8 +37,8 @@ _hydra() {
                     _arguments \
                         '(-l --layout)'{-l,--layout}'[Layout to use]:layout:(default dev full)' \
                         '(-n --count)'{-n,--count}'[Number of sessions to spawn]:count:(1 2 3 4 5 6 7 8 9 10)' \
-                        '--ai[AI tool to use]:ai:(claude aider codex cursor copilot gemini)' \
-                        '--profile[Agent profile to use]:profile:(none claude codex cursor copilot aider gemini)' \
+                        '--ai[AI tool to use]:ai:(claude aider codex cursor agy opencode copilot gemini)' \
+                        '--profile[Agent profile to use]:profile:(none claude codex cursor agy opencode copilot aider gemini)' \
                         '--no-agent[Create a plain shell head]' \
                         '--dry-run[Print plan without mutation]' \
                         '--prompt[Task text]:task:' \

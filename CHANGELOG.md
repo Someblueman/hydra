@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Antigravity (`agy`) and Cursor Agent headless profiles with bounded event
+  translation, explicit recorded-session resume, and native fleet sign-in.
+- Interactive Antigravity and OpenCode profiles; Cursor now starts `cursor-agent`.
+  Agent discovery, completions, and documentation distinguish interactive launch,
+  headless capabilities, and completed live qualifications.
+
 - Named workflow file and structured inputs, sealed output manifests, and exact
   artifact references that block dependents on missing or changed output.
 - Durable workflow approval waits with bound evidence, explicit decisions and

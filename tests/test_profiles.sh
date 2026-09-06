@@ -36,6 +36,13 @@ assert_equal exact-session "$(profile_field codex resume_mode)" "Codex resume re
 assert_equal "'codex' resume 'recorded-session'" "$(profile_resume_command codex recorded-session)" "Codex resume selects only the supplied identity"
 profile_resume_command codex '' >/dev/null 2>&1
 assert_failure $? "Codex resume cannot select a most-recent session"
+assert_equal cursor-agent "$(profile_field cursor executable)" "Cursor profile selects the agent CLI"
+for builtin in agy cursor opencode; do
+    profile_exists "$builtin"
+    assert_success $? "$builtin is an interactive profile"
+    assert_equal task-file "$(profile_field "$builtin" prompt_mode)" "$builtin declares task delivery"
+    assert_equal none "$(profile_field "$builtin" resume_mode)" "$builtin interactive launch does not invent a recorded session"
+done
 
 fake_agent="$test_root/fake agent"
 fake_output="$test_root/args"
@@ -77,6 +84,48 @@ printf '%s' "$task_payload" > "$planned_task_file"
 FAKE_OUTPUT="$fake_output" sh -c "$planned_launch"
 assert_success $? "launch recipe may be resolved before durable task creation"
 assert_equal "$task_payload" "$(sed '1d' "$fake_output")" "planned launch reads the committed task at execution time"
+
+mkdir "$test_root/bin"
+cat > "$test_root/bin/agent-argv" <<'EOF'
+#!/bin/sh
+case "$1" in
+    --prompt=*|--prompt-interactive=*)
+        [ "$#" -eq 1 ] || exit 1
+        printf '%s\n' "${1%%=*}" > "$FAKE_OUTPUT.flag"
+        printf '%s' "${1#*=}" > "$FAKE_OUTPUT" ;;
+    --)
+        [ "$#" -eq 2 ] || exit 1
+        printf '%s\n' "$1" > "$FAKE_OUTPUT.flag"
+        printf '%s' "$2" > "$FAKE_OUTPUT" ;;
+    *) exit 1 ;;
+esac
+EOF
+chmod +x "$test_root/bin/agent-argv"
+builtin_payload="--option $task_payload"
+printf '%s' "$builtin_payload" > "$test_root/builtin-task"
+for builtin in agy cursor opencode; do
+    executable="$(profile_field "$builtin" executable)"
+    ln -s agent-argv "$test_root/bin/$executable"
+    launch="$(profile_launch_command "$builtin" "$test_root/builtin-task" "")"
+    PATH="$test_root/bin:$PATH" sh -c "$launch"
+    assert_success $? "$builtin delivers exactly one prompt argument"
+    assert_equal "$builtin_payload" "$(cat "$fake_output")" "$builtin preserves literal task bytes and leading options"
+    case "$builtin" in agy) flag=--prompt-interactive ;; cursor) flag=-- ;; opencode) flag=--prompt ;; esac
+    assert_equal "$flag" "$(cat "$fake_output.flag")" "$builtin uses its interactive prompt flag"
+done
+# A formerly custom name must not silently switch executables after an upgrade.
+cp -R "$HYDRA_HOME/profiles/fixture" "$HYDRA_HOME/profiles/agy"
+assert_equal "$fake_agent" "$(profile_field agy executable)" "registered custom agy executable is preserved"
+assert_equal 1 "$(profile_list | grep -c '^agy$')" "a previously custom builtin name is listed once"
+launch="$(profile_launch_command agy "$task_file" "")"
+FAKE_OUTPUT="$fake_output" sh -c "$launch"
+assert_equal "$task_payload" "$(sed '1d' "$fake_output")" "existing custom prompt recipe is preserved"
+printf '{}\n' > "$HYDRA_HOME/profiles/agy/adapter.json"
+profile_executable_path agy >/dev/null 2>&1
+assert_failure $? "a stored headless profile cannot resolve to the builtin launch executable"
+assert_equal 0 "$(profile_list | grep -c '^agy$')" "headless-only names stay out of the interactive list"
+profile_exists agy
+assert_failure $? "a stored headless name is not an interactive profile"
 
 provider_id="$(profile_new_provider_id claude instance_fixture)"
 case "$provider_id" in

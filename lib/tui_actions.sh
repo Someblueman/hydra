@@ -109,12 +109,15 @@ tui_action_spawn() {
     done
 
     if [ -z "$ai_tool" ] && [ -z "$template" ]; then
-        printf "\nAI tool (1=claude 2=codex 3=aider 4=gemini 5=custom, Enter=claude): "
+        printf "\nAI tool (1=claude 2=codex 3=aider 4=gemini 5=custom 6=agy 7=cursor 8=opencode, Enter=claude): "
         read -r ai_choice
         case "$ai_choice" in
             2) ai_tool="codex" ;;
             3) ai_tool="aider" ;;
             4) ai_tool="gemini" ;;
+            6) ai_tool="agy" ;;
+            7) ai_tool="cursor" ;;
+            8) ai_tool="opencode" ;;
             5)
                 printf "Custom command: "
                 read -r ai_tool

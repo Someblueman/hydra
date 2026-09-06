@@ -217,6 +217,12 @@ status, and available run identity. The owner seals an immutable result snapshot
 after completion; collection never infers success from a live worktree.
 
 
+Agent workflow steps use the same [headless profiles](PROFILES.md#headless-execution)
+on local and remote hosts: `agy`, `cursor`, `opencode`, `claude`, `codex`, and `pi`.
+The receiver must have the matching adapter, executable, and authentication.
+Provider credentials are not task inputs; use [native host sign-in](HOST_AUTH.md).
+Live host qualification is recorded separately from transport conformance.
+
 ## Logs and cancellation
 
 ```sh

@@ -51,10 +51,57 @@ static int canonical(json_object *input, struct agent_event *event) {
     }
     return -1;
 }
+static int agy(json_object *input, struct agent_event *event) {
+    const char *type = f_string(input, "event");
+    if (!type) return -1;
+    if (!strcmp(type, "init")) {
+        event->kind = "session"; event->status = "running";
+        event->session = f_string(input, "conversation_id");
+        return event->session && *event->session ? 1 : -1;
+    }
+    if (!strcmp(type, "result")) {
+        json_object *result = f_field(input, "result");
+        const char *status = f_string(result, "status"), *session = f_string(result, "conversation_id");
+        if (!status || (strcmp(status, "SUCCESS") && strcmp(status, "ERROR") && strcmp(status, "CANCELED") &&
+            strcmp(status, "INTERRUPTED") && strcmp(status, "INVALID") && strcmp(status, "WAITING") && strcmp(status, "RUNNING"))) return -1;
+        event->kind = "result"; event->status = !strcmp(status, "SUCCESS") ? "idle" : "failed";
+        event->text = f_string(result, "response"); event->session = session && *session ? session : NULL;
+        if (!strcmp(status, "SUCCESS") && (!event->text || !event->session)) return -1;
+        /* Only the terminal aggregate is counted; step deltas are not results. */
+        event->usage = usage(f_field(result, "usage"), "input_tokens", "output_tokens", "cache_read_tokens");
+        return event->usage ? 1 : -1;
+    }
+    return 0;
+}
+static int cursor(json_object *input, const char *type, struct agent_event *event) {
+    if (!strcmp(type, "system")) {
+        const char *subtype = f_string(input, "subtype");
+        if (subtype && !strcmp(subtype, "init")) {
+            event->kind = "session"; event->status = "running";
+            event->session = f_string(input, "session_id");
+            return event->session && *event->session ? 1 : -1;
+        }
+    }
+    if (!strcmp(type, "result")) {
+        json_object *error = f_field(input, "is_error");
+        if (!json_object_is_type(error, json_type_boolean)) return -1;
+        event->kind = "result"; event->status = json_object_get_boolean(error) ? "failed" : "idle";
+        event->text = f_string(input, "result"); event->session = f_string(input, "session_id");
+        if (event->session && !*event->session) event->session = NULL;
+        if (!json_object_get_boolean(error) && (!event->text || !event->session || !*event->session)) return -1;
+        /* Cursor's documented result has no usage counters. Keep them unknown. */
+        return 1;
+    }
+    if (!strcmp(type, "error")) { event->kind = "observation"; event->status = "failed"; return 1; }
+    return 0;
+}
 int agent_decode(const char *adapter, json_object *input, struct agent_event *event) {
     const char *type = f_string(input, "type");
     memset(event, 0, sizeof(*event));
-    if (!json_object_is_type(input, json_type_object) || !type) return -1;
+    if (!json_object_is_type(input, json_type_object)) return -1;
+    if (!strcmp(adapter, "agy-jsonl")) return agy(input, event);
+    if (!type) return -1;
+    if (!strcmp(adapter, "cursor-jsonl")) return cursor(input, type, event);
     if (!strcmp(adapter, "canonical-jsonl")) return canonical(input, event);
     if (!strcmp(adapter, "codex-jsonl")) {
         if (!strcmp(type, "thread.started")) { event->kind = "session"; event->session = f_string(input, "thread_id"); return event->session ? 1 : -1; }

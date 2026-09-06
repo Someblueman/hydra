@@ -105,7 +105,10 @@ hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
 ```
 
-`--profile` selects an agent; `--no-agent` selects a plain shell. `exec` runs a
+`--profile` selects an agent; `--no-agent` selects a plain shell. Interactive
+profiles include `agy` (Antigravity), `cursor` (Cursor Agent), `opencode`, `claude`,
+and `codex`, plus launch-only integrations. Headless execution also supports `pi`.
+See the complete [supported-agent matrix](PROFILES.md) and [headless contract](AGENT_CONTRACT.md). `exec` runs a
 command through Hydra's supervision and records its result. `send` queues steering
 in the head's inbox, and `recv` reads it from that head. Queuing a message does not
 prove the agent consumed it. Provider safe-point delivery requires the capability

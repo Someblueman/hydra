@@ -15,12 +15,12 @@ validate_ai_command() {
     fi
     
     case "$command" in
-        "claude"|"codex"|"cursor"|"copilot"|"aider"|"gemini")
+        "claude"|"codex"|"cursor"|"agy"|"opencode"|"copilot"|"aider"|"gemini")
             return 0
             ;;
         *)
             echo "Error: Unsupported AI command: $command" >&2
-            echo "Supported: claude, codex, cursor, copilot, aider, gemini" >&2
+            echo "Supported: claude, codex, cursor, agy, opencode, copilot, aider, gemini" >&2
             echo "Next: pass --no-agent for a shell-only head, or pass --ai with a supported tool" >&2
             return 1
             ;;
@@ -209,7 +209,7 @@ find_broadcast_pane() {
         esac
         _fb_is_agent=0
         case "$_fb_cmd" in
-            claude|codex|cursor|copilot|aider|gemini)
+            claude|codex|cursor|cursor-agent|agy|opencode|copilot|aider|gemini)
                 _fb_is_agent=1
                 ;;
         esac

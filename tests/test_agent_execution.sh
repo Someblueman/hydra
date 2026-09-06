@@ -31,6 +31,8 @@ hydra() { "$root/bin/hydra" "$@"; }
 hydra init --no-agent --trust >/dev/null
 hydra spawn agent-fixture --no-agent >/dev/null
 worker="$(hydra path agent-fixture)"
+# shellcheck disable=SC1091
+. "$root/tests/agent_builtin_cases.sh"
 cat > "$fixture/provider" <<'PROVIDER'
 #!/bin/sh
 case "$1" in --help|--version) echo fixture-1.0; exit 0 ;; esac

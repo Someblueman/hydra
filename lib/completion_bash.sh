@@ -131,7 +131,7 @@ _hydra_completion() {
                 ;;
             --ai)
                 # Complete with AI tools
-                COMPREPLY=($(compgen -W "claude aider codex cursor copilot gemini" -- ${cur}))
+                COMPREPLY=($(compgen -W "claude aider codex cursor agy opencode copilot gemini" -- ${cur}))
                 return 0
                 ;;
             --agents)

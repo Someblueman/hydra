@@ -1,15 +1,20 @@
 # Workflow and agent acceptance (in progress)
 
 This record covers roadmap priorities 1 and 2 on
-`feature/workflow-inputs-agent-adapters`. Qualification is incomplete: the named
-providers have passed the local task below. The earlier Ubuntu VPS is now available,
-and the plain script and durable approval scenarios have passed over real SSH.
-OpenCode has also passed exact prompt delivery, session recall, and cancellation
-with an explicitly selected free model. Codex and Pi have now also passed the same task and cancellation after explicit
-host authentication. Claude native host sign-in and remote qualification were explicitly deferred by
-the user on 6 September 2026. They remain open rather than counted as passed. The remote
-fixture tests are transport and recovery evidence, not live provider qualification. No release,
-push, or completed-roadmap claim follows from this record.
+`feature/workflow-inputs-agent-adapters`, plus the subsequent Antigravity, Cursor,
+and OpenCode support expansion. The [supported-agent matrix](PROFILES.md)
+distinguishes implemented headless contracts from interactive launch and actual
+provider qualification.
+
+The original local Claude/Codex/Pi/OpenCode/plain-script matrix passed. Original
+remote Codex, Pi, OpenCode, plain-script, and durable-approval scenarios passed over
+real SSH. Claude native host sign-in and remote qualification remain deferred at
+the user's request. The expansion below records Antigravity local execution,
+recorded recall, byte preservation, and cancellation, plus fresh OpenCode byte and
+recall checks. Cursor's CLI and conformance tests are available, but actual Cursor
+execution stopped at missing authentication. Antigravity/Cursor remote provider
+runs have not been qualified. No fixture result substitutes for those live checks,
+and no release or push follows from this record.
 
 ## Local provider task, 6 September 2026
 
@@ -267,7 +272,8 @@ last live-provider qualification dependency and is deferred at the user's reques
 | Supervision, malformed/partial events, stale instances, unsupported capability refusal | `tests/test_agent_execution.sh`; live cancellation task evidence above |
 | Verification independent of provider completion | A successful two-agent fixture workflow is rejected by its failing independent gate; live workflows separately compare outputs before passing gates |
 | Opt-in bounded payload retention and unknown usage | `tests/c/test_agent_profile.c` checks byte/run retention bounds; `tests/test_agent_execution.sh` checks default absence, explicit retention and null usage |
-| Named providers on the same local and remote task | Local matrix complete; remote Codex/Pi/OpenCode/plain complete; Claude remote explicitly deferred |
+| Original named providers on the same local and remote task | Original local matrix complete; remote Codex/Pi/OpenCode/plain complete; Claude remote explicitly deferred |
+| Antigravity/Cursor/OpenCode expansion | Public builtin argv/resume/failure conformance in `tests/agent_builtin_cases.sh`; Antigravity and fresh OpenCode live evidence below; Cursor live execution requires authentication |
 | Host credential setup | `tests/c/test_agent_auth.c`, `tests/test_agent_auth.sh`, real SSH synthetic copy, and approved real Codex/Pi transfers |
 
 ## Live Codex-to-Pi artifact handoff
@@ -332,3 +338,92 @@ sanitizer findings. Logs are retained locally as
 `/tmp/hydra-final-deferred-claude-test-all.log` and
 `/tmp/hydra-final-deferred-claude-sanitize-fleet.log`. Claude remote qualification
 remains deferred; these checks do not close that live-provider requirement.
+
+## Antigravity, Cursor, and OpenCode expansion, 6 September 2026
+
+Built-in `agy` and `cursor` headless contracts now join the existing OpenCode
+contract. Interactive launch adds Antigravity/OpenCode and changes Cursor to the
+separate `cursor-agent` CLI. Current help/version inspection covered Antigravity
+1.1.27, Cursor Agent `2026.09.02-c22c1a3`, and OpenCode 1.18.27. Normal provider
+permission settings were preserved. Tests also preserve a previously registered
+custom profile when an upgrade introduces its name as a built-in.
+
+| Check | Antigravity | Cursor Agent | OpenCode |
+| --- | --- | --- | --- |
+| Actual version/help probe | Passed | Passed | Passed |
+| Builtin literal argv, exact recorded resume, partial stream and failed-event conformance | Passed with synthetic executable | Passed with synthetic executable | Passed with synthetic executable |
+| Local provider result bytes match raw provider JSON | Passed | Not qualified: unauthenticated | Passed |
+| Local recorded-session recall | Passed, byte-identical answer | Not qualified: unauthenticated | Passed, byte-identical answer |
+| Local observed print-process cancellation | Passed | Not qualified: unauthenticated | Earlier local qualification passed |
+| Real SSH provider execution | Not qualified | Not qualified | Earlier remote qualification passed |
+| Native fleet sign-in recipe | `agy` startup; SSH argv tested | `cursor-agent login`; SSH argv tested | Existing `opencode auth login` |
+
+Native sign-in recipe tests do not authenticate accounts. `cursor-agent status
+--format json` reported `isAuthenticated: false`, and public profile execution
+returned exit 1 in `run_429a82e2e58e5c05cd3e`. No successful Cursor answer or resume
+is claimed. Portable credential copying for Antigravity/Cursor is unsupported;
+they use provider-owned native sign-in.
+
+A disposable Git repository and Hydra state directory are identified by
+`/tmp/hydra-expanded-agents-current`. They retain the selected prompts, independent
+comparisons, public CLI responses, and `*-fidelity-evidence.json`,
+`*-resume-evidence.json`, and `agy-cancellation-evidence.json`. The temporary head
+was stopped through public `hydra kill`; copies of its answers remain in the
+qualification directory's `answers/` folder. Only the explicit
+fidelity runs enabled bounded `--retain-raw`; the normal invocation default remains
+o provider-payload retention.
+
+Fidelity runs requested a fixed token with no extra words, then independently
+compared the result file with the terminal provider JSON text. Token-content
+checks ignored surrounding whitespace; byte-preservation checks did not.
+Antigravity emitted 22 bytes (including a final newline) in
+`run_0829a4f76da16dd965c1`, SHA-256
+`269295387bbb3fff75ee61ba63b9faeea0c978bc2cbb9841f5b33b15a2451e50`.
+OpenCode emitted 21 bytes in `run_b841bef376bd9133eb62`, SHA-256
+`a4050dbba2a0f881e8d1b1483e3bf11212ceeab6ec68b69bfab445188a724a6c`.
+Both result files matched the raw provider text exactly. Exploratory prompts
+requesting exact newline counts did not pass formatting checks: Antigravity added
+newlines and OpenCode omitted them. Hydra did not trim or rewrite either response;
+these records are adapter-fidelity evidence, not a claim of exact model formatting
+or completion of the original no-newline remote task by the new providers.
+
+Antigravity resumed `run_7cb2031538066a13231a` as
+`run_e6715820075a5541fbd5`, retaining session
+`356009c6-d5c0-49b8-a51c-0c14d598ec45`. OpenCode resumed
+`run_d6dbd458700c6be02cb4` as `run_d9135ef5548cbbeff4ef`, retaining session
+`ses_f8813f29effecOjb0gCGO1gP8U`. Follow-up prompts omitted the prior token.
+Each pair had identical output bytes, the same profile digest and session identity,
+and an observed successful resume receipt.
+
+Cancellation run `run_e9414fa74d4e951bec62` first observed Antigravity's actual
+`--print` process, not a version/help probe, beneath the public exec owner. Sending
+SIGTERM to that owner returned shell status 143; the observed provider PID was gone
+and the receipt reported `cancelled`, exit 130. No provider completion was used as
+a verification gate.
+
+Reproduce on an authenticated host with a disposable no-agent head:
+
+```sh
+hydra agent probe agy
+hydra exec --branch worker --profile agy --prompt-file prompt.txt \
+  --require prompt,observations,resume --result-file answer.txt --retain-raw \
+  --timeout 90 --exit-code --json
+hydra exec --branch worker --profile agy --prompt-file follow-up.txt \
+  --resume-run RUN_ID --result-file recalled.txt --timeout 90 --exit-code --json
+```
+
+`RUN_ID` comes from the successful first exec response. Compare the returned files
+independently and inspect the exact recorded session. Replace `agy` with `cursor`
+or `opencode` to exercise their contracts; install and authenticate each provider
+first. Cursor keeps usage null and rejects `--require usage` before starting.
+
+Expansion checks on 6 September 2026 passed: `make test-all` and
+`make sanitize-fleet` (UndefinedBehaviorSanitizer on macOS, with no reported
+runtime findings). Final localized prompt/custom-profile refinements were checked
+with `tests/test_profiles.sh` (40 passed), `tests/test_operations.sh` (37 passed),
+and the full ShellCheck/dash lint. All local link targets in the 19 changed
+Markdown files resolved, and `git diff --check` passed. Local logs are
+`/tmp/hydra-expanded-agents-test-all.log`,
+`/tmp/hydra-expanded-agents-sanitize-fleet.log`,
+`/tmp/hydra-expanded-agents-profiles.log`, and
+`/tmp/hydra-expanded-agents-operations.log`.

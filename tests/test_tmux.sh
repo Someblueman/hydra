@@ -193,6 +193,12 @@ test_validate_ai_command() {
     
     validate_ai_command "cursor" 2>/dev/null
     assert_success $? "validate_ai_command should accept 'cursor'"
+
+    validate_ai_command "agy" 2>/dev/null
+    assert_success $? "validate_ai_command should accept 'agy'"
+
+    validate_ai_command "opencode" 2>/dev/null
+    assert_success $? "validate_ai_command should accept 'opencode'"
     
     validate_ai_command "copilot" 2>/dev/null
     assert_success $? "validate_ai_command should accept 'copilot'"

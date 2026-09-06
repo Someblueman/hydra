@@ -177,7 +177,8 @@ provenance_capture_instance() {
     _pci_profile="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/profile" 2>/dev/null || true)"
     _pci_executable="$(profile_executable_path "${_pci_profile:-none}" 2>/dev/null || true)"
     _pci_version=""
-    if profile_builtin_exists "${_pci_profile:-none}" && [ -n "$_pci_executable" ] && [ "$_pci_executable" != none ]; then
+    if profile_builtin_exists "${_pci_profile:-none}" && [ ! -f "$HYDRA_HOME/profiles/$_pci_profile/executable" ] &&
+       [ -n "$_pci_executable" ] && [ "$_pci_executable" != none ]; then
         _pci_version="$("$_pci_executable" --version 2>/dev/null | sed -n '1p' || true)"
     elif [ -n "$_pci_executable" ] && [ "$_pci_executable" != none ]; then
         _pci_version=user-declared

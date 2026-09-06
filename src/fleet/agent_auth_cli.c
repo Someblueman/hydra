@@ -25,8 +25,9 @@ static json_object *request_safe(const struct f_remote *remote, json_object *req
     json_object_put(raw); return result;
 }
 static json_object *login(const struct f_remote *remote, const char *agent, const char *executable) {
-    const char *args = !strcmp(agent, "codex") ? "login --device-auth" : !strcmp(agent, "claude") ? "auth login" : !strcmp(agent, "opencode") ? "auth login" : "";
-    char command[F_PATH * 4]; char *quoted = f_quote(executable ? executable : agent); struct f_capture cap = {0};
+    const char *args = !strcmp(agent, "codex") ? "login --device-auth" : !strcmp(agent, "claude") ? "auth login" : !strcmp(agent, "opencode") ? "auth login" : !strcmp(agent, "cursor") ? "login" : "";
+    const char *program = executable ? executable : !strcmp(agent, "cursor") ? "cursor-agent" : agent;
+    char command[F_PATH * 4]; char *quoted = f_quote(program); struct f_capture cap = {0};
     if (!quoted || snprintf(command, sizeof(command), "exec %s %s", quoted, args) >= (int)sizeof(command)) { free(quoted); return f_error("fleet-auth", "invalid_input", "invalid login executable"); }
     free(quoted); (void)f_ssh(remote, command, NULL, 0, 300, true, &cap); f_capture_free(&cap);
     return f_error("fleet-auth", "login_failed", "cannot start native sign-in over interactive SSH");
@@ -38,7 +39,7 @@ json_object *auth_cli(int argc, char **argv) {
     int i; bool map, supported = false;
     if (!argc || !strcmp(argv[0], "help") || !strcmp(argv[0], "--help")) {
         result = json_object_new_object();
-        f_string_add(result, "usage", "fleet auth status|preview|copy HOST --agent codex|pi|opencode|claude [--provider NAME] [--source FILE] [--approve PLAN_SHA256]; fleet auth login HOST --agent NAME [--executable /path] (Pi: enter /login)");
+        f_string_add(result, "usage", "fleet auth status|preview|copy HOST --agent codex|pi|opencode|claude [--provider NAME] [--source FILE] [--approve PLAN_SHA256]; fleet auth login HOST --agent codex|pi|opencode|claude|agy|cursor [--executable /path] (Pi: enter /login; agy: follow startup sign-in)");
         return f_success("fleet-auth-help", result);
     }
     op = argv[0];
@@ -54,7 +55,7 @@ json_object *auth_cli(int argc, char **argv) {
         else if (!strcmp(argv[i], "--executable")) executable = argv[++i];
         else goto invalid;
     }
-    if (!host || !auth_agent(agent) || f_remote_load(host, &remote)) goto invalid;
+    if (!host || !agent || (!auth_agent(agent) && (strcmp(op, "login") || (strcmp(agent, "agy") && strcmp(agent, "cursor")))) || f_remote_load(host, &remote)) goto invalid;
     map = !strcmp(agent, "pi") || !strcmp(agent, "opencode");
     if ((provider && (!map || !f_name(provider) || strlen(provider) > 128)) ||
         (executable && (strcmp(op, "login") || executable[0] != '/')) ||

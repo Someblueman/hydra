@@ -120,10 +120,14 @@ rm "$fixture/remote/.codex"
 mv "$fixture/remote/real" "$fixture/remote/.codex"
 printf '%s\000' '{"OPENAI_API_KEY":"bad"}' > "$fixture/local/codex.json"
 reject preview codex
-for agent in codex pi opencode claude; do
+for agent in codex pi opencode claude agy cursor; do
     hydra fleet auth login test --agent "$agent"
     grep -q -- '-t' "$fixture/login-argv"
-    grep -q "exec '$agent'" "$fixture/login-argv"
+    case "$agent" in cursor) grep -q "exec 'cursor-agent' login" "$fixture/login-argv" ;; *) grep -q "exec '$agent'" "$fixture/login-argv" ;; esac
+done
+for agent in agy cursor; do
+    if hydra fleet auth preview test --agent "$agent" > "$fixture/unsupported-copy"; then exit 1; fi
+    grep -q invalid_input "$fixture/unsupported-copy"
 done
 hydra fleet auth login test --agent codex --executable '/private/with space/codex'
 grep -q "exec '/private/with space/codex' login --device-auth" "$fixture/login-argv"

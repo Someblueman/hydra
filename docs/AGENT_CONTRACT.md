@@ -3,7 +3,8 @@
 The optional native helper supports declarative headless profiles through the
 POSIX shell CLI. Existing interactive launch profiles remain supported separately;
 launch availability does not imply prompt delivery, event hooks, or exact resume.
-See the [acceptance record](WORKFLOW_AGENT_ACCEPTANCE.md) for tested versions,
+See the [supported-agent matrix](PROFILES.md) for headless and interactive profiles,
+and the [acceptance record](WORKFLOW_AGENT_ACCEPTANCE.md) for tested versions,
 reproduction commands, and the remaining live remote qualification boundary.
 
 ```sh
@@ -55,8 +56,12 @@ profile digest and current instance. Hydra does not search for the latest provid
 session. Missing or changed bindings fail explicitly.
 
 Imports create a new private profile under `$HYDRA_HOME/profiles/NAME/adapter.json`.
-Existing profiles and built-in names are not replaced. Built-in declarations target
-Claude Code, Codex, Pi, and OpenCode, using their normal permission settings.
+Existing profiles and built-in names are not replaced by imports. Stored custom
+contracts take precedence when an upgrade introduces their name as a built-in.
+Built-in declarations target Antigravity (`agy`), Cursor Agent (`cursor`),
+OpenCode, Claude Code, Codex, and Pi, using their normal permission settings.
+Cursor uses the separate `cursor-agent` executable. Antigravity disables slash
+command expansion so a supplied task remains a literal prompt.
 
 ## Evidence and observations
 
@@ -87,6 +92,33 @@ permission or provide an interactive approval callback. Usage fields are optiona
 and remain null when unavailable. Exact cost enforcement is unsupported. Provider
 JSONL examples in `tests/fixtures/agents` are synthetic conformance fixtures;
 live-provider qualification is separate evidence.
+
+## Provider translations
+
+| Adapter | Session identity | Answer source | Terminal failure |
+| --- | --- | --- | --- |
+| `agy-jsonl` | Init event `conversation_id` / `result.conversation_id` | Terminal `result.response` | Every terminal status other than `SUCCESS` |
+| `cursor-jsonl` | Init/result event `session_id` | Terminal `result.result` | `is_error`, error event, or nonzero process exit |
+| `opencode-jsonl` | `sessionID` | Completed `text.part.text` | Error event or nonzero process exit |
+| `claude-jsonl` | `system/init.session_id` | Terminal `result.result` | `is_error` or nonzero process exit |
+| `codex-jsonl` | `thread.started.thread_id` | Completed `agent_message.text` | Failed turn, error event, or nonzero process exit |
+| `pi-jsonl` | Session `id` | Assistant `message_end` text | Error/aborted stop reason or nonzero process exit |
+
+Antigravity names its event discriminator `event`; other provider adapters use
+`type`. Intermediate Antigravity text deltas are ignored in favor of its complete
+terminal response, preventing duplicated or partial artifacts. Its usage is the
+provider's terminal aggregate, which can be cumulative across resumed turns;
+do not add those reports as if they were independent per-turn charges. Cursor's
+documented stream has no token counts, so usage remains null and `--require usage`
+is rejected before invocation. Unsupported permission callbacks and exact cost
+limits remain unsupported for these built-ins.
+
+Hydra preserves answer bytes, including provider-supplied whitespace. A model's
+formatting or completion report is not an independent artifact/gate check.
+The provider surfaces are documented by [Antigravity](https://antigravity.google/docs/cli/headless/),
+[Cursor](https://cursor.com/docs/cli/reference/output-format), and
+[OpenCode](https://opencode.ai/docs/cli/); fixtures test Hydra's translations,
+while dated live records establish which installed versions were exercised.
 
 ## Safe points and retention
 

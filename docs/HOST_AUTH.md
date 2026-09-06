@@ -13,14 +13,23 @@ hydra fleet auth login ovh --agent codex
 hydra fleet auth login ovh --agent claude
 hydra fleet auth login ovh --agent opencode
 hydra fleet auth login ovh --agent pi
+hydra fleet auth login ovh --agent agy
+hydra fleet auth login ovh --agent cursor
 ```
 
 These open an SSH terminal running, respectively, `codex login --device-auth`,
-`claude auth login`, `opencode auth login`, or `pi` (enter `/login`). Follow the
+`claude auth login`, `opencode auth login`, `pi` (enter `/login`), `agy` (follow
+startup sign-in), or `cursor-agent login`. Follow the
 provider's prompts. `--executable /absolute/path/to/agent` selects a privately
 installed CLI. The agent owns the login, browser/device interaction, and token
 refresh. Hydra does not record the terminal output or copy keychain credentials.
 Native sign-in is also available when the remote Hydra lacks the copy protocol.
+
+Antigravity and Cursor support native sign-in only through Hydra. Their credential
+stores are not copied or inspected by `fleet auth status|preview|copy`; those
+operations support the four agents in the table below. On the execution host,
+use `cursor-agent status` or an actual Antigravity task to check native readiness.
+See [supported agents](PROFILES.md) for execution capabilities.
 
 ## Copy a local credential
 

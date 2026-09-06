@@ -16,6 +16,7 @@ export HYDRA_SKIP_AI=1
 
 cleanup() {
     tmux kill-session -t operations-test 2>/dev/null || true
+    tmux kill-session -t custom-profile-provenance 2>/dev/null || true
     rm -rf "$test_root"
 }
 trap cleanup EXIT HUP INT TERM
@@ -143,6 +144,26 @@ assert_equal 600 "$output_mode" "captured exec output is private"
 git -C "$worktree" restore -- tracked.txt
 "$HYDRA_BIN" kill operations-test >/dev/null
 assert_success $? "operations head tears down"
+
+# A custom name from before a builtin was added must not gain automatic probes.
+cat > "$test_root/custom-agent" <<'AGENT'
+#!/bin/sh
+if [ "${1:-}" = --version ]; then touch "$HYDRA_TEST_PROFILE_PROBE"; fi
+AGENT
+chmod +x "$test_root/custom-agent"
+HYDRA_TEST_PROFILE_PROBE="$test_root/unexpected-version-probe"
+export HYDRA_TEST_PROFILE_PROBE
+"$HYDRA_BIN" agent init legacy-agy --executable "$test_root/custom-agent" >/dev/null
+mv "$HYDRA_HOME/profiles/legacy-agy" "$HYDRA_HOME/profiles/agy"
+HYDRA_SKIP_AI='' HYDRA_NO_SWITCH=1 "$HYDRA_BIN" spawn custom-profile-provenance --profile agy >/dev/null
+assert_success $? "a previously registered custom agy profile still launches"
+test ! -e "$HYDRA_TEST_PROFILE_PROBE"
+assert_success $? "custom builtin-name provenance never runs an extra version probe"
+"$HYDRA_BIN" provenance custom-profile-provenance --json > "$test_root/custom-provenance"
+grep -q user-declared "$test_root/custom-provenance"
+assert_success $? "custom builtin-name version remains user-declared"
+"$HYDRA_BIN" kill custom-profile-provenance --force >/dev/null
+assert_success $? "custom profile qualification head tears down"
 
 echo "======================================="
 echo "Test Results:"

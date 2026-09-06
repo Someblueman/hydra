@@ -72,6 +72,11 @@ executable path. Reusing a pin checks its installed bytes. It neither changes th
 host's default PATH nor upgrades another installation. Source versions and archive
 checksums are release identities; do not bootstrap unreviewed packages.
 
+Fleet headless tasks support Antigravity (`agy`), Cursor Agent, OpenCode, Claude
+Code, Codex, and Pi when the selected CLI and credentials are available on that
+host. See [supported agents](PROFILES.md) and the [qualification record](WORKFLOW_AGENT_ACCEPTANCE.md)
+for the difference between implemented contracts and completed live host checks.
+
 ## Authenticate agents
 
 Use `hydra fleet auth login HOST --agent NAME` for native sign-in, or preview and

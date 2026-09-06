@@ -97,8 +97,8 @@ complete -c hydra -f -n '__fish_use_subcommand' -s v -l version -d 'Show version
 # Complete spawn command
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s l -l layout -d 'Layout to use' -a 'default dev full'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s n -l count -d 'Number of sessions to spawn' -a '1 2 3 4 5 6 7 8 9 10'
-complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to use' -a 'claude aider codex cursor copilot gemini'
-complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l profile -d 'Agent profile' -a 'none claude codex cursor copilot aider gemini'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to use' -a 'claude aider codex cursor agy opencode copilot gemini'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l profile -d 'Agent profile' -a 'none claude codex cursor agy opencode copilot aider gemini'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l no-agent -d 'Create a plain shell head'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l dry-run -d 'Print plan without mutation'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l prompt -d 'Task text'
@@ -216,7 +216,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subc
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l format -r
 
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -a 'status preview copy login help'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l agent -r -a 'codex pi opencode claude'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l agent -r -a 'codex pi opencode claude agy cursor'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l provider -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l source -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l approve -r

@@ -8,6 +8,8 @@ static const struct { const char *name, *json; } builtins[] = {
     {"claude", "{\"schema_version\":1,\"executable\":\"claude\",\"argv\":[\"--print\",\"--verbose\",\"--output-format\",\"stream-json\",\"--session-id\",{\"input\":\"session_id\"},\"--\",{\"input\":\"prompt\"}],\"resume_argv\":[\"--print\",\"--verbose\",\"--output-format\",\"stream-json\",\"--resume\",{\"input\":\"session_id\"},\"--\",{\"input\":\"prompt\"}],\"prompt\":\"argument\",\"adapter\":\"claude-jsonl\",\"session\":\"generated\",\"probe_argv\":[\"--help\"],\"probe_tokens\":[\"--print\",\"--session-id\",\"--resume\",\"stream-json\"]}"},
     {"pi", "{\"schema_version\":1,\"executable\":\"pi\",\"argv\":[\"--print\",\"--mode\",\"json\",\"--session-id\",{\"input\":\"session_id\"},\"--\",{\"input\":\"prompt\"}],\"resume_argv\":[\"--print\",\"--mode\",\"json\",\"--session\",{\"input\":\"session_id\"},\"--\",{\"input\":\"prompt\"}],\"prompt\":\"argument\",\"adapter\":\"pi-jsonl\",\"session\":\"generated\",\"probe_argv\":[\"--help\"],\"probe_tokens\":[\"--print\",\"--session-id\",\"--session\",\"json\"]}"},
     {"opencode", "{\"schema_version\":1,\"executable\":\"opencode\",\"argv\":[\"run\",\"--format\",\"json\",\"--\",{\"input\":\"prompt\"}],\"resume_argv\":[\"run\",\"--format\",\"json\",\"--session\",{\"input\":\"session_id\"},\"--\",{\"input\":\"prompt\"}],\"prompt\":\"argument\",\"adapter\":\"opencode-jsonl\",\"session\":\"observed\",\"probe_argv\":[\"run\",\"--help\"],\"probe_tokens\":[\"--format\",\"--session\"]}"},
+    {"agy", "{\"schema_version\":1,\"executable\":\"agy\",\"argv\":[\"--output-format\",\"stream-json\",\"--disable-slash-commands\",\"--print\",{\"input\":\"prompt\"}],\"resume_argv\":[\"--output-format\",\"stream-json\",\"--disable-slash-commands\",\"--conversation\",{\"input\":\"session_id\"},\"--print\",{\"input\":\"prompt\"}],\"prompt\":\"argument\",\"adapter\":\"agy-jsonl\",\"session\":\"observed\",\"probe_argv\":[\"--help\"],\"probe_tokens\":[\"--print\",\"--conversation\",\"--disable-slash-commands\",\"stream-json\"]}"},
+    {"cursor", "{\"schema_version\":1,\"executable\":\"cursor-agent\",\"argv\":[\"--print\",\"--output-format\",\"stream-json\",\"--\",{\"input\":\"prompt\"}],\"resume_argv\":[\"--print\",\"--output-format\",\"stream-json\",\"--resume\",{\"input\":\"session_id\"},\"--\",{\"input\":\"prompt\"}],\"prompt\":\"argument\",\"adapter\":\"cursor-jsonl\",\"session\":\"observed\",\"probe_argv\":[\"--help\"],\"probe_tokens\":[\"--print\",\"--resume\",\"stream-json\"]}"},
     {NULL, NULL}
 };
 static bool argument_list(json_object *list, bool substitutions) {
@@ -46,7 +48,7 @@ json_object *agent_profile_validate(json_object *input) {
     if (!task_keys(input, keys) || !f_number_is(input, "schema_version", 1) || !executable || !*executable || strlen(executable) >= F_PATH ||
         (executable[0] != '/' && (!f_name(executable) || strchr(executable, '/'))) || !prompt || !adapter || !session ||
         (strcmp(prompt, "none") && strcmp(prompt, "stdin") && strcmp(prompt, "argument") && strcmp(prompt, "file")) ||
-        (strcmp(adapter, "none") && strcmp(adapter, "canonical-jsonl") && strcmp(adapter, "codex-jsonl") && strcmp(adapter, "claude-jsonl") && strcmp(adapter, "pi-jsonl") && strcmp(adapter, "opencode-jsonl")) ||
+        (strcmp(adapter, "none") && strcmp(adapter, "canonical-jsonl") && strcmp(adapter, "codex-jsonl") && strcmp(adapter, "claude-jsonl") && strcmp(adapter, "pi-jsonl") && strcmp(adapter, "opencode-jsonl") && strcmp(adapter, "agy-jsonl") && strcmp(adapter, "cursor-jsonl")) ||
         (strcmp(session, "none") && strcmp(session, "generated") && strcmp(session, "observed")) ||
         !transport(f_field(input, "argv"), prompt, false, session) ||
         (f_field(input, "resume_argv") && (!strcmp(session, "none") || !transport(f_field(input, "resume_argv"), prompt, true, session))) ||
@@ -56,19 +58,22 @@ json_object *agent_profile_validate(json_object *input) {
     return copy;
 }
 json_object *agent_profile(const char *name) {
-    char path[F_PATH]; json_object *input = NULL, *profile; size_t i;
+    char path[F_PATH], scalar[F_PATH]; json_object *input = NULL, *profile; size_t i;
     if (!agent_name(name)) return NULL;
     if (snprintf(path, sizeof(path), "%s/profiles/%s/adapter.json", f_home, name) >= (int)sizeof(path)) return NULL;
     /* Custom contracts are explicit. Existing scalar profiles remain launch-only. */
-    for (i = 0; builtins[i].name; i++) if (!strcmp(name, builtins[i].name)) { input = f_parse(builtins[i].json); break; }
-    if (!input && !access(path, F_OK)) input = f_read_json(path, AGENT_PROMPT_LIMIT);
+    if (!access(path, F_OK)) input = f_read_json(path, AGENT_PROMPT_LIMIT);
+    else {
+        if (snprintf(scalar, sizeof(scalar), "%s/profiles/%s/executable", f_home, name) >= (int)sizeof(scalar) || !access(scalar, F_OK)) return NULL;
+        for (i = 0; builtins[i].name; i++) if (!strcmp(name, builtins[i].name)) { input = f_parse(builtins[i].json); break; }
+    }
     profile = agent_profile_validate(input); json_object_put(input); return profile;
 }
 bool agent_name(const char *name) { return name && *name && strlen(name) <= 64 && strspn(name, "abcdefghijklmnopqrstuvwxyz0123456789_-") == strlen(name); }
 bool agent_builtin(const char *name) {
     size_t i;
     for (i = 0; builtins[i].name; i++) if (!strcmp(name, builtins[i].name)) return true;
-    return !strcmp(name, "none") || !strcmp(name, "cursor") || !strcmp(name, "copilot") || !strcmp(name, "aider") || !strcmp(name, "gemini");
+    return !strcmp(name, "none") || !strcmp(name, "copilot") || !strcmp(name, "aider") || !strcmp(name, "gemini");
 }
 bool agent_capability(json_object *profile, const char *capability) {
     if (!strcmp(capability, "headless") || !strcmp(capability, "cancel")) return true;
@@ -76,7 +81,7 @@ bool agent_capability(json_object *profile, const char *capability) {
     if (!strcmp(capability, "resume")) return f_field(profile, "resume_argv") != NULL;
     if (!strcmp(capability, "observations")) return strcmp(f_string(profile, "adapter"), "none") != 0;
     if (!strcmp(capability, "permission-requests")) return !strcmp(f_string(profile, "adapter"), "canonical-jsonl");
-    if (!strcmp(capability, "usage")) return strcmp(f_string(profile, "adapter"), "none") != 0;
+    if (!strcmp(capability, "usage")) return strcmp(f_string(profile, "adapter"), "none") && strcmp(f_string(profile, "adapter"), "cursor-jsonl");
     return false;
 }
 json_object *agent_capabilities(json_object *profile) {

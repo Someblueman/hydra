@@ -96,7 +96,7 @@ ensure_ai_on_path() {
         echo "See README Quick Start." >&2
         return 1
     fi
-    if ! command -v "$_ai" >/dev/null 2>&1; then
+    if ! profile_executable_path "$_ai" >/dev/null 2>&1; then
         echo "Error: AI command '$_ai' is not installed or not on PATH" >&2
         echo "Next: pass --no-agent to spawn a shell-only head, install '$_ai', or set HYDRA_AI_COMMAND" >&2
         echo "See README Quick Start for the five-minute no-agent tour." >&2

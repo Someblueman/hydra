@@ -122,3 +122,14 @@ supervised exec path. See [Agent contract v1](AGENT_CONTRACT.md) for the finite
 profile schema, exact-session resume, capability evidence, output bounds, and
 retention, and [Workflow data](WORKFLOW_DATA.md) for sealed handoff and remote
 approval waits. Provider completion does not satisfy a verification gate.
+
+## Supported workflow agents
+
+Profile-based `exec` steps support Antigravity (`agy`), Cursor Agent (`cursor`),
+OpenCode (`opencode`), Claude Code (`claude`), Codex (`codex`), and Pi (`pi`).
+Imported profiles can add a plain script or another declared worker. Select the
+profile with `args.profile`, deliver a verified `prompt_input` or `prompt_file`,
+and require only capabilities the profile declares. Cursor does not declare usage
+reporting. Use an independent compare or gate step to verify the result.
+See [supported agents](PROFILES.md) and [the headless contract](AGENT_CONTRACT.md)
+for executable requirements, exact resume, and live qualification status.

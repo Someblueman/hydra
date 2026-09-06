@@ -73,7 +73,9 @@ See [EVENTS.md](EVENTS.md), [LIFECYCLE.md](LIFECYCLE.md), and
 ## Profiles, tasks, adapters, and scopes
 
 - Built-in and custom profile fields, confidence labels, and resolution order are
-  defined in [PROFILES.md](PROFILES.md).
+  defined in [PROFILES.md](PROFILES.md). Headless declarations, provider translations,
+  exact recorded-session resume, and capability requirements are versioned in
+  [AGENT_CONTRACT.md](AGENT_CONTRACT.md).
 - Task text is resolved before launch, stored privately, and delivered as one quoted
   argument. Events contain only its hash and byte count.
 - Adapter input is bounded canonical JSON schema v1 and must name the current

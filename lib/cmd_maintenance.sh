@@ -134,8 +134,8 @@ cmd_doctor() {
     echo ""
     echo "Agents:"
     _detected=""
-    for _agent in claude aider gemini codex cursor copilot; do
-        if command -v "$_agent" >/dev/null 2>&1; then
+    for _agent in claude aider gemini codex cursor agy opencode copilot; do
+        if profile_executable_path "$_agent" >/dev/null 2>&1; then
             if [ -z "$_detected" ]; then
                 _detected="$_agent"
             else

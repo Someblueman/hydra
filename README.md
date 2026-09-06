@@ -63,6 +63,11 @@ hydra doctor
 
 Add `$HOME/.local/bin` to your shell's `PATH` to keep the command available in new
 terminals. You can also run `bin/hydra` directly from a checkout without installing.
+Headless agents: **Antigravity (`agy`), Cursor Agent, OpenCode, Claude Code,
+Codex, and Pi**. See the [supported-agent matrix](docs/PROFILES.md) for interactive
+launch support, executable names, capabilities, and live qualification limits.
+Cursor requires `cursor-agent`; Claude remote qualification remains deferred.
+
 GitHub CLI, `fzf`, and coding agents are optional integrations. For a compiler-free
 local installation, skip `make build-fleet` and set `HYDRA_INSTALL_TUI=never` when
 running the installer.

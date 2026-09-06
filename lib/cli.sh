@@ -32,6 +32,8 @@ Commands:
   spawn --pr <#>    Create a head from an existing GitHub PR
   init              Initialize project identity, trust, profile, and worktree root
   agent             Inspect, probe, or import agent profiles
+                    Headless: agy (Antigravity), cursor (Cursor Agent), opencode,
+                              claude, codex, pi; inspect with agent contract NAME
   remote            Manage OpenSSH aliases: add NAME [USER@]SSH_ALIAS, remove NAME, list
   fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
                     Commands: list, doctor, handshake, bootstrap, package, init, spawn,

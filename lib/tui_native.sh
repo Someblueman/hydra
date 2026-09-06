@@ -104,28 +104,19 @@ tui_native_count_entries() {
 tui_native_set_profile_status() {
     _tnsps_profile="$1"
     _tned_adapter_source='hydra capabilities --json'
-    case "$_tnsps_profile" in
-        -|none)
-            _tned_adapter=none _tned_adapter_confidence=exact
-            ;;
-        claude|codex)
-            _tned_adapter=none _tned_adapter_confidence=verified-local-help
-            ;;
-        cursor|copilot|aider|gemini)
-            _tned_adapter=none _tned_adapter_confidence=launch-only
-            ;;
-        *)
-            if profile_exists "$_tnsps_profile" 2>/dev/null; then
-                _tned_adapter="$(profile_field "$_tnsps_profile" adapter 2>/dev/null || echo unavailable)"
-                _tned_adapter_confidence="$(profile_field "$_tnsps_profile" confidence 2>/dev/null || echo unavailable)"
-                _tned_adapter_source="$(profile_custom_dir "$_tnsps_profile" 2>/dev/null || printf '%s' 'hydra capabilities --json')"
-                _tned_adapter="$(tui_native_safe_field "$_tned_adapter")"
-                _tned_adapter_confidence="$(tui_native_safe_field "$_tned_adapter_confidence")"
-            else
-                _tned_adapter=unavailable _tned_adapter_confidence=unavailable
-            fi
-            ;;
-    esac
+    if [ "$_tnsps_profile" = - ] || [ "$_tnsps_profile" = none ]; then
+        _tned_adapter=none _tned_adapter_confidence=exact
+    elif profile_exists "$_tnsps_profile" 2>/dev/null; then
+        _tned_adapter="$(profile_field "$_tnsps_profile" adapter 2>/dev/null || echo unavailable)"
+        _tned_adapter_confidence="$(profile_field "$_tnsps_profile" confidence 2>/dev/null || echo unavailable)"
+        if [ -f "$HYDRA_HOME/profiles/$_tnsps_profile/executable" ]; then
+            _tned_adapter_source="$(profile_custom_dir "$_tnsps_profile")"
+        fi
+        _tned_adapter="$(tui_native_safe_field "$_tned_adapter")"
+        _tned_adapter_confidence="$(tui_native_safe_field "$_tned_adapter_confidence")"
+    else
+        _tned_adapter=unavailable _tned_adapter_confidence=unavailable
+    fi
 }
 
 tui_native_emit_invalid_heads() {

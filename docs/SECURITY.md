@@ -17,7 +17,9 @@ shell string can do anything that user can do.
   strings additionally require `allow_shell: true`; argv is the default.
 - Built-in profiles resolve one known executable name. Custom profiles require an
   existing absolute executable path and are recorded as user-declared. Hydra does
-  not infer provider hooks from executable presence.
+  not infer provider hooks from executable presence. The [supported-agent matrix](PROFILES.md)
+  separates interactive launch from headless adapters; the Cursor profile resolves
+  `cursor-agent`, and Antigravity/Cursor do not use Hydra credential copying.
 - Task text is stored in mode-0600 head state and delivered as one quoted argument.
   Events and provenance contain its hash and byte count, never its content.
 - Adapter input is capped at 8 KiB, must be canonical schema v1, and must correlate
