@@ -60,8 +60,8 @@ version number is chosen at release time from compatibility impact.
 
 Items below have no assigned release number. When work is selected, define the
 smallest coherent scope and its acceptance boundaries, then release it when ready.
-Priority may change with observed use. The numbered priorities build on fleet
-transport rather than expanding the pilot into a distributed scheduler.
+Priority may change with observed use. The numbered priorities reuse fleet
+transport and one workflow execution authority as coordination expands across hosts.
 
 ### Candidate features
 
@@ -100,24 +100,117 @@ fixture tests and local authentication do not close another provider's remote
 requirement. Claude remains explicitly deferred rather than blocking the other
 implemented profiles.
 
-#### 3. Resource admission and simple placement
+#### 3. Resource admission
 
-Start with explicit hosts and FIFO admission. Add automatic placement only after
-capacity and capability information can explain each decision.
+Start with explicit hosts and FIFO admission. Build this boundary alongside the
+first distributed DAG slice; automatic placement depends on it.
 
 - [ ] Add host/project concurrency limits, disk floors, capability labels, queue age,
-      and bounded backpressure. Reserve host-wide resources at the receiving host,
-      rather than trusting a stale client snapshot or project-local allocation alone.
-- [ ] Add eligible-host selection with inspectable reasons for placement or refusal.
-      Keep model/cost routing outside the scheduler's initial scope.
-- [ ] Before reassignment, define ownership generations and stale-update rejection.
-      Lease expiry alone must not duplicate unresolved external work.
+      and bounded backpressure. Reserve host-wide resources atomically at the
+      receiving host, rather than trusting client observations or project-local
+      allocation alone. Define reservation release and retain unresolved ownership.
+- [ ] Expose capacity, reservations, queue state, and observation freshness for
+      inspection and later placement. Treat CPU/memory observations as signals,
+      not enforcement or proof that another task can safely start.
 
 Acceptance: concurrent submitters cannot exceed the host's admission limit; stale
 capacity observations cannot overbook it. An incompatible or full host explains why
-work is queued or refused. An offline host does not trigger an unsafe duplicate.
+work is queued or refused. Queue deadlines and cancellation have bounded behavior;
+unknown execution does not silently release its claim.
 
-#### 4. Run diagnostics and bounded retention
+#### 4. Distributed DAG execution and independent validation
+
+Extend the existing finite workflow DAG across explicitly selected hosts. Producers
+create artifacts, validators examine those exact artifacts, and a deterministic
+policy step combines their evidence. An assembler produces a new candidate that
+must be validated again. These are workflow roles, not separate scheduler services.
+
+- [ ] Add individual remote steps through the existing fleet task interface, with
+      one durable coordinator per run. Persist the resolved graph, source/input
+      digests, policy, host assignment, exact package, and submission key before
+      dispatch. Bind the receipt once known and verify completion before advancing
+      dependents. Recover on the same coordinator host first.
+- [ ] Connect verified result collection to downstream task inputs and source
+      commits. Start with transfer through the coordinator; preserve immutable
+      artifact bindings and authorize derived tasks within the run's explicit
+      destinations and work recipes. Mutable branch names are not handoff identity.
+- [ ] Define versioned validation reports bound to artifact and validator-definition
+      digests. Separate process success from PASS/FAIL/INCONCLUSIVE verdicts. Require
+      all designated checks to pass initially; missing evidence and agent agreement
+      alone cannot satisfy a correctness gate. Protect the acceptance harness from
+      producer edits; separate sessions do not provide OS isolation.
+- [ ] Validate the assembled candidate, then use existing bound approval and
+      integration checks. Repairs create new candidates and bounded attempts;
+      previous validation does not authorize changed bytes.
+- [ ] Reconcile lost responses against the original host, package, and key. Keep
+      reconciliation, execution retry, and semantic repair distinct. Host-scoped
+      deduplication cannot prevent a second execution on another host. Defer
+      automatic coordinator failover and unresolved-task reassignment.
+
+Acceptance: a two-host fan-out, independent validation, evidence join, assembly,
+and combined-candidate check pass through the public CLI. Coordinator restart and
+lost acknowledgments preserve original task identities without duplicate execution.
+Bad artifacts, stale verdicts, validator errors, and a moved integration target
+prevent promotion. Replaying the same recorded observations yields the same
+scheduling decisions; this does not promise identical agent outputs or timings.
+
+Research basis (6 September 2026): the original
+[MapReduce model](https://research.google/pubs/mapreduce-simplified-data-processing-on-large-clusters/)
+combines values by key; validation is more naturally a separate DAG stage.
+[Temporal's architecture](https://github.com/temporalio/temporal/blob/main/docs/architecture/README.md)
+separates deterministic workflow decisions from effectful activities.
+[in-toto](https://in-toto.io/docs/getting-started/) supplies a precedent for linking
+steps through exact materials and products. These inform the design, not new runtime
+dependencies or claims that provenance proves correctness.
+
+#### 5. Load balancing across eligible hosts
+
+Extend resource admission with automatic placement of **new, unassigned work**.
+Explicit host pinning remains available. Implement this after assignment recovery
+and receiver reservations are qualified; it need not wait for dynamic task pools.
+
+- [ ] Filter hosts by authorized destination, project mapping, platform/toolchain,
+      adapter capabilities, resource requirements, freshness, and any validator
+      separation requirement. An idle incompatible host is not eligible.
+- [ ] Start with capacity-normalized reserved slots for comparable task classes,
+      bounded queues, and stable tie-breaks. Then evaluate queue-delay estimates,
+      measured task duration, and artifact-transfer cost as evidence warrants.
+      CPU utilization alone is insufficient for agents waiting on remote APIs;
+      account/provider limits shared across hosts need an explicit shared budget
+      authority before Hydra claims to enforce them fleet-wide.
+- [ ] Record candidate hosts, observations, ranking, policy version, and reservation
+      outcome. Receiver admission remains final. Reconsider placement after a
+      definitive refusal; an ambiguous dispatch remains assigned for reconciliation.
+- [ ] Add queue aging or bounded fair sharing where workloads demonstrate starvation.
+      Balance producer and validator demand so fan-out does not indefinitely delay
+      validation. Measure useful completions rather than pursuing equal CPU usage.
+- [ ] Consider rebalancing accepted but not-started work only with durable withdrawal
+      that prevents its old receiver from starting it, followed by confirmed release
+      and a new assignment generation. A lost withdrawal response blocks transfer.
+      Do not migrate running agents or replay uncertain effects as load balancing.
+- [ ] Before any broader reassignment, define enforced ownership generations and
+      stale-update rejection at receivers, result admission, and promotion. External
+      side effects require their own idempotency/fencing contract; lease expiry alone
+      must not authorize duplicate execution.
+
+Acceptance: heterogeneous-host trials compare explicit placement and simple balanced
+placement using queue wait, time to verified result, throughput, transfer bytes, and
+starvation. Record workload and observation traces; replay yields identical decisions.
+Race concurrent submitters, stale capacity, node drain, lost reservation/withdrawal
+responses, and late results. Admission limits and artifact bindings always hold;
+performance improvement is claimed only where repeated measurements support it.
+
+Research basis (6 September 2026): Kubernetes separates
+[filtering, scoring, and reservation](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/).
+[Dask scheduling](https://distributed.dask.org/en/latest/scheduling-policies.html)
+considers worker load and data locality. Its
+[transactional work stealing](https://distributed.dask.org/en/latest/work-stealing.html)
+checks that work has not started before moving it, but still documents duplicate
+execution risks during worker/network failures. Hydra should borrow the placement
+ideas while retaining its stricter unknown-outcome boundary. These are design
+recommendations; no Hydra balancing prototype or performance qualification exists.
+
+#### 6. Run diagnostics and bounded retention
 
 Explain what needs attention through existing CLI and TUI surfaces.
 
@@ -134,7 +227,7 @@ Acceptance: an operator can identify a blocked task's owner, reason, and next ac
 without reading raw state files. Retention stays bounded while preserving active
 recovery and the documented deduplication window.
 
-#### 5. Dynamic task pools and schedules
+#### 7. Dynamic task pools and schedules
 
 Select this work only when real workloads need newly discovered tasks or persistent
 queues that finite workflows cannot express cleanly.
@@ -142,6 +235,8 @@ queues that finite workflows cannot express cleanly.
 - [ ] Add file-backed pools with one coordinator, unique task claims, bounded
       outstanding work, cancellation/retry budgets, and stale-owner rejection.
       Reuse task execution and admission rather than adding another scheduler.
+      Seal bounded expansion manifests before scheduling; freeze join membership
+      and cap graph growth, artifact bytes, and repair rounds.
 - [ ] Start schedules through host timers invoking the same submission API. Define
       missed-run and duplicate-trigger behavior and the always-on owner needed for
       unattended scheduling; make reboot recovery an explicit opt-in contract.
@@ -173,7 +268,6 @@ prioritized backlog:
 
 - explicit dirty-source snapshots, including selected untracked and binary files,
   without silently committing or altering the caller's branch;
-- cross-host DAG steps after source/result transfer and coordinator recovery work;
 - optional isolated execution profiles, prioritized earlier if untrusted code is
   required; advisory scopes alone do not provide isolation;
 - ACP session adapters after pinning a protocol version and proving interoperability;
