@@ -126,6 +126,7 @@ static void native_observations_cancel(struct app *app, size_t source);
 #include "hydra_tui_statistics_model.inc"
 #include "hydra_tui_plan_model.inc"
 #include "hydra_tui_plan_projection.inc"
+#include "hydra_tui_plan_launch.inc"
 #include "hydra_tui_observations.inc"
 #include "hydra_tui_terminals.inc"
 #include "hydra_tui_ui.inc"

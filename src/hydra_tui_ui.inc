@@ -359,6 +359,18 @@ static int interactive_main(struct app *app) {
         else if (app->view==7 && key=='V') {
             if (!native_plan_compile(app)) copy_text(app->notice,sizeof(app->notice),"Load draft and policy with P before validation; an active compilation must finish first");
         }
+        else if (app->view==7 && key=='E') {
+            struct native_plan *p=app->plan;
+            if (p && p->state==PLAN_READY && !app->fleet) {
+                char digest[65],answer[128],prompt[256];
+                unsigned revision=p->revision;
+                copy_text(digest,sizeof(digest),p->digest);
+                snprintf(prompt,sizeof(prompt),"Execute revision %u? Type exact digest %s: ",revision,digest);
+                if (prompt_text(app,prompt,answer,sizeof(answer))==0 &&
+                    (!app->plan || app->plan->revision!=revision || strcmp(answer,digest) || !native_plan_launch(app,digest)))
+                    copy_text(app->notice,sizeof(app->notice),"Execution not submitted: digest, revision or launch state did not match. Review and validate again.");
+            } else copy_text(app->notice,sizeof(app->notice),"Validate a local plan with V and review its full scope before exact-digest execution approval.");
+        }
         else if (app->view == 7 && native_workspace_key(app, key)) { }
         else if (app->view == 5 && workflow_key(app, key)) { }
         else if (key == 'j') move_selection(app, 1);

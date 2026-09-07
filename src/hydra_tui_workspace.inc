@@ -203,7 +203,7 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
     }
     native_workspace_tree(app);
     dashboard_text(&c, 1, 0, width-2, TV_TITLE, "HYDRA WORKSPACE / %s / %s", w->mode==0 ? "A CONVERSATION" : w->mode==1 ? "B PLAN OVERVIEW" : "C MONITOR", app->snapshot_stale ? "STALE" : app->fleet ? "Fleet" : "Local");
-    if (!compact) dashboard_text(&c, 1, 1, width-2, TV_BORDER, "A conversation / B plan / C monitor / P load / V validate / D stats / z %s", w->zoom ? "restore panes" : "zoom focus");
+    if (!compact) dashboard_text(&c, 1, 1, width-2, TV_BORDER, "A conversation / B plan / C monitor / P load / V validate / E approve / D stats / z %s", w->zoom ? "restore panes" : "zoom focus");
     for (i = 0; i < w->layout.count; i++) {
         const struct tv_pane *p = &w->layout.panes[i];
         struct tv_canvas view, content;

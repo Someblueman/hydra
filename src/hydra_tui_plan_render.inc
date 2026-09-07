@@ -6,7 +6,9 @@ static void native_workspace_plan_text(struct app *app, struct tv_canvas *c, siz
     int x=0,y=1;
     static const char *states[]={"DRAFT / unvalidated","VALIDATING","INVALID","READY / awaiting approval","VIEW UNAVAILABLE"};
     if (!p) { tv_text(c,(struct tv_rect){0,0,c->width,c->height},"P load draft + policy / V validate",TV_WARNING); return; }
-    dashboard_text(c,0,0,c->width,TV_STRONG,"Revision %u / %s",p->revision,states[p->state]);
+    dashboard_text(c,0,0,c->width,TV_STRONG,"Revision %u / %s",p->revision,
+        p->state==PLAN_READY && !strcmp(p->digest,p->launched_digest) ?
+        (p->launched_run[0] ? "RUN RECORDED / C monitor" : "LAUNCH REQUESTED / awaiting run receipt") : states[p->state]);
     text=p->state==PLAN_DRAFT && p->source_bytes ? p->source_bytes : p->text;
     length=p->state==PLAN_DRAFT && p->source_bytes ? p->source_length : p->text_length;
     while (text && offset<length && y<c->height) {

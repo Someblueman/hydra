@@ -8,6 +8,10 @@ struct native_plan {
     unsigned revision, compilation;
     enum native_plan_state state;
     struct native_capture job;
+    struct native_capture launch_job;
+    pid_t owner_pid;
+    char launched_digest[65], launched_run[65], launch_state[32];
+    bool follow_launched_run;
     bool projecting;
     char *source_bytes, *policy_bytes, *text;
     size_t source_length, policy_length, text_length, text_scroll, selected;
@@ -49,6 +53,9 @@ static void native_plan_destroy(struct app *app) {
     struct native_plan *p=app->plan;
     if (!p) return;
     native_capture_destroy(&p->job);
+    native_capture_destroy(&p->launch_job);
+    /* The detached workflow owner outlives this UI. Never signal it here. */
+    if (p->owner_pid>0) (void)waitpid(p->owner_pid,NULL,WNOHANG);
     if (p->directory[0]) {
         unsigned i;
         char path[4096];
@@ -65,7 +72,7 @@ static bool native_plan_init(struct app *app) {
     if (app->plan) return true;
     p=calloc(1,sizeof(*p));
     if (!p) return false;
-    p->job.fd=-1; app->plan=p;
+    p->job.fd=-1; p->launch_job.fd=-1; app->plan=p;
     if (snprintf(p->directory,sizeof(p->directory),"%s/hydra-ui-plan.XXXXXX",temp && temp[0] ? temp : "/tmp")>=(int)sizeof(p->directory) || !mkdtemp(p->directory)) {
         p->directory[0]='\0'; native_plan_destroy(app); return false;
     }

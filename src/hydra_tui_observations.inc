@@ -16,6 +16,7 @@ static void native_observations_destroy(struct app *app) {
 static void native_observations_tick(struct app *app, bool request) {
     size_t i;
     native_plan_tick(app,request);
+    native_plan_launch_tick(app,request);
     if (!app->observations) {
         if (!request) return;
         app->observations=calloc(1,sizeof(*app->observations));

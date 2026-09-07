@@ -11,6 +11,12 @@ workflow_plan_tool() (
 cmd_workflow_plan() (
     _cwp_action="${1:-}"
     case "$_cwp_action" in
+        --workspace-owner|--workspace-status)
+            _load_lib workflow_plan_launch
+            shift
+            if [ "$_cwp_action" = --workspace-owner ]; then workflow_plan_launch_owner "$@"
+            else workflow_plan_launch_status "$@"; fi
+            ;;
         schema)
             [ "$#" -eq 1 ] || exit 1
             workflow_plan_tool schema

@@ -95,6 +95,9 @@ cmd_workflow() {
             : > "$_cw_tmp/events.jsonl"
             mv "$_cw_tmp" "$_cw_dir" || { rm -rf "$_cw_tmp"; return 1; }
             workflow_event "$_cw_dir" "" run.created
+            if [ -n "${_workflow_plan_launch:-}" ]; then
+                workflow_atomic_scalar "$_workflow_plan_launch/run-id" "$_cw_run" || return 1
+            fi
             printf '%s\n' "$_cw_run"
             workflow_drive "$_cw_dir"
             ;;

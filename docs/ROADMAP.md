@@ -368,8 +368,10 @@ The existing planning implementation is integrated into this branch; see the
 [planner recipe](PLANNER_RECIPE.md) and [compilation contract](PLAN_COMPILATION.md).
 The native workspace now loads draft/policy files with P, validates with V, shows
 revision-aware complete previews and dependencies, and preserves layout state
-across A/B/C/D. Native dialogs continue agent I/O. Exact-digest execution approval,
-full C evidence/intervention, and real agent-authored workflow acceptance remain
+across A/B/C/D. Native dialogs continue agent I/O. E accepts the exact displayed
+digest, rechecks the revision and delegates execution to a durable owner through
+the existing engine; UI exit and duplicate launch refusal are covered by a real
+workflow test. Full C evidence/intervention and real agent-authored workflow acceptance remain
 outstanding; the milestone checkboxes stay open until those criteria are met.
 
 ### Milestone 4: integrated working terminals

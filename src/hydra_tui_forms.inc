@@ -25,23 +25,38 @@ static int form_columns(const char *text, size_t length, bool ascii) {
     return columns;
 }
 static void form_draw(struct app *app, const char *prompt, const char *text, size_t cursor) {
-    struct tv_cell cells[512U*4U];
+    struct tv_cell cells[512U*8U];
     struct tv_canvas c;
-    int width=app->cols>512 ? 511 : app->cols-1, row, column;
-    size_t start=0;
+    int width=app->cols>512 ? 511 : app->cols-1, row, column, height, prompt_rows, x=0,y=1;
+    size_t start=0, offset=0, prompt_length=strlen(prompt);
     if (width<5 || app->rows<4) return;
-    (void)tv_init(&c,cells,512U*4U,width,4,!app->ascii);
+    prompt_rows=(form_columns(prompt,prompt_length,app->ascii)+width-1)/width;
+    if (prompt_rows<1) prompt_rows=1;
+    height=prompt_rows+3;
+    if (height>8) height=8;
+    if (height>app->rows) height=app->rows;
+    (void)tv_init(&c,cells,512U*8U,width,height,!app->ascii);
     tv_clear(&c,TV_BASE);
     while (start<cursor && form_columns(text+start,cursor-start,app->ascii)>=width-2) start=form_next(text,start,cursor);
     column=form_columns(text+start,cursor-start,app->ascii);
     tv_text(&c,(struct tv_rect){0,0,width,1},"INPUT TO HYDRA / text field",TV_SELECTED);
-    tv_text(&c,(struct tv_rect){0,1,width,1},prompt,TV_STRONG);
-    tv_text(&c,(struct tv_rect){0,2,width,1},text+start,TV_BASE);
-    if (cursor<strlen(text)) c.cells[(size_t)c.stride*2U+(size_t)column].style=TV_SELECTED;
-    else tv_put(&c,column,2,'_',TV_SELECTED);
-    tv_text(&c,(struct tv_rect){0,3,width,1},"Enter submit / Esc cancel",TV_BORDER);
-    for (row=0;row<4;row++) {
-        printf("\033[%d;1H",app->rows-3+row);
+    while (offset<prompt_length && y<height-2) {
+        uint32_t cp;
+        size_t used=tv_utf8_decode(prompt+offset,prompt_length-offset,&cp);
+        int columns;
+        if (!used) break;
+        offset+=used; columns=tv_codepoint_width(cp);
+        if (columns<0 || (app->ascii && cp>126)) { cp='?'; columns=1; }
+        if (x+columns>width) { x=0; y++; }
+        if (y<height-2) tv_put(&c,x,y,cp,TV_STRONG);
+        x+=columns;
+    }
+    tv_text(&c,(struct tv_rect){0,height-2,width,1},text+start,TV_BASE);
+    if (cursor<strlen(text)) c.cells[(size_t)c.stride*(size_t)(height-2)+(size_t)column].style=TV_SELECTED;
+    else tv_put(&c,column,height-2,'_',TV_SELECTED);
+    tv_text(&c,(struct tv_rect){0,height-1,width,1},"Enter submit / Esc cancel",TV_BORDER);
+    for (row=0;row<height;row++) {
+        printf("\033[%d;1H",app->rows-height+1+row);
         (void)tv_write_row(&c,row,stdout,dashboard_style,app);
     }
     fflush(stdout);
