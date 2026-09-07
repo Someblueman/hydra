@@ -244,3 +244,12 @@ test-fleet: build-fleet $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BU
 .PHONY: sanitize-fleet
 sanitize-fleet:
 	$(MAKE) BUILD_DIR=build/fleet-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-fleet
+
+# Local C quality pilot: use the same compiler flags as native builds.
+CLANG_TIDY ?= build/quality-tools/bin/clang-tidy
+QUALITY_C_SYSROOT = $(shell if [ "$$(uname -s)" = Darwin ]; then xcrun --show-sdk-path; fi)
+QUALITY_C_FLAGS = $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(if $(QUALITY_C_SYSROOT),-isysroot $(QUALITY_C_SYSROOT))
+.PHONY: quality-c
+quality-c:
+	@pkg-config --exists json-c
+	@$(CLANG_TIDY) --header-filter='(src|tests/c)/' --checks='-*,clang-analyzer-*,readability-function-cognitive-complexity' --config='{CheckOptions: {readability-function-cognitive-complexity.Threshold: 15, readability-function-cognitive-complexity.DescribeBasicIncrements: false}}' $(wildcard src/*.c src/fleet/*.c tests/c/*.c) -- $(QUALITY_C_FLAGS)

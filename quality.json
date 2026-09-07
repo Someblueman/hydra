@@ -7,11 +7,11 @@
     "tests",
     "install.sh",
     "uninstall.sh",
-    "assets/demos"
+    "assets/demos",
+    "src",
+    "Makefile"
   ],
   "exclude": [
-    "*.c",
-    "*.h",
     "*.py",
     "__pycache__/*",
     "*/__pycache__/*"
@@ -36,6 +36,30 @@
         "--version"
       ],
       "install": []
+    },
+    "clang-tidy": {
+      "command": [
+        "{root}/build/quality-tools/bin/clang-tidy"
+      ],
+      "version": "22.1.8",
+      "version_args": [
+        "--version"
+      ],
+      "install": [
+        [
+          "uv",
+          "venv",
+          "{root}/build/quality-tools"
+        ],
+        [
+          "uv",
+          "pip",
+          "install",
+          "--python",
+          "{root}/build/quality-tools/bin/python",
+          "clang-tidy==22.1.8"
+        ]
+      ]
     }
   },
   "checks": [
@@ -51,6 +75,25 @@
       ],
       "files": false,
       "stage": "fast",
+      "failure_codes": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "Hydra C analysis (complexity advisory)",
+      "tool": "make",
+      "args": [
+        "quality-c"
+      ],
+      "patterns": [
+        "*.c",
+        "*.h",
+        "*.inc",
+        "Makefile"
+      ],
+      "files": false,
+      "stage": "full",
       "failure_codes": [
         1,
         2
