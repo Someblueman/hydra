@@ -95,6 +95,60 @@ static int cursor(json_object *input, const char *type, struct agent_event *even
     if (!strcmp(type, "error")) { event->kind = "observation"; event->status = "failed"; return 1; }
     return 0;
 }
+static int codex(json_object *input, const char *type, struct agent_event *event) {
+    if (!strcmp(type, "thread.started")) { event->kind = "session"; event->session = f_string(input, "thread_id"); return event->session ? 1 : -1; }
+    if (!strcmp(type, "turn.started")) { event->kind = "observation"; event->status = "running"; return 1; }
+    if (!strcmp(type, "turn.completed")) {
+        event->kind = "usage"; event->status = "idle"; event->usage = usage(f_field(input, "usage"), "input_tokens", "output_tokens", "cached_input_tokens"); return event->usage ? 1 : -1;
+    }
+    if (!strcmp(type, "turn.failed") || !strcmp(type, "error")) { event->kind = "observation"; event->status = "failed"; return 1; }
+    if (!strcmp(type, "item.completed")) {
+        json_object *item = f_field(input, "item"); const char *kind = f_string(item, "type");
+        if (kind && !strcmp(kind, "agent_message")) { event->kind = "result"; event->text = f_string(item, "text"); return event->text ? 1 : -1; }
+    }
+    return 0;
+}
+static int claude(json_object *input, const char *type, struct agent_event *event) {
+    if (!strcmp(type, "system")) {
+        const char *subtype = f_string(input, "subtype");
+        if (subtype && !strcmp(subtype, "init")) { event->kind = "session"; event->session = f_string(input, "session_id"); return event->session ? 1 : -1; }
+    }
+    if (!strcmp(type, "result")) {
+        json_object *error = f_field(input, "is_error");
+        event->kind = "result"; event->text = f_string(input, "result");
+        if (!json_object_is_type(error, json_type_boolean) ||
+            (!json_object_get_boolean(error) && !event->text)) return -1;
+        event->status = json_object_get_boolean(error) ? "failed" : "idle";
+        event->usage = usage(f_field(input, "usage"), "input_tokens", "output_tokens", "cache_read_input_tokens");
+        return event->usage ? 1 : -1;
+    }
+    return 0;
+}
+static int pi(json_object *input, const char *type, struct agent_event *event) {
+    if (!strcmp(type, "session")) { event->kind = "session"; event->session = f_string(input, "id"); return event->session ? 1 : -1; }
+    if (!strcmp(type, "agent_start")) { event->kind = "observation"; event->status = "running"; return 1; }
+    if (!strcmp(type, "agent_end")) { event->kind = "observation"; event->status = "idle"; return 1; }
+    if (!strcmp(type, "message_end")) {
+        json_object *message = f_field(input, "message"); const char *role = f_string(message, "role");
+        if (role && !strcmp(role, "assistant")) {
+            const char *reason = f_string(message, "stopReason");
+            event->kind = "result"; event->text = content_text(f_field(message, "content"));
+            event->status = reason && (!strcmp(reason, "error") || !strcmp(reason, "aborted")) ? "failed" : NULL;
+            event->usage = usage(f_field(message, "usage"), "input", "output", "cacheRead"); return event->usage ? 1 : -1;
+        }
+    }
+    return 0;
+}
+static int opencode(json_object *input, const char *type, struct agent_event *event) {
+    event->session = f_string(input, "sessionID");
+    if (!strcmp(type, "step_start")) { event->kind = "observation"; event->status = "running"; return 1; }
+    if (!strcmp(type, "text")) { event->kind = "result"; event->text = f_string(f_field(input, "part"), "text"); return event->text ? 1 : -1; }
+    if (!strcmp(type, "step_finish")) {
+        event->kind = "usage"; event->status = "idle"; event->usage = usage(f_field(f_field(input, "part"), "tokens"), "input", "output", NULL); return event->usage ? 1 : -1;
+    }
+    if (!strcmp(type, "error")) { event->kind = "observation"; event->status = "failed"; return 1; }
+    return event->session ? 1 : 0;
+}
 int agent_decode(const char *adapter, json_object *input, struct agent_event *event) {
     const char *type = f_string(input, "type");
     memset(event, 0, sizeof(*event));
@@ -103,59 +157,9 @@ int agent_decode(const char *adapter, json_object *input, struct agent_event *ev
     if (!type) return -1;
     if (!strcmp(adapter, "cursor-jsonl")) return cursor(input, type, event);
     if (!strcmp(adapter, "canonical-jsonl")) return canonical(input, event);
-    if (!strcmp(adapter, "codex-jsonl")) {
-        if (!strcmp(type, "thread.started")) { event->kind = "session"; event->session = f_string(input, "thread_id"); return event->session ? 1 : -1; }
-        if (!strcmp(type, "turn.started")) { event->kind = "observation"; event->status = "running"; return 1; }
-        if (!strcmp(type, "turn.completed")) {
-            event->kind = "usage"; event->status = "idle"; event->usage = usage(f_field(input, "usage"), "input_tokens", "output_tokens", "cached_input_tokens"); return event->usage ? 1 : -1;
-        }
-        if (!strcmp(type, "turn.failed") || !strcmp(type, "error")) { event->kind = "observation"; event->status = "failed"; return 1; }
-        if (!strcmp(type, "item.completed")) {
-            json_object *item = f_field(input, "item"); const char *kind = f_string(item, "type");
-            if (kind && !strcmp(kind, "agent_message")) { event->kind = "result"; event->text = f_string(item, "text"); return event->text ? 1 : -1; }
-        }
-        return 0;
-    }
-    if (!strcmp(adapter, "claude-jsonl")) {
-        if (!strcmp(type, "system")) {
-            const char *subtype = f_string(input, "subtype");
-            if (subtype && !strcmp(subtype, "init")) { event->kind = "session"; event->session = f_string(input, "session_id"); return event->session ? 1 : -1; }
-        }
-        if (!strcmp(type, "result")) {
-            json_object *error = f_field(input, "is_error");
-            event->kind = "result"; event->text = f_string(input, "result");
-            if (!json_object_is_type(error, json_type_boolean) ||
-                (!json_object_get_boolean(error) && !event->text)) return -1;
-            event->status = json_object_get_boolean(error) ? "failed" : "idle";
-            event->usage = usage(f_field(input, "usage"), "input_tokens", "output_tokens", "cache_read_input_tokens");
-            return event->usage ? 1 : -1;
-        }
-        return 0;
-    }
-    if (!strcmp(adapter, "pi-jsonl")) {
-        if (!strcmp(type, "session")) { event->kind = "session"; event->session = f_string(input, "id"); return event->session ? 1 : -1; }
-        if (!strcmp(type, "agent_start")) { event->kind = "observation"; event->status = "running"; return 1; }
-        if (!strcmp(type, "agent_end")) { event->kind = "observation"; event->status = "idle"; return 1; }
-        if (!strcmp(type, "message_end")) {
-            json_object *message = f_field(input, "message"); const char *role = f_string(message, "role");
-            if (role && !strcmp(role, "assistant")) {
-                const char *reason = f_string(message, "stopReason");
-                event->kind = "result"; event->text = content_text(f_field(message, "content"));
-                event->status = reason && (!strcmp(reason, "error") || !strcmp(reason, "aborted")) ? "failed" : NULL;
-                event->usage = usage(f_field(message, "usage"), "input", "output", "cacheRead"); return event->usage ? 1 : -1;
-            }
-        }
-        return 0;
-    }
-    if (!strcmp(adapter, "opencode-jsonl")) {
-        event->session = f_string(input, "sessionID");
-        if (!strcmp(type, "step_start")) { event->kind = "observation"; event->status = "running"; return 1; }
-        if (!strcmp(type, "text")) { event->kind = "result"; event->text = f_string(f_field(input, "part"), "text"); return event->text ? 1 : -1; }
-        if (!strcmp(type, "step_finish")) {
-            event->kind = "usage"; event->status = "idle"; event->usage = usage(f_field(f_field(input, "part"), "tokens"), "input", "output", NULL); return event->usage ? 1 : -1;
-        }
-        if (!strcmp(type, "error")) { event->kind = "observation"; event->status = "failed"; return 1; }
-        return event->session ? 1 : 0;
-    }
+    if (!strcmp(adapter, "codex-jsonl")) return codex(input, type, event);
+    if (!strcmp(adapter, "claude-jsonl")) return claude(input, type, event);
+    if (!strcmp(adapter, "pi-jsonl")) return pi(input, type, event);
+    if (!strcmp(adapter, "opencode-jsonl")) return opencode(input, type, event);
     return -1;
 }
