@@ -1,7 +1,16 @@
 #!/bin/sh
 
 case "${1:-}:${2:-}" in
+    fleet:tui-visual-data)
+        fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
+        cat "$fixture_dir/fleet-v2.tsv"
+        ;;
+    workflow:tui-data)
+        fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
+        cat "$fixture_dir/workflow-v1.tsv"
+        ;;
     tui:--data)
+        if [ -n "${HYDRA_TEST_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_FAIL_FILE" ]; then exit 1; fi
         if [ -n "${HYDRA_TUI_FIXTURE:-}" ]; then
             cat "$HYDRA_TUI_FIXTURE"
         else

@@ -1,0 +1,6 @@
+HYDRA_FLEET_TUI	2
+T	builder	responded	1	-
+F	builder	/work/project	feature-build	head_aaaaaaaaaaaaaaaaaaaa	instance_aaaaaaaaaaaaaaaaaaaa	running
+T	empty	responded	0	-
+T	offline	failed	0	offline
+R	fleet	offline	offline	observed	reconcile

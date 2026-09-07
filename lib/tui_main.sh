@@ -147,9 +147,13 @@ cmd_tui() {
             tui_native_run
             return $?
             ;;
+        --view|--theme|--ascii|--no-color)
+            tui_native_run "$@"
+            return $?
+            ;;
         *)
             echo "Error: unknown TUI option '$1'" >&2
-            echo "Usage: hydra tui [--basic|--capabilities [--json]|--headless-fixture FILE ...]" >&2
+            echo "Usage: hydra tui [--basic|--capabilities [--json]|--view NAME|--theme NAME|--ascii|--no-color|--headless-fixture FILE ...]" >&2
             return 2
             ;;
     esac

@@ -39,6 +39,19 @@ for code in host_key_failed authentication_failed offline timeout invalid_respon
     grep -q "\"code\":\"$code\"" "$fixture/result"
 done
 grep -q '"partial":true' "$fixture/result"
+"$root/bin/hydra" fleet tui-data > "$fixture/tui-v1"
+[ "$(head -n 1 "$fixture/tui-v1")" = "$(printf 'HYDRA_FLEET_TUI\t1')" ]
+if grep -q '^T' "$fixture/tui-v1"; then echo 'legacy fleet data changed'; exit 1; fi
+"$root/bin/hydra" fleet tui-visual-data > "$fixture/tui-v2"
+awk -F '\t' '$1=="T" && $2=="good" && $3=="responded" && $4==0 {empty=1}
+    $1=="T" && $2=="offline" && $3=="failed" && $5=="offline" {failed=1}
+    END {exit !(empty && failed)}' "$fixture/tui-v2"
+if [ -x "$root/build/hydra-tui" ]; then
+    "$root/build/hydra-tui" --fleet --headless-fixture "$fixture/tui-v2" --view hosts --ascii --size 140x30 > "$fixture/hosts.out"
+    grep -q 'good.*responded.*0 heads' "$fixture/hosts.out"
+    grep -q 'offline.*failed' "$fixture/hosts.out"
+    grep -q 'CPU / memory / load: unavailable' "$fixture/hosts.out"
+fi
 for host in key auth offline malformed skew good; do "$root/bin/hydra" remote remove "$host" >/dev/null; done
 HYDRA_TEST_SSH_PID="$fixture/ssh-pid"
 export HYDRA_TEST_SSH_PID

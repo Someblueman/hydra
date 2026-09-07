@@ -10,6 +10,10 @@ remains the only mutation and policy authority.
 hydra tui                 # native-first; visibly falls back to the basic TUI
 hydra tui --basic         # explicit basic recovery path
 hydra tui --capabilities  # availability and observation diagnostics
+hydra tui --view heads    # original head table
+hydra tui --view workflows # recorded workflow dependency graph
+hydra tui --ascii         # ASCII graphics on terminals/fonts without Unicode
+hydra tui --theme dark    # fixed dark palette; terminal and light also supported
 ```
 
 Plain `hydra tui` falls back visibly to the basic TUI when the native binary is
@@ -30,6 +34,35 @@ flow-control, and terminal-matrix reliability. Control mode therefore remains of
 instead of becoming an unqualified event authority.
 
 ## Views and confidence
+
+The interactive default is an overview dashboard. Wide terminals show summary
+cards, a selectable head table, selected-head details, queue history, session-state
+distribution, and changed-file bars. At 80 columns the overview stacks the table
+and chart; very small terminals prioritize readable selection and navigation.
+`o` returns to the overview, `w` opens workflows, and `H` opens remote hosts.
+The deterministic headless interface retains its original default head table.
+
+Queue history holds up to 120 refresh observations, not repaint frames. Its
+horizontal domain is **samples**, since collection intervals can vary. Only heads
+with a recorded identity contribute to this known-data count. Failed refreshes
+create gaps; they do not fabricate zero entries. The last good snapshot remains
+visible with a stale indication and its age. Session state and file-change bars
+are snapshot distributions, not throughput or completion estimates.
+
+Workflow graphs read recorded local runs through `hydra workflow tui-data`.
+Arrows go from prerequisite to dependent. `j/k` selects a node, `[/]` switches
+runs, and `h/l/J/K` pans. `Enter` recenters on selection. Mouse clicks select
+visible nodes; a narrow terminal shows the selected step and its dependencies.
+The model rejects duplicate IDs, missing dependencies, and cycles. Its bounds are
+32 runs, 512 total steps, 128 steps and 512 edges per graph. Limit or missing-record
+warnings remain visible; this view never executes or repairs a workflow.
+
+`hydra fleet tui` supplies remote observations. The host view includes successful
+empty hosts and failed hosts, distinguishes a list response from process liveness,
+and exposes the failure code. Selecting a host and pressing `Enter` filters the
+head list. CPU, memory, and load are explicitly unavailable: the current remote
+protocol does not collect them. Remote workflow graphs are likewise not present;
+the graph view covers Hydra's existing local workflow records.
 
 The head list puts branch identity first, followed by session status. Wider
 terminals also show the agent and reported outcome. Session liveness never implies
@@ -62,10 +95,13 @@ row; selection markers and labels remain usable with `NO_COLOR` or `--no-color`.
 
 | Key | Action |
 | --- | --- |
-| `j` / `k`, arrows | Move through heads |
+| `j` / `k`, arrows | Move through heads, workflow nodes, hosts, or recovery findings |
 | `Enter` | Open selected-head detail |
-| `v` | Cycle heads, detail, coordination, and recovery views |
-| `/` | Search branch, session, group, or profile |
+| `v` | Cycle heads, detail, coordination, recovery, overview, workflows, and hosts |
+| `o` / `w` / `H` | Open overview / workflow graph / hosts |
+| `[` / `]` | Previous / next recorded workflow run |
+| `h` / `l` / `J` / `K` | Pan the workflow graph left / right / down / up |
+| `/` | Search branch, session, group, profile, remote host, or project |
 | `:` | Search explicit local actions |
 | `p` | Open details and toggle sanitized terminal output |
 | `d` | Toggle diagnostics for the selected head or recovery finding |

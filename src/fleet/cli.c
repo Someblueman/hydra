@@ -96,7 +96,9 @@ json_object *f_cli(int argc, char **argv) {
     if (result) return result;
     if (!strcmp(action, "handshake") && !options.name) return f_handshake();
     if (!strcmp(action, "tui")) return launch_tui();
-    if (!strcmp(action, "tui-data")) { (void)f_tui_data(1, 16); return NULL; }
+    if (!strcmp(action, "tui-data") || !strcmp(action, "tui-visual-data")) {
+        (void)f_tui_data(1, 16, !strcmp(action, "tui-visual-data")); return NULL;
+    }
     if (!strcmp(action, "package")) {
         if (!options.source || !options.binary || !options.output) return f_error("fleet-package", "invalid_input", "source, target binary, and output are required");
         result = f_package(options.source, options.binary);

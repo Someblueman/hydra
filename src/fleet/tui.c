@@ -14,12 +14,18 @@ static bool routable(const char *value, size_t limit) {
     for (; *p; p++) if (*p < 32 || *p == 127) return false;
     return true;
 }
-int f_tui_data(unsigned seconds, unsigned jobs) {
+int f_tui_data(unsigned seconds, unsigned jobs, bool include_hosts) {
     json_object *result = f_aggregate("list", seconds, jobs), *hosts = f_field(f_field(result, "data"), "hosts"); size_t i, j;
-    puts("HYDRA_FLEET_TUI\t1");
+    puts(include_hosts ? "HYDRA_FLEET_TUI\t2" : "HYDRA_FLEET_TUI\t1");
     if (!json_object_is_type(hosts, json_type_array)) puts("R\tfleet\tall\tlimit or adapter failure\tobserved\tinspect CLI");
     for (i = 0; json_object_is_type(hosts, json_type_array) && i < json_object_array_length(hosts); i++) {
         json_object *host = json_object_array_get_idx(hosts, i), *heads = f_field(f_field(host, "data"), "heads"); const char *name = f_string(host, "host");
+        if (include_hosts) {
+            bool ok = json_object_get_boolean(f_field(host, "ok"));
+            printf("T\t"); field(name); printf("\t%s\t%zu\t", ok ? "responded" : "failed",
+                json_object_is_type(heads, json_type_array) ? json_object_array_length(heads) : 0);
+            field(ok ? "-" : f_string(f_field(host, "error"), "code")); putchar('\n');
+        }
         if (!json_object_get_boolean(f_field(host, "ok"))) {
             printf("R\tfleet\t"); field(name); printf("\t"); field(f_string(f_field(host, "error"), "code")); puts("\tobserved\treconcile"); continue;
         }
