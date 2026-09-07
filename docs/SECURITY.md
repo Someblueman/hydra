@@ -10,7 +10,11 @@ shell string can do anything that user can do.
 - Repository `.hydra` configuration and hooks are untrusted until `hydra init
   --trust` records their exact content hash for this host. Any relevant content
   change invalidates that decision. `.hydra/local.yml` is host-local, ignored by
-  Git, mode 0600, and excluded from the repository trust hash.
+  Git, mode 0600, and excluded from the repository trust hash. This exemption
+  applies only to that root file, not nested files with the same name. Repository
+  configuration must contain regular files and directories: symbolic links,
+  special files, and newline-bearing paths cannot be approved. Replace links with
+  reviewed regular files and run `hydra init --trust` again after upgrading.
 - Repository workflow definitions share that trust boundary. All workflow commands
   refuse a repository definition whose `.hydra` hash is absent or changed; an
   explicit definition outside `.hydra` can be inspected or run directly. Command

@@ -23,6 +23,10 @@ cmd_init() {
         cli_error init not_git_repository "hydra init must run inside a Git repository" "cd into a repository and retry"
         return 1
     }
+    if [ -L "$_ci_root/.hydra" ]; then
+        cli_error init unsafe_configuration "repository .hydra must not be a symbolic link" "replace the link with reviewed regular configuration files"
+        return 1
+    fi
     _ci_project="$(hydra_ensure_project_id)" || return 1
     if [ -z "$_ci_profile" ]; then
         _ci_profile="$(profile_resolve "")" || return 1
@@ -72,7 +76,10 @@ cmd_init() {
     atomic_replace "$_ci_local" "$_ci_local_tmp" || return 1
 
     if [ "$_ci_trust" -eq 1 ]; then
-        project_set_trusted || return 1
+        project_set_trusted || {
+            cli_error init unsafe_configuration "cannot approve repository configuration" "use readable regular files and directories without symbolic links or newline-bearing paths"
+            return 1
+        }
         _ci_trusted=true
     else
         _ci_trusted=false

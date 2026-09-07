@@ -6,7 +6,7 @@
 #include <locale.h>
 #include <stdlib.h>
 #include <string.h>
-#define HYDRA_TUI_VERSION "2.2.0"
+#define HYDRA_TUI_VERSION "2.2.1"
 #define HYDRA_TUI_PROTOCOL 2
 
 /* Command-line parsing and process entry point. */

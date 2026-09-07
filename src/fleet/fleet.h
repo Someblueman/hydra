@@ -11,7 +11,7 @@
 #define F_LIMIT (8U * 1024U * 1024U)
 #define F_PATH 4096
 #define F_PROTOCOL 1
-#define F_VERSION "2.2.0"
+#define F_VERSION "2.2.1"
 /* Process configuration is initialized by main before dispatch. */
 extern const char *f_home, *f_hydra;
 #endif
