@@ -39,8 +39,8 @@ file_hash() {
 echo "Running native install tests..."
 echo "==============================="
 
-HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_CORE_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-core.sh" >/dev/null
-HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_TUI_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-tui.sh" >/dev/null
+HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_CORE_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" core >/dev/null
+HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_TUI_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" tui >/dev/null
 prefix="$test_root/offline-prefix"
 home="$test_root/home"
 mkdir -p "$home"

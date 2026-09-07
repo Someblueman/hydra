@@ -74,8 +74,7 @@ static void write_input(int fd, const char *data, size_t length) {
         }
     }
     if (written != length) {
-        fprintf(stderr, "failed to write pseudo-terminal input: %s\n",
-                errno == 0 ? "short write" : strerror(errno));
+        fprintf(stderr, "short pseudo-terminal input write: %zu of %zu bytes\n", written, length);
         exit(1);
     }
 }
@@ -91,12 +90,35 @@ static bool same_terminal(const struct termios *left, const struct termios *righ
            memcmp(left->c_cc, right->c_cc, sizeof(left->c_cc)) == 0;
 }
 
+static void child_session(const struct session *session, const char *tui, const char *hydra, const char *fake_bin) {
+    char path[4096];
+    const char *old_path = getenv("PATH");
+    char *tui_path = strdup(tui), *hydra_path = strdup(hydra);
+    if (!tui_path || !hydra_path) _exit(119);
+    snprintf(path, sizeof(path), "%s:%s", fake_bin, old_path == NULL ? "" : old_path);
+    close(session->master);
+    if (setsid() < 0) _exit(120);
+#ifdef TIOCSCTTY
+    (void)ioctl(session->slave, TIOCSCTTY, 0);
+#endif
+    if (dup2(session->slave, STDIN_FILENO) < 0 || dup2(session->slave, STDOUT_FILENO) < 0 ||
+        dup2(session->slave, STDERR_FILENO) < 0) _exit(121);
+    if (session->slave > STDERR_FILENO) close(session->slave);
+    setenv("TERM", "xterm-256color", 1);
+    if (getenv("HYDRA_TEST_COLOR") != NULL) unsetenv("NO_COLOR");
+    else setenv("NO_COLOR", "1", 1);
+    setenv("PATH", path, 1);
+    execl(tui_path, tui_path, "--hydra", hydra_path, (char *)NULL);
+    _exit(127);
+}
+
 static int open_session(struct session *session, const char *tui, const char *hydra,
                         const char *fake_bin, unsigned short cols, unsigned short rows) {
     char *slave_name;
     struct winsize size;
     pid_t pid;
     *session = (struct session){.pid = -1, .master = -1, .slave = -1};
+    if (!tui || !hydra || !fake_bin) return -1;
     session->master = posix_openpt(O_RDWR | O_NOCTTY);
     if (session->master < 0 || grantpt(session->master) != 0 || unlockpt(session->master) != 0) goto failed;
     slave_name = ptsname(session->master);
@@ -108,27 +130,7 @@ static int open_session(struct session *session, const char *tui, const char *hy
     if (ioctl(session->master, TIOCSWINSZ, &size) != 0) goto failed;
     pid = fork();
     if (pid < 0) goto failed;
-    if (pid == 0) {
-        char path[4096];
-        const char *old_path = getenv("PATH");
-        char *tui_path = strdup(tui), *hydra_path = strdup(hydra);
-        if (!tui_path || !hydra_path) _exit(119);
-        snprintf(path, sizeof(path), "%s:%s", fake_bin, old_path == NULL ? "" : old_path);
-        close(session->master);
-        if (setsid() < 0) _exit(120);
-#ifdef TIOCSCTTY
-        (void)ioctl(session->slave, TIOCSCTTY, 0);
-#endif
-        if (dup2(session->slave, STDIN_FILENO) < 0 || dup2(session->slave, STDOUT_FILENO) < 0 ||
-            dup2(session->slave, STDERR_FILENO) < 0) _exit(121);
-        if (session->slave > STDERR_FILENO) close(session->slave);
-        setenv("TERM", "xterm-256color", 1);
-        if (getenv("HYDRA_TEST_COLOR") != NULL) unsetenv("NO_COLOR");
-        else setenv("NO_COLOR", "1", 1);
-        setenv("PATH", path, 1);
-        execl(tui_path, tui_path, "--hydra", hydra_path, (char *)NULL);
-        _exit(127);
-    }
+    if (pid == 0) child_session(session, tui, hydra, fake_bin);
     session->pid = pid;
     (void)fcntl(session->master, F_SETFL, fcntl(session->master, F_GETFL) | O_NONBLOCK);
     return 0;
@@ -467,6 +469,10 @@ int main(int argc, char **argv) {
     if (getenv("HYDRA_TEST_SLOW_HYDRA") != NULL) {
         test_preflight_failure(argv[1], getenv("HYDRA_TEST_SLOW_HYDRA"), argv[3], 80, 24, 4,
                                "hung adapter is terminated by the bounded refresh timeout");
+    }
+    if (getenv("HYDRA_TEST_EOF_HYDRA") != NULL) {
+        test_preflight_failure(argv[1], getenv("HYDRA_TEST_EOF_HYDRA"), argv[3], 80, 24, 4,
+                               "adapter deadline remains bounded after stdout EOF");
     }
     test_crash_fallback(getenv("HYDRA_TEST_CRASH_DISPATCH"), argv[3]);
     printf("Tests: %d, Failed: %d\n", tests, failures);

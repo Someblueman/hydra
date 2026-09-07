@@ -59,12 +59,14 @@ bool f_number_is(json_object *obj, const char *key, int expected) {
     json_object *value = f_field(obj, key);
     return json_object_is_type(value, json_type_int) && json_object_get_int64(value) == expected;
 }
-const char *f_string(json_object *obj, const char *key) {
-    json_object *value = f_field(obj, key);
+const char *f_text(json_object *value) {
     const char *text;
     if (!json_object_is_type(value, json_type_string)) return NULL;
     text = json_object_get_string(value);
     return strlen(text) == (size_t)json_object_get_string_len(value) ? text : NULL;
+}
+const char *f_string(json_object *obj, const char *key) {
+    return f_text(f_field(obj, key));
 }
 void f_string_add(json_object *obj, const char *key, const char *value) {
     json_object_object_add(obj, key, json_object_new_string(value ? value : ""));

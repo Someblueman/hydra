@@ -42,7 +42,7 @@ static int files_valid(json_object *files, json_object *outputs, json_object *he
         int64_t size = json_object_get_int64(bytes); char path[F_PATH], hash[65]; int status;
         if (!task_keys(file, outputs ? artifact_keys : evidence_keys) || !task_path(relative) || !task_hex(digest, 64) ||
             !json_object_is_type(bytes, json_type_int) || size < 0 || size > (int64_t)limit || !hex || !task_hex(hex, (size_t)size * 2)) return -1;
-        if (outputs && (strcmp(relative, task_text(json_object_array_get_idx(outputs, i))) || !head_exists(heads, f_string(file, "head_id")))) return -1;
+        if (outputs && (strcmp(relative, f_text(json_object_array_get_idx(outputs, i))) || !head_exists(heads, f_string(file, "head_id")))) return -1;
         for (j = 0; j < i; j++) if (!strcmp(relative, f_string(json_object_array_get_idx(files, j), "path"))) return -1;
         if (f_path(path, sizeof(path), scratch, "file") || f_hex_write(path, hex, 0600)) return -1;
         status = f_hash(path, hash); unlink(path); if (status || strcmp(hash, digest)) return -1;

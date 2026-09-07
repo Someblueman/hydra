@@ -1,6 +1,6 @@
 #ifndef HYDRA_PLAN_H
 #define HYDRA_PLAN_H
-#include "workflow_data.h"
+#include "fleet.h"
 
 #define PLAN_LIMIT (256U * 1024U)
 #define PLAN_STEPS 64U

@@ -1,4 +1,5 @@
 #include "agent.h"
+#include "task.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -16,7 +17,7 @@ static bool argument_list(json_object *list, bool substitutions) {
     const char *const keys[] = {"input", NULL}; size_t i;
     if (!json_object_is_type(list, json_type_array) || json_object_array_length(list) > AGENT_ARGS) return false;
     for (i = 0; i < json_object_array_length(list); i++) {
-        json_object *arg = json_object_array_get_idx(list, i); const char *text = task_text(arg);
+        json_object *arg = json_object_array_get_idx(list, i); const char *text = f_text(arg);
         if (text) { if (strlen(text) > 4096) return false; }
         else {
             const char *slot = f_string(arg, "input");
@@ -100,7 +101,7 @@ json_object *agent_arguments(json_object *profile, const char *mode, json_object
     if (!definition) goto bad;
     json_object_array_add(args, json_object_new_string(f_string(profile, "executable")));
     for (i = 0; i < json_object_array_length(definition); i++) {
-        json_object *arg = json_object_array_get_idx(definition, i); const char *text = task_text(arg);
+        json_object *arg = json_object_array_get_idx(definition, i); const char *text = f_text(arg);
         if (!text) {
             const char *slot = f_string(arg, "input");
             text = slot ? f_string(values, slot) : NULL;

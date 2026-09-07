@@ -9,7 +9,6 @@
 bool task_path(const char *path);
 bool task_hex(const char *text, size_t length);
 bool task_keys(json_object *object, const char *const keys[]);
-const char *task_text(json_object *value);
 /* Validation also creates a canonical copy; the caller owns the result. */
 json_object *task_spec(json_object *input, bool prepared);
 int task_json_hash(json_object *object, const char *scratch, char digest[65]);

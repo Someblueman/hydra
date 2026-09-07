@@ -8,7 +8,7 @@
 const char *f_home, *f_hydra;
 static void stopped(int signal_number) { f_stopped = signal_number; }
 int main(int argc, char **argv) {
-    char home[F_PATH]; json_object *result = NULL; int status;
+    static char home[F_PATH]; json_object *result = NULL; int status;
     f_home = getenv("HYDRA_HOME"); f_hydra = getenv("HYDRA_BIN_CMD");
     if (!f_home) { if (!getenv("HOME") || f_path(home, sizeof(home), getenv("HOME"), ".hydra")) return 1; f_home = home; }
     if (!f_hydra) f_hydra = "hydra";

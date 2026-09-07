@@ -52,18 +52,28 @@ static void coverage(json_object *plan, json_object *errors) {
             plan_error(errors, "requirements", "uncovered_requirement", "every requirement needs an explicit criterion and a check for its final deliverable");
     }
 }
-int plan_graph(json_object *plan, json_object *errors) {
-    bool reach[PLAN_STEPS][PLAN_STEPS] = {{false}};
-    json_object *steps = f_field(plan, "steps"); size_t n = json_object_array_length(steps), i, j, k, a, b;
+static void dependencies(json_object *steps, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors) {
+    size_t n = json_object_array_length(steps), i, j, k;
     for (i = 0; i < n; i++) {
         json_object *needs = f_field(json_object_array_get_idx(steps, i), "needs");
         for (j = 0; j < json_object_array_length(needs); j++) {
-            int index = plan_index(steps, task_text(json_object_array_get_idx(needs, j)));
+            int index = plan_index(steps, f_text(json_object_array_get_idx(needs, j)));
             if (index < 0) plan_error(errors, "steps.needs", "missing_dependency", "dependency does not name a step");
             else reach[i][index] = true;
         }
     }
     for (k = 0; k < n; k++) for (i = 0; i < n; i++) for (j = 0; j < n; j++) reach[i][j] = reach[i][j] || (reach[i][k] && reach[k][j]);
+}
+static void write_conflicts(json_object *writes, json_object *other_writes, json_object *errors) {
+    size_t a, b;
+    for (a = 0; a < json_object_array_length(writes); a++) for (b = 0; b < json_object_array_length(other_writes); b++)
+        if (overlap(f_text(json_object_array_get_idx(writes, a)), f_text(json_object_array_get_idx(other_writes, b))))
+            plan_error(errors, "steps.writes", "write_conflict", "overlapping mutable targets require dependency ordering");
+}
+int plan_graph(json_object *plan, json_object *errors) {
+    bool reach[PLAN_STEPS][PLAN_STEPS] = {{false}};
+    json_object *steps = f_field(plan, "steps"); size_t n = json_object_array_length(steps), i, j;
+    dependencies(steps, reach, errors);
     for (i = 0; i < n; i++) {
         json_object *s = json_object_array_get_idx(steps, i), *writes = f_field(s, "writes");
         const char *head = f_string(f_field(s, "args"), "head"); unsigned producers = 0;
@@ -83,9 +93,7 @@ int plan_graph(json_object *plan, json_object *errors) {
             if (branch && f_string(f_field(s, "args"), "branch") && !strcmp(branch, f_string(f_field(s, "args"), "branch")))
                 plan_error(errors, "steps.args.branch", "duplicate_head", "each head has exactly one spawn recipe");
             if (reach[i][j] || reach[j][i]) continue;
-            for (a = 0; a < json_object_array_length(writes); a++) for (b = 0; b < json_object_array_length(f_field(t, "writes")); b++)
-                if (overlap(task_text(json_object_array_get_idx(writes, a)), task_text(json_object_array_get_idx(f_field(t, "writes"), b))))
-                    plan_error(errors, "steps.writes", "write_conflict", "overlapping mutable targets require dependency ordering");
+            write_conflicts(writes, f_field(t, "writes"), errors);
         }
         if (head && producers != 1) plan_error(errors, "steps.args.head", "unbound_head", "initial plans create every execution head from the bound source");
     }

@@ -1,4 +1,6 @@
 #include "plan.h"
+#include "task.h"
+#include "workflow_data.h"
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +34,7 @@ static bool unique_members(const char **p, unsigned depth) {
         if (object) {
             json_object *key; const char *name;
             whitespace(p); if (**p != '"' || !(key = string_token(p))) goto done;
-            name = task_text(key);
+            name = f_text(key);
             if (!name || f_field(names, name)) { json_object_put(key); goto done; }
             json_object_object_add(names, name, json_object_new_boolean(true)); json_object_put(key);
             whitespace(p); if (*(*p)++ != ':') goto done;
@@ -86,7 +88,7 @@ void plan_error(json_object *errors, const char *path, const char *code, const c
     entry = json_object_new_object(); f_string_add(entry, "path", path); f_string_add(entry, "code", code); f_string_add(entry, "message", message);
     json_object_array_add(errors, entry);
 }
-bool plan_text(json_object *value) { const char *s = task_text(value); return s && *s && strlen(s) <= 8192; }
+bool plan_text(json_object *value) { const char *s = f_text(value); return s && *s && strlen(s) <= 8192; }
 bool plan_list(json_object *value, size_t minimum, size_t maximum) {
     return json_object_is_type(value, json_type_array) && json_object_array_length(value) >= minimum && json_object_array_length(value) <= maximum;
 }
@@ -103,7 +105,7 @@ bool plan_has(json_object *array, const char *text) {
     size_t i;
     if (!text || !json_object_is_type(array, json_type_array)) return false;
     for (i = 0; i < json_object_array_length(array); i++) {
-        const char *s = task_text(json_object_array_get_idx(array, i)); if (s && !strcmp(s, text)) return true;
+        const char *s = f_text(json_object_array_get_idx(array, i)); if (s && !strcmp(s, text)) return true;
     }
     return false;
 }

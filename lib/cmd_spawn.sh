@@ -2,7 +2,8 @@
 # Hydra command handlers
 # POSIX-compliant shell script
 
-cmd_spawn() {
+# Parser owns the command variables below; subsequent phases consume them in order.
+spawn_parse_options() {
     # Parse arguments
     branch=""
     layout="default"
@@ -146,6 +147,11 @@ $_csp_mode$_csp_tab$2"
         esac
     done
     
+    return 0
+}
+
+cmd_spawn() {
+    spawn_parse_options "$@" || return $?
     # Handle GitHub issue mode
     if [ -n "$issue_num" ]; then
         if [ -n "$branch" ]; then

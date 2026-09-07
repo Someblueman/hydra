@@ -1,4 +1,5 @@
 #include "agent.h"
+#include "task.h"
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>

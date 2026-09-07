@@ -1,4 +1,5 @@
 #include "agent.h"
+#include "task.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -49,6 +50,51 @@ static int session_new(char output[129]) {
         bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
     return 0;
 }
+static int resume_session(json_object *profile, char **argv, const char *worktree,
+                          const char *hash, struct agent_stream *stream, json_object **prior) {
+    char path[F_PATH];
+    if (*argv[7]) {
+        if (!identity(argv[7], "run_") || !agent_capability(profile, "resume") ||
+            snprintf(path, sizeof(path), "%s/state/v2/projects/%s/exec/%s/%s/agent.json", f_home, argv[4], argv[7], argv[5]) >= (int)sizeof(path)) return -1;
+        *prior = f_read_json(path, AGENT_OUTPUT_LIMIT);
+        if (!f_number_is(*prior, "schema_version", 1) || !f_string(*prior, "instance_id") || strcmp(f_string(*prior, "instance_id"), argv[6]) ||
+            !f_string(*prior, "project_id") || strcmp(f_string(*prior, "project_id"), argv[4]) || !f_string(*prior, "head_id") || strcmp(f_string(*prior, "head_id"), argv[5]) ||
+            !f_string(*prior, "worktree") || strcmp(f_string(*prior, "worktree"), worktree) ||
+            !f_string(*prior, "profile_sha256") || strcmp(f_string(*prior, "profile_sha256"), hash) || !f_string(*prior, "session_id") ||
+            !f_number_is(*prior, "exit_status", 0) || f_copy(stream->session, sizeof(stream->session), f_string(*prior, "session_id"))) return -1;
+    } else if (!strcmp(f_string(profile, "session"), "generated") && session_new(stream->session)) return -1;
+    return 0;
+}
+static int apply_steering(json_object *profile, char **prompt, struct agent_stream *stream, size_t *steering_bytes) {
+    if (!agent_capability(profile, "safe-point")) return 0;
+    const char *separator = "\n\nQueued steering at this turn boundary:\n";
+    size_t used = strlen(*prompt), separator_size = strlen(separator);
+    char budget[32]; struct f_capture messages = {0};
+    snprintf(budget, sizeof(budget), "%zu", used + separator_size < AGENT_PROMPT_LIMIT ? AGENT_PROMPT_LIMIT - used - separator_size : 0);
+    char *drain[] = {(char *)f_hydra, "adapter", "safe-point", (char *)stream->branch, (char *)stream->instance, budget, NULL};
+    if (f_run(drain, NULL, 0, 5, &messages) || messages.status) { f_capture_free(&messages); return -1; }
+    if (messages.out_bytes) {
+        *steering_bytes = messages.out_bytes;
+        if (used + separator_size > AGENT_PROMPT_LIMIT || messages.out_bytes > AGENT_PROMPT_LIMIT - used - separator_size || memchr(messages.out, '\0', messages.out_bytes)) { f_capture_free(&messages); return -1; }
+        char *joined = malloc(used + separator_size + messages.out_bytes + 1);
+        if (!joined) { f_capture_free(&messages); return -1; }
+        memcpy(joined, *prompt, used); memcpy(joined + used, separator, separator_size); memcpy(joined + used + separator_size, messages.out, messages.out_bytes + 1);
+        free(*prompt); *prompt = joined;
+    }
+    f_capture_free(&messages);
+    if (agent_stop(stream)) return -1;
+    return 0;
+}
+static const char *end_state(int status, const struct f_capture *cap, const struct agent_stream *stream) {
+    const char *end_state = status ? "failed" : "completed";
+    if (cap->status == 130) end_state = "cancelled";
+    if (cap->timeout) end_state = "timed_out";
+    if (stream->permission) end_state = "permission_required";
+    if (stream->observation_failed) end_state = "observation_unavailable";
+    if (stream->malformed) end_state = "malformed_output";
+    if (stream->stale) end_state = "stale_instance";
+    return end_state;
+}
 /* Internal argv transport, invoked only by the shell exec supervisor. */
 json_object *agent_run_cli(int argc, char **argv) {
     json_object *profile = NULL, *probe = NULL, *result = NULL, *record = NULL, *values = NULL, *args = NULL, *prior = NULL;
@@ -71,34 +117,8 @@ json_object *agent_run_cli(int argc, char **argv) {
     stream.adapter = f_string(profile, "adapter"); stream.branch = branch; stream.instance = argv[6]; stream.current_path = current;
     stream.events = json_object_new_array();
     if (agent_stop(&stream)) goto invalid;
-    if (*argv[7]) {
-        if (!identity(argv[7], "run_") || !agent_capability(profile, "resume") ||
-            snprintf(path, sizeof(path), "%s/state/v2/projects/%s/exec/%s/%s/agent.json", f_home, argv[4], argv[7], argv[5]) >= (int)sizeof(path)) goto invalid;
-        prior = f_read_json(path, AGENT_OUTPUT_LIMIT);
-        if (!f_number_is(prior, "schema_version", 1) || !f_string(prior, "instance_id") || strcmp(f_string(prior, "instance_id"), argv[6]) ||
-            !f_string(prior, "project_id") || strcmp(f_string(prior, "project_id"), argv[4]) || !f_string(prior, "head_id") || strcmp(f_string(prior, "head_id"), argv[5]) ||
-            !f_string(prior, "worktree") || strcmp(f_string(prior, "worktree"), worktree) ||
-            !f_string(prior, "profile_sha256") || strcmp(f_string(prior, "profile_sha256"), hash) || !f_string(prior, "session_id") ||
-            !f_number_is(prior, "exit_status", 0) || f_copy(stream.session, sizeof(stream.session), f_string(prior, "session_id"))) goto invalid;
-    } else if (!strcmp(f_string(profile, "session"), "generated") && session_new(stream.session)) goto invalid;
-    if (agent_capability(profile, "safe-point")) {
-        const char *separator = "\n\nQueued steering at this turn boundary:\n";
-        size_t used = strlen(prompt), separator_size = strlen(separator);
-        char budget[32]; struct f_capture messages = {0};
-        snprintf(budget, sizeof(budget), "%zu", used + separator_size < AGENT_PROMPT_LIMIT ? AGENT_PROMPT_LIMIT - used - separator_size : 0);
-        char *drain[] = {(char *)f_hydra, "adapter", "safe-point", branch, argv[6], budget, NULL};
-        if (f_run(drain, NULL, 0, 5, &messages) || messages.status) { f_capture_free(&messages); goto invalid; }
-        if (messages.out_bytes) {
-            steering_bytes = messages.out_bytes;
-            if (used + separator_size > AGENT_PROMPT_LIMIT || messages.out_bytes > AGENT_PROMPT_LIMIT - used - separator_size || memchr(messages.out, '\0', messages.out_bytes)) { f_capture_free(&messages); goto invalid; }
-            char *joined = malloc(used + separator_size + messages.out_bytes + 1);
-            if (!joined) { f_capture_free(&messages); goto invalid; }
-            memcpy(joined, prompt, used); memcpy(joined + used, separator, separator_size); memcpy(joined + used + separator_size, messages.out, messages.out_bytes + 1);
-            free(prompt); prompt = joined;
-        }
-        f_capture_free(&messages);
-        if (agent_stop(&stream)) goto invalid;
-    }
+    if (resume_session(profile, argv, worktree, hash, &stream, &prior) ||
+        apply_steering(profile, &prompt, &stream, &steering_bytes)) goto invalid;
     /* File transport gets an immutable private copy, removed after execution. */
     if (f_path(path, sizeof(path), argv[3], ".agent-prompt") || f_write(path, prompt, strlen(prompt), false) || f_hash(path, prompt_hash)) goto invalid;
     values = json_object_new_object(); f_string_add(values, "prompt", prompt); f_string_add(values, "task_file", path);
@@ -115,7 +135,7 @@ json_object *agent_run_cli(int argc, char **argv) {
     if (task_write_json(argv[3], "agent.json", record, false)) { unlink(path); goto invalid; }
     {
         char *command[AGENT_ARGS + 2];
-        for (i = 0; i < json_object_array_length(args); i++) command[i] = (char *)task_text(json_object_array_get_idx(args, i));
+        for (i = 0; i < json_object_array_length(args); i++) command[i] = (char *)f_text(json_object_array_get_idx(args, i));
         command[i] = NULL;
         control.log_fd[0] = control.log_fd[1] = -1; control.context = &stream; control.stop = agent_stop; control.observe = agent_observe; control.grace_seconds = 1;
         bool stdin_prompt = !strcmp(f_string(profile, "prompt"), "stdin");
@@ -148,14 +168,7 @@ json_object *agent_run_cli(int argc, char **argv) {
         json_object_object_add(record, "raw_truncated", json_object_new_boolean(cap.out_bytes > AGENT_OUTPUT_LIMIT || cap.err_bytes > AGENT_OUTPUT_LIMIT));
     }
     json_object_object_add(record, "exit_status", json_object_new_int(status));
-    const char *end_state = status ? "failed" : "completed";
-    if (cap.status == 130) end_state = "cancelled";
-    if (cap.timeout) end_state = "timed_out";
-    if (stream.permission) end_state = "permission_required";
-    if (stream.observation_failed) end_state = "observation_unavailable";
-    if (stream.malformed) end_state = "malformed_output";
-    if (stream.stale) end_state = "stale_instance";
-    f_string_add(record, "state", end_state);
+    f_string_add(record, "state", end_state(status, &cap, &stream));
     json_object_object_add(record, "finished_at", json_object_new_int64((int64_t)time(NULL)));
     json_object_object_add(record, "events", json_object_get(stream.events));
     json_object_object_add(record, "usage", json_object_get(stream.usage));

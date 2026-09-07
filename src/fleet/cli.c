@@ -23,9 +23,58 @@ static json_object *attach_remote(const struct f_remote *remote, json_object *re
     free(quoted); f_ssh(remote, command, NULL, 0, seconds, true, &cap);
     return f_error("fleet-attach", "transport_failed", "cannot execute interactive SSH");
 }
+static json_object *launch_tui(void) {
+    char path[F_PATH]; const char *native = getenv("HYDRA_TUI_BIN"), *bin = getenv("HYDRA_BIN_DIR");
+    if (native) execl(native, native, "--fleet", "--hydra", f_hydra, (char *)NULL);
+    else if (bin) {
+        if (!f_path(path, sizeof(path), bin, "../build/hydra-tui")) execl(path, path, "--fleet", "--hydra", f_hydra, (char *)NULL);
+        if (!f_path(path, sizeof(path), bin, "../libexec/hydra/hydra-tui")) execl(path, path, "--fleet", "--hydra", f_hydra, (char *)NULL);
+    }
+    return f_error("fleet-tui", "missing_dependency", "build or install the optional native TUI");
+}
+struct fleet_options {
+    const char *name, *project, *instance, *output, *input, *digest, *source, *binary, *run;
+    unsigned seconds, jobs, interval;
+    int rest;
+    bool explicit_timeout;
+};
+static json_object *parse_options(int argc, char **argv, struct fleet_options *options) {
+    const struct { const char *name; const char **value; } fields[] = {
+        {"--project", &options->project},
+        {"--instance", &options->instance},
+        {"--output", &options->output},
+        {"--input", &options->input},
+        {"--sha256", &options->digest},
+        {"--source", &options->source},
+        {"--binary", &options->binary},
+        {"--run", &options->run}
+    };
+    int i;
+    for (i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--")) { options->rest = i + 1; break; }
+        if (!strcmp(argv[i], "--json")) continue;
+        if (argv[i][0] != '-' && !options->name) { options->name = argv[i]; continue; }
+        if (i + 1 >= argc) return f_error("fleet", "invalid_input", "missing option value");
+        const char **destination = NULL;
+        size_t field;
+        for (field = 0; field < sizeof(fields) / sizeof(fields[0]); field++) {
+            if (!strcmp(argv[i], fields[field].name)) { destination = fields[field].value; break; }
+        }
+        if (destination) *destination = argv[++i];
+        else if (!strcmp(argv[i], "--timeout") || !strcmp(argv[i], "--jobs") || !strcmp(argv[i], "--interval")) {
+            char *end; const char *option = argv[i]; unsigned long value = strtoul(argv[++i], &end, 10);
+            if (!*argv[i] || *end || !value || value > (!strcmp(option, "--jobs") ? 16UL : 300UL)) return f_error("fleet", "invalid_input", "jobs must be 1-16; timeout and interval must be 1-300 seconds");
+            if (!strcmp(option, "--jobs")) options->jobs = (unsigned)value;
+            else if (!strcmp(option, "--interval")) options->interval = (unsigned)value;
+            else { options->seconds = (unsigned)value; options->explicit_timeout = true; }
+        } else return f_error("fleet", "invalid_input", "unknown option");
+    }
+    return NULL;
+}
 json_object *f_cli(int argc, char **argv) {
-    const char *action, *name = NULL, *project = NULL, *instance = NULL, *output = NULL, *input = NULL, *digest = NULL, *source = NULL, *binary = NULL, *run = NULL;
-    unsigned seconds = 5, jobs = 4, interval = 5; int i, rest = argc; bool explicit_timeout = false;
+    const char *action;
+    struct fleet_options options = {.seconds = 5, .jobs = 4, .interval = 5, .rest = argc};
+    int i;
     json_object *result, *request, *args; struct f_remote remote;
     if (argc < 1) return f_error("fleet", "invalid_input", "use hydra fleet help");
     action = argv[0];
@@ -36,80 +85,53 @@ json_object *f_cli(int argc, char **argv) {
         f_string_add(data, "usage", "fleet list|doctor|reconcile|watch [--timeout N --jobs N]; fleet task help; fleet auth help; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet package --source DIR --binary FILE --output FILE; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path [--instance ID] [--input FILE --output FILE --run ID] -- ARGS");
         return f_success("fleet-help", data);
     }
-    for (i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--")) { rest = i + 1; break; }
-        if (!strcmp(argv[i], "--json")) continue;
-        if (argv[i][0] != '-' && !name) { name = argv[i]; continue; }
-        if (i + 1 >= argc) return f_error("fleet", "invalid_input", "missing option value");
-        if (!strcmp(argv[i], "--project")) project = argv[++i];
-        else if (!strcmp(argv[i], "--instance")) instance = argv[++i];
-        else if (!strcmp(argv[i], "--output")) output = argv[++i];
-        else if (!strcmp(argv[i], "--input")) input = argv[++i];
-        else if (!strcmp(argv[i], "--sha256")) digest = argv[++i];
-        else if (!strcmp(argv[i], "--source")) source = argv[++i];
-        else if (!strcmp(argv[i], "--binary")) binary = argv[++i];
-        else if (!strcmp(argv[i], "--run")) run = argv[++i];
-        else if (!strcmp(argv[i], "--timeout") || !strcmp(argv[i], "--jobs") || !strcmp(argv[i], "--interval")) {
-            char *end; const char *option = argv[i]; unsigned long value = strtoul(argv[++i], &end, 10);
-            if (!*argv[i] || *end || !value || value > (!strcmp(option, "--jobs") ? 16UL : 300UL)) return f_error("fleet", "invalid_input", "jobs must be 1-16; timeout and interval must be 1-300 seconds");
-            if (!strcmp(option, "--jobs")) jobs = (unsigned)value;
-            else if (!strcmp(option, "--interval")) interval = (unsigned)value;
-            else { seconds = (unsigned)value; explicit_timeout = true; }
-        } else return f_error("fleet", "invalid_input", "unknown option");
-    }
-    if (!strcmp(action, "handshake") && !name) return f_handshake();
-    if (!strcmp(action, "tui")) {
-        char path[F_PATH]; const char *native = getenv("HYDRA_TUI_BIN"), *bin = getenv("HYDRA_BIN_DIR");
-        if (native) execl(native, native, "--fleet", "--hydra", f_hydra, (char *)NULL);
-        else if (bin) {
-            if (!f_path(path, sizeof(path), bin, "../build/hydra-tui")) execl(path, path, "--fleet", "--hydra", f_hydra, (char *)NULL);
-            if (!f_path(path, sizeof(path), bin, "../libexec/hydra/hydra-tui")) execl(path, path, "--fleet", "--hydra", f_hydra, (char *)NULL);
-        }
-        return f_error("fleet-tui", "missing_dependency", "build or install the optional native TUI");
-    }
+    result = parse_options(argc, argv, &options);
+    if (result) return result;
+    if (!strcmp(action, "handshake") && !options.name) return f_handshake();
+    if (!strcmp(action, "tui")) return launch_tui();
     if (!strcmp(action, "tui-data")) { (void)f_tui_data(1, 16); return NULL; }
     if (!strcmp(action, "package")) {
-        if (!source || !binary || !output) return f_error("fleet-package", "invalid_input", "source, target binary, and output are required");
-        result = f_package(source, binary);
+        if (!options.source || !options.binary || !options.output) return f_error("fleet-package", "invalid_input", "source, target binary, and output are required");
+        result = f_package(options.source, options.binary);
         if (json_object_get_boolean(f_field(result, "ok"))) {
             const char *text = json_object_to_json_string_ext(f_field(result, "data"), JSON_C_TO_STRING_PLAIN); char hash[65];
-            if (f_write(output, text, strlen(text), false) || f_hash(output, hash)) { json_object_put(result); return f_error("fleet-package", "io_failed", "cannot write new package output"); }
-            json_object_put(result); request = json_object_new_object(); f_string_add(request, "file", output); f_string_add(request, "sha256", hash); result = f_success("fleet-package", request);
+            if (f_write(options.output, text, strlen(text), false) || f_hash(options.output, hash)) { json_object_put(result); return f_error("fleet-package", "io_failed", "cannot write new package output"); }
+            json_object_put(result); request = json_object_new_object(); f_string_add(request, "file", options.output); f_string_add(request, "sha256", hash); result = f_success("fleet-package", request);
         }
         return result;
     }
     if (!strcmp(action, "watch")) {
         while (!f_stopped) {
             struct timespec pause = {0, 100000000}; unsigned tick;
-            result = f_aggregate("list", seconds, jobs); (void)f_emit(result); json_object_put(result); fflush(stdout);
-            for (tick = 0; tick < interval * 10 && !f_stopped; tick++) nanosleep(&pause, NULL);
+            result = f_aggregate("list", options.seconds, options.jobs); (void)f_emit(result); json_object_put(result); fflush(stdout);
+            for (tick = 0; tick < options.interval * 10 && !f_stopped; tick++) nanosleep(&pause, NULL);
         }
         return NULL;
     }
     if (!strcmp(action, "reconcile")) action = "list";
-    if ((!strcmp(action, "list") || !strcmp(action, "doctor")) && !name) return f_aggregate(action, seconds, jobs);
-    if (!name || f_remote_load(name, &remote)) return f_error("fleet", "invalid_alias", "register a remote with hydra remote add");
+    if ((!strcmp(action, "list") || !strcmp(action, "doctor")) && !options.name) return f_aggregate(action, options.seconds, options.jobs);
+    if (!options.name || f_remote_load(options.name, &remote)) return f_error("fleet", "invalid_alias", "register a remote with hydra remote add");
     if (!strcmp(action, "bootstrap")) {
-        if (!input || !digest) return f_error("fleet-bootstrap", "invalid_input", "input package and sha256 are required");
-        return f_bootstrap(&remote, input, digest, explicit_timeout ? seconds : 60);
+        if (!options.input || !options.digest) return f_error("fleet-bootstrap", "invalid_input", "input package and sha256 are required");
+        return f_bootstrap(&remote, options.input, options.digest, options.explicit_timeout ? options.seconds : 60);
     }
-    result = f_observe(&remote, "handshake", seconds);
+    result = f_observe(&remote, "handshake", options.seconds);
     if (!json_object_get_boolean(f_field(result, "ok"))) return result;
     if (!supported(result, action)) { json_object_put(result); return f_error("fleet", "capability_unavailable", "remote does not advertise this operation"); }
     json_object_put(result);
     request = json_object_new_object(); args = json_object_new_array();
     json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", action);
-    if (project) f_string_add(request, "project", project);
-    if (instance) f_string_add(request, "instance", instance);
-    if (run) f_string_add(request, "run", run);
-    for (i = rest; i < argc; i++) json_object_array_add(args, json_object_new_string(argv[i]));
+    if (options.project) f_string_add(request, "project", options.project);
+    if (options.instance) f_string_add(request, "instance", options.instance);
+    if (options.run) f_string_add(request, "run", options.run);
+    for (i = options.rest; i < argc; i++) json_object_array_add(args, json_object_new_string(argv[i]));
     json_object_object_add(request, "args", args);
     if (!strcmp(action, "import")) {
-        char *text = input ? f_read(input, F_LIMIT) : NULL; json_object *bundle = text ? f_parse(text) : NULL; free(text);
+        char *text = options.input ? f_read(options.input, F_LIMIT) : NULL; json_object *bundle = text ? f_parse(text) : NULL; free(text);
         if (!bundle) { json_object_put(request); return f_error("fleet-import", "invalid_input", "a valid input bundle is required"); }
         json_object_object_add(request, "bundle", bundle);
     }
-    result = f_request(&remote, request, explicit_timeout ? seconds : ((!strcmp(action, "list") || !strcmp(action, "doctor")) ? 5 : 300));
+    result = f_request(&remote, request, options.explicit_timeout ? options.seconds : ((!strcmp(action, "list") || !strcmp(action, "doctor")) ? 5 : 300));
     json_object_put(request);
     if (!json_object_get_boolean(f_field(result, "ok"))) {
         const char *code = f_string(f_field(result, "error"), "code");
@@ -119,8 +141,8 @@ json_object *f_cli(int argc, char **argv) {
     }
     if (!strcmp(action, "export")) {
         const char *text = json_object_to_json_string_ext(f_field(result, "data"), JSON_C_TO_STRING_PLAIN);
-        if (!output || f_write(output, text, strlen(text), false)) { json_object_put(result); return f_error("fleet-export", "io_failed", "a new output path is required"); }
+        if (!options.output || f_write(options.output, text, strlen(text), false)) { json_object_put(result); return f_error("fleet-export", "io_failed", "a new output path is required"); }
     }
-    if (!strcmp(action, "attach")) { json_object *failure = attach_remote(&remote, result, seconds); json_object_put(result); return failure; }
+    if (!strcmp(action, "attach")) { json_object *failure = attach_remote(&remote, result, options.seconds); json_object_put(result); return failure; }
     return result;
 }

@@ -9,7 +9,8 @@ static char *resolved(const char *executable) {
     char candidate[F_PATH], canonical[F_PATH], *paths, *cursor, *directory;
     /* Preserve the invoked basename: symlink dispatchers such as mise use it. */
     if (executable[0] == '/') return !access(executable, X_OK) ? strdup(executable) : NULL;
-    paths = strdup(getenv("PATH") ? getenv("PATH") : ""); if (!paths) return NULL;
+    const char *path_env = getenv("PATH");
+    paths = strdup(path_env ? path_env : ""); if (!paths) return NULL;
     cursor = paths;
     while (cursor) {
         directory = cursor; cursor = strchr(cursor, ':'); if (cursor) *cursor++ = '\0';
@@ -42,11 +43,11 @@ json_object *agent_probe(json_object *profile) {
         f_capture_free(&cap);
         args = agent_arguments(profile, "probe_argv", NULL);
         if (args) {
-            for (i = 0; i < json_object_array_length(args); i++) argv[i] = (char *)task_text(json_object_array_get_idx(args, i));
+            for (i = 0; i < json_object_array_length(args); i++) argv[i] = (char *)f_text(json_object_array_get_idx(args, i));
             argv[i] = NULL; argv[0] = path;
             supported = !f_run(argv, NULL, 0, 5, &cap) && !cap.status;
             for (i = 0; supported && i < json_object_array_length(f_field(profile, "probe_tokens")); i++) {
-                const char *token = task_text(json_object_array_get_idx(f_field(profile, "probe_tokens"), i));
+                const char *token = f_text(json_object_array_get_idx(f_field(profile, "probe_tokens"), i));
                 supported = strstr(cap.out, token) || strstr(cap.err, token);
             }
         }

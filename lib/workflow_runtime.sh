@@ -74,7 +74,35 @@ workflow_bindings_match() {
     workflow_plan_bindings_match "$_wbm_dir"
 }
 
+# The profile handoff needs durable run/step bindings as well as execution options.
+workflow_profile_command() {
+    _wpc_dir="$1" _wpc_id="$2" _wpc_head="$3" _wpc_profile="$4" _wpc_timeout="$5"
+    _wpc_profile_args="$(awk -F '\t' -v id="$_wpc_id" '$1=="profile_args" && $2==id {print $3 "\t" $4 "\t" $5 "\t" $6 "\t" $7}' "$_wpc_dir/graph.tsv")"
+    _wpc_prompt_file="$(printf '%s\n' "$_wpc_profile_args" | cut -f1)"
+    _wpc_prompt_input="$(printf '%s\n' "$_wpc_profile_args" | cut -f2)"
+    _wpc_result_file="$(printf '%s\n' "$_wpc_profile_args" | cut -f3)"
+    _wpc_requires="$(printf '%s\n' "$_wpc_profile_args" | cut -f4)"
+    _wpc_resume_from="$(printf '%s\n' "$_wpc_profile_args" | cut -f5)"
+    if [ "$_wpc_prompt_input" != - ]; then
+        _wpc_prompt="$HYDRA_WORKFLOW_INPUTS_DIR/$_wpc_prompt_input"
+    else
+        _wpc_prompt="$("${HYDRA_BIN_CMD:-hydra}" path "$_wpc_head")/$_wpc_prompt_file"
+    fi
+    set -- exec --exit-code --json --branch "$_wpc_head" --profile "$_wpc_profile" --prompt-file "$_wpc_prompt"
+    [ "$_wpc_result_file" = - ] || set -- "$@" --result-file "$HYDRA_WORKFLOW_OUTPUTS_DIR/$_wpc_result_file"
+    [ "$_wpc_requires" = - ] || set -- "$@" --require "$_wpc_requires"
+    if [ "$_wpc_resume_from" != - ]; then
+        _wpc_previous="$(sed -n '1p' "$_wpc_dir/steps/$_wpc_resume_from/authoritative-attempt")"
+        case "$_wpc_previous" in ''|*[!0-9]*) return 2 ;; esac
+        _wpc_resume_id="$(cmd_fleet_dispatch agent-profile run-id "$_wpc_dir/steps/$_wpc_resume_from/attempt-$_wpc_previous/stdout")" || return 2
+        set -- "$@" --resume-run "$_wpc_resume_id"
+    fi
+    [ -z "$_wpc_timeout" ] || set -- "$@" --timeout "$_wpc_timeout"
+    "$HYDRA_BIN_PATH" "$@"
+}
+
 workflow_step_command() {
+    _wsc_dir="$1" _wsc_id="$2"; shift 2
     _wsc_kind="$1"; shift
     _wsc_head="$1" _wsc_branch="$2" _wsc_group="$3" _wsc_profile="$4" _wsc_command="$5"
     _wsc_message="$6" _wsc_name="$7" _wsc_by="$8" _wsc_reason="$9"; shift 9
@@ -99,27 +127,8 @@ workflow_step_command() {
         kill) set -- kill "$_wsc_head"; [ "$_wsc_force" != true ] || set -- "$@" --force ;;
         exec)
             if [ -n "$_wsc_profile" ]; then
-                _wsc_profile_args="$(awk -F '\t' -v id="$_wss_id" '$1=="profile_args" && $2==id {print $3 "\t" $4 "\t" $5 "\t" $6 "\t" $7}' "$_wss_dir/graph.tsv")"
-                _wsc_prompt_file="$(printf '%s\n' "$_wsc_profile_args" | cut -f1)"
-                _wsc_prompt_input="$(printf '%s\n' "$_wsc_profile_args" | cut -f2)"
-                _wsc_result_file="$(printf '%s\n' "$_wsc_profile_args" | cut -f3)"
-                _wsc_requires="$(printf '%s\n' "$_wsc_profile_args" | cut -f4)"
-                _wsc_resume_from="$(printf '%s\n' "$_wsc_profile_args" | cut -f5)"
-                if [ "$_wsc_prompt_input" != - ]; then
-                    _wsc_prompt="$HYDRA_WORKFLOW_INPUTS_DIR/$_wsc_prompt_input"
-                else
-                    _wsc_prompt="$("${HYDRA_BIN_CMD:-hydra}" path "$_wsc_head")/$_wsc_prompt_file"
-                fi
-                set -- exec --exit-code --json --branch "$_wsc_head" --profile "$_wsc_profile" --prompt-file "$_wsc_prompt"
-                [ "$_wsc_result_file" = - ] || set -- "$@" --result-file "$HYDRA_WORKFLOW_OUTPUTS_DIR/$_wsc_result_file"
-                [ "$_wsc_requires" = - ] || set -- "$@" --require "$_wsc_requires"
-                if [ "$_wsc_resume_from" != - ]; then
-                    _wsc_previous="$(sed -n '1p' "$_wss_dir/steps/$_wsc_resume_from/authoritative-attempt")"
-                    case "$_wsc_previous" in ''|*[!0-9]*) return 2 ;; esac
-                    _wsc_resume_id="$(cmd_fleet_dispatch agent-profile run-id "$_wss_dir/steps/$_wsc_resume_from/attempt-$_wsc_previous/stdout")" || return 2
-                    set -- "$@" --resume-run "$_wsc_resume_id"
-                fi
-                [ -z "$_wsc_timeout" ] || set -- "$@" --timeout "$_wsc_timeout"
+                workflow_profile_command "$_wsc_dir" "$_wsc_id" "$_wsc_head" "$_wsc_profile" "$_wsc_timeout"
+                return $?
             elif [ -n "$_wsc_argv" ]; then
                 set -- exec --exit-code
                 [ -z "$_wsc_head" ] || set -- "$@" --branch "$_wsc_head"
@@ -284,7 +293,7 @@ workflow_start_step() {
             HYDRA_WORKFLOW_OUTPUTS_DIR="$_wss_attempt_dir/outputs"
             export HYDRA_WORKFLOW_INPUTS_DIR HYDRA_WORKFLOW_OUTPUTS_DIR
         fi
-        workflow_step_command "$_wss_kind" "$@" >"$_wss_attempt_dir/stdout" 2>"$_wss_attempt_dir/stderr" &
+        workflow_step_command "$_wss_dir" "$_wss_id" "$_wss_kind" "$@" >"$_wss_attempt_dir/stdout" 2>"$_wss_attempt_dir/stderr" &
         _ws_command_pid=$!
         workflow_atomic_scalar "$_wss_sd/command-pid" "$_ws_command_pid"
         if wait "$_ws_command_pid"; then _ws_code=0; else _ws_code=$?; fi

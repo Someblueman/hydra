@@ -21,16 +21,7 @@ all: lint
 
 # Lint all shell scripts for POSIX compliance
 lint:
-	@echo "Running ShellCheck for POSIX compliance..."
-	@find . -name "*.sh" -o -path "./bin/hydra" | while read -r file; do \
-		echo "Checking $$file..."; \
-		shellcheck --shell=sh --severity=style "$$file" || exit 1; \
-	done
-	@echo "Running dash syntax check..."
-	@find . -name "*.sh" -o -path "./bin/hydra" | while read -r file; do \
-		echo "Validating $$file..."; \
-		dash -n "$$file" || exit 1; \
-	done
+	@sh scripts/lint-shell.sh
 	@echo "All checks passed!"
 
 # Run shell-only tests; native suites have build prerequisites in their own targets.
@@ -63,7 +54,7 @@ $(BUILD_DIR)/libhydra.a: $(BUILD_DIR)/libhydra.o
 $(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/hydra-tui: src/hydra_tui.c src/hydra_tui_model.inc src/hydra_tui_ui.inc src/hydra_tui_mouse.inc src/hydra_tui_render.inc src/hydra_tui_theme.inc src/hydra_tui_actions.inc src/hydra_tui_main.inc | $(BUILD_DIR)
+$(BUILD_DIR)/hydra-tui: src/hydra_tui.c src/hydra_tui_process.inc src/hydra_tui_model.inc src/hydra_tui_ui.inc src/hydra_tui_mouse.inc src/hydra_tui_render.inc src/hydra_tui_theme.inc src/hydra_tui_actions.inc src/hydra_tui_main.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) src/hydra_tui.c -o $@
 
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
@@ -87,6 +78,7 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 		HYDRA_TUI_BIN="$(CURDIR)/tests/fixtures/tui/crash-native.sh" \
 		HYDRA_TEST_CRASH_DISPATCH="$(CURDIR)/tests/fixtures/tui/crash-dispatch.sh" \
 		HYDRA_TEST_SLOW_HYDRA="$(CURDIR)/tests/fixtures/tui/slow-hydra.sh" \
+		HYDRA_TEST_EOF_HYDRA="$(CURDIR)/tests/fixtures/tui/eof-hydra.sh" \
 		$(BUILD_DIR)/test-tui-pty "$(CURDIR)/$(BUILD_DIR)/hydra-tui" \
 		"$(CURDIR)/tests/fixtures/tui/fake-hydra.sh" "$(CURDIR)/tests/fixtures/tui/fake-bin"; \
 	status=$$?; \
@@ -119,10 +111,10 @@ bench-tui: build-tui $(BUILD_DIR)/test-tui-pty
 	@sh scripts/bench-tui.sh
 
 package-core: build-core
-	@sh scripts/package-core.sh
+	@sh scripts/package-native.sh core
 
 package-tui: build-tui
-	@sh scripts/package-tui.sh
+	@sh scripts/package-native.sh tui
 
 # Record shell baseline timings (not a CI gate; no speedup claims)
 bench:
@@ -200,29 +192,34 @@ FLEET_JSON_LIB = $(shell pkg-config --variable=libdir json-c)/libjson-c.a
 .PHONY: build-fleet test-fleet
 build-fleet: $(BUILD_DIR)/hydra-fleet
 
-$(BUILD_DIR)/hydra-fleet: $(FLEET_SOURCES) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(FLEET_SOURCES) $(FLEET_JSON_LIB) -lm -o $@
+# Compile shared fleet code once. Compiler dependency files track the actual
+# header/.inc closure for each object and test, including sanitizer builds.
+FLEET_OBJECTS = $(patsubst src/fleet/%.c,$(BUILD_DIR)/fleet/%.o,$(filter-out src/fleet/main.c,$(FLEET_SOURCES)))
+FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data agent-profile agent-auth plan)
 
-$(BUILD_DIR)/test-fleet: tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+$(BUILD_DIR)/fleet/%.o: src/fleet/%.c
+	@mkdir -p "$(@D)"
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/test-task-package: tests/c/test_task_package.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_task_package.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+$(BUILD_DIR)/libhydra-fleet.a: $(FLEET_OBJECTS)
+	rm -f $@
+	$(AR) rcs $@ $(FLEET_OBJECTS)
 
-$(BUILD_DIR)/test-task-result: tests/c/test_task_result.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_task_result.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+$(BUILD_DIR)/hydra-fleet: $(BUILD_DIR)/fleet/main.o $(BUILD_DIR)/libhydra-fleet.a
+	$(CC) $(CORE_CFLAGS) $^ $(FLEET_JSON_LIB) -lm -o $@
 
-$(BUILD_DIR)/test-workflow-data: tests/c/test_workflow_data.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_workflow_data.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+$(BUILD_DIR)/test-fleet: tests/c/test_fleet.c
+$(BUILD_DIR)/test-task-package: tests/c/test_task_package.c
+$(BUILD_DIR)/test-task-result: tests/c/test_task_result.c
+$(BUILD_DIR)/test-workflow-data: tests/c/test_workflow_data.c
+$(BUILD_DIR)/test-agent-profile: tests/c/test_agent_profile.c
+$(BUILD_DIR)/test-agent-auth: tests/c/test_agent_auth.c
+$(BUILD_DIR)/test-plan: tests/c/test_plan.c
 
-$(BUILD_DIR)/test-agent-profile: tests/c/test_agent_profile.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_agent_profile.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+$(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) -MMD -MP -MF $@.d -MT $@ $(filter %.c,$^) $(BUILD_DIR)/libhydra-fleet.a $(FLEET_JSON_LIB) -lm -o $@
 
-$(BUILD_DIR)/test-agent-auth: tests/c/test_agent_auth.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_agent_auth.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
-
-$(BUILD_DIR)/test-plan: tests/c/test_plan.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_plan.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+-include $(FLEET_OBJECTS:.o=.d) $(BUILD_DIR)/fleet/main.d $(FLEET_TEST_BINS:%=%.d)
 
 test-fleet: build-fleet $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
 	$(BUILD_DIR)/test-plan
@@ -245,11 +242,14 @@ test-fleet: build-fleet $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BU
 sanitize-fleet:
 	$(MAKE) BUILD_DIR=build/fleet-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-fleet
 
-# Local C quality pilot: use the same compiler flags as native builds.
+# C analysis and reviewed complexity ceiling; use the native build flags.
 CLANG_TIDY ?= build/quality-tools/bin/clang-tidy
 QUALITY_C_SYSROOT = $(shell if [ "$$(uname -s)" = Darwin ]; then xcrun --show-sdk-path; fi)
 QUALITY_C_FLAGS = $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(if $(QUALITY_C_SYSROOT),-isysroot $(QUALITY_C_SYSROOT))
-.PHONY: quality-c
+.PHONY: quality-c test-quality-c
 quality-c:
 	@pkg-config --exists json-c
-	@$(CLANG_TIDY) --header-filter='(src|tests/c)/' --checks='-*,clang-analyzer-*,readability-function-cognitive-complexity' --config='{CheckOptions: {readability-function-cognitive-complexity.Threshold: 15, readability-function-cognitive-complexity.DescribeBasicIncrements: false}}' $(wildcard src/*.c src/fleet/*.c tests/c/*.c) -- $(QUALITY_C_FLAGS)
+	@sh scripts/quality-c.sh docs/quality/cognitive-complexity.tsv $(CLANG_TIDY) $(wildcard src/*.c src/fleet/*.c tests/c/*.c) -- $(QUALITY_C_FLAGS)
+
+test-quality-c:
+	@sh tests/quality_c_cases.sh "$(CLANG_TIDY)"

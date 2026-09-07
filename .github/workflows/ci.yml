@@ -7,6 +7,7 @@ on:
       - develop
       - 'feature/**'
       - 'fix/**'
+      - 'refactor/**'
       - 'hotfix/**'
       - 'release/**'
   pull_request:
@@ -28,12 +29,30 @@ jobs:
     - name: Run ShellCheck
       run: make lint
     
-    - name: Validate with dash
+  quality-c:
+    name: C analysis and complexity ceiling
+    # Match the reviewed Darwin baseline; Linux native/sanitizer coverage remains below.
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install pinned analysis dependencies
       run: |
-        for script in bin/hydra lib/*.sh; do
-          echo "Validating $script with dash..."
-          dash -n "$script"
-        done
+        brew install json-c pkg-config
+        python -m venv build/quality-tools
+        build/quality-tools/bin/python -m pip install clang-tidy==22.1.8
+    - name: Verify baseline policy and analyze C
+      run: make test-quality-c quality-c
+    - name: Preserve complete analyzer report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: c-analysis
+        path: |
+          build/quality-c.log
+          build/quality-c.tsv
 
   test:
     name: Test

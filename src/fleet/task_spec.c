@@ -5,12 +5,6 @@
 #include <strings.h>
 #include <unistd.h>
 
-const char *task_text(json_object *value) {
-    const char *text;
-    if (!json_object_is_type(value, json_type_string)) return NULL;
-    text = json_object_get_string(value);
-    return strlen(text) == (size_t)json_object_get_string_len(value) ? text : NULL;
-}
 bool task_hex(const char *text, size_t length) {
     size_t i;
     if (!text || strlen(text) != length) return false;
@@ -49,10 +43,10 @@ static json_object *strings(json_object *array, size_t max, bool paths, bool nam
     if (!json_object_is_type(array, json_type_array) || json_object_array_length(array) > max) return NULL;
     out = json_object_new_array();
     for (i = 0; i < json_object_array_length(array); i++) {
-        const char *text = task_text(json_object_array_get_idx(array, i));
+        const char *text = f_text(json_object_array_get_idx(array, i));
         if (!text || strlen(text) > 4096 || (paths && !task_path(text)) || (names && (!f_name(text) || strlen(text) > 64))) goto bad;
         if (paths || names) for (j = 0; j < i; j++) {
-            const char *previous = task_text(json_object_array_get_idx(array, j));
+            const char *previous = f_text(json_object_array_get_idx(array, j));
             if (!strcmp(previous, text)) goto bad;
         }
         json_object_array_add(out, json_object_new_string(text));
@@ -69,7 +63,7 @@ static json_object *work_spec(json_object *input) {
     if (!strcmp(kind, "exec")) {
         if (f_field(input, "path") || !(args = strings(f_field(input, "argv"), 128, false, false))) goto bad;
         json_object_object_add(work, "argv", args);
-        if (!json_object_array_length(args) || !*task_text(json_object_array_get_idx(args, 0))) goto bad;
+        if (!json_object_array_length(args) || !*f_text(json_object_array_get_idx(args, 0))) goto bad;
     } else if (!strcmp(kind, "workflow")) {
         const char *path = f_string(input, "path");
         if (f_field(input, "argv") || !task_path(path) || strncmp(path, ".hydra/workflows/", 17)) goto bad;

@@ -69,7 +69,7 @@ static bool dependencies(json_object *spec) {
     json_object *caps = f_field(spec, "capabilities"); size_t i;
     const char *supported[] = {"exec", "workflow", "git", "tmux", "agent-headless", "workflow-data", "workflow-approval-wait", NULL};
     for (i = 0; i < json_object_array_length(caps); i++) {
-        const char *name = task_text(json_object_array_get_idx(caps, i)); size_t j;
+        const char *name = f_text(json_object_array_get_idx(caps, i)); size_t j;
         for (j = 0; supported[j] && strcmp(name, supported[j]); j++) {}
         if (!supported[j]) return false;
     }

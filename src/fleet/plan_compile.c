@@ -1,5 +1,7 @@
 #define _XOPEN_SOURCE 700
 #include "plan.h"
+#include "task.h"
+#include "workflow_data.h"
 #include "agent.h"
 #include <stdlib.h>
 #include <string.h>
@@ -8,7 +10,7 @@
 
 static void list(FILE *file, json_object *array) {
     size_t i;
-    for (i = 0; i < json_object_array_length(array); i++) fprintf(file, "%s%s", i ? "," : "", task_text(json_object_array_get_idx(array, i)));
+    for (i = 0; i < json_object_array_length(array); i++) fprintf(file, "%s%s", i ? "," : "", f_text(json_object_array_get_idx(array, i)));
 }
 /* Lower only already checked values. This projection uses the published YAML
  * syntax; its graph is also checked by the existing workflow data validator. */
@@ -27,7 +29,7 @@ int plan_lower(json_object *plan, const char *directory) {
             fprintf(yaml, "      %s: ", key);
             if (!strcmp(key, "argv")) { fputc('[', yaml); list(yaml, value); fputc(']', yaml); }
             else if (json_object_is_type(value, json_type_int)) fprintf(yaml, "%d", json_object_get_int(value));
-            else fputs(task_text(value), yaml);
+            else fputs(f_text(value), yaml);
             fputc('\n', yaml);
         }
         fprintf(graph, "step\t%s\t%s\t", f_string(step, "id"), f_string(step, "kind"));
@@ -92,7 +94,7 @@ static json_object *context_files(json_object *plan, const char *source, const c
     json_object *decl = f_parse("{\"type\":\"file\",\"max_bytes\":524288}");
     if (f_path(path, sizeof(path), scratch, "context")) goto bad;
     for (i = 0; i < json_object_array_length(refs); i++) {
-        const char *ref = task_text(json_object_array_get_idx(refs, i)); json_object *file;
+        const char *ref = f_text(json_object_array_get_idx(refs, i)); json_object *file;
         if (!task_path(ref) || task_file_copy(source, ref, path) || !(file = wd_file(path, decl))) goto bad;
         *bytes += json_object_get_int64(f_field(file, "bytes")); json_object_object_add(files, ref, file); unlink(path);
     }

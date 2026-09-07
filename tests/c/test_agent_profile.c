@@ -102,7 +102,7 @@ int main(void) {
     assert(!agent_capability(profile, "resume")); assert(!agent_capability(profile, "usage"));
     values = f_parse("{\"prompt\":\"a; $(touch /tmp/never) ' \\n b\"}");
     args = agent_arguments(profile, "argv", values); assert(args && json_object_array_length(args) == 2);
-    assert(!strcmp(task_text(json_object_array_get_idx(args, 1)), f_string(values, "prompt")));
+    assert(!strcmp(f_text(json_object_array_get_idx(args, 1)), f_string(values, "prompt")));
     json_object_put(args); json_object_put(values); json_object_put(profile);
     for (i = 0; bad[i]; i++) {
         json_object *list = json_object_new_array(); json_object_array_add(list, f_parse_value(bad[i]));

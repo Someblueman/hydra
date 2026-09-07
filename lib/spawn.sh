@@ -315,12 +315,24 @@ spawn_single() {
     release_lock "$project_worktree_lock"
     head_id="$committed_head"
     head_dir="$(state_v2_head_dir "$project_id" "$head_id")" || return 1
-    provenance_capture_head "$branch" || {
+    if ! spawn_start_session; then
         spawn_rollback_session "$session" "$branch" "$worktree_path"
+        return 1
+    fi
+
+    # Return session name for caller
+    echo "$session"
+    return 0
+}
+
+# Finish the current spawn after its durable identity is committed and its
+# project lock is released. Consumes spawn_single's command-scoped variables;
+# the caller owns rollback so every failure follows the same retirement order.
+spawn_start_session() {
+    provenance_capture_head "$branch" || {
         return 1
     }
     provenance_capture_instance "$branch" launch "$launch_command" || {
-        spawn_rollback_session "$session" "$branch" "$worktree_path"
         return 1
     }
 
@@ -334,13 +346,11 @@ spawn_single() {
     identity_export="export HYDRA_PROJECT_ID=$(profile_shell_quote "$project_id") HYDRA_HEAD_ID=$(profile_shell_quote "$head_id") HYDRA_INSTANCE_ID=$(profile_shell_quote "$instance_id") HYDRA_BRANCH=$(profile_shell_quote "$branch") HYDRA_WORKTREE=$(profile_shell_quote "$worktree_path") HYDRA_STATE_DIR=$(profile_shell_quote "$head_dir") HYDRA_TASK_FILE=$(profile_shell_quote "$head_dir/task")"
     send_keys_to_session "$session" "$identity_export" || {
         echo "Error: Failed to export head identity into session" >&2
-        spawn_rollback_session "$session" "$branch" "$worktree_path"
         return 1
     }
     event_emit "$project_id" "$head_id" "$instance_id" lifecycle.started hydra local \
         "{\"profile\":\"$(json_escape "$ai_tool")\"}" >/dev/null || {
         echo "Error: Failed to record lifecycle event" >&2
-        spawn_rollback_session "$session" "$branch" "$worktree_path"
         return 1
     }
 
@@ -349,7 +359,6 @@ spawn_single() {
     if [ -n "$template" ] && [ -z "${HYDRA_DISABLE_YAML:-}" ]; then
         _load_lib template
         merged_cfg="$(apply_template "$template" "$worktree_path" "$repo_root" "$branch" "$session")" || {
-            spawn_rollback_session "$session" "$branch" "$worktree_path"
             return 1
         }
         if [ -n "$merged_cfg" ] && [ -f "$merged_cfg" ]; then
@@ -364,14 +373,12 @@ spawn_single() {
             fi
             if ! apply_yaml_config "$merged_cfg" "$session" "$worktree_path" "$repo_root" user-template; then
                 rm -f "$merged_cfg"
-                spawn_rollback_session "$session" "$branch" "$worktree_path"
                 return 1
             fi
             rm -f "$merged_cfg"
         fi
     elif [ -z "${HYDRA_DISABLE_YAML:-}" ] && cfgpath="$(locate_yaml_config "$worktree_path" "$repo_root" 2>/dev/null || true)" && [ -n "$cfgpath" ]; then
         if ! apply_yaml_config "$cfgpath" "$session" "$worktree_path" "$repo_root"; then
-            spawn_rollback_session "$session" "$branch" "$worktree_path"
             return 1
         fi
     else
@@ -384,20 +391,16 @@ spawn_single() {
     if [ "$ai_tool" != none ]; then
         echo "Starting $ai_tool in session '$session'..." >&2
         if ! send_keys_to_session "$session" "$launch_command"; then
-            spawn_rollback_session "$session" "$branch" "$worktree_path"
             return 1
         fi
     fi
 
     lifecycle_set_observed "$branch" running hydra exact || {
-        spawn_rollback_session "$session" "$branch" "$worktree_path"
         return 1
     }
 
     # Run post-spawn hook (best-effort)
     run_hook post-spawn "$worktree_path" "$repo_root" "$session" "$branch"
 
-    # Return session name for caller
-    echo "$session"
     return 0
 }

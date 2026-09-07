@@ -1,6 +1,6 @@
 #ifndef HYDRA_WORKFLOW_DATA_H
 #define HYDRA_WORKFLOW_DATA_H
-#include "task.h"
+#include "fleet.h"
 
 #define WD_LIMIT 65536U
 #define WD_NAMES 64U

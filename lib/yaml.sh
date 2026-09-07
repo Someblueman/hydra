@@ -29,26 +29,8 @@ locate_yaml_config() {
     return 1
 }
 
-# Apply YAML config: create windows/panes and send startup commands
-# Supports window dir and env, pane split/dir/env
-# Usage: apply_yaml_config <config_path> <session> <worktree> <repo_root> [user-template]
-apply_yaml_config() {
-    cfg="$1"; session="$2"; wt="$3"; repo="$4"; config_source="${5:-repository}"
-    [ -f "$cfg" ] || return 0
-    if [ "$config_source" != user-template ]; then
-        case "$cfg" in
-            "$HYDRA_HOME"/*) ;;
-            *)
-                config_root="$(dirname "$(dirname "$cfg")")"
-                if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$config_root"; then
-                    echo "Error: repository YAML config is not trusted or changed" >&2
-                    echo "Next: review .hydra/config.yml and run 'hydra init --trust'" >&2
-                    return 1
-                fi
-                ;;
-        esac
-    fi
-
+# Emit the restricted WIN/WATTR/PANE/START tab-separated records consumed below.
+yaml_config_records() {
     awk '
       function ltrim(s){ sub(/^[[:space:]]+/,"",s); return s }
       function rtrim(s){ sub(/[[:space:]]+$/,"",s); return s }
@@ -130,7 +112,30 @@ apply_yaml_config() {
         next
       }
       END{ flush_pane() }
-    ' "$cfg" | while IFS=$(printf '\t') read -r kind f1 f2 f3 f4; do
+    ' "$1"
+}
+
+# Apply YAML config: create windows/panes and send startup commands
+# Supports window dir and env, pane split/dir/env
+# Usage: apply_yaml_config <config_path> <session> <worktree> <repo_root> [user-template]
+apply_yaml_config() {
+    cfg="$1"; session="$2"; wt="$3"; repo="$4"; config_source="${5:-repository}"
+    [ -f "$cfg" ] || return 0
+    if [ "$config_source" != user-template ]; then
+        case "$cfg" in
+            "$HYDRA_HOME"/*) ;;
+            *)
+                config_root="$(dirname "$(dirname "$cfg")")"
+                if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$config_root"; then
+                    echo "Error: repository YAML config is not trusted or changed" >&2
+                    echo "Next: review .hydra/config.yml and run 'hydra init --trust'" >&2
+                    return 1
+                fi
+                ;;
+        esac
+    fi
+
+    yaml_config_records "$cfg" | while IFS=$(printf '\t') read -r kind f1 f2 f3 f4; do
         # Accumulate session-wide env seen so far so later windows/panes inherit it
         session_env="${session_env:-}"
         case "$kind" in
@@ -190,30 +195,15 @@ apply_yaml_config() {
             fi
             prefix=""
             # Compose env prefix as exports to persist in shell (session -> window -> pane)
-            if [ -n "$session_env" ]; then
+            for yaml_env in "$session_env" "$window_env" "$pane_env"; do
                 IFS=';'
-                for kv in $session_env; do
+                for kv in $yaml_env; do
                     unset IFS
                     [ -z "$kv" ] && continue
                     prefix="$prefix export $kv;"
                 done
-            fi
-            if [ -n "$window_env" ]; then
-                IFS=';'
-                for kv in $window_env; do
-                    unset IFS
-                    [ -z "$kv" ] && continue
-                    prefix="$prefix export $kv;"
-                done
-            fi
-            if [ -n "$pane_env" ]; then
-                IFS=';'
-                for kv in $pane_env; do
-                    unset IFS
-                    [ -z "$kv" ] && continue
-                    prefix="$prefix export $kv;"
-                done
-            fi
+                unset IFS
+            done
             tmux select-window -t "$current_window_id" 2>/dev/null || true
             if [ "$current_pane_index" -eq 0 ]; then
                 # Avoid premature shell expansion of command contents

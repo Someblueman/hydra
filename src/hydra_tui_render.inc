@@ -243,38 +243,20 @@ static void render_help(struct app *app) {
     linef(app, "q               Quit");
 }
 
-static void render(struct app *app, unsigned frame, bool headless) {
-    static const char *views[] = {"Heads", "Details", "Coordination", "Recovery"};
-    app->hit_count = 0U;
-    app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
-    app->hit_tabs = app->cols >= 70 && !app->search[0];
-    app->paint = !headless && !app->no_color;
-    app->line = 0;
-    app->limit = app->rows - 3;
-    app->boxed = false;
-    if (headless) printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
-    else { style(app, TONE_BASE); printf("\033[H\033[2J"); }
+static const char *view_names[] = {"Heads", "Details", "Coordination", "Recovery"};
+static void render_header(struct app *app) {
     style(app, TONE_TITLE);
     linef(app, "%-*s", app->cols - 1, app->fleet ? " HYDRA MISSION CONTROL / Fleet" : " HYDRA MISSION CONTROL");
     style(app, TONE_BASE);
-    if (app->search[0]) linef(app, "[%s]  Search: %s", views[app->view], app->search);
+    if (app->search[0]) linef(app, "[%s]  Search: %s", view_names[app->view], app->search);
     else if (app->cols >= 70) linef(app, "%sHeads%s  %sDetails%s  %sCoordination%s  %sRecovery%s   v next",
         app->view == 0 ? "[" : " ", app->view == 0 ? "]" : " ",
         app->view == 1 ? "[" : " ", app->view == 1 ? "]" : " ",
         app->view == 2 ? "[" : " ", app->view == 2 ? "]" : " ",
         app->view == 3 ? "[" : " ", app->view == 3 ? "]" : " ");
-    else linef(app, "[%s]  v next view", views[app->view]);
-    panel_edge(app, app->help ? "HELP" : app->diagnostics ? "DIAGNOSTICS" : views[app->view]);
-    app->boxed = true;
-    if (app->help) render_help(app);
-    else if (app->view == 0) render_list(app);
-    else if (app->view == 1) render_detail(app);
-    else if (app->view == 2) render_coordination(app);
-    else render_recovery(app);
-    while (app->line < app->limit) linef(app, "");
-    app->boxed = false;
-    app->limit = app->rows;
-    panel_edge(app, NULL);
+    else linef(app, "[%s]  v next view", view_names[app->view]);
+}
+static void render_footer(struct app *app) {
     if (app->marked_count) linef(app, "%zu marked  x kill  G group%s%s", app->marked_count, app->notice[0] ? " | " : "", app->notice);
     else if (app->notice[0]) linef(app, "%s", app->notice);
     else if (!app->help && !app->diagnostics && (app->view == 0 || app->view == 3))
@@ -285,5 +267,30 @@ static void render(struct app *app, unsigned frame, bool headless) {
     else if (app->view == 1 && !app->fleet) linef(app, "p output  d diagnostics  Esc back  t theme  ? help  q quit");
     else linef(app, app->fleet ? "a attach  c interrupt  / search  t theme  ? help  q quit" : "Enter details  : actions  / search  t theme  ? help  q quit");
     style(app, TONE_BASE);
+}
+
+static void render(struct app *app, unsigned frame, bool headless) {
+    app->hit_count = 0U;
+    app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
+    app->hit_tabs = app->cols >= 70 && !app->search[0];
+    app->paint = !headless && !app->no_color;
+    app->line = 0;
+    app->limit = app->rows - 3;
+    app->boxed = false;
+    if (headless) printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
+    else { style(app, TONE_BASE); printf("\033[H\033[2J"); }
+    render_header(app);
+    panel_edge(app, app->help ? "HELP" : app->diagnostics ? "DIAGNOSTICS" : view_names[app->view]);
+    app->boxed = true;
+    if (app->help) render_help(app);
+    else if (app->view == 0) render_list(app);
+    else if (app->view == 1) render_detail(app);
+    else if (app->view == 2) render_coordination(app);
+    else render_recovery(app);
+    while (app->line < app->limit) linef(app, "");
+    app->boxed = false;
+    app->limit = app->rows;
+    panel_edge(app, NULL);
+    render_footer(app);
     fflush(stdout);
 }

@@ -1,4 +1,6 @@
 #include "plan.h"
+#include "task.h"
+#include "workflow_data.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -62,9 +64,9 @@ json_object *plan_delivery(const char *run) {
         {
             json_object *claimed = f_field(report, "requirements"); size_t a, b;
             for (a = 0; a < json_object_array_length(claimed); a++) {
-                const char *id = task_text(json_object_array_get_idx(claimed, a)); int index = plan_index(requirements, id);
+                const char *id = f_text(json_object_array_get_idx(claimed, a)); int index = plan_index(requirements, id);
                 if (index < 0 || strcmp(f_string(json_object_array_get_idx(requirements, (size_t)index), "check"), f_string(c, "id"))) { json_object_put(report); goto done; }
-                for (b = 0; b < a; b++) if (!strcmp(id, task_text(json_object_array_get_idx(claimed, b)))) { json_object_put(report); goto done; }
+                for (b = 0; b < a; b++) if (!strcmp(id, f_text(json_object_array_get_idx(claimed, b)))) { json_object_put(report); goto done; }
             }
         }
         for (j = 0; j < json_object_array_length(requirements); j++) {

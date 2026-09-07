@@ -1,4 +1,6 @@
 #!/bin/sh
+# shellcheck disable=SC1091
+. "$(CDPATH='' cd -- "$(dirname "$0")" && pwd)/helpers.sh"
 # Integration tests for main hydra commands
 # POSIX-compliant test framework
 
@@ -37,54 +39,8 @@ cleanup_ci_environment() {
 }
 
 # Test helper functions
-assert_equal() {
-    expected="$1"
-    actual="$2"
-    message="$3"
-    
-    test_count=$((test_count + 1))
-    if [ "$expected" = "$actual" ]; then
-        pass_count=$((pass_count + 1))
-        echo "[PASS] $message"
-    else
-        fail_count=$((fail_count + 1))
-        echo "[FAIL] $message"
-        echo "  Expected: '$expected'"
-        echo "  Actual:   '$actual'"
-    fi
-}
 
-assert_success() {
-    exit_code="$1"
-    message="$2"
-    
-    test_count=$((test_count + 1))
-    if [ "$exit_code" -eq 0 ]; then
-        pass_count=$((pass_count + 1))
-        echo "[PASS] $message"
-    else
-        fail_count=$((fail_count + 1))
-        echo "[FAIL] $message"
-        echo "  Expected: success (exit code 0)"
-        echo "  Actual:   failure (exit code $exit_code)"
-    fi
-}
 
-assert_failure() {
-    exit_code="$1"
-    message="$2"
-    
-    test_count=$((test_count + 1))
-    if [ "$exit_code" -ne 0 ]; then
-        pass_count=$((pass_count + 1))
-        echo "[PASS] $message"
-    else
-        fail_count=$((fail_count + 1))
-        echo "[FAIL] $message"
-        echo "  Expected: failure (non-zero exit code)"
-        echo "  Actual:   success (exit code 0)"
-    fi
-}
 
 assert_contains() {
     text="$1"

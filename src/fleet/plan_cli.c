@@ -16,8 +16,28 @@ static json_object *diagnostics(json_object *errors, json_object *plan) {
     }
     return result;
 }
+static json_object *compile_command(const char *plan_path, const char *policy_path, const char *source, const char *output) {
+    json_object *plan, *policy, *compiled = NULL, *errors = json_object_new_array(), *result;
+    char digest[65];
+    plan = plan_read(plan_path); policy = plan_read(policy_path);
+    if (!plan || !policy) plan_error(errors, "$", "invalid_json", "expected bounded UTF-8 JSON objects without duplicate members");
+    else compiled = plan_compile(plan, policy, source, errors);
+    if (!compiled && !json_object_array_length(errors)) plan_error(errors, "$", "compile_failed", "compiler could not resolve the plan");
+    if (compiled && output) {
+        const char *text; json_object *canonical = plan_canonical(compiled);
+        text = json_object_to_json_string_ext(canonical, JSON_C_TO_STRING_PLAIN);
+        if (strlen(text) > PLAN_LIMIT || plan_digest(compiled, digest) || f_write(output, text, strlen(text), false))
+            plan_error(errors, "$", "artifact_write_failed", "compiled artifact must fit 256 KiB and use a new writable output path");
+        json_object_put(canonical);
+    }
+    result = diagnostics(errors, plan);
+    if (compiled && !json_object_array_length(errors) && !plan_digest(compiled, digest)) f_string_add(f_field(result, "data"), "sha256", digest);
+    json_object_put(plan); json_object_put(policy); json_object_put(compiled); json_object_put(errors);
+    return result;
+}
+
 json_object *plan_cli(int argc, char **argv) {
-    json_object *plan = NULL, *policy = NULL, *compiled = NULL, *errors = json_object_new_array(), *result = NULL;
+    json_object *plan = NULL, *compiled = NULL, *result = NULL;
     char digest[65], path[F_PATH];
     if (argc == 1 && !strcmp(argv[0], "schema")) {
         static const char *const schema[] = {
@@ -25,27 +45,15 @@ json_object *plan_cli(int argc, char **argv) {
         };
         size_t i;
         for (i = 0; i < sizeof(schema) / sizeof(schema[0]); i++) if (fputs(schema[i], stdout) == EOF) {
-            json_object_put(errors); return f_error("workflow plan schema", "io_error", "cannot write schema");
+            return f_error("workflow plan schema", "io_error", "cannot write schema");
         }
-        json_object_put(errors); return NULL;
+        return NULL;
     }
     if ((argc == 4 && !strcmp(argv[0], "validate")) || (argc == 5 && !strcmp(argv[0], "compile"))) {
-        plan = plan_read(argv[1]); policy = plan_read(argv[2]);
-        if (!plan || !policy) plan_error(errors, "$", "invalid_json", "expected bounded UTF-8 JSON objects without duplicate members");
-        else compiled = plan_compile(plan, policy, argv[3], errors);
-        if (!compiled && !json_object_array_length(errors)) plan_error(errors, "$", "compile_failed", "compiler could not resolve the plan");
-        if (compiled && !strcmp(argv[0], "compile")) {
-            const char *text; json_object *canonical = plan_canonical(compiled);
-            text = json_object_to_json_string_ext(canonical, JSON_C_TO_STRING_PLAIN);
-            if (strlen(text) > PLAN_LIMIT || plan_digest(compiled, digest) || f_write(argv[4], text, strlen(text), false))
-                plan_error(errors, "$", "artifact_write_failed", "compiled artifact must fit 256 KiB and use a new writable output path");
-            json_object_put(canonical);
-        }
-        result = diagnostics(errors, plan);
-        if (compiled && !json_object_array_length(errors) && !plan_digest(compiled, digest)) f_string_add(f_field(result, "data"), "sha256", digest);
+        return compile_command(argv[1], argv[2], argv[3], argc == 5 ? argv[4] : NULL);
     } else if (argc == 2 && !strcmp(argv[0], "preview")) {
         compiled = plan_read(argv[1]);
-        if (compiled && !plan_preview(compiled)) { json_object_put(compiled); json_object_put(errors); return NULL; }
+        if (compiled && !plan_preview(compiled)) { json_object_put(compiled); return NULL; }
     } else if (argc == 2 && !strcmp(argv[0], "result")) {
         char *state = NULL;
         if (!f_path(path, sizeof(path), argv[1], "state")) state = f_read(path, 64);
@@ -75,18 +83,18 @@ json_object *plan_cli(int argc, char **argv) {
                 const char *branch = f_string(f_field(json_object_array_get_idx(steps, i), "args"), "branch");
                 if (branch && plan_id(branch)) puts(branch);
             }
-            json_object_put(compiled); json_object_put(errors); return NULL;
+            json_object_put(compiled); return NULL;
         }
     } else if (argc == 2 && !strcmp(argv[0], "timeout")) {
         compiled = plan_read(argv[1]);
         if (compiled && f_field(f_field(compiled, "plan"), "envelope")) {
             printf("%d\n", json_object_get_int(f_field(f_field(f_field(compiled, "plan"), "envelope"), "timeout_seconds")));
-            json_object_put(compiled); json_object_put(errors); return NULL;
+            json_object_put(compiled); return NULL;
         }
     } else if (argc == 2 && !strcmp(argv[0], "projection")) {
         compiled = plan_read(argv[1]);
         if (compiled && f_string(compiled, "workflow")) { fputs(f_string(compiled, "workflow"), stdout); result = f_success("workflow plan projection", NULL); }
-        if (result) { json_object_put(result); json_object_put(compiled); json_object_put(errors); return NULL; }
+        if (result) { json_object_put(result); json_object_put(compiled); return NULL; }
     } else if (argc == 4 && !strcmp(argv[0], "bindings")) {
         compiled = plan_read(argv[1]);
         if (compiled && !plan_admit(compiled, argv[2], argv[3])) result = f_success("workflow plan bindings", json_object_new_object());
@@ -97,5 +105,5 @@ json_object *plan_cli(int argc, char **argv) {
     }
     if (!result) result = f_error("workflow plan", "invalid_or_stale_plan", "plan is malformed, unaccepted, changed, unsupported, or lacks passing artifact-bound verification");
     if (f_field(result, "error") && !f_field(result, "data")) f_string_add(f_field(result, "error"), "recovery", "inspect the compiled artifact, source, inputs, head availability and verification; compile and accept fresh scope when bindings change");
-    json_object_put(plan); json_object_put(policy); json_object_put(compiled); json_object_put(errors); return result;
+    json_object_put(plan); json_object_put(compiled); return result;
 }

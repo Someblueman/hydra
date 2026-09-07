@@ -36,6 +36,67 @@ static size_t split_fields(char *line, char **fields, size_t capacity) {
     return count;
 }
 
+static int fleet_record(struct model *model, char **fields, char *error, size_t error_size) {
+    struct head *head;
+    if (model->head_count >= MAX_HEADS || strlen(fields[1]) >= 128U || strlen(fields[2]) >= SOURCE_TEXT || strlen(fields[3]) >= TEXT || strlen(fields[4]) >= TEXT || strlen(fields[5]) >= TEXT) {
+        copy_text(error, error_size, "fleet row exceeds native bounds"); return -1;
+    }
+    head = &model->heads[model->head_count++];
+    copy_text(head->remote_host, sizeof(head->remote_host), fields[1]);
+    copy_text(head->remote_project, sizeof(head->remote_project), fields[2]);
+    copy_text(head->remote_branch, sizeof(head->remote_branch), fields[3]);
+    (void)snprintf(head->branch, sizeof(head->branch), "%.80s/%.170s", fields[1], fields[3]);
+    copy_text(head->head_id, sizeof(head->head_id), fields[4]);
+    copy_text(head->instance, sizeof(head->instance), fields[5]);
+    copy_text(head->desired, sizeof(head->desired), fields[6]);
+    copy_text(head->status, sizeof(head->status), fields[6]);
+    copy_text(head->liveness, sizeof(head->liveness), "unknown");
+    copy_text(head->source, sizeof(head->source), "remote durable state");
+    return 0;
+}
+static int head_record(struct model *model, char **fields, char *error, size_t error_size) {
+    struct head *head;
+    if (model->head_count >= MAX_HEADS) {
+        copy_text(error, error_size, "native data exceeds the 512-head safety bound");
+        return -1;
+    }
+    head = &model->heads[model->head_count++];
+    memset(head, 0, sizeof(*head));
+    copy_text(head->branch, sizeof(head->branch), fields[1]);
+    copy_text(head->session, sizeof(head->session), fields[2]);
+    copy_text(head->profile, sizeof(head->profile), fields[3]);
+    copy_text(head->group, sizeof(head->group), fields[4]);
+    copy_text(head->pr, sizeof(head->pr), fields[5]);
+    copy_text(head->status, sizeof(head->status), fields[6]);
+    copy_text(head->liveness, sizeof(head->liveness), fields[7]);
+    copy_text(head->declared, sizeof(head->declared), fields[8]);
+    copy_text(head->observed, sizeof(head->observed), fields[9]);
+    copy_text(head->confidence, sizeof(head->confidence), fields[10]);
+    copy_text(head->instance, sizeof(head->instance), fields[11]);
+    if (!parse_unsigned(fields[12], &head->events) ||
+        !parse_unsigned(fields[13], &head->signals) ||
+        !parse_unsigned(fields[14], &head->messages) ||
+        !parse_unsigned(fields[15], &head->claims) ||
+        !parse_unsigned(fields[16], &head->scopes) ||
+        !parse_unsigned(fields[17], &head->queue) ||
+        !parse_unsigned(fields[18], &head->resources) ||
+        !parse_unsigned(fields[19], &head->diff) ||
+        !parse_unsigned(fields[20], &head->gates) ||
+        !parse_unsigned(fields[21], &head->approved) ||
+        !parse_unsigned(fields[28], &head->notifications)) {
+        copy_text(error, error_size, "native data contains an invalid numeric field");
+        return -1;
+    }
+    copy_text(head->desired, sizeof(head->desired), fields[22]);
+    copy_text(head->source, sizeof(head->source), fields[23]);
+    copy_text(head->head_id, sizeof(head->head_id), fields[24]);
+    copy_text(head->adapter, sizeof(head->adapter), fields[25]);
+    copy_text(head->adapter_confidence, sizeof(head->adapter_confidence), fields[26]);
+    copy_text(head->adapter_source, sizeof(head->adapter_source), fields[27]);
+    copy_text(head->notification_source, sizeof(head->notification_source), fields[29]);
+    return 0;
+}
+
 static int load_model_stream(FILE *input, struct model *model, char *error, size_t error_size) {
     char *line = NULL;
     size_t line_size = 0U;
@@ -59,63 +120,9 @@ static int load_model_stream(FILE *input, struct model *model, char *error, size
             continue;
         }
         if (fleet_stream && count == 7U && strcmp(fields[0], "F") == 0) {
-            struct head *head;
-            if (model->head_count >= MAX_HEADS || strlen(fields[1]) >= 128U || strlen(fields[2]) >= SOURCE_TEXT || strlen(fields[3]) >= TEXT || strlen(fields[4]) >= TEXT || strlen(fields[5]) >= TEXT) {
-                copy_text(error, error_size, "fleet row exceeds native bounds"); free(line); return -1;
-            }
-            head = &model->heads[model->head_count++];
-            copy_text(head->remote_host, sizeof(head->remote_host), fields[1]);
-            copy_text(head->remote_project, sizeof(head->remote_project), fields[2]);
-            copy_text(head->remote_branch, sizeof(head->remote_branch), fields[3]);
-            (void)snprintf(head->branch, sizeof(head->branch), "%.80s/%.170s", fields[1], fields[3]);
-            copy_text(head->head_id, sizeof(head->head_id), fields[4]);
-            copy_text(head->instance, sizeof(head->instance), fields[5]);
-            copy_text(head->desired, sizeof(head->desired), fields[6]);
-            copy_text(head->status, sizeof(head->status), fields[6]);
-            copy_text(head->liveness, sizeof(head->liveness), "unknown");
-            copy_text(head->source, sizeof(head->source), "remote durable state");
+            if (fleet_record(model, fields, error, error_size)) { free(line); return -1; }
         } else if (!fleet_stream && count == 30U && strcmp(fields[0], "H") == 0) {
-            struct head *head;
-            if (model->head_count >= MAX_HEADS) {
-                copy_text(error, error_size, "native data exceeds the 512-head safety bound");
-                free(line);
-                return -1;
-            }
-            head = &model->heads[model->head_count++];
-            memset(head, 0, sizeof(*head));
-            copy_text(head->branch, sizeof(head->branch), fields[1]);
-            copy_text(head->session, sizeof(head->session), fields[2]);
-            copy_text(head->profile, sizeof(head->profile), fields[3]);
-            copy_text(head->group, sizeof(head->group), fields[4]);
-            copy_text(head->pr, sizeof(head->pr), fields[5]);
-            copy_text(head->status, sizeof(head->status), fields[6]);
-            copy_text(head->liveness, sizeof(head->liveness), fields[7]);
-            copy_text(head->declared, sizeof(head->declared), fields[8]);
-            copy_text(head->observed, sizeof(head->observed), fields[9]);
-            copy_text(head->confidence, sizeof(head->confidence), fields[10]);
-            copy_text(head->instance, sizeof(head->instance), fields[11]);
-            if (!parse_unsigned(fields[12], &head->events) ||
-                !parse_unsigned(fields[13], &head->signals) ||
-                !parse_unsigned(fields[14], &head->messages) ||
-                !parse_unsigned(fields[15], &head->claims) ||
-                !parse_unsigned(fields[16], &head->scopes) ||
-                !parse_unsigned(fields[17], &head->queue) ||
-                !parse_unsigned(fields[18], &head->resources) ||
-                !parse_unsigned(fields[19], &head->diff) ||
-                !parse_unsigned(fields[20], &head->gates) ||
-                !parse_unsigned(fields[21], &head->approved) ||
-                !parse_unsigned(fields[28], &head->notifications)) {
-                copy_text(error, error_size, "native data contains an invalid numeric field");
-                free(line);
-                return -1;
-            }
-            copy_text(head->desired, sizeof(head->desired), fields[22]);
-            copy_text(head->source, sizeof(head->source), fields[23]);
-            copy_text(head->head_id, sizeof(head->head_id), fields[24]);
-            copy_text(head->adapter, sizeof(head->adapter), fields[25]);
-            copy_text(head->adapter_confidence, sizeof(head->adapter_confidence), fields[26]);
-            copy_text(head->adapter_source, sizeof(head->adapter_source), fields[27]);
-            copy_text(head->notification_source, sizeof(head->notification_source), fields[29]);
+            if (head_record(model, fields, error, error_size)) { free(line); return -1; }
         } else if (count == 6U && strcmp(fields[0], "R") == 0) {
             struct recovery *recovery;
             if (model->recovery_count >= MAX_RECOVERY) continue;
@@ -153,87 +160,30 @@ static int load_fixture(const char *path, struct model *model, char *error, size
 }
 
 static int refresh_model(struct app *app) {
-    int pipefd[2], status = 0, ready;
-    pid_t pid;
-    posix_spawn_file_actions_t actions;
-    posix_spawnattr_t attributes;
+    struct output_child child;
     FILE *input;
     struct model *next;
-    struct timespec started, now;
     size_t bytes = 0U;
-    bool failed = false, timed_out = false;
-    char buffer[8192];
-    char error[TEXT] = "";
+    bool failed = false;
+    char buffer[8192], error[TEXT] = "";
     char *argv[] = {(char *)app->hydra, (char *)(app->fleet ? "fleet" : "tui"), (char *)(app->fleet ? "tui-data" : "--data"), NULL};
-    if (pipe(pipefd) != 0) return -1;
-    posix_spawn_file_actions_init(&actions);
-    posix_spawnattr_init(&attributes);
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
-    posix_spawnattr_setpgroup(&attributes, 0);
-    posix_spawn_file_actions_addclose(&actions, pipefd[0]);
-    posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
-    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
-    posix_spawn_file_actions_addclose(&actions, pipefd[1]);
-    if (posix_spawnp(&pid, app->hydra, &actions, &attributes, argv, environ) != 0) {
-        posix_spawn_file_actions_destroy(&actions);
-        posix_spawnattr_destroy(&attributes);
-        close(pipefd[0]); close(pipefd[1]);
-        return -1;
-    }
-    posix_spawn_file_actions_destroy(&actions);
-    posix_spawnattr_destroy(&attributes);
-    close(pipefd[1]);
+    if (output_start(&child, argv, app->fleet ? 3500L : 2000L)) return -1;
     input = tmpfile();
-    if (input == NULL) {
-        close(pipefd[0]);
-        (void)kill(-pid, SIGKILL); (void)kill(pid, SIGKILL);
-        while (waitpid(pid, &status, 0) < 0 && errno == EINTR) { }
-        return -1;
-    }
-    (void)clock_gettime(CLOCK_MONOTONIC, &started);
+    if (input == NULL) { (void)output_finish(&child, true); return -1; }
     for (;;) {
-        fd_set readfds;
-        struct timeval timeout;
-        ssize_t length;
-        long elapsed_ms, remaining_ms;
-        (void)clock_gettime(CLOCK_MONOTONIC, &now);
-        elapsed_ms = (long)(now.tv_sec - started.tv_sec) * 1000L +
-                     (long)(now.tv_nsec - started.tv_nsec) / 1000000L;
-        remaining_ms = (app->fleet ? 3500L : 2000L) - elapsed_ms;
-        if (remaining_ms <= 0L) { timed_out = true; break; }
-        FD_ZERO(&readfds); FD_SET(pipefd[0], &readfds);
-        timeout.tv_sec = remaining_ms / 1000L;
-        timeout.tv_usec = (remaining_ms % 1000L) * 1000L;
-        ready = select(pipefd[0] + 1, &readfds, NULL, NULL, &timeout);
-        if (ready == 0) { timed_out = true; break; }
-        if (ready < 0) {
-            if (errno == EINTR) continue;
-            failed = true; break;
-        }
-        length = read(pipefd[0], buffer, sizeof(buffer));
+        ssize_t length = output_read(&child, buffer, sizeof(buffer));
         if (length == 0) break;
-        if (length < 0) {
-            if (errno == EINTR) continue;
-            failed = true; break;
-        }
+        if (length < 0) { failed = true; break; }
         bytes += (size_t)length;
         if (bytes > MAX_DATA_BYTES || fwrite(buffer, 1U, (size_t)length, input) != (size_t)length) {
             failed = true; break;
         }
     }
-    close(pipefd[0]);
-    if (timed_out || failed) {
-        (void)kill(-pid, SIGKILL); (void)kill(pid, SIGKILL);
-    }
-    do { ready = waitpid(pid, &status, 0); } while (ready < 0 && errno == EINTR);
-    if (timed_out) {
+    if (output_finish(&child, failed)) {
         fclose(input);
-        copy_text(app->notice, sizeof(app->notice), "shell data adapter timed out; showing last good snapshot");
-        return -1;
-    }
-    if (failed || ready != pid || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        fclose(input);
-        copy_text(app->notice, sizeof(app->notice), "shell data adapter failed; showing last good snapshot");
+        copy_text(app->notice, sizeof(app->notice), child.timed_out ?
+                  "shell data adapter timed out; showing last good snapshot" :
+                  "shell data adapter failed; showing last good snapshot");
         return -1;
     }
     rewind(input);
@@ -311,15 +261,10 @@ static void refresh_current_session(struct app *app) {
 
 static void capture_preview(struct app *app) {
     if (app->fleet) return;
-    int pipefd[2], status = 0, waited;
-    pid_t pid;
-    ssize_t length;
+    struct output_child child;
     size_t used = 0U;
+    bool failed = false;
     char target[TEXT + 8U];
-    posix_spawn_file_actions_t actions;
-    posix_spawnattr_t attributes;
-    struct timespec started, now;
-    bool timed_out = false;
     char *argv[8];
     if (!app->preview || app->model.head_count == 0U) return;
     retarget_selection(app);
@@ -329,49 +274,15 @@ static void capture_preview(struct app *app) {
     argv[3] = (char *)"-S"; argv[4] = (char *)"-8"; argv[5] = (char *)"-t";
     argv[6] = target; argv[7] = NULL;
     app->preview_text[0] = '\0';
-    if (pipe(pipefd) != 0) return;
-    posix_spawn_file_actions_init(&actions);
-    posix_spawnattr_init(&attributes);
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
-    posix_spawnattr_setpgroup(&attributes, 0);
-    posix_spawn_file_actions_addclose(&actions, pipefd[0]);
-    posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
-    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
-    posix_spawn_file_actions_addclose(&actions, pipefd[1]);
-    if (posix_spawnp(&pid, "tmux", &actions, &attributes, argv, environ) != 0) {
-        posix_spawn_file_actions_destroy(&actions); posix_spawnattr_destroy(&attributes);
-        close(pipefd[0]); close(pipefd[1]); return;
-    }
-    posix_spawn_file_actions_destroy(&actions); posix_spawnattr_destroy(&attributes); close(pipefd[1]);
-    (void)clock_gettime(CLOCK_MONOTONIC, &started);
+    if (output_start(&child, argv, 1000L)) return;
     while (used + 1U < sizeof(app->preview_text)) {
-        fd_set readfds;
-        struct timeval timeout;
-        long elapsed_ms, remaining_ms;
-        int ready;
-        (void)clock_gettime(CLOCK_MONOTONIC, &now);
-        elapsed_ms = (long)(now.tv_sec - started.tv_sec) * 1000L +
-                     (long)(now.tv_nsec - started.tv_nsec) / 1000000L;
-        remaining_ms = 1000L - elapsed_ms;
-        if (remaining_ms <= 0L) { timed_out = true; break; }
-        FD_ZERO(&readfds); FD_SET(pipefd[0], &readfds);
-        timeout.tv_sec = remaining_ms / 1000L;
-        timeout.tv_usec = (remaining_ms % 1000L) * 1000L;
-        ready = select(pipefd[0] + 1, &readfds, NULL, NULL, &timeout);
-        if (ready == 0) { timed_out = true; break; }
-        if (ready < 0) { if (errno == EINTR) continue; timed_out = true; break; }
-        length = read(pipefd[0], app->preview_text + used, sizeof(app->preview_text) - used - 1U);
+        ssize_t length = output_read(&child, app->preview_text + used, sizeof(app->preview_text) - used - 1U);
         if (length == 0) break;
-        if (length < 0) { if (errno == EINTR) continue; timed_out = true; break; }
+        if (length < 0) { failed = true; break; }
         used += (size_t)length;
     }
-    close(pipefd[0]);
-    if (timed_out || used + 1U >= sizeof(app->preview_text)) {
-        (void)kill(-pid, SIGKILL); (void)kill(pid, SIGKILL);
-    }
-    do { waited = waitpid(pid, &status, 0); } while (waited < 0 && errno == EINTR);
     app->preview_text[used] = '\0';
-    if (timed_out || waited != pid || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        copy_text(app->preview_text, sizeof(app->preview_text), timed_out ? "preview timed out" : "preview unavailable");
+    if (output_finish(&child, failed || used + 1U >= sizeof(app->preview_text))) {
+        copy_text(app->preview_text, sizeof(app->preview_text), child.timed_out ? "preview timed out" : "preview unavailable");
     }
 }

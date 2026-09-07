@@ -1,6 +1,6 @@
 #ifndef HYDRA_AGENT_H
 #define HYDRA_AGENT_H
-#include "workflow_data.h"
+#include "fleet.h"
 
 #define AGENT_ARGS 128U
 #define AGENT_PROMPT_LIMIT 65536U

@@ -83,6 +83,12 @@ _load_libs() {
     done
 }
 
+# Basic UI actions are loaded only when native dispatch falls back or --basic is selected.
+_load_tui_basic_libs() {
+    _load_libs layout hooks yaml spawn spawn_bulk kill parallel github dashboard \
+        cmd_spawn cmd_queue cmd_list cmd_session cmd_messages
+}
+
 # Execution commands share this order; spawn also needs layout before state.
 _load_runtime_libs() {
     _load_libs output paths locks git tmux "$@" state identity state_v2 events project profiles lifecycle
@@ -169,9 +175,8 @@ _load_libs_for_cmd() {
             _load_libs locks state tmux identity state_v2 dashboard
             ;;
         tui)
-            _load_libs output paths locks identity git tmux layout state state_v2 project profiles notify events \
-                lifecycle hooks yaml spawn spawn_bulk kill limits maintenance parallel github dashboard \
-                cmd_spawn cmd_queue cmd_list cmd_session cmd_messages tui
+            _load_libs output paths locks identity git tmux state state_v2 project profiles notify events \
+                lifecycle limits maintenance tui
             ;;
         queue)
             _load_libs output state locks identity state_v2 limits spawn cmd_queue

@@ -22,7 +22,7 @@ int task_finish(const char *directory, json_object *state) {
 static int artifacts(json_object *files, json_object *heads, json_object *spec, const char *scratch) {
     json_object *outputs = f_field(spec, "outputs"); size_t i, j, remaining = (size_t)json_object_get_int(f_field(f_field(spec, "limits"), "artifact_bytes"));
     for (i = 0; i < json_object_array_length(outputs); i++) {
-        const char *relative = task_text(json_object_array_get_idx(outputs, i)); json_object *producer = NULL;
+        const char *relative = f_text(json_object_array_get_idx(outputs, i)); json_object *producer = NULL;
         for (j = 0; j < json_object_array_length(heads); j++) {
             json_object *head = json_object_array_get_idx(heads, j); char path[F_PATH]; struct stat st;
             if (f_path(path, sizeof(path), f_string(head, "workspace"), relative)) return -1;

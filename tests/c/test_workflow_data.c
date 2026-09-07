@@ -1,4 +1,5 @@
 #include "fleet/workflow_data.h"
+#include "fleet/task.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>

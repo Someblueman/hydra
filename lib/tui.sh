@@ -52,10 +52,18 @@ _tui_load_modules() {
     if [ -z "$_tdir" ]; then
         _tdir="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)" || true
     fi
-    for _mod in tui_init tui_data tui_render tui_input tui_actions tui_native tui_main; do
+    for _mod in tui_init tui_data tui_render tui_input tui_actions; do
         # shellcheck disable=SC1090
         . "$_tdir/${_mod}.sh"
     done
     _TUI_MODULES_LOADED=1
 }
-_tui_load_modules
+_tui_entry_dir="${HYDRA_LIB_DIR:-}"
+if [ -z "$_tui_entry_dir" ]; then
+    _tui_entry_dir="$(cd "$(dirname "$0")/../lib" 2>/dev/null && pwd)" || true
+fi
+# Native dispatch does not need the basic renderer or action implementations.
+for _tui_entry in tui_native tui_main; do
+    # shellcheck disable=SC1090
+    . "${_tui_entry_dir}/${_tui_entry}.sh"
+done

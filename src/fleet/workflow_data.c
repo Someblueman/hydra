@@ -1,4 +1,5 @@
 #include "workflow_data.h"
+#include "task.h"
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>

@@ -1,4 +1,5 @@
 #include "agent.h"
+#include "task.h"
 #include <math.h>
 #include <string.h>
 
@@ -128,17 +129,16 @@ static int pi(json_object *input, const char *type, struct agent_event *event) {
     if (!strcmp(type, "session")) { event->kind = "session"; event->session = f_string(input, "id"); return event->session ? 1 : -1; }
     if (!strcmp(type, "agent_start")) { event->kind = "observation"; event->status = "running"; return 1; }
     if (!strcmp(type, "agent_end")) { event->kind = "observation"; event->status = "idle"; return 1; }
-    if (!strcmp(type, "message_end")) {
-        json_object *message = f_field(input, "message"); const char *role = f_string(message, "role");
-        if (role && !strcmp(role, "assistant")) {
-            const char *reason = f_string(message, "stopReason");
-            event->kind = "result"; event->text = content_text(f_field(message, "content"));
-            event->status = reason && (!strcmp(reason, "error") || !strcmp(reason, "aborted")) ? "failed" : NULL;
-            event->usage = usage(f_field(message, "usage"), "input", "output", "cacheRead"); return event->usage ? 1 : -1;
-        }
-    }
-    return 0;
+    if (strcmp(type, "message_end")) return 0;
+    json_object *message = f_field(input, "message");
+    const char *role = f_string(message, "role"), *reason = f_string(message, "stopReason");
+    if (!role || strcmp(role, "assistant")) return 0;
+    event->kind = "result"; event->text = content_text(f_field(message, "content"));
+    event->status = reason && (!strcmp(reason, "error") || !strcmp(reason, "aborted")) ? "failed" : NULL;
+    event->usage = usage(f_field(message, "usage"), "input", "output", "cacheRead");
+    return event->usage ? 1 : -1;
 }
+
 static int opencode(json_object *input, const char *type, struct agent_event *event) {
     event->session = f_string(input, "sessionID");
     if (!strcmp(type, "step_start")) { event->kind = "observation"; event->status = "running"; return 1; }

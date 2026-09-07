@@ -282,6 +282,42 @@ static void interactive_prompt(struct app *app, char prefix) {
     else execute_palette(app, query);
 }
 
+static void handle_key(struct app *app, char key) {
+    if (app->fleet) {
+        switch (key) {
+            case 'a': fleet_action(app, true); return;
+            case 'c': fleet_action(app, false); return;
+            case ':': case 'p': case ' ': case 'A': case 'x': case 'G':
+                copy_text(app->notice, sizeof(app->notice), "Fleet: a attach, c interrupt, v views, / search, q quit"); return;
+            default: break;
+        }
+    }
+    switch (key) {
+        case 'q': app->running = false; break;
+        case 'j': move_selection(app, 1); break;
+        case 'k': move_selection(app, -1); break;
+        case 'v': app->view = (app->view + 1) % 4; app->diagnostics = false; break;
+        case '\r': case '\n':
+            if (selected_head(app) != NULL) app->view = 1;
+            else copy_text(app->notice, sizeof(app->notice), "no matching head selected");
+            break;
+        case '/': case ':': interactive_prompt(app, key); break;
+        case 'p': app->view = 1; app->preview = !app->preview; capture_preview(app); break;
+        case 'd': if (app->view != 3) app->view = 1; app->diagnostics = !app->diagnostics; break;
+        case ' ': toggle_mark(app); break;
+        case 'A': select_all_visible(app); break;
+        case 'x': if (app->marked_count > 0U) kill_marked_action(app); break;
+        case 'G': if (app->marked_count > 0U) group_marked_action(app); break;
+        case 't':
+            app->theme = (app->theme + 1) % 3;
+            snprintf(app->notice, sizeof(app->notice), "Theme: %s%s", theme_names[app->theme], app->no_color ? " (NO_COLOR)" : "");
+            break;
+        case '?': app->help = !app->help; break;
+        case 27: handle_escape(app); break;
+        default: break;
+    }
+}
+
 static int interactive_main(struct app *app) {
     time_t last_refresh;
     char key;
@@ -322,32 +358,7 @@ static int interactive_main(struct app *app) {
             }
             continue;
         }
-        if (key == 'q') app->running = false;
-        else if (key == 'j') move_selection(app, 1);
-        else if (key == 'k') move_selection(app, -1);
-        else if (key == 'v') { app->view = (app->view + 1) % 4; app->diagnostics = false; }
-        else if (key == '\r' || key == '\n') {
-            if (selected_head(app) != NULL) app->view = 1;
-            else copy_text(app->notice, sizeof(app->notice), "no matching head selected");
-        }
-        else if (key == '/') interactive_prompt(app, '/');
-        else if (app->fleet && key == 'a') fleet_action(app, true);
-        else if (app->fleet && key == 'c') fleet_action(app, false);
-        else if (app->fleet && (key == ':' || key == 'p' || key == ' ' || key == 'A' || key == 'x' || key == 'G')) copy_text(app->notice, sizeof(app->notice), "Fleet: a attach, c interrupt, v views, / search, q quit");
-        else if (key == ':') interactive_prompt(app, ':');
-        else if (key == 'p') { app->view = 1; app->preview = !app->preview; capture_preview(app); }
-        else if (key == 'd') { if (app->view != 3) app->view = 1; app->diagnostics = !app->diagnostics; }
-        else if (key == ' ') toggle_mark(app);
-        else if (key == 'A') select_all_visible(app);
-        else if (key == 'x' && app->marked_count > 0U) kill_marked_action(app);
-        else if (key == 'G' && app->marked_count > 0U) group_marked_action(app);
-        else if (key == 't') {
-            app->theme = (app->theme + 1) % 3;
-            snprintf(app->notice, sizeof(app->notice), "Theme: %s%s", theme_names[app->theme],
-                     app->no_color ? " (NO_COLOR)" : "");
-        }
-        else if (key == '?') app->help = !app->help;
-        else if (key == 27) handle_escape(app);
+        handle_key(app, key);
     }
     restore_terminal(app);
     return stop_signal == 0 ? 0 : 128 + stop_signal;

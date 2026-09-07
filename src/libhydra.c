@@ -171,55 +171,50 @@ static int hydra_validate_head(const char *head_path, const char *head_name, FIL
     return 0;
 }
 
+struct hydra_branch_record {
+    char id[HYDRA_SCALAR_MAX];
+    char branch[HYDRA_SCALAR_MAX];
+};
 static int hydra_validate_unique_branches(const char *heads_path, FILE *err) {
     DIR *heads = opendir(heads_path);
-    struct dirent *head_entry;
+    struct dirent *entry;
+    struct hydra_branch_record *records = NULL;
+    size_t count = 0U, capacity = 0U, i, j;
+    int result = -1;
     if (heads == NULL) return -1;
-    while ((head_entry = readdir(heads)) != NULL) {
-        char head_path[PATH_MAX];
-        char branch_path[PATH_MAX];
-        char branch[HYDRA_SCALAR_MAX];
-        DIR *others;
-        struct dirent *other_entry;
-        if (head_entry->d_name[0] == '.' || strncmp(head_entry->d_name, "head_", 5U) != 0) continue;
-        if (hydra_path(head_path, sizeof(head_path), heads_path, head_entry->d_name) != 0 ||
+    while ((entry = readdir(heads)) != NULL) {
+        char head_path[PATH_MAX], branch_path[PATH_MAX];
+        if (entry->d_name[0] == '.' || strncmp(entry->d_name, "head_", 5U) != 0) continue;
+        if (count == capacity) {
+            size_t next;
+            void *grown;
+            if (capacity > (size_t)-1 / 2U / sizeof(*records)) goto done;
+            next = capacity == 0U ? 16U : capacity * 2U;
+            grown = realloc(records, next * sizeof(*records));
+            if (grown == NULL) goto done;
+            records = grown; capacity = next;
+        }
+        if (hydra_copy(records[count].id, sizeof(records[count].id), entry->d_name) != 0 ||
+            hydra_path(head_path, sizeof(head_path), heads_path, entry->d_name) != 0 ||
             !hydra_is_dir(head_path) ||
             hydra_path(branch_path, sizeof(branch_path), head_path, "branch") != 0 ||
-            hydra_read_scalar(branch_path, branch, sizeof(branch)) != 0) {
-            closedir(heads);
-            return -1;
-        }
-        others = opendir(heads_path);
-        if (others == NULL) {
-            closedir(heads);
-            return -1;
-        }
-        while ((other_entry = readdir(others)) != NULL) {
-            char other_path[PATH_MAX];
-            char other_branch_path[PATH_MAX];
-            char other_branch[HYDRA_SCALAR_MAX];
-            if (other_entry->d_name[0] == '.' ||
-                strncmp(other_entry->d_name, "head_", 5U) != 0 ||
-                strcmp(other_entry->d_name, head_entry->d_name) <= 0) continue;
-            if (hydra_path(other_path, sizeof(other_path), heads_path, other_entry->d_name) != 0 ||
-                !hydra_is_dir(other_path) ||
-                hydra_path(other_branch_path, sizeof(other_branch_path), other_path, "branch") != 0 ||
-                hydra_read_scalar(other_branch_path, other_branch, sizeof(other_branch)) != 0) {
-                closedir(others);
-                closedir(heads);
-                return -1;
-            }
-            if (strcmp(branch, other_branch) == 0) {
-                fprintf(err, "duplicate branch identity: %s\n", branch);
-                closedir(others);
-                closedir(heads);
-                return -1;
-            }
-        }
-        closedir(others);
+            hydra_read_scalar(branch_path, records[count].branch, sizeof(records[count].branch)) != 0) goto done;
+        count++;
     }
-    closedir(heads);
-    return 0;
+    /* Preserve directory-order diagnostics and the lexicographic pair rule.
+     * Compare the collected scalars in memory instead of reopening every head. */
+    for (i = 0U; i < count; i++) {
+        for (j = 0U; j < count; j++) {
+            if (strcmp(records[j].id, records[i].id) <= 0) continue;
+            if (strcmp(records[i].branch, records[j].branch) == 0) {
+                fprintf(err, "duplicate branch identity: %s\n", records[i].branch);
+                goto done;
+            }
+        }
+    }
+    result = 0;
+done:
+    free(records); closedir(heads); return result;
 }
 
 int hydra_validate_state(const char *root, FILE *err) {
@@ -238,7 +233,7 @@ int hydra_validate_state(const char *root, FILE *err) {
     }
     while ((project_entry = readdir(projects)) != NULL) {
         char project_path[PATH_MAX];
-        char heads_path[PATH_MAX];
+        char heads_path[PATH_MAX], record_path[PATH_MAX];
         DIR *heads;
         struct dirent *head_entry;
         if (project_entry->d_name[0] == '.') continue;
@@ -252,11 +247,11 @@ int hydra_validate_state(const char *root, FILE *err) {
             closedir(projects);
             return -1;
         }
-        if (hydra_path(heads_path, sizeof(heads_path), project_path, "project-id") != 0 ||
-            hydra_read_scalar(heads_path, value, sizeof(value)) != 0 ||
+        if (hydra_path(record_path, sizeof(record_path), project_path, "project-id") != 0 ||
+            hydra_read_scalar(record_path, value, sizeof(value)) != 0 ||
             strcmp(value, project_entry->d_name) != 0 ||
-            hydra_path(heads_path, sizeof(heads_path), project_path, "repo-root") != 0 ||
-            hydra_read_scalar(heads_path, value, sizeof(value)) != 0 || value[0] == '\0' ||
+            hydra_path(record_path, sizeof(record_path), project_path, "repo-root") != 0 ||
+            hydra_read_scalar(record_path, value, sizeof(value)) != 0 || value[0] == '\0' ||
             hydra_path(heads_path, sizeof(heads_path), project_path, "heads") != 0 ||
             (heads = opendir(heads_path)) == NULL) {
             fprintf(err, "invalid project record: %s\n", project_entry->d_name);
@@ -381,6 +376,9 @@ static int hydra_collect_heads(const char *root, struct hydra_head_record **reco
             if (head_entry->d_name[0] == '.') continue;
             if (strncmp(head_entry->d_name, "head_", 5U) != 0) continue;
             if (count == capacity) {
+                if (capacity > (size_t)-1 / 2U / sizeof(*records)) {
+                    closedir(heads); closedir(projects); free(records); return -1;
+                }
                 size_t next = capacity == 0U ? 16U : capacity * 2U;
                 void *grown = realloc(records, next * sizeof(*records));
                 if (grown == NULL) {
@@ -434,5 +432,6 @@ int hydra_write_snapshot(const char *root, FILE *out, FILE *err) {
         fputc('}', out);
     }
     free(records);
-    return fputs("]}}\n", out) == EOF ? -1 : 0;
+    if (fputs("]}}\n", out) == EOF || ferror(out)) return -1;
+    return 0;
 }

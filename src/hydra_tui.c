@@ -76,6 +76,7 @@ static volatile sig_atomic_t stop_signal;
 static struct head *selected_head(struct app *app);
 static void retarget_selection(struct app *app);
 
+#include "hydra_tui_process.inc"
 #include "hydra_tui_model.inc"
 #include "hydra_tui_ui.inc"
 #include "hydra_tui_main.inc"

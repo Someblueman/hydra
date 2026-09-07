@@ -60,10 +60,18 @@ done:
 }
 /* Walk recorded state paths without following any child symlink. */
 static int descend(int parent, const char *name) {
-    int child;
+    int child, saved;
     if (parent < 0) return -1;
     child = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-    close(parent); return child;
+    saved = child < 0 ? errno : 0;
+    close(parent);
+    if (child < 0) errno = saved;
+    return child;
+}
+static int log_project_directory(const char *project) {
+    int dir = open(f_home, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    dir = descend(dir, "state"); dir = descend(dir, "v2");
+    dir = descend(dir, "projects"); return descend(dir, project);
 }
 static int log_directory(const char *id, json_object *runtime, json_object *request, json_object *log) {
     const char *source = f_field(request, "source") ? f_string(request, "source") : "owner";
@@ -85,18 +93,18 @@ static int log_directory(const char *id, json_object *runtime, json_object *requ
     if (!run || !project) { errno = ENOENT; return -1; }
     if (!f_name(project) || strncmp(project, "project_", 8) || !f_name(run) || strncmp(run, "run_", 4)) { errno = EINVAL; return -1; }
     f_string_add(log, "run_id", run);
-    dir = open(f_home, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-    dir = descend(dir, "state"); dir = descend(dir, "v2"); dir = descend(dir, "projects"); dir = descend(dir, project);
     if (!strcmp(kind, "exec")) {
         const char *head = f_string(runtime, "execution_head_id");
-        if (!head || !f_name(head) || strncmp(head, "head_", 5)) { if (dir >= 0) close(dir); errno = EINVAL; return -1; }
+        if (!head || !f_name(head) || strncmp(head, "head_", 5)) { errno = EINVAL; return -1; }
         f_string_add(log, "head_id", head);
+        dir = log_project_directory(project);
         dir = descend(dir, "exec"); dir = descend(dir, run); dir = descend(dir, head);
     } else {
         json_object *attempt = f_field(request, "attempt"); int64_t number = attempt ? json_object_get_int64(attempt) : 1;
-        if ((attempt && !json_object_is_type(attempt, json_type_int)) || number < 1 || number > 10000) { if (dir >= 0) close(dir); errno = EINVAL; return -1; }
+        if ((attempt && !json_object_is_type(attempt, json_type_int)) || number < 1 || number > 10000) { errno = EINVAL; return -1; }
         snprintf(path, sizeof(path), "attempt-%lld", (long long)number);
         f_string_add(log, "step", step); json_object_object_add(log, "attempt", json_object_new_int64(number));
+        dir = log_project_directory(project);
         dir = descend(dir, "workflows"); dir = descend(dir, "runs"); dir = descend(dir, run);
         dir = descend(dir, "steps"); dir = descend(dir, step); dir = descend(dir, path);
     }

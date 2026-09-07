@@ -86,7 +86,7 @@ static int inputs_prepare(const char *source, const char *scratch, json_object *
     json_object_object_add(spec, "inputs", manifest);
     if (f_path(path, sizeof(path), scratch, "input")) goto done;
     for (i = 0; i < json_object_array_length(selected); i++) {
-        const char *relative = task_text(json_object_array_get_idx(selected, i)); char *hex; json_object *entry;
+        const char *relative = f_text(json_object_array_get_idx(selected, i)); char *hex; json_object *entry;
         if (task_file_copy(source, relative, path) || f_hash(path, hash) || !(hex = f_hex_read(path))) goto done;
         unlink(path); total += strlen(hex) / 2;
         if (total > TASK_FILE_LIMIT) { free(hex); goto done; }
@@ -155,7 +155,7 @@ json_object *task_inspect(json_object *package) {
         f_hex_write(path, hex, 0600) || f_hash(path, hash) || strcmp(hash, f_string(f_field(spec, "source"), "bundle_sha256"))) goto clean;
     for (i = 0; i < json_object_array_length(manifest); i++) {
         json_object *file = json_object_array_get_idx(manifest, i);
-        const char *bytes = task_text(json_object_array_get_idx(payload, i));
+        const char *bytes = f_text(json_object_array_get_idx(payload, i));
         if (!bytes || strlen(bytes) / 2 != (size_t)json_object_get_int64(f_field(file, "bytes"))) goto clean;
         total += strlen(bytes) / 2; if (total > TASK_FILE_LIMIT) goto clean;
         if (f_path(path, sizeof(path), scratch, "input") || f_hex_write(path, bytes, 0600) || f_hash(path, hash) || strcmp(hash, f_string(file, "sha256"))) goto clean;

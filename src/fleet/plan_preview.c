@@ -1,9 +1,10 @@
 #include "plan.h"
+#include "task.h"
 #include <string.h>
 
 static void items(const char *label, json_object *array) {
     size_t i; printf("%s:", label);
-    for (i = 0; i < json_object_array_length(array); i++) printf(" %s%s", i ? ", " : "", task_text(json_object_array_get_idx(array, i)));
+    for (i = 0; i < json_object_array_length(array); i++) printf(" %s%s", i ? ", " : "", f_text(json_object_array_get_idx(array, i)));
     putchar('\n');
 }
 int plan_preview(json_object *compiled) {

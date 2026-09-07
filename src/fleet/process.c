@@ -28,7 +28,7 @@ static void capture_log(struct f_control *control, int stream, const char *bytes
 static int run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap, struct f_control *control) {
     int out[2] = {-1,-1}, err[2] = {-1,-1}, status = 0, result = -1;
     pid_t pid = -1; FILE *in = NULL; size_t used[2] = {0,0};
-    long deadline; bool stopped = false;
+    long deadline, cancel_grace = control ? (long)control->grace_seconds * 1000L : 0L; bool stopped = false;
     memset(cap, 0, sizeof(*cap)); cap->status = 1;
     cap->out = calloc(F_LIMIT + 1, 1); cap->err = calloc(F_LIMIT + 1, 1);
     if (!cap->out || !cap->err || !(in = tmpfile())) goto done;
@@ -55,7 +55,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
         if (!stopped && control && control->stop && control->stop(control->context)) cap->cancelled = true;
         if (!stopped && (f_stopped || cap->cancelled || milliseconds() >= deadline)) {
             cap->timeout = !f_stopped && !cap->cancelled; stopped = true;
-            (void)kill(-pid, SIGTERM); deadline = milliseconds() + (cap->cancelled ? (long)control->grace_seconds * 1000L : 500);
+            (void)kill(-pid, SIGTERM); deadline = milliseconds() + (cap->cancelled ? cancel_grace : 500);
         }
         if (stopped && milliseconds() >= deadline - (cap->cancelled ? 200 : 0)) (void)kill(-pid, SIGKILL);
         (void)poll(polls, 2, 50);
@@ -79,7 +79,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
             pid_t waited = waitpid(pid, &status, WNOHANG);
             if (waited == pid) { pid = -1; break; }
         }
-        if (cap->cancelled && milliseconds() >= deadline) { cap->stop_unknown = true; control->stop_unknown = true; break; }
+        if (cap->cancelled && milliseconds() >= deadline) { cap->stop_unknown = true; if (control) control->stop_unknown = true; break; }
     }
     cap->status = cap->timeout ? 124 : (f_stopped || cap->cancelled ? 130 : (WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status)));
     if (used[0] == F_LIMIT || used[1] == F_LIMIT) cap->status = 125;

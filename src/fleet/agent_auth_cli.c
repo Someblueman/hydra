@@ -97,7 +97,7 @@ json_object *auth_cli(int argc, char **argv) {
     if (auth_hash(json_object_to_json_string_ext(plan, JSON_C_TO_STRING_PLAIN), plan_hash)) { result = f_error("fleet-auth", "hash_failed", "cannot bind authentication preview"); goto done; }
     f_string_add(plan, "approval_sha256", plan_hash);
     if (!strcmp(op, "preview")) { result = f_success("fleet-auth-preview", plan); plan = NULL; goto done; }
-    if (strcmp(approve, plan_hash)) { result = f_error("fleet-auth", "stale_preview", "source or destination changed, or approval did not match; preview again"); goto done; }
+    if (!approve || strcmp(approve, plan_hash)) { result = f_error("fleet-auth", "stale_preview", "source or destination changed, or approval did not match; preview again"); goto done; }
     f_string_add(request, "operation", "copy"); f_string_add(request, "before", f_string(plan, "before")); f_string_add(request, "destination", f_string(plan, "destination"));
     json_object_object_add(request, "credential", json_object_get(payload));
     json_object_put(response); response = f_request(&remote, request, 15);
