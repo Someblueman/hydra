@@ -20,20 +20,25 @@ static bool uncertain(json_object *response) {
 json_object *task_remote_cli(int argc, char **argv) {
     const char *host, *output = NULL, *timeout = NULL, *input = NULL, *key = NULL, *id = NULL, *trust = NULL; bool submit = !strcmp(argv[0], "submit"), start = !strcmp(argv[0], "start");
     const char *stream = NULL, *offset = NULL, *limit = NULL, *source = NULL, *step = NULL, *attempt = NULL; bool cancel = !strcmp(argv[0], "cancel"), logs = !strcmp(argv[0], "logs");
+    const char *request_id = NULL, *decision = NULL, *actor = NULL;
+    bool resume = !strcmp(argv[0], "resume"), decide = !strcmp(argv[0], "decide");
     bool result_read = !strcmp(argv[0], "result");
     char capability[32]; unsigned log_offset = 0, log_limit = 4096;
     struct f_remote remote; json_object *package = NULL, *checked = NULL, *request = NULL, *response = NULL;
-    unsigned seconds = result_read ? 30 : 5; int i;
+    unsigned seconds = (result_read || cancel) ? 30 : 5; int i;
     if (argc < 2 || !f_name(argv[1])) return f_error("fleet-task", "invalid_input", "select a registered host alias");
     host = argv[1];
     for (i = 2; i < argc; i++) {
         const char **destination;
         if (!strcmp(argv[i], "--output") && result_read) destination = &output;
-        else if (!strcmp(argv[i], "--timeout") && result_read) destination = &timeout;
+        else if (!strcmp(argv[i], "--timeout") && (result_read || cancel)) destination = &timeout;
         else if (!strcmp(argv[i], "--input") && submit) destination = &input;
         else if (!strcmp(argv[i], "--key") && submit) destination = &key;
         else if (!strcmp(argv[i], "--id") && !submit) destination = &id;
-        else if (!strcmp(argv[i], "--trust-spec") && (start || submit)) destination = &trust;
+        else if (!strcmp(argv[i], "--trust-spec") && (start || submit || resume || decide)) destination = &trust;
+        else if (!strcmp(argv[i], "--request") && decide) destination = &request_id;
+        else if (!strcmp(argv[i], "--decision") && decide) destination = &decision;
+        else if (!strcmp(argv[i], "--by") && decide) destination = &actor;
         else if (!strcmp(argv[i], "--source") && logs) destination = &source;
         else if (!strcmp(argv[i], "--step") && logs) destination = &step;
         else if (!strcmp(argv[i], "--attempt") && logs) destination = &attempt;
@@ -44,10 +49,10 @@ json_object *task_remote_cli(int argc, char **argv) {
         if (*destination || ++i == argc || !*argv[i]) return f_error("fleet-task", "invalid_input", "each option requires one value");
         *destination = argv[i];
     }
-    if ((submit ? !input || !key : !id) || (start && !trust)) return f_error("fleet-task", "invalid_input", "required task options are missing");
+    if ((submit ? !input || !key : !id) || ((start || resume || decide) && !trust) || (decide && (!request_id || !decision))) return f_error("fleet-task", "invalid_input", "required task options are missing");
     if (timeout) {
         unsigned long value = strtoul(timeout, NULL, 10);
-        if (strspn(timeout, "0123456789") != strlen(timeout) || value < 1 || value > 300) return f_error("fleet-task-result", "invalid_input", "timeout must be 1-300 seconds");
+        if (strspn(timeout, "0123456789") != strlen(timeout) || value < 1 || value > 300) return f_error(cancel ? "fleet-task-cancel" : "fleet-task-result", "invalid_input", "timeout must be 1-300 seconds");
         seconds = (unsigned)value;
     }
     if (logs) {
@@ -74,6 +79,9 @@ json_object *task_remote_cli(int argc, char **argv) {
     json_object_put(response); request = json_object_new_object();
     json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", "task");
     f_string_add(request, "operation", argv[0]);
+    if (request_id) f_string_add(request, "request_id", request_id);
+    if (decision) f_string_add(request, "decision", decision);
+    if (actor) f_string_add(request, "by", actor);
     if (trust) f_string_add(request, "trust_spec", trust);
     if (logs) {
         if (source) f_string_add(request, "source", source);
@@ -105,7 +113,7 @@ json_object *task_remote_cli(int argc, char **argv) {
         }
         json_object_put(checked);
     }
-    if ((submit || start || cancel) && uncertain(response)) {
+    if ((submit || start || cancel || resume || decide) && uncertain(response)) {
         json_object *wrapped = f_error("fleet-task", "outcome_unknown", submit ? "the acceptance response was lost or invalid; retry this same package and key to reconcile, never invent a new key" : "the mutation response was lost or invalid; inspect this task's status; execution is never replayed");
         json_object_object_add(f_field(wrapped, "error"), "cause", json_object_get(f_field(response, "error")));
         json_object_put(response); response = wrapped;

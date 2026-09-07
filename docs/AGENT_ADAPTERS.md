@@ -1,16 +1,21 @@
 # Agent adapters
 
-Hydra 1.6 keeps provider state non-authoritative. Agent profiles declare launch,
-task, resume, environment, adapter, and confidence capabilities. `hydra agent
-doctor` probes executable availability and reports the declared surface.
+Hydra keeps provider state non-authoritative. Headless execution supports
+Antigravity (`agy`), Cursor Agent, OpenCode, Claude Code, Codex, and Pi through
+bounded JSONL translations. See the [supported-agent matrix](PROFILES.md),
+[versioned headless contract](AGENT_CONTRACT.md), and
+[dated qualification evidence](WORKFLOW_AGENT_ACCEPTANCE.md).
 
-No provider-specific hook is enabled merely because an executable exists. The
-locally inspected Claude Code and Codex help surfaces establish launch and resume
-flags, but do not establish a stable, versioned hook payload contract. Hydra
-therefore ships no automatic provider hook adapter for those versions. This is the
-capability-probed fallback as observed on 2026-08-28: Tier 0/1 remains complete,
-and missed or unavailable hooks leave the last Hydra-owned observation unchanged or
-explicitly unavailable rather than inventing provider state.
+`hydra agent probe NAME` inspects executable versions and required flags.
+`hydra exec --profile NAME` supervises the provider and translates observed session,
+result, usage, and status fields. Provider completion does not set a declared
+outcome or pass a verification gate. Cursor usage is unknown; Antigravity uses
+its terminal aggregate and does not concatenate intermediate text deltas.
+
+Interactive launch profiles do not install automatic provider hooks. Their
+`adapter: none` remains accurate even when the same agent has a separate headless
+JSONL adapter. `hydra agent doctor` describes the interactive launch surface;
+`hydra agent contract NAME` describes headless capabilities.
 
 The universal integration point is canonical adapter JSON v1 on standard input:
 

@@ -6,7 +6,7 @@ profile_validate_name() {
 }
 
 profile_builtin_exists() {
-    case "$1" in none|claude|codex|cursor|copilot|aider|gemini) return 0 ;; esac
+    case "$1" in none|claude|codex|cursor|agy|opencode|copilot|aider|gemini) return 0 ;; esac
     return 1
 }
 
@@ -16,6 +16,7 @@ profile_custom_dir() {
 }
 
 profile_exists() {
+    [ ! -f "$HYDRA_HOME/profiles/$1/adapter.json" ] || return 1
     profile_builtin_exists "$1" && return 0
     _pe_dir="$(profile_custom_dir "$1")" || return 1
     [ -f "$_pe_dir/executable" ]
@@ -24,40 +25,52 @@ profile_exists() {
 profile_field() {
     _pf_name="$1"
     _pf_field="$2"
+    _pf_dir="$(profile_custom_dir "$_pf_name")" || return 1
+    [ ! -f "$_pf_dir/adapter.json" ] || return 1
+    # Keep previously registered custom profiles when a new builtin is introduced.
+    if [ -f "$_pf_dir/executable" ]; then
+        [ -f "$_pf_dir/$_pf_field" ] || return 1
+        sed -n '1p' "$_pf_dir/$_pf_field"
+        return 0
+    fi
     if profile_builtin_exists "$_pf_name"; then
         case "$_pf_field" in
             executable)
-                if [ "$_pf_name" = none ]; then printf '%s\n' none; else printf '%s\n' "$_pf_name"; fi
+                case "$_pf_name" in cursor) printf 'cursor-agent\n' ;; *) printf '%s\n' "$_pf_name" ;; esac
                 ;;
             tier)
                 if [ "$_pf_name" = none ]; then printf '0\n'; else printf '1\n'; fi
                 ;;
             prompt_mode)
-                case "$_pf_name" in claude|codex) printf 'task-file\n' ;; *) printf 'none\n' ;; esac
+                case "$_pf_name" in claude|codex|agy|cursor|opencode) printf 'task-file\n' ;; *) printf 'none\n' ;; esac
                 ;;
             resume_mode)
-                case "$_pf_name" in claude) printf 'session-id\n' ;; codex) printf 'cwd-last\n' ;; *) printf 'none\n' ;; esac
+                case "$_pf_name" in claude) printf 'session-id\n' ;; codex) printf 'exact-session\n' ;; *) printf 'none\n' ;; esac
                 ;;
             adapter) printf 'none\n' ;;
             confidence)
-                case "$_pf_name" in claude|codex) printf 'verified-local-help\n' ;; none) printf 'exact\n' ;; *) printf 'launch-only\n' ;; esac
+                case "$_pf_name" in claude|codex|agy|cursor|opencode) printf 'verified-local-help\n' ;; none) printf 'exact\n' ;; *) printf 'launch-only\n' ;; esac
                 ;;
             environment) printf 'TERM,COLORTERM\n' ;;
             *) return 1 ;;
         esac
         return 0
     fi
-    _pf_dir="$(profile_custom_dir "$_pf_name")" || return 1
-    [ -f "$_pf_dir/$_pf_field" ] || return 1
-    sed -n '1p' "$_pf_dir/$_pf_field"
+    return 1
 }
 
 profile_list() {
-    printf '%s\n' none claude codex cursor copilot aider gemini
+    for _pl_name in none claude codex cursor agy opencode copilot aider gemini; do
+        [ ! -f "$HYDRA_HOME/profiles/$_pl_name/adapter.json" ] || continue
+        printf '%s\n' "$_pl_name"
+    done
     if [ -d "$HYDRA_HOME/profiles" ]; then
         for _pl_dir in "$HYDRA_HOME"/profiles/*; do
             [ -d "$_pl_dir" ] || continue
-            basename "$_pl_dir"
+            [ -f "$_pl_dir/executable" ] || continue
+            [ ! -f "$_pl_dir/adapter.json" ] || continue
+            _pl_name="$(basename "$_pl_dir")"
+            profile_builtin_exists "$_pl_name" || printf '%s\n' "$_pl_name"
         done
     fi
 }
@@ -74,6 +87,10 @@ profile_executable_path() {
 profile_resolve() {
     _pr_requested="${1:-}"
     if [ -n "$_pr_requested" ]; then
+        if [ -f "$HYDRA_HOME/profiles/$_pr_requested/adapter.json" ]; then
+            echo "Error: '$_pr_requested' is a headless profile; use hydra exec --profile $_pr_requested --prompt-file <file>" >&2
+            return 1
+        fi
         profile_exists "$_pr_requested" || {
             echo "Error: unknown agent profile '$_pr_requested'" >&2
             return 1
@@ -95,7 +112,7 @@ profile_resolve() {
 
     _pr_found=""
     _pr_count=0
-    for _pr_name in claude codex cursor copilot aider gemini; do
+    for _pr_name in claude codex cursor agy opencode copilot aider gemini; do
         if profile_executable_path "$_pr_name" >/dev/null 2>&1; then
             _pr_found="$_pr_name"
             _pr_count=$((_pr_count + 1))
@@ -141,7 +158,15 @@ profile_launch_command() {
             echo "Error: profile '$_plc_name' does not support safe task injection" >&2
             return 1
         }
-        _plc_command="$_plc_command \"\$(cat $(profile_shell_quote "$_plc_task_file"))\""
+        _plc_prompt_option=""
+        if [ ! -f "$HYDRA_HOME/profiles/$_plc_name/executable" ]; then
+            case "$_plc_name" in
+                agy) _plc_prompt_option="--prompt-interactive=" ;;
+                opencode) _plc_prompt_option="--prompt=" ;;
+                cursor) _plc_prompt_option="-- " ;;
+            esac
+        fi
+        _plc_command="$_plc_command $_plc_prompt_option\"\$(cat $(profile_shell_quote "$_plc_task_file"))\""
     fi
     printf '%s\n' "$_plc_command"
 }
@@ -155,7 +180,11 @@ profile_resume_command() {
             printf '%s --resume %s\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" \
                 "$(profile_shell_quote "$_prc_provider_id")"
             ;;
-        cwd-last) printf '%s resume --last\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" ;;
+        exact-session)
+            [ -n "$_prc_provider_id" ] || return 1
+            printf '%s resume %s\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" \
+                "$(profile_shell_quote "$_prc_provider_id")"
+            ;;
         *) return 1 ;;
     esac
 }
@@ -170,6 +199,7 @@ profile_create_custom() {
     [ -x "$_pcc_executable" ] || return 1
     case "$_pcc_prompt_mode" in none|task-file) ;; *) return 1 ;; esac
     _pcc_dir="$(profile_custom_dir "$_pcc_name")" || return 1
+    [ ! -e "$_pcc_dir/adapter.json" ] || return 1
     mkdir -p "$_pcc_dir" || return 1
     chmod 700 "$_pcc_dir" 2>/dev/null || true
     state_v2_write_scalar "$_pcc_dir/executable" "$_pcc_executable" || return 1

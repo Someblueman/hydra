@@ -106,8 +106,13 @@ operations_exec_worker() {
     operations_capture_stream "$_oew_stderr_pipe" "$_oew_dir/stderr" "$_oew_max" &
     _oew_stderr_pid=$!
     _oew_started="$(date +%s)"
+    _oew_instance="$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/heads/$_oew_head/current-instance" 2>/dev/null || true)"
     (cd "$_oew_worktree" && exec "$@") > "$_oew_stdout_pipe" 2> "$_oew_stderr_pipe" &
     _oew_pid=$!
+    _oew_cancelled=0
+    if [ -n "${_ce_profile:-}" ]; then
+        trap '_oew_cancelled=1; kill -TERM "$_oew_pid" 2>/dev/null || true' HUP INT TERM
+    fi
     _oew_watchdog=""
     if [ "$_oew_timeout" -gt 0 ]; then
         (
@@ -118,7 +123,11 @@ operations_exec_worker() {
             wait "$_oew_timer" || exit 0
             if kill -0 "$_oew_pid" 2>/dev/null; then
                 : > "$_oew_timed"
-                operations_signal_tree "$_oew_pid" TERM
+                if [ -n "${_ce_profile:-}" ]; then
+                    kill -TERM "$_oew_pid" 2>/dev/null || true
+                else
+                    operations_signal_tree "$_oew_pid" TERM
+                fi
                 sleep 1
                 operations_signal_tree "$_oew_pid" KILL
             fi
@@ -126,6 +135,11 @@ operations_exec_worker() {
         _oew_watchdog=$!
     fi
     if wait "$_oew_pid"; then _oew_wait_status=0; else _oew_wait_status=$?; fi
+    if [ "$_oew_cancelled" -eq 1 ]; then
+        wait "$_oew_pid" 2>/dev/null || true
+        _oew_wait_status=143
+    fi
+    trap - HUP INT TERM
     if [ -n "$_oew_watchdog" ]; then
         kill "$_oew_watchdog" 2>/dev/null || true
         wait "$_oew_watchdog" 2>/dev/null || true
@@ -143,7 +157,6 @@ operations_exec_worker() {
     : > "$_oew_dir/complete"
     chmod 600 "$_oew_dir/complete" 2>/dev/null || true
     rm -f "$_oew_stdout_pipe" "$_oew_stderr_pipe" "$_oew_timed"
-    _oew_instance="$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/heads/$_oew_head/current-instance" 2>/dev/null || true)"
     if hydra_valid_id "$_oew_instance"; then
         event_emit "$LIFECYCLE_PROJECT_ID" "$_oew_head" "$_oew_instance" exec.completed hydra local \
             "{\"run_id\":\"$_oew_run\",\"exit_code\":$_oew_status}" >/dev/null 2>&1 || true
@@ -168,7 +181,8 @@ provenance_capture_instance() {
     _pci_profile="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/profile" 2>/dev/null || true)"
     _pci_executable="$(profile_executable_path "${_pci_profile:-none}" 2>/dev/null || true)"
     _pci_version=""
-    if profile_builtin_exists "${_pci_profile:-none}" && [ -n "$_pci_executable" ] && [ "$_pci_executable" != none ]; then
+    if profile_builtin_exists "${_pci_profile:-none}" && [ ! -f "$HYDRA_HOME/profiles/$_pci_profile/executable" ] &&
+       [ -n "$_pci_executable" ] && [ "$_pci_executable" != none ]; then
         _pci_version="$("$_pci_executable" --version 2>/dev/null | sed -n '1p' || true)"
     elif [ -n "$_pci_executable" ] && [ "$_pci_executable" != none ]; then
         _pci_version=user-declared

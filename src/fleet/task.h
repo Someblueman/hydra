@@ -25,9 +25,13 @@ int task_sync_dir(const char *path);
 int task_write_json(const char *directory, const char *name, json_object *value, bool replace);
 json_object *task_read_record(const char *directory, const char *name);
 json_object *task_start(const char *id, const char *trust);
+json_object *task_resume(const char *id, const char *trust);
+json_object *task_approval(const char *id, json_object *request);
+int task_workspace(const char *directory, json_object *state);
+bool task_no_agent_workers(json_object *state);
 bool task_owner_active(const char *directory);
 bool task_runtime_valid(json_object *state);
-void task_execute(const char *directory, json_object *package, json_object *state);
+void task_execute(const char *directory, json_object *package, json_object *state, bool resume);
 struct task_control {
     struct f_control process;
     const char *directory, *digest;
@@ -47,6 +51,7 @@ int task_result_files(json_object *files, const char *root, const char *relative
 int task_result_evidence(json_object *files, const char *directory, json_object *state, json_object *heads, const char *scratch);
 json_object *task_result_verify(json_object *envelope);
 int task_result_seal(const char *directory, json_object *state);
+int task_finish(const char *directory, json_object *state);
 int task_result_bindings(json_object *result, const char *scratch);
 int task_owned_directory(int parent, const char *name, bool create);
 int task_collection_root(const char *project, char root[F_PATH], bool create);

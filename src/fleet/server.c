@@ -1,12 +1,13 @@
 #include "fleet.h"
 #include "task.h"
+#include "agent_auth.h"
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-static const char *capabilities[] = {"list", "doctor", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-start", "task-cancel", "task-logs", "task-result", NULL};
+static const char *capabilities[] = {"list", "doctor", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", NULL};
 json_object *f_handshake(void) {
     json_object *data = json_object_new_object(), *caps = json_object_new_array(), *projects = json_object_new_array(), *native = json_object_new_object();
     char root[F_PATH]; DIR *dir; struct dirent *entry; size_t i;
@@ -114,6 +115,7 @@ json_object *f_serve(json_object *request) {
         return f_error("fleet", "version_mismatch", "unsupported request protocol");
     if (!strcmp(action, "handshake")) return f_handshake();
     if (!strcmp(action, "list")) return snapshot();
+    if (!strcmp(action, "auth")) return auth_serve(request);
     if (!strcmp(action, "task")) return task_serve(request);
     if (args && !json_object_is_type(args, json_type_array)) return f_error("fleet", "invalid_input", "args must be an array");
     count = args ? json_object_array_length(args) : 0;

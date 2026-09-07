@@ -27,8 +27,11 @@ stdout and return nonzero; additional low-level diagnostics may appear on stderr
 
 `hydra capabilities --json` is the negotiation entry point. It reports the state,
 event, and JSON schema versions plus profile availability, integration tier, prompt
-and resume modes, adapter, and confidence. Capability absence is data, not success
-inference. Commands must not label observed quiet, process exit, or an agent report as
+and resume modes, adapter, and confidence for interactive launch. For headless
+Antigravity, Cursor Agent, OpenCode, Claude Code, Codex, or Pi, use `hydra agent
+contract NAME` for declarations and `hydra agent probe NAME` for dated executable
+and help evidence. The [supported-agent matrix](PROFILES.md) separates these
+interfaces. Capability absence is data, not success inference. Commands must not label observed quiet, process exit, or an agent report as
 a passed gate or human approval.
 
 Lifecycle automation uses `hydra lifecycle --json`, `hydra wait --json`, and the

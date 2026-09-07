@@ -18,7 +18,7 @@ static bool finite_json(json_object *value) {
     }
     return true;
 }
-json_object *f_parse(const char *text) {
+json_object *f_parse_value(const char *text) {
     struct json_tokener *tok = json_tokener_new_ex(32);
     json_object *obj;
     size_t length = strlen(text), end;
@@ -28,10 +28,15 @@ json_object *f_parse(const char *text) {
     end = json_tokener_get_parse_end(tok);
     if (json_tokener_get_error(tok) != json_tokener_success) { json_object_put(obj); obj = NULL; }
     while (end < length && isspace((unsigned char)text[end])) end++;
-    if (end < length || !json_object_is_type(obj, json_type_object)) { json_object_put(obj); obj = NULL; }
+    if (end < length) { json_object_put(obj); obj = NULL; }
     if (obj && !finite_json(obj)) { json_object_put(obj); obj = NULL; }
     json_tokener_free(tok);
     return obj;
+}
+json_object *f_parse(const char *text) {
+    json_object *value = f_parse_value(text);
+    if (!json_object_is_type(value, json_type_object)) { json_object_put(value); return NULL; }
+    return value;
 }
 json_object *f_read_json(const char *path, size_t limit) {
     FILE *file; char *bytes; size_t length; json_object *object = NULL;

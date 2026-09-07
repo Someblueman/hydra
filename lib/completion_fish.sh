@@ -7,13 +7,19 @@
 generate_fish_completion() {
     cat <<'EOF'
 # Fish completion for hydra
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l profile -r
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l prompt-file -r
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l resume-run -r
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l result-file -r
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l require -r
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l retain-raw
 
 # Complete commands
 complete -c hydra -f -n '__fish_use_subcommand' -a 'remote' -d 'Manage OpenSSH aliases'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'fleet' -d 'Inspect trusted remote installations'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote' -a 'add remove list'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task' -a 'handshake list doctor bootstrap package task init spawn signal cancel workflow attach export import reconcile watch tui'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect submit start status cancel logs result inspect-result collect collected help'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth' -a 'handshake list doctor bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect submit start resume requests decide status cancel logs result inspect-result collect collected help'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l source -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l spec -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l input -r
@@ -21,6 +27,9 @@ complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcomm
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l key -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l id -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l trust-spec -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from decide' -l request -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from decide' -l decision -xa 'approve reject'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from decide' -l by -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet' -l json
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet' -l jobs -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet' -l timeout -r
@@ -88,8 +97,8 @@ complete -c hydra -f -n '__fish_use_subcommand' -s v -l version -d 'Show version
 # Complete spawn command
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s l -l layout -d 'Layout to use' -a 'default dev full'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s n -l count -d 'Number of sessions to spawn' -a '1 2 3 4 5 6 7 8 9 10'
-complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to use' -a 'claude aider codex cursor copilot gemini'
-complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l profile -d 'Agent profile' -a 'none claude codex cursor copilot aider gemini'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to use' -a 'claude aider codex cursor agy opencode copilot gemini'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l profile -d 'Agent profile' -a 'none claude codex cursor agy opencode copilot aider gemini'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l no-agent -d 'Create a plain shell head'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l dry-run -d 'Print plan without mutation'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l prompt -d 'Task text'
@@ -118,6 +127,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l branch -d 'Select 
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l group -d 'Select a group'
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l all -d 'Select all heads'
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l jobs -d 'Maximum parallel commands' -a '1 2 4 8 16'
+complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l exit-code -d 'Return command status for one head'
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l timeout -d 'Per-command timeout in seconds'
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l json -d 'Output versioned JSON'
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l shell -d 'Execute an explicitly trusted shell string'
@@ -128,7 +138,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from diff review provenance' -l 
 
 # Complete template command
 complete -c hydra -f -n '__fish_seen_subcommand_from template' -a 'list create show edit delete'
-complete -c hydra -f -n '__fish_seen_subcommand_from agent' -a 'list show doctor init'
+complete -c hydra -f -n '__fish_seen_subcommand_from agent' -a 'list show doctor init contract probe import'
 complete -c hydra -f -n '__fish_seen_subcommand_from state' -a 'verify backup migrate rollback'
 complete -c hydra -f -n '__fish_seen_subcommand_from events' -a 'verify tail filter retain repair'
 complete -c hydra -f -n '__fish_seen_subcommand_from adapter' -a 'ingest'
@@ -138,7 +148,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from scope' -a 'set show check'
 complete -c hydra -f -n '__fish_seen_subcommand_from resource' -a 'allocate status env release'
 complete -c hydra -f -n '__fish_seen_subcommand_from gate' -a 'run approve status'
 complete -c hydra -f -n '__fish_seen_subcommand_from context' -a 'create'
-complete -c hydra -f -n '__fish_seen_subcommand_from workflow' -a 'list show validate dry-run run status cancel resume'
+complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and not __fish_seen_subcommand_from plan' -a 'list show validate dry-run run status cancel resume requests decide plan'
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -a 'train status report cancel resume approve promote cleanup'
 complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -a 'doctor'
 complete -c hydra -f -n '__fish_seen_subcommand_from snapshot' -l native -d 'Try the optional read-only native helper'
@@ -164,6 +174,8 @@ complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l gate -d 'Appr
 complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l dry-run -d 'Simulate without mutation'
 complete -c hydra -f -n '__fish_seen_subcommand_from land' -l into -d 'Current target branch'
 complete -c hydra -f -n '__fish_seen_subcommand_from land' -l keep-head -d 'Keep source head after landing'
+complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -a 'schema validate compile show run result'
+complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l accept -r -d 'Accept exact compiled digest'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow' -l json -d 'Output versioned status JSON'
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -l base -d 'Explicit base ref'
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -l target -d 'Local target ref'
@@ -201,8 +213,15 @@ complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subc
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from logs' -l limit -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from logs' -l step -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from logs' -l attempt -r
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from result' -l timeout -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from result cancel' -l timeout -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l into -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l format -r
+
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -a 'status preview copy login help'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l agent -r -a 'codex pi opencode claude agy cursor'
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l provider -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l source -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l approve -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l executable -r
 EOF
 }

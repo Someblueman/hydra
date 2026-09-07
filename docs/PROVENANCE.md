@@ -13,11 +13,19 @@ commit; task SHA-256 and byte count; current trusted-configuration hash; and dec
 lifecycle sources. It does not contain task text, environment values, terminal
 output, or message bodies.
 
-Instance provenance contains launch or resume mode, resolved profile, executable,
+Interactive instance provenance contains launch or resume mode, resolved profile, executable,
 profile version confidence, Hydra version, and the resolved launch/resume recipe.
 Built-in executable versions are probed. Custom executable versions are marked
 `user-declared`; Hydra does not execute an arbitrary custom `--version` command just
 to collect metadata.
+
+Headless runs have separate `agent.json` receipts containing the selected profile
+and prompt digests, exact executable version probe, session identity, normalized
+observations, and optional usage. Built-in Antigravity, Cursor Agent, OpenCode,
+Claude Code, Codex, and Pi use this shared receipt contract. Explicit headless
+custom profiles are probed too; that is separate from collecting interactive
+instance provenance. Provider-supplied usage may remain unknown, especially for
+Cursor. See [Agent contract v1](AGENT_CONTRACT.md) and [supported agents](PROFILES.md).
 
 Provenance is local evidence, not an attestation. A same-user process can modify the
 state tree, and a recorded version or hash does not prove a gate passed. Events name

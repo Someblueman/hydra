@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "roots": [
+    "bin/hydra",
+    "lib",
+    "scripts",
+    "tests",
+    "install.sh",
+    "uninstall.sh",
+    "assets/demos",
+    "src",
+    "Makefile"
+  ],
+  "exclude": [
+    "*.py",
+    "__pycache__/*",
+    "*/__pycache__/*"
+  ],
+  "tools": {
+    "make": {
+      "command": [
+        "make"
+      ],
+      "version": "3.81",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
+    },
+    "shellcheck": {
+      "command": [
+        "shellcheck"
+      ],
+      "version": "0.11.0",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
+    },
+    "clang-tidy": {
+      "command": [
+        "{root}/build/quality-tools/bin/clang-tidy"
+      ],
+      "version": "22.1.8",
+      "version_args": [
+        "--version"
+      ],
+      "install": [
+        [
+          "uv",
+          "venv",
+          "{root}/build/quality-tools"
+        ],
+        [
+          "uv",
+          "pip",
+          "install",
+          "--python",
+          "{root}/build/quality-tools/bin/python",
+          "clang-tidy==22.1.8"
+        ]
+      ]
+    }
+  },
+  "checks": [
+    {
+      "name": "Hydra native shell lint (ShellCheck and dash)",
+      "tool": "make",
+      "args": [
+        "lint"
+      ],
+      "patterns": [
+        "*.sh",
+        "bin/hydra"
+      ],
+      "files": false,
+      "stage": "fast",
+      "failure_codes": [
+        1,
+        2
+      ]
+    },
+    {
+      "name": "Hydra C analysis (complexity advisory)",
+      "tool": "make",
+      "args": [
+        "quality-c"
+      ],
+      "patterns": [
+        "*.c",
+        "*.h",
+        "*.inc",
+        "Makefile"
+      ],
+      "files": false,
+      "stage": "full",
+      "failure_codes": [
+        1,
+        2
+      ]
+    }
+  ],
+  "size": {
+    "limit": 500,
+    "mode": "review"
+  }
+}

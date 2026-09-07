@@ -1,6 +1,8 @@
-# Hydra 2.0 public contracts
+# Hydra public contracts
 
-Hydra 2.0 commits to the local interfaces below. Internal shell function names,
+Hydra preserves the stable local interfaces introduced in 2.0 and the fleet
+interfaces shipped in 2.1.0. This document also describes the source-branch
+additions listed under [Unreleased](../CHANGELOG.md#unreleased). Internal shell function names,
 module layout, renderer details, caches, and on-disk temporary files are not public
 contracts.
 
@@ -11,7 +13,9 @@ contracts.
   a major release and the deprecation policy in [VERSIONING.md](VERSIONING.md).
 - Machine interfaces reject unsupported schema or protocol versions. They do not
   guess, silently downgrade, or accept a different format as a fallback.
-- Readers ignore unknown JSON object fields within a supported schema version.
+- Readers ignore unknown JSON output fields within a supported schema version.
+  Input formats with a closed schema, including planning documents, reject unknown
+  fields rather than silently discarding requested behavior.
 - The shell CLI is the only mutation authority. Native processes receive bounded,
   versioned input and invoke public shell commands with an argument vector.
 
@@ -73,7 +77,9 @@ See [EVENTS.md](EVENTS.md), [LIFECYCLE.md](LIFECYCLE.md), and
 ## Profiles, tasks, adapters, and scopes
 
 - Built-in and custom profile fields, confidence labels, and resolution order are
-  defined in [PROFILES.md](PROFILES.md).
+  defined in [PROFILES.md](PROFILES.md). Headless declarations, provider translations,
+  exact recorded-session resume, and capability requirements are versioned in
+  [AGENT_CONTRACT.md](AGENT_CONTRACT.md).
 - Task text is resolved before launch, stored privately, and delivered as one quoted
   argument. Events contain only its hash and byte count.
 - Adapter input is bounded canonical JSON schema v1 and must name the current
@@ -82,6 +88,14 @@ See [EVENTS.md](EVENTS.md), [LIFECYCLE.md](LIFECYCLE.md), and
   approval is a separate exact binding to verification evidence.
 
 ## Workflows and integration
+
+Objective planning schema v1 is an optional, closed JSON authoring contract exposed
+by `hydra workflow plan schema`. It lowers local spawn/exec plans into the existing
+workflow runtime. Compilation binds source, declared inputs, context, profiles,
+policy and compiler version; execution requires the exact accepted SHA-256.
+Planning success requires sealed final deliverables and positive reports linked
+to their exact bytes and requirement IDs. Coverage alone is not semantic proof.
+See [the planner recipe](PLANNER_RECIPE.md) for limits and report format.
 
 Workflow definition schema v1 is the stable finite-DAG contract. Definitions use the
 documented restricted YAML subset, every step declares idempotency, argv is the
@@ -121,7 +135,7 @@ Source and prefix installs provide `bin/hydra`, `lib/hydra/*.sh`, and an optiona
 qualified `hydra-tui`. Core shell operation requires POSIX `sh`, Git, and tmux 3.0 or
 newer on supported macOS and Linux systems. See [SUPPORT.md](SUPPORT.md).
 
-## Fleet pilot (unreleased)
+## Fleet coordination (since v2.1.0)
 
 [Fleet protocol 1](FLEET.md) is an optional C/OpenSSH coordinator. Its one-request
 stdin JSON boundary negotiates capabilities before mutations, transports argv

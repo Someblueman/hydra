@@ -106,10 +106,12 @@ The final pinned installation is retained for review; it does not change remote
 PATH or replace a system installation. Temporary source/dependency/test state and
 the earlier test pins were removed after evidence was captured.
 
-## Remaining release qualification
+## Release status
 
-The working tree is uncommitted. Hosted checks on a reviewed/merged commit,
-release-time version assignment, final archive production, and publication remain
-explicit next actions under [the release policy](VERSIONING.md). Pilot
+At the time of this qualification, the working tree was uncommitted. Hosted checks
+on a reviewed/merged commit, release-time version assignment, final archive
+production, and publication were still pending under
+[the release policy](VERSIONING.md). This fleet functionality subsequently shipped
+in `v2.1.0`; see [the release notes](../RELEASE_NOTES.md). Qualified
 bounds are 16 hosts, INT-only head signalling, and explicit selected bundles;
 there is no distributed scheduler or automatic mutation retry.

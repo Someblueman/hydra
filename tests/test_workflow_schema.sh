@@ -144,6 +144,29 @@ steps:
     args:
       head: one'
 
+retry_base='version: 1
+id: retry-policy
+steps:
+  - id: task
+    kind: exec
+    idempotent: true
+    retry: 2
+    args:
+      head: one
+      argv: [true]'
+reject invalid_retry_class "$retry_base
+    retry_on: [guess]"
+reject invalid_retry_backoff "$retry_base
+    retry_backoff: 86401"
+printf '%s\n' "$retry_base
+    retry_on: [failure, timeout]
+    retry_backoff: 2" > "$TEST_ROOT/retry.yml"
+"$HYDRA_BIN" workflow show "$TEST_ROOT/retry.yml" > "$TEST_ROOT/retry-normalized.yml"
+"$HYDRA_BIN" workflow validate "$TEST_ROOT/retry-normalized.yml" >/dev/null
+assert_success $? "retry policy survives normalized round trip"
+grep -q 'retry_on: \[failure,timeout\]' "$TEST_ROOT/retry-normalized.yml"
+assert_success $? "normalized definition retains selected classes"
+
 before="$(find "$HYDRA_HOME" -type f -print | LC_ALL=C sort | xargs cksum 2>/dev/null || true)"
 "$HYDRA_BIN" workflow dry-run "$valid" >/dev/null
 after="$(find "$HYDRA_HOME" -type f -print | LC_ALL=C sort | xargs cksum 2>/dev/null || true)"

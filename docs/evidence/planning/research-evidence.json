@@ -1,0 +1,17 @@
+{
+  "run_id": "run_48f6845e2b1cbbc6c165",
+  "source": {
+    "commit": "1ec9bfc1dac62af8d197aefd35f73e679683de52",
+    "root": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-plan-qualification.qfxo96fd/research",
+    "sha256": "533ef26c574e30a8860bd23f83eaeaef063e744ea13e01223fd1402dba0cc2fe"
+  },
+  "plan_sha256": "462a1cd8c8fd816eb36f79284dabdaca6bbdb1746297ff443a6d93a1a7941f64",
+  "artifact_sha256": "028f679ac12eaf8193c66e6386624c21e8fceb2ec306135e58ea96482416a6c1",
+  "provider_sessions": {
+    "analyze": "ses_f86ad7576ffeTC16ERdQDeNP52",
+    "assess": "ses_f86a91349ffeEusHrTwze709Jy"
+  },
+  "profile_sha256": "891499c517cdd2346e6e475a8c5cfcd892e66e4e16cd7d100c180b9316f6a83a",
+  "provider_version": "1.18.27",
+  "parent_checks": "24 schedule rows match independent Python simulation; means within 0.000001; exact tails and worst-job IDs; full report read against all six criteria"
+}

@@ -1,0 +1,13 @@
+Implement slugify according to SPEC.md and slug.h in this repository. Inspect
+those files and the existing CLI for the interface contract. Do not edit files,
+commit, spawn agents, or change acceptance tests. Your ONLY deliverable is the
+complete source text for slug.c, including its header include. Return raw C text
+as your final answer, without Markdown fences, commentary or a change report.
+Handle ASCII explicitly and preserve the documented buffer error contract.
+Read only SPEC.md, slug.h and main.c in the current repository. Do not run
+commands, create scratch directories, or inspect tests: the separate verifier
+will compile and exercise your returned source. Return the implementation now
+once you have read those three files. If using multiple passes, reset all
+separator state between passes and never emit a leading or trailing separator.
+Pay particular attention to NULL input with a valid positive-capacity output:
+the error must clear output[0] even if it currently contains nonzero data.

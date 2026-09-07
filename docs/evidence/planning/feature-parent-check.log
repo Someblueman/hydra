@@ -1,0 +1,6 @@
+cc -std=c99 -Wall -Wextra -Werror -pedantic -O2 main.c slug.c -o catalog-slug
+['./catalog-slug', ' Hello, WORLD! ', 'a__b']: exit 0; stdout='hello-world\na-b\n'; stderr=''
+['./catalog-slug', '--limit', '3', 'ABC']: exit 0; stdout='abc\n'; stderr=''
+['./catalog-slug', '--limit', '2', 'ABC']: exit 2; stdout=''; stderr='slug does not fit\n'
+['./catalog-slug', '--limit', '65', 'ABC']: exit 2; stdout=''; stderr=''
+['./catalog-slug']: exit 2; stdout=''; stderr='usage: catalog-slug [--limit 1..64] <text>...\n'

@@ -20,10 +20,15 @@ cleanup() {
         cleanup_session="$(cat "$cleanup_head/session")"
         cleanup_instance="$(cat "$cleanup_head/current-instance")"
         cleanup_id="$(tmux display-message -p -t "=$cleanup_session" '#{session_id}' 2>/dev/null)" || continue
+        [ -n "$cleanup_id" ] || continue
         [ "$(tmux show-environment -t "$cleanup_id" HYDRA_INSTANCE_ID 2>/dev/null)" = "HYDRA_INSTANCE_ID=$cleanup_instance" ] || continue
         tmux kill-session -t "$cleanup_id" 2>/dev/null || :
     done
-    rm -rf "$fixture"
+    if [ "${HYDRA_TEST_KEEP:-0}" = 1 ]; then
+        printf 'Preserved task fixture: %s\n' "$fixture" >&2
+    else
+        rm -rf "$fixture"
+    fi
 }
 trap cleanup 0
 trap 'exit 130' INT
@@ -43,10 +48,13 @@ if [ -f "$HYDRA_TEST_TRANSPORT/offline" ]; then exit 255; fi
 request="$(mktemp "$HYDRA_TEST_TRANSPORT/request.XXXXXX")"
 trap 'rm -f "$request"' 0
 cat > "$request"
-if [ -f "$HYDRA_TEST_TRANSPORT/lose-ack" ] && grep -Eq '"operation":"(submit|start|cancel)"' "$request"; then
+if [ -f "$HYDRA_TEST_TRANSPORT/lose-ack" ] && grep -Eq '"operation":"(submit|start|cancel|resume|decide)"' "$request"; then
     /bin/sh -c "$2" < "$request" > "$HYDRA_TEST_TRANSPORT/lost-response"
     rm "$HYDRA_TEST_TRANSPORT/lose-ack"
     exit 255
+fi
+if [ -f "$HYDRA_TEST_TRANSPORT/slow-cancel" ] && grep -q '"operation":"cancel"' "$request"; then
+    sleep 6
 fi
 exec /bin/sh -c "$2" < "$request"
 SSH
@@ -282,6 +290,11 @@ if task inspect-result --input "$fixture/bad-result" > "$fixture/result-error"; 
 grep -q '"code":"invalid_result"' "$fixture/result-error"
 if task result build --id "$workflow_id" --output "$fixture/result-package" > "$fixture/result-error"; then exit 1; fi
 grep -q '"code":"io_failed"' "$fixture/result-error"
+
+# shellcheck disable=SC1091
+. "$root/tests/task_agent_cases.sh"
+# shellcheck disable=SC1091
+. "$root/tests/task_approval_cases.sh"
 
 # A command that emits a symlink cannot produce a valid artifact snapshot.
 sed -e 's@\["true"\]@["ln","-s","/dev/null","result.txt"]@' -e 's/"outputs":\[\]/"outputs":["result.txt"]/' "$fixture/spec" > "$fixture/unsafe-output-spec"

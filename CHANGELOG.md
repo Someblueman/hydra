@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Bounded JSON objective plans with public schema discovery, structured validation,
+  requirement coverage, deterministic compilation and readable previews.
+- Exact-digest accepted local plan execution bound to source, inputs, context,
+  policy and adapter definitions through the existing workflow runtime. Final
+  results require passing verification reports bound to sealed deliverable bytes.
+- Agent-facing planner recipe and live-qualified feature/research examples, with
+  independent executable checks and assessment of the completed outputs.
+  Distributed DAG execution, automatic placement and dynamic expansion remain
+  outside this implementation.
+
+- Antigravity (`agy`) and Cursor Agent headless profiles with bounded event
+  translation, explicit recorded-session resume, and native fleet sign-in.
+- Interactive Antigravity and OpenCode profiles; Cursor now starts `cursor-agent`.
+  Agent discovery, completions, and documentation distinguish interactive launch,
+  headless capabilities, and completed live qualifications.
+
+- Named workflow file and structured inputs, sealed output manifests, and exact
+  artifact references that block dependents on missing or changed output.
+- Durable workflow approval waits with bound evidence, explicit decisions and
+  resume, stale-decision rejection, and remote task suspension and recovery.
+- Failure-class retry policies and durable backoff deadlines, preserving completed
+  attempts and reporting uncertain non-idempotent work for recovery.
+- Versioned declarative headless agent profiles, bounded event translation,
+  capability evidence, exact recorded-session resume, safe-point prompt delivery,
+  supervised cancellation, and opt-in bounded provider payload retention.
+
+- Fleet host authentication through native provider sign-in or preview-bound
+  copying of private credentials, with selected-provider merges for Pi/OpenCode.
+
+### Changed
+
+- Fleet task cancellation allows 30 seconds per transport phase and accepts a
+  bounded `--timeout` override so suspended approval result sealing can finish.
+- Interactive Codex restore requires an exact recorded session identity instead of
+  implicitly selecting the latest session. Older heads remain inspectable; see
+  [the migration instructions](docs/AGENT_CONTRACT.md#workflow-profiles-and-migration).
+
+Workflow-data and local planning acceptance are complete. Cursor local/remote,
+Antigravity remote, and Claude Code remote live qualification remain outstanding;
+Claude remote sign-in is explicitly deferred. These are qualification limits,
+not claims that the implemented profiles have passed on those hosts.
+See [the acceptance record](docs/WORKFLOW_AGENT_ACCEPTANCE.md) for the local and
+remote provider matrix and exact evidence.
+
 ## [2.1.0] - 2026-09-05
 
 ### Added

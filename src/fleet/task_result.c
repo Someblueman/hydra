@@ -6,10 +6,18 @@
 #include <string.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 static int command(const char *root, char *const args[]) {
     struct f_capture cap = {0}; int status = task_git(root, args, &cap); f_capture_free(&cap); return status;
+}
+int task_finish(const char *directory, json_object *state) {
+    json_object_object_add(state, "finished_at", json_object_new_int64((int64_t)time(NULL)));
+    f_string_add(state, "result_state", "sealing");
+    if (task_write_json(directory, "state.json", state, true)) return -1;
+    f_string_add(state, "result_state", task_result_seal(directory, state) ? "unavailable" : "ready");
+    return task_write_json(directory, "state.json", state, true);
 }
 static int artifacts(json_object *files, json_object *heads, json_object *spec, const char *scratch) {
     json_object *outputs = f_field(spec, "outputs"); size_t i, j, remaining = (size_t)json_object_get_int(f_field(f_field(spec, "limits"), "artifact_bytes"));

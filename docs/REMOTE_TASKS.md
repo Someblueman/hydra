@@ -1,11 +1,14 @@
-# Remote tasks (unreleased)
+# Remote tasks
 
-This unreleased implementation provides package preparation, durable submission,
+Available since v2.1.0, remote tasks provide package preparation, durable submission,
 detached command/workflow execution, status, cancellation, and bounded log retrieval.
 Launch requires explicit authorization of the specification digest. Verified result
 snapshots can be downloaded and collected into isolated local refs for the existing
 integration flow. See [local and real-host qualification](REMOTE_TASK_ACCEPTANCE.md)
-for tested boundaries and the remaining release/publication gates.
+for tested boundaries. That dated record predates publication; the base remote
+task capability shipped in v2.1.0. Headless adapters and durable approval
+suspension described here are newer source additions; see the
+[changelog](../CHANGELOG.md#unreleased).
 
 ## Prepare and preview
 
@@ -54,6 +57,14 @@ For an existing finite workflow use
 `"work": {"kind": "workflow", "path": ".hydra/workflows/build.yml"}` and
 `"completion": "workflow-success"`. The path must be a regular file in the exact
 source commit. Preparation does not execute it or grant repository trust.
+
+Workflows using the new contracts should declare `workflow-data`,
+`workflow-approval-wait`, or `agent-headless` in `capabilities`, as appropriate,
+alongside `workflow`. The receiving helper checks these before acceptance, so an
+older host refuses an unsupported task. Agent profiles and provider credentials
+must already exist on the receiving host; they are not copied from the client.
+See [workflow data and approvals](WORKFLOW_DATA.md) and
+[agent profiles](AGENT_CONTRACT.md) for their execution contracts.
 
 ## Transfer and binding contract
 
@@ -149,8 +160,11 @@ mutation retry occurs. Handshake failures mean this call did not dispatch a
 submission; they do not erase any earlier acceptance. Status during an outage
 reports the transport failure without claiming a terminal task state. Submission
 uses the specification's transport deadline independently for handshake and
-request; status, standalone start, cancel, and logs use 5 seconds for each. A transport timeout
-does not stop a detached task owner.
+request; status, standalone start, and logs use 5 seconds for each. Cancellation
+uses 30 seconds for each, with `--timeout 1..300` to override it, because cancelling
+a suspended approval also seals its result. A transport timeout does not stop a
+detached task owner. If cancellation reports `outcome_unknown`, inspect status
+before taking further action.
 
 Acceptance records and keys currently have no automatic expiry. Retain them for
 the lifetime of recovery and result collection. Deleting this state loses the
@@ -205,6 +219,12 @@ failure reasons. The owner records bounded `stdout` and `stderr` files, an exit
 status, and available run identity. The owner seals an immutable result snapshot
 after completion; collection never infers success from a live worktree.
 
+
+Agent workflow steps use the same [headless profiles](PROFILES.md#headless-execution)
+on local and remote hosts: `agy`, `cursor`, `opencode`, `claude`, `codex`, and `pi`.
+The receiver must have the matching adapter, executable, and authentication.
+Provider credentials are not task inputs; use [native host sign-in](HOST_AUTH.md).
+Live host qualification is recorded separately from transport conformance.
 
 ## Logs and cancellation
 

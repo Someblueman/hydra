@@ -1,0 +1,32 @@
+{
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "checks": [
+    {
+      "command": "make test-all",
+      "exit_code": 0,
+      "log_sha256": "ba7a5d32e439bf1289686cc4c3c6fcef8f19f17c98fcfff873387cd7bf089b26",
+      "local_log": "/tmp/hydra-plan-test-all-complete.log",
+      "note": "Exit 0; 53 planning assertions at this point. The subsequent resource-projection guard was checked by the focused run and final sanitizer suite."
+    },
+    {
+      "command": "HYDRA_FLEET_BIN=/Users/sws/Code/hydra/build/hydra-fleet sh tests/test_workflow_plan.sh",
+      "exit_code": 0,
+      "log_sha256": "afce993d11842627a43155f7d44e321d332a3ecd1c41ec5d845f6e581770efe1",
+      "local_log": "/tmp/hydra-plan-bound-limits.log",
+      "note": "Exit 0; 56 planning assertions, including final live resource-limit tampering guard."
+    },
+    {
+      "command": "make sanitize-fleet",
+      "exit_code": 0,
+      "log_sha256": "f1411c4594fc07a57e75f35a48f765310ea75407e44185ffbb0ea39c8ffb1994",
+      "local_log": "/tmp/hydra-plan-sanitize-fleet.log",
+      "note": "Exit 0 on final runtime code; macOS default -fsanitize=undefined, including all 56 planning assertions."
+    }
+  ],
+  "additional": [
+    "Both final live plans recompiled to byte-identical artifacts",
+    "Bash planning subcommand completion exercised; generated zsh syntax checked",
+    "Public JSON Schema output parsed; external Python jsonschema package unavailable",
+    "git diff --check passed"
+  ]
+}

@@ -7,8 +7,10 @@
 static bool selected(const char *name) {
     const char *names[] = {"state", "run-id", "workflow-id", "created-at", "completed-at", "started-at", "finished-at",
         "base-commit", "graph.tsv", "exit-code", "attempts", "authoritative-attempt", "stdout", "stderr",
-        "status", "head-commit", "worktree-hash", "argv-hash", "branch", "complete", "latest-run", "latest-status",
-        "latest-head-commit", "latest-worktree-hash", "approved-by", "approved-at", "approval-reason", NULL}; size_t i;
+        "status", "agent.json", "head-commit", "worktree-hash", "argv-hash", "branch", "complete", "latest-run", "latest-status",
+        "latest-head-commit", "latest-worktree-hash", "approved-by", "approved-at", "approval-reason", "resolved.yml", "definition-hash", "data.json", "data-hash", "inputs.json", "outputs.json",
+        "failure-class", "retry-at", "decision-source", "request-id", "step-id", "binding.tsv", "binding-hash",
+        "head", "name", "message", "expires-at", "action", "source", "principal-uid", "actor-label", "decided-at", NULL}; size_t i;
     for (i = 0; names[i]; i++) if (!strcmp(name, names[i])) return true;
     return false;
 }
@@ -22,7 +24,7 @@ static int walk(json_object *files, const char *root, const char *relative, cons
         if (entry->d_name[0] == '.') continue;
         if (!f_name(entry->d_name) || f_path(child, sizeof(child), relative, entry->d_name) || f_path(path, sizeof(path), root, child) || lstat(path, &st)) goto done;
         if (S_ISDIR(st.st_mode)) { if (walk(files, root, child, scratch, remaining, depth - 1)) goto done; }
-        else if (selected(entry->d_name) && task_result_files(files, root, child, scratch, remaining)) goto done;
+        else if ((selected(entry->d_name) || (strrchr(relative, '/') && !strcmp(strrchr(relative, '/') + 1, "artifacts"))) && task_result_files(files, root, child, scratch, remaining)) goto done;
     }
     status = 0;
 done:

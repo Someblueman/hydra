@@ -124,6 +124,12 @@ cmd_wait() {
 }
 
 cmd_adapter() {
+    if [ "${1:-}" = safe-point ]; then
+        [ "$#" -eq 4 ] || return 1
+        _load_lib messages
+        messages_safe_point "$2" "$3" "$4"
+        return $?
+    fi
     [ "${1:-}" = ingest ] || { echo "Usage: hydra adapter ingest <branch>" >&2; return 1; }
     _ca_branch="${2:-}"
     if [ -z "$_ca_branch" ] || [ $# -ne 2 ]; then
@@ -147,7 +153,7 @@ cmd_adapter() {
         return 1
     }
     case "$_ca_kind" in
-        observed) lifecycle_set_observed "$_ca_branch" "$_ca_status" adapter reported ;;
+        observed) lifecycle_set_observed "$_ca_branch" "$_ca_status" adapter reported "" "$_ca_instance" ;;
         outcome) lifecycle_set_outcome "$_ca_branch" "$_ca_status" adapter generic-ingest ;;
         *) echo "Error: adapter kind must be observed or outcome" >&2; return 1 ;;
     esac || { echo "Error: unsupported adapter status '$_ca_status'" >&2; return 1; }
@@ -181,9 +187,6 @@ cmd_resume() {
     fi
     _cr_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
     [ -n "$_cr_worktree" ] || { echo "Error: head has no stored worktree path" >&2; return 1; }
-    if [ ! -d "$_cr_worktree" ]; then
-        create_worktree "$_cr_branch" "$_cr_worktree" || return 1
-    fi
     _cr_profile="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/profile" 2>/dev/null || true)"
     if [ -z "$_cr_profile" ] || [ "$_cr_profile" = - ]; then
         _cr_profile=none
@@ -199,6 +202,9 @@ cmd_resume() {
             echo "Error: profile '$_cr_profile' has no supported resume recipe" >&2
             return 1
         }
+    fi
+    if [ ! -d "$_cr_worktree" ]; then
+        create_worktree "$_cr_branch" "$_cr_worktree" || return 1
     fi
     _cr_session="$(generate_session_name "$_cr_branch")" || return 1
     create_session "$_cr_session" "$_cr_worktree" || return 1

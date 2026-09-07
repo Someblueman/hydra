@@ -23,9 +23,25 @@ repository trust. Captured stdout/stderr are capped by `HYDRA_EXEC_MAX_BYTES`
 head ID. JSON includes the bounded captures and per-head exit status. A nonzero
 workload result makes the CLI exit nonzero while preserving all result records.
 
-Exec evidence is intentionally distinct from messaging and lifecycle state. It does
+Command-mode exec evidence is distinct from messaging and lifecycle state. It does
 not deliver agent steering, declare an outcome, update observed agent status, or
 approve a gate.
+
+Profile mode supervises a headless provider on exactly one head instead of taking
+trailing command argv. Supported built-ins are Antigravity (`agy`), Cursor Agent
+(`cursor`), OpenCode, Claude Code, Codex, and Pi. For example:
+
+```sh
+hydra exec --branch feature --profile agy --prompt-file task.txt \
+  --require prompt,observations --result-file answer.txt --exit-code --json
+```
+
+This mode can deliver queued safe-point messages and translate provider
+observations. It still cannot declare an outcome or approve a gate. Missing
+executables or required capabilities fail before starting the provider; Cursor
+usage is unsupported. See [supported profiles](PROFILES.md) and
+[the headless contract](AGENT_CONTRACT.md) for resume, authentication, output
+retention, and independently verified results.
 
 ## Git views
 

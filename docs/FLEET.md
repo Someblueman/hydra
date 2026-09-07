@@ -1,4 +1,4 @@
-# Fleet pilot
+# Trusted SSH fleets
 
 Fleet coordinates up to 16 trusted Hydra hosts through OpenSSH. It provides pinned
 bootstrap, observation, remote head and workflow operations, interactive attach,
@@ -10,11 +10,16 @@ command/workflow runs, bounded logs, cancellation, and verified result collectio
 Successful committed results enter the existing local integration and approval
 flow. Existing direct remote workflow calls remain synchronous.
 
+Fleet and remote tasks shipped in v2.1.0. Headless provider execution and durable
+approval suspension are source-branch additions; see the [changelog](../CHANGELOG.md).
+A remote workflow runs on one selected host. Cross-host DAG coordination and
+automatic placement remain on the [roadmap](ROADMAP.md).
+
 ## Architecture and installation
 
 The optional `hydra-fleet` executable is C. It owns JSON validation, SSH transport,
 bounded child processes, aggregation, and fleet configuration/bundles. OpenSSH owns
-host resolution, credentials, host keys, and connection sharing. Head and workflow
+host resolution, SSH credentials, host keys, and connection sharing. Head and workflow
 mutations invoke the existing shell CLI with argv; they do not write live Hydra
 state from C. There is no fleet daemon, database, scheduler, or mutation replay loop.
 
@@ -71,6 +76,17 @@ at `~/.local/share/hydra/fleet/HASH`. Only then does it update the local alias's
 executable path. Reusing a pin checks its installed bytes. It neither changes the
 host's default PATH nor upgrades another installation. Source versions and archive
 checksums are release identities; do not bootstrap unreviewed packages.
+
+Fleet headless tasks support Antigravity (`agy`), Cursor Agent, OpenCode, Claude
+Code, Codex, and Pi when the selected CLI and credentials are available on that
+host. See [supported agents](PROFILES.md) and the [qualification record](WORKFLOW_AGENT_ACCEPTANCE.md)
+for the difference between implemented contracts and completed live host checks.
+
+## Authenticate agents
+
+Use `hydra fleet auth login HOST --agent NAME` for native sign-in, or preview and
+explicitly copy a supported local credential. See [host authentication](HOST_AUTH.md)
+for provider selection, credential locations, storage guarantees, and recovery.
 
 ## Observe and reconcile
 
@@ -138,7 +154,7 @@ hydra fleet attach ovh --project '/srv/project with spaces' \
 Head signal/cancel delivers foreground `INT` (tmux `C-c`) after rechecking the
 observed instance under the existing lifecycle lock. A stale instance is refused.
 The response means delivered, not task completion. It preserves the head,
-worktree, and dirty files. Only `INT` is supported in this pilot. Use workflow
+worktree, and dirty files. Only `INT` is supported by the direct interrupt command. Use workflow
 cancel for whole-workflow cancellation. Attach resolves that instance's session,
 then runs ordinary interactive `ssh -t ... tmux attach-session`; tmux detach works
 normally. A usable terminal and TERM are required.

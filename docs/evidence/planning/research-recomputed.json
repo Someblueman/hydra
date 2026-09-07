@@ -1,0 +1,188 @@
+{
+  "FCFS": {
+    "mean_wait": 11.583333333333334,
+    "mean_turnaround": 14.166666666666666,
+    "p95_turnaround": 19,
+    "max_wait": 18,
+    "worst_wait_job": "L",
+    "schedule": [
+      {
+        "id": "A",
+        "start": 0,
+        "finish": 9,
+        "wait": 0,
+        "turnaround": 9
+      },
+      {
+        "id": "B",
+        "start": 9,
+        "finish": 10,
+        "wait": 9,
+        "turnaround": 10
+      },
+      {
+        "id": "C",
+        "start": 10,
+        "finish": 12,
+        "wait": 9,
+        "turnaround": 11
+      },
+      {
+        "id": "D",
+        "start": 12,
+        "finish": 13,
+        "wait": 10,
+        "turnaround": 11
+      },
+      {
+        "id": "E",
+        "start": 13,
+        "finish": 18,
+        "wait": 10,
+        "turnaround": 15
+      },
+      {
+        "id": "F",
+        "start": 18,
+        "finish": 19,
+        "wait": 14,
+        "turnaround": 15
+      },
+      {
+        "id": "G",
+        "start": 19,
+        "finish": 21,
+        "wait": 13,
+        "turnaround": 15
+      },
+      {
+        "id": "H",
+        "start": 21,
+        "finish": 22,
+        "wait": 13,
+        "turnaround": 14
+      },
+      {
+        "id": "I",
+        "start": 22,
+        "finish": 25,
+        "wait": 13,
+        "turnaround": 16
+      },
+      {
+        "id": "J",
+        "start": 25,
+        "finish": 26,
+        "wait": 15,
+        "turnaround": 16
+      },
+      {
+        "id": "K",
+        "start": 26,
+        "finish": 30,
+        "wait": 15,
+        "turnaround": 19
+      },
+      {
+        "id": "L",
+        "start": 30,
+        "finish": 31,
+        "wait": 18,
+        "turnaround": 19
+      }
+    ]
+  },
+  "SJF": {
+    "mean_wait": 4.0,
+    "mean_turnaround": 6.583333333333333,
+    "p95_turnaround": 31,
+    "max_wait": 22,
+    "worst_wait_job": "A",
+    "schedule": [
+      {
+        "id": "B",
+        "start": 0,
+        "finish": 1,
+        "wait": 0,
+        "turnaround": 1
+      },
+      {
+        "id": "C",
+        "start": 1,
+        "finish": 3,
+        "wait": 0,
+        "turnaround": 2
+      },
+      {
+        "id": "D",
+        "start": 3,
+        "finish": 4,
+        "wait": 1,
+        "turnaround": 2
+      },
+      {
+        "id": "F",
+        "start": 4,
+        "finish": 5,
+        "wait": 0,
+        "turnaround": 1
+      },
+      {
+        "id": "E",
+        "start": 5,
+        "finish": 10,
+        "wait": 2,
+        "turnaround": 7
+      },
+      {
+        "id": "H",
+        "start": 10,
+        "finish": 11,
+        "wait": 2,
+        "turnaround": 3
+      },
+      {
+        "id": "J",
+        "start": 11,
+        "finish": 12,
+        "wait": 1,
+        "turnaround": 2
+      },
+      {
+        "id": "L",
+        "start": 12,
+        "finish": 13,
+        "wait": 0,
+        "turnaround": 1
+      },
+      {
+        "id": "G",
+        "start": 13,
+        "finish": 15,
+        "wait": 7,
+        "turnaround": 9
+      },
+      {
+        "id": "I",
+        "start": 15,
+        "finish": 18,
+        "wait": 6,
+        "turnaround": 9
+      },
+      {
+        "id": "K",
+        "start": 18,
+        "finish": 22,
+        "wait": 7,
+        "turnaround": 11
+      },
+      {
+        "id": "A",
+        "start": 22,
+        "finish": 31,
+        "wait": 22,
+        "turnaround": 31
+      }
+    ]
+  }
+}

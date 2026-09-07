@@ -1,0 +1,2 @@
+{"type":"system","subtype":"init","session_id":"fixture-session"}
+{"type":"result","subtype":"success","session_id":"fixture-session","result":"fixture artifact","is_error":false}

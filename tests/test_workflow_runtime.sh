@@ -218,6 +218,39 @@ retry_dir="$(run_dir_for "$retry_run")"
 assert_equal 2 "$(sed -n '1p' "$retry_dir/steps/retry/attempts")" "retry count is authoritative"
 assert_equal 2 "$(sed -n '1p' "$test_root/retry-count")" "retry side effect ran exactly twice"
 
+# A persisted backoff survives coordinator loss and preserves completed evidence.
+sed 's/retry: 1/retry: 1\n    retry_on: [failure]\n    retry_backoff: 4/; s/retry-count/backoff-count/' "$test_root/retry.yml" > "$test_root/backoff.yml"
+"$HYDRA_BIN" workflow run "$test_root/backoff.yml" > "$test_root/backoff.out" 2>&1 &
+backoff_runner=$!
+wait_for_file "$test_root/backoff-count" || exit 1
+backoff_run="$(sed -n '1p' "$test_root/backoff.out")"
+backoff_dir="$(run_dir_for "$backoff_run")"
+wait_for_file "$backoff_dir/steps/retry/attempt-1/retry-at" || exit 1
+backoff_at="$(cat "$backoff_dir/steps/retry/attempt-1/retry-at")"
+assert_equal failure "$(cat "$backoff_dir/steps/retry/attempt-1/failure-class")" "failed attempt records its failure class"
+assert_equal 1 "$(cat "$test_root/backoff-count")" "retry does not run before backoff"
+kill -KILL "$backoff_runner" 2>/dev/null || true
+wait "$backoff_runner" 2>/dev/null || true
+"$HYDRA_BIN" workflow resume "$backoff_run" >/dev/null
+assert_success $? "resume completes a retry with durable backoff"
+assert_equal "$backoff_at" "$(cat "$backoff_dir/steps/retry/attempt-1/retry-at")" "restart preserves retry deadline"
+assert_equal 2 "$(cat "$test_root/backoff-count")" "backoff recovery executes exactly one retry"
+if [ "$(cat "$backoff_dir/steps/retry/started-at")" -ge "$backoff_at" ]; then deadline_status=0; else deadline_status=1; fi
+assert_success "$deadline_status" "retry starts only after recorded deadline"
+
+sed 's/retry: 1/retry: 1\n    retry_on: [timeout]/; s/retry-count/class-count/' "$test_root/retry.yml" > "$test_root/classes.yml"
+"$HYDRA_BIN" workflow run "$test_root/classes.yml" > "$test_root/classes.out" 2>&1
+assert_failure $? "failure outside selected retry classes fails the run"
+assert_equal 1 "$(cat "$test_root/class-count")" "excluded failure class is never retried"
+
+sed 's/retry: 1/retry: 1\n    retry_on: [timeout]/; s@argv: .*@argv: [sleep, 3]\n      timeout: 1@' "$test_root/retry.yml" > "$test_root/timeout.yml"
+"$HYDRA_BIN" workflow run "$test_root/timeout.yml" > "$test_root/timeout.out" 2>&1
+assert_failure $? "timeout retry budget eventually exhausts"
+timeout_run="$(sed -n '1p' "$test_root/timeout.out")"
+timeout_dir="$(run_dir_for "$timeout_run")"
+assert_equal timeout "$(cat "$timeout_dir/steps/retry/attempt-1/failure-class")" "supervised timeout is classified from command status"
+assert_equal 2 "$(cat "$timeout_dir/steps/retry/attempts")" "timeout class permits its bounded retry"
+
 cat > "$test_root/long.sh" <<'EOF'
 #!/bin/sh
 set -eu
@@ -246,13 +279,42 @@ steps:
       head: workflow-a
       argv: [sh, $test_root/long.sh, $test_root/cancel-started, $test_root/cancel-completed]
 EOF
-"$HYDRA_BIN" workflow run "$test_root/cancel.yml" > "$test_root/cancel.out" 2>&1 &
+# Delay the scheduler's next state scan until the cancelled step publishes its
+# terminal state, reproducing the ordering that intermittently failed in CI.
+mkdir "$test_root/race-bin"
+cat > "$test_root/race-bin/find" <<EOF
+#!/bin/sh
+run_dir=\$(cat "$test_root/cancel-race-dir" 2>/dev/null || true)
+if [ "\$#" -ge 3 ] && [ "\$1" = "\$run_dir/steps" ] && [ "\$2" = -name ] && [ -s "\$run_dir/residual-children.tsv" ]; then
+    count=0
+    while [ "\$(cat "\$run_dir/steps/long/state")" = running ] && [ "\$count" -lt 100 ]; do
+        sleep 0.05; count=\$((count + 1))
+    done
+    : > "$test_root/cancel-race-observed"
+fi
+exec "$(command -v find)" "\$@"
+EOF
+chmod +x "$test_root/race-bin/find"
+PATH="$test_root/race-bin:$PATH" "$HYDRA_BIN" workflow run "$test_root/cancel.yml" > "$test_root/cancel.out" 2>&1 &
 cancel_runner=$!
 wait_for_file "$test_root/cancel-started" || exit 1
 cancel_run="$(sed -n '1p' "$test_root/cancel.out")"
 cancel_dir="$(run_dir_for "$cancel_run")"
-"$HYDRA_BIN" workflow cancel "$cancel_run" > "$test_root/cancel-command.out"
+printf '%s\n' "$cancel_dir" > "$test_root/cancel-race-dir"
+# Hold event publication so the worker stays alive after writing its terminal
+# step state. This exposes a residual snapshot taken before that transition.
+mkdir "$cancel_dir/.events.lock" || exit 1
+printf '%s\n' "$$" > "$cancel_dir/.events.lock/owner-pid"
+"$HYDRA_BIN" workflow cancel "$cancel_run" > "$test_root/cancel-command.out" &
+cancel_request=$!
+cancel_wait=0
+while [ "$(cat "$cancel_dir/state")" = running ] && [ "$cancel_wait" -lt 100 ]; do
+    sleep 0.1; cancel_wait=$((cancel_wait + 1))
+done
+rm -rf "$cancel_dir/.events.lock"
+wait "$cancel_request"
 assert_success $? "cancellation reaches an active workflow owner"
+assert_success "$(if [ -f "$test_root/cancel-race-observed" ]; then printf 0; else printf 1; fi)" "cancellation exercises a worker finishing after the residual snapshot"
 wait "$cancel_runner" 2>/dev/null || true
 assert_equal cancelled "$(sed -n '1p' "$cancel_dir/state")" "cancelled run records a terminal state"
 if [ ! -s "$cancel_dir/residual-children.tsv" ] && [ ! -f "$test_root/cancel-completed" ]; then cancel_status=0; else cancel_status=1; fi

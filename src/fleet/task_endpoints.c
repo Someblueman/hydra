@@ -30,6 +30,18 @@ json_object *task_cancel(const char *id) {
     if (!flock(owner, LOCK_EX | LOCK_NB)) {
         struct stat st;
         state = task_read_record(directory, "state.json"); if (!task_runtime_valid(state)) goto bad;
+        if (!strcmp(f_string(state, "state"), "waiting_approval")) {
+            struct f_capture cap = {0};
+            char *argv[] = {(char *)f_hydra, "workflow", "cancel", (char *)f_string(state, "run_id"), NULL};
+            if (task_workspace(directory, state)) goto bad;
+            bool stopped = !f_run(argv, NULL, 0, 10, &cap) && !cap.status && task_no_agent_workers(state);
+            f_capture_free(&cap);
+            f_string_add(state, "state", stopped ? "cancelled" : "outcome_unknown");
+            f_string_add(state, "cancellation", stopped ? "confirmed_stopped" : "unknown");
+            f_string_add(state, "cancellation_scope", "managed_commands");
+            if (!stopped) f_string_add(state, "failure", "cancellation_unconfirmed");
+            if (task_finish(directory, state)) goto bad;
+        }
         if (!strcmp(f_string(state, "state"), "accepted")) {
             if (f_path(path, sizeof(path), directory, "launch.json")) goto bad;
             if (lstat(path, &st) && errno == ENOENT) {
