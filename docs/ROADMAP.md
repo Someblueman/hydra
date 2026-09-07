@@ -112,31 +112,34 @@ The agent interprets requirements; a deterministic compiler validates and resolv
 its proposal. Compilation checks an explicit contract, not the semantic truth of
 natural-language requirements. See [the implementation path](PLAN_COMPILATION.md)
 for interfaces, compiler stages, compatibility boundaries, and acceptance examples.
+Local slices 1–3 are implemented and [qualified](evidence/plan-qualification.md).
+Distributed placement and dynamic replanning remain later slices.
 
-- [ ] Define objective, deliverable, requirement, and plan records with stable IDs,
+- [x] Define objective, deliverable, requirement, and plan records with stable IDs,
       explicit constraints, assumptions, open questions, permitted effects, and
       budgets. Tie requirements to final deliverables and their evaluation methods.
       Missing material decisions remain visible rather than becoming guessed defaults.
-- [ ] Add a bounded JSON planning format and agent-readable CLI schema, validation,
+- [x] Add a bounded JSON planning format and agent-readable CLI schema, validation,
       diagnostics, and preview. Reuse existing workflow commands where possible;
       keep one semantic model rather than separate CLI and DSL execution engines.
-- [ ] Compile accepted plans into a versioned resolved execution artifact. Check
+- [x] Compile accepted plans into a versioned resolved execution artifact. Check
       cycles, artifact types/producers, requirement coverage, final composition and
       verification, write conflicts, execution capabilities, authority, and budgets.
       Emit stable diagnostics with field paths and actionable errors. Compilation
       performs no worker execution, host mutation, or model calls.
-- [ ] Bind execution to the compiled artifact and its inputs, source, policy, and
+- [x] Bind execution to the compiled artifact and its inputs, source, policy, and
       compiler version. Preserve published workflow schema 1 behavior; unsupported
       planned operations fail explicitly until their runtime capabilities exist.
       Plan acceptance never grants unstated remote execution or publication rights.
-- [ ] Provide a planner recipe that discovers the schema, proposes a plan, reads
+- [x] Provide a planner recipe that discovers the schema, proposes a plan, reads
       validation errors, and revises within a bounded budget. Keep clarification,
       plan acceptance, execution, and final delivery distinct. Add MCP only if the
       public CLI proves insufficient for a concrete agent client.
-- [ ] Qualify both a feature workflow that delivers integrated working code and a
+- [x] Qualify both a feature workflow that delivers integrated working code and a
       research workflow that delivers a checked report. Include design or evidence
       synthesis as productive work; check its output as a whole. Start with static
-      stages, then admit bounded follow-up plans for genuinely unknown work.
+      stages; follow-up work uses a newly compiled and accepted static plan.
+      Dynamic graph expansion remains deferred.
 
 Acceptance: an agent can propose, validate, revise, compile, preview, and execute a
 plan through public interfaces. Identical explicit inputs produce identical resolved

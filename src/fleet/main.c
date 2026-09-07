@@ -1,6 +1,7 @@
 #include "fleet.h"
 #include "workflow_data.h"
 #include "agent.h"
+#include "plan.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -14,7 +15,8 @@ int main(int argc, char **argv) {
     signal(SIGINT, stopped); signal(SIGTERM, stopped); signal(SIGHUP, stopped); signal(SIGPIPE, SIG_IGN);
     setenv("LC_ALL", "C", 1);
     if (argc == 2 && !strcmp(argv[1], "--version")) { puts("Hydra fleet protocol 1"); return 0; }
-    if (argc >= 2 && !strcmp(argv[1], "workflow-data")) result = wd_cli(argc - 2, argv + 2);
+    if (argc >= 2 && !strcmp(argv[1], "workflow-plan")) result = plan_cli(argc - 2, argv + 2);
+    else if (argc >= 2 && !strcmp(argv[1], "workflow-data")) result = wd_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "agent-profile")) result = agent_profile_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "agent-run")) result = agent_run_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "remote")) result = f_remote_cli(argc - 2, argv + 2);

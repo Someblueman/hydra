@@ -45,6 +45,7 @@ Commands:
                     Usage: hydra workflow list
                            hydra workflow <show|validate|dry-run|run> <id|path>
                            hydra workflow <status|cancel|resume> <run-id>
+                           hydra workflow plan --help
   path [<branch>]   Print the stored worktree path for a head
   lifecycle <head>  Show declared outcome, observed status, and liveness
   outcome <head>    Declare an instance-scoped outcome

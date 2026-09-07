@@ -3,6 +3,7 @@
 cmd_workflow() {
     _cw_action="${1:-}"
     case "$_cw_action" in
+        plan) shift; cmd_workflow_plan "$@" ;;
         -h|--help|'')
             printf '%s\n' \
                 'Usage: hydra workflow list' \
@@ -10,6 +11,7 @@ cmd_workflow() {
                 '       hydra workflow validate <id|path>' \
                 '       hydra workflow dry-run <id|path>' \
                 '       hydra workflow run <id|path>' \
+                '       hydra workflow plan --help' \
                 '       hydra workflow status <run-id> [--json]' \
                 '       hydra workflow cancel <run-id>' \
                 '       hydra workflow resume <run-id>' \
@@ -83,6 +85,7 @@ cmd_workflow() {
                 printf 'disk_mb\t%s\n' "$_cw_disk"
                 printf 'max_heads\t%s\n' "$_cw_heads"
             } > "$_cw_tmp/manifest.tsv"
+            workflow_plan_initialize "$_cw_tmp" || { rm -rf "$_cw_tmp"; return 1; }
             workflow_atomic_scalar "$_cw_tmp/state" queued
             : > "$_cw_tmp/events.jsonl"
             mv "$_cw_tmp" "$_cw_dir" || { rm -rf "$_cw_tmp"; return 1; }

@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "id": "plan-fixture",
+  "objective": "Deliver a report and verify its contents",
+  "context": [],
+  "assumptions": [],
+  "questions": [],
+  "envelope": {
+    "hosts": [
+      "local"
+    ],
+    "tools": [
+      "sh"
+    ],
+    "effects": [
+      "worktree",
+      "execute"
+    ],
+    "writes": [],
+    "parallelism": 1,
+    "timeout_seconds": 180,
+    "artifact_bytes": 4096,
+    "max_heads": 1,
+    "disk_mb": 1,
+    "retry_budget": 0,
+    "repair_budget": 0
+  },
+  "steps": [
+    {
+      "id": "spawn",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {
+        "branch": "plan-smoke"
+      }
+    },
+    {
+      "id": "compose",
+      "role": "compose",
+      "kind": "exec",
+      "needs": [
+        "spawn"
+      ],
+      "writes": [],
+      "args": {
+        "head": "plan-smoke",
+        "argv": [
+          "sh",
+          "compose.sh"
+        ],
+        "timeout": 30
+      }
+    },
+    {
+      "id": "verify",
+      "role": "verify",
+      "kind": "exec",
+      "needs": [
+        "compose"
+      ],
+      "writes": [],
+      "args": {
+        "head": "plan-smoke",
+        "argv": [
+          "sh",
+          "check.sh"
+        ],
+        "timeout": 30
+      }
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "report",
+      "description": "Final report",
+      "step": "compose",
+      "output": "report",
+      "destination": "run-artifact"
+    }
+  ],
+  "checks": [
+    {
+      "id": "check",
+      "method": "executable",
+      "definition": "Compare expected text",
+      "step": "verify",
+      "input": "subject",
+      "report": "check",
+      "deliverable": "report"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "content",
+      "criterion": "Report has the expected contents",
+      "deliverable": "report",
+      "check": "check"
+    }
+  ],
+  "data": {
+    "schema_version": 1,
+    "inputs": {
+      "expected": {
+        "path": "expected.txt",
+        "type": "file",
+        "max_bytes": 128
+      }
+    },
+    "steps": {
+      "compose": {
+        "outputs": {
+          "report": {
+            "type": "file",
+            "path": "report.txt",
+            "max_bytes": 1024
+          }
+        }
+      },
+      "verify": {
+        "inputs": {
+          "subject": {
+            "step": "compose",
+            "output": "report"
+          },
+          "expected": {
+            "input": "expected"
+          }
+        },
+        "outputs": {
+          "check": {
+            "type": "object",
+            "path": "check.json",
+            "max_bytes": 2048
+          }
+        }
+      }
+    }
+  }
+}

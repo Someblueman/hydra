@@ -38,7 +38,7 @@ test:
 	@echo "Running tests..."
 	@if [ -d tests ] && [ -n "$$(ls -A tests/test_*.sh 2>/dev/null)" ]; then \
 		for test in tests/test_*.sh; do \
-			case "$$test" in tests/test_core.sh|tests/test_native_install.sh|tests/test_native_tui.sh|tests/test_fleet.sh|tests/test_fleet_install.sh|tests/test_task_package.sh|tests/test_task_acceptance.sh|tests/test_workflow_data.sh|tests/test_workflow_approval.sh|tests/test_agent_execution.sh|tests/test_agent_auth.sh) continue ;; esac; \
+			case "$$test" in tests/test_core.sh|tests/test_native_install.sh|tests/test_native_tui.sh|tests/test_fleet.sh|tests/test_fleet_install.sh|tests/test_task_package.sh|tests/test_task_acceptance.sh|tests/test_workflow_data.sh|tests/test_workflow_plan.sh|tests/test_workflow_approval.sh|tests/test_agent_execution.sh|tests/test_agent_auth.sh) continue ;; esac; \
 			echo "Running $$test..."; \
 			sh "$$test" || exit 1; \
 		done; \
@@ -200,34 +200,39 @@ FLEET_JSON_LIB = $(shell pkg-config --variable=libdir json-c)/libjson-c.a
 .PHONY: build-fleet test-fleet
 build-fleet: $(BUILD_DIR)/hydra-fleet
 
-$(BUILD_DIR)/hydra-fleet: $(FLEET_SOURCES) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h | $(BUILD_DIR)
+$(BUILD_DIR)/hydra-fleet: $(FLEET_SOURCES) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(FLEET_SOURCES) $(FLEET_JSON_LIB) -lm -o $@
 
-$(BUILD_DIR)/test-fleet: tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-fleet: tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_fleet.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
 
-$(BUILD_DIR)/test-task-package: tests/c/test_task_package.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-task-package: tests/c/test_task_package.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_task_package.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
 
-$(BUILD_DIR)/test-task-result: tests/c/test_task_result.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-task-result: tests/c/test_task_result.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_task_result.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
 
-$(BUILD_DIR)/test-workflow-data: tests/c/test_workflow_data.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-workflow-data: tests/c/test_workflow_data.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_workflow_data.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
 
-$(BUILD_DIR)/test-agent-profile: tests/c/test_agent_profile.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-agent-profile: tests/c/test_agent_profile.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/task.h src/fleet/workflow_data.h src/fleet/agent.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_agent_profile.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
 
-$(BUILD_DIR)/test-agent-auth: tests/c/test_agent_auth.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/agent_auth.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-agent-auth: tests/c/test_agent_auth.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/fleet.h src/fleet/agent_auth.h src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_agent_auth.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
 
-test-fleet: build-fleet $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
+$(BUILD_DIR)/test-plan: tests/c/test_plan.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) src/fleet/plan.h src/fleet/plan_schema.inc | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) tests/c/test_plan.c $(filter-out src/fleet/main.c,$(FLEET_SOURCES)) $(FLEET_JSON_LIB) -lm -o $@
+
+test-fleet: build-fleet $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
+	$(BUILD_DIR)/test-plan
 	$(BUILD_DIR)/test-agent-auth
 	$(BUILD_DIR)/test-agent-profile
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_agent_auth.sh
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_agent_execution.sh
 	$(BUILD_DIR)/test-workflow-data
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_data.sh
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan.sh
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_approval.sh
 	$(BUILD_DIR)/test-fleet
 	$(BUILD_DIR)/test-task-package

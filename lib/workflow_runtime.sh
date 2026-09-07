@@ -70,7 +70,8 @@ workflow_bindings_match() {
     [ "$(git rev-parse HEAD 2>/dev/null || true)" = "$_wbm_base" ] &&
     [ "$(git hash-object "$_wbm_dir/resolved.yml")" = "$(sed -n '1p' "$_wbm_dir/definition-hash")" ] &&
     [ "$(workflow_parse "$_wbm_dir/resolved.yml" runtime | git hash-object --stdin)" = "$(git hash-object "$_wbm_dir/graph.tsv")" ] &&
-    workflow_data_bindings_match "$_wbm_dir"
+    workflow_data_bindings_match "$_wbm_dir" &&
+    workflow_plan_bindings_match "$_wbm_dir"
 }
 
 workflow_step_command() {
@@ -261,6 +262,11 @@ workflow_start_step() {
         _ws_command_pid=""
         _ws_cancelled=0
         trap '_ws_cancelled=1; [ -z "$_ws_command_pid" ] || operations_signal_tree "$_ws_command_pid" TERM' HUP INT TERM
+        if ! workflow_plan_bindings_match "$_wss_dir"; then
+            workflow_atomic_scalar "$_wss_sd/state" recovery-required
+            workflow_event "$_wss_dir" "$_wss_id" step.recovery_required stale_plan
+            exit 1
+        fi
         if ! workflow_approval_guard "$_wss_dir" "$_wss_id"; then
             workflow_atomic_scalar "$_wss_sd/state" recovery-required
             workflow_event "$_wss_dir" "$_wss_id" step.recovery_required stale_approval
@@ -358,6 +364,10 @@ workflow_drive() {
     _wd_parallelism="$(sed -n '1p' "$_wd_dir/parallelism")"
     while :; do
         workflow_atomic_scalar "$_wd_dir/heartbeat-at" "$(date +%s)"
+        if workflow_plan_expired "$_wd_dir" && [ ! -f "$_wd_dir/cancel-requested" ]; then
+            workflow_atomic_scalar "$_wd_dir/cancel-requested" "$(date +%s)"
+            workflow_event "$_wd_dir" "" run.budget_exhausted plan_deadline
+        fi
         workflow_recover_running_steps "$_wd_dir"
         if [ -f "$_wd_dir/cancel-requested" ]; then
             [ -f "$_wd_dir/cancel-started-at" ] || workflow_atomic_scalar "$_wd_dir/cancel-started-at" "$(date +%s)"
@@ -422,6 +432,10 @@ workflow_drive() {
                 _wd_final=cancelled
             else
                 _wd_final=succeeded
+            fi
+            if [ "$_wd_final" = succeeded ] && ! workflow_plan_finish "$_wd_dir"; then
+                _wd_final=failed
+                workflow_event "$_wd_dir" "" run.delivery_rejected missing_or_negative_verification
             fi
             workflow_atomic_scalar "$_wd_dir/state" "$_wd_final"
             workflow_event "$_wd_dir" "" "run.$_wd_final"

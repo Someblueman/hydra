@@ -11,7 +11,9 @@ contracts.
   a major release and the deprecation policy in [VERSIONING.md](VERSIONING.md).
 - Machine interfaces reject unsupported schema or protocol versions. They do not
   guess, silently downgrade, or accept a different format as a fallback.
-- Readers ignore unknown JSON object fields within a supported schema version.
+- Readers ignore unknown JSON output fields within a supported schema version.
+  Input formats with a closed schema, including planning documents, reject unknown
+  fields rather than silently discarding requested behavior.
 - The shell CLI is the only mutation authority. Native processes receive bounded,
   versioned input and invoke public shell commands with an argument vector.
 
@@ -84,6 +86,14 @@ See [EVENTS.md](EVENTS.md), [LIFECYCLE.md](LIFECYCLE.md), and
   approval is a separate exact binding to verification evidence.
 
 ## Workflows and integration
+
+Objective planning schema v1 is an optional, closed JSON authoring contract exposed
+by `hydra workflow plan schema`. It lowers local spawn/exec plans into the existing
+workflow runtime. Compilation binds source, declared inputs, context, profiles,
+policy and compiler version; execution requires the exact accepted SHA-256.
+Planning success requires sealed final deliverables and positive reports linked
+to their exact bytes and requirement IDs. Coverage alone is not semantic proof.
+See [the planner recipe](PLANNER_RECIPE.md) for limits and report format.
 
 Workflow definition schema v1 is the stable finite-DAG contract. Definitions use the
 documented restricted YAML subset, every step declares idempotency, argv is the

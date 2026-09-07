@@ -142,6 +142,7 @@ _load_libs_for_cmd() {
             _load_lib cmd_fleet
             _load_lib workflow_approval
             _load_lib workflow_data
+            _load_lib workflow_plan
             _load_lib workflow_retry
             _load_lib workflow_runtime
             _load_lib cmd_workflow

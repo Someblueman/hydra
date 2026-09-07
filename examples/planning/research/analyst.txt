@@ -1,0 +1,10 @@
+Write the completed research report requested by SPEC.md in this repository.
+The metrics and schedule are appended below from sealed experimental outputs.
+Read jobs.csv and measure.sh in this repository for the source data and method. Evaluate
+every requirement in SPEC.md, report precise numbers, show the two constraint
+checks and a justified recommendation. Avoid claims beyond this supplied trace.
+The composition step will append the complete metrics and schedule, so explain
+their meaning and refer to that reproducibility appendix. Do not edit files,
+commit, spawn agents, or run new work beyond reading and checking the provided
+evidence. Return only the completed Markdown report as your final answer, without
+outer Markdown fences, meta commentary or a status summary.

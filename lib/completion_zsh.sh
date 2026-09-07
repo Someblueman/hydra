@@ -105,7 +105,11 @@ _hydra() {
                     _arguments '1:subcommand:(create)' '--diff[Include selected diff]' '*--file[Add a manifest file]:file:_files' '--note[Add a note]:text:' '--history[Include bounded history]:count:' '*--artifact[Add an artifact reference]:artifact:_files' '--json[Output versioned JSON]'
                     ;;
                 workflow)
-                    _arguments '1:subcommand:(list show validate dry-run run status cancel resume requests decide)' '--json[Output versioned status JSON]' '2:workflow or run:'
+                    if [[ ${words[2]} == plan ]]; then
+                        _arguments '2:planning action:(schema validate compile show run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '*:file:_files'
+                        return
+                    fi
+                    _arguments '1:subcommand:(list show validate dry-run run status cancel resume requests decide plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
                     ;;
                 sync)
                     _arguments '--from[Source ref]:ref:' '--gate[Approved gate]:name:' '--dry-run[Simulate without mutation]' '1:head:_hydra_sessions'

@@ -153,6 +153,15 @@ interrupts. Agent executables and repositories live on the host that runs the wo
 See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements, remote
 workflows, and recovery behavior.
 
+## Plan an objective
+
+The optional native helper supports `hydra workflow plan`: discover the JSON
+schema, validate an agent-authored proposal, compile and review an immutable
+local DAG, then execute it with an exact acceptance digest. Retrieve the final
+verified artifacts with `hydra workflow plan result <run-id>`. See the
+[planner recipe](docs/PLANNER_RECIPE.md) and
+[feature and research examples](examples/planning/README.md).
+
 ## Documentation
 
 | Topic | Guide |
@@ -162,6 +171,7 @@ workflows, and recovery behavior.
 | Submit, monitor, cancel, collect, and integrate remote tasks | [Remote tasks](docs/REMOTE_TASKS.md) |
 | Agent profiles and prompts | [Profiles](docs/PROFILES.md) |
 | Workflows and guarded integration | [Workflows](docs/workflows.md) |
+| Agent-authored objectives and compiled local DAGs | [Planner recipe](docs/PLANNER_RECIPE.md) |
 | Scopes, collisions, resources, and gates | [Parallel safety](docs/PARALLEL_SAFETY.md) |
 | Lifecycle, messaging, and automation | [Automation](docs/AUTOMATION.md) · [Events](docs/EVENTS.md) |
 | State, recovery, and provenance | [State](docs/STATE.md) · [Operations](docs/OPERATIONS.md) · [Provenance](docs/PROVENANCE.md) |

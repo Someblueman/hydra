@@ -1,0 +1,4 @@
+PASS: 24 schedule rows exactly match independent Python simulation of the source jobs.csv.
+PASS: All reported means agree within 0.000001; nearest-rank p95, maximum wait and worst-job IDs match exactly.
+PASS: Full report reviewed against six original criteria: definitions, means, tails and tradeoff, worst-wait jobs and starvation distinction, both fixed constraint checks, reproducibility appendix, and stated scope limits.
+Finding: neither policy meets p95 <= 22 and maximum wait <= 16; no limits relaxed.

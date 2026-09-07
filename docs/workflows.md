@@ -133,3 +133,11 @@ and require only capabilities the profile declares. Cursor does not declare usag
 reporting. Use an independent compare or gate step to verify the result.
 See [supported agents](PROFILES.md) and [the headless contract](AGENT_CONTRACT.md)
 for executable requirements, exact resume, and live qualification status.
+
+## Objective planning
+
+Use [`hydra workflow plan`](PLANNER_RECIPE.md) to author a bounded JSON plan,
+compile and review its source/input/policy bindings, then run the exact accepted
+artifact through this same scheduler. Final success requires artifact-bound
+verification reports for the declared deliverables. This optional native path
+does not change workflow schema 1 or shell-only execution.

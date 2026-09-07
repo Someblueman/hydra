@@ -1,9 +1,13 @@
 # From objective to executable work
 
-Status: proposed design and implementation sequence, 7 September 2026.
-No planning manifest, compiler command, or compiled-run interface described below
-is implemented yet. Current interfaces are documented in [Static workflows](workflows.md)
-and [Workflow data](WORKFLOW_DATA.md); outstanding work lives in [the roadmap](ROADMAP.md).
+Status: local slices 1–3 implemented, 7 September 2026.
+The public `hydra workflow plan` interface provides schema discovery, validation,
+compilation, preview, accepted execution and verified result retrieval. See the
+[planner recipe](PLANNER_RECIPE.md) for runnable commands and the
+[qualification evidence](evidence/plan-qualification.md) for delivery checks.
+Distributed execution, placement and replanning remain outstanding in
+[the roadmap](ROADMAP.md). Existing [static workflows](workflows.md) and
+[workflow data](WORKFLOW_DATA.md) retain their published contracts.
 
 ## Product contract
 
@@ -32,7 +36,7 @@ parsing. Lower planning documents into existing workflow operations where possib
 add explicit versioned capabilities for new operations. Do not silently strip
 unsupported fields or implement a second scheduler behind the planning format.
 
-The intended interaction is schematic, not current runnable commands:
+The implemented local interaction is:
 
 ```text
 agent reads objective, context, and plan schema
@@ -44,11 +48,12 @@ user or previously authorized policy accepts the exact execution scope
 runner executes the accepted compiled plan -> final deliverable and checks
 ```
 
-Today an agent can author a schema-1 workflow and use `hydra workflow validate`,
-`dry-run`, `run`, and `status --json`. Proposed additions are schema discovery,
-structured planning diagnostics, compilation, and execution of the bound compiled
-artifact. Extend that command family; settle exact syntax with the schema change.
-An optional agent skill can teach this protocol without becoming another authority.
+Agents can still author schema-1 workflows and use `hydra workflow validate`,
+`dry-run`, `run`, and `status --json`. The additional `workflow plan` commands are
+`schema`, `validate <plan> <policy>`, `compile <plan> <policy> <new-output>`,
+`show <compiled> [--json]`, `run <compiled> --accept <sha256>` and
+`result <run-id>`. The planner recipe teaches this protocol without becoming
+another authorization source. The optional native helper is required.
 
 ## Minimum planning contract
 
