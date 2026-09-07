@@ -225,6 +225,8 @@ static void record_hit(struct app *app, size_t index) {
 
 #include "hydra_tui_render.inc"
 
+static int read_key(int timeout_ms, char *key);
+#include "hydra_tui_forms.inc"
 #include "hydra_tui_actions.inc"
 #include "hydra_tui_statistics_input.inc"
 #include "hydra_tui_terminal_input.inc"
@@ -348,6 +350,15 @@ static int interactive_main(struct app *app) {
         else if (key == 'q') app->running = false;
         else if (key == 'D') statistics_toggle(app);
         else if (app->view == 8 && statistics_key(app, key)) { }
+        else if (app->view==7 && key=='P') {
+            char path[4096],policy[4096];
+            if (!app->fleet && prompt_text(app,"Draft JSON path: ",path,sizeof(path))==0 && path[0] &&
+                prompt_text(app,"Policy JSON path: ",policy,sizeof(policy))==0 && policy[0])
+                (void)native_plan_load(app,path,policy);
+        }
+        else if (app->view==7 && key=='V') {
+            if (!native_plan_compile(app)) copy_text(app->notice,sizeof(app->notice),"Load draft and policy with P before validation; an active compilation must finish first");
+        }
         else if (app->view == 7 && native_workspace_key(app, key)) { }
         else if (app->view == 5 && workflow_key(app, key)) { }
         else if (key == 'j') move_selection(app, 1);

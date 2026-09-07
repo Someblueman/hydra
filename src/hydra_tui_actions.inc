@@ -36,19 +36,6 @@ static int spawn_argv(char *const argv[]) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 
-static int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) {
-    restore_terminal(app);
-    printf("\n%s", prompt);
-    fflush(stdout);
-    if (fgets(buffer, (int)size, stdin) == NULL) buffer[0] = '\0';
-    buffer[strcspn(buffer, "\r\n")] = '\0';
-    if (enter_raw(app) != 0) {
-        app->running = false;
-        return -1;
-    }
-    return 0;
-}
-
 static void spawn_action(struct app *app) {
     char branch[TEXT] = "", profile[TEXT] = "", template[TEXT] = "", layout[TEXT] = "";
     char *argv[11];

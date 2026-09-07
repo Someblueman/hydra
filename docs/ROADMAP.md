@@ -364,8 +364,13 @@ Draft, validated, awaiting approval, running and failed states are visibly disti
 Toggle from conversation to comprehensive overview and back during plan revision;
 verify that unsent input, session identity, selected step, scroll and focus survive.
 The overview toggle changes presentation only, never approval or execution state.
-Coordinate with the planning implementation branch before integration; these UI
-items do not authorize replacing or duplicating its plan/execution contracts.
+The existing planning implementation is integrated into this branch; see the
+[planner recipe](PLANNER_RECIPE.md) and [compilation contract](PLAN_COMPILATION.md).
+The native workspace now loads draft/policy files with P, validates with V, shows
+revision-aware complete previews and dependencies, and preserves layout state
+across A/B/C/D. Native dialogs continue agent I/O. Exact-digest execution approval,
+full C evidence/intervention, and real agent-authored workflow acceptance remain
+outstanding; the milestone checkboxes stay open until those criteria are met.
 
 ### Milestone 4: integrated working terminals
 

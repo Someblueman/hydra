@@ -40,9 +40,22 @@ cmp -s "$ROOT/compiled.json" "$ROOT/repeated.json"
 assert_success $? 'identical inputs compile to identical bytes'
 "$HYDRA_BIN" workflow plan show "$ROOT/compiled.json" > "$ROOT/preview.txt"
 assert_success $? 'compiled plan has a readable scope preview'
+"$HYDRA_BIN" workflow plan tui-data "$ROOT/compiled.json" > "$ROOT/plan-tui.tsv"
+assert_success $? 'native plan projection succeeds without executing work'
+awk 'index($0,"T\t")==1 {print substr($0,3)}' "$ROOT/plan-tui.tsv" > "$ROOT/projected-preview.txt"
+cmp -s "$ROOT/preview.txt" "$ROOT/projected-preview.txt"
+assert_success $? 'native preview preserves the full public approval scope'
+awk -F '\t' '$1=="N" && $2=="verify" && $3=="exec" && $4=="verify" && $5=="compose" {found=1} END {exit !found}' "$ROOT/plan-tui.tsv"
+assert_success $? 'native graph includes the recorded verification dependency'
+awk -F '\t' '$1=="N" {nodes++} $1=="T" {lines++} $1=="Z" {valid=($2==nodes && $3==lines)} END {exit !valid}' "$ROOT/plan-tui.tsv"
+assert_success $? 'native projection has a complete record-count trailer'
 sed 's/"inputs":{/"inputs":[],"invalid_inputs":{/' "$ROOT/compiled.json" > "$ROOT/bad-preview.json"
 "$HYDRA_BIN" workflow plan show "$ROOT/bad-preview.json" > "$ROOT/bad-preview.out" 2>&1
 assert_failure $? 'malformed compiled input declarations fail preview safely'
+"$HYDRA_BIN" workflow plan tui-data "$ROOT/bad-preview.json" > "$ROOT/bad-tui.out" 2>&1
+assert_failure $? 'malformed plans cannot produce native approval previews'
+if grep -q '^HYDRA_PLAN_TUI' "$ROOT/bad-tui.out"; then assert_failure 0 'invalid projection must not emit a partial handshake'
+else assert_success 0 'invalid projection emits no partial handshake'; fi
 reject() {
     sed "$1" "$ROOT/plan.json" > "$ROOT/bad.json"
     "$HYDRA_BIN" workflow plan validate "$ROOT/bad.json" "$ROOT/policy.json" > "$ROOT/rejection.json" 2>&1

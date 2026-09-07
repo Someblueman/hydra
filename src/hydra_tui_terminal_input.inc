@@ -29,6 +29,7 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
         if (e->key=='q') app->running=false;
         else if (e->key=='\t') tv_workspace_focus_next(&w->layout,1);
         else if (e->key=='D') statistics_toggle(app);
+        else if (e->key=='A' || e->key=='B' || e->key=='C') native_workspace_mode(app,(int)e->key-'A');
         else if (e->key=='z') (void)native_workspace_key(app,'z');
         else if (e->key=='n') {
             size_t i;

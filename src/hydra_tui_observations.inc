@@ -15,6 +15,7 @@ static void native_observations_destroy(struct app *app) {
 
 static void native_observations_tick(struct app *app, bool request) {
     size_t i;
+    native_plan_tick(app,request);
     if (!app->observations) {
         if (!request) return;
         app->observations=calloc(1,sizeof(*app->observations));
@@ -36,7 +37,7 @@ static void native_observations_tick(struct app *app, bool request) {
             } else if (i==1) (void)accept_workflows(app,input);
             else (void)accept_statistics(app,input);
         }
-        if (request && !p->pid && (i==0 || (!app->fleet && ((i==1 && app->view==5) || (i==2 && app->view==8))))) {
+        if (request && !p->pid && (i==0 || (!app->fleet && ((i==1 && (app->view==5 || app->view==7)) || (i==2 && app->view==8))))) {
             char *argv[]={(char *)app->hydra,i==0 ? app->fleet ? "fleet" : "tui" : "workflow",
                 i==0 ? app->fleet ? "tui-visual-data" : "--data" : i==1 ? "tui-data" : "statistics-data",NULL};
             if (!native_capture_start(p,argv,app->fleet ? 3500 : 2000)) {

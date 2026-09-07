@@ -259,3 +259,30 @@ Offline `hydra-tui` artifacts use adjacent `.sha256`, `.platform`, `.dependencie
 and `.source` metadata. Installation verifies checksum, host platform, protocol, and
 exact Hydra/TUI release version before atomic replacement. Shell-only installation
 remains available with `HYDRA_INSTALL_TUI=never`.
+
+## Draft planning workspace
+
+The workspace defaults to A (conversation). B opens the plan overview and toggles
+back to A; C shows observed workflow dependencies. Each layout retains its own
+focus, split proportions, zoom and pane scroll. Attached terminal clients and their
+unsent input remain shared; use Ctrl-B A/B/C while input goes to an agent. D retains
+its existing statistics filters and returns to the previous workspace layout.
+
+P opens native draft/policy path fields. These dialogs keep terminal output and
+observations running; pasted newlines cannot submit them. V compiles the loaded
+revision through `hydra workflow plan compile`, then displays the complete public
+preview and dependency projection. Compilation does not execute work. Changes to
+either original file increment the displayed revision and clear the compiled
+digest. Failed validation remains visible; missing or oversized projections are
+reported unavailable. Draft/policy inputs are bounded at 256 KiB each and preview
+text at 1 MiB. Temporary compilation snapshots are removed on normal UI exit.
+
+Execution approval and intervention controls are still outstanding. C currently
+shows recorded dependencies; full run evidence and recovery integration remain on
+the roadmap. Real Codex model-response qualification remains blocked by the local
+CLI login, despite verified composer, resizing and reconnect behavior.
+
+`make test-plan-workspace` exercises actual compilation and revision invalidation
+through a PTY at 40x10, 80x24 and 140x40. `make sanitize-plan-workspace` repeats it
+with the repository sanitizer flags. Attached-session checks cover unsent input
+across A/B/C/D without executing it during transitions.

@@ -27,6 +27,10 @@ cmd_workflow_plan() (
             elif [ "$#" -eq 3 ] && [ "$3" = --json ]; then workflow_plan_tool show "$2"
             else exit 1; fi
             ;;
+        tui-data)
+            [ "$#" -eq 2 ] || exit 1
+            workflow_plan_tool tui-data "$2"
+            ;;
         result)
             [ "$#" -eq 2 ] && hydra_valid_id "$2" || exit 1
             workflow_plan_tool result "$(workflow_runs_dir)/$2"

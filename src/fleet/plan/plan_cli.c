@@ -56,9 +56,16 @@ static json_object *preview_command(char **argv, bool *printed) {
     json_object *compiled = NULL;
 
     compiled = plan_read(argv[1]);
-    if (compiled && !plan_preview(compiled)) { json_object_put(compiled); *printed = true; return NULL; }
+    if (compiled && !plan_preview(compiled, stdout)) { json_object_put(compiled); *printed = true; return NULL; }
     json_object_put(compiled);
     return result;
+}
+
+static json_object *tui_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]);
+    if (compiled && !plan_tui(compiled)) *printed = true;
+    json_object_put(compiled);
+    return NULL;
 }
 
 static json_object *result_command(char **argv, bool *printed) {
@@ -186,6 +193,7 @@ json_object *plan_cli(int argc, char **argv) {
         json_object *(*call)(char **argv, bool *printed);
     } commands[] = {
         {"preview", 2, preview_command},
+        {"tui-data", 2, tui_command},
         {"result", 2, result_command},
         {"show", 2, show_command},
         {"admit", 5, admit_command},

@@ -92,6 +92,7 @@ int main(int argc, char **argv) {
     native_workspace_destroy(&app);
     native_terminals_destroy(&app);
     native_observations_destroy(&app);
+    native_plan_destroy(&app);
     statistics_destroy(&app);
     return index;
 }

@@ -44,8 +44,8 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     write_input(session.master, "\033", 1U);
     (void)wait_for_marker(&session, "[Heads]", 1000);
     write_input(session.master, "/", 1U);
-    result(wait_for_marker(&session, "\033[?1006l", 1000), "search prompt disables mouse reporting");
-    (void)wait_for_marker(&session, "Search heads:", 1000);
+    result(wait_for_markers(&session, "INPUT TO HYDRA / text field", "Search heads:", 1000) && wait_for_raw(&session),
+           "native search prompt keeps terminal input in raw mode");
     write_input(session.master, "unavailable\n", 12U);
     (void)wait_for_marker(&session, "Search: unavailable", 1000);
     mouse_input(&session, "\033[<0;8;5M");

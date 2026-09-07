@@ -3,6 +3,7 @@
 #include "hydra_tui_dashboard.inc"
 #include "hydra_tui_workflow_render.inc"
 #include "hydra_tui_hosts.inc"
+#include "hydra_tui_plan_render.inc"
 #include "hydra_tui_workspace.inc"
 #include "hydra_tui_statistics_render.inc"
 

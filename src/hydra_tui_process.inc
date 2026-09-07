@@ -77,11 +77,20 @@ static bool native_capture_step(struct native_capture *p) {
     return p->reaped && p->eof;
 }
 
-/* Transfers the successful, rewound stream; always releases the process handle. */
-static FILE *native_capture_take(struct native_capture *p) {
+/* Transfer complete stdout even on a normal nonzero exit, for compiler
+ * diagnostics. Timeout/transport failures never become complete documents. */
+static FILE *native_capture_result(struct native_capture *p, bool *success) {
     FILE *out=NULL;
-    if (p->reaped && p->eof && !p->failed && WIFEXITED(p->status) && WEXITSTATUS(p->status)==0 &&
-        fflush(p->output)==0 && fseek(p->output,0,SEEK_SET)==0) { out=p->output; p->output=NULL; }
+    *success=p->reaped && WIFEXITED(p->status) && WEXITSTATUS(p->status)==0 && !p->failed;
+    if (p->reaped && p->eof && WIFEXITED(p->status) && !p->failed && fflush(p->output)==0 && fseek(p->output,0,SEEK_SET)==0) {
+        out=p->output; p->output=NULL;
+    }
     native_capture_destroy(p);
+    return out;
+}
+static FILE *native_capture_take(struct native_capture *p) {
+    bool success;
+    FILE *out=native_capture_result(p,&success);
+    if (!success && out) { fclose(out); out=NULL; }
     return out;
 }

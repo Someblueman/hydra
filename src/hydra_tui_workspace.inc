@@ -2,6 +2,9 @@
 #define WORKSPACE_CAPACITY (512U * 256U)
 struct native_workspace {
     struct tv_workspace layout;
+    struct tv_workspace saved[3];
+    bool saved_zoom[3], initialized[3];
+    int mode;
     struct tv_tree tree;
     struct tv_tree_node nodes[MAX_HEADS + 1];
     struct tv_cell *cells, *previous;
@@ -38,6 +41,23 @@ static bool native_workspace_init(struct app *app) {
     return true;
 }
 
+static void native_workspace_mode(struct app *app, int mode) {
+    struct native_workspace *w;
+    if (!native_workspace_init(app)) return;
+    w=app->workspace;
+    if (mode==1 && w->mode==1) mode=0;
+    w->saved[w->mode]=w->layout; w->saved_zoom[w->mode]=w->zoom; w->initialized[w->mode]=true;
+    if (w->initialized[mode]) { w->layout=w->saved[mode]; w->zoom=w->saved_zoom[mode]; }
+    else {
+        tv_workspace_init(&w->layout,18,5);
+        (void)tv_workspace_split(&w->layout,0,TV_COLUMNS,250);
+        (void)tv_workspace_split(&w->layout,2,TV_ROWS,450);
+        (void)tv_workspace_split(&w->layout,4,TV_ROWS,500);
+        w->layout.panes[3].min_width=40; w->layout.focus=3; w->zoom=false;
+    }
+    w->mode=mode; app->view=7; native_workspace_invalidate(app);
+}
+
 static void native_workspace_tree(struct app *app) {
     struct native_workspace *w = app->workspace;
     size_t i, count = 1, chosen = 0;
@@ -69,13 +89,20 @@ static void native_workspace_move(struct app *app, int direction) {
         if (direction<0 && t->scroll<t->screen->history_count) t->scroll++;
         if (direction>0 && t->scroll) t->scroll--;
     }
+    else if (w->layout.focus==5) {
+        size_t *selected=w->mode==1 && app->plan ? &app->plan->selected : &app->workflow_node;
+        size_t count=w->mode==1 && app->plan ? app->plan->graph.node_count : app->workflows ? app->workflows->node_count : 0;
+        if (direction<0 && *selected) (*selected)--;
+        if (direction>0 && *selected+1<count) (*selected)++;
+    }
     else if (w->layout.focus == 1) { tv_tree_move(&w->tree, direction); native_workspace_select(app); }
-    else tv_workspace_scroll(&w->layout, direction, w->layout.focus == 3 ? 13 : app->model.recovery_count + 5);
+    else tv_workspace_scroll(&w->layout, direction, w->layout.focus == 3 ? 13 : w->layout.focus==6 ? NATIVE_PLAN_TEXT : app->model.recovery_count + 5);
 }
 
 static bool native_workspace_key(struct app *app, char key) {
     struct native_workspace *w = app->workspace;
     if (!w) return false;
+    if (key=='A' || key=='B' || key=='C') { native_workspace_mode(app,key-'A'); return true; }
     if (key == 'z') {
         w->zoom = !w->zoom;
         copy_text(app->notice,sizeof(app->notice),w->zoom ? "Focused pane expanded / z restores splits" : "Pane splits restored");
@@ -175,8 +202,8 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
         w->layout.root=root;
     }
     native_workspace_tree(app);
-    dashboard_text(&c, 1, 0, width-2, TV_TITLE, "HYDRA WORKSPACE / %s", app->snapshot_stale ? "STALE" : app->fleet ? "Fleet" : "Local");
-    if (!compact) dashboard_text(&c, 1, 1, width-2, TV_BORDER, "W workspace / D statistics / w workflows / H hosts / z %s", w->zoom ? "restore panes" : "zoom focus");
+    dashboard_text(&c, 1, 0, width-2, TV_TITLE, "HYDRA WORKSPACE / %s / %s", w->mode==0 ? "A CONVERSATION" : w->mode==1 ? "B PLAN OVERVIEW" : "C MONITOR", app->snapshot_stale ? "STALE" : app->fleet ? "Fleet" : "Local");
+    if (!compact) dashboard_text(&c, 1, 1, width-2, TV_BORDER, "A conversation / B plan / C monitor / P load / V validate / D stats / z %s", w->zoom ? "restore panes" : "zoom focus");
     for (i = 0; i < w->layout.count; i++) {
         const struct tv_pane *p = &w->layout.panes[i];
         struct tv_canvas view, content;
@@ -192,8 +219,8 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
             if (compact) {
                 if (attached) dashboard_text(&view,0,0,view.width,TV_SELECTED,"%.14s / %s",t->label,
                     t->client.finished || t->client.eof ? "DISCONNECTED" : "INPUT TO AGENT");
-                else dashboard_text(&view,0,0,view.width,TV_SELECTED,"FOCUS / %s",i==1 ? "NAVIGATION" : i==3 ? "SELECTED WORK" : "ACTIVITY / RECOVERY");
-            } else tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : i == 3 ? attached ? t->label : "SELECTED WORK" : "ACTIVITY / RECOVERY");
+                else dashboard_text(&view,0,0,view.width,TV_SELECTED,"FOCUS / %s",i==1 ? "NAVIGATION" : i==3 ? "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
+            } else tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : i == 3 ? attached ? t->label : "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
             if (!compact && attached) dashboard_text(&view,1,1,view.width-2,i==w->layout.focus ? TV_SELECTED : TV_BORDER,
                 "%s / %s", t->client.finished || t->client.eof ? "CLIENT DISCONNECTED" : "ATTACHED",
                 t->client.finished || t->client.eof ? "NO INPUT / Ctrl-B r reconnect" :
@@ -208,6 +235,8 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
         else if (i == 3 && native_terminal_selected(app) && native_terminal_selected(app)->screen)
             native_terminal_draw(app,&content,w->layout.focus==3);
         else if (i == 3) native_workspace_details(app, &content, p->scroll);
+        else if (i==5) native_workspace_graph(app,&content,w->mode==1);
+        else if (i==6 || (i==4 && app->plan)) native_workspace_plan_text(app,&content,p->scroll);
         else native_workspace_activity(app, &content, p->scroll);
     }
     if (!compact) dashboard_text(&c, 0, height-2, width, app->snapshot_stale ? TV_WARNING : TV_BORDER, "%s snapshot / age %lds%s%s",

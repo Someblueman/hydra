@@ -1,4 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -12,6 +15,7 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/select.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -66,6 +70,7 @@ struct native_workspace;
 struct statistics_view;
 struct native_terminals;
 struct native_observations;
+struct native_plan;
 
 struct app {
     struct model model;
@@ -73,6 +78,7 @@ struct app {
     struct statistics_view *statistics;
     struct native_terminals *terminals;
     struct native_observations *observations;
+    struct native_plan *plan;
     const char *hydra;
     size_t selected, recovery_selected;
     int view, theme;
@@ -118,6 +124,8 @@ static void native_observations_cancel(struct app *app, size_t source);
 #include "hydra_tui_model.inc"
 #include "hydra_tui_workflow_model.inc"
 #include "hydra_tui_statistics_model.inc"
+#include "hydra_tui_plan_model.inc"
+#include "hydra_tui_plan_projection.inc"
 #include "hydra_tui_observations.inc"
 #include "hydra_tui_terminals.inc"
 #include "hydra_tui_ui.inc"

@@ -27,5 +27,6 @@ int plan_admit(json_object *compiled, const char *source, const char *accepted);
 int plan_heads_available(json_object *compiled, const char *source);
 int plan_finish(const char *run);
 json_object *plan_delivery(const char *run);
-int plan_preview(json_object *compiled);
+int plan_preview(json_object *compiled, FILE *out);
+int plan_tui(json_object *compiled);
 #endif
