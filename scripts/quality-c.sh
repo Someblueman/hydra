@@ -2,7 +2,10 @@
 # Compare cognitive complexity by source/function, independent of line numbers.
 set -eu
 baseline="$1" tool="$2"; shift 2
-[ "$#" -gt 0 ] && [ "$1" != -- ] || { echo 'C analysis requires source files' >&2; exit 2; }
+if [ "$#" -eq 0 ] || [ "$1" = -- ]; then
+    echo 'C analysis requires source files' >&2
+    exit 2
+fi
 [ -f "$baseline" ] || { echo "Missing complexity baseline: $baseline" >&2; exit 2; }
 "$tool" --version | grep -q 'version 22\.1\.8' || { echo 'C analysis requires clang-tidy 22.1.8' >&2; exit 2; }
 report="${QUALITY_C_LOG:-build/quality-c.log}"
