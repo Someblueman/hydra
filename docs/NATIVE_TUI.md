@@ -285,16 +285,36 @@ The workspace records one launch per project/digest under
 `state/v2/projects/<project>/workflows/launches/<digest>`; `run-id` points to the
 existing workflow run, `owner.log` contains diagnostics and `exit-code` records
 owner completion. A reserved or uncertain launch is never automatically retried.
-Use the existing workflow status/cancel/resume commands for lifecycle operations.
+In C, `[` and `]` select recorded runs; j/k in the dependency pane selects a step.
+The evidence pane follows that exact run/step, showing its attempt, exit code and
+the last 8192 bytes of each output stream. Input requests include their message,
+identity, binding, expiry and decision. For successful compiled plans, result
+retrieval rechecks the sealed artifacts and displays deliverable hashes, paths and
+check evidence. Recorded success alone never displays verified evidence. Failed
+or incomplete reads retain an explicitly stale observation; changing selection
+clears evidence from the previous run or step.
+The fixed header's verification status comes from the result verifier. Output
+text containing a success claim cannot set that status.
 
-C currently shows recorded dependencies; full run evidence, native intervention
-and recovery integration remain on
+C also supports Y to approve a request, N to reject it, R to resume and X to cancel.
+Each action names the selected run and requires typing the action; decisions also
+require the request ID shown in evidence. The existing CLI checks request binding
+and expiry. A recorded decision does not automatically resume work. Control owners
+survive UI closure and record output in the run's `workspace-controls.log`, shown
+in evidence. Terminal runs cannot be resumed or cancelled from the workspace.
+These controls do not extend the planning schema: compiled plans still support
+spawn/exec only, with zero retry and repair budgets. Existing workflow definitions
+can contain approval waits. Revising execution scope needs fresh approval.
+
+Real agent-authored acceptance and complete project/head/run navigation remain on
 the roadmap. Real Codex model-response qualification remains blocked by the local
 CLI login, despite verified composer, resizing and reconnect behavior.
 
 `make test-plan-workspace` exercises actual compilation and revision invalidation
 through a PTY at 40x10, 80x24 and 140x40, plus stale/wrong approval refusal,
-detached execution, duplicate launch refusal and artifact-bound verification.
+detached execution, duplicate launch refusal, artifact-bound verification and
+tamper refusal. Real workflow request tests cover explicit decisions, separate
+resume, rejection and cancellation while an attached shell retains unsent input.
 `make sanitize-plan-workspace` repeats it
 with the repository sanitizer flags. Attached-session checks cover unsent input
 across A/B/C/D without executing it during transitions.

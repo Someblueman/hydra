@@ -94,3 +94,23 @@ static FILE *native_capture_take(struct native_capture *p) {
     if (!success && out) { fclose(out); out=NULL; }
     return out;
 }
+
+/* Mutation owners are deliberately separate from captures: no pipe, terminal,
+ * timeout or UI cleanup can terminate them. Callers reap without signalling. */
+static bool native_detached_start(pid_t *pid, char *const argv[], int input_fd) {
+    posix_spawn_file_actions_t actions;
+    posix_spawnattr_t attributes;
+    int result;
+    posix_spawn_file_actions_init(&actions); posix_spawnattr_init(&attributes);
+    posix_spawnattr_setflags(&attributes,POSIX_SPAWN_SETPGROUP); posix_spawnattr_setpgroup(&attributes,0);
+    if (input_fd>=0) {
+        posix_spawn_file_actions_adddup2(&actions,input_fd,STDIN_FILENO);
+        posix_spawn_file_actions_addclose(&actions,input_fd);
+    } else posix_spawn_file_actions_addopen(&actions,STDIN_FILENO,"/dev/null",O_RDONLY,0);
+    posix_spawn_file_actions_addopen(&actions,STDOUT_FILENO,"/dev/null",O_WRONLY,0);
+    posix_spawn_file_actions_addopen(&actions,STDERR_FILENO,"/dev/null",O_WRONLY,0);
+    result=posix_spawnp(pid,argv[0],&actions,&attributes,argv,environ);
+    posix_spawn_file_actions_destroy(&actions); posix_spawnattr_destroy(&attributes);
+    if (result) *pid=0;
+    return result==0;
+}

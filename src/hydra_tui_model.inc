@@ -209,13 +209,13 @@ static int accept_model_data(struct app *app, FILE *input) {
     next = malloc(sizeof(*next));
     if (next == NULL) {
         fclose(input);
-        copy_text(app->notice, sizeof(app->notice), "native model allocation failed");
+        copy_text(app->snapshot_error, sizeof(app->snapshot_error), "native model allocation failed");
         return -1;
     }
     if (load_model_stream(input, next, error, sizeof(error)) != 0) {
         fclose(input);
         free(next);
-        copy_text(app->notice, sizeof(app->notice), error);
+        copy_text(app->snapshot_error, sizeof(app->snapshot_error), error);
         return -1;
     }
     fclose(input);
@@ -233,15 +233,21 @@ static int accept_model_data(struct app *app, FILE *input) {
     if (app->selected >= app->model.head_count && app->model.head_count > 0U) {
         app->selected = app->model.head_count - 1U;
     }
-    app->notice[0] = '\0';
+    app->snapshot_error[0] = '\0';
     return 0;
 }
 
 static int refresh_model(struct app *app) {
     int result;
+    char notice[TEXT];
+    FILE *input;
     native_observations_cancel(app,0);
-    result = accept_model_data(app,capture_adapter(app,app->fleet ? "fleet" : "tui",
-        app->fleet ? "tui-visual-data" : "--data",app->fleet ? 3500 : 2000));
+    copy_text(notice,sizeof(notice),app->notice); app->notice[0]='\0';
+    input=capture_adapter(app,app->fleet ? "fleet" : "tui",
+        app->fleet ? "tui-visual-data" : "--data",app->fleet ? 3500 : 2000);
+    if (!input) copy_text(app->snapshot_error,sizeof(app->snapshot_error),app->notice[0] ? app->notice : "Snapshot observation unavailable");
+    copy_text(app->notice,sizeof(app->notice),notice);
+    result = accept_model_data(app,input);
     record_snapshot(app, result == 0);
     return result;
 }

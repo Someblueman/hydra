@@ -77,7 +77,9 @@ static json_object *result_command(char **argv, bool *printed) {
     if (!f_path(path, sizeof(path), argv[1], "state")) state = f_read(path, 64);
     if (state && !strcmp(state, "succeeded\n")) {
         json_object *delivery = plan_delivery(argv[1]);
-        if (delivery) result = f_success("workflow plan result", delivery);
+        if (delivery && !strcmp(argv[0], "result-view")) {
+            plan_delivery_view(delivery); json_object_put(delivery); *printed = true;
+        } else if (delivery) result = f_success("workflow plan result", delivery);
     }
     free(state);
     return result;
@@ -195,6 +197,7 @@ json_object *plan_cli(int argc, char **argv) {
         {"preview", 2, preview_command},
         {"tui-data", 2, tui_command},
         {"result", 2, result_command},
+        {"result-view", 2, result_command},
         {"show", 2, show_command},
         {"admit", 5, admit_command},
         {"finish", 2, finish_command},

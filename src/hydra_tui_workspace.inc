@@ -13,6 +13,10 @@ struct native_workspace {
     bool root_open, zoom, compact;
 };
 
+static bool native_workspace_monitoring(struct app *app) {
+    return app->workspace && app->workspace->mode==2;
+}
+
 static void native_workspace_destroy(struct app *app) {
     if (!app->workspace) return;
     free(app->workspace->cells); free(app->workspace->previous);
@@ -91,7 +95,9 @@ static void native_workspace_move(struct app *app, int direction) {
     }
     else if (w->layout.focus==5) {
         size_t *selected=w->mode==1 && app->plan ? &app->plan->selected : &app->workflow_node;
-        size_t count=w->mode==1 && app->plan ? app->plan->graph.node_count : app->workflows ? app->workflows->node_count : 0;
+        size_t indices[TV_GRAPH_MAX_NODES];
+        size_t count=w->mode==1 && app->plan ? app->plan->graph.node_count :
+            app->workflows ? workflow_nodes(app->workflows,app->workflow_run,indices) : 0;
         if (direction<0 && *selected) (*selected)--;
         if (direction>0 && *selected+1<count) (*selected)++;
     }
@@ -103,6 +109,7 @@ static bool native_workspace_key(struct app *app, char key) {
     struct native_workspace *w = app->workspace;
     if (!w) return false;
     if (key=='A' || key=='B' || key=='C') { native_workspace_mode(app,key-'A'); return true; }
+    if (w->mode==2 && (key=='[' || key==']')) return workflow_key(app,key);
     if (key == 'z') {
         w->zoom = !w->zoom;
         copy_text(app->notice,sizeof(app->notice),w->zoom ? "Focused pane expanded / z restores splits" : "Pane splits restored");
@@ -203,9 +210,11 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
     }
     native_workspace_tree(app);
     dashboard_text(&c, 1, 0, width-2, TV_TITLE, "HYDRA WORKSPACE / %s / %s", w->mode==0 ? "A CONVERSATION" : w->mode==1 ? "B PLAN OVERVIEW" : "C MONITOR", app->snapshot_stale ? "STALE" : app->fleet ? "Fleet" : "Local");
-    if (!compact) dashboard_text(&c, 1, 1, width-2, TV_BORDER, "A conversation / B plan / C monitor / P load / V validate / E approve / D stats / z %s", w->zoom ? "restore panes" : "zoom focus");
+    if (!compact) dashboard_text(&c, 1, 1, width-2, TV_BORDER,
+        w->mode==2 ? "[ ] runs / Y approve / N reject / R resume / X cancel / A conversation / B plan / D stats / z %s" :
+        "A conversation / B plan / C monitor / P load / V validate / E approve / D stats / z %s", w->zoom ? "restore panes" : "zoom focus");
     for (i = 0; i < w->layout.count; i++) {
-        const struct tv_pane *p = &w->layout.panes[i];
+        struct tv_pane *p = &w->layout.panes[i];
         struct tv_canvas view, content;
         if (p->split != TV_LEAF) {
             for (y = 0; y < p->divider.height; y++) for (x = 0; x < p->divider.width; x++)
@@ -236,16 +245,22 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
             native_terminal_draw(app,&content,w->layout.focus==3);
         else if (i == 3) native_workspace_details(app, &content, p->scroll);
         else if (i==5) native_workspace_graph(app,&content,w->mode==1);
-        else if (i==6 || (i==4 && app->plan)) native_workspace_plan_text(app,&content,p->scroll);
+        else if (i==6 && w->mode==2) native_workspace_evidence_text(app,&content,&p->scroll);
+        else if (i==6 || (i==4 && app->plan)) native_workspace_plan_text(app,&content,&p->scroll);
         else native_workspace_activity(app, &content, p->scroll);
     }
-    if (!compact) dashboard_text(&c, 0, height-2, width, app->snapshot_stale ? TV_WARNING : TV_BORDER, "%s snapshot / age %lds%s%s",
-                   app->snapshot_stale ? "STALE: last good" : "Current", age < 0 ? 0 : age, app->notice[0] ? " / " : "", app->notice);
-    tv_text(&c, (struct tv_rect){0,height-1,width,1},
+    if (!compact) {
+        const char *notice=app->snapshot_stale ? app->snapshot_error : app->notice;
+        dashboard_text(&c, 0, height-2, width, app->snapshot_stale ? TV_WARNING : TV_BORDER, "%s snapshot / age %lds%s%s",
+            app->snapshot_stale ? "STALE: last good" : "Current", age < 0 ? 0 : age, notice[0] ? " / " : "",notice);
+    }
+    if (compact && app->notice[0] && !(w->layout.focus==3 && native_terminal_selected(app) && native_terminal_selected(app)->screen))
+        tv_text(&c,(struct tv_rect){0,height-1,width,1},app->notice,TV_WARNING);
+    else tv_text(&c, (struct tv_rect){0,height-1,width,1},
             w->layout.focus==3 && native_terminal_selected(app) && native_terminal_selected(app)->screen ?
             (native_terminal_selected(app)->client.finished || native_terminal_selected(app)->client.eof ?
              "DISCONNECTED / Ctrl-B r reconnect" : width<100 ? "Ctrl-B Tab Hydra / Ctrl-B q quit" :
-             "INPUT TO AGENT / Ctrl-B Tab Hydra / Ctrl-B z zoom / Ctrl-B D statistics / Ctrl-B n next / Ctrl-B q quit") : width < 60 ? "Tab panes j/k scroll D stats q quit" : width < 100 ? "Tab focus z zoom a interact D statistics q quit" :
+             "INPUT TO AGENT / Ctrl-B Tab Hydra / Ctrl-B z zoom / Ctrl-B D statistics / Ctrl-B n next / Ctrl-B q quit") : compact && w->mode==2 ? "Y approve N reject R resume X cancel" : width < 60 ? "Tab panes j/k scroll D stats q quit" : width < 100 ? "Tab focus z zoom a interact D statistics q quit" :
             "Tab focus / j k scroll / h l tree / drag splits / a interact / D statistics / : actions / q quit", TV_STRONG);
     if (headless) {
         printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);

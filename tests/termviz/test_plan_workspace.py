@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 
 from pty_support import Session
 
@@ -53,9 +54,15 @@ with tempfile.TemporaryDirectory(prefix="hydra-plan-workspace-") as folder:
         s.send("kkkk")
         s.until("Revised workspace acceptance objective")
         for width, height in [(40, 10), (80, 24), (140, 40)]:
+            if width == 40:
+                s.send("j")
+                time.sleep(.1)  # Leave a pre-resize frame queued in the PTY.
+            before_resize = len(s.raw)
             s.resize(width, height)
             s.pump(.3)
-            assert s.screen.overflow == 0
+            if s.screen.overflow:
+                (ROOT / "build/plan-resize-failure.ansi").write_bytes(s.raw[before_resize:])
+            assert s.screen.overflow == 0, f"{width}x{height}, overflow={s.screen.overflow}, clears={s.screen.clears}\n{s.screen.text()}"
         draft.write_text('{"broken":')
         s.until("Revision 3 / DRAFT", timeout=8)
         s.send("V")

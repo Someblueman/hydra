@@ -222,6 +222,7 @@ static void render_recovery(struct app *app) {
 static void render_help(struct app *app) {
     linef(app, "D statistics / T range / Enter evidence / Esc back");
     linef(app, "W workspace / Tab focus / h l tree / drag splits");
+    linef(app, "C monitor: Y approve request / N reject / R resume / X cancel");
     linef(app, "KEYBOARD HELP");
     if (app->rows < 20) {
         linef(app, "j/k move  Enter detail  Esc back");
@@ -302,6 +303,7 @@ static void render(struct app *app, unsigned frame, bool headless) {
     app->limit = app->rows;
     panel_edge(app, NULL);
     if (app->marked_count) linef(app, "%zu marked  x kill  G group%s%s", app->marked_count, app->notice[0] ? " | " : "", app->notice);
+    else if (app->snapshot_stale && app->snapshot_error[0]) linef(app,"%s",app->snapshot_error);
     else if (app->notice[0]) linef(app, "%s", app->notice);
     else if (app->view >= 4 && app->cols >= 70) linef(app, "%s snapshot / age %lds / o overview / w workflows / H hosts",
                                 (app->view == 5 ? app->workflow_stale : app->snapshot_stale) ? "STALE: last good" : "Current",

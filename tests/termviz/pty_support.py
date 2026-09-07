@@ -22,8 +22,9 @@ import unicodedata
 
 
 class Screen:
-    def __init__(self, cols: int, rows: int):
+    def __init__(self, cols: int, rows: int, wait_for_clear: bool = False):
         self.cols, self.rows = cols, rows
+        self.awaiting_clear = wait_for_clear
         self.x = self.y = self.clears = self.overflow = 0
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self.escape = ""
@@ -88,6 +89,7 @@ class Screen:
                             self.y = (values[0] or 1) - 1
                             self.x = (values[1] if len(values) > 1 and values[1] else 1) - 1
                         elif char == "J" and values[0] == 2:
+                            self.awaiting_clear = False
                             self.clears += 1
                             self.cells = [[(" ", self.fg, self.bg, False, 1) for _ in range(self.cols)] for _ in range(self.rows)]
                         elif char == "m":
@@ -98,6 +100,8 @@ class Screen:
                 continue
             if char == "\x1b":
                 self.escape = char
+            elif self.awaiting_clear:
+                continue
             elif char == "\r":
                 self.x = 0
             elif char == "\n":
@@ -180,9 +184,16 @@ class Session:
             data = data[count:]
 
     def resize(self, cols: int, rows: int) -> None:
-        self.screen = Screen(cols, rows)
+        # Buffered rows were produced for the previous dimensions. The native
+        # presenter's full redraw acknowledges the new size; validate every byte
+        # after that boundary, rather than interpreting old rows as new overflow.
+        self.screen = Screen(cols, rows, wait_for_clear=True)
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         self.pump(.25)
+        deadline = time.monotonic() + 3
+        while self.screen.awaiting_clear and time.monotonic() < deadline:
+            self.pump(.05)
+        assert not self.screen.awaiting_clear, "No full redraw acknowledged the resize"
 
     def close(self, keys: bytes | None = None, signum: int | None = None, expected: int = 0) -> None:
         if self.process.poll() is None:

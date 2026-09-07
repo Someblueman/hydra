@@ -227,6 +227,7 @@ static void record_hit(struct app *app, size_t index) {
 
 static int read_key(int timeout_ms, char *key);
 #include "hydra_tui_forms.inc"
+#include "hydra_tui_controls_input.inc"
 #include "hydra_tui_actions.inc"
 #include "hydra_tui_statistics_input.inc"
 #include "hydra_tui_terminal_input.inc"
@@ -371,6 +372,7 @@ static int interactive_main(struct app *app) {
                     copy_text(app->notice,sizeof(app->notice),"Execution not submitted: digest, revision or launch state did not match. Review and validate again.");
             } else copy_text(app->notice,sizeof(app->notice),"Validate a local plan with V and review its full scope before exact-digest execution approval.");
         }
+        else if (app->view == 7 && native_control_key(app,key)) { }
         else if (app->view == 7 && native_workspace_key(app, key)) { }
         else if (app->view == 5 && workflow_key(app, key)) { }
         else if (key == 'j') move_selection(app, 1);

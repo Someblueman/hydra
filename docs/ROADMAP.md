@@ -371,8 +371,10 @@ revision-aware complete previews and dependencies, and preserves layout state
 across A/B/C/D. Native dialogs continue agent I/O. E accepts the exact displayed
 digest, rechecks the revision and delegates execution to a durable owner through
 the existing engine; UI exit and duplicate launch refusal are covered by a real
-workflow test. Full C evidence/intervention and real agent-authored workflow acceptance remain
-outstanding; the milestone checkboxes stay open until those criteria are met.
+workflow test. C now follows selected run/step evidence and delegates explicit
+request decisions, resume and cancellation to the existing CLI. Full navigation
+and real agent-authored workflow acceptance remain outstanding; the milestone
+checkboxes stay open until those criteria are met.
 
 ### Milestone 4: integrated working terminals
 
@@ -418,6 +420,14 @@ recovery action through the existing CLI. No fabricated progress or inferred suc
 For D, reconcile displayed aggregates with their underlying records for a selected
 time range, including failed, missing and stale observations. Verify filtering,
 drill-down and return navigation; missing measurements never appear as zero.
+
+Implemented in C: recorded run switching, dependency selection, bounded step
+output, request/binding inspection, fresh artifact verification with tamper refusal,
+and explicit approve/reject/resume/cancel controls. The controls retain the engine's
+separate decision/resume boundary and do not restart terminal runs. PTY tests cover
+an existing approval-wait workflow and preserve an attached shell's unsent draft
+through decisions and UI closure. This does not qualify agent-authored planning,
+extend the compiled-plan schema, or complete the project/head/run navigation work.
 
 ### Milestone 6: interaction and visual polish
 

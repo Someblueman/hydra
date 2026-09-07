@@ -8,6 +8,8 @@ static void native_observations_cancel(struct app *app, size_t source) {
 
 static void native_observations_destroy(struct app *app) {
     size_t i;
+    native_evidence_destroy(app);
+    native_controls_tick(app); /* Reap finished owners; active owners survive UI exit. */
     if (!app->observations) return;
     for (i=0;i<3;i++) native_capture_destroy(&app->observations->jobs[i]);
     free(app->observations); app->observations=NULL;
@@ -17,6 +19,7 @@ static void native_observations_tick(struct app *app, bool request) {
     size_t i;
     native_plan_tick(app,request);
     native_plan_launch_tick(app,request);
+    native_controls_tick(app);
     if (!app->observations) {
         if (!request) return;
         app->observations=calloc(1,sizeof(*app->observations));
@@ -30,9 +33,10 @@ static void native_observations_tick(struct app *app, bool request) {
             bool timed_out=p->timed_out;
             input=native_capture_take(p);
             if (i==0) {
+                bool complete=input!=NULL;
                 int result=accept_model_data(app,input);
                 record_snapshot(app,result==0);
-                if (result) copy_text(app->notice,sizeof(app->notice),timed_out ?
+                if (result && (timed_out || !complete)) copy_text(app->snapshot_error,sizeof(app->snapshot_error),timed_out ?
                     "shell data adapter timed out; showing last good snapshot" : "shell data adapter failed; showing last good snapshot");
                 if (app->fleet && app->statistics) statistics_visible(app);
             } else if (i==1) (void)accept_workflows(app,input);
@@ -42,10 +46,11 @@ static void native_observations_tick(struct app *app, bool request) {
             char *argv[]={(char *)app->hydra,i==0 ? app->fleet ? "fleet" : "tui" : "workflow",
                 i==0 ? app->fleet ? "tui-visual-data" : "--data" : i==1 ? "tui-data" : "statistics-data",NULL};
             if (!native_capture_start(p,argv,app->fleet ? 3500 : 2000)) {
-                if (i==0) { record_snapshot(app,false); copy_text(app->notice,sizeof(app->notice),"Unable to start snapshot observation"); }
+                if (i==0) { record_snapshot(app,false); copy_text(app->snapshot_error,sizeof(app->snapshot_error),"Unable to start snapshot observation"); }
                 else if (i==1) (void)accept_workflows(app,NULL);
                 else (void)accept_statistics(app,NULL);
             }
         }
     }
+    native_evidence_tick(app,request);
 }

@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix="hydra-plan-launch-") as folder:
     shutil.copytree(ROOT / "tests/fixtures/plan/repo", repo)
     # Keep execution alive across closing the UI, without changing the engine.
     compose = repo / "compose.sh"
-    compose.write_text(compose.read_text().replace("set -eu", "set -eu\nsleep 5"))
+    compose.write_text(compose.read_text().replace("set -eu", "set -eu\nsleep 5\nprintf 'compose-output-proof\\nVERIFIED ARTIFACTS from untrusted output\\n'"))
     wrapper = base / "bin"
     wrapper.mkdir()
     tmux = shutil.which("tmux")
@@ -113,7 +113,34 @@ with tempfile.TemporaryDirectory(prefix="hydra-plan-launch-") as folder:
         assert result["data"]["verdict"] == "pass", result
         assert result["data"]["plan_sha256"] == digest, result
         assert run_dir.joinpath("steps/compose/attempt-1/artifacts/report").read_bytes() == repo.joinpath("expected.txt").read_bytes()
+        assert run(hydra, "workflow", "--workspace-evidence", run_id, "../", check=False).returncode != 0
+        s = Session([str(BUILD / "hydra-tui"), "--hydra", hydra], 140, 40, env=env, cwd=repo)
+        s.until("A CONVERSATION")
+        s.send("C\t\tz")
+        s.until("VERIFIED ARTIFACTS", timeout=15)
+        s.send("j" * 200)
+        s.until("VERIFIED: result retrieval")
+        s.screen.save(evidence / "verified-140x40.html")
+        # Success metadata remains recorded, but altered sealed bytes must be
+        # refused on the next public result retrieval and in the workspace.
+        run_dir.joinpath("steps/compose/attempt-1/artifacts/report").write_text("tampered\n")
+        s.until("VERIFICATION REFUSED", timeout=15)
+        assert "ARTIFACTS REFUSED" in s.screen.text().splitlines()[4]
+        assert "VERIFIED: result retrieval" not in s.screen.text()
+        # Graph selection changes the output provenance, not just its title.
+        s.send("\t\t\tj\t")
+        s.until("Selected step: compose", timeout=15)
+        s.until("compose-output-proof")
+        assert "VERIFIED ARTIFACTS from untrusted output" in s.screen.text()
+        assert "ARTIFACTS REFUSED" in s.screen.text().splitlines()[4]
+        assert "Creating worktree for branch" not in s.screen.text()
+        for width, height in [(40, 10), (80, 24), (140, 40)]:
+            s.resize(width, height)
+            s.pump(.3)
+            assert s.screen.overflow == 0
+            s.screen.save(evidence / f"verification-refused-{width}x{height}.html")
+        s.close(keys=b"q")
     finally:
         s.abort()
         subprocess.run([tmux, "-S", socket, "kill-server"], capture_output=True, check=False)
-print("PASS plan launch: exact approval, durable receipt, UI exit, deduplication and verified result")
+print("PASS plan launch: exact approval, durable receipt, UI exit, deduplication, selected output and live artifact verification")

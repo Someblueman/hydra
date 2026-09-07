@@ -3,6 +3,16 @@
 cmd_workflow() {
     _cw_action="${1:-}"
     case "$_cw_action" in
+        --workspace-control)
+            _load_lib workflow_control
+            shift
+            workflow_control "$@"
+            ;;
+        --workspace-evidence)
+            _load_lib workflow_evidence
+            shift
+            workflow_evidence "$@"
+            ;;
         statistics-data)
             [ "$#" -eq 1 ] || return 2
             _load_lib workflow_statistics

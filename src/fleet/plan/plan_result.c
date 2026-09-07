@@ -83,6 +83,21 @@ done:
     if (status) { json_object_put(delivery); return NULL; }
     return delivery;
 }
+
+/* Presentation of an already verified delivery; shares the public result gate. */
+void plan_delivery_view(json_object *delivery) {
+    printf("Accepted plan: %s\n", f_string(delivery, "plan_sha256"));
+    json_object_object_foreach(f_field(delivery, "deliverables"), deliverable_id, file) {
+        printf("\nDeliverable %s: %lld bytes (%s)\nSHA-256: %s\nSealed path: %s\n", deliverable_id,
+            (long long)json_object_get_int64(f_field(file, "bytes")), f_string(file, "type"), f_string(file, "sha256"), f_string(file, "path"));
+    }
+    json_object_object_foreach(f_field(delivery, "checks"), check_id, report) {
+        json_object *requirements = f_field(report, "requirements"); size_t i;
+        printf("\nCheck %s: %s\nSubject SHA-256: %s\nRequirements:", check_id, f_string(report, "verdict"), f_string(report, "subject_sha256"));
+        for (i = 0; i < json_object_array_length(requirements); i++) printf(" %s", f_text(json_object_array_get_idx(requirements, i)));
+        printf("\nEvidence: %s\n", f_string(report, "evidence"));
+    }
+}
 int plan_finish(const char *run) {
     json_object *delivery = plan_delivery(run); int status = -1;
     if (delivery) status = task_write_json(run, "delivery.json", delivery, true);

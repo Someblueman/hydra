@@ -71,6 +71,7 @@ struct statistics_view;
 struct native_terminals;
 struct native_observations;
 struct native_plan;
+struct native_evidence;
 
 struct app {
     struct model model;
@@ -79,6 +80,9 @@ struct app {
     struct native_terminals *terminals;
     struct native_observations *observations;
     struct native_plan *plan;
+    struct native_evidence *evidence;
+    pid_t control_pids[4];
+    char control_labels[4][128];
     const char *hydra;
     size_t selected, recovery_selected;
     int view, theme;
@@ -105,6 +109,7 @@ struct app {
     char current_session[TEXT];
     char search[TEXT];
     char notice[TEXT];
+    char snapshot_error[TEXT];
     char preview_text[4096];
     struct termios saved;
 };
@@ -117,6 +122,7 @@ static struct head *selected_head(struct app *app);
 static void retarget_selection(struct app *app);
 static void native_workspace_move(struct app *app, int direction);
 static void native_workspace_invalidate(struct app *app);
+static bool native_workspace_monitoring(struct app *app);
 static void statistics_move(struct app *app, int direction);
 static void native_observations_cancel(struct app *app, size_t source);
 
@@ -127,6 +133,8 @@ static void native_observations_cancel(struct app *app, size_t source);
 #include "hydra_tui_plan_model.inc"
 #include "hydra_tui_plan_projection.inc"
 #include "hydra_tui_plan_launch.inc"
+#include "hydra_tui_evidence.inc"
+#include "hydra_tui_controls.inc"
 #include "hydra_tui_observations.inc"
 #include "hydra_tui_terminals.inc"
 #include "hydra_tui_ui.inc"
