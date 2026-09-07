@@ -8,7 +8,7 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     struct session session;
     struct winsize size;
     char overlong[240];
-    result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open mouse terminal");
+    if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open mouse terminal")) return;
     result(wait_for_marker(&session, "\033[?1006h", 1000), "raw mode enables SGR mouse reporting");
     (void)wait_for_marker(&session, "Click row", 1000);
     mouse_input(&session, "\033[<0;8;6M");
