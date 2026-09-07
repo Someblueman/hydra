@@ -32,7 +32,10 @@ cmd_workflow_plan() (
             workflow_plan_tool result "$(workflow_runs_dir)/$2"
             ;;
         run)
-            [ "$#" -eq 4 ] && [ "$3" = --accept ] || { cli_error 'workflow plan' acceptance_required 'run requires <compiled.json> --accept <sha256>' 'review workflow plan show and accept its exact digest'; exit 1; }
+            if [ "$#" -ne 4 ] || [ "$3" != --accept ]; then
+                cli_error 'workflow plan' acceptance_required 'run requires <compiled.json> --accept <sha256>' 'review workflow plan show and accept its exact digest'
+                exit 1
+            fi
             _cwp_root="$(workflow_repo_root)" || exit 1
             _workflow_plan_stage="$(mktemp -d)" || exit 1
             trap 'rm -rf "$_workflow_plan_stage"' EXIT

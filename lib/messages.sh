@@ -323,7 +323,7 @@ messages_safe_point() (
     acquire_lock "$_msp_lock" "deliver safe-point steering" || exit 1
     trap 'release_lock "$_msp_lock"' 0
     for _msp_file in "$_msp_dir"/queue/*; do
-        [ -f "$_msp_file" ] && [ ! -L "$_msp_file" ] || continue
+        if [ ! -f "$_msp_file" ] || [ -L "$_msp_file" ]; then continue; fi
         _msp_id="${_msp_file##*/}"
         _msp_meta="$_msp_dir/metadata/$_msp_id"
         [ "$(sed -n 's/^delivery=//p' "$_msp_meta" 2>/dev/null)" = safe-point ] || continue

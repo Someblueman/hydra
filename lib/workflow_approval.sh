@@ -19,7 +19,7 @@ workflow_approval_binding() (
         fi
     } > "$_wab_out" || exit 1
     for _wab_queued in "$PARALLEL_HEAD_DIR"/messages/queue/*; do
-        [ -f "$_wab_queued" ] && [ ! -L "$_wab_queued" ] || continue
+        if [ ! -f "$_wab_queued" ] || [ -L "$_wab_queued" ]; then continue; fi
         _wab_message_id="${_wab_queued##*/}"
         _wab_metadata="$PARALLEL_HEAD_DIR/messages/metadata/$_wab_message_id"
         [ "$(sed -n 's/^delivery=//p' "$_wab_metadata" 2>/dev/null)" = safe-point ] || continue
@@ -100,7 +100,7 @@ workflow_approval_resume() (
     trap 'exit 129' HUP
     # shellcheck disable=SC2094 # Both graph accesses are read-only.
     while IFS="$(printf '\t')" read -r _wap_tag _wap_step _wap_kind _wap_rest; do
-        [ "$_wap_tag" = step ] && [ "$_wap_kind" = approval-wait ] || continue
+        if [ "$_wap_tag" != step ] || [ "$_wap_kind" != approval-wait ]; then continue; fi
         _wap_sd="$_wap_dir/steps/$_wap_step"
         [ "$(sed -n '1p' "$_wap_sd/state")" = waiting-approval ] || continue
         _wap_id="$(sed -n '1p' "$_wap_sd/request-id")"
