@@ -22,6 +22,19 @@ static void handle_mouse(struct app *app, const char *sequence) {
         return;
     }
     if (*cursor == 'm') return;
+    if (app->view == 8 && !app->help && !app->diagnostics) {
+        for (index = 0; index < app->hit_count; index++) {
+            if (values[2] < (unsigned)app->hit_rows[index] || values[2] > (unsigned)app->hit_bottom[index] ||
+                values[1] < (unsigned)app->hit_left[index] || values[1] > (unsigned)app->hit_right[index]) continue;
+            if (values[0] == 64 || values[0] == 65) statistics_move(app, values[0] == 64 ? -1 : 1);
+            else if (values[0] == 0) {
+                app->statistics->selected = app->hit_items[index];
+                app->statistics->selected_id[0] = '\0'; statistics_visible(app);
+            }
+            return;
+        }
+        return;
+    }
     if (values[0] == 0U && values[2] == 2U && app->hit_tabs) {
         static const unsigned starts[] = {1U, 10U, 21U, 37U, 50U, 62U, 75U};
         static const unsigned ends[] = {7U, 18U, 34U, 46U, 59U, 72U, 81U};

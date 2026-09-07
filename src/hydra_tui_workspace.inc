@@ -108,17 +108,17 @@ static void native_workspace_details(struct app *app, struct tv_canvas *c, size_
         case 0: snprintf(text, sizeof(text), "%s", h->branch); break;
         case 1: snprintf(text, sizeof(text), "Observed: %s", display_status(h)); break;
         case 2: snprintf(text, sizeof(text), "Agent: %s / %s", h->profile, h->adapter); break;
-        case 3: snprintf(text, sizeof(text), "Declared: %s", h->declared); break;
-        case 4: snprintf(text, sizeof(text), "Group: %s", h->group); break;
-        case 5: snprintf(text, sizeof(text), "Session: %s", h->session); break;
-        case 6: snprintf(text, sizeof(text), "Head: %s", h->head_id[0] ? h->head_id : "unavailable"); break;
-        case 7: snprintf(text, sizeof(text), "Instance: %s", h->instance); break;
-        case 8: snprintf(text, sizeof(text), "Confidence: %s", h->confidence); break;
-        case 9: snprintf(text, sizeof(text), "Source: %s", h->source); break;
-        case 10: snprintf(text, sizeof(text), "Host: %s", app->fleet ? h->remote_host : "local"); break;
-        case 11: snprintf(text, sizeof(text), "Project: %s", app->fleet ? h->remote_project : "current project"); break;
-        case 12: snprintf(text, sizeof(text), "PR: %s", h->pr); break;
-        default: snprintf(text, sizeof(text), "Enter details / : actions / o overview"); break;
+        case 3: snprintf(text, sizeof(text), "Group: %s", h->group[0] ? h->group : "none"); break;
+        case 4: snprintf(text, sizeof(text), "Host: %s", app->fleet ? h->remote_host : "local"); break;
+        case 5: snprintf(text, sizeof(text), "Project: %s", app->fleet ? h->remote_project : "current project"); break;
+        case 6:
+            if (app->fleet || !h->head_id[0]) snprintf(text,sizeof(text),"Activity counters unavailable");
+            else snprintf(text,sizeof(text),"%u changed files / %u queued entries",h->diff,h->queue);
+            break;
+        case 7: snprintf(text, sizeof(text), "PR: %s", h->pr[0] ? h->pr : "not recorded"); break;
+        case 9: snprintf(text, sizeof(text), "a interact / Enter details / d provenance"); break;
+        case 10: snprintf(text, sizeof(text), ": actions / w workflow graph / D statistics"); break;
+        default: text[0]='\0'; break;
         }
         tv_text(c, (struct tv_rect){0,row,c->width,1}, text, row == 0 ? TV_STRONG : TV_BASE);
     }
@@ -131,7 +131,7 @@ static void native_workspace_activity(struct app *app, struct tv_canvas *c, size
         char text[1024]; size_t index = scroll + (size_t)row;
         if (index == 0) snprintf(text, sizeof(text), "%zu heads / %zu recovery findings", app->model.head_count, app->model.recovery_count);
         else if (index < 5 && (!h || app->fleet || !h->head_id[0]))
-            snprintf(text, sizeof(text), "Detailed activity counters unavailable");
+            snprintf(text, sizeof(text), "%s",index==1 ? "Detailed activity counters unavailable" : "");
         else if (index == 1) snprintf(text, sizeof(text), "Events %u / Messages %u / Signals %u", h->events, h->messages, h->signals);
         else if (index == 2) snprintf(text, sizeof(text), "Queue %u / Changed files %u", h->queue, h->diff);
         else if (index == 3) snprintf(text, sizeof(text), "Gates %u / Approved %u", h->gates, h->approved);
@@ -139,7 +139,7 @@ static void native_workspace_activity(struct app *app, struct tv_canvas *c, size
         else if (index - 5 < app->model.recovery_count) {
             const struct recovery *r = &app->model.recovery[index - 5];
             snprintf(text, sizeof(text), "%s / %s / %s", r->kind, r->label, r->action);
-        } else snprintf(text, sizeof(text), "w workflow graph / H hosts / o charts");
+        } else text[0]='\0';
         tv_text(c, (struct tv_rect){0,row,c->width,1}, text, index >= 5 && index - 5 < app->model.recovery_count ? TV_WARNING : TV_BASE);
     }
 }
@@ -158,7 +158,7 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
     (void)tv_workspace_layout(&w->layout, (struct tv_rect){0,2,width,height-4});
     native_workspace_tree(app);
     dashboard_text(&c, 1, 0, width-2, TV_TITLE, "HYDRA WORKSPACE / %s", app->fleet ? "Fleet" : "Local");
-    dashboard_text(&c, 1, 1, width-2, TV_BORDER, "W workspace / o overview / w workflows / H hosts / %s", app->search[0] ? app->search : "all heads");
+    dashboard_text(&c, 1, 1, width-2, TV_BORDER, "W workspace / D statistics / w workflows / H hosts / %s", app->search[0] ? app->search : "all heads");
     for (i = 0; i < w->layout.count; i++) {
         const struct tv_pane *p = &w->layout.panes[i];
         struct tv_canvas view, content;
@@ -168,7 +168,7 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
             continue;
         }
         if (!tv_canvas_view(&view, &c, p->bounds)) continue;
-        tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : i == 3 ? "HEAD DETAIL" : "ACTIVITY / RECOVERY");
+        tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : i == 3 ? "SELECTED WORK" : "ACTIVITY / RECOVERY");
         dashboard_text(&view, 1, 1, view.width-2, i == w->layout.focus ? TV_SELECTED : TV_BORDER,
                        "%s / scroll %zu", i == w->layout.focus ? "FOCUS" : "Tab to focus", p->scroll);
         if (!tv_canvas_view(&content, &view, (struct tv_rect){1,2,view.width-2,view.height-3})) continue;
@@ -178,8 +178,8 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
     }
     dashboard_text(&c, 0, height-2, width, app->snapshot_stale ? TV_WARNING : TV_BORDER, "%s snapshot / age %lds%s%s",
                    app->snapshot_stale ? "STALE: last good" : "Current", age < 0 ? 0 : age, app->notice[0] ? " / " : "", app->notice);
-    tv_text(&c, (struct tv_rect){0,height-1,width,1}, width < 100 ? "Tab focus j/k scroll h/l tree q quit" :
-            "Tab focus / j k scroll / h l tree / drag splits / Enter details / : actions / ? help / q quit", TV_STRONG);
+    tv_text(&c, (struct tv_rect){0,height-1,width,1}, width < 60 ? "Tab focus j/k scroll D stats q quit" : width < 100 ? "Tab focus j/k scroll a interact D statistics q quit" :
+            "Tab focus / j k scroll / h l tree / drag splits / a interact / D statistics / : actions / q quit", TV_STRONG);
     if (headless) {
         printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
         for (y = 0; y < height; y++) { (void)tv_write_row(&c, y, stdout, NULL, NULL); putchar('\n'); }

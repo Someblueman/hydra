@@ -23,6 +23,7 @@
 #include "termviz/workspace.h"
 #include "termviz/tree.h"
 #include "hydra_tui_workflow.h"
+#include "hydra_statistics.h"
 
 #define HYDRA_TUI_VERSION "2.1.0"
 #define HYDRA_TUI_PROTOCOL 2
@@ -59,10 +60,12 @@ struct model {
 };
 
 struct native_workspace;
+struct statistics_view;
 
 struct app {
     struct model model;
     struct native_workspace *workspace;
+    struct statistics_view *statistics;
     const char *hydra;
     size_t selected, recovery_selected;
     int view, theme;
@@ -101,8 +104,10 @@ static struct head *selected_head(struct app *app);
 static void retarget_selection(struct app *app);
 static void native_workspace_move(struct app *app, int direction);
 static void native_workspace_invalidate(struct app *app);
+static void statistics_move(struct app *app, int direction);
 
 #include "hydra_tui_model.inc"
 #include "hydra_tui_workflow_model.inc"
+#include "hydra_tui_statistics_model.inc"
 #include "hydra_tui_ui.inc"
 #include "hydra_tui_main.inc"

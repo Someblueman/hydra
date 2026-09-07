@@ -344,9 +344,9 @@ the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset.
       selection and pane scroll positions; restore prior focus when returning.
       Use the monitoring/intervention layout (concept C) during execution, with the
       same conversation and selected run available across layouts.
-      Add a dedicated statistics layout (concept D), accessible on demand from any
-      layout. Give numbers, trends and comparisons the main area; allow the agent
-      pane to be revealed without losing the statistics filters or conversation.
+      Connect the implemented statistics layout (concept D) to these future
+      layouts; allow the agent pane to be revealed without losing statistics
+      filters or conversation.
 - [ ] Present agent-authored plans through the existing plan workflow: objective,
       steps, dependencies, inputs/outputs, checks, validation errors and current
       revision. Distinguish a conversational proposal from a validated executable
@@ -392,18 +392,16 @@ state. Record tested CLI versions and unsupported behavior explicitly.
 - [ ] Distinguish observed progress from declared intent, stale or missing data,
       blocked dependencies and requests for a decision. Offer the next applicable
       action with enough context to assess its effect.
-- [ ] Build the dedicated statistics overview (concept D) around recorded evidence:
-      run/step outcomes, active/queued/blocked work, queue delay, execution duration,
-      time to verified result, retries and recovery counts. Group and filter by
-      project, workflow, host and time range; show compact tables and useful trends.
+- [ ] Extend the implemented [statistics view](STATISTICS.md) with queue delay,
+      total execution duration, time to verified result and recovery counts once
+      existing evidence supplies reliable definitions and denominators. Add remote
+      workflow cohorts when the fleet protocol supplies them.
 - [ ] Show resource utilization and provider token/cost totals only where reliable
-      measurements exist. Label units, metric definitions, sample counts, time range,
-      source and freshness; distinguish unknown or partial coverage from zero and
-      verified outcomes from process exits. Do not add telemetry collection merely
-      to populate the view or infer performance from activity counts.
-- [ ] Support drilling from a statistic into its contributing runs, steps or hosts
-      and returning to the same filters. Preserve agent session/input and selected
-      work when switching between statistics, planning and monitoring layouts.
+      measurements exist. Preserve source, freshness, sample counts and explicit
+      unknowns; do not add telemetry collection merely to populate the view.
+- [ ] Preserve future agent session/input and shared selected work when switching
+      between statistics, planning and monitoring layouts. Current statistics
+      filters, run/step/host drill-down and workspace return are implemented.
 - [ ] Keep the interactive agent pane available to discuss a blocked step or revise
       future work, with explicit scope and approval before execution changes.
 

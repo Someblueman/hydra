@@ -12,6 +12,7 @@ hydra tui --basic         # explicit basic recovery path
 hydra tui --capabilities  # availability and observation diagnostics
 hydra tui --view heads    # original head table
 hydra tui --view workflows # recorded workflow dependency graph
+hydra tui --view statistics # recorded workflow statistics (D)
 hydra tui --ascii         # ASCII graphics on terminals/fonts without Unicode
 hydra tui --theme dark    # fixed dark palette; terminal and light also supported
 ```
@@ -50,6 +51,19 @@ workflows and `H` opens remote hosts. The deterministic headless interface retai
 its original default head table. The standalone [termviz workspace demo](../src/termviz/README.md)
 adds an embedded real shell; Hydra's workspace does not create shells or replace
 existing tmux head ownership.
+
+`D` opens the dedicated statistics view and returns to the previous view without
+changing workspace selection, pane focus or scroll. It shows a filtered run cohort,
+recorded outcome distribution, retries, latest-attempt timing and a seven-day run
+creation chart. `Enter` inspects contributing steps; `g` opens the selected run's
+existing graph and `Esc` returns to the same statistics filters. Fleet mode shows
+host response coverage and known head counts. See [statistics definitions and
+limits](STATISTICS.md). This view does not yet include an embedded agent pane.
+
+The workspace's selected-work pane emphasizes agent, group, host, project and
+changes. `a` opens the selected head through the public `hydra switch` command;
+returning from that terminal handoff restores the workspace. This uses the existing
+tmux session and does not embed a second terminal owner.
 
 Queue history holds up to 120 refresh observations, not repaint frames. Its
 horizontal domain is **samples**, since collection intervals can vary. Only heads
@@ -106,7 +120,9 @@ row; selection markers and labels remain usable with `NO_COLOR` or `--no-color`.
 | --- | --- |
 | `j` / `k`, arrows | Move through heads, workflow nodes, hosts, or recovery findings |
 | `Enter` | Open selected-head detail |
-| `v` | Cycle heads, detail, coordination, recovery, overview, workflows, hosts, and workspace |
+| `v` | Cycle heads, detail, coordination, recovery, overview, workflows, hosts, workspace, and statistics |
+| `D` | Toggle statistics; retain filters and previous workspace context |
+| `a` in workspace | Open selected head through `hydra switch` |
 | `W` / `Tab` | Open workspace / cycle workspace pane focus |
 | `h` / `l` in workspace | Collapse / expand navigation tree |
 | `o` / `w` / `H` | Open overview / workflow graph / hosts |

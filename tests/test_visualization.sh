@@ -68,8 +68,12 @@ EOF
 "$viz_bin" workflow run "$viz_tmp/workflow.yml" > "$viz_tmp/run.log"
 viz_before="$(find "$HYDRA_HOME/state" -type f -exec cksum {} \; | sort | cksum)"
 "$viz_bin" workflow tui-data > "$viz_tmp/workflows.tsv"
+"$viz_bin" workflow statistics-data > "$viz_tmp/statistics.tsv"
 viz_after="$(find "$HYDRA_HOME/state" -type f -exec cksum {} \; | sort | cksum)"
 [ "$viz_before" = "$viz_after" ]
+awk -F '\t' '$1=="R" && $3=="visualization-proof" && $4=="succeeded" {run=1}
+    $1=="S" {steps++; if ($6!=1 || $7 !~ /^[0-9]+$/ || $8 !~ /^[0-9]+$/ || $8<$7) bad=1}
+    END {exit (bad || !(run && steps==4))}' "$viz_tmp/statistics.tsv"
 awk -F '\t' '$1=="W" && $3=="visualization-proof" && $4=="succeeded" {run=1}
     $1=="N" && $3=="review" && $5=="succeeded" && $7=="build,tests" {join=1}
     END {exit !(run && join)}' "$viz_tmp/workflows.tsv"
@@ -86,6 +90,7 @@ grep -q 'succeeded' "$viz_tmp/graph.out"
 mkdir -p "$viz_root/build/visualization-evidence"
 cp "$viz_tmp/workflows.tsv" "$viz_root/build/visualization-evidence/real-workflow.tsv"
 cp "$viz_tmp/heads.tsv" "$viz_root/build/visualization-evidence/real-heads.tsv"
+cp "$viz_tmp/statistics.tsv" "$viz_root/build/visualization-evidence/real-statistics.tsv"
 cp "$viz_tmp/graph.out" "$viz_root/build/visualization-evidence/real-graph.txt"
 # Cycles and missing dependencies must not produce a plausible graph.
 for viz_bad in cycle missing duplicate empty_dependency duplicate_dependency; do
@@ -112,4 +117,20 @@ for viz_size in 999999999999999999x24 80x9999999999999999 4097x24; do
         echo 'FAIL: accepted out-of-range dimensions'; exit 1
     fi
 done
+# Missing or symlinked scalar evidence remains unknown rather than becoming zero.
+viz_run="$(awk -F '\t' '$1=="R" {print $2; exit}' "$viz_tmp/statistics.tsv")"
+viz_record="$(find "$HYDRA_HOME/state/v2" -type d -name "$viz_run" | head -n 1)"
+[ -n "$viz_record" ]
+rm "$viz_record/steps/build/started-at"
+printf '123456\n' > "$viz_tmp/outside-start"
+ln -s "$viz_tmp/outside-start" "$viz_record/steps/build/started-at"
+printf '%s\n' 'not-a-number' > "$viz_record/steps/tests/attempts"
+"$viz_bin" workflow statistics-data > "$viz_tmp/missing-statistics.tsv"
+awk -F '\t' '$1=="S" && $3=="build" {start=($7=="-")}
+    $1=="S" && $3=="tests" {attempt=($6=="not-a-number" && $8=="-")}
+    END {exit !(start && attempt)}' "$viz_tmp/missing-statistics.tsv"
+"$viz_tui" --headless-fixture "$viz_tmp/heads.tsv" --statistics-fixture "$viz_tmp/missing-statistics.tsv" \
+    --view statistics --ascii --size 140x40 > "$viz_tmp/statistics.out"
+grep -q 'Timing 2/4' "$viz_tmp/statistics.out"
+grep -q 'Attempts 3/4' "$viz_tmp/statistics.out"
 printf 'PASS: real workflow execution, read-only projection, dependency graph, responsive bounds, invalid graph rejection\n'

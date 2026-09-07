@@ -13,15 +13,17 @@ static int parse_size(const char *value, int *cols, int *rows) {
 
 static void usage(FILE *out) {
     fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--ascii] [--fleet]\n"
-          "  [--view workspace|overview|heads|detail|coordination|recovery|workflows|hosts]\n"
+          "  [--view statistics|workspace|overview|heads|detail|coordination|recovery|workflows|hosts]\n"
           "  [--version|--protocol-version|--diagnostics|--hydra PATH]\n"
-          "  [--headless-fixture FILE [--workflow-fixture FILE] --size COLSxROWS --frames N]\n", out);
+          "  [--headless-fixture FILE [--workflow-fixture FILE] [--statistics-fixture FILE]\n"
+          "   --size COLSxROWS --frames N]\n", out);
 }
 
 int main(int argc, char **argv) {
     struct app app;
     const char *fixture = NULL;
     const char *workflow_fixture = NULL;
+    const char *statistics_fixture = NULL;
     unsigned frames = 1U, frame;
     int index;
     bool explicit_view = false;
@@ -43,6 +45,7 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[index], "--fleet") == 0) app.fleet = true;
         else if (strcmp(argv[index], "--headless-fixture") == 0 && index + 1 < argc) fixture = argv[++index];
         else if (strcmp(argv[index], "--workflow-fixture") == 0 && index + 1 < argc) workflow_fixture = argv[++index];
+        else if (strcmp(argv[index], "--statistics-fixture") == 0 && index + 1 < argc) statistics_fixture = argv[++index];
         else if (strcmp(argv[index], "--size") == 0 && index + 1 < argc) {
             if (parse_size(argv[++index], &app.cols, &app.rows) != 0) { usage(stderr); return 2; }
         } else if (strcmp(argv[index], "--frames") == 0 && index + 1 < argc) {
@@ -58,6 +61,7 @@ int main(int argc, char **argv) {
             else if (strcmp(view, "workflows") == 0) { app.view = 5; app.graph_follow = true; }
             else if (strcmp(view, "hosts") == 0) app.view = 6;
             else if (strcmp(view, "workspace") == 0) app.view = 7;
+            else if (strcmp(view, "statistics") == 0) app.view = 8;
             else return 2;
         } else if (strcmp(argv[index], "--diagnostics") == 0) { app.diagnostics = true; app.view = 1; }
         else if (strcmp(argv[index], "--theme") == 0 && index + 1 < argc) theme = argv[++index];
@@ -73,16 +77,19 @@ int main(int argc, char **argv) {
         if (load_fixture(fixture, &app.model, error, sizeof(error)) != 0) { fprintf(stderr, "%s\n", error); return 2; }
         record_snapshot(&app, true);
         if (workflow_fixture && refresh_workflows(&app, workflow_fixture)) return 2;
+        if (statistics_fixture && refresh_statistics(&app, statistics_fixture)) return 2;
         for (frame = 1U; frame <= frames && !stop_requested; frame++) render(&app, frame, true);
         free(app.workflows);
         native_workspace_destroy(&app);
+        statistics_destroy(&app);
         if (stop_signal != 0) return 128 + stop_signal;
         return ferror(stdout) ? 3 : 0;
     }
-    if (workflow_fixture) { usage(stderr); return 2; }
+    if (workflow_fixture || statistics_fixture) { usage(stderr); return 2; }
     if (!explicit_view && !app.diagnostics) app.view = 7;
     index = interactive_main(&app);
     free(app.workflows);
     native_workspace_destroy(&app);
+    statistics_destroy(&app);
     return index;
 }

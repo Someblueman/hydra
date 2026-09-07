@@ -1,6 +1,11 @@
 #!/bin/sh
 
 case "${1:-}:${2:-}" in
+    workflow:statistics-data)
+        if [ -n "${HYDRA_TEST_STATS_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_STATS_FAIL_FILE" ]; then exit 1; fi
+        fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
+        cat "$fixture_dir/statistics-v1.tsv"
+        ;;
     fleet:tui-visual-data)
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
         cat "$fixture_dir/fleet-v2.tsv"
@@ -20,6 +25,9 @@ case "${1:-}:${2:-}" in
         ;;
     dashboard:)
         printf '%s\n' "FAKE DASHBOARD"
+        ;;
+    switch:*)
+        printf 'FAKE SWITCH %s\n' "$2"
         ;;
     spawn:*)
         printf 'FAKE SPAWN %s\n' "$*"

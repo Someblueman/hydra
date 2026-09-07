@@ -4,6 +4,7 @@
 #include "hydra_tui_workflow_render.inc"
 #include "hydra_tui_hosts.inc"
 #include "hydra_tui_workspace.inc"
+#include "hydra_tui_statistics_render.inc"
 
 /* Draw the border outside the content padding; title is sanitized by linef. */
 static void panel_edge(struct app *app, const char *title) {
@@ -218,6 +219,7 @@ static void render_recovery(struct app *app) {
 }
 
 static void render_help(struct app *app) {
+    linef(app, "D statistics / T range / Enter evidence / Esc back");
     linef(app, "W workspace / Tab focus / h l tree / drag splits");
     linef(app, "KEYBOARD HELP");
     if (app->rows < 20) {
@@ -249,13 +251,14 @@ static void render_help(struct app *app) {
 }
 
 static void render(struct app *app, unsigned frame, bool headless) {
-    static const char *views[] = {"Heads", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace"};
+    static const char *views[] = {"Heads", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace", "Statistics"};
     time_t observed_at = app->view == 5 ? app->workflow_at : app->snapshot_at;
     long age = headless || !observed_at ? 0L : (long)(time(NULL) - observed_at);
     if (age < 0) age = 0;
     app->hit_count = 0U;
     app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
     app->hit_tabs = app->cols >= 70 && !app->search[0];
+    if (app->view == 8 && !app->help && !app->diagnostics && render_statistics(app, frame, headless)) return;
     if (app->view == 7 && !app->help && !app->diagnostics && render_native_workspace(app, frame, headless)) return;
     native_workspace_invalidate(app);
     app->paint = !headless && !app->no_color;

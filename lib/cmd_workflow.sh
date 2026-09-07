@@ -3,6 +3,11 @@
 cmd_workflow() {
     _cw_action="${1:-}"
     case "$_cw_action" in
+        statistics-data)
+            [ "$#" -eq 1 ] || return 2
+            _load_lib workflow_statistics
+            workflow_statistics_data
+            ;;
         plan) shift; cmd_workflow_plan "$@" ;;
         -h|--help|'')
             printf '%s\n' \

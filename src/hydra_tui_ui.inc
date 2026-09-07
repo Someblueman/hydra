@@ -137,6 +137,7 @@ static void retarget_selection(struct app *app) {
 
 static void move_selection(struct app *app, int direction) {
     size_t index;
+    if (app->view == 8) { statistics_move(app, direction); return; }
     if (app->view == 7) { native_workspace_move(app, direction); return; }
     if (app->view == 5) { workflow_move(app, direction); return; }
     if (app->view == 6) {
@@ -225,6 +226,7 @@ static void record_hit(struct app *app, size_t index) {
 #include "hydra_tui_render.inc"
 
 #include "hydra_tui_actions.inc"
+#include "hydra_tui_statistics_input.inc"
 
 static int read_key(int timeout_ms, char *key) {
     fd_set readfds;
@@ -246,6 +248,7 @@ static void handle_escape(struct app *app) {
     size_t count = 0U, matched = 0U, consumed = 0U;
     struct timespec started, now;
     if (read_key(20, &ch) <= 0) {
+        if (statistics_back(app)) return;
         app->view = 0; app->help = false; app->diagnostics = false;
         app->search[0] = '\0'; app->notice[0] = '\0';
         return;
@@ -318,6 +321,7 @@ static int interactive_main(struct app *app) {
     signal(SIGPIPE, signal_handler);
     if (refresh_model(app) != 0 && app->model.head_count == 0U) return 4;
     if (app->view == 5 && !app->fleet) (void)refresh_workflows(app, NULL);
+    if (app->view == 8) (void)refresh_statistics(app, NULL);
 
     refresh_current_session(app);
     if (enter_raw(app) != 0) return 4;
@@ -329,6 +333,7 @@ static int interactive_main(struct app *app) {
         if (now - last_refresh >= 2) {
             (void)refresh_model(app);
             if (app->view == 5 && !app->fleet) (void)refresh_workflows(app, NULL);
+            if (app->view == 8) (void)refresh_statistics(app, NULL);
             refresh_current_session(app);
             capture_preview(app);
             last_refresh = time(NULL);
@@ -339,13 +344,16 @@ static int interactive_main(struct app *app) {
             continue;
         }
         if (key == 'q') app->running = false;
+        else if (key == 'D') statistics_toggle(app);
+        else if (app->view == 8 && statistics_key(app, key)) { }
         else if (app->view == 7 && native_workspace_key(app, key)) { }
         else if (app->view == 5 && workflow_key(app, key)) { }
         else if (key == 'j') move_selection(app, 1);
         else if (key == 'k') move_selection(app, -1);
         else if (key == 'v') {
-            app->view = (app->view + 1) % 8; app->diagnostics = false;
+            app->view = (app->view + 1) % 9; app->diagnostics = false;
             if (app->view == 5 && !app->fleet) { app->graph_follow = true; (void)refresh_workflows(app, NULL); }
+            if (app->view == 8) (void)refresh_statistics(app, NULL);
         }
         else if (key == 'W') { app->view = 7; app->diagnostics = false; }
         else if (key == 'o') { app->view = 4; app->diagnostics = false; }
@@ -364,6 +372,7 @@ static int interactive_main(struct app *app) {
         else if (app->view == 6 && strchr("/:pac AxGd", key)) copy_text(app->notice, sizeof(app->notice), "Select a host and press Enter to inspect its heads");
         else if (key == '/') interactive_prompt(app, '/');
         else if (app->fleet && key == 'a') fleet_action(app, true);
+        else if (app->view == 7 && key == 'a') execute_palette(app, "switch");
         else if (app->fleet && key == 'c') fleet_action(app, false);
         else if (app->fleet && (key == ':' || key == 'p' || key == ' ' || key == 'A' || key == 'x' || key == 'G')) copy_text(app->notice, sizeof(app->notice), "Fleet: a attach, c interrupt, v views, / search, q quit");
         else if (key == ':') interactive_prompt(app, ':');
