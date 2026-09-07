@@ -10,6 +10,9 @@ AR ?= ar
 CFLAGS ?= -O2
 CORE_CFLAGS = $(CFLAGS) -std=c99 -Wall -Wextra -Werror -pedantic -Isrc
 BUILD_DIR ?= build
+# Build and analysis share recursive discovery so domain directories cannot
+# silently omit native sources from the quality gate.
+NATIVE_SOURCES = $(shell find src -type f -name '*.c' | LC_ALL=C sort)
 SANITIZER_FLAGS ?= $(shell if [ "$$(uname -s)" = Darwin ]; then printf '%s' '-fsanitize=undefined'; else printf '%s' '-fsanitize=address,undefined'; fi)
 
 # Installation prefix (no root required when writable)
@@ -54,8 +57,17 @@ $(BUILD_DIR)/libhydra.a: $(BUILD_DIR)/libhydra.o
 $(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/hydra-tui: src/hydra_tui.c src/hydra_tui_process.inc src/hydra_tui_model.inc src/hydra_tui_ui.inc src/hydra_tui_mouse.inc src/hydra_tui_render.inc src/hydra_tui_theme.inc src/hydra_tui_actions.inc src/hydra_tui_main.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) src/hydra_tui.c -o $@
+TUI_SOURCES = $(filter src/tui/%.c,$(NATIVE_SOURCES))
+TUI_OBJECTS = $(patsubst src/tui/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SOURCES))
+
+$(BUILD_DIR)/tui/%.o: src/tui/%.c
+	@mkdir -p "$(@D)"
+	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS)
+	$(CC) $(CORE_CFLAGS) $^ -o $@
+
+-include $(TUI_OBJECTS:.o=.d)
 
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) tests/c/test_libhydra.c $(BUILD_DIR)/libhydra.a -o $@
@@ -185,7 +197,7 @@ help:
 	@echo "  make help      - Show this help message"
 
 # Optional fleet coordinator; JSON-C is statically linked into this executable.
-FLEET_SOURCES = $(wildcard src/fleet/*.c)
+FLEET_SOURCES = $(filter src/fleet/%.c,$(NATIVE_SOURCES))
 FLEET_JSON_CFLAGS = $(shell pkg-config --cflags json-c)
 FLEET_JSON_LIB = $(shell pkg-config --variable=libdir json-c)/libjson-c.a
 
@@ -249,7 +261,7 @@ QUALITY_C_FLAGS = $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(if $(QUALITY_C_SYSROOT),
 .PHONY: quality-c test-quality-c
 quality-c:
 	@pkg-config --exists json-c
-	@sh scripts/quality-c.sh docs/quality/cognitive-complexity.tsv $(CLANG_TIDY) $(wildcard src/*.c src/fleet/*.c tests/c/*.c) -- $(QUALITY_C_FLAGS)
+	@sh scripts/quality-c.sh docs/quality/cognitive-complexity.tsv $(CLANG_TIDY) $(NATIVE_SOURCES) $(wildcard tests/c/*.c) -- $(QUALITY_C_FLAGS)
 
 test-quality-c:
 	@sh tests/quality_c_cases.sh "$(CLANG_TIDY)"

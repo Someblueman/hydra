@@ -7,6 +7,9 @@ This work addresses the audit of `main` at `2c4efea` on
 maintenance signals, not a count of bugs. ShellCheck and dash passed; shell
 cognitive complexity is not measured.
 
+The initial review below records work through `de7dd9c`. The
+[follow-up](#follow-up-module-boundaries) records the subsequent module reorganisation.
+
 ## Item-by-item disposition
 
 | Audit item | Change or concrete retention decision | Relevant acceptance |
@@ -144,3 +147,68 @@ Final local acceptance passed on macOS:
 
 Linux ASan and hosted CI were not executed locally. No push or publication was
 performed. Existing untracked `.gmcs/` and `output/` content was preserved.
+
+## Follow-up module boundaries
+
+This round starts from `de7dd9c` and keeps the existing CLI, JSON, durable-state
+and shell/native argv contracts. The organisation now follows these ownership
+boundaries:
+
+| Area | Organisation and ownership |
+|---|---|
+| Fleet families | `src/fleet/agent`, `auth`, `plan`, `task`, `workflow`, `transport` and `support` contain the existing related implementations. Forty-four relocated C files retain identical bodies outside includes. |
+| Fleet headers | `fleet.h` holds common constants and process configuration. JSON, bounded files, process capture, transport, bundles and dispatch have separate headers. Callers include the interfaces they use; there are no forwarding compatibility headers. |
+| Support and transport | Filesystem operations moved out of JSON parsing; SSH command construction and remote target validation live with transport. Capture owns pipes, process-group deadlines and reaping; transport calls that API. |
+| Plan commands | A local name/arity table dispatches concrete operation handlers. Each handler owns its JSON cleanup. Text-only success is explicit and remains distinct from failed validation. |
+| Authentication | Options are parsed once, validated for their operation and passed to credential handling. Preview construction borrows validated metadata. Secret transmission still requires the exact approval hash and still filters the response after transmission. Flag precedence and validation order are preserved. |
+| Agent execution | The existing shell argv is decoded into named borrowed fields. Resume binding, steering, invocation and observation construction are explicit phases. The coordinator retains the running/final receipt writes and their ordering. |
+| Fleet subprocesses | Each stream groups its pipe descriptors, capture buffer and byte count. One drain helper handles stdout/stderr; the lifecycle loop still owns termination, grace deadlines, PID reuse protection and cancellation uncertainty. |
+| Native TUI | Ten independently compiled `.c` files replace the textual `.inc` implementation chain. Model parsing has no terminal or process dependency. The adapter combines model and bounded subprocess APIs. Selection, rendering, actions and input borrow caller-owned app state. Signal flags and the terminal cleanup pointer are private to the terminal module. |
+| Shell cancellation | `cmd_exec_cancel_workers` receives the profile policy explicitly rather than reading its caller's `_ce_profile` variable. The trap passes the same policy, preserving supervisor-first cancellation. |
+| Build and analysis | Fleet/TUI objects and analysis share recursive native source discovery. Compiler dependency files track private headers. Packaging keeps its existing binary names and installation layout. |
+
+All 23 fleet/TUI headers compile independently with the repository's strict C99
+flags. The build/analysis inventory matches all **75** C translation units;
+the increase from 66 comes from splitting the native TUI compilation unit.
+
+| Hotspot | Before this round | After |
+|---|---:|---:|
+| `plan_cli` | 81 | 16 |
+| `auth_cli` | 81 | at or below 15 |
+| `agent_run_cli` | 82 | 57 |
+| Process `run` | 95 | 68 |
+
+The maximum reported cognitive complexity falls from **95 to 68**. The number
+of functions above 15 increases from **123 to 125**: authentication now has
+separate option parsing (20), operation validation (23) and credential handling
+(25), while its dispatcher falls below the reporting threshold. These are
+reviewed phases with distinct inputs and ownership, not relaxed checks.
+No existing function's ceiling increased after mapping moved paths.
+Reduced/removed allowances are ratcheted down. The sum of above-threshold scores
+falls from **3,703 to 3,572**; this excludes functions at or below 15 and is not a
+whole-program metric. Shell cognitive complexity remains unmeasured.
+
+Analysis retains **13** non-complexity diagnostics: the previous 12, plus the
+now independently analyzed adapter's `rewind`/`malloc` errno warning. The adapter
+never interprets errno from `rewind`; allocation failure is checked by its return
+value. A repeated TERM lookup exposed by separate compilation now caches the
+environment value before validation. New capture tests check seek results
+directly. No analyzer warnings are suppressed.
+
+The new capture test exercises independent stdout/stderr, stdout closing before
+stderr, cumulative stdout observations, separate log truncation budgets and a
+nonzero child exit. Existing plan/auth/agent acceptance and all 87 real PTY checks
+passed during this round. Final local acceptance passed:
+
+| Check | Result |
+|---|---|
+| `make test-all` | Passed the complete shell/native, fleet task, PTY, parity, installation and onboarding suites, including `make lint` |
+| `make quality-c` | Passed all 75 translation units against reviewed, ratcheted ceilings |
+| `make test-quality-c` | Passed the real checker's regression and failure-boundary cases |
+| `make sanitize` | Passed macOS UBSan, including complete fleet task acceptance |
+| Fresh temporary build directory | All three native executables built without existing objects |
+| Header/source inventory checks | All 23 fleet/TUI headers compiled independently; analysis selected all 75 C sources |
+| `git diff --check` | Passed |
+
+Linux ASan and hosted CI were not run locally. Work used the existing checkout;
+nothing was pushed or published, and `.gmcs/` and `output/` content was preserved.

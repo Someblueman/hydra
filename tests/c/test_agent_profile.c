@@ -1,4 +1,7 @@
-#include "fleet/agent.h"
+#include "fleet/support/json.h"
+#include "fleet/support/files.h"
+#include "fleet/support/process.h"
+#include "fleet/agent/agent.h"
 #include <assert.h>
 #include <dirent.h>
 #include <stdlib.h>

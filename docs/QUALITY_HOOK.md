@@ -24,11 +24,12 @@ repair outcomes separately from setup/trial events after a week of use.
 
 ## C analysis
 
-Run `make quality-c` for clang-tidy 22.1.8 analysis of all 66 current C
-translation units. The target uses CORE_CFLAGS, JSON-C pkg-config includes,
+Run `make quality-c` for clang-tidy 22.1.8 analysis of all native C sources and
+the C test translation units. The target uses CORE_CFLAGS, JSON-C pkg-config includes,
 and the macOS SDK sysroot when applicable. Headers and .inc fragments are
 analyzed through their including translation units, not as standalone programs.
-New .c files are selected by the target's source globs.
+Native .c files are discovered recursively. Fleet/TUI builds and C analysis use
+the same source inventory, including the domain subdirectories.
 
 Provision with the toolkit quality `setup` command using the existing quality.json,
 or `uv venv build/quality-tools` followed by

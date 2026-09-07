@@ -1,5 +1,8 @@
-#include "fleet/workflow_data.h"
-#include "fleet/task.h"
+#include "fleet/support/json.h"
+#include "fleet/support/files.h"
+#include "fleet/support/process.h"
+#include "fleet/workflow/workflow_data.h"
+#include "fleet/task/task.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>

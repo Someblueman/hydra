@@ -1,5 +1,7 @@
 #define _XOPEN_SOURCE 700
-#include "fleet/task.h"
+#include "fleet/support/json.h"
+#include "fleet/support/files.h"
+#include "fleet/task/task.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>

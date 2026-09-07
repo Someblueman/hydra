@@ -1,6 +1,13 @@
-#include "fleet.h"
-#include "task.h"
-#include "agent_auth.h"
+#include "fleet/support/json.h"
+#include "fleet/support/files.h"
+#include "fleet/support/process.h"
+#include "fleet/transport/remote.h"
+#include "fleet/transport/server.h"
+#include "fleet/transport/bundle.h"
+#include "fleet/cli.h"
+#include "fleet/fleet.h"
+#include "fleet/task/task.h"
+#include "fleet/auth/agent_auth.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>

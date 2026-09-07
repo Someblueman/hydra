@@ -196,6 +196,13 @@ The CLI and lifecycle orchestration use POSIX shell; optional native helpers use
 Source qualification needs GNU Make, ShellCheck, dash, Git, tmux, and a C compiler.
 The fleet build additionally needs pkg-config and JSON-C development files.
 
+Fleet C code is grouped under `src/fleet/{agent,auth,plan,task,workflow,transport,support}`.
+Domain headers expose their own contracts; support headers cover bounded files,
+JSON and subprocess capture. The native TUI lives in `src/tui/`, with independently
+compiled model, adapter, process, selection, rendering, input and terminal modules.
+See the [simplification review](docs/CODEBASE_SIMPLIFICATION.md#follow-up-module-boundaries)
+for ownership boundaries and measured results.
+
 ```sh
 make lint       # ShellCheck and shell syntax
 make test-all   # Complete acceptance suite, including native and PTY checks
