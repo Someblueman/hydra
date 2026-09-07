@@ -2,7 +2,7 @@
 
 > - **Status:** canonical outstanding-work backlog
 > - **Snapshot:** 7 September 2026
-> - **Current release:** `v2.1.0` remote fleets and native mission control
+> - **Current release:** `v2.2.0` workflow data, agent adapters, and local objective planning
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   [Release policy](VERSIONING.md) · [Contracts](CONTRACTS.md) ·

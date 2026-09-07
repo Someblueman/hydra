@@ -7,8 +7,8 @@ snapshots can be downloaded and collected into isolated local refs for the exist
 integration flow. See [local and real-host qualification](REMOTE_TASK_ACCEPTANCE.md)
 for tested boundaries. That dated record predates publication; the base remote
 task capability shipped in v2.1.0. Headless adapters and durable approval
-suspension described here are newer source additions; see the
-[changelog](../CHANGELOG.md#unreleased).
+suspension described here are available in v2.2.0; see the
+[changelog](../CHANGELOG.md#220---2026-09-07).
 
 ## Prepare and preview
 

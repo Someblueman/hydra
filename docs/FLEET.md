@@ -11,7 +11,7 @@ Successful committed results enter the existing local integration and approval
 flow. Existing direct remote workflow calls remain synchronous.
 
 Fleet and remote tasks shipped in v2.1.0. Headless provider execution and durable
-approval suspension are source-branch additions; see the [changelog](../CHANGELOG.md).
+approval suspension are available in v2.2.0; see the [changelog](../CHANGELOG.md).
 A remote workflow runs on one selected host. Cross-host DAG coordination and
 automatic placement remain on the [roadmap](ROADMAP.md).
 

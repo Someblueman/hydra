@@ -32,10 +32,9 @@ echo "=============================="
 assert_equal none "$(profile_resolve none)" "none is a first-class profile"
 assert_equal task-file "$(profile_field claude prompt_mode)" "Claude task transport is declared"
 assert_equal session-id "$(profile_field claude resume_mode)" "Claude resume recipe is declared"
-assert_equal exact-session "$(profile_field codex resume_mode)" "Codex resume requires an exact recorded session"
-assert_equal "'codex' resume 'recorded-session'" "$(profile_resume_command codex recorded-session)" "Codex resume selects only the supplied identity"
-profile_resume_command codex '' >/dev/null 2>&1
-assert_failure $? "Codex resume cannot select a most-recent session"
+assert_equal cwd-last "$(profile_field codex resume_mode)" "Codex interactive resume remains cwd-scoped"
+assert_equal "'codex' resume --last" "$(profile_resume_command codex '')" "Codex interactive resume supports heads without recorded IDs"
+assert_equal "'codex' resume --last" "$(profile_resume_command codex recorded-session)" "Codex interactive recipe stays separate from headless exact resume"
 assert_equal cursor-agent "$(profile_field cursor executable)" "Cursor profile selects the agent CLI"
 for builtin in agy cursor opencode; do
     profile_exists "$builtin"

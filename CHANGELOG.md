@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-07
+
 ### Added
 
 - Bounded JSON objective plans with public schema discovery, structured validation,
@@ -40,11 +42,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Contributor quality-hook pilot includes local shell checks and native C analysis.
 - Fleet task cancellation allows 30 seconds per transport phase and accepts a
   bounded `--timeout` override so suspended approval result sealing can finish.
-- Interactive Codex restore requires an exact recorded session identity instead of
-  implicitly selecting the latest session. Older heads remain inspectable; see
-  [the migration instructions](docs/AGENT_CONTRACT.md#workflow-profiles-and-migration).
+
+### Fixed
+
+- Workflow cancellation refreshes residual worker evidence before publishing terminal
+  state, avoiding stale residuals and false cancellation failures.
+- Agent cancellation reaches the native supervisor before its children so receipts
+  preserve the observed cancellation; deadline signals remain timeouts.
+- Git fingerprints reject failed or truncated probes. Agent result decoding rejects
+  malformed terminal records and embedded NUL data.
+- Shell lint remains compatible with ShellCheck 0.9.
+- Restore the Hydra logo in the README.
+
+### Compatibility
+
+- Interactive Codex heads preserve cwd-scoped `codex resume --last`, including
+  heads without a recorded provider session ID. Headless `hydra exec --resume-run`
+  uses only the exact session bound to the selected successful run receipt.
+- State v2 and existing core, TUI, fleet, event, and JSON protocol versions remain
+  unchanged. Upgrade the shell CLI and native helpers together.
+
+### Qualification
 
 Workflow-data and local planning acceptance are complete. Cursor local/remote,
 Antigravity remote, and Claude Code remote live qualification remain outstanding;
@@ -747,3 +768,6 @@ remote provider matrix and exact evidence.
 [0.2.0]: https://github.com/yourusername/hydra/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
+
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/Someblueman/hydra/compare/v2.1.0...v2.2.0

@@ -7,13 +7,20 @@ cat > "$fixture/builtin-bin/provider" <<'PROVIDER'
 set -eu
 provider="${0##*/}"
 case " $* " in
-    *' --help '*|*' --version '*) printf '%s\n' 'fixture-1 --print --conversation --resume --session --format --output-format --disable-slash-commands stream-json'; exit 0 ;;
+    *' --help '*|*' --version '*) printf '%s\n' 'fixture-1 --print --conversation --resume --session --format --output-format --disable-slash-commands stream-json --json resume'; exit 0 ;;
 esac
 mode=start
 session=fixture-session
 prompt=''
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        exec) [ "$provider" = codex ]; shift ;;
+        resume)
+            [ "$provider" = codex ] && [ "$2" = --json ]
+            mode=resume; session="$3"; shift 3 ;;
+        --json) [ "$provider" = codex ]; shift ;;
+        --color) [ "$provider" = codex ] && [ "$2" = never ]; shift 2 ;;
+        -) [ "$provider" = codex ]; prompt="$(cat)"; shift ;;
         run) [ "$provider" = opencode ]; shift ;;
         --format|--output-format) case "$2" in json|stream-json) ;; *) exit 64 ;; esac; shift 2 ;;
         --disable-slash-commands) [ "$provider" = agy ]; shift ;;
@@ -32,6 +39,7 @@ case "$prompt" in
     partial-provider) printf '{'; exit 0 ;;
     failed-provider)
         case "$adapter" in
+            codex) printf '%s\n' '{"type":"turn.failed"}' ;;
             agy) printf '%s\n' '{"event":"result","result":{"status":"WAITING"}}' ;;
             cursor) printf '%s\n' '{"type":"result","is_error":true}' ;;
             opencode) printf '%s\n' '{"type":"error"}' ;;
@@ -45,7 +53,7 @@ builtin_path="$PATH"
 PATH="$fixture/builtin-bin:$PATH"
 HYDRA_PROVIDER_FIXTURES="$root/tests/fixtures/agents"
 export PATH HYDRA_PROVIDER_FIXTURES
-for builtin in agy cursor opencode; do
+for builtin in codex agy cursor opencode; do
     case "$builtin" in cursor) executable=cursor-agent ;; *) executable="$builtin" ;; esac
     ln -s provider "$fixture/builtin-bin/$executable"
     # An option-shaped prompt stays data through each provider's literal recipe.

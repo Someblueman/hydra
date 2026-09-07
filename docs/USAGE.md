@@ -1,9 +1,9 @@
 # Command and configuration guide
 
-See `hydra help` for complete command syntax. This guide covers the current branch.
-Fleet and [remote tasks](REMOTE_TASKS.md) shipped in v2.1.0. Workflow data,
-approval waits, headless adapters and local objective planning are additions in
-this checkout; see the [changelog](../CHANGELOG.md) for the release boundary.
+See `hydra help` for complete command syntax. Fleet and
+[remote tasks](REMOTE_TASKS.md) shipped in v2.1.0. Version 2.2.0 adds workflow data,
+approval waits, headless adapters, and local objective planning; see the
+[changelog](../CHANGELOG.md) for upgrade notes.
 
 
 ```sh

@@ -17,7 +17,7 @@ when built from source. Trusted SSH fleet coordination shipped in v2.1.0;
 Windows, WSL-specific behavior and BSD userlands without the documented tools
 are not qualified platforms.
 
-The current source adds headless adapters and local objective planning. Provider
+Version 2.2.0 adds headless adapters and local objective planning. Provider
 authentication and live qualification are host-specific; see the
 [agent matrix](PROFILES.md). Cross-host objective DAGs and automatic load balancing
 remain roadmap work.

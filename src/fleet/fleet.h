@@ -12,7 +12,7 @@
 #define F_LIMIT (8U * 1024U * 1024U)
 #define F_PATH 4096
 #define F_PROTOCOL 1
-#define F_VERSION "2.1.0"
+#define F_VERSION "2.2.0"
 struct f_capture { char *out, *err; size_t out_bytes, err_bytes; int status; bool timeout, cancelled, stop_unknown; };
 /* Borrowed log descriptors and stop context; remaining budgets span invocations. */
 struct f_control {

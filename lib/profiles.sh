@@ -45,7 +45,7 @@ profile_field() {
                 case "$_pf_name" in claude|codex|agy|cursor|opencode) printf 'task-file\n' ;; *) printf 'none\n' ;; esac
                 ;;
             resume_mode)
-                case "$_pf_name" in claude) printf 'session-id\n' ;; codex) printf 'exact-session\n' ;; *) printf 'none\n' ;; esac
+                case "$_pf_name" in claude) printf 'session-id\n' ;; codex) printf 'cwd-last\n' ;; *) printf 'none\n' ;; esac
                 ;;
             adapter) printf 'none\n' ;;
             confidence)
@@ -180,11 +180,7 @@ profile_resume_command() {
             printf '%s --resume %s\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" \
                 "$(profile_shell_quote "$_prc_provider_id")"
             ;;
-        exact-session)
-            [ -n "$_prc_provider_id" ] || return 1
-            printf '%s resume %s\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" \
-                "$(profile_shell_quote "$_prc_provider_id")"
-            ;;
+        cwd-last) printf '%s resume --last\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" ;;
         *) return 1 ;;
     esac
 }
