@@ -1,11 +1,14 @@
-# Remote tasks (unreleased)
+# Remote tasks
 
-This unreleased implementation provides package preparation, durable submission,
+Available since v2.1.0, remote tasks provide package preparation, durable submission,
 detached command/workflow execution, status, cancellation, and bounded log retrieval.
 Launch requires explicit authorization of the specification digest. Verified result
 snapshots can be downloaded and collected into isolated local refs for the existing
 integration flow. See [local and real-host qualification](REMOTE_TASK_ACCEPTANCE.md)
-for tested boundaries and the remaining release/publication gates.
+for tested boundaries. That dated record predates publication; the base remote
+task capability shipped in v2.1.0. Headless adapters and durable approval
+suspension described here are newer source additions; see the
+[changelog](../CHANGELOG.md#unreleased).
 
 ## Prepare and preview
 

@@ -24,6 +24,11 @@ use ordinary shell sessions alongside agents.
 
 [Demo transcript and recording instructions](assets/demos/README.md)
 
+This checkout includes unreleased workflow data, approval waits, headless adapters
+and local objective planning on top of **v2.1.0**. For published behavior use the
+[latest release](https://github.com/Someblueman/hydra/releases/latest); see the
+[changelog](CHANGELOG.md) for the source/release boundary.
+
 ## What you can do
 
 - **Lead from native mission control.** Browse heads, inspect activity and changes,
@@ -36,8 +41,11 @@ use ordinary shell sessions alongside agents.
   or disturbing another task's working tree.
 - **See what is happening.** Inspect sessions from native mission control, a tmux
   dashboard, or the CLI. Query structured state and retain lifecycle history.
-- **Coordinate work.** Run finite workflows, exchange messages, declare file
+- **Coordinate work.** Run finite workflows with named inputs, sealed outputs,
+  durable approval waits and bounded retries. Exchange messages, declare file
   scopes, and detect collisions between heads.
+- **Deliver an objective.** Let an agent propose a local plan, inspect its compiled
+  scope, and run it with independent checks of the final code or report.
 - **Review and integrate.** Inspect diffs and provenance, run verification gates,
   and use guarded integration commands to assemble changes.
 
@@ -66,7 +74,8 @@ terminals. You can also run `bin/hydra` directly from a checkout without install
 Headless agents: **Antigravity (`agy`), Cursor Agent, OpenCode, Claude Code,
 Codex, and Pi**. See the [supported-agent matrix](docs/PROFILES.md) for interactive
 launch support, executable names, capabilities, and live qualification limits.
-Cursor requires `cursor-agent`; Claude remote qualification remains deferred.
+Cursor requires `cursor-agent`. Cursor local/remote and Antigravity remote live
+qualification await sign-in; Claude remote qualification remains deferred.
 
 GitHub CLI, `fzf`, and coding agents are optional integrations. For a compiler-free
 local installation, skip `make build-fleet` and set `HYDRA_INSTALL_TUI=never` when
@@ -158,7 +167,10 @@ workflows, and recovery behavior.
 The optional native helper supports `hydra workflow plan`: discover the JSON
 schema, validate an agent-authored proposal, compile and review an immutable
 local DAG, then execute it with an exact acceptance digest. Retrieve the final
-verified artifacts with `hydra workflow plan result <run-id>`. See the
+verified artifacts with `hydra workflow plan result <run-id>`. Planning does not
+call a model itself; an ordinary agent authors the proposal through the CLI.
+Compiled plans currently execute locally; cross-host DAG placement is still on
+the roadmap. See the
 [planner recipe](docs/PLANNER_RECIPE.md) and
 [feature and research examples](examples/planning/README.md).
 
@@ -188,7 +200,8 @@ The fleet build additionally needs pkg-config and JSON-C development files.
 ```sh
 make lint       # ShellCheck and shell syntax
 make test-all   # Complete acceptance suite, including native and PTY checks
-make sanitize   # Native sanitizer checks
+make sanitize   # All native sanitizer checks
+make sanitize-fleet # Focused fleet, agent and planning sanitizer checks
 make help       # Build, package, and focused test targets
 ```
 

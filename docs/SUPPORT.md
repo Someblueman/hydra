@@ -2,7 +2,7 @@
 
 ## Supported systems
 
-Hydra 2.0 supports current macOS and Linux systems with:
+Hydra supports current macOS and Linux systems with:
 
 - a POSIX `sh` (`dash` is used for compliance qualification);
 - Git;
@@ -11,9 +11,16 @@ Hydra 2.0 supports current macOS and Linux systems with:
 
 The shell CLI and basic TUI require no compiler. The optional native TUI requires a
 C99 compiler when built from source; release artifacts are qualified on macOS and
-Linux. Windows, WSL-specific behavior, BSD userlands without the documented tools,
-and remote multi-host coordination are not supported 2.0 contracts. The
-[unreleased fleet pilot](FLEET.md) documents its separate support boundaries.
+Linux. The optional fleet helper additionally requires JSON-C and pkg-config
+when built from source. Trusted SSH fleet coordination shipped in v2.1.0;
+[fleet setup](FLEET.md) documents matching installations and host requirements.
+Windows, WSL-specific behavior and BSD userlands without the documented tools
+are not qualified platforms.
+
+The current source adds headless adapters and local objective planning. Provider
+authentication and live qualification are host-specific; see the
+[agent matrix](PROFILES.md). Cross-host objective DAGs and automatic load balancing
+remain roadmap work.
 
 Optional `fzf`, `gh`, and agent executables add only their documented features.
 Their absence must not prevent shell-only local orchestration.

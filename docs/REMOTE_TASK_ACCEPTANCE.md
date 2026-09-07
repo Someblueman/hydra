@@ -1,10 +1,14 @@
 # Remote task acceptance — 5 September 2026
 
-This records local and real Ubuntu SSH qualification of the unreleased remote-task
+This records local and real Ubuntu SSH qualification of the remote-task
 implementation. It supplements the historical [fleet pilot](FLEET_ACCEPTANCE.md).
 It does not claim a release, publication, provider-harness qualification, or hosted
 CI. The scenario used disposable repositories and isolated Hydra homes, with actual
 command output, Git commits, workflow attempts, and gate records.
+
+The base capability subsequently shipped in v2.1.0; this record retains the
+evidence and publication state of the original qualification run. See the
+[release notes](../RELEASE_NOTES.md) for the published release boundary.
 
 ## Qualification
 

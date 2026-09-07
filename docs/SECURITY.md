@@ -76,7 +76,7 @@ result. Promotion rechecks the target ref, candidate commits, manifest, approval
 clean worktree under the project integration lock; it updates only a local branch and
 never pushes.
 
-## Fleet coordination (unreleased)
+## Fleet coordination
 
 Fleet uses strict host-key verification and noninteractive OpenSSH authentication.
 It negotiates capabilities before remote operations. Fixed transport commands carry
@@ -101,3 +101,13 @@ over SSH. Copy grants the receiving Unix account use of the selected credential.
 See [host authentication](HOST_AUTH.md) for private-file requirements, provider
 entry selection, sensitive transport handling, and concurrent refresh limits.
 Credentials remain outside task and configuration bundles.
+
+## Objective planning
+
+An agent-authored plan and policy do not grant authorization. The operator reviews
+the scripts, provider permissions and compiled scope, then accepts its exact digest.
+Admission rechecks source/input/profile bindings; dispatch checks execution
+projections. Declared tools, writes and effects are reviewable constraints, not OS
+isolation or an analysis of arbitrary script side effects. Verification reports
+bind claims to final artifact bytes; coverage and agent agreement do not prove
+semantic correctness. See [the planner recipe](PLANNER_RECIPE.md).

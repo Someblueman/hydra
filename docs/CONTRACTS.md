@@ -1,6 +1,8 @@
-# Hydra 2.0 public contracts
+# Hydra public contracts
 
-Hydra 2.0 commits to the local interfaces below. Internal shell function names,
+Hydra preserves the stable local interfaces introduced in 2.0 and the fleet
+interfaces shipped in 2.1.0. This document also describes the source-branch
+additions listed under [Unreleased](../CHANGELOG.md#unreleased). Internal shell function names,
 module layout, renderer details, caches, and on-disk temporary files are not public
 contracts.
 
@@ -133,7 +135,7 @@ Source and prefix installs provide `bin/hydra`, `lib/hydra/*.sh`, and an optiona
 qualified `hydra-tui`. Core shell operation requires POSIX `sh`, Git, and tmux 3.0 or
 newer on supported macOS and Linux systems. See [SUPPORT.md](SUPPORT.md).
 
-## Fleet pilot (unreleased)
+## Fleet coordination (since v2.1.0)
 
 [Fleet protocol 1](FLEET.md) is an optional C/OpenSSH coordinator. Its one-request
 stdin JSON boundary negotiates capabilities before mutations, transports argv

@@ -1,8 +1,9 @@
 # Command and configuration guide
 
 See `hydra help` for complete command syntax. This guide covers the current branch.
-Fleet and [remote tasks](REMOTE_TASKS.md) are unreleased; see the [changelog](../CHANGELOG.md)
-for the boundary with the stable local interface.
+Fleet and [remote tasks](REMOTE_TASKS.md) shipped in v2.1.0. Workflow data,
+approval waits, headless adapters and local objective planning are additions in
+this checkout; see the [changelog](../CHANGELOG.md) for the release boundary.
 
 
 ```sh
@@ -65,6 +66,14 @@ hydra workflow requests run_ID --json
 hydra workflow decide run_ID step_REQUEST_ID approve --by reviewer
 hydra workflow resume run_ID
 
+# Local objective plans (optional native helper; compile from clean source)
+hydra workflow plan schema
+hydra workflow plan validate ../plan.json ../policy.json
+hydra workflow plan compile ../plan.json ../policy.json ../compiled.json
+hydra workflow plan show ../compiled.json
+hydra workflow plan run ../compiled.json --accept SHA256_FROM_PREVIEW
+hydra workflow plan result run_ID
+
 # Parallel safety and guarded integration
 hydra claim add feature-x --path 'lib/*' --access write --reason refactor --expires-at 1790000000
 hydra scope check feature-x --json
@@ -116,6 +125,11 @@ and receipt described in [automation](AUTOMATION.md).
 
 A declared `done` outcome is separate from verification: use `exec` or a named
 `gate` to record whether a command passed, then review before integration.
+
+For plan/policy authoring, scope review, report formats and disposable examples,
+see the [planner recipe](PLANNER_RECIPE.md). An accepted digest binds execution
+scope; it does not establish that a natural-language objective was interpreted
+correctly. Inspect the final deliverable and its checks.
 
 ## Expert terminal utilities
 

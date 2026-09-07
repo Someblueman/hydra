@@ -1,6 +1,6 @@
-# Workflow and agent acceptance (in progress)
+# Workflow and agent acceptance — qualified scope and remaining checks
 
-This record covers roadmap priorities 1 and 2 on
+This record covers workflow data, durable approvals, retries, and agent execution on
 `feature/workflow-inputs-agent-adapters`, plus the subsequent Antigravity, Cursor,
 and OpenCode support expansion. The [supported-agent matrix](PROFILES.md)
 distinguishes implemented headless contracts from interactive launch and actual
@@ -257,7 +257,7 @@ The private qualification directory retains `auth-approved-*-copy.json`,
 `codex-authenticated-exact-evidence.json`, `pi-openrouter-exact-evidence.json`, and
 the corresponding `*-cancellation-evidence.json` files. These copy receipts contain
 paths and digests, not credential contents. Claude native host sign-in remains the
-last live-provider qualification dependency and is deferred at the user's request.
+remaining original-matrix live-provider qualification dependency and is deferred at the user's request.
 
 ## Acceptance coverage
 

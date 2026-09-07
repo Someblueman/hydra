@@ -1,4 +1,4 @@
-# Fleet pilot
+# Trusted SSH fleets
 
 Fleet coordinates up to 16 trusted Hydra hosts through OpenSSH. It provides pinned
 bootstrap, observation, remote head and workflow operations, interactive attach,
@@ -9,6 +9,11 @@ persists receiver-owned acceptance and execution, and supports disconnected
 command/workflow runs, bounded logs, cancellation, and verified result collection.
 Successful committed results enter the existing local integration and approval
 flow. Existing direct remote workflow calls remain synchronous.
+
+Fleet and remote tasks shipped in v2.1.0. Headless provider execution and durable
+approval suspension are source-branch additions; see the [changelog](../CHANGELOG.md).
+A remote workflow runs on one selected host. Cross-host DAG coordination and
+automatic placement remain on the [roadmap](ROADMAP.md).
 
 ## Architecture and installation
 
@@ -149,7 +154,7 @@ hydra fleet attach ovh --project '/srv/project with spaces' \
 Head signal/cancel delivers foreground `INT` (tmux `C-c`) after rechecking the
 observed instance under the existing lifecycle lock. A stale instance is refused.
 The response means delivered, not task completion. It preserves the head,
-worktree, and dirty files. Only `INT` is supported in this pilot. Use workflow
+worktree, and dirty files. Only `INT` is supported by the direct interrupt command. Use workflow
 cancel for whole-workflow cancellation. Attach resolves that instance's session,
 then runs ordinary interactive `ssh -t ... tmux attach-session`; tmux detach works
 normally. A usable terminal and TERM are required.

@@ -2,7 +2,7 @@
 
 > - **Status:** canonical outstanding-work backlog
 > - **Snapshot:** 7 September 2026
-> - **Current release:** `v2.0.0` stable local orchestration interface
+> - **Current release:** `v2.1.0` remote fleets and native mission control
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   [Release policy](VERSIONING.md) · [Contracts](CONTRACTS.md) ·
@@ -61,7 +61,7 @@ version number is chosen at release time from compatibility impact.
   and approval remain separate. Claims and scopes are not operating-system isolation.
 - Performance claims require reproducible measurements.
 
-## Post-2.0 backlog
+## Outstanding backlog
 
 Items below have no assigned release number. When work is selected, define the
 smallest coherent scope and its acceptance boundaries, then release it when ready.
@@ -73,6 +73,9 @@ transport and one workflow execution authority as coordination expands across ho
 Select these priorities in dependency order, with independently useful scope.
 The implemented remote submission and collection interface is documented in
 [Remote tasks](REMOTE_TASKS.md), with [qualification evidence](REMOTE_TASK_ACCEPTANCE.md).
+Local objective planning is implemented; see the [planner recipe](PLANNER_RECIPE.md)
+and [delivery qualification](evidence/plan-qualification.md). Remaining priorities
+keep their original numbers so existing references remain meaningful.
 
 #### 2. Adapter conformance and headless execution: remaining live qualification
 
@@ -104,49 +107,6 @@ claimed host. The original Codex/Pi/OpenCode/plain remote task remains qualified
 fixture tests and local authentication do not close another provider's remote
 requirement. Claude remains explicitly deferred rather than blocking the other
 implemented profiles.
-
-#### 3. Objective planning and deterministic DAG compilation
-
-Expose agent-assisted planning through the CLI and a versioned declarative plan.
-The agent interprets requirements; a deterministic compiler validates and resolves
-its proposal. Compilation checks an explicit contract, not the semantic truth of
-natural-language requirements. See [the implementation path](PLAN_COMPILATION.md)
-for interfaces, compiler stages, compatibility boundaries, and acceptance examples.
-Local slices 1–3 are implemented and [qualified](evidence/plan-qualification.md).
-Distributed placement and dynamic replanning remain later slices.
-
-- [x] Define objective, deliverable, requirement, and plan records with stable IDs,
-      explicit constraints, assumptions, open questions, permitted effects, and
-      budgets. Tie requirements to final deliverables and their evaluation methods.
-      Missing material decisions remain visible rather than becoming guessed defaults.
-- [x] Add a bounded JSON planning format and agent-readable CLI schema, validation,
-      diagnostics, and preview. Reuse existing workflow commands where possible;
-      keep one semantic model rather than separate CLI and DSL execution engines.
-- [x] Compile accepted plans into a versioned resolved execution artifact. Check
-      cycles, artifact types/producers, requirement coverage, final composition and
-      verification, write conflicts, execution capabilities, authority, and budgets.
-      Emit stable diagnostics with field paths and actionable errors. Compilation
-      performs no worker execution, host mutation, or model calls.
-- [x] Bind execution to the compiled artifact and its inputs, source, policy, and
-      compiler version. Preserve published workflow schema 1 behavior; unsupported
-      planned operations fail explicitly until their runtime capabilities exist.
-      Plan acceptance never grants unstated remote execution or publication rights.
-- [x] Provide a planner recipe that discovers the schema, proposes a plan, reads
-      validation errors, and revises within a bounded budget. Keep clarification,
-      plan acceptance, execution, and final delivery distinct. Add MCP only if the
-      public CLI proves insufficient for a concrete agent client.
-- [x] Qualify both a feature workflow that delivers integrated working code and a
-      research workflow that delivers a checked report. Include design or evidence
-      synthesis as productive work; check its output as a whole. Start with static
-      stages; follow-up work uses a newly compiled and accepted static plan.
-      Dynamic graph expansion remains deferred.
-
-Acceptance: an agent can propose, validate, revise, compile, preview, and execute a
-plan through public interfaces. Identical explicit inputs produce identical resolved
-DAGs; malformed, uncovered, cyclic, over-budget, or unauthorized plans cannot run.
-A complete requirements table alone cannot claim semantic adequacy. Changed plans
-invalidate their execution bindings. Successful child tasks without the declared
-final deliverable and its required checks do not count as objective completion.
 
 #### 4. Resource admission
 

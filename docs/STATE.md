@@ -1,6 +1,6 @@
 # Hydra state v2
 
-State v2 is Hydra 2.0's only runtime state authority. It lives below
+State v2, introduced in Hydra 2.0, is the only runtime state authority. It lives below
 `$HYDRA_HOME/state/v2`, uses mode-0700 directories and mode-0600 records, and has a
 `schema-version` file containing `2`.
 
@@ -68,6 +68,12 @@ bind `data.json`, `data-hash`, `inputs.json`, and per-attempt `outputs.json` and
 artifact snapshots. Approval requests live under `approvals/<request-id>` with
 immutable decision records; the step records its current request ID. See
 [Workflow data and approval waits](WORKFLOW_DATA.md).
+
+Compiled planning runs additionally retain `compiled.json`, `plan-accepted`,
+`plan-deadline` and `delivery.json`. Definition, graph, data and resource-limit
+files are checked projections of the accepted compiled artifact. Result retrieval
+rechecks the sealed deliverables and reports even after temporary heads have been
+removed. See the [planner recipe](PLANNER_RECIPE.md).
 
 Integration reports retain their immutable candidate manifest, initial target,
 gates, merge output, verification evidence, approval, and recovery action. Cleanup

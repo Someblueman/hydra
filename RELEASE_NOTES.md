@@ -2,6 +2,10 @@
 
 Release date: 2026-09-05
 
+These notes describe the published v2.1.0 release. New source-branch additions
+are recorded under [Unreleased in the changelog](CHANGELOG.md#unreleased); they
+are not part of v2.1.0.
+
 Hydra 2.1.0 adds trusted remote fleets and disconnected task execution, with
 verified result collection and local integration. Native mission control gains
 clearer layouts, themes, and mouse navigation.
