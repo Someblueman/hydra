@@ -22,6 +22,9 @@
 #include "termviz/termviz.h"
 #include "termviz/workspace.h"
 #include "termviz/tree.h"
+#include "termviz/terminal.h"
+#include "termviz/pty_posix.h"
+#include "termviz/input.h"
 #include "hydra_tui_workflow.h"
 #include "hydra_statistics.h"
 
@@ -61,11 +64,15 @@ struct model {
 
 struct native_workspace;
 struct statistics_view;
+struct native_terminals;
+struct native_observations;
 
 struct app {
     struct model model;
     struct native_workspace *workspace;
     struct statistics_view *statistics;
+    struct native_terminals *terminals;
+    struct native_observations *observations;
     const char *hydra;
     size_t selected, recovery_selected;
     int view, theme;
@@ -105,9 +112,13 @@ static void retarget_selection(struct app *app);
 static void native_workspace_move(struct app *app, int direction);
 static void native_workspace_invalidate(struct app *app);
 static void statistics_move(struct app *app, int direction);
+static void native_observations_cancel(struct app *app, size_t source);
 
+#include "hydra_tui_process.inc"
 #include "hydra_tui_model.inc"
 #include "hydra_tui_workflow_model.inc"
 #include "hydra_tui_statistics_model.inc"
+#include "hydra_tui_observations.inc"
+#include "hydra_tui_terminals.inc"
 #include "hydra_tui_ui.inc"
 #include "hydra_tui_main.inc"

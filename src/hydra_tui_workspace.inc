@@ -62,7 +62,13 @@ static void native_workspace_select(struct app *app) {
 static void native_workspace_move(struct app *app, int direction) {
     struct native_workspace *w = app->workspace;
     if (!w) return;
-    if (w->layout.focus == 1) { tv_tree_move(&w->tree, direction); native_workspace_select(app); }
+    if (w->layout.focus == 3 && native_terminal_selected(app) && native_terminal_selected(app)->screen) {
+        struct native_terminal *t=native_terminal_selected(app);
+        t->scrolling=true;
+        if (direction<0 && t->scroll<t->screen->history_count) t->scroll++;
+        if (direction>0 && t->scroll) t->scroll--;
+    }
+    else if (w->layout.focus == 1) { tv_tree_move(&w->tree, direction); native_workspace_select(app); }
     else tv_workspace_scroll(&w->layout, direction, w->layout.focus == 3 ? 13 : app->model.recovery_count + 5);
 }
 
@@ -168,17 +174,30 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
             continue;
         }
         if (!tv_canvas_view(&view, &c, p->bounds)) continue;
-        tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : i == 3 ? "SELECTED WORK" : "ACTIVITY / RECOVERY");
-        dashboard_text(&view, 1, 1, view.width-2, i == w->layout.focus ? TV_SELECTED : TV_BORDER,
-                       "%s / scroll %zu", i == w->layout.focus ? "FOCUS" : "Tab to focus", p->scroll);
+        {
+            struct native_terminal *t=native_terminal_selected(app);
+            bool attached=i==3 && t && t->screen;
+            tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : i == 3 ? attached ? t->label : "SELECTED WORK" : "ACTIVITY / RECOVERY");
+            if (attached) dashboard_text(&view,1,1,view.width-2,i==w->layout.focus ? TV_SELECTED : TV_BORDER,
+                "%s / %s", t->client.finished || t->client.eof ? "CLIENT DISCONNECTED" : "ATTACHED",
+                t->client.finished || t->client.eof ? "NO INPUT / Ctrl-B r reconnect" :
+                i==w->layout.focus ? "INPUT TO AGENT / Ctrl-B Tab Hydra" : "Tab to interact");
+        }
+        if (i!=3 || !native_terminal_selected(app) || !native_terminal_selected(app)->screen)
+            dashboard_text(&view, 1, 1, view.width-2, i == w->layout.focus ? TV_SELECTED : TV_BORDER,
+                           "%s / scroll %zu", i == w->layout.focus ? "FOCUS" : "Tab to focus", p->scroll);
         if (!tv_canvas_view(&content, &view, (struct tv_rect){1,2,view.width-2,view.height-3})) continue;
         if (i == 1) tv_tree_draw(&w->tree, &content, &w->layout.panes[1].scroll, w->layout.focus == 1);
+        else if (i == 3 && native_terminal_selected(app) && native_terminal_selected(app)->screen)
+            native_terminal_draw(app,&content,w->layout.focus==3);
         else if (i == 3) native_workspace_details(app, &content, p->scroll);
         else native_workspace_activity(app, &content, p->scroll);
     }
     dashboard_text(&c, 0, height-2, width, app->snapshot_stale ? TV_WARNING : TV_BORDER, "%s snapshot / age %lds%s%s",
                    app->snapshot_stale ? "STALE: last good" : "Current", age < 0 ? 0 : age, app->notice[0] ? " / " : "", app->notice);
-    tv_text(&c, (struct tv_rect){0,height-1,width,1}, width < 60 ? "Tab focus j/k scroll D stats q quit" : width < 100 ? "Tab focus j/k scroll a interact D statistics q quit" :
+    tv_text(&c, (struct tv_rect){0,height-1,width,1},
+            w->layout.focus==3 && native_terminal_selected(app) && native_terminal_selected(app)->screen ?
+            (width<65 ? "Ctrl-B Tab Hydra / Ctrl-B q quit" : "INPUT TO AGENT / Ctrl-B Tab Hydra / Ctrl-B D statistics / Ctrl-B n next / Ctrl-B q quit") : width < 60 ? "Tab focus j/k scroll D stats q quit" : width < 100 ? "Tab focus j/k scroll a interact D statistics q quit" :
             "Tab focus / j k scroll / h l tree / drag splits / a interact / D statistics / : actions / q quit", TV_STRONG);
     if (headless) {
         printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);

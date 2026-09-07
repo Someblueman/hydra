@@ -83,7 +83,8 @@ These test tools are not library or demo runtime dependencies.
 
 Hydra-specific aggregation, clocks, identities, workflow/agent semantics, and
 mutation policy stay in Hydra. Its workspace uses the same layout/tree/presenter
-without creating embedded shells or replacing tmux ownership of existing heads.
+and uses the optional PTY adapter for attachment clients. Existing head shells
+and agents remain owned by tmux, independently of those clients.
 
 ## Text and sizing limits
 

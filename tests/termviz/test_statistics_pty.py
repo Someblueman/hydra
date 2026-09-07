@@ -25,11 +25,6 @@ def local_statistics() -> None:
             s.send("j\tjj\tjjj")
             s.pump(.2)
             assert "scroll 2" in s.screen.text() and "scroll 3" in s.screen.text()
-            s.send("a")
-            s.until("FAKE SWITCH feature-stale")
-            s.until("Press Enter to return")
-            s.send("\r")
-            s.until("HYDRA WORKSPACE")
             s.send("D")
             s.until("HYDRA / D STATISTICS")
             s.until("Latest attempt mean 95.0s / n=6 / max 120s")
@@ -84,7 +79,7 @@ def local_statistics() -> None:
             for cols, rows in [(80, 24), (40, 10), (140, 40)]:
                 s.resize(cols, rows)
                 s.until("D STATISTICS")
-                assert "q quit" in s.screen.text() and s.screen.overflow == 0
+                assert "q quit" in s.screen.text() and s.screen.overflow == 0, f"{s.screen.cols}x{s.screen.rows} overflow={s.screen.overflow}\n{s.screen.text()}"
                 assert s.screen.clears >= 1, "Resizing must invalidate presentation"
                 s.screen.save(EVIDENCE / f"statistics-{cols}x{rows}.html")
             s.close(b"q")
@@ -120,7 +115,7 @@ def fleet_statistics() -> None:
         s.pump(.1)
         s.resize(40, 10)
         s.until("3/3 offline")
-        assert "q quit" in s.screen.text() and s.screen.overflow == 0
+        assert "q quit" in s.screen.text() and s.screen.overflow == 0, f"{s.screen.cols}x{s.screen.rows} overflow={s.screen.overflow}\n{s.screen.text()}"
         s.send("\r")
         s.until("No head evidence")
         s.close(b"q")

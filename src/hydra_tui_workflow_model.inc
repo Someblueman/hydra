@@ -88,13 +88,9 @@ static int load_workflows(FILE *input, struct workflow_model *m) {
     return handshake && !ferror(input) ? 0 : -1;
 }
 
-static int refresh_workflows(struct app *app, const char *fixture) {
-    FILE *input;
+/* Consumes the completed observation stream. */
+static int accept_workflows(struct app *app, FILE *input) {
     struct workflow_model *next;
-    char notice[TEXT];
-    copy_text(notice, sizeof(notice), app->notice);
-    input = fixture ? fopen(fixture, "r") : capture_adapter(app, "workflow", "tui-data", 2000);
-    copy_text(app->notice, sizeof(app->notice), notice);
     next = input ? malloc(sizeof(*next)) : NULL;
     if (!input || !next || load_workflows(input, next)) {
         if (input) fclose(input);
@@ -120,6 +116,16 @@ static int refresh_workflows(struct app *app, const char *fixture) {
     app->workflow_stale = false; app->workflow_error[0] = '\0';
     app->workflow_at = time(NULL);
     return 0;
+}
+
+static int refresh_workflows(struct app *app, const char *fixture) {
+    char notice[TEXT];
+    FILE *input;
+    copy_text(notice,sizeof(notice),app->notice);
+    if (!fixture) native_observations_cancel(app,1);
+    input=fixture ? fopen(fixture,"r") : capture_adapter(app,"workflow","tui-data",2000);
+    copy_text(app->notice,sizeof(app->notice),notice);
+    return accept_workflows(app,input);
 }
 
 static void workflow_move(struct app *app, int direction) {

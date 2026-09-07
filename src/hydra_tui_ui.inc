@@ -21,7 +21,7 @@ static void restore_terminal(struct app *app) {
         app->raw = false;
     }
     if (isatty(STDOUT_FILENO)) {
-        static const char reset[] = "\033[?1000l\033[?1006l\033[?1002l\033[0m\033[?25h\n";
+        static const char reset[] = "\033[?1000l\033[?1006l\033[?1002l\033[?2004l\033[0m\033[?25h\n";
         write_terminal(reset, sizeof(reset) - 1U);
     }
 }
@@ -37,14 +37,14 @@ static int enter_raw(struct app *app) {
     struct termios raw;
     if (tcgetattr(STDIN_FILENO, &app->saved) != 0) return -1;
     raw = app->saved;
-    raw.c_lflag &= (tcflag_t)~(ICANON | ECHO | IEXTEN);
+    raw.c_lflag &= (tcflag_t)~(ICANON | ECHO | IEXTEN | ISIG);
     raw.c_iflag &= (tcflag_t)~(IXON | ICRNL);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) return -1;
     app->raw = true;
     {
-        static const char modes[] = "\033[?25l\033[?1000h\033[?1006h\033[?1002h";
+        static const char modes[] = "\033[?25l\033[?1000h\033[?1006h\033[?1002h\033[?2004h";
         write_terminal(modes, sizeof(modes) - 1U);
     }
     return 0;
@@ -227,6 +227,7 @@ static void record_hit(struct app *app, size_t index) {
 
 #include "hydra_tui_actions.inc"
 #include "hydra_tui_statistics_input.inc"
+#include "hydra_tui_terminal_input.inc"
 
 static int read_key(int timeout_ms, char *key) {
     fd_set readfds;
@@ -331,19 +332,20 @@ static int interactive_main(struct app *app) {
     while (app->running && !stop_requested) {
         time_t now = time(NULL);
         if (now - last_refresh >= 2) {
-            (void)refresh_model(app);
-            if (app->view == 5 && !app->fleet) (void)refresh_workflows(app, NULL);
-            if (app->view == 8) (void)refresh_statistics(app, NULL);
-            refresh_current_session(app);
-            capture_preview(app);
-            last_refresh = time(NULL);
-        }
+            native_observations_tick(app,true);
+            if (app->preview && !native_terminal_focused(app)) capture_preview(app);
+            last_refresh = now;
+        } else native_observations_tick(app,false);
+        native_terminals_pump(app);
         update_size(app);
         render(app, 0U, false);
-        if (read_key(500, &key) <= 0) {
+        if (read_key(app->terminals || app->observations ? 40 : 500, &key) <= 0) {
+            native_terminal_flush_input(app);
             continue;
         }
-        if (key == 'q') app->running = false;
+        if (native_terminal_byte(app,(unsigned char)key)) continue;
+        if (key == 3) { stop_signal=SIGINT; stop_requested=1; }
+        else if (key == 'q') app->running = false;
         else if (key == 'D') statistics_toggle(app);
         else if (app->view == 8 && statistics_key(app, key)) { }
         else if (app->view == 7 && native_workspace_key(app, key)) { }
@@ -372,7 +374,9 @@ static int interactive_main(struct app *app) {
         else if (app->view == 6 && strchr("/:pac AxGd", key)) copy_text(app->notice, sizeof(app->notice), "Select a host and press Enter to inspect its heads");
         else if (key == '/') interactive_prompt(app, '/');
         else if (app->fleet && key == 'a') fleet_action(app, true);
-        else if (app->view == 7 && key == 'a') execute_palette(app, "switch");
+        else if (app->view == 7 && key == 'a') {
+            if (native_terminal_attach(app)) app->workspace->layout.focus=3;
+        }
         else if (app->fleet && key == 'c') fleet_action(app, false);
         else if (app->fleet && (key == ':' || key == 'p' || key == ' ' || key == 'A' || key == 'x' || key == 'G')) copy_text(app->notice, sizeof(app->notice), "Fleet: a attach, c interrupt, v views, / search, q quit");
         else if (key == ':') interactive_prompt(app, ':');

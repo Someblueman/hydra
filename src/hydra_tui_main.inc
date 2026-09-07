@@ -90,6 +90,8 @@ int main(int argc, char **argv) {
     index = interactive_main(&app);
     free(app.workflows);
     native_workspace_destroy(&app);
+    native_terminals_destroy(&app);
+    native_observations_destroy(&app);
     statistics_destroy(&app);
     return index;
 }

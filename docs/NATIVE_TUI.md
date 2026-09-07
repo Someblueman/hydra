@@ -27,9 +27,10 @@ The normal source installer builds and installs the native TUI when `make` and a
 compiler are available. `HYDRA_INSTALL_TUI=never` keeps a compiler-free shell-only
 installation, where plain `hydra tui` visibly enters the basic fallback.
 
-The production refresh path uses one shell snapshot every two seconds with a
-two-second subprocess timeout, plus an optional selected-preview `tmux capture-pane`
-bounded to one second and 4095 bytes. The earlier tmux
+The production refresh path requests a shell snapshot every two seconds with a
+two-second subprocess timeout. Periodic observations run asynchronously, so slow
+collection does not block attached terminal input. An optional selected-preview
+`tmux capture-pane` is bounded to one second and 4095 bytes. The earlier tmux
 control-mode prototype met its latency experiment, but did not establish reconnect,
 flow-control, and terminal-matrix reliability. Control mode therefore remains off
 instead of becoming an unqualified event authority.
@@ -49,8 +50,8 @@ head table, selected-head details, queue history, session-state distribution, an
 changed-file bars. At 80 columns the overview stacks the table and chart. `w` opens
 workflows and `H` opens remote hosts. The deterministic headless interface retains
 its original default head table. The standalone [termviz workspace demo](../src/termviz/README.md)
-adds an embedded real shell; Hydra's workspace does not create shells or replace
-existing tmux head ownership.
+adds an embedded real shell. Hydra's workspace instead embeds attachment clients
+to existing tmux heads; see [attached terminals](ATTACHED_TERMINALS.md).
 
 `D` opens the dedicated statistics view and returns to the previous view without
 changing workspace selection, pane focus or scroll. It shows a filtered run cohort,
@@ -61,9 +62,9 @@ host response coverage and known head counts. See [statistics definitions and
 limits](STATISTICS.md). This view does not yet include an embedded agent pane.
 
 The workspace's selected-work pane emphasizes agent, group, host, project and
-changes. `a` opens the selected head through the public `hydra switch` command;
-returning from that terminal handoff restores the workspace. This uses the existing
-tmux session and does not embed a second terminal owner.
+changes. `a` opens an identity-checked client to the selected head inside the
+workspace. `Ctrl-B Tab` transfers input back to Hydra; `Ctrl-B D` opens statistics.
+The existing tmux session retains the agent process and unsent input.
 
 Queue history holds up to 120 refresh observations, not repaint frames. Its
 horizontal domain is **samples**, since collection intervals can vary. Only heads
@@ -122,7 +123,8 @@ row; selection markers and labels remain usable with `NO_COLOR` or `--no-color`.
 | `Enter` | Open selected-head detail |
 | `v` | Cycle heads, detail, coordination, recovery, overview, workflows, hosts, workspace, and statistics |
 | `D` | Toggle statistics; retain filters and previous workspace context |
-| `a` in workspace | Open selected head through `hydra switch` |
+| `a` in workspace | Attach the selected head in the conversation pane |
+| `Ctrl-B` in conversation | Prefix for Hydra focus, view, client and exit controls |
 | `W` / `Tab` | Open workspace / cycle workspace pane focus |
 | `h` / `l` in workspace | Collapse / expand navigation tree |
 | `o` / `w` / `H` | Open overview / workflow graph / hosts |

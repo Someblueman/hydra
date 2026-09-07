@@ -187,105 +187,22 @@ static void record_snapshot(struct app *app, bool valid) {
 
 /* Returned stream is caller-owned and rewound; close it after parsing. */
 static FILE *capture_adapter(struct app *app, const char *command, const char *option, long budget_ms) {
-    int pipefd[2], status = 0, ready;
-    pid_t pid;
-    posix_spawn_file_actions_t actions;
-    posix_spawnattr_t attributes;
+    struct native_capture capture={.fd=-1};
+    char *argv[]={(char *)app->hydra,(char *)command,(char *)option,NULL};
     FILE *input;
-    struct timespec started, now;
-    size_t bytes = 0U;
-    bool failed = false, timed_out = false;
-    char buffer[8192];
-    char *argv[] = {(char *)app->hydra, (char *)command, (char *)option, NULL};
-    if (pipe(pipefd) != 0) return NULL;
-    posix_spawn_file_actions_init(&actions);
-    posix_spawnattr_init(&attributes);
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
-    posix_spawnattr_setpgroup(&attributes, 0);
-    posix_spawn_file_actions_addclose(&actions, pipefd[0]);
-    posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
-    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
-    posix_spawn_file_actions_addclose(&actions, pipefd[1]);
-    if (posix_spawnp(&pid, app->hydra, &actions, &attributes, argv, environ) != 0) {
-        posix_spawn_file_actions_destroy(&actions);
-        posix_spawnattr_destroy(&attributes);
-        close(pipefd[0]); close(pipefd[1]);
-        return NULL;
+    if (!native_capture_start(&capture,argv,budget_ms)) return NULL;
+    while (!native_capture_step(&capture)) {
+        struct timespec pause={0,10000000L};
+        (void)nanosleep(&pause,NULL);
     }
-    posix_spawn_file_actions_destroy(&actions);
-    posix_spawnattr_destroy(&attributes);
-    close(pipefd[1]);
-    input = tmpfile();
-    if (input == NULL) {
-        close(pipefd[0]);
-        (void)kill(-pid, SIGKILL); (void)kill(pid, SIGKILL);
-        while (waitpid(pid, &status, 0) < 0 && errno == EINTR) { }
-        return NULL;
-    }
-    (void)clock_gettime(CLOCK_MONOTONIC, &started);
-    for (;;) {
-        fd_set readfds;
-        struct timeval timeout;
-        ssize_t length;
-        long elapsed_ms, remaining_ms;
-        (void)clock_gettime(CLOCK_MONOTONIC, &now);
-        elapsed_ms = (long)(now.tv_sec - started.tv_sec) * 1000L +
-                     (long)(now.tv_nsec - started.tv_nsec) / 1000000L;
-        remaining_ms = budget_ms - elapsed_ms;
-        if (remaining_ms <= 0L) { timed_out = true; break; }
-        FD_ZERO(&readfds); FD_SET(pipefd[0], &readfds);
-        timeout.tv_sec = remaining_ms / 1000L;
-        timeout.tv_usec = (remaining_ms % 1000L) * 1000L;
-        ready = select(pipefd[0] + 1, &readfds, NULL, NULL, &timeout);
-        if (ready == 0) { timed_out = true; break; }
-        if (ready < 0) {
-            if (errno == EINTR) continue;
-            failed = true; break;
-        }
-        length = read(pipefd[0], buffer, sizeof(buffer));
-        if (length == 0) break;
-        if (length < 0) {
-            if (errno == EINTR) continue;
-            failed = true; break;
-        }
-        bytes += (size_t)length;
-        if (bytes > MAX_DATA_BYTES || fwrite(buffer, 1U, (size_t)length, input) != (size_t)length) {
-            failed = true; break;
-        }
-    }
-    close(pipefd[0]);
-    if (timed_out || failed) {
-        (void)kill(-pid, SIGKILL); (void)kill(pid, SIGKILL);
-    }
-    for (;;) {
-        struct timespec pause = {0, 10000000L};
-        ready = waitpid(pid, &status, WNOHANG);
-        if (ready == pid || (ready < 0 && errno != EINTR)) break;
-        (void)clock_gettime(CLOCK_MONOTONIC, &now);
-        if ((now.tv_sec - started.tv_sec) * 1000L + (now.tv_nsec - started.tv_nsec) / 1000000L >= budget_ms) {
-            timed_out = true;
-            (void)kill(-pid, SIGKILL); (void)kill(pid, SIGKILL);
-            do { ready = waitpid(pid, &status, 0); } while (ready < 0 && errno == EINTR);
-            break;
-        }
-        (void)nanosleep(&pause, NULL);
-    }
-    if (timed_out) {
-        fclose(input);
-        copy_text(app->notice, sizeof(app->notice), "shell data adapter timed out; showing last good snapshot");
-        return NULL;
-    }
-    if (failed || ready != pid || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        fclose(input);
-        copy_text(app->notice, sizeof(app->notice), "shell data adapter failed; showing last good snapshot");
-        return NULL;
-    }
-    rewind(input);
+    if (capture.timed_out) copy_text(app->notice,sizeof(app->notice),"shell data adapter timed out; showing last good snapshot");
+    input=native_capture_take(&capture);
+    if (!input && !app->notice[0]) copy_text(app->notice,sizeof(app->notice),"shell data adapter failed; showing last good snapshot");
     return input;
 }
 
-static int refresh_model_data(struct app *app) {
-    FILE *input = capture_adapter(app, app->fleet ? "fleet" : "tui", app->fleet ? "tui-visual-data" : "--data", app->fleet ? 3500 : 2000);
+/* Consumes input on every path. */
+static int accept_model_data(struct app *app, FILE *input) {
     struct model *next;
     char error[TEXT] = "";
     if (!input) return -1;
@@ -302,10 +219,13 @@ static int refresh_model_data(struct app *app) {
         return -1;
     }
     fclose(input);
-    if (app->fleet && app->selected < app->model.head_count) {
+    if (app->selected < app->model.head_count) {
         const struct head *previous = &app->model.heads[app->selected]; size_t index;
         for (index = 0; index < next->head_count; index++) {
-            if (strcmp(previous->head_id, next->heads[index].head_id) == 0 && strcmp(previous->remote_host, next->heads[index].remote_host) == 0) { app->selected = index; break; }
+            if ((previous->head_id[0] ? !strcmp(previous->head_id,next->heads[index].head_id) :
+                !strcmp(previous->branch,next->heads[index].branch)) && !strcmp(previous->remote_host,next->heads[index].remote_host)) {
+                app->selected=index; break;
+            }
         }
     }
     app->model = *next;
@@ -318,7 +238,10 @@ static int refresh_model_data(struct app *app) {
 }
 
 static int refresh_model(struct app *app) {
-    int result = refresh_model_data(app);
+    int result;
+    native_observations_cancel(app,0);
+    result = accept_model_data(app,capture_adapter(app,app->fleet ? "fleet" : "tui",
+        app->fleet ? "tui-visual-data" : "--data",app->fleet ? 3500 : 2000));
     record_snapshot(app, result == 0);
     return result;
 }

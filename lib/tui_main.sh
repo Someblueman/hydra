@@ -113,6 +113,12 @@ tui_main_loop() {
 # Returns: 0 on success, 1 on failure
 cmd_tui() {
     case "${1:-}" in
+        --attach)
+            shift
+            _load_lib tui_attach
+            tui_attach_instance "$@"
+            return $?
+            ;;
         --basic)
             shift
             [ $# -eq 0 ] || {

@@ -53,15 +53,10 @@ static void statistics_visible(struct app *app) {
     else v->selected_id[0] = '\0';
 }
 
-static int refresh_statistics(struct app *app, const char *fixture) {
-    FILE *input;
+/* Consumes the completed observation stream. */
+static int accept_statistics(struct app *app, FILE *input) {
     struct hs_model *next;
-    char notice[TEXT];
-    if (!statistics_init(app)) return -1;
-    if (app->fleet) { statistics_visible(app); return 0; }
-    copy_text(notice, sizeof(notice), app->notice);
-    input = fixture ? fopen(fixture, "r") : capture_adapter(app, "workflow", "statistics-data", 2000);
-    copy_text(app->notice, sizeof(app->notice), notice);
+    if (!statistics_init(app)) { if (input) fclose(input); return -1; }
     next = input ? malloc(sizeof(*next)) : NULL;
     if (!input || !next || !hs_load(input, next)) {
         if (input) fclose(input);
@@ -73,6 +68,17 @@ static int refresh_statistics(struct app *app, const char *fixture) {
     app->statistics->stale = false; app->statistics->error[0] = '\0';
     statistics_visible(app);
     return 0;
+}
+
+static int refresh_statistics(struct app *app, const char *fixture) {
+    char notice[TEXT];
+    FILE *input;
+    if (app->fleet) { if (!statistics_init(app)) return -1; statistics_visible(app); return 0; }
+    copy_text(notice,sizeof(notice),app->notice);
+    if (!fixture) native_observations_cancel(app,2);
+    input=fixture ? fopen(fixture,"r") : capture_adapter(app,"workflow","statistics-data",2000);
+    copy_text(app->notice,sizeof(app->notice),notice);
+    return accept_statistics(app,input);
 }
 
 static void statistics_move(struct app *app, int direction) {

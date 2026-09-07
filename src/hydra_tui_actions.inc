@@ -95,6 +95,7 @@ static void group_marked_action(struct app *app) {
 static void kill_marked_action(struct app *app) {
     size_t index, killed = 0U, skipped = 0U;
     int failed = 0;
+    refresh_current_session(app);
     restore_terminal(app);
     printf("\033[H\033[2J");
     fflush(stdout);

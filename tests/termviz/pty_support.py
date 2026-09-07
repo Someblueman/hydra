@@ -134,7 +134,7 @@ class Screen:
 
 
 class Session:
-    def __init__(self, argv: list[str], cols: int, rows: int, env: dict[str, str] | None = None):
+    def __init__(self, argv: list[str], cols: int, rows: int, env: dict[str, str] | None = None, cwd: Path | None = None):
         self.closed = False
         self.master, self.slave = pty.openpty()
         self.original = termios.tcgetattr(self.slave)
@@ -142,7 +142,7 @@ class Session:
         self.raw = bytearray()
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         self.process = subprocess.Popen(argv, stdin=self.slave, stdout=self.slave, stderr=self.slave,
-                                        start_new_session=True, env={**os.environ, "ENV": "/dev/null", "PS1": "TV$ ", "TERM": "xterm-256color", **(env or {})})
+                                        start_new_session=True, cwd=cwd, env={**os.environ, "ENV": "/dev/null", "PS1": "TV$ ", "TERM": "xterm-256color", **(env or {})})
 
     def pump(self, seconds: float = .15) -> bytes:
         data = bytearray()
