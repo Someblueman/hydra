@@ -3,6 +3,7 @@
 #include "hydra_tui_dashboard.inc"
 #include "hydra_tui_workflow_render.inc"
 #include "hydra_tui_hosts.inc"
+#include "hydra_tui_workspace.inc"
 
 /* Draw the border outside the content padding; title is sanitized by linef. */
 static void panel_edge(struct app *app, const char *title) {
@@ -217,6 +218,7 @@ static void render_recovery(struct app *app) {
 }
 
 static void render_help(struct app *app) {
+    linef(app, "W workspace / Tab focus / h l tree / drag splits");
     linef(app, "KEYBOARD HELP");
     if (app->rows < 20) {
         linef(app, "j/k move  Enter detail  Esc back");
@@ -247,13 +249,15 @@ static void render_help(struct app *app) {
 }
 
 static void render(struct app *app, unsigned frame, bool headless) {
-    static const char *views[] = {"Heads", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts"};
+    static const char *views[] = {"Heads", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace"};
     time_t observed_at = app->view == 5 ? app->workflow_at : app->snapshot_at;
     long age = headless || !observed_at ? 0L : (long)(time(NULL) - observed_at);
     if (age < 0) age = 0;
     app->hit_count = 0U;
     app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
     app->hit_tabs = app->cols >= 70 && !app->search[0];
+    if (app->view == 7 && !app->help && !app->diagnostics && render_native_workspace(app, frame, headless)) return;
+    native_workspace_invalidate(app);
     app->paint = !headless && !app->no_color;
     app->line = 0;
     app->limit = app->rows - 3;
@@ -287,7 +291,8 @@ static void render(struct app *app, unsigned frame, bool headless) {
     else if (app->view == 3) render_recovery(app);
     else if (app->view == 4) render_dashboard(app);
     else if (app->view == 5) render_workflow_graph(app);
-    else render_hosts(app);
+    else if (app->view == 6) render_hosts(app);
+    else linef(app, "Workspace requires at least 20 columns and 6 rows");
     while (app->line < app->limit) linef(app, "");
     app->boxed = false;
     app->limit = app->rows;
@@ -301,7 +306,7 @@ static void render(struct app *app, unsigned frame, bool headless) {
                                 (app->view == 5 ? app->workflow_stale : app->snapshot_stale) ? "STALE" : "Current");
     else if (!app->help && !app->diagnostics && (app->view == 0 || app->view == 3))
         linef(app, app->hit_tabs ? "Click row/tab | Wheel moves selection | o overview | t theme" : "Click row | Wheel moves selection");
-    else linef(app, "o overview  |  t theme  |  v views  |  Esc back");
+    else linef(app, "W workspace | o overview | t theme  |  v views  |  Esc back");
     style(app, TONE_STRONG);
     if (app->view == 5) linef(app, app->cols < 60 ? "j/k node [/] run ? help q quit" : "j/k node  [/] run  h/l/J/K pan  ? help  q quit");
     else if (app->view == 6) linef(app, "j/k host  Enter heads  ? help  q quit");

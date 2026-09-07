@@ -13,7 +13,7 @@ static int parse_size(const char *value, int *cols, int *rows) {
 
 static void usage(FILE *out) {
     fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--ascii] [--fleet]\n"
-          "  [--view overview|heads|detail|coordination|recovery|workflows|hosts]\n"
+          "  [--view workspace|overview|heads|detail|coordination|recovery|workflows|hosts]\n"
           "  [--version|--protocol-version|--diagnostics|--hydra PATH]\n"
           "  [--headless-fixture FILE [--workflow-fixture FILE] --size COLSxROWS --frames N]\n", out);
 }
@@ -57,6 +57,7 @@ int main(int argc, char **argv) {
             else if (strcmp(view, "overview") == 0) app.view = 4;
             else if (strcmp(view, "workflows") == 0) { app.view = 5; app.graph_follow = true; }
             else if (strcmp(view, "hosts") == 0) app.view = 6;
+            else if (strcmp(view, "workspace") == 0) app.view = 7;
             else return 2;
         } else if (strcmp(argv[index], "--diagnostics") == 0) { app.diagnostics = true; app.view = 1; }
         else if (strcmp(argv[index], "--theme") == 0 && index + 1 < argc) theme = argv[++index];
@@ -74,12 +75,14 @@ int main(int argc, char **argv) {
         if (workflow_fixture && refresh_workflows(&app, workflow_fixture)) return 2;
         for (frame = 1U; frame <= frames && !stop_requested; frame++) render(&app, frame, true);
         free(app.workflows);
+        native_workspace_destroy(&app);
         if (stop_signal != 0) return 128 + stop_signal;
         return ferror(stdout) ? 3 : 0;
     }
     if (workflow_fixture) { usage(stderr); return 2; }
-    if (!explicit_view && !app.diagnostics) app.view = 4;
+    if (!explicit_view && !app.diagnostics) app.view = 7;
     index = interactive_main(&app);
     free(app.workflows);
+    native_workspace_destroy(&app);
     return index;
 }

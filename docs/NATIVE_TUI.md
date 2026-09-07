@@ -35,12 +35,21 @@ instead of becoming an unqualified event authority.
 
 ## Views and confidence
 
-The interactive default is an overview dashboard. Wide terminals show summary
-cards, a selectable head table, selected-head details, queue history, session-state
-distribution, and changed-file bars. At 80 columns the overview stacks the table
-and chart; very small terminals prioritize readable selection and navigation.
-`o` returns to the overview, `w` opens workflows, and `H` opens remote hosts.
-The deterministic headless interface retains its original default head table.
+The interactive default is the workspace: a head navigation tree, selected-head
+details, and activity/recovery panes. `Tab` cycles focus; `j/k` navigate the tree
+or scroll the focused content pane independently; `h/l` collapse/expand tree
+branches. Drag either divider to resize. When minimum sizes cannot fit, focus
+cycling reveals hidden panes. `W` returns to this workspace; `--view workspace`
+selects it explicitly. Rendering retains the previous frame and emits changed
+regions; resize, palette changes and delegated terminal ownership invalidate it.
+
+`o` opens the overview dashboard. Wide terminals show summary cards, a selectable
+head table, selected-head details, queue history, session-state distribution, and
+changed-file bars. At 80 columns the overview stacks the table and chart. `w` opens
+workflows and `H` opens remote hosts. The deterministic headless interface retains
+its original default head table. The standalone [termviz workspace demo](../src/termviz/README.md)
+adds an embedded real shell; Hydra's workspace does not create shells or replace
+existing tmux head ownership.
 
 Queue history holds up to 120 refresh observations, not repaint frames. Its
 horizontal domain is **samples**, since collection intervals can vary. Only heads
@@ -97,7 +106,9 @@ row; selection markers and labels remain usable with `NO_COLOR` or `--no-color`.
 | --- | --- |
 | `j` / `k`, arrows | Move through heads, workflow nodes, hosts, or recovery findings |
 | `Enter` | Open selected-head detail |
-| `v` | Cycle heads, detail, coordination, recovery, overview, workflows, and hosts |
+| `v` | Cycle heads, detail, coordination, recovery, overview, workflows, hosts, and workspace |
+| `W` / `Tab` | Open workspace / cycle workspace pane focus |
+| `h` / `l` in workspace | Collapse / expand navigation tree |
 | `o` / `w` / `H` | Open overview / workflow graph / hosts |
 | `[` / `]` | Previous / next recorded workflow run |
 | `h` / `l` / `J` / `K` | Pan the workflow graph left / right / down / up |
@@ -128,15 +139,16 @@ or recovery row to select it; the wheel over list rows moves selection exactly a
 wide, click a view tab to switch views. Enter opens the selected head; `d` inspects
 a recovery finding. Clicking a row never attaches, interrupts, or mutates a head.
 
-Headers, borders, empty space, help, and diagnostics do not select rows. Release,
-drag, modified clicks, and malformed reports are ignored. Hit targets come from
+In the workspace, click a pane to focus it and drag a divider to resize; the
+wheel navigates or scrolls that pane. Other views keep their existing behavior:
+headers, borders, empty space, help, and diagnostics do not select rows. Release,
+drag, modified clicks, and malformed reports are ignored outside workspace dividers. Hit targets come from
 the last painted frame; a resize invalidates them until the next render. At narrow
 widths or during search, use `v` for view navigation. Mouse reporting is disabled
 for prompts, delegated commands, and exit, including the basic fallback after a
 native crash. Terminal-native text selection may require holding Shift.
 
-Dragging layouts, workflow graphs, and historical sparklines remain
-outstanding. No new activity or progress metrics are inferred from session status
+Dragging workflow graphs and historical sparklines remains outstanding. No new activity or progress metrics are inferred from session status
 or fleet desired state.
 
 ## Themes
@@ -166,8 +178,9 @@ when `t` is pressed. Headless fixture output remains plain and deterministic.
   an explicit basic-TUI recovery.
 - The native renderer does not depend on color, so `NO_COLOR`, monochrome, and
   low-color terminals preserve all status meaning.
-- Pane and state bytes are untrusted. Control bytes and non-ASCII byte sequences are
-  replaced before rendering; escape sequences cannot inject commands or terminal
+- Pane and state bytes are untrusted. The termviz views decode bounded UTF-8 with
+  explicit cell widths; older line-based views retain ASCII replacement. Controls
+  and malformed text are replaced before rendering; escape sequences cannot inject commands or terminal
   controls. Bracketed paste and unknown escape sequences are bounded and ignored; SGR
   mouse reports accept only bounded numeric coordinates and navigation buttons.
 - The layout clips to the current terminal size and the recovery view remains useful

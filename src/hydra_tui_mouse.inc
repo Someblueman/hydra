@@ -11,12 +11,17 @@ static void handle_mouse(struct app *app, const char *sequence) {
         }
         if (field < 2U && *cursor++ != ';') return;
     }
-    if (*cursor != 'M' || cursor[1] != '\0') return; /* Release is inert. */
+    if ((*cursor != 'M' && *cursor != 'm') || cursor[1] != '\0') return;
     update_size(app);
     if (app->cols != app->hit_cols || app->rows != app->hit_height ||
         app->view != app->hit_view || app->cols < 40 || app->rows < 10) return;
     if (values[1] == 0U || values[1] >= (unsigned)app->cols ||
         values[2] == 0U || values[2] > (unsigned)app->rows) return;
+    if (app->view == 7 && !app->help && !app->diagnostics) {
+        native_workspace_mouse(app, values[0], (int)values[1] - 1, (int)values[2] - 1, *cursor == 'm');
+        return;
+    }
+    if (*cursor == 'm') return;
     if (values[0] == 0U && values[2] == 2U && app->hit_tabs) {
         static const unsigned starts[] = {1U, 10U, 21U, 37U, 50U, 62U, 75U};
         static const unsigned ends[] = {7U, 18U, 34U, 46U, 59U, 72U, 81U};

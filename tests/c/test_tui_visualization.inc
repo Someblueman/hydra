@@ -2,10 +2,10 @@
 static void test_visualization(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     struct winsize size;
-    setenv("HYDRA_TEST_DEFAULT_VIEW", "1", 1);
+    setenv("HYDRA_TEST_OVERVIEW", "1", 1);
     result(open_session(&session, tui, hydra, fake_bin, 140, 40) == 0, "open visualization terminal");
-    unsetenv("HYDRA_TEST_DEFAULT_VIEW");
-    result(wait_for_marker(&session, "QUEUE DEPTH", 1000), "default overview lays out real snapshot statistics");
+    unsetenv("HYDRA_TEST_OVERVIEW");
+    result(wait_for_marker(&session, "QUEUE DEPTH", 1000), "overview lays out real snapshot statistics");
     mouse_input(&session, "\033[<0;10;13M");
     result(wait_for_marker(&session, "Observed: STALE", 1000), "overview mouse selects the head row");
     mouse_input(&session, "\033[<0;110;12M");
@@ -42,9 +42,9 @@ static void test_visualization_refresh(const char *tui, const char *hydra, const
     if (fd < 0) return;
     close(fd); unlink(marker);
     setenv("HYDRA_TEST_FAIL_FILE", marker, 1);
-    setenv("HYDRA_TEST_DEFAULT_VIEW", "1", 1);
+    setenv("HYDRA_TEST_OVERVIEW", "1", 1);
     result(open_session(&session, tui, hydra, fake_bin, 140, 40) == 0, "open refresh visualization terminal");
-    unsetenv("HYDRA_TEST_FAIL_FILE"); unsetenv("HYDRA_TEST_DEFAULT_VIEW");
+    unsetenv("HYDRA_TEST_FAIL_FILE"); unsetenv("HYDRA_TEST_OVERVIEW");
     (void)wait_for_marker(&session, "QUEUE DEPTH", 1000);
     fd = open(marker, O_WRONLY | O_CREAT | O_EXCL, 0600);
     result(fd >= 0, "inject a failed subsequent observation");

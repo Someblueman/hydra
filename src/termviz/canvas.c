@@ -7,34 +7,87 @@ bool tv_init(struct tv_canvas *out, struct tv_cell *cells, size_t capacity,
     if (!out || !cells || width < 1 || height < 1 || width > 4096 || height > 4096 ||
         (size_t)width > SIZE_MAX / (size_t)height ||
         (size_t)width * (size_t)height > capacity) return false;
-    out->cells = cells; out->width = width; out->height = height; out->unicode = unicode;
+    out->cells = cells; out->stride = width; out->width = width; out->height = height; out->unicode = unicode;
     tv_clear(out, TV_BASE);
     return true;
 }
 
+static struct tv_cell blank(enum tv_style style) {
+    struct tv_cell cell;
+    memset(&cell, 0, sizeof(cell));
+    cell.glyph = ' '; cell.style = style; cell.width = 1;
+    cell.foreground = cell.background = TV_COLOR_DEFAULT;
+    return cell;
+}
+
+bool tv_canvas_view(struct tv_canvas *out, const struct tv_canvas *parent, struct tv_rect r) {
+    if (!out || !parent || r.x < 0 || r.y < 0 || r.width < 1 || r.height < 1 ||
+        (int64_t)r.x + r.width > parent->width || (int64_t)r.y + r.height > parent->height) return false;
+    *out = *parent;
+    out->cells = parent->cells + (size_t)r.y * (size_t)parent->stride + (size_t)r.x;
+    out->width = r.width; out->height = r.height;
+    return true;
+}
+
+bool tv_cell_equal(const struct tv_cell *a, const struct tv_cell *b) {
+    return a->glyph == b->glyph && a->style == b->style && a->width == b->width &&
+        a->foreground == b->foreground && a->background == b->background &&
+        a->attributes == b->attributes && a->combining_count == b->combining_count &&
+        !memcmp(a->combining, b->combining, sizeof(a->combining));
+}
+
 void tv_clear(struct tv_canvas *c, enum tv_style style) {
-    size_t i, count = (size_t)c->width * (size_t)c->height;
-    for (i = 0; i < count; i++) { c->cells[i].glyph = ' '; c->cells[i].style = style; }
+    int x, y;
+    struct tv_cell cell = blank(style);
+    for (y = 0; y < c->height; y++) for (x = 0; x < c->width; x++)
+        c->cells[(size_t)y * (size_t)c->stride + (size_t)x] = cell;
+}
+
+static void erase_partner(struct tv_canvas *c, int x, int y) {
+    struct tv_cell *cell = &c->cells[(size_t)y * (size_t)c->stride + (size_t)x];
+    if (!cell->width && x > 0) cell[-1] = blank(cell->style);
+    if (cell->width == 2 && x + 1 < c->width) cell[1] = blank(cell->style);
 }
 
 void tv_put(struct tv_canvas *c, int x, int y, uint32_t glyph, enum tv_style style) {
     struct tv_cell *cell;
-    if (x < 0 || y < 0 || x >= c->width || y >= c->height) return;
-    /* Only printable ASCII and our single-cell generated graphics alphabet. */
-    if (!((glyph >= 32 && glyph <= 126) || (glyph >= 0x2500 && glyph <= 0x259f) ||
-          (glyph >= 0x2800 && glyph <= 0x28ff))) glyph = '?';
-    cell = &c->cells[(size_t)y * (size_t)c->width + (size_t)x];
-    cell->glyph = glyph; cell->style = style;
+    int width = tv_codepoint_width(glyph);
+    if (x < 0 || y < 0 || x > c->width || y >= c->height) return;
+    if (!c->unicode && glyph > 126) { glyph = '?'; width = 1; }
+    if (width < 0) { glyph = '?'; width = 1; }
+    if (width == 0) {
+        if (x < 1) return;
+        cell = &c->cells[(size_t)y * (size_t)c->stride + (size_t)x - 1];
+        if (!cell->width && x > 1) cell--;
+        if (cell->combining_count < TV_COMBINING_MAX)
+            cell->combining[cell->combining_count++] = glyph;
+        return;
+    }
+    if (x == c->width) return;
+    if (width == 2 && x + 1 >= c->width) { glyph = ' '; width = 1; }
+    erase_partner(c, x, y);
+    if (width == 2) erase_partner(c, x + 1, y);
+    cell = &c->cells[(size_t)y * (size_t)c->stride + (size_t)x];
+    *cell = blank(style); cell->glyph = glyph; cell->width = (unsigned char)width;
+    if (width == 2) { cell[1] = blank(style); cell[1].width = 0; }
 }
 
 void tv_text(struct tv_canvas *c, struct tv_rect r, const char *text, enum tv_style style) {
-    int i;
+    int64_t x = r.x, end = (int64_t)r.x + r.width;
+    size_t remaining;
     if (!text || r.width <= 0 || r.height <= 0 || r.y < 0 || r.y >= c->height) return;
-    for (i = 0; i < r.width && text[i]; i++) {
-        int64_t x = (int64_t)r.x + i;
-        unsigned char ch = (unsigned char)text[i];
-        if (x >= 0 && x < c->width) tv_put(c, (int)x, r.y, ch >= 32 && ch <= 126 ? ch : '?', style);
-        if (x >= c->width) break;
+    remaining = strlen(text);
+    while (remaining && x <= end && x <= c->width) {
+        uint32_t cp;
+        size_t used = tv_utf8_decode(text, remaining, &cp);
+        int width;
+        if (!used) { used = 1; cp = '?'; }
+        width = tv_codepoint_width(cp);
+        if (width < 0 || (!c->unicode && cp > 126)) { cp = '?'; width = 1; }
+        if (width && (x == end || x == c->width)) break;
+        if (x >= 0 && x + width <= end && !(width == 0 && x == r.x))
+            tv_put(c, (int)x, r.y, cp, style);
+        x += width; text += used; remaining -= used;
     }
 }
 
@@ -74,21 +127,3 @@ void tv_bar(struct tv_canvas *c, struct tv_rect r, uint64_t value, uint64_t maxi
     }
 }
 
-bool tv_write_row(const struct tv_canvas *c, int row, FILE *output,
-                  void (*style)(void *, enum tv_style), void *context) {
-    int x;
-    enum tv_style previous = (enum tv_style)-1;
-    if (row < 0 || row >= c->height || !output) return false;
-    for (x = 0; x < c->width; x++) {
-        const struct tv_cell *cell = &c->cells[(size_t)row * (size_t)c->width + (size_t)x];
-        uint32_t g = cell->glyph;
-        if (style && cell->style != previous) { style(context, cell->style); previous = cell->style; }
-        if (g < 128) { if (fputc((int)g, output) == EOF) return false; }
-        else {
-            unsigned char bytes[3] = {(unsigned char)(0xe0U | (g >> 12)),
-                (unsigned char)(0x80U | ((g >> 6) & 63U)), (unsigned char)(0x80U | (g & 63U))};
-            if (fwrite(bytes, 1, 3, output) != 3) return false;
-        }
-    }
-    return !ferror(output);
-}

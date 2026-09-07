@@ -20,6 +20,8 @@
 #include <unistd.h>
 #include <langinfo.h>
 #include "termviz/termviz.h"
+#include "termviz/workspace.h"
+#include "termviz/tree.h"
 #include "hydra_tui_workflow.h"
 
 #define HYDRA_TUI_VERSION "2.1.0"
@@ -56,8 +58,11 @@ struct model {
     size_t host_count;
 };
 
+struct native_workspace;
+
 struct app {
     struct model model;
+    struct native_workspace *workspace;
     const char *hydra;
     size_t selected, recovery_selected;
     int view, theme;
@@ -94,6 +99,8 @@ static volatile sig_atomic_t stop_signal;
 
 static struct head *selected_head(struct app *app);
 static void retarget_selection(struct app *app);
+static void native_workspace_move(struct app *app, int direction);
+static void native_workspace_invalidate(struct app *app);
 
 #include "hydra_tui_model.inc"
 #include "hydra_tui_workflow_model.inc"

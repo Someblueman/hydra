@@ -15,12 +15,13 @@ static void write_terminal(const char *data, size_t length) {
 }
 
 static void restore_terminal(struct app *app) {
+    if (app) native_workspace_invalidate(app);
     if (app != NULL && app->raw) {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &app->saved);
         app->raw = false;
     }
     if (isatty(STDOUT_FILENO)) {
-        static const char reset[] = "\033[?1000l\033[?1006l\033[0m\033[?25h\n";
+        static const char reset[] = "\033[?1000l\033[?1006l\033[?1002l\033[0m\033[?25h\n";
         write_terminal(reset, sizeof(reset) - 1U);
     }
 }
@@ -43,7 +44,7 @@ static int enter_raw(struct app *app) {
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) return -1;
     app->raw = true;
     {
-        static const char modes[] = "\033[?25l\033[?1000h\033[?1006h";
+        static const char modes[] = "\033[?25l\033[?1000h\033[?1006h\033[?1002h";
         write_terminal(modes, sizeof(modes) - 1U);
     }
     return 0;
@@ -136,6 +137,7 @@ static void retarget_selection(struct app *app) {
 
 static void move_selection(struct app *app, int direction) {
     size_t index;
+    if (app->view == 7) { native_workspace_move(app, direction); return; }
     if (app->view == 5) { workflow_move(app, direction); return; }
     if (app->view == 6) {
         if (direction > 0 && app->host_selected + 1 < app->model.host_count) app->host_selected++;
@@ -263,6 +265,8 @@ static void handle_escape(struct app *app) {
     if (sequence[0] == '<') handle_mouse(app, sequence);
     else if (strcmp(sequence, "A") == 0) move_selection(app, -1);
     else if (strcmp(sequence, "B") == 0) move_selection(app, 1);
+    else if (app->view == 7 && (!strcmp(sequence, "C") || !strcmp(sequence, "D")))
+        (void)native_workspace_key(app, sequence[0] == 'C' ? 'l' : 'h');
     else if (strcmp(sequence, "M") == 0) {
         /* Legacy X10 carries three bytes after CSI M; never treat them as keys. */
         for (count = 0U; count < 3U; count++) if (read_key(20, &ch) <= 0) break;
@@ -335,13 +339,15 @@ static int interactive_main(struct app *app) {
             continue;
         }
         if (key == 'q') app->running = false;
+        else if (app->view == 7 && native_workspace_key(app, key)) { }
         else if (app->view == 5 && workflow_key(app, key)) { }
         else if (key == 'j') move_selection(app, 1);
         else if (key == 'k') move_selection(app, -1);
         else if (key == 'v') {
-            app->view = (app->view + 1) % 7; app->diagnostics = false;
+            app->view = (app->view + 1) % 8; app->diagnostics = false;
             if (app->view == 5 && !app->fleet) { app->graph_follow = true; (void)refresh_workflows(app, NULL); }
         }
+        else if (key == 'W') { app->view = 7; app->diagnostics = false; }
         else if (key == 'o') { app->view = 4; app->diagnostics = false; }
         else if (key == 'H') { app->view = 6; app->diagnostics = false; }
         else if (key == 'w') {
