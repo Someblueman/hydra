@@ -327,17 +327,106 @@ The workspace foundation and first embedded-shell milestone are implemented.
 See [workspace acceptance](WORKSPACE_ACCEPTANCE.md) for reproducible checks and
 the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset.
 
-### Later: agent compatibility and standalone publication
+### Milestone 3: useful Hydra workspace
 
-- [ ] Run real agent CLIs to drive terminal compatibility, then expand to multiple
-      embedded terminal panes and attention indicators backed by actual observations.
-- [ ] Stabilize the API from Hydra and standalone use, document ownership and limits,
-      and prepare an independently buildable repository with examples and tests.
+- [ ] Establish a reviewed visual target with clear project -> head -> run navigation,
+      prominent selected work, concise status summaries, and contextual actions.
+      Keep raw identifiers and detailed provenance available on demand; avoid
+      repeated hints and diagnostic fields as the primary workspace content.
+- [ ] Make an interactive agent pane a first-class part of the workspace. Users
+      should converse with Codex or another qualified CLI about an objective,
+      inspect its proposed plan alongside the conversation, request revisions,
+      and return to the same agent session while work is running.
+- [ ] Present agent-authored plans through the existing plan workflow: objective,
+      steps, dependencies, inputs/outputs, checks, validation errors and current
+      revision. Distinguish a conversational proposal from a validated executable
+      plan and from a running workflow. Surface explicit approval of the exact
+      plan being executed; revisions invalidate any prior approval.
+- [ ] Design planning, execution and recovery layouts around the same selected
+      project/run context. Preserve draft and session context when changing panes;
+      make focus and whether input reaches an agent or Hydra unambiguous.
 
-Full terminal compatibility, a broad widget catalogue, remote execution changes,
-new telemetry collection, and repository publication are outside the first two
-milestones. Extraction and publication require a separate release decision;
-implementation qualification is not permission to push or publish.
+Acceptance: review concrete narrow/wide layout examples, then use the workspace to
+ask an agent for a plan, request a meaningful revision, inspect validation and the
+changed dependency graph, and explicitly approve that version through the existing
+shell-authoritative workflow. Merely receiving an agent message never starts work.
+Draft, validated, awaiting approval, running and failed states are visibly distinct.
+Coordinate with the planning implementation branch before integration; these UI
+items do not authorize replacing or duplicating its plan/execution contracts.
+
+### Milestone 4: integrated working terminals
+
+- [ ] Attach interactive panes to existing Hydra sessions while preserving tmux
+      ownership. Keep the planning conversation distinct from worker sessions and
+      retain session identity when switching or reconnecting.
+- [ ] Qualify real Codex and other selected agent CLIs, expanding terminal behavior
+      only for observed needs. Exercise interactive prompts, paste, scrolling,
+      resize, full-screen output, interruption and permission requests.
+- [ ] Support multiple terminal panes and switching between agents. Show attention
+      indicators backed by actual observations; distinguish waiting for user input,
+      unknown state, disconnected transport and process exit.
+
+Acceptance: author/revise a plan in the interactive agent pane, switch to a worker's
+existing session, interact with it, then return to the original conversation. Resize
+and reconnect without duplicate execution, lost session identity or damaged terminal
+state. Record tested CLI versions and unsupported behavior explicitly.
+
+### Milestone 5: operational views
+
+- [ ] Integrate workflow graphs, host status, selected-step output, verification
+      evidence, failures and recovery actions into the workspace's navigation and
+      detail panes. Preserve useful existing overview/graph views.
+- [ ] Distinguish observed progress from declared intent, stale or missing data,
+      blocked dependencies and requests for a decision. Offer the next applicable
+      action with enough context to assess its effect.
+- [ ] Keep the interactive agent pane available to discuss a blocked step or revise
+      future work, with explicit scope and approval before execution changes.
+
+Acceptance: trace a failed step from the graph to its output and evidence, understand
+why dependents are waiting, inspect host/data freshness, and perform the supported
+recovery action through the existing CLI. No fabricated progress or inferred success.
+
+### Milestone 6: interaction and visual polish
+
+- [ ] Refine spacing, information density, restrained semantic colors, selection and
+      focus, pane titles, contextual controls and keyboard discoverability.
+- [ ] Add useful search/filtering and deliberate empty, loading, disconnected,
+      failed and unavailable states. Preserve readable monochrome/ASCII behavior.
+- [ ] Adapt layouts to available space, with focus/zoom for the agent conversation,
+      discoverable hidden panes, and retained selection and independent scrolling.
+
+Acceptance: inspect and interact with planning, running, waiting-for-input and failed
+workflows at 40x10, 80x24 and 140x40. Users can identify selected work, current status,
+input destination and next action without consulting raw IDs or overflowing text.
+Compare actual terminal captures against the reviewed visual target; component tests
+alone do not satisfy visual or interaction acceptance.
+
+### Milestone 7: real-workflow acceptance
+
+- [ ] Run a representative multi-agent task from objective discussion and agent-
+      authored plan through revision, explicit approval, execution, intervention,
+      verification and result inspection entirely through the workspace.
+- [ ] Exercise a real request for user input, a failed check and supported recovery,
+      plus detach/reconnect. Fix observed workflow friction within this scope.
+- [ ] Record reproducible terminal evidence and operator findings, distinguishing
+      automated checks from hands-on usability acceptance and untested combinations.
+
+Acceptance: the operator can tell what is happening, communicate with the planning
+agent and workers, make a required decision, recover a failure and inspect verified
+results without losing context or creating another execution owner. Complete this
+workflow before describing the interface as product-ready.
+
+### Milestone 8: standalone library readiness
+
+- [ ] Stabilize the API from real Hydra and standalone use, document storage/process
+      ownership and compatibility limits, and prepare an independently buildable
+      repository with examples and tests.
+- [ ] Qualify the supported platforms and package/license boundaries. Keep Hydra
+      semantics outside termviz and publish only after a separate release decision.
+
+Full terminal compatibility, a broad widget catalogue, new telemetry collection and
+remote execution changes require their own bounded scope. Local implementation and
+qualification do not authorize repository creation, pushing or publication.
 
 ## Simplification alongside feature work
 
