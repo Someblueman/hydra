@@ -52,6 +52,7 @@ case "$1" in
     permission) printf '{"schema_version":1,"type":"permission","request_id":"request_1"}\n'; sleep 10; exit 0 ;;
     cancel|stale) sleep 20; exit 0 ;;
     exit130) exit 130 ;;
+    escaped-nul) printf '%s\n' '{"schema_version":1,"type":"result","text":"abc\u0000def"}'; exit 0 ;;
     *) printf '{"schema_version":1,"type":"observation","status":"running"}\n' ;;
 esac
 printf '{"schema_version":1,"type":"result","text":"exact artifact"}\n'
@@ -76,11 +77,12 @@ if hydra exec --branch agent-fixture --profile fixture --prompt-file "$fixture/p
 [ "$(cat "$worker/starts")" = "$before" ]
 observed_file="$(find "$HYDRA_HOME/state/v2/projects" -name observed-status -print)"
 observed_before="$(cat "$observed_file")"
-for mode in partial malformed oversized nul; do
+for mode in partial malformed oversized nul escaped-nul; do
     printf %s "$mode" > "$fixture/prompt"
-    if hydra exec --branch agent-fixture --profile fixture --prompt-file "$fixture/prompt" --exit-code --json > "$fixture/$mode"; then exit 1; else code=$?; fi
+    if hydra exec --branch agent-fixture --profile fixture --prompt-file "$fixture/prompt" --result-file rejected.txt --exit-code --json > "$fixture/$mode"; then exit 1; else code=$?; fi
     [ "$code" -eq 125 ]
     grep -q malformed_output "$fixture/$mode"
+    [ ! -e "$worker/rejected.txt" ]
     [ "$(cat "$observed_file")" = "$observed_before" ]
 done
 printf complete-only > "$fixture/prompt"

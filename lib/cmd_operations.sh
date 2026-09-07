@@ -62,7 +62,10 @@ cmd_exec() {
         return 1
     fi
     if [ -n "$_ce_profile" ]; then
-        [ $# -eq 0 ] && [ -z "$_ce_shell" ] && [ -n "$_ce_prompt" ] || { cli_error exec invalid_input "profile execution requires --prompt-file and no command argv" "use hydra agent contract <profile>"; return 1; }
+        if [ $# -ne 0 ] || [ -n "$_ce_shell" ] || [ -z "$_ce_prompt" ]; then
+            cli_error exec invalid_input "profile execution requires --prompt-file and no command argv" "use hydra agent contract <profile>"
+            return 1
+        fi
         case "$_ce_prompt" in /*) ;; *) _ce_prompt="$(pwd)/$_ce_prompt" ;; esac
         _load_lib cmd_fleet
         _ce_native="$(fleet_binary)" || return 1

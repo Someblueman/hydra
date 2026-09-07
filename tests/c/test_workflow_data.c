@@ -6,6 +6,36 @@
 #include <unistd.h>
 
 const char *f_home, *f_hydra;
+static void git_ok(char *const args[]) {
+    struct f_capture cap = {0};
+    assert(!f_run(args, NULL, 0, 30, &cap) && !cap.status);
+    f_capture_free(&cap);
+}
+static void fingerprints(const char *root) {
+    char repo[F_PATH], file[F_PATH], missing[F_PATH], first[65], second[65];
+    char *init[] = {"git", "init", "-q", repo, NULL};
+    char *add[] = {"git", "-C", repo, "add", "tracked", NULL};
+    char *commit[] = {"git", "-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgSign=false", "commit", "-qm", "base", NULL};
+    char block[4096]; FILE *large; size_t i;
+    assert(!f_path(repo, sizeof(repo), root, "repo"));
+    assert(!f_path(file, sizeof(file), repo, "tracked"));
+    assert(!f_path(missing, sizeof(missing), repo, "dangling"));
+    git_ok(init);
+    /* A Git failure must not produce an apparently usable binding. */
+    assert(wd_fingerprint(repo, first));
+    assert(!f_write(file, "base\n", 5, false)); git_ok(add); git_ok(commit);
+    assert(!wd_fingerprint(repo, first));
+    assert(!f_write(file, "dirty\n", 6, true));
+    assert(!wd_fingerprint(repo, second) && strcmp(first, second));
+    /* hash-object must fail closed too, even after the preceding reads succeed. */
+    assert(!symlink("missing-target", missing));
+    assert(wd_fingerprint(repo, second)); assert(!unlink(missing));
+    /* A real tracked text diff exceeds the subprocess capture budget. */
+    memset(block, 'x', sizeof(block)); large = fopen(file, "wb"); assert(large);
+    for (i = 0; i <= F_LIMIT / sizeof(block); i++) assert(fwrite(block, 1, sizeof(block), large) == sizeof(block));
+    assert(fputc('\n', large) != EOF && !fclose(large));
+    assert(wd_fingerprint(repo, second));
+}
 static void typed_files(const char *root) {
     const char *types[] = {"object", "array", "string", "number", "boolean"};
     const char *values[] = {"{\"a\":1}", "[1,2]", "\"text\"", "42.5", "true"};
@@ -48,6 +78,6 @@ static void manifests(const char *root) {
 int main(void) {
     char root[] = "/tmp/hydra-workflow-data-test.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    typed_files(root); manifests(root); assert(!f_remove_tree(root));
+    typed_files(root); manifests(root); fingerprints(root); assert(!f_remove_tree(root));
     puts("Workflow data: typed bytes, strict JSON, bounds, digests and manifest boundaries passed"); return 0;
 }

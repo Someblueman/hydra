@@ -17,10 +17,10 @@ int wd_fingerprint(const char *worktree, char digest[65]) {
     json_object *binding = json_object_new_object(); struct f_capture cap = {0}; size_t i; int status = -1;
     if (!mkdtemp(scratch)) { json_object_put(binding); return -1; }
     for (i = 0; i < 4; i++) {
-        if (f_run(commands[i], NULL, 0, 30, &cap)) goto done;
+        if (f_run(commands[i], NULL, 0, 30, &cap) || cap.status) goto done;
         f_string_add(binding, keys[i], cap.out); f_capture_free(&cap);
     }
-    if (f_run(hash, f_string(binding, "untracked"), strlen(f_string(binding, "untracked")), 30, &cap)) goto done;
+    if (f_run(hash, f_string(binding, "untracked"), strlen(f_string(binding, "untracked")), 30, &cap) || cap.status) goto done;
     f_string_add(binding, "untracked_hashes", cap.out);
     status = task_json_hash(binding, scratch, digest);
 done:
