@@ -307,6 +307,79 @@ Acceptance: duplicate triggers and competing workers do not create duplicate tas
 claims. Work growth remains bounded, cancellation propagates, and restart recovery
 does not invent completion or replay uncertain actions.
 
+## Native workspace and standalone termviz track
+
+This track develops dependency-free C terminal infrastructure, using Hydra as its
+first real consumer and eventual standalone release as the direction. Work in the
+existing visualization worktree. Build milestones in order; integrate a real shell
+before expanding the widget catalogue. Existing visualization architecture and
+limits are documented in [VISUALIZATION.md](VISUALIZATION.md) and the
+[termviz module guide](../src/termviz/README.md).
+
+Termviz owns reusable rendering, layout, input routing, and terminal screen
+interpretation. Hydra owns agent/workflow semantics and authoritative actions.
+Keep OS-specific terminal lifecycle and PTY process handling in small adapters,
+separate from the portable core. Add no third-party dependencies. Preserve the
+shell-only path, current CLI/state contracts, and tmux authority for Hydra heads;
+the standalone shell example does not introduce a competing Hydra execution owner.
+
+### Milestone 1: interactive workspace foundation
+
+- [ ] Add retained frames and incremental output: an unchanged frame emits no
+      cell updates, and a localized edit does not clear/repaint the entire screen.
+- [ ] Add nested rectangular layout with minimum sizes, clipping, draggable splits,
+      independent scroll positions, and defined behavior when space is insufficient.
+- [ ] Route keyboard and mouse input through explicit focus and painted hit regions.
+      Each pane receives input and resize events and draws into a clipped surface.
+- [ ] Support UTF-8 text and styled spans with documented display-width behavior,
+      including wide/combining characters and malformed input. Bound text storage;
+      do not claim universal emoji/font shaping compatibility.
+- [ ] Deliver a standalone workspace demo with a navigation tree and two independently
+      scrolling content panes. Integrate the same foundation into Hydra's native UI.
+
+Acceptance: actual PTY checks exercise keyboard/mouse focus, divider dragging,
+independent scrolling, and resize at 40x10, 80x24, and 140x40. No pane paints outside
+its bounds; tiny layouts remain navigable. Capture output to prove unchanged-frame
+and localized-update behavior. Inspect rendered narrow/wide examples and verify
+exact terminal restoration on normal exit, interruption, and relevant failures.
+The standalone build contains no Hydra dependencies.
+
+### Milestone 2: one embedded real shell
+
+- [ ] Implement a bounded terminal screen model and streaming escape-sequence parser,
+      independent of layout and process creation. Document the supported sequence
+      and mode subset; handle fragmented, malformed, and unsupported input safely.
+- [ ] Support the cursor, erase, style, wrap, scrolling-region, primary/alternate-screen,
+      and input-mode behavior required by the qualified shell workflow. Keep scrollback
+      bounded and prevent child output from invoking host-terminal side effects.
+- [ ] Connect one interactive shell through a small POSIX PTY adapter in the workspace
+      demo. Route focused input, propagate resize, drain output without blocking UI
+      interaction, and report child exit/error with explicit process ownership.
+- [ ] Verify shell input, styled output, scrollback, a deterministic full-screen test
+      child, focus changes while output streams, resize propagation, and cleanup.
+      Make the embedded surface reusable by Hydra without replacing head ownership.
+
+Acceptance: launch a real local shell in an embedded pane, execute commands and
+observe their output and exit status, resize and confirm the child terminal size,
+switch focus while it produces output, and return from alternate-screen content.
+PTY and parser tests cover chunk boundaries, malformed sequences, bounded history,
+child exit, and interruption without leaked owned children or damaged outer terminal
+settings. Qualify locally on macOS, preserve POSIX portability, and report untested
+platforms. Run relevant full Hydra checks, supported sanitizers, standalone builds,
+and actual rendered inspection for both milestones; record reproducible evidence.
+
+### Later: agent compatibility and standalone publication
+
+- [ ] Run real agent CLIs to drive terminal compatibility, then expand to multiple
+      embedded terminal panes and attention indicators backed by actual observations.
+- [ ] Stabilize the API from Hydra and standalone use, document ownership and limits,
+      and prepare an independently buildable repository with examples and tests.
+
+Full terminal compatibility, a broad widget catalogue, remote execution changes,
+new telemetry collection, and repository publication are outside the first two
+milestones. Extraction and publication require a separate release decision;
+implementation qualification is not permission to push or publish.
+
 ## Simplification alongside feature work
 
 - [ ] Keep spawn queues, workflow scheduling, and future pools on one admission and
