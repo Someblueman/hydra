@@ -337,6 +337,13 @@ the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset.
       should converse with Codex or another qualified CLI about an objective,
       inspect its proposed plan alongside the conversation, request revisions,
       and return to the same agent session while work is running.
+- [ ] Use conversation-first planning (concept A) as the default, with a discoverable
+      toggle to the comprehensive plan overview (concept B) and back. Expand the
+      dependency graph, validation and approval context on demand while keeping the
+      agent pane available. Preserve the agent session, unsent input, plan revision,
+      selection and pane scroll positions; restore prior focus when returning.
+      Use the monitoring/intervention layout (concept C) during execution, with the
+      same conversation and selected run available across layouts.
 - [ ] Present agent-authored plans through the existing plan workflow: objective,
       steps, dependencies, inputs/outputs, checks, validation errors and current
       revision. Distinguish a conversational proposal from a validated executable
@@ -351,6 +358,9 @@ ask an agent for a plan, request a meaningful revision, inspect validation and t
 changed dependency graph, and explicitly approve that version through the existing
 shell-authoritative workflow. Merely receiving an agent message never starts work.
 Draft, validated, awaiting approval, running and failed states are visibly distinct.
+Toggle from conversation to comprehensive overview and back during plan revision;
+verify that unsent input, session identity, selected step, scroll and focus survive.
+The overview toggle changes presentation only, never approval or execution state.
 Coordinate with the planning implementation branch before integration; these UI
 items do not authorize replacing or duplicating its plan/execution contracts.
 
