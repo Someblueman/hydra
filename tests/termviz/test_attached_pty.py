@@ -1,6 +1,7 @@
 """Real Hydra heads -> identity-checked tmux clients -> embedded terminal input."""
 from pathlib import Path
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -142,6 +143,64 @@ def attached() -> None:
             s.send("printf 'returned' > returned-proof\r")
             s.pump(.5)
             assert (one / "returned-proof").read_text() == "returned"
+            s.send("printf 'multi-one' > multi-proof")
+            s.pump(.1)
+            s.send("\x02S")
+            s.until("Two attached agents")
+            s.send("\x02\t")
+            s.send("printf 'multi-two' > multi-proof")
+            s.pump(.2)
+            assert s.screen.text().count("ATTACHED") == 2, s.screen.text()
+            for mode in ("B", "C"):
+                s.send("\x02" + mode + "\x02S")
+                s.pump(.3)
+                assert s.screen.text().count("ATTACHED") == 2, s.screen.text()
+            s.send("\x02D")
+            s.until("D STATISTICS")
+            s.send("D\x02A")
+            for width, height in [(80, 24), (40, 10), (140, 40)]:
+                s.resize(width, height)
+                s.pump(.3)
+                assert s.screen.overflow == 0, s.screen.text()
+                assert not (one / "multi-proof").exists() and not (two / "multi-proof").exists()
+                s.screen.save(EVIDENCE / f"two-agents-{width}x{height}.html")
+            assert s.screen.text().count("ATTACHED") == 2, s.screen.text()
+            s.send("\r")
+            s.pump(.4)
+            assert (two / "multi-proof").read_text() == "multi-two", s.screen.text()
+            assert not (one / "multi-proof").exists()
+            s.send("\x02n\r")
+            s.pump(.4)
+            assert (one / "multi-proof").read_text() == "multi-one", s.screen.text()
+            s.send('i=0; while [ "$i" -lt 50 ]; do echo HISTORY_A:$i; i=$((i+1)); done\r')
+            s.pump(.4)
+            s.send("\x02[kkkkk")
+            s.pump(.2)
+            history_a = re.findall(r"HISTORY_A:\d+", s.screen.text())
+            assert history_a
+            s.send("\x02\t")
+            s.send('i=0; while [ "$i" -lt 50 ]; do echo HISTORY_B:$i; i=$((i+1)); done\r')
+            s.pump(.4)
+            s.send("\x02[kkkkk\x02n")
+            s.pump(.2)
+            assert re.findall(r"HISTORY_A:\d+", s.screen.text()) == history_a, "Other pane changed scrollback"
+            s.send("\x02]\x02n\x02]\x02n")
+            s.pump(.2)
+            # Derive the second pane hit target from its rendered border label.
+            for y, line in enumerate(s.screen.text().splitlines()):
+                if "─" + rows[1][1] in line:
+                    x = line.index("─" + rows[1][1])
+                    break
+            else:
+                raise AssertionError("Second agent border not rendered")
+            s.send(f"\x1b[<0;{x+4};{y+4}M\x1b[<0;{x+4};{y+4}m")
+            s.send("printf 'mouse-focus' > mouse-multi-proof\r")
+            s.pump(.4)
+            assert (two / "mouse-multi-proof").read_text() == "mouse-focus"
+            assert not (one / "mouse-multi-proof").exists()
+            s.send("\x02n")
+            s.send("\x02S")  # Restore one pane before the client-only reconnect checks.
+            s.pump(.2)
             s.send("printf 'reconnected' > reconnect-proof")
             s.pump(.1)
             s.send("\x02x")

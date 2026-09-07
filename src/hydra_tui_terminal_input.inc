@@ -1,6 +1,6 @@
 static bool native_terminal_focused(struct app *app) {
-    struct native_terminal *t=native_terminal_selected(app);
-    return app->view==7 && app->workspace && app->workspace->layout.focus==3 && t && t->screen;
+    struct native_terminal *t=app->workspace ? native_workspace_terminal(app,app->workspace->layout.focus) : NULL;
+    return app->view==7 && t && t->screen;
 }
 
 static void native_terminal_event(struct app *app, const struct tv_event *e) {
@@ -9,8 +9,19 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
     struct native_workspace *w=app->workspace;
     if (!set || !w) return;
     if (e->type==TV_MOUSE) {
-        struct tv_rect r=w->layout.panes[3].bounds;
+        struct tv_rect r={0,0,0,0};
+        int pane;
         int left=w->compact ? 0 : 1, top=w->compact ? 1 : 2, border=w->compact ? 0 : 1;
+        for (pane=0;pane<w->layout.count;pane++) {
+            struct native_terminal *candidate=native_workspace_terminal(app,pane);
+            struct tv_rect bounds=w->layout.panes[pane].bounds;
+            if (candidate && candidate->screen && e->x>=bounds.x+left && e->x<bounds.x+bounds.width-border &&
+                e->y>=bounds.y+top && e->y<bounds.y+bounds.height-border) {
+                r=bounds; t=candidate;
+                if (e->button==0 && !e->release) { w->layout.focus=pane; native_workspace_sync_terminal(app); }
+                break;
+            }
+        }
         if (t && t->screen && t->screen->mouse_mode && t->screen->mouse_sgr && !t->scrolling &&
             w->layout.drag<0 && e->x>=r.x+left && e->x<r.x+r.width-border && e->y>=r.y+top && e->y<r.y+r.height-border) {
             char bytes[64];
@@ -27,17 +38,19 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
     if (set->prefix) {
         set->prefix=false;
         if (e->key=='q') app->running=false;
-        else if (e->key=='\t') tv_workspace_focus_next(&w->layout,1);
+        else if (e->key=='\t') native_workspace_focus_next(app);
         else if (e->key=='D') statistics_toggle(app);
         else if (e->key=='A' || e->key=='B' || e->key=='C') native_workspace_mode(app,(int)e->key-'A');
         else if (e->key=='z') (void)native_workspace_key(app,'z');
+        else if (e->key=='S') native_workspace_split_agents(app);
         else if (e->key=='n') {
             size_t i;
             for (i=1;i<=NATIVE_TERMINALS;i++) {
                 size_t next=(set->selected+i)%NATIVE_TERMINALS;
                 if (set->slots[next].screen) {
                     size_t head;
-                    set->selected=next; w->layout.focus=3; app->view=7;
+                    set->selected=next; app->view=7;
+                    native_workspace_show_terminal(app,true);
                     for (head=0;head<app->model.head_count;head++)
                         if (!strcmp(app->model.heads[head].head_id,set->slots[next].head) &&
                             !strcmp(app->model.heads[head].instance,set->slots[next].instance)) { app->selected=head; break; }

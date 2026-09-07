@@ -400,7 +400,7 @@ static int interactive_main(struct app *app) {
         else if (key == '/') interactive_prompt(app, '/');
         else if (app->fleet && key == 'a') fleet_action(app, true);
         else if (app->view == 7 && key == 'a') {
-            if (native_terminal_attach(app)) app->workspace->layout.focus=3;
+            if (native_terminal_attach(app)) native_workspace_show_terminal(app,true);
         }
         else if (app->fleet && key == 'c') fleet_action(app, false);
         else if (app->fleet && (key == ':' || key == 'p' || key == ' ' || key == 'A' || key == 'x' || key == 'G')) copy_text(app->notice, sizeof(app->notice), "Fleet: a attach, c interrupt, v views, / search, q quit");

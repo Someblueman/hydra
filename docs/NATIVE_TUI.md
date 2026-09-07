@@ -125,6 +125,7 @@ row; selection markers and labels remain usable with `NO_COLOR` or `--no-color`.
 | `D` | Toggle statistics; retain filters and previous workspace context |
 | `a` in workspace | Attach the selected head in the conversation pane |
 | `Ctrl-B` in conversation | Prefix for Hydra focus, view, client and exit controls |
+| `S` in workspace / `Ctrl-B S` in conversation | Toggle two visible attached agents in the current layout |
 | `W` / `Tab` | Open workspace / cycle workspace pane focus |
 | `h` / `l` in workspace | Collapse / expand navigation tree |
 | `o` / `w` / `H` | Open overview / workflow graph / hosts |

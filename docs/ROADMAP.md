@@ -395,6 +395,11 @@ existing session, interact with it, then return to the original conversation. Re
 and reconnect without duplicate execution, lost session identity or damaged terminal
 state. Record tested CLI versions and unsupported behavior explicitly.
 
+The workspace now supports two visible existing tmux clients per A/B/C layout,
+with four cached clients, independent scrollback and focus, and retained unsent
+drafts across layout changes. Narrow layouts reveal one focused agent at a time.
+Real agent qualification and observation-backed attention indicators remain open.
+
 ### Milestone 5: operational views
 
 - [ ] Integrate workflow graphs, host status, selected-step output, verification
@@ -428,8 +433,8 @@ output, request/binding inspection, fresh artifact verification with tamper refu
 and explicit approve/reject/resume/cancel controls. The controls retain the engine's
 separate decision/resume boundary and do not restart terminal runs. PTY tests cover
 an existing approval-wait workflow and preserve an attached shell's unsent draft
-through decisions and UI closure. This does not qualify agent-authored planning,
-extend the compiled-plan schema, or complete the project/head/run navigation work.
+through decisions and UI closure. Local project/head/run navigation is connected.
+Agent-authored planning remains unqualified; the compiled-plan schema is unchanged.
 
 ### Milestone 6: interaction and visual polish
 

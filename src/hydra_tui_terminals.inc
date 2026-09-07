@@ -123,8 +123,7 @@ static void native_terminals_pump(struct app *app) {
     }
 }
 
-static void native_terminal_draw(struct app *app, struct tv_canvas *c, bool focused) {
-    struct native_terminal *t=native_terminal_selected(app);
+static void native_terminal_draw(struct app *app, struct native_terminal *t, struct tv_canvas *c, bool focused) {
     if (!t || !t->screen) return;
     if (c->width!=t->screen->primary.canvas.width || c->height!=t->screen->primary.canvas.height) {
         if (!tv_term_resize(t->screen,c->width,c->height) ||

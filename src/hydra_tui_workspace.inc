@@ -12,6 +12,7 @@ struct native_workspace {
     char collapsed[MAX_HEADS][TEXT];
     size_t collapsed_count;
     bool run_selected;
+    struct { int first; size_t slots[2]; } agents[3];
     struct tv_cell *cells, *previous;
     struct tv_presenter presenter;
     int theme;
@@ -50,6 +51,8 @@ static bool native_workspace_init(struct app *app) {
     return true;
 }
 
+#include "hydra_tui_workspace_terminals.inc"
+
 static void native_workspace_mode(struct app *app, int mode) {
     struct native_workspace *w;
     if (!native_workspace_init(app)) return;
@@ -64,7 +67,9 @@ static void native_workspace_mode(struct app *app, int mode) {
         (void)tv_workspace_split(&w->layout,4,TV_ROWS,500);
         w->layout.panes[3].min_width=40; w->layout.focus=3; w->zoom=false;
     }
-    w->mode=mode; app->view=7; native_workspace_invalidate(app);
+    w->mode=mode; app->view=7;
+    native_workspace_show_terminal(app,false);
+    native_workspace_invalidate(app);
 }
 
 static void native_workspace_tree(struct app *app) {
@@ -135,12 +140,13 @@ static void native_workspace_select(struct app *app) {
 static void native_workspace_move(struct app *app, int direction) {
     struct native_workspace *w = app->workspace;
     if (!w) return;
-    if (w->layout.focus == 3 && native_terminal_selected(app) && native_terminal_selected(app)->screen) {
-        struct native_terminal *t=native_terminal_selected(app);
+    if (native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen) {
+        struct native_terminal *t=native_workspace_terminal(app,w->layout.focus);
         t->scrolling=true;
         if (direction<0 && t->scroll<t->screen->history_count) t->scroll++;
         if (direction>0 && t->scroll) t->scroll--;
     }
+    else if (native_workspace_agent_index(w,w->layout.focus)>=0) tv_workspace_scroll(&w->layout,direction,13);
     else if (w->layout.focus==5) {
         size_t *selected=w->mode==1 && app->plan ? &app->plan->selected : &app->workflow_node;
         size_t indices[TV_GRAPH_MAX_NODES];
@@ -150,7 +156,7 @@ static void native_workspace_move(struct app *app, int direction) {
         if (direction>0 && *selected+1<count) (*selected)++;
     }
     else if (w->layout.focus == 1) { tv_tree_move(&w->tree, direction); native_workspace_select(app); }
-    else tv_workspace_scroll(&w->layout, direction, w->layout.focus == 3 ? 13 : w->layout.focus==6 ? NATIVE_PLAN_TEXT : app->model.recovery_count + 5);
+    else tv_workspace_scroll(&w->layout, direction, w->layout.focus==6 ? NATIVE_PLAN_TEXT : app->model.recovery_count + 5);
 }
 
 static bool native_workspace_key(struct app *app, char key) {
@@ -163,7 +169,8 @@ static bool native_workspace_key(struct app *app, char key) {
         copy_text(app->notice,sizeof(app->notice),w->zoom ? "Focused pane expanded / z restores splits" : "Pane splits restored");
         return true;
     }
-    if (key == '\t') { tv_workspace_focus_next(&w->layout, 1); return true; }
+    if (key == 'S') { native_workspace_split_agents(app); return true; }
+    if (key == '\t') { native_workspace_focus_next(app); return true; }
     if (w->layout.focus == 1 && (key == 'h' || key == 'l')) {
         size_t index=w->tree.selected, k;
         tv_tree_expand(&w->tree, key == 'l');
@@ -202,6 +209,7 @@ static void native_workspace_mouse(struct app *app, unsigned button, int x, int 
     if (button == 0 || button == 64 || button == 65) {
         if (!tv_workspace_press(&w->layout, x, y)) return;
         if (w->layout.drag >= 0) return;
+        native_workspace_sync_terminal(app);
         if (button == 64 || button == 65) native_workspace_move(app, button == 64 ? -1 : 1);
         else if (w->layout.focus == 1) {
             (void)tv_tree_click(&w->tree, w->layout.panes[1].scroll, y - w->layout.panes[1].bounds.y - (w->compact ? 1 : 2));
@@ -282,6 +290,8 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
     for (i = 0; i < w->layout.count; i++) {
         struct tv_pane *p = &w->layout.panes[i];
         struct tv_canvas view, content;
+        struct native_terminal *t=native_workspace_terminal(app,i);
+        bool agent=native_workspace_agent_index(w,i)>=0, attached=t && t->screen;
         if (p->split != TV_LEAF) {
             for (y = 0; y < p->divider.height; y++) for (x = 0; x < p->divider.width; x++)
                 tv_put(&c, p->divider.x+x, p->divider.y+y, p->split == TV_COLUMNS ? (app->ascii ? '|' : 0x2502) : (app->ascii ? '-' : 0x2500), TV_BORDER);
@@ -289,27 +299,24 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
         }
         if (!tv_canvas_view(&view, &c, p->bounds)) continue;
         {
-            struct native_terminal *t=native_terminal_selected(app);
-            bool attached=i==3 && t && t->screen;
             if (compact) {
                 if (attached) dashboard_text(&view,0,0,view.width,TV_SELECTED,"%.14s / %s",t->label,
                     t->client.finished || t->client.eof ? "DISCONNECTED" : "INPUT TO AGENT");
-                else dashboard_text(&view,0,0,view.width,TV_SELECTED,"FOCUS / %s",i==1 ? "NAVIGATION" : i==3 ? "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
-            } else tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : i == 3 ? attached ? t->label : "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
+                else dashboard_text(&view,0,0,view.width,TV_SELECTED,"FOCUS / %s",i==1 ? "NAVIGATION" : agent ? "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
+            } else tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : agent ? attached ? t->label : "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
             if (!compact && attached) dashboard_text(&view,1,1,view.width-2,i==w->layout.focus ? TV_SELECTED : TV_BORDER,
                 "%s / %s", t->client.finished || t->client.eof ? "CLIENT DISCONNECTED" : "ATTACHED",
                 t->client.finished || t->client.eof ? "NO INPUT / Ctrl-B r reconnect" :
                 i==w->layout.focus ? "INPUT TO AGENT / Ctrl-B Tab Hydra" : "Tab to interact");
         }
-        if (!compact && (i!=3 || !native_terminal_selected(app) || !native_terminal_selected(app)->screen))
+        if (!compact && !attached)
             dashboard_text(&view, 1, 1, view.width-2, i == w->layout.focus ? TV_SELECTED : TV_BORDER,
                            "%s / scroll %zu", i == w->layout.focus ? "FOCUS" : "Tab to focus", p->scroll);
         if (!tv_canvas_view(&content, &view, compact ? (struct tv_rect){0,1,view.width,view.height-1} :
             (struct tv_rect){1,2,view.width-2,view.height-3})) continue;
         if (i == 1) tv_tree_draw(&w->tree, &content, &w->layout.panes[1].scroll, w->layout.focus == 1);
-        else if (i == 3 && native_terminal_selected(app) && native_terminal_selected(app)->screen)
-            native_terminal_draw(app,&content,w->layout.focus==3);
-        else if (i == 3) native_workspace_details(app, &content, p->scroll);
+        else if (attached) native_terminal_draw(app,t,&content,w->layout.focus==i);
+        else if (agent) native_workspace_details(app, &content, p->scroll);
         else if (i==5) native_workspace_graph(app,&content,w->mode==1);
         else if (i==6 && w->mode==2) native_workspace_evidence_text(app,&content,&p->scroll);
         else if (i==6 || (i==4 && app->plan)) native_workspace_plan_text(app,&content,&p->scroll);
@@ -320,14 +327,16 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
         dashboard_text(&c, 0, height-2, width, app->snapshot_stale ? TV_WARNING : TV_BORDER, "%s snapshot / age %lds%s%s",
             app->snapshot_stale ? "STALE: last good" : "Current", age < 0 ? 0 : age, notice[0] ? " / " : "",notice);
     }
-    if (compact && app->notice[0] && !(w->layout.focus==3 && native_terminal_selected(app) && native_terminal_selected(app)->screen))
+    if (w->layout.focus==1 && w->run_selected)
+        tv_text(&c,(struct tv_rect){0,height-1,width,1},"Enter evidence / h parent / Tab panes",TV_STRONG);
+    else if (compact && app->notice[0] && !(native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen))
         tv_text(&c,(struct tv_rect){0,height-1,width,1},app->notice,TV_WARNING);
     else tv_text(&c, (struct tv_rect){0,height-1,width,1},
-            w->layout.focus==3 && native_terminal_selected(app) && native_terminal_selected(app)->screen ?
+            native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen ?
             (native_terminal_selected(app)->client.finished || native_terminal_selected(app)->client.eof ?
-             "DISCONNECTED / Ctrl-B r reconnect" : width<100 ? "Ctrl-B Tab Hydra / Ctrl-B q quit" :
-             "INPUT TO AGENT / Ctrl-B Tab Hydra / Ctrl-B z zoom / Ctrl-B D statistics / Ctrl-B n next / Ctrl-B q quit") : compact && w->mode==2 ? "Y approve N reject R resume X cancel" : width < 60 ? "Tab panes j/k scroll D stats q quit" : width < 100 ? "Tab focus z zoom a interact D statistics q quit" :
-            "Tab focus / j k scroll / h l tree / drag splits / a interact / D statistics / : actions / q quit", TV_STRONG);
+             "DISCONNECTED / Ctrl-B r reconnect" : width<100 ? "Ctrl-B: Tab Hydra / S split / q quit" :
+             "INPUT TO AGENT / Ctrl-B Tab focus / Ctrl-B S split / Ctrl-B D statistics / Ctrl-B n next / Ctrl-B q quit") : compact && w->mode==2 ? "Y approve N reject R resume X cancel" : width < 60 ? "Tab panes j/k scroll D stats q quit" : width < 100 ? "Tab focus z zoom a interact S split D stats q quit" :
+            "Tab focus / j k scroll / h l tree / drag splits / a interact / S split agents / D statistics / : actions / q quit", TV_STRONG);
     if (headless) {
         printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
         for (y = 0; y < height; y++) { (void)tv_write_row(&c, y, stdout, NULL, NULL); putchar('\n'); }

@@ -5,6 +5,11 @@ tmux session appears in the conversation pane. The pane owns a tmux attachment
 client and terminal screen storage; tmux continues owning the agent and its shell.
 Opening, switching or closing clients does not create another agent execution.
 Up to four clients remain attached while the UI is open.
+After attaching two heads, `S` in Hydra or `Ctrl-B S` in an agent toggles two
+visible agent panes in the current layout. A/B/C retain their own split and focus.
+Each visible pane has a different client and independent scrollback; changing
+focus also selects that agent's head. Narrow layouts expose the focused pane,
+and focus cycling reaches the other one. Closing a split does not close a client.
 
 ## Input and navigation
 
@@ -15,6 +20,7 @@ identifies the head and input destination. Hydra commands use a Ctrl-B prefix:
 | --- | --- |
 | `Ctrl-B`, `Tab` | Move focus back to Hydra's other panes |
 | `Ctrl-B`, `z` | Expand the focused pane or restore its saved splits |
+| `Ctrl-B`, `S` | Toggle one/two visible agent panes after attaching two heads |
 | `Ctrl-B`, `D` | Open statistics; `D` there returns to the same conversation |
 | `Ctrl-B`, `n` | Switch to the next attached client and select its head |
 | `Ctrl-B`, `[` / `]` | Enter scrollback / return to live terminal output |
