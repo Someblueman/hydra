@@ -130,11 +130,33 @@ def attached() -> None:
             s.send("\r")
             s.pump(.4)
             assert (one / "reconnect-proof").read_text() == "reconnected"
+            s.send("printf 'zoom-draft' > zoom-proof")
+            s.pump(.1)
+            s.send("\x02z")
+            s.until("z restore panes")
+            assert "NAVIGATION" not in s.screen.text(), "Zoom retained hidden pane content"
+            s.send("\x02D")
+            s.until("D STATISTICS")
+            s.send("D")
+            s.until("z restore panes")
+            s.send("\x02z")
+            s.until("NAVIGATION")
+            assert not (one / "zoom-proof").exists()
+            s.send("\r")
+            s.pump(.4)
+            assert (one / "zoom-proof").read_text() == "zoom-draft"
             s.screen.save(EVIDENCE / "attached-140x40.html")
             for cols, rows_count in [(80, 24), (40, 10), (140, 40)]:
                 s.resize(cols, rows_count)
                 s.pump(.3)
                 assert s.screen.overflow == 0
+                s.send("stty size > size-proof\r")
+                s.pump(.3)
+                terminal_rows, terminal_cols = map(int, (one / "size-proof").read_text().split())
+                if cols == 40:
+                    assert terminal_rows >= 6 and terminal_cols >= 35, "Compact conversation is too small"
+                    assert "NAVIGATION" not in s.screen.text()
+                    assert "INPUT TO AGENT" in s.screen.text()
                 s.screen.save(EVIDENCE / f"attached-{cols}x{rows_count}.html")
             run("tmux", "detach-client", "-s", "=" + rows[0][2])
             s.until("CLIENT DISCONNECTED")

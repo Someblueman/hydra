@@ -14,6 +14,7 @@ identifies the head and input destination. Hydra commands use a Ctrl-B prefix:
 | Keys | Action |
 | --- | --- |
 | `Ctrl-B`, `Tab` | Move focus back to Hydra's other panes |
+| `Ctrl-B`, `z` | Expand the focused pane or restore its saved splits |
 | `Ctrl-B`, `D` | Open statistics; `D` there returns to the same conversation |
 | `Ctrl-B`, `n` | Switch to the next attached client and select its head |
 | `Ctrl-B`, `[` / `]` | Enter scrollback / return to live terminal output |
@@ -22,6 +23,11 @@ identifies the head and input destination. Hydra commands use a Ctrl-B prefix:
 | `Ctrl-B`, `r` | Reconnect the same recorded instance after client disconnection |
 | `Ctrl-B`, `q` | Exit Hydra and close its attachment clients |
 | `Ctrl-B`, `Ctrl-B` | Send a literal Ctrl-B to tmux |
+
+At narrow sizes (below 65 content columns or 16 rows), compact chrome shows only
+the focused pane. Tab still reaches hidden panes. At larger sizes, `z` while
+Hydra has focus, or `Ctrl-B z` from an agent, toggles focus zoom. The saved pane
+splits and scroll remain intact, including across a statistics round trip.
 
 Clicking another workspace pane transfers focus. When the child requests mouse
 reports, content-area reports are translated into its own coordinates. Pane borders
@@ -82,5 +88,8 @@ closing/reopening only the attachment client. The first model request failed
 because the saved login could not refresh. No model response, tool permission
 interaction or agent-authored plan is qualified by this observation. Local
 captures are in `build/codex-terminal-evidence/`; credentials must be refreshed
-before the remaining live acceptance can run. At 40x10 the current split leaves
-the composer too little room; focus zoom remains a required UI correction.
+before the remaining live acceptance can run. The initial 40x10 split left the
+composer too little room. Compact focused-pane rendering now exposes the real
+Codex composer and its unsent draft at that size; the follow-up capture is
+`build/codex-terminal-evidence/compact-draft-40x10.txt`. This corrects the observed
+layout problem without claiming model or permission-request qualification.

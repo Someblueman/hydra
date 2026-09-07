@@ -10,10 +10,11 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
     if (!set || !w) return;
     if (e->type==TV_MOUSE) {
         struct tv_rect r=w->layout.panes[3].bounds;
+        int left=w->compact ? 0 : 1, top=w->compact ? 1 : 2, border=w->compact ? 0 : 1;
         if (t && t->screen && t->screen->mouse_mode && t->screen->mouse_sgr && !t->scrolling &&
-            w->layout.drag<0 && e->x>r.x && e->x<r.x+r.width-1 && e->y>=r.y+2 && e->y<r.y+r.height-1) {
+            w->layout.drag<0 && e->x>=r.x+left && e->x<r.x+r.width-border && e->y>=r.y+top && e->y<r.y+r.height-border) {
             char bytes[64];
-            int n=snprintf(bytes,sizeof(bytes),"\033[<%u;%d;%d%c",e->button,e->x-r.x,e->y-r.y-1,e->release ? 'm' : 'M');
+            int n=snprintf(bytes,sizeof(bytes),"\033[<%u;%d;%d%c",e->button,e->x-r.x-left+1,e->y-r.y-top+1,e->release ? 'm' : 'M');
             if (n>0 && (size_t)n<sizeof(bytes)) native_terminal_send(app,t,bytes,(size_t)n);
         } else native_workspace_mouse(app,e->button,e->x,e->y,e->release);
         return;
@@ -28,6 +29,7 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
         if (e->key=='q') app->running=false;
         else if (e->key=='\t') tv_workspace_focus_next(&w->layout,1);
         else if (e->key=='D') statistics_toggle(app);
+        else if (e->key=='z') (void)native_workspace_key(app,'z');
         else if (e->key=='n') {
             size_t i;
             for (i=1;i<=NATIVE_TERMINALS;i++) {
