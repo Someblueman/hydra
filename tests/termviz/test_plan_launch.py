@@ -116,7 +116,25 @@ with tempfile.TemporaryDirectory(prefix="hydra-plan-launch-") as folder:
         assert run(hydra, "workflow", "--workspace-evidence", run_id, "../", check=False).returncode != 0
         s = Session([str(BUILD / "hydra-tui"), "--hydra", hydra], 140, 40, env=env, cwd=repo)
         s.until("A CONVERSATION")
-        s.send("C\t\tz")
+        links = run(hydra, "workflow", "--workspace-links").stdout.splitlines()
+        assert links[0] == "HYDRA_WORKSPACE_LINKS\t1" and links[-1] == "Z", links
+        assert len([line for line in links if line.startswith("L\t" + run_id + "\t")]) == 1, links
+        s.send("z")  # Project/head/run tree, using the actual recorded graph.
+        s.until("plan-fixture / succeeded", timeout=15)
+        s.send("j")
+        s.until("Recorded branch reference")
+        s.send("hh")  # Parent, then collapse its historical run references.
+        s.pump(2.5)
+        assert "plan-fixture / succeeded" not in s.screen.text()
+        s.send("l")
+        s.until("plan-fixture / succeeded")
+        s.send("j")
+        for width, height in [(40, 10), (80, 24), (140, 40)]:
+            s.resize(width, height)
+            s.pump(.3)
+            assert s.screen.overflow == 0
+            s.screen.save(evidence / f"navigation-{width}x{height}.html")
+        s.send("\rz")  # Selected run opens monitoring evidence directly.
         s.until("VERIFIED ARTIFACTS", timeout=15)
         s.send("j" * 200)
         s.until("VERIFIED: result retrieval")

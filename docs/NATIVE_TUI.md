@@ -37,7 +37,7 @@ instead of becoming an unqualified event authority.
 
 ## Views and confidence
 
-The interactive default is the workspace: a head navigation tree, selected-head
+The interactive default is the workspace: a project/head/run tree, selected-head
 details, and activity/recovery panes. `Tab` cycles focus; `j/k` navigate the tree
 or scroll the focused content pane independently; `h/l` collapse/expand tree
 branches. Drag either divider to resize. When minimum sizes cannot fit, focus
@@ -306,7 +306,14 @@ These controls do not extend the planning schema: compiled plans still support
 spawn/exec only, with zero retry and repair budgets. Existing workflow definitions
 can contain approval waits. Revising execution scope needs fresh approval.
 
-Real agent-authored acceptance and complete project/head/run navigation remain on
+The local navigation tree groups recorded runs beneath matching head branches;
+runs without a visible matching head remain under the current project. Enter on
+a run opens its monitoring evidence. Head expansion and selected run survive
+refresh and layout changes. Associations come from recorded graph arguments,
+not current instance ownership. The read-only projection is bounded to 32 runs
+and 512 branch references, matching the graph view's run limit.
+
+Real agent-authored acceptance and final workspace visual review remain on
 the roadmap. Real Codex model-response qualification remains blocked by the local
 CLI login, despite verified composer, resizing and reconnect behavior.
 

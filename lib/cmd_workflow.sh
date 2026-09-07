@@ -3,6 +3,11 @@
 cmd_workflow() {
     _cw_action="${1:-}"
     case "$_cw_action" in
+        --workspace-links)
+            [ "$#" -eq 1 ] || return 2
+            _load_lib workflow_links
+            workflow_links
+            ;;
         --workspace-control)
             _load_lib workflow_control
             shift

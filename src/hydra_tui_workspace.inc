@@ -6,7 +6,12 @@ struct native_workspace {
     bool saved_zoom[3], initialized[3];
     int mode;
     struct tv_tree tree;
-    struct tv_tree_node nodes[MAX_HEADS + 1];
+    struct tv_tree_node nodes[MAX_HEADS + 1 + 512 + WF_RUNS];
+    char run_labels[WF_RUNS][200];
+    char project_label[256];
+    char collapsed[MAX_HEADS][TEXT];
+    size_t collapsed_count;
+    bool run_selected;
     struct tv_cell *cells, *previous;
     struct tv_presenter presenter;
     int theme;
@@ -67,12 +72,42 @@ static void native_workspace_tree(struct app *app) {
     size_t i, count = 1, chosen = 0;
     bool root_selected = w->tree.count && !w->tree.selected;
     if (w->tree.count) w->root_open = w->nodes[0].expanded;
-    w->nodes[0] = (struct tv_tree_node){app->fleet ? "Fleet heads" : "Local heads", SIZE_MAX, 0, w->root_open, TV_STRONG};
+    bool matched[WF_RUNS]={false};
+    size_t r;
+    if (app->links) {
+        const char *name=strrchr(app->links->root,'/');
+        snprintf(w->project_label,sizeof(w->project_label),"Project: %.180s%s",name ? name+1 : app->links->root,
+            app->links->stale ? " / LINKS STALE" : "");
+    }
+    w->nodes[0] = (struct tv_tree_node){app->fleet ? "Fleet heads" : app->links ? w->project_label : "Current project", SIZE_MAX, 0, w->root_open, TV_STRONG};
+    for (i=0;i<w->collapsed_count;) {
+        size_t h;
+        for (h=0;h<app->model.head_count;h++) if (!strcmp(w->collapsed[i],app->model.heads[h].branch)) break;
+        if (h<app->model.head_count) i++;
+        else { w->collapsed_count--; memcpy(w->collapsed[i],w->collapsed[w->collapsed_count],TEXT); }
+    }
+    if (!app->fleet && app->workflows) for (r=0;r<app->workflows->run_count;r++)
+        snprintf(w->run_labels[r],sizeof(w->run_labels[r]),"%s / %s / %s",app->workflows->runs[r].name,
+            app->workflows->runs[r].state,app->workflows->runs[r].id);
     retarget_selection(app);
     for (i = 0; i < app->model.head_count; i++) if (head_matches(&app->model.heads[i], app->search)) {
         const struct head *h = &app->model.heads[i];
+        size_t k;
+        bool expanded=true;
+        for (k=0;k<w->collapsed_count;k++) if (!strcmp(w->collapsed[k],h->branch)) expanded=false;
         if (i == app->selected) chosen = count;
-        w->nodes[count++] = (struct tv_tree_node){h->branch, i, 1, false, !strcmp(display_status(h), "LIVE") ? TV_BASE : TV_WARNING};
+        w->nodes[count++] = (struct tv_tree_node){h->branch, i, 1, expanded, !strcmp(display_status(h), "LIVE") ? TV_BASE : TV_WARNING};
+        if (!app->fleet && app->workflows) for (r=0;r<app->workflows->run_count;r++) if (native_links_match(app,r,i)) {
+            if (count>=sizeof(w->nodes)/sizeof(w->nodes[0])) break;
+            matched[r]=true;
+            if (w->run_selected && r==app->workflow_run && i==app->selected && expanded) chosen=count;
+            w->nodes[count++] = (struct tv_tree_node){w->run_labels[r],(r+1)*(MAX_HEADS+1)+i,2,false,TV_BORDER};
+        }
+    }
+    if (!app->fleet && app->workflows) for (r=0;r<app->workflows->run_count;r++) if (!matched[r]) {
+        if (count>=sizeof(w->nodes)/sizeof(w->nodes[0])) break;
+        if (w->run_selected && r==app->workflow_run) chosen=count;
+        w->nodes[count++]=(struct tv_tree_node){w->run_labels[r],(r+1)*(MAX_HEADS+1)+MAX_HEADS,1,false,TV_BORDER};
     }
     (void)tv_tree_init(&w->tree, w->nodes, count);
     w->tree.selected = root_selected ? 0 : chosen;
@@ -80,8 +115,21 @@ static void native_workspace_tree(struct app *app) {
 
 static void native_workspace_select(struct app *app) {
     struct native_workspace *w = app->workspace;
-    if (w->tree.selected < w->tree.count && w->nodes[w->tree.selected].value < app->model.head_count)
-        app->selected = w->nodes[w->tree.selected].value;
+    size_t value,head;
+    if (w->tree.selected>=w->tree.count) return;
+    value=w->nodes[w->tree.selected].value;
+    w->run_selected=value!=SIZE_MAX && value>=MAX_HEADS+1;
+    if (value==SIZE_MAX) return;
+    head=value%(MAX_HEADS+1);
+    if (head<app->model.head_count) app->selected=head;
+    if (w->run_selected) {
+        size_t run=value/(MAX_HEADS+1)-1;
+        if (app->workflows && run<app->workflows->run_count) {
+            if (app->workflow_run!=run) app->workflow_node=0;
+            app->workflow_run=run;
+            copy_text(app->notice,sizeof(app->notice),"Recorded branch reference; current instance ownership is not implied");
+        }
+    }
 }
 
 static void native_workspace_move(struct app *app, int direction) {
@@ -117,7 +165,25 @@ static bool native_workspace_key(struct app *app, char key) {
     }
     if (key == '\t') { tv_workspace_focus_next(&w->layout, 1); return true; }
     if (w->layout.focus == 1 && (key == 'h' || key == 'l')) {
-        tv_tree_expand(&w->tree, key == 'l'); native_workspace_select(app); return true;
+        size_t index=w->tree.selected, k;
+        tv_tree_expand(&w->tree, key == 'l');
+        if (index<w->tree.count && w->nodes[index].value<app->model.head_count) {
+            const char *branch=app->model.heads[w->nodes[index].value].branch;
+            for (k=0;k<w->collapsed_count;k++) if (!strcmp(w->collapsed[k],branch)) break;
+            if (w->nodes[index].expanded && k<w->collapsed_count) {
+                w->collapsed_count--; memcpy(w->collapsed[k],w->collapsed[w->collapsed_count],TEXT);
+            } else if (!w->nodes[index].expanded && k==w->collapsed_count && k<MAX_HEADS)
+                copy_text(w->collapsed[w->collapsed_count++],TEXT,branch);
+        }
+        native_workspace_select(app); return true;
+    }
+    if (w->layout.focus==1 && w->run_selected && (key=='\r' || key=='\n')) {
+        native_workspace_mode(app,2); w->layout.focus=6; return true;
+    }
+    if (w->layout.focus==1 && w->run_selected &&
+        w->nodes[w->tree.selected].value%(MAX_HEADS+1)==MAX_HEADS && strchr(":ac",key)) {
+        copy_text(app->notice,sizeof(app->notice),"This run has no matching visible head; Enter opens its evidence");
+        return true;
     }
     if ((key == '\r' || key == '\n' || key == ':' || key == 'a' || key == 'c') &&
         w->layout.focus == 1 && !w->tree.selected) {
@@ -156,7 +222,7 @@ static void native_workspace_details(struct app *app, struct tv_canvas *c, size_
         case 2: snprintf(text, sizeof(text), "Agent: %s / %s", h->profile, h->adapter); break;
         case 3: snprintf(text, sizeof(text), "Group: %s", h->group[0] ? h->group : "none"); break;
         case 4: snprintf(text, sizeof(text), "Host: %s", app->fleet ? h->remote_host : "local"); break;
-        case 5: snprintf(text, sizeof(text), "Project: %s", app->fleet ? h->remote_project : "current project"); break;
+        case 5: snprintf(text, sizeof(text), "Project: %.990s", app->fleet ? h->remote_project : app->links ? app->links->root : "current project"); break;
         case 6:
             if (app->fleet || !h->head_id[0]) snprintf(text,sizeof(text),"Activity counters unavailable");
             else snprintf(text,sizeof(text),"%u changed files / %u queued entries",h->diff,h->queue);

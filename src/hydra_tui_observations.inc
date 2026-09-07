@@ -1,17 +1,18 @@
 /* One in-flight read per source. Completed snapshots replace whole models;
  * terminal input and output continue while an adapter runs or times out. */
-struct native_observations { struct native_capture jobs[3]; };
+struct native_observations { struct native_capture jobs[4]; };
 
 static void native_observations_cancel(struct app *app, size_t source) {
-    if (app->observations && source<3) native_capture_destroy(&app->observations->jobs[source]);
+    if (app->observations && source<4) native_capture_destroy(&app->observations->jobs[source]);
 }
 
 static void native_observations_destroy(struct app *app) {
     size_t i;
     native_evidence_destroy(app);
+    free(app->links); app->links=NULL;
     native_controls_tick(app); /* Reap finished owners; active owners survive UI exit. */
     if (!app->observations) return;
-    for (i=0;i<3;i++) native_capture_destroy(&app->observations->jobs[i]);
+    for (i=0;i<4;i++) native_capture_destroy(&app->observations->jobs[i]);
     free(app->observations); app->observations=NULL;
 }
 
@@ -24,9 +25,9 @@ static void native_observations_tick(struct app *app, bool request) {
         if (!request) return;
         app->observations=calloc(1,sizeof(*app->observations));
         if (!app->observations) return;
-        for (i=0;i<3;i++) app->observations->jobs[i].fd=-1;
+        for (i=0;i<4;i++) app->observations->jobs[i].fd=-1;
     }
-    for (i=0;i<3;i++) {
+    for (i=0;i<4;i++) {
         struct native_capture *p=&app->observations->jobs[i];
         if (p->pid && native_capture_step(p)) {
             FILE *input;
@@ -40,15 +41,17 @@ static void native_observations_tick(struct app *app, bool request) {
                     "shell data adapter timed out; showing last good snapshot" : "shell data adapter failed; showing last good snapshot");
                 if (app->fleet && app->statistics) statistics_visible(app);
             } else if (i==1) (void)accept_workflows(app,input);
-            else (void)accept_statistics(app,input);
+            else if (i==2) (void)accept_statistics(app,input);
+            else native_links_accept(app,input);
         }
-        if (request && !p->pid && (i==0 || (!app->fleet && ((i==1 && (app->view==5 || app->view==7)) || (i==2 && app->view==8))))) {
+        if (request && !p->pid && (i==0 || (!app->fleet && ((i==1 && (app->view==5 || app->view==7)) || (i==2 && app->view==8) || (i==3 && app->view==7))))) {
             char *argv[]={(char *)app->hydra,i==0 ? app->fleet ? "fleet" : "tui" : "workflow",
-                i==0 ? app->fleet ? "tui-visual-data" : "--data" : i==1 ? "tui-data" : "statistics-data",NULL};
+                i==0 ? app->fleet ? "tui-visual-data" : "--data" : i==1 ? "tui-data" : i==2 ? "statistics-data" : "--workspace-links",NULL};
             if (!native_capture_start(p,argv,app->fleet ? 3500 : 2000)) {
                 if (i==0) { record_snapshot(app,false); copy_text(app->snapshot_error,sizeof(app->snapshot_error),"Unable to start snapshot observation"); }
                 else if (i==1) (void)accept_workflows(app,NULL);
-                else (void)accept_statistics(app,NULL);
+                else if (i==2) (void)accept_statistics(app,NULL);
+                else native_links_accept(app,NULL);
             }
         }
     }

@@ -372,8 +372,10 @@ across A/B/C/D. Native dialogs continue agent I/O. E accepts the exact displayed
 digest, rechecks the revision and delegates execution to a durable owner through
 the existing engine; UI exit and duplicate launch refusal are covered by a real
 workflow test. C now follows selected run/step evidence and delegates explicit
-request decisions, resume and cancellation to the existing CLI. Full navigation
-and real agent-authored workflow acceptance remain outstanding; the milestone
+request decisions, resume and cancellation to the existing CLI. Local navigation
+groups recorded runs under matching head branches and opens selected evidence;
+unmatched runs remain under the project. Final visual review and real
+agent-authored workflow acceptance remain outstanding; the milestone
 checkboxes stay open until those criteria are met.
 
 ### Milestone 4: integrated working terminals

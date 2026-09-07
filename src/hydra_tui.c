@@ -72,6 +72,7 @@ struct native_terminals;
 struct native_observations;
 struct native_plan;
 struct native_evidence;
+struct native_links;
 
 struct app {
     struct model model;
@@ -81,6 +82,7 @@ struct app {
     struct native_observations *observations;
     struct native_plan *plan;
     struct native_evidence *evidence;
+    struct native_links *links;
     pid_t control_pids[4];
     char control_labels[4][128];
     const char *hydra;
@@ -135,6 +137,7 @@ static void native_observations_cancel(struct app *app, size_t source);
 #include "hydra_tui_plan_launch.inc"
 #include "hydra_tui_evidence.inc"
 #include "hydra_tui_controls.inc"
+#include "hydra_tui_links.inc"
 #include "hydra_tui_observations.inc"
 #include "hydra_tui_terminals.inc"
 #include "hydra_tui_ui.inc"
