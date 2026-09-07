@@ -424,6 +424,9 @@ workflow_drive() {
 
         _wd_nonterminal="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(queued|ready|running|retrying)$' || true)"
         if [ "$_wd_nonterminal" -eq 0 ]; then
+            # A worker can finish after the cancellation snapshot was taken.
+            # Refresh it before publishing a terminal run state.
+            [ ! -f "$_wd_dir/cancel-requested" ] || workflow_cancel_steps "$_wd_dir"
             if find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -q '^recovery-required$'; then
                 _wd_final=recovery-required
             elif find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -q '^failed$'; then

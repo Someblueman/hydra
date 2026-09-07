@@ -279,13 +279,42 @@ steps:
       head: workflow-a
       argv: [sh, $test_root/long.sh, $test_root/cancel-started, $test_root/cancel-completed]
 EOF
-"$HYDRA_BIN" workflow run "$test_root/cancel.yml" > "$test_root/cancel.out" 2>&1 &
+# Delay the scheduler's next state scan until the cancelled step publishes its
+# terminal state, reproducing the ordering that intermittently failed in CI.
+mkdir "$test_root/race-bin"
+cat > "$test_root/race-bin/find" <<EOF
+#!/bin/sh
+run_dir=\$(cat "$test_root/cancel-race-dir" 2>/dev/null || true)
+if [ "\$#" -ge 3 ] && [ "\$1" = "\$run_dir/steps" ] && [ "\$2" = -name ] && [ -s "\$run_dir/residual-children.tsv" ]; then
+    count=0
+    while [ "\$(cat "\$run_dir/steps/long/state")" = running ] && [ "\$count" -lt 100 ]; do
+        sleep 0.05; count=\$((count + 1))
+    done
+    : > "$test_root/cancel-race-observed"
+fi
+exec "$(command -v find)" "\$@"
+EOF
+chmod +x "$test_root/race-bin/find"
+PATH="$test_root/race-bin:$PATH" "$HYDRA_BIN" workflow run "$test_root/cancel.yml" > "$test_root/cancel.out" 2>&1 &
 cancel_runner=$!
 wait_for_file "$test_root/cancel-started" || exit 1
 cancel_run="$(sed -n '1p' "$test_root/cancel.out")"
 cancel_dir="$(run_dir_for "$cancel_run")"
-"$HYDRA_BIN" workflow cancel "$cancel_run" > "$test_root/cancel-command.out"
+printf '%s\n' "$cancel_dir" > "$test_root/cancel-race-dir"
+# Hold event publication so the worker stays alive after writing its terminal
+# step state. This exposes a residual snapshot taken before that transition.
+mkdir "$cancel_dir/.events.lock" || exit 1
+printf '%s\n' "$$" > "$cancel_dir/.events.lock/owner-pid"
+"$HYDRA_BIN" workflow cancel "$cancel_run" > "$test_root/cancel-command.out" &
+cancel_request=$!
+cancel_wait=0
+while [ "$(cat "$cancel_dir/state")" = running ] && [ "$cancel_wait" -lt 100 ]; do
+    sleep 0.1; cancel_wait=$((cancel_wait + 1))
+done
+rm -rf "$cancel_dir/.events.lock"
+wait "$cancel_request"
 assert_success $? "cancellation reaches an active workflow owner"
+assert_success "$(if [ -f "$test_root/cancel-race-observed" ]; then printf 0; else printf 1; fi)" "cancellation exercises a worker finishing after the residual snapshot"
 wait "$cancel_runner" 2>/dev/null || true
 assert_equal cancelled "$(sed -n '1p' "$cancel_dir/state")" "cancelled run records a terminal state"
 if [ ! -s "$cancel_dir/residual-children.tsv" ] && [ ! -f "$test_root/cancel-completed" ]; then cancel_status=0; else cancel_status=1; fi
