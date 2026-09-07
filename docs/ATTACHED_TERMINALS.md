@@ -18,7 +18,7 @@ identifies the head and input destination. Hydra commands use a Ctrl-B prefix:
 
 | Keys | Action |
 | --- | --- |
-| `Ctrl-B`, `Tab` | Move focus back to Hydra's other panes |
+| `Ctrl-B`, `Tab` | Move focus through agent and Hydra panes |
 | `Ctrl-B`, `z` | Expand the focused pane or restore its saved splits |
 | `Ctrl-B`, `S` | Toggle one/two visible agent panes after attaching two heads |
 | `Ctrl-B`, `D` | Open statistics; `D` there returns to the same conversation |
@@ -44,6 +44,12 @@ or shell process across view changes, client detach and reconnect.
 The selected client reports attachment/disconnection separately from recorded agent
 outcomes. A detached client is not evidence that an agent completed or failed.
 Disconnected clients refuse input and are never restarted automatically.
+Agent attention is `AGENT UNKNOWN` unless an exact, instance-matched lifecycle
+record supplies an exit or failure; those labels say `RECORDED`. Stale snapshots
+and replaced instances have separate labels. Terminal silence, prompt text and
+reported outcomes never establish a waiting-for-input state. Workflow approval
+waits appear in C from the recorded run/request state; they are not attributed
+to a current agent solely because its branch appears in an old graph.
 
 ## Identity and lifecycle boundary
 
@@ -73,7 +79,8 @@ behavior.
 on a tmux socket with a clean configuration. It verifies actual file effects from
 terminal input, Ctrl-C, bracketed paste, an unsent draft across statistics, switching
 clients, client-only close, reconnect and process identity preservation, and
-140x40/80x24/40x10 rendering. A deliberately slow real data adapter proves terminal
+140x40/80x24/40x10 rendering. Two visible clients retain independent unsent drafts
+across A/B/C/D, independent scrollback and mouse-selected input. A deliberately slow real data adapter proves terminal
 input still works during collection, timeout and recovery. Exact outer terminal
 settings are checked on exit. `make sanitize-attached` runs the same path under
 the platform's sanitizer setup.
@@ -90,8 +97,9 @@ Codex CLI 0.153.3 was launched inside a real Hydra attachment with
 `--sandbox workspace-write --ask-for-approval on-request --no-alt-screen` in a
 throwaway repository. Its native trust prompt and composer rendered. An unsent
 composer draft survived a statistics round trip, three terminal sizes, and
-closing/reopening only the attachment client. The first model request failed
-because the saved login could not refresh. No model response, tool permission
+closing/reopening only the attachment client. A later request after integration
+reconfirmed the saved-login refresh failure despite successful login-status output.
+No model response, tool permission
 interaction or agent-authored plan is qualified by this observation. Local
 captures are in `build/codex-terminal-evidence/`; credentials must be refreshed
 before the remaining live acceptance can run. The initial 40x10 split left the

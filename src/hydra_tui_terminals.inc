@@ -22,6 +22,23 @@ static struct native_terminal *native_terminal_selected(struct app *app) {
     return &app->terminals->slots[app->terminals->selected];
 }
 
+static const char *native_terminal_attention(struct app *app, const struct native_terminal *t) {
+    size_t i;
+    if (app->snapshot_stale) return "STATE STALE";
+    for (i=0;i<app->model.head_count;i++) {
+        const struct head *h=&app->model.heads[i];
+        if (strcmp(h->head_id,t->head) || strcmp(h->instance,t->instance)) continue;
+        if (!strcmp(h->confidence,"exact")) {
+            if (!strcmp(h->observed,"exited")) return "EXIT RECORDED";
+            if (!strcmp(h->observed,"failed")) return "FAIL RECORDED";
+        }
+        /* Output activity, a live tmux session and a reported outcome cannot
+         * establish whether an interactive agent is waiting for a decision. */
+        return "AGENT UNKNOWN";
+    }
+    return "OLD INSTANCE";
+}
+
 static void native_terminal_close(struct native_terminal *t) {
     if (!t->screen) return;
     tv_pty_close(&t->client);

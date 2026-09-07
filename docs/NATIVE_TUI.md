@@ -313,6 +313,9 @@ a run opens its monitoring evidence. Head expansion and selected run survive
 refresh and layout changes. Associations come from recorded graph arguments,
 not current instance ownership. The read-only projection is bounded to 32 runs
 and 512 branch references, matching the graph view's run limit.
+Fleet workspace activity lists existing host responses and distinguishes failed
+responses with unknown counts from successful empty responses. H opens the
+selected head's host details without adding remote execution or telemetry.
 
 Real agent-authored acceptance and final workspace visual review remain on
 the roadmap. Real Codex model-response qualification remains blocked by the local

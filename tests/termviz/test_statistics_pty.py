@@ -118,6 +118,14 @@ def fleet_statistics() -> None:
         assert "q quit" in s.screen.text() and s.screen.overflow == 0, f"{s.screen.cols}x{s.screen.rows} overflow={s.screen.overflow}\n{s.screen.text()}"
         s.send("\r")
         s.until("No head evidence")
+        s.resize(140, 40)
+        s.send("W")
+        s.until("Host list observations / H details")
+        s.send("\t\tz")
+        s.until("offline / failed / unknown heads")
+        assert "empty / responded / 0 heads" in s.screen.text(), s.screen.text()
+        s.send("H")
+        s.until("HOSTS / latest bounded list response")
         s.close(b"q")
     except BaseException:
         s.abort()

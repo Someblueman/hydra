@@ -58,16 +58,32 @@ def attached() -> None:
             assert refused.returncode != 0 and "no longer current" in refused.stderr
             slow = temp / "slow"
             started = temp / "started"
+            observation = temp / "observation-fixture"
             adapter = temp / "hydra-adapter"
             adapter.write_text("#!/bin/sh\n" +
                 f'if [ "$1:$2" = tui:--data ] && [ -f {shlex.quote(str(slow))} ]; then\n' +
                 f'  touch {shlex.quote(str(started))}\n  sleep 3\nfi\n' +
+                f'if [ "$1:$2" = tui:--data ] && [ -f {shlex.quote(str(observation))} ]; then\n' +
+                f'  read -r observed confidence < {shlex.quote(str(observation))}\n' +
+                f'  {shlex.quote(str(ROOT / "bin/hydra"))} "$@" | ' +
+                "awk -F '\\t' -v OFS='\\t' -v observed=\"$observed\" -v confidence=\"$confidence\" " +
+                "'$1==\"H\" {$10=observed; $11=confidence} {print}'\n  exit\nfi\n" +
                 f'exec {shlex.quote(str(ROOT / "bin/hydra"))} "$@"\n')
             adapter.chmod(0o755)
             s = Session([str(BUILD / "hydra-tui"), "--hydra", str(adapter)], 140, 40, env=env, cwd=repo)
             s.until("HYDRA WORKSPACE")
             s.send("a")
             s.until("INPUT TO AGENT")
+            s.until("AGENT UNKNOWN")
+            # Synthetic snapshots exercise label confidence; these are not
+            # claims that the real attached shell exited or failed.
+            for observed, confidence, label in [("exited", "exact", "EXIT RECORDED"),
+                                                 ("exited", "reported", "AGENT UNKNOWN"),
+                                                 ("failed", "exact", "FAIL RECORDED")]:
+                observation.write_text(f"{observed} {confidence}\n")
+                s.until(label, timeout=8)
+            observation.unlink()
+            s.until("AGENT UNKNOWN", timeout=8)
             s.pump(.5)
             s.send("printf 'one' > attachment-proof\r")
             s.pump(.5)

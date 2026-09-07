@@ -99,6 +99,9 @@ static void native_workspace_tree(struct app *app) {
         const struct head *h = &app->model.heads[i];
         size_t k;
         bool expanded=true;
+        if (count>=sizeof(w->nodes)/sizeof(w->nodes[0])) {
+            copy_text(app->notice,sizeof(app->notice),"Navigation limit reached / filter heads"); break;
+        }
         for (k=0;k<w->collapsed_count;k++) if (!strcmp(w->collapsed[k],h->branch)) expanded=false;
         if (i == app->selected) chosen = count;
         w->nodes[count++] = (struct tv_tree_node){h->branch, i, 1, expanded, !strcmp(display_status(h), "LIVE") ? TV_BASE : TV_WARNING};
@@ -156,13 +159,22 @@ static void native_workspace_move(struct app *app, int direction) {
         if (direction>0 && *selected+1<count) (*selected)++;
     }
     else if (w->layout.focus == 1) { tv_tree_move(&w->tree, direction); native_workspace_select(app); }
-    else tv_workspace_scroll(&w->layout, direction, w->layout.focus==6 ? NATIVE_PLAN_TEXT : app->model.recovery_count + 5);
+    else tv_workspace_scroll(&w->layout, direction, w->layout.focus==6 ? NATIVE_PLAN_TEXT :
+        app->fleet ? app->model.host_count+2 : app->model.recovery_count+5);
 }
 
 static bool native_workspace_key(struct app *app, char key) {
     struct native_workspace *w = app->workspace;
     if (!w) return false;
     if (key=='A' || key=='B' || key=='C') { native_workspace_mode(app,key-'A'); return true; }
+    if (key=='H' && app->fleet) {
+        const struct head *h=selected_head(app);
+        size_t i;
+        for (i=0;h && i<app->model.host_count;i++) if (!strcmp(h->remote_host,app->model.hosts[i].name)) {
+            app->host_selected=i; break;
+        }
+        app->view=6; return true;
+    }
     if (w->mode==2 && (key=='[' || key==']')) return workflow_key(app,key);
     if (key == 'z') {
         w->zoom = !w->zoom;
@@ -221,7 +233,7 @@ static void native_workspace_mouse(struct app *app, unsigned button, int x, int 
 static void native_workspace_details(struct app *app, struct tv_canvas *c, size_t scroll) {
     const struct head *h = selected_head(app);
     int row;
-    if (!h) { tv_text(c, (struct tv_rect){0,0,c->width,1}, "No matching head", TV_WARNING); return; }
+    if (!h) { tv_text(c, (struct tv_rect){0,0,c->width,1}, app->fleet ? "No matching head / H host observations" : "No matching head", TV_WARNING); return; }
     for (row = 0; row < c->height; row++) {
         char text[1024];
         switch (scroll + (size_t)row) {
@@ -249,7 +261,16 @@ static void native_workspace_activity(struct app *app, struct tv_canvas *c, size
     int row;
     for (row = 0; row < c->height; row++) {
         char text[1024]; size_t index = scroll + (size_t)row;
-        if (index == 0) snprintf(text, sizeof(text), "%zu heads / %zu recovery findings", app->model.head_count, app->model.recovery_count);
+        if (app->fleet) {
+            if (!index) snprintf(text,sizeof(text),"Host list observations / H details");
+            else if (index<=app->model.host_count) {
+                const struct host_observation *host=&app->model.hosts[index-1];
+                char count[24]="unknown";
+                if (strcmp(host->state,"failed")) snprintf(count,sizeof(count),"%u",host->heads);
+                snprintf(text,sizeof(text),"%s / %s / %s heads",host->name,host->state,count);
+            } else snprintf(text,sizeof(text),"%s",index==app->model.host_count+1 ? "Process / CPU / memory unavailable" : "");
+        }
+        else if (index == 0) snprintf(text, sizeof(text), "%zu heads / %zu recovery findings", app->model.head_count, app->model.recovery_count);
         else if (index < 5 && (!h || app->fleet || !h->head_id[0]))
             snprintf(text, sizeof(text), "%s",index==1 ? "Detailed activity counters unavailable" : "");
         else if (index == 1) snprintf(text, sizeof(text), "Events %u / Messages %u / Signals %u", h->events, h->messages, h->signals);
@@ -260,7 +281,9 @@ static void native_workspace_activity(struct app *app, struct tv_canvas *c, size
             const struct recovery *r = &app->model.recovery[index - 5];
             snprintf(text, sizeof(text), "%s / %s / %s", r->kind, r->label, r->action);
         } else text[0]='\0';
-        tv_text(c, (struct tv_rect){0,row,c->width,1}, text, index >= 5 && index - 5 < app->model.recovery_count ? TV_WARNING : TV_BASE);
+        tv_text(c, (struct tv_rect){0,row,c->width,1}, text,
+            app->fleet ? index && index<=app->model.host_count && !strcmp(app->model.hosts[index-1].state,"failed") ? TV_WARNING : TV_BASE :
+            index>=5 && index-5<app->model.recovery_count ? TV_WARNING : TV_BASE);
     }
 }
 
@@ -299,11 +322,13 @@ static bool render_native_workspace(struct app *app, unsigned frame, bool headle
         }
         if (!tv_canvas_view(&view, &c, p->bounds)) continue;
         {
+            char agent_title[TEXT+64];
+            if (attached) snprintf(agent_title,sizeof(agent_title),"%s / %s",t->label,native_terminal_attention(app,t));
             if (compact) {
-                if (attached) dashboard_text(&view,0,0,view.width,TV_SELECTED,"%.14s / %s",t->label,
-                    t->client.finished || t->client.eof ? "DISCONNECTED" : "INPUT TO AGENT");
+                if (attached) dashboard_text(&view,0,0,view.width,TV_SELECTED,"%s / %.6s / %s",
+                    t->client.finished || t->client.eof ? "DISCONNECTED" : "INPUT TO AGENT",t->label,native_terminal_attention(app,t));
                 else dashboard_text(&view,0,0,view.width,TV_SELECTED,"FOCUS / %s",i==1 ? "NAVIGATION" : agent ? "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
-            } else tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : agent ? attached ? t->label : "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
+            } else tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : agent ? attached ? agent_title : "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
             if (!compact && attached) dashboard_text(&view,1,1,view.width-2,i==w->layout.focus ? TV_SELECTED : TV_BORDER,
                 "%s / %s", t->client.finished || t->client.eof ? "CLIENT DISCONNECTED" : "ATTACHED",
                 t->client.finished || t->client.eof ? "NO INPUT / Ctrl-B r reconnect" :

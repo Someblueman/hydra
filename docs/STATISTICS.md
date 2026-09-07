@@ -111,5 +111,6 @@ It also removes timing evidence and corrupts an attempt counter to verify unknow
 coverage. Evidence is generated under `build/visualization-evidence/`; illustrative
 fixture terminal captures are under `build/statistics-evidence/`. They establish
 separate facts: the fixture tests presentation and reconciliation; the real run
-checks the actual shell-to-native path. Hosted/platform-matrix qualification,
-embedded agent interaction and end-to-end planning approval remain future work.
+checks the actual shell-to-native path. Attached-session and exact-plan-approval
+tests now cover D round trips separately; see [attached terminals](ATTACHED_TERMINALS.md).
+Real agent-authored workflow and additional-platform qualification remain open.

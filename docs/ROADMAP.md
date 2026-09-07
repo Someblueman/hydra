@@ -337,14 +337,14 @@ the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset.
       should converse with Codex or another qualified CLI about an objective,
       inspect its proposed plan alongside the conversation, request revisions,
       and return to the same agent session while work is running.
-- [ ] Use conversation-first planning (concept A) as the default, with a discoverable
+- [x] Use conversation-first planning (concept A) as the default, with a discoverable
       toggle to the comprehensive plan overview (concept B) and back. Expand the
       dependency graph, validation and approval context on demand while keeping the
       agent pane available. Preserve the agent session, unsent input, plan revision,
       selection and pane scroll positions; restore prior focus when returning.
       Use the monitoring/intervention layout (concept C) during execution, with the
       same conversation and selected run available across layouts.
-      Connect the implemented statistics layout (concept D) to these future
+      Connect the implemented statistics layout (concept D) to these workspace
       layouts; allow the agent pane to be revealed without losing statistics
       filters or conversation.
 - [ ] Present agent-authored plans through the existing plan workflow: objective,
@@ -352,7 +352,7 @@ the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset.
       revision. Distinguish a conversational proposal from a validated executable
       plan and from a running workflow. Surface explicit approval of the exact
       plan being executed; revisions invalidate any prior approval.
-- [ ] Design planning, execution and recovery layouts around the same selected
+- [x] Design planning, execution and recovery layouts around the same selected
       project/run context. Preserve draft and session context when changing panes;
       make focus and whether input reaches an agent or Hydra unambiguous.
 
@@ -375,18 +375,18 @@ workflow test. C now follows selected run/step evidence and delegates explicit
 request decisions, resume and cancellation to the existing CLI. Local navigation
 groups recorded runs under matching head branches and opens selected evidence;
 unmatched runs remain under the project. Final visual review and real
-agent-authored workflow acceptance remain outstanding; the milestone
-checkboxes stay open until those criteria are met.
+agent-authored workflow acceptance remain outstanding; those acceptance
+criteria stay open until they are met.
 
 ### Milestone 4: integrated working terminals
 
-- [ ] Attach interactive panes to existing Hydra sessions while preserving tmux
+- [x] Attach interactive panes to existing Hydra sessions while preserving tmux
       ownership. Keep the planning conversation distinct from worker sessions and
       retain session identity when switching or reconnecting.
 - [ ] Qualify real Codex and other selected agent CLIs, expanding terminal behavior
       only for observed needs. Exercise interactive prompts, paste, scrolling,
       resize, full-screen output, interruption and permission requests.
-- [ ] Support multiple terminal panes and switching between agents. Show attention
+- [x] Support multiple terminal panes and switching between agents. Show attention
       indicators backed by actual observations; distinguish waiting for user input,
       unknown state, disconnected transport and process exit.
 
@@ -398,24 +398,26 @@ state. Record tested CLI versions and unsupported behavior explicitly.
 The workspace now supports two visible existing tmux clients per A/B/C layout,
 with four cached clients, independent scrollback and focus, and retained unsent
 drafts across layout changes. Narrow layouts reveal one focused agent at a time.
-Real agent qualification and observation-backed attention indicators remain open.
+Agent attention remains explicitly unknown without exact instance observations;
+recorded exit/failure, stale data and client disconnection have separate labels.
+Workflow input requests remain identified in C. Real agent qualification is open.
 
 ### Milestone 5: operational views
 
-- [ ] Integrate workflow graphs, host status, selected-step output, verification
+- [x] Integrate workflow graphs, host status, selected-step output, verification
       evidence, failures and recovery actions into the workspace's navigation and
       detail panes. Preserve useful existing overview/graph views.
-- [ ] Distinguish observed progress from declared intent, stale or missing data,
+- [x] Distinguish observed progress from declared intent, stale or missing data,
       blocked dependencies and requests for a decision. Offer the next applicable
       action with enough context to assess its effect.
 - [ ] Extend the implemented [statistics view](STATISTICS.md) with queue delay,
       total execution duration, time to verified result and recovery counts once
       existing evidence supplies reliable definitions and denominators. Add remote
       workflow cohorts when the fleet protocol supplies them.
-- [ ] Show resource utilization and provider token/cost totals only where reliable
+- [x] Show resource utilization and provider token/cost totals only where reliable
       measurements exist. Preserve source, freshness, sample counts and explicit
       unknowns; do not add telemetry collection merely to populate the view.
-- [ ] Preserve future agent session/input and shared selected work when switching
+- [x] Preserve agent session/input and shared selected work when switching
       between statistics, planning and monitoring layouts. Current statistics
       filters, run/step/host drill-down and workspace return are implemented.
 - [ ] Keep the interactive agent pane available to discuss a blocked step or revise
@@ -440,9 +442,9 @@ Agent-authored planning remains unqualified; the compiled-plan schema is unchang
 
 - [ ] Refine spacing, information density, restrained semantic colors, selection and
       focus, pane titles, contextual controls and keyboard discoverability.
-- [ ] Add useful search/filtering and deliberate empty, loading, disconnected,
+- [x] Add useful search/filtering and deliberate empty, loading, disconnected,
       failed and unavailable states. Preserve readable monochrome/ASCII behavior.
-- [ ] Adapt layouts to available space, with focus/zoom for the agent conversation,
+- [x] Adapt layouts to available space, with focus/zoom for the agent conversation,
       discoverable hidden panes, and retained selection and independent scrolling.
 
 Acceptance: inspect and interact with planning, running, waiting-for-input and failed
@@ -472,11 +474,14 @@ Local source extraction, an independent Makefile, preserved licenses and the
 standalone component/PTY acceptance path are implemented. Run
 `make test-termviz-export`; see [ownership and compatibility boundaries](../src/termviz/STANDALONE.md).
 Darwin 25.6.0 arm64 with Apple Clang 17 passed on 7 September 2026. Other platform
-runtime qualification remains unavailable; final API review follows integrated UI use.
+runtime qualification remains unavailable. Integrated shell/client use preserves
+the caller-owned core and optional POSIX boundaries; real agent acceptance may
+still reveal terminal-protocol needs outside the currently qualified subset.
 
-- [ ] Stabilize the API from real Hydra and standalone use, document storage/process
+- [x] Stabilize the API from real Hydra and standalone use, document storage/process
       ownership and compatibility limits, and prepare an independently buildable
-      repository with examples and tests.
+      source tree with examples and tests. Compatibility remains explicitly
+      unpublished and source consumers must rebuild when updating.
 - [ ] Qualify the supported platforms and package/license boundaries. Keep Hydra
       semantics outside termviz and publish only after a separate release decision.
 

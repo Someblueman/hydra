@@ -78,5 +78,40 @@ Unicode handling uses bounded cell-width rules rather than general grapheme
 shaping. History is physical rows without reflow. The process adapter owns its
 child and ordinary foreground jobs, not deliberately detached daemons. Terminal
 support and limits are specified in [TERMINAL.md](../src/termviz/TERMINAL.md).
-Full agent qualification, multiple embedded terminals, API stabilization and
-standalone publication remain in [the roadmap](ROADMAP.md).
+The later [attached-terminal qualification](ATTACHED_TERMINALS.md) adds two visible
+tmux clients, independent scrollback and preserved drafts. Full agent-response
+qualification and additional-platform evidence remain in [the roadmap](ROADMAP.md).
+Standalone publication requires a separate release decision.
+
+## Integrated workspace checks, 7 September 2026
+
+The current local checks extend the original standalone-shell qualification:
+`make test-all` passed on the final integrated code, including installation and
+onboarding; its local log is `build/workspace-final-test-all.log`.
+
+| Boundary | Evidence |
+| --- | --- |
+| Planning and approval | `test_plan_workspace.py` and `test_plan_launch.py`: real compiler, changed revision, invalid proposal, exact-digest refusal/approval, durable launch receipt, UI exit and duplicate-launch refusal. |
+| Intervention and results | `test_workflow_controls.py`: real approval wait, separate decision/resume, rejection and cancellation; selected-step output, sealed result verification and tamper refusal. |
+| Navigation | The real plan-launch test groups a recorded run beneath its head, retains collapse/expand across refresh, and opens that run's evidence. Branch references are historical associations, not instance ownership. |
+| Multiple clients | `test_attached_pty.py`: two real tmux sessions visible together, separate unsent drafts across A/B/C/D, mouse input to the selected client, independent scrollback, three sizes and client-only reconnect/exit. |
+| Observation limits | Stale head snapshots, unknown agent attention and independent transport disconnection remain visible. Synthetic snapshot cases verify exact versus reported exit/failure labels; they do not claim the attached shell exited. Fleet fixtures distinguish failed/unknown from successful/empty host responses. |
+| Local extraction | `make test-termviz-export` builds the library, examples and component/PTY tests outside Hydra. No Hydra domain code or runtime dependency enters the exported library. |
+
+Actual PTY cell captures are generated in `build/plan-launch-evidence/`
+(approval, navigation and verification), `build/workspace-control-evidence/`
+(running, waiting, failed and cancelled), and `build/attached-evidence/`
+(one/two clients), including 40x10, 80x24 and 140x40 cases. Browser inspection
+is recorded separately from assertions; captures are terminal output, not mockups.
+Focused attached-session and plan/control suites passed under local UBSan.
+A separate UBSan stress probe also exercised 512 heads sharing run associations;
+the navigation capacity limit remained explicit and the probe completed without
+sanitizer errors.
+
+Real Codex CLI 0.153.3 renders its composer and preserves a draft, but its model
+request still fails during access-token refresh. This was reconfirmed after the
+integrated changes; `codex login status` alone was insufficient evidence of usable
+authentication. The representative agent-authored workflow, tool permission
+interaction and resulting end-to-end acceptance remain unqualified. Refreshing
+the CLI login is required to continue that acceptance. Additional operating-system
+qualification is unavailable.
