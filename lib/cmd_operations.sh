@@ -6,7 +6,12 @@ cmd_exec_cancel_workers() {
     [ -f "$_cecw_file" ] || return 0
     while IFS= read -r _cecw_pid; do
         case "$_cecw_pid" in ''|*[!0-9]*) continue ;; esac
-        operations_signal_tree "$_cecw_pid" TERM
+        if [ -n "${_ce_profile:-}" ]; then
+            # Let the agent supervisor record cancellation before stopping its children.
+            kill -TERM "$_cecw_pid" 2>/dev/null || true
+        else
+            operations_signal_tree "$_cecw_pid" TERM
+        fi
     done < "$_cecw_file"
     if [ -n "${_ce_profile:-}" ]; then
         while IFS= read -r _cecw_pid; do

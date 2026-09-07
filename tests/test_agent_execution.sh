@@ -135,7 +135,11 @@ for boundary in cancel stale; do
         boundary_run="$(sed -n 's/.*\"run_id\":\"\([^\"]*\)\".*/\1/p' "$fixture/$boundary-live")"
         boundary_record="$(find "$HYDRA_HOME/state/v2/projects" -path "*/exec/$boundary_run/*/agent.json" -print)"
         [ -n "$boundary_record" ]
-        grep -Eq '"observed":\{[^}]*"cancel":true' "$boundary_record"
+        if ! grep -Eq '"observed":\{[^}]*"cancel":true' "$boundary_record"; then
+            printf 'Agent cancellation was not recorded: ' >&2
+            cat "$boundary_record" >&2
+            exit 1
+        fi
     else
         printf '%s\n' "$instance" > "$current"
         [ "$code" -eq 125 ]

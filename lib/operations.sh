@@ -111,7 +111,7 @@ operations_exec_worker() {
     _oew_pid=$!
     _oew_cancelled=0
     if [ -n "${_ce_profile:-}" ]; then
-        trap '_oew_cancelled=1; operations_signal_tree "$_oew_pid" TERM' HUP INT TERM
+        trap '_oew_cancelled=1; kill -TERM "$_oew_pid" 2>/dev/null || true' HUP INT TERM
     fi
     _oew_watchdog=""
     if [ "$_oew_timeout" -gt 0 ]; then
@@ -123,7 +123,11 @@ operations_exec_worker() {
             wait "$_oew_timer" || exit 0
             if kill -0 "$_oew_pid" 2>/dev/null; then
                 : > "$_oew_timed"
-                operations_signal_tree "$_oew_pid" TERM
+                if [ -n "${_ce_profile:-}" ]; then
+                    kill -TERM "$_oew_pid" 2>/dev/null || true
+                else
+                    operations_signal_tree "$_oew_pid" TERM
+                fi
                 sleep 1
                 operations_signal_tree "$_oew_pid" KILL
             fi
