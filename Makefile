@@ -72,7 +72,7 @@ $(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS)
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) tests/c/test_libhydra.c $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tests/c/test_tui_themes.inc | $(BUILD_DIR)
+$(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tests/c/test_tui_themes.inc tests/c/test_tui_palette.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_tui_pty.c -o $@
 
 test-c: $(BUILD_DIR)/test-libhydra

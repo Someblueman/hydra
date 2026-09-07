@@ -131,18 +131,38 @@ void kill_marked_action(struct app *app) {
     if (enter_raw(app) != 0) app->running = false;
 }
 
-struct palette_action { const char *name; int kind; };
+enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN };
+struct palette_action {
+    const char *name;
+    const char *command;
+    const char *subcommand;
+    enum palette_scope scope;
+};
+/* Order preserves first-substring-match selection. Arguments are literal argv
+ * entries; only the two interactive actions require additional prompting. */
 static const struct palette_action palette[] = {
-    {"switch", 1}, {"kill", 2}, {"regenerate", 3}, {"spawn", 4}, {"status", 5},
-    {"claims", 6}, {"collisions", 7}, {"scopes", 8}, {"queue", 9},
-    {"resources", 10}, {"git diff", 11}, {"approvals", 12}, {"recovery inspect", 13},
-    {"dashboard", 14}
+    {"switch", "switch", NULL, ACTION_HEAD},
+    {"kill", "kill", NULL, ACTION_HEAD},
+    {"regenerate", "regenerate", NULL, ACTION_GLOBAL},
+    {"spawn", "spawn", NULL, ACTION_SPAWN},
+    {"status", "status", NULL, ACTION_GLOBAL},
+    {"claims", "claim", "list", ACTION_GLOBAL},
+    {"collisions", "collision", NULL, ACTION_COMPARE},
+    {"scopes", "scope", "show", ACTION_HEAD},
+    {"queue", "queue", NULL, ACTION_GLOBAL},
+    {"resources", "resource", "status", ACTION_HEAD},
+    {"git diff", "diff", NULL, ACTION_HEAD},
+    {"approvals", "gate", "status", ACTION_HEAD},
+    {"recovery inspect", "doctor", NULL, ACTION_GLOBAL},
+    {"dashboard", "dashboard", NULL, ACTION_GLOBAL}
 };
 
 void execute_palette(struct app *app, const char *query) {
-    size_t index;
+    size_t index, count = 0U;
     const struct palette_action *chosen = NULL;
     struct head *head = selected_head(app);
+    char other[TEXT] = "";
+    char *argv[6]; /* executable, command, subcommand, head, comparison, NULL */
     if (query[0] == '\0') {
         copy_text(app->notice, sizeof(app->notice), "action search canceled");
         return;
@@ -151,60 +171,20 @@ void execute_palette(struct app *app, const char *query) {
         if (strstr(palette[index].name, query) != NULL) { chosen = &palette[index]; break; }
     }
     if (chosen == NULL) { copy_text(app->notice, sizeof(app->notice), "no explicit local action matched"); return; }
-    if (chosen->kind == 4) { spawn_action(app); return; }
-    if (chosen->kind == 3) {
-        char *argv[] = {(char *)app->hydra, (char *)"regenerate", NULL};
-        (void)run_argv(app, argv); return;
+    if (chosen->scope == ACTION_SPAWN) { spawn_action(app); return; }
+    argv[count++] = (char *)app->hydra;
+    argv[count++] = (char *)chosen->command;
+    if (chosen->subcommand != NULL) argv[count++] = (char *)chosen->subcommand;
+    if (chosen->scope == ACTION_HEAD || chosen->scope == ACTION_COMPARE) {
+        if (head == NULL) { copy_text(app->notice, sizeof(app->notice), "select a head for that action"); return; }
+        argv[count++] = head->branch;
     }
-    if (chosen->kind == 5) {
-        char *argv[] = {(char *)app->hydra, (char *)"status", NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 6) {
-        char *argv[] = {(char *)app->hydra, (char *)"claim", (char *)"list", NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 9) {
-        char *argv[] = {(char *)app->hydra, (char *)"queue", NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 13) {
-        char *argv[] = {(char *)app->hydra, (char *)"doctor", NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 14) {
-        char *argv[] = {(char *)app->hydra, (char *)"dashboard", NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (head == NULL) { copy_text(app->notice, sizeof(app->notice), "select a head for that action"); return; }
-    if (chosen->kind == 1 || chosen->kind == 2) {
-        char *argv[] = {(char *)app->hydra, (char *)(chosen->kind == 1 ? "switch" : "kill"), head->branch, NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 7) {
-        char other[TEXT] = "";
-        char *argv[5];
+    if (chosen->scope == ACTION_COMPARE) {
         if (prompt_text(app, "Compare with head: ", other, sizeof(other)) != 0 || other[0] == '\0') return;
-        argv[0] = (char *)app->hydra; argv[1] = (char *)"collision";
-        argv[2] = head->branch; argv[3] = other; argv[4] = NULL;
-        (void)run_argv(app, argv); return;
+        argv[count++] = other;
     }
-    if (chosen->kind == 8) {
-        char *argv[] = {(char *)app->hydra, (char *)"scope", (char *)"show", head->branch, NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 10) {
-        char *argv[] = {(char *)app->hydra, (char *)"resource", (char *)"status", head->branch, NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 11) {
-        char *argv[] = {(char *)app->hydra, (char *)"diff", head->branch, NULL};
-        (void)run_argv(app, argv); return;
-    }
-    if (chosen->kind == 12) {
-        char *argv[] = {(char *)app->hydra, (char *)"gate", (char *)"status", head->branch, NULL};
-        (void)run_argv(app, argv);
-    }
+    argv[count] = NULL;
+    (void)run_argv(app, argv);
 }
 
 /* Fleet actions carry host, project and observed instance to the public CLI. */

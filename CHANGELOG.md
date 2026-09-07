@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Native TUI palette actions now declare commands and selection requirements in
+  one table, preserving search order, prompts, and literal argument handling.
+
 ## [2.2.0] - 2026-09-07
 
 ### Added

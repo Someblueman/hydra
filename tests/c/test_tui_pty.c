@@ -237,6 +237,7 @@ static void close_session(struct session *session) {
 
 #include "test_tui_mouse.inc"
 #include "test_tui_themes.inc"
+#include "test_tui_palette.inc"
 
 static void test_session_failure(void) {
     pid_t pid = fork();
@@ -460,6 +461,7 @@ int main(int argc, char **argv) {
     test_mouse(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
+    test_palette(argv[1], argv[2], argv[3]);
     test_signal(argv[1], argv[2], argv[3], SIGINT, "SIGINT");
     test_signal(argv[1], argv[2], argv[3], SIGTERM, "SIGTERM");
     test_signal(argv[1], argv[2], argv[3], SIGHUP, "SIGHUP");

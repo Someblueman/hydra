@@ -212,3 +212,29 @@ passed during this round. Final local acceptance passed:
 
 Linux ASan and hosted CI were not run locally. Work used the existing checkout;
 nothing was pushed or published, and `.gmcs/` and `output/` content was preserved.
+
+## Feature-development stopping point
+
+The follow-up makes the native palette a concrete extension point: its fourteen
+actions declare their command, optional subcommand and selection scope in one
+table. Spawn and comparison retain their existing prompts. First substring match,
+literal argv boundaries, missing-selection notices and terminal restoration are
+unchanged. `execute_palette` falls from cognitive complexity 25 to at or below
+15; its allowance is removed. The gate now reports 124 functions above 15 with
+no regressions. This does not change the previous analysis limitations.
+
+The contributor guide now maps common feature types to their owning modules and
+focused tests. This is a practical stopping point for general simplification:
+command dispatch, data parsing, process ownership and presentation have distinct
+homes. Remaining lifecycle and validation coordinators should be changed against
+the requirements of the next feature, preserving their ordering and cleanup
+contracts. This is an engineering judgment, not evidence that future changes are
+risk-free or that every function is small.
+
+This localized follow-up passed 79 deterministic TUI checks, 108 real PTY checks,
+the same 108 PTY checks with macOS UBSan, repository shell lint, all-source
+`make quality-c` against the reduced baseline, and `git diff --check`. The added
+PTY cases exercise ordinary command mappings, first-match precedence, literal
+comparison arguments, canceled/unknown searches and missing-head boundaries.
+The prior round's full `make test-all` remains the broader qualification; it was
+not repeated for this palette-only change. Linux ASan and hosted CI were not run.
