@@ -59,7 +59,7 @@ CLI. These profiles work without the native helper. `hydra agent list`, `show`,
 | `cursor` | `cursor-agent` | Positional prompt after `--` | No automatic session capture; use headless recorded resume |
 | `opencode` | `opencode` | `--prompt` | No automatic session capture; use headless recorded resume |
 | `claude` | `claude` | Positional prompt | Exact generated `--session-id` / `--resume` |
-| `codex` | `codex` | Positional prompt | `resume ID`, only with a recorded identity |
+| `codex` | `codex` | Positional prompt | cwd-scoped `resume --last` |
 | `copilot`, `aider`, `gemini` | Matching executable name | Not declared | Launch only |
 | custom | Explicit absolute executable | Declared `none` or `task-file` | Not declared |
 
@@ -103,5 +103,6 @@ New imports cannot replace a reserved built-in name. Inspect a pre-existing cust
 name before assuming it uses the built-in recipe; use a fresh profile name for
 customizations.
 
-Older Codex heads without an exact recorded session remain inspectable but cannot
-use implicit `resume --last`. See [the migration contract](AGENT_CONTRACT.md#workflow-profiles-and-migration).
+Interactive Codex heads retain cwd-scoped `resume --last`, including older heads
+without recorded provider session IDs. Headless `exec --resume-run` still requires
+an exact recorded session; see [the resume contract](AGENT_CONTRACT.md#workflow-profiles-and-migration).

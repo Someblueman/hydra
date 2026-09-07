@@ -1,8 +1,10 @@
 # Hydra public contracts
 
-Hydra preserves the stable local interfaces introduced in 2.0 and the fleet
-interfaces shipped in 2.1.0. This document also describes the source-branch
-additions listed under [Unreleased](../CHANGELOG.md#unreleased). Internal shell function names,
+Hydra 2.2.0 retains state v2 and the existing local and fleet protocols, and adds
+workflow data, approval, agent, and planning contracts. Interactive Codex restore
+retains cwd-scoped latest-session selection; headless resume binds an exact recorded
+session. See the [2.2.0 compatibility notes](../CHANGELOG.md#220---2026-09-07).
+Internal shell function names,
 module layout, renderer details, caches, and on-disk temporary files are not public
 contracts.
 

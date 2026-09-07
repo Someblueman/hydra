@@ -24,10 +24,9 @@ use ordinary shell sessions alongside agents.
 
 [Demo transcript and recording instructions](assets/demos/README.md)
 
-This checkout includes unreleased workflow data, approval waits, headless adapters
-and local objective planning on top of **v2.1.0**. For published behavior use the
-[latest release](https://github.com/Someblueman/hydra/releases/latest); see the
-[changelog](CHANGELOG.md) for the source/release boundary.
+**v2.2.0** adds workflow data, approval waits, headless adapters, and local objective
+planning. Install the [latest release](https://github.com/Someblueman/hydra/releases/latest)
+and see the [changelog](CHANGELOG.md) for features and upgrade notes.
 
 ## What you can do
 

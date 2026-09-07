@@ -164,19 +164,17 @@ transport; it does not establish that the model obeyed it. Live qualification mu
 compare actual results. A zero headless timeout is bounded internally to 24 hours;
 ordinary command-mode exec retains its existing timeout behavior.
 
-Interactive Codex restore no longer uses `resume --last`. `hydra resume HEAD`
-requires a recorded provider session ID and fails before recreating a missing
-worktree when no supported exact recipe is available. Older Codex heads without
-that identity remain inspectable. Start a headless exec and use its returned run ID
-with `--resume-run` for subsequent turns, or select the known provider session
-explicitly outside Hydra. Existing successful headless receipts remain tied to
-one current instance; they cannot be reused for a replacement instance.
+Interactive Codex restore retains cwd-scoped `codex resume --last`. `hydra resume HEAD`
+recreates the selected head's worktree/session and asks Codex for the latest
+conversation in that worktree; older heads do not need a recorded provider session
+ID. This interactive convenience does not claim an exact conversation identity.
 
-This is an intentional behavior change for callers relying on implicit latest
-session selection. There is no automatic migration that guesses a session identity.
-No existing state is deleted, and the shell-only launch and no-agent paths remain
-available. Headless-only imported profiles are invoked through `hydra exec`, not
-interactive spawn; inspect their complete declaration with `hydra agent contract`.
+Headless `hydra exec --resume-run RUN_ID` is a separate path. It requires a
+successful recorded run and resumes its exact provider session, never `--last`.
+The receipt must match the current head, instance, worktree, and profile. It cannot
+be reused for a replacement instance. Headless-only imported profiles are invoked
+through `hydra exec`, not interactive spawn; inspect their complete declaration
+with `hydra agent contract`.
 
 ## Host authentication
 
