@@ -123,6 +123,14 @@ json_object *agent_run_cli(int argc, char **argv) {
         invoked = !f_run_controlled(command, stdin_prompt ? prompt : NULL, stdin_prompt ? strlen(prompt) : 0, seconds ? seconds : 86400, &cap, &control) && cap.status != 127;
     }
     unlink(path);
+    /* The shell watchdog may reach the same deadline before this helper does.
+     * Its durable marker distinguishes deadline signals from user cancellation. */
+    {
+        struct stat timed;
+        if (!f_path(path, sizeof(path), argv[3], ".timed-out") && !lstat(path, &timed) && S_ISREG(timed.st_mode)) {
+            cap.timeout = true; cap.status = 124;
+        }
+    }
     if (strcmp(stream.adapter, "none") && stream.received != stream.consumed && !cap.cancelled && !f_stopped && !cap.timeout) stream.malformed = true;
     status = stream.stale || stream.malformed || stream.observation_failed ? 125 : (stream.permission ? 3 : (stream.failed && !cap.status ? 1 : cap.status));
     if (!status && *argv[8]) {
@@ -157,7 +165,7 @@ json_object *agent_run_cli(int argc, char **argv) {
         json_object_object_add(observed, "prompt", invoked && strcmp(f_string(profile, "prompt"), "none") ? json_object_new_boolean(true) : NULL);
         json_object_object_add(observed, "observations", json_object_array_length(stream.events) ? json_object_new_boolean(true) : NULL);
         json_object_object_add(observed, "resume", *argv[7] && stream.session_seen && !status ? json_object_new_boolean(true) : NULL);
-        json_object_object_add(observed, "cancel", invoked && !cap.stop_unknown && (cap.status == 130 || cap.timeout) && !stream.permission && !stream.stale && !stream.malformed && !stream.observation_failed ? json_object_new_boolean(true) : NULL);
+        json_object_object_add(observed, "cancel", invoked && !cap.stop_unknown && !cap.timeout && (cap.cancelled || f_stopped) && !stream.permission && !stream.stale && !stream.malformed && !stream.observation_failed ? json_object_new_boolean(true) : NULL);
         json_object_object_add(observed, "safe-point", invoked && steering_bytes ? json_object_new_boolean(true) : NULL);
         json_object_object_add(observed, "permission-requests", stream.permission ? json_object_new_boolean(true) : NULL);
         json_object_object_add(observed, "usage", f_field(stream.usage, "input_tokens") || f_field(stream.usage, "output_tokens") || f_field(stream.usage, "cost_usd") ? json_object_new_boolean(true) : NULL);

@@ -51,6 +51,7 @@ case "$1" in
     complete-only) printf '{"schema_version":1,"type":"observation","status":"idle"}\n'; exit 0 ;;
     permission) printf '{"schema_version":1,"type":"permission","request_id":"request_1"}\n'; sleep 10; exit 0 ;;
     cancel|stale) sleep 20; exit 0 ;;
+    exit130) exit 130 ;;
     *) printf '{"schema_version":1,"type":"observation","status":"running"}\n' ;;
 esac
 printf '{"schema_version":1,"type":"result","text":"exact artifact"}\n'
@@ -98,8 +99,20 @@ if hydra exec --branch agent-fixture --profile fixture --prompt-file "$fixture/p
 [ "$code" -eq 3 ]
 grep -q permission_required "$fixture/permission"
 printf cancel > "$fixture/prompt"
-if hydra exec --branch agent-fixture --profile fixture --prompt-file "$fixture/prompt" --timeout 1 --exit-code > "$fixture/cancel"; then exit 1; else code=$?; fi
+if hydra exec --branch agent-fixture --profile fixture --prompt-file "$fixture/prompt" --timeout 1 --exit-code --json > "$fixture/cancel"; then exit 1; else code=$?; fi
 [ "$code" -eq 124 ]
+timeout_run="$(sed -n 's/.*"run_id":"\([^"]*\)".*/\1/p' "$fixture/cancel")"
+timeout_record="$(find "$HYDRA_HOME/state/v2/projects" -path "*/exec/$timeout_run/*/agent.json" -print)"
+[ -n "$timeout_record" ]
+grep -q '"state":"timed_out"' "$timeout_record"
+grep -Eq '"observed":\{[^}]*"cancel":null' "$timeout_record"
+printf exit130 > "$fixture/prompt"
+if hydra exec --branch agent-fixture --profile fixture --prompt-file "$fixture/prompt" --exit-code --json > "$fixture/exit130"; then exit 1; else code=$?; fi
+[ "$code" -eq 130 ]
+exit130_run="$(sed -n 's/.*\"run_id\":\"\([^\"]*\)\".*/\1/p' "$fixture/exit130")"
+exit130_record="$(find "$HYDRA_HOME/state/v2/projects" -path "*/exec/$exit130_run/*/agent.json" -print)"
+[ -n "$exit130_record" ]
+if grep -Eq '"observed":\{[^}]*"cancel":true' "$exit130_record"; then exit 1; fi
 for boundary in cancel stale; do
     printf %s "$boundary" > "$fixture/prompt"
     before="$(cat "$worker/starts")"
@@ -115,7 +128,13 @@ for boundary in cancel stale; do
     fi
     if wait "$owner"; then exit 1; else code=$?; fi
     owner=""
-    if [ "$boundary" = cancel ]; then [ "$code" -eq 143 ]; else
+    if [ "$boundary" = cancel ]; then
+        [ "$code" -eq 143 ]
+        boundary_run="$(sed -n 's/.*\"run_id\":\"\([^\"]*\)\".*/\1/p' "$fixture/$boundary-live")"
+        boundary_record="$(find "$HYDRA_HOME/state/v2/projects" -path "*/exec/$boundary_run/*/agent.json" -print)"
+        [ -n "$boundary_record" ]
+        grep -Eq '"observed":\{[^}]*"cancel":true' "$boundary_record"
+    else
         printf '%s\n' "$instance" > "$current"
         [ "$code" -eq 125 ]
         grep -q stale_instance "$fixture/stale-live"

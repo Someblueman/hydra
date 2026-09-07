@@ -50,6 +50,9 @@ static void provider_failures(void) {
         {"cursor-jsonl", "{\"type\":\"assistant\",\"message\":{\"content\":[]}}", 0},
         {"cursor-jsonl", "{\"type\":\"result\",\"is_error\":\"false\"}", -1},
         {"cursor-jsonl", "{\"type\":\"result\",\"is_error\":false,\"session_id\":\"recorded\"}", -1},
+        {"claude-jsonl", "{\"type\":\"result\"}", -1},
+        {"claude-jsonl", "{\"type\":\"result\",\"is_error\":false}", -1},
+        {"claude-jsonl", "{\"type\":\"result\",\"is_error\":\"false\"}", -1},
         {NULL, NULL, 0}
     };
     const char *statuses[] = {"ERROR", "CANCELED", "INTERRUPTED", "INVALID", "WAITING", "RUNNING", NULL};
@@ -71,6 +74,10 @@ static void provider_failures(void) {
     assert(agent_decode("cursor-jsonl", input, &event) == 1);
     assert(!strcmp(event.status, "failed") && !event.usage && !event.session);
     json_object_put(input);
+    input = f_parse("{\"type\":\"result\",\"is_error\":true}");
+    assert(agent_decode("claude-jsonl", input, &event) == 1);
+    assert(!strcmp(event.status, "failed") && !event.text);
+    json_object_put(event.usage); json_object_put(input);
 }
 int main(void) {
     char root[] = "/tmp/hydra-agent-profile-test.XXXXXX", script[F_PATH], link[F_PATH], definition[F_PATH];

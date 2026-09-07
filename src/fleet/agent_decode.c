@@ -122,8 +122,11 @@ int agent_decode(const char *adapter, json_object *input, struct agent_event *ev
             if (subtype && !strcmp(subtype, "init")) { event->kind = "session"; event->session = f_string(input, "session_id"); return event->session ? 1 : -1; }
         }
         if (!strcmp(type, "result")) {
+            json_object *error = f_field(input, "is_error");
             event->kind = "result"; event->text = f_string(input, "result");
-            event->status = json_object_get_boolean(f_field(input, "is_error")) ? "failed" : "idle";
+            if (!json_object_is_type(error, json_type_boolean) ||
+                (!json_object_get_boolean(error) && !event->text)) return -1;
+            event->status = json_object_get_boolean(error) ? "failed" : "idle";
             event->usage = usage(f_field(input, "usage"), "input_tokens", "output_tokens", "cache_read_input_tokens");
             return event->usage ? 1 : -1;
         }
