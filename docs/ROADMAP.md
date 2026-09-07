@@ -444,6 +444,12 @@ workflow before describing the interface as product-ready.
 
 ### Milestone 8: standalone library readiness
 
+Local source extraction, an independent Makefile, preserved licenses and the
+standalone component/PTY acceptance path are implemented. Run
+`make test-termviz-export`; see [ownership and compatibility boundaries](../src/termviz/STANDALONE.md).
+Darwin 25.6.0 arm64 with Apple Clang 17 passed on 7 September 2026. Other platform
+runtime qualification remains unavailable; final API review follows integrated UI use.
+
 - [ ] Stabilize the API from real Hydra and standalone use, document storage/process
       ownership and compatibility limits, and prepare an independently buildable
       repository with examples and tests.

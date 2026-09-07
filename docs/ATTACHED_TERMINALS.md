@@ -71,3 +71,16 @@ permission prompts and the complete A/B/C/D workflow remain separate roadmap
 acceptance requirements. Remote attachments currently retain the existing fleet
 handoff path. The supported terminal interpretation subset is documented in
 [termviz's terminal contract](../src/termviz/TERMINAL.md).
+
+### Real Codex observation, 7 September 2026
+
+Codex CLI 0.153.3 was launched inside a real Hydra attachment with
+`--sandbox workspace-write --ask-for-approval on-request --no-alt-screen` in a
+throwaway repository. Its native trust prompt and composer rendered. An unsent
+composer draft survived a statistics round trip, three terminal sizes, and
+closing/reopening only the attachment client. The first model request failed
+because the saved login could not refresh. No model response, tool permission
+interaction or agent-authored plan is qualified by this observation. Local
+captures are in `build/codex-terminal-evidence/`; credentials must be refreshed
+before the remaining live acceptance can run. At 40x10 the current split leaves
+the composer too little room; focus zoom remains a required UI correction.

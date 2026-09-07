@@ -47,14 +47,23 @@ cc -std=c99 -Wall -Wextra -Werror -pedantic -Isrc/termviz \
 /tmp/termviz-workspace --shell
 ```
 
-Copy `src/termviz/`, `examples/workspace*.c`, `examples/workspace_demo.h`,
-`examples/termviz.c`, and `tests/c/test_termviz*.c`, preserving their directory
-layout. Component test builds also need `-Isrc` for their `termviz/` includes.
-Retain the root Hydra license and `UNICODE-LICENSE.txt`. The command above
-builds the workspace without Hydra sources, configuration, JSON-C, tmux, a package
-manager, or a code generator. A portable-core consumer can omit both `*_posix.c`
-files and their headers. The POSIX demo is locally qualified on macOS; other POSIX
-platforms require their own runtime qualification.
+For a complete independently buildable source tree, run from Hydra's root:
+
+```sh
+scripts/package-termviz.sh /tmp/termviz-source-new
+make -C /tmp/termviz-source-new all test test-pty
+```
+
+The destination must not exist. The exporter copies sources, examples, tests,
+licenses and a standalone Makefile; it does not create a Git repository or
+publish. The default standalone target builds a portable C99 static library.
+POSIX examples and real-PTY tests are separate targets. See
+[standalone ownership and compatibility](STANDALONE.md) for API, process, platform
+and license boundaries. The copied tests reuse the existing component and PTY
+checks; Hydra integration is excluded from the standalone test target.
+
+The POSIX demo is locally qualified on macOS; other platforms require their own
+runtime qualification. Python is used only by the optional PTY test target.
 
 `make test-termviz` exercises components. `make test-workspace-pty` uses the
 repository's existing Python 3 test toolchain, standard library only, to interact
