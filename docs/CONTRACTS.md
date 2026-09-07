@@ -1,6 +1,6 @@
 # Hydra public contracts
 
-Hydra 3.0 retains state v2 and the existing local and fleet protocols, and adds
+Hydra 2.2.0 retains state v2 and the existing local and fleet protocols, and adds
 workflow data, approval, agent, and planning contracts. Interactive Codex restore
 retains cwd-scoped latest-session selection; headless resume binds an exact recorded
 session. See the [2.2.0 compatibility notes](../CHANGELOG.md#220---2026-09-07).
