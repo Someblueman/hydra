@@ -102,7 +102,7 @@ src/libhydra.c	hydra_validate_events	20
 src/libhydra.c	hydra_validate_state	31
 src/libhydra.c	hydra_validate_unique_branches	29
 src/tui/adapter.c	refresh_model	28
-src/tui/input.c	handle_escape	41
+src/tui/input.c	handle_escape	24
 src/tui/input.c	handle_key	17
 src/tui/input.c	handle_mouse	43
 src/tui/input.c	interactive_main	16

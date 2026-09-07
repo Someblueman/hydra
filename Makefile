@@ -78,7 +78,11 @@ $(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tes
 test-c: $(BUILD_DIR)/test-libhydra
 	$(BUILD_DIR)/test-libhydra
 
-test-tui: build-tui
+$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c src/tui/input.c $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/input.o,$(TUI_OBJECTS))
+	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
+
+test-tui: build-tui $(BUILD_DIR)/test-tui-input
+	$(BUILD_DIR)/test-tui-input
 	@sh tests/test_native_tui.sh
 
 test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
@@ -108,6 +112,8 @@ sanitize-core:
 
 sanitize-tui:
 	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" build-tui
+	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" build/sanitize/test-tui-input
+	@build/sanitize/test-tui-input
 	@build/sanitize/hydra-tui --headless-fixture tests/fixtures/tui/native-v2.tsv --size 80x24 --frames 2 >/dev/null
 
 sanitizer: sanitize-core

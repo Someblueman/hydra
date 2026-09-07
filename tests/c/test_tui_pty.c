@@ -272,6 +272,8 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     struct session session;
     struct winsize size;
     const char paste[] = "\033[200~pasted-q-:kill\033[201~";
+    char large_paste[8300];
+    size_t paste_offset;
     const char mouse[] = "\033[<0;12;4M";
     (void)setenv("TMUX", "test", 1);
     (void)setenv("FAKE_TMUX_CURRENT_SESSION", "hydra-feature-live", 1);
@@ -313,6 +315,18 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, paste, sizeof(paste) - 1U);
     sleep_ms(150);
     result(still_running(&session), "bracketed paste cannot inject quit or actions");
+    memset(large_paste, '9', sizeof(large_paste));
+    memcpy(large_paste, "\033[200~", 6U);
+    memcpy(large_paste + sizeof(large_paste) - 7U, "q\033[201~", 7U);
+    for (paste_offset = 0U; paste_offset < sizeof(large_paste); paste_offset += 100U) {
+        write_input(session.master, large_paste + paste_offset, 100U);
+        sleep_ms(2);
+        drain_output(session.master);
+    }
+    write_input(session.master, "?", 1U);
+    result(wait_for_marker(&session, "KEYBOARD HELP", 2000), "oversized paste cannot inject quit and preserves the next key");
+    write_input(session.master, "?", 1U);
+    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "keyboard input resumes after oversized paste");
     write_input(session.master, mouse, sizeof(mouse) - 1U);
     sleep_ms(100);
     result(still_running(&session), "mouse over a non-list view is inert");

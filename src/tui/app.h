@@ -3,6 +3,8 @@
 #include "model.h"
 #include <termios.h>
 
+enum input_mode { INPUT_KEYS, INPUT_DISCARD_CSI, INPUT_DISCARD_PASTE };
+
 struct app {
     struct model model;
     const char *hydra;
@@ -13,6 +15,8 @@ struct app {
     bool hit_tabs;
     int rows, cols, line, limit;
     bool raw, no_color, preview, help, running, fleet, diagnostics, paint, boxed;
+    enum input_mode input_mode;
+    size_t paste_matched;
     char marked[MAX_HEADS][TEXT];
     size_t marked_count;
     char current_session[TEXT];

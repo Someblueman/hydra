@@ -68,27 +68,60 @@ static void handle_mouse(struct app *app, const char *sequence) {
 }
 
 
-static void handle_escape(struct app *app) {
+static bool escape_expired(const struct timespec *started) {
+    struct timespec now;
+    (void)clock_gettime(CLOCK_MONOTONIC, &now);
+    return now.tv_sec - started->tv_sec > 1 ||
+        (now.tv_sec - started->tv_sec == 1 && now.tv_nsec >= started->tv_nsec);
+}
+
+static bool csi_final(char ch) {
+    return (unsigned char)ch >= 0x40U && (unsigned char)ch <= 0x7eU;
+}
+
+static bool discard_complete(struct app *app, char ch) {
     static const char paste_end[] = "\033[201~";
+    if (app->input_mode == INPUT_DISCARD_CSI) return csi_final(ch);
+    if (ch == paste_end[app->paste_matched]) app->paste_matched++;
+    else app->paste_matched = ch == paste_end[0] ? 1U : 0U;
+    return app->paste_matched == sizeof(paste_end) - 1U;
+}
+
+/* A budget yields to the UI, never turns discarded bytes into key bindings.
+ * The caller owns app and retains the terminator match across input batches. */
+static void discard_input(struct app *app, char ch) {
+    struct timespec started;
+    size_t consumed = 0U;
+    (void)clock_gettime(CLOCK_MONOTONIC, &started);
+    for (;;) {
+        if (discard_complete(app, ch)) {
+            app->input_mode = INPUT_KEYS;
+            app->paste_matched = 0U;
+            return;
+        }
+        if (++consumed >= 8192U || escape_expired(&started) || read_key(20, &ch) <= 0) return;
+    }
+}
+
+static void handle_escape(struct app *app) {
     char ch, sequence[64];
-    size_t count = 0U, matched = 0U, consumed = 0U;
-    struct timespec started, now;
+    size_t count = 0U, consumed = 0U;
+    struct timespec started;
+    bool complete = false;
     if (read_key(20, &ch) <= 0) {
         app->view = 0; app->help = false; app->diagnostics = false;
         app->search[0] = '\0'; app->notice[0] = '\0';
         return;
     }
     if (ch != '[') return;
-    /* Drain overlong CSI reports through their terminator, with both bounds. */
     (void)clock_gettime(CLOCK_MONOTONIC, &started);
     while (consumed++ < 8192U && read_key(20, &ch) > 0) {
         if (count + 1U < sizeof(sequence)) sequence[count++] = ch;
-        if ((unsigned char)ch >= 0x40U && (unsigned char)ch <= 0x7eU) break;
-        (void)clock_gettime(CLOCK_MONOTONIC, &now);
-        if (now.tv_sec - started.tv_sec >= 1) break;
+        if (csi_final(ch)) { complete = true; break; }
+        if (escape_expired(&started)) break;
     }
+    if (!complete) { app->input_mode = INPUT_DISCARD_CSI; return; }
     if (consumed >= sizeof(sequence)) return;
-    consumed = 0U;
     sequence[count] = '\0';
     if (sequence[0] == '<') handle_mouse(app, sequence);
     else if (strcmp(sequence, "A") == 0) move_selection(app, -1);
@@ -98,16 +131,10 @@ static void handle_escape(struct app *app) {
         for (count = 0U; count < 3U; count++) if (read_key(20, &ch) <= 0) break;
     }
     else if (strcmp(sequence, "200~") == 0) {
-        (void)clock_gettime(CLOCK_MONOTONIC, &started);
-        while (consumed++ < 8192U) {
-            (void)clock_gettime(CLOCK_MONOTONIC, &now);
-            if (now.tv_sec - started.tv_sec >= 1) break;
-            if (read_key(20, &ch) <= 0) continue;
-            if (ch == paste_end[matched]) matched++;
-            else matched = ch == paste_end[0] ? 1U : 0U;
-            if (matched == sizeof(paste_end) - 1U) break;
-        }
+        app->input_mode = INPUT_DISCARD_PASTE;
+        app->paste_matched = 0U;
         copy_text(app->notice, sizeof(app->notice), "bracketed paste ignored");
+        if (read_key(20, &ch) > 0) discard_input(app, ch);
     }
 }
 
@@ -158,6 +185,11 @@ static void handle_key(struct app *app, char key) {
     }
 }
 
+static void handle_input(struct app *app, char key) {
+    if (app->input_mode == INPUT_KEYS) handle_key(app, key);
+    else discard_input(app, key);
+}
+
 int interactive_main(struct app *app) {
     time_t last_refresh;
     char key;
@@ -196,7 +228,7 @@ int interactive_main(struct app *app) {
             }
             continue;
         }
-        handle_key(app, key);
+        handle_input(app, key);
     }
     restore_terminal(app);
     return terminal_exit_status();

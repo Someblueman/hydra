@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and newline-bearing paths now fail closed; replace links with regular files,
   review `.hydra`, and rerun `hydra init --trust` as needed.
 
+- Reject a linked `.hydra` root before initialization writes configuration.
+- Keep oversized or interrupted terminal paste/CSI input inert until its
+  terminator, and enable bracketed paste while the native TUI is active.
+
 ### Changed
 
 - Native modules and command handlers have clearer ownership, shared dependency

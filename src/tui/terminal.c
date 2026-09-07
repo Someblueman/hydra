@@ -32,7 +32,7 @@ void restore_terminal(struct app *app) {
         app->raw = false;
     }
     if (isatty(STDOUT_FILENO)) {
-        static const char reset[] = "\033[?1000l\033[?1006l\033[0m\033[?25h\n";
+        static const char reset[] = "\033[?1000l\033[?1006l\033[?2004l\033[0m\033[?25h\n";
         write_terminal(reset, sizeof(reset) - 1U);
     }
 }
@@ -55,7 +55,7 @@ int enter_raw(struct app *app) {
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) return -1;
     app->raw = true;
     {
-        static const char modes[] = "\033[?25l\033[?1000h\033[?1006h";
+        static const char modes[] = "\033[?25l\033[?1000h\033[?1006h\033[?2004h";
         write_terminal(modes, sizeof(modes) - 1U);
     }
     return 0;
