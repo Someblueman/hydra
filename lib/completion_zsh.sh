@@ -21,6 +21,9 @@ _hydra() {
     case $state in
         args)
             case $words[1] in
+                admission)
+                    _arguments '1:action:(status configure request claim cancel unknown release)' '--json[Output versioned status JSON]' '--confirmed[Confirm execution termination]'
+                    ;;
                 remote)
                     _arguments '1:action:(add remove list)' '*:argument:'
                     ;;
@@ -173,6 +176,7 @@ _hydra_commands() {
         'init:Initialize project identity, trust, profile, and worktree root'
         'agent:Manage agent profiles'
         'capabilities:Print machine-readable capabilities'
+        'admission:Inspect or configure host-wide execution reservations'
         'workflow:Run or inspect a finite trusted workflow DAG'
         'path:Print a stored worktree path'
         'lifecycle:Show declared, observed, and live head state'

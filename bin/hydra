@@ -98,6 +98,9 @@ _load_runtime_libs() {
 # Usage: _load_libs_for_cmd <command>
 _load_libs_for_cmd() {
     case "$1" in
+        admission)
+            _load_libs output admission
+            ;;
         version|help|-v|--version|-h|--help)
             ;;
         fleet-local)

@@ -35,6 +35,8 @@ Commands:
                     Headless: agy (Antigravity), cursor (Cursor Agent), opencode,
                               claude, codex, pi; inspect with agent contract NAME
   remote            Manage OpenSSH aliases: add NAME [USER@]SSH_ALIAS, remove NAME, list
+  admission         Inspect or configure host-wide execution reservations and FIFO admission
+                    Usage: hydra admission --help
   fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
                     Commands: list, doctor, handshake, bootstrap, package, init, spawn,
                               signal, cancel, workflow, attach, export, import,
@@ -230,6 +232,10 @@ main() {
         agent)
             shift
             cmd_agent "$@"
+            ;;
+        admission)
+            shift
+            cmd_admission "$@"
             ;;
         fleet-local)
             shift

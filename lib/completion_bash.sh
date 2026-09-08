@@ -19,7 +19,7 @@ _hydra_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    commands="remote fleet spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
+    commands="remote fleet admission spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
     if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && $COMP_CWORD -ge 5 ]]; then
         case ${COMP_WORDS[3]:-} in
@@ -84,6 +84,7 @@ _hydra_completion() {
             esac
             return 0
             ;;
+        admission) COMPREPLY=($(compgen -W "status configure request claim cancel unknown release --json --confirmed" -- "${cur}")); return 0 ;;
         claim) COMPREPLY=($(compgen -W "add list remove" -- ${cur})); return 0 ;;
         scope) COMPREPLY=($(compgen -W "set show check" -- ${cur})); return 0 ;;
         resource) COMPREPLY=($(compgen -W "allocate status env release" -- ${cur})); return 0 ;;

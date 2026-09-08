@@ -7,6 +7,10 @@
 generate_fish_completion() {
     cat <<'EOF'
 # Fish completion for hydra
+complete -c hydra -f -n '__fish_use_subcommand' -a 'admission' -d 'Inspect or configure host-wide execution reservations'
+complete -c hydra -f -n '__fish_seen_subcommand_from admission' -a 'status configure request claim cancel unknown release'
+complete -c hydra -f -n '__fish_seen_subcommand_from admission' -l json
+complete -c hydra -f -n '__fish_seen_subcommand_from admission' -l confirmed
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l profile -r
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l prompt-file -r
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l resume-run -r
