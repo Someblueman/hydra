@@ -251,6 +251,9 @@ test-fleet: build-fleet $(BUILD_DIR)/test-workflow-schedule $(BUILD_DIR)/test-pl
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_data.sh
 	HYDRA_TEST_DAG_REPLAY=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
 	HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_DAG_RESULT_LOST=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_DAG_RESULT_BAD=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_DAG_PARALLELISM=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
 	HYDRA_TEST_DAG_CRASH=2 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
 	HYDRA_TEST_DAG_SOURCE=1 HYDRA_TEST_DAG_SOURCE_TAMPER=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
 	HYDRA_TEST_PLAN_SOURCE=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh

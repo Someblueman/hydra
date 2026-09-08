@@ -53,17 +53,17 @@ static bool dependencies_done(const char *needs, json_object *states) {
     }
     return true;
 }
-static int running_count(json_object *graph, json_object *states) {
-    int running = 0;
+static int active_count(json_object *graph, json_object *states) {
+    int active = 0;
     if (!json_object_is_type(graph, json_type_object) || !json_object_object_length(graph) ||
         json_object_object_length(graph) > (int)WD_STEPS || !json_object_is_type(states, json_type_object) ||
         json_object_object_length(states) != json_object_object_length(graph)) return -1;
     json_object_object_foreach(graph, id, definition) {
         (void)definition; const char *state = f_string(states, id);
         if (!wd_name(id) || !state_valid(state)) return -1;
-        if (!strcmp(state, "running")) running++;
+        if (!strcmp(state, "running") || !strcmp(state, "waiting-remote")) active++;
     }
-    return running;
+    return active;
 }
 static bool time_valid(json_object *observed) {
     return json_object_is_type(f_field(observed, "observed_at"), json_type_int) &&
@@ -75,7 +75,7 @@ static bool expired(json_object *observed) {
     return deadline && json_object_get_int64(f_field(observed, "observed_at")) >= deadline;
 }
 int ws_decide(json_object *graph, json_object *observations, int parallelism, char choice[65]) {
-    json_object *states = f_field(observations, "states"); int running = running_count(graph, states);
+    json_object *states = f_field(observations, "states"); int running = active_count(graph, states);
     choice[0] = '\0';
     if (running < 0 || !time_valid(observations) || !json_object_is_type(f_field(observations, "cancelled"), json_type_boolean) || parallelism < 1 || parallelism > 16) return -1;
     json_object_object_foreach(graph, id, definition) {

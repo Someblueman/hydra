@@ -65,6 +65,22 @@ done
 [ "$(sed -n 's/.*"sequence":\([0-9]*\).*/\1/p' "$TEST_DIR"/race_* | sort -u | wc -l | tr -d ' ')" -eq 12 ]
 has "$(admit status)" '"reserved":1,"queued":11'
 
+# An existing policy must contain every key; absent fields never mean unlimited.
+cp "$HYDRA_HOME/admission/policy" "$TEST_DIR/policy"
+for missing in host_limit project_limit disk_floor_kb queue_limit labels; do
+    sed "/^$missing=/d" "$TEST_DIR/policy" > "$HYDRA_HOME/admission/policy"
+    if admit request policy_probe project_x 60 - > "$TEST_DIR/error"; then exit 1; fi
+    has "$(cat "$TEST_DIR/error")" state_unavailable
+    [ ! -e "$HYDRA_HOME/admission/policy_probe.request" ]
+done
+: > "$HYDRA_HOME/admission/policy"
+if admit status >/dev/null; then exit 1; fi
+cp "$TEST_DIR/policy" "$HYDRA_HOME/admission/policy"
+printf 'host_limit=' >> "$HYDRA_HOME/admission/policy"
+if admit status >/dev/null; then exit 1; fi
+cp "$TEST_DIR/policy" "$HYDRA_HOME/admission/policy"
+has "$(admit status)" '"reserved":1,"queued":11'
+
 # Broken state must fail closed, including links and partial records.
 printf 'partial\n' > "$HYDRA_HOME/admission/broken.request"
 if admit request blocked project_x 60 - > "$TEST_DIR/error"; then exit 1; fi

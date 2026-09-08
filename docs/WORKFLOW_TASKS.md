@@ -44,6 +44,11 @@ resume reconciles the same host, package and key. Changing an alias's endpoint d
 not redirect recorded work. Corrupt bindings or an unapproved attempt number
 require recovery. Deduplication is scoped to the receiving host's task store.
 
+A task in `waiting-remote` retains its workflow parallelism slot. Resume observes
+that existing dispatch before admitting more work. A lost result-collection
+response is also resumable, even after execution succeeds; invalid collection
+digests or receipt bindings still require recovery.
+
 Cancellation sends a request for the bound task. If the receiver cannot confirm
 termination, the run remains `waiting-remote`; later resume reconciles that same
 identity. Dependents remain blocked. There is no coordinator failover, automatic

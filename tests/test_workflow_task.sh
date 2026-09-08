@@ -1,6 +1,10 @@
 #!/bin/sh
 # Public workflow DAG through real task acceptance, execution and collection.
 set -eu
+if [ "${HYDRA_TEST_DAG_PARALLELISM:-0}" = 1 ]; then
+    HYDRA_TEST_DAG_LOST_ACK=1
+    export HYDRA_TEST_DAG_LOST_ACK
+fi
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
 HYDRA_HOME="$fixture/home"
@@ -16,7 +20,8 @@ cleanup() {
     done
     if [ "${passed:-0}" = 1 ]; then rm -rf "$fixture"; else printf 'Task DAG evidence: %s\n' "$fixture" >&2; fi
 }
-trap cleanup EXIT
+test_code=0
+trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
@@ -53,7 +58,7 @@ git commit -qm 'task recipes'
 commit="$(git rev-parse HEAD)"
 "$root/bin/hydra" init --no-agent --trust >/dev/null
 dag_host=local
-if [ "${HYDRA_TEST_DAG_LOST_ACK:-0}" = 1 ]; then
+if [ "${HYDRA_TEST_DAG_LOST_ACK:-0}" = 1 ] || [ "${HYDRA_TEST_DAG_RESULT_LOST:-0}" = 1 ] || [ "${HYDRA_TEST_DAG_RESULT_BAD:-0}" = 1 ]; then
     mkdir "$fixture/bin"
     HYDRA_TEST_DAG_CONTROL="$fixture"
     export HYDRA_TEST_DAG_CONTROL
@@ -69,6 +74,19 @@ if [ -f "$HYDRA_TEST_DAG_CONTROL/lose-ack" ] && grep -q '"operation":"submit"' "
     rm "$HYDRA_TEST_DAG_CONTROL/lose-ack"
     exit 255
 fi
+if [ -f "$HYDRA_TEST_DAG_CONTROL/lose-result" ] && grep -q '"operation":"result"' "$request"; then
+    /bin/sh -c "$2" < "$request" > "$HYDRA_TEST_DAG_CONTROL/lost-response"
+    rm "$HYDRA_TEST_DAG_CONTROL/lose-result"
+    exit 255
+fi
+if [ -f "$HYDRA_TEST_DAG_CONTROL/bad-result" ] && grep -q '"operation":"result"' "$request"; then
+    /bin/sh -c "$2" < "$request" > "$HYDRA_TEST_DAG_CONTROL/lost-response"
+    sed 's/"result_sha256":"[a-f0-9]*/"result_sha256":"0000000000000000000000000000000000000000000000000000000000000000/' "$HYDRA_TEST_DAG_CONTROL/lost-response" > "$HYDRA_TEST_DAG_CONTROL/bad-response"
+    mv "$HYDRA_TEST_DAG_CONTROL/bad-response" "$HYDRA_TEST_DAG_CONTROL/lost-response"
+    rm "$HYDRA_TEST_DAG_CONTROL/bad-result"
+    cat "$HYDRA_TEST_DAG_CONTROL/lost-response"
+    exit 0
+fi
 exec /bin/sh -c "$2" < "$request"
 SSH
     chmod +x "$fixture/bin/ssh"
@@ -76,7 +94,9 @@ SSH
     export PATH
     "$root/bin/hydra" remote add build loopback --hydra "$root/bin/hydra" --home "$HYDRA_HOME" >/dev/null
     dag_host=build
-    : > "$fixture/lose-ack"
+    if [ "${HYDRA_TEST_DAG_LOST_ACK:-0}" = 1 ]; then : > "$fixture/lose-ack"; fi
+    if [ "${HYDRA_TEST_DAG_RESULT_LOST:-0}" = 1 ]; then : > "$fixture/lose-result"; fi
+    if [ "${HYDRA_TEST_DAG_RESULT_BAD:-0}" = 1 ]; then : > "$fixture/bad-result"; fi
 fi
 for node in produce consume; do
     selected='[]'
@@ -113,6 +133,21 @@ steps:
       task_input: recipe
 YAML
 if [ "${HYDRA_TEST_DAG_SOURCE:-0}" = 1 ]; then printf '      source_step: produce\n' >> "$fixture/workflow.yml"; fi
+if [ "${HYDRA_TEST_DAG_PARALLELISM:-0}" = 1 ]; then
+    sed 's/parallelism: 2/parallelism: 1/' "$fixture/workflow.yml" > "$fixture/serial.yml"
+    mv "$fixture/serial.yml" "$fixture/workflow.yml"
+    cat >> "$fixture/workflow.yml" <<'YAML'
+  - id: independent
+    kind: task
+    needs: []
+    retry: 0
+    idempotent: false
+    args:
+      task_input: recipe
+YAML
+    sed 's/"steps":{/"steps":{"independent":{"inputs":{"recipe":{"input":"producer-recipe"}},"outputs":{"result":{"path":"result.txt","type":"file","max_bytes":4096}}},/' "$fixture/data.json" > "$fixture/independent.json"
+    mv "$fixture/independent.json" "$fixture/data.json"
+fi
 if [ "${HYDRA_TEST_DAG_SOURCE_TAMPER:-0}" = 1 ]; then
     # shellcheck source=/dev/null
     . "$root/tests/workflow_task_source_cases.sh"
@@ -132,12 +167,31 @@ if [ "${HYDRA_TEST_DAG_SOURCE_TAMPER:-0}" = 1 ]; then
     workflow_source_fault_assert
     exit 0
 fi
-if [ "${HYDRA_TEST_DAG_LOST_ACK:-0}" = 1 ]; then
-    [ "$run_code" = 3 ]
+if [ "${HYDRA_TEST_DAG_LOST_ACK:-0}" = 1 ] || [ "${HYDRA_TEST_DAG_RESULT_LOST:-0}" = 1 ] || [ "${HYDRA_TEST_DAG_RESULT_BAD:-0}" = 1 ]; then
+    if [ "${HYDRA_TEST_DAG_RESULT_BAD:-0}" = 1 ]; then [ "$run_code" = 1 ]; else [ "$run_code" = 3 ]; fi
     run="$(sed -n '1p' "$fixture/run.out")"
     run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
     cp "$run_dir/steps/produce/attempt-1/remote/dispatch.json" "$fixture/original-dispatch"
     original_id="$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json -print | sed 's|/acceptance.json$||;s|.*/||')"
+    if [ "${HYDRA_TEST_DAG_PARALLELISM:-0}" = 1 ]; then
+        [ "$(cat "$run_dir/steps/independent/state")" = ready ]
+        [ ! -d "$run_dir/steps/independent/attempt-1" ]
+        [ "$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" = 1 ]
+    fi
+    if [ "${HYDRA_TEST_DAG_RESULT_LOST:-0}" = 1 ]; then
+        "$root/bin/hydra" fleet task status build --id "$original_id" > "$fixture/result-status"
+        grep -q '"state":"succeeded"' "$fixture/result-status"
+        grep -q '"result_state":"ready"' "$fixture/result-status"
+    fi
+    if [ "${HYDRA_TEST_DAG_RESULT_BAD:-0}" = 1 ]; then
+        [ "$(cat "$run_dir/state")" = recovery-required ]
+        [ "$(cat "$run_dir/steps/produce/attempt-1/exit-code")" = 76 ]
+        [ "$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" = 1 ]
+        [ ! -d "$run_dir/steps/consume/attempt-1" ]
+        passed=1
+        printf 'Task DAG: malformed result remains recovery-required without downstream acceptance\n'
+        exit 0
+    fi
     if [ -n "${HYDRA_TEST_DAG_FAULT:-}" ]; then
         # shellcheck source=/dev/null
         . "$root/tests/workflow_task_fault_cases.sh"
@@ -154,7 +208,9 @@ grep -q '"state":"succeeded"' "$fixture/status"
 run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
 printf 'producer output\nconsumer output\n' > "$fixture/expected"
 cmp "$fixture/expected" "$run_dir/steps/consume/attempt-1/artifacts/result"
-[ "$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" = 2 ]
+expected_tasks=2
+if [ "${HYDRA_TEST_DAG_PARALLELISM:-0}" = 1 ]; then expected_tasks=3; fi
+[ "$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" = "$expected_tasks" ]
 [ -s "$run_dir/steps/produce/attempt-1/remote/collection.json" ]
 [ -s "$run_dir/steps/consume/attempt-1/remote/receipt.json" ]
 if [ "${HYDRA_TEST_DAG_REPLAY:-0}" = 1 ]; then

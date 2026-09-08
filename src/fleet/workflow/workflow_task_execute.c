@@ -122,9 +122,22 @@ static int materialize(const char *attempt, json_object *result) {
     }
     return 0;
 }
+static bool collection_transport_failure(json_object *response) {
+    const char *code = f_string(f_field(response, "error"), "code");
+    const char *transient[] = {"outcome_unknown", "timeout", "offline", "cancelled", "invalid_response", "remote_failed", "output_limit", "transport_failed", "authentication_failed", "host_key_failed", NULL};
+    for (size_t i = 0; code && transient[i]; i++) if (!strcmp(code, transient[i])) return true;
+    return false;
+}
 static json_object *collect(const char *attempt, const char *remote, json_object *record, const char *id, const char *source) {
     json_object *response = request(record, "result", id, false), *envelope = f_field(f_field(response, "data"), "collection");
     json_object *checked = task_result_verify(envelope), *collected = NULL; bool valid = false;
+    if (!json_object_get_boolean(f_field(response, "ok"))) {
+        bool transient = collection_transport_failure(response);
+        json_object_put(response); json_object_put(checked); json_object_put(collected);
+        return f_error("workflow task", transient ? "waiting_remote" : "result_unavailable",
+            transient ? "result collection transport was interrupted; reconcile the same task identity" :
+                        "task result or collection is unavailable or failed binding verification");
+    }
     if (!json_object_get_boolean(f_field(checked, "ok")) ||
         !receipt_matches(f_field(f_field(envelope, "result"), "receipt"), record, id)) goto done;
     collected = task_collect(source, envelope);

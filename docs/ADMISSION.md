@@ -53,6 +53,9 @@ existing reservations above the new limit; no further slots are granted until
 capacity permits. Policy is private receiver configuration and is never sourced
 as shell code or taken from a submitted repository.
 
+An existing policy must contain all five fields exactly once. Empty, partial or
+malformed policy files block admission; defaults apply only when no policy exists.
+
 ## Owner interface
 
 ```sh

@@ -20,9 +20,10 @@ workflow_task_resume() {
         _wtr_sd="$1/steps/$_wtr_id"
         rm -f "$_wtr_sd/cancel-reconciled"
         [ ! -f "$1/cancel-requested" ] || continue
-        case "$(sed -n '1p' "$_wtr_sd/state")" in
-            waiting-remote) workflow_atomic_scalar "$_wtr_sd/state" ready ;;
-        esac
+        if workflow_plan_expired "$1"; then continue; fi
+        if [ "$(sed -n '1p' "$_wtr_sd/state")" = waiting-remote ]; then
+            workflow_task_start "$1" "$_wtr_id" || return 1
+        fi
     done < "$1/graph.tsv"
 }
 workflow_task_start() {
@@ -84,7 +85,11 @@ workflow_task_start() {
 workflow_waiting_state() {
     _wws_states="$(find "$1/steps" -name state -exec sed -n '1p' {} \;)"
     printf '%s\n' "$_wws_states" | grep -Eq '^waiting-(approval|remote)$' || return 1
-    if printf '%s\n' "$_wws_states" | grep -Eq '^(ready|running|retrying)$'; then return 1; fi
+    if printf '%s\n' "$_wws_states" | grep -Eq '^(running|retrying)$'; then return 1; fi
+    if printf '%s\n' "$_wws_states" | grep -q '^ready$'; then
+        _wws_remote="$(printf '%s\n' "$_wws_states" | grep -c '^waiting-remote$' || true)"
+        [ "$_wws_remote" -ge "$(sed -n '1p' "$1/parallelism")" ] || return 1
+    fi
     _wws_state=waiting-approval
     if printf '%s\n' "$_wws_states" | grep -q '^waiting-remote$'; then _wws_state=waiting-remote; fi
     workflow_atomic_scalar "$1/state" "$_wws_state"

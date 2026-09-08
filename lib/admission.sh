@@ -52,8 +52,8 @@ admission_open() {
     _ad_host_limit=0 _ad_project_limit=0 _ad_disk_floor_kb=0 _ad_queue_limit=128 _ad_host_labels=-
     if [ -e "$_ad_root/policy" ] || [ -L "$_ad_root/policy" ]; then
         [ -f "$_ad_root/policy" ] && [ ! -L "$_ad_root/policy" ] || return 1
-        _ad_seen=' '
-        while IFS='=' read -r _ad_key _ad_value; do
+        _ad_seen=' ' _ad_fields=0
+        while IFS='=' read -r _ad_key _ad_value || [ -n "$_ad_key$_ad_value" ]; do
             case "$_ad_seen" in *" $_ad_key "*) return 1 ;; esac
             _ad_seen="$_ad_seen$_ad_key "
             case "$_ad_key" in
@@ -64,7 +64,9 @@ admission_open() {
                 labels) admission_labels "$_ad_value" || return 1; _ad_host_labels="$_ad_value" ;;
                 *) return 1 ;;
             esac
+            _ad_fields=$((_ad_fields + 1))
         done < "$_ad_root/policy"
+        [ "$_ad_fields" -eq 5 ] || return 1
     fi
     _ad_disk_free_kb="$(LC_ALL=C df -Pk "$_ad_root" | awk 'END {print $4}')"
     admission_number "$_ad_disk_free_kb" || return 1
@@ -201,7 +203,9 @@ cmd_admission() (
         _ad_target_project="$1"
     else
         if [ "$_ad_action" = release ]; then
-            [ $# -eq 1 ] && [ "$1" = --confirmed ] || { admission_error confirmation_required 'Release requires confirmed execution termination'; exit 1; }
+            if [ $# -ne 1 ] || [ "$1" != --confirmed ]; then
+                admission_error confirmation_required 'Release requires confirmed execution termination'; exit 1
+            fi
         else [ $# -eq 0 ] || { admission_error invalid_input 'Unexpected arguments'; exit 1; }
         fi
         admission_read "$_ad_path" || { admission_error not_found 'Admission request unavailable'; exit 1; }
@@ -210,8 +214,10 @@ cmd_admission() (
     admission_scan || { admission_error recovery_required 'Invalid admission record'; exit 1; }
     if [ "$_ad_action" = request ]; then
         if [ -e "$_ad_path" ] || [ -L "$_ad_path" ]; then
-            admission_read "$_ad_path" && [ "$_ad_project" = "$1" ] && [ "$_ad_required" = "$3" ] &&
-                [ "$((_ad_deadline - _ad_requested))" -eq "$2" ] || { admission_error submission_conflict 'Request ID already binds different or invalid inputs'; exit 1; }
+            if ! admission_read "$_ad_path" || [ "$_ad_project" != "$1" ] || [ "$_ad_required" != "$3" ] ||
+                [ "$((_ad_deadline - _ad_requested))" -ne "$2" ]; then
+                admission_error submission_conflict 'Request ID already binds different or invalid inputs'; exit 1
+            fi
         else
             [ "$_ad_queued" -lt "$_ad_queue_limit" ] || { admission_error queue_full 'Host admission queue is full'; exit 1; }
             _ad_project="$1" _ad_requested="$_ad_now" _ad_deadline=$((_ad_now + $2)) _ad_sequence="$_ad_next" _ad_required="$3" _ad_state=queued _ad_reason=pending

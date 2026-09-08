@@ -229,9 +229,7 @@ workflow_recover_running_steps() {
         _wrr_attempt="$(sed -n '1p' "$_wrr_sd/attempts")"
         _wrr_exit="$(sed -n '1p' "$_wrr_sd/attempt-$_wrr_attempt/exit-code" 2>/dev/null || true)"
         if [ "$_wrr_kind" = task ]; then
-            _wrr_reconcile=ready
-            [ ! -f "$_wrr_dir/cancel-requested" ] || _wrr_reconcile=waiting-remote
-            workflow_atomic_scalar "$_wrr_sd/state" "$_wrr_reconcile"
+            workflow_atomic_scalar "$_wrr_sd/state" waiting-remote
             continue
         fi
         workflow_attempt_result "$_wrr_dir" "$_wrr_id" "$_wrr_retry" "$_wrr_idem" "${_wrr_exit:-unknown}"
@@ -395,7 +393,8 @@ workflow_drive() {
         }
     fi
     workflow_plan_repair "$_wd_dir" repair-resume >/dev/null || return 1
-    workflow_task_resume "$_wd_dir"
+    workflow_recover_running_steps "$_wd_dir" || return 1
+    workflow_task_resume "$_wd_dir" || return 1
     trap 'workflow_atomic_scalar "$_wd_dir/cancel-requested" "$(date +%s)"' HUP INT TERM
     _wd_parallelism="$(sed -n '1p' "$_wd_dir/parallelism")"
     while :; do
