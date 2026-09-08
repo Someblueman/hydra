@@ -34,9 +34,10 @@ static void native_workspace_evidence_text(struct app *app, struct tv_canvas *c,
     if (!e || !e->run[0]) { tv_text(c,(struct tv_rect){0,0,c->width,1},"No selected recorded run",TV_WARNING); return; }
     if (app->workflows) for (i=0;i<app->workflows->run_count;i++)
         if (!strcmp(app->workflows->runs[i].id,e->run)) { state=app->workflows->runs[i].state; break; }
-    dashboard_text(c,0,0,c->width,e->stale || e->verdict==3 ? TV_WARNING : TV_STRONG,"%s / run %s / %s",
+    dashboard_text(c,0,0,c->width,e->stale || e->verdict==3 ? TV_WARNING : TV_STRONG,"%s / %s%s / %s",
         e->stale ? "STALE EVIDENCE" : !e->text ? "LOADING EVIDENCE" : e->verdict==2 ? "VERIFIED ARTIFACTS" :
-        e->verdict==3 ? "ARTIFACTS REFUSED" : "OBSERVED EVIDENCE",state,e->step);
+        e->verdict==3 ? "ARTIFACTS REFUSED" : c->width<60 ? "OBSERVED" : "OBSERVED EVIDENCE",
+        c->width<60 ? "" : "run ",state,e->step);
     if (e->text) native_workspace_text(c,e->text,e->length,scroll);
     else tv_text(c,(struct tv_rect){0,1,c->width,1},e->stale ? "Complete evidence unavailable" : "Reading run, output and artifact records",TV_WARNING);
 }

@@ -17,7 +17,9 @@ build/termviz-workspace --shell
 
 `CC`, `AR`, `CFLAGS` and `CPPFLAGS` can be overridden on the make command line.
 The build requires GNU make. The POSIX examples need a terminal and the host PTY
-interfaces. Python is a test dependency only. `make clean` removes this extracted
+interfaces. Python and `ps` (procps on Debian) are test dependencies only.
+Linux owned-session cleanup uses `/proc`; deliberately detached sessions are
+outside the adapter's ownership. `make clean` removes this extracted
 tree's `build` directory.
 
 ## Ownership and compatibility
@@ -44,8 +46,10 @@ no bundled third-party runtime. Compiler/toolchain licensing remains the user's
 installation's responsibility.
 
 Local runtime qualification is recorded in the Hydra repository's acceptance
-record. macOS is the currently tested POSIX platform. Linux and other systems
-remain unqualified until their component and PTY suites run there. Windows has no
+record. macOS arm64 (Apple Clang 17, UBSan) and Linux aarch64
+(Debian GCC 12.2, ASan/UBSan) passed component and real PTY suites. Linux was
+tested in a Debian Bookworm container on LinuxKit 6.12.67. Other systems remain
+unqualified until their component and PTY suites run there. Windows has no
 provided process/terminal adapter. A portable-core build alone does not qualify a
 platform's display, terminal driver or process lifecycle.
 

@@ -1,0 +1,24 @@
+ HYDRA WORKSPACE / C MONITOR / Local
+ [ ] runs / Y approve / N reject / R resume / X cancel / A conversation / B pl
+╭─PLAN / EVIDENCE─────────────────────────────────────────────────────────────╮
+│FOCUS / scroll 18                                                            │
+│OBSERVED EVIDENCE / run waiting-approval / review                            │
+│Step: review                                                                 │
+│State: pending                                                               │
+│Message: Please review failed run run_0e6123d7d1ce8fff341f before repairing t│
+│he production filter and proposing a newly approved plan. All exec processes │
+│exited 0, but the sealed check verdict is fail: staging-only appeared where T│
+│OTAL should be, and the report had 5 rows instead of 4.                      │
+│Binding: 0319cccc644d752da7485c989438920b5cee89b3                            │
+│Expires (Unix seconds): none                                                 │
+│Evidence: /tmp/hydra-real-workspace-1ww4v6pp/home/state/v2/projects/project_2│
+│03e0b99cb0df4d1a57d/workflows/runs/run_d14b90449897630dad1e/approvals/step_01│
+│01950ee39d3160a179/binding.tsv                                               │
+│Decision: none                                                               │
+│                                                                             │
+│Workspace control results (last 8192 bytes)                                  │
+│Not recorded.                                                                │
+│                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
+Current snapshot / age 0s / Terminal run: no resume or cancel. Inspect evidence
+Tab focus z zoom a interact S split D stats q quit

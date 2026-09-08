@@ -60,7 +60,7 @@ Invalid identifiers, stale instances and mismatched ownership are refused before
 interactive input reaches a session. It does not select by a partial branch name.
 
 Exiting the UI, closing a client, or receiving a handled termination signal closes
-only the attachment PTY and its client process group. The existing tmux server,
+only the attachment PTY and its owned client session. The existing tmux server,
 shell and agent remain alive. Reconnection rechecks identity rather than attaching
 to a replacement instance silently. Existing palette actions still invoke the
 public CLI; the shell-only TUI and full-terminal switch remain available.
@@ -85,13 +85,13 @@ input still works during collection, timeout and recovery. Exact outer terminal
 settings are checked on exit. `make sanitize-attached` runs the same path under
 the platform's sanitizer setup.
 
-These shell/client checks do not qualify every agent CLI. Real Codex planning,
-permission prompts and the complete A/B/C/D workflow remain separate roadmap
-acceptance requirements. Remote attachments currently retain the existing fleet
+These shell/client checks do not qualify every agent CLI. The subsequent
+[real workflow acceptance](WORKSPACE_REAL_ACCEPTANCE.md) qualifies Codex 0.153.3
+planning, permission prompts and A/B/C/D interaction in the tested configuration. Remote attachments currently retain the existing fleet
 handoff path. The supported terminal interpretation subset is documented in
 [termviz's terminal contract](../src/termviz/TERMINAL.md).
 
-### Real Codex observation, 7 September 2026
+### Earlier Codex observation, 7 September 2026
 
 Codex CLI 0.153.3 was launched inside a real Hydra attachment with
 `--sandbox workspace-write --ask-for-approval on-request --no-alt-screen` in a
@@ -107,3 +107,24 @@ composer too little room. Compact focused-pane rendering now exposes the real
 Codex composer and its unsent draft at that size; the follow-up capture is
 `build/codex-terminal-evidence/compact-draft-40x10.txt`. This corrects the observed
 layout problem without claiming model or permission-request qualification.
+
+### Real Codex qualification, 8 September 2026
+
+Two Codex CLI 0.153.3 conversations completed the production-report exercise
+through existing Hydra tmux sessions. The planner authored and revised the plan;
+the reviewer independently wrote the checker and inspected the final sealed
+result. Interactive questions, bracketed paste, native tool approval, scrolling,
+three terminal sizes, unsent drafts, switching and reconnect were exercised.
+The earlier authentication failure is superseded by successful live requests.
+A fresh, qualification-owned `codex app-server --listen unix://...` process used
+the refreshed native login; both clients used `--remote unix://... -C <fixture>`
+with `--sandbox workspace-write --ask-for-approval on-request --no-alt-screen`.
+The existing shared app server was not restarted or reconfigured.
+
+Escape interrupted the model turn but did not establish tool-process termination.
+The CLI's explicit `/stop` then stopped the observed background probe; its final
+marker remained absent after the original deadline. This is a Codex control
+observation, separate from Hydra's client-only detach and workflow cancellation.
+No other agent CLI was selected for this exercise. Full terminal-protocol
+compatibility and remote Hydra attachment are not implied. See the acceptance
+record for exact runs, hashes, captures and the separate recovery decision stage.

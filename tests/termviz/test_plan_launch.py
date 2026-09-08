@@ -100,6 +100,9 @@ with tempfile.TemporaryDirectory(prefix="hydra-plan-launch-") as folder:
         run_id = receipts[0].read_text().strip()
         run_dir = receipts[0].parents[2] / "runs" / run_id
         assert run_dir.joinpath("state").read_text().strip() not in ("succeeded", "failed")
+        s.send("E")
+        s.until("This revision was already submitted")
+        assert "Type exact digest" not in s.screen.text()
         s.close(keys=b"q")
         assert not compiled.exists(), "UI temporary snapshot was not cleaned"
         duplicate = run(hydra, "workflow", "plan", "--workspace-owner", digest, input=snapshot, check=False)

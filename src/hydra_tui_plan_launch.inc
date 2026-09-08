@@ -35,22 +35,27 @@ static void native_plan_launch_tick(struct app *app, bool watch) {
                 bool changed=strcmp(p->launch_state,fields[2]) || (strcmp(fields[3],"-") && strcmp(p->launched_run,fields[3]));
                 copy_text(p->launch_state,sizeof(p->launch_state),fields[2]);
                 if (strcmp(fields[3],"-")) {
-                    size_t i;
                     if (strcmp(p->launched_run,fields[3])) p->follow_launched_run=true;
                     copy_text(p->launched_run,sizeof(p->launched_run),fields[3]);
-                    if (p->follow_launched_run && app->workflows) for (i=0;i<app->workflows->run_count;i++)
-                        if (!strcmp(app->workflows->runs[i].id,fields[3])) {
-                            app->workflow_run=i; app->workflow_node=0; p->follow_launched_run=false; break;
-                        }
                     if (changed) snprintf(app->notice,sizeof(app->notice),"Run %s / launch owner %s / exit %s",fields[3],fields[2],fields[4]);
                 } else if (changed) snprintf(app->notice,sizeof(app->notice),"Launch %s / no run receipt / exit %s. No automatic retry.",fields[2],fields[4]);
                 valid=true;
             }
         }
         if (input) fclose(input);
-        if (!valid) copy_text(app->notice,sizeof(app->notice),"Launch observation unavailable; execution outcome unknown. No automatic retry.");
+        if (!valid) copy_text(app->notice,sizeof(app->notice),p->launched_run[0] ?
+            "Launch owner observation unavailable; recorded run retained. Inspect C for execution evidence." :
+            "Launch observation unavailable; execution outcome unknown. No automatic retry.");
     }
-    if (watch && !p->launch_job.pid && p->launched_digest[0]) {
+    /* The workflow snapshot can arrive after the immutable finished receipt. */
+    if (p->follow_launched_run && app->workflows) {
+        size_t i;
+        for (i=0;i<app->workflows->run_count;i++)
+            if (!strcmp(app->workflows->runs[i].id,p->launched_run)) {
+                app->workflow_run=i; app->workflow_node=0; p->follow_launched_run=false; break;
+            }
+    }
+    if (watch && !p->launch_job.pid && p->launched_digest[0] && strcmp(p->launch_state,"finished")) {
         char *argv[]={(char *)app->hydra,"workflow","plan","--workspace-status",p->launched_digest,NULL};
         (void)native_capture_start(&p->launch_job,argv,3000);
     }

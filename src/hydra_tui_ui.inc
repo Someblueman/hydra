@@ -362,7 +362,9 @@ static int interactive_main(struct app *app) {
         }
         else if (app->view==7 && key=='E') {
             struct native_plan *p=app->plan;
-            if (p && p->state==PLAN_READY && !app->fleet) {
+            if (p && p->digest[0] && !strcmp(p->digest,p->launched_digest)) {
+                copy_text(app->notice,sizeof(app->notice),"This revision was already submitted. Open C to inspect its recorded run.");
+            } else if (p && p->state==PLAN_READY && !app->fleet) {
                 char digest[65],answer[128],prompt[256];
                 unsigned revision=p->revision;
                 copy_text(digest,sizeof(digest),p->digest);

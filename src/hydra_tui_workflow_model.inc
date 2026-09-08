@@ -142,6 +142,7 @@ static bool workflow_key(struct app *app, char key) {
     else if (key == '[' || key == ']') {
         if (app->workflows && app->workflows->run_count) {
             size_t n = app->workflows->run_count;
+            if (n > 1) app->notice[0] = '\0';
             app->workflow_run = (app->workflow_run + (key == ']' ? 1 : n - 1)) % n;
             app->workflow_node = 0; app->graph_x = 0; app->graph_y = 0; app->graph_follow = true;
         }

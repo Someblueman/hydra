@@ -103,6 +103,7 @@ steps:
                     s.resize(width, height)
                     s.pump(.3)
                     assert s.screen.overflow == 0
+                    assert "waiting-approval" in s.screen.text(), s.screen.text()
                     s.screen.save(evidence / f"waiting-{width}x{height}.html")
             if action == "approve":
                 s.send("Y")
@@ -156,6 +157,9 @@ steps:
                     s.screen.save(evidence / f"{terminal}-{width}x{height}.html")
                 s.send("R")
                 s.until("Terminal run: no resume or cancel", timeout=10)
+                s.send("]")
+                s.pump(.3)
+                assert "Terminal run: no resume or cancel" not in s.screen.text()
                 s.close(keys=b"q")
         assert effects.read_text().splitlines().count("after") == 1
         assert not (worker / "unsent-control-proof").exists()

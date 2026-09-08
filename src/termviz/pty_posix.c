@@ -11,6 +11,30 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <dirent.h>
+#include <limits.h>
+
+/* Job-control shells put background jobs in separate process groups. Linux
+ * exposes session membership through /proc; signal only this owned session.
+ * Keep its leader unreaped until the final scan so its ID cannot be reused.
+ * A tmux server owns a different session and is deliberately outside this set. */
+static void signal_session(pid_t session, int signal_number) {
+    DIR *directory = opendir("/proc");
+    struct dirent *entry;
+    if (!directory) return;
+    while ((entry = readdir(directory)) != NULL) {
+        char *end;
+        long value;
+        if (entry->d_name[0] < '1' || entry->d_name[0] > '9') continue;
+        errno = 0;
+        value = strtol(entry->d_name, &end, 10);
+        if (errno || *end || value > INT_MAX) continue;
+        if (getsid((pid_t)value) == session) kill((pid_t)value, signal_number);
+    }
+    closedir(directory);
+}
+#endif
 
 bool tv_pty_resize(struct tv_pty *p, int columns, int rows) {
     struct winsize size;
@@ -111,6 +135,12 @@ void tv_pty_close(struct tv_pty *p) {
     pid_t foreground = p->fd >= 0 ? tcgetpgrp(p->fd) : -1;
     int i, status;
     if (p->pid > 0 && !p->finished) {
+#ifdef __linux__
+        struct timespec pause = {0,200000000L};
+        signal_session(p->pid, SIGHUP);
+        while (nanosleep(&pause, &pause) < 0 && errno == EINTR) { }
+        signal_session(p->pid, SIGKILL);
+#endif
         if (foreground > 0 && foreground != p->pid && getsid(foreground) == p->pid) kill(-foreground, SIGHUP);
         kill(-p->pid, SIGHUP);
     }

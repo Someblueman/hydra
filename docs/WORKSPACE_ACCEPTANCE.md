@@ -76,11 +76,11 @@ Long text is clipped, and pane scroll positions survive resizing.
 This qualification does not establish full xterm or agent-CLI compatibility.
 Unicode handling uses bounded cell-width rules rather than general grapheme
 shaping. History is physical rows without reflow. The process adapter owns its
-child and ordinary foreground jobs, not deliberately detached daemons. Terminal
+child and ordinary jobs in its session, not deliberately detached daemons. Terminal
 support and limits are specified in [TERMINAL.md](../src/termviz/TERMINAL.md).
 The later [attached-terminal qualification](ATTACHED_TERMINALS.md) adds two visible
-tmux clients, independent scrollback and preserved drafts. Full agent-response
-qualification and additional-platform evidence remain in [the roadmap](ROADMAP.md).
+tmux clients, independent scrollback and preserved drafts. Real agent-response
+qualification and Linux evidence are in [the later acceptance record](WORKSPACE_REAL_ACCEPTANCE.md).
 Standalone publication requires a separate release decision.
 
 ## Integrated workspace checks, 7 September 2026
@@ -108,10 +108,9 @@ A separate UBSan stress probe also exercised 512 heads sharing run associations;
 the navigation capacity limit remained explicit and the probe completed without
 sanitizer errors.
 
-Real Codex CLI 0.153.3 renders its composer and preserves a draft, but its model
-request still fails during access-token refresh. This was reconfirmed after the
-integrated changes; `codex login status` alone was insufficient evidence of usable
-authentication. The representative agent-authored workflow, tool permission
-interaction and resulting end-to-end acceptance remain unqualified. Refreshing
-the CLI login is required to continue that acceptance. Additional operating-system
-qualification is unavailable.
+The earlier Codex access-token refresh blocker was resolved for the qualification
+by using a fresh, isolated app server with the refreshed native login. The
+[8 September real-workflow record](WORKSPACE_REAL_ACCEPTANCE.md) supersedes that
+blocked result and records successful model/tool interaction, three stages of
+execution and recovery, final artifact verification and final-code checks.
+Linux standalone component/PTY and ASan/UBSan qualification also passed there.

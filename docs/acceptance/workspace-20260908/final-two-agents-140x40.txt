@@ -1,0 +1,40 @@
+ HYDRA WORKSPACE / A CONVERSATION / Local
+ A conversation / B plan / C monitor / P load / V validate / E approve / D stats / z zoom focus
+╭─NAVIGATION────────────────────────────╮│╭─planner / AGENT UNKNOWN──────────────────────╮│╭─reviewer / AGENT UNKNOWN─────────────────────╮
+│Tab to focus / scroll 0                │││ATTACHED / INPUT TO AGENT / Ctrl-B Tab Hydra  │││ATTACHED / Tab to interact                    │
+│ - Project: repo                       │││  draft.json to plan production-report-       │││  bytes and matching the check:               │
+│   - report-attempt-two                │││  recovery, head report-attempt-two, and      │││                                              │
+│     └ production-report-recovery / suc│││  truthful recovery assumptions. Graph,       │││                                              │
+│   └ reviewer                          │││  policy, bindings, and criteria are          │││  3198ee2db843848077545dfda13cac114fe4e04ad58f│
+│*  └ planner                           │││  preserved.                                  │││  789c51c6e98672c55c70                        │
+│   - report-attempt-one                │││                                              │││                                              │
+│     └ production-report-plan / failed │││  .hydra/ remains untracked. No workflow was  │││  Read-only inspection completed; no edits,   │
+│     └ recovery-review / succeeded / ru│││  run, approved, or resumed.                  │││  commits, launches, or retries.              │
+│                                       │││                                              │││                                              │
+│                                       │││─ Worked for 1m 01s ──────────────────────────│││──────────────────────────────────────────────│
+│                                       │││                                              │││                                              │
+│                                       │││                                              │││                                              │
+│                                       │││› Ask Codex to do anything                    │││› Ask Codex to do anything                    │
+│                                       │││                                              │││                                              │
+│                                       │││  gpt-6-astra low · /tmp/hydra-real-workspace…│││  gpt-6-astra low · /tmp/hydra-real-workspace…│
+│                                       │││[planner] 0:codex*      "repo" 11:19 08-Sep-26│││[reviewer]0:codex*      "repo" 11:19 08-Sep-26│
+│                                       ││╰──────────────────────────────────────────────╯│╰──────────────────────────────────────────────╯
+│                                       ││─────────────────────────────────────────────────────────────────────────────────────────────────
+│                                       ││╭─ACTIVITY / RECOVERY───────────────────────────────────────────────────────────────────────────╮
+│                                       │││Tab to focus / scroll 0                                                                        │
+│                                       │││4 heads / 0 recovery findings                                                                  │
+│                                       │││Events 3 / Messages 0 / Signals 0                                                              │
+│                                       │││Queue 0 / Changed files 0                                                                      │
+│                                       │││Gates 0 / Approved 0                                                                           │
+│                                       │││Claims 0 / Scopes 0                                                                            │
+│                                       │││                                                                                               │
+│                                       │││                                                                                               │
+│                                       │││                                                                                               │
+│                                       │││                                                                                               │
+│                                       │││                                                                                               │
+│                                       │││                                                                                               │
+│                                       │││                                                                                               │
+│                                       │││                                                                                               │
+╰───────────────────────────────────────╯│╰───────────────────────────────────────────────────────────────────────────────────────────────╯
+Current snapshot / age 1s / Two attached agents / Ctrl-B Tab changes focus / Ctrl-B S restores one pane
+INPUT TO AGENT / Ctrl-B Tab focus / Ctrl-B S split / Ctrl-B D statistics / Ctrl-B n next / Ctrl-B q quit

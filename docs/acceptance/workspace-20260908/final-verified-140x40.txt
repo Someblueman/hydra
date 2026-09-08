@@ -1,0 +1,40 @@
+ HYDRA WORKSPACE / C MONITOR / Local
+ [ ] runs / Y approve / N reject / R resume / X cancel / A conversation / B plan / D stats / z restore panes
+╭─PLAN / EVIDENCE─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│FOCUS / scroll 0                                                                                                                         │
+│VERIFIED ARTIFACTS / run succeeded / spawn                                                                                               │
+│Workflow run_ff335619a40de2f45f46: succeeded (source: recorded)                                                                          │
+│  spawn [spawn]: succeeded (attempts=1)                                                                                                  │
+│  preflight [exec]: succeeded (attempts=1)                                                                                               │
+│  compose [exec]: succeeded (attempts=1)                                                                                                 │
+│  verify [exec]: succeeded (attempts=1)                                                                                                  │
+│                                                                                                                                         │
+│Selected step: spawn                                                                                                                     │
+│Observed state: succeeded                                                                                                                │
+│Attempt: 1                                                                                                                               │
+│Exit code: 0                                                                                                                             │
+│                                                                                                                                         │
+│Standard output (last 8192 bytes)                                                                                                        │
+│Session 'report-attempt-two' created (HYDRA_NO_SWITCH set; not attaching)                                                                │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│Standard error (last 8192 bytes)                                                                                                         │
+│Creating worktree for branch 'report-attempt-two'...                                                                                     │
+│Preparing worktree (new branch 'report-attempt-two')                                                                                     │
+│HEAD is now at 8faa971 Filter report aggregation to production traffic                                                                   │
+│Creating tmux session 'report-attempt-two'...                                                                                            │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│Input requests (recorded binding, expiry and decision)                                                                                   │
+│No recorded input requests.                                                                                                              │
+│                                                                                                                                         │
+│Workspace control results (last 8192 bytes)                                                                                              │
+│Not recorded.                                                                                                                            │
+│                                                                                                                                         │
+│Artifact verification                                                                                                                    │
+│Accepted plan: 4fae7926672b2410c7f61e8db8e37e9e154c589ada33cdf497350263839e4109                                                          │
+│                                                                                                                                         │
+│Deliverable report: 94 bytes (file)                                                                                                      │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+Current snapshot / age 0s / Focused pane expanded / z restores splits
+Tab focus / j k scroll / h l tree / drag splits / a interact / S split agents / D statistics / : actions / q quit
