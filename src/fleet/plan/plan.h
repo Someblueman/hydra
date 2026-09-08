@@ -19,7 +19,13 @@ bool plan_has(json_object *array, const char *text);
 int plan_index(json_object *steps, const char *id);
 int plan_validate(json_object *plan, json_object *policy, json_object *errors);
 int plan_graph(json_object *plan, json_object *errors);
+int plan_evidence_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors);
 int plan_lower(json_object *plan, const char *directory);
+json_object *plan_task_bindings(json_object *plan, json_object *data, json_object *source, const char *scratch, json_object *errors);
+json_object *plan_validation_context(json_object *compiled, const char *step);
+int plan_step_check(const char *run, const char *step);
+int plan_validation_write(const char *run, const char *step, const char *directory, const char *name);
+json_object *plan_artifact(json_object *compiled, const char *run, const char *step, const char *name, char path[F_PATH]);
 json_object *plan_compile(json_object *plan, json_object *policy, const char *source, json_object *errors);
 int plan_digest(json_object *value, char digest[65]);
 /* Borrowed JSON inputs. Digest is caller-owned; reports retain no references.

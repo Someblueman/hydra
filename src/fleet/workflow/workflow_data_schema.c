@@ -58,18 +58,22 @@ static bool dependency(json_object *graph, const char *step, const char *produce
     }
     return false;
 }
+static bool reference_valid(json_object *manifest, json_object *graph, const char *step, json_object *value) {
+    const char *const keys[] = {"input", "step", "output", "validation", NULL};
+    const char *input = f_string(value, "input"), *producer = f_string(value, "step"), *output = f_string(value, "output");
+    if (!task_keys(value, keys)) return false;
+    if (f_field(value, "validation"))
+        return json_object_object_length(value) == 1 && f_string(value, "validation") &&
+            !strcmp(f_string(value, "validation"), "plan") && !strcmp(f_string(f_field(graph, step), "kind"), "task");
+    if (input)
+        return wd_name(input) && !f_field(value, "step") && !f_field(value, "output") && f_field(f_field(manifest, "inputs"), input);
+    return !f_field(value, "input") && wd_name(producer) && wd_name(output) && dependency(graph, step, producer) &&
+        f_field(f_field(f_field(f_field(manifest, "steps"), producer), "outputs"), output);
+}
 static bool references(json_object *manifest, json_object *graph, const char *step, json_object *inputs) {
-    const char *const keys[] = {"input", "step", "output", NULL};
     if (!json_object_is_type(inputs, json_type_object) || json_object_object_length(inputs) > (int)WD_NAMES) return false;
     json_object_object_foreach(inputs, name, value) {
-        const char *input = f_string(value, "input"), *producer = f_string(value, "step"), *output = f_string(value, "output");
-        if (!wd_name(name) || !task_keys(value, keys)) return false;
-        if (input) {
-            if (!wd_name(input) || f_field(value, "step") || f_field(value, "output") || !f_field(f_field(manifest, "inputs"), input)) return false;
-        } else {
-            if (f_field(value, "input") || !wd_name(producer) || !wd_name(output) || !dependency(graph, step, producer) ||
-                !f_field(f_field(f_field(f_field(manifest, "steps"), producer), "outputs"), output)) return false;
-        }
+        if (!wd_name(name) || !reference_valid(manifest, graph, step, value)) return false;
     }
     return true;
 }

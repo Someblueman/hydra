@@ -60,6 +60,9 @@ workflow_task_start() {
                 workflow_data_tool seal "$_wts_run" "$_wts_id" "$_wts_attempt" > "$_wts_attempt/data-seal.json" || _wts_code=76
             fi
         fi
+        if [ "$_wts_code" -eq 0 ] && [ -f "$_wts_run/compiled.json" ]; then
+            workflow_plan_tool step-check "$_wts_run" "$_wts_id" > "$_wts_attempt/validation-result.json" || _wts_code=1
+        fi
         workflow_atomic_scalar "$_wts_attempt/exit-code" "$_wts_code"
         case "$_wts_code" in
             75|129|130|143) _wts_state=waiting-remote ;;

@@ -19,7 +19,7 @@ static bool valid_data(json_object *compiled) {
 
 /* Planning currently has no retries. Read the runtime's authoritative attempt
  * and its sealed artifact, never the worker's mutable output directory. */
-static json_object *artifact(json_object *compiled, const char *run, const char *step, const char *name, char path[F_PATH]) {
+json_object *plan_artifact(json_object *compiled, const char *run, const char *step, const char *name, char path[F_PATH]) {
     char relative[256], directory[F_PATH]; json_object *receipt, *file, *decl;
     if (!plan_id(step) || !plan_id(name) || snprintf(relative, sizeof(relative), "steps/%s/attempt-1", step) >= (int)sizeof(relative) ||
         f_path(directory, sizeof(directory), run, relative) || snprintf(path, F_PATH, "%s/artifacts/%s", directory, name) >= F_PATH) return NULL;
@@ -48,14 +48,14 @@ json_object *plan_delivery(const char *run) {
     {
         json_object *deliverables = f_field(plan, "deliverables");
         for (i = 0; i < json_object_array_length(deliverables); i++) {
-            json_object *d = json_object_array_get_idx(deliverables, i), *file = artifact(compiled, run, f_string(d, "step"), f_string(d, "output"), path);
+            json_object *d = json_object_array_get_idx(deliverables, i), *file = plan_artifact(compiled, run, f_string(d, "step"), f_string(d, "output"), path);
             if (!file) goto done;
             f_string_add(file, "path", path); json_object_object_add(f_field(delivery, "deliverables"), f_string(d, "id"), file);
         }
     }
     checks = f_field(plan, "checks");
     for (i = 0; i < json_object_array_length(checks); i++) {
-        json_object *c = json_object_array_get_idx(checks, i), *file = artifact(compiled, run, f_string(c, "step"), f_string(c, "report"), path), *report;
+        json_object *c = json_object_array_get_idx(checks, i), *file = plan_artifact(compiled, run, f_string(c, "step"), f_string(c, "report"), path), *report;
         json_object *subject = f_field(f_field(delivery, "deliverables"), f_string(c, "deliverable"));
         if (!file) goto done;
         json_object_put(file); report = plan_read(path);

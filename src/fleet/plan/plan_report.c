@@ -55,10 +55,26 @@ enum plan_verdict plan_report(json_object *compiled, json_object *check,
     json_object *requirements = f_field(f_field(compiled, "plan"), "requirements");
     const char *verdict = f_string(report, "verdict"), *id = f_string(check, "id");
     bool v2 = f_number_is(report, "schema_version", 2);
-    if (!verdict || !report_bindings(compiled, id, report, subject, v2) ||
+    if ((f_number_is(f_field(compiled, "plan"), "schema_version", 2) && !v2) || !verdict || !report_bindings(compiled, id, report, subject, v2) ||
         !report_coverage(requirements, f_field(report, "requirements"), id)) return PLAN_INVALID;
     if (!strcmp(verdict, "pass")) return PLAN_PASS;
     if (!strcmp(verdict, "fail")) return PLAN_FAIL;
     if (v2 && !strcmp(verdict, "inconclusive")) return PLAN_INCONCLUSIVE;
     return PLAN_INVALID;
+}
+
+json_object *plan_validation_context(json_object *compiled, const char *step) {
+    json_object *checks = f_field(f_field(compiled, "plan"), "checks"), *data = json_object_new_object();
+    if (!plan_id(step) || plan_index(f_field(f_field(compiled, "plan"), "steps"), step) < 0) goto bad;
+    for (size_t i = 0; i < json_object_array_length(checks); i++) {
+        json_object *check = json_object_array_get_idx(checks, i); char digest[65];
+        const char *owner = f_string(check, "step"), *id = f_string(check, "id");
+        if (!owner) goto bad;
+        if (strcmp(owner, step)) continue;
+        if (plan_check_digest(compiled, id, digest)) goto bad;
+        f_string_add(data, id, digest);
+    }
+    return data;
+bad:
+    json_object_put(data); return NULL;
 }

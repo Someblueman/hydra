@@ -2,6 +2,7 @@
 #include "fleet/support/files.h"
 #include "fleet/workflow/workflow_data.h"
 #include "fleet/task/task.h"
+#include "fleet/plan/plan.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -97,23 +98,27 @@ static int producer_directory(const char *run, const char *step, char directory[
 done:
     free(attempt); free(state); return status;
 }
+static int prepare_input(json_object *manifest, const char *run, const char *step, const char *inputs, const char *name, json_object *reference) {
+    const char *input = f_string(reference, "input"), *producer = f_string(reference, "step"), *output = f_string(reference, "output");
+    json_object *declaration; char destination[F_PATH], source[F_PATH];
+    if (f_path(destination, sizeof(destination), inputs, name)) return -1;
+    if (f_field(reference, "validation")) return plan_validation_write(run, step, inputs, name);
+    if (input) {
+        declaration = f_field(f_field(manifest, "inputs"), input);
+        return receive(run, "inputs.json", input, declaration, destination);
+    }
+    declaration = f_field(f_field(f_field(f_field(manifest, "steps"), producer), "outputs"), output);
+    if (producer_directory(run, producer, source)) return -1;
+    return receive(source, "outputs.json", output, declaration, destination);
+}
 int wd_prepare(json_object *manifest, const char *run, const char *step, const char *attempt) {
-    char inputs[F_PATH], outputs[F_PATH], destination[F_PATH], source[F_PATH];
+    char inputs[F_PATH], outputs[F_PATH];
     json_object *refs = f_field(f_field(f_field(manifest, "steps"), step), "inputs");
     if (f_path(inputs, sizeof(inputs), attempt, "inputs") || f_path(outputs, sizeof(outputs), attempt, "outputs") ||
         mkdir(inputs, 0700) || mkdir(outputs, 0700)) return -1;
     if (!refs) return 0;
     json_object_object_foreach(refs, name, reference) {
-        const char *input = f_string(reference, "input"), *producer = f_string(reference, "step"), *output = f_string(reference, "output");
-        json_object *declaration;
-        if (f_path(destination, sizeof(destination), inputs, name)) return -1;
-        if (input) {
-            declaration = f_field(f_field(manifest, "inputs"), input);
-            if (receive(run, "inputs.json", input, declaration, destination)) return -1;
-        } else {
-            declaration = f_field(f_field(f_field(f_field(manifest, "steps"), producer), "outputs"), output);
-            if (producer_directory(run, producer, source) || receive(source, "outputs.json", output, declaration, destination)) return -1;
-        }
+        if (prepare_input(manifest, run, step, inputs, name, reference)) return -1;
     }
     return 0;
 }

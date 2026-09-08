@@ -194,22 +194,16 @@ static json_object *check_definition_command(char **argv, bool *printed) {
 }
 
 static json_object *check_context_command(char **argv, bool *printed) {
-    json_object *compiled = plan_read(argv[1]), *checks, *data = NULL, *result = NULL;
+    json_object *compiled = plan_read(argv[1]), *data = plan_validation_context(compiled, argv[2]), *result = NULL;
     (void)printed;
-    if (!compiled || !plan_id(argv[2]) ||
-        plan_index(f_field(f_field(compiled, "plan"), "steps"), argv[2]) < 0) goto done;
-    checks = f_field(f_field(compiled, "plan"), "checks"); data = json_object_new_object();
-    for (size_t i = 0; i < json_object_array_length(checks); i++) {
-        json_object *check = json_object_array_get_idx(checks, i); char digest[65];
-        const char *step = f_string(check, "step"), *id = f_string(check, "id");
-        if (!step) goto done;
-        if (strcmp(step, argv[2])) continue;
-        if (plan_check_digest(compiled, id, digest)) goto done;
-        f_string_add(data, id, digest);
-    }
-    result = f_success("workflow plan check-context", json_object_get(data));
-done:
+    if (data) result = f_success("workflow plan check-context", json_object_get(data));
     json_object_put(data); json_object_put(compiled); return result;
+}
+static json_object *step_check_command(char **argv, bool *printed) {
+    (void)printed;
+    return plan_step_check(argv[1], argv[2]) ?
+        f_error("workflow plan step-check", "validation_rejected", "required evidence is missing, invalid, failed or inconclusive") :
+        f_success("workflow plan step-check", json_object_new_object());
 }
 
 json_object *plan_cli(int argc, char **argv) {
@@ -230,6 +224,7 @@ json_object *plan_cli(int argc, char **argv) {
         {"data-match", 3, data_match_command},
         {"check-definition", 3, check_definition_command},
         {"check-context", 3, check_context_command},
+        {"step-check", 3, step_check_command},
     };
     json_object *result = NULL;
     bool printed = false;

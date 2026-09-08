@@ -69,3 +69,61 @@ dispatch, moved placement, and confirmed/unconfirmed cancellation cases. Recover
 checks compare the original dispatch and receipt and count receiver acceptances.
 The wrong-key case also recomputes the file checksum, exercising contextual
 identity verification separately from file-integrity verification.
+
+## Compiled plans with required evidence
+
+Objective plan schema 2 uses task steps through the same `workflow plan compile`,
+`show`, `run --accept`, `status` and `resume` interfaces as schema 1. The compiled
+artifact binds each recipe and its resolved transport destination before any
+execution. Recipes must fit the accepted hosts, tools, effects, artifact budget,
+head count and total queue/startup/execution time budget. Each task starts from
+the accepted source commit. The preview includes the exact recipe and transport.
+
+A deliverable with `destination: intermediate` can name a work-step output;
+`destination: run-artifact` still requires a compose step. Both need explicit
+requirements and checks. Any consumer of a checked artifact must depend on all
+its required validator steps. Those dependencies form the evidence join; missing
+edges are a compilation error. The producer remains a direct dependency for its
+file handoff.
+
+A validator declares a generated input in the workflow data manifest:
+
+```json
+"validation": {"validation": "plan"}
+```
+
+Its task recipe includes `validation` in its selected inputs. The coordinator
+writes an object mapping this step's check IDs to their accepted definition
+SHA-256 values. The validator reads it at `$HYDRA_TASK_INPUT_DIR/validation` and
+returns a version-2 [check report](PLAN_COMPILATION.md) in its declared object
+output. The report binds the exact subject digest, validator digest, requirement
+coverage and PASS/FAIL/INCONCLUSIVE verdict.
+
+After verified collection, the coordinator evaluates every check owned by the
+step before marking it successful. A missing, malformed, stale, failed or
+inconclusive required report blocks downstream execution. Valid negative reports
+remain sealed for inspection, with coordinator verdicts in `validation.json`.
+Final result retrieval independently evaluates the reports again. Validator
+scripts run from the accepted source commit, so producer commits cannot replace
+their acceptance definitions.
+
+Schema-1 local plans and reports remain supported. Schema-2 plans currently require
+zero execution retries and zero repairs; bounded candidate repair and derived Git
+source handoff are still outstanding.
+
+The larger schema-2 qualification run `run_fcd37ffcd8338b3a8558` used a macOS
+producer and a Linux VPS producer. Each was checked on the other host. Assembly
+waited for both checks, committed the combined file on macOS, and a VPS validator
+checked the assembled bytes. All three reports passed exact expected-content,
+subject-digest, definition-digest and requirement-coverage checks. The combined
+artifact SHA-256 was
+`60dc14222713495f87b057cf6d1c5c4e7582125b80de2e7e973bdd6668d60c73`.
+[Recorded task identities and verdicts](evidence/distributed/two-host-validation.json)
+retain the explicit placements and accepted plan digest.
+
+The same collected composition was exercised through the existing integration
+CLI in a disposable collector repository: promotion without approval failed,
+a target move after approval blocked promotion, and a fresh assembly and approval
+promoted the checked bytes. [Integration identities](evidence/distributed/two-host-integration.json)
+record the target commits and both attempts. No repository publication occurred.
+These checks do not close the remaining repair, source-handoff and replay work.

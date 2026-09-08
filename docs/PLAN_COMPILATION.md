@@ -1,12 +1,14 @@
 # From objective to executable work
 
-Status: local slices 1–3 implemented, 7 September 2026.
+Status: local slices 1–3 and schema-2 distributed task admission with required
+validation joins implemented, 8 September 2026.
 The public `hydra workflow plan` interface provides schema discovery, validation,
 compilation, preview, accepted execution and verified result retrieval. See the
 [planner recipe](PLANNER_RECIPE.md) for runnable commands and the
 [qualification evidence](evidence/plan-qualification.md) for delivery checks.
-Distributed execution, placement and replanning remain outstanding in
-[the roadmap](ROADMAP.md). Existing [static workflows](workflows.md) and
+See [distributed task plans](WORKFLOW_TASKS.md) for explicit placement and
+intermediate validation. Full distributed acceptance, derived source handoff and
+bounded repair remain outstanding in [the roadmap](ROADMAP.md). Existing [static workflows](workflows.md) and
 [workflow data](WORKFLOW_DATA.md) retain their published contracts.
 
 ## Product contract

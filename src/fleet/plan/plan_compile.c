@@ -15,6 +15,10 @@ static void list(FILE *file, json_object *array) {
     size_t i;
     for (i = 0; i < json_object_array_length(array); i++) fprintf(file, "%s%s", i ? "," : "", f_text(json_object_array_get_idx(array, i)));
 }
+static void task_graph_args(FILE *graph, json_object *step) {
+    if (!strcmp(f_string(step, "kind"), "task"))
+        fprintf(graph, "task_args\t%s\t%s\n", f_string(step, "id"), f_string(f_field(step, "args"), "task_input"));
+}
 /* Lower only already checked values. This projection uses the published YAML
  * syntax; its graph is also checked by the existing workflow data validator. */
 int plan_lower(json_object *plan, const char *directory) {
@@ -38,6 +42,7 @@ int plan_lower(json_object *plan, const char *directory) {
         fprintf(graph, "step\t%s\t%s\t", f_string(step, "id"), f_string(step, "kind"));
         if (json_object_array_length(needs)) list(graph, needs); else fputc('-', graph);
         fputc('\n', graph);
+        task_graph_args(graph, step);
     }
     if (ferror(yaml) || ferror(graph)) goto done;
     status = task_write_json(directory, "data.json", f_field(plan, "data"), false);
@@ -105,6 +110,20 @@ static json_object *context_files(json_object *plan, const char *source, const c
 bad:
     json_object_put(decl); json_object_put(files); return NULL;
 }
+static bool complete_binding(json_object *plan, const char *source, const char *scratch, json_object *compiled, json_object *errors) {
+    json_object *binding = f_field(compiled, "source"), *after; bool stable;
+    if (f_number_is(plan, "schema_version", 2)) {
+        json_object *tasks = plan_task_bindings(plan, f_field(compiled, "data"), binding, scratch, errors);
+        if (!tasks) return false;
+        json_object_object_add(compiled, "tasks", tasks);
+    }
+    after = source_binding(source); stable = after && json_object_equal(binding, after); json_object_put(after);
+    if (!stable) { plan_error(errors, "source", "source_changed", "source changed while resolving inputs"); return false; }
+    if (strlen(json_object_to_json_string_ext(compiled, JSON_C_TO_STRING_PLAIN)) > PLAN_LIMIT) {
+        plan_error(errors, "$", "compiled_limit", "resolved artifact exceeds 256 KiB"); return false;
+    }
+    return true;
+}
 json_object *plan_compile(json_object *plan, json_object *policy, const char *source, json_object *errors) {
     char scratch[] = "/tmp/hydra-plan-compile.XXXXXX", data_path[F_PATH], graph_path[F_PATH], yaml_path[F_PATH];
     json_object *compiled = NULL, *manifest = NULL, *binding = NULL, *adapters = NULL, *data = NULL, *normalized = NULL, *context = NULL; char *yaml = NULL;
@@ -128,14 +147,7 @@ json_object *plan_compile(json_object *plan, json_object *policy, const char *so
     json_object_object_add(compiled, "source", json_object_get(binding)); json_object_object_add(compiled, "profiles", json_object_get(adapters));
     json_object_object_add(compiled, "context", json_object_get(context));
     json_object_object_add(compiled, "data", json_object_get(data)); f_string_add(compiled, "workflow", yaml);
-    {
-        json_object *after = source_binding(source);
-        bool stable = after && json_object_equal(binding, after); json_object_put(after);
-        if (!stable) { plan_error(errors, "source", "source_changed", "source changed while resolving inputs"); json_object_put(compiled); compiled = NULL; }
-        else if (strlen(json_object_to_json_string_ext(compiled, JSON_C_TO_STRING_PLAIN)) > PLAN_LIMIT) {
-            plan_error(errors, "$", "compiled_limit", "resolved artifact exceeds 256 KiB"); json_object_put(compiled); compiled = NULL;
-        }
-    }
+    if (!complete_binding(plan, source, scratch, compiled, errors)) { json_object_put(compiled); compiled = NULL; }
 done:
     free(yaml); json_object_put(manifest); json_object_put(binding); json_object_put(adapters); json_object_put(data); json_object_put(normalized); json_object_put(context); f_remove_tree(scratch);
     return compiled;

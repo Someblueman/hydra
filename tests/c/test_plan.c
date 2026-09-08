@@ -94,9 +94,23 @@ static void report_cases(void) {
     assert(plan_report(compiled, check, NULL, subject) == PLAN_INVALID);
     json_object_put(report); json_object_put(compiled);
 }
+static void distributed_graph_cases(void) {
+    json_object *plan = plan_read("tests/fixtures/plan-task/plan.json"), *policy = plan_read("tests/fixtures/plan-task/policy.json");
+    assert(plan && policy); expect(plan, policy, NULL);
+    json_object *compose = json_object_array_get_idx(f_field(plan, "steps"), 2);
+    json_object_object_add(compose, "needs", f_parse_value("[\"produce\"]"));
+    expect(plan, policy, "missing_evidence_join");
+    json_object_object_add(compose, "needs", f_parse_value("[\"produce\",\"inspect\"]"));
+    json_object *inputs = f_field(f_field(f_field(f_field(plan, "data"), "steps"), "inspect"), "inputs");
+    json_object_object_del(inputs, "validation"); expect(plan, policy, "missing_validation_context");
+    json_object_object_add(inputs, "validation", f_parse_value("{\"validation\":\"plan\"}"));
+    json_object_object_del(json_object_array_get_idx(f_field(plan, "checks"), 0), "step");
+    expect(plan, policy, "invalid_verification");
+    json_object_put(plan); json_object_put(policy);
+}
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    graph_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
+    graph_cases(); distributed_graph_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
     puts("planning graph, policy, canonical JSON and parser checks passed"); return 0;
 }

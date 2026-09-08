@@ -6,7 +6,10 @@ fixture="$(mktemp -d)"
 HYDRA_HOME="$fixture/home"
 HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
 export HYDRA_HOME HYDRA_FLEET_BIN HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
+# shellcheck source=/dev/null
+. "$root/tests/workflow_task_cleanup.sh"
 cleanup() {
+    workflow_task_fixture_quiesce || return 1
     for workspace in "$HYDRA_HOME"/fleet/tasks/task_*/workspace; do
         [ -f "$workspace/.git/hydra/project-id" ] || continue
         (cd "$workspace" && "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :

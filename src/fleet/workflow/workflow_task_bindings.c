@@ -43,7 +43,7 @@ static bool io_matches(json_object *spec, json_object *declarations, const char 
     }
     return true;
 }
-static json_object *step_binding(const char *run, json_object *data, const char *id, const char *descriptor) {
+json_object *wt_step_binding(const char *run, json_object *data, const char *id, const char *descriptor) {
     json_object *declarations = f_field(f_field(data, "steps"), id), *draft = NULL, *spec = NULL, *destination = NULL, *out = NULL;
     const char *input = f_string(f_field(f_field(declarations, "inputs"), descriptor), "input"); char path[F_PATH];
     if (!wd_name(input) || snprintf(path, sizeof(path), "%s/artifacts/%s", run, input) >= (int)sizeof(path)) goto done;
@@ -65,8 +65,23 @@ static json_object *coordinator(void) {
     out = json_object_new_object(); f_string_add(out, "host", hostname); f_string_add(out, "home", home);
     json_object_object_add(out, "uid", json_object_new_int64((int64_t)geteuid())); return out;
 }
+static bool compiled_matches(const char *run, json_object *steps) {
+    char path[F_PATH];
+    if (f_path(path, sizeof(path), run, "compiled.json")) return false;
+    if (access(path, F_OK)) return true;
+    json_object *compiled = f_read_json(path, F_LIMIT);
+    bool matches = compiled && json_object_equal(steps, f_field(compiled, "tasks"));
+    json_object_put(compiled); return matches;
+}
+static int bindings_write(const char *run, json_object *record) {
+    char path[F_PATH], hash[65];
+    if (digest_field(record, run, "graph.tsv") || digest_field(record, run, "data.json") ||
+        task_write_json(run, "tasks.json", record, false) || f_path(path, sizeof(path), run, "tasks.json") || f_hash(path, hash) ||
+        f_path(path, sizeof(path), run, "tasks-sha256") || f_write(path, hash, 64, false)) return -1;
+    return task_sync_dir(run);
+}
 int wt_initialize(const char *run, const char *source) {
-    char path[F_PATH], root[F_PATH], hash[65], *graph = NULL, *line, *save = NULL;
+    char path[F_PATH], root[F_PATH], *graph = NULL, *line, *save = NULL;
     json_object *data = NULL, *record = NULL, *owner = coordinator(), *steps; int status = -1;
     if (!owner || !realpath(source, root) || f_path(path, sizeof(path), run, "graph.tsv") || !(graph = f_read(path, F_LIMIT))) goto done;
     if (f_path(path, sizeof(path), run, "data.json") || !(data = f_read_json(path, WD_LIMIT)) || wd_verify(data, run)) goto done;
@@ -78,13 +93,10 @@ int wt_initialize(const char *run, const char *source) {
         if (!tag || strcmp(tag, "task_args")) continue;
         id = strtok_r(NULL, "\t", &fields); descriptor = strtok_r(NULL, "\t", &fields);
         if (!wd_name(id) || !wd_name(descriptor) || f_field(steps, id) ||
-            !(binding = step_binding(run, data, id, descriptor))) goto done;
+            !(binding = wt_step_binding(run, data, id, descriptor))) goto done;
         json_object_object_add(steps, id, binding);
     }
-    if (digest_field(record, run, "graph.tsv") || digest_field(record, run, "data.json") ||
-        task_write_json(run, "tasks.json", record, false) || f_path(path, sizeof(path), run, "tasks.json") || f_hash(path, hash)) goto done;
-    if (f_path(path, sizeof(path), run, "tasks-sha256") || f_write(path, hash, 64, false) || task_sync_dir(run)) goto done;
-    status = 0;
+    if (compiled_matches(run, steps)) status = bindings_write(run, record);
 done:
     free(graph); json_object_put(data); json_object_put(record); json_object_put(owner); return status;
 }

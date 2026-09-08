@@ -76,19 +76,36 @@ invalid:
 unauthorized:
     plan_error(errors, path, "unauthorized", "operation, tool or write scope is outside the declared envelope"); return false;
 }
-static bool recipe(json_object *step, json_object *env, json_object *errors, const char *path) {
-    const char *const step_keys[] = {"id", "role", "kind", "needs", "args", "writes", NULL};
+static bool step_fields(json_object *step) {
+    const char *const keys[] = {"id", "role", "kind", "needs", "args", "writes", NULL};
+    const char *role = f_string(step, "role");
+    return task_keys(step, keys) && plan_id(f_string(step, "id")) && role &&
+        (!strcmp(role, "work") || !strcmp(role, "compose") || !strcmp(role, "verify")) &&
+        strings(f_field(step, "needs"), 0, true) && strings(f_field(step, "writes"), 0, false);
+}
+static bool supported_version(json_object *plan) {
+    return f_number_is(plan, "schema_version", 1) || f_number_is(plan, "schema_version", 2);
+}
+static bool placed_hosts(json_object *plan, json_object *env) {
+    return f_number_is(plan, "schema_version", 2) ||
+        (json_object_array_length(f_field(env, "hosts")) == 1 && plan_has(f_field(env, "hosts"), "local"));
+}
+static bool supported_kind(const char *kind, bool distributed) {
+    return kind && (distributed ? !strcmp(kind, "task") : (!strcmp(kind, "exec") || !strcmp(kind, "spawn")));
+}
+static bool recipe(json_object *step, json_object *env, json_object *errors, const char *path, bool distributed) {
     const char *const spawn_keys[] = {"branch", NULL};
+    const char *const task_keys_allowed[] = {"task_input", NULL};
     const char *kind = f_string(step, "kind"), *role = f_string(step, "role");
     json_object *args = f_field(step, "args"), *writes = f_field(step, "writes");
     size_t i;
-    if (!task_keys(step, step_keys) || !plan_id(f_string(step, "id")) || !role ||
-        (strcmp(role, "work") && strcmp(role, "compose") && strcmp(role, "verify")) ||
-        !strings(f_field(step, "needs"), 0, true) || !strings(writes, 0, false)) goto invalid;
-    if (!kind || (strcmp(kind, "exec") && strcmp(kind, "spawn"))) {
-        plan_error(errors, path, "unsupported_operation", "supported operations are local spawn and exec"); return false;
+    if (!step_fields(step)) goto invalid;
+    if (!supported_kind(kind, distributed)) {
+        plan_error(errors, path, "unsupported_operation", "schema 1 supports local spawn/exec; schema 2 supports explicitly placed task recipes"); return false;
     }
-    if (!strcmp(kind, "spawn")) {
+    if (distributed) {
+        if (!task_keys(args, task_keys_allowed) || !plan_id(f_string(args, "task_input"))) goto invalid;
+    } else if (!strcmp(kind, "spawn")) {
         if (!task_keys(args, spawn_keys) || !plan_id(f_string(args, "branch")) || strcmp(role, "work") || json_object_array_length(writes)) goto invalid;
         if (!plan_has(f_field(env, "effects"), "worktree")) goto unauthorized;
     } else {
@@ -145,23 +162,24 @@ int plan_validate(json_object *plan, json_object *policy, json_object *errors) {
     const char *const requirement_keys[] = {"id", "criterion", "deliverable", "check", NULL};
     const char *const check_keys[] = {"id", "method", "definition", "step", "input", "report", "deliverable", NULL};
     json_object *env = f_field(plan, "envelope"), *allowed = f_field(policy, "envelope"), *steps = f_field(plan, "steps");
+    bool distributed = f_number_is(plan, "schema_version", 2);
     size_t i; int64_t seconds = 0; unsigned heads = 0; char path[128];
-    if (!task_keys(plan, keys) || !f_number_is(plan, "schema_version", 1) || !plan_id(f_string(plan, "id")) ||
+    if (!task_keys(plan, keys) || !supported_version(plan) || !plan_id(f_string(plan, "id")) ||
         !plan_text(f_field(plan, "objective")) || !strings(f_field(plan, "context"), 0, false) ||
         !strings(f_field(plan, "assumptions"), 0, false) || !strings(f_field(plan, "questions"), 0, false))
-        plan_error(errors, "$", "invalid_plan", "expected schema 1, objective, ID and explicit context, assumptions and questions arrays; unknown fields are rejected");
+        plan_error(errors, "$", "invalid_plan", "expected schema 1 or 2, objective, ID and explicit context, assumptions and questions arrays; unknown fields are rejected");
     if (plan_list(f_field(plan, "questions"), 1, 64)) plan_error(errors, "questions", "unresolved_question", "resolve material questions before compilation");
     if (!envelope(env) || !task_keys(policy, policy_keys) || !f_number_is(policy, "schema_version", 1) || !envelope(allowed)) {
         plan_error(errors, "envelope", "invalid_policy", "explicit bounded plan and policy envelopes required; retry and repair budgets must be zero"); return -1;
     }
-    if (json_object_array_length(f_field(env, "hosts")) != 1 || !plan_has(f_field(env, "hosts"), "local"))
+    if (!placed_hosts(plan, env))
         plan_error(errors, "envelope.hosts", "unsupported_host", "only local execution is implemented");
     policy_bounds(env, allowed, errors);
     if (!plan_list(steps, 1, PLAN_STEPS)) plan_error(errors, "steps", "invalid_steps", "expected 1 to 64 steps");
     else for (i = 0; i < json_object_array_length(steps); i++) {
         json_object *step = json_object_array_get_idx(steps, i);
         snprintf(path, sizeof(path), "steps[%zu]", i);
-        if (!recipe(step, env, errors, path)) continue;
+        if (!recipe(step, env, errors, path, distributed)) continue;
         if (plan_index(steps, f_string(step, "id")) != (int)i) plan_error(errors, path, "duplicate_id", "step ID is repeated");
         if (!strcmp(f_string(step, "kind"), "spawn")) heads++;
         else seconds += json_object_get_int64(f_field(f_field(step, "args"), "timeout"));
