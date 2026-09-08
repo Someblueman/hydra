@@ -6,9 +6,18 @@ The receiving authority checks current reservations and policy under one lock.
 
 ## Implementation status
 
-The admission primitive is implemented. Automatic integration with spawn, exec,
-workflows, and remote task owners is still in progress; configuring this primitive
-alone does **not yet limit those execution paths**. Roadmap item 4 remains open.
+The admission primitive and local `exec` worker integration are implemented.
+Workflow exec steps use that same worker path. Spawn, gate, and remote task-owner
+integration remain in progress; roadmap item 4 remains open.
+
+Every exec worker obtains its own slot before launching its command, including
+each worker selected by `exec --all --jobs N`. `HYDRA_ADMISSION_QUEUE_SECONDS`
+sets its queue deadline (default 60 seconds, maximum 7 days), separately from the
+command timeout. `HYDRA_ADMISSION_LABELS` supplies required comma-separated labels.
+Rejected or expired admission reports exit code 125 without invoking the command.
+Each worker records `admission.json` and, on completion, `admission-release.json`
+beside its execution evidence. Losing an execution owner retains its claim even
+if its command later exits. Explicitly reconcile termination before releasing it.
 
 ## Receiver policy
 
@@ -83,4 +92,7 @@ not admission enforcement. Capacity snapshots must not be used as reservations.
 `sh tests/test_admission.sh` checks the public CLI with concurrent submitters,
 unique FIFO sequences, project limits, disk floors, labels, queue bounds and
 expiry, unknown ownership, cancellation, conflicting IDs, malformed records,
-links, and lock contention. Runtime integration acceptance remains outstanding.
+links, and lock contention. `sh tests/test_admission_execution.sh` exercises real
+exec commands across two projects, verifies they cannot overlap at a one-slot
+host limit, and checks queue cancellation/expiry, label refusal, normal release,
+and a killed worker's retained reservation. Full runtime acceptance remains open.

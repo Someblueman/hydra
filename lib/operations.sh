@@ -94,11 +94,18 @@ operations_exec_worker() {
     _oew_dir="$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/exec/$_oew_run/$_oew_head"
     mkdir -p "$_oew_dir" || return 0
     chmod 700 "$_oew_dir" 2>/dev/null || true
+    _oew_admission="${_oew_run}-${_oew_head}"
+    if ! admission_wait "$_oew_admission" "$LIFECYCLE_PROJECT_ID" "$_oew_dir/admission.json" 2> "$_oew_dir/stderr"; then
+        : > "$_oew_dir/stdout"
+        printf '125\n' > "$_oew_dir/status"
+        return 0
+    fi
     _oew_stdout_pipe="$_oew_dir/.stdout.pipe"
     _oew_stderr_pipe="$_oew_dir/.stderr.pipe"
     _oew_timed="$_oew_dir/.timed-out"
     if ! mkfifo "$_oew_stdout_pipe" "$_oew_stderr_pipe"; then
         rm -f "$_oew_stdout_pipe" "$_oew_stderr_pipe"
+        cmd_admission release "$_oew_admission" --confirmed > "$_oew_dir/admission-release.json" || true
         return 0
     fi
     operations_capture_stream "$_oew_stdout_pipe" "$_oew_dir/stdout" "$_oew_max" &
@@ -155,6 +162,9 @@ operations_exec_worker() {
     chmod 600 "$_oew_dir/stdout" "$_oew_dir/stderr" "$_oew_dir/status" \
         "$_oew_dir/branch" "$_oew_dir/started-at" "$_oew_dir/finished-at" "$_oew_dir/argv-hash" 2>/dev/null || true
     : > "$_oew_dir/complete"
+    # Command completion and reservation release remain separate evidence.
+    # An interrupted owner never reaches this release, retaining its claim.
+    cmd_admission release "$_oew_admission" --confirmed > "$_oew_dir/admission-release.json" || true
     chmod 600 "$_oew_dir/complete" 2>/dev/null || true
     rm -f "$_oew_stdout_pipe" "$_oew_stderr_pipe" "$_oew_timed"
     if hydra_valid_id "$_oew_instance"; then

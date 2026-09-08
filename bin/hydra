@@ -91,7 +91,7 @@ _load_tui_basic_libs() {
 
 # Execution commands share this order; spawn also needs layout before state.
 _load_runtime_libs() {
-    _load_libs output paths locks git tmux "$@" state identity state_v2 events project profiles lifecycle
+    _load_libs output paths locks git tmux "$@" state identity state_v2 events project profiles lifecycle admission admission_runtime
 }
 
 # Load libraries required for a command
