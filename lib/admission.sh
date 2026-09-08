@@ -31,6 +31,7 @@ admission_error() {
 
 admission_open() {
     _ad_root="${HYDRA_HOME:-$HOME/.hydra}/admission"
+    [ "$(find "${HYDRA_HOME:-$HOME/.hydra}" -prune -user "$(id -u)" ! -perm -0020 ! -perm -0002 -exec printf yes \;)" = yes ] || return 1
     [ ! -L "$_ad_root" ] || return 1
     (umask 077; mkdir -p "$_ad_root") || return 1
     [ -d "$_ad_root" ] || return 1

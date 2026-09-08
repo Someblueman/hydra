@@ -193,6 +193,8 @@ Environment:
   HYDRA_DASHBOARD_PANES_PER_SESSION  Panes per session for dashboard (1, N, or all)
   HYDRA_MAX_SESSIONS  Maximum active sessions (default: unlimited)
                       When limit is reached, spawns are queued for later
+  HYDRA_ADMISSION_QUEUE_SECONDS  Admission wait deadline (default: 60)
+  HYDRA_ADMISSION_LABELS  Comma-separated required host labels
   HYDRA_SKIP_SETUP  Set to 1 to skip environment setup commands
   HYDRA_SETUP_CONTINUE  Set to 1 to continue spawn even if setup fails
   HYDRA_CORE        Explicit optional hydra-core executable

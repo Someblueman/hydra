@@ -3,12 +3,15 @@
 The shell CLI owns one admission store per receiving host's `HYDRA_HOME`, shared
 by all projects using that home. A client capacity snapshot never grants a slot.
 The receiving authority checks current reservations and policy under one lock.
+The CLI resolves its executable and home before workers change directories.
+The home and admission directory must be owned by the current user and must not
+be writable by the group or other users. A home symlink resolves to the same store.
 
 ## Implementation status
 
-The admission primitive and local `exec` worker integration are implemented.
-Workflow exec steps use that same worker path. Spawn, gate, and remote task-owner
-integration remain in progress; roadmap item 4 remains open.
+Local exec workers, gates, spawn, resume, and spawn queue processing use the same
+admission authority. Workflow steps use these paths. Remote task-owner integration
+remains in progress; roadmap item 4 remains open.
 
 Every exec worker obtains its own slot before launching its command, including
 each worker selected by `exec --all --jobs N`. `HYDRA_ADMISSION_QUEUE_SECONDS`
@@ -18,6 +21,17 @@ Rejected or expired admission reports exit code 125 without invoking the command
 Each worker records `admission.json` and, on completion, `admission-release.json`
 beside its execution evidence. Losing an execution owner retains its claim even
 if its command later exits. Explicitly reconcile termination before releasing it.
+
+Head creation reserves before worktree setup. Interactive agent instances keep
+their slot until explicit teardown, and store its ID in their instance's
+`admission-id`. Plain shell heads release their startup slot after creation; later
+exec commands acquire independent slots. Admission counts managed operations and
+agent instances, not arbitrary processes launched manually in shell panes. Resume
+acquires a new reservation before creating a worktree or terminal. A failed setup
+with uncertain effects retains an `unknown` reservation for reconciliation.
+An absent terminal alone does not release an old instance's claim during resume.
+Existing `HYDRA_MAX_SESSIONS` and interactive spawn-queue behavior still constrain
+head creation; they cannot grant capacity past the receiver's admission policy.
 
 ## Receiver policy
 
@@ -95,4 +109,7 @@ expiry, unknown ownership, cancellation, conflicting IDs, malformed records,
 links, and lock contention. `sh tests/test_admission_execution.sh` exercises real
 exec commands across two projects, verifies they cannot overlap at a one-slot
 host limit, and checks queue cancellation/expiry, label refusal, normal release,
-and a killed worker's retained reservation. Full runtime acceptance remains open.
+and a killed worker's retained reservation. `sh tests/test_admission_heads.sh`
+checks startup/resume before effects, an interactive fixture agent's lifetime,
+gate refusal and release, and the existing queue processor's real spawn path.
+Full remote runtime acceptance remains open.

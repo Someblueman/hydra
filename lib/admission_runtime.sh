@@ -41,3 +41,36 @@ admission_wait() (
         fi
     done
 )
+
+# Run a synchronous command after admission; an interrupted owner never executes
+# the release below. The caller supplies a fresh execution identity and directory.
+admission_command() (
+    _ac_id="$1" _ac_project="$2" _ac_evidence="$3"
+    shift 3
+    admission_wait "$_ac_id" "$_ac_project" "$_ac_evidence/admission.json" || exit 125
+    if "$@"; then _ac_status=0; else _ac_status=$?; fi
+    cmd_admission release "$_ac_id" --confirmed > "$_ac_evidence/admission-release.json" || true
+    exit "$_ac_status"
+)
+
+# The lifecycle callback binds HEAD_ADMISSION_ID before launching an agent, and
+# marks HEAD_ADMISSION_EFFECTS before setup or agent execution can begin.
+admission_head() (
+    HEAD_ADMISSION_ID="$1" _ah_project="$2" _ah_profile="$3"
+    shift 3
+    HEAD_ADMISSION_EFFECTS=0
+    _ah_tmp="$(mktemp -d "$HYDRA_HOME/.admission-head.XXXXXX")" || exit 1
+    trap 'rm -rf "$_ah_tmp"' 0
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    trap 'exit 129' HUP
+    admission_wait "$HEAD_ADMISSION_ID" "$_ah_project" "$_ah_tmp/admission.json" || exit 125
+    if "$@"; then _ah_status=0; else _ah_status=$?; fi
+    if { [ "$_ah_status" -eq 0 ] && [ "$_ah_profile" = none ]; } ||
+        { [ "$_ah_status" -ne 0 ] && [ "$HEAD_ADMISSION_EFFECTS" -eq 0 ]; }; then
+        cmd_admission release "$HEAD_ADMISSION_ID" --confirmed >/dev/null || exit 1
+    elif [ "$_ah_status" -ne 0 ]; then
+        cmd_admission unknown "$HEAD_ADMISSION_ID" >/dev/null || true
+    fi
+    exit "$_ah_status"
+)

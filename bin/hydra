@@ -33,6 +33,7 @@ else
     # Fallback to dirname if cd fails
     HYDRA_BIN_DIR="$(dirname "$HYDRA_BIN_PATH")"
 fi
+HYDRA_BIN_PATH="$HYDRA_BIN_DIR/$(basename "$HYDRA_BIN_PATH")"
 
 # Library discovery: HYDRA_ROOT, source ../lib, PREFIX ../lib/hydra, legacy
 if [ -n "${HYDRA_ROOT:-}" ] && [ -d "$HYDRA_ROOT/lib" ] && [ -f "$HYDRA_ROOT/lib/git.sh" ]; then
@@ -182,7 +183,8 @@ _load_libs_for_cmd() {
                 lifecycle limits maintenance tui
             ;;
         queue)
-            _load_libs output state locks identity state_v2 limits spawn cmd_queue
+            _load_runtime_libs layout
+            _load_libs operations parallel notify hooks yaml limits spawn cmd_queue
             ;;
         completion)
             _load_libs completion_bash completion_zsh completion_fish completion cmd_completion
@@ -214,6 +216,10 @@ init_hydra_home() {
         echo "Next: chmod u+w \"$HYDRA_HOME\" or export HYDRA_HOME to a writable directory (see README Quick Start)" >&2
         exit 1
     fi
+    # Child commands can change directories; retain one host state authority.
+    HYDRA_HOME="$(cd "$HYDRA_HOME" && pwd -P)" || exit 1
+    HYDRA_1X_MAP="$HYDRA_HOME/map"
+    export HYDRA_HOME HYDRA_1X_MAP
 }
 
 # Load the top-level usage and dispatcher after library discovery is ready.

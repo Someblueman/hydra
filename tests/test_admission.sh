@@ -73,4 +73,9 @@ mkdir "$HYDRA_HOME/admission/lock"
 if admit claim race_1 >/dev/null; then exit 1; fi
 rmdir "$HYDRA_HOME/admission/lock"
 has "$(admit status)" '"reserved":1'
+chmod go+w "$HYDRA_HOME"
+if admit status >/dev/null; then exit 1; fi
+chmod 700 "$HYDRA_HOME"
+ln -s "$HYDRA_HOME" "$TEST_DIR/home-alias"
+has "$(HYDRA_HOME="$TEST_DIR/home-alias" "$CLI" admission status)" '"reserved":1'
 printf 'Passed admission CLI, FIFO, deadlines, backpressure, ownership, and concurrent-submitter checks\n'

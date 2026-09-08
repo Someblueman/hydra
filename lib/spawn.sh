@@ -262,9 +262,20 @@ spawn_single() {
         return 1
     fi
 
+    _load_libs admission admission_runtime
+    admission_head "$instance_id" "$project_id" "$ai_tool" spawn_admitted
+}
+
+# Continues spawn_single under its receiving-host reservation.
+spawn_admitted() {
     # Create worktree
     project_worktree_lock="worktree_project_${project_id}"
     acquire_lock "$project_worktree_lock" "spawn worktree creation" "$head_id" || return 1
+    if state_v2_find_head_by_branch "$project_id" "$branch" >/dev/null 2>&1; then
+        echo "Error: head '$branch' was created while waiting for admission; use hydra resume" >&2
+        release_lock "$project_worktree_lock"
+        return 1
+    fi
     echo "Creating worktree for branch '$branch'..." >&2
     if ! create_worktree "$branch" "$worktree_path"; then
         release_lock "$project_worktree_lock"
@@ -272,6 +283,9 @@ spawn_single() {
     fi
 
     # Run environment setup commands (blocking, before session creation)
+    # Read by admission_head after this callback returns.
+    # shellcheck disable=SC2034
+    HEAD_ADMISSION_EFFECTS=1
     if ! run_setup_commands "$worktree_path" "$repo_root"; then
         echo "Error: Environment setup failed" >&2
         if [ -z "${HYDRA_SETUP_CONTINUE:-}" ]; then
@@ -315,6 +329,10 @@ spawn_single() {
     release_lock "$project_worktree_lock"
     head_id="$committed_head"
     head_dir="$(state_v2_head_dir "$project_id" "$head_id")" || return 1
+    if ! state_v2_write_scalar "$head_dir/instances/$instance_id/admission-id" "$HEAD_ADMISSION_ID"; then
+        spawn_rollback_session "$session" "$branch" "$worktree_path"
+        return 1
+    fi
     if ! spawn_start_session; then
         spawn_rollback_session "$session" "$branch" "$worktree_path"
         return 1
