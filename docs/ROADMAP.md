@@ -110,6 +110,8 @@ implemented profiles.
 
 #### 5. Distributed DAG execution and independent validation
 
+Implementation contract: [Distributed workflows](DISTRIBUTED_DAG.md).
+
 Extend the existing finite workflow DAG across explicitly selected hosts. Producers
 create artifacts, validators examine those exact artifacts, and a deterministic
 policy step combines their evidence. Composition workers integrate code, reconcile
