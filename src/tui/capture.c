@@ -1,16 +1,13 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Bounded read-only subprocess capture. The caller owns the stream and process;
  * step never waits for a child, so terminal I/O can continue during observations. */
-struct native_capture {
-    pid_t pid;
-    int fd, status;
-    FILE *output;
-    struct timespec started;
-    long budget_ms;
-    size_t bytes;
-    bool eof, reaped, failed, timed_out;
-};
 
-static void native_capture_destroy(struct native_capture *p) {
+
+void native_capture_destroy(struct native_capture *p) {
     if (p->pid>0 && !p->reaped) {
         (void)kill(-p->pid,SIGKILL); (void)kill(p->pid,SIGKILL);
         while (waitpid(p->pid,&p->status,0)<0 && errno==EINTR) { }
@@ -20,7 +17,7 @@ static void native_capture_destroy(struct native_capture *p) {
     memset(p,0,sizeof(*p)); p->fd=-1;
 }
 
-static bool native_capture_start(struct native_capture *p, char *const argv[], long budget_ms) {
+bool native_capture_start(struct native_capture *p, char *const argv[], long budget_ms) {
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t attributes;
     int pipes[2], result;
@@ -47,14 +44,14 @@ fail:
     native_capture_destroy(p); return false;
 }
 
-static bool native_capture_step(struct native_capture *p) {
+bool native_capture_step(struct native_capture *p) {
     struct timespec now;
     size_t chunks;
     long elapsed;
     if (!p->pid) return true;
     (void)clock_gettime(CLOCK_MONOTONIC,&now);
     elapsed=(long)(now.tv_sec-p->started.tv_sec)*1000L+(long)(now.tv_nsec-p->started.tv_nsec)/1000000L;
-    if (elapsed>=p->budget_ms || stop_requested) { p->timed_out=true; p->failed=true; }
+    if (elapsed>=p->budget_ms || terminal_stopped()) { p->timed_out=true; p->failed=true; }
     for (chunks=0; !p->failed && !p->eof && chunks<32; chunks++) {
         char bytes[8192];
         ssize_t n=read(p->fd,bytes,sizeof(bytes));
@@ -79,7 +76,7 @@ static bool native_capture_step(struct native_capture *p) {
 
 /* Transfer complete stdout even on a normal nonzero exit, for compiler
  * diagnostics. Timeout/transport failures never become complete documents. */
-static FILE *native_capture_result(struct native_capture *p, bool *success) {
+FILE *native_capture_result(struct native_capture *p, bool *success) {
     FILE *out=NULL;
     *success=p->reaped && WIFEXITED(p->status) && WEXITSTATUS(p->status)==0 && !p->failed;
     if (p->reaped && p->eof && WIFEXITED(p->status) && !p->failed && fflush(p->output)==0 && fseek(p->output,0,SEEK_SET)==0) {
@@ -88,7 +85,7 @@ static FILE *native_capture_result(struct native_capture *p, bool *success) {
     native_capture_destroy(p);
     return out;
 }
-static FILE *native_capture_take(struct native_capture *p) {
+FILE *native_capture_take(struct native_capture *p) {
     bool success;
     FILE *out=native_capture_result(p,&success);
     if (!success && out) { fclose(out); out=NULL; }
@@ -97,7 +94,7 @@ static FILE *native_capture_take(struct native_capture *p) {
 
 /* Mutation owners are deliberately separate from captures: no pipe, terminal,
  * timeout or UI cleanup can terminate them. Callers reap without signalling. */
-static bool native_detached_start(pid_t *pid, char *const argv[], int input_fd) {
+bool native_detached_start(pid_t *pid, char *const argv[], int input_fd) {
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t attributes;
     int result;

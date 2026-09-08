@@ -3,6 +3,10 @@
 cmd_workflow() {
     _cw_action="${1:-}"
     case "$_cw_action" in
+        tui-data)
+            _load_lib workflow_tui
+            workflow_tui_data
+            ;;
         --workspace-links)
             [ "$#" -eq 1 ] || return 2
             _load_lib workflow_links

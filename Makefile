@@ -45,6 +45,62 @@ build-core: $(BUILD_DIR)/hydra-core
 
 build-tui: $(BUILD_DIR)/hydra-tui
 
+.PHONY: test-termviz example-termviz example-workspace test-workspace-pty test-visualization sanitize-workspace
+test-visualization: build-tui test-termviz
+	sh tests/test_visualization.sh
+$(BUILD_DIR)/test-termviz: tests/c/test_termviz.c $(TERMVIZ_SOURCES) src/termviz/termviz.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_termviz.c $(TERMVIZ_SOURCES) -o $@
+
+$(BUILD_DIR)/test-termviz-present: tests/c/test_termviz_present.c $(TERMVIZ_SOURCES) src/termviz/termviz.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_termviz_present.c $(TERMVIZ_SOURCES) -o $@
+
+$(BUILD_DIR)/test-termviz-workspace: tests/c/test_termviz_workspace.c src/termviz/workspace.c src/termviz/workspace.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_termviz_workspace.c src/termviz/workspace.c -o $@
+
+$(BUILD_DIR)/test-termviz-unicode: tests/c/test_termviz_unicode.c $(TERMVIZ_SOURCES) src/termviz/termviz.h src/termviz/unicode_tables.inc | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_termviz_unicode.c $(TERMVIZ_SOURCES) -o $@
+
+$(BUILD_DIR)/test-termviz-terminal: tests/c/test_termviz_terminal.c $(TERMVIZ_SOURCES) src/termviz/terminal.h src/termviz/terminal_internal.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_termviz_terminal.c $(TERMVIZ_SOURCES) -o $@
+
+$(BUILD_DIR)/test-termviz-input: tests/c/test_termviz_input.c $(TERMVIZ_SOURCES) src/termviz/input.h src/termviz/tree.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_termviz_input.c $(TERMVIZ_SOURCES) -o $@
+
+test-termviz: $(BUILD_DIR)/test-termviz $(BUILD_DIR)/test-termviz-present $(BUILD_DIR)/test-termviz-workspace $(BUILD_DIR)/test-termviz-unicode $(BUILD_DIR)/test-termviz-terminal $(BUILD_DIR)/test-termviz-input
+	$(BUILD_DIR)/test-termviz
+	$(BUILD_DIR)/test-termviz-present
+	$(BUILD_DIR)/test-termviz-workspace
+	$(BUILD_DIR)/test-termviz-unicode
+	$(BUILD_DIR)/test-termviz-terminal
+	$(BUILD_DIR)/test-termviz-input
+
+$(BUILD_DIR)/termviz-example: examples/termviz.c $(TERMVIZ_SOURCES) src/termviz/termviz.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/termviz examples/termviz.c $(TERMVIZ_SOURCES) -o $@
+
+$(BUILD_DIR)/termviz-workspace: examples/workspace.c examples/workspace_view.c examples/workspace_input.c $(TERMVIZ_SOURCES) src/termviz/workspace.h src/termviz/input.h src/termviz/terminal_posix.c src/termviz/posix.h src/termviz/pty_posix.c src/termviz/pty_posix.h examples/workspace_demo.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/termviz examples/workspace.c examples/workspace_view.c examples/workspace_input.c $(TERMVIZ_SOURCES) -o $@
+
+$(BUILD_DIR)/test-workspace-child: tests/c/test_workspace_child.c | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_workspace_child.c -o $@
+
+test-workspace-pty: example-workspace build-tui $(BUILD_DIR)/test-workspace-child
+	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_pty.py
+
+$(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c src/hydra_statistics.c -o $@
+
+.PHONY: test-statistics sanitize-statistics
+test-statistics: $(BUILD_DIR)/test-statistics build-tui
+	$(BUILD_DIR)/test-statistics
+	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_statistics_pty.py
+
+sanitize-statistics:
+	@$(MAKE) BUILD_DIR=build/statistics-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-statistics
+
+example-workspace: $(BUILD_DIR)/termviz-workspace
+
+example-termviz: $(BUILD_DIR)/termviz-example
+
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
@@ -64,21 +120,33 @@ $(BUILD_DIR)/tui/%.o: src/tui/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS)
+TERMVIZ_SOURCES = $(filter src/termviz/%.c,$(NATIVE_SOURCES))
+TERMVIZ_HEADERS = $(wildcard src/termviz/*.h src/termviz/*.inc)
+TERMVIZ_OBJECTS = $(patsubst src/termviz/%.c,$(BUILD_DIR)/termviz/%.o,$(TERMVIZ_SOURCES))
+TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o
+
+$(BUILD_DIR)/termviz/%.o: src/termviz/%.c
+	@mkdir -p "$(@D)"
+	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/hydra_statistics.o: src/hydra_statistics.c src/hydra_statistics.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS) $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS)
 	$(CC) $(CORE_CFLAGS) $^ -o $@
 
--include $(TUI_OBJECTS:.o=.d)
+-include $(TUI_OBJECTS:.o=.d) $(TERMVIZ_OBJECTS:.o=.d) $(TUI_DATA_OBJECTS:.o=.d)
 
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) tests/c/test_libhydra.c $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tests/c/test_tui_themes.inc tests/c/test_tui_palette.inc | $(BUILD_DIR)
+$(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tests/c/test_tui_themes.inc tests/c/test_tui_palette.inc tests/c/test_tui_visualization.inc | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_tui_pty.c -o $@
 
 test-c: $(BUILD_DIR)/test-libhydra
 	$(BUILD_DIR)/test-libhydra
 
-$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c src/tui/input.c $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/input.o,$(TUI_OBJECTS))
+$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c src/tui/input.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/input.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
 test-tui: build-tui $(BUILD_DIR)/test-tui-input
@@ -105,7 +173,7 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 test-parity: build-core
 	@sh tests/test_core.sh
 
-test-all: lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
+test-all: test-plan-workspace test-attached-pty test-termviz-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
 sanitize-core:
 	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-c
@@ -271,3 +339,26 @@ quality-c:
 
 test-quality-c:
 	@sh tests/quality_c_cases.sh "$(CLANG_TIDY)"
+
+.PHONY: test-attached-pty sanitize-attached
+test-attached-pty: build-tui
+	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_attached_pty.py
+sanitize-attached:
+	@$(MAKE) BUILD_DIR=build/attached-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-attached-pty
+
+.PHONY: test-termviz-export
+test-termviz-export:
+	sh tests/termviz/test_export.sh
+
+.PHONY: test-plan-workspace sanitize-plan-workspace
+test-plan-workspace: build-tui build-fleet
+	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_plan_workspace.py
+	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_plan_launch.py
+	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_workflow_controls.py
+sanitize-plan-workspace:
+	@$(MAKE) BUILD_DIR=build/plan-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-plan-workspace
+
+sanitize-workspace:
+	@$(MAKE) BUILD_DIR=build/workspace-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-termviz test-workspace-pty
+
+$(BUILD_DIR)/termviz-workspace $(BUILD_DIR)/termviz-example $(BUILD_DIR)/test-termviz $(BUILD_DIR)/test-termviz-present $(BUILD_DIR)/test-termviz-unicode $(BUILD_DIR)/test-termviz-terminal $(BUILD_DIR)/test-termviz-input: $(TERMVIZ_HEADERS)

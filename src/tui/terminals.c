@@ -1,28 +1,21 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Hydra owns the attachment set. Each PTY owns only an attach client; tmux
  * continues owning the agent session when a client is closed or the UI exits. */
-#define NATIVE_TERMINALS 4
-#define NATIVE_TERMINAL_CELLS (512U * 256U)
-struct native_terminal {
-    struct tv_pty client;
-    struct tv_terminal_model *screen;
-    struct tv_cell *cells, *history;
-    char head[TEXT], instance[TEXT], label[TEXT];
-    size_t scroll;
-    bool scrolling;
-};
-struct native_terminals {
-    struct native_terminal slots[NATIVE_TERMINALS];
-    size_t selected;
-    struct tv_input input;
-    bool prefix;
-};
 
-static struct native_terminal *native_terminal_selected(struct app *app) {
+
+
+
+
+struct native_terminal *native_terminal_selected(struct app *app) {
     if (!app->terminals) return NULL;
     return &app->terminals->slots[app->terminals->selected];
 }
 
-static const char *native_terminal_attention(struct app *app, const struct native_terminal *t) {
+const char *native_terminal_attention(struct app *app, const struct native_terminal *t) {
     size_t i;
     if (app->snapshot_stale) return "STATE STALE";
     for (i=0;i<app->model.head_count;i++) {
@@ -39,21 +32,21 @@ static const char *native_terminal_attention(struct app *app, const struct nativ
     return "OLD INSTANCE";
 }
 
-static void native_terminal_close(struct native_terminal *t) {
+void native_terminal_close(struct native_terminal *t) {
     if (!t->screen) return;
     tv_pty_close(&t->client);
     free(t->screen); free(t->cells); free(t->history);
     memset(t,0,sizeof(*t)); t->client.fd=-1; t->client.pid=-1;
 }
 
-static void native_terminals_destroy(struct app *app) {
+void native_terminals_destroy(struct app *app) {
     size_t i;
     if (!app->terminals) return;
     for (i=0;i<NATIVE_TERMINALS;i++) native_terminal_close(&app->terminals->slots[i]);
     free(app->terminals); app->terminals=NULL;
 }
 
-static bool native_terminal_attach(struct app *app) {
+bool native_terminal_attach(struct app *app) {
     const struct head *h=selected_head(app);
     struct native_terminal *t;
     size_t i, available=NATIVE_TERMINALS;
@@ -100,12 +93,12 @@ fail:
     return false;
 }
 
-static void native_terminal_send(struct app *app, struct native_terminal *t, const void *bytes, size_t length) {
+void native_terminal_send(struct app *app, struct native_terminal *t, const void *bytes, size_t length) {
     if (!t || !t->screen || t->client.eof || !tv_pty_enqueue(&t->client,bytes,length))
         copy_text(app->notice,sizeof(app->notice),"Input not delivered: client disconnected or input queue full");
 }
 
-static void native_terminals_pump(struct app *app) {
+void native_terminals_pump(struct app *app) {
     size_t i;
     if (!app->terminals) return;
     for (i=0;i<NATIVE_TERMINALS;i++) {
@@ -140,7 +133,7 @@ static void native_terminals_pump(struct app *app) {
     }
 }
 
-static void native_terminal_draw(struct app *app, struct native_terminal *t, struct tv_canvas *c, bool focused) {
+void native_terminal_draw(struct app *app, struct native_terminal *t, struct tv_canvas *c, bool focused) {
     if (!t || !t->screen) return;
     if (c->width!=t->screen->primary.canvas.width || c->height!=t->screen->primary.canvas.height) {
         if (!tv_term_resize(t->screen,c->width,c->height) ||

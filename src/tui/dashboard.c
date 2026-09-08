@@ -1,10 +1,15 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Hydra maps observations to reusable widgets. These functions do not collect
  * data or infer remote liveness from desired state. */
-static void dashboard_style(void *context, enum tv_style tone) {
+void dashboard_style(void *context, enum tv_style tone) {
     style(context, (enum tone)tone);
 }
 
-static void dashboard_text(struct tv_canvas *c, int x, int y, int width,
+void dashboard_text(struct tv_canvas *c, int x, int y, int width,
                            enum tv_style tone, const char *format, ...) {
     char buffer[1024];
     va_list args;
@@ -12,7 +17,7 @@ static void dashboard_text(struct tv_canvas *c, int x, int y, int width,
     tv_text(c, (struct tv_rect){x, y, width, 1}, buffer, tone);
 }
 
-static void dashboard_card(struct tv_canvas *c, int x, int width, const char *title,
+void dashboard_card(struct tv_canvas *c, int x, int width, const char *title,
                            size_t count, const char *caption, enum tv_style tone) {
     tv_panel(c, (struct tv_rect){x, 0, width, 5}, title);
     if (count == SIZE_MAX) dashboard_text(c, x + 2, 1, width - 4, tone, "--");
@@ -128,7 +133,7 @@ static void dashboard_distribution(struct app *app, struct tv_canvas *c, struct 
                    changes ? "0..%u files / %zu unknown / j k select" : "%u total heads / snapshot counts", changes ? maximum : (unsigned)app->model.head_count, unknown);
 }
 
-static void render_dashboard(struct app *app) {
+void render_dashboard(struct app *app) {
     struct tv_canvas c;
     struct tv_cell *cells;
     size_t i, live = 0, attention = 0, gates = 0;

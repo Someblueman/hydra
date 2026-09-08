@@ -1,3 +1,8 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Statistics are a view over recorded evidence, never a telemetry collector. */
 static const char *statistics_range(const struct statistics_view *v) {
     return v->filter.days == 1 ? "24 hours" : v->filter.days == 7 ? "7 days" : "all recorded";
@@ -149,7 +154,7 @@ static void statistics_fleet(struct app *app, struct tv_canvas *c, struct tv_rec
     dashboard_text(c,r.x+2,r.y+r.height-2,r.width-4,TV_WARNING,"Remote workflow history / CPU / memory / cost: unavailable");
 }
 
-static bool render_statistics(struct app *app, unsigned frame, bool headless) {
+bool render_statistics(struct app *app, unsigned frame, bool headless) {
     struct tv_canvas c;
     struct native_workspace *w;
     struct statistics_view *v;

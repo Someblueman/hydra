@@ -1,4 +1,9 @@
-static bool native_terminal_focused(struct app *app) {
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
+bool native_terminal_focused(struct app *app) {
     struct native_terminal *t=app->workspace ? native_workspace_terminal(app,app->workspace->layout.focus) : NULL;
     return app->view==7 && t && t->screen;
 }
@@ -83,14 +88,14 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
     native_terminal_send(app,t,e->bytes,e->length);
 }
 
-static bool native_terminal_byte(struct app *app, unsigned char byte) {
+bool native_terminal_byte(struct app *app, unsigned char byte) {
     struct tv_event e;
     if (!app->terminals || (!native_terminal_focused(app) && !app->terminals->prefix && byte!=2)) return false;
     if (tv_input_feed(&app->terminals->input,byte,&e)) native_terminal_event(app,&e);
     return true;
 }
 
-static void native_terminal_flush_input(struct app *app) {
+void native_terminal_flush_input(struct app *app) {
     struct tv_event e;
     if (app->terminals && tv_input_flush(&app->terminals->input,&e)) native_terminal_event(app,&e);
 }

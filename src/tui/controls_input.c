@@ -1,4 +1,9 @@
-static bool native_control_key(struct app *app, char key) {
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
+bool native_control_key(struct app *app, char key) {
     const char *action=key=='R' ? "resume" : key=='X' ? "cancel" : key=='Y' ? "approve" : key=='N' ? "reject" : NULL;
     char run[80],request[80]="-",answer[128],prompt[256];
     if (!action || !native_workspace_monitoring(app)) return false;

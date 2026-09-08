@@ -1,3 +1,8 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Wrapped documents share painting and clamp scroll when their length changes. */
 static void native_workspace_text(struct tv_canvas *c, const char *text, size_t length, size_t *scroll) {
     int pass;
@@ -27,7 +32,7 @@ static void native_workspace_text(struct tv_canvas *c, const char *text, size_t 
     }
 }
 
-static void native_workspace_evidence_text(struct app *app, struct tv_canvas *c, size_t *scroll) {
+void native_workspace_evidence_text(struct app *app, struct tv_canvas *c, size_t *scroll) {
     struct native_evidence *e=app->evidence;
     const char *state="unavailable";
     size_t i;
@@ -42,7 +47,7 @@ static void native_workspace_evidence_text(struct app *app, struct tv_canvas *c,
     else tv_text(c,(struct tv_rect){0,1,c->width,1},e->stale ? "Complete evidence unavailable" : "Reading run, output and artifact records",TV_WARNING);
 }
 
-static void native_workspace_plan_text(struct app *app, struct tv_canvas *c, size_t *scroll) {
+void native_workspace_plan_text(struct app *app, struct tv_canvas *c, size_t *scroll) {
     struct native_plan *p=app->plan;
     const char *text;
     size_t length;
@@ -55,7 +60,7 @@ static void native_workspace_plan_text(struct app *app, struct tv_canvas *c, siz
     length=p->state==PLAN_DRAFT && p->source_bytes ? p->source_length : p->text_length;
     native_workspace_text(c,text,length,scroll);
 }
-static void native_workspace_graph(struct app *app, struct tv_canvas *c, bool planning) {
+void native_workspace_graph(struct app *app, struct tv_canvas *c, bool planning) {
     struct workflow_model *m=planning ? app->plan ? &app->plan->graph : NULL : app->workflows;
     size_t run=planning ? 0 : app->workflow_run, indices[TV_GRAPH_MAX_NODES], n,count,i;
     size_t *selected=planning && app->plan ? &app->plan->selected : &app->workflow_node;

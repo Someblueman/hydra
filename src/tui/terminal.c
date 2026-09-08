@@ -1,10 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
-#include "terminal.h"
-#include <errno.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 
 static struct app *active_app;
 static volatile sig_atomic_t stop_requested;
@@ -27,12 +25,13 @@ static void write_terminal(const char *data, size_t length) {
 }
 
 void restore_terminal(struct app *app) {
+    if (app) native_workspace_invalidate(app);
     if (app != NULL && app->raw) {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &app->saved);
         app->raw = false;
     }
     if (isatty(STDOUT_FILENO)) {
-        static const char reset[] = "\033[?1000l\033[?1006l\033[?2004l\033[0m\033[?25h\n";
+        static const char reset[] = "\033[?1000l\033[?1006l\033[?1002l\033[?2004l\033[0m\033[?25h\n";
         write_terminal(reset, sizeof(reset) - 1U);
     }
 }
@@ -48,14 +47,14 @@ int enter_raw(struct app *app) {
     struct termios raw;
     if (tcgetattr(STDIN_FILENO, &app->saved) != 0) return -1;
     raw = app->saved;
-    raw.c_lflag &= (tcflag_t)~(ICANON | ECHO | IEXTEN);
+    raw.c_lflag &= (tcflag_t)~(ICANON | ECHO | IEXTEN | ISIG);
     raw.c_iflag &= (tcflag_t)~(IXON | ICRNL);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0) return -1;
     app->raw = true;
     {
-        static const char modes[] = "\033[?25l\033[?1000h\033[?1006h\033[?2004h";
+        static const char modes[] = "\033[?25l\033[?1000h\033[?1006h\033[?1002h\033[?2004h";
         write_terminal(modes, sizeof(modes) - 1U);
     }
     return 0;
@@ -79,3 +78,5 @@ void terminal_watch(struct app *app) {
 }
 bool terminal_stopped(void) { return stop_requested != 0; }
 int terminal_exit_status(void) { return stop_signal == 0 ? 0 : 128 + stop_signal; }
+
+void terminal_request_stop(int number) { signal_handler(number); }

@@ -1,10 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Read-only association snapshot; workflow and head identities remain authoritative. */
-struct native_links {
-    char project[128], root[SOURCE_TEXT];
-    struct { char run[80], branch[TEXT]; } refs[512];
-    size_t count;
-    bool stale;
-};
+
 
 static bool native_links_load(FILE *input, struct native_links *m) {
     char line[SOURCE_TEXT+256];
@@ -32,7 +32,7 @@ static bool native_links_load(FILE *input, struct native_links *m) {
     return header && project && end && !ferror(input);
 }
 
-static void native_links_accept(struct app *app, FILE *input) {
+void native_links_accept(struct app *app, FILE *input) {
     struct native_links *next=input ? calloc(1,sizeof(*next)) : NULL;
     bool ok=next && native_links_load(input,next);
     if (input) fclose(input);
@@ -40,7 +40,7 @@ static void native_links_accept(struct app *app, FILE *input) {
     free(app->links); app->links=next;
 }
 
-static bool native_links_match(struct app *app, size_t run, size_t head) {
+bool native_links_match(struct app *app, size_t run, size_t head) {
     size_t i;
     if (!app->links || !app->workflows || app->fleet) return false;
     for (i=0;i<app->links->count;i++) if (

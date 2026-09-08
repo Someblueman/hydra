@@ -1,5 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Strict, bounded read model. Dependency semantics remain recorded evidence. */
-static bool workflow_id(const char *s) {
+bool workflow_id(const char *s) {
     size_t i;
     if (!s[0] || strlen(s) > 79) return false;
     for (i = 0; s[i]; i++) if (!((s[i] >= 'a' && s[i] <= 'z') ||
@@ -7,7 +12,7 @@ static bool workflow_id(const char *s) {
     return true;
 }
 
-static size_t workflow_nodes(const struct workflow_model *m, size_t run, size_t *indices) {
+size_t workflow_nodes(const struct workflow_model *m, size_t run, size_t *indices) {
     size_t i, n = 0;
     for (i = 0; i < m->node_count; i++) if (m->nodes[i].run == run) {
         if (n == TV_GRAPH_MAX_NODES) return n + 1;
@@ -16,7 +21,7 @@ static size_t workflow_nodes(const struct workflow_model *m, size_t run, size_t 
     return n;
 }
 
-static bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_t n,
+bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_t n,
                             struct tv_edge *edges, size_t *count) {
     size_t i;
     *count = 0;
@@ -89,7 +94,7 @@ static int load_workflows(FILE *input, struct workflow_model *m) {
 }
 
 /* Consumes the completed observation stream. */
-static int accept_workflows(struct app *app, FILE *input) {
+int accept_workflows(struct app *app, FILE *input) {
     struct workflow_model *next;
     next = input ? malloc(sizeof(*next)) : NULL;
     if (!input || !next || load_workflows(input, next)) {
@@ -118,7 +123,7 @@ static int accept_workflows(struct app *app, FILE *input) {
     return 0;
 }
 
-static int refresh_workflows(struct app *app, const char *fixture) {
+int refresh_workflows(struct app *app, const char *fixture) {
     char notice[TEXT];
     FILE *input;
     copy_text(notice,sizeof(notice),app->notice);
@@ -128,7 +133,7 @@ static int refresh_workflows(struct app *app, const char *fixture) {
     return accept_workflows(app,input);
 }
 
-static void workflow_move(struct app *app, int direction) {
+void workflow_move(struct app *app, int direction) {
     size_t indices[TV_GRAPH_MAX_NODES], n;
     if (!app->workflows) return;
     n = workflow_nodes(app->workflows, app->workflow_run, indices);
@@ -137,7 +142,7 @@ static void workflow_move(struct app *app, int direction) {
     app->graph_follow = true;
 }
 
-static bool workflow_key(struct app *app, char key) {
+bool workflow_key(struct app *app, char key) {
     if (key == 'j' || key == 'k') workflow_move(app, key == 'j' ? 1 : -1);
     else if (key == '[' || key == ']') {
         if (app->workflows && app->workflows->run_count) {

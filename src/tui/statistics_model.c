@@ -1,15 +1,12 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* View state is caller-owned and independent of head/graph selection. */
-struct statistics_view {
-    struct hs_model *model;
-    struct hs_filter filter;
-    size_t selected, visible[HS_RUNS], count;
-    size_t step_scroll;
-    int back_view;
-    bool stale, detail, graph_open;
-    char error[TEXT], selected_id[128];
-};
 
-static bool statistics_init(struct app *app) {
+
+bool statistics_init(struct app *app) {
     if (!app->statistics) {
         app->statistics = calloc(1, sizeof(*app->statistics));
         if (!app->statistics) return false;
@@ -18,12 +15,12 @@ static bool statistics_init(struct app *app) {
     return true;
 }
 
-static void statistics_destroy(struct app *app) {
+void statistics_destroy(struct app *app) {
     if (!app->statistics) return;
     free(app->statistics->model); free(app->statistics); app->statistics = NULL;
 }
 
-static void statistics_visible(struct app *app) {
+void statistics_visible(struct app *app) {
     struct statistics_view *v = app->statistics;
     size_t i, j;
     v->count = 0;
@@ -54,7 +51,7 @@ static void statistics_visible(struct app *app) {
 }
 
 /* Consumes the completed observation stream. */
-static int accept_statistics(struct app *app, FILE *input) {
+int accept_statistics(struct app *app, FILE *input) {
     struct hs_model *next;
     if (!statistics_init(app)) { if (input) fclose(input); return -1; }
     next = input ? malloc(sizeof(*next)) : NULL;
@@ -70,7 +67,7 @@ static int accept_statistics(struct app *app, FILE *input) {
     return 0;
 }
 
-static int refresh_statistics(struct app *app, const char *fixture) {
+int refresh_statistics(struct app *app, const char *fixture) {
     char notice[TEXT];
     FILE *input;
     if (app->fleet) { if (!statistics_init(app)) return -1; statistics_visible(app); return 0; }
@@ -81,7 +78,7 @@ static int refresh_statistics(struct app *app, const char *fixture) {
     return accept_statistics(app,input);
 }
 
-static void statistics_move(struct app *app, int direction) {
+void statistics_move(struct app *app, int direction) {
     struct statistics_view *v = app->statistics;
     if (!v) return;
     if (v->detail) {

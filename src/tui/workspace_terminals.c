@@ -1,11 +1,16 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Two visible attachments per layout; cached clients retain terminal state.
  * A session is painted in at most one pane, so it receives one terminal size. */
-static int native_workspace_agent_index(struct native_workspace *w, int pane) {
+int native_workspace_agent_index(struct native_workspace *w, int pane) {
     int first=w->agents[w->mode].first;
     return first ? pane>=first && pane<=first+1 ? pane-first : -1 : pane==3 ? 0 : -1;
 }
 
-static struct native_terminal *native_workspace_terminal(struct app *app, int pane) {
+struct native_terminal *native_workspace_terminal(struct app *app, int pane) {
     struct native_workspace *w=app->workspace;
     int index;
     size_t slot;
@@ -15,7 +20,7 @@ static struct native_terminal *native_workspace_terminal(struct app *app, int pa
     return slot<NATIVE_TERMINALS ? &app->terminals->slots[slot] : NULL;
 }
 
-static void native_workspace_sync_terminal(struct app *app) {
+void native_workspace_sync_terminal(struct app *app) {
     struct native_terminal *t=native_workspace_terminal(app,app->workspace->layout.focus);
     size_t head;
     if (!t || !t->screen) return;
@@ -26,14 +31,14 @@ static void native_workspace_sync_terminal(struct app *app) {
         }
 }
 
-static void native_workspace_focus_next(struct app *app) {
+void native_workspace_focus_next(struct app *app) {
     tv_workspace_focus_next(&app->workspace->layout,1);
     native_workspace_sync_terminal(app);
 }
 
 /* Explicit attachment selects its existing pane. Layout changes keep both the
  * active session and restored pane focus, swapping bindings when necessary. */
-static void native_workspace_show_terminal(struct app *app, bool focus) {
+void native_workspace_show_terminal(struct app *app, bool focus) {
     struct native_workspace *w=app->workspace;
     int first=w->agents[w->mode].first, target=native_workspace_agent_index(w,w->layout.focus), i;
     size_t selected;
@@ -52,7 +57,7 @@ static void native_workspace_show_terminal(struct app *app, bool focus) {
     if (focus) w->layout.focus=first ? first+target : 3;
 }
 
-static void native_workspace_split_agents(struct app *app) {
+void native_workspace_split_agents(struct app *app) {
     struct native_workspace *w=app->workspace;
     int first=w->agents[w->mode].first;
     size_t selected, other;

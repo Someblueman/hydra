@@ -1,4 +1,9 @@
-static void render_hosts(struct app *app) {
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
+void render_hosts(struct app *app) {
     struct tv_canvas c;
     struct tv_cell *cells;
     int width = app->cols - 1, height = app->limit - app->line, row, available, split;

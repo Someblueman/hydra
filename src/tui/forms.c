@@ -1,3 +1,8 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Modal text input keeps terminal clients and bounded observations moving.
  * Paste is data only; Enter is accepted only as an explicit key event. */
 static size_t form_previous(const char *text, size_t cursor) {
@@ -61,7 +66,7 @@ static void form_draw(struct app *app, const char *prompt, const char *text, siz
     }
     fflush(stdout);
 }
-static int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) {
+int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) {
     struct tv_input input;
     size_t length=0, cursor=0;
     time_t last_refresh=time(NULL);
@@ -69,7 +74,7 @@ static int prompt_text(struct app *app, const char *prompt, char *buffer, size_t
     if (!size) return -1;
     buffer[0]='\0';
     tv_input_init(&input);
-    while (!stop_requested && app->running) {
+    while (!terminal_stopped() && app->running) {
         struct tv_event e;
         char byte;
         bool event;

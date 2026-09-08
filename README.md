@@ -200,6 +200,10 @@ Fleet C code is grouped under `src/fleet/{agent,auth,plan,task,workflow,transpor
 Domain headers expose their own contracts; support headers cover bounded files,
 JSON and subprocess capture. The native TUI lives in `src/tui/`, with independently
 compiled model, adapter, process, selection, rendering, input and terminal modules.
+Workspace views include A/B/C layouts, attached tmux clients, draft validation,
+exact-digest execution and selected-run evidence. Statistics and graph rendering
+use the reusable `src/termviz/` components; see the [workspace guide](docs/NATIVE_TUI.md)
+and [standalone library guide](src/termviz/STANDALONE.md).
 See the [simplification review](docs/CODEBASE_SIMPLIFICATION.md#follow-up-module-boundaries)
 for ownership boundaries and measured results.
 

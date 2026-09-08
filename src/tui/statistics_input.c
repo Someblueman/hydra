@@ -1,4 +1,9 @@
-static void statistics_toggle(struct app *app) {
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
+void statistics_toggle(struct app *app) {
     if (!statistics_init(app)) return;
     if (app->view == 8) app->view = app->statistics->back_view;
     else {
@@ -39,7 +44,7 @@ static void statistics_workflow(struct statistics_view *v, int direction) {
     copy_text(v->filter.workflow,sizeof(v->filter.workflow),names[selected]);
 }
 
-static bool statistics_key(struct app *app, char key) {
+bool statistics_key(struct app *app, char key) {
     struct statistics_view *v=app->statistics;
     if(!v) return false;
     app->notice[0]='\0';
@@ -63,7 +68,7 @@ static bool statistics_key(struct app *app, char key) {
     return true;
 }
 
-static bool statistics_back(struct app *app) {
+bool statistics_back(struct app *app) {
     struct statistics_view *v=app->statistics;
     if(!v) return false;
     if(app->view==8) {

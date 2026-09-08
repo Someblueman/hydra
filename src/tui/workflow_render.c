@@ -1,4 +1,9 @@
-static void render_workflow_graph(struct app *app) {
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
+void render_workflow_graph(struct app *app) {
     struct workflow_model *m = app->workflows;
     struct tv_cell *cells;
     struct tv_canvas c;

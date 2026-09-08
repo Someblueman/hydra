@@ -78,6 +78,10 @@ static json_object *parse_options(int argc, char **argv, struct fleet_options *o
     }
     return NULL;
 }
+static bool is_tui_data(const char *action) {
+    return !strcmp(action, "tui-data") || !strcmp(action, "tui-visual-data");
+}
+
 json_object *f_cli(int argc, char **argv) {
     const char *action;
     struct fleet_options options = {.seconds = 5, .jobs = 4, .interval = 5, .rest = argc};
@@ -96,7 +100,7 @@ json_object *f_cli(int argc, char **argv) {
     if (result) return result;
     if (!strcmp(action, "handshake") && !options.name) return f_handshake();
     if (!strcmp(action, "tui")) return launch_tui();
-    if (!strcmp(action, "tui-data") || !strcmp(action, "tui-visual-data")) {
+    if (is_tui_data(action)) {
         (void)f_tui_data(1, 16, !strcmp(action, "tui-visual-data")); return NULL;
     }
     if (!strcmp(action, "package")) {

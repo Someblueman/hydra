@@ -1,15 +1,13 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Read-only evidence follows the selected recorded run and step. */
-#define NATIVE_EVIDENCE_LIMIT (1024U*1024U)
-struct native_evidence {
-    struct native_capture job;
-    char run[80], step[65];
-    char *text;
-    size_t length;
-    unsigned verdict;
-    bool stale;
-};
 
-static void native_evidence_destroy(struct app *app) {
+
+
+void native_evidence_destroy(struct app *app) {
     if (!app->evidence) return;
     native_capture_destroy(&app->evidence->job);
     free(app->evidence->text); free(app->evidence); app->evidence=NULL;
@@ -38,7 +36,7 @@ static bool native_evidence_accept(struct native_evidence *e, FILE *input) {
     free(e->text); e->text=text; e->length=length; e->verdict=verdict; return true;
 }
 
-static void native_evidence_tick(struct app *app, bool watch) {
+void native_evidence_tick(struct app *app, bool watch) {
     struct native_evidence *e=app->evidence;
     struct workflow_model *m=app->workflows;
     size_t indices[TV_GRAPH_MAX_NODES],count=0;

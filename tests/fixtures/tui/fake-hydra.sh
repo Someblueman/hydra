@@ -26,9 +26,6 @@ case "${1:-}:${2:-}" in
     dashboard:)
         printf '%s\n' "FAKE DASHBOARD"
         ;;
-    switch:*)
-        printf 'FAKE SWITCH %s\n' "$2"
-        ;;
     spawn:*)
         printf 'FAKE SPAWN %s\n' "$*"
         ;;

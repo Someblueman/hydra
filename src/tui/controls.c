@@ -1,5 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* A bounded set of detached CLI owners; no lifecycle engine in the UI. */
-static void native_controls_tick(struct app *app) {
+void native_controls_tick(struct app *app) {
     size_t i;
     for (i=0;i<4;i++) if (app->control_pids[i]>0) {
         int status=0;
@@ -16,7 +21,7 @@ static void native_controls_tick(struct app *app) {
     }
 }
 
-static bool native_control_submit(struct app *app, const char *run, const char *action, const char *request) {
+bool native_control_submit(struct app *app, const char *run, const char *action, const char *request) {
     size_t i;
     char *argv[]={"nohup",(char *)app->hydra,"workflow","--workspace-control",(char *)run,(char *)action,(char *)request,NULL};
     native_controls_tick(app);

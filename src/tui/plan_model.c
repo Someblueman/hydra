@@ -1,22 +1,13 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Planning presentation only. The shell CLI compiles and admits execution. */
-#define NATIVE_PLAN_LIMIT (256U*1024U)
-#define NATIVE_PLAN_TEXT (1024U*1024U)
-enum native_plan_state { PLAN_DRAFT, PLAN_VALIDATING, PLAN_INVALID, PLAN_READY, PLAN_UNAVAILABLE };
-struct native_plan {
-    char path[4096], policy[4096], directory[4096], compiled[4096];
-    char digest[65], objective[4096], notice[TEXT];
-    unsigned revision, compilation;
-    enum native_plan_state state;
-    struct native_capture job;
-    struct native_capture launch_job;
-    pid_t owner_pid;
-    char launched_digest[65], launched_run[65], launch_state[32];
-    bool follow_launched_run;
-    bool projecting;
-    char *source_bytes, *policy_bytes, *text;
-    size_t source_length, policy_length, text_length, text_scroll, selected;
-    struct workflow_model graph;
-};
+
+
+
+
 static char *native_plan_read(const char *path, size_t *length) {
     struct stat info;
     char *bytes;
@@ -37,7 +28,7 @@ static char *native_plan_read(const char *path, size_t *length) {
     if (used>NATIVE_PLAN_LIMIT) { free(bytes); return NULL; }
     bytes[used]='\0'; *length=used; return bytes;
 }
-static bool native_plan_changed(struct native_plan *p) {
+bool native_plan_changed(struct native_plan *p) {
     size_t a=0,b=0;
     char *source=native_plan_read(p->path,&a), *policy=native_plan_read(p->policy,&b);
     bool changed=(source==NULL)!=(p->source_bytes==NULL) || (policy==NULL)!=(p->policy_bytes==NULL) ||
@@ -45,11 +36,11 @@ static bool native_plan_changed(struct native_plan *p) {
         (policy && memcmp(policy,p->policy_bytes,b));
     free(source); free(policy); return changed;
 }
-static void native_plan_message(struct native_plan *p, const char *text) {
+void native_plan_message(struct native_plan *p, const char *text) {
     free(p->text); p->text=strdup(text); p->text_length=p->text ? strlen(p->text) : 0;
     p->text_scroll=0;
 }
-static void native_plan_destroy(struct app *app) {
+void native_plan_destroy(struct app *app) {
     struct native_plan *p=app->plan;
     if (!p) return;
     native_capture_destroy(&p->job);
@@ -87,7 +78,7 @@ static bool native_plan_write(struct native_plan *p, const char *name, const cha
     ok=fwrite(bytes,1,length,out)==length;
     return fclose(out)==0 && ok;
 }
-static bool native_plan_load(struct app *app, const char *path, const char *policy) {
+bool native_plan_load(struct app *app, const char *path, const char *policy) {
     struct native_plan *p;
     char *a,*b;
     size_t an=0,bn=0;
@@ -107,7 +98,7 @@ static bool native_plan_load(struct app *app, const char *path, const char *poli
     native_plan_message(p,"Conversational proposal loaded. No validation or execution has occurred. Press V to validate and compile the current draft and policy.");
     return true;
 }
-static bool native_plan_compile(struct app *app) {
+bool native_plan_compile(struct app *app) {
     struct native_plan *p=app->plan;
     char draft[4096], policy[4096];
     char *argv[8];

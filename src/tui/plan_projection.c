@@ -1,3 +1,8 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 static bool native_plan_accept(struct native_plan *p, FILE *input) {
     struct workflow_model *graph=calloc(1,sizeof(*graph));
     char *preview=calloc(1,NATIVE_PLAN_TEXT+1), *line=NULL;
@@ -57,7 +62,7 @@ static bool native_plan_accept(struct native_plan *p, FILE *input) {
 done:
     free(graph); free(preview); free(line); return valid;
 }
-static void native_plan_tick(struct app *app, bool watch) {
+void native_plan_tick(struct app *app, bool watch) {
     struct native_plan *p=app->plan;
     if (!p) return;
     if (p->job.pid && native_capture_step(&p->job)) {

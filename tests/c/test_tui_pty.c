@@ -108,7 +108,9 @@ static void child_session(const struct session *session, const char *tui, const 
     if (getenv("HYDRA_TEST_COLOR") != NULL) unsetenv("NO_COLOR");
     else setenv("NO_COLOR", "1", 1);
     setenv("PATH", path, 1);
-    execl(tui_path, tui_path, "--hydra", hydra_path, (char *)NULL);
+    if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
+    else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
+    else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "heads", (char *)NULL);
     _exit(127);
 }
 
@@ -461,6 +463,8 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
     return 0;
 }
 
+#include "test_tui_visualization.inc"
+
 int main(int argc, char **argv) {
     if (argc == 5 && strcmp(argv[1], "--measure") == 0) {
         return measure_interactive(argv[2], argv[3], argv[4]);
@@ -473,6 +477,9 @@ int main(int argc, char **argv) {
     test_session_failure();
     test_themes(argv[1], argv[2], argv[3]);
     test_mouse(argv[1], argv[2], argv[3]);
+    test_visualization(argv[1], argv[2], argv[3]);
+    test_visualization_refresh(argv[1], argv[2], argv[3]);
+    test_visualization_hosts(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
     test_palette(argv[1], argv[2], argv[3]);

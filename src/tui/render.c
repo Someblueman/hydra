@@ -1,12 +1,10 @@
 #define _POSIX_C_SOURCE 200809L
-#include "render.h"
-#include "selection.h"
-#include "text.h"
-#include <stdarg.h>
-#include <string.h>
-
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Semantic terminal and fixed 256-color palettes; terminal mode preserves the user's base colors. */
-enum tone { TONE_BASE, TONE_BORDER, TONE_TITLE, TONE_SELECTED, TONE_WARNING, TONE_STRONG };
+
 static const char *theme_names[] = {"terminal", "dark", "light"};
 
 /* Caller owns the output integer; names are fixed internal strings. */
@@ -18,7 +16,7 @@ bool parse_theme(const char *name, int *theme) {
     return false;
 }
 
-static void style(const struct app *app, enum tone tone) {
+void style(const struct app *app, enum tone tone) {
     static const char *palettes[3][6] = {
         {"\033[0m", "\033[0;36m", "\033[0;1;7m", "\033[0;1;7m", "\033[0;33m", "\033[0;1m"},
         {"\033[0;38;5;252;48;5;234m", "\033[0;38;5;117;48;5;234m", "\033[0;38;5;16;48;5;117m", "\033[0;38;5;16;48;5;117m", "\033[0;38;5;220;48;5;234m", "\033[0;1;38;5;252;48;5;234m"},
@@ -40,8 +38,7 @@ static void safe_print(const char *text, int width) {
         used++;
     }
 }
-
-static void linef(struct app *app, const char *format, ...) {
+void linef(struct app *app, const char *format, ...) {
     char buffer[2048];
     va_list args;
     if (app->line >= app->limit) return;
@@ -60,8 +57,7 @@ static void linef(struct app *app, const char *format, ...) {
     } else safe_print(buffer, app->cols > 1 ? app->cols - 1 : 1);
     if (!app->raw || app->line < app->rows) putchar('\n');
 }
-
-static const char *display_status(const struct head *head) {
+const char *display_status(const struct head *head) {
     if (head->remote_host[0] != '\0') return "UNOBSERVED";
     if (strcmp(head->observed, "unavailable") == 0 || strcmp(head->liveness, "unavailable") == 0) return "UNAVAILABLE";
     if (strcmp(head->liveness, "stopped") == 0 &&
@@ -69,16 +65,15 @@ static const char *display_status(const struct head *head) {
     if (strcmp(head->liveness, "live") == 0) return "LIVE";
     return "STOPPED";
 }
-
-/* Store only rows actually painted in the last frame, including filtered indices. */
 static void record_hit(struct app *app, size_t index) {
     if (app->line >= app->limit || app->hit_count >= MAX_HEADS) return;
     app->hit_rows[app->hit_count] = app->line + 1;
+    app->hit_bottom[app->hit_count] = app->line + 1;
+    app->hit_left[app->hit_count] = 3;
+    app->hit_right[app->hit_count] = app->cols - 3;
     app->hit_items[app->hit_count++] = index;
 }
-
 /* Bounded terminal views. Diagnostics are an explicit detail mode. */
-
 
 /* Draw the border outside the content padding; title is sanitized by linef. */
 static void panel_edge(struct app *app, const char *title) {
@@ -293,6 +288,9 @@ static void render_recovery(struct app *app) {
 }
 
 static void render_help(struct app *app) {
+    linef(app, "D statistics / T range / Enter evidence / Esc back");
+    linef(app, "W workspace / Tab focus / h l tree / drag splits");
+    linef(app, "C monitor: Y approve request / N reject / R resume / X cancel");
     linef(app, "KEYBOARD HELP");
     if (app->rows < 20) {
         linef(app, "j/k move  Enter detail  Esc back");
@@ -304,7 +302,7 @@ static void render_help(struct app *app) {
     linef(app, "j/k or arrows   Move between heads");
     linef(app, "Enter           Open details");
     linef(app, "Esc             Back to heads / clear search");
-    linef(app, "v               Next view");
+    linef(app, "v / o / w / H   Next view / overview / workflows / hosts");
     linef(app, "/               Search heads");
     linef(app, "d               Show / hide diagnostics");
     if (app->fleet) {
@@ -322,36 +320,92 @@ static void render_help(struct app *app) {
     linef(app, "q               Quit");
 }
 
-static const char *view_names[] = {"Heads", "Details", "Coordination", "Recovery"};
+static const char *view_names[] = {"Heads", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace", "Statistics"};
+
 static void render_header(struct app *app) {
+    char tabs[128];
+    size_t used = 0, i, count = app->cols >= 100 ? 7U : 4U;
     style(app, TONE_TITLE);
     linef(app, "%-*s", app->cols - 1, app->fleet ? " HYDRA MISSION CONTROL / Fleet" : " HYDRA MISSION CONTROL");
     style(app, TONE_BASE);
-    if (app->search[0]) linef(app, "[%s]  Search: %s", view_names[app->view], app->search);
-    else if (app->cols >= 70) linef(app, "%sHeads%s  %sDetails%s  %sCoordination%s  %sRecovery%s   v next",
-        app->view == 0 ? "[" : " ", app->view == 0 ? "]" : " ",
-        app->view == 1 ? "[" : " ", app->view == 1 ? "]" : " ",
-        app->view == 2 ? "[" : " ", app->view == 2 ? "]" : " ",
-        app->view == 3 ? "[" : " ", app->view == 3 ? "]" : " ");
-    else linef(app, "[%s]  v next view", view_names[app->view]);
+    if (app->search[0]) { linef(app, "[%s]  Search: %s", view_names[app->view], app->search); return; }
+    if (app->cols < 70) { linef(app, "[%s]  v next view", view_names[app->view]); return; }
+    for (i = 0; i < count; i++) {
+        const char *gap = i == 3 ? "   " : "  ";
+        int length = snprintf(tabs + used, sizeof(tabs) - used, "%c%s%c%s",
+            app->view == (int)i ? '[' : ' ', view_names[i], app->view == (int)i ? ']' : ' ', gap);
+        if (length < 0 || (size_t)length >= sizeof(tabs) - used) return;
+        used += (size_t)length;
+    }
+    linef(app, "%s%s", tabs, count == 4 ? "o/w/H views" : "");
 }
-static void render_footer(struct app *app) {
-    if (app->marked_count) linef(app, "%zu marked  x kill  G group%s%s", app->marked_count, app->notice[0] ? " | " : "", app->notice);
+
+static void render_content(struct app *app) {
+    if (app->help) { render_help(app); return; }
+    switch (app->view) {
+        case 0: render_list(app); break;
+        case 1: render_detail(app); break;
+        case 2: render_coordination(app); break;
+        case 3: render_recovery(app); break;
+        case 4: render_dashboard(app); break;
+        case 5: render_workflow_graph(app); break;
+        case 6: render_hosts(app); break;
+        default: linef(app, "Workspace requires at least 20 columns and 6 rows"); break;
+    }
+}
+
+static bool render_workspace_view(struct app *app, unsigned frame, bool headless) {
+    if (app->view == 8) return render_statistics(app, frame, headless);
+    if (app->view == 7) return render_native_workspace(app, frame, headless);
+    return false;
+}
+
+static bool render_notice(struct app *app) {
+    if (app->marked_count) {
+        linef(app, "%zu marked  x kill  G group%s%s", app->marked_count, app->notice[0] ? " | " : "", app->notice);
+    } else if (app->snapshot_stale && app->snapshot_error[0]) linef(app, "%s", app->snapshot_error);
     else if (app->notice[0]) linef(app, "%s", app->notice);
-    else if (!app->help && !app->diagnostics && (app->view == 0 || app->view == 3))
-        linef(app, app->hit_tabs ? "Click row/tab | Wheel moves selection | t theme" : "Click row | Wheel moves selection");
-    else linef(app, "t theme  |  v views  |  Esc back");
+    else return false;
+    return true;
+}
+
+static void render_snapshot_hint(struct app *app, bool headless) {
+    time_t observed_at = app->view == 5 ? app->workflow_at : app->snapshot_at;
+    long age = headless || !observed_at ? 0L : (long)(time(NULL) - observed_at);
+    bool stale = app->view == 5 ? app->workflow_stale : app->snapshot_stale;
+    if (age < 0) age = 0;
+    if (app->cols >= 70) linef(app, "%s snapshot / age %lds / o overview / w workflows / H hosts", stale ? "STALE: last good" : "Current", age);
+    else linef(app, "%s / o overview / w graph / H hosts", stale ? "STALE" : "Current");
+}
+
+static void render_key_hint(struct app *app) {
     style(app, TONE_STRONG);
-    if (app->cols < 60) linef(app, app->fleet ? "a attach  c interrupt  ? help  q quit" : "Enter open  : actions  ? help  q quit");
+    if (app->view == 5) linef(app, app->cols < 60 ? "j/k node [/] run ? help q quit" : "j/k node  [/] run  h/l/J/K pan  ? help  q quit");
+    else if (app->view == 6) linef(app, "j/k host  Enter heads  ? help  q quit");
+    else if (app->cols < 60) linef(app, app->fleet ? "a attach  c interrupt  ? help  q quit" : "Enter open  : actions  ? help  q quit");
     else if (app->view == 1 && !app->fleet) linef(app, "p output  d diagnostics  Esc back  t theme  ? help  q quit");
     else linef(app, app->fleet ? "a attach  c interrupt  / search  t theme  ? help  q quit" : "Enter details  : actions  / search  t theme  ? help  q quit");
     style(app, TONE_BASE);
+}
+
+static void render_footer(struct app *app, bool headless) {
+    if (!render_notice(app)) {
+        if (app->view >= 4) render_snapshot_hint(app, headless);
+        else if (!app->help && !app->diagnostics && (app->view == 0 || app->view == 3))
+            linef(app, app->hit_tabs ? "Click row/tab | Wheel moves selection | o overview | t theme" : "Click row | Wheel moves selection");
+        else linef(app, "W workspace | o overview | t theme  |  v views  |  Esc back");
+    }
+    render_key_hint(app);
 }
 
 void render(struct app *app, unsigned frame, bool headless) {
     app->hit_count = 0U;
     app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
     app->hit_tabs = app->cols >= 70 && !app->search[0];
+    if (!app->help && !app->diagnostics) {
+        if (render_workspace_view(app, frame, headless)) return;
+    }
+    native_workspace_invalidate(app);
     app->paint = !headless && !app->no_color;
     app->line = 0;
     app->limit = app->rows - 3;
@@ -361,15 +415,11 @@ void render(struct app *app, unsigned frame, bool headless) {
     render_header(app);
     panel_edge(app, app->help ? "HELP" : app->diagnostics ? "DIAGNOSTICS" : view_names[app->view]);
     app->boxed = true;
-    if (app->help) render_help(app);
-    else if (app->view == 0) render_list(app);
-    else if (app->view == 1) render_detail(app);
-    else if (app->view == 2) render_coordination(app);
-    else render_recovery(app);
+    render_content(app);
     while (app->line < app->limit) linef(app, "");
     app->boxed = false;
     app->limit = app->rows;
     panel_edge(app, NULL);
-    render_footer(app);
+    render_footer(app, headless);
     fflush(stdout);
 }

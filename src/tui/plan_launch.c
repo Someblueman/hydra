@@ -1,5 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Detached launch transport; all admission and execution remain in the CLI. */
-static bool native_plan_launch(struct app *app, const char *digest) {
+bool native_plan_launch(struct app *app, const char *digest) {
     struct native_plan *p=app->plan;
     int fd;
     bool started;
@@ -16,7 +21,7 @@ static bool native_plan_launch(struct app *app, const char *digest) {
     return true;
 }
 
-static void native_plan_launch_tick(struct app *app, bool watch) {
+void native_plan_launch_tick(struct app *app, bool watch) {
     struct native_plan *p=app->plan;
     if (!p) return;
     if (p->owner_pid>0) {

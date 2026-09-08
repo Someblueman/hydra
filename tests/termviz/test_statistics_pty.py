@@ -79,6 +79,9 @@ def local_statistics() -> None:
             for cols, rows in [(80, 24), (40, 10), (140, 40)]:
                 s.resize(cols, rows)
                 s.until("D STATISTICS")
+                # The title can arrive in an earlier PTY chunk than the footer.
+                # Wait for the completed frame before checking resize geometry.
+                s.until("q quit")
                 assert "q quit" in s.screen.text() and s.screen.overflow == 0, f"{s.screen.cols}x{s.screen.rows} overflow={s.screen.overflow}\n{s.screen.text()}"
                 assert s.screen.clears >= 1, "Resizing must invalidate presentation"
                 s.screen.save(EVIDENCE / f"statistics-{cols}x{rows}.html")
@@ -115,6 +118,7 @@ def fleet_statistics() -> None:
         s.pump(.1)
         s.resize(40, 10)
         s.until("3/3 offline")
+        s.until("q quit")
         assert "q quit" in s.screen.text() and s.screen.overflow == 0, f"{s.screen.cols}x{s.screen.rows} overflow={s.screen.overflow}\n{s.screen.text()}"
         s.send("\r")
         s.until("No head evidence")

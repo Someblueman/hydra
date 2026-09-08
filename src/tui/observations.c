@@ -1,12 +1,17 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* One in-flight read per source. Completed snapshots replace whole models;
  * terminal input and output continue while an adapter runs or times out. */
-struct native_observations { struct native_capture jobs[4]; };
 
-static void native_observations_cancel(struct app *app, size_t source) {
+
+void native_observations_cancel(struct app *app, size_t source) {
     if (app->observations && source<4) native_capture_destroy(&app->observations->jobs[source]);
 }
 
-static void native_observations_destroy(struct app *app) {
+void native_observations_destroy(struct app *app) {
     size_t i;
     native_evidence_destroy(app);
     free(app->links); app->links=NULL;
@@ -16,7 +21,7 @@ static void native_observations_destroy(struct app *app) {
     free(app->observations); app->observations=NULL;
 }
 
-static void native_observations_tick(struct app *app, bool request) {
+void native_observations_tick(struct app *app, bool request) {
     size_t i;
     native_plan_tick(app,request);
     native_plan_launch_tick(app,request);

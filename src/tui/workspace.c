@@ -1,39 +1,27 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 /* Hydra's view owns data interpretation; termviz owns layout, focus and paint. */
-#define WORKSPACE_CAPACITY (512U * 256U)
-struct native_workspace {
-    struct tv_workspace layout;
-    struct tv_workspace saved[3];
-    bool saved_zoom[3], initialized[3];
-    int mode;
-    struct tv_tree tree;
-    struct tv_tree_node nodes[MAX_HEADS + 1 + 512 + WF_RUNS];
-    char run_labels[WF_RUNS][200];
-    char project_label[256];
-    char collapsed[MAX_HEADS][TEXT];
-    size_t collapsed_count;
-    bool run_selected;
-    struct { int first; size_t slots[2]; } agents[3];
-    struct tv_cell *cells, *previous;
-    struct tv_presenter presenter;
-    int theme;
-    bool root_open, zoom, compact;
-};
 
-static bool native_workspace_monitoring(struct app *app) {
+
+
+bool native_workspace_monitoring(struct app *app) {
     return app->workspace && app->workspace->mode==2;
 }
 
-static void native_workspace_destroy(struct app *app) {
+void native_workspace_destroy(struct app *app) {
     if (!app->workspace) return;
     free(app->workspace->cells); free(app->workspace->previous);
     free(app->workspace); app->workspace = NULL;
 }
 
-static void native_workspace_invalidate(struct app *app) {
+void native_workspace_invalidate(struct app *app) {
     if (app->workspace) tv_present_invalidate(&app->workspace->presenter);
 }
 
-static bool native_workspace_init(struct app *app) {
+bool native_workspace_init(struct app *app) {
     struct native_workspace *w;
     if (app->workspace) return true;
     w = calloc(1, sizeof(*w));
@@ -51,9 +39,8 @@ static bool native_workspace_init(struct app *app) {
     return true;
 }
 
-#include "hydra_tui_workspace_terminals.inc"
 
-static void native_workspace_mode(struct app *app, int mode) {
+void native_workspace_mode(struct app *app, int mode) {
     struct native_workspace *w;
     if (!native_workspace_init(app)) return;
     w=app->workspace;
@@ -140,7 +127,7 @@ static void native_workspace_select(struct app *app) {
     }
 }
 
-static void native_workspace_move(struct app *app, int direction) {
+void native_workspace_move(struct app *app, int direction) {
     struct native_workspace *w = app->workspace;
     if (!w) return;
     if (native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen) {
@@ -163,7 +150,7 @@ static void native_workspace_move(struct app *app, int direction) {
         app->fleet ? app->model.host_count+2 : app->model.recovery_count+5);
 }
 
-static bool native_workspace_key(struct app *app, char key) {
+bool native_workspace_key(struct app *app, char key) {
     struct native_workspace *w = app->workspace;
     if (!w) return false;
     if (key=='A' || key=='B' || key=='C') { native_workspace_mode(app,key-'A'); return true; }
@@ -213,7 +200,7 @@ static bool native_workspace_key(struct app *app, char key) {
     return false;
 }
 
-static void native_workspace_mouse(struct app *app, unsigned button, int x, int y, bool release) {
+void native_workspace_mouse(struct app *app, unsigned button, int x, int y, bool release) {
     struct native_workspace *w = app->workspace;
     if (!w) return;
     if (release) { tv_workspace_release(&w->layout); return; }
@@ -287,7 +274,7 @@ static void native_workspace_activity(struct app *app, struct tv_canvas *c, size
     }
 }
 
-static bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
+bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
     struct native_workspace *w;
     struct tv_canvas c;
     int width = app->cols > 512 ? 511 : app->cols - 1;
