@@ -1,63 +1,56 @@
-# Hydra v2.2.0 Release Notes
+# Hydra v2.3.0 Release Notes
 
-Release date: 2026-09-07
+Release date: 2026-09-08
 
-Hydra 2.2.0 adds workflows with named inputs, sealed artifacts, durable approvals,
-and retry policies. Headless agents run through explicit adapter contracts, while
-local objective plans compile into reviewable workflows accepted by exact digest.
+Hydra 2.3.0 adds finite distributed workflows and shared resource admission.
+Explicitly placed tasks exchange verified files and Git results, while independent
+checks gate composition and final delivery.
 
 ## Highlights
 
-- Carry file and structured inputs between steps. Declared outputs are sealed and
-  verified before dependents consume them; missing or changed artifacts block work.
-- Suspend local workflows and remote tasks for durable approval, then resume with
-  decisions bound to the reviewed evidence. Declared idempotent steps can retry
-  selected failure classes with durable backoff deadlines.
-- Run headless agents with capability checks, bounded event translation, exact
-  recorded-session resume, safe-point steering, supervised cancellation, and
-  optional bounded payload retention. New profiles include Antigravity and Cursor
-  Agent, alongside expanded OpenCode integration.
-- Inspect and validate bounded JSON objective plans, preview their deterministic
-  compilation, and authorize local execution by exact digest. Final delivery
-  requires passing verification reports bound to sealed deliverable bytes.
-- Sign in to providers on selected fleet hosts or preview and explicitly approve
-  copying private credentials. Pi and OpenCode support selected-provider merges.
-- Receive reliable cancellation receipts and terminal workflow state, with failed
-  or truncated Git fingerprint probes and malformed agent output rejected.
+- Run workflows across selected trusted hosts with durable coordinator ownership,
+  stable task receipts, verified handoffs, and deterministic scheduling replay.
+- Compile schema-2 distributed plans with artifact-bound validation joins and
+  version-2 reports tied to accepted check definitions. Repair rejected candidates
+  within an accepted whole-graph budget, then validate the combined result.
+- Share FIFO admission across local execution, gates, head startup and resume,
+  queued spawns, and remote tasks and workflows. Receiver policy controls host and
+  project concurrency, disk floors, labels, and queue bounds.
+- Inspect reservations and queue reasons with `hydra admission` and
+  `hydra fleet admission HOST`. Unknown execution retains capacity; resume keeps
+  the original task identity, including after result-collection transport loss.
+- Reject incomplete admission policies, orphan plan checks, corrupt results, and
+  changed handoff identities before they can authorize dependent execution.
 
 ## Compatibility and upgrade
 
-Upgrade the shell CLI and optional native helpers together: all executable version
-handshakes are now 2.2.0. Existing state v2, event/JSON schemas, and core, TUI, and
-fleet protocol versions remain unchanged. Existing command-based workflows remain
-supported; agent profiles and workflow data are opt-in additions.
+This is a backward-compatible minor release. Upgrade the shell CLI and optional
+native helpers together to 2.3.0, including the selected fleet hosts. Existing state
+v2 and core, TUI, and fleet protocol versions remain unchanged. Existing local plans
+and command workflows remain supported; distributed plans and admission policy are
+opt-in additions. An absent admission policy retains the default limits; an
+existing policy must contain every documented field.
 
-Interactive Codex heads preserve cwd-scoped `codex resume --last`, including heads
-without a recorded provider session identity. Headless `hydra exec --resume-run`
-remains separate: it resumes only the exact session in the selected successful
-run receipt, bound to the same head, instance, worktree, and profile. See the
-[agent resume contract](https://github.com/Someblueman/hydra/blob/v2.2.0/docs/AGENT_CONTRACT.md#workflow-profiles-and-migration).
-
-The attached tar.gz and zip archives contain the exact release source; SHA256SUMS
-verifies both downloads. The shell CLI remains compiler-free. To build the optional
-native helpers, use `make build-core build-tui build-fleet`; fleet additionally
-requires JSON-C development files and pkg-config. JSON-C is linked statically.
-Run `sh install.sh` from the unpacked source to install into the documented prefix.
-Users upgrading from 1.9 should first follow the documented 2.0 state migration.
+The attached tar.gz and zip archives contain the exact release source. Verify them
+with `SHA256SUMS`, unpack, and run `sh install.sh`. The shell CLI remains
+compiler-free. Optional native helpers build with
+`make build-core build-tui build-fleet`; fleet requires JSON-C development files
+and pkg-config, with JSON-C linked statically.
 
 ## Scope and qualification limits
 
-Objective DAG execution is local. Cross-host DAG coordination, automatic placement,
-dynamic graph expansion, and scheduled task pools remain roadmap work. Remote
-workflows still execute on one selected host.
+Distributed execution uses finite graphs, explicit placement, and one original
+coordinator. Coordinator failover, automatic reassignment, dynamic expansion, and
+scheduled pools remain outstanding work. A collected result does not grant review
+approval or permission to promote it.
 
-Provider capabilities and authentication differ by host. Cursor local/remote,
-Antigravity remote, and Claude Code remote live qualification remain outstanding;
-Claude remote sign-in is deferred. Fixture and platform tests do not replace those
-provider checks. See the
-[workflow and agent acceptance matrix](https://github.com/Someblueman/hydra/blob/v2.2.0/docs/WORKFLOW_AGENT_ACCEPTANCE.md)
-and [planning evidence](https://github.com/Someblueman/hydra/blob/v2.2.0/docs/evidence/plan-qualification.md).
+The retained [two-host acceptance evidence](https://github.com/Someblueman/hydra/blob/v2.3.0/docs/evidence/distributed/qualification.md)
+uses executable fixtures on macOS and Linux through the public task interfaces;
+it does not establish live AI-provider conformance or identical worker outputs.
+See [distributed workflows](https://github.com/Someblueman/hydra/blob/v2.3.0/docs/DISTRIBUTED_DAG.md)
+and [admission policy](https://github.com/Someblueman/hydra/blob/v2.3.0/docs/ADMISSION.md)
+for the contracts and recovery behavior.
 
-Fleet remains a trusted-host tool with strict SSH host-key checks. A successful
-agent run or collected remote result does not confer review approval or permission
-to promote it. Credential copying requires approval of the exact preview digest.
+Linux sanitizer runs retain a pre-existing, nonfatal UBSan diagnostic in the empty
+record-list sort at `src/libhydra.c:409`. It is unchanged by this release; passing
+CI must not be interpreted as an absence of sanitizer diagnostics.

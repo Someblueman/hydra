@@ -2,7 +2,7 @@
 
 > - **Status:** canonical outstanding-work backlog
 > - **Snapshot:** 8 September 2026
-> - **Current release:** `v2.2.1` safety, trust, and terminal fixes
+> - **Current release:** `v2.3.0` distributed workflows and resource admission
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   [Release policy](VERSIONING.md) · [Contracts](CONTRACTS.md) ·
