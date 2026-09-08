@@ -2,6 +2,29 @@
 # Hydra list command handler
 # POSIX-compliant shell script
 
+# Populate LIST_* and the existing lifecycle/Git snapshots once per row.
+# Arguments: branch, timestamp, PR, include Git, skip PR status, refresh PR status.
+list_row_details() {
+    LIST_DURATION_SECONDS=0
+    if [ -n "$2" ] && [ "$2" != - ]; then LIST_DURATION_SECONDS="$(get_duration_since "$2")"; fi
+    LIST_DURATION="$(format_duration "$LIST_DURATION_SECONDS")"
+    LIST_PR_STATUS=""
+    if [ -n "$3" ] && [ "$3" != - ] && [ -z "$5" ]; then
+        _load_lib github
+        LIST_PR_STATUS="$(get_pr_status_cached "$3" "$6" 2>/dev/null || echo "")"
+    fi
+    lifecycle_snapshot "$1"
+    LIST_GIT_JSON=null
+    if [ -n "$4" ] && [ -n "$LIFECYCLE_SNAPSHOT_INSTANCE" ]; then
+        _clg_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
+        _clg_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref" 2>/dev/null || true)"
+        if [ -d "$_clg_worktree" ] && [ -n "$_clg_base" ]; then
+            operations_git_counts "$_clg_worktree" "$_clg_base"
+            LIST_GIT_JSON="{\"base_ref\":\"$_clg_base\",\"ahead\":$OPERATIONS_AHEAD,\"behind\":$OPERATIONS_BEHIND,\"dirty_paths\":$OPERATIONS_DIRTY}"
+        fi
+    fi
+}
+
 cmd_list() {
     # Parse arguments
     filter_group=""
@@ -120,45 +143,31 @@ cmd_list() {
     tmux_load_snapshot
 
     if [ -n "$json_output" ]; then
-        # JSON output mode
         tmpjson="$(mktemp)"
         trap 'rm -f "$tmpjson"' EXIT
-        total=0
-        active=0
-        dead=0
-
-        while IFS=' ' read -r branch session ai group timestamp deps pr; do
-            # Filter by group if specified
-            if [ -n "$filter_group" ]; then
-                if [ "$group" != "$filter_group" ]; then
-                    continue
-                fi
-            fi
-
-            total=$((total + 1))
-
-            # Calculate duration (validated numeric subtraction)
-            duration_secs=0
-            if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
-                duration_secs="$(get_duration_since "$timestamp")"
-            fi
-            duration_human="$(format_duration "$duration_secs")"
-
-            # Determine status (use snapshot loaded above)
-            if tmux_snapshot_has_session "$session"; then
-                status="active"
-                active=$((active + 1))
-            else
-                status="dead"
-                dead=$((dead + 1))
-            fi
-
-            # Check if current
-            is_current="false"
-            if [ "$session" = "$current_session" ]; then
-                is_current="true"
-            fi
-
+    else
+        if [ -n "$filter_group" ]; then
+            echo "Active Hydra heads in group '$filter_group':"
+        else
+            echo "Active Hydra heads:"
+        fi
+        echo ""
+    fi
+    total=0 active=0 dead=0
+    while IFS=' ' read -r branch session ai group timestamp deps pr; do
+        [ -z "$filter_group" ] || [ "$group" = "$filter_group" ] || continue
+        total=$((total + 1))
+        if tmux_snapshot_has_session "$session"; then
+            status=active; active=$((active + 1))
+        else
+            status=dead; dead=$((dead + 1))
+        fi
+        is_current=false
+        [ "$session" != "$current_session" ] || is_current=true
+        list_row_details "$branch" "$timestamp" "$pr" "$show_git" "$no_pr_status" "$refresh_pr_status"
+        duration_str=""
+        if [ -n "$timestamp" ] && [ "$timestamp" != - ]; then duration_str="$LIST_DURATION"; fi
+        if [ -n "$json_output" ]; then
             # Handle null/empty values for JSON
             ai_json="null"
             if [ -n "$ai" ] && [ "$ai" != "-" ]; then
@@ -180,35 +189,19 @@ cmd_list() {
             pr_status_json="null"
             if [ -n "$pr" ] && [ "$pr" != "-" ]; then
                 pr_json="$pr"
-                # Fetch PR status if not disabled
-                if [ -z "$no_pr_status" ]; then
-                    _load_lib github
-                    _pr_st="$(get_pr_status_cached "$pr" "$refresh_pr_status" 2>/dev/null || echo "")"
-                    if [ -n "$_pr_st" ]; then
-                        pr_status_json="\"$(json_escape "$_pr_st")\""
-                    fi
+                if [ -n "$LIST_PR_STATUS" ]; then
+                    pr_status_json="\"$(json_escape "$LIST_PR_STATUS")\""
                 fi
             fi
 
-            # Build JSON object
-            lifecycle_snapshot "$branch"
-            git_json=null
-            if [ -n "$show_git" ] && [ -n "$LIFECYCLE_SNAPSHOT_INSTANCE" ]; then
-                _clg_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
-                _clg_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref" 2>/dev/null || true)"
-                if [ -d "$_clg_worktree" ] && [ -n "$_clg_base" ]; then
-                    operations_git_counts "$_clg_worktree" "$_clg_base"
-                    git_json="{\"base_ref\":\"$_clg_base\",\"ahead\":$OPERATIONS_AHEAD,\"behind\":$OPERATIONS_BEHIND,\"dirty_paths\":$OPERATIONS_DIRTY}"
-                fi
-            fi
             printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s, "deps": %s, "pr": %s, "pr_status": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s, "git": %s}\n' \
                 "$(json_escape "$branch")" \
                 "$(json_escape "$session")" \
                 "$ai_json" \
                 "$group_json" \
                 "$status" \
-                "$duration_secs" \
-                "$duration_human" \
+                "$LIST_DURATION_SECONDS" \
+                "$LIST_DURATION" \
                 "$ts_json" \
                 "$is_current" \
                 "$deps_json" \
@@ -220,50 +213,8 @@ cmd_list() {
                 "$(json_escape "$LIFECYCLE_SNAPSHOT_CONFIDENCE")" \
                 "$(json_escape "$LIFECYCLE_SNAPSHOT_LIVENESS")" \
                 "$LIFECYCLE_SNAPSHOT_COMPLETE" \
-                "$git_json" >> "$tmpjson"
-        done <<EOF
-$state_rows
-EOF
-
-        # Output JSON
-        printf '{"schema_version":1,"ok":true,"command":"list","data":{"sessions":['
-        first=1
-        while IFS= read -r line; do
-            if [ "$first" -eq 1 ]; then
-                first=0
-            else
-                printf ','
-            fi
-            printf '%s' "$line"
-        done < "$tmpjson"
-        printf '],"total":%s,"active":%s,"dead":%s}}\n' "$total" "$active" "$dead"
-
-        rm -f "$tmpjson"
-        trap - EXIT
-    else
-        # Human-readable output mode
-        if [ -n "$filter_group" ]; then
-            echo "Active Hydra heads in group '$filter_group':"
+                "$LIST_GIT_JSON" >> "$tmpjson"
         else
-            echo "Active Hydra heads:"
-        fi
-        echo ""
-
-        while IFS=' ' read -r branch session ai group timestamp deps pr; do
-            # Filter by group if specified
-            if [ -n "$filter_group" ]; then
-                if [ "$group" != "$filter_group" ]; then
-                    continue
-                fi
-            fi
-
-            # Calculate duration if timestamp exists
-            duration_str=""
-            if [ -n "$timestamp" ] && [ "$timestamp" != "-" ]; then
-                duration_secs="$(get_duration_since "$timestamp")"
-                duration_str="$(format_duration "$duration_secs")"
-            fi
-
             # Build status line
             status_line=""
             if [ -n "$duration_str" ]; then
@@ -294,12 +245,8 @@ EOF
             # Show PR if linked (with status if available)
             if [ -n "$pr" ] && [ "$pr" != "-" ]; then
                 pr_display="PR #$pr"
-                if [ -z "$no_pr_status" ]; then
-                    _load_lib github
-                    _pr_st="$(get_pr_status_cached "$pr" "$refresh_pr_status" 2>/dev/null || echo "")"
-                    if [ -n "$_pr_st" ] && [ "$_pr_st" != "UNKNOWN" ]; then
-                        pr_display="PR #$pr $_pr_st"
-                    fi
+                if [ -n "$LIST_PR_STATUS" ] && [ "$LIST_PR_STATUS" != UNKNOWN ]; then
+                    pr_display="PR #$pr $LIST_PR_STATUS"
                 fi
                 if [ -n "$status_line" ]; then
                     status_line="$status_line [$pr_display]"
@@ -309,19 +256,15 @@ EOF
             fi
 
             # Check if session still exists (use snapshot loaded above)
-            lifecycle_snapshot "$branch"
             status_line="$status_line [declared: ${LIFECYCLE_SNAPSHOT_OUTCOME:-none}] [observed: $LIFECYCLE_SNAPSHOT_OBSERVED/$LIFECYCLE_SNAPSHOT_CONFIDENCE] [live: $LIFECYCLE_SNAPSHOT_LIVENESS]"
             if [ -n "$show_git" ] && [ -n "$LIFECYCLE_SNAPSHOT_INSTANCE" ]; then
-                _clg_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
-                _clg_base="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref" 2>/dev/null || true)"
-                if [ -d "$_clg_worktree" ] && [ -n "$_clg_base" ]; then
-                    operations_git_counts "$_clg_worktree" "$_clg_base"
+                if [ "$LIST_GIT_JSON" != null ]; then
                     status_line="$status_line [git: +$OPERATIONS_AHEAD/-$OPERATIONS_BEHIND dirty=$OPERATIONS_DIRTY]"
                 else
                     status_line="$status_line [git: unavailable]"
                 fi
             fi
-            if tmux_snapshot_has_session "$session"; then
+            if [ "$status" = active ]; then
                 # Check if it's the current session
                 if [ "$session" = "$current_session" ]; then
                     echo "* $branch -> $session $status_line (current)"
@@ -331,8 +274,25 @@ EOF
             else
                 echo "  $branch -> $session $status_line (dead)"
             fi
-        done <<EOF
+        fi
+    done <<EOF
 $state_rows
 EOF
+    if [ -n "$json_output" ]; then
+        # Output JSON
+        printf '{"schema_version":1,"ok":true,"command":"list","data":{"sessions":['
+        first=1
+        while IFS= read -r line; do
+            if [ "$first" -eq 1 ]; then
+                first=0
+            else
+                printf ','
+            fi
+            printf '%s' "$line"
+        done < "$tmpjson"
+        printf '],"total":%s,"active":%s,"dead":%s}}\n' "$total" "$active" "$dead"
+
+        rm -f "$tmpjson"
+        trap - EXIT
     fi
 }

@@ -8,8 +8,8 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     struct session session;
     struct winsize size;
     char overlong[240];
-    result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open mouse terminal");
-    result(wait_for_marker(&session, "\033[?1006h", 1000), "raw mode enables SGR mouse reporting");
+    if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open mouse terminal")) return;
+    result(wait_for_markers(&session, "\033[?1006h", "\033[?2004h", 1000), "raw mode enables mouse and bracketed paste reporting");
     (void)wait_for_marker(&session, "Click row", 1000);
     mouse_input(&session, "\033[<0;8;6M");
     result(wait_for_marker(&session, ">  feature-stale", 1000), "click selects the painted row");
@@ -22,6 +22,11 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     mouse_input(&session, "\033[<64;8;6M");
     result(wait_for_marker(&session, ">  feature-stale", 1000), "wheel up has keyboard selection parity");
     mouse_input(&session, "\033[<0;8;5m\033[<32;8;5M\033[<4;8;5M\033[<0;0;5M\033[<0;8;25M\033[<0;-1;5M\033[<0;999999999999;5M\033[Mqqq");
+    /* Observe a unique response after the whole invalid-report batch. A row
+     * marker also appears in intermediate frames and is not an input barrier. */
+    write_input(session.master, "?", 1U);
+    result(wait_for_marker(&session, "KEYBOARD HELP", 2000), "invalid mouse report batch preserves the next key");
+    write_input(session.master, "?", 1U);
     result(wait_for_marker(&session, "Row 2 of 3", 1000), "release, drag, modifiers and invalid coordinates do not select");
     memset(overlong, '9', sizeof(overlong));
     memcpy(overlong, "\033[<0;", 5U);

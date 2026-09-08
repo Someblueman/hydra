@@ -11,7 +11,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_1X_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="2.2.0"
+HYDRA_VERSION="2.2.1"
 export HYDRA_VERSION HYDRA_1X_MAP
 
 # Source helper libraries
@@ -75,6 +75,25 @@ _load_lib() {
     _LOADED_LIBS="${_LOADED_LIBS}:${_lib}:"
 }
 
+# Load ordered dependencies using function-local positional arguments.
+_load_libs() {
+    while [ "$#" -gt 0 ]; do
+        _load_lib "$1"
+        shift
+    done
+}
+
+# Basic UI actions are loaded only when native dispatch falls back or --basic is selected.
+_load_tui_basic_libs() {
+    _load_libs layout hooks yaml spawn spawn_bulk kill parallel github dashboard \
+        cmd_spawn cmd_queue cmd_list cmd_session cmd_messages
+}
+
+# Execution commands share this order; spawn also needs layout before state.
+_load_runtime_libs() {
+    _load_libs output paths locks git tmux "$@" state identity state_v2 events project profiles lifecycle
+}
+
 # Load libraries required for a command
 # Usage: _load_libs_for_cmd <command>
 _load_libs_for_cmd() {
@@ -82,377 +101,93 @@ _load_libs_for_cmd() {
         version|help|-v|--version|-h|--help)
             ;;
         fleet-local)
-            _load_lib output
-            _load_lib locks
-            _load_lib git
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib lifecycle
-            _load_lib cmd_fleet_local
+            _load_libs output locks git identity state_v2 lifecycle cmd_fleet_local
             ;;
         remote|fleet)
-            _load_lib output
-            _load_lib cmd_fleet
+            _load_libs output cmd_fleet
             ;;
         state|events)
-            _load_lib output
-            _load_lib locks
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib events
-            _load_lib cmd_foundation
+            _load_libs output locks identity state_v2 events cmd_foundation
             ;;
         snapshot)
-            _load_lib output
-            _load_lib locks
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib core
-            _load_lib cmd_core
+            _load_libs output locks identity state_v2 core cmd_core
             ;;
         init|agent|capabilities|path)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib project
-            _load_lib profiles
-            _load_lib cmd_lifecycle
+            _load_libs output paths locks git identity state_v2 project profiles cmd_lifecycle
             ;;
         workflow)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib tmux
-            _load_lib state
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib events
-            _load_lib project
-            _load_lib profiles
-            _load_lib lifecycle
-            _load_lib operations
-            _load_lib parallel
-            _load_lib messages
-            _load_lib limits
-            _load_lib workflow
-            _load_lib cmd_fleet
-            _load_lib workflow_approval
-            _load_lib workflow_data
-            _load_lib workflow_plan
-            _load_lib workflow_retry
-            _load_lib workflow_runtime
-            _load_lib cmd_workflow
+            _load_runtime_libs
+            _load_libs operations parallel messages limits workflow cmd_fleet workflow_approval workflow_data \
+                workflow_plan workflow_retry workflow_runtime cmd_workflow
             ;;
         lifecycle|outcome|wait|adapter|resume|notify)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib tmux
-            _load_lib state
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib events
-            _load_lib project
-            _load_lib profiles
-            _load_lib lifecycle
-            _load_lib notify
-            _load_lib operations
-            _load_lib cmd_evidence
+            _load_runtime_libs
+            _load_libs notify operations cmd_evidence
             ;;
         exec|diff|review|provenance)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib tmux
-            _load_lib state
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib events
-            _load_lib project
-            _load_lib profiles
-            _load_lib lifecycle
-            _load_lib operations
-            _load_lib cmd_operations
+            _load_runtime_libs
+            _load_libs operations cmd_operations
             ;;
         claim|scope|collision|resource|gate)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib tmux
-            _load_lib state
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib events
-            _load_lib project
-            _load_lib profiles
-            _load_lib lifecycle
-            _load_lib operations
-            _load_lib parallel
-            _load_lib cmd_parallel
+            _load_runtime_libs
+            _load_libs operations parallel cmd_parallel
             ;;
         context|sync|land|integrate)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib tmux
-            _load_lib state
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib events
-            _load_lib project
-            _load_lib profiles
-            _load_lib lifecycle
-            _load_lib notify
-            _load_lib hooks
-            _load_lib messages
-            _load_lib operations
-            _load_lib parallel
-            _load_lib integration
-            _load_lib integration_verified
-            _load_lib integration_verified_actions
-            _load_lib kill
-            _load_lib limits
-            _load_lib spawn
-            _load_lib cmd_integration
+            _load_runtime_libs
+            _load_libs notify hooks messages operations parallel integration integration_verified \
+                integration_verified_actions kill limits spawn cmd_integration
             ;;
         du|gc|worktree)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib tmux
-            _load_lib state
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib project
-            _load_lib profiles
-            _load_lib lifecycle
-            _load_lib parallel
-            _load_lib integration
-            _load_lib worktree_ops
-            _load_lib cmd_worktree_ops
+            _load_libs output paths locks git tmux state identity state_v2 project profiles lifecycle parallel \
+                integration worktree_ops cmd_worktree_ops
             ;;
         spawn)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib tmux
-            _load_lib layout
-            _load_lib state
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib events
-            _load_lib project
-            _load_lib profiles
-            _load_lib lifecycle
-            _load_lib notify
-            _load_lib operations
-            _load_lib parallel
-            _load_lib hooks
-            _load_lib yaml
-            _load_lib spawn
-            _load_lib spawn_bulk
-            _load_lib github
-            _load_lib limits
-            _load_lib kill
-            _load_lib cmd_spawn
-            _load_lib cmd_list
-            _load_lib cmd_session
+            _load_runtime_libs layout
+            _load_libs notify operations parallel hooks yaml spawn spawn_bulk github limits kill cmd_spawn cmd_list \
+                cmd_session
             ;;
         list|switch|status|cycle-layout)
-            _load_lib output
-            _load_lib locks
-            _load_lib state
-            _load_lib tmux
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib lifecycle
-            _load_lib operations
-            _load_lib layout
-            _load_lib github
-            _load_lib cmd_list
-            _load_lib cmd_session
+            _load_libs output locks state tmux identity state_v2 lifecycle operations layout github cmd_list \
+                cmd_session
             ;;
         kill)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib tmux
-            _load_lib state
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib events
-            _load_lib project
-            _load_lib lifecycle
-            _load_lib parallel
-            _load_lib notify
-            _load_lib hooks
-            _load_lib messages
-            _load_lib kill
-            _load_lib limits
-            _load_lib spawn
-            _load_lib cmd_session
+            _load_libs output paths locks git tmux state identity state_v2 events project lifecycle parallel notify \
+                hooks messages kill limits spawn cmd_session
             ;;
         group|send|recv)
-            _load_lib output
-            _load_lib state
-            _load_lib tmux
-            _load_lib locks
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib messages
-            _load_lib cmd_group
-            _load_lib cmd_messages
+            _load_libs output state tmux locks identity state_v2 messages cmd_group cmd_messages
             ;;
         pr|template)
-            _load_lib locks
-            _load_lib state
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib github
-            _load_lib template
-            _load_lib cmd_github
+            _load_libs locks state identity state_v2 github template cmd_github
             ;;
         tail|broadcast|wait-idle)
-            _load_lib locks
-            _load_lib state
-            _load_lib tmux
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib cmd_session_ops
+            _load_libs locks state tmux identity state_v2 cmd_session_ops
             ;;
         regenerate)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib tmux
-            _load_lib layout
-            _load_lib state
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib events
-            _load_lib project
-            _load_lib profiles
-            _load_lib lifecycle
-            _load_lib notify
-            _load_lib hooks
-            _load_lib yaml
-            _load_lib spawn
-            _load_lib cmd_queue
-            _load_lib cmd_evidence
+            _load_runtime_libs layout
+            _load_libs notify hooks yaml spawn cmd_queue cmd_evidence
             ;;
         doctor|cleanup)
-            _load_lib paths
-            _load_lib maintenance
-            _load_lib tmux
-            _load_lib state
-            _load_lib git
-            _load_lib locks
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib output
-            _load_lib messages
-            _load_lib spawn
-            _load_lib cmd_queue
-            _load_lib cmd_maintenance
+            _load_libs paths maintenance tmux state git locks identity state_v2 output messages spawn cmd_queue \
+                cmd_maintenance
             ;;
         dashboard|dashboard-exit)
-            _load_lib locks
-            _load_lib state
-            _load_lib tmux
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib dashboard
+            _load_libs locks state tmux identity state_v2 dashboard
             ;;
         tui)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib identity
-            _load_lib git
-            _load_lib tmux
-            _load_lib layout
-            _load_lib state
-            _load_lib state_v2
-            _load_lib project
-            _load_lib profiles
-            _load_lib notify
-            _load_lib events
-            _load_lib lifecycle
-            _load_lib hooks
-            _load_lib yaml
-            _load_lib spawn
-            _load_lib spawn_bulk
-            _load_lib kill
-            _load_lib limits
-            _load_lib maintenance
-            _load_lib parallel
-            _load_lib github
-            _load_lib dashboard
-            _load_lib cmd_spawn
-            _load_lib cmd_queue
-            _load_lib cmd_list
-            _load_lib cmd_session
-            _load_lib cmd_messages
-            _load_lib tui
+            _load_libs output paths locks identity git tmux state state_v2 project profiles notify events \
+                lifecycle limits maintenance tui
             ;;
         queue)
-            _load_lib output
-            _load_lib state
-            _load_lib locks
-            _load_lib identity
-            _load_lib state_v2
-            _load_lib limits
-            _load_lib spawn
-            _load_lib cmd_queue
+            _load_libs output state locks identity state_v2 limits spawn cmd_queue
             ;;
         completion)
-            _load_lib completion_bash
-            _load_lib completion_zsh
-            _load_lib completion_fish
-            _load_lib completion
-            _load_lib cmd_completion
+            _load_libs completion_bash completion_zsh completion_fish completion cmd_completion
             ;;
         *)
-            _load_lib output
-            _load_lib paths
-            _load_lib locks
-            _load_lib git
-            _load_lib tmux
-            _load_lib layout
-            _load_lib state
-            _load_lib completion
-            _load_lib dashboard
-            _load_lib github
-            _load_lib hooks
-            _load_lib yaml
-            _load_lib spawn
-            _load_lib spawn_bulk
-            _load_lib kill
-            _load_lib limits
-            _load_lib maintenance
-            _load_lib tui
-            _load_lib cmd_spawn
-            _load_lib cmd_queue
-            _load_lib cmd_list
-            _load_lib cmd_session
-            _load_lib cmd_group
-            _load_lib cmd_messages
-            _load_lib cmd_github
-            _load_lib cmd_session_ops
-            _load_lib cmd_maintenance
-            _load_lib cmd_completion
+            _load_libs output paths locks git tmux layout state completion dashboard github hooks yaml spawn \
+                spawn_bulk kill limits maintenance tui cmd_spawn cmd_queue cmd_list cmd_session cmd_group \
+                cmd_messages cmd_github cmd_session_ops cmd_maintenance cmd_completion
             ;;
     esac
 }

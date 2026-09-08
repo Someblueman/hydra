@@ -1,4 +1,7 @@
-#include "fleet.h"
+#include "fleet/support/json.h"
+#include "fleet/transport/remote.h"
+#include "fleet/cli.h"
+#include "fleet/fleet.h"
 #include <string.h>
 /* Fleet is a separate internal adapter. Control bytes cannot enter terminal rows. */
 static void field(const char *value) {

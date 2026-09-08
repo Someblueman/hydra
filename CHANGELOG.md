@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] - Unreleased candidate
+
+### Security
+
+- Fix repository trust hashing that omitted nested `local.yml` files and symbolic
+  links, allowing unapproved workflow changes to retain a previous approval.
+  Only root `.hydra/local.yml` remains exempt. Linked configuration, special files,
+  and newline-bearing paths now fail closed; replace links with regular files,
+  review `.hydra`, and rerun `hydra init --trust` as needed.
+
+- Reject a linked `.hydra` root before initialization writes configuration.
+- Keep oversized or interrupted terminal paste/CSI input inert until its
+  terminator, and enable bracketed paste while the native TUI is active.
+
+### Changed
+
+- Native modules and command handlers have clearer ownership, shared dependency
+  loading, and regression-gated C complexity ceilings.
+- Native TUI palette actions now declare commands and selection requirements in
+  one table, preserving search order, prompts, and literal argument handling.
+
 ## [2.2.0] - 2026-09-07
 
 ### Added

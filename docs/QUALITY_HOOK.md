@@ -24,23 +24,45 @@ repair outcomes separately from setup/trial events after a week of use.
 
 ## C analysis
 
-Run `make quality-c` for clang-tidy 22.1.8 analysis of all 66 current C
-translation units. The target uses CORE_CFLAGS, JSON-C pkg-config includes,
+Run `make quality-c` for clang-tidy 22.1.8 analysis of all native C sources and
+the C test translation units. The target uses CORE_CFLAGS, JSON-C pkg-config includes,
 and the macOS SDK sysroot when applicable. Headers and .inc fragments are
 analyzed through their including translation units, not as standalone programs.
-New .c files are selected by the target's source globs.
+Native .c files are discovered recursively. Fleet/TUI builds and C analysis use
+the same source inventory, including the domain subdirectories.
 
 Provision with the toolkit quality `setup` command using the existing quality.json,
 or `uv venv build/quality-tools` followed by
 `uv pip install --python build/quality-tools/bin/python clang-tidy==22.1.8`.
 Check-time installation is disabled. C runs only at Stop; shell remains fast-stage.
 
-This initial C baseline is advisory: analyzer warnings and cognitive complexity
-above 15 are visible but do not block. Compiler errors fail the check. A PASS
-means analysis completed, not that there were no warnings. Findings need triage
-before introducing a blocking or regression-baseline policy; no existing source
-is suppressed or automatically repaired. The quality runner caps command output,
-so run `make quality-c > build/quality-c.log 2>&1` for the complete report.
+C cognitive complexity is now an incremental regression gate. The reviewed
+`docs/quality/cognitive-complexity.tsv` records ceilings by relative source path
+and function name. A function absent from the table has a ceiling of 15. Higher
+scores fail `make quality-c`; line-number changes do not. Existing analyzer
+warnings remain visible and require review, while compiler/tool failures block.
+The checker version, enabled checks, and threshold remain unchanged. The original
+118-function audit baseline and subsequent dispositions are documented in
+`CODEBASE_SIMPLIFICATION.md`.
+
+When simplifying an existing hotspot, review the complete function and its
+extracted helpers together. Update the baseline only with that reviewed change,
+ratchet reduced scores down, and remove obsolete entries. New helpers above 15
+need an explicit reason in the change description; moving code or adding an
+allowance alone does not establish simplification. Do not suppress diagnostics,
+raise the threshold, or edit allowances merely to pass the check.
+
+`make test-quality-c` exercises the actual pinned checker: new and increased
+scores fail, threshold-15 and unchanged scores pass, line shifts are ignored,
+and empty baselines, missing sources, and compiler failures cannot hide a
+regression. CI runs these checks on macOS with the same pinned checker and keeps
+the full report. Native tests and sanitizers still run on Linux and macOS.
+`test-all` remains usable with the ordinary build toolchain; C analysis is its
+separate required CI job. Shell cognitive complexity remains unavailable.
+
+The complete report is written to `build/quality-c.log` and normalized metrics
+to `build/quality-c.tsv`. Set `QUALITY_C_LOG` to choose another report path.
+Do not redirect make's stdout to the same file that the checker owns.
 
 ## Shell pilot evaluation — 7 September 2026
 
@@ -58,7 +80,7 @@ correctness finding. The remaining failures have not all been individually
 attributed, and the setup error remains unclassified. Evidence supports extending
 the pilot, but does not establish a defect-prevention rate or net time savings.
 
-C validation: analysis completed on the native build flags with the macOS SDK;
+Historical pilot validation: analysis completed on the native build flags with the macOS SDK;
 a temporary 16-branch probe emitted the configured complexity warning without
 blocking, and malformed C returned a failure. Initial analysis before enabling
 header diagnostics emitted 139 warnings; that is an untriaged baseline, not a

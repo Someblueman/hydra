@@ -39,8 +39,8 @@ file_hash() {
 echo "Running native install tests..."
 echo "==============================="
 
-HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_CORE_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-core.sh" >/dev/null
-HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_TUI_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-tui.sh" >/dev/null
+HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_CORE_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" core >/dev/null
+HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_TUI_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" tui >/dev/null
 prefix="$test_root/offline-prefix"
 home="$test_root/home"
 mkdir -p "$home"
@@ -155,10 +155,10 @@ HOME="$archive_home" PREFIX="$archive_prefix" HYDRA_INSTALL_CORE=required HYDRA_
     sh "$archive_checkout/install.sh" > "$test_root/archive-source.out" 2>&1
 assert_success $? "source archive auto-builds native TUI without Git metadata"
 assert_file "$archive_prefix/libexec/hydra/hydra-tui" "auto install builds and installs native TUI when a compiler is available"
-assert_equal "hydra-2.2.0-source-tree" \
+assert_equal "hydra-2.2.1-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-core.source")" \
     "source archive records explicit non-commit provenance"
-assert_equal "hydra-2.2.0-source-tree" \
+assert_equal "hydra-2.2.1-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-tui.source")" \
     "source archive records explicit native TUI provenance"
 

@@ -21,5 +21,10 @@ case "${1:-}:${2:-}" in
     kill:*)
         printf 'FAKE KILL %s\n' "$*"
         ;;
+    switch:*|regenerate:*|status:*|claim:list|collision:*|scope:show|queue:*|resource:status|diff:*|gate:status|doctor:*)
+        printf 'FAKE ACTION'
+        printf ' <%s>' "$@"
+        printf '\n'
+        ;;
     *) exit 1 ;;
 esac

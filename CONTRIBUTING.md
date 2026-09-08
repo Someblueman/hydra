@@ -29,6 +29,33 @@ Keep changes cohesive and source/test files under 500 lines. Document behavior u
 Unreleased in the changelog. Follow [VERSIONING.md](docs/VERSIONING.md) for release
 time version assignment and publication; passing local checks is not a release.
 
+## Where to add functionality
+
+Start with the owning domain and its public contract. Native sources under
+`src/fleet/` and `src/tui/` are discovered recursively by the build and C analysis;
+private headers are tracked through compiler dependency files.
+
+| Change | Entry point and implementation | Focused verification |
+|---|---|---|
+| Shell command | `lib/cli.sh`, its `lib/cmd_*.sh` handler, and the domain library; declare shared dependencies in `lib/deps.sh` | `make lint` and the affected `tests/test_*.sh` |
+| Native TUI action | `src/tui/actions.c` palette table: label, literal command/subcommand, and selection scope; interactive prompts stay in action code | `make test-tui test-tui-pty`; argv cases in `tests/c/test_tui_palette.inc` |
+| Native TUI data or presentation | `model.c` parses records, `adapter.c` fetches snapshots, `selection.c` selects heads, `render.c` draws, and `input.c` handles keys | TUI fixture and PTY suites; `make sanitize-tui` for native changes |
+| Plan operation | `src/fleet/plan/plan_cli.c` operation table and the corresponding plan module | `make test-fleet`, especially workflow plan/approval acceptance |
+| Agent provider | `src/fleet/agent/`: profile/probe, decode, stream observation, and run coordination have separate owners | `make test-fleet`, especially agent execution/auth acceptance |
+| Remote task | `src/fleet/task/`: CLI parsing, acceptance, launch/control, execution, collection, and result verification | `make test-fleet sanitize-fleet` |
+| Transport or subprocess behavior | `src/fleet/transport/` owns SSH/protocol operations; `support/process.c` owns process capture and deadlines | Fleet and sanitizer suites; preserve cancellation and uncertainty semantics |
+
+Keep one owner for resource cleanup and state transitions. Put new work beside
+that owner; extract a helper when it has a clear input/output contract. Add private
+headers only for interfaces used across translation units. Ordinary palette
+actions need a table entry and an argv test, without a new dispatch branch.
+
+Run `make quality-c` for native changes. Its reviewed per-function ceilings catch
+increases; lower an allowance when simplification reduces the measured score.
+See [the simplification report](docs/CODEBASE_SIMPLIFICATION.md) for retained
+complexity and analyzer limitations. Passing this gate does not replace behavioral
+tests. Prefer the next concrete feature to another blanket decomposition pass.
+
 ## POSIX Compliance
 
 Hydra's runtime shell scripts use POSIX `/bin/sh` and pass ShellCheck and dash

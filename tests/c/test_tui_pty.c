@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/resource.h>
 #include <sys/select.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -26,10 +27,11 @@ struct session {
 static int tests;
 static int failures;
 
-static void result(bool ok, const char *message) {
+static bool result(bool ok, const char *message) {
     tests++;
     if (ok) printf("[PASS] %s\n", message);
     else { printf("[FAIL] %s\n", message); failures++; }
+    return ok;
 }
 
 static void sleep_ms(long milliseconds) {
@@ -72,8 +74,7 @@ static void write_input(int fd, const char *data, size_t length) {
         }
     }
     if (written != length) {
-        fprintf(stderr, "failed to write pseudo-terminal input: %s\n",
-                errno == 0 ? "short write" : strerror(errno));
+        fprintf(stderr, "short pseudo-terminal input write: %zu of %zu bytes\n", written, length);
         exit(1);
     }
 }
@@ -89,44 +90,55 @@ static bool same_terminal(const struct termios *left, const struct termios *righ
            memcmp(left->c_cc, right->c_cc, sizeof(left->c_cc)) == 0;
 }
 
+static void child_session(const struct session *session, const char *tui, const char *hydra, const char *fake_bin) {
+    char path[4096];
+    const char *old_path = getenv("PATH");
+    char *tui_path = strdup(tui), *hydra_path = strdup(hydra);
+    if (!tui_path || !hydra_path) _exit(119);
+    snprintf(path, sizeof(path), "%s:%s", fake_bin, old_path == NULL ? "" : old_path);
+    close(session->master);
+    if (setsid() < 0) _exit(120);
+#ifdef TIOCSCTTY
+    (void)ioctl(session->slave, TIOCSCTTY, 0);
+#endif
+    if (dup2(session->slave, STDIN_FILENO) < 0 || dup2(session->slave, STDOUT_FILENO) < 0 ||
+        dup2(session->slave, STDERR_FILENO) < 0) _exit(121);
+    if (session->slave > STDERR_FILENO) close(session->slave);
+    setenv("TERM", "xterm-256color", 1);
+    if (getenv("HYDRA_TEST_COLOR") != NULL) unsetenv("NO_COLOR");
+    else setenv("NO_COLOR", "1", 1);
+    setenv("PATH", path, 1);
+    execl(tui_path, tui_path, "--hydra", hydra_path, (char *)NULL);
+    _exit(127);
+}
+
 static int open_session(struct session *session, const char *tui, const char *hydra,
                         const char *fake_bin, unsigned short cols, unsigned short rows) {
     char *slave_name;
     struct winsize size;
     pid_t pid;
+    *session = (struct session){.pid = -1, .master = -1, .slave = -1};
+    if (!tui || !hydra || !fake_bin) return -1;
     session->master = posix_openpt(O_RDWR | O_NOCTTY);
-    if (session->master < 0 || grantpt(session->master) != 0 || unlockpt(session->master) != 0) return -1;
+    if (session->master < 0 || grantpt(session->master) != 0 || unlockpt(session->master) != 0) goto failed;
     slave_name = ptsname(session->master);
-    if (slave_name == NULL) return -1;
+    if (slave_name == NULL) goto failed;
     session->slave = open(slave_name, O_RDWR | O_NOCTTY);
-    if (session->slave < 0 || tcgetattr(session->slave, &session->original) != 0) return -1;
+    if (session->slave < 0 || tcgetattr(session->slave, &session->original) != 0) goto failed;
     memset(&size, 0, sizeof(size));
     size.ws_col = cols; size.ws_row = rows;
-    if (ioctl(session->master, TIOCSWINSZ, &size) != 0) return -1;
+    if (ioctl(session->master, TIOCSWINSZ, &size) != 0) goto failed;
     pid = fork();
-    if (pid < 0) return -1;
-    if (pid == 0) {
-        char path[4096];
-        const char *old_path = getenv("PATH");
-        close(session->master);
-        if (setsid() < 0) _exit(120);
-#ifdef TIOCSCTTY
-        (void)ioctl(session->slave, TIOCSCTTY, 0);
-#endif
-        if (dup2(session->slave, STDIN_FILENO) < 0 || dup2(session->slave, STDOUT_FILENO) < 0 ||
-            dup2(session->slave, STDERR_FILENO) < 0) _exit(121);
-        if (session->slave > STDERR_FILENO) close(session->slave);
-        setenv("TERM", "xterm-256color", 1);
-        if (getenv("HYDRA_TEST_COLOR") != NULL) unsetenv("NO_COLOR");
-        else setenv("NO_COLOR", "1", 1);
-        snprintf(path, sizeof(path), "%s:%s", fake_bin, old_path == NULL ? "" : old_path);
-        setenv("PATH", path, 1);
-        execl(tui, tui, "--hydra", hydra, (char *)NULL);
-        _exit(127);
-    }
+    if (pid < 0) goto failed;
+    if (pid == 0) child_session(session, tui, hydra, fake_bin);
     session->pid = pid;
     (void)fcntl(session->master, F_SETFL, fcntl(session->master, F_GETFL) | O_NONBLOCK);
     return 0;
+failed:
+    if (session->slave >= 0) close(session->slave);
+    if (session->master >= 0) close(session->master);
+    session->slave = session->master = -1;
+    return -1;
 }
 
 static bool wait_for_raw(struct session *session) {
@@ -225,10 +237,25 @@ static void close_session(struct session *session) {
 
 #include "test_tui_mouse.inc"
 #include "test_tui_themes.inc"
+#include "test_tui_palette.inc"
+
+static void test_session_failure(void) {
+    pid_t pid = fork();
+    int status = 0;
+    if (pid == 0) {
+        struct rlimit limit = {0, 0};
+        struct session session;
+        if (setrlimit(RLIMIT_NOFILE, &limit) != 0) _exit(2);
+        int opened = open_session(&session, "/usr/bin/false", "/usr/bin/false", "", 80, 24);
+        _exit(opened == -1 && session.pid == -1 && session.master == -1 && session.slave == -1 ? 0 : 1);
+    }
+    result(pid > 0 && waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0,
+           "failed PTY setup leaves no live session handles");
+}
 
 static void test_small_list(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
-    result(open_session(&session, tui, hydra, fake_bin, 40, 10) == 0, "open minimum-size terminal");
+    if (!result(open_session(&session, tui, hydra, fake_bin, 40, 10) == 0, "open minimum-size terminal")) return;
     result(wait_for_raw(&session), "small list enters raw mode");
     write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads:", 1000);
@@ -245,12 +272,15 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     struct session session;
     struct winsize size;
     const char paste[] = "\033[200~pasted-q-:kill\033[201~";
+    char large_paste[8300];
+    size_t paste_offset;
     const char mouse[] = "\033[<0;12;4M";
     (void)setenv("TMUX", "test", 1);
     (void)setenv("FAKE_TMUX_CURRENT_SESSION", "hydra-feature-live", 1);
-    result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open real pseudo-terminal");
+    bool opened = result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open real pseudo-terminal");
     (void)unsetenv("TMUX");
     (void)unsetenv("FAKE_TMUX_CURRENT_SESSION");
+    if (!opened) return;
     result(wait_for_raw(&session), "interactive TUI enters raw mode");
     write_input(session.master, "j\r", 2U);
     result(wait_for_marker(&session, "HEAD DETAIL  feature-stale", 1000),
@@ -285,6 +315,18 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, paste, sizeof(paste) - 1U);
     sleep_ms(150);
     result(still_running(&session), "bracketed paste cannot inject quit or actions");
+    memset(large_paste, '9', sizeof(large_paste));
+    memcpy(large_paste, "\033[200~", 6U);
+    memcpy(large_paste + sizeof(large_paste) - 7U, "q\033[201~", 7U);
+    for (paste_offset = 0U; paste_offset < sizeof(large_paste); paste_offset += 100U) {
+        write_input(session.master, large_paste + paste_offset, 100U);
+        sleep_ms(2);
+        drain_output(session.master);
+    }
+    write_input(session.master, "?", 1U);
+    result(wait_for_marker(&session, "KEYBOARD HELP", 2000), "oversized paste cannot inject quit and preserves the next key");
+    write_input(session.master, "?", 1U);
+    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "keyboard input resumes after oversized paste");
     write_input(session.master, mouse, sizeof(mouse) - 1U);
     sleep_ms(100);
     result(still_running(&session), "mouse over a non-list view is inert");
@@ -379,8 +421,8 @@ static void test_preflight_failure(const char *tui, const char *hydra, const cha
 static void test_crash_fallback(const char *dispatch, const char *fake_bin) {
     struct session session;
     if (dispatch == NULL || dispatch[0] == '\0') return;
-    result(open_session(&session, dispatch, "/usr/bin/false", fake_bin, 80, 24) == 0,
-           "open crash-fallback pseudo-terminal");
+    if (!result(open_session(&session, dispatch, "/usr/bin/false", fake_bin, 80, 24) == 0,
+                "open crash-fallback pseudo-terminal")) return;
     result(wait_for_marker(&session, "\033[?1000l\033[?1006l", 3000),
            "crash fallback disables mouse reporting");
     result(wait_for_marker(&session, "Hydra TUI", 3000),
@@ -428,10 +470,12 @@ int main(int argc, char **argv) {
         return 2;
     }
     printf("Running native TUI pseudo-terminal tests...\n");
+    test_session_failure();
     test_themes(argv[1], argv[2], argv[3]);
     test_mouse(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
+    test_palette(argv[1], argv[2], argv[3]);
     test_signal(argv[1], argv[2], argv[3], SIGINT, "SIGINT");
     test_signal(argv[1], argv[2], argv[3], SIGTERM, "SIGTERM");
     test_signal(argv[1], argv[2], argv[3], SIGHUP, "SIGHUP");
@@ -441,6 +485,10 @@ int main(int argc, char **argv) {
     if (getenv("HYDRA_TEST_SLOW_HYDRA") != NULL) {
         test_preflight_failure(argv[1], getenv("HYDRA_TEST_SLOW_HYDRA"), argv[3], 80, 24, 4,
                                "hung adapter is terminated by the bounded refresh timeout");
+    }
+    if (getenv("HYDRA_TEST_EOF_HYDRA") != NULL) {
+        test_preflight_failure(argv[1], getenv("HYDRA_TEST_EOF_HYDRA"), argv[3], 80, 24, 4,
+                               "adapter deadline remains bounded after stdout EOF");
     }
     test_crash_fallback(getenv("HYDRA_TEST_CRASH_DISPATCH"), argv[3]);
     printf("Tests: %d, Failed: %d\n", tests, failures);

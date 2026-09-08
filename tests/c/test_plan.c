@@ -1,4 +1,6 @@
-#include "fleet/plan.h"
+#include "fleet/support/json.h"
+#include "fleet/support/files.h"
+#include "fleet/plan/plan.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>

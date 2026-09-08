@@ -154,6 +154,11 @@ cmd_tui() {
             ;;
     esac
 
+    if command -v _load_tui_basic_libs >/dev/null 2>&1; then
+        _load_tui_basic_libs
+    fi
+    _tui_load_modules
+
     # Check if in terminal
     if [ ! -t 0 ] || [ ! -t 1 ]; then
         echo "Error: TUI requires an interactive terminal" >&2

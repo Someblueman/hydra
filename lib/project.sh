@@ -37,25 +37,44 @@ project_repo_config() {
     printf '%s/.hydra/config.yml\n' "$_prc_root"
 }
 
-project_config_hash() {
+project_config_hash() (
     _pch_root="${1:-}"
     _pch_config="$(project_repo_config "$_pch_root")" || return 1
     _pch_dir="$(dirname "$_pch_config")"
+    [ ! -L "$_pch_dir" ] || return 1
     [ -d "$_pch_dir" ] || { printf '%s\n' none; return 0; }
-    _pch_manifest="$(mktemp)" || return 1
-    find "$_pch_dir" -type f ! -name local.yml -print | sort | while IFS= read -r _pch_file; do
+    _pch_scratch="$(mktemp -d)" || return 1
+    trap 'rm -rf "$_pch_scratch"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    trap 'exit 129' HUP
+    # Validate names before newline serialization. Do not follow links or ignore
+    # nested local.yml files: only the root host-local record is exempt.
+    find "$_pch_dir" -exec sh -c '
+        excluded="$1/local.yml"; shift
+        cr="$(printf "\r")"
+        for path do
+            [ "$path" = "$excluded" ] && continue
+            case "$path" in *"
+"*|*"$cr"*) exit 1 ;; esac
+            [ ! -L "$path" ] || exit 1
+            if [ -f "$path" ]; then printf "%s\n" "$path"
+            elif [ ! -d "$path" ]; then exit 1
+            fi
+        done
+    ' sh "$_pch_dir" {} + > "$_pch_scratch/files" || return 1
+    LC_ALL=C sort "$_pch_scratch/files" > "$_pch_scratch/sorted" || return 1
+    while IFS= read -r _pch_file; do
         _pch_relative="${_pch_file#"$_pch_dir"/}"
-        case "$_pch_relative" in *'
-'*|*''*) exit 1 ;; esac
-        printf '%s %s\n' "$_pch_relative" "$(hydra_hash < "$_pch_file")"
-    done > "$_pch_manifest" || { rm -f "$_pch_manifest"; return 1; }
-    if [ -s "$_pch_manifest" ]; then
-        hydra_hash < "$_pch_manifest"
+        _pch_hash="$(hydra_hash < "$_pch_file")" || return 1
+        printf '%s %s\n' "$_pch_relative" "$_pch_hash"
+    done < "$_pch_scratch/sorted" > "$_pch_scratch/manifest" || return 1
+    if [ -s "$_pch_scratch/manifest" ]; then
+        hydra_hash < "$_pch_scratch/manifest"
     else
         printf '%s\n' none
     fi
-    rm -f "$_pch_manifest"
-}
+)
 
 project_is_trusted() {
     _pit_root="${1:-}"

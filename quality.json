@@ -9,7 +9,9 @@
     "uninstall.sh",
     "assets/demos",
     "src",
-    "Makefile"
+    "Makefile",
+    "docs/quality",
+    "quality.json"
   ],
   "exclude": [
     "*.py",
@@ -81,7 +83,7 @@
       ]
     },
     {
-      "name": "Hydra C analysis (complexity advisory)",
+      "name": "Hydra C analysis and complexity regression gate",
       "tool": "make",
       "args": [
         "quality-c"
@@ -90,7 +92,10 @@
         "*.c",
         "*.h",
         "*.inc",
-        "Makefile"
+        "Makefile",
+        "scripts/quality-c.sh",
+        "docs/quality/*.tsv",
+        "quality.json"
       ],
       "files": false,
       "stage": "full",

@@ -1,4 +1,6 @@
-#include "fleet/agent_auth.h"
+#include "fleet/support/json.h"
+#include "fleet/support/files.h"
+#include "fleet/auth/agent_auth.h"
 #include <assert.h>
 #include <fcntl.h>
 #include <stdlib.h>

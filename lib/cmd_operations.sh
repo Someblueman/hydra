@@ -2,18 +2,18 @@
 # CLI handlers for execution, Git evidence, and provenance.
 
 cmd_exec_cancel_workers() {
-    _cecw_file="$1"
+    _cecw_file="$1" _cecw_profile="$2"
     [ -f "$_cecw_file" ] || return 0
     while IFS= read -r _cecw_pid; do
         case "$_cecw_pid" in ''|*[!0-9]*) continue ;; esac
-        if [ -n "${_ce_profile:-}" ]; then
+        if [ -n "$_cecw_profile" ]; then
             # Let the agent supervisor record cancellation before stopping its children.
             kill -TERM "$_cecw_pid" 2>/dev/null || true
         else
             operations_signal_tree "$_cecw_pid" TERM
         fi
     done < "$_cecw_file"
-    if [ -n "${_ce_profile:-}" ]; then
+    if [ -n "$_cecw_profile" ]; then
         while IFS= read -r _cecw_pid; do
             case "$_cecw_pid" in ''|*[!0-9]*) continue ;; esac
             wait "$_cecw_pid" 2>/dev/null || true
@@ -117,7 +117,7 @@ cmd_exec() {
         _ce_agent_lock="agent_${_ce_project}_$(sed -n '1p' "$_ce_selection")"
         acquire_lock "$_ce_agent_lock" "supervise headless agent" || { rm -f "$_ce_selection"; return 1; }
     fi
-    trap 'cmd_exec_cancel_workers "$_ce_workers"; [ -z "$_ce_agent_lock" ] || release_lock "$_ce_agent_lock"; exit 143' HUP INT TERM
+    trap 'cmd_exec_cancel_workers "$_ce_workers" "$_ce_profile"; [ -z "$_ce_agent_lock" ] || release_lock "$_ce_agent_lock"; exit 143' HUP INT TERM
     _ce_max="${HYDRA_EXEC_MAX_BYTES:-1048576}"
     case "$_ce_max" in ''|*[!0-9]*) rm -f "$_ce_selection"; [ -z "$_ce_agent_lock" ] || release_lock "$_ce_agent_lock"; trap - HUP INT TERM; return 1 ;; esac
     # Publish the durable run identity before workers start. The JSON document

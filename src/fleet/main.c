@@ -1,14 +1,21 @@
-#include "fleet.h"
-#include "workflow_data.h"
-#include "agent.h"
-#include "plan.h"
+#include "fleet/support/json.h"
+#include "fleet/support/files.h"
+#include "fleet/transport/remote.h"
+#include "fleet/transport/server.h"
+#include "fleet/transport/bundle.h"
+#include "fleet/cli.h"
+#include "fleet/support/process.h"
+#include "fleet/fleet.h"
+#include "fleet/workflow/workflow_data.h"
+#include "fleet/agent/agent.h"
+#include "fleet/plan/plan.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 const char *f_home, *f_hydra;
 static void stopped(int signal_number) { f_stopped = signal_number; }
 int main(int argc, char **argv) {
-    char home[F_PATH]; json_object *result = NULL; int status;
+    static char home[F_PATH]; json_object *result = NULL; int status;
     f_home = getenv("HYDRA_HOME"); f_hydra = getenv("HYDRA_BIN_CMD");
     if (!f_home) { if (!getenv("HOME") || f_path(home, sizeof(home), getenv("HOME"), ".hydra")) return 1; f_home = home; }
     if (!f_hydra) f_hydra = "hydra";
