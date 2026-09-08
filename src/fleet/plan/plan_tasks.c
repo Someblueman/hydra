@@ -26,6 +26,8 @@ json_object *plan_task_bindings(json_object *plan, json_object *data, json_objec
         const char *id = f_string(step, "id"), *descriptor = f_string(f_field(step, "args"), "task_input");
         json_object *binding = wt_step_binding(scratch, data, id, descriptor);
         if (!binding || !task_policy(binding, env, source, &seconds)) { json_object_put(binding); goto bad; }
+        const char *producer = f_string(f_field(step, "args"), "source_step");
+        if (producer) f_string_add(binding, "source_step", producer);
         json_object_object_add(out, id, binding);
     }
     if (seconds > json_object_get_int64(f_field(env, "timeout_seconds")) ||

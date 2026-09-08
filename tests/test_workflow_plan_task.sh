@@ -26,6 +26,21 @@ cd "$fixture/source"
 git init -q
 git config user.name Test
 git config user.email test@example.invalid
+if [ "${HYDRA_TEST_PLAN_SOURCE:-0}" != 0 ]; then
+    cat >> produce.sh <<'SOURCE'
+printf 'derived-source\n' > marker
+ git add marker result.txt
+ git -c user.name=Producer -c user.email=producer@example.invalid commit -qm candidate
+SOURCE
+    cat >> compose.sh <<'SOURCE'
+[ "$(git show HEAD:marker)" = derived-source ]
+SOURCE
+    sed '/"id": "compose"/,/"writes"/s/"task_input": "recipe"/"task_input": "recipe", "source_step": "produce"/' "$fixture/plan.json" > "$fixture/derived.json"
+    mv "$fixture/derived.json" "$fixture/plan.json"
+    if [ "${HYDRA_TEST_PLAN_SOURCE:-0}" = dirty ]; then
+        printf 'printf uncommitted > dirty-file\n' >> produce.sh
+    fi
+fi
 git add .
 git commit -qm recipes
 commit="$(git rev-parse HEAD)"
@@ -50,7 +65,12 @@ code=0
 "$root/bin/hydra" workflow plan run "$fixture/compiled.json" --accept "$digest" > "$fixture/run.out" 2> "$fixture/run.err" || code=$?
 run="$(sed -n '1p' "$fixture/run.out")"
 run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
-if [ "$mode" = pass ]; then
+if [ "${HYDRA_TEST_PLAN_SOURCE:-0}" = dirty ]; then
+    [ "$code" != 0 ]
+    [ "$(cat "$run_dir/steps/compose/state")" = recovery-required ]
+    [ ! -d "$run_dir/steps/compose/attempt-1/remote" ]
+    [ "$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" = 2 ]
+elif [ "$mode" = pass ]; then
     [ "$code" = 0 ]
     [ "$(cat "$run_dir/state")" = succeeded ]
     "$root/bin/hydra" workflow plan result "$run" > "$fixture/result.json"

@@ -67,6 +67,10 @@ static json_object *coordinator(void) {
 }
 static bool compiled_matches(const char *run, json_object *steps) {
     char path[F_PATH];
+    json_object_object_foreach(steps, id, binding) {
+        const char *producer = f_string(binding, "source_step"); (void)id;
+        if (f_field(binding, "source_step") && (!wd_name(producer) || !f_field(steps, producer))) return false;
+    }
     if (f_path(path, sizeof(path), run, "compiled.json")) return false;
     if (access(path, F_OK)) return true;
     json_object *compiled = f_read_json(path, F_LIMIT);
@@ -89,11 +93,13 @@ int wt_initialize(const char *run, const char *source) {
     json_object_object_add(record, "schema_version", json_object_new_int(1)); f_string_add(record, "source", root);
     json_object_object_add(record, "coordinator", json_object_get(owner)); json_object_object_add(record, "steps", steps);
     for (line = strtok_r(graph, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
-        char *fields = NULL, *tag = strtok_r(line, "\t", &fields), *id, *descriptor; json_object *binding;
+        char *fields = NULL, *tag = strtok_r(line, "\t", &fields), *id, *descriptor, *source_step; json_object *binding;
         if (!tag || strcmp(tag, "task_args")) continue;
         id = strtok_r(NULL, "\t", &fields); descriptor = strtok_r(NULL, "\t", &fields);
         if (!wd_name(id) || !wd_name(descriptor) || f_field(steps, id) ||
             !(binding = wt_step_binding(run, data, id, descriptor))) goto done;
+        source_step = strtok_r(NULL, "\t", &fields);
+        if (source_step) f_string_add(binding, "source_step", source_step);
         json_object_object_add(steps, id, binding);
     }
     if (compiled_matches(run, steps)) status = bindings_write(run, record);

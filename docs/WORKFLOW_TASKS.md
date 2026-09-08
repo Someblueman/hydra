@@ -77,7 +77,7 @@ Objective plan schema 2 uses task steps through the same `workflow plan compile`
 artifact binds each recipe and its resolved transport destination before any
 execution. Recipes must fit the accepted hosts, tools, effects, artifact budget,
 head count and total queue/startup/execution time budget. Each task starts from
-the accepted source commit. The preview includes the exact recipe and transport.
+the accepted source commit unless it explicitly selects a predecessor with `source_step`. The preview includes the exact recipe and transport.
 
 A deliverable with `destination: intermediate` can name a work-step output;
 `destination: run-artifact` still requires a compose step. Both need explicit
@@ -108,8 +108,7 @@ scripts run from the accepted source commit, so producer commits cannot replace
 their acceptance definitions.
 
 Schema-1 local plans and reports remain supported. Schema-2 plans currently require
-zero execution retries and zero repairs; bounded candidate repair and derived Git
-source handoff are still outstanding.
+zero execution retries and zero repairs; bounded candidate repair is still outstanding.
 
 The larger schema-2 qualification run `run_fcd37ffcd8338b3a8558` used a macOS
 producer and a Linux VPS producer. Each was checked on the other host. Assembly
@@ -126,4 +125,25 @@ CLI in a disposable collector repository: promotion without approval failed,
 a target move after approval blocked promotion, and a fresh assembly and approval
 promoted the checked bytes. [Integration identities](evidence/distributed/two-host-integration.json)
 record the target commits and both attempts. No repository publication occurred.
-These checks do not close the remaining repair, source-handoff and replay work.
+These checks do not close the remaining repair and replay work.
+
+### Derived Git source
+
+A task may set `args.source_step` to a direct predecessor. After that producer
+succeeds, the coordinator requires a verified collection containing exactly one
+clean head. It creates the consumer package from that collected commit, retaining
+the accepted recipe and destination. Missing, dirty or altered collections stop
+execution before submission. The dispatch records the producer step, task ID,
+collection ID, result digest, head ID and commit and rechecks them on recovery.
+
+In plan schema 2 this source dependency also requires all the producer's required
+validation joins. A `verify` step cannot select derived source: its executable
+acceptance definitions remain in the original accepted commit. File inputs are
+still handed off separately through declared, sealed artifacts.
+
+The two-host source qualification `run_b7b8ebd8d52d130b6c04` assembled on macOS
+from the VPS producer's collected commit after independent validation. The
+composer checked a file through `git show HEAD:result.txt`, then committed the
+combined candidate; a VPS validator checked the final bytes. The
+[recorded source binding](evidence/distributed/two-host-source.json) identifies
+both the producer result and the consumer package commit.

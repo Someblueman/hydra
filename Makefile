@@ -250,6 +250,9 @@ test-fleet: build-fleet $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BU
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
 	HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
 	HYDRA_TEST_DAG_CRASH=2 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_DAG_SOURCE=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_PLAN_SOURCE=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh
+	HYDRA_TEST_PLAN_SOURCE=dirty HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh
 	@for fault in dispatch key placement cancel cancel-offline; do \
 		HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="$$fault" HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh || exit 1; \
 	done

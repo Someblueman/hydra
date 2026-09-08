@@ -37,6 +37,16 @@ set -eu
 cat "$HYDRA_TASK_INPUT_DIR/previous" > result.txt
 printf 'consumer output\n' >> result.txt
 SCRIPT
+if [ "${HYDRA_TEST_DAG_SOURCE:-0}" = 1 ]; then
+    cat >> produce.sh <<'SOURCE'
+printf 'source-commit\n' > marker
+ git add marker result.txt
+ git -c user.name=Producer -c user.email=producer@example.invalid commit -qm candidate
+SOURCE
+    cat >> consume.sh <<'SOURCE'
+[ "$(git show HEAD:marker)" = source-commit ]
+SOURCE
+fi
 if [ "${HYDRA_TEST_DAG_CRASH:-0}" != 0 ]; then sed -i.bak 's/HYDRA_DAG_TEST_DELAY:-0/HYDRA_DAG_TEST_DELAY:-12/' produce.sh; rm produce.sh.bak; fi
 git add .
 git commit -qm 'task recipes'
@@ -102,6 +112,7 @@ steps:
     args:
       task_input: recipe
 YAML
+if [ "${HYDRA_TEST_DAG_SOURCE:-0}" = 1 ]; then printf '      source_step: produce\n' >> "$fixture/workflow.yml"; fi
 "$root/bin/hydra" workflow validate "$fixture/workflow.yml" > "$fixture/validation"
 run_code=0
 if [ "${HYDRA_TEST_DAG_CRASH:-0}" != 0 ]; then

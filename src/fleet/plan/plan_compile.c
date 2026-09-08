@@ -16,8 +16,11 @@ static void list(FILE *file, json_object *array) {
     for (i = 0; i < json_object_array_length(array); i++) fprintf(file, "%s%s", i ? "," : "", f_text(json_object_array_get_idx(array, i)));
 }
 static void task_graph_args(FILE *graph, json_object *step) {
-    if (!strcmp(f_string(step, "kind"), "task"))
-        fprintf(graph, "task_args\t%s\t%s\n", f_string(step, "id"), f_string(f_field(step, "args"), "task_input"));
+    if (strcmp(f_string(step, "kind"), "task")) return;
+    json_object *args = f_field(step, "args");
+    fprintf(graph, "task_args\t%s\t%s", f_string(step, "id"), f_string(args, "task_input"));
+    if (f_string(args, "source_step")) fprintf(graph, "\t%s", f_string(args, "source_step"));
+    fputc('\n', graph);
 }
 /* Lower only already checked values. This projection uses the published YAML
  * syntax; its graph is also checked by the existing workflow data validator. */

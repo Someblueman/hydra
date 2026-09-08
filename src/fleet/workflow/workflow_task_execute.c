@@ -40,35 +40,43 @@ static int dispatch_key(const char *run, const char *step, const char *attempt, 
     f_string_add(identity, "attempt", strrchr(attempt, '/') ? strrchr(attempt, '/') + 1 : attempt);
     status = plan_digest(identity, digest); json_object_put(identity); return status;
 }
-static json_object *dispatch(const char *run, const char *step, const char *attempt, json_object *bindings) {
+static json_object *dispatch_spec(json_object *binding, json_object *source) {
+    json_object *spec = plan_canonical(f_field(binding, "spec"));
+    if (source) f_string_add(f_field(spec, "source"), "commit", f_string(source, "commit"));
+    return spec;
+}
+static json_object *dispatch(const char *run, const char *step, const char *attempt, json_object *bindings, json_object *source) {
     char root[F_PATH], stage[F_PATH], inputs[F_PATH], digest[65];
-    json_object *existing = NULL, *prepared = NULL, *out = NULL;
+    json_object *existing = NULL, *prepared = NULL, *out = NULL, *spec = NULL;
     json_object *binding = f_field(f_field(bindings, "steps"), step); struct stat st;
     if (f_path(root, sizeof(root), attempt, "remote")) return NULL;
     if (!lstat(root, &st)) return read_dispatch(root);
     if (errno != ENOENT || snprintf(stage, sizeof(stage), "%s/.remote.XXXXXX", attempt) >= (int)sizeof(stage) || !mkdtemp(stage)) return NULL;
     if (f_path(inputs, sizeof(inputs), attempt, "inputs")) goto done;
-    prepared = task_prepare(f_string(bindings, "source"), inputs, f_field(binding, "spec"));
+    spec = dispatch_spec(binding, source);
+    prepared = task_prepare(f_string(bindings, "source"), inputs, spec);
     if (!json_object_get_boolean(f_field(prepared, "ok"))) goto done;
     if (dispatch_key(run, step, attempt, digest)) goto done;
     existing = json_object_new_object(); f_string_add(existing, "submission_key", digest);
     json_object_object_add(existing, "package", json_object_get(f_field(prepared, "data")));
     json_object_object_add(existing, "binding", json_object_get(binding));
+    if (source) json_object_object_add(existing, "source", json_object_get(source));
     if (write_dispatch(stage, existing) || rename(stage, root) || task_sync_dir(attempt)) goto done;
     stage[0] = '\0'; out = json_object_get(existing);
 done:
     if (stage[0]) f_remove_tree(stage);
-    json_object_put(existing); json_object_put(prepared); return out;
+    json_object_put(spec); json_object_put(existing); json_object_put(prepared); return out;
 }
-static bool dispatch_valid(json_object *record, json_object *binding) {
+static bool dispatch_valid(json_object *record, json_object *binding, json_object *source) {
     json_object *package = f_field(record, "package"), *checked = task_inspect(package), *spec;
     bool valid = json_object_get_boolean(f_field(checked, "ok")) && json_object_equal(binding, f_field(record, "binding")) &&
-        task_hex(f_string(record, "submission_key"), 64);
+        task_hex(f_string(record, "submission_key"), 64) && json_object_equal(source, f_field(record, "source"));
     if (valid) {
         spec = plan_canonical(f_field(package, "spec"));
         json_object_object_del(f_field(spec, "source"), "bundle_sha256");
         json_object_object_add(spec, "inputs", json_object_get(f_field(f_field(binding, "spec"), "inputs")));
-        valid = json_object_equal(spec, f_field(binding, "spec")); json_object_put(spec);
+        json_object *expected = dispatch_spec(binding, source);
+        valid = json_object_equal(spec, expected); json_object_put(expected); json_object_put(spec);
     }
     json_object_put(checked); return valid;
 }
@@ -174,13 +182,15 @@ static json_object *drive(struct execution *execution) {
     }
 }
 json_object *wt_execute(const char *run, const char *step, const char *attempt) {
-    json_object *bindings = wt_bindings(run), *response = NULL, *receipt = NULL;
+    json_object *bindings = wt_bindings(run), *response = NULL, *receipt = NULL, *source = NULL;
     struct execution execution = {.run = run, .attempt = attempt}; char path[F_PATH], expected[65]; int lock = -1;
     if (!bindings || !f_field(f_field(bindings, "steps"), step) || f_path(path, sizeof(path), attempt, "remote.lock")) goto done;
     lock = open(path, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (lock < 0 || flock(lock, LOCK_EX | LOCK_NB)) goto done;
-    execution.record = dispatch(run, step, attempt, bindings); execution.source = f_string(bindings, "source");
-    if (!execution.record || !dispatch_valid(execution.record, f_field(f_field(bindings, "steps"), step)) ||
+    json_object *binding = f_field(f_field(bindings, "steps"), step);
+    if (f_field(binding, "source_step") && !(source = wt_source_binding(run, bindings, binding))) goto done;
+    execution.record = dispatch(run, step, attempt, bindings, source); execution.source = f_string(bindings, "source");
+    if (!execution.record || !dispatch_valid(execution.record, binding, source) ||
         dispatch_key(run, step, attempt, expected) || strcmp(expected, f_string(execution.record, "submission_key")) ||
         f_path(execution.remote, sizeof(execution.remote), attempt, "remote")) goto done;
     receipt = read_json(execution.remote, "receipt.json", 16384);
@@ -189,6 +199,6 @@ json_object *wt_execute(const char *run, const char *step, const char *attempt) 
     response = drive(&execution);
 done:
     if (lock >= 0) close(lock);
-    json_object_put(bindings); json_object_put(execution.record); json_object_put(receipt);
+    json_object_put(source); json_object_put(bindings); json_object_put(execution.record); json_object_put(receipt);
     return response ? response : f_error("workflow task", "binding_invalid", "recorded task identity, destination, or artifacts changed");
 }

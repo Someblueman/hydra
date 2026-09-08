@@ -101,6 +101,10 @@ static void distributed_graph_cases(void) {
     json_object_object_add(compose, "needs", f_parse_value("[\"produce\"]"));
     expect(plan, policy, "missing_evidence_join");
     json_object_object_add(compose, "needs", f_parse_value("[\"produce\",\"inspect\"]"));
+    f_string_add(f_field(compose, "args"), "source_step", "produce"); expect(plan, policy, NULL);
+    json_object *validator = json_object_array_get_idx(f_field(plan, "steps"), 1);
+    f_string_add(f_field(validator, "args"), "source_step", "produce"); expect(plan, policy, "invalid_step");
+    json_object_object_del(f_field(validator, "args"), "source_step");
     json_object *inputs = f_field(f_field(f_field(f_field(plan, "data"), "steps"), "inspect"), "inputs");
     json_object_object_del(inputs, "validation"); expect(plan, policy, "missing_validation_context");
     json_object_object_add(inputs, "validation", f_parse_value("{\"validation\":\"plan\"}"));

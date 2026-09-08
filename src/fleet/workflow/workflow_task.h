@@ -7,6 +7,7 @@ json_object *wt_cli(int argc, char **argv);
 json_object *wt_destination(const char *alias);
 json_object *wt_bindings(const char *run);
 json_object *wt_step_binding(const char *run, json_object *data, const char *id, const char *descriptor);
+json_object *wt_source_binding(const char *run, json_object *bindings, json_object *binding);
 int wt_drive(const char *run);
 int wt_initialize(const char *run, const char *source);
 json_object *wt_execute(const char *run, const char *step, const char *attempt);

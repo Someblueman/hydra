@@ -93,9 +93,15 @@ static bool placed_hosts(json_object *plan, json_object *env) {
 static bool supported_kind(const char *kind, bool distributed) {
     return kind && (distributed ? !strcmp(kind, "task") : (!strcmp(kind, "exec") || !strcmp(kind, "spawn")));
 }
+static bool task_recipe(json_object *step) {
+    const char *const keys[] = {"task_input", "source_step", NULL};
+    json_object *args = f_field(step, "args"); const char *producer = f_string(args, "source_step");
+    if (!task_keys(args, keys) || !plan_id(f_string(args, "task_input"))) return false;
+    return !f_field(args, "source_step") || (plan_id(producer) && strcmp(f_string(step, "role"), "verify") &&
+        plan_has(f_field(step, "needs"), producer));
+}
 static bool recipe(json_object *step, json_object *env, json_object *errors, const char *path, bool distributed) {
     const char *const spawn_keys[] = {"branch", NULL};
-    const char *const task_keys_allowed[] = {"task_input", NULL};
     const char *kind = f_string(step, "kind"), *role = f_string(step, "role");
     json_object *args = f_field(step, "args"), *writes = f_field(step, "writes");
     size_t i;
@@ -104,7 +110,7 @@ static bool recipe(json_object *step, json_object *env, json_object *errors, con
         plan_error(errors, path, "unsupported_operation", "schema 1 supports local spawn/exec; schema 2 supports explicitly placed task recipes"); return false;
     }
     if (distributed) {
-        if (!task_keys(args, task_keys_allowed) || !plan_id(f_string(args, "task_input"))) goto invalid;
+        if (!task_recipe(step)) goto invalid;
     } else if (!strcmp(kind, "spawn")) {
         if (!task_keys(args, spawn_keys) || !plan_id(f_string(args, "branch")) || strcmp(role, "work") || json_object_array_length(writes)) goto invalid;
         if (!plan_has(f_field(env, "effects"), "worktree")) goto unauthorized;

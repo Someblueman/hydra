@@ -8,7 +8,9 @@ static bool checks_subject(json_object *checks, const char *step, const char *de
     }
     return false;
 }
-static bool consumes(json_object *inputs, json_object *delivery) {
+static bool consumes(json_object *step, json_object *inputs, json_object *delivery) {
+    const char *source = f_string(f_field(step, "args"), "source_step");
+    if (source && !strcmp(source, f_string(delivery, "step"))) return true;
     if (!json_object_is_type(inputs, json_type_object)) return false;
     json_object_object_foreach(inputs, name, ref) {
         const char *producer = f_string(ref, "step"), *output = f_string(ref, "output"); (void)name;
@@ -30,7 +32,7 @@ static void join_consumers(json_object *plan, json_object *delivery, bool reach[
     json_object *steps = f_field(plan, "steps"), *data = f_field(f_field(plan, "data"), "steps"), *checks = f_field(plan, "checks");
     for (size_t j = 0; j < json_object_array_length(steps); j++) {
         const char *id = f_string(json_object_array_get_idx(steps, j), "id");
-        if (checks_subject(checks, id, f_string(delivery, "id")) || !consumes(f_field(f_field(data, id), "inputs"), delivery)) continue;
+        if (checks_subject(checks, id, f_string(delivery, "id")) || !consumes(json_object_array_get_idx(steps, j), f_field(f_field(data, id), "inputs"), delivery)) continue;
         required_checks(plan, delivery, j, reach, errors);
     }
 }

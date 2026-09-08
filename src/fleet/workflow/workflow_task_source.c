@@ -1,0 +1,47 @@
+#include "fleet/workflow/workflow_task.h"
+#include "fleet/workflow/workflow_data.h"
+#include "fleet/task/task.h"
+#include "fleet/support/files.h"
+#include <stdlib.h>
+#include <string.h>
+
+static json_object *record(const char *directory, const char *name) {
+    char path[F_PATH];
+    return f_path(path, sizeof(path), directory, name) ? NULL : f_read_json(path, F_LIMIT);
+}
+static bool same_receipt(json_object *left, json_object *right) {
+    const char *fields[] = {"task_id", "spec_sha256", "submission_key"};
+    for (size_t i = 0; i < 3; i++) {
+        const char *a = f_string(left, fields[i]), *b = f_string(right, fields[i]);
+        if (!a || !b || strcmp(a, b)) return false;
+    }
+    return true;
+}
+static bool succeeded(const char *run, const char *producer) {
+    char path[F_PATH], *state; bool valid;
+    if (snprintf(path, sizeof(path), "%s/steps/%s/state", run, producer) >= (int)sizeof(path)) return false;
+    state = f_read(path, 64); valid = state && !strcmp(state, "succeeded\n"); free(state); return valid;
+}
+json_object *wt_source_binding(const char *run, json_object *bindings, json_object *binding) {
+    const char *producer = f_string(binding, "source_step"); char directory[F_PATH];
+    json_object *envelope = NULL, *receipt = NULL, *collection = NULL, *verified = NULL, *stored = NULL, *out = NULL;
+    if (!wd_name(producer) || !f_field(f_field(bindings, "steps"), producer) || !succeeded(run, producer) ||
+        snprintf(directory, sizeof(directory), "%s/steps/%s/attempt-1/remote", run, producer) >= (int)sizeof(directory)) goto done;
+    envelope = record(directory, "result.json"); receipt = record(directory, "receipt.json"); collection = record(directory, "collection.json");
+    verified = task_result_verify(envelope);
+    if (!json_object_get_boolean(f_field(verified, "ok")) || !same_receipt(receipt, f_field(f_field(envelope, "result"), "receipt"))) goto done;
+    const char *id = f_string(f_field(collection, "data"), "collection_id");
+    if (!id) goto done;
+    stored = task_collected(f_string(bindings, "source"), id);
+    const char *digest = f_string(f_field(stored, "data"), "result_sha256");
+    if (!json_object_get_boolean(f_field(stored, "ok")) || !digest || strcmp(digest, f_string(envelope, "result_sha256"))) goto done;
+    json_object *heads = f_field(f_field(envelope, "result"), "heads");
+    if (json_object_array_length(heads) != 1) goto done;
+    json_object *head = json_object_array_get_idx(heads, 0);
+    if (json_object_get_boolean(f_field(head, "dirty"))) goto done;
+    out = json_object_new_object(); f_string_add(out, "step", producer); f_string_add(out, "collection_id", id);
+    f_string_add(out, "task_id", f_string(receipt, "task_id")); f_string_add(out, "result_sha256", digest);
+    f_string_add(out, "head_id", f_string(head, "head_id")); f_string_add(out, "commit", f_string(head, "commit"));
+done:
+    json_object_put(envelope); json_object_put(receipt); json_object_put(collection); json_object_put(verified); json_object_put(stored); return out;
+}
