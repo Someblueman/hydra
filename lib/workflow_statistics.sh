@@ -81,10 +81,10 @@ workflow_statistics_begin() {
     elif [ "$_wsb_state" != waiting-approval ]; then
         _wsb_count="$(workflow_statistics_scalar "$_wsb_dir/recovery-count")"
         case "$_wsb_count" in ''|*[!0-9]*) return 0 ;; esac
-        [ "${#_wsb_count}" -le 6 ] && [ "$_wsb_count" -lt 999999 ] || {
+        if [ "${#_wsb_count}" -gt 6 ] || [ "$_wsb_count" -ge 999999 ]; then
             workflow_atomic_scalar "$_wsb_dir/recovery-count" -
             return
-        }
+        fi
         # expr treats leading-zero counters as decimal on POSIX shells.
         # shellcheck disable=SC2003
         _wsb_next="$(expr "$_wsb_count" + 1)" || return 1

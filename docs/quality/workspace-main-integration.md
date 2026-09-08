@@ -5,7 +5,13 @@ On 9 September 2026 the native workspace branch was merged with main's Hydra
 is `8a6e07f5e5966d56e365b1b58f0136a255ceb8df`, tree
 `3d98feabd4bb2c97fe213436f7f6bf87ba4256c7`. The subsequent main merge
 (`bfd6823`, PR #79) changes only the roadmap; this record is also documentation.
-The code, tests and CI configuration remain those of the tested merge.
+That roadmap merge preserved the tested code, tests and CI configuration.
+
+PR #80's hosted ShellCheck 0.9.0 subsequently flagged SC2015 in the recovery
+counter bound. An explicit `if` replaces the equivalent `A && B || C` condition.
+Focused checks under dash and macOS sh cover zero, leading zeros, the maximum,
+overflow, invalid/missing history and approval continuation. Repository lint is
+rechecked with both ShellCheck 0.9.0 and 0.11.0 for this syntax-only follow-up.
 
 ## Results
 
