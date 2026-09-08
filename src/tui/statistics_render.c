@@ -154,6 +154,33 @@ static void statistics_fleet(struct app *app, struct tv_canvas *c, struct tv_rec
     dashboard_text(c,r.x+2,r.y+r.height-2,r.width-4,TV_WARNING,"Remote workflow history / CPU / memory / cost: unavailable");
 }
 
+static void statistics_compact_step(struct statistics_view *v, struct tv_canvas *c, int width) {
+    char duration[40]="--";
+    size_t i, ordinal=0;
+    bool shown=false;
+    for (i=0;i<v->model->step_count;i++) {
+        const struct hs_step *s=&v->model->steps[i];
+        uint64_t seconds;
+        if (s->run!=v->visible[v->selected] || ordinal++<v->step_scroll) continue;
+        if (hs_duration(v->model,s,&seconds)) snprintf(duration,sizeof(duration),"%llus",(unsigned long long)seconds);
+        dashboard_text(c,1,5,width-2,TV_BASE,"%s / %s / %s",s->id,s->state,duration); shown=true; break;
+    }
+    if(!shown) dashboard_text(c,1,5,width-2,TV_WARNING,"No step at this offset / k back");
+}
+
+static void statistics_compact(struct app *app, struct tv_canvas *c, int width, int height, const struct hs_summary *summary, const char *retries) {
+    struct statistics_view *v=app->statistics;
+    dashboard_text(c,1,2,width-2,TV_STRONG,"%zu runs / %zu steps / %s retries",summary->runs,summary->steps,retries);
+    dashboard_text(c,1,3,width-2,TV_BASE,"Run OK %zu / fail %zu / unknown %zu",summary->run_states[HS_SUCCEEDED],summary->run_states[HS_FAILED],summary->run_states[HS_UNKNOWN]);
+    if (v->count) {
+        const struct hs_run *run=&v->model->runs[v->visible[v->selected]];
+        dashboard_text(c,1,4,width-2,TV_SELECTED,"%zu/%zu %s",v->selected+1,v->count,run->name);
+        dashboard_text(c,1,5,width-2,TV_BASE,"%s / Enter evidence",run->state);
+        if (v->detail) statistics_compact_step(v,c,width);
+    } else dashboard_text(c,1,4,width-2,TV_WARNING,"No matching runs / 0 reset filters");
+    if (height>9) dashboard_text(c,1,6,width-2,TV_BORDER,"Timing %zu/%zu / missing stays --",summary->duration_known,summary->steps);
+}
+
 bool render_statistics(struct app *app, unsigned frame, bool headless) {
     struct tv_canvas c;
     struct native_workspace *w;
@@ -180,27 +207,10 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
     else if (!v->model || (!v->model->run_count && v->model->warnings)) {
         dashboard_text(&c,2,4,width-4,TV_WARNING,"Statistics unavailable");
         if (height>10) dashboard_text(&c,2,6,width-4,TV_BASE,"No valid workflow statistics sample received. r retries.");
+    } else if (v->metric_page) {
+        statistics_metrics_render(app,&c,(struct tv_rect){0,2,width,height-4});
     } else if (height<18 || width<65) {
-        dashboard_text(&c,1,2,width-2,TV_STRONG,"%zu runs / %zu steps / %s retries",summary.runs,summary.steps,retries);
-        dashboard_text(&c,1,3,width-2,TV_BASE,"Run OK %zu / fail %zu / unknown %zu",summary.run_states[HS_SUCCEEDED],summary.run_states[HS_FAILED],summary.run_states[HS_UNKNOWN]);
-        if (v->count) {
-            const struct hs_run *run=&v->model->runs[v->visible[v->selected]];
-            dashboard_text(&c,1,4,width-2,TV_SELECTED,"%zu/%zu %s",v->selected+1,v->count,run->name);
-            dashboard_text(&c,1,5,width-2,TV_BASE,"%s / Enter evidence",run->state);
-            if (v->detail) {
-                size_t i, ordinal=0;
-                bool shown=false;
-                for (i=0;i<v->model->step_count;i++) {
-                    const struct hs_step *s=&v->model->steps[i];
-                    uint64_t seconds;
-                    if (s->run!=v->visible[v->selected] || ordinal++<v->step_scroll) continue;
-                    if (hs_duration(v->model,s,&seconds)) snprintf(duration,sizeof(duration),"%llus",(unsigned long long)seconds);
-                    dashboard_text(&c,1,5,width-2,TV_BASE,"%s / %s / %s",s->id,s->state,duration); shown=true; break;
-                }
-                if(!shown) dashboard_text(&c,1,5,width-2,TV_WARNING,"No step at this offset / k back");
-            }
-        } else dashboard_text(&c,1,4,width-2,TV_WARNING,"No matching runs / 0 reset filters");
-        if (height>9) dashboard_text(&c,1,6,width-2,TV_BORDER,"Timing %zu/%zu / missing stays --",summary.duration_known,summary.steps);
+        statistics_compact(app,&c,width,height,&summary,retries);
     } else {
         left=width>=110 ? 25 : 0; body=width-left; cards=body/4;
         if (left) {
@@ -244,7 +254,7 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
         "%s%s",v->model && v->model->warnings ? "PARTIAL / " : "",v->error[0] ? v->error : app->notice[0] ? app->notice : v->model && v->model->warnings ? v->model->warning : app->fleet ? "Source: latest fleet list / desired state is not process liveness" : "Source: recorded workflow scalars / success is not verified result");
     if (height>=25 && v->model && !app->fleet && width>=110)
         dashboard_text(&c,2,height-5,20,TV_BORDER,"%s",updated);
-    tv_text(&c,(struct tv_rect){0,height-1,width,1},width<65 ? "D back T range / find Enter q quit" : width<100 ? "D back T range / find Enter evidence g graph q quit" : "D back / T range / ! attention / [ ] workflow / / find / Enter evidence / g graph / q quit",TV_STRONG);
+    tv_text(&c,(struct tv_rect){0,height-1,width,1},width<65 ? "D back M metric / find Enter q quit" : width<100 ? "D back M metric T range / find Enter evidence g graph q quit" : "D back / M metric / T range / ! attention / [ ] workflow / / find / Enter evidence / g graph / q quit",TV_STRONG);
     if (headless) {
         printf("FRAME %u %dx%d\n",frame,app->cols,app->rows);
         for(y=0;y<height;y++) { (void)tv_write_row(&c,y,stdout,NULL,NULL); putchar('\n'); }

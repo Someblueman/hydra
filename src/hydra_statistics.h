@@ -10,13 +10,15 @@
 enum hs_state { HS_SUCCEEDED, HS_FAILED, HS_RUNNING, HS_QUEUED, HS_BLOCKED, HS_CANCELLED, HS_UNKNOWN, HS_STATES };
 struct hs_run {
     char id[80], name[80], project[80], state[40];
-    uint64_t created;
+    uint64_t created, started, completed, verified;
+    unsigned recoveries;
+    bool recoveries_known, planned;
     bool partial;
 };
 struct hs_step {
     size_t run;
     char id[65], kind[32], state[40];
-    uint64_t started, completed;
+    uint64_t started, completed, ready, first_started;
     unsigned attempts;
     bool attempts_known;
 };
@@ -43,4 +45,14 @@ bool hs_matches(const struct hs_model *m, size_t run, const struct hs_filter *fi
  * Durations are completed latest attempts, not total run/verification duration. */
 void hs_summarize(const struct hs_model *m, const struct hs_filter *filter, struct hs_summary *out);
 bool hs_duration(const struct hs_model *m, const struct hs_step *step, uint64_t *seconds);
+enum hs_metric { HS_QUEUE, HS_ELAPSED, HS_VERIFIED, HS_RECOVERIES, HS_METRICS };
+enum hs_evidence { HS_INELIGIBLE, HS_MISSING, HS_KNOWN };
+struct hs_metric_summary {
+    size_t eligible, known, daily_known[7];
+    uint64_t sum, maximum, p50, p95, daily_sum[7];
+};
+/* Index addresses steps for queue delay, runs otherwise. Outputs are caller-owned. */
+enum hs_evidence hs_sample(const struct hs_model *m, enum hs_metric metric, size_t index, uint64_t *value);
+void hs_metric_summarize(const struct hs_model *m, const struct hs_filter *filter,
+                         enum hs_metric metric, struct hs_metric_summary *out);
 #endif

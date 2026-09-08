@@ -57,6 +57,7 @@ struct statistics_view {
     size_t selected, visible[HS_RUNS], count;
     size_t step_scroll;
     int back_view;
+    unsigned metric_page;
     bool stale, detail, graph_open;
     char error[TEXT], selected_id[128];
 };
@@ -134,6 +135,7 @@ bool native_plan_key(struct app *app, char key);
 bool native_control_key(struct app *app, char key);
 int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size);
 bool render_statistics(struct app *app, unsigned frame, bool headless);
+void statistics_metrics_render(struct app *app, struct tv_canvas *c, struct tv_rect r);
 int native_workspace_agent_index(struct native_workspace *w, int pane);
 struct native_terminal *native_workspace_terminal(struct app *app, int pane);
 void native_workspace_sync_terminal(struct app *app);

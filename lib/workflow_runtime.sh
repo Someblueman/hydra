@@ -197,6 +197,7 @@ workflow_refresh_states() {
                 workflow_event "$_wrs_dir" "$_wrs_id" step.cancelled dependency_failed
                 _wrs_changed=1
             elif [ "$_wrs_ready" -eq 1 ]; then
+                workflow_atomic_scalar "$_wrs_sd/initial-ready-at" "$(date +%s)"
                 workflow_atomic_scalar "$_wrs_sd/state" ready
                 workflow_event "$_wrs_dir" "$_wrs_id" step.ready
                 _wrs_changed=1
@@ -262,7 +263,11 @@ workflow_start_step() {
     (umask 077; mkdir -p "$_wss_attempt_dir") || return 1
     workflow_atomic_scalar "$_wss_sd/attempts" "$_wss_attempt"
     workflow_atomic_scalar "$_wss_sd/state" running
-    workflow_atomic_scalar "$_wss_sd/started-at" "$(date +%s)"
+    _wss_started="$(date +%s)"
+    workflow_atomic_scalar "$_wss_sd/started-at" "$_wss_started"
+    if [ "$_wss_attempt" -eq 1 ]; then
+        workflow_atomic_scalar "$_wss_sd/initial-started-at" "$_wss_started"
+    fi
     if [ "$_wss_kind" = approve ]; then
         workflow_atomic_scalar "$_wss_attempt_dir/decision-source" workflow-policy || return 1
     fi
@@ -358,6 +363,8 @@ workflow_drive() {
         rm -rf "$_wd_drive_lock"
         mkdir "$_wd_drive_lock" || return 1
     fi
+    _load_lib workflow_statistics
+    workflow_statistics_begin "$_wd_dir" || { rm -rf "$_wd_drive_lock"; return 1; }
     workflow_atomic_scalar "$_wd_dir/owner-pid" "$$" || return 1
     workflow_atomic_scalar "$_wd_dir/heartbeat-at" "$(date +%s)" || return 1
     workflow_atomic_scalar "$_wd_dir/state" running || return 1
@@ -449,6 +456,9 @@ workflow_drive() {
                 _wd_final=failed
                 workflow_event "$_wd_dir" "" run.delivery_rejected missing_or_negative_verification
             fi
+            case "$_wd_final" in succeeded|failed|cancelled)
+                workflow_atomic_scalar "$_wd_dir/completed-at" "$(date +%s)" ;;
+            esac
             workflow_atomic_scalar "$_wd_dir/state" "$_wd_final"
             workflow_event "$_wd_dir" "" "run.$_wd_final"
             trap - HUP INT TERM

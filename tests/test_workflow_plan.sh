@@ -100,6 +100,8 @@ cmp -s "$run_dir/steps/compose/attempt-1/artifacts/report" expected.txt
 assert_success $? 'delivered bytes match independently checked expected contents'
 "$HYDRA_BIN" workflow plan result "$run" > "$ROOT/result.json"
 assert_success $? 'public result command verifies and returns the final deliverable'
+python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$run_dir" 0 verified
+assert_success $? "independently verified timing reconciles with the native aggregate"
 printf 'tampered\n' > "$run_dir/steps/compose/attempt-1/artifacts/report"
 "$HYDRA_BIN" workflow plan result "$run" >/dev/null 2>&1
 assert_failure $? 'result retrieval refuses corrupted sealed bytes despite recorded success'
@@ -124,6 +126,9 @@ run="$(sed -n '1p' "$ROOT/negative.out")"
 "$HYDRA_BIN" workflow status "$run" --json > "$ROOT/negative-status.json"
 grep -q '"state":"failed"' "$ROOT/negative-status.json"
 assert_success $? 'negative assessment makes the overall run fail'
+negative_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
+python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$negative_dir" 0 unverified
+assert_success $? "negative verification remains missing in the eligible plan cohort"
 grep -q '"step_id":"verify","state":"succeeded"' "$ROOT/negative-status.json"
 assert_success $? 'negative verdict is evaluated after all child steps succeeded'
 {

@@ -8,6 +8,7 @@ The view reads existing records; it neither starts work nor changes runtime stat
 
 | Key | Action |
 | --- | --- |
+| `M` | Cycle overview, queue delay, total execution, recorded verification, owner recoveries (local) |
 | `T` | Cycle all recorded, last 24 hours and last 7 days (local mode) |
 | `[` / `]` | Filter by workflow name (local mode) |
 | `/` | Search workflow, run ID or project; fleet mode searches host names |
@@ -47,6 +48,32 @@ prioritize counts, selection and evidence. The minimum supported size is 40x10.
   pre-run timestamps do not contribute. A valid zero-second interval is zero.
   `n` and timing coverage expose the denominator. These are neither total run
   duration nor a complete history of every retry.
+- **Queue delay:** first `initial-ready-at` to `initial-started-at`, in seconds.
+  Denominator: recorded non-approval-wait steps, excluding those known to have
+  zero attempts and no first start. Missing attempt evidence leaves eligibility
+  uncertain and is conservatively counted as unknown. Dependency waiting and
+  retry backoff are excluded. Queue delay measures scheduling after readiness.
+- **Total execution:** run `started-at` (first coordinator drive) to `completed-at`
+  (terminal result), in seconds. Denominator: succeeded, failed and cancelled runs.
+  Includes child execution, dependency waits, approval waits, retry backoff and
+  downtime before owner recovery. Resumable recovery-required runs are not terminal.
+- **Recorded verification:** first drive to the independent plan finish gate's
+  successful `verified-at`. Denominator: runs with an accepted compiled plan,
+  including failed and unfinished plans as unknown. Only succeeded runs with a
+  matching accepted-plan digest contribute. This records when verification passed;
+  it does not claim the artifact is still valid. `workflow plan result` checks
+  present artifact integrity again. Normal workflows are not eligible.
+- **Owner recoveries:** accepted coordinator resumptions under the run drive lock.
+  Denominator: all matched runs. New runs begin at zero. Approval continuation and
+  automatic step retries do not increment it; stale-owner takeover does. A rejected
+  resume is not counted. Missing historical counters remain unknown.
+- **Metric pages:** mean, maximum, and nearest-rank p50/p95 use known samples only;
+  coverage is known / eligible, without extrapolation. Timing values are seconds;
+  recovery values are counts. Seven rolling 24-hour bins show means and known
+  sample sizes grouped by run creation, using the same filters. Empty bins show
+  `--`. At compact sizes the distribution summary and selected evidence remain
+  available; charts require at least 80x24. `Enter` and `j/k` inspect the selected
+  run's step values for queue delay. Each page reports snapshot age.
 - **Run creation chart:** seven rolling 24-hour bins within the matched cohort,
   relative to the snapshot timestamp. It does not measure throughput.
 - **Fleet:** current host list responses, failed observations and known reported
@@ -61,7 +88,9 @@ remain visible. The graph feed has separate, smaller limits; a selected run outs
 that graph sample produces an explicit notice and remains inspectable in statistics.
 
 Scalar files are individually observed, not a transaction across the run directory.
-An attempt-counter change during collection discards that step's timing/counts.
+An attempt-counter change during collection discards that step's latest timing/counts.
+A state or recovery-counter change while collecting run metrics discards those
+run metrics. These guards cannot provide a transactional snapshot across all files.
 Symlinked runs, step directories and scalar files are skipped or reported unknown.
 A running run with a stale owner is classified unknown. Missing numeric evidence
 never becomes zero. A malformed or timed-out refresh retains the last valid sample
@@ -76,9 +105,9 @@ instead of displaying a truncated sample as complete.
 are tab-separated; `-` is missing scalar evidence. Each record ends in a newline.
 
 ```text
-HYDRA_STATISTICS  1  snapshot_epoch_seconds
-R  run_id  workflow_name  state  project_id  created_at_utc  complete|partial
-S  run_id  step_id  kind  state  attempts  latest_started_epoch  latest_completed_epoch
+HYDRA_STATISTICS  2  snapshot_epoch_seconds
+R  run_id  workflow_name  state  project_id  created_at_utc  complete|partial  first_drive_epoch  terminal_epoch  verified_epoch  recovery_count  compiled_plan_0_or_1
+S  run_id  step_id  kind  state  attempts  latest_started_epoch  latest_completed_epoch  first_ready_epoch  first_started_epoch
 X  coverage_warning
 Z  run_count  step_count
 ```
@@ -87,7 +116,15 @@ Z  run_count  step_count
 The required final `Z` counts detect truncation. The C reader rejects unsupported
 versions, duplicate identities, malformed framing/counts, oversized fields and
 streams above 1 MiB. Invalid numeric/date evidence remains unknown. This feed is
-an internal native-view boundary; it does not extend durable workflow state.
+an internal native-view boundary, replaced together with its native consumer.
+
+New durable scalar fields are additive within existing workflow runtime version 1:
+run `started-at`, `completed-at`, `verified-at`, `verification-plan-sha256`, and
+`recovery-count`; step `initial-ready-at` and `initial-started-at`. Existing state,
+event, attempt, approval and plan contracts retain their meaning. Older records
+are not backfilled from latest-attempt times or inferred from success; missing
+boundaries remain unknown. Timestamps have one-second wall-clock resolution;
+clock changes can invalidate intervals, and valid same-second intervals are zero.
 
 ## Local qualification
 
@@ -114,3 +151,10 @@ separate facts: the fixture tests presentation and reconciliation; the real run
 checks the actual shell-to-native path. Attached-session and exact-plan-approval
 tests now cover D round trips separately; see [attached terminals](ATTACHED_TERMINALS.md).
 Real agent-authored workflow and additional-platform qualification remain open.
+
+Real retry/recovery, approval continuation, positive and negative plan checks
+compare the shell feed and native aggregates with the run's actual scalar records.
+Missing historical boundaries and counters are tested separately. The metric-page
+PTY checks exercise all four pages at 40x10, 80x24 and 140x40, including filters,
+evidence and workspace return. These are local workflow measurements, not provider
+cost/resource measurements or fresh remote/provider campaign qualification.

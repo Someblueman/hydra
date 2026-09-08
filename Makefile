@@ -46,7 +46,7 @@ build-core: $(BUILD_DIR)/hydra-core
 build-tui: $(BUILD_DIR)/hydra-tui
 
 .PHONY: test-termviz example-termviz example-workspace test-workspace-pty test-visualization sanitize-workspace
-test-visualization: build-tui test-termviz
+test-visualization: build-tui test-termviz $(BUILD_DIR)/test-statistics
 	sh tests/test_visualization.sh
 $(BUILD_DIR)/test-termviz: tests/c/test_termviz.c $(TERMVIZ_SOURCES) src/termviz/termviz.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_termviz.c $(TERMVIZ_SOURCES) -o $@
@@ -86,8 +86,8 @@ $(BUILD_DIR)/test-workspace-child: tests/c/test_workspace_child.c | $(BUILD_DIR)
 test-workspace-pty: example-workspace build-tui $(BUILD_DIR)/test-workspace-child
 	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_pty.py
 
-$(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c src/hydra_statistics.c -o $@
+$(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c -o $@
 
 .PHONY: test-statistics sanitize-statistics
 test-statistics: $(BUILD_DIR)/test-statistics build-tui
@@ -123,13 +123,13 @@ $(BUILD_DIR)/tui/%.o: src/tui/%.c
 TERMVIZ_SOURCES = $(filter src/termviz/%.c,$(NATIVE_SOURCES))
 TERMVIZ_HEADERS = $(wildcard src/termviz/*.h src/termviz/*.inc)
 TERMVIZ_OBJECTS = $(patsubst src/termviz/%.c,$(BUILD_DIR)/termviz/%.o,$(TERMVIZ_SOURCES))
-TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o
+TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o $(BUILD_DIR)/hydra_statistics_metrics.o
 
 $(BUILD_DIR)/termviz/%.o: src/termviz/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/hydra_statistics.o: src/hydra_statistics.c src/hydra_statistics.h | $(BUILD_DIR)
+$(TUI_DATA_OBJECTS): $(BUILD_DIR)/%.o: src/%.c src/hydra_statistics.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS) $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS)
@@ -307,7 +307,7 @@ $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 
 -include $(FLEET_OBJECTS:.o=.d) $(BUILD_DIR)/fleet/main.d $(FLEET_TEST_BINS:%=%.d)
 
-test-fleet: build-fleet $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
+test-fleet: $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
 	$(BUILD_DIR)/test-plan
 	$(BUILD_DIR)/test-agent-auth
 	$(BUILD_DIR)/test-agent-profile

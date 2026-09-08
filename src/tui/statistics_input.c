@@ -44,14 +44,22 @@ static void statistics_workflow(struct statistics_view *v, int direction) {
     copy_text(v->filter.workflow,sizeof(v->filter.workflow),names[selected]);
 }
 
+static bool statistics_filter_key(struct app *app, char key) {
+    struct statistics_view *v=app->statistics;
+    if(key=='M' && !app->fleet) { v->metric_page=(v->metric_page+1)%(HS_METRICS+1); v->step_scroll=0; }
+    else if(key=='T' && !app->fleet) { v->filter.days=v->filter.days==0 ? 1 : v->filter.days==1 ? 7 : 0; v->detail=false; }
+    else if(key=='!') { v->filter.attention=!v->filter.attention; v->detail=false; }
+    else if(key=='0') { memset(&v->filter,0,sizeof(v->filter)); v->detail=false; }
+    else return false;
+    return true;
+}
+
 bool statistics_key(struct app *app, char key) {
     struct statistics_view *v=app->statistics;
     if(!v) return false;
     app->notice[0]='\0';
     if(key=='j' || key=='k') statistics_move(app,key=='j' ? 1 : -1);
-    else if(key=='T' && !app->fleet) { v->filter.days=v->filter.days==0 ? 1 : v->filter.days==1 ? 7 : 0; v->detail=false; }
-    else if(key=='!') { v->filter.attention=!v->filter.attention; v->detail=false; }
-    else if(key=='0') { memset(&v->filter,0,sizeof(v->filter)); v->detail=false; }
+    else if(statistics_filter_key(app,key)) { }
     else if((key=='[' || key==']') && !app->fleet) { statistics_workflow(v,key==']' ? 1 : -1); v->detail=false; }
     else if(key=='/') {
         char query[80];

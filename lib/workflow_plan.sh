@@ -121,5 +121,9 @@ workflow_plan_expired() {
 
 workflow_plan_finish() {
     [ -f "$1/compiled.json" ] || return 0
-    workflow_plan_bindings_match "$1" && workflow_plan_tool finish "$1" > "$1/plan-verification.json"
+    workflow_plan_bindings_match "$1" && workflow_plan_tool finish "$1" > "$1/plan-verification.json" || return 1
+    # Historical timing of the independent gate, bound to the accepted revision.
+    # Reading statistics never reruns verification or rewrites this observation.
+    workflow_atomic_scalar "$1/verification-plan-sha256" "$(sed -n '1p' "$1/plan-accepted")" &&
+        workflow_atomic_scalar "$1/verified-at" "$(date +%s)"
 }

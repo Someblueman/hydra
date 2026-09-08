@@ -92,6 +92,45 @@ def local_statistics() -> None:
     print("PASS statistics PTY: scope, time range, evidence/graph drill-down, preserved workspace, mouse, stale recovery, three sizes and termios")
 
 
+def metric_pages() -> None:
+    s = Session(ARGV + ["--view", "statistics"], 140, 40)
+    try:
+        s.until("Latest attempt mean")
+        for cols, rows in [(140, 40), (80, 24), (40, 10)]:
+            if (s.screen.cols, s.screen.rows) != (cols, rows):
+                s.resize(cols, rows)
+            for title, coverage in [("QUEUE DELAY", "known 7/10"),
+                                    ("TOTAL EXECUTION", "known 4/5"),
+                                    ("RECORDED VERIFICATION", "known 2/3"),
+                                    ("OWNER RECOVERIES", "known 6/8")]:
+                s.send("M")
+                s.until(title)
+                s.until(coverage)
+                s.until("Sample age")
+                s.until("q quit")
+                assert "p50" in s.screen.text() and s.screen.overflow == 0
+                s.screen.save(EVIDENCE / f"{title.lower().replace(' ', '-')}-{cols}x{rows}.html")
+            s.send("M")
+            s.until("D STATISTICS")
+        s.resize(140, 40)
+        s.send("MMMM/")
+        s.until("Find workflow, run or project:")
+        s.send("recovery\r")
+        s.until("known 2/2")
+        s.send("\r")
+        s.until("failed / 2")
+        s.send("D")
+        s.until("HYDRA WORKSPACE")
+        s.send("D")
+        s.until("OWNER RECOVERIES")
+        s.until("known 2/2")
+        s.close(keys="q")
+    except BaseException:
+        s.abort()
+        raise
+    print("PASS metric pages: four metrics, coverage, percentiles, freshness, filters, evidence, three sizes")
+
+
 def fleet_statistics() -> None:
     s = Session(ARGV + ["--fleet", "--view", "statistics"], 140, 40)
     try:
@@ -140,3 +179,4 @@ def fleet_statistics() -> None:
 if __name__ == "__main__":
     local_statistics()
     fleet_statistics()
+    metric_pages()

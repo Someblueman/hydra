@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Native statistics now include queue delay, total run duration, recorded independent
+  verification time and owner recovery counts, with coverage, percentiles, trends
+  and contributing evidence. Minimal lifecycle scalars preserve unknown historical
+  values; press `M` in statistics to cycle metrics.
+
 ### Fixed
 
 - Standalone export qualification uses its own build directory when Hydra is

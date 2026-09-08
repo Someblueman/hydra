@@ -217,6 +217,8 @@ retry_run="$(sed -n '1p' "$test_root/retry.out")"
 retry_dir="$(run_dir_for "$retry_run")"
 assert_equal 2 "$(sed -n '1p' "$retry_dir/steps/retry/attempts")" "retry count is authoritative"
 assert_equal 2 "$(sed -n '1p' "$test_root/retry-count")" "retry side effect ran exactly twice"
+python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$retry_dir" 0 unverified
+assert_success $? "automatic retries retain zero owner recoveries and reconcile native timing"
 
 # A persisted backoff survives coordinator loss and preserves completed evidence.
 sed 's/retry: 1/retry: 1\n    retry_on: [failure]\n    retry_backoff: 4/; s/retry-count/backoff-count/' "$test_root/retry.yml" > "$test_root/backoff.yml"
@@ -437,6 +439,8 @@ assert_success $? "stale run resumes its retryable interrupted step"
 assert_equal succeeded "$(sed -n '1p' "$resume_dir/state")" "resumed run reaches success"
 assert_equal 1 "$(sed -n '1p' "$test_root/effect-count")" "resume never repeats a completed non-idempotent effect"
 assert_equal 2 "$(sed -n '1p' "$test_root/resume-count")" "interrupted idempotent attempt retries once"
+python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$resume_dir" 1 unverified
+assert_success $? "owner recovery counted once with whole-run duration and first queue delay"
 
 echo "============================================"
 echo "Test Results:"

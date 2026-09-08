@@ -61,29 +61,45 @@ enum hs_state hs_state(const char *s) {
     return HS_UNKNOWN;
 }
 
+static void run_metrics(struct hs_run *r, char **f, uint64_t observed) {
+    uint64_t value;
+    if (number(f[7], observed, &value)) r->started = value;
+    if (number(f[8], observed, &value)) r->completed = value;
+    if (number(f[9], observed, &value)) r->verified = value;
+    r->recoveries_known = number(f[10], 999999, &value);
+    if (r->recoveries_known) r->recoveries = (unsigned)value;
+    r->planned = !strcmp(f[11], "1");
+}
+
+static void step_metrics(struct hs_step *s, char **f, uint64_t observed) {
+    uint64_t value;
+    if (number(f[8], observed, &value)) s->ready = value;
+    if (number(f[9], observed, &value)) s->first_started = value;
+}
+
 bool hs_load(FILE *input, struct hs_model *m) {
     char line[2048];
     size_t bytes = 0;
     bool header = false, ended = false;
     memset(m, 0, sizeof(*m));
     while (fgets(line, sizeof(line), input)) {
-        char *f[10], *p;
+        char *f[12], *p;
         size_t n = strlen(line), count = 1, i;
         uint64_t value;
         if (ended || !n || line[n-1] != '\n' || (bytes += n) > 1024U * 1024U) return false;
         line[n-1] = '\0'; f[0] = line;
         for (p = line; *p; p++) if (*p == '\t') {
-            if (count == 10) return false;
+            if (count == 12) return false;
             *p = '\0'; f[count++] = p + 1;
         }
         if (!header) {
-            if (count != 3 || strcmp(f[0], "HYDRA_STATISTICS") || strcmp(f[1], "1") ||
+            if (count != 3 || strcmp(f[0], "HYDRA_STATISTICS") || strcmp(f[1], "2") ||
                 !number(f[2], 253402300799ULL, &m->observed) || !m->observed) return false;
             header = true; continue;
         }
         if (count == 2 && !strcmp(f[0], "X")) {
             m->warnings++; if (!copy(m->warning, sizeof(m->warning), f[1])) return false;
-        } else if (count == 7 && !strcmp(f[0], "R")) {
+        } else if (count == 12 && !strcmp(f[0], "R")) {
             struct hs_run *r;
             if (m->run_count == HS_RUNS || !id(f[1])) return false;
             for (i = 0; i < m->run_count; i++) if (!strcmp(m->runs[i].id, f[1])) return false;
@@ -94,7 +110,8 @@ bool hs_load(FILE *input, struct hs_model *m) {
             if (r->created > m->observed) r->created = 0;
             if (strcmp(f[6], "partial") && strcmp(f[6], "complete")) return false;
             r->partial = !strcmp(f[6], "partial");
-        } else if (count == 8 && !strcmp(f[0], "S")) {
+            run_metrics(r, f, m->observed);
+        } else if (count == 10 && !strcmp(f[0], "S")) {
             struct hs_step *s;
             size_t run;
             for (run = 0; run < m->run_count; run++) if (!strcmp(m->runs[run].id, f[1])) break;
@@ -107,6 +124,7 @@ bool hs_load(FILE *input, struct hs_model *m) {
             if (s->attempts_known) s->attempts = (unsigned)value;
             if (number(f[6], m->observed, &value)) s->started = value;
             if (number(f[7], m->observed, &value)) s->completed = value;
+            step_metrics(s, f, m->observed);
         } else if (count == 3 && !strcmp(f[0], "Z")) {
             if (!number(f[1], HS_RUNS, &value) || value != m->run_count ||
                 !number(f[2], HS_STEPS, &value) || value != m->step_count) return false;

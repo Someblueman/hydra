@@ -121,6 +121,8 @@ done
 viz_run="$(awk -F '\t' '$1=="R" {print $2; exit}' "$viz_tmp/statistics.tsv")"
 viz_record="$(find "$HYDRA_HOME/state/v2" -type d -name "$viz_run" | head -n 1)"
 [ -n "$viz_record" ]
+python3 "$viz_root/tests/statistics_evidence.py" "$viz_bin" "$viz_record" 0 unverified
+rm "$viz_record/started-at" "$viz_record/recovery-count" "$viz_record/steps/build/initial-ready-at"
 rm "$viz_record/steps/build/started-at"
 printf '123456\n' > "$viz_tmp/outside-start"
 ln -s "$viz_tmp/outside-start" "$viz_record/steps/build/started-at"
@@ -133,4 +135,7 @@ awk -F '\t' '$1=="S" && $3=="build" {start=($7=="-")}
     --view statistics --ascii --size 140x40 > "$viz_tmp/statistics.out"
 grep -q 'Timing 2/4' "$viz_tmp/statistics.out"
 grep -q 'Attempts 3/4' "$viz_tmp/statistics.out"
+"${BUILD_DIR:-$viz_root/build}/test-statistics" "$viz_tmp/missing-statistics.tsv" "$viz_run" > "$viz_tmp/metrics.txt"
+awk '$1==0 {q=($2==4 && $3==3)} $1==1 {e=($2==1 && $3==0 && $4==0)}
+     $1==3 {r=($2==1 && $3==0 && $4==0)} END {exit !(q && e && r)}' "$viz_tmp/metrics.txt"
 printf 'PASS: real workflow execution, read-only projection, dependency graph, responsive bounds, invalid graph rejection\n'

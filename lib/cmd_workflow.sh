@@ -82,6 +82,7 @@ cmd_workflow() {
             workflow_atomic_scalar "$_cw_tmp/run-id" "$_cw_run"
             workflow_atomic_scalar "$_cw_tmp/schema-version" 1
             workflow_atomic_scalar "$_cw_tmp/runtime-version" 1
+            workflow_atomic_scalar "$_cw_tmp/recovery-count" 0
             workflow_atomic_scalar "$_cw_tmp/project-id" "$_cw_project"
             workflow_atomic_scalar "$_cw_tmp/definition-path" "$_cw_file"
             workflow_atomic_scalar "$_cw_tmp/definition-hash" "$_cw_hash"
