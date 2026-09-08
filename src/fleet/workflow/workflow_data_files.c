@@ -127,6 +127,12 @@ static int verify_map(json_object *map, const char *source, const char *receipt,
     }
     return 0;
 }
+int wd_verify_output(json_object *manifest, const char *step, const char *attempt) {
+    char scratch[] = "/tmp/hydra-workflow-output.XXXXXX"; int status;
+    if (!mkdtemp(scratch)) return -1;
+    status = verify_map(f_field(f_field(f_field(manifest, "steps"), step), "outputs"), attempt, "outputs.json", scratch);
+    f_remove_tree(scratch); return status;
+}
 int wd_verify(json_object *manifest, const char *run) {
     char scratch[] = "/tmp/hydra-workflow-verify.XXXXXX", directory[F_PATH], path[F_PATH]; int status = -1;
     json_object *steps = f_field(manifest, "steps");

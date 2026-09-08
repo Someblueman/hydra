@@ -1,8 +1,9 @@
 # Distributed workflow implementation contract
 
 Status: implementation in progress for [roadmap item 5](ROADMAP.md). This document
-defines the intended extension; it does not claim that remote DAG execution is
-available. Existing workflow schema 1, compiled plans, task protocol 1 and their
+defines the full intended extension. The [task-step primitive](WORKFLOW_TASKS.md)
+is implemented; full planner and two-host acceptance remain open. Existing
+workflow schema 1, compiled plans, task protocol 1 and their
 persisted records remain published contracts.
 
 ## Execution and authority

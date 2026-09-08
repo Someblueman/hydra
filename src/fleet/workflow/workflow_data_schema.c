@@ -85,7 +85,7 @@ json_object *wd_manifest(const char *manifest, const char *graph_path) {
         const char *kind = f_string(f_field(graph, name), "kind");
         if (!wd_name(name) || !kind || !task_keys(value, step_keys) ||
             (f_field(value, "inputs") && !references(data, graph, name, f_field(value, "inputs"))) ||
-            (f_field(value, "outputs") && (strcmp(kind, "exec") || !declarations(f_field(value, "outputs"), false)))) goto bad;
+            (f_field(value, "outputs") && ((strcmp(kind, "exec") && strcmp(kind, "task")) || !declarations(f_field(value, "outputs"), false)))) goto bad;
     }
     json_object_put(graph); return data;
 bad:
