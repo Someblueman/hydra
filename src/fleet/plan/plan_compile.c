@@ -67,7 +67,7 @@ done:
 }
 /* Resolve only explicitly declared data and adapter contracts. No model calls,
  * probes, head creation, or recipe execution occur during compilation. */
-static json_object *bind_inputs(json_object *data, const char *source, const char *scratch, int64_t limit) {
+static json_object *bind_inputs(json_object *data, const char *source, const char *scratch, int64_t limit, int64_t rounds) {
     char path[F_PATH]; int64_t total = 0; json_object *bound = plan_canonical(data), *inputs = f_field(bound, "inputs");
     if (f_path(path, sizeof(path), scratch, "input")) goto bad;
     json_object_object_foreach(inputs, name, declaration) {
@@ -82,7 +82,7 @@ static json_object *bind_inputs(json_object *data, const char *source, const cha
         json_object_object_foreach(steps, id, step) {
             json_object *outputs = f_field(step, "outputs"); (void)id;
             if (!outputs) continue;
-            json_object_object_foreach(outputs, name, declaration) { (void)name; total += json_object_get_int64(f_field(declaration, "max_bytes")); }
+            json_object_object_foreach(outputs, name, declaration) { (void)name; total += rounds * json_object_get_int64(f_field(declaration, "max_bytes")); }
         }
     }
     if (total > limit) goto bad;
@@ -138,8 +138,9 @@ json_object *plan_compile(json_object *plan, json_object *policy, const char *so
         !(manifest = wd_manifest(data_path, graph_path))) { plan_error(errors, "data", "invalid_handoff", "invalid artifact types, bounds, paths or direct producer dependencies"); goto done; }
     if (!(binding = source_binding(source))) { plan_error(errors, "source", "invalid_source", "source must be a Git repository with no tracked changes and bounded readable content"); goto done; }
     if (!(context = context_files(plan, source, scratch, &context_bytes))) { plan_error(errors, "context", "invalid_context", "context references must be bounded existing repository files; snapshot external sources first"); goto done; }
-    if (!(data = bind_inputs(manifest, source, scratch, json_object_get_int64(f_field(f_field(plan, "envelope"), "artifact_bytes")) - context_bytes))) {
-        plan_error(errors, "data", "invalid_inputs_or_budget", "repository inputs must exist and match their type/digest; total declared input and output bytes must fit the envelope"); goto done;
+    if (!(data = bind_inputs(manifest, source, scratch, json_object_get_int64(f_field(f_field(plan, "envelope"), "artifact_bytes")) - context_bytes,
+        1 + json_object_get_int64(f_field(f_field(plan, "envelope"), "repair_budget"))))) {
+        plan_error(errors, "data", "invalid_inputs_or_budget", "repository inputs must exist and match their type/digest; declared inputs and every reserved output round must fit the artifact envelope"); goto done;
     }
     if (strlen(json_object_to_json_string_ext(data, JSON_C_TO_STRING_PLAIN)) > WD_LIMIT) { plan_error(errors, "data", "bound_data_limit", "input digests make the resolved data manifest exceed 64 KiB"); goto done; }
     if (!(adapters = profiles(plan))) { plan_error(errors, "steps.args.profile", "unsupported_profile", "headless prompt profile is unavailable"); goto done; }

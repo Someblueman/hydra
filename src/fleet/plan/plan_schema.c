@@ -49,7 +49,7 @@ static bool envelope(json_object *o) {
         !strings(f_field(o, "effects"), 1, true) || !strings(f_field(o, "writes"), 0, false) ||
         !integer(o, "parallelism", 1, 16) || !integer(o, "timeout_seconds", 1, 86400) ||
         !integer(o, "artifact_bytes", 1, 64 * TASK_FILE_LIMIT) || !integer(o, "max_heads", 1, 64) ||
-        !integer(o, "disk_mb", 1, 1048576) || !f_number_is(o, "retry_budget", 0) || !f_number_is(o, "repair_budget", 0)) return false;
+        !integer(o, "disk_mb", 1, 1048576) || !f_number_is(o, "retry_budget", 0) || !integer(o, "repair_budget", 0, 10)) return false;
     for (i = 0; i < json_object_array_length(f_field(o, "writes")); i++) if (!scope(f_text(json_object_array_get_idx(f_field(o, "writes"), i)))) return false;
     return true;
 }
@@ -146,7 +146,7 @@ static bool records(json_object *array, const char *path, const char *const keys
 static void policy_bounds(json_object *env, json_object *allowed, json_object *errors) {
     size_t i, j;
     const char *sets[] = {"hosts", "tools", "effects", "writes"};
-    const char *bounds[] = {"parallelism", "timeout_seconds", "artifact_bytes", "max_heads"};
+    const char *bounds[] = {"parallelism", "timeout_seconds", "artifact_bytes", "max_heads", "repair_budget"};
     for (i = 0; i < 4; i++) {
         json_object *set = f_field(env, sets[i]);
         for (j = 0; j < json_object_array_length(set); j++) {
@@ -156,10 +156,14 @@ static void policy_bounds(json_object *env, json_object *allowed, json_object *e
             if (i == 2 && strcmp(s, "worktree") && strcmp(s, "execute")) plan_error(errors, "effects", "unsupported_effect", "supported effects are worktree and execute");
         }
     }
-    for (i = 0; i < 4; i++) if (json_object_get_int64(f_field(env, bounds[i])) > json_object_get_int64(f_field(allowed, bounds[i])))
+    for (i = 0; i < 5; i++) if (json_object_get_int64(f_field(env, bounds[i])) > json_object_get_int64(f_field(allowed, bounds[i])))
         plan_error(errors, bounds[i], "over_budget", "plan budget exceeds policy");
     if (json_object_get_int64(f_field(env, "disk_mb")) < json_object_get_int64(f_field(allowed, "disk_mb")))
         plan_error(errors, "disk_mb", "unauthorized", "plan free-space floor is below policy");
+}
+static void repair_version(json_object *plan, json_object *errors) {
+    if (f_number_is(plan, "schema_version", 1) && !f_number_is(f_field(plan, "envelope"), "repair_budget", 0))
+        plan_error(errors, "envelope.repair_budget", "unsupported_repair", "repairs require plan schema 2");
 }
 int plan_validate(json_object *plan, json_object *policy, json_object *errors) {
     const char *const keys[] = {"schema_version", "id", "objective", "context", "assumptions", "questions", "deliverables", "requirements", "checks", "steps", "data", "envelope", NULL};
@@ -176,10 +180,11 @@ int plan_validate(json_object *plan, json_object *policy, json_object *errors) {
         plan_error(errors, "$", "invalid_plan", "expected schema 1 or 2, objective, ID and explicit context, assumptions and questions arrays; unknown fields are rejected");
     if (plan_list(f_field(plan, "questions"), 1, 64)) plan_error(errors, "questions", "unresolved_question", "resolve material questions before compilation");
     if (!envelope(env) || !task_keys(policy, policy_keys) || !f_number_is(policy, "schema_version", 1) || !envelope(allowed)) {
-        plan_error(errors, "envelope", "invalid_policy", "explicit bounded plan and policy envelopes required; retry and repair budgets must be zero"); return -1;
+        plan_error(errors, "envelope", "invalid_policy", "explicit bounded plan and policy envelopes required; execution retries must be zero and repairs bounded to 0 through 10"); return -1;
     }
     if (!placed_hosts(plan, env))
         plan_error(errors, "envelope.hosts", "unsupported_host", "only local execution is implemented");
+    repair_version(plan, errors);
     policy_bounds(env, allowed, errors);
     if (!plan_list(steps, 1, PLAN_STEPS)) plan_error(errors, "steps", "invalid_steps", "expected 1 to 64 steps");
     else for (i = 0; i < json_object_array_length(steps); i++) {

@@ -112,7 +112,7 @@ _hydra() {
                         _arguments '2:planning action:(schema validate compile show run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '*:file:_files'
                         return
                     fi
-                    _arguments '1:subcommand:(list show validate dry-run run status cancel resume requests decide plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
+                    _arguments '1:subcommand:(list show validate dry-run run status cancel resume replay requests decide plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
                     ;;
                 sync)
                     _arguments '--from[Source ref]:ref:' '--gate[Approved gate]:name:' '--dry-run[Simulate without mutation]' '1:head:_hydra_sessions'

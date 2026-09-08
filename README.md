@@ -165,11 +165,13 @@ workflows, and recovery behavior.
 
 The optional native helper supports `hydra workflow plan`: discover the JSON
 schema, validate an agent-authored proposal, compile and review an immutable
-local DAG, then execute it with an exact acceptance digest. Retrieve the final
-verified artifacts with `hydra workflow plan result <run-id>`. Planning does not
-call a model itself; an ordinary agent authors the proposal through the CLI.
-Compiled plans currently execute locally; cross-host DAG placement is still on
-the roadmap. See the
+DAG, then execute it with an exact acceptance digest. Retrieve the final
+verified artifacts with `hydra workflow plan result <run-id>`. Schema-2 plans
+[distribute tasks across explicit hosts](docs/WORKFLOW_TASKS.md), require bound
+validation, hand off collected Git commits, and support bounded candidate repair.
+Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
+Planning does not call a model itself; an ordinary agent authors the proposal
+through the CLI. See the
 [planner recipe](docs/PLANNER_RECIPE.md) and
 [feature and research examples](examples/planning/README.md).
 

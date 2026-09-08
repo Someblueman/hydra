@@ -32,9 +32,9 @@ int plan_preview(json_object *compiled) {
     printf("Plan %s (%s)\n%s\n\n", f_string(plan, "id"), f_string(compiled, "compiler"), f_string(plan, "objective"));
     items("Context", f_field(plan, "context")); items("Assumptions", f_field(plan, "assumptions")); items("Open questions", f_field(plan, "questions"));
     items("Hosts", f_field(env, "hosts")); items("Tools", f_field(env, "tools")); items("Effects", f_field(env, "effects")); items("Declared repository writes", f_field(env, "writes"));
-    printf("Budgets: parallelism %d; wall time %d seconds; artifacts %lld bytes; heads %d; disk floor %d MiB; retries 0; repairs 0\n",
+    printf("Budgets: parallelism %d; wall time %d seconds; artifacts %lld bytes; heads %d; disk floor %d MiB; retries 0; repairs %d\n",
         json_object_get_int(f_field(env, "parallelism")), json_object_get_int(f_field(env, "timeout_seconds")),
-        (long long)json_object_get_int64(f_field(env, "artifact_bytes")), json_object_get_int(f_field(env, "max_heads")), json_object_get_int(f_field(env, "disk_mb")));
+        (long long)json_object_get_int64(f_field(env, "artifact_bytes")), json_object_get_int(f_field(env, "max_heads")), json_object_get_int(f_field(env, "disk_mb")), json_object_get_int(f_field(env, "repair_budget")));
     {
         json_object *steps = f_field(plan, "steps"), *deliverables = f_field(plan, "deliverables"), *requirements = f_field(plan, "requirements");
         puts("\nWork:");

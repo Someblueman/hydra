@@ -101,6 +101,17 @@ static bool receipt_matches(json_object *receipt, json_object *record, const cha
         (!id || !strcmp(observed, id)) && digest && !strcmp(digest, f_string(f_field(record, "package"), "spec_sha256")) &&
         key && !strcmp(key, f_string(record, "submission_key"));
 }
+bool wt_parent_receipt(const char *run, const char *step, const char *attempt, json_object *binding, json_object *receipt) {
+    char directory[F_PATH], expected[65]; json_object *record = NULL; bool valid = false;
+    if (f_path(directory, sizeof(directory), attempt, "remote") || !(record = read_dispatch(directory))) goto done;
+    json_object *source = f_field(record, "source"); const char *producer = f_string(binding, "source_step");
+    if ((producer != NULL) != (source != NULL)) goto done;
+    if (producer && (!f_string(source, "step") || strcmp(producer, f_string(source, "step")))) goto done;
+    valid = dispatch_valid(record, binding, source) && !dispatch_key(run, step, attempt, expected) &&
+        !strcmp(expected, f_string(record, "submission_key")) && receipt_matches(receipt, record, NULL);
+done:
+    json_object_put(record); return valid;
+}
 static int materialize(const char *attempt, json_object *result) {
     char root[F_PATH], path[F_PATH], hash[65]; json_object *files = f_field(result, "artifacts");
     if (f_path(root, sizeof(root), attempt, "outputs")) return -1;
@@ -181,10 +192,14 @@ static json_object *drive(struct execution *execution) {
         struct timespec delay = {1, 0}; nanosleep(&delay, NULL);
     }
 }
+static bool attempt_valid(const char *run, const char *step, const char *attempt) {
+    char expected[F_PATH]; int number = plan_task_attempt(run);
+    return number > 0 && snprintf(expected, sizeof(expected), "%s/steps/%s/attempt-%d", run, step, number) < (int)sizeof(expected) && !strcmp(expected, attempt);
+}
 json_object *wt_execute(const char *run, const char *step, const char *attempt) {
     json_object *bindings = wt_bindings(run), *response = NULL, *receipt = NULL, *source = NULL;
     struct execution execution = {.run = run, .attempt = attempt}; char path[F_PATH], expected[65]; int lock = -1;
-    if (!bindings || !f_field(f_field(bindings, "steps"), step) || f_path(path, sizeof(path), attempt, "remote.lock")) goto done;
+    if (!bindings || !f_field(f_field(bindings, "steps"), step) || !attempt_valid(run, step, attempt) || f_path(path, sizeof(path), attempt, "remote.lock")) goto done;
     lock = open(path, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, 0600);
     if (lock < 0 || flock(lock, LOCK_EX | LOCK_NB)) goto done;
     json_object *binding = f_field(f_field(bindings, "steps"), step);

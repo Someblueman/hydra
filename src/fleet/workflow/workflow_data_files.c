@@ -81,7 +81,12 @@ static int receive(const char *source, const char *receipt_name, const char *nam
 done:
     json_object_put(receipt); json_object_put(file); return status;
 }
-static int producer_directory(const char *run, const char *step, char directory[F_PATH]) {
+static bool valid_attempt(const char *attempt) {
+    if (!*attempt || strlen(attempt) > 2) return false;
+    for (const char *p = attempt; *p; p++) if (*p < '0' || *p > '9') return false;
+    return atoi(attempt) >= 1 && atoi(attempt) <= 11;
+}
+int wd_producer_directory(const char *run, const char *step, char directory[F_PATH]) {
     char path[F_PATH], *attempt = NULL, *state = NULL, *p; int status = -1;
     if (snprintf(path, sizeof(path), "%s/steps/%s/state", run, step) >= (int)sizeof(path)) goto done;
     state = f_read(path, 64);
@@ -90,9 +95,7 @@ static int producer_directory(const char *run, const char *step, char directory[
     attempt = f_read(path, 16);
     if (!attempt) goto done;
     p = strchr(attempt, '\n'); if (p) *p = '\0';
-    if (!*attempt || strlen(attempt) > 2) goto done;
-    for (p = attempt; *p; p++) if (*p < '0' || *p > '9') goto done;
-    if (atoi(attempt) < 1 || atoi(attempt) > 11 ||
+    if (!valid_attempt(attempt) ||
         snprintf(directory, F_PATH, "%s/steps/%s/attempt-%s", run, step, attempt) >= F_PATH) goto done;
     status = 0;
 done:
@@ -102,13 +105,14 @@ static int prepare_input(json_object *manifest, const char *run, const char *ste
     const char *input = f_string(reference, "input"), *producer = f_string(reference, "step"), *output = f_string(reference, "output");
     json_object *declaration; char destination[F_PATH], source[F_PATH];
     if (f_path(destination, sizeof(destination), inputs, name)) return -1;
+    if (f_field(reference, "repair")) return plan_repair_write(run, inputs, name);
     if (f_field(reference, "validation")) return plan_validation_write(run, step, inputs, name);
     if (input) {
         declaration = f_field(f_field(manifest, "inputs"), input);
         return receive(run, "inputs.json", input, declaration, destination);
     }
     declaration = f_field(f_field(f_field(f_field(manifest, "steps"), producer), "outputs"), output);
-    if (producer_directory(run, producer, source)) return -1;
+    if (wd_producer_directory(run, producer, source)) return -1;
     return receive(source, "outputs.json", output, declaration, destination);
 }
 int wd_prepare(json_object *manifest, const char *run, const char *step, const char *attempt) {
@@ -150,7 +154,7 @@ int wd_verify(json_object *manifest, const char *run) {
         if (!state) goto done;
         if (!strcmp(state, "succeeded\n") && f_field(value, "outputs")) {
             free(state);
-            if (producer_directory(run, step, directory) || verify_map(f_field(value, "outputs"), directory, "outputs.json", scratch)) goto done;
+            if (wd_producer_directory(run, step, directory) || verify_map(f_field(value, "outputs"), directory, "outputs.json", scratch)) goto done;
         } else free(state);
     }
     status = 0;

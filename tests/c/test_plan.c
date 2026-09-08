@@ -112,9 +112,24 @@ static void distributed_graph_cases(void) {
     expect(plan, policy, "invalid_verification");
     json_object_put(plan); json_object_put(policy);
 }
+static void repair_policy_cases(void) {
+    json_object *plan = plan_read("tests/fixtures/plan-task/plan.json"), *policy = plan_read("tests/fixtures/plan-task/policy.json");
+    json_object_object_add(f_field(plan, "envelope"), "repair_budget", json_object_new_int(1)); expect(plan, policy, "over_budget");
+    json_object_object_add(f_field(policy, "envelope"), "repair_budget", json_object_new_int(1)); expect(plan, policy, "missing_repair_context");
+    const char *producers[] = {"produce", "compose"};
+    for (size_t i = 0; i < 2; i++) {
+        json_object *inputs = f_field(f_field(f_field(f_field(plan, "data"), "steps"), producers[i]), "inputs");
+        json_object_object_add(inputs, "repair", f_parse("{\"repair\":\"plan\"}"));
+    }
+    expect(plan, policy, NULL);
+    json_object_object_add(f_field(plan, "envelope"), "repair_budget", json_object_new_int(11)); expect(plan, policy, "invalid_policy");
+    json_object_put(plan); plan = fixture();
+    json_object_object_add(f_field(plan, "envelope"), "repair_budget", json_object_new_int(1)); expect(plan, policy, "unsupported_repair");
+    json_object_put(plan); json_object_put(policy);
+}
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    graph_cases(); distributed_graph_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
+    graph_cases(); distributed_graph_cases(); repair_policy_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
     puts("planning graph, policy, canonical JSON and parser checks passed"); return 0;
 }

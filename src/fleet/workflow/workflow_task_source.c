@@ -17,17 +17,13 @@ static bool same_receipt(json_object *left, json_object *right) {
     }
     return true;
 }
-static bool succeeded(const char *run, const char *producer) {
-    char path[F_PATH], *state; bool valid;
-    if (snprintf(path, sizeof(path), "%s/steps/%s/state", run, producer) >= (int)sizeof(path)) return false;
-    state = f_read(path, 64); valid = state && !strcmp(state, "succeeded\n"); free(state); return valid;
-}
 json_object *wt_source_binding(const char *run, json_object *bindings, json_object *binding) {
-    const char *producer = f_string(binding, "source_step"); char directory[F_PATH];
+    const char *producer = f_string(binding, "source_step"); char directory[F_PATH], attempt[F_PATH];
     json_object *envelope = NULL, *receipt = NULL, *collection = NULL, *verified = NULL, *stored = NULL, *out = NULL;
-    if (!wd_name(producer) || !f_field(f_field(bindings, "steps"), producer) || !succeeded(run, producer) ||
-        snprintf(directory, sizeof(directory), "%s/steps/%s/attempt-1/remote", run, producer) >= (int)sizeof(directory)) goto done;
+    if (!wd_name(producer) || !f_field(f_field(bindings, "steps"), producer) || wd_producer_directory(run, producer, attempt) ||
+        f_path(directory, sizeof(directory), attempt, "remote")) goto done;
     envelope = record(directory, "result.json"); receipt = record(directory, "receipt.json"); collection = record(directory, "collection.json");
+    if (!wt_parent_receipt(run, producer, attempt, f_field(f_field(bindings, "steps"), producer), receipt)) goto done;
     verified = task_result_verify(envelope);
     if (!json_object_get_boolean(f_field(verified, "ok")) || !same_receipt(receipt, f_field(f_field(envelope, "result"), "receipt"))) goto done;
     const char *id = f_string(f_field(collection, "data"), "collection_id");

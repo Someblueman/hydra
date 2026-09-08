@@ -6,6 +6,10 @@ case "$HYDRA_TEST_DAG_FAULT" in
         printf ' ' >> "$run_dir/steps/produce/attempt-1/remote/dispatch.json"
         expected=recovery-required
         ;;
+    attempt)
+        printf '2\n' > "$run_dir/steps/produce/attempts"
+        expected=recovery-required
+        ;;
     key)
         dispatch="$run_dir/steps/produce/attempt-1/remote/dispatch.json"
         sed 's/"submission_key":"[a-f0-9]*"/"submission_key":"0000000000000000000000000000000000000000000000000000000000000000"/' "$dispatch" > "$fixture/wrong-key"
@@ -19,7 +23,21 @@ case "$HYDRA_TEST_DAG_FAULT" in
         "$root/bin/hydra" remote add build different-host --hydra "$root/bin/hydra" --home "$HYDRA_HOME" >/dev/null
         expected=waiting-remote
         ;;
-    cancel) expected=cancelled ;;
+    cancel)
+        : "${original_id:?}"
+        # The confirmed-stop case starts after the receiver has published its
+        # plain head. Cancelling during incomplete startup may correctly remain
+        # outcome_unknown; the offline case below covers that safety boundary.
+        cancellation_poll=0
+        while [ "$cancellation_poll" -lt 150 ]; do
+            "$root/bin/hydra" fleet task status build --id "$original_id" > "$fixture/receiver-status"
+            if grep -q '"execution_head_id"' "$fixture/receiver-status"; then break; fi
+            sleep 0.2
+            cancellation_poll=$((cancellation_poll + 1))
+        done
+        grep -q '"execution_head_id"' "$fixture/receiver-status"
+        expected=cancelled
+        ;;
     *) exit 1 ;;
 esac
 case "$HYDRA_TEST_DAG_FAULT" in

@@ -23,6 +23,13 @@ int plan_evidence_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], j
 int plan_lower(json_object *plan, const char *directory);
 json_object *plan_task_bindings(json_object *plan, json_object *data, json_object *source, const char *scratch, json_object *errors);
 json_object *plan_validation_context(json_object *compiled, const char *step);
+json_object *plan_run_definition(const char *run);
+int plan_attempt_directory(const char *run, const char *step, char directory[F_PATH]);
+json_object *plan_repair_evidence(const char *run, json_object *compiled);
+int plan_repair(const char *run, bool resume);
+int plan_task_attempt(const char *run);
+int plan_repair_write(const char *run, const char *directory, const char *name);
+bool plan_repair_fresh(const char *run, json_object *check, const char *subject);
 int plan_step_check(const char *run, const char *step);
 int plan_validation_write(const char *run, const char *step, const char *directory, const char *name);
 json_object *plan_artifact(json_object *compiled, const char *run, const char *step, const char *name, char path[F_PATH]);
@@ -31,6 +38,7 @@ int plan_digest(json_object *value, char digest[65]);
 /* Borrowed JSON inputs. Digest is caller-owned; reports retain no references.
  * INVALID is malformed/stale evidence, distinct from a valid negative verdict. */
 enum plan_verdict { PLAN_INVALID, PLAN_PASS, PLAN_FAIL, PLAN_INCONCLUSIVE };
+enum plan_verdict plan_check_result(json_object *compiled, const char *run, json_object *check);
 int plan_check_digest(json_object *compiled, const char *check, char digest[65]);
 enum plan_verdict plan_report(json_object *compiled, json_object *check,
                               json_object *report, const char *subject);

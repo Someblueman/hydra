@@ -15,6 +15,7 @@ cmd_workflow() {
                 '       hydra workflow status <run-id> [--json]' \
                 '       hydra workflow cancel <run-id>' \
                 '       hydra workflow resume <run-id>' \
+                '       hydra workflow replay <run-id>' \
                 '       hydra workflow requests <run-id> [--json]' \
                 '       hydra workflow decide <run-id> <request-id> approve|reject [--by <label>]'
             [ -n "$_cw_action" ]
@@ -110,6 +111,14 @@ cmd_workflow() {
                 printf 'Workflow %s: %s (source: recorded)\n' "$2" "$_cw_state"
                 while IFS="$(printf '\t')" read -r _cw_tag _cw_id _cw_kind _cw_rest; do [ "$_cw_tag" = step ] || continue; printf '  %s [%s]: %s (attempts=%s)\n' "$_cw_id" "$_cw_kind" "$(sed -n '1p' "$_cw_dir/steps/$_cw_id/state")" "$(sed -n '1p' "$_cw_dir/steps/$_cw_id/attempts")"; done < "$_cw_dir/graph.tsv"
             fi
+            ;;
+        replay)
+            if [ "$#" -ne 2 ] || ! hydra_valid_id "$2"; then
+                cli_error workflow invalid_arguments "replay requires a valid run ID" "run hydra workflow --help"
+                return 1
+            fi
+            _cw_runs="$(workflow_runs_dir)" || return 1
+            workflow_task_tool replay "$_cw_runs/$2"
             ;;
         cancel)
             [ "$#" -eq 2 ] || { cli_error workflow invalid_arguments "cancel requires a run ID" "run hydra workflow --help"; return 1; }

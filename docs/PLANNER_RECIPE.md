@@ -16,9 +16,11 @@ schema-1 workflows and the shell-only core keep their existing interfaces.
    verification may use different heads. Prefer independent executable tests for
    code and a separate assessment for research or design. A passing agent exit is
    not a verification verdict.
-3. Write a bounded JSON document (256 KiB, at most 64 steps). Use local `spawn`
-   and `exec` recipes. Each head must be created in the plan; existing heads are
-   rejected at admission. Retries and repair budgets are zero in this version.
+3. Write a bounded JSON document (256 KiB, at most 64 steps). Schema 1 uses local
+   `spawn` and `exec` recipes with fresh heads and zero retry/repair budgets.
+   Schema 2 uses explicitly placed `task` recipes, required evidence joins and
+   an optional bounded repair budget. See [distributed plans](WORKFLOW_TASKS.md)
+   for task input selection and generated validation/repair context.
 4. Declare named inputs and outputs using [Workflow data](WORKFLOW_DATA.md).
    Artifact consumers must directly depend on their producer. `prompt_input`
    names a declared input. For profile execution, `result_file` must name a
@@ -46,7 +48,7 @@ schema-1 workflows and the shell-only core keep their existing interfaces.
    authorization does not cover the exact plan. An agent-written policy file is
    not itself an authorization grant.
 9. Consume the run ID. Use the existing `hydra workflow status <run-id> --json`,
-   `cancel`, and `resume` commands. Retrieve completed, reverified artifacts with
+   `cancel`, `resume`, and `replay` commands. Retrieve completed, reverified artifacts with
    `hydra workflow plan result <run-id>`. Inspect the actual final output against
    the original objective; do not substitute child completion or a receipt for
    that assessment.
@@ -108,17 +110,21 @@ Use `hydra workflow plan check-definition <compiled.json> <check-id>` to inspect
 the expected validator digest. During execution, `HYDRA_WORKFLOW_VALIDATION_FILE`
 names a JSON response whose `data` object maps this step's check IDs to those
 digests. Validators copy the relevant digest into their version-2 report.
+Schema-2 task validators instead select a generated `{"validation":"plan"}`
+input: its file directly maps check IDs to digests, without the `data` wrapper.
 
 The digest hashes the canonical object with `schema_version: 2`, `check` set to
 the check ID, and `plan_sha256` set to the complete compiled-plan digest. This
 binds the rubric, recipe, source, declared inputs and policy; even unrelated plan
 changes require fresh evidence. The value identifies the required definition,
 not proof that a validator faithfully executed it. The schema command publishes
-this format as `$defs.reportV2`. These reports extend local delivery verification;
-distributed scheduling and intermediate evidence gates remain under development.
+this format as `$defs.reportV2`. Schema-2 plans require this report version and
+apply intermediate validation before releasing consumers.
 
 Coverage proves explicit traceability, not that the decomposition or rubric is
 sufficient. Check the delivered feature in its integrated environment; read a
 research report and examine its supporting evidence. When findings require new
-work, author and accept a new static plan. There is no dynamic DAG expansion,
-automatic repair, remote placement, load balancing or failover in this version.
+work outside the accepted repair envelope, author and accept a new static plan.
+Schema-2 semantic repair uses new candidates and fresh validation within its
+accepted budget. Dynamic DAG expansion, automatic placement and coordinator
+failover remain outside this version.

@@ -90,7 +90,7 @@ _hydra_completion() {
         resource) COMPREPLY=($(compgen -W "allocate status env release" -- ${cur})); return 0 ;;
         gate) COMPREPLY=($(compgen -W "run approve status" -- ${cur})); return 0 ;;
         context) COMPREPLY=($(compgen -W "create" -- ${cur})); return 0 ;;
-        workflow) COMPREPLY=($(compgen -W "list show validate dry-run run status cancel resume requests decide plan" -- ${cur})); return 0 ;;
+        workflow) COMPREPLY=($(compgen -W "list show validate dry-run run status cancel resume replay requests decide plan" -- ${cur})); return 0 ;;
         integrate) COMPREPLY=($(compgen -W "train status report cancel resume approve promote cleanup" -- ${cur})); return 0 ;;
         worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
         snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;

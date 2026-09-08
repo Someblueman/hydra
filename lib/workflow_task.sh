@@ -27,9 +27,11 @@ workflow_task_resume() {
 }
 workflow_task_start() {
     _wts_run="$1" _wts_id="$2" _wts_sd="$1/steps/$2"
-    _wts_attempt="$_wts_sd/attempt-1"
+    _wts_number="$(sed -n '1p' "$_wts_sd/attempts")"
+    [ "$_wts_number" -gt 0 ] || _wts_number=1
+    _wts_attempt="$_wts_sd/attempt-$_wts_number"
     (umask 077; mkdir -p "$_wts_attempt") || return 1
-    workflow_atomic_scalar "$_wts_sd/attempts" 1
+    workflow_atomic_scalar "$_wts_sd/attempts" "$_wts_number"
     workflow_atomic_scalar "$_wts_sd/state" running
     workflow_event "$_wts_run" "$_wts_id" step.running task_reconciliation
     (
@@ -73,7 +75,7 @@ workflow_task_start() {
         if [ -f "$_wts_run/cancel-requested" ]; then
             case "$_wts_state" in succeeded|failed) _wts_state=cancelled ;; esac
         fi
-        case "$_wts_state" in succeeded|failed) workflow_atomic_scalar "$_wts_sd/authoritative-attempt" 1 ;; esac
+        case "$_wts_state" in succeeded|failed) workflow_atomic_scalar "$_wts_sd/authoritative-attempt" "$_wts_number" ;; esac
         workflow_atomic_scalar "$_wts_sd/state" "$_wts_state"
         workflow_event "$_wts_run" "$_wts_id" "step.$_wts_state" task_observation
     ) &
@@ -101,4 +103,14 @@ workflow_task_cancel() {
         running) : ;; # The native observer sends the bound cancellation request.
         *) return 1 ;;
     esac
+}
+
+workflow_next_step() {
+    if [ -f "$1/tasks.json" ]; then workflow_task_tool next "$1"; return $?; fi
+    awk -F '\t' '$1=="step" {print $2}' "$1/graph.tsv" | while IFS= read -r _wns_id; do
+        if [ "$(sed -n '1p' "$1/steps/$_wns_id/state")" = ready ]; then
+            printf '%s\n' "$_wns_id"
+            break
+        fi
+    done
 }

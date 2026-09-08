@@ -17,12 +17,21 @@ static bool valid_data(json_object *compiled) {
     json_object_put(checked); json_object_put(plan); f_remove_tree(scratch); return valid;
 }
 
-/* Planning currently has no retries. Read the runtime's authoritative attempt
- * and its sealed artifact, never the worker's mutable output directory. */
+int plan_attempt_directory(const char *run, const char *step, char directory[F_PATH]) {
+    char path[F_PATH], *number = NULL, *end = NULL; int status = -1;
+    if (!plan_id(step) || snprintf(path, sizeof(path), "%s/steps/%s/attempts", run, step) >= (int)sizeof(path)) return -1;
+    number = f_read(path, 16);
+    if (!number) return -1;
+    long attempt = strtol(number, &end, 10);
+    if (attempt >= 1 && attempt <= 11 && end != number && !strcmp(end, "\n") &&
+        snprintf(directory, F_PATH, "%s/steps/%s/attempt-%ld", run, step, attempt) < F_PATH) status = 0;
+    free(number); return status;
+}
+/* Read the current attempt's sealed receipt, including while its validator is
+ * finishing. Previous repair rounds cannot supply evidence for this round. */
 json_object *plan_artifact(json_object *compiled, const char *run, const char *step, const char *name, char path[F_PATH]) {
-    char relative[256], directory[F_PATH]; json_object *receipt, *file, *decl;
-    if (!plan_id(step) || !plan_id(name) || snprintf(relative, sizeof(relative), "steps/%s/attempt-1", step) >= (int)sizeof(relative) ||
-        f_path(directory, sizeof(directory), run, relative) || snprintf(path, F_PATH, "%s/artifacts/%s", directory, name) >= F_PATH) return NULL;
+    char directory[F_PATH]; json_object *receipt, *file, *decl;
+    if (!plan_id(name) || plan_attempt_directory(run, step, directory) || snprintf(path, F_PATH, "%s/artifacts/%s", directory, name) >= F_PATH) return NULL;
     decl = f_field(f_field(f_field(f_field(f_field(compiled, "data"), "steps"), step), "outputs"), name);
     if (!f_string(decl, "type")) return NULL;
     receipt = task_read_record(directory, "outputs.json"); file = wd_file(path, decl);
@@ -59,7 +68,8 @@ json_object *plan_delivery(const char *run) {
         json_object *subject = f_field(f_field(delivery, "deliverables"), f_string(c, "deliverable"));
         if (!file) goto done;
         json_object_put(file); report = plan_read(path);
-        if (plan_report(compiled, c, report, f_string(subject, "sha256")) != PLAN_PASS) {
+        if (!plan_repair_fresh(run, c, f_string(subject, "sha256")) ||
+            plan_report(compiled, c, report, f_string(subject, "sha256")) != PLAN_PASS) {
             json_object_put(report); goto done;
         }
         json_object_object_add(f_field(delivery, "checks"), f_string(c, "id"), report);

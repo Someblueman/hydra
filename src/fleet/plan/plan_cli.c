@@ -206,6 +206,12 @@ static json_object *step_check_command(char **argv, bool *printed) {
         f_success("workflow plan step-check", json_object_new_object());
 }
 
+static json_object *repair_command(char **argv, bool *printed) {
+    int status = plan_repair(argv[1], !strcmp(argv[0], "repair-resume"));
+    if (status < 0) return f_error("workflow plan repair", "repair_state_invalid", "recorded repair state is invalid; do not start replacement work");
+    printf("%d\n", status); *printed = true; return NULL;
+}
+
 json_object *plan_cli(int argc, char **argv) {
     static const struct {
         const char *name;
@@ -225,6 +231,8 @@ json_object *plan_cli(int argc, char **argv) {
         {"check-definition", 3, check_definition_command},
         {"check-context", 3, check_context_command},
         {"step-check", 3, step_check_command},
+        {"repair", 2, repair_command},
+        {"repair-resume", 2, repair_command},
     };
     json_object *result = NULL;
     bool printed = false;

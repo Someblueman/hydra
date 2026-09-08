@@ -41,11 +41,17 @@ SOURCE
         printf 'printf uncommitted > dirty-file\n' >> produce.sh
     fi
 fi
+if [ -n "${HYDRA_TEST_PLAN_REPAIR:-}" ]; then
+    # shellcheck source=/dev/null
+    . "$root/tests/workflow_plan_repair_cases.sh"
+    workflow_plan_repair_setup
+    if [ "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" = 1 ]; then workflow_plan_repair_fault_setup; fi
+fi
 git add .
 git commit -qm recipes
 commit="$(git rev-parse HEAD)"
 "$root/bin/hydra" init --no-agent --trust >/dev/null
-mode="${HYDRA_TEST_PLAN_TASK_VERDICT:-pass}"
+mode="${HYDRA_TEST_PLAN_REPAIR:-${HYDRA_TEST_PLAN_TASK_VERDICT:-pass}}"
 for node in produce inspect compose verify; do
     inputs='[]'; outputs='["result.txt"]'; argv="[\"sh\",\"$node.sh\"]"
     case "$node" in
@@ -54,10 +60,22 @@ for node in produce inspect compose verify; do
         compose) inputs='["subject"]' ;;
         verify) inputs='["subject","validation"]'; outputs='["report.json"]'; argv='["sh","check.sh","final-check","final-content","pass"]' ;;
     esac
+    if [ -n "${HYDRA_TEST_PLAN_REPAIR:-}" ]; then inputs="$(printf '%s' "$inputs" | sed 's/^\[/["repair",/;s/,]/]/')"; fi
     cat > "$node.json" <<JSON
 {"schema_version":1,"host":"local","project":"$fixture/source","source":{"commit":"$commit"},"work":{"kind":"exec","argv":$argv},"inputs":$inputs,"outputs":$outputs,"capabilities":["exec"],"completion":"command-exit","limits":{"transport_seconds":10,"queue_seconds":30,"startup_seconds":30,"execution_seconds":30,"cancellation_seconds":5,"log_bytes":4096,"artifact_bytes":4096}}
 JSON
 done
+if [ "${HYDRA_TEST_PLAN_REPAIR_BUDGET:-0}" = 1 ]; then
+    for definition in "$fixture/plan.json" "$fixture/policy.json"; do
+        sed 's/"artifact_bytes": 65536/"artifact_bytes": 40000/' "$definition" > "$fixture/updated"
+        mv "$fixture/updated" "$definition"
+    done
+    if "$root/bin/hydra" workflow plan compile "$fixture/plan.json" "$fixture/policy.json" "$fixture/compiled.json" > "$fixture/compile.json"; then exit 1; fi
+    grep -q invalid_inputs_or_budget "$fixture/compile.json"
+    passed=1
+    printf 'Plan task repair: all output rounds must fit the accepted artifact budget\n'
+    exit 0
+fi
 "$root/bin/hydra" workflow plan compile "$fixture/plan.json" "$fixture/policy.json" "$fixture/compiled.json" > "$fixture/compile.json"
 digest="$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$fixture/compile.json")"
 "$root/bin/hydra" workflow plan show "$fixture/compiled.json" > "$fixture/preview"
@@ -65,7 +83,10 @@ code=0
 "$root/bin/hydra" workflow plan run "$fixture/compiled.json" --accept "$digest" > "$fixture/run.out" 2> "$fixture/run.err" || code=$?
 run="$(sed -n '1p' "$fixture/run.out")"
 run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
-if [ "${HYDRA_TEST_PLAN_SOURCE:-0}" = dirty ]; then
+if [ -n "${HYDRA_TEST_PLAN_REPAIR:-}" ]; then
+    if [ "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" = 1 ]; then workflow_plan_repair_fault_resume; fi
+    workflow_plan_repair_assert
+elif [ "${HYDRA_TEST_PLAN_SOURCE:-0}" = dirty ]; then
     [ "$code" != 0 ]
     [ "$(cat "$run_dir/steps/compose/state")" = recovery-required ]
     [ ! -d "$run_dir/steps/compose/attempt-1/remote" ]

@@ -1,8 +1,8 @@
 # Distributed workflow implementation contract
 
-Status: implementation in progress for [roadmap item 5](ROADMAP.md). This document
-defines the full intended extension. The [task-step primitive](WORKFLOW_TASKS.md)
-is implemented; full planner and two-host acceptance remain open. Existing
+Status: implemented and qualified for [roadmap item 5](ROADMAP.md).
+See the [acceptance evidence](evidence/distributed/qualification.md).
+See [distributed task workflows](WORKFLOW_TASKS.md) for the public interface. Existing
 workflow schema 1, compiled plans, task protocol 1 and their
 persisted records remain published contracts.
 

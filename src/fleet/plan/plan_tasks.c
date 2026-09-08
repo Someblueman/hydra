@@ -30,8 +30,9 @@ json_object *plan_task_bindings(json_object *plan, json_object *data, json_objec
         if (producer) f_string_add(binding, "source_step", producer);
         json_object_object_add(out, id, binding);
     }
-    if (seconds > json_object_get_int64(f_field(env, "timeout_seconds")) ||
-        json_object_array_length(steps) > (size_t)json_object_get_int64(f_field(env, "max_heads"))) goto bad;
+    int64_t rounds = 1 + json_object_get_int64(f_field(env, "repair_budget"));
+    if (seconds * rounds > json_object_get_int64(f_field(env, "timeout_seconds")) ||
+        json_object_array_length(steps) * (size_t)rounds > (size_t)json_object_get_int64(f_field(env, "max_heads"))) goto bad;
     return out;
 bad:
     plan_error(errors, "steps", "invalid_task_policy", "task recipes must match source, declared inputs/outputs, explicit hosts, tools, effects and total finite budgets");

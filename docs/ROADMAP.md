@@ -111,6 +111,8 @@ implemented profiles.
 #### 5. Distributed DAG execution and independent validation
 
 Implementation contract: [Distributed workflows](DISTRIBUTED_DAG.md).
+Qualified on macOS and one Linux VPS on 8 September 2026; see the
+[acceptance evidence](evidence/distributed/qualification.md).
 
 Extend the existing finite workflow DAG across explicitly selected hosts. Producers
 create artifacts, validators examine those exact artifacts, and a deterministic
@@ -118,24 +120,24 @@ policy step combines their evidence. Composition workers integrate code, reconci
 designs, or synthesize reports; their new deliverables must be validated again.
 These are workflow roles, not separate scheduler services.
 
-- [ ] Add individual remote steps through the existing fleet task interface, with
+- [x] Add individual remote steps through the existing fleet task interface, with
       one durable coordinator per run. Persist the resolved graph, source/input
       digests, policy, host assignment, exact package, and submission key before
       dispatch. Bind the receipt once known and verify completion before advancing
       dependents. Recover on the same coordinator host first.
-- [ ] Connect verified result collection to downstream task inputs and source
+- [x] Connect verified result collection to downstream task inputs and source
       commits. Start with transfer through the coordinator; preserve immutable
       artifact bindings and authorize derived tasks within the run's explicit
       destinations and work recipes. Mutable branch names are not handoff identity.
-- [ ] Define versioned validation reports bound to artifact and validator-definition
+- [x] Define versioned validation reports bound to artifact and validator-definition
       digests. Separate process success from PASS/FAIL/INCONCLUSIVE verdicts. Require
       all designated checks to pass initially; missing evidence and agent agreement
       alone cannot satisfy a correctness gate. Protect the acceptance harness from
       producer edits; separate sessions do not provide OS isolation.
-- [ ] Validate the assembled candidate, then use existing bound approval and
+- [x] Validate the assembled candidate, then use existing bound approval and
       integration checks. Repairs create new candidates and bounded attempts;
       previous validation does not authorize changed bytes.
-- [ ] Reconcile lost responses against the original host, package, and key. Keep
+- [x] Reconcile lost responses against the original host, package, and key. Keep
       reconciliation, execution retry, and semantic repair distinct. Host-scoped
       deduplication cannot prevent a second execution on another host. Defer
       automatic coordinator failover and unresolved-task reassignment.

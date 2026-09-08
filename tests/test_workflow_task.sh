@@ -47,7 +47,7 @@ SOURCE
 [ "$(git show HEAD:marker)" = source-commit ]
 SOURCE
 fi
-if [ "${HYDRA_TEST_DAG_CRASH:-0}" != 0 ]; then sed -i.bak 's/HYDRA_DAG_TEST_DELAY:-0/HYDRA_DAG_TEST_DELAY:-12/' produce.sh; rm produce.sh.bak; fi
+if [ "${HYDRA_TEST_DAG_CRASH:-0}" != 0 ] || [ "${HYDRA_TEST_DAG_FAULT:-}" = cancel ]; then sed -i.bak 's/HYDRA_DAG_TEST_DELAY:-0/HYDRA_DAG_TEST_DELAY:-12/' produce.sh; rm produce.sh.bak; fi
 git add .
 git commit -qm 'task recipes'
 commit="$(git rev-parse HEAD)"
@@ -113,6 +113,11 @@ steps:
       task_input: recipe
 YAML
 if [ "${HYDRA_TEST_DAG_SOURCE:-0}" = 1 ]; then printf '      source_step: produce\n' >> "$fixture/workflow.yml"; fi
+if [ "${HYDRA_TEST_DAG_SOURCE_TAMPER:-0}" = 1 ]; then
+    # shellcheck source=/dev/null
+    . "$root/tests/workflow_task_source_cases.sh"
+    workflow_source_fault_setup
+fi
 "$root/bin/hydra" workflow validate "$fixture/workflow.yml" > "$fixture/validation"
 run_code=0
 if [ "${HYDRA_TEST_DAG_CRASH:-0}" != 0 ]; then
@@ -120,6 +125,12 @@ if [ "${HYDRA_TEST_DAG_CRASH:-0}" != 0 ]; then
     . "$root/tests/workflow_task_crash_cases.sh"
 else
     "$root/bin/hydra" workflow run "$fixture/workflow.yml" > "$fixture/run.out" 2> "$fixture/run.err" || run_code=$?
+fi
+if [ "${HYDRA_TEST_DAG_SOURCE_TAMPER:-0}" = 1 ]; then
+    run="$(sed -n '1p' "$fixture/run.out")"
+    run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
+    workflow_source_fault_assert
+    exit 0
 fi
 if [ "${HYDRA_TEST_DAG_LOST_ACK:-0}" = 1 ]; then
     [ "$run_code" = 3 ]
@@ -146,5 +157,18 @@ cmp "$fixture/expected" "$run_dir/steps/consume/attempt-1/artifacts/result"
 [ "$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" = 2 ]
 [ -s "$run_dir/steps/produce/attempt-1/remote/collection.json" ]
 [ -s "$run_dir/steps/consume/attempt-1/remote/receipt.json" ]
+if [ "${HYDRA_TEST_DAG_REPLAY:-0}" = 1 ]; then
+    "$root/bin/hydra" workflow replay "$run" > "$fixture/replay-1.json"
+    "$root/bin/hydra" workflow replay "$run" > "$fixture/replay-2.json"
+    cmp "$fixture/replay-1.json" "$fixture/replay-2.json"
+    grep -q '"decisions":\["produce"' "$fixture/replay-1.json"
+    cp "$run_dir/schedule.jsonl" "$fixture/original-journal"
+    sed 's/"decision":"produce"/"decision":"consume"/' "$fixture/original-journal" > "$run_dir/schedule.jsonl"
+    if "$root/bin/hydra" workflow replay "$run" > "$fixture/rejected-replay.json"; then exit 1; fi
+    cp "$fixture/original-journal" "$run_dir/schedule.jsonl"
+    printf '{"schema_version":' >> "$run_dir/schedule.jsonl"
+    if "$root/bin/hydra" workflow replay "$run" > "$fixture/partial-replay.json"; then exit 1; fi
+    cp "$fixture/original-journal" "$run_dir/schedule.jsonl"
+fi
 passed=1
 printf 'Task DAG: producer -> verified collection -> sealed input -> consumer passed\n'

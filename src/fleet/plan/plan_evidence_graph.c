@@ -45,6 +45,17 @@ static void check_contexts(json_object *plan, json_object *errors) {
         if (!context) plan_error(errors, "checks", "missing_validation_context", "distributed validators require an input with validation: plan");
     }
 }
+static void repair_contexts(json_object *plan, json_object *errors) {
+    if (!json_object_get_int(f_field(f_field(plan, "envelope"), "repair_budget"))) return;
+    json_object *steps = f_field(plan, "steps"), *data = f_field(f_field(plan, "data"), "steps");
+    for (size_t i = 0; i < json_object_array_length(steps); i++) {
+        json_object *step = json_object_array_get_idx(steps, i); bool context = false;
+        if (!strcmp(f_string(step, "role"), "verify")) continue;
+        json_object *inputs = f_field(f_field(data, f_string(step, "id")), "inputs");
+        json_object_object_foreach(inputs, name, ref) { (void)name; if (f_field(ref, "repair")) context = true; }
+        if (!context) plan_error(errors, "data", "missing_repair_context", "repairable producers and composers require an input with repair: plan");
+    }
+}
 int plan_evidence_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors) {
     if (json_object_array_length(errors) || !f_number_is(plan, "schema_version", 2)) return 0;
     json_object *deliverables = f_field(plan, "deliverables"); bool final = false;
@@ -54,6 +65,6 @@ int plan_evidence_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], j
         join_consumers(plan, delivery, reach, errors);
     }
     if (!final) plan_error(errors, "deliverables", "missing_final", "at least one composed final artifact is required");
-    check_contexts(plan, errors);
+    check_contexts(plan, errors); repair_contexts(plan, errors);
     return json_object_array_length(errors) ? -1 : 0;
 }

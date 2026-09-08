@@ -394,6 +394,7 @@ workflow_drive() {
             return 1
         }
     fi
+    workflow_plan_repair "$_wd_dir" repair-resume >/dev/null || return 1
     workflow_task_resume "$_wd_dir"
     trap 'workflow_atomic_scalar "$_wd_dir/cancel-requested" "$(date +%s)"' HUP INT TERM
     _wd_parallelism="$(sed -n '1p' "$_wd_dir/parallelism")"
@@ -416,12 +417,11 @@ workflow_drive() {
         if [ ! -f "$_wd_dir/cancel-requested" ]; then
             _wd_slots=$((_wd_parallelism - _wd_active))
             while [ "$_wd_slots" -gt 0 ]; do
-                _wd_next="$(awk -F '\t' '$1=="step" {print $2}' "$_wd_dir/graph.tsv" | while IFS= read -r _wd_id; do
-                    if [ "$(sed -n '1p' "$_wd_dir/steps/$_wd_id/state")" = ready ]; then
-                        printf '%s\n' "$_wd_id"
-                        break
-                    fi
-                done || true)"
+                _wd_next="$(workflow_next_step "$_wd_dir")" || {
+                    workflow_atomic_scalar "$_wd_dir/state" recovery-required
+                    rm -rf "$_wd_drive_lock"
+                    return 1
+                }
                 [ -n "$_wd_next" ] || break
                 _wd_next_kind="$(awk -F '\t' -v id="$_wd_next" '$1=="step" && $2==id { print $3; exit }' "$_wd_dir/graph.tsv")"
                 if [ "$_wd_next_kind" = spawn ]; then
@@ -455,6 +455,11 @@ workflow_drive() {
 
         _wd_nonterminal="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(queued|ready|running|retrying)$' || true)"
         if [ "$_wd_nonterminal" -eq 0 ]; then
+            _wd_repaired="$(workflow_plan_repair "$_wd_dir")" || return 1
+            if [ "$_wd_repaired" = 1 ]; then
+                workflow_event "$_wd_dir" "" run.repair new_candidate_round
+                continue
+            fi
             # A worker can finish after the cancellation snapshot was taken.
             # Refresh it before publishing a terminal run state.
             [ ! -f "$_wd_dir/cancel-requested" ] || workflow_cancel_steps "$_wd_dir"
