@@ -168,6 +168,11 @@ Verification completed successfully with `make lint`, `make test`,
 `make test-fleet`, and `make sanitize-fleet` (UBSan on macOS). Final release-build
 remote acceptance and focused head/exec admission checks also passed after review.
 The build and public fleet help check passed after the final help-text update.
+The subsequent C quality gate passed after extracting admission preparation,
+cleanup, queue-expiry, and inspection helpers: no cognitive-complexity regressions
+against the checked-in baseline. Existing size and analyzer advisories remain;
+the acceptance result does not describe the repository as warning-free.
+Fleet transport and full remote task acceptance passed again after that refactor.
 
 `sh tests/test_admission.sh` checks the public CLI with concurrent submitters,
 unique FIFO sequences, project limits, disk floors, labels, queue bounds and

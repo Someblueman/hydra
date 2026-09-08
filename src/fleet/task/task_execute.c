@@ -71,6 +71,26 @@ static void execution_argv(char **argv, json_object *work, json_object *state, b
     } else { argv[n++] = "workflow"; argv[n++] = resume ? "resume" : "run"; argv[n++] = (char *)f_string(resume ? state : work, resume ? "run_id" : "path"); }
     argv[n] = NULL;
 }
+static int enter_workspace(const char *directory, json_object *package, json_object *state, bool resume,
+        int64_t *startup, struct task_control *control) {
+    json_object *spec = f_field(package, "spec");
+    if (!resume && task_admission_wait(directory, state, control)) return -1;
+    *startup = monotonic() + json_object_get_int64(f_field(f_field(spec, "limits"), "startup_seconds"));
+    if (resume ? task_workspace(directory, state) : prepare(directory, package, state, *startup, &control->process)) {
+        f_string_add(state, "failure", monotonic() >= *startup ? "startup_deadline" : "startup_failed"); return -1;
+    }
+    if (resume && task_admission_context(directory, state, spec)) { f_string_add(state, "failure", "admission_binding_invalid"); return -1; }
+    if (!resume) task_admission_close(directory, state, true);
+    return 0;
+}
+static void close_control(const char *directory, json_object *state, struct task_control *control, bool preparing, bool timeout) {
+    if (preparing) task_admission_close(directory, state, !control->process.stop_unknown);
+    task_control_close(control);
+    const char *cancellation = f_string(state, "cancellation");
+    bool confirmed = cancellation && !strcmp(cancellation, "confirmed_stopped");
+    if (timeout && !control->process.stop_unknown && task_no_agent_workers(state)) confirmed = true;
+    task_admission_children(state, confirmed);
+}
 void task_execute(const char *directory, json_object *package, json_object *state, bool resume) {
     json_object *spec = f_field(package, "spec"), *work = f_field(spec, "work"), *limits = f_field(spec, "limits"), *evidence = NULL;
     struct f_capture cap = {0}; char bytes[32], home[F_PATH]; char *argv[140]; size_t i;
@@ -100,11 +120,7 @@ void task_execute(const char *directory, json_object *package, json_object *stat
     json_object_object_add(state, "owner_pid", json_object_new_int64((int64_t)getpid()));
     f_string_add(state, "launch_intent", "started");
     if (task_write_json(directory, "state.json", state, true)) goto done;
-    if (!resume && task_admission_wait(directory, state, &control)) goto failed;
-    startup = monotonic() + json_object_get_int64(f_field(limits, "startup_seconds"));
-    if (resume ? task_workspace(directory, state) : prepare(directory, package, state, startup, &control.process)) { f_string_add(state, "failure", monotonic() >= startup ? "startup_deadline" : "startup_failed"); goto failed; }
-    if (resume && task_admission_context(directory, state, spec)) { f_string_add(state, "failure", "admission_binding_invalid"); goto failed; }
-    if (!resume) task_admission_close(directory, state, true);
+    if (enter_workspace(directory, package, state, resume, &startup, &control)) goto failed;
     preparing = false;
     if (global) setenv("GIT_CONFIG_GLOBAL", global, 1); else unsetenv("GIT_CONFIG_GLOBAL");
     if (system) setenv("GIT_CONFIG_NOSYSTEM", system, 1); else unsetenv("GIT_CONFIG_NOSYSTEM");
@@ -142,10 +158,7 @@ failed:
     f_string_add(state, "state", "failed");
     if (!f_string(state, "failure")) f_string_add(state, "failure", "evidence_unavailable");
 done:
-    if (preparing) task_admission_close(directory, state, !control.process.stop_unknown);
-    task_control_close(&control);
-    if (f_string(state, "cancellation") && !strcmp(f_string(state, "cancellation"), "confirmed_stopped")) task_admission_children(state);
-    else if (cap.timeout && !control.process.stop_unknown && task_no_agent_workers(state)) task_admission_children(state);
+    close_control(directory, state, &control, preparing, cap.timeout);
     if (!strcmp(f_string(state, "state"), "waiting_approval")) {
         (void)task_write_json(directory, "state.json", state, true);
         goto released;

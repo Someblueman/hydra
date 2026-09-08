@@ -105,10 +105,10 @@ void task_admission_close(const char *directory, json_object *state, bool confir
     else f_string_add(state, "admission_cleanup", "incomplete");
     json_object_put(reply);
 }
-void task_admission_children(json_object *state) {
+void task_admission_children(json_object *state, bool confirmed) {
     const char *prefix = f_string(state, "admission_id"); char root[F_PATH]; DIR *dir; struct dirent *entry;
     bool complete = true;
-    if (!prefix || f_path(root, sizeof(root), f_home, "admission") || !(dir = opendir(root))) return;
+    if (!confirmed || !prefix || f_path(root, sizeof(root), f_home, "admission") || !(dir = opendir(root))) return;
     while ((entry = readdir(dir))) {
         char id[161]; size_t length = strlen(entry->d_name), n = strlen(prefix); json_object *reply;
         char *cancel[] = {(char *)f_hydra, "admission", "cancel", id, NULL};

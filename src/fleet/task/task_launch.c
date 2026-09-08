@@ -51,6 +51,13 @@ static int detach(const char *directory, json_object *package, json_object *stat
     while (waitpid(child, &status, 0) < 0) if (errno != EINTR) return -1;
     return WIFEXITED(status) && !WEXITSTATUS(status) ? 0 : -1;
 }
+static bool queue_expired(json_object *data, json_object *checked, json_object *state) {
+    int64_t accepted_at = json_object_get_int64(f_field(data, "accepted_at")), now = (int64_t)time(NULL);
+    int64_t queue = json_object_get_int64(f_field(f_field(f_field(checked, "data"), "limits"), "queue_seconds"));
+    if (accepted_at >= 0 && now >= accepted_at && now - accepted_at < queue) return false;
+    f_string_add(state, "state", "expired"); f_string_add(state, "failure", now < accepted_at ? "clock_changed" : "queue_deadline");
+    return true;
+}
 static json_object *launch(const char *id, const char *trust, bool resume) {
     char root[F_PATH], directory[F_PATH], path[F_PATH]; int owner = -1;
     json_object *receipt = task_status(id), *package = NULL, *checked = NULL, *state = NULL, *claim = NULL, *result = NULL;
@@ -76,14 +83,9 @@ static json_object *launch(const char *id, const char *trust, bool resume) {
     if (f_path(path, sizeof(path), directory, "package.json") || !(package = f_read_json(path, TASK_PACKAGE_LIMIT))) goto io;
     checked = task_inspect(package);
     if (!json_object_get_boolean(f_field(checked, "ok")) || strcmp(f_string(package, "spec_sha256"), digest)) { result = f_error("fleet-task-start", "recovery_required", "the stored package no longer matches the acceptance digest"); goto done; }
-    if (!resume) {
-        int64_t accepted_at = json_object_get_int64(f_field(data, "accepted_at")), now = (int64_t)time(NULL);
-        int64_t queue = json_object_get_int64(f_field(f_field(f_field(checked, "data"), "limits"), "queue_seconds"));
-        if (accepted_at < 0 || now < accepted_at || now - accepted_at >= queue) {
-            f_string_add(state, "state", "expired"); f_string_add(state, "failure", now < accepted_at ? "clock_changed" : "queue_deadline");
-            if (task_write_json(directory, "state.json", state, true)) goto io;
-            result = task_status(id); goto done;
-        }
+    if (!resume && queue_expired(data, checked, state)) {
+        if (task_write_json(directory, "state.json", state, true)) goto io;
+        result = task_status(id); goto done;
     }
     claim = json_object_new_object(); json_object_object_add(claim, "schema_version", json_object_new_int(1));
     f_string_add(claim, "trusted_spec_sha256", digest); json_object_object_add(claim, "requested_at", json_object_new_int64((int64_t)time(NULL)));

@@ -44,8 +44,8 @@ int task_admission_request(const char *directory, json_object *state, json_objec
 int task_admission_context(const char *directory, json_object *state, json_object *spec);
 int task_admission_wait(const char *directory, json_object *state, struct task_control *control);
 void task_admission_close(const char *directory, json_object *state, bool confirmed);
-/* Call only after managed child termination is independently confirmed. */
-void task_admission_children(json_object *state);
+/* confirmed must reflect independent managed child termination evidence. */
+void task_admission_children(json_object *state, bool confirmed);
 int task_control_open(struct task_control *control, const char *directory, const char *digest, json_object *state, json_object *limits);
 void task_control_close(struct task_control *control);
 void task_cancel_view(const char *directory, const char *digest, json_object *state);
