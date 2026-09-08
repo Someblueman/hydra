@@ -6,6 +6,10 @@ independent check, an explicit recovery decision, repair and verified delivery.
 This qualifies the tested local workflow and terminal subset. It is not a release,
 a remote-agent qualification or a claim of universal terminal compatibility.
 
+This is the historical local exercise before distributed schema-2 plans and the
+richer lifecycle statistics were integrated. Schema and measurement limitations
+below describe that exercise; current statistics are defined in [STATISTICS.md](STATISTICS.md).
+
 ## Actors and execution boundary
 
 Two existing Hydra heads, `planner` and `reviewer`, ran Codex CLI 0.153.3

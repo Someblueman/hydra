@@ -39,6 +39,7 @@ cmd_workflow() {
                 '       hydra workflow status <run-id> [--json]' \
                 '       hydra workflow cancel <run-id>' \
                 '       hydra workflow resume <run-id>' \
+                '       hydra workflow replay <run-id>' \
                 '       hydra workflow requests <run-id> [--json]' \
                 '       hydra workflow decide <run-id> <request-id> approve|reject [--by <label>]'
             [ -n "$_cw_action" ]
@@ -111,6 +112,7 @@ cmd_workflow() {
                 printf 'max_heads\t%s\n' "$_cw_heads"
             } > "$_cw_tmp/manifest.tsv"
             workflow_plan_initialize "$_cw_tmp" || { rm -rf "$_cw_tmp"; return 1; }
+            workflow_task_initialize "$_cw_tmp" || { rm -rf "$_cw_tmp"; return 1; }
             workflow_atomic_scalar "$_cw_tmp/state" queued
             : > "$_cw_tmp/events.jsonl"
             mv "$_cw_tmp" "$_cw_dir" || { rm -rf "$_cw_tmp"; return 1; }
@@ -138,12 +140,20 @@ cmd_workflow() {
                 while IFS="$(printf '\t')" read -r _cw_tag _cw_id _cw_kind _cw_rest; do [ "$_cw_tag" = step ] || continue; printf '  %s [%s]: %s (attempts=%s)\n' "$_cw_id" "$_cw_kind" "$(sed -n '1p' "$_cw_dir/steps/$_cw_id/state")" "$(sed -n '1p' "$_cw_dir/steps/$_cw_id/attempts")"; done < "$_cw_dir/graph.tsv"
             fi
             ;;
+        replay)
+            if [ "$#" -ne 2 ] || ! hydra_valid_id "$2"; then
+                cli_error workflow invalid_arguments "replay requires a valid run ID" "run hydra workflow --help"
+                return 1
+            fi
+            _cw_runs="$(workflow_runs_dir)" || return 1
+            workflow_task_tool replay "$_cw_runs/$2"
+            ;;
         cancel)
             [ "$#" -eq 2 ] || { cli_error workflow invalid_arguments "cancel requires a run ID" "run hydra workflow --help"; return 1; }
             hydra_valid_id "$2" || { cli_error workflow invalid_run_id "invalid workflow run ID: $2" "use a run ID reported by hydra workflow run"; return 1; }
             _cw_runs="$(workflow_runs_dir)" || return 1; _cw_dir="$_cw_runs/$2"; [ -d "$_cw_dir" ] || return 1
             _cw_state="$(sed -n '1p' "$_cw_dir/state")"
-            case "$_cw_state" in running|waiting-approval) ;; *) cli_error workflow not_running "workflow run is already terminal: $_cw_state" "inspect it with hydra workflow status $2"; return 1 ;; esac
+            case "$_cw_state" in running|waiting-approval|waiting-remote) ;; *) cli_error workflow not_running "workflow run is already terminal: $_cw_state" "inspect it with hydra workflow status $2"; return 1 ;; esac
             workflow_atomic_scalar "$_cw_dir/cancel-requested" "$(date +%s)"; workflow_event "$_cw_dir" "" run.cancel_requested
             _cw_owner="$(sed -n '1p' "$_cw_dir/owner-pid" 2>/dev/null || true)"
             if [ "$_cw_state" = running ] && workflow_run_owner_active "$_cw_dir"; then

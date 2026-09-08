@@ -61,9 +61,90 @@ static void parse_cases(const char *root) {
         assert(!f_write(path, large, PLAN_LIMIT + 1, true)); assert(!plan_read(path)); free(large);
     }
 }
+static void report_cases(void) {
+    const char *subject = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    char digest[65], changed[65];
+    json_object *compiled = json_object_new_object(), *plan = fixture(), *check, *report;
+    json_object_object_add(compiled, "plan", plan);
+    check = json_object_array_get_idx(f_field(plan, "checks"), 0);
+    assert(!plan_check_digest(compiled, "check", digest));
+    report = f_parse("{\"schema_version\":2,\"verdict\":\"pass\",\"requirements\":[\"content\"],\"evidence\":\"Checked exact bytes\"}");
+    f_string_add(report, "subject_sha256", subject); f_string_add(report, "validator_sha256", digest);
+    assert(plan_report(compiled, check, report, subject) == PLAN_PASS);
+    f_string_add(report, "verdict", "fail"); assert(plan_report(compiled, check, report, subject) == PLAN_FAIL);
+    f_string_add(report, "verdict", "inconclusive"); assert(plan_report(compiled, check, report, subject) == PLAN_INCONCLUSIVE);
+    f_string_add(report, "verdict", "pass");
+    f_string_add(check, "definition", "Changed acceptance rubric");
+    assert(!plan_check_digest(compiled, "check", changed) && strcmp(digest, changed));
+    assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    f_string_add(report, "validator_sha256", changed);
+    assert(plan_report(compiled, check, report, subject) == PLAN_PASS);
+    assert(plan_report(compiled, check, report, changed) == PLAN_INVALID);
+    json_object_object_add(report, "requirements", f_parse_value("[\"content\",\"content\"]"));
+    assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    json_object_object_add(report, "requirements", f_parse_value("[1]"));
+    assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    json_object_object_add(report, "requirements", f_parse_value("[\"content\"]"));
+    json_object_object_add(report, "schema_version", json_object_new_int(1));
+    assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    json_object_object_del(report, "validator_sha256");
+    assert(plan_report(compiled, check, report, subject) == PLAN_PASS);
+    f_string_add(report, "verdict", "inconclusive");
+    assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    assert(plan_report(compiled, check, NULL, subject) == PLAN_INVALID);
+    json_object_put(report); json_object_put(compiled);
+}
+static void distributed_graph_cases(void) {
+    json_object *plan = plan_read("tests/fixtures/plan-task/plan.json"), *policy = plan_read("tests/fixtures/plan-task/policy.json");
+    assert(plan && policy); expect(plan, policy, NULL);
+    json_object *compose = json_object_array_get_idx(f_field(plan, "steps"), 2);
+    json_object_object_add(compose, "needs", f_parse_value("[\"produce\"]"));
+    expect(plan, policy, "missing_evidence_join");
+    json_object_object_add(compose, "needs", f_parse_value("[\"produce\",\"inspect\"]"));
+    f_string_add(f_field(compose, "args"), "source_step", "produce"); expect(plan, policy, NULL);
+    json_object *validator = json_object_array_get_idx(f_field(plan, "steps"), 1);
+    f_string_add(f_field(validator, "args"), "source_step", "produce"); expect(plan, policy, "invalid_step");
+    json_object_object_del(f_field(validator, "args"), "source_step");
+    json_object *inputs = f_field(f_field(f_field(f_field(plan, "data"), "steps"), "inspect"), "inputs");
+    json_object_object_del(inputs, "validation"); expect(plan, policy, "missing_validation_context");
+    json_object_object_add(inputs, "validation", f_parse_value("{\"validation\":\"plan\"}"));
+    json_object_object_del(json_object_array_get_idx(f_field(plan, "checks"), 0), "step");
+    expect(plan, policy, "invalid_verification");
+    json_object_put(plan); json_object_put(policy);
+}
+static void repair_policy_cases(void) {
+    json_object *plan = plan_read("tests/fixtures/plan-task/plan.json"), *policy = plan_read("tests/fixtures/plan-task/policy.json");
+    json_object_object_add(f_field(plan, "envelope"), "repair_budget", json_object_new_int(1)); expect(plan, policy, "over_budget");
+    json_object_object_add(f_field(policy, "envelope"), "repair_budget", json_object_new_int(1)); expect(plan, policy, "missing_repair_context");
+    const char *producers[] = {"produce", "compose"};
+    for (size_t i = 0; i < 2; i++) {
+        json_object *inputs = f_field(f_field(f_field(f_field(plan, "data"), "steps"), producers[i]), "inputs");
+        json_object_object_add(inputs, "repair", f_parse("{\"repair\":\"plan\"}"));
+    }
+    expect(plan, policy, NULL);
+    json_object_object_add(f_field(plan, "envelope"), "repair_budget", json_object_new_int(11)); expect(plan, policy, "invalid_policy");
+    json_object_put(plan); plan = fixture();
+    json_object_object_add(f_field(plan, "envelope"), "repair_budget", json_object_new_int(1)); expect(plan, policy, "unsupported_repair");
+    json_object_put(plan); json_object_put(policy);
+}
+static void check_ownership_cases(void) {
+    const char *plans[] = {"tests/fixtures/plan/plan.json", "tests/fixtures/plan-task/plan.json"};
+    const char *policies[] = {"tests/fixtures/plan/policy.json", "tests/fixtures/plan-task/policy.json"};
+    for (size_t i = 0; i < 2; i++) {
+        json_object *plan = plan_read(plans[i]), *policy = plan_read(policies[i]);
+        json_object *requirements = f_field(plan, "requirements"), *checks = f_field(plan, "checks");
+        json_object *extra = plan_canonical(json_object_array_get_idx(requirements, 0));
+        f_string_add(extra, "id", "extra"); json_object_array_add(requirements, extra);
+        expect(plan, policy, NULL); /* A check may own several requirements. */
+        json_object *orphan = plan_canonical(json_object_array_get_idx(checks, 0));
+        f_string_add(orphan, "id", "orphan"); json_object_array_add(checks, orphan);
+        expect(plan, policy, "orphan_check");
+        json_object_put(plan); json_object_put(policy);
+    }
+}
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    graph_cases(); parse_cases(root); assert(!f_remove_tree(root));
+    graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
     puts("planning graph, policy, canonical JSON and parser checks passed"); return 0;
 }

@@ -14,7 +14,9 @@ bool task_keys(json_object *object, const char *const keys[]);
 /* Validation also creates a canonical copy; the caller owns the result. */
 json_object *task_spec(json_object *input, bool prepared);
 int task_json_hash(json_object *object, const char *scratch, char digest[65]);
-json_object *task_prepare(const char *source, json_object *spec);
+/* Borrowed roots; NULL input_source selects the resolved source directory.
+ * Caller owns the returned envelope. */
+json_object *task_prepare(const char *source, const char *input_source, json_object *spec);
 json_object *task_inspect(json_object *package);
 json_object *task_cli(int argc, char **argv);
 json_object *task_remote_cli(int argc, char **argv);
@@ -39,6 +41,13 @@ struct task_control {
     json_object *state;
     bool cancel_seen;
 };
+/* Arguments are borrowed. These functions persist shell admission evidence. */
+int task_admission_request(const char *directory, json_object *state, json_object *accepted, json_object *spec);
+int task_admission_context(const char *directory, json_object *state, json_object *spec);
+int task_admission_wait(const char *directory, json_object *state, struct task_control *control);
+void task_admission_close(const char *directory, json_object *state, bool confirmed);
+/* confirmed must reflect independent managed child termination evidence. */
+void task_admission_children(json_object *state, bool confirmed);
 int task_control_open(struct task_control *control, const char *directory, const char *digest, json_object *state, json_object *limits);
 void task_control_close(struct task_control *control);
 void task_cancel_view(const char *directory, const char *digest, json_object *state);

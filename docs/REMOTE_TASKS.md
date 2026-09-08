@@ -45,6 +45,14 @@ hydra fleet task prepare --source /path/to/repository \
 hydra fleet task inspect --input /tmp/task-package.json
 ```
 
+Use `prepare --inputs-from /path/to/sealed-inputs` to read selected input paths
+from a separate directory. The default remains the source directory. This lets a
+coordinator package verified producer outputs without modifying its source
+checkout. Input selection, binary encoding, bounds and checksums are unchanged;
+missing inputs do not fall back to source files. The source bundle still contains
+the exact declared commit. This option packages bytes; it does not itself verify
+their producer provenance or grant permission to dispatch them.
+
 The preparation response previews the host, project, exact commit, selected input
 paths, byte counts and SHA-256 hashes, output declarations, limits, package size,
 and specification digest. It omits the actual transferred file contents. Inspect
@@ -82,7 +90,8 @@ The bundle contains the exact commit and reachable Git history under one ref,
 values, credentials, or unselected working-tree files are copied. **Committed
 history is included**; choose source history appropriate for the trusted destination.
 Dirty tracked files remain untouched and are excluded unless explicitly selected
-as inputs. Input paths are relative to the source directory and can select
+as inputs. Input paths are relative to `--inputs-from` when supplied, otherwise
+the source directory, and can select
 untracked files. Only regular files are accepted; no path component may be a
 symlink. Binary input bytes are preserved. Inputs are separate package payloads,
 not modifications to the source commit.
@@ -131,7 +140,8 @@ hydra fleet task status build --id task_ID_FROM_RECEIPT
 The selected alias must match the prepared specification. The receiver requires
 an existing registered project mapping, working Git/tmux/Hydra executables, and
 supported required capabilities. The receiver recognizes the existing local `exec`,
-`workflow`, `git`, and `tmux` capabilities. Other required names fail explicitly;
+`workflow`, `git`, and `tmux` capabilities. `label.NAME` requires the receiver's
+explicitly configured admission label `NAME`. Other unsupported names fail explicitly;
 executable detection does not qualify provider prompt delivery or resume.
 The handshake advertises task protocol 1 with `task-accept`, `task-start`,
 `task-status`, `task-cancel`, `task-logs`, and `task-result`.
@@ -211,7 +221,11 @@ actual workflow run ID; its existing attempt/gate records remain authoritative.
 does not imply all agent sessions stopped, a human approved changes, or changes
 were integrated. Missing execution evidence is not invented.
 
-Queue time runs from recorded acceptance to launch, with clock reversal refused.
+Queue time runs from recorded acceptance to the initial admission grant, with clock
+reversal refused. Host/project capacity, disk floors, labels, and queue bounds are
+checked by the receiving shell authority; a client snapshot cannot grant capacity.
+Waiting owners expose their reason in `runtime.admission` without creating a
+workspace. See [resource admission](ADMISSION.md) for policy and release semantics.
 Startup uses one monotonic deadline across checkout, initialization, and head
 creation. Execution has its own monotonic deadline around the shell CLI process
 group. `queue_deadline`, `startup_deadline`, and `execution_deadline` are separate

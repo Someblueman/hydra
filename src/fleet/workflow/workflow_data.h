@@ -15,5 +15,8 @@ bool wd_name(const char *name);
 int wd_initialize(json_object *manifest, const char *source, const char *run);
 int wd_prepare(json_object *manifest, const char *run, const char *step, const char *attempt);
 int wd_seal(json_object *manifest, const char *step, const char *attempt);
+int wd_verify_output(json_object *manifest, const char *step, const char *attempt);
 int wd_verify(json_object *manifest, const char *run);
+int wd_producer_directory(const char *run, const char *step, char directory[F_PATH]);
+json_object *wd_graph_read(const char *path);
 #endif

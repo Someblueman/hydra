@@ -93,7 +93,7 @@ json_object *f_cli(int argc, char **argv) {
     if (!strcmp(action, "task")) return task_cli(argc - 1, argv + 1);
     if (!strcmp(action, "help") || !strcmp(action, "--help")) {
         json_object *data = json_object_new_object();
-        f_string_add(data, "usage", "fleet list|doctor|reconcile|watch [--timeout N --jobs N]; fleet task help; fleet auth help; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet package --source DIR --binary FILE --output FILE; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path [--instance ID] [--input FILE --output FILE --run ID] -- ARGS");
+        f_string_add(data, "usage", "fleet list|doctor|reconcile|watch [--timeout N --jobs N]; fleet admission HOST -- status [--json|--summary]; fleet admission HOST -- inspect ID; fleet task help; fleet auth help; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet package --source DIR --binary FILE --output FILE; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path [--instance ID] [--input FILE --output FILE --run ID] -- ARGS");
         return f_success("fleet-help", data);
     }
     result = parse_options(argc, argv, &options);
@@ -148,7 +148,7 @@ json_object *f_cli(int argc, char **argv) {
     json_object_put(request);
     if (!json_object_get_boolean(f_field(result, "ok"))) {
         const char *code = f_string(f_field(result, "error"), "code");
-        if (code && (!strcmp(code, "timeout") || !strcmp(code, "offline") || !strcmp(code, "cancelled")) && strcmp(action, "list") && strcmp(action, "doctor"))
+        if (code && (!strcmp(code, "timeout") || !strcmp(code, "offline") || !strcmp(code, "cancelled")) && strcmp(action, "list") && strcmp(action, "doctor") && strcmp(action, "admission"))
             f_string_add(f_field(result, "error"), "code", "outcome_unknown");
         return result;
     }

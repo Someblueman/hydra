@@ -128,7 +128,18 @@ jobs:
       run: brew install tmux shellcheck json-c pkg-config
 
     - name: Build and test native protocol and mission control
-      run: make build-fleet test-fleet build-core build-tui test-c test-tui test-tui-pty test-parity
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-native
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make build-fleet test-fleet build-core build-tui test-c test-tui test-tui-pty test-parity
+
+    - name: Qualify native workspace, statistics and standalone export
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-workspace
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make test-visualization test-workspace-pty test-attached-pty test-plan-workspace test-statistics test-termviz-export
 
     - name: Package exact source commit
       run: |
@@ -138,10 +149,18 @@ jobs:
         test "$(cat "$tui_package_dir/hydra-tui.source")" = "$(git rev-parse HEAD)"
 
     - name: Run sanitizer tests
-      run: make sanitize
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-sanitize
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make sanitize
 
     - name: Qualify shell-only and offline native installs
-      run: make test-install test-native-install
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-install
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make test-install test-native-install
 
     - name: Inspect release dependencies
       run: |

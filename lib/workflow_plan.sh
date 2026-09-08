@@ -37,6 +37,10 @@ cmd_workflow_plan() (
             [ "$#" -eq 2 ] || exit 1
             workflow_plan_tool tui-data "$2"
             ;;
+        check-definition)
+            [ "$#" -eq 3 ] || exit 1
+            workflow_plan_tool check-definition "$2" "$3"
+            ;;
         result)
             [ "$#" -eq 2 ] && hydra_valid_id "$2" || exit 1
             workflow_plan_tool result "$(workflow_runs_dir)/$2"
@@ -75,6 +79,7 @@ cmd_workflow_plan() (
                 '       hydra workflow plan show <compiled.json> [--json]' \
                 '       hydra workflow plan run <compiled.json> --accept <sha256>' \
                 '       hydra workflow plan result <run-id>' \
+                '       hydra workflow plan check-definition <compiled.json> <check-id>' \
                 'Compile from the source repository. Keep compiled output outside it.' \
                 'Execution uses the existing workflow status, cancel and resume commands.'
             ;;
@@ -126,4 +131,13 @@ workflow_plan_finish() {
     # Reading statistics never reruns verification or rewrites this observation.
     workflow_atomic_scalar "$1/verification-plan-sha256" "$(sed -n '1p' "$1/plan-accepted")" &&
         workflow_atomic_scalar "$1/verified-at" "$(date +%s)"
+}
+
+workflow_plan_repair() {
+    if [ ! -f "$1/compiled.json" ]; then printf '0\n'; return 0; fi
+    workflow_plan_tool "${2:-repair}" "$1" || {
+        workflow_atomic_scalar "$1/state" recovery-required
+        rm -rf "$1/.drive.lock"
+        return 1
+    }
 }

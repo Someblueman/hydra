@@ -4,7 +4,9 @@ set -eu
 viz_root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 viz_tmp="$(mktemp -d "${TMPDIR:-/tmp}/hydra-visualization.XXXXXX")"
 viz_bin="$viz_root/bin/hydra"
-viz_tui="${HYDRA_VISUAL_TEST_BIN:-$viz_root/build/hydra-tui}"
+viz_build="${BUILD_DIR:-$viz_root/build}"
+case "$viz_build" in /*) ;; *) viz_build="$viz_root/$viz_build" ;; esac
+viz_tui="${HYDRA_VISUAL_TEST_BIN:-$viz_build/hydra-tui}"
 export HYDRA_HOME="$viz_tmp/home" HYDRA_SKIP_AI=1 HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
 cleanup() {
     if [ -d "$viz_tmp/repo/.git" ]; then
@@ -135,7 +137,7 @@ awk -F '\t' '$1=="S" && $3=="build" {start=($7=="-")}
     --view statistics --ascii --size 140x40 > "$viz_tmp/statistics.out"
 grep -q 'Timing 2/4' "$viz_tmp/statistics.out"
 grep -q 'Attempts 3/4' "$viz_tmp/statistics.out"
-"${BUILD_DIR:-$viz_root/build}/test-statistics" "$viz_tmp/missing-statistics.tsv" "$viz_run" > "$viz_tmp/metrics.txt"
+"$viz_build/test-statistics" "$viz_tmp/missing-statistics.tsv" "$viz_run" > "$viz_tmp/metrics.txt"
 awk '$1==0 {q=($2==4 && $3==3)} $1==1 {e=($2==1 && $3==0 && $4==0)}
      $1==3 {r=($2==1 && $3==0 && $4==0)} END {exit !(q && e && r)}' "$viz_tmp/metrics.txt"
 printf 'PASS: real workflow execution, read-only projection, dependency graph, responsive bounds, invalid graph rejection\n'

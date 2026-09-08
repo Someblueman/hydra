@@ -53,6 +53,9 @@ prioritize counts, selection and evidence. The minimum supported size is 40x10.
   zero attempts and no first start. Missing attempt evidence leaves eligibility
   uncertain and is conservatively counted as unknown. Dependency waiting and
   retry backoff are excluded. Queue delay measures scheduling after readiness.
+  Start means coordinator dispatch; downstream host-admission waiting is included
+  in total run duration, not measured as a separate queue sample. Task steps whose
+  first-dispatch boundary is not recorded remain unknown.
 - **Total execution:** run `started-at` (first coordinator drive) to `completed-at`
   (terminal result), in seconds. Denominator: succeeded, failed and cancelled runs.
   Includes child execution, dependency waits, approval waits, retry backoff and

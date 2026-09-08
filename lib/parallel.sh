@@ -435,7 +435,7 @@ parallel_gate_run() {
     _pgr_tmp="$(mktemp -d "$_pgr_gate/runs/.run.XXXXXX")" || {
         release_lock "$_pgr_lock"; return 1;
     }
-    if (cd "$PARALLEL_WORKTREE" && "$@") > "$_pgr_tmp/stdout.raw" 2> "$_pgr_tmp/stderr.raw"; then
+    if (cd "$PARALLEL_WORKTREE" && admission_command "$_pgr_run" "$LIFECYCLE_PROJECT_ID" "$_pgr_tmp" "$@") > "$_pgr_tmp/stdout.raw" 2> "$_pgr_tmp/stderr.raw"; then
         _pgr_status=0
     else
         _pgr_status=$?

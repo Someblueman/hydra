@@ -1,13 +1,32 @@
+#define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include <stdlib.h>
 #include "fleet/support/json.h"
 #include "fleet/plan/plan.h"
 #include "fleet/task/task.h"
 #include <string.h>
-#include <stdlib.h>
 
 static void items(FILE *out, const char *label, json_object *array) {
     size_t i; fprintf(out, "%s:", label);
     for (i = 0; i < json_object_array_length(array); i++) fprintf(out, " %s%s", i ? ", " : "", f_text(json_object_array_get_idx(array, i)));
     fputc('\n', out);
+}
+static void step_preview(json_object *compiled, json_object *step, FILE *out) {
+    const char *id = f_string(step, "id"), *head = f_string(f_field(step, "args"), "head");
+    json_object *binding = f_field(f_field(compiled, "tasks"), id);
+    if (binding) {
+        json_object *spec = f_field(binding, "spec");
+        fprintf(out, "  %s: %s/task on %s:%s; ", id, f_string(step, "role"), f_string(spec, "host"), f_string(spec, "project"));
+        items(out, "after", f_field(step, "needs"));
+        fprintf(out, "    recipe: %s\n", json_object_to_json_string_ext(spec, JSON_C_TO_STRING_PLAIN));
+        fprintf(out, "    transport: %s\n", json_object_to_json_string_ext(f_field(binding, "destination"), JSON_C_TO_STRING_PLAIN));
+    } else {
+        fprintf(out, "  %s: %s/%s on local:%s; ", id, f_string(step, "role"), f_string(step, "kind"), head ? head : f_string(f_field(step, "args"), "branch"));
+        items(out, "after", f_field(step, "needs"));
+        fprintf(out, "    recipe: %s\n", json_object_to_json_string_ext(f_field(step, "args"), JSON_C_TO_STRING_PLAIN));
+    }
 }
 int plan_preview(json_object *compiled, FILE *out) {
     json_object *plan = f_field(compiled, "plan"), *errors = json_object_new_array(), *env = f_field(plan, "envelope");
@@ -18,22 +37,17 @@ int plan_preview(json_object *compiled, FILE *out) {
     fprintf(out, "Plan %s (%s)\n%s\n\n", f_string(plan, "id"), f_string(compiled, "compiler"), f_string(plan, "objective"));
     items(out, "Context", f_field(plan, "context")); items(out, "Assumptions", f_field(plan, "assumptions")); items(out, "Open questions", f_field(plan, "questions"));
     items(out, "Hosts", f_field(env, "hosts")); items(out, "Tools", f_field(env, "tools")); items(out, "Effects", f_field(env, "effects")); items(out, "Declared repository writes", f_field(env, "writes"));
-    fprintf(out, "Budgets: parallelism %d; wall time %d seconds; artifacts %lld bytes; heads %d; disk floor %d MiB; retries 0; repairs 0\n",
+    fprintf(out, "Budgets: parallelism %d; wall time %d seconds; artifacts %lld bytes; heads %d; disk floor %d MiB; retries 0; repairs %d\n",
         json_object_get_int(f_field(env, "parallelism")), json_object_get_int(f_field(env, "timeout_seconds")),
-        (long long)json_object_get_int64(f_field(env, "artifact_bytes")), json_object_get_int(f_field(env, "max_heads")), json_object_get_int(f_field(env, "disk_mb")));
+        (long long)json_object_get_int64(f_field(env, "artifact_bytes")), json_object_get_int(f_field(env, "max_heads")), json_object_get_int(f_field(env, "disk_mb")), json_object_get_int(f_field(env, "repair_budget")));
     {
         json_object *steps = f_field(plan, "steps"), *deliverables = f_field(plan, "deliverables"), *requirements = f_field(plan, "requirements");
         fprintf(out, "%s\n", "\nWork:");
-        for (i = 0; i < json_object_array_length(steps); i++) {
-            json_object *step = json_object_array_get_idx(steps, i); const char *head = f_string(f_field(step, "args"), "head");
-            fprintf(out, "  %s: %s/%s on local:%s; ", f_string(step, "id"), f_string(step, "role"), f_string(step, "kind"), head ? head : f_string(f_field(step, "args"), "branch"));
-            items(out, "after", f_field(step, "needs"));
-            fprintf(out, "    recipe: %s\n", json_object_to_json_string_ext(f_field(step, "args"), JSON_C_TO_STRING_PLAIN));
-        }
-        fprintf(out, "%s\n", "\nFinal deliverables:");
+        for (i = 0; i < json_object_array_length(steps); i++) step_preview(compiled, json_object_array_get_idx(steps, i), out);
+        fprintf(out, "%s\n", "\nDeliverables:");
         for (i = 0; i < json_object_array_length(deliverables); i++) {
             json_object *d = json_object_array_get_idx(deliverables, i);
-            fprintf(out, "  %s: %s (%s/%s -> sealed run artifact)\n", f_string(d, "id"), f_string(d, "description"), f_string(d, "step"), f_string(d, "output"));
+            fprintf(out, "  %s: %s (%s/%s -> %s)\n", f_string(d, "id"), f_string(d, "description"), f_string(d, "step"), f_string(d, "output"), f_string(d, "destination"));
         }
         fprintf(out, "%s\n", "\nRequired acceptance:");
         for (i = 0; i < json_object_array_length(requirements); i++) {

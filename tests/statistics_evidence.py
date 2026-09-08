@@ -11,6 +11,8 @@ expected_recoveries = sys.argv[3]
 verified = sys.argv[4] == "verified"
 root = hydra.parent.parent
 build = Path(os.environ.get("BUILD_DIR", root / "build"))
+if not build.is_absolute():
+    build = root / build
 
 
 def scalar(path):
