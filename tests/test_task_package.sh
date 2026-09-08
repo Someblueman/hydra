@@ -41,6 +41,21 @@ grep -q '"ok":true' "$fixture/inspected"
 git -C "$fixture/source" status --porcelain > "$fixture/after"
 cmp "$fixture/before" "$fixture/after"
 [ "$(cat "$fixture/source/code")" = 'local dirty work' ]
+# Downstream inputs come from sealed coordinator storage, not the source tree.
+mkdir "$fixture/handoff"
+printf 'verified producer bytes\000tail\n' > "$fixture/handoff/context"
+handoff_hash="$(shasum -a 256 "$fixture/handoff/context" | cut -d ' ' -f 1)"
+task prepare --source "$fixture/source" --inputs-from "$fixture/handoff" --spec "$fixture/spec" --output "$fixture/handoff-package" > "$fixture/handoff-preview"
+grep -q "\"sha256\":\"$handoff_hash\"" "$fixture/handoff-preview"
+task inspect --input "$fixture/handoff-package" > "$fixture/handoff-inspected"
+grep -q "\"commit\":\"$commit\"" "$fixture/handoff-inspected"
+git -C "$fixture/source" status --porcelain > "$fixture/after-handoff"
+cmp "$fixture/before" "$fixture/after-handoff"
+mv "$fixture/handoff/context" "$fixture/handoff/saved"
+if task prepare --source "$fixture/source" --inputs-from "$fixture/handoff" --spec "$fixture/spec" --output "$fixture/missing-handoff" >/dev/null; then exit 1; fi
+ln -s saved "$fixture/handoff/context"
+if task prepare --source "$fixture/source" --inputs-from "$fixture/handoff" --spec "$fixture/spec" --output "$fixture/linked-handoff" >/dev/null; then exit 1; fi
+if task inspect --input "$fixture/package" --inputs-from "$fixture/handoff" >/dev/null; then exit 1; fi
 if task prepare --source "$fixture/source" --spec "$fixture/spec" --output "$fixture/package" > "$fixture/error"; then exit 1; fi
 grep -q '"code":"io_failed"' "$fixture/error"
 # Changing bytes or immutable fields without rebinding checksums must fail.

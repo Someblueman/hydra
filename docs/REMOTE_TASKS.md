@@ -45,6 +45,14 @@ hydra fleet task prepare --source /path/to/repository \
 hydra fleet task inspect --input /tmp/task-package.json
 ```
 
+Use `prepare --inputs-from /path/to/sealed-inputs` to read selected input paths
+from a separate directory. The default remains the source directory. This lets a
+coordinator package verified producer outputs without modifying its source
+checkout. Input selection, binary encoding, bounds and checksums are unchanged;
+missing inputs do not fall back to source files. The source bundle still contains
+the exact declared commit. This option packages bytes; it does not itself verify
+their producer provenance or grant permission to dispatch them.
+
 The preparation response previews the host, project, exact commit, selected input
 paths, byte counts and SHA-256 hashes, output declarations, limits, package size,
 and specification digest. It omits the actual transferred file contents. Inspect
@@ -82,7 +90,8 @@ The bundle contains the exact commit and reachable Git history under one ref,
 values, credentials, or unselected working-tree files are copied. **Committed
 history is included**; choose source history appropriate for the trusted destination.
 Dirty tracked files remain untouched and are excluded unless explicitly selected
-as inputs. Input paths are relative to the source directory and can select
+as inputs. Input paths are relative to `--inputs-from` when supplied, otherwise
+the source directory, and can select
 untracked files. Only regular files are accepted; no path component may be a
 symlink. Binary input bytes are preserved. Inputs are separate package payloads,
 not modifications to the source commit.

@@ -14,7 +14,9 @@ bool task_keys(json_object *object, const char *const keys[]);
 /* Validation also creates a canonical copy; the caller owns the result. */
 json_object *task_spec(json_object *input, bool prepared);
 int task_json_hash(json_object *object, const char *scratch, char digest[65]);
-json_object *task_prepare(const char *source, json_object *spec);
+/* Borrowed roots; NULL input_source selects the resolved source directory.
+ * Caller owns the returned envelope. */
+json_object *task_prepare(const char *source, const char *input_source, json_object *spec);
 json_object *task_inspect(json_object *package);
 json_object *task_cli(int argc, char **argv);
 json_object *task_remote_cli(int argc, char **argv);
