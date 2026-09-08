@@ -196,7 +196,7 @@ results. Live mappings, locks, owner PIDs, and active workflows are excluded.
 History import goes under `$HYDRA_HOME/fleet/history` as an inert archive; it is
 never imported into runtime workflow state or used as a resume shortcut.
 
-## Native fleet view
+## Admission inspection
 
 Inspect receiving-host admission without changing policy:
 
@@ -209,6 +209,8 @@ Initialized-host snapshots include capacity and observation timestamps. These ar
 observations; the receiving shell authority grants every reservation against live
 policy. See [resource admission](ADMISSION.md) for limits, labels, queue deadlines,
 and retained claims after owner loss.
+
+## Native fleet view
 
 ```sh
 make build-tui

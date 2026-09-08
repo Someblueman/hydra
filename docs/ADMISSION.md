@@ -7,11 +7,10 @@ The CLI resolves its executable and home before workers change directories.
 The home and admission directory must be owned by the current user and must not
 be writable by the group or other users. A home symlink resolves to the same store.
 
-## Implementation status
+## Runtime paths
 
 Local exec workers, gates, spawn, resume, and spawn queue processing use the same
-admission authority. Workflow steps and remote tasks use these paths. Final
-resource-admission qualification remains in progress; roadmap item 4 remains open.
+admission authority. Workflow steps and remote tasks use these paths.
 
 Every exec worker obtains its own slot before launching its command, including
 each worker selected by `exec --all --jobs N`. `HYDRA_ADMISSION_QUEUE_SECONDS`
@@ -147,7 +146,28 @@ head snapshots include this summary for initialized hosts. Full status and
 `inspect ID` expose individual queue and reservation records. Remote admission
 inspection is read-only; configure receiver policy on the receiving host.
 
-## Primitive verification
+## Acceptance — 8 September 2026
+
+Resource admission through implementation commit `6972f99` passed local macOS
+qualification. Remote cases use a controlled SSH boundary with real receiving
+processes, Git, tmux, and isolated host state. This qualification covers admission
+behavior; live-provider and separate-host qualification retain their existing scope.
+
+| Requirement | Acceptance evidence |
+| --- | --- |
+| Atomic host-wide FIFO and bounded queue | Twelve simultaneous CLI submitters produce one reservation, eleven queued entries, and unique sequences; queue overflow is refused. |
+| Host/project concurrency | Real local commands across projects cannot overlap with one host slot; two remote task clones share the original project's one-slot limit and cannot overlap. |
+| Disk floors and capability labels | CLI disk-floor refusal, missing-label refusal, and a matching-label remote execution. |
+| Stale observations cannot grant capacity | A remote zero-use snapshot is captured before capacity is occupied; later submission queues against the receiving authority. |
+| Bounded queue age and cancellation | Original deadlines survive repeated start; expiry and queued cancellation occur without workspace creation; running cancellation confirms termination and reconciles task-scoped claims. |
+| Unknown ownership retains claims | Killing local and remote execution owners leaves reservations held; repeated remote start refuses replay. |
+| Head, gate, and queue integration | Startup/resume stop before effects when blocked; interactive instances retain slots; gates and queue processing use the same authority. |
+| Inspectable capacity and freshness | Public local/remote status and inspect expose state, reasons, counts, labels, timestamps, and bounded summaries. CPU/memory do not grant slots. |
+
+Verification completed successfully with `make lint`, `make test`,
+`make test-fleet`, and `make sanitize-fleet` (UBSan on macOS). Final release-build
+remote acceptance and focused head/exec admission checks also passed after review.
+The build and public fleet help check passed after the final help-text update.
 
 `sh tests/test_admission.sh` checks the public CLI with concurrent submitters,
 unique FIFO sequences, project limits, disk floors, labels, queue bounds and
@@ -163,4 +183,3 @@ the real receiver through the fixture's SSH boundary: stale capacity, queue boun
 queued cancellation, expiry before clone, capability labels, and concurrent tasks
 sharing the original project's limit. The task suite also checks that losing an
 owner retains its execution claim and confirmed cancellation releases child claims.
-Final broader qualification remains open.

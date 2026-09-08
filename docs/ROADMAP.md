@@ -108,24 +108,6 @@ fixture tests and local authentication do not close another provider's remote
 requirement. Claude remains explicitly deferred rather than blocking the other
 implemented profiles.
 
-#### 4. Resource admission
-
-Start with explicit hosts and FIFO admission. Build this boundary alongside the
-first distributed DAG slice; automatic placement depends on it.
-
-- [ ] Add host/project concurrency limits, disk floors, capability labels, queue age,
-      and bounded backpressure. Reserve host-wide resources atomically at the
-      receiving host, rather than trusting client observations or project-local
-      allocation alone. Define reservation release and retain unresolved ownership.
-- [ ] Expose capacity, reservations, queue state, and observation freshness for
-      inspection and later placement. Treat CPU/memory observations as signals,
-      not enforcement or proof that another task can safely start.
-
-Acceptance: concurrent submitters cannot exceed the host's admission limit; stale
-capacity observations cannot overbook it. An incompatible or full host explains why
-work is queued or refused. Queue deadlines and cancellation have bounded behavior;
-unknown execution does not silently release its claim.
-
 #### 5. Distributed DAG execution and independent validation
 
 Extend the existing finite workflow DAG across explicitly selected hosts. Producers
