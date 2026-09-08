@@ -72,6 +72,9 @@ transport and one workflow execution authority as coordination expands across ho
 ### Candidate features
 
 Select these priorities in dependency order, with independently useful scope.
+The observation milestones in priority 7 can start against current remote tasks
+before tmux removal; they build on existing distributed execution and do not wait
+for load balancing.
 The implemented remote submission and collection interface is documented in
 [Remote tasks](REMOTE_TASKS.md), with [qualification evidence](REMOTE_TASK_ACCEPTANCE.md).
 Local objective planning is implemented; see the [planner recipe](PLANNER_RECIPE.md)
@@ -146,9 +149,10 @@ These are delivery milestones, not assigned release versions.
       plan through public interfaces. Exercise duplicate submission, lost start
       response, owner death, cancellation, and bounded logs; uncertain work is never
       replayed and retained reservations are not released by terminal absence.
-- [ ] **T3 — Distributed qualification and operator access.** Use T2 for priority
-      5's two-host fan-out, validation, join, composition, and final check. Expose
-      run/step/attempt logs and owner state through CLI/TUI without requiring attach.
+- [ ] **T3 — Distributed qualification and operator access.** Use T2 for the
+      implemented two-host fan-out, validation, join, composition, and final check
+      described in [Distributed DAGs](DISTRIBUTED_DAG.md). Reuse
+      priority 7's run/step/attempt visibility through CLI/TUI without requiring attach.
       Interactive terminal access remains an explicit capability; viewing logs is
       not attachment to a headless process's stdin.
       Acceptance: the complete distributed scenario succeeds with tmux absent on
@@ -474,15 +478,67 @@ execution risks during worker/network failures. Hydra should borrow the placemen
 ideas while retaining its stricter unknown-outcome boundary. These are design
 recommendations; no Hydra balancing prototype or performance qualification exists.
 
-#### 7. Run diagnostics and bounded retention
+#### 7. Remote execution visibility, diagnostics, and bounded retention
 
-Explain what needs attention through existing CLI and TUI surfaces. Extend item
-9's obligation/evidence explanations as those milestones land; useful diagnostics
-need not wait for load balancing.
+Organize visibility around runs, tasks, and execution attempts, with hosts,
+workspaces, provider conversations, and optional terminals as related resources.
+An agent is a managed process, not an OS-isolated container. Terminal replacement
+alone does not provide execution visibility or isolation. These milestones can
+start before T1–T3 using the existing remote task owner and observation endpoints;
+apply them to the implemented [distributed runs](DISTRIBUTED_DAG.md). Extend item
+9's obligation/evidence explanations as those milestones land. V1–V4 are planned
+operator visibility and qualification work, not claims of new runtime behavior.
 
-- [ ] Add effective configuration, "why waiting?", host/attempt timelines, artifact
-      inventories, and explicit stale-observation labels. Include the unsatisfied
-      contract/obligation, exact subject, missing evidence, and next useful action.
+- [ ] **V1 — Run and host overview with explicit observation freshness.** Define a
+      versioned receiver snapshot with task/run/step/attempt identity, assigned host,
+      workspace, agent profile, execution owner, state, pending requests, and
+      observation timestamps. Show effective configuration and concrete waiting
+      reasons: admission, dependency, authentication, approval, or reconciliation.
+      Include the unsatisfied contract/obligation, exact subject, missing evidence,
+      and next useful action as item 9 supplies those records.
+      Keep connection health and observation age distinct from last-known execution
+      state. The receiver owns execution observations; the coordinator owns graph
+      and assignment decisions. Views do not become another state authority.
+      Acceptance: CLI and TUI identify the owner, waiting reason, and next action
+      without raw-state inspection. Disconnect one host while others stay reachable:
+      its cached state is visibly stale, with last-confirmed time, and is never
+      relabeled failed or confirmed running merely because transport was lost.
+- [ ] **V2 — Attempt detail, ordered events, and resumable logs.** Reuse existing
+      run/step/attempt log selectors and byte offsets; add a bounded, versioned event
+      observation contract with stable sequence/cursor semantics. Define reconnect,
+      duplicate-event, retention-gap, and stream-reset behavior. Expose attempt
+      history, artifact inventory, provider observations, and approval requests.
+      Present process exit, result collection, verification verdict, and approval
+      separately. Start with bounded polling; streaming is optional when measured
+      responsiveness or traffic justifies it. Logs do not imply interactive stdin
+      access; attach remains a capability of an actual terminal.
+      Acceptance: reconnect resumes logs and event observation from recorded cursors
+      without silently omitting transitions or presenting duplicate transitions.
+      Missing retained history is explicitly reported. A successful process with
+      missing artifacts or failed verification cannot appear as an accepted result.
+- [ ] **V3 — Controls with visible acknowledgments.** Present cancellation requested,
+      delivered, and confirmed stopped as distinct stages. Bind approvals and other
+      mutations to the exact task/attempt or candidate they concern; preserve existing
+      authorization and mutation paths. Unknown cancellation remains visible. Keep
+      cancellation separate from workspace deletion and retain unresolved admission
+      claims. Disable actions that cannot establish a current safe target, and make
+      host authentication/approval requests actionable rather than hidden waits.
+      Acceptance: lose a cancellation response, reconnect, and show the receiver's
+      recorded outcome without duplicate effects or a false stopped state. Reject
+      stale approvals and ensure workspace cleanup cannot discard active/dirty work.
+- [ ] **V4 — Recovery visibility qualification.** Exercise the complete public CLI
+      and TUI path through submission, execution, SSH loss, reconnect, cancellation,
+      and collection. Reconcile the original attempt before deciding on further
+      execution; loss of a heartbeat or connection does not authorize replacement
+      workers. Reuse task identities and durable outcomes rather than infer success
+      from a quiet terminal or provider conversation restore.
+      Acceptance: disconnect and restart the observing client while work continues;
+      recover the same task/attempt, event history, log position, and exact result.
+      Separately kill the execution owner and retain `outcome_unknown` without replay.
+      Repeat across the existing two-host execution path; one unavailable host
+      cannot block observation of another, and stale results cannot advance
+      dependent work.
+
 - [ ] Measure queue delay, time to verified result, unknown outcomes, recovery
       success, manual interventions, and transfer size. Make metric export optional
       and report provider usage only when available.
@@ -490,11 +546,14 @@ need not wait for load balancing.
       logs, and artifacts without discarding evidence required by active recovery
       or accepted outcome claims. Preserve referenced raw evidence and contract
       versions for the declared audit/reuse window; disclose expired evidence.
+      Keep retention gaps distinguishable from empty output or absent events.
 - [ ] Add accessible event-announcer and comparison views over the same evidence.
 
-Acceptance: an operator can identify a blocked task's owner, reason, and next action
-without reading raw state files. Retention stays bounded while preserving active
-recovery and the documented deduplication window.
+Acceptance: operators can explain what is running, where, why it is waiting, how
+fresh that information is, and whether a requested action took effect. Retention
+stays bounded while preserving active recovery and the documented deduplication
+window. V1–V4 provide the observation surface used by T3; they do not require a new
+permanent daemon, terminal server, scheduler, or automatic coordinator failover.
 
 #### 8. Dynamic task pools and schedules
 
