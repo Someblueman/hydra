@@ -16,14 +16,31 @@ static bool overlap(const char *a, const char *b) {
     if (cb && cb[1] == '*' && cb[2] == '\0') return !strncmp(b, a, (size_t)(cb-b)+1);
     return !strncmp(a, b, n) && (na == nb || (na < nb ? b[n] : a[n]) == '/');
 }
+static bool delivery_role(json_object *plan, json_object *d, const char *role) {
+    const char *destination = f_string(d, "destination");
+    if (!destination || !role) return false;
+    if (f_number_is(plan, "schema_version", 2) && !strcmp(destination, "intermediate")) return true;
+    return !strcmp(role, "compose") && !strcmp(destination, "run-artifact");
+}
+static bool executable_recipe(json_object *plan, json_object *step, const char *method) {
+    return f_number_is(plan, "schema_version", 2) || !method || strcmp(method, "executable") || f_field(f_field(step, "args"), "argv");
+}
+static void check_ownership(json_object *requirements, const char *check, json_object *errors) {
+    if (!check) return; /* Missing IDs are rejected by structural validation. */
+    for (size_t i = 0; i < json_object_array_length(requirements); i++) {
+        const char *owner = f_string(json_object_array_get_idx(requirements, i), "check");
+        if (owner && !strcmp(owner, check)) return;
+    }
+    plan_error(errors, "checks", "orphan_check", "each check must own at least one requirement so its report can claim valid coverage");
+}
 static void coverage(json_object *plan, json_object *errors) {
     json_object *deliverables = f_field(plan, "deliverables"), *requirements = f_field(plan, "requirements"), *checks = f_field(plan, "checks"), *steps = f_field(plan, "steps");
     size_t i, j;
     for (i = 0; i < json_object_array_length(deliverables); i++) {
         json_object *d = json_object_array_get_idx(deliverables, i), *producer = record(steps, f_string(d, "step")); bool covered = false;
         const char *role = f_string(producer, "role");
-        if (!plan_text(f_field(d, "description")) || !plan_id(f_string(d, "output")) || !role || strcmp(role, "compose") ||
-            !output(plan, f_string(d, "step"), f_string(d, "output")) || !f_string(d, "destination") || strcmp(f_string(d, "destination"), "run-artifact"))
+        if (!plan_text(f_field(d, "description")) || !plan_id(f_string(d, "output")) || !delivery_role(plan, d, role) ||
+            !output(plan, f_string(d, "step"), f_string(d, "output")))
             plan_error(errors, "deliverables", "missing_composition", "each final deliverable needs a compose step, declared output and run-artifact destination");
         for (j = 0; j < json_object_array_length(requirements); j++) {
             const char *id = f_string(json_object_array_get_idx(requirements, j), "deliverable");
@@ -44,8 +61,9 @@ static void coverage(json_object *plan, json_object *errors) {
             !f_string(report, "type") || strcmp(f_string(report, "type"), "object") ||
             json_object_array_length(f_field(step, "writes")))
             plan_error(errors, "checks", "invalid_verification", "a verify step must consume the exact composed artifact, declare an object report and no repository writes");
-        if (method && !strcmp(method, "executable") && !f_field(f_field(step, "args"), "argv"))
+        if (!executable_recipe(plan, step, method))
             plan_error(errors, "checks", "invalid_evaluator", "executable checks require an argv recipe; agent assessment is a distinct method");
+        check_ownership(requirements, f_string(c, "id"), errors);
     }
     for (i = 0; i < json_object_array_length(requirements); i++) {
         json_object *r = json_object_array_get_idx(requirements, i), *d = record(deliverables, f_string(r, "deliverable")), *c = record(checks, f_string(r, "check"));
@@ -99,5 +117,6 @@ int plan_graph(json_object *plan, json_object *errors) {
         if (head && producers != 1) plan_error(errors, "steps.args.head", "unbound_head", "initial plans create every execution head from the bound source");
     }
     coverage(plan, errors);
+    plan_evidence_graph(plan, reach, errors);
     return json_object_array_length(errors) ? -1 : 0;
 }

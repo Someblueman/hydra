@@ -1,0 +1,8 @@
+{
+  "collection": "collection_d212eb056792fa063d60a114b89c9a98e764043a692854928bd5e4603fc7a8e7",
+  "first": "run_743fea7a2e405a2b5129",
+  "target_before": "62b65e56fc703d515230227e1701b2083833e47f",
+  "target_moved": "8b90c9ac3a2313758e0b43790691a4d34950d9a6",
+  "second": "run_381df239a262d7475355",
+  "promoted_commit": "9dc9d43b4ef74a556e288aea6dd7d302579eb801"
+}

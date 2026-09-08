@@ -15,6 +15,13 @@ static void list(FILE *file, json_object *array) {
     size_t i;
     for (i = 0; i < json_object_array_length(array); i++) fprintf(file, "%s%s", i ? "," : "", f_text(json_object_array_get_idx(array, i)));
 }
+static void task_graph_args(FILE *graph, json_object *step) {
+    if (strcmp(f_string(step, "kind"), "task")) return;
+    json_object *args = f_field(step, "args");
+    fprintf(graph, "task_args\t%s\t%s", f_string(step, "id"), f_string(args, "task_input"));
+    if (f_string(args, "source_step")) fprintf(graph, "\t%s", f_string(args, "source_step"));
+    fputc('\n', graph);
+}
 /* Lower only already checked values. This projection uses the published YAML
  * syntax; its graph is also checked by the existing workflow data validator. */
 int plan_lower(json_object *plan, const char *directory) {
@@ -38,6 +45,7 @@ int plan_lower(json_object *plan, const char *directory) {
         fprintf(graph, "step\t%s\t%s\t", f_string(step, "id"), f_string(step, "kind"));
         if (json_object_array_length(needs)) list(graph, needs); else fputc('-', graph);
         fputc('\n', graph);
+        task_graph_args(graph, step);
     }
     if (ferror(yaml) || ferror(graph)) goto done;
     status = task_write_json(directory, "data.json", f_field(plan, "data"), false);
@@ -59,7 +67,7 @@ done:
 }
 /* Resolve only explicitly declared data and adapter contracts. No model calls,
  * probes, head creation, or recipe execution occur during compilation. */
-static json_object *bind_inputs(json_object *data, const char *source, const char *scratch, int64_t limit) {
+static json_object *bind_inputs(json_object *data, const char *source, const char *scratch, int64_t limit, int64_t rounds) {
     char path[F_PATH]; int64_t total = 0; json_object *bound = plan_canonical(data), *inputs = f_field(bound, "inputs");
     if (f_path(path, sizeof(path), scratch, "input")) goto bad;
     json_object_object_foreach(inputs, name, declaration) {
@@ -74,7 +82,7 @@ static json_object *bind_inputs(json_object *data, const char *source, const cha
         json_object_object_foreach(steps, id, step) {
             json_object *outputs = f_field(step, "outputs"); (void)id;
             if (!outputs) continue;
-            json_object_object_foreach(outputs, name, declaration) { (void)name; total += json_object_get_int64(f_field(declaration, "max_bytes")); }
+            json_object_object_foreach(outputs, name, declaration) { (void)name; total += rounds * json_object_get_int64(f_field(declaration, "max_bytes")); }
         }
     }
     if (total > limit) goto bad;
@@ -105,6 +113,20 @@ static json_object *context_files(json_object *plan, const char *source, const c
 bad:
     json_object_put(decl); json_object_put(files); return NULL;
 }
+static bool complete_binding(json_object *plan, const char *source, const char *scratch, json_object *compiled, json_object *errors) {
+    json_object *binding = f_field(compiled, "source"), *after; bool stable;
+    if (f_number_is(plan, "schema_version", 2)) {
+        json_object *tasks = plan_task_bindings(plan, f_field(compiled, "data"), binding, scratch, errors);
+        if (!tasks) return false;
+        json_object_object_add(compiled, "tasks", tasks);
+    }
+    after = source_binding(source); stable = after && json_object_equal(binding, after); json_object_put(after);
+    if (!stable) { plan_error(errors, "source", "source_changed", "source changed while resolving inputs"); return false; }
+    if (strlen(json_object_to_json_string_ext(compiled, JSON_C_TO_STRING_PLAIN)) > PLAN_LIMIT) {
+        plan_error(errors, "$", "compiled_limit", "resolved artifact exceeds 256 KiB"); return false;
+    }
+    return true;
+}
 json_object *plan_compile(json_object *plan, json_object *policy, const char *source, json_object *errors) {
     char scratch[] = "/tmp/hydra-plan-compile.XXXXXX", data_path[F_PATH], graph_path[F_PATH], yaml_path[F_PATH];
     json_object *compiled = NULL, *manifest = NULL, *binding = NULL, *adapters = NULL, *data = NULL, *normalized = NULL, *context = NULL; char *yaml = NULL;
@@ -116,8 +138,9 @@ json_object *plan_compile(json_object *plan, json_object *policy, const char *so
         !(manifest = wd_manifest(data_path, graph_path))) { plan_error(errors, "data", "invalid_handoff", "invalid artifact types, bounds, paths or direct producer dependencies"); goto done; }
     if (!(binding = source_binding(source))) { plan_error(errors, "source", "invalid_source", "source must be a Git repository with no tracked changes and bounded readable content"); goto done; }
     if (!(context = context_files(plan, source, scratch, &context_bytes))) { plan_error(errors, "context", "invalid_context", "context references must be bounded existing repository files; snapshot external sources first"); goto done; }
-    if (!(data = bind_inputs(manifest, source, scratch, json_object_get_int64(f_field(f_field(plan, "envelope"), "artifact_bytes")) - context_bytes))) {
-        plan_error(errors, "data", "invalid_inputs_or_budget", "repository inputs must exist and match their type/digest; total declared input and output bytes must fit the envelope"); goto done;
+    if (!(data = bind_inputs(manifest, source, scratch, json_object_get_int64(f_field(f_field(plan, "envelope"), "artifact_bytes")) - context_bytes,
+        1 + json_object_get_int64(f_field(f_field(plan, "envelope"), "repair_budget"))))) {
+        plan_error(errors, "data", "invalid_inputs_or_budget", "repository inputs must exist and match their type/digest; declared inputs and every reserved output round must fit the artifact envelope"); goto done;
     }
     if (strlen(json_object_to_json_string_ext(data, JSON_C_TO_STRING_PLAIN)) > WD_LIMIT) { plan_error(errors, "data", "bound_data_limit", "input digests make the resolved data manifest exceed 64 KiB"); goto done; }
     if (!(adapters = profiles(plan))) { plan_error(errors, "steps.args.profile", "unsupported_profile", "headless prompt profile is unavailable"); goto done; }
@@ -128,14 +151,7 @@ json_object *plan_compile(json_object *plan, json_object *policy, const char *so
     json_object_object_add(compiled, "source", json_object_get(binding)); json_object_object_add(compiled, "profiles", json_object_get(adapters));
     json_object_object_add(compiled, "context", json_object_get(context));
     json_object_object_add(compiled, "data", json_object_get(data)); f_string_add(compiled, "workflow", yaml);
-    {
-        json_object *after = source_binding(source);
-        bool stable = after && json_object_equal(binding, after); json_object_put(after);
-        if (!stable) { plan_error(errors, "source", "source_changed", "source changed while resolving inputs"); json_object_put(compiled); compiled = NULL; }
-        else if (strlen(json_object_to_json_string_ext(compiled, JSON_C_TO_STRING_PLAIN)) > PLAN_LIMIT) {
-            plan_error(errors, "$", "compiled_limit", "resolved artifact exceeds 256 KiB"); json_object_put(compiled); compiled = NULL;
-        }
-    }
+    if (!complete_binding(plan, source, scratch, compiled, errors)) { json_object_put(compiled); compiled = NULL; }
 done:
     free(yaml); json_object_put(manifest); json_object_put(binding); json_object_put(adapters); json_object_put(data); json_object_put(normalized); json_object_put(context); f_remove_tree(scratch);
     return compiled;

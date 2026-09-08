@@ -165,11 +165,13 @@ workflows, and recovery behavior.
 
 The optional native helper supports `hydra workflow plan`: discover the JSON
 schema, validate an agent-authored proposal, compile and review an immutable
-local DAG, then execute it with an exact acceptance digest. Retrieve the final
-verified artifacts with `hydra workflow plan result <run-id>`. Planning does not
-call a model itself; an ordinary agent authors the proposal through the CLI.
-Compiled plans currently execute locally; cross-host DAG placement is still on
-the roadmap. See the
+DAG, then execute it with an exact acceptance digest. Retrieve the final
+verified artifacts with `hydra workflow plan result <run-id>`. Schema-2 plans
+[distribute tasks across explicit hosts](docs/WORKFLOW_TASKS.md), require bound
+validation, hand off collected Git commits, and support bounded candidate repair.
+Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
+Planning does not call a model itself; an ordinary agent authors the proposal
+through the CLI. See the
 [planner recipe](docs/PLANNER_RECIPE.md) and
 [feature and research examples](examples/planning/README.md).
 
@@ -180,6 +182,7 @@ the roadmap. See the
 | Commands, layouts, hooks, configuration, and TUI keys | [Usage](docs/USAGE.md) |
 | Remote hosts, bootstrap, and fleet operations | [Fleet](docs/FLEET.md) |
 | Submit, monitor, cancel, collect, and integrate remote tasks | [Remote tasks](docs/REMOTE_TASKS.md) |
+| Host/project limits, FIFO queues, reservations, and recovery | [Resource admission](docs/ADMISSION.md) |
 | Agent profiles and prompts | [Profiles](docs/PROFILES.md) |
 | Workflows and guarded integration | [Workflows](docs/workflows.md) |
 | Agent-authored objectives and compiled local DAGs | [Planner recipe](docs/PLANNER_RECIPE.md) |

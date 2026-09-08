@@ -358,6 +358,11 @@ clear_queue() {
 # Returns: Number of spawned sessions on stdout
 # Note: Runs best-effort, does not fail if spawns fail
 process_spawn_queue() {
+    # Kill, cleanup, and queue commands can all reach this path. Load the same
+    # spawn dependencies before executing an entry, including provenance.
+    if command -v _load_libs_for_cmd >/dev/null 2>&1; then
+        _load_libs_for_cmd spawn
+    fi
     _ensure_queue_dir || return 1
     _qdir="$(_get_queue_dir)" || return 1
     _queue_lock="$(_get_queue_lock)" || return 1
@@ -408,7 +413,7 @@ process_spawn_queue() {
 
         # Attempt spawn — keep queue file on failure for retry
         echo "Processing queued spawn: $_q_branch..." >&2
-        if spawn_single "$_q_branch" "$_q_layout" "$_q_ai" "$_q_group" "" "" >/dev/null 2>&1; then
+        if spawn_single "$_q_branch" "$_q_layout" "$_q_ai" "$_q_group" "" "" >/dev/null; then
             acquire_lock "$_queue_lock" "queue completion" || {
                 release_lock "$_process_lock"
                 return 1

@@ -185,6 +185,8 @@ task start build --id "$execution_id" --trust-spec "$digest" >/dev/null
 [ -f "$fixture/host/fleet/tasks/$execution_id/provenance.json" ]
 [ -f "$fixture/host/fleet/tasks/$execution_id/attempt.json" ]
 # A complete workflow uses its recorded run and gate, with exact selected input.
+# shellcheck disable=SC1091
+. "$root/tests/task_admission_cases.sh"
 mkdir -p "$fixture/source/.hydra/workflows"
 cat > "$fixture/source/.hydra/workflows/remote.yml" <<'WORKFLOW'
 version: 1
@@ -341,6 +343,10 @@ grep -q '"state":"outcome_unknown"' "$fixture/crash-status"
 if task start build --id "$crash_id" --trust-spec "$crash_digest" > "$fixture/error"; then exit 1; fi
 grep -q '"code":"outcome_unknown"' "$fixture/error"
 # Queue expiry is distinct from an attempted execution.
+crash_claim="$(find "$fixture/host/admission" -name "$crash_id.run_*.request" -print)"
+[ -f "$crash_claim" ]
+[ "$(cut -d ' ' -f 2 "$crash_claim")" = reserved ]
+"$root/bin/hydra" fleet admission build -- inspect "$(basename "$crash_claim" .request)" | grep -q '"state":"reserved"'
 sed 's/"queue_seconds":60/"queue_seconds":1/' "$fixture/spec" > "$fixture/queue-spec"
 task prepare --source "$fixture/source" --spec "$fixture/queue-spec" --output "$fixture/queue-package" > "$fixture/queue-preview"
 task submit build --input "$fixture/queue-package" --key queue-expiry > "$fixture/queue-receipt"
@@ -443,6 +449,10 @@ for kind in exec workflow; do
         sleep 0.1; attempt=$((attempt + 1))
     done
     grep -q '"cancellation":"confirmed_stopped"' "$fixture/control-status" || { cat "$fixture/control-status"; exit 1; }
+    grep -q '"admission_cleanup":"confirmed"' "$fixture/control-status"
+    for control_claim in "$fixture/host/admission/$control_id"*.request; do
+        case "$(cut -d ' ' -f 2 "$control_claim")" in reserved|unknown|queued) exit 1 ;; esac
+    done
     [ -d "$fixture/host/fleet/tasks/$control_id/workspace/.git" ]
     task cancel build --id "$control_id" > "$fixture/repeat-cancel"
     grep -q '"cancel_response":"already_terminal"' "$fixture/repeat-cancel"

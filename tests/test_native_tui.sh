@@ -64,7 +64,7 @@ echo "Running native TUI tests..."
 echo "==========================="
 
 assert_equal "2" "$("$tui" --protocol-version)" "native TUI protocol handshake"
-assert_equal "Hydra TUI 2.2.1 protocol 2" "$("$tui" --version)" "native TUI version handshake"
+assert_equal "Hydra TUI 2.3.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
 
 awk 'BEGIN { FS = OFS = "\t" } $1 == "H" && !changed { $13 = "invalid"; changed = 1 } { print }' \
     "$fixture" > "$test_root/invalid-number.tsv"
@@ -183,14 +183,14 @@ assert_failure $? "TERM=dumb fails cleanly"
 assert_failure $? "non-TTY invocation fails cleanly"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.2.1 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.3.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
 chmod +x "$test_root/native-transient"
 HYDRA_TUI_BIN="$test_root/native-transient" "$repo_root/bin/hydra" tui > /dev/null 2> "$test_root/fallback.err"
 assert_failure $? "non-TTY basic fallback still fails cleanly"
 contains "starting the basic TUI" "$test_root/fallback.err" "transient native failure dispatches to basic fallback"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.2.1 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.3.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
 chmod +x "$test_root/native-success"
 HYDRA_TUI_BIN="$test_root/native-success" "$repo_root/bin/hydra" tui > "$test_root/default.out"
 contains "NATIVE DEFAULT" "$test_root/default.out" "plain tui dispatches to a qualified native executable"
@@ -227,6 +227,8 @@ contains '"mutation_authority":"shell-cli"' "$test_root/capabilities.json" "capa
 adapter_home="$test_root/adapter-home"
 adapter_repo="$test_root/adapter-repo"
 mkdir -p "$adapter_home/profiles/custom" "$adapter_repo"
+# Hydra reports the physical home path, including macOS /var -> /private/var.
+adapter_home="$(cd "$adapter_home" && pwd -P)"
 git -C "$adapter_repo" init -q
 mkdir -p "$adapter_repo/.git/hydra"
 printf '%s\n' project_aaaaaaaaaaaaaaaa > "$adapter_repo/.git/hydra/project-id"

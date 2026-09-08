@@ -71,7 +71,8 @@ workflow_bindings_match() {
     [ "$(git hash-object "$_wbm_dir/resolved.yml")" = "$(sed -n '1p' "$_wbm_dir/definition-hash")" ] &&
     [ "$(workflow_parse "$_wbm_dir/resolved.yml" runtime | git hash-object --stdin)" = "$(git hash-object "$_wbm_dir/graph.tsv")" ] &&
     workflow_data_bindings_match "$_wbm_dir" &&
-    workflow_plan_bindings_match "$_wbm_dir"
+    workflow_plan_bindings_match "$_wbm_dir" &&
+    workflow_task_bindings_match "$_wbm_dir"
 }
 
 # The profile handoff needs durable run/step bindings as well as execution options.
@@ -227,6 +228,10 @@ workflow_recover_running_steps() {
         workflow_pid_alive "$_wrr_pid" && continue
         _wrr_attempt="$(sed -n '1p' "$_wrr_sd/attempts")"
         _wrr_exit="$(sed -n '1p' "$_wrr_sd/attempt-$_wrr_attempt/exit-code" 2>/dev/null || true)"
+        if [ "$_wrr_kind" = task ]; then
+            workflow_atomic_scalar "$_wrr_sd/state" waiting-remote
+            continue
+        fi
         workflow_attempt_result "$_wrr_dir" "$_wrr_id" "$_wrr_retry" "$_wrr_idem" "${_wrr_exit:-unknown}"
     done < "$_wrr_dir/graph.tsv"
 }
@@ -253,6 +258,10 @@ workflow_start_step() {
     shift 5
     if [ "$_wss_kind" = approval-wait ]; then
         workflow_approval_create "$_wss_dir" "$_wss_id" "$1" "$7" "$6" "${11}"
+        return $?
+    fi
+    if [ "$_wss_kind" = task ]; then
+        workflow_task_start "$_wss_dir" "$_wss_id"
         return $?
     fi
     _wss_sd="$_wss_dir/steps/$_wss_id"
@@ -293,6 +302,18 @@ workflow_start_step() {
             HYDRA_WORKFLOW_OUTPUTS_DIR="$_wss_attempt_dir/outputs"
             export HYDRA_WORKFLOW_INPUTS_DIR HYDRA_WORKFLOW_OUTPUTS_DIR
         fi
+        if [ -f "$_wss_dir/compiled.json" ]; then
+            HYDRA_WORKFLOW_VALIDATION_FILE="$_wss_attempt_dir/validation-context.json"
+            if ! workflow_plan_tool check-context "$_wss_dir/compiled.json" "$_wss_id" > "$HYDRA_WORKFLOW_VALIDATION_FILE"; then
+                workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
+                workflow_atomic_scalar "$_wss_sd/state" failed
+                workflow_event "$_wss_dir" "$_wss_id" step.failed invalid_validation_context
+                exit 1
+            fi
+            export HYDRA_WORKFLOW_VALIDATION_FILE
+        else
+            unset HYDRA_WORKFLOW_VALIDATION_FILE
+        fi
         workflow_step_command "$_wss_dir" "$_wss_id" "$_wss_kind" "$@" >"$_wss_attempt_dir/stdout" 2>"$_wss_attempt_dir/stderr" &
         _ws_command_pid=$!
         workflow_atomic_scalar "$_wss_sd/command-pid" "$_ws_command_pid"
@@ -323,6 +344,7 @@ workflow_cancel_steps() {
     while IFS= read -r _wcs_sd; do
         [ -n "$_wcs_sd" ] || continue
         _wcs_state="$(sed -n '1p' "$_wcs_sd/state")"
+        workflow_task_cancel "$_wcs_dir" "$_wcs_sd" "$_wcs_state" && continue
         case "$_wcs_state" in
             queued|ready|retrying|waiting-approval)
                 workflow_atomic_scalar "$_wcs_sd/state" cancelled
@@ -348,6 +370,7 @@ EOF
 
 workflow_drive() {
     _wd_dir="$1"
+    if workflow_task_needs_owner "$_wd_dir"; then workflow_task_tool drive "$_wd_dir"; return $?; fi
     _wd_drive_lock="$_wd_dir/.drive.lock"
     if ! mkdir "$_wd_drive_lock" 2>/dev/null; then
         _wd_existing="$(sed -n '1p' "$_wd_dir/owner-pid" 2>/dev/null || true)"
@@ -369,6 +392,9 @@ workflow_drive() {
             return 1
         }
     fi
+    workflow_plan_repair "$_wd_dir" repair-resume >/dev/null || return 1
+    workflow_recover_running_steps "$_wd_dir" || return 1
+    workflow_task_resume "$_wd_dir" || return 1
     trap 'workflow_atomic_scalar "$_wd_dir/cancel-requested" "$(date +%s)"' HUP INT TERM
     _wd_parallelism="$(sed -n '1p' "$_wd_dir/parallelism")"
     while :; do
@@ -390,12 +416,11 @@ workflow_drive() {
         if [ ! -f "$_wd_dir/cancel-requested" ]; then
             _wd_slots=$((_wd_parallelism - _wd_active))
             while [ "$_wd_slots" -gt 0 ]; do
-                _wd_next="$(awk -F '\t' '$1=="step" {print $2}' "$_wd_dir/graph.tsv" | while IFS= read -r _wd_id; do
-                    if [ "$(sed -n '1p' "$_wd_dir/steps/$_wd_id/state")" = ready ]; then
-                        printf '%s\n' "$_wd_id"
-                        break
-                    fi
-                done || true)"
+                _wd_next="$(workflow_next_step "$_wd_dir")" || {
+                    workflow_atomic_scalar "$_wd_dir/state" recovery-required
+                    rm -rf "$_wd_drive_lock"
+                    return 1
+                }
                 [ -n "$_wd_next" ] || break
                 _wd_next_kind="$(awk -F '\t' -v id="$_wd_next" '$1=="step" && $2==id { print $3; exit }' "$_wd_dir/graph.tsv")"
                 if [ "$_wd_next_kind" = spawn ]; then
@@ -421,11 +446,7 @@ workflow_drive() {
             done
         fi
 
-        _wd_waiting="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^waiting-approval$' || true)"
-        _wd_runnable="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(ready|running|retrying)$' || true)"
-        if [ "$_wd_waiting" -gt 0 ] && [ "$_wd_runnable" -eq 0 ]; then
-            workflow_atomic_scalar "$_wd_dir/state" waiting-approval
-            workflow_event "$_wd_dir" "" run.waiting_approval
+        if workflow_waiting_state "$_wd_dir"; then
             trap - HUP INT TERM
             rm -rf "$_wd_drive_lock"
             return 3
@@ -433,6 +454,11 @@ workflow_drive() {
 
         _wd_nonterminal="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(queued|ready|running|retrying)$' || true)"
         if [ "$_wd_nonterminal" -eq 0 ]; then
+            _wd_repaired="$(workflow_plan_repair "$_wd_dir")" || return 1
+            if [ "$_wd_repaired" = 1 ]; then
+                workflow_event "$_wd_dir" "" run.repair new_candidate_round
+                continue
+            fi
             # A worker can finish after the cancellation snapshot was taken.
             # Refresh it before publishing a terminal run state.
             [ ! -f "$_wd_dir/cancel-requested" ] || workflow_cancel_steps "$_wd_dir"

@@ -8,6 +8,21 @@ static void items(const char *label, json_object *array) {
     for (i = 0; i < json_object_array_length(array); i++) printf(" %s%s", i ? ", " : "", f_text(json_object_array_get_idx(array, i)));
     putchar('\n');
 }
+static void step_preview(json_object *compiled, json_object *step) {
+    const char *id = f_string(step, "id"), *head = f_string(f_field(step, "args"), "head");
+    json_object *binding = f_field(f_field(compiled, "tasks"), id);
+    if (binding) {
+        json_object *spec = f_field(binding, "spec");
+        printf("  %s: %s/task on %s:%s; ", id, f_string(step, "role"), f_string(spec, "host"), f_string(spec, "project"));
+        items("after", f_field(step, "needs"));
+        printf("    recipe: %s\n", json_object_to_json_string_ext(spec, JSON_C_TO_STRING_PLAIN));
+        printf("    transport: %s\n", json_object_to_json_string_ext(f_field(binding, "destination"), JSON_C_TO_STRING_PLAIN));
+    } else {
+        printf("  %s: %s/%s on local:%s; ", id, f_string(step, "role"), f_string(step, "kind"), head ? head : f_string(f_field(step, "args"), "branch"));
+        items("after", f_field(step, "needs"));
+        printf("    recipe: %s\n", json_object_to_json_string_ext(f_field(step, "args"), JSON_C_TO_STRING_PLAIN));
+    }
+}
 int plan_preview(json_object *compiled) {
     json_object *plan = f_field(compiled, "plan"), *errors = json_object_new_array(), *env = f_field(plan, "envelope");
     char digest[65]; size_t i; int status = -1;
@@ -17,22 +32,17 @@ int plan_preview(json_object *compiled) {
     printf("Plan %s (%s)\n%s\n\n", f_string(plan, "id"), f_string(compiled, "compiler"), f_string(plan, "objective"));
     items("Context", f_field(plan, "context")); items("Assumptions", f_field(plan, "assumptions")); items("Open questions", f_field(plan, "questions"));
     items("Hosts", f_field(env, "hosts")); items("Tools", f_field(env, "tools")); items("Effects", f_field(env, "effects")); items("Declared repository writes", f_field(env, "writes"));
-    printf("Budgets: parallelism %d; wall time %d seconds; artifacts %lld bytes; heads %d; disk floor %d MiB; retries 0; repairs 0\n",
+    printf("Budgets: parallelism %d; wall time %d seconds; artifacts %lld bytes; heads %d; disk floor %d MiB; retries 0; repairs %d\n",
         json_object_get_int(f_field(env, "parallelism")), json_object_get_int(f_field(env, "timeout_seconds")),
-        (long long)json_object_get_int64(f_field(env, "artifact_bytes")), json_object_get_int(f_field(env, "max_heads")), json_object_get_int(f_field(env, "disk_mb")));
+        (long long)json_object_get_int64(f_field(env, "artifact_bytes")), json_object_get_int(f_field(env, "max_heads")), json_object_get_int(f_field(env, "disk_mb")), json_object_get_int(f_field(env, "repair_budget")));
     {
         json_object *steps = f_field(plan, "steps"), *deliverables = f_field(plan, "deliverables"), *requirements = f_field(plan, "requirements");
         puts("\nWork:");
-        for (i = 0; i < json_object_array_length(steps); i++) {
-            json_object *step = json_object_array_get_idx(steps, i); const char *head = f_string(f_field(step, "args"), "head");
-            printf("  %s: %s/%s on local:%s; ", f_string(step, "id"), f_string(step, "role"), f_string(step, "kind"), head ? head : f_string(f_field(step, "args"), "branch"));
-            items("after", f_field(step, "needs"));
-            printf("    recipe: %s\n", json_object_to_json_string_ext(f_field(step, "args"), JSON_C_TO_STRING_PLAIN));
-        }
-        puts("\nFinal deliverables:");
+        for (i = 0; i < json_object_array_length(steps); i++) step_preview(compiled, json_object_array_get_idx(steps, i));
+        puts("\nDeliverables:");
         for (i = 0; i < json_object_array_length(deliverables); i++) {
             json_object *d = json_object_array_get_idx(deliverables, i);
-            printf("  %s: %s (%s/%s -> sealed run artifact)\n", f_string(d, "id"), f_string(d, "description"), f_string(d, "step"), f_string(d, "output"));
+            printf("  %s: %s (%s/%s -> %s)\n", f_string(d, "id"), f_string(d, "description"), f_string(d, "step"), f_string(d, "output"), f_string(d, "destination"));
         }
         puts("\nRequired acceptance:");
         for (i = 0; i < json_object_array_length(requirements); i++) {

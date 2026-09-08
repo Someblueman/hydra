@@ -139,7 +139,7 @@ workflow_parse() {
         else if(k=="requires") arg[step,k]=list(v,field)
         else if(k=="timeout") arg[step,k]=number(v,field,1,86400)
         else if(k=="force" || k=="allow_shell") arg[step,k]=boolean(scalar(v,field),field)
-        else if(k ~ /^(head|branch|group|profile|command|message|name|by|reason|completion_policy|prompt_file|prompt_input|result_file|resume_from)$/) {
+        else if(k ~ /^(head|branch|group|profile|command|message|name|by|reason|completion_policy|prompt_file|prompt_input|result_file|resume_from|task_input|source_step)$/) {
             if(k=="command" && trim(v) ~ /^\[/) fail(field,"use argv for a command list")
             arg[step,k]=scalar(v,field)
         }
@@ -158,7 +158,7 @@ workflow_parse() {
         if(argv[i]!=""){out=out sep "argv=[" argv[i] "]"}
         return out
     }
-    BEGIN { parallelism=1; disk=10240; maxheads=16; argc=18; split("head branch group profile command message name by reason completion_policy timeout force allow_shell prompt_file prompt_input result_file requires resume_from",argkeys," ") }
+    BEGIN { parallelism=1; disk=10240; maxheads=16; argc=20; split("head branch group profile command message name by reason completion_policy timeout force allow_shell prompt_file prompt_input result_file requires resume_from task_input source_step",argkeys," ") }
     {
         sub(/\r$/,""); raw=$0
         if(raw ~ /\t/) fail("line " NR,"tabs are unsupported")
@@ -181,7 +181,7 @@ workflow_parse() {
         if(step<1) fail("steps","at least one step is required")
         for(i=1;i<=step;i++){
             if(sid[i]=="") fail("steps[" i "].id","required"); if(ids[sid[i]]++) fail("steps[" sid[i] "].id","duplicate ID")
-            if(kind[i] !~ /^(spawn|wait|exec|message|gate|approve|approval-wait|kill)$/) fail("steps[" sid[i] "].kind","unsupported step kind " kind[i])
+            if(kind[i] !~ /^(spawn|wait|exec|message|gate|approve|approval-wait|kill|task)$/) fail("steps[" sid[i] "].kind","unsupported step kind " kind[i])
             if(retry[i]=="") retry[i]=0
             if(backoff[i]=="") backoff[i]=0
             if(!seen_step[i,"retry_on"]) retryon[i]="failure,timeout,interrupted,configuration"
@@ -195,6 +195,14 @@ workflow_parse() {
                 if(retry[i]>0 || idem[i]!="false") fail("steps[" sid[i] "]","approval waits require retry 0 and idempotent false")
                 if(arg[i,"by"]!="") fail("steps[" sid[i] "].args.by","approval waits cannot predeclare a decision actor")
             }
+            else if(kind[i]=="task") {
+                req(i,"task_input")
+                if(!valid_id(arg[i,"task_input"]) || data=="") fail("steps[" sid[i] "].args.task_input","requires a named root input and data manifest")
+                if(arg[i,"source_step"]!="" && !valid_id(arg[i,"source_step"])) fail("steps[" sid[i] "].args.source_step","requires a task step ID")
+                if(retry[i]!=0 || idem[i]!="false") fail("steps[" sid[i] "]","task reconciliation requires retry 0 and idempotent false")
+                for(k=1;k<=18;k++) if(seen_arg[i,argkeys[k]]) fail("steps[" sid[i] "].args","task steps accept only task_input")
+                if(argv[i]!="") fail("steps[" sid[i] "].args","task recipes belong in the bound specification")
+            }
             else if(kind[i]=="kill") req(i,"head")
             else if(kind[i]=="exec"){
                 req(i,"head")
@@ -204,6 +212,9 @@ workflow_parse() {
                     if((arg[i,"prompt_input"]!="" || arg[i,"result_file"]!="") && data=="") fail("steps[" sid[i] "].args","named prompts and result files require a data manifest")
                 } else if(arg[i,"command"]=="" && argv[i]=="") fail("steps[" sid[i] "].args.command","command, argv, or profile is required")
             }
+            if(kind[i]!="task" && seen_arg[i,"source_step"]) fail("steps[" sid[i] "].args.source_step","requires a task step")
+            if(kind[i]=="task" && arg[i,"source_step"]!="" && !index("," needs[i] ",","," arg[i,"source_step"] ",")) fail("steps[" sid[i] "].args.source_step","source producer must be a direct dependency")
+            if(kind[i]!="task" && seen_arg[i,"task_input"]) fail("steps[" sid[i] "].args.task_input","requires a task step")
             for(k=14;k<=18;k++) if(seen_arg[i,argkeys[k]] && (kind[i]!="exec" || arg[i,"profile"]=="")) fail("steps[" sid[i] "].args." argkeys[k],"requires an exec profile")
             for(k=14;k<=16;k++) if(arg[i,argkeys[k]]!="" && (arg[i,argkeys[k]] ~ /^\// || arg[i,argkeys[k]] ~ /(^|\/)\.\.?(\/|$)/ || arg[i,argkeys[k]] ~ /\/\// || arg[i,argkeys[k]] ~ /\/$/)) fail("steps[" sid[i] "].args." argkeys[k],"must be a safe relative path")
             if(arg[i,"command"]!="" && argv[i]!="") fail("steps[" sid[i] "].args","command and argv are ambiguous")
@@ -233,6 +244,7 @@ workflow_parse() {
                 printf "step\t%s\t%s\t%s\t%d\t%s",sid[i],kind[i],(needs[i]==""?"-":needs[i]),retry[i],idem[i]
                 for(k=1;k<=13;k++) printf "\t%s",(arg[i,argkeys[k]]==""?"-":arg[i,argkeys[k]])
                 printf "\t%s\n",(argv[i]==""?"-":argv[i])
+                if(kind[i]=="task") {printf "task_args\t%s\t%s",sid[i],arg[i,"task_input"]; if(arg[i,"source_step"]!="")printf "\t%s",arg[i,"source_step"];printf "\n"}
                 if(kind[i]=="exec" && arg[i,"profile"]!="") {printf "profile_args\t%s",sid[i];for(k=14;k<=18;k++)printf "\t%s",(arg[i,argkeys[k]]==""?"-":arg[i,argkeys[k]]);printf "\n"}
                 if(seen_step[i,"retry_on"] || seen_step[i,"retry_backoff"]) printf "retry_policy\t%s\t%s\t%d\n",sid[i],(retryon[i]==""?"-":retryon[i]),backoff[i]
             }

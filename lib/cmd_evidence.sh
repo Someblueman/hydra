@@ -203,6 +203,25 @@ cmd_resume() {
             return 1
         }
     fi
+    _cr_admission="$(hydra_new_id claim "$LIFECYCLE_PROJECT_ID|$_cr_branch|resume")" || return 1
+    admission_head "$_cr_admission" "$LIFECYCLE_PROJECT_ID" "$_cr_profile" _cmd_resume_admitted
+}
+
+_cmd_resume_admitted() {
+    _cr_lock="resume_${LIFECYCLE_PROJECT_ID}_${LIFECYCLE_HEAD_ID}"
+    acquire_lock "$_cr_lock" "resume admitted head" || return 1
+    if ! lifecycle_load_head "$_cr_branch" || [ "$LIFECYCLE_INSTANCE_ID" != "$_cr_old_instance" ] ||
+        { [ -n "$_cr_old_session" ] && tmux has-session -t "=$_cr_old_session" 2>/dev/null; }; then
+        echo "Error: head changed while waiting for admission; inspect its current instance" >&2
+        release_lock "$_cr_lock"
+        return 1
+    fi
+    if _cmd_resume_instance; then _cr_status=0; else _cr_status=$?; fi
+    release_lock "$_cr_lock"
+    return "$_cr_status"
+}
+
+_cmd_resume_instance() {
     if [ ! -d "$_cr_worktree" ]; then
         create_worktree "$_cr_branch" "$_cr_worktree" || return 1
     fi
@@ -211,6 +230,10 @@ cmd_resume() {
     release_session_lock "$_cr_session" 2>/dev/null || true
     if ! lifecycle_new_instance "$_cr_branch" "$_cr_session" "$_cr_provider" "$_cr_recipe"; then
         tmux kill-session -t "$_cr_session" 2>/dev/null || true
+        return 1
+    fi
+    if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/admission-id" "$HEAD_ADMISSION_ID"; then
+        _cmd_resume_abort "$_cr_branch" "$_cr_session"
         return 1
     fi
     provenance_capture_instance "$_cr_branch" resume "$_cr_recipe" || {
@@ -232,6 +255,9 @@ cmd_resume() {
         _cmd_resume_abort "$_cr_branch" "$_cr_session"
         return 1
     }
+    # Read by admission_head after this callback returns.
+    # shellcheck disable=SC2034
+    HEAD_ADMISSION_EFFECTS=1
     if [ -n "$_cr_recipe" ] && ! send_keys_to_session "$_cr_session" "$_cr_recipe"; then
         _cmd_resume_abort "$_cr_branch" "$_cr_session"
         return 1

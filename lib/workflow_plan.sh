@@ -27,6 +27,10 @@ cmd_workflow_plan() (
             elif [ "$#" -eq 3 ] && [ "$3" = --json ]; then workflow_plan_tool show "$2"
             else exit 1; fi
             ;;
+        check-definition)
+            [ "$#" -eq 3 ] || exit 1
+            workflow_plan_tool check-definition "$2" "$3"
+            ;;
         result)
             [ "$#" -eq 2 ] && hydra_valid_id "$2" || exit 1
             workflow_plan_tool result "$(workflow_runs_dir)/$2"
@@ -65,6 +69,7 @@ cmd_workflow_plan() (
                 '       hydra workflow plan show <compiled.json> [--json]' \
                 '       hydra workflow plan run <compiled.json> --accept <sha256>' \
                 '       hydra workflow plan result <run-id>' \
+                '       hydra workflow plan check-definition <compiled.json> <check-id>' \
                 'Compile from the source repository. Keep compiled output outside it.' \
                 'Execution uses the existing workflow status, cancel and resume commands.'
             ;;
@@ -112,4 +117,13 @@ workflow_plan_expired() {
 workflow_plan_finish() {
     [ -f "$1/compiled.json" ] || return 0
     workflow_plan_bindings_match "$1" && workflow_plan_tool finish "$1" > "$1/plan-verification.json"
+}
+
+workflow_plan_repair() {
+    if [ ! -f "$1/compiled.json" ]; then printf '0\n'; return 0; fi
+    workflow_plan_tool "${2:-repair}" "$1" || {
+        workflow_atomic_scalar "$1/state" recovery-required
+        rm -rf "$1/.drive.lock"
+        return 1
+    }
 }

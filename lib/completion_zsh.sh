@@ -21,6 +21,9 @@ _hydra() {
     case $state in
         args)
             case $words[1] in
+                admission)
+                    _arguments '1:action:(status configure request inspect claim cancel unknown release)' '--json[Output versioned status JSON]' '--summary[Omit individual records]' '--confirmed[Confirm execution termination]'
+                    ;;
                 remote)
                     _arguments '1:action:(add remove list)' '*:argument:'
                     ;;
@@ -30,7 +33,7 @@ _hydra() {
                     elif [[ $words[2] == task ]]; then
                         _arguments '1:action:(task)' '2:task action:(prepare inspect submit start resume requests decide status cancel logs result inspect-result collect collected help)' '--source[Repository for prepare or owner/work for logs]:source:' '--spec[Task specification]:file:_files' '--input[Prepared package]:file:_files' '--output[New package file]:file:_files' '--key[Stable submission key]:key:' '--id[Accepted task ID]:task ID:' '--request[Approval request ID]:request:' '--decision[Decision]:decision:(approve reject)' '--by[Actor label]:label:' '--trust-spec[Authorize exact task digest]:SHA256:' '--stream[Log stream]:stream:(stdout stderr)' '--offset[Byte offset]:offset:' '--limit[Page bytes]:limit:' '--step[Workflow log step]:step:' '--attempt[Workflow attempt]:attempt:' '--timeout[Result or cancellation transport deadline]:seconds:' '--into[Collection repository]:directory:_files -/' '--format[Collection output]:format:(candidates)'
                     else
-                        _arguments '1:action:(handshake list doctor bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui)' '*:argument:'
+                        _arguments '1:action:(handshake list doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui)' '*:argument:'
                     fi
                     ;;
                 spawn)
@@ -109,7 +112,7 @@ _hydra() {
                         _arguments '2:planning action:(schema validate compile show run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '*:file:_files'
                         return
                     fi
-                    _arguments '1:subcommand:(list show validate dry-run run status cancel resume requests decide plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
+                    _arguments '1:subcommand:(list show validate dry-run run status cancel resume replay requests decide plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
                     ;;
                 sync)
                     _arguments '--from[Source ref]:ref:' '--gate[Approved gate]:name:' '--dry-run[Simulate without mutation]' '1:head:_hydra_sessions'
@@ -173,6 +176,7 @@ _hydra_commands() {
         'init:Initialize project identity, trust, profile, and worktree root'
         'agent:Manage agent profiles'
         'capabilities:Print machine-readable capabilities'
+        'admission:Inspect or configure host-wide execution reservations'
         'workflow:Run or inspect a finite trusted workflow DAG'
         'path:Print a stored worktree path'
         'lifecycle:Show declared, observed, and live head state'
