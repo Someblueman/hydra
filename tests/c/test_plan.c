@@ -61,9 +61,42 @@ static void parse_cases(const char *root) {
         assert(!f_write(path, large, PLAN_LIMIT + 1, true)); assert(!plan_read(path)); free(large);
     }
 }
+static void report_cases(void) {
+    const char *subject = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    char digest[65], changed[65];
+    json_object *compiled = json_object_new_object(), *plan = fixture(), *check, *report;
+    json_object_object_add(compiled, "plan", plan);
+    check = json_object_array_get_idx(f_field(plan, "checks"), 0);
+    assert(!plan_check_digest(compiled, "check", digest));
+    report = f_parse("{\"schema_version\":2,\"verdict\":\"pass\",\"requirements\":[\"content\"],\"evidence\":\"Checked exact bytes\"}");
+    f_string_add(report, "subject_sha256", subject); f_string_add(report, "validator_sha256", digest);
+    assert(plan_report(compiled, check, report, subject) == PLAN_PASS);
+    f_string_add(report, "verdict", "fail"); assert(plan_report(compiled, check, report, subject) == PLAN_FAIL);
+    f_string_add(report, "verdict", "inconclusive"); assert(plan_report(compiled, check, report, subject) == PLAN_INCONCLUSIVE);
+    f_string_add(report, "verdict", "pass");
+    f_string_add(check, "definition", "Changed acceptance rubric");
+    assert(!plan_check_digest(compiled, "check", changed) && strcmp(digest, changed));
+    assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    f_string_add(report, "validator_sha256", changed);
+    assert(plan_report(compiled, check, report, subject) == PLAN_PASS);
+    assert(plan_report(compiled, check, report, changed) == PLAN_INVALID);
+    json_object_object_add(report, "requirements", f_parse_value("[\"content\",\"content\"]"));
+    assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    json_object_object_add(report, "requirements", f_parse_value("[1]"));
+    assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    json_object_object_add(report, "requirements", f_parse_value("[\"content\"]"));
+    json_object_object_add(report, "schema_version", json_object_new_int(1));
+    assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    json_object_object_del(report, "validator_sha256");
+    assert(plan_report(compiled, check, report, subject) == PLAN_PASS);
+    f_string_add(report, "verdict", "inconclusive");
+    assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    assert(plan_report(compiled, check, NULL, subject) == PLAN_INVALID);
+    json_object_put(report); json_object_put(compiled);
+}
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    graph_cases(); parse_cases(root); assert(!f_remove_tree(root));
+    graph_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
     puts("planning graph, policy, canonical JSON and parser checks passed"); return 0;
 }

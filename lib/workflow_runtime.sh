@@ -293,6 +293,18 @@ workflow_start_step() {
             HYDRA_WORKFLOW_OUTPUTS_DIR="$_wss_attempt_dir/outputs"
             export HYDRA_WORKFLOW_INPUTS_DIR HYDRA_WORKFLOW_OUTPUTS_DIR
         fi
+        if [ -f "$_wss_dir/compiled.json" ]; then
+            HYDRA_WORKFLOW_VALIDATION_FILE="$_wss_attempt_dir/validation-context.json"
+            if ! workflow_plan_tool check-context "$_wss_dir/compiled.json" "$_wss_id" > "$HYDRA_WORKFLOW_VALIDATION_FILE"; then
+                workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
+                workflow_atomic_scalar "$_wss_sd/state" failed
+                workflow_event "$_wss_dir" "$_wss_id" step.failed invalid_validation_context
+                exit 1
+            fi
+            export HYDRA_WORKFLOW_VALIDATION_FILE
+        else
+            unset HYDRA_WORKFLOW_VALIDATION_FILE
+        fi
         workflow_step_command "$_wss_dir" "$_wss_id" "$_wss_kind" "$@" >"$_wss_attempt_dir/stdout" 2>"$_wss_attempt_dir/stderr" &
         _ws_command_pid=$!
         workflow_atomic_scalar "$_wss_sd/command-pid" "$_ws_command_pid"

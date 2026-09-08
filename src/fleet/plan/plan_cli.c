@@ -179,6 +179,39 @@ static json_object *data_match_command(char **argv, bool *printed) {
     return result;
 }
 
+static json_object *check_definition_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]), *result = NULL;
+    json_object *errors = json_object_new_array(); char digest[65];
+    (void)printed;
+    if (compiled && f_number_is(compiled, "schema_version", 1) &&
+        !plan_validate(f_field(compiled, "plan"), f_field(compiled, "policy"), errors) &&
+        !plan_check_digest(compiled, argv[2], digest)) {
+        json_object *data = json_object_new_object();
+        f_string_add(data, "check", argv[2]); f_string_add(data, "validator_sha256", digest);
+        result = f_success("workflow plan check-definition", data);
+    }
+    json_object_put(errors); json_object_put(compiled); return result;
+}
+
+static json_object *check_context_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]), *checks, *data = NULL, *result = NULL;
+    (void)printed;
+    if (!compiled || !plan_id(argv[2]) ||
+        plan_index(f_field(f_field(compiled, "plan"), "steps"), argv[2]) < 0) goto done;
+    checks = f_field(f_field(compiled, "plan"), "checks"); data = json_object_new_object();
+    for (size_t i = 0; i < json_object_array_length(checks); i++) {
+        json_object *check = json_object_array_get_idx(checks, i); char digest[65];
+        const char *step = f_string(check, "step"), *id = f_string(check, "id");
+        if (!step) goto done;
+        if (strcmp(step, argv[2])) continue;
+        if (plan_check_digest(compiled, id, digest)) goto done;
+        f_string_add(data, id, digest);
+    }
+    result = f_success("workflow plan check-context", json_object_get(data));
+done:
+    json_object_put(data); json_object_put(compiled); return result;
+}
+
 json_object *plan_cli(int argc, char **argv) {
     static const struct {
         const char *name;
@@ -195,6 +228,8 @@ json_object *plan_cli(int argc, char **argv) {
         {"projection", 2, projection_command},
         {"bindings", 4, bindings_command},
         {"data-match", 3, data_match_command},
+        {"check-definition", 3, check_definition_command},
+        {"check-context", 3, check_context_command},
     };
     json_object *result = NULL;
     bool printed = false;

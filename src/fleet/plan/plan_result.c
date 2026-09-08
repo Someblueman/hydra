@@ -30,8 +30,8 @@ static json_object *artifact(json_object *compiled, const char *run, const char 
     json_object_put(receipt); return file;
 }
 json_object *plan_delivery(const char *run) {
-    char path[F_PATH], digest[65]; json_object *compiled = NULL, *plan, *data, *delivery = NULL, *checks, *requirements, *errors = json_object_new_array();
-    size_t i, j; int status = -1;
+    char path[F_PATH], digest[65]; json_object *compiled = NULL, *plan, *data, *delivery = NULL, *checks, *errors = json_object_new_array();
+    size_t i; int status = -1;
     if (f_path(path, sizeof(path), run, "compiled.json") || !(compiled = plan_read(path))) goto done;
     plan = f_field(compiled, "plan"); data = f_field(compiled, "data");
     if (plan_validate(plan, f_field(compiled, "policy"), errors)) goto done;
@@ -53,27 +53,14 @@ json_object *plan_delivery(const char *run) {
             f_string_add(file, "path", path); json_object_object_add(f_field(delivery, "deliverables"), f_string(d, "id"), file);
         }
     }
-    checks = f_field(plan, "checks"); requirements = f_field(plan, "requirements");
+    checks = f_field(plan, "checks");
     for (i = 0; i < json_object_array_length(checks); i++) {
-        const char *const report_keys[] = {"schema_version", "verdict", "subject_sha256", "requirements", "evidence", NULL};
         json_object *c = json_object_array_get_idx(checks, i), *file = artifact(compiled, run, f_string(c, "step"), f_string(c, "report"), path), *report;
         json_object *subject = f_field(f_field(delivery, "deliverables"), f_string(c, "deliverable"));
         if (!file) goto done;
         json_object_put(file); report = plan_read(path);
-        if (!task_keys(report, report_keys) || !f_number_is(report, "schema_version", 1) || !f_string(report, "verdict") || strcmp(f_string(report, "verdict"), "pass") ||
-            !f_string(report, "subject_sha256") || strcmp(f_string(report, "subject_sha256"), f_string(subject, "sha256")) ||
-            !plan_list(f_field(report, "requirements"), 1, 64) || !plan_text(f_field(report, "evidence"))) { json_object_put(report); goto done; }
-        {
-            json_object *claimed = f_field(report, "requirements"); size_t a, b;
-            for (a = 0; a < json_object_array_length(claimed); a++) {
-                const char *id = f_text(json_object_array_get_idx(claimed, a)); int index = plan_index(requirements, id);
-                if (index < 0 || strcmp(f_string(json_object_array_get_idx(requirements, (size_t)index), "check"), f_string(c, "id"))) { json_object_put(report); goto done; }
-                for (b = 0; b < a; b++) if (!strcmp(id, f_text(json_object_array_get_idx(claimed, b)))) { json_object_put(report); goto done; }
-            }
-        }
-        for (j = 0; j < json_object_array_length(requirements); j++) {
-            json_object *r = json_object_array_get_idx(requirements, j);
-            if (!strcmp(f_string(r, "check"), f_string(c, "id")) && !plan_has(f_field(report, "requirements"), f_string(r, "id"))) { json_object_put(report); goto done; }
+        if (plan_report(compiled, c, report, f_string(subject, "sha256")) != PLAN_PASS) {
+            json_object_put(report); goto done;
         }
         json_object_object_add(f_field(delivery, "checks"), f_string(c, "id"), report);
     }

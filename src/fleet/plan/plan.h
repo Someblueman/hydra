@@ -22,6 +22,12 @@ int plan_graph(json_object *plan, json_object *errors);
 int plan_lower(json_object *plan, const char *directory);
 json_object *plan_compile(json_object *plan, json_object *policy, const char *source, json_object *errors);
 int plan_digest(json_object *value, char digest[65]);
+/* Borrowed JSON inputs. Digest is caller-owned; reports retain no references.
+ * INVALID is malformed/stale evidence, distinct from a valid negative verdict. */
+enum plan_verdict { PLAN_INVALID, PLAN_PASS, PLAN_FAIL, PLAN_INCONCLUSIVE };
+int plan_check_digest(json_object *compiled, const char *check, char digest[65]);
+enum plan_verdict plan_report(json_object *compiled, json_object *check,
+                              json_object *report, const char *subject);
 int plan_materialize(json_object *compiled, const char *directory);
 int plan_admit(json_object *compiled, const char *source, const char *accepted);
 int plan_heads_available(json_object *compiled, const char *source);

@@ -102,6 +102,21 @@ matching subject hashes, and intact sealed artifacts. A zero exit with a
 negative or malformed report fails the run. Artifacts and reports are retained
 under the existing run directory; `plan result` returns their paths and digests.
 
+Report version 2 adds a required `validator_sha256` and the `inconclusive` verdict.
+Only `pass` satisfies delivery. Version 1 remains supported for existing plans.
+Use `hydra workflow plan check-definition <compiled.json> <check-id>` to inspect
+the expected validator digest. During execution, `HYDRA_WORKFLOW_VALIDATION_FILE`
+names a JSON response whose `data` object maps this step's check IDs to those
+digests. Validators copy the relevant digest into their version-2 report.
+
+The digest hashes the canonical object with `schema_version: 2`, `check` set to
+the check ID, and `plan_sha256` set to the complete compiled-plan digest. This
+binds the rubric, recipe, source, declared inputs and policy; even unrelated plan
+changes require fresh evidence. The value identifies the required definition,
+not proof that a validator faithfully executed it. The schema command publishes
+this format as `$defs.reportV2`. These reports extend local delivery verification;
+distributed scheduling and intermediate evidence gates remain under development.
+
 Coverage proves explicit traceability, not that the decomposition or rubric is
 sufficient. Check the delivered feature in its integrated environment; read a
 research report and examine its supporting evidence. When findings require new
