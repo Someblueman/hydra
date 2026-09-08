@@ -227,6 +227,8 @@ contains '"mutation_authority":"shell-cli"' "$test_root/capabilities.json" "capa
 adapter_home="$test_root/adapter-home"
 adapter_repo="$test_root/adapter-repo"
 mkdir -p "$adapter_home/profiles/custom" "$adapter_repo"
+# Hydra reports the physical home path, including macOS /var -> /private/var.
+adapter_home="$(cd "$adapter_home" && pwd -P)"
 git -C "$adapter_repo" init -q
 mkdir -p "$adapter_repo/.git/hydra"
 printf '%s\n' project_aaaaaaaaaaaaaaaa > "$adapter_repo/.git/hydra/project-id"
