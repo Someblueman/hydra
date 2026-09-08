@@ -43,8 +43,9 @@ version number is chosen at release time from compatibility impact.
   unattended schedules and reboot recovery need an explicit execution owner.
 - State remains inspectable with ordinary filesystem and shell tools.
 - Git and tmux remain authorities for repository and terminal state. Preserve the
-  current head contract while adding task identity above heads and instances;
-  introduce another execution backend only for a demonstrated requirement.
+  current interactive head contract while separating terminal attachment from
+  headless execution. The tmux-optional milestones below extend the existing task
+  owner; they do not introduce another scheduler or remove interactive sessions.
 - Native frontends delegate mutations to the shell CLI instead of duplicating policy.
 - Public changes follow [VERSIONING.md](VERSIONING.md), including deprecation,
   migration, and rollback requirements. Replace internal interfaces in place;
@@ -109,6 +110,58 @@ claimed host. The original Codex/Pi/OpenCode/plain remote task remains qualified
 fixture tests and local authentication do not close another provider's remote
 requirement. Claude remains explicitly deferred rather than blocking the other
 implemented profiles.
+
+#### T. Optional tmux for headless and remote execution
+
+Decision: make tmux optional for headless execution, retaining it for interactive
+heads. This is planned behavior, not a change to current dependency requirements.
+See [the updated analysis](research/tmux-optional-execution.md) for the current
+implementation, affected contracts, and design tradeoffs. Resource admission and
+finite distributed execution are implemented; T1 and T2 extend that execution to
+hosts without tmux, and T3 qualifies the same distributed scenario in that mode.
+These are delivery milestones, not assigned release versions.
+
+- [ ] **T1 — Terminal-independent workspace and execution identity.** Separate
+      workspace, trust, identity, and provenance creation from terminal launch in
+      the shell mutation path. Support a headless execution with no terminal;
+      preserve existing interactive spawn/attach behavior. Define the durable
+      representation and compatibility treatment before changing session fields.
+      Update lifecycle, cleanup, result readers, and CLI/TUI observations together;
+      an absent terminal must not mean a dead worker. Keep cancellation distinct
+      from workspace deletion and preserve dirty work.
+      Acceptance: a local command and headless adapter execute and produce verified
+      artifacts without invoking tmux; status and teardown work for both execution
+      modes. Existing state and interactive workflows remain readable and usable,
+      with migration/rollback checks where the durable contract changes.
+- [ ] **T2 — Remote execution and planning without tmux.** Route remote exec and
+      headless workflow steps through T1 and the existing detached task owner.
+      Make admission, bootstrap, doctor, installation, and capability negotiation
+      require tmux only for terminal operations. Extend plan schema/validation and
+      lowering explicitly; preserve published spawn semantics and existing compiled
+      artifact bindings. Unsupported remote or terminal capabilities fail before
+      launch, rather than silently changing the requested execution mode.
+      Acceptance: on hosts without tmux installed, submit a command and an available
+      authenticated headless adapter, disconnect, reconnect, collect exact outputs,
+      and consume them in a dependent step. Run the corresponding local compiled
+      plan through public interfaces. Exercise duplicate submission, lost start
+      response, owner death, cancellation, and bounded logs; uncertain work is never
+      replayed and retained reservations are not released by terminal absence.
+- [ ] **T3 — Distributed qualification and operator access.** Use T2 for priority
+      5's two-host fan-out, validation, join, composition, and final check. Expose
+      run/step/attempt logs and owner state through CLI/TUI without requiring attach.
+      Interactive terminal access remains an explicit capability; viewing logs is
+      not attachment to a headless process's stdin.
+      Acceptance: the complete distributed scenario succeeds with tmux absent on
+      execution hosts. Coordinator restart and lost acknowledgments preserve task
+      identity; stale results cannot advance dependents. Re-run interactive spawn,
+      attach, messaging, transcript, and teardown regressions with tmux installed.
+
+Host service management is a conditional extension of these milestones. Add systemd
+or launchd integration only for an explicit logout/reboot recovery requirement,
+reusing the same owner and reconciliation records. Qualify those failure boundaries
+separately; service restart must not replay uncertain work. No permanent daemon,
+replacement terminal multiplexer, automatic failover, or isolation guarantee is
+required to complete T1–T3.
 
 #### 9. Planning, node contracts, and verified outcomes
 
