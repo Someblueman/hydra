@@ -179,6 +179,39 @@ static json_object *data_match_command(char **argv, bool *printed) {
     return result;
 }
 
+static json_object *check_definition_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]), *result = NULL;
+    json_object *errors = json_object_new_array(); char digest[65];
+    (void)printed;
+    if (compiled && f_number_is(compiled, "schema_version", 1) &&
+        !plan_validate(f_field(compiled, "plan"), f_field(compiled, "policy"), errors) &&
+        !plan_check_digest(compiled, argv[2], digest)) {
+        json_object *data = json_object_new_object();
+        f_string_add(data, "check", argv[2]); f_string_add(data, "validator_sha256", digest);
+        result = f_success("workflow plan check-definition", data);
+    }
+    json_object_put(errors); json_object_put(compiled); return result;
+}
+
+static json_object *check_context_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]), *data = plan_validation_context(compiled, argv[2]), *result = NULL;
+    (void)printed;
+    if (data) result = f_success("workflow plan check-context", json_object_get(data));
+    json_object_put(data); json_object_put(compiled); return result;
+}
+static json_object *step_check_command(char **argv, bool *printed) {
+    (void)printed;
+    return plan_step_check(argv[1], argv[2]) ?
+        f_error("workflow plan step-check", "validation_rejected", "required evidence is missing, invalid, failed or inconclusive") :
+        f_success("workflow plan step-check", json_object_new_object());
+}
+
+static json_object *repair_command(char **argv, bool *printed) {
+    int status = plan_repair(argv[1], !strcmp(argv[0], "repair-resume"));
+    if (status < 0) return f_error("workflow plan repair", "repair_state_invalid", "recorded repair state is invalid; do not start replacement work");
+    printf("%d\n", status); *printed = true; return NULL;
+}
+
 json_object *plan_cli(int argc, char **argv) {
     static const struct {
         const char *name;
@@ -195,6 +228,11 @@ json_object *plan_cli(int argc, char **argv) {
         {"projection", 2, projection_command},
         {"bindings", 4, bindings_command},
         {"data-match", 3, data_match_command},
+        {"check-definition", 3, check_definition_command},
+        {"check-context", 3, check_context_command},
+        {"step-check", 3, step_check_command},
+        {"repair", 2, repair_command},
+        {"repair-resume", 2, repair_command},
     };
     json_object *result = NULL;
     bool printed = false;

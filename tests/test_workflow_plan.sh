@@ -21,6 +21,9 @@ trap 'exit 143' TERM
 trap 'exit 129' HUP
 mkdir "$ROOT/repo"
 cp "$REPO/tests/fixtures/plan/repo/"* "$ROOT/repo/"
+if [ "${HYDRA_TEST_REPORT_V2:-0}" = 1 ]; then
+    cp "$ROOT/repo/check-v2.sh" "$ROOT/repo/check.sh"
+fi
 cp "$REPO/tests/fixtures/plan/plan.json" "$ROOT/plan.json"
 cp "$REPO/tests/fixtures/plan/policy.json" "$ROOT/policy.json"
 cd "$ROOT/repo" || exit 1
@@ -35,6 +38,10 @@ grep -q '"coverage":' "$ROOT/validate.json"
 assert_success $? 'validation includes requirement coverage'
 "$HYDRA_BIN" workflow plan compile "$ROOT/plan.json" "$ROOT/policy.json" "$ROOT/compiled.json" > "$ROOT/compile.json"
 assert_success $? 'compile resolves a source and input bound artifact'
+"$HYDRA_BIN" workflow plan check-definition "$ROOT/compiled.json" check > "$ROOT/check-definition.json"
+assert_success $? 'public CLI exposes the bound validator digest'
+"$HYDRA_BIN" workflow plan check-definition "$ROOT/compiled.json" absent >/dev/null 2>&1
+assert_failure $? 'validator digest lookup rejects unknown check IDs'
 "$HYDRA_BIN" workflow plan compile "$ROOT/plan.json" "$ROOT/policy.json" "$ROOT/repeated.json" >/dev/null
 cmp -s "$ROOT/compiled.json" "$ROOT/repeated.json"
 assert_success $? 'identical inputs compile to identical bytes'

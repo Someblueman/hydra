@@ -383,6 +383,10 @@ lifecycle_finish_teardown() {
     _lft_repo="$(sed -n '1p' "$(state_v2_project_dir "$LIFECYCLE_PROJECT_ID")/repo-root" 2>/dev/null || true)"
     lifecycle_write_head_scalar "$_lft_branch" desired-state stopped || return 1
     lifecycle_set_observed "$_lft_branch" exited hydra exact || return 1
+    if [ -f "$LIFECYCLE_INSTANCE_DIR/admission-id" ]; then
+        _lft_admission="$(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/admission-id")"
+        "$HYDRA_BIN_PATH" admission release "$_lft_admission" --confirmed >/dev/null || return 1
+    fi
     event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" lifecycle.torn-down hydra local '{}' >/dev/null || return 1
     run_hook post-teardown "" "$_lft_repo" "$_lft_session" "$_lft_branch"
 }

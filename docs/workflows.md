@@ -3,7 +3,7 @@
 For named artifacts and durable operator decisions, see [Workflow data and approval
 waits](WORKFLOW_DATA.md).
 
-Hydra workflow schema `1` describes a finite, locally executed DAG. Repository
+Hydra workflow schema `1` describes a finite DAG with one local coordinator. Repository
 definitions live at `.hydra/workflows/<id>.yml` (or `.yaml`).
 They are covered by `hydra init --trust`; changing any file below `.hydra` makes
 repository workflows untrusted until reviewed and trusted again. An explicit file
@@ -42,7 +42,8 @@ single `-` or `_` separators. `parallelism` is 1-16, `disk_mb` 1-1048576,
 true. Supported kinds and required arguments are: `spawn` (`branch`), `wait`
 (`head`), `exec` (`head` and `command` or `argv`), `message` (`head`, `message`), `gate`
 (`head`, `name`, and `command` or `argv`), `approve` (`head`, `name`, `by`), `approval-wait` (`head`, `name`), and
-`kill` (`head`). Optional delegation arguments are `group`, `profile`, `reason`,
+`kill` (`head`), and `task` (`task_input`). Task steps use the native fleet runtime
+described in [Distributed task steps](WORKFLOW_TASKS.md). Optional delegation arguments are `group`, `profile`, `reason`,
 `completion_policy`, `timeout`, `force`, and `allow_shell`. `command` and `argv`
 are mutually exclusive.
 

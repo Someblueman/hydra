@@ -1,0 +1,228 @@
+{
+  "schema_version": 2,
+  "id": "checked-task-plan",
+  "objective": "Validate a candidate before composition and validate the composition",
+  "context": [],
+  "assumptions": [],
+  "questions": [],
+  "steps": [
+    {
+      "id": "produce",
+      "role": "work",
+      "kind": "task",
+      "needs": [],
+      "args": {
+        "task_input": "recipe"
+      },
+      "writes": []
+    },
+    {
+      "id": "inspect",
+      "role": "verify",
+      "kind": "task",
+      "needs": [
+        "produce"
+      ],
+      "args": {
+        "task_input": "recipe"
+      },
+      "writes": []
+    },
+    {
+      "id": "compose",
+      "role": "compose",
+      "kind": "task",
+      "needs": [
+        "produce",
+        "inspect"
+      ],
+      "args": {
+        "task_input": "recipe"
+      },
+      "writes": []
+    },
+    {
+      "id": "verify",
+      "role": "verify",
+      "kind": "task",
+      "needs": [
+        "compose"
+      ],
+      "args": {
+        "task_input": "recipe"
+      },
+      "writes": []
+    }
+  ],
+  "data": {
+    "schema_version": 1,
+    "inputs": {
+      "produce-recipe": {
+        "path": "produce.json",
+        "type": "object",
+        "max_bytes": 4096
+      },
+      "inspect-recipe": {
+        "path": "inspect.json",
+        "type": "object",
+        "max_bytes": 4096
+      },
+      "compose-recipe": {
+        "path": "compose.json",
+        "type": "object",
+        "max_bytes": 4096
+      },
+      "verify-recipe": {
+        "path": "verify.json",
+        "type": "object",
+        "max_bytes": 4096
+      }
+    },
+    "steps": {
+      "produce": {
+        "inputs": {
+          "recipe": {
+            "input": "produce-recipe"
+          }
+        },
+        "outputs": {
+          "result": {
+            "path": "result.txt",
+            "type": "file",
+            "max_bytes": 4096
+          }
+        }
+      },
+      "inspect": {
+        "inputs": {
+          "recipe": {
+            "input": "inspect-recipe"
+          },
+          "subject": {
+            "step": "produce",
+            "output": "result"
+          },
+          "validation": {
+            "validation": "plan"
+          }
+        },
+        "outputs": {
+          "report": {
+            "path": "report.json",
+            "type": "object",
+            "max_bytes": 4096
+          }
+        }
+      },
+      "compose": {
+        "inputs": {
+          "recipe": {
+            "input": "compose-recipe"
+          },
+          "subject": {
+            "step": "produce",
+            "output": "result"
+          }
+        },
+        "outputs": {
+          "result": {
+            "path": "result.txt",
+            "type": "file",
+            "max_bytes": 4096
+          }
+        }
+      },
+      "verify": {
+        "inputs": {
+          "recipe": {
+            "input": "verify-recipe"
+          },
+          "subject": {
+            "step": "compose",
+            "output": "result"
+          },
+          "validation": {
+            "validation": "plan"
+          }
+        },
+        "outputs": {
+          "report": {
+            "path": "report.json",
+            "type": "object",
+            "max_bytes": 4096
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "hosts": [
+      "local"
+    ],
+    "tools": [
+      "sh"
+    ],
+    "effects": [
+      "execute",
+      "worktree"
+    ],
+    "writes": [],
+    "parallelism": 2,
+    "timeout_seconds": 600,
+    "artifact_bytes": 65536,
+    "max_heads": 4,
+    "disk_mb": 1,
+    "retry_budget": 0,
+    "repair_budget": 0
+  },
+  "deliverables": [
+    {
+      "id": "part",
+      "description": "Checked intermediate",
+      "step": "produce",
+      "output": "result",
+      "destination": "intermediate"
+    },
+    {
+      "id": "final",
+      "description": "Checked composition",
+      "step": "compose",
+      "output": "result",
+      "destination": "run-artifact"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "part-content",
+      "criterion": "Candidate is suitable for composition",
+      "deliverable": "part",
+      "check": "part-check"
+    },
+    {
+      "id": "final-content",
+      "criterion": "Composition preserves the candidate",
+      "deliverable": "final",
+      "check": "final-check"
+    }
+  ],
+  "checks": [
+    {
+      "id": "part-check",
+      "method": "executable",
+      "definition": "Inspect candidate content",
+      "step": "inspect",
+      "input": "subject",
+      "report": "report",
+      "deliverable": "part"
+    },
+    {
+      "id": "final-check",
+      "method": "executable",
+      "definition": "Inspect composed content",
+      "step": "verify",
+      "input": "subject",
+      "report": "report",
+      "deliverable": "final"
+    }
+  ]
+}

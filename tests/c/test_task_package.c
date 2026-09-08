@@ -52,7 +52,7 @@ static void exact_source(const char *dir) {
     out[strcspn(out, "\n")] = '\0'; assert(!f_copy(commit, sizeof(commit), out)); free(out);
     f_string_add(f_field(spec, "source"), "commit", commit);
     assert(!f_write(code, "dirty\n", 6, true));
-    response = task_prepare(dir, spec); assert(json_object_get_boolean(f_field(response, "ok"))); package = f_field(response, "data");
+    response = task_prepare(dir, NULL, spec); assert(json_object_get_boolean(f_field(response, "ok"))); package = f_field(response, "data");
     inspected = task_inspect(package); assert(json_object_get_boolean(f_field(inspected, "ok"))); json_object_put(inspected);
     assert(!f_path(bundle, sizeof(bundle), dir, "received.bundle")); assert(!f_hex_write(bundle, f_string(package, "bundle_hex"), 0600));
     free(run(fetch)); out = run(show); assert(!strcmp(out, "committed\n")); free(out);

@@ -6,6 +6,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+static int attempt_command(const char *action, json_object *manifest, const char *run, const char *step, const char *attempt) {
+    if (!strcmp(action, "prepare")) return wd_prepare(manifest, run, step, attempt);
+    if (!strcmp(action, "verify-output")) return wd_verify_output(manifest, step, attempt);
+    if (!strcmp(action, "seal")) return wd_seal(manifest, step, attempt);
+    return -1;
+}
 json_object *wd_cli(int argc, char **argv) {
     json_object *manifest = NULL, *result; char data[F_PATH], graph[F_PATH]; int status = -1;
     if (argc == 2 && !strcmp(argv[0], "fingerprint")) {
@@ -26,10 +32,7 @@ json_object *wd_cli(int argc, char **argv) {
         if (manifest) {
             if (argc == 5 && !strcmp(argv[0], "init")) status = wd_initialize(manifest, argv[2], argv[1]);
             else if (argc == 2 && !strcmp(argv[0], "verify")) status = wd_verify(manifest, argv[1]);
-            else if (argc == 4 && wd_name(argv[2])) {
-                if (!strcmp(argv[0], "prepare")) status = wd_prepare(manifest, argv[1], argv[2], argv[3]);
-                else if (!strcmp(argv[0], "seal")) status = wd_seal(manifest, argv[2], argv[3]);
-            }
+            else if (argc == 4 && wd_name(argv[2])) status = attempt_command(argv[0], manifest, argv[1], argv[2], argv[3]);
         }
     }
     result = status ? f_error("workflow-data", "invalid_data", "workflow data is invalid, missing, changed, oversized, or has unsafe paths; inspect declarations and sealed artifacts") :

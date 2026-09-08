@@ -1,6 +1,7 @@
 # Optional tmux for headless execution
 
-Analysis updated 8 September 2026 against main commit `0319959` (v2.2.1).
+Analysis initially updated 8 September 2026 against main commit `0319959`
+(v2.2.1), then reconciled with the finite distributed DAG implementation.
 Status: recommendation and implementation milestones; no runtime change or new
 remote qualification is claimed by this document.
 
@@ -19,7 +20,11 @@ Main now includes local objective planning and the v2.2.1 correctness/trust fixe
 Fleet sources were reorganized into task, transport, support, agent, and plan
 modules. The earlier flat source paths are obsolete. Local planning already lowers
 into the existing workflow engine; it must be included in this migration rather
-than treated as future work. Distributed planning/execution remains outstanding.
+than treated as future work. Finite distributed planning/execution, resource
+admission, validation joins, bounded repair, and scheduling replay are now
+implemented on this branch; see the [qualification record](../evidence/distributed/qualification.md).
+That controlled two-host qualification used tmux and executable fixtures. Execution
+without tmux and additional live-provider qualification remain outstanding.
 See [plan compilation](../PLAN_COMPILATION.md) and
 [the roadmap](../ROADMAP.md#candidate-features).
 
@@ -98,9 +103,9 @@ terminal-free execution.
 
 [Roadmap milestones T1–T3](../ROADMAP.md#t-optional-tmux-for-headless-and-remote-execution)
 sequence workspace/state separation, remote and compiled-plan execution, then
-cross-host DAG qualification. Resource admission may proceed independently, but the
-first headless distributed DAG should use the new path rather than further couple
-planning to terminal sessions.
+cross-host DAG qualification without tmux. Resource admission and finite distributed
+execution already exist; extend their current paths and repeat the distributed
+scenario without tmux rather than introducing a second execution authority.
 
 The decisive first proof is a command and headless adapter run on a host without
 tmux installed: submit, disconnect, reconnect, collect exact artifacts, and consume

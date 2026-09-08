@@ -102,20 +102,23 @@ static int inputs_prepare(const char *source, const char *scratch, json_object *
 done:
     json_object_put(selected); return status;
 }
-json_object *task_prepare(const char *source, json_object *draft) {
+static int source_bundle(const char *scratch, const char *source, const char *commit, char bundle[F_PATH]) {
+    char *fetch[] = {"fetch", "--no-tags", "--no-recurse-submodules", "--", (char *)source, (char *)commit, NULL};
+    char *ref[] = {"update-ref", "refs/heads/task-source", (char *)commit, NULL};
+    char *create[] = {"bundle", "create", bundle, "refs/heads/task-source", NULL};
+    if (f_path(bundle, F_PATH, scratch, "source.bundle") || git_ok(scratch, fetch) ||
+        git_ok(scratch, ref) || git_ok(scratch, create)) return -1;
+    return 0;
+}
+json_object *task_prepare(const char *source, const char *input_source, json_object *draft) {
     char scratch[] = "/tmp/hydra-task-prepare.XXXXXX", bundle[F_PATH], absolute[F_PATH], hash[65];
     json_object *spec = task_spec(draft, false), *package = NULL, *inputs; char *hex = NULL;
     const char *commit; const char *error = "invalid_spec";
     if (!spec) goto done;
     if (!realpath(source, absolute) || !mkdtemp(scratch)) { error = "io_failed"; goto done; }
     commit = f_string(f_field(spec, "source"), "commit"); error = "source_preflight_failed";
-    if (preflight(absolute, commit, f_field(spec, "work")) || init_bare(scratch, commit)) goto clean;
-    {
-        char *fetch[] = {"fetch", "--no-tags", "--no-recurse-submodules", "--", absolute, (char *)commit, NULL};
-        char *ref[] = {"update-ref", "refs/heads/task-source", (char *)commit, NULL};
-        char *create[] = {"bundle", "create", bundle, "refs/heads/task-source", NULL};
-        if (f_path(bundle, sizeof(bundle), scratch, "source.bundle") || git_ok(scratch, fetch) || git_ok(scratch, ref) || git_ok(scratch, create)) goto clean;
-    }
+    if (preflight(absolute, commit, f_field(spec, "work")) || init_bare(scratch, commit) ||
+        source_bundle(scratch, absolute, commit, bundle)) goto clean;
     error = "package_too_large";
     if (!(hex = f_hex_read(bundle)) || strlen(hex) > TASK_PACKAGE_LIMIT - TASK_FILE_LIMIT * 2 || f_hash(bundle, hash)) goto clean;
     f_string_add(f_field(spec, "source"), "bundle_sha256", hash);
@@ -123,7 +126,7 @@ json_object *task_prepare(const char *source, json_object *draft) {
     json_object_object_add(package, "spec", json_object_get(spec)); f_string_add(package, "bundle_hex", hex);
     inputs = json_object_new_array(); json_object_object_add(package, "input_hex", inputs);
     error = "invalid_input_file";
-    if (inputs_prepare(absolute, scratch, spec, inputs)) goto clean;
+    if (inputs_prepare(input_source ? input_source : absolute, scratch, spec, inputs)) goto clean;
     {
         json_object *validated = task_spec(spec, true);
         error = "invalid_spec";

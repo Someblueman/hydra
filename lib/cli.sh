@@ -35,8 +35,10 @@ Commands:
                     Headless: agy (Antigravity), cursor (Cursor Agent), opencode,
                               claude, codex, pi; inspect with agent contract NAME
   remote            Manage OpenSSH aliases: add NAME [USER@]SSH_ALIAS, remove NAME, list
+  admission         Inspect or configure host-wide execution reservations and FIFO admission
+                    Usage: hydra admission --help
   fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
-                    Commands: list, doctor, handshake, bootstrap, package, init, spawn,
+                    Commands: list, doctor, admission, handshake, bootstrap, package, init, spawn,
                               signal, cancel, workflow, attach, export, import,
                               reconcile, watch, tui, task (see fleet help)
                     Options: --project PATH, --instance ID, --jobs 1-16, --timeout 1-300
@@ -191,6 +193,8 @@ Environment:
   HYDRA_DASHBOARD_PANES_PER_SESSION  Panes per session for dashboard (1, N, or all)
   HYDRA_MAX_SESSIONS  Maximum active sessions (default: unlimited)
                       When limit is reached, spawns are queued for later
+  HYDRA_ADMISSION_QUEUE_SECONDS  Admission wait deadline (default: 60)
+  HYDRA_ADMISSION_LABELS  Comma-separated required host labels
   HYDRA_SKIP_SETUP  Set to 1 to skip environment setup commands
   HYDRA_SETUP_CONTINUE  Set to 1 to continue spawn even if setup fails
   HYDRA_CORE        Explicit optional hydra-core executable
@@ -230,6 +234,10 @@ main() {
         agent)
             shift
             cmd_agent "$@"
+            ;;
+        admission)
+            shift
+            cmd_admission "$@"
             ;;
         fleet-local)
             shift

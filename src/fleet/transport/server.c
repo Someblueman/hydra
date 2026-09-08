@@ -12,7 +12,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static const char *capabilities[] = {"list", "doctor", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", NULL};
+static const char *capabilities[] = {"list", "doctor", "admission", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", NULL};
 json_object *f_handshake(void) {
     json_object *data = json_object_new_object(), *caps = json_object_new_array(), *projects = json_object_new_array(), *native = json_object_new_object();
     char root[F_PATH]; DIR *dir; struct dirent *entry; size_t i;
@@ -79,6 +79,8 @@ static json_object *snapshot(void) {
     }
     {
         json_object *result = run_hydra(argv, 15), *heads = f_field(f_field(result, "data"), "heads"); size_t i;
+        char *capacity[] = {(char *)f_hydra, "admission", "status", "--summary", NULL};
+        if (f_field(result, "data")) json_object_object_add(f_field(result, "data"), "admission", run_hydra(capacity, 5));
         for (i = 0; json_object_is_type(heads, json_type_array) && i < json_object_array_length(heads); i++) {
             json_object *head = json_object_array_get_idx(heads, i); const char *project = f_string(head, "project_id"); char *value;
             if (!project || !f_name(project) || snprintf(path, sizeof(path), "%s/state/v2/projects/%s/repo-root", f_home, project) >= (int)sizeof(path)) continue;
@@ -112,6 +114,16 @@ static json_object *workflow_runs(void) {
     }
     return f_success("fleet-workflow-runs", data);
 }
+/* args have already passed the transport's bounded string-array validation. */
+static json_object *admission_inspect(json_object *args, size_t count) {
+    const char *sub = count ? f_text(json_object_array_get_idx(args, 0)) : "";
+    const char *option = count == 2 ? f_text(json_object_array_get_idx(args, 1)) : "";
+    bool status = !strcmp(sub, "status") && (count == 1 || (count == 2 && (!strcmp(option, "--json") || !strcmp(option, "--summary"))));
+    bool inspect = !strcmp(sub, "inspect") && count == 2 && f_name(option);
+    char *argv[] = {(char *)f_hydra, "admission", (char *)sub, count == 2 ? (char *)option : NULL, NULL};
+    if (!status && !inspect) return f_error("fleet-admission", "invalid_input", "use status [--json|--summary] or inspect ID; configure policy on the receiving host");
+    return run_hydra(argv, 5);
+}
 json_object *f_serve(json_object *request) {
     const char *action = f_string(request, "action"), *project = f_string(request, "project"), *instance = f_string(request, "instance");
     json_object *args = f_field(request, "args"); size_t i, n = 0, count = 0;
@@ -130,9 +142,9 @@ json_object *f_serve(json_object *request) {
         if (!json_object_is_type(arg, json_type_string) || strlen(json_object_get_string(arg)) != (size_t)json_object_get_string_len(arg))
             return f_error("fleet", "invalid_input", "arguments must be strings without NUL");
     }
-    if (strcmp(action, "doctor")) {
-        if (!project || *project != '/' || chdir(project)) return f_error("fleet", "invalid_project", "an existing absolute remote project path is required");
-    }
+    if (!strcmp(action, "admission")) return admission_inspect(args, count);
+    if (strcmp(action, "doctor") && (!project || *project != '/' || chdir(project)))
+        return f_error("fleet", "invalid_project", "an existing absolute remote project path is required");
     if (!strcmp(action, "export")) return f_bundle_export(project, args, f_string(request, "run"));
     if (!strcmp(action, "import")) return f_bundle_import(project, f_field(request, "bundle"));
     argv[n++] = (char *)f_hydra;
