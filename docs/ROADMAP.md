@@ -179,11 +179,6 @@ block basic load balancing. Relevant item **7** diagnostics can accompany each s
 
 ##### 9A. Satisfiable outcome obligations and compiler diagnostics
 
-- [ ] Correct the reproduced orphan-check inconsistency: public plan validation
-      currently admits a check with no assigned requirement, while its report must
-      claim at least one requirement owned by that check. Reject this contradiction
-      before execution without preventing legitimate multi-obligation checks. See
-      the [report ownership rules](../src/fleet/plan/plan_report.c).
 - [ ] Represent each mandatory outcome with an intent reference, exact subject,
       observable criterion, evaluation method, required evidence, applicable
       environment, completion rule, and limitations. Allow a requirement to have

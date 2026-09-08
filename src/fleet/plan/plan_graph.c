@@ -25,6 +25,14 @@ static bool delivery_role(json_object *plan, json_object *d, const char *role) {
 static bool executable_recipe(json_object *plan, json_object *step, const char *method) {
     return f_number_is(plan, "schema_version", 2) || !method || strcmp(method, "executable") || f_field(f_field(step, "args"), "argv");
 }
+static void check_ownership(json_object *requirements, const char *check, json_object *errors) {
+    if (!check) return; /* Missing IDs are rejected by structural validation. */
+    for (size_t i = 0; i < json_object_array_length(requirements); i++) {
+        const char *owner = f_string(json_object_array_get_idx(requirements, i), "check");
+        if (owner && !strcmp(owner, check)) return;
+    }
+    plan_error(errors, "checks", "orphan_check", "each check must own at least one requirement so its report can claim valid coverage");
+}
 static void coverage(json_object *plan, json_object *errors) {
     json_object *deliverables = f_field(plan, "deliverables"), *requirements = f_field(plan, "requirements"), *checks = f_field(plan, "checks"), *steps = f_field(plan, "steps");
     size_t i, j;
@@ -55,6 +63,7 @@ static void coverage(json_object *plan, json_object *errors) {
             plan_error(errors, "checks", "invalid_verification", "a verify step must consume the exact composed artifact, declare an object report and no repository writes");
         if (!executable_recipe(plan, step, method))
             plan_error(errors, "checks", "invalid_evaluator", "executable checks require an argv recipe; agent assessment is a distinct method");
+        check_ownership(requirements, f_string(c, "id"), errors);
     }
     for (i = 0; i < json_object_array_length(requirements); i++) {
         json_object *r = json_object_array_get_idx(requirements, i), *d = record(deliverables, f_string(r, "deliverable")), *c = record(checks, f_string(r, "check"));

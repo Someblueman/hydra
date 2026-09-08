@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Run finite workflows across explicitly selected hosts with durable coordinator
+  ownership, stable task receipts, and verified file and collected Git handoffs.
+- Compile distributed schema-2 plans with artifact-bound validation joins and
+  version-2 reports tied to accepted check definitions. Required checks gate
+  composition, and the combined candidate requires its own validation.
+- Repair rejected candidates within an accepted whole-graph budget and replay
+  scheduling decisions from recorded observations. Unknown remote execution is
+  reconciled under its original identity rather than retried or reassigned.
 - Share shell-authoritative FIFO admission across local exec, gates, head startup
   and resume, queued spawns, and remote tasks and workflows. Receiver policy
   controls host/project concurrency, disk floors, required labels, and queue
@@ -21,6 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timestamps with `hydra admission` and read-only `hydra fleet admission HOST`.
   Bounded capacity summaries are included in initialized-host fleet snapshots;
   cached observations never grant execution authority.
+
+### Fixed
+
+- Reject plans containing a check with no assigned requirement before execution;
+  such checks cannot produce a valid report. Multiple requirements per check
+  remain supported in both local and distributed plans.
 
 ## [2.2.1] - 2026-09-08
 

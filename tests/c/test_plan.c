@@ -127,9 +127,24 @@ static void repair_policy_cases(void) {
     json_object_object_add(f_field(plan, "envelope"), "repair_budget", json_object_new_int(1)); expect(plan, policy, "unsupported_repair");
     json_object_put(plan); json_object_put(policy);
 }
+static void check_ownership_cases(void) {
+    const char *plans[] = {"tests/fixtures/plan/plan.json", "tests/fixtures/plan-task/plan.json"};
+    const char *policies[] = {"tests/fixtures/plan/policy.json", "tests/fixtures/plan-task/policy.json"};
+    for (size_t i = 0; i < 2; i++) {
+        json_object *plan = plan_read(plans[i]), *policy = plan_read(policies[i]);
+        json_object *requirements = f_field(plan, "requirements"), *checks = f_field(plan, "checks");
+        json_object *extra = plan_canonical(json_object_array_get_idx(requirements, 0));
+        f_string_add(extra, "id", "extra"); json_object_array_add(requirements, extra);
+        expect(plan, policy, NULL); /* A check may own several requirements. */
+        json_object *orphan = plan_canonical(json_object_array_get_idx(checks, 0));
+        f_string_add(orphan, "id", "orphan"); json_object_array_add(checks, orphan);
+        expect(plan, policy, "orphan_check");
+        json_object_put(plan); json_object_put(policy);
+    }
+}
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    graph_cases(); distributed_graph_cases(); repair_policy_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
+    graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
     puts("planning graph, policy, canonical JSON and parser checks passed"); return 0;
 }
