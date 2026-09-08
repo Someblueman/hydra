@@ -389,7 +389,7 @@ workflow_drive() {
         mkdir "$_wd_drive_lock" || return 1
     fi
     _load_lib workflow_statistics
-    workflow_statistics_begin "$_wd_dir" || { rm -rf "$_wd_drive_lock"; return 1; }
+    workflow_statistics_begin "$_wd_dir" || true
     workflow_atomic_scalar "$_wd_dir/owner-pid" "$$" || return 1
     workflow_atomic_scalar "$_wd_dir/heartbeat-at" "$(date +%s)" || return 1
     workflow_atomic_scalar "$_wd_dir/state" running || return 1

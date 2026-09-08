@@ -15,7 +15,7 @@ BUILD = Path(os.environ.get("BUILD_DIR", ROOT / "build")).resolve()
 
 with tempfile.TemporaryDirectory(prefix="hydra-plan-launch-") as folder:
     base = Path(folder)
-    repo = base / "repo"
+    repo = base / "repo\tline"
     shutil.copytree(ROOT / "tests/fixtures/plan/repo", repo)
     # Keep execution alive across closing the UI, without changing the engine.
     compose = repo / "compose.sh"
@@ -121,8 +121,11 @@ with tempfile.TemporaryDirectory(prefix="hydra-plan-launch-") as folder:
         s.until("A CONVERSATION")
         links = run(hydra, "workflow", "--workspace-links").stdout.splitlines()
         assert links[0] == "HYDRA_WORKSPACE_LINKS\t1" and links[-1] == "Z", links
+        project = links[1].split("\t")
+        assert project == ["P", run_dir.parents[2].name, str(repo.resolve()).replace("\t", " ").replace("\n", " ")], links
         assert len([line for line in links if line.startswith("L\t" + run_id + "\t")]) == 1, links
         s.send("z")  # Project/head/run tree, using the actual recorded graph.
+        s.until("Project: repo line")
         s.until("plan-fixture / succeeded", timeout=15)
         s.send("j")
         s.until("Recorded branch reference")
@@ -161,7 +164,24 @@ with tempfile.TemporaryDirectory(prefix="hydra-plan-launch-") as folder:
             assert s.screen.overflow == 0
             s.screen.save(evidence / f"verification-refused-{width}x{height}.html")
         s.close(keys=b"q")
+        # Newline roots cannot be initialized in durable scalar state. A read-only
+        # projection after moving this existing checkout must still be framed.
+        original_repo = repo
+        repo = repo.rename(base / "repo\tline\nbreak")
+        try:
+            moved_links = run(hydra, "workflow", "--workspace-links").stdout.splitlines()
+            assert moved_links[1].split("\t") == [
+                "P", project[1], str(repo.resolve()).replace("\t", " ").replace("\n", " ")]
+            assert moved_links[2:] == links[2:], moved_links
+            s = Session([str(BUILD / "hydra-tui"), "--hydra", hydra], 140, 40, env=env, cwd=repo)
+            s.until("A CONVERSATION")
+            s.send("z")
+            s.until("Project: repo line break")
+            s.until("plan-fixture / succeeded", timeout=15)
+            s.close(keys=b"q")
+        finally:
+            repo = repo.rename(original_repo)
     finally:
         s.abort()
         subprocess.run([tmux, "-S", socket, "kill-server"], capture_output=True, check=False)
-print("PASS plan launch: exact approval, durable receipt, UI exit, deduplication, selected output and live artifact verification")
+print("PASS plan launch: exact approval, durable receipt, UI exit, deduplication, selected output, live artifact verification and escaped checkout paths")

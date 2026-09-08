@@ -128,9 +128,14 @@ workflow_plan_finish() {
     [ -f "$1/compiled.json" ] || return 0
     workflow_plan_bindings_match "$1" && workflow_plan_tool finish "$1" > "$1/plan-verification.json" || return 1
     # Historical timing of the independent gate, bound to the accepted revision.
-    # Reading statistics never reruns verification or rewrites this observation.
-    workflow_atomic_scalar "$1/verification-plan-sha256" "$(sed -n '1p' "$1/plan-accepted")" &&
-        workflow_atomic_scalar "$1/verified-at" "$(date +%s)"
+    # Optional telemetry must not change delivery. Invalidate old timing first,
+    # and publish the binding last so a partial write remains unknown.
+    rm -f "$1/verification-plan-sha256" "$1/verified-at" || return 0
+    if ! { workflow_atomic_scalar "$1/verified-at" "$(date +%s)" &&
+        workflow_atomic_scalar "$1/verification-plan-sha256" "$(sed -n '1p' "$1/plan-accepted")"; }; then
+        rm -f "$1/verification-plan-sha256" "$1/verified-at" || true
+    fi
+    return 0
 }
 
 workflow_plan_repair() {

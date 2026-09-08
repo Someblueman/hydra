@@ -128,6 +128,11 @@ event, attempt, approval and plan contracts retain their meaning. Older records
 are not backfilled from latest-attempt times or inferred from success; missing
 boundaries remain unknown. Timestamps have one-second wall-clock resolution;
 clock changes can invalidate intervals, and valid same-second intervals are zero.
+Statistics persistence is optional: a failed run-start or recovery-counter write
+does not block execution, and failed verification-timing writes do not change a
+verified delivery into failure. Partial timing records remain unknown; the
+accepted-plan binding is published only after its timestamp. Required owner,
+execution-state and independent-verification writes remain execution gates.
 
 ## Local qualification
 

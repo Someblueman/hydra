@@ -9,7 +9,7 @@ export HYDRA_HOME="$ROOT/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_S
 . "$REPO/tests/helpers.sh"
 test_count=0 pass_count=0 fail_count=0
 cleanup() {
-    for head in plan-smoke plan-negative plan-guard-graph plan-guard-limits; do
+    for head in plan-smoke plan-negative plan-guard-graph plan-guard-limits plan-timing-verified-at plan-timing-verification-plan-sha256; do
         (cd "$ROOT/repo" && "$HYDRA_BIN" kill "$head" --force >/dev/null 2>&1) || true
     done
     if [ "$fail_count" -ne 0 ]; then printf 'Failure evidence: %s\n' "$ROOT"; return; fi
@@ -121,6 +121,8 @@ git branch -D plan-smoke >/dev/null 2>&1 || true
 assert_failure $? 'admission rejects retained durable head state after branch deletion'
 if [ ! -s "$ROOT/durable.out" ]; then empty_status=0; else empty_status=1; fi
 assert_success "$empty_status" 'durable head rejection creates no workflow run'
+# shellcheck disable=SC1091
+. "$REPO/tests/workflow_plan_statistics_cases.sh"
 sed 's/"verdict":"pass"/"verdict":"fail"/' check.sh > "$ROOT/check.sh"
 cp "$ROOT/check.sh" check.sh
 git add check.sh && git commit -qm 'negative assessment fixture'

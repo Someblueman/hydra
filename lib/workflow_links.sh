@@ -3,6 +3,8 @@
 workflow_links() (
     _wlk_project="$(hydra_get_project_id)" || return 1
     _wlk_repo="$(workflow_repo_root)" || return 1
+    # The root is display-only; match the native adapter's single-field encoding.
+    _wlk_repo="$(printf '%s' "$_wlk_repo" | tr '\t\r\n' '   ')"
     printf 'HYDRA_WORKSPACE_LINKS\t1\nP\t%s\t%s\n' "$_wlk_project" "$_wlk_repo"
     _wlk_root="$(workflow_runs_dir)" || return 1
     _wlk_runs=0

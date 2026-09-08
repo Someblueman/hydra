@@ -27,7 +27,7 @@ def number(path):
 assert scalar(run / "recovery-count") == expected_recoveries
 start = number(run / "started-at")
 end = number(run / "completed-at")
-assert start and end and end >= start
+assert end and (start is None or end >= start)
 queue = []
 eligible = 0
 for row in (run / "graph.tsv").read_text().splitlines():
@@ -43,7 +43,7 @@ for row in (run / "graph.tsv").read_text().splitlines():
     if ready is not None and first is not None:
         assert first >= ready
         queue.append(first - ready)
-expected = [(0, eligible, len(queue), sum(queue)), (1, 1, 1, end-start)]
+expected = [(0, eligible, len(queue), sum(queue)), (1, 1, int(start is not None), end-start if start is not None else 0)]
 if verified:
     passed = number(run / "verified-at")
     assert start <= passed <= end

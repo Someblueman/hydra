@@ -13,6 +13,47 @@ Focused checks under dash and macOS sh cover zero, leading zeros, the maximum,
 overflow, invalid/missing history and approval continuation. Repository lint is
 rechecked with both ShellCheck 0.9.0 and 0.11.0 for this syntax-only follow-up.
 
+## PR review follow-up
+
+Optional statistics writes no longer block run startup/recovery or turn a verified
+delivery into failure. The required execution-state and independent-verification
+gates remain intact. Actual CLI rename faults cover run start, recovery count,
+verification time and its plan binding, including seeded stale timing. The plan
+suite passed 78 checks and runtime suite passed 47; negative verification, altered
+plan guards, cancellation and ordinary recovery remain covered.
+
+The private workspace projection escapes tabs, carriage returns and newlines in
+its display-only root. The complete plan/UI acceptance passed in a tab-containing
+checkout. After moving that existing checkout to a newline-containing path, the
+read-only CLI projection and native parser retained the same project identity and
+association rows. This does not expand the existing durable initialization rule,
+which rejects newlines in repository scalar paths.
+
+The affected statistics PTY, workspace controls, real visualization and ShellCheck
+0.9.0 repository lint passed. Local logs use `build/pr80-*-review.log`,
+`build/pr80-plan-timing.log`, `build/pr80-runtime-timing.log`,
+`build/pr80-path-plan-launch.log`, `build/pr80-workflow-controls.log` and
+`build/pr80-review-fixes-lint.log`.
+
+The shell-only test target now excludes the native visualization script, retaining
+its prerequisite-backed target in full/native acceptance. A clean source archive
+attempt first hit an unchanged admission failure, then passed admission and stopped
+at path tests because the archive lacked Git metadata. The same path tests passed
+12/12 after initializing that disposable fixture as a Git repository. No further
+full shell rerun was used to claim clean-source acceptance; hosted shell CI remains
+the complete check for this routing correction.
+
+Python test bytecode is ignored by the repository itself. The earlier macOS local
+checks inherited that rule from the user's global Git excludes, while hosted Linux
+did not; `tests/termviz/__pycache__/pty_support.*.pyc` consequently made the hosted
+source appear dirty. The package dirty-source guard is unchanged.
+An isolated Git snapshot of staged tree `d4afe87988be0d408d1092bd802dd4cdaa0f1cec`,
+with global excludes disabled, rebuilt core/TUI and passed the statistics tests.
+The resulting bytecode left its Git status clean; both native packages matched
+their built bytes, SHA-256 metadata and snapshot commit. A deliberate README edit
+was still refused by packaging. Only this evidence paragraph was added afterward.
+Logs: `build/pr80-package-probe.log` and `build/pr80-package-dirty-refusal.log`.
+
 ## Results
 
 All commands below completed with exit status zero on local macOS arm64:

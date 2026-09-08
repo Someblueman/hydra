@@ -82,13 +82,16 @@ workflow_statistics_begin() {
         _wsb_count="$(workflow_statistics_scalar "$_wsb_dir/recovery-count")"
         case "$_wsb_count" in ''|*[!0-9]*) return 0 ;; esac
         if [ "${#_wsb_count}" -gt 6 ] || [ "$_wsb_count" -ge 999999 ]; then
-            workflow_atomic_scalar "$_wsb_dir/recovery-count" -
+            workflow_atomic_scalar "$_wsb_dir/recovery-count" - || rm -f "$_wsb_dir/recovery-count"
             return
         fi
         # expr treats leading-zero counters as decimal on POSIX shells.
         # shellcheck disable=SC2003
         _wsb_next="$(expr "$_wsb_count" + 1)" || return 1
-        workflow_atomic_scalar "$_wsb_dir/recovery-count" "$_wsb_next" || return 1
+        if ! workflow_atomic_scalar "$_wsb_dir/recovery-count" "$_wsb_next"; then
+            rm -f "$_wsb_dir/recovery-count" || true
+            return 1
+        fi
     fi
 }
 

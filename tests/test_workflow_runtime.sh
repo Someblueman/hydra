@@ -222,6 +222,23 @@ assert_equal 2 "$(sed -n '1p' "$test_root/retry-count")" "retry side effect ran 
 python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$retry_dir" 0 unverified
 assert_success $? "automatic retries retain zero owner recoveries and reconcile native timing"
 
+mkdir "$test_root/statistics-bin"
+cp "$(dirname "$HYDRA_BIN")/../tests/fixtures/statistics/fail-scalar-mv.sh" "$test_root/statistics-bin/mv"
+chmod +x "$test_root/statistics-bin/mv"
+statistics_real_mv="$(command -v mv)"
+sed 's/retry-count/start-fault-count/' "$test_root/retry.yml" > "$test_root/start-fault.yml"
+PATH="$test_root/statistics-bin:$PATH" HYDRA_TEST_REAL_MV="$statistics_real_mv" \
+    HYDRA_TEST_STATS_FIELD=started-at HYDRA_TEST_STATS_MARKER="$test_root/start.fault" \
+    "$HYDRA_BIN" workflow run "$test_root/start-fault.yml" > "$test_root/start-fault.out"
+assert_success $? "optional run start timestamp failure does not block execution"
+test -f "$test_root/start.fault"
+assert_success $? "run start timestamp write failure was exercised"
+start_fault_run="$(sed -n '1p' "$test_root/start-fault.out")"
+start_fault_dir="$(run_dir_for "$start_fault_run")"
+assert_equal succeeded "$(cat "$start_fault_dir/state")" "run without start timing still succeeds"
+python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$start_fault_dir" 0 unverified
+assert_success $? "missing start timestamp remains unknown in native duration coverage"
+
 # A persisted backoff survives coordinator loss and preserves completed evidence.
 sed 's/retry: 1/retry: 1\n    retry_on: [failure]\n    retry_backoff: 4/; s/retry-count/backoff-count/' "$test_root/retry.yml" > "$test_root/backoff.yml"
 "$HYDRA_BIN" workflow run "$test_root/backoff.yml" > "$test_root/backoff.out" 2>&1 &
@@ -235,8 +252,14 @@ assert_equal failure "$(cat "$backoff_dir/steps/retry/attempt-1/failure-class")"
 assert_equal 1 "$(cat "$test_root/backoff-count")" "retry does not run before backoff"
 kill -KILL "$backoff_runner" 2>/dev/null || true
 wait "$backoff_runner" 2>/dev/null || true
-"$HYDRA_BIN" workflow resume "$backoff_run" >/dev/null
+PATH="$test_root/statistics-bin:$PATH" HYDRA_TEST_REAL_MV="$statistics_real_mv" \
+    HYDRA_TEST_STATS_FIELD=recovery-count HYDRA_TEST_STATS_MARKER="$test_root/recovery.fault" \
+    "$HYDRA_BIN" workflow resume "$backoff_run" >/dev/null
 assert_success $? "resume completes a retry with durable backoff"
+test -f "$test_root/recovery.fault"
+assert_success $? "optional recovery counter write failure was exercised"
+python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$backoff_dir" - unverified
+assert_success $? "failed counter persistence discards the old count and remains unknown"
 assert_equal "$backoff_at" "$(cat "$backoff_dir/steps/retry/attempt-1/retry-at")" "restart preserves retry deadline"
 assert_equal 2 "$(cat "$test_root/backoff-count")" "backoff recovery executes exactly one retry"
 if [ "$(cat "$backoff_dir/steps/retry/started-at")" -ge "$backoff_at" ]; then deadline_status=0; else deadline_status=1; fi
