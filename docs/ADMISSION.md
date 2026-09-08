@@ -10,8 +10,8 @@ be writable by the group or other users. A home symlink resolves to the same sto
 ## Implementation status
 
 Local exec workers, gates, spawn, resume, and spawn queue processing use the same
-admission authority. Workflow steps use these paths. Remote task-owner integration
-remains in progress; roadmap item 4 remains open.
+admission authority. Workflow steps and remote tasks use these paths. Final
+resource-admission qualification remains in progress; roadmap item 4 remains open.
 
 Every exec worker obtains its own slot before launching its command, including
 each worker selected by `exec --all --jobs N`. `HYDRA_ADMISSION_QUEUE_SECONDS`
@@ -39,6 +39,10 @@ head creation; they cannot grant capacity past the receiver's admission policy.
 # Host slots, slots per project, disk floor KiB, pending queue bound, host labels
 hydra admission configure 4 2 1048576 128 linux,gpu
 hydra admission status --json
+hydra admission status --summary
+# Read-only inspection through an explicitly selected registered remote:
+hydra fleet admission build -- status --summary
+hydra fleet admission build -- inspect task-example
 ```
 
 Concurrency limits of zero mean unlimited. The project limit applies separately
@@ -54,6 +58,7 @@ as shell code or taken from a submitted repository.
 
 ```sh
 hydra admission request task-example project-example 60 linux
+hydra admission inspect task-example
 hydra admission claim task-example
 hydra admission cancel task-example
 hydra admission unknown task-example
@@ -81,6 +86,42 @@ reservation; it continues counting against host and project limits. Release is a
 explicit owner assertion that execution has ended, requiring `--confirmed`.
 Age, dead PIDs, lost connections, or expired leases never release reservations.
 
+## Remote tasks
+
+The existing receiver launch lock and durable launch claim still control execution
+deduplication. Before detaching an owner, the receiver requests a preparation slot
+using the accepted task ID and the original mapped project identity. A full queue
+fails without creating a workspace. A waiting task remains `starting`, with its
+queue state and reason in `runtime.admission`; status never turns that observation
+into permission to launch again.
+
+The initial queue deadline is acceptance time plus the specification's
+`queue_seconds`. Repeated start or submit does not extend it. The detached owner
+polls the shell authority and cancellation request. Startup time begins only after
+that initial reservation is granted. Preparation releases its slot before heads
+and commands acquire their own slots, so workflow coordinators do not hold a slot
+while waiting for their workers. Subsequent operation waits have the same maximum
+queue duration, bounded also by their enclosing startup or execution deadline.
+
+Receiver-created Git metadata binds the isolated workspace to the original mapped
+project for admission. Its child reservation IDs carry the task ID as a prefix.
+Thus separate clones cannot evade the mapped project's limit. Resuming a suspended
+task checks this binding; older suspended tasks acquire it from their immutable
+acceptance record. The existing execution project identity remains unchanged for
+worktree state, logs, artifacts, and collection.
+
+Task capability names prefixed with `label.` request operator labels: for example,
+`"capabilities": ["exec", "label.linux", "label.gpu"]`. The prefix is removed when
+matching the receiver's configured labels. Requirements apply to preparation and
+later workers. Built-in capability checks still reject unsupported operations.
+
+Confirmed managed-command cancellation reconciles only that task's child claims.
+An unconfirmed stop or missing owner retains reservations. A task status response
+can therefore show `outcome_unknown` while an execution reservation remains
+`reserved`; it still consumes capacity. Inspect the task and its reservation before
+manual release. `admission_cleanup: incomplete` means reconciliation could not be
+confirmed and capacity may remain held.
+
 ## Storage and recovery
 
 `$HYDRA_HOME/admission/policy` holds restricted key/value policy. Each
@@ -100,6 +141,11 @@ not claim power-loss durability beyond the host filesystem's guarantees.
 Status records its observation timestamp and reports zero age at capture. A
 consumer computes subsequent freshness from that timestamp. CPU and memory are
 not admission enforcement. Capacity snapshots must not be used as reservations.
+`status --summary` omits individual records and marks `requests_omitted: true`,
+keeping capacity response size bounded even when terminal history grows. Fleet
+head snapshots include this summary for initialized hosts. Full status and
+`inspect ID` expose individual queue and reservation records. Remote admission
+inspection is read-only; configure receiver policy on the receiving host.
 
 ## Primitive verification
 
@@ -112,4 +158,9 @@ host limit, and checks queue cancellation/expiry, label refusal, normal release,
 and a killed worker's retained reservation. `sh tests/test_admission_heads.sh`
 checks startup/resume before effects, an interactive fixture agent's lifetime,
 gate refusal and release, and the existing queue processor's real spawn path.
-Full remote runtime acceptance remains open.
+`tests/task_admission_cases.sh`, sourced by `tests/test_task_acceptance.sh`, exercises
+the real receiver through the fixture's SSH boundary: stale capacity, queue bounds,
+queued cancellation, expiry before clone, capability labels, and concurrent tasks
+sharing the original project's limit. The task suite also checks that losing an
+owner retains its execution claim and confirmed cancellation releases child claims.
+Final broader qualification remains open.

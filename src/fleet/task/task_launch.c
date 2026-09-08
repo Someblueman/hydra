@@ -79,7 +79,7 @@ static json_object *launch(const char *id, const char *trust, bool resume) {
     if (!resume) {
         int64_t accepted_at = json_object_get_int64(f_field(data, "accepted_at")), now = (int64_t)time(NULL);
         int64_t queue = json_object_get_int64(f_field(f_field(f_field(checked, "data"), "limits"), "queue_seconds"));
-        if (now < accepted_at || now - accepted_at >= queue) {
+        if (accepted_at < 0 || now < accepted_at || now - accepted_at >= queue) {
             f_string_add(state, "state", "expired"); f_string_add(state, "failure", now < accepted_at ? "clock_changed" : "queue_deadline");
             if (task_write_json(directory, "state.json", state, true)) goto io;
             result = task_status(id); goto done;
@@ -89,6 +89,12 @@ static json_object *launch(const char *id, const char *trust, bool resume) {
     f_string_add(claim, "trusted_spec_sha256", digest); json_object_object_add(claim, "requested_at", json_object_new_int64((int64_t)time(NULL)));
     if (task_write_json(directory, resume ? "resume.json" : "launch.json", claim, resume)) goto io;
     f_string_add(state, "state", "starting"); f_string_add(state, "launch_intent", "claimed");
+    if (!resume && task_admission_request(directory, state, data, f_field(package, "spec"))) {
+        task_admission_close(directory, state, true);
+        f_string_add(state, "state", "failed");
+        if (task_write_json(directory, "state.json", state, true)) goto io;
+        result = task_status(id); goto done;
+    }
     if (task_write_json(directory, "state.json", state, true) || detach(directory, package, state, owner, resume)) {
         result = f_error("fleet-task-start", "outcome_unknown", "launch intent is durable but owner startup could not be confirmed; do not replay"); goto done;
     }

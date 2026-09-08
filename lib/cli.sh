@@ -38,7 +38,7 @@ Commands:
   admission         Inspect or configure host-wide execution reservations and FIFO admission
                     Usage: hydra admission --help
   fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
-                    Commands: list, doctor, handshake, bootstrap, package, init, spawn,
+                    Commands: list, doctor, admission, handshake, bootstrap, package, init, spawn,
                               signal, cancel, workflow, attach, export, import,
                               reconcile, watch, tui, task (see fleet help)
                     Options: --project PATH, --instance ID, --jobs 1-16, --timeout 1-300

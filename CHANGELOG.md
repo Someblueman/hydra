@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Share shell-authoritative FIFO admission across local exec, gates, head startup
+  and resume, queued spawns, and remote tasks and workflows. Receiver policy
+  controls host/project concurrency, disk floors, required labels, and queue
+  bounds. Isolated remote task clones count against their original mapped project.
+- Retain reservations after uncertain execution or owner loss; confirmed teardown
+  and managed-command cancellation release only the corresponding claims. Initial
+  remote admission uses the original acceptance deadline and precedes workspace
+  creation.
+- Inspect capacity, queue reasons and age, reservation ownership, and observation
+  timestamps with `hydra admission` and read-only `hydra fleet admission HOST`.
+  Bounded capacity summaries are included in initialized-host fleet snapshots;
+  cached observations never grant execution authority.
+
 ## [2.2.1] - 2026-09-08
 
 ### Security

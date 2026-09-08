@@ -131,7 +131,8 @@ hydra fleet task status build --id task_ID_FROM_RECEIPT
 The selected alias must match the prepared specification. The receiver requires
 an existing registered project mapping, working Git/tmux/Hydra executables, and
 supported required capabilities. The receiver recognizes the existing local `exec`,
-`workflow`, `git`, and `tmux` capabilities. Other required names fail explicitly;
+`workflow`, `git`, and `tmux` capabilities. `label.NAME` requires the receiver's
+explicitly configured admission label `NAME`. Other unsupported names fail explicitly;
 executable detection does not qualify provider prompt delivery or resume.
 The handshake advertises task protocol 1 with `task-accept`, `task-start`,
 `task-status`, `task-cancel`, `task-logs`, and `task-result`.
@@ -211,7 +212,11 @@ actual workflow run ID; its existing attempt/gate records remain authoritative.
 does not imply all agent sessions stopped, a human approved changes, or changes
 were integrated. Missing execution evidence is not invented.
 
-Queue time runs from recorded acceptance to launch, with clock reversal refused.
+Queue time runs from recorded acceptance to the initial admission grant, with clock
+reversal refused. Host/project capacity, disk floors, labels, and queue bounds are
+checked by the receiving shell authority; a client snapshot cannot grant capacity.
+Waiting owners expose their reason in `runtime.admission` without creating a
+workspace. See [resource admission](ADMISSION.md) for policy and release semantics.
 Startup uses one monotonic deadline across checkout, initialization, and head
 creation. Execution has its own monotonic deadline around the shell CLI process
 group. `queue_deadline`, `startup_deadline`, and `execution_deadline` are separate

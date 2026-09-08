@@ -44,7 +44,7 @@ static int prepare(const char *directory, json_object *package, json_object *sta
         if (!f_name(project) || strncmp(project, "project_", 8)) { free(project); return -1; }
         f_string_add(state, "execution_project_id", project); free(project);
     }
-    return task_write_json(directory, "state.json", state, true);
+    return task_admission_context(directory, state, f_field(package, "spec")) || task_write_json(directory, "state.json", state, true) ? -1 : 0;
 }
 static int spawn_head(const char *directory, json_object *state, int64_t startup, struct f_control *control) {
     struct f_capture cap = {0}; json_object *evidence = NULL; int status = -1;
@@ -76,9 +76,10 @@ void task_execute(const char *directory, json_object *package, json_object *stat
     struct f_capture cap = {0}; char bytes[32], home[F_PATH]; char *argv[140]; size_t i;
     struct task_control control;
     const char *clear[] = {"HYDRA_PROJECT_ID", "HYDRA_HEAD_ID", "HYDRA_INSTANCE_ID", "HYDRA_STATE_DIR", "HYDRA_BRANCH", "HYDRA_WORKTREE", NULL};
-    int64_t startup = monotonic() + json_object_get_int64(f_field(limits, "startup_seconds"));
+    int64_t startup;
     int64_t execution = json_object_get_int64(f_field(limits, "execution_seconds")), execution_start;
     bool complete_response = false;
+    bool preparing = !resume;
     bool command = !strcmp(f_string(work, "kind"), "exec");
     const char *global_env = getenv("GIT_CONFIG_GLOBAL"), *system_env = getenv("GIT_CONFIG_NOSYSTEM");
     char *global = global_env ? strdup(global_env) : NULL;
@@ -99,7 +100,12 @@ void task_execute(const char *directory, json_object *package, json_object *stat
     json_object_object_add(state, "owner_pid", json_object_new_int64((int64_t)getpid()));
     f_string_add(state, "launch_intent", "started");
     if (task_write_json(directory, "state.json", state, true)) goto done;
+    if (!resume && task_admission_wait(directory, state, &control)) goto failed;
+    startup = monotonic() + json_object_get_int64(f_field(limits, "startup_seconds"));
     if (resume ? task_workspace(directory, state) : prepare(directory, package, state, startup, &control.process)) { f_string_add(state, "failure", monotonic() >= startup ? "startup_deadline" : "startup_failed"); goto failed; }
+    if (resume && task_admission_context(directory, state, spec)) { f_string_add(state, "failure", "admission_binding_invalid"); goto failed; }
+    if (!resume) task_admission_close(directory, state, true);
+    preparing = false;
     if (global) setenv("GIT_CONFIG_GLOBAL", global, 1); else unsetenv("GIT_CONFIG_GLOBAL");
     if (system) setenv("GIT_CONFIG_NOSYSTEM", system, 1); else unsetenv("GIT_CONFIG_NOSYSTEM");
     if (command && spawn_head(directory, state, startup, &control.process)) goto failed;
@@ -136,7 +142,10 @@ failed:
     f_string_add(state, "state", "failed");
     if (!f_string(state, "failure")) f_string_add(state, "failure", "evidence_unavailable");
 done:
+    if (preparing) task_admission_close(directory, state, !control.process.stop_unknown);
     task_control_close(&control);
+    if (f_string(state, "cancellation") && !strcmp(f_string(state, "cancellation"), "confirmed_stopped")) task_admission_children(state);
+    else if (cap.timeout && !control.process.stop_unknown && task_no_agent_workers(state)) task_admission_children(state);
     if (!strcmp(f_string(state, "state"), "waiting_approval")) {
         (void)task_write_json(directory, "state.json", state, true);
         goto released;

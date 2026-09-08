@@ -34,9 +34,13 @@ admit release three --confirmed >/dev/null
 
 # The receiver observes disk itself, and expires waiting requests on inspection.
 admit configure 1 0 999999999999 1 - >/dev/null
-has "$(admit request disk project_a 1 -)" disk_floor
+has "$(admit request disk project_a 60 -)" disk_floor
 if admit request overflow project_b 60 - > "$TEST_DIR/error"; then exit 1; fi
 has "$(cat "$TEST_DIR/error")" queue_full
+admit cancel disk >/dev/null
+has "$(admit inspect disk)" '"state":"cancelled"'
+has "$(admit status --summary)" '"requests":\[\],"requests_omitted":true'
+has "$(admit request expiry project_a 1 -)" disk_floor
 sleep 1
 has "$(admit status)" '"state":"expired"'
 admit configure 1 0 0 30 - >/dev/null

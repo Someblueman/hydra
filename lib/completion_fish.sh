@@ -8,8 +8,9 @@ generate_fish_completion() {
     cat <<'EOF'
 # Fish completion for hydra
 complete -c hydra -f -n '__fish_use_subcommand' -a 'admission' -d 'Inspect or configure host-wide execution reservations'
-complete -c hydra -f -n '__fish_seen_subcommand_from admission' -a 'status configure request claim cancel unknown release'
+complete -c hydra -f -n '__fish_seen_subcommand_from admission' -a 'status configure request inspect claim cancel unknown release'
 complete -c hydra -f -n '__fish_seen_subcommand_from admission' -l json
+complete -c hydra -f -n '__fish_seen_subcommand_from admission' -l summary
 complete -c hydra -f -n '__fish_seen_subcommand_from admission' -l confirmed
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l profile -r
 complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l prompt-file -r
@@ -22,7 +23,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l retain-raw
 complete -c hydra -f -n '__fish_use_subcommand' -a 'remote' -d 'Manage OpenSSH aliases'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'fleet' -d 'Inspect trusted remote installations'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote' -a 'add remove list'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth' -a 'handshake list doctor bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth' -a 'handshake list doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect submit start resume requests decide status cancel logs result inspect-result collect collected help'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l source -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l spec -r

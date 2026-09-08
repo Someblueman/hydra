@@ -43,6 +43,7 @@ json_object *task_cancel(const char *id) {
             f_string_add(state, "cancellation", stopped ? "confirmed_stopped" : "unknown");
             f_string_add(state, "cancellation_scope", "managed_commands");
             if (!stopped) f_string_add(state, "failure", "cancellation_unconfirmed");
+            if (stopped) task_admission_children(state);
             if (task_finish(directory, state)) goto bad;
         }
         if (!strcmp(f_string(state, "state"), "accepted")) {

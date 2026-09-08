@@ -198,6 +198,18 @@ never imported into runtime workflow state or used as a resume shortcut.
 
 ## Native fleet view
 
+Inspect receiving-host admission without changing policy:
+
+```sh
+hydra fleet admission build -- status --summary
+hydra fleet admission build -- inspect task_ID
+```
+
+Initialized-host snapshots include capacity and observation timestamps. These are
+observations; the receiving shell authority grants every reservation against live
+policy. See [resource admission](ADMISSION.md) for limits, labels, queue deadlines,
+and retained claims after owner loss.
+
 ```sh
 make build-tui
 hydra fleet tui

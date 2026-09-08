@@ -1,6 +1,25 @@
 #!/bin/sh
 # Admission waits run inside an existing execution owner, never a scheduler.
 
+# Receiver-owned Git metadata binds isolated workspaces to their mapped project.
+# This is scalar data, not sourced shell code. IDs retain a task prefix so that
+# confirmed receiver cancellation can reconcile only that task's reservations.
+admission_binding() {
+    ADMISSION_ID="$1" ADMISSION_PROJECT="$2"
+    _ab_common="$(hydra_git_common_dir 2>/dev/null)" || return 1
+    _ab_context="$_ab_common/hydra/admission-context"
+    [ -e "$_ab_context" ] || [ -L "$_ab_context" ] || return 0
+    [ -f "$_ab_context" ] && [ ! -L "$_ab_context" ] || return 1
+    IFS=' ' read -r _ab_task _ab_project _ab_seconds _ab_labels _ab_extra < "$_ab_context" || return 1
+    [ -z "$_ab_extra" ] && [ "$(wc -l < "$_ab_context" | tr -d ' ')" = 1 ] || return 1
+    case "$_ab_task" in task_*) ;; *) return 1 ;; esac
+    admission_token "$_ab_task" && admission_token "$_ab_project" &&
+        admission_number "$_ab_seconds" && admission_labels "$_ab_labels" || return 1
+    ADMISSION_ID="$_ab_task.$1" ADMISSION_PROJECT="$_ab_project"
+    admission_token "$ADMISSION_ID" || return 1
+    HYDRA_ADMISSION_QUEUE_SECONDS="$_ab_seconds" HYDRA_ADMISSION_LABELS="$_ab_labels"
+}
+
 admission_wait_cleanup() {
     [ "$_aw_granted" -eq 0 ] && [ "$_aw_owned" -eq 1 ] || return 0
     # No command has started in this helper. A signal may arrive after the
@@ -45,7 +64,8 @@ admission_wait() (
 # Run a synchronous command after admission; an interrupted owner never executes
 # the release below. The caller supplies a fresh execution identity and directory.
 admission_command() (
-    _ac_id="$1" _ac_project="$2" _ac_evidence="$3"
+    admission_binding "$1" "$2" || exit 125
+    _ac_id="$ADMISSION_ID" _ac_project="$ADMISSION_PROJECT" _ac_evidence="$3"
     shift 3
     admission_wait "$_ac_id" "$_ac_project" "$_ac_evidence/admission.json" || exit 125
     if "$@"; then _ac_status=0; else _ac_status=$?; fi
@@ -56,7 +76,8 @@ admission_command() (
 # The lifecycle callback binds HEAD_ADMISSION_ID before launching an agent, and
 # marks HEAD_ADMISSION_EFFECTS before setup or agent execution can begin.
 admission_head() (
-    HEAD_ADMISSION_ID="$1" _ah_project="$2" _ah_profile="$3"
+    admission_binding "$1" "$2" || exit 125
+    HEAD_ADMISSION_ID="$ADMISSION_ID" _ah_project="$ADMISSION_PROJECT" _ah_profile="$3"
     shift 3
     HEAD_ADMISSION_EFFECTS=0
     _ah_tmp="$(mktemp -d "$HYDRA_HOME/.admission-head.XXXXXX")" || exit 1

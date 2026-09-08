@@ -150,10 +150,10 @@ cmd_admission() (
     _ad_action="${1:-status}"
     [ $# -eq 0 ] || shift
     if [ "$_ad_action" = --help ]; then
-        printf '%s\n' 'hydra admission status [--json]' \
+        printf '%s\n' 'hydra admission status [--json|--summary]' \
             'hydra admission configure <host-limit> <project-limit> <disk-floor-kb> <queue-limit> <labels|->' \
             'hydra admission request <id> <project-id> <queue-seconds> <labels|->' \
-            'hydra admission <claim|cancel|unknown> <id>' \
+            'hydra admission <inspect|claim|cancel|unknown> <id>' \
             'hydra admission release <id> --confirmed'
         exit 0
     fi
@@ -172,22 +172,24 @@ cmd_admission() (
             exit 0
             ;;
         status)
-            [ $# -eq 0 ] || { [ $# -eq 1 ] && [ "$1" = --json ]; } || exit 1
+            _ad_summary=0
+            case "$#:${1:-}" in 0:|1:--json) ;; 1:--summary) _ad_summary=1 ;; *) exit 1 ;; esac
             admission_scan || { admission_error recovery_required 'Invalid admission record'; exit 1; }
             printf '{"schema_version":1,"ok":true,"command":"admission","data":{"observed_at":%s,"observation_age_seconds":0,"host_limit":%s,"project_limit":%s,"disk_floor_kb":%s,"disk_free_kb":%s,"queue_limit":%s,"labels":"%s","reserved":%s,"queued":%s,"requests":[' \
                 "$_ad_now" "$_ad_host_limit" "$_ad_project_limit" "$_ad_disk_floor_kb" "$_ad_disk_free_kb" "$_ad_queue_limit" "$_ad_host_labels" "$_ad_reserved" "$_ad_queued"
             _ad_comma=''
             for _ad_file in "$_ad_root"/*.request; do
+                [ "$_ad_summary" -eq 0 ] || break
                 [ -f "$_ad_file" ] || continue
                 admission_read "$_ad_file" || exit 1
                 _ad_id="${_ad_file##*/}"; _ad_id="${_ad_id%.request}"
                 admission_token "$_ad_id" || exit 1
                 printf '%s' "$_ad_comma"; admission_record_json; _ad_comma=,
             done
-            printf ']}}\n'
+            printf '],"requests_omitted":%s}}\n' "$( [ "$_ad_summary" -eq 1 ] && printf true || printf false )"
             exit 0
             ;;
-        request|claim|cancel|unknown|release) ;;
+        request|inspect|claim|cancel|unknown|release) ;;
         *) admission_error invalid_input 'Unknown admission action'; exit 1 ;;
     esac
     if ! { [ $# -ge 1 ] && admission_token "$1"; }; then admission_error invalid_input 'A restricted request ID is required'; exit 1; fi

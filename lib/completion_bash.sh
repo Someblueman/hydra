@@ -45,7 +45,7 @@ _hydra_completion() {
             return 0
             ;;
         fleet)
-            COMPREPLY=($(compgen -W "handshake list doctor bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            COMPREPLY=($(compgen -W "handshake list doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
             return 0
             ;;
         auth)
@@ -84,7 +84,7 @@ _hydra_completion() {
             esac
             return 0
             ;;
-        admission) COMPREPLY=($(compgen -W "status configure request claim cancel unknown release --json --confirmed" -- "${cur}")); return 0 ;;
+        admission) COMPREPLY=($(compgen -W "status configure request inspect claim cancel unknown release --json --summary --confirmed" -- "${cur}")); return 0 ;;
         claim) COMPREPLY=($(compgen -W "add list remove" -- ${cur})); return 0 ;;
         scope) COMPREPLY=($(compgen -W "set show check" -- ${cur})); return 0 ;;
         resource) COMPREPLY=($(compgen -W "allocate status env release" -- ${cur})); return 0 ;;

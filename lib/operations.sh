@@ -95,7 +95,14 @@ operations_exec_worker() {
     mkdir -p "$_oew_dir" || return 0
     chmod 700 "$_oew_dir" 2>/dev/null || true
     _oew_admission="${_oew_run}-${_oew_head}"
-    if ! admission_wait "$_oew_admission" "$LIFECYCLE_PROJECT_ID" "$_oew_dir/admission.json" 2> "$_oew_dir/stderr"; then
+    if ! admission_binding "$_oew_admission" "$LIFECYCLE_PROJECT_ID"; then
+        : > "$_oew_dir/stdout"
+        printf 'Invalid admission binding\n' > "$_oew_dir/stderr"
+        printf '125\n' > "$_oew_dir/status"
+        return 0
+    fi
+    _oew_admission="$ADMISSION_ID"
+    if ! admission_wait "$_oew_admission" "$ADMISSION_PROJECT" "$_oew_dir/admission.json" 2> "$_oew_dir/stderr"; then
         : > "$_oew_dir/stdout"
         printf '125\n' > "$_oew_dir/status"
         return 0
