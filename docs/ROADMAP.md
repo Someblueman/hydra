@@ -312,6 +312,70 @@ These motivate the milestones; they do not prove general agent-plan soundness,
 measured Hydra optimization gains, or a need to adopt another runtime. Preserve
 published plan/report schemas and durable records through explicit versioning.
 
+#### 10. Performance baselines, idle efficiency, and change locality
+
+Begin measurement alongside item 9, before changing refresh or scheduling policy;
+this is not blocked by 9F or load balancing. Item 9D concerns performance tasks
+executed by Hydra; this milestone measures Hydra itself. Feed fleet overhead and
+contention evidence into item 6 and expose useful counters through item 7.
+See [measurement design and research](research/performance-baselines.md).
+
+Target: **with no changes, Hydra should do almost no work; with one changed
+worktree, work should be mostly confined to that worktree.** This is an acceptance
+objective, not a claim about the current periodic snapshot implementation.
+
+- [ ] Establish repeatable baselines at **1, 10, and 50 real worktrees with active
+      agents**. Separate quiescent, one-changing, all-changing, and sustained-output
+      cases; distinguish deterministic agent stand-ins from authenticated live-agent
+      trials. Extend existing benchmark/PTY infrastructure rather than introducing
+      a separate performance service. Retain existing 5/20/100-head checks for
+      their narrower scope until explicitly replaced with equivalent coverage.
+- [ ] Measure **idle cost** after settling: CPU time per second, clearly normalized
+      CPU percentage, wakeups per second, and subprocess launches per minute across
+      Hydra and its helpers. Attribute agent, tmux, and observer overhead separately;
+      also record scans, redraws, filesystem operations, and remote requests.
+- [ ] Measure **interaction latency** from scheduled input injection to the matching
+      rendered response: median, p95, p99 where supported by sample count, observed
+      maximum, and missed deadlines. Include navigation, search, resize, and cancel
+      under refresh and output load. Distinguish PTY frame completion from visible
+      terminal presentation; do not label the former input-to-pixel latency.
+- [ ] Measure **update latency** from a timestamped repository or agent change to
+      its matching display state. Separate detection, collection, model update,
+      and render delay; include selected and unselected worktrees, bursts, and
+      remote disconnect/reconnect. Bound remote clock uncertainty explicitly.
+- [ ] Measure **fleet scaling** across the matrix: total and per-worktree CPU,
+      resident/peak memory, process and descriptor counts, scans, remote traffic,
+      startup/time-to-usable, and interaction/update tails. Record agent activity,
+      repository size, host placement, and admission limits; queued work must not
+      be reported as concurrently active agents.
+- [ ] Measure **output pressure** at declared bytes/second, line sizes, producer
+      counts, and durations, with preview open and closed. Track input latency,
+      update backlog/age, peak memory and growth, dropped/coalesced display updates,
+      producer blocking, and time to recover after output stops. Preserve authoritative
+      task results and required evidence even when display updates are coalesced.
+- [ ] Qualify **change locality** using per-worktree attribution: compare no-change
+      cost and the incremental cost of changing exactly one worktree at each scale.
+      Unchanged worktrees should not incur repeated Git scans, helper launches, or
+      output capture because a peer changed. Identify shared Git metadata dependencies
+      and bounded reconciliation separately; do not achieve low cost by hiding stale
+      state. Explore event notification, invalidation, batching, and bounded caches
+      only where profiles support them; prove missed-event and reconnect recovery.
+- [ ] Store exact revisions, builds, workload seeds, raw timestamped samples,
+      environment/tool versions, attribution boundaries, and observer overhead.
+      Separate startup from steady state and alternate baseline/candidate trials.
+      Choose numeric idle, tail-latency, memory, recovery, and locality budgets from
+      the initial supported-platform baselines and product needs, then freeze them
+      before evaluating optimizations. Retain stalls and uncertainty; never treat
+      a short-run maximum as a guaranteed worst case or missing counters as zero.
+
+Acceptance: publish reproducible baseline evidence for every matrix cell on macOS
+and Linux, with explicit unsupported measurements and separate live-agent coverage.
+The measurement slice completes with recorded budgets and correctness checks;
+the efficiency slice completes only when repeated before/after trials meet those
+budgets, demonstrate near-idle behavior and bounded unrelated-worktree cost, and
+preserve freshness, cancellation, recovery, and result integrity under output load.
+No performance baseline or improvement is claimed by this roadmap addition.
+
 #### 6. Load balancing across eligible hosts
 
 Extend resource admission with automatic placement of **new, unassigned work**.
