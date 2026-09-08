@@ -99,6 +99,9 @@ with tempfile.TemporaryDirectory(prefix="hydra-plan-launch-") as folder:
         assert len(receipts) == 1, s.screen.text()
         run_id = receipts[0].read_text().strip()
         run_dir = receipts[0].parents[2] / "runs" / run_id
+        # The receipt file can precede its async UI observation, which replaces
+        # the footer. Wait for that rendered transition before testing input.
+        s.until(f"Run {run_id} / launch owner starting", timeout=10)
         assert run_dir.joinpath("state").read_text().strip() not in ("succeeded", "failed")
         s.send("E")
         s.until("This revision was already submitted")

@@ -54,6 +54,23 @@ their built bytes, SHA-256 metadata and snapshot commit. A deliberate README edi
 was still refused by packaging. Only this evidence paragraph was added afterward.
 Logs: `build/pr80-package-probe.log` and `build/pr80-package-dirty-refusal.log`.
 
+### Launch receipt synchronization
+
+PR CI run `34290951594` failed intermittently at the duplicate-approval notice on
+the same `a308fab` source that passed the push run. A controlled observation delay
+reproduced the boundary: the receipt file existed before its UI projection; the
+duplicate refusal appeared, then the pending receipt update replaced the footer.
+The PTY test now waits for the matching rendered run receipt before pressing E
+again. Duplicate refusal, absence of a second confirmation, detached continuation,
+public duplicate rejection and the single-run assertion remain unchanged.
+
+No production code changed. The controlled case passed with synchronization, as
+did the full plan-launch PTY test on macOS arm64 and a fresh Ubuntu 24.04 arm64
+container, plus repository lint with ShellCheck 0.9.0. Local logs:
+`build/pr80-receipt-race-before.log`, `build/pr80-receipt-race-after.log`,
+`build/pr80-receipt-synchronized.log`, `build/pr80-linux-plan-launch.log` and
+`build/pr80-receipt-lint.log`.
+
 ## Results
 
 All commands below completed with exit status zero on local macOS arm64:
