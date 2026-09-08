@@ -1,6 +1,6 @@
 #!/bin/sh
 # Sourced by the real-task fixture. Crash ownership, preserving accepted work.
-: "${root:?}" "${fixture:?}"
+: "${root:?}" "${fixture:?}" "${workflow_runs:?}"
 "$root/bin/hydra" workflow run "$fixture/workflow.yml" > "$fixture/run.out" 2> "$fixture/run.err" &
 launcher=$!
 run_dir=''
@@ -9,7 +9,7 @@ while [ "$wait_tick" -lt 100 ]; do
     wait_tick=$((wait_tick + 1))
     run="$(sed -n '1p' "$fixture/run.out")"
     if [ -n "$run" ]; then
-        run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
+        run_dir="$workflow_runs/$run"
         if [ -n "$run_dir" ] && [ -s "$run_dir/steps/produce/attempt-1/remote/receipt.json" ]; then break; fi
     fi
     sleep 0.2

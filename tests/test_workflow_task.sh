@@ -57,6 +57,7 @@ git add .
 git commit -qm 'task recipes'
 commit="$(git rev-parse HEAD)"
 "$root/bin/hydra" init --no-agent --trust >/dev/null
+workflow_runs="$(cd "$HYDRA_HOME" && pwd -P)/state/v2/projects/$(cat .git/hydra/project-id)/workflows/runs"
 dag_host=local
 if [ "${HYDRA_TEST_DAG_LOST_ACK:-0}" = 1 ] || [ "${HYDRA_TEST_DAG_RESULT_LOST:-0}" = 1 ] || [ "${HYDRA_TEST_DAG_RESULT_BAD:-0}" = 1 ]; then
     mkdir "$fixture/bin"
@@ -163,14 +164,14 @@ else
 fi
 if [ "${HYDRA_TEST_DAG_SOURCE_TAMPER:-0}" = 1 ]; then
     run="$(sed -n '1p' "$fixture/run.out")"
-    run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
+    run_dir="$workflow_runs/$run"
     workflow_source_fault_assert
     exit 0
 fi
 if [ "${HYDRA_TEST_DAG_LOST_ACK:-0}" = 1 ] || [ "${HYDRA_TEST_DAG_RESULT_LOST:-0}" = 1 ] || [ "${HYDRA_TEST_DAG_RESULT_BAD:-0}" = 1 ]; then
     if [ "${HYDRA_TEST_DAG_RESULT_BAD:-0}" = 1 ]; then [ "$run_code" = 1 ]; else [ "$run_code" = 3 ]; fi
     run="$(sed -n '1p' "$fixture/run.out")"
-    run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
+    run_dir="$workflow_runs/$run"
     cp "$run_dir/steps/produce/attempt-1/remote/dispatch.json" "$fixture/original-dispatch"
     original_id="$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json -print | sed 's|/acceptance.json$||;s|.*/||')"
     if [ "${HYDRA_TEST_DAG_PARALLELISM:-0}" = 1 ]; then
@@ -205,7 +206,7 @@ fi
 run="$(sed -n '1p' "$fixture/run.out")"
 "$root/bin/hydra" workflow status "$run" --json > "$fixture/status"
 grep -q '"state":"succeeded"' "$fixture/status"
-run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
+run_dir="$workflow_runs/$run"
 printf 'producer output\nconsumer output\n' > "$fixture/expected"
 cmp "$fixture/expected" "$run_dir/steps/consume/attempt-1/artifacts/result"
 expected_tasks=2
