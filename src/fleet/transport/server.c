@@ -12,7 +12,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static const char *capabilities[] = {"list", "doctor", "admission", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", NULL};
+static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", NULL};
 json_object *f_handshake(void) {
     json_object *data = json_object_new_object(), *caps = json_object_new_array(), *projects = json_object_new_array(), *native = json_object_new_object();
     char root[F_PATH]; DIR *dir; struct dirent *entry; size_t i;
@@ -124,16 +124,23 @@ static json_object *admission_inspect(json_object *args, size_t count) {
     if (!status && !inspect) return f_error("fleet-admission", "invalid_input", "use status [--json|--summary] or inspect ID; configure policy on the receiving host");
     return run_hydra(argv, 5);
 }
+
+static json_object *builtin_request(const char *action, json_object *request) {
+    if (!strcmp(action, "handshake")) return f_handshake();
+    if (!strcmp(action, "list")) return snapshot();
+    if (!strcmp(action, "overview")) return task_overview();
+    if (!strcmp(action, "auth")) return auth_serve(request);
+    if (!strcmp(action, "task")) return task_serve(request);
+    return NULL;
+}
+
 json_object *f_serve(json_object *request) {
     const char *action = f_string(request, "action"), *project = f_string(request, "project"), *instance = f_string(request, "instance");
     json_object *args = f_field(request, "args"); size_t i, n = 0, count = 0;
     char *argv[140]; unsigned seconds = 300;
     if (!f_number_is(request, "protocol", F_PROTOCOL) || !action)
         return f_error("fleet", "version_mismatch", "unsupported request protocol");
-    if (!strcmp(action, "handshake")) return f_handshake();
-    if (!strcmp(action, "list")) return snapshot();
-    if (!strcmp(action, "auth")) return auth_serve(request);
-    if (!strcmp(action, "task")) return task_serve(request);
+    { json_object *builtin = builtin_request(action, request); if (builtin) return builtin; }
     if (args && !json_object_is_type(args, json_type_array)) return f_error("fleet", "invalid_input", "args must be an array");
     count = args ? json_object_array_length(args) : 0;
     if (count > 128) return f_error("fleet", "invalid_input", "too many command arguments");

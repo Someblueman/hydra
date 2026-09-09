@@ -23,6 +23,9 @@ json_object *task_remote_cli(int argc, char **argv);
 json_object *task_serve(json_object *request);
 json_object *task_accept(json_object *package, const char *key);
 json_object *task_status(const char *id);
+/* Receiver-owned read-only execution observations. Returned JSON belongs to caller. */
+json_object *task_observation(const char *id);
+json_object *task_overview(void);
 int task_store_root(char root[F_PATH]);
 int task_sync_dir(const char *path);
 int task_write_json(const char *directory, const char *name, json_object *value, bool replace);

@@ -136,20 +136,29 @@ done:
     if (staged) f_remove_tree(stage);
     json_object_put(binding); json_object_put(accepted); json_object_put(state); json_object_put(inspected); return result;
 }
+static json_object *task_read_operation(json_object *request, const char *operation) {
+    if ((!strcmp(operation, "requests") || !strcmp(operation, "decide")) && !f_field(request, "package") && !f_field(request, "submission_key") &&
+        (strcmp(operation, "requests") || !f_field(request, "trust_spec"))) return task_approval(f_string(request, "task_id"), request);
+    if (!strcmp(operation, "resume") && !f_field(request, "package") && !f_field(request, "submission_key"))
+        return task_resume(f_string(request, "task_id"), f_string(request, "trust_spec"));
+    if (!strcmp(operation, "logs") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec"))
+        return task_logs(f_string(request, "task_id"), request);
+    if (!strcmp(operation, "result") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec"))
+        return task_result(f_string(request, "task_id"));
+    if (!strcmp(operation, "cancel") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec"))
+        return task_cancel(f_string(request, "task_id"));
+    if (!strcmp(operation, "observe") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec"))
+        return task_observation(f_string(request, "task_id"));
+    return NULL;
+}
+
 json_object *task_serve(json_object *request) {
     const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", "stream", "offset", "limit", "source", "step", "attempt", "request_id", "decision", "by", NULL};
     const char *operation = f_string(request, "operation");
     if (!task_keys(request, keys) || !operation) return f_error("fleet-task", "invalid_input", "invalid task request");
     if (strcmp(operation, "decide") && (f_field(request, "request_id") || f_field(request, "decision") || f_field(request, "by"))) return f_error("fleet-task", "invalid_input", "decision fields require decide");
     if (strcmp(operation, "logs") && (f_field(request, "stream") || f_field(request, "offset") || f_field(request, "limit") || f_field(request, "source") || f_field(request, "step") || f_field(request, "attempt"))) return f_error("fleet-task", "invalid_input", "log options require the logs operation");
-    if ((!strcmp(operation, "requests") || !strcmp(operation, "decide")) && !f_field(request, "package") && !f_field(request, "submission_key") &&
-        (strcmp(operation, "requests") || !f_field(request, "trust_spec"))) return task_approval(f_string(request, "task_id"), request);
-    if (!strcmp(operation, "resume") && !f_field(request, "package") && !f_field(request, "submission_key")) return task_resume(f_string(request, "task_id"), f_string(request, "trust_spec"));
-    if (!strcmp(operation, "logs") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) {
-        return task_logs(f_string(request, "task_id"), request);
-    }
-    if (!strcmp(operation, "result") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_result(f_string(request, "task_id"));
-    if (!strcmp(operation, "cancel") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_cancel(f_string(request, "task_id"));
+    { json_object *read = task_read_operation(request, operation); if (read) return read; }
     if (!strcmp(operation, "submit") && !f_field(request, "task_id")) {
         const char *trust = f_string(request, "trust_spec"), *digest = f_string(f_field(request, "package"), "spec_sha256"); json_object *accepted;
         if (f_field(request, "trust_spec") && (!task_hex(trust, 64) || !digest || strcmp(trust, digest))) return f_error("fleet-task-submit", "trust_required", "--trust-spec must match the prepared specification digest");

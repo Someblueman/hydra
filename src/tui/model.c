@@ -92,9 +92,88 @@ static int host_record(struct model *model, char **fields, char *error, size_t e
         copy_text(error, error_size, "duplicate fleet host observation"); return -1;
     }
     host = &model->hosts[model->host_count++];
+    memset(host, 0, sizeof(*host));
     copy_text(host->name, sizeof(host->name), fields[1]); copy_text(host->state, sizeof(host->state), fields[2]);
     copy_text(host->error, sizeof(host->error), fields[4]);
+    copy_text(host->connection, sizeof(host->connection), !strcmp(fields[2], "responded") ? "reachable" : "unreachable");
+    copy_text(host->freshness, sizeof(host->freshness), "unknown");
+    copy_text(host->last_confirmed, sizeof(host->last_confirmed), "-");
+    copy_text(host->age, sizeof(host->age), "-");
     if (!parse_unsigned(fields[3], &host->heads)) { copy_text(error, error_size, "invalid fleet head count"); return -1; }
+    return 0;
+}
+
+static bool host_connection(const char *value) {
+    return !strcmp(value, "reachable") || !strcmp(value, "unreachable") ||
+        !strcmp(value, "authentication") || !strcmp(value, "unsupported") ||
+        !strcmp(value, "malformed") || !strcmp(value, "remote_error") ||
+        !strcmp(value, "unknown");
+}
+
+static bool freshness_state(const char *value) {
+    return !strcmp(value, "fresh") || !strcmp(value, "stale") || !strcmp(value, "unknown");
+}
+
+static bool bounded_field(const char *value, size_t limit) {
+    const unsigned char *p = (const unsigned char *)value;
+    if (!value || strlen(value) >= limit || strchr(value, '\t')) return false;
+    for (; *p; p++) if (*p < 32 || *p == 127) return false;
+    return true;
+}
+
+static int host_record_v3(struct model *model, char **fields, char *error, size_t error_size) {
+    struct host_observation *host;
+    size_t i;
+    unsigned heads;
+    if (model->host_count == 16 || !bounded_field(fields[1], sizeof(model->hosts[0].name)) ||
+        !fields[1][0] || (strcmp(fields[2], "responded") && strcmp(fields[2], "failed")) ||
+        !parse_unsigned(fields[3], &heads) || !bounded_field(fields[4], sizeof(model->hosts[0].error)) ||
+        !host_connection(fields[5]) || !freshness_state(fields[6]) ||
+        !bounded_field(fields[7], sizeof(model->hosts[0].last_confirmed)) ||
+        !bounded_field(fields[8], sizeof(model->hosts[0].age))) {
+        copy_text(error, error_size, "invalid version 3 fleet host observation"); return -1;
+    }
+    for (i = 0; i < model->host_count; i++) if (!strcmp(model->hosts[i].name, fields[1])) {
+        copy_text(error, error_size, "duplicate fleet host observation"); return -1;
+    }
+    host = &model->hosts[model->host_count++]; memset(host, 0, sizeof(*host));
+    copy_text(host->name, sizeof(host->name), fields[1]); copy_text(host->state, sizeof(host->state), fields[2]);
+    copy_text(host->error, sizeof(host->error), fields[4]); copy_text(host->connection, sizeof(host->connection), fields[5]);
+    copy_text(host->freshness, sizeof(host->freshness), fields[6]); copy_text(host->last_confirmed, sizeof(host->last_confirmed), fields[7]);
+    copy_text(host->age, sizeof(host->age), fields[8]);
+    host->heads = heads;
+    return 0;
+}
+
+static int task_record(struct model *model, char **fields, char *error, size_t error_size) {
+    struct task_observation *task;
+    if (model->task_count >= MAX_TASKS || !bounded_field(fields[1], sizeof(model->tasks[0].host)) ||
+        !bounded_field(fields[2], sizeof(model->tasks[0].task_id)) || !bounded_field(fields[3], sizeof(model->tasks[0].run_id)) ||
+        !bounded_field(fields[4], sizeof(model->tasks[0].step_id)) || !bounded_field(fields[5], sizeof(model->tasks[0].attempt_id)) ||
+        !bounded_field(fields[6], sizeof(model->tasks[0].workspace)) || !bounded_field(fields[7], sizeof(model->tasks[0].profile)) ||
+        !bounded_field(fields[8], sizeof(model->tasks[0].owner)) || !bounded_field(fields[9], sizeof(model->tasks[0].state)) ||
+        !bounded_field(fields[10], sizeof(model->tasks[0].waiting_reason)) || !bounded_field(fields[11], sizeof(model->tasks[0].waiting_detail)) ||
+        !bounded_field(fields[12], sizeof(model->tasks[0].next_action)) || !bounded_field(fields[13], sizeof(model->tasks[0].receiver_observed)) ||
+        !bounded_field(fields[14], sizeof(model->tasks[0].last_confirmed)) || !freshness_state(fields[15])) {
+        copy_text(error, error_size, "invalid fleet task observation"); return -1;
+    }
+    task = &model->tasks[model->task_count++]; memset(task, 0, sizeof(*task));
+    copy_text(task->host, sizeof(task->host), fields[1]); copy_text(task->task_id, sizeof(task->task_id), fields[2]);
+    copy_text(task->run_id, sizeof(task->run_id), fields[3]); copy_text(task->step_id, sizeof(task->step_id), fields[4]);
+    copy_text(task->attempt_id, sizeof(task->attempt_id), fields[5]); copy_text(task->workspace, sizeof(task->workspace), fields[6]);
+    copy_text(task->profile, sizeof(task->profile), fields[7]); copy_text(task->owner, sizeof(task->owner), fields[8]);
+    copy_text(task->state, sizeof(task->state), fields[9]); copy_text(task->waiting_reason, sizeof(task->waiting_reason), fields[10]);
+    copy_text(task->waiting_detail, sizeof(task->waiting_detail), fields[11]); copy_text(task->next_action, sizeof(task->next_action), fields[12]);
+    copy_text(task->receiver_observed, sizeof(task->receiver_observed), fields[13]); copy_text(task->last_confirmed, sizeof(task->last_confirmed), fields[14]);
+    copy_text(task->freshness, sizeof(task->freshness), fields[15]);
+    if (!parse_unsigned(fields[16], &task->pending)) { copy_text(error, error_size, "invalid fleet task pending count"); return -1; }
+    {
+        size_t i;
+        for (i = 0; i < model->host_count; i++) if (!strcmp(model->hosts[i].name, task->host)) {
+            model->hosts[i].tasks++;
+            break;
+        }
+    }
     return 0;
 }
 
@@ -102,7 +181,7 @@ static bool valid_handshake(size_t count, char **fields) {
     if (count != 2U) return false;
     if (!strcmp(fields[0], "HYDRA_TUI")) return !strcmp(fields[1], "2");
     return !strcmp(fields[0], "HYDRA_FLEET_TUI") &&
-        (!strcmp(fields[1], "1") || !strcmp(fields[1], "2"));
+        (!strcmp(fields[1], "1") || !strcmp(fields[1], "2") || !strcmp(fields[1], "3"));
 }
 
 static void recovery_record(struct model *model, char **fields) {
@@ -117,11 +196,54 @@ static void recovery_record(struct model *model, char **fields) {
     copy_text(recovery->action, sizeof(recovery->action), fields[5]);
 }
 
+struct stream_state {
+    bool fleet_stream;
+    bool fleet_hosts;
+    bool fleet_v3;
+};
+
+static int parse_handshake(size_t count, char **fields, struct stream_state *state, char *error, size_t error_size) {
+    if (!valid_handshake(count, fields)) {
+        copy_text(error, error_size, "native data protocol handshake failed");
+        return -1;
+    }
+    state->fleet_stream = strcmp(fields[0], "HYDRA_FLEET_TUI") == 0;
+    state->fleet_v3 = state->fleet_stream && !strcmp(fields[1], "3");
+    state->fleet_hosts = state->fleet_stream && (!strcmp(fields[1], "2") || state->fleet_v3);
+    return 0;
+}
+
+static int fleet_record_line(struct model *model, const struct stream_state *state, size_t count, char **fields,
+                             char *error, size_t error_size) {
+    if (state->fleet_v3 && count == 9U && !strcmp(fields[0], "T")) return host_record_v3(model, fields, error, error_size);
+    if (state->fleet_hosts && count == 5 && !strcmp(fields[0], "T")) return host_record(model, fields, error, error_size);
+    if (state->fleet_stream && count == 7U && !strcmp(fields[0], "F")) return fleet_record(model, fields, error, error_size);
+    if (state->fleet_v3 && count == 17U && !strcmp(fields[0], "O")) return task_record(model, fields, error, error_size);
+    return 1;
+}
+
+static int local_record_line(struct model *model, size_t count, char **fields, char *error, size_t error_size) {
+    if (count == 30U && !strcmp(fields[0], "H")) return head_record(model, fields, error, error_size);
+    if (count == 6U && !strcmp(fields[0], "R")) { recovery_record(model, fields); return 0; }
+    return 1;
+}
+
+static int parse_record(struct model *model, const struct stream_state *state, size_t count, char **fields,
+                        char *error, size_t error_size) {
+    int result;
+    if (count == 6U && !strcmp(fields[0], "R")) { recovery_record(model, fields); return 0; }
+    result = state->fleet_stream ? fleet_record_line(model, state, count, fields, error, error_size) :
+        local_record_line(model, count, fields, error, error_size);
+    if (result != 1) return result;
+    copy_text(error, error_size, "native data contains a malformed record");
+    return -1;
+}
+
 int load_model_stream(FILE *input, struct model *model, char *error, size_t error_size) {
     char *line = NULL;
     size_t line_size = 0U;
     ssize_t length;
-    bool handshake = false, fleet_stream = false, fleet_hosts = false;
+    bool handshake = false; struct stream_state state = {0};
     memset(model, 0, sizeof(*model));
     while ((length = getline(&line, &line_size, input)) >= 0) {
         char *fields[40];
@@ -130,29 +252,11 @@ int load_model_stream(FILE *input, struct model *model, char *error, size_t erro
         if (length > 0 && line[length - 1] == '\r') line[--length] = '\0';
         count = split_fields(line, fields, sizeof(fields) / sizeof(fields[0]));
         if (!handshake) {
-            if (!valid_handshake(count, fields)) {
-                copy_text(error, error_size, "native data protocol handshake failed");
-                free(line);
-                return -1;
-            }
-            fleet_stream = strcmp(fields[0], "HYDRA_FLEET_TUI") == 0;
-            fleet_hosts = fleet_stream && !strcmp(fields[1], "2");
+            if (parse_handshake(count, fields, &state, error, error_size)) { free(line); return -1; }
             handshake = true;
             continue;
         }
-        if (fleet_hosts && count == 5 && !strcmp(fields[0], "T")) {
-            if (host_record(model, fields, error, error_size)) { free(line); return -1; }
-        } else if (fleet_stream && count == 7U && strcmp(fields[0], "F") == 0) {
-            if (fleet_record(model, fields, error, error_size)) { free(line); return -1; }
-        } else if (!fleet_stream && count == 30U && strcmp(fields[0], "H") == 0) {
-            if (head_record(model, fields, error, error_size)) { free(line); return -1; }
-        } else if (count == 6U && strcmp(fields[0], "R") == 0) {
-            recovery_record(model, fields);
-        } else {
-            copy_text(error, error_size, "native data contains a malformed record");
-            free(line);
-            return -1;
-        }
+        if (parse_record(model, &state, count, fields, error, error_size)) { free(line); return -1; }
     }
     free(line);
     if (!handshake) {
@@ -173,4 +277,3 @@ int load_fixture(const char *path, struct model *model, char *error, size_t erro
     fclose(input);
     return result;
 }
-

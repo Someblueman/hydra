@@ -315,5 +315,15 @@ contains 'ovh' "$test_root/fleet.txt" 'fleet identifies remote hosts in their ow
 contains 'feature' "$test_root/fleet.txt" 'fleet identifies the remote branch'
 contains 'a attach  c interrupt' "$test_root/fleet.txt" 'fleet advertises only remote-safe actions'
 
+printf 'HYDRA_FLEET_TUI\t3\nT\tbuild\tresponded\t0\t-\tunreachable\tstale\t123\t4\nO\tbuild\ttask_abc\trun_xyz\tstep\tattempt-1\t/work\tnone\trecorded\trunning\tdependency\twaiting for input\tinspect dependency\t123\t123\tstale\t1\n' > "$test_root/fleet-v3.tsv"
+"$tui" --fleet --headless-fixture "$test_root/fleet-v3.tsv" --view hosts --ascii --size 140x30 > "$test_root/fleet-v3-hosts.txt"
+contains 'build' "$test_root/fleet-v3-hosts.txt" 'fleet v3 preserves host identity'
+contains 'stale' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders stale freshness'
+contains 'task_abc' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders task identity'
+contains 'dependency' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders waiting reason'
+"$tui" --fleet --headless-fixture "$test_root/fleet-v3.tsv" --view overview --ascii --size 140x30 > "$test_root/fleet-v3-overview.txt"
+contains 'REMOTE TASKS' "$test_root/fleet-v3-overview.txt" 'fleet overview reserves a task observation panel'
+contains 'inspect dependency' "$test_root/fleet-v3-overview.txt" 'fleet overview renders the next action'
+
 printf '\nTests: %d, Passed: %d, Failed: %d\n' "$test_count" "$pass_count" "$fail_count"
 [ "$fail_count" -eq 0 ]
