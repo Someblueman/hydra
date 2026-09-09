@@ -18,6 +18,19 @@ static bool unknown_code(const char *code) {
 static bool package_matches(const char *path, const char *expected) {
     char actual[65]; return path && expected && digest(expected) && !f_hash(path, actual) && !strcmp(actual, expected);
 }
+static int progress_path(char path[F_PATH], const char *digest_value) {
+    char dir[F_PATH]; if (f_path(dir, sizeof(dir), f_home, "fleet/enrollment") || f_mkdirs(dir)) return -1;
+    return snprintf(path, F_PATH, "%s/%s.json", dir, digest_value) >= F_PATH ? -1 : 0;
+}
+static void save_progress(const char *path, json_object *result) {
+    const char *text = json_object_to_json_string_ext(result, JSON_C_TO_STRING_PLAIN); (void)f_write(path, text, strlen(text), true);
+}
+static json_object *prior_row(json_object *progress, const char *alias) {
+    json_object *rows = f_field(progress, "hosts"); size_t i;
+    if (!json_object_is_type(rows, json_type_array)) return NULL;
+    for (i = 0; i < json_object_array_length(rows); i++) { json_object *row = json_object_array_get_idx(rows, i); if (f_string(row, "alias") && !strcmp(f_string(row, "alias"), alias)) return row; }
+    return NULL;
+}
 static json_object *candidate(json_object *qualification, const char *id) {
     json_object *rows = f_field(f_field(qualification, "data"), "candidates"); size_t i;
     if (!json_object_is_type(rows, json_type_array)) return NULL;
@@ -60,20 +73,21 @@ static json_object *apply_host(json_object *host, unsigned seconds) {
     f_string_add(row, "alias", alias); f_string_add(row, "target", target);
     { char *actual = f_peer_fingerprint(&remote, seconds); if (!actual) { f_string_add(row, "status", "outcome_unknown"); f_string_add(row, "error", "peer fingerprint unavailable"); } else if (strcmp(actual, fingerprint)) { f_string_add(row, "status", "host_key_changed"); f_string_add(row, "error", "authenticated peer fingerprint differs from reviewed identity"); free(actual); } else {
         if (package) { json_object *boot = f_bootstrap(&remote, package, package_digest, seconds); bool boot_ok = json_object_get_boolean(f_field(boot, "ok")); const char *code = f_string(f_field(boot, "error"), "code"); if (!boot_ok) { f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "bootstrap_failed"); json_object_put(boot); return row; } json_object_put(boot); }
-        { json_object *request = json_object_new_object(), *args = json_object_new_array(); json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", "init"); f_string_add(request, "project", project); json_object_array_add(args, json_object_new_string("--no-agent")); json_object_object_add(request, "args", args); response = f_request(&remote, request, seconds); json_object_put(request); if (json_object_get_boolean(f_field(response, "ok"))) { f_string_add(row, "status", "enrolled"); } else { const char *code = f_string(f_field(response, "error"), "code"); f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "remote_failed"); } json_object_put(response); if (prefix && *prefix) f_string_add(row, "reviewed_prefix", prefix); }
+        { json_object *request = json_object_new_object(), *args = json_object_new_array(); json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", "init"); f_string_add(request, "project", project); json_object_array_add(args, json_object_new_string("--no-agent")); json_object_object_add(request, "args", args); response = f_request(&remote, request, seconds); json_object_put(request); if (json_object_get_boolean(f_field(response, "ok"))) { const char *peer = f_string(f_field(response, "data"), "peer_fingerprint"), *installed = f_string(f_field(response, "data"), "hydra"); if (!peer) { f_string_add(row, "status", "outcome_unknown"); f_string_add(row, "error", "mutation peer fingerprint was not reported"); } else if (strcmp(peer, fingerprint)) { f_string_add(row, "status", "host_key_changed"); f_string_add(row, "error", "mutation peer fingerprint differed from reviewed identity"); } else if (prefix && *prefix && (!installed || strncmp(installed, prefix, strlen(prefix)))) { f_string_add(row, "status", "prefix_mismatch"); f_string_add(row, "error", "bootstrap path differed from reviewed prefix"); } else f_string_add(row, "status", "enrolled"); } else { const char *code = f_string(f_field(response, "error"), "code"); f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "remote_failed"); } json_object_put(response); }
     }} return row;
 invalid: f_string_add(row, "status", "invalid_intent"); return row;
 }
 static json_object *apply(const char *path, const char *confirm, unsigned seconds) {
-    json_object *intent = f_read_json(path, F_LIMIT), *host, *hosts, *result, *rows; char hash[65], verify[F_PATH], saved[65]; size_t i;
+    json_object *intent = f_read_json(path, F_LIMIT), *host, *hosts, *result, *rows, *progress = NULL, *previous, *item; char hash[65], verify[F_PATH], saved[65], progress_file[F_PATH] = ""; size_t i;
     if (!intent || strcmp(f_string(intent, "kind"), "fleet-enrollment-intent") || !digest(confirm) || !digest(f_string(intent, "intent_sha256"))) goto invalid;
     if (f_copy(saved, sizeof(saved), f_string(intent, "intent_sha256"))) goto invalid; json_object_object_del(intent, "intent_sha256");
     if (snprintf(verify, sizeof(verify), "%s.verify", path) >= (int)sizeof(verify) || f_write(verify, json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN), strlen(json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN)), true) || f_hash(verify, hash)) { unlink(verify); goto invalid; }
     unlink(verify); if (strcmp(hash, saved) || strcmp(hash, confirm)) goto invalid;
     json_object_object_add(intent, "intent_sha256", json_object_new_string(saved)); result = json_object_new_object(); f_string_add(result, "intent_sha256", saved); rows = json_object_new_array(); json_object_object_add(result, "hosts", rows);
+    if (!progress_path(progress_file, saved)) progress = f_read_json(progress_file, F_LIMIT);
     hosts = f_field(intent, "hosts"); if (!json_object_is_type(hosts, json_type_array)) { hosts = json_object_new_array(); host = f_field(intent, "host"); if (host) json_object_array_add(hosts, json_object_get(host)); }
-    for (i = 0; i < json_object_array_length(hosts); i++) json_object_array_add(rows, apply_host(json_object_array_get_idx(hosts, i), seconds));
-    if (!f_field(intent, "hosts")) json_object_put(hosts); json_object_put(intent); return f_success("fleet-enrollment-apply", result);
+    for (i = 0; i < json_object_array_length(hosts); i++) { host = json_object_array_get_idx(hosts, i); previous = prior_row(progress, f_string(host, "alias")); item = previous ? json_object_get(previous) : apply_host(host, seconds); json_object_array_add(rows, item); if (progress_file[0]) save_progress(progress_file, result); }
+    if (progress) json_object_put(progress); if (!f_field(intent, "hosts")) json_object_put(hosts); json_object_put(intent); return f_success("fleet-enrollment-apply", result);
 invalid: json_object_put(intent); return f_error("fleet-enrollment-apply", "review_required", "intent digest, confirmation, or reviewed fields do not match");
 }
 json_object *enrollment_cli(int argc, char **argv) {
