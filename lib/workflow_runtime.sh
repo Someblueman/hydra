@@ -118,6 +118,8 @@ workflow_step_command() {
     case "$_wsc_kind" in
         spawn)
             set -- spawn "$_wsc_branch"
+            _wsc_terminal="$(awk -F '\t' -v id="$_wsc_id" '$1=="terminal_mode" && $2==id {print $3}' "$_wsc_dir/graph.tsv")"
+            [ "$_wsc_terminal" != headless ] || set -- "$@" --headless
             [ -z "$_wsc_group" ] || set -- "$@" --group "$_wsc_group"
             if [ -n "$_wsc_profile" ]; then set -- "$@" --profile "$_wsc_profile"; else set -- "$@" --no-agent; fi
             [ -z "$_wsc_policy" ] || set -- "$@" --completion-policy "$_wsc_policy"

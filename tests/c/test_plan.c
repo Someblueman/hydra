@@ -20,6 +20,17 @@ static void expect(json_object *plan, json_object *policy, const char *code) {
     }
     json_object_put(errors);
 }
+static void terminal_cases(void) {
+    json_object *plan = fixture(), *policy = plan_read("tests/fixtures/plan/policy.json");
+    json_object *args = f_field(json_object_array_get_idx(f_field(plan, "steps"), 0), "args");
+    f_string_add(args, "terminal_mode", "headless"); expect(plan, policy, NULL);
+    f_string_add(args, "terminal_mode", "interactive"); expect(plan, policy, NULL);
+    f_string_add(args, "terminal_mode", "auto"); expect(plan, policy, "invalid_step");
+    json_object_object_add(args, "terminal_mode", json_object_new_boolean(true)); expect(plan, policy, "invalid_step");
+    json_object_object_add(args, "terminal_mode", NULL); expect(plan, policy, "invalid_step");
+    json_object_object_del(args, "terminal_mode"); expect(plan, policy, NULL);
+    json_object_put(plan); json_object_put(policy);
+}
 static void graph_cases(void) {
     json_object *plan = fixture(), *policy = plan_read("tests/fixtures/plan/policy.json"), *steps, *compose, *worker;
     assert(plan && policy); expect(plan, policy, NULL);
@@ -171,6 +182,6 @@ static void obligation_cases(void) {
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
+    terminal_cases(); graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
     puts("planning graph, policy, canonical JSON and parser checks passed"); return 0;
 }

@@ -89,7 +89,7 @@
 "          \"minItems\": 0,\n          \"maxItems\": 64,\n          \"uniqueItems\": true\n        },\n",
 "        \"args\": {\n          \"oneOf\": [\n            {\n              \"type\": \"object\",\n",
 "              \"additionalProperties\": false,\n              \"properties\": {\n                \"branch\": {\n                  \"type\": \"string\",\n",
-"                  \"pattern\": \"^[a-z][a-z0-9]*([-_][a-z0-9]+)*$\",\n                  \"maxLength\": 64\n                }\n              },\n",
+"                  \"pattern\": \"^[a-z][a-z0-9]*([-_][a-z0-9]+)*$\",\n                  \"maxLength\": 64\n                },\n                \"terminal_mode\": {\n                  \"enum\": [\"interactive\", \"headless\"]\n                }\n              },\n",
 "              \"required\": [\n                \"branch\"\n              ]\n            },\n",
 "            {\n              \"type\": \"object\",\n              \"additionalProperties\": false,\n              \"properties\": {\n",
 "                \"head\": {\n                  \"type\": \"string\",\n                  \"pattern\": \"^[a-z][a-z0-9]*([-_][a-z0-9]+)*$\",\n                  \"maxLength\": 64\n",

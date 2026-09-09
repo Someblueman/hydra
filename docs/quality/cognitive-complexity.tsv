@@ -37,7 +37,7 @@ src/fleet/plan/plan_result.c	plan_delivery	41
 src/fleet/plan/plan_schema.c	exec_recipe	22
 src/fleet/plan/plan_schema.c	plan_validate	21
 src/fleet/plan/plan_schema.c	policy_bounds	17
-src/fleet/plan/plan_schema.c	recipe	26
+src/fleet/plan/plan_schema.c	recipe	24
 src/fleet/support/files.c	f_mkdirs	16
 src/fleet/support/json.c	finite_json	21
 src/fleet/support/process.c	run	68
@@ -84,7 +84,7 @@ src/fleet/transport/bundle.c	history_files	27
 src/fleet/transport/remote.c	f_observe	16
 src/fleet/transport/remote.c	f_remote_cli	22
 src/fleet/transport/remote.c	f_request	18
-src/fleet/transport/server.c	f_handshake	23
+src/fleet/transport/server.c	f_handshake	22
 src/fleet/transport/server.c	f_serve	51
 src/fleet/transport/server.c	workflow_runs	17
 src/fleet/tui.c	f_tui_data	16

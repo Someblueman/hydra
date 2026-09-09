@@ -18,6 +18,9 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
+# shellcheck source=/dev/null
+. "$root/tests/headless_path.sh"
+headless_path "$fixture/no-tmux"
 mkdir "$fixture/source"
 cp "$root/tests/fixtures/plan-task/repo/"* "$fixture/source/"
 cp "$root/tests/fixtures/plan-task/plan.json" "$fixture/plan.json"
@@ -62,7 +65,7 @@ for node in produce inspect compose verify; do
     esac
     if [ -n "${HYDRA_TEST_PLAN_REPAIR:-}" ]; then inputs="$(printf '%s' "$inputs" | sed 's/^\[/["repair",/;s/,]/]/')"; fi
     cat > "$node.json" <<JSON
-{"schema_version":1,"host":"local","project":"$fixture/source","source":{"commit":"$commit"},"work":{"kind":"exec","argv":$argv},"inputs":$inputs,"outputs":$outputs,"capabilities":["exec"],"completion":"command-exit","limits":{"transport_seconds":10,"queue_seconds":30,"startup_seconds":30,"execution_seconds":30,"cancellation_seconds":5,"log_bytes":4096,"artifact_bytes":4096}}
+{"schema_version":1,"host":"local","project":"$fixture/source","source":{"commit":"$commit"},"work":{"kind":"exec","argv":$argv},"inputs":$inputs,"outputs":$outputs,"capabilities":["exec","execution-headless"],"completion":"command-exit","limits":{"transport_seconds":10,"queue_seconds":30,"startup_seconds":30,"execution_seconds":30,"cancellation_seconds":5,"log_bytes":4096,"artifact_bytes":4096}}
 JSON
 done
 if [ "${HYDRA_TEST_PLAN_REPAIR_BUDGET:-0}" = 1 ]; then

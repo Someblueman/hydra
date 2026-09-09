@@ -4,6 +4,10 @@
 #include "fleet/workflow/workflow_task.h"
 #include <string.h>
 
+static bool task_capabilities(json_object *caps) {
+    size_t count = json_object_array_length(caps);
+    return plan_has(caps, "exec") && (count == 1 || (count == 2 && plan_has(caps, "execution-headless")));
+}
 static bool task_policy(json_object *binding, json_object *env, json_object *source, int64_t *seconds) {
     json_object *spec = f_field(binding, "spec"), *work = f_field(spec, "work"), *limits = f_field(spec, "limits");
     const char *commit = f_string(f_field(spec, "source"), "commit"), *kind = f_string(work, "kind");
@@ -11,7 +15,7 @@ static bool task_policy(json_object *binding, json_object *env, json_object *sou
         !plan_has(f_field(env, "hosts"), f_string(spec, "host")) ||
         !plan_has(f_field(env, "tools"), f_text(json_object_array_get_idx(f_field(work, "argv"), 0))) ||
         !plan_has(f_field(env, "effects"), "execute") || !plan_has(f_field(env, "effects"), "worktree") ||
-        json_object_array_length(f_field(spec, "capabilities")) != 1 || !plan_has(f_field(spec, "capabilities"), "exec") ||
+        !task_capabilities(f_field(spec, "capabilities")) ||
         json_object_get_int64(f_field(limits, "artifact_bytes")) > json_object_get_int64(f_field(env, "artifact_bytes"))) return false;
     *seconds += json_object_get_int64(f_field(limits, "queue_seconds")) + json_object_get_int64(f_field(limits, "startup_seconds")) +
                 json_object_get_int64(f_field(limits, "execution_seconds"));

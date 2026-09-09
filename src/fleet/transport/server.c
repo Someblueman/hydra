@@ -12,10 +12,23 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", NULL};
+static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", "execution-headless", NULL};
+bool f_terminal_available(void) {
+    struct f_capture cap = {0}; char *argv[] = {"tmux", "-V", NULL};
+    unsigned major = 0, minor = 0;
+    bool ok = !f_run(argv, NULL, 0, 5, &cap) && !cap.status &&
+        sscanf(cap.out, "tmux %u.%u", &major, &minor) == 2 && major >= 3;
+    f_capture_free(&cap); return ok;
+}
+static json_object *host_capabilities(void) {
+    json_object *caps = json_object_new_array();
+    for (size_t i = 0; capabilities[i]; i++) json_object_array_add(caps, json_object_new_string(capabilities[i]));
+    if (f_terminal_available()) json_object_array_add(caps, json_object_new_string("tmux"));
+    return caps;
+}
 json_object *f_handshake(void) {
-    json_object *data = json_object_new_object(), *caps = json_object_new_array(), *projects = json_object_new_array(), *native = json_object_new_object();
-    char root[F_PATH]; DIR *dir; struct dirent *entry; size_t i;
+    json_object *data = json_object_new_object(), *projects = json_object_new_array(), *native = json_object_new_object();
+    char root[F_PATH]; DIR *dir; struct dirent *entry;
     f_string_add(data, "hydra_version", F_VERSION);
     json_object_object_add(data, "fleet_protocol", json_object_new_int(F_PROTOCOL));
     json_object_object_add(data, "task_protocol", json_object_new_int(1));
@@ -28,8 +41,7 @@ json_object *f_handshake(void) {
         json_object_object_add(data, "native_protocols", protocols);
         json_object_array_add(signals, json_object_new_string("INT")); json_object_object_add(data, "signals", signals);
     }
-    for (i = 0; capabilities[i]; i++) json_object_array_add(caps, json_object_new_string(capabilities[i]));
-    json_object_object_add(data, "capabilities", caps);
+    json_object_object_add(data, "capabilities", host_capabilities());
     if (!f_path(root, sizeof(root), f_home, "state/v2/projects") && (dir = opendir(root))) {
         while ((entry = readdir(dir))) {
             char path[F_PATH], project[F_PATH], *value; json_object *item;
