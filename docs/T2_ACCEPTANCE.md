@@ -33,6 +33,7 @@ not authenticate to a provider or enroll a host.
 | --- | --- |
 | `make build-fleet build/test-plan`; `build/test-plan` | Passed, including both explicit modes, invalid values and null, and omitted mode |
 | `build/test-fleet`, `build/test-task-package`, `build/test-workflow-data` | Passed |
+| `sh tests/test_workflow_plan.sh` after PTY capacity restoration | 91/91 passed on implementation commit `73c940a45effd039bb725f97ed01ddcf466eeb7c`, including all previously blocked cases |
 | `HYDRA_TEST_HEADLESS=1 sh tests/test_workflow_plan.sh` | 91/91 passed: compilation, exact delivery, independent verification and runtime binding tamper rejection |
 | `sh tests/test_headless_plan_adapter.sh` | Passed: omitted mode rejects before launch; explicit headless bound profile produces exact bytes consumed by an independent verifier |
 | `sh tests/test_workflow_plan_task.sh` | Passed: schema 2 compiled tasks with explicit `execution-headless`, intermediate checks and final evidence join |
@@ -64,7 +65,7 @@ baseline. No ceiling was raised.
 
 ## Environment limits
 
-The interactive `sh tests/test_workflow_plan.sh` run returned 86/91, exactly
+The initial interactive `sh tests/test_workflow_plan.sh` run returned 86/91, exactly
 matching the coordinator's baseline. A bounded initial tmux probe succeeded,
 but the negative and two mutation-guard runs failed to allocate PTYs. Their
 spawn stderr says `create window failed: fork failed: Device not configured`.
@@ -72,8 +73,15 @@ Evidence is retained under
 `/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/tmp.fwg4dIlMzX` in runs
 `run_f7993635e4fd2a59699b`, `run_9c969ca73fe7f1477532`, and
 `run_2f30fca06252895dd98f` (each `steps/spawn/attempt-1/stderr`). The same cases
-passed without tmux. No unrelated terminal sessions were removed. Full interactive
-qualification therefore remains constrained by the host's PTY capacity.
+passed without tmux. No unrelated terminal sessions were removed by this task.
+
+After the user authorized the coordinator to archive and remove eligible old idle
+terminal sessions, PTY capacity was restored. A single rerun of the unchanged T2
+implementation passed **91/91**, including the negative assessment and both live
+mutation guards. The suite and cleanup exited zero; the test slot was returned
+to 9B. `build/t2-acceptance/plan-interactive-restored.log` records that result.
+The initial PTY qualification blocker is resolved; the earlier failed run is
+retained only as historical diagnostic evidence.
 
 An optional Apple AddressSanitizer attempt stalled in sanitizer/dyld allocator
 initialization before `main`, as sampled in `build/t2-acceptance/asan-startup.txt`,
