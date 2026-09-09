@@ -94,7 +94,7 @@ json_object *f_request(const struct f_remote *remote, json_object *request, unsi
     if (result && cap.status && json_object_get_boolean(f_field(result, "ok"))) { json_object_put(result); result = NULL; }
     if (result && json_object_get_boolean(f_field(result, "ok")) && cap.err) {
         const char *marker = "Server host key: "; char *start = strstr(cap.err, marker), *end;
-        if (start) { start += strlen(marker); end = start; while (*end && *end != '\n' && *end != '\r' && *end != ' ') end++; if (end > start) { char key[256]; size_t length = (size_t)(end - start); if (length < sizeof(key)) { memcpy(key, start, length); key[length] = '\0'; f_string_add(f_field(result, "data"), "peer_fingerprint", key); } } }
+        if (start) { start += strlen(marker); start = strstr(start, "SHA256:"); end = start; while (start && *end && *end != '\n' && *end != '\r' && *end != ' ') end++; if (start && end > start) { char key[256]; size_t length = (size_t)(end - start); if (length < sizeof(key)) { memcpy(key, start, length); key[length] = '\0'; f_string_add(f_field(result, "data"), "peer_fingerprint", key); } } }
     }
     if (result && json_object_get_boolean(f_field(result, "ok")) && f_string(request, "expected_peer_fingerprint")) {
         const char *expected = f_string(request, "expected_peer_fingerprint"), *actual = f_string(f_field(result, "data"), "peer_fingerprint");
@@ -182,7 +182,7 @@ char *f_peer_fingerprint(const struct f_remote *remote, unsigned seconds) {
     argv[n++] = (char *)remote->target; argv[n++] = (char *)"env LC_ALL=C  'hydra' fleet serve"; argv[n] = NULL;
     status = f_run(argv, "{\"protocol\":1,\"action\":\"handshake\"}", sizeof("{\"protocol\":1,\"action\":\"handshake\"}") - 1, seconds, &cap);
     if (!status && cap.err && (start = strstr(cap.err, marker))) {
-        start += strlen(marker); end = start;
+        start += strlen(marker); start = strstr(start, "SHA256:"); end = start;
         while (*end && *end != '\n' && *end != '\r' && *end != ' ') end++;
         if (end > start && (fingerprint = malloc((size_t)(end - start) + 1))) {
             memcpy(fingerprint, start, (size_t)(end - start)); fingerprint[end - start] = '\0';
