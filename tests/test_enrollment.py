@@ -43,7 +43,7 @@ class EnrollmentTest(unittest.TestCase):
         self.ssh.chmod(0o755)
         self.env = os.environ.copy()
         self.env.update(HOME=str(self.tmp), HYDRA_HOME=str(self.home), PATH=f"{self.tmp}:{os.environ['PATH']}",
-                         HYDRA_FLEET_BIN=str(Path(__file__).parents[1] / "build/hydra-fleet"), HYDRA_BIN_CMD=str(self.hydra_wrapper), ENROLL_COUNT_WRAPPER=str(self.hydra_wrapper), ENROLL_REAL=str(Path(__file__).parents[1] / "bin/hydra"), ENROLL_COUNTER=str(self.counter), ENROLL_FINGERPRINT="SHA256:fixture")
+                         HYDRA_FLEET_BIN=os.environ.get("HYDRA_FLEET_BIN", str(Path(__file__).parents[1] / "build/hydra-fleet")), HYDRA_BIN_CMD=str(self.hydra_wrapper), ENROLL_COUNT_WRAPPER=str(self.hydra_wrapper), ENROLL_REAL=str(Path(__file__).parents[1] / "bin/hydra"), ENROLL_COUNTER=str(self.counter), ENROLL_FINGERPRINT="SHA256:fixture")
         self.cli = str(Path(__file__).parents[1] / "bin/hydra")
 
     def run_cli(self, *args, check=True):

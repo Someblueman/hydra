@@ -154,7 +154,7 @@ int f_ssh(const struct f_remote *remote, const char *command, const char *input,
         char dir[F_PATH];
         if (f_path(dir, sizeof(dir), f_home, "fleet/sockets") || f_mkdirs(dir)) return -1;
         if (snprintf(socket, sizeof(socket), "ControlPath=%s/%%C-%ld", dir, (long)getpid()) >= (int)sizeof(socket)) return -1;
-        argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlMaster=auto";
+        argv[n++] = (char *)"-o"; argv[n++] = (char *)(remote->require_existing_master ? "ControlMaster=no" : "ControlMaster=auto");
         argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlPersist=60";
         argv[n++] = (char *)"-o"; argv[n++] = socket;
     }
@@ -189,6 +189,7 @@ char *f_peer_fingerprint(struct f_remote *remote, unsigned seconds) {
         if (start && end > start && (fingerprint = malloc((size_t)(end - start) + 1))) {
             memcpy(fingerprint, start, (size_t)(end - start)); fingerprint[end - start] = '\0';
             (void)f_copy(remote->peer_fingerprint, sizeof(remote->peer_fingerprint), fingerprint);
+            remote->require_existing_master = true;
         }
     }
     f_capture_free(&cap); return fingerprint;

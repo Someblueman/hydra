@@ -3,7 +3,7 @@
 #include "fleet/fleet.h"
 #include <json-c/json.h>
 
-struct f_remote { char name[128], target[256], hydra[F_PATH], home[F_PATH]; bool multiplex;
+struct f_remote { char name[128], target[256], hydra[F_PATH], home[F_PATH]; bool multiplex, require_existing_master;
     /* Transient discovery policy only; never persisted in an alias record. */
     char ssh_config[F_PATH], peer_fingerprint[256];
 };
