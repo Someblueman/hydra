@@ -157,6 +157,7 @@ int f_ssh(const struct f_remote *remote, const char *command, const char *input,
         argv[n++] = (char *)"-o"; argv[n++] = (char *)(remote->require_existing_master ? "ControlMaster=no" : "ControlMaster=auto");
         argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlPersist=60";
         argv[n++] = (char *)"-o"; argv[n++] = socket;
+        if (remote->require_existing_master) { argv[n++] = (char *)"-o"; argv[n++] = (char *)"ProxyCommand=false"; }
     }
     argv[n++] = (char *)remote->target; argv[n++] = (char *)command; argv[n] = NULL;
     if (tty) { execvp("ssh", argv); return -1; }
