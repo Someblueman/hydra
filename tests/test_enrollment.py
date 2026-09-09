@@ -82,6 +82,21 @@ class EnrollmentTest(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["data"]["hosts"][0]["status"], "review_required")
         self.assertFalse(self.counter.exists())
 
+    def test_reviewed_ssh_config_change_requires_renewal(self):
+        config = self.tmp / "ssh-config"
+        config.write_text("Host good\n  HostName good\n  User tester\n")
+        qualification = self.qualification()
+        value = json.loads(qualification.read_text())
+        value["data"]["candidates"][0]["sources"] = [{"kind": "ssh-config", "locator": str(config)}]
+        qualification.write_text(json.dumps(value))
+        intent = self.tmp / "intent.json"
+        self.run_cli("review", "--input", str(qualification), "--candidate", "cand_676f6f64", "--project", str(self.tmp / "project"), "--output", str(intent))
+        digest = json.loads(intent.read_text())["intent_sha256"]
+        config.write_text("Host good\n  HostName changed\n  User other\n")
+        result = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
+        self.assertEqual(json.loads(result.stdout)["data"]["hosts"][0]["status"], "invalid_intent")
+        self.assertFalse(self.counter.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
