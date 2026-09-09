@@ -188,6 +188,11 @@ char *f_peer_fingerprint(const struct f_remote *remote, unsigned seconds) {
             memcpy(fingerprint, start, (size_t)(end - start)); fingerprint[end - start] = '\0';
         }
     }
+    if (!fingerprint && !status && cap.out && (start = strstr(cap.out, marker))) {
+        start += strlen(marker); start = strstr(start, "SHA256:"); end = start;
+        while (start && *end && *end != '\n' && *end != '\r' && *end != ' ') end++;
+        if (start && end > start) { fingerprint = malloc((size_t)(end - start) + 1); if (fingerprint) { memcpy(fingerprint, start, (size_t)(end - start)); fingerprint[end - start] = '\0'; } }
+    }
     f_capture_free(&cap); return fingerprint;
 }
 

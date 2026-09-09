@@ -13,9 +13,10 @@ class EnrollmentTest(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.home = self.tmp / "home"
         self.home.mkdir()
+        subprocess.run(["git", "init", "-q", str(self.tmp / "project")], check=True)
         self.counter = self.tmp / "mutations"
         self.ssh = self.tmp / "ssh"
-        self.ssh.write_text(textwrap.dedent("""
+        self.ssh.write_text(textwrap.dedent("""\
             #!/usr/bin/env python3
             import json, os, subprocess, sys
             request = json.load(sys.stdin)
@@ -49,7 +50,8 @@ class EnrollmentTest(unittest.TestCase):
     def test_apply_is_explicit_and_duplicate_is_reconciled(self):
         qualification = self.qualification()
         intent = self.tmp / "intent.json"
-        self.run_cli("review", "--input", str(qualification), "--candidate", "cand_676f6f64", "--project", str(self.tmp), "--output", str(intent))
+        project = self.tmp / "project"
+        self.run_cli("review", "--input", str(qualification), "--candidate", "cand_676f6f64", "--project", str(project), "--output", str(intent))
         reviewed = json.loads(intent.read_text())
         digest = reviewed["intent_sha256"]
         first = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
