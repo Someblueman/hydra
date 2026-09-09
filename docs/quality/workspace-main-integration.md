@@ -71,6 +71,35 @@ container, plus repository lint with ShellCheck 0.9.0. Local logs:
 `build/pr80-receipt-synchronized.log`, `build/pr80-linux-plan-launch.log` and
 `build/pr80-receipt-lint.log`.
 
+### Queued form input under terminal backpressure
+
+The older push CI run `34290948221` failed 22 macOS PTY assertions around search,
+palette input and action return, while terminal restoration checks passed. Local
+ordinary acceptance passed. The form repainted the full view for each queued byte:
+one 13-character search burst generated 30,889 bytes of output locally. A bounded
+slow-consumer case reproduced a late palette action and subsequent input mismatch
+with the original one-second deadlines.
+
+Forms now drain at most 64 already-queued bytes before repainting. A drained queue
+returns to painting and the ordinary 40 ms wait before flushing incomplete escape
+input. The same observed search burst generated 1,834 output bytes afterward;
+this is a local output-volume observation, not a general latency benchmark.
+
+The existing palette suite applies 64-byte reads with 2 ms pacing to its longest
+form burst and checks a fragmented Home key with cursor insertion. It retains all
+action, literal-argv, raw-mode and deadline assertions. Against the archived
+pre-fix binary this final fixture failed two checks; the corrected binary passed
+138/138 on macOS arm64 and fresh Ubuntu 24.04 arm64. UBSan PTY checks and the
+planning, launch and workflow-control suites passed, as did 79 native checks and
+repository lint. Targeted Clang-Tidy 22.1.8 analysis passed without increased
+complexity ceilings (`prompt_text`: 42 against the existing ceiling of 45).
+
+Logs: `build/pr80-form-burst-regression-before.log`,
+`build/pr80-forms-pty-final.log`, `build/pr80-forms-linux-final.log`,
+`build/pr80-forms-pty-sanitize.log`, `build/pr80-forms-plan-sanitize.log`,
+`build/pr80-forms-native-tests.log`, `build/pr80-forms-quality.log` and
+`build/pr80-forms-lint.log`.
+
 ## Results
 
 All commands below completed with exit status zero on local macOS arm64:

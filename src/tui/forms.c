@@ -66,9 +66,25 @@ static void form_draw(struct app *app, const char *prompt, const char *text, siz
     }
     fflush(stdout);
 }
+
+static void form_insert(char *buffer, size_t size, size_t *length, size_t *cursor,
+                        const struct tv_event *event) {
+    size_t i;
+    if (event->length >= size - *length) return;
+    for (i=0; i<event->length && *length+1<size; i++) {
+        unsigned char value=(unsigned char)event->bytes[i];
+        if (value<32 || value==127) continue;
+        memmove(buffer + *cursor + 1, buffer + *cursor, *length - *cursor + 1);
+        buffer[(*cursor)++]=(char)value;
+        (*length)++;
+    }
+}
+
 int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) {
     struct tv_input input;
     size_t length=0, cursor=0;
+    unsigned queued=0;
+    bool redraw=true;
     time_t last_refresh=time(NULL);
     int result=-1;
     if (!size) return -1;
@@ -78,15 +94,24 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
         struct tv_event e;
         char byte;
         bool event;
-        time_t now=time(NULL);
-        native_observations_tick(app,now-last_refresh>=2);
-        if (now-last_refresh>=2) last_refresh=now;
-        native_terminals_pump(app);
-        update_size(app);
-        render(app,0,false);
-        form_draw(app,prompt,buffer,cursor);
-        if (read_key(40,&byte)>0) event=tv_input_feed(&input,(unsigned char)byte,&e);
-        else event=tv_input_flush(&input,&e);
+        if (redraw) {
+            time_t now=time(NULL);
+            native_observations_tick(app,now-last_refresh>=2);
+            if (now-last_refresh>=2) last_refresh=now;
+            native_terminals_pump(app);
+            update_size(app);
+            render(app,0,false);
+            form_draw(app,prompt,buffer,cursor);
+        }
+        /* Drain a bounded burst before repainting, without flushing incomplete
+         * escape sequences until the ordinary input timeout has elapsed. */
+        if (read_key(redraw ? 40 : 0,&byte)>0) {
+            redraw=++queued>=64;
+            if (redraw) queued=0;
+            event=tv_input_feed(&input,(unsigned char)byte,&e);
+        } else if (!redraw) {
+            redraw=true; queued=0; continue;
+        } else event=tv_input_flush(&input,&e);
         if (!event) continue;
         if (e.type==TV_KEY && (e.key==27 || e.key==3)) break;
         if (e.type==TV_KEY && (e.key=='\r' || e.key=='\n')) { result=0; break; }
@@ -99,14 +124,7 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
         else if (e.type==TV_KEY && e.key==TV_KEY_HOME) cursor=0;
         else if (e.type==TV_KEY && e.key==TV_KEY_END) cursor=length;
         else if (e.type==TV_PASTE || (e.type==TV_KEY && e.key<0x110000)) {
-            size_t i;
-            if (e.length>=size-length) continue;
-            for (i=0;i<e.length && length+1<size;i++) {
-                unsigned char value=(unsigned char)e.bytes[i];
-                if (value<32 || value==127) continue;
-                memmove(buffer+cursor+1,buffer+cursor,length-cursor+1);
-                buffer[cursor++]=(char)value; length++;
-            }
+            form_insert(buffer,size,&length,&cursor,&e);
         }
     }
     /* The form temporarily paints over the workspace presenter. */

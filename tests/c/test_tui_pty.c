@@ -22,6 +22,7 @@ struct session {
     int master;
     int slave;
     struct termios original;
+    bool slow_output;
 };
 
 static int tests;
@@ -157,6 +158,14 @@ static bool wait_for_raw(struct session *session) {
     return false;
 }
 
+static ssize_t read_marker_output(struct session *session, char *buffer, size_t size) {
+    ssize_t length;
+    if (session->slow_output && size > 64U) size = 64U;
+    length = read(session->master, buffer, size);
+    if (session->slow_output && length > 0) sleep_ms(2);
+    return length;
+}
+
 /* Keep both observations: one PTY read can contain the entire frame. */
 static bool wait_for_markers(struct session *session, const char *marker,
                              const char *second, long timeout_ms) {
@@ -165,7 +174,7 @@ static bool wait_for_markers(struct session *session, const char *marker,
     size_t used = 0U;
     long long deadline = monotonic_ms() + timeout_ms;
     while (monotonic_ms() < deadline) {
-        ssize_t length = read(session->master, captured + used, sizeof(captured) - used - 1U);
+        ssize_t length = read_marker_output(session, captured + used, sizeof(captured) - used - 1U);
         if (length > 0) {
             used += (size_t)length;
             captured[used] = '\0';

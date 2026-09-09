@@ -28,11 +28,23 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
                 "open palette test terminal")) return;
     (void)wait_for_raw(&session);
     for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); index++) {
+        /* Bound this regression to one queued form burst, not idle throughput. */
+        session.slow_output = strcmp(cases[index].query, "recovery inspect") == 0;
         palette_query(&session, cases[index].query);
         result(wait_for_marker(&session, cases[index].expected, 1000), cases[index].expected);
+        session.slow_output = false;
         write_input(session.master, "\n", 1U);
         (void)wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000);
     }
+    write_input(session.master, ":", 1U);
+    (void)wait_for_marker(&session, "Action search:", 1000);
+    write_input(session.master, "tatus\033[", 7U);
+    sleep_ms(10);
+    write_input(session.master, "Hs\n", 3U);
+    result(wait_for_marker(&session, "FAKE ACTION <status>", 1000),
+           "queued form input preserves a fragmented Home key and cursor insertion");
+    write_input(session.master, "\n", 1U);
+    (void)wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000);
     palette_query(&session, "collisions");
     (void)wait_for_marker(&session, "Compare with head:", 1000);
     write_input(session.master, "other head;literal\n", 19U);
