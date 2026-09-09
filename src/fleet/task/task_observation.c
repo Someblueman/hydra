@@ -4,6 +4,7 @@
 #include "fleet/task/task.h"
 #include <dirent.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -20,6 +21,7 @@
 #define OBSERVATION_STEPS 512U
 #define OBSERVATION_REQUESTS 32U
 #define OBSERVATION_GRAPH_LIMIT (256U * 1024U)
+#define OBSERVATION_ATTEMPTS 512U
 
 static int object_id_order(const void *left, const void *right) {
     const char *a = f_string(*(json_object *const *)left, "request_id");
@@ -283,6 +285,230 @@ static void current_step_identity(json_object *task, json_object *steps) {
         f_string_add(task, "agent_profile", f_string(selected, "agent_profile"));
 }
 
+/* V2 observations are deliberately read-only and bounded.  A cursor is the
+ * last sequence the client has confirmed; the receiver returns sequence+1.
+ * Retention and malformed streams are reported explicitly instead of being
+ * silently treated as an empty stream. */
+struct event_scan {
+    json_object *events; unsigned cursor, wanted, first, last, delivered;
+    bool reset, scan_truncated; size_t returned, bytes; off_t byte_offset, safe_offset;
+};
+
+static bool scan_event_line(struct event_scan *scan, char *line, off_t line_start) {
+    json_object *event = f_parse(line), *sequence = f_field(event, "sequence");
+    if (!event || !json_object_is_type(event, json_type_object) || !f_number_is(event, "schema_version", 1) ||
+        !json_object_is_type(sequence, json_type_int) || json_object_get_int64(sequence) < 1 || json_object_get_int64(sequence) > 4294967295U) {
+        json_object_put(event); scan->reset = true; return true;
+    }
+    { unsigned value = (unsigned)json_object_get_int64(sequence);
+      if (!scan->first) scan->first = value;
+      if ((scan->last && value != scan->last + 1U) || (scan->byte_offset > 0 && !scan->last && scan->cursor < 4294967295U && value != scan->cursor + 1U)) {
+          scan->reset = true; json_object_put(event); return true;
+      }
+      scan->last = value;
+      if (value > scan->cursor && scan->returned < scan->wanted) { json_object_array_add(scan->events, event); scan->returned++; scan->delivered = value; }
+      else json_object_put(event);
+    }
+    (void)line_start; return scan->returned >= scan->wanted;
+}
+
+static void scan_event_stream(FILE *input, struct event_scan *scan) {
+    char line[8192];
+    while (fgets(line, sizeof(line), input)) {
+        off_t line_start = ftello(input) - (off_t)strlen(line);
+        if (!strchr(line, '\n') && !feof(input)) { scan->reset = true; break; }
+        scan->bytes += strlen(line);
+        if (scan->bytes > 262144U) { scan->scan_truncated = true; scan->safe_offset = line_start; break; }
+        if (scan_event_line(scan, line, line_start)) break;
+    }
+}
+
+static void event_request_values(json_object *request, unsigned *cursor, unsigned *wanted, off_t *offset) {
+    json_object *value;
+    value = f_field(request, "cursor"); if (value && json_object_is_type(value, json_type_int) && json_object_get_int64(value) >= 0) *cursor = (unsigned)json_object_get_int64(value);
+    value = f_field(request, "event_limit"); if (value && json_object_is_type(value, json_type_int) && json_object_get_int64(value) >= 1 && json_object_get_int64(value) <= 128) *wanted = (unsigned)json_object_get_int64(value);
+    value = f_field(request, "byte_offset"); if (value && json_object_is_type(value, json_type_int) && json_object_get_int64(value) >= 0) *offset = (off_t)json_object_get_int64(value);
+}
+
+static bool open_event_stream(const char *project, const char *run, char path[F_PATH], FILE **input, struct stat *stream_stat) {
+    return project && run && f_name(project) && f_name(run) && snprintf(path, F_PATH, "%s/state/v2/projects/%s/workflows/runs/%s/events.jsonl", f_home, project, run) < F_PATH && (*input = fopen(path, "r")) && !fstat(fileno(*input), stream_stat);
+}
+
+static void unavailable_event_stream(json_object *data, json_object *stream, json_object *events, unsigned cursor) {
+    json_object_object_add(stream, "schema_version", json_object_new_int(1)); json_object_object_add(stream, "events", events);
+    json_object_object_add(stream, "oldest_cursor", json_object_new_int64(cursor)); json_object_object_add(stream, "available", json_object_new_boolean(false));
+    f_string_add(stream, "unavailable_reason", "event-history-missing"); json_object_object_add(stream, "retention_gap", json_object_new_boolean(true));
+    json_object_object_add(stream, "stream_reset", json_object_new_boolean(false)); json_object_object_add(stream, "next_cursor", json_object_new_int64(cursor));
+    json_object_object_add(stream, "head_cursor", json_object_new_int64(cursor)); f_string_add(stream, "duplicate_policy", "sequence-cursor");
+    json_object_object_add(stream, "next_byte_offset", json_object_new_int64(0)); json_object_object_add(data, "event_observation", stream);
+}
+
+static bool prepare_event_input(json_object *request, const char *generation, struct stat *stream_stat, FILE *input, off_t byte_offset, off_t *safe_offset, off_t *reset_offset) {
+    bool reset = false;
+    *safe_offset = byte_offset; *reset_offset = byte_offset;
+    if (f_field(request, "stream_id") && (!f_text(f_field(request, "stream_id")) || strcmp(f_text(f_field(request, "stream_id")), generation))) { reset = true; *safe_offset = 0; *reset_offset = 0; }
+    if (byte_offset > stream_stat->st_size || (!reset && fseeko(input, byte_offset, SEEK_SET))) { reset = true; *safe_offset = 0; *reset_offset = 0; }
+    if (reset) (void)fseeko(input, *safe_offset, SEEK_SET);
+    return reset;
+}
+
+static unsigned event_head_cursor(FILE *input, off_t size, unsigned fallback) {
+    char line[8192]; unsigned head = fallback;
+    off_t start = size > (off_t)sizeof(line) ? size - (off_t)sizeof(line) : 0;
+    if (fseeko(input, start, SEEK_SET)) return head;
+    while (fgets(line, sizeof(line), input)) {
+        json_object *event = f_parse(line), *sequence = f_field(event, "sequence");
+        if (event && json_object_is_type(sequence, json_type_int) && json_object_get_int64(sequence) > 0 && json_object_get_int64(sequence) <= 4294967295U) head = (unsigned)json_object_get_int64(sequence);
+        json_object_put(event);
+    }
+    return head;
+}
+
+static void event_observation(json_object *data, json_object *state, json_object *request) {
+    json_object *stream = json_object_new_object(), *events = json_object_new_array();
+    const char *project = f_string(state, "execution_project_id"), *run = f_string(state, "run_id");
+    char path[F_PATH]; FILE *input = NULL; unsigned cursor = 0, wanted = 128;
+    bool gap = false, reset = false, available = false; off_t byte_offset = 0;
+    char generation[128] = ""; struct stat stream_stat; off_t next_byte_offset = 0, safe_offset = 0, reset_offset = 0;
+    struct event_scan scan = {0};
+    event_request_values(request, &cursor, &wanted, &byte_offset);
+    if (!open_event_stream(project, run, path, &input, &stream_stat)) { unavailable_event_stream(data, stream, events, cursor); return; }
+    available = true;
+    (void)snprintf(generation, sizeof(generation), "%llu:%llu", (unsigned long long)stream_stat.st_dev, (unsigned long long)stream_stat.st_ino);
+    reset = prepare_event_input(request, generation, &stream_stat, input, byte_offset, &safe_offset, &reset_offset);
+    scan.events = events; scan.cursor = cursor; scan.wanted = wanted; scan.byte_offset = byte_offset; scan.safe_offset = safe_offset; scan.reset = reset;
+    scan_event_stream(input, &scan); reset = scan.reset; safe_offset = scan.safe_offset;
+    scan.last = event_head_cursor(input, stream_stat.st_size, scan.last);
+    /* A bounded scan stops after fgets has consumed the next line.  Resume
+     * from that line's start so the caller cannot skip an event. */
+    next_byte_offset = scan.scan_truncated ? safe_offset : ftello(input);
+    if (next_byte_offset < 0) next_byte_offset = safe_offset;
+    fclose(input);
+    if (scan.first && cursor + 1U < scan.first) gap = true;
+    if (reset || (f_field(request, "stream_id") && strcmp(f_text(f_field(request, "stream_id")), generation))) { json_object_put(events); events = json_object_new_array(); scan.delivered = cursor; next_byte_offset = reset_offset; }
+    json_object_object_add(stream, "schema_version", json_object_new_int(1)); json_object_object_add(stream, "events", events);
+    json_object_object_add(stream, "available", json_object_new_boolean(available)); f_string_add(stream, "stream_id", generation);
+    json_object_object_add(stream, "scan_truncated", json_object_new_boolean(scan.scan_truncated));
+    json_object_object_add(stream, "next_byte_offset", json_object_new_int64((int64_t)next_byte_offset));
+    json_object_object_add(stream, "oldest_cursor", json_object_new_int64(scan.first ? scan.first - 1U : cursor));
+    if (!scan.delivered) scan.delivered = cursor;
+    json_object_object_add(stream, "next_cursor", json_object_new_int64(scan.delivered));
+    json_object_object_add(stream, "head_cursor", json_object_new_int64(scan.last));
+    json_object_object_add(stream, "retention_gap", json_object_new_boolean(gap)); json_object_object_add(stream, "stream_reset", json_object_new_boolean(reset));
+    f_string_add(stream, "duplicate_policy", "sequence-cursor");
+    json_object_object_add(data, "event_observation", stream);
+}
+
+static unsigned step_attempt_count(const char *step_root) {
+    char *text = scalar(step_root, "attempts"); unsigned count = 1;
+    if (text && f_name(text) && strspn(text, "0123456789") == strlen(text)) {
+        unsigned long parsed = strtoul(text, NULL, 10);
+        if (parsed <= 10000) count = (unsigned)parsed;
+    }
+    free(text); return count;
+}
+
+static void add_missing_attempt(json_object *attempts, json_object *attempt, unsigned number) {
+    char id[32]; (void)snprintf(id, sizeof(id), "attempt-%u", number); f_string_add(attempt, "attempt_id", id);
+    f_string_add(attempt, "retention", "missing"); json_object_object_add(attempt, "state", json_object_new_null());
+    json_object_object_add(attempt, "process_exit", json_object_new_null()); json_object_object_add(attempt, "completed_at", json_object_new_null());
+    json_object_object_add(attempt, "failure_class", json_object_new_null()); f_string_add(attempt, "result_collection", "unavailable"); f_string_add(attempt, "verification", "unavailable");
+    json_object_array_add(attempts, attempt);
+}
+
+static void add_unavailable_attempt(json_object *attempts, json_object *attempt, unsigned number) {
+    char id[32]; (void)snprintf(id, sizeof(id), "attempt-%u", number); f_string_add(attempt, "attempt_id", id);
+    f_string_add(attempt, "retention", "unavailable"); json_object_object_add(attempt, "state", json_object_new_null());
+    json_object_object_add(attempt, "process_exit", json_object_new_null()); json_object_object_add(attempt, "completed_at", json_object_new_null());
+    json_object_object_add(attempt, "failure_class", json_object_new_null()); f_string_add(attempt, "result_collection", "unavailable"); f_string_add(attempt, "verification", "unavailable");
+    json_object_array_add(attempts, attempt);
+}
+
+static void add_one_attempt(json_object *attempts, const char *step_root, const char *step_id, unsigned number) {
+    json_object *attempt = json_object_new_object(); char attempt_root[F_PATH] = "", *exit_status = NULL, *completed_at = NULL, *failure_class = NULL;
+    f_string_add(attempt, "step_id", step_id ? step_id : "unavailable");
+    (void)snprintf(attempt_root, sizeof(attempt_root), "%s/attempt-%u", step_root, number);
+    if (!step_root[0]) { add_unavailable_attempt(attempts, attempt, number); return; }
+    {
+        struct stat attempt_stat;
+        if (lstat(attempt_root, &attempt_stat) || !S_ISDIR(attempt_stat.st_mode)) {
+            add_missing_attempt(attempts, attempt, number); return;
+        }
+    }
+    f_string_add(attempt, "retention", "retained");
+    { char id[32]; (void)snprintf(id, sizeof(id), "attempt-%u", number); f_string_add(attempt, "attempt_id", id); }
+    if (step_root[0]) { exit_status = scalar(attempt_root, "exit-code"); completed_at = scalar(attempt_root, "completed-at"); failure_class = scalar(attempt_root, "failure-class"); }
+    if (exit_status && !strcmp(exit_status, "0")) f_string_add(attempt, "state", "succeeded");
+    else if (exit_status) f_string_add(attempt, "state", "failed");
+    else if (completed_at) f_string_add(attempt, "state", "completed");
+    else json_object_object_add(attempt, "state", json_object_new_null());
+    nullable(attempt, "process_exit", exit_status); nullable(attempt, "completed_at", completed_at); nullable(attempt, "failure_class", failure_class);
+    f_string_add(attempt, "result_collection", "unavailable"); f_string_add(attempt, "verification", "unavailable");
+    json_object_array_add(attempts, attempt); free(exit_status); free(completed_at); free(failure_class);
+}
+
+static size_t add_step_attempt_history(json_object *attempts, const char *step_root, const char *step_id, size_t remaining, bool *truncated) {
+    unsigned n, count = step_root[0] ? step_attempt_count(step_root) : 1, start = 1;
+    if (count > remaining) { *truncated = true; start = count - (unsigned)remaining + 1U; }
+    for (n = start; n <= count && (size_t)(n - start) < remaining; n++) add_one_attempt(attempts, step_root, step_id, n);
+    return count < remaining ? count : remaining;
+}
+
+static bool add_step_attempts(json_object *attempts, json_object *state, json_object *steps) {
+    size_t i, total = 0; bool truncated = false;
+    for (i = 0; i < json_object_array_length(steps); i++) {
+        json_object *step = json_object_array_get_idx(steps, i); const char *step_id = f_string(step, "step_id");
+        char step_root[F_PATH] = "";
+        if (!step_id || !strcmp(step_id, "unavailable") || !f_string(state, "work_kind") || strcmp(f_string(state, "work_kind"), "workflow") || !f_name(f_string(state, "execution_project_id")) || !f_name(f_string(state, "run_id")) || !f_name(step_id) || snprintf(step_root, sizeof(step_root), "%s/state/v2/projects/%s/workflows/runs/%s/steps/%s", f_home, f_string(state, "execution_project_id"), f_string(state, "run_id"), step_id) >= (int)sizeof(step_root)) step_root[0] = '\0';
+        if (total < OBSERVATION_ATTEMPTS) total += add_step_attempt_history(attempts, step_root, step_id, OBSERVATION_ATTEMPTS - total, &truncated);
+        else truncated = true;
+    }
+    return truncated;
+}
+
+static void add_v2_result_evidence(json_object *artifacts, json_object *verification, const char *directory) {
+    char path[F_PATH]; json_object *result = NULL;
+    if (!f_path(path, sizeof(path), directory, "result.json")) result = f_read_json(path, TASK_PACKAGE_LIMIT + 1024);
+    if (result && json_object_is_type(f_field(f_field(result, "result"), "artifacts"), json_type_array)) {
+        size_t i;
+        json_object *source = f_parse_value(json_object_to_json_string_ext(f_field(f_field(result, "result"), "artifacts"), JSON_C_TO_STRING_PLAIN));
+        for (i = 0; source && i < json_object_array_length(source); i++) { json_object *item = json_object_array_get_idx(source, i); json_object_object_del(item, "hex"); json_object_array_add(artifacts, json_object_get(item)); }
+        json_object_put(source);
+        f_string_add(verification, "kind", "integrity"); f_string_add(verification, "state", "recorded"); f_string_add(verification, "recheck", "not_rechecked");
+    } else f_string_add(verification, "state", "unavailable");
+    json_object_put(result);
+}
+
+static void add_provider_evidence(json_object *provider, const char *directory) {
+    char path[F_PATH];
+    if (!f_path(path, sizeof(path), directory, "provenance.json")) {
+        json_object *observed = f_read_json(path, 131072);
+        if (observed) { json_object_object_add(provider, "observation", observed); f_string_add(provider, "state", "available"); }
+    }
+    if (!f_string(provider, "state")) f_string_add(provider, "state", "unavailable");
+}
+
+static void add_process_evidence(json_object *task, json_object *state) {
+    json_object *process = json_object_new_object();
+    nullable(process, "state", f_string(state, "state"));
+    if (f_field(state, "exit_status")) json_object_object_add(process, "exit_status", json_object_get(f_field(state, "exit_status"))); else json_object_object_add(process, "exit_status", json_object_new_null());
+    json_object_object_add(task, "process_exit", process);
+}
+
+static void add_collection_evidence(json_object *task, json_object *state) {
+    json_object *collection = json_object_new_object(); const char *result_state = f_string(state, "result_state");
+    f_string_add(collection, "state", result_state && !strcmp(result_state, "ready") ? "ready" : "unavailable"); nullable(collection, "error", f_string(state, "result_error")); json_object_object_add(task, "result_collection", collection);
+}
+
+static void v2_evidence(json_object *task, json_object *state, const char *directory, json_object *steps) {
+    json_object *attempts = json_object_new_array(), *artifacts = json_object_new_array(), *provider = json_object_new_object(), *verification = json_object_new_object();
+    bool attempts_truncated = add_step_attempts(attempts, state, steps); add_v2_result_evidence(artifacts, verification, directory); add_provider_evidence(provider, directory); add_process_evidence(task, state); add_collection_evidence(task, state);
+    json_object_object_add(task, "attempt_history", attempts); json_object_object_add(task, "artifact_inventory", artifacts);
+    json_object_object_add(task, "provider_observations", provider); json_object_object_add(task, "verification", verification);
+    json_object_object_add(task, "attempt_history_truncated", json_object_new_boolean(attempts_truncated));
+    json_object_object_add(task, "approval_requests", json_object_get(f_field(task, "pending_requests")));
+}
+
 static json_object *build_observation(const char *id, const char *directory, int64_t now) {
     json_object *accepted = task_read_record(directory, "acceptance.json"), *state = task_read_record(directory, "state.json");
     char path[F_PATH]; json_object *package = NULL, *spec = NULL, *task = NULL, *steps;
@@ -322,17 +548,19 @@ static json_object *build_observation(const char *id, const char *directory, int
         f_string_add(contract, "availability", "unavailable"); f_string_add(contract, "reason", "no receiver obligation record is attached to task protocol 1");
         json_object_object_add(contract, "missing_evidence", missing); json_object_object_add(task, "contract", contract);
     }
+    v2_evidence(task, state, directory, steps);
     json_object_put(accepted); json_object_put(state); json_object_put(package); json_object_put(spec); return task;
 bad:
     json_object_put(accepted); json_object_put(state); json_object_put(package); json_object_put(spec); json_object_put(task);
     return NULL;
 }
 
-json_object *task_observation(const char *id) {
-    char root[F_PATH], directory[F_PATH]; struct stat st; json_object *task; int64_t now = (int64_t)time(NULL);
+json_object *task_observation(const char *id, json_object *request) {
+    char root[F_PATH], directory[F_PATH]; struct stat st; json_object *task, *state = NULL; int64_t now = (int64_t)time(NULL);
     if (!task_id_valid(id) || task_store_root(root) || f_path(directory, sizeof(directory), root, id) || lstat(directory, &st) || !S_ISDIR(st.st_mode) ||
         !(task = build_observation(id, directory, now))) return f_error("fleet-observation", "recovery_required", "receiver task records are missing, malformed, or no longer safe to inspect");
-    { json_object *data = json_object_new_object(); json_object_object_add(data, "snapshot_schema_version", json_object_new_int(1)); nullable_now(data, "receiver_observed_at", now); json_object_object_add(data, "task", task); return f_success("fleet-observation", data); }
+    state = task_read_record(directory, "state.json");
+    { json_object *data = json_object_new_object(); json_object_object_add(data, "snapshot_schema_version", json_object_new_int(1)); nullable_now(data, "receiver_observed_at", now); event_observation(data, state, request); json_object_object_add(data, "task", task); json_object_put(state); return f_success("fleet-observation", data); }
 }
 
 json_object *task_overview(void) {

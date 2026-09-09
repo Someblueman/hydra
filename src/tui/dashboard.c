@@ -85,6 +85,10 @@ static void dashboard_fleet_tasks(struct app *app, struct tv_canvas *c, struct t
         if (row < r.y + r.height - 2)
             dashboard_text(c, r.x + 4, row++, r.width - 6, !strcmp(task->waiting_reason, "none") ? TV_BASE : TV_WARNING,
                            "wait %s / %s / next: %s", task->waiting_reason, task->waiting_detail, task->next_action);
+        if (row < r.y + r.height - 2)
+            dashboard_text(c, r.x + 4, row++, r.width - 6,
+                           !strcmp(task->result_state, "ready") && !strcmp(task->verification_state, "integrity_verified") ? TV_BASE : TV_WARNING,
+                           "result %s / verification %s", task->result_state, task->verification_state);
     }
     dashboard_text(c, r.x + 2, r.y + r.height - 2, r.width - 4, TV_BORDER,
                    "%zu task observations / owner state and freshness are receiver evidence", app->model.task_count);

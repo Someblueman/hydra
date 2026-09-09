@@ -24,8 +24,10 @@ struct remote_options {
     const char *host, *output, *timeout, *input, *key, *id, *trust;
     const char *stream, *offset, *limit, *source, *step, *attempt;
     const char *request_id, *decision, *actor;
+    const char *cursor, *event_limit, *byte_offset, *stream_id;
     bool submit, start, cancel, logs, resume, decide, result_read, observe;
     unsigned log_offset, log_limit, seconds;
+    unsigned event_cursor, event_count;
 };
 
 static bool observation_text(json_object *object, const char *key, size_t limit, bool nullable_value) {
@@ -124,10 +126,22 @@ static bool number(const char *text, unsigned minimum, unsigned maximum, unsigne
     *result = (unsigned)value;
     return true;
 }
+static json_object *parse_observe_limits(struct remote_options *options) {
+    unsigned ignored;
+    if (options->cursor && !number(options->cursor, 0, 4294967295U, &options->event_cursor)) return f_error("fleet-task-observe", "invalid_input", "cursor must be 0-4294967295");
+    options->event_count = 128;
+    if (options->event_limit && !number(options->event_limit, 1, 128, &options->event_count)) return f_error("fleet-task-observe", "invalid_input", "event limit must be 1-128");
+    if (options->byte_offset && !number(options->byte_offset, 0, 4294967295U, &ignored)) return f_error("fleet-task-observe", "invalid_input", "byte offset must be 0-4294967295");
+    return NULL;
+}
+
 static json_object *parse_limits(struct remote_options *options) {
     unsigned attempt;
     if (options->timeout && !number(options->timeout, 1, 300, &options->seconds))
         return f_error(options->cancel ? "fleet-task-cancel" : "fleet-task-result", "invalid_input", "timeout must be 1-300 seconds");
+    if (!options->logs && options->observe) {
+        return parse_observe_limits(options);
+    }
     if (!options->logs) return NULL;
     if (options->attempt && !number(options->attempt, 1, 10000, &attempt))
         return f_error("fleet-task-logs", "invalid_input", "attempt must be 1-10000");
@@ -171,7 +185,11 @@ static json_object *parse_options(int argc, char **argv, struct remote_options *
         {"--attempt", options->logs, &options->attempt},
         {"--stream", options->logs, &options->stream},
         {"--offset", options->logs, &options->offset},
-        {"--limit", options->logs, &options->limit}
+        {"--limit", options->logs, &options->limit},
+        {"--cursor", options->observe, &options->cursor},
+        {"--event-limit", options->observe, &options->event_limit}
+        ,{"--stream-id", options->observe, &options->stream_id}
+        ,{"--byte-offset", options->observe, &options->byte_offset}
     };
     for (i = 2; i < argc; i++) {
         const char **destination = NULL;
@@ -189,6 +207,20 @@ static json_object *parse_options(int argc, char **argv, struct remote_options *
     if ((options->submit ? !options->input || !options->key : !options->id) || ((options->start || options->resume || options->decide) && !options->trust) || (options->decide && (!options->request_id || !options->decision))) return f_error("fleet-task", "invalid_input", "required task options are missing");
     return parse_limits(options);
 }
+static void request_log_options(json_object *request, const struct remote_options *options) {
+    if (options->source) f_string_add(request, "source", options->source);
+    if (options->step) f_string_add(request, "step", options->step);
+    if (options->attempt) json_object_object_add(request, "attempt", json_object_new_int64(strtol(options->attempt, NULL, 10)));
+    f_string_add(request, "stream", options->stream ? options->stream : "stdout");
+    json_object_object_add(request, "offset", json_object_new_int64(options->log_offset)); json_object_object_add(request, "limit", json_object_new_int64(options->log_limit));
+}
+
+static void request_observe_options(json_object *request, const struct remote_options *options) {
+    json_object_object_add(request, "cursor", json_object_new_int64(options->event_cursor)); json_object_object_add(request, "event_limit", json_object_new_int64(options->event_count));
+    if (options->stream_id) f_string_add(request, "stream_id", options->stream_id);
+    if (options->byte_offset) json_object_object_add(request, "byte_offset", json_object_new_int64(strtol(options->byte_offset, NULL, 10)));
+}
+
 /* Returns a new request; package is borrowed. */
 static json_object *make_request(const struct remote_options *options, const char *operation, json_object *package) {
     json_object *request = json_object_new_object();
@@ -198,14 +230,8 @@ static json_object *make_request(const struct remote_options *options, const cha
     if (options->decision) f_string_add(request, "decision", options->decision);
     if (options->actor) f_string_add(request, "by", options->actor);
     if (options->trust) f_string_add(request, "trust_spec", options->trust);
-    if (options->logs) {
-        if (options->source) f_string_add(request, "source", options->source);
-        if (options->step) f_string_add(request, "step", options->step);
-        if (options->attempt) json_object_object_add(request, "attempt", json_object_new_int64(strtol(options->attempt, NULL, 10)));
-        f_string_add(request, "stream", options->stream ? options->stream : "stdout");
-        json_object_object_add(request, "offset", json_object_new_int64(options->log_offset));
-        json_object_object_add(request, "limit", json_object_new_int64(options->log_limit));
-    }
+    if (options->logs) request_log_options(request, options);
+    if (options->observe) request_observe_options(request, options);
     if (options->submit) { json_object_object_add(request, "package", json_object_get(package)); f_string_add(request, "submission_key", options->key); }
     else f_string_add(request, "task_id", options->id);
     return request;
