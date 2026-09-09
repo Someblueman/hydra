@@ -100,6 +100,24 @@ Logs: `build/pr80-form-burst-regression-before.log`,
 `build/pr80-forms-native-tests.log`, `build/pr80-forms-quality.log` and
 `build/pr80-forms-lint.log`.
 
+## Fleet detail exit synchronization
+
+PR CI run `34294265107` on macOS passed the C PTY, plan launch/control and
+local statistics checks, then missed the fleet `Find host:` prompt. The fleet
+PTY test sent Escape followed by `/` after a fixed 50 ms delay. A delayed UI
+could read both bytes as one escape sequence, leaving host detail open.
+The test now waits for the selected host list row to reappear before sending
+search input; search, filtering and drill-down assertions and deadlines remain
+unchanged. Production code is unchanged.
+
+A controlled probe paused the real UI for 150 ms at detail Escape. The old test
+reproduced the same missing-prompt failure; the corrected test passed under the
+same pause. `make test-statistics` and full lint with CI ShellCheck 0.9.0 also
+passed on macOS. Local logs: `build/pr80-fleet-escape-before.log`,
+`build/pr80-fleet-escape-after.log`, `build/pr80-fleet-statistics-final.log` and
+`build/pr80-fleet-escape-lint.log`. Hosted acceptance for the follow-up remains
+separate.
+
 ## Results
 
 All commands below completed with exit status zero on local macOS arm64:

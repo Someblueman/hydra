@@ -140,7 +140,8 @@ def fleet_statistics() -> None:
         s.send("\r")
         s.until("/work/project")
         s.send("\x1b")
-        s.pump(.05)
+        # Wait for Escape to close detail before another key can join its prefix.
+        s.until("> builder")
         s.send("/")
         s.until("Find host:")
         s.send("offline\r")
