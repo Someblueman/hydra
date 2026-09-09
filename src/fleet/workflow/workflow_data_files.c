@@ -1,6 +1,7 @@
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/workflow/workflow_data.h"
+#include "fleet/workflow/workflow_contract.h"
 #include "fleet/task/task.h"
 #include "fleet/plan/plan.h"
 #include <stdlib.h>
@@ -8,25 +9,27 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+static bool structured_type(const char *type, json_object *value) {
+    if (!strcmp(type, "object")) return json_object_is_type(value, json_type_object);
+    if (!strcmp(type, "array")) return json_object_is_type(value, json_type_array);
+    if (!strcmp(type, "string")) return json_object_is_type(value, json_type_string);
+    if (!strcmp(type, "boolean")) return json_object_is_type(value, json_type_boolean);
+    if (!strcmp(type, "number")) return json_object_is_type(value, json_type_int) || json_object_is_type(value, json_type_double);
+    return false;
+}
 /* Called only on a private snapshot produced by task_file_copy. */
 json_object *wd_file(const char *path, json_object *declaration) {
     const char *type = f_string(declaration, "type"), *expected = f_string(declaration, "sha256");
     int64_t limit = json_object_get_int64(f_field(declaration, "max_bytes"));
-    struct stat st; char digest[65], *bytes = NULL; json_object *parsed = NULL, *result = NULL, *value;
-    bool valid = false;
+    struct stat st; char digest[65], *bytes = NULL; json_object *parsed = NULL, *result = NULL;
     if (!type || lstat(path, &st) || !S_ISREG(st.st_mode) || st.st_size < 0 || st.st_size > limit ||
         f_hash(path, digest) || (expected && strcmp(expected, digest))) goto done;
     if (strcmp(type, "file")) {
         size_t length = (size_t)st.st_size;
         bytes = f_read(path, WD_LIMIT);
         if (!bytes || strlen(bytes) != length || !(parsed = f_parse_value(bytes))) goto done;
-        value = parsed;
-        if (!strcmp(type, "object")) valid = json_object_is_type(value, json_type_object);
-        else if (!strcmp(type, "array")) valid = json_object_is_type(value, json_type_array);
-        else if (!strcmp(type, "string")) valid = json_object_is_type(value, json_type_string);
-        else if (!strcmp(type, "boolean")) valid = json_object_is_type(value, json_type_boolean);
-        else if (!strcmp(type, "number")) valid = json_object_is_type(value, json_type_int) || json_object_is_type(value, json_type_double);
-        if (!valid) goto done;
+        if (!structured_type(type, parsed)) goto done;
+        if (f_field(declaration, "contract") && (!plan_json_unique(bytes) || !wc_value(f_field(declaration, "contract"), parsed))) goto done;
     }
     result = json_object_new_object(); f_string_add(result, "type", type); f_string_add(result, "sha256", digest);
     json_object_object_add(result, "bytes", json_object_new_int64(st.st_size));
@@ -62,7 +65,8 @@ int wd_initialize(json_object *manifest, const char *source, const char *run) {
 int wd_seal(json_object *manifest, const char *step, const char *attempt) {
     char source[F_PATH]; json_object *declarations = f_field(f_field(f_field(manifest, "steps"), step), "outputs");
     if (f_path(source, sizeof(source), attempt, "outputs")) return -1;
-    return snapshot(declarations, source, attempt, "outputs.json");
+    if (snapshot(declarations, source, attempt, "outputs.json")) return -1;
+    return wc_rules(manifest, step, attempt, true);
 }
 static bool same_file(json_object *a, json_object *b) {
     const char *digest = f_string(a, "sha256"), *type = f_string(a, "type");
@@ -105,6 +109,11 @@ static int prepare_input(json_object *manifest, const char *run, const char *ste
     const char *input = f_string(reference, "input"), *producer = f_string(reference, "step"), *output = f_string(reference, "output");
     json_object *declaration; char destination[F_PATH], source[F_PATH];
     if (f_path(destination, sizeof(destination), inputs, name)) return -1;
+    if (f_field(reference, "provenance")) {
+        json_object *provenance = wc_provenance(run, reference);
+        int status = provenance ? task_write_json(inputs, name, provenance, false) : -1;
+        json_object_put(provenance); return status;
+    }
     if (f_field(reference, "repair")) return plan_repair_write(run, inputs, name);
     if (f_field(reference, "validation")) return plan_validation_write(run, step, inputs, name);
     if (input) {
@@ -120,11 +129,11 @@ int wd_prepare(json_object *manifest, const char *run, const char *step, const c
     json_object *refs = f_field(f_field(f_field(manifest, "steps"), step), "inputs");
     if (f_path(inputs, sizeof(inputs), attempt, "inputs") || f_path(outputs, sizeof(outputs), attempt, "outputs") ||
         mkdir(inputs, 0700) || mkdir(outputs, 0700)) return -1;
-    if (!refs) return 0;
+    if (!refs) return wc_rules(manifest, step, attempt, false);
     json_object_object_foreach(refs, name, reference) {
         if (prepare_input(manifest, run, step, inputs, name, reference)) return -1;
     }
-    return 0;
+    return wc_rules(manifest, step, attempt, false);
 }
 static int verify_map(json_object *map, const char *source, const char *receipt, const char *scratch) {
     char destination[F_PATH];
@@ -140,6 +149,7 @@ int wd_verify_output(json_object *manifest, const char *step, const char *attemp
     char scratch[] = "/tmp/hydra-workflow-output.XXXXXX"; int status;
     if (!mkdtemp(scratch)) return -1;
     status = verify_map(f_field(f_field(f_field(manifest, "steps"), step), "outputs"), attempt, "outputs.json", scratch);
+    if (!status) status = wc_rules(manifest, step, attempt, true);
     f_remove_tree(scratch); return status;
 }
 int wd_verify(json_object *manifest, const char *run) {
@@ -154,7 +164,7 @@ int wd_verify(json_object *manifest, const char *run) {
         if (!state) goto done;
         if (!strcmp(state, "succeeded\n") && f_field(value, "outputs")) {
             free(state);
-            if (wd_producer_directory(run, step, directory) || verify_map(f_field(value, "outputs"), directory, "outputs.json", scratch)) goto done;
+            if (wd_producer_directory(run, step, directory) || verify_map(f_field(value, "outputs"), directory, "outputs.json", scratch) || wc_rules(manifest, step, directory, true)) goto done;
         } else free(state);
     }
     status = 0;

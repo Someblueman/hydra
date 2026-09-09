@@ -11,6 +11,8 @@
  * a caller-owned array; no validation function executes proposed operations. */
 json_object *plan_cli(int argc, char **argv);
 json_object *plan_read(const char *path);
+/* Borrows NUL-terminated JSON text; checks member uniqueness and exact signed integer tokens. */
+bool plan_json_unique(const char *text);
 json_object *plan_canonical(json_object *value);
 void plan_error(json_object *errors, const char *path, const char *code, const char *message);
 void plan_obligation_error(json_object *errors, const char *path, const char *code,
@@ -22,6 +24,7 @@ bool plan_text(json_object *value);
 bool plan_has(json_object *array, const char *text);
 int plan_index(json_object *steps, const char *id);
 int plan_validate(json_object *plan, json_object *policy, json_object *errors);
+int plan_relations(json_object *plan, json_object *errors);
 int plan_graph(json_object *plan, json_object *errors);
 int plan_evidence_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors);
 int plan_obligations_validate(json_object *plan, json_object *errors);

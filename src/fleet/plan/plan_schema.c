@@ -166,7 +166,7 @@ static void repair_version(json_object *plan, json_object *errors) {
         plan_error(errors, "envelope.repair_budget", "unsupported_repair", "repairs require plan schema 2");
 }
 int plan_validate(json_object *plan, json_object *policy, json_object *errors) {
-    const char *const keys[] = {"schema_version", "id", "objective", "context", "assumptions", "questions", "deliverables", "requirements", "checks", "obligations", "steps", "data", "envelope", NULL};
+    const char *const keys[] = {"schema_version", "id", "objective", "context", "assumptions", "questions", "deliverables", "requirements", "checks", "obligations", "steps", "data", "envelope", "relations", NULL};
     const char *const policy_keys[] = {"schema_version", "envelope", NULL};
     const char *const deliverable_keys[] = {"id", "description", "step", "output", "destination", NULL};
     const char *const requirement_keys[] = {"id", "criterion", "deliverable", "check", NULL};
@@ -202,5 +202,6 @@ int plan_validate(json_object *plan, json_object *policy, json_object *errors) {
     (void)records(f_field(plan, "checks"), "checks", check_keys, errors);
     if (json_object_array_length(errors)) return -1;
     if (plan_obligations_validate(plan, errors)) return -1;
+    (void)plan_relations(plan, errors);
     return plan_graph(plan, errors);
 }

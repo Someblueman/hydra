@@ -147,3 +147,10 @@ coordinator, selected by name in the task recipe, and packaged as ordinary input
 files. They require an accepted compiled plan; a standalone workflow has no plan
 validation or repair context. See [distributed task workflows](WORKFLOW_TASKS.md)
 for the value formats, validation joins and repair bounds.
+
+## Opt-in handoff contracts
+
+Data schema 2 adds exact producer/consumer contracts, units, required fields,
+explicit lossless conversions, composition predicates and candidate provenance
+bindings. See [Bounded handoff contracts](HANDOFF_CONTRACTS.md). Schema 1 retains
+its existing byte/type/receipt contract.

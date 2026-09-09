@@ -225,23 +225,23 @@ misleading plans across feature, performance, and research tasks for later miles
 
 Depends on 9A's obligation model; reuse sealed artifacts and existing receipt checks.
 
-- [ ] Add pinned producer output and consumer input schemas, cardinality, units,
+- [x] Add pinned producer output and consumer input schemas, cardinality, units,
       versions, identity/provenance requirements, and supported pre/postconditions.
       Begin with exact schema matching and a small supported predicate set; reject
       unsupported constraints rather than claiming arbitrary schema implication.
-- [ ] Validate declared compatibility at compilation and actual values at
+- [x] Validate declared compatibility at compilation and actual values at
       materialization. Values that violate the declared contract, including empty
       objects, missing fields, wrong units/candidates, or missing required evidence,
       must stop the consumer before it executes.
-- [ ] Distinguish data, evidence, effect/order, resource, and provenance relations in
+- [x] Distinguish data, evidence, effect/order, resource, and provenance relations in
       the planning representation. Lower ordering to the existing DAG; resource
       mutexes need not create arbitrary permanent ordering, and descriptive lineage
       links are not all execution prerequisites.
-- [ ] Bind candidate manifests to the relevant collected commit/source tree,
+- [x] Bind candidate manifests to the relevant collected commit/source tree,
       dependency/build inputs, artifacts, and configuration. Support relational
       checks across inputs and recheck invariants after composition; checking one
       declared file does not automatically validate the complete candidate.
-- [ ] Use explicit validated conversion nodes for permitted transformations. Extend
+- [x] Use explicit validated conversion nodes for permitted transformations. Extend
       declared read/write and effect-conflict reasoning where useful, and label
       which constraints the executor actually enforces. Declarations alone do not
       establish isolation, determinism, or safe repetition of external effects.
@@ -250,6 +250,16 @@ Acceptance: negative handoff cases fail before consumer submission; compatible
 cases pass through the public CLI. Include a structurally valid object with missing
 semantic fields, a unit mismatch, stale candidate identity, a lossy conversion,
 and individually valid components whose composition violates a shared invariant.
+
+Implementation: [bounded data-schema-2 contracts](HANDOFF_CONTRACTS.md) preserve
+legacy compiled acceptance bindings. Exact schemas, required fields/units,
+pre/postconditions, lossless integer conversions and candidate manifests are
+checked through existing sealed-artifact and receipt boundaries. Typed execution
+relations must match existing DAG dependencies; resource/provenance annotations
+are descriptive and unsupported mutex enforcement is rejected. Local acceptance
+and its explicit limits are recorded in [9B evidence](evidence/handoff-contracts-9b.md).
+External-host/live-provider qualification remains separate; no arbitrary schema
+implication, isolation or semantic correctness is claimed.
 
 ##### 9C. Structured evidence and validation of the validator
 
