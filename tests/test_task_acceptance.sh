@@ -285,6 +285,15 @@ grep -q '"retention_gap":false' "$fixture/workflow-reconnect"
 grep -q '"stream_reset":false' "$fixture/workflow-reconnect"
 stream_id="$(sed -n 's/.*"stream_id":"\([^"]*\)".*/\1/p' "$fixture/workflow-observation" | head -n 1)"
 case "$stream_id" in ''|*[!0-9:]*) exit 1 ;; esac
+events_path="$fixture/host/state/v2/projects/$(sed -n 's/.*"execution_project_id":"\([^"]*\)".*/\1/p' "$fixture/host/fleet/tasks/$workflow_id/state.json")/workflows/runs/$(sed -n 's/.*"run_id":"\([^"]*\)".*/\1/p' "$fixture/host/fleet/tasks/$workflow_id/state.json")/events.jsonl"
+last_sequence="$(sed -n 's/.*"sequence":\([0-9][0-9]*\).*/\1/p' "$fixture/workflow-observation" | sort -n | tail -n 1)"
+if [ -n "$last_sequence" ]; then
+    next_sequence=$((last_sequence + 1))
+    printf '{"schema_version":1,"sequence":%s,"type":"test.append"}\n' "$next_sequence" >> "$events_path"
+    task observe build --id "$workflow_id" --cursor "$cursor" --stream-id "$stream_id" > "$fixture/workflow-append"
+    grep -q '"stream_reset":false' "$fixture/workflow-append"
+    grep -q "\"sequence\":$next_sequence" "$fixture/workflow-append"
+fi
 if grep -q '"sequence":' "$fixture/workflow-observation"; then
     first_sequence="$(sed -n 's/.*"sequence":\([0-9][0-9]*\).*/\1/p' "$fixture/workflow-observation" | head -n 1)"
     [ -n "$first_sequence" ]
@@ -293,7 +302,6 @@ fi
 task observe build --id "$workflow_id" --stream-id replaced-stream > "$fixture/workflow-reset"
 grep -q '"stream_reset":true' "$fixture/workflow-reset"
 grep -q '"events":\[\]' "$fixture/workflow-reset"
-events_path="$fixture/host/state/v2/projects/$(sed -n 's/.*"execution_project_id":"\([^"]*\)".*/\1/p' "$fixture/host/fleet/tasks/$workflow_id/state.json")/workflows/runs/$(sed -n 's/.*"run_id":"\([^"]*\)".*/\1/p' "$fixture/host/fleet/tasks/$workflow_id/state.json")/events.jsonl"
 cp "$events_path" "$fixture/events-saved"
 tail -n +2 "$fixture/events-saved" > "$events_path"
 task observe build --id "$workflow_id" > "$fixture/workflow-gap"

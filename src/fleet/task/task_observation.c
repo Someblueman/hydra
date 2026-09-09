@@ -292,7 +292,7 @@ static void event_observation(json_object *data, json_object *state, json_object
     json_object *stream = json_object_new_object(), *events = json_object_new_array();
     const char *project = f_string(state, "execution_project_id"), *run = f_string(state, "run_id");
     char path[F_PATH]; FILE *input = NULL; char line[8192]; unsigned cursor = 0, wanted = 128, first = 0, last = 0;
-    bool gap = false, reset = false, available = false; size_t returned = 0, bytes = 0; unsigned delivered = 0;
+    bool gap = false, reset = false, available = false, scan_truncated = false; size_t returned = 0, bytes = 0; unsigned delivered = 0;
     char generation[128] = ""; struct stat stream_stat;
     if (f_field(request, "cursor") && json_object_is_type(f_field(request, "cursor"), json_type_int) && json_object_get_int64(f_field(request, "cursor")) >= 0)
         cursor = (unsigned)json_object_get_int64(f_field(request, "cursor"));
@@ -307,12 +307,12 @@ static void event_observation(json_object *data, json_object *state, json_object
         json_object_object_add(data, "event_observation", stream); return;
     }
     available = true;
-    (void)snprintf(generation, sizeof(generation), "%llu:%llu:%lld:%lld", (unsigned long long)stream_stat.st_dev, (unsigned long long)stream_stat.st_ino, (long long)stream_stat.st_mtime, (long long)stream_stat.st_size);
+    (void)snprintf(generation, sizeof(generation), "%llu:%llu", (unsigned long long)stream_stat.st_dev, (unsigned long long)stream_stat.st_ino);
     if (f_field(request, "stream_id") && (!f_text(f_field(request, "stream_id")) || strcmp(f_text(f_field(request, "stream_id")), generation))) reset = true;
     while (fgets(line, sizeof(line), input)) {
         json_object *event; json_object *sequence;
         if (!strchr(line, '\n') && !feof(input)) { reset = true; break; }
-        bytes += strlen(line); if (bytes > 262144U) { reset = true; break; }
+        bytes += strlen(line); if (bytes > 262144U) { scan_truncated = true; break; }
         event = f_parse(line); sequence = f_field(event, "sequence");
         if (!event || !json_object_is_type(event, json_type_object) || !f_number_is(event, "schema_version", 1) || !json_object_is_type(sequence, json_type_int) || json_object_get_int64(sequence) < 1 || json_object_get_int64(sequence) > 4294967295U) { json_object_put(event); reset = true; break; }
         { unsigned value = (unsigned)json_object_get_int64(sequence);
@@ -320,12 +320,14 @@ static void event_observation(json_object *data, json_object *state, json_object
           if (last && value != last + 1U) { reset = true; json_object_put(event); break; }
           last = value;
           if (value > cursor && returned < wanted) { json_object_array_add(events, event); returned++; delivered = value; } else json_object_put(event); }
+        if (returned >= wanted) break;
     }
     fclose(input);
     if (first && cursor + 1U < first) gap = true;
-    if (reset || (f_field(request, "stream_id") && strcmp(f_text(f_field(request, "stream_id")), generation))) { json_object_put(events); events = json_object_new_array(); }
+    if (reset || (f_field(request, "stream_id") && strcmp(f_text(f_field(request, "stream_id")), generation))) { json_object_put(events); events = json_object_new_array(); delivered = cursor; }
     json_object_object_add(stream, "schema_version", json_object_new_int(1)); json_object_object_add(stream, "events", events);
     json_object_object_add(stream, "available", json_object_new_boolean(available)); f_string_add(stream, "stream_id", generation);
+    json_object_object_add(stream, "scan_truncated", json_object_new_boolean(scan_truncated));
     json_object_object_add(stream, "oldest_cursor", json_object_new_int64(first ? first - 1U : cursor));
     if (!delivered) delivered = cursor;
     json_object_object_add(stream, "next_cursor", json_object_new_int64(delivered));
