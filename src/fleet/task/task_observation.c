@@ -351,6 +351,18 @@ static bool prepare_event_input(json_object *request, const char *generation, st
     return reset;
 }
 
+static unsigned event_head_cursor(FILE *input, off_t size, unsigned fallback) {
+    char line[8192]; unsigned head = fallback;
+    off_t start = size > (off_t)sizeof(line) ? size - (off_t)sizeof(line) : 0;
+    if (fseeko(input, start, SEEK_SET)) return head;
+    while (fgets(line, sizeof(line), input)) {
+        json_object *event = f_parse(line), *sequence = f_field(event, "sequence");
+        if (event && json_object_is_type(sequence, json_type_int) && json_object_get_int64(sequence) > 0 && json_object_get_int64(sequence) <= 4294967295U) head = (unsigned)json_object_get_int64(sequence);
+        json_object_put(event);
+    }
+    return head;
+}
+
 static void event_observation(json_object *data, json_object *state, json_object *request) {
     json_object *stream = json_object_new_object(), *events = json_object_new_array();
     const char *project = f_string(state, "execution_project_id"), *run = f_string(state, "run_id");
@@ -365,6 +377,7 @@ static void event_observation(json_object *data, json_object *state, json_object
     reset = prepare_event_input(request, generation, &stream_stat, input, byte_offset, &safe_offset, &reset_offset);
     scan.events = events; scan.cursor = cursor; scan.wanted = wanted; scan.byte_offset = byte_offset; scan.safe_offset = safe_offset; scan.reset = reset;
     scan_event_stream(input, &scan); reset = scan.reset; safe_offset = scan.safe_offset;
+    scan.last = event_head_cursor(input, stream_stat.st_size, scan.last);
     /* A bounded scan stops after fgets has consumed the next line.  Resume
      * from that line's start so the caller cannot skip an event. */
     next_byte_offset = scan.scan_truncated ? safe_offset : ftello(input);
