@@ -145,6 +145,13 @@ static json_object *builtin_request(const char *action, json_object *request) {
     if (!strcmp(action, "task")) return task_serve(request);
     return NULL;
 }
+static int enrollment_record(char path[F_PATH], const char *operation) {
+    char dir[F_PATH], id[256]; size_t i;
+    if (!operation || !*operation || strlen(operation) >= sizeof(id)) return -1;
+    for (i = 0; operation[i]; i++) id[i] = operation[i] == ':' ? '_' : operation[i]; id[i] = '\0';
+    if (f_path(dir, sizeof(dir), f_home, "fleet/enrollment-ops") || f_mkdirs(dir) || f_path(path, F_PATH, dir, id)) return -1;
+    return 0;
+}
 
 json_object *f_serve(json_object *request) {
     const char *action = f_string(request, "action"), *project = f_string(request, "project"), *instance = f_string(request, "instance");
@@ -188,5 +195,14 @@ json_object *f_serve(json_object *request) {
     }
     argv[n] = NULL;
     setenv("HYDRA_NONINTERACTIVE", "1", 1);
+    if (!strcmp(action, "init") && f_string(request, "enrollment_operation_id")) {
+        char record[F_PATH];
+        if (!enrollment_record(record, f_string(request, "enrollment_operation_id"))) {
+            char *seen = f_read(record, 64);
+            if (seen) { free(seen); return f_success("fleet-enrollment-reconciled", json_object_new_object()); }
+            (void)f_write(record, "pending", 7, true);
+            { json_object *init_result = run_hydra(argv, seconds); if (json_object_get_boolean(f_field(init_result, "ok"))) (void)f_write(record, "succeeded", 9, true); return init_result; }
+        }
+    }
     return run_hydra(argv, seconds);
 }
