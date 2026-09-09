@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import fcntl
 import os
 from pathlib import Path
 import subprocess
@@ -15,6 +16,9 @@ class EnrollmentTest(unittest.TestCase):
         self.home.mkdir()
         subprocess.run(["git", "init", "-q", str(self.tmp / "project")], check=True)
         self.counter = self.tmp / "mutations"
+        self.hydra_wrapper = self.tmp / "hydra-count"
+        self.hydra_wrapper.write_text("#!/bin/sh\nfor a in \"$@\"; do if [ \"$a\" = init ]; then printf 'init\\n' >> \"$ENROLL_COUNTER\"; break; fi; done\nexec \"$ENROLL_REAL\" \"$@\"\n")
+        self.hydra_wrapper.chmod(0o755)
         self.ssh = self.tmp / "ssh"
         self.ssh.write_text(textwrap.dedent("""\
             #!/usr/bin/env python3
@@ -26,12 +30,8 @@ class EnrollmentTest(unittest.TestCase):
             request = json.load(sys.stdin)
             target = os.environ.get("ENROLL_TARGET", "good")
             print("debug1: Server host key: ssh-ed25519 " + os.environ["ENROLL_FINGERPRINT"], file=sys.stderr)
-            if request.get("action") == "init":
-                op = request.get("enrollment_operation_id", "").replace(":", "_")
-                record = os.path.join(os.environ.get("HYDRA_HOME", ""), "fleet", "enrollment-ops", op)
-                if not os.path.exists(record):
-                    with open(os.environ["ENROLL_COUNTER"], "a") as f: f.write("init\\n")
-            result = subprocess.run([os.environ["HYDRA_FLEET_BIN"], "fleet", "serve"], input=json.dumps(request), text=True, capture_output=True)
+            receiver_env = dict(os.environ, HYDRA_BIN_CMD=os.environ["ENROLL_COUNT_WRAPPER"])
+            result = subprocess.run([os.environ["HYDRA_FLEET_BIN"], "fleet", "serve"], input=json.dumps(request), text=True, capture_output=True, env=receiver_env)
             if request.get("action") == "init" and os.environ.get("ENROLL_DROP_INIT_RESPONSE") and not os.path.exists(os.environ["ENROLL_DROP_INIT_RESPONSE"]):
                 open(os.environ["ENROLL_DROP_INIT_RESPONSE"], "w").close()
                 sys.exit(255)
@@ -43,7 +43,7 @@ class EnrollmentTest(unittest.TestCase):
         self.ssh.chmod(0o755)
         self.env = os.environ.copy()
         self.env.update(HOME=str(self.tmp), HYDRA_HOME=str(self.home), PATH=f"{self.tmp}:{os.environ['PATH']}",
-                         HYDRA_FLEET_BIN=str(Path(__file__).parents[1] / "build/hydra-fleet"), ENROLL_COUNTER=str(self.counter), ENROLL_FINGERPRINT="SHA256:fixture")
+                         HYDRA_FLEET_BIN=str(Path(__file__).parents[1] / "build/hydra-fleet"), HYDRA_BIN_CMD=str(self.hydra_wrapper), ENROLL_COUNT_WRAPPER=str(self.hydra_wrapper), ENROLL_REAL=str(Path(__file__).parents[1] / "bin/hydra"), ENROLL_COUNTER=str(self.counter), ENROLL_FINGERPRINT="SHA256:fixture")
         self.cli = str(Path(__file__).parents[1] / "bin/hydra")
 
     def run_cli(self, *args, check=True):
@@ -92,7 +92,7 @@ class EnrollmentTest(unittest.TestCase):
         self.run_cli("review", "--input", str(qualification), "--candidate", "cand_676f6f64", "--project", str(self.tmp), "--output", str(intent))
         digest = json.loads(intent.read_text())["intent_sha256"]
         result = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
-        self.assertEqual(json.loads(result.stdout)["data"]["hosts"][0]["status"], "review_required")
+        self.assertEqual(json.loads(result.stdout)["data"]["hosts"][0]["status"], "outcome_unknown")
         self.assertFalse(self.counter.exists())
 
     def test_lost_response_reconciles_without_second_init(self):
@@ -107,6 +107,20 @@ class EnrollmentTest(unittest.TestCase):
         second = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
         self.assertEqual(json.loads(second.stdout)["data"]["hosts"][0]["status"], "enrolled")
         self.assertEqual(self.counter.read_text().splitlines(), ["init"])
+
+    def test_concurrent_apply_is_rejected(self):
+        qualification = self.qualification()
+        intent = self.tmp / "intent.json"
+        self.run_cli("review", "--input", str(qualification), "--candidate", "cand_676f6f64", "--project", str(self.tmp / "project"), "--output", str(intent))
+        digest = json.loads(intent.read_text())["intent_sha256"]
+        lock_dir = self.home / "fleet" / "enrollment"
+        lock_dir.mkdir(parents=True)
+        lock = lock_dir / f"{digest}.json.lock"
+        with lock.open("w") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            result = self.run_cli("apply", "--input", str(intent), "--confirm", digest, check=False)
+        self.assertEqual(json.loads(result.stdout)["error"]["code"], "apply_in_progress")
+        self.assertFalse(self.counter.exists())
 
     def test_reviewed_ssh_config_change_requires_renewal(self):
         config = self.tmp / "ssh-config"

@@ -163,7 +163,7 @@ int f_ssh(const struct f_remote *remote, const char *command, const char *input,
 }
 
 char *f_peer_fingerprint(const struct f_remote *remote, unsigned seconds) {
-    struct f_capture cap = {0}; char timeout[64], socket[F_PATH], *fingerprint = NULL;
+    struct f_capture cap = {0}; char timeout[64], *fingerprint = NULL;
     char *argv[32]; size_t n = 0; const char *marker = "Server host key: ";
     char *start, *end; int status;
     snprintf(timeout, sizeof(timeout), "ConnectTimeout=%u", seconds);
@@ -173,13 +173,8 @@ char *f_peer_fingerprint(const struct f_remote *remote, unsigned seconds) {
     argv[n++] = (char *)"-o"; argv[n++] = (char *)"StrictHostKeyChecking=yes";
     argv[n++] = (char *)"-o"; argv[n++] = (char *)"UpdateHostKeys=no";
     argv[n++] = (char *)"-o"; argv[n++] = timeout;
-    if (remote->multiplex) {
-        char dir[F_PATH];
-        if (f_path(dir, sizeof(dir), f_home, "fleet/sockets") || f_mkdirs(dir) ||
-            snprintf(socket, sizeof(socket), "ControlPath=%s/%%C", dir) >= (int)sizeof(socket)) return NULL;
-        argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlMaster=auto";
-        argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlPersist=60"; argv[n++] = (char *)"-o"; argv[n++] = socket;
-    }
+    /* Identity capture must perform a real key exchange. A reused
+     * ControlMaster does not repeat the Server host key diagnostic. */
     argv[n++] = (char *)remote->target; argv[n++] = (char *)"env LC_ALL=C  'hydra' fleet serve"; argv[n] = NULL;
     status = f_run(argv, "{\"protocol\":1,\"action\":\"handshake\"}", sizeof("{\"protocol\":1,\"action\":\"handshake\"}") - 1, seconds, &cap);
     if (!status && cap.err && (start = strstr(cap.err, marker))) {
