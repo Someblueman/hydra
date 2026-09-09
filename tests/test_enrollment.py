@@ -25,6 +25,8 @@ class EnrollmentTest(unittest.TestCase):
             if request.get("action") == "init":
                 with open(os.environ["ENROLL_COUNTER"], "a") as f: f.write("init\\n")
             result = subprocess.run([os.environ["HYDRA_FLEET_BIN"], "fleet", "serve"], input=json.dumps(request), text=True, capture_output=True)
+            if os.environ.get("ENROLL_STDOUT_MARKER") and request.get("action") == "handshake":
+                print("Server host key: ssh-ed25519 SHA256:fixture")
             sys.stdout.write(result.stdout)
             sys.exit(0)
         """))
@@ -67,6 +69,17 @@ class EnrollmentTest(unittest.TestCase):
         digest = json.loads(intent.read_text())["intent_sha256"]
         result = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
         self.assertEqual(json.loads(result.stdout)["data"]["hosts"][0]["status"], "host_key_changed")
+        self.assertFalse(self.counter.exists())
+
+    def test_stdout_marker_is_not_peer_identity(self):
+        self.env["ENROLL_STDOUT_MARKER"] = "1"
+        self.env["ENROLL_FINGERPRINT"] = ""
+        qualification = self.qualification()
+        intent = self.tmp / "intent.json"
+        self.run_cli("review", "--input", str(qualification), "--candidate", "cand_676f6f64", "--project", str(self.tmp), "--output", str(intent))
+        digest = json.loads(intent.read_text())["intent_sha256"]
+        result = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
+        self.assertEqual(json.loads(result.stdout)["data"]["hosts"][0]["status"], "outcome_unknown")
         self.assertFalse(self.counter.exists())
 
 

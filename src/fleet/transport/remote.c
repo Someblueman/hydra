@@ -183,15 +183,10 @@ char *f_peer_fingerprint(const struct f_remote *remote, unsigned seconds) {
     status = f_run(argv, "{\"protocol\":1,\"action\":\"handshake\"}", sizeof("{\"protocol\":1,\"action\":\"handshake\"}") - 1, seconds, &cap);
     if (!status && cap.err && (start = strstr(cap.err, marker))) {
         start += strlen(marker); start = strstr(start, "SHA256:"); end = start;
-        while (*end && *end != '\n' && *end != '\r' && *end != ' ') end++;
-        if (end > start && (fingerprint = malloc((size_t)(end - start) + 1))) {
+        while (start && *end && *end != '\n' && *end != '\r' && *end != ' ') end++;
+        if (start && end > start && (fingerprint = malloc((size_t)(end - start) + 1))) {
             memcpy(fingerprint, start, (size_t)(end - start)); fingerprint[end - start] = '\0';
         }
-    }
-    if (!fingerprint && !status && cap.out && (start = strstr(cap.out, marker))) {
-        start += strlen(marker); start = strstr(start, "SHA256:"); end = start;
-        while (start && *end && *end != '\n' && *end != '\r' && *end != ' ') end++;
-        if (start && end > start) { fingerprint = malloc((size_t)(end - start) + 1); if (fingerprint) { memcpy(fingerprint, start, (size_t)(end - start)); fingerprint[end - start] = '\0'; } }
     }
     f_capture_free(&cap); return fingerprint;
 }
