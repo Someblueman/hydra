@@ -21,12 +21,13 @@ subject, validation, output = sys.argv[1:]
 data = open(subject, 'rb').read(); context = json.load(open(validation))['data']
 mode = os.environ.get('HYDRA_V3_FAULT', '')
 assessment = mode.startswith('assessment-')
-actual = 'Wrong candidate artifact' if mode == 'wrong-artifact' else data.decode()
-obligation_id = 'content-check' if not assessment else 'content-check'
+actual = data.decode()
+obligation_id = 'content-check'
 raw = ({'verdict': 'inconclusive' if mode == 'assessment-inconclusive' else ('fail' if mode == 'assessment-fail' else 'pass'), 'explanation': 'Assessment fixture', 'measurement': len(data)} if assessment else {'actual': actual, 'measurement': len(data)})
 raw_hash = hashlib.sha256(json.dumps(raw, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 obs = [{'id': 'case-1', 'raw': raw, 'raw_sha256': raw_hash}]
 inventory = [obligation_id] if assessment else ['case-1']
+if assessment: obs[0]['id'] = obligation_id
 if mode == 'drop': obs = []; inventory = []
 if mode == 'raw-tampered': obs[0]['raw']['actual'] = 'Tampered after hashing'
 if mode == 'missing-measurement':
@@ -37,11 +38,10 @@ subject_hash = hashlib.sha256(data).hexdigest()
 if mode == 'stale-subject': subject_hash = '0' * 64
 exit_code = 7 if mode == 'nonzero' else 0
 failed = 1 if mode in ('wrong-artifact', 'nonzero', 'assessment-fail') else 0
-counted_failures = 1 if mode == 'wrong-artifact' else 0
+counted_failures = 1 if mode in ('wrong-artifact', 'assessment-fail') else 0
 domain = 'inconclusive' if mode == 'assessment-inconclusive' else ('fail' if failed else 'pass')
 recipe_hash = '0' * 64 if mode in ('changed-predicate', 'assessment-stale-rubric') else context['check-recipe']
 if assessment:
-    obs[0]['id'] = obligation_id
     if mode != 'assessment-missing-authority':
         reviewer = {'rubric': 'Assessment rubric: determine whether the report is acceptable.', 'source_locators': ['fixture'], 'disagreement': 'None', 'authority': 'fixture'}
     else:
