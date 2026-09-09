@@ -25,10 +25,14 @@ struct recovery {
     char kind[64], label[TEXT], source[SOURCE_TEXT], confidence[64], action[TEXT];
 };
 
+struct host_observation { char name[128], state[40], error[128]; unsigned heads; };
+
 struct model {
     struct head heads[MAX_HEADS];
     struct recovery recovery[MAX_RECOVERY];
     size_t head_count, recovery_count;
+    struct host_observation hosts[16];
+    size_t host_count;
 };
 
 /* Caller owns model and error buffers. Input FILE remains caller-owned. */

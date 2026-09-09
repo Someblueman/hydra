@@ -113,6 +113,12 @@ tui_main_loop() {
 # Returns: 0 on success, 1 on failure
 cmd_tui() {
     case "${1:-}" in
+        --attach)
+            shift
+            _load_lib tui_attach
+            tui_attach_instance "$@"
+            return $?
+            ;;
         --basic)
             shift
             [ $# -eq 0 ] || {
@@ -147,9 +153,13 @@ cmd_tui() {
             tui_native_run
             return $?
             ;;
+        --view|--theme|--ascii|--no-color)
+            tui_native_run "$@"
+            return $?
+            ;;
         *)
             echo "Error: unknown TUI option '$1'" >&2
-            echo "Usage: hydra tui [--basic|--capabilities [--json]|--headless-fixture FILE ...]" >&2
+            echo "Usage: hydra tui [--basic|--capabilities [--json]|--view NAME|--theme NAME|--ascii|--no-color|--headless-fixture FILE ...]" >&2
             return 2
             ;;
     esac

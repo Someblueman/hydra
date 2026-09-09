@@ -1,0 +1,40 @@
+ HYDRA WORKSPACE / A CONVERSATION / Local
+ A conversation / B plan / C monitor / P load / V validate / E approve / D stats / z restore panes
+╭─planner / AGENT UNKNOWN─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ATTACHED / INPUT TO AGENT / Ctrl-B Tab Hydra                                                                                             │
+│    13 +      head: report-attempt-one                                                                                                   │
+│    14 +      name: production-filter-repair                                                                                             │
+│    15 +      message: "Please review failed run run_0e6123d7d1ce8fff341f before repairing the production filter and proposing a newly ap│
+│        proved plan. All exec processes exited 0, but the sealed check verdict is fail: staging-only appeared where TOTAL should be, and │
+│        the report had 5 rows instead of 4."                                                                                             │
+│    16 +  - id: confirm                                                                                                                  │
+│    17 +    kind: exec                                                                                                                   │
+│    18 +    needs: [review]                                                                                                              │
+│    19 +    retry: 0                                                                                                                     │
+│    20 +    idempotent: false                                                                                                            │
+│    21 +    args:                                                                                                                        │
+│    22 +      head: report-attempt-one                                                                                                   │
+│    23 +      argv: [python3, /tmp/hydra-real-workspace-1ww4v6pp/confirm-recovery.py]                                                    │
+│    24 +      timeout: 45                                                                                                                │
+│                                                                                                                                         │
+│• Ran HYDRA_HOME=/tmp/hydra-real-workspace-1ww4v6pp/home PATH=/tmp/hydra-real-workspace-1ww4v6pp/bin:$PATH /Users/sws/Code/              │
+│  │ hydra-c-tui-visualization/bin/hydra workflow run /tmp/hydra-real-workspace-1ww4v6pp/recovery-review.yml                              │
+│  └ run_d14b90449897630dad1e                                                                                                             │
+│                                                                                                                                         │
+│─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+│                                                                                                                                         │
+│• Started exactly once: run_d14b90449897630dad1e.                                                                                        │
+│                                                                                                                                         │
+│  Exit code 3 means waiting for operator approval. Created the workflow and confirmation helper; no approval, resume, repair, commit, or │
+│  compiled-plan execution performed.                                                                                                     │
+│                                                                                                                                         │
+│─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│
+│                                                                                                                                         │
+│                                                                                                                                         │
+│› UNSENT_RECOVERY: retain this conversation while the decision stage runs.                                                               │
+│                                                                                                                                         │
+│  gpt-6-astra low · /tmp/hydra-real-workspace-1ww4v6pp/repo · main · Context 87% left · weekly 90% left · 0.153.3 · 51.6K used           │
+│[planner] 0:codex*                                                                                                 "repo" 10:54 08-Sep-26│
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+Current snapshot / age 0s / Attached client / Ctrl-B Tab returns input to Hydra
+INPUT TO AGENT / Ctrl-B Tab focus / Ctrl-B S split / Ctrl-B D statistics / Ctrl-B n next / Ctrl-B q quit

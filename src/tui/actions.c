@@ -1,12 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
-#include "actions.h"
-#include "terminal.h"
-#include "selection.h"
-#include "text.h"
-#include <errno.h>
-#include <spawn.h>
-#include <string.h>
-#include <sys/wait.h>
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
 extern char **environ;
 
 /* Explicit shell CLI actions exposed by the native palette. */
@@ -47,18 +43,7 @@ static int spawn_argv(char *const argv[]) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 
-int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) {
-    restore_terminal(app);
-    printf("\n%s", prompt);
-    fflush(stdout);
-    if (fgets(buffer, (int)size, stdin) == NULL) buffer[0] = '\0';
-    buffer[strcspn(buffer, "\r\n")] = '\0';
-    if (enter_raw(app) != 0) {
-        app->running = false;
-        return -1;
-    }
-    return 0;
-}
+
 
 static void spawn_action(struct app *app) {
     char branch[TEXT] = "", profile[TEXT] = "", template[TEXT] = "", layout[TEXT] = "";
@@ -106,6 +91,7 @@ void group_marked_action(struct app *app) {
 void kill_marked_action(struct app *app) {
     size_t index, killed = 0U, skipped = 0U;
     int failed = 0;
+    refresh_current_session(app);
     restore_terminal(app);
     printf("\033[H\033[2J");
     fflush(stdout);
@@ -131,6 +117,10 @@ void kill_marked_action(struct app *app) {
     if (enter_raw(app) != 0) app->running = false;
 }
 
+
+
+/* Order preserves first-substring-match selection. Arguments are literal argv
+ * entries; only the two interactive actions require additional prompting. */
 enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN };
 struct palette_action {
     const char *name;
@@ -138,8 +128,7 @@ struct palette_action {
     const char *subcommand;
     enum palette_scope scope;
 };
-/* Order preserves first-substring-match selection. Arguments are literal argv
- * entries; only the two interactive actions require additional prompting. */
+
 static const struct palette_action palette[] = {
     {"switch", "switch", NULL, ACTION_HEAD},
     {"kill", "kill", NULL, ACTION_HEAD},

@@ -7,6 +7,107 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Native statistics now include queue delay, total run duration, recorded independent
+  verification time and owner recovery counts, with coverage, percentiles, trends
+  and contributing evidence. Minimal lifecycle scalars preserve unknown historical
+  values; press `M` in statistics to cycle metrics.
+
+### Fixed
+
+- Standalone export qualification uses its own build directory when Hydra is
+  invoked with a custom build path.
+- Closing a standalone PTY on Linux also stops ordinary background jobs in its
+  owned session, while leaving external tmux sessions outside that boundary.
+- Workspace execution approval now reports an already submitted revision before
+  opening another dialog. Finished launch receipts stop polling; unavailable
+  owner observations retain known run evidence. Run switching clears stale action
+  notices, and narrow evidence headers retain the complete waiting state.
+
+### Added
+
+- Optional two-agent splits in A/B/C with distinct existing tmux clients,
+  independent scrollback, input focus and preserved drafts across layout changes.
+
+- Local project/head/run navigation from recorded branch references, with
+  preserved expansion, unmatched runs at project level and direct evidence access.
+
+- Native draft/policy loading, asynchronous validation and complete compiled plan
+  previews with revision invalidation, reversible A/B/C layouts, and text dialogs
+  that preserve attached terminal I/O. Exact-digest approval launches through the
+  existing workflow engine with durable run receipts, duplicate launch refusal and
+  execution that survives UI closure.
+
+- C monitoring now follows selected-run step output, input requests and freshly
+  verified artifact evidence. Native approve/reject/resume/cancel controls retain
+  the existing engine's binding checks and explicit decision/resume boundary;
+  owners and attached shell drafts survive UI closure.
+
+- Focus zoom for native workspace panes and compact single-pane rendering at
+  narrow sizes, preserving terminal drafts, saved splits and statistics navigation.
+
+- Local standalone termviz source export with a portable static-library build,
+  optional POSIX examples, independent component/PTY tests and documented
+  ownership, compatibility and license boundaries. No repository or publication
+  is created by the exporter.
+
+- Deterministic local objective planning with validation, bound compilation,
+  comprehensive preview, exact-digest execution approval and artifact-bound final
+  verification. The native workspace branch reuses the existing planning engine;
+  see [the planner recipe](docs/PLANNER_RECIPE.md).
+
+- Native workspace attachment clients for up to four existing local tmux heads,
+  with identity checks, direct terminal input, explicit focus routing, preserved
+  drafts, client-only detach and reconnect. Periodic observations now run without
+  blocking terminal I/O. See [attachment boundaries](docs/ATTACHED_TERMINALS.md).
+
+- Dedicated native statistics view (`D`) with workflow/time/search filters,
+  recorded outcomes, retries, latest-attempt timing, run creation trends and
+  run/step/graph drill-down. Fleet mode exposes host response coverage and known
+  head counts. Missing measurements and failed refreshes remain explicit.
+  See [metric definitions and qualification](docs/STATISTICS.md).
+- Workspace selected-work summaries and an `a` shortcut to the existing head
+  session, preserving workspace context on return.
+
+- Dependency-free termviz workspace with incremental rendering, nested draggable
+  panes, independent scrolling, focus routing, navigation trees, and bounded
+  UTF-8 wide/combining text. The native Hydra UI opens this workspace by default.
+- Standalone workspace demo with one real shell through a separate POSIX PTY
+  adapter, bounded screen/parser and scrollback, alternate-screen support, resize
+  propagation and explicit child cleanup. Hydra heads retain tmux ownership.
+  See [acceptance evidence](docs/WORKSPACE_ACCEPTANCE.md) and the
+  [supported terminal subset](src/termviz/TERMINAL.md).
+
+- Antigravity (`agy`) and Cursor Agent headless profiles with bounded event
+  translation, explicit recorded-session resume, and native fleet sign-in.
+- Interactive Antigravity and OpenCode profiles; Cursor now starts `cursor-agent`.
+  Agent discovery, completions, and documentation distinguish interactive launch,
+  headless capabilities, and completed live qualifications.
+
+- Named workflow file and structured inputs, sealed output manifests, and exact
+  artifact references that block dependents on missing or changed output.
+- Durable workflow approval waits with bound evidence, explicit decisions and
+  resume, stale-decision rejection, and remote task suspension and recovery.
+- Failure-class retry policies and durable backoff deadlines, preserving completed
+  attempts and reporting uncertain non-idempotent work for recovery.
+- Versioned declarative headless agent profiles, bounded event translation,
+  capability evidence, exact recorded-session resume, safe-point prompt delivery,
+  supervised cancellation, and opt-in bounded provider payload retention.
+
+- Fleet host authentication through native provider sign-in or preview-bound
+  copying of private credentials, with selected-provider merges for Pi/OpenCode.
+
+### Changed
+
+- Fleet task cancellation allows 30 seconds per transport phase and accepts a
+  bounded `--timeout` override so suspended approval result sealing can finish.
+- Interactive Codex restore requires an exact recorded session identity instead of
+  implicitly selecting the latest session. Older heads remain inspectable; see
+  [the migration instructions](docs/AGENT_CONTRACT.md#workflow-profiles-and-migration).
+
+Workflow-data acceptance is complete. Claude Code remote qualification is deferred
+until native host sign-in is available and remains on the outstanding roadmap.
+See [the acceptance record](docs/WORKFLOW_AGENT_ACCEPTANCE.md) for the local and
+remote provider matrix and exact evidence.
 ## [2.3.0] - 2026-09-08
 
 ### Added

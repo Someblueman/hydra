@@ -1,0 +1,24 @@
+ HYDRA WORKSPACE / C MONITOR / Local
+ [ ] runs / Y approve / N reject / R resume / X cancel / A conversation / B pl
+╭─PLAN / EVIDENCE─────────────────────────────────────────────────────────────╮
+│FOCUS / scroll 0                                                             │
+│OBSERVED EVIDENCE / run failed / spawn                                       │
+│Workflow run_0e6123d7d1ce8fff341f: failed (source: recorded)                 │
+│  spawn [spawn]: succeeded (attempts=1)                                      │
+│  preflight [exec]: succeeded (attempts=1)                                   │
+│  compose [exec]: succeeded (attempts=1)                                     │
+│  verify [exec]: succeeded (attempts=1)                                      │
+│                                                                             │
+│Selected step: spawn                                                         │
+│Observed state: succeeded                                                    │
+│Attempt: 1                                                                   │
+│Exit code: 0                                                                 │
+│                                                                             │
+│Standard output (last 8192 bytes)                                            │
+│Session 'report-attempt-one' created (HYDRA_NO_SWITCH set; not attaching)    │
+│                                                                             │
+│                                                                             │
+│Standard error (last 8192 bytes)                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
+Current snapshot / age 1s
+Tab focus z zoom a interact S split D stats q quit

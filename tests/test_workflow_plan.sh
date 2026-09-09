@@ -9,7 +9,7 @@ export HYDRA_HOME="$ROOT/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_S
 . "$REPO/tests/helpers.sh"
 test_count=0 pass_count=0 fail_count=0
 cleanup() {
-    for head in plan-smoke plan-negative plan-guard-graph plan-guard-limits; do
+    for head in plan-smoke plan-negative plan-guard-graph plan-guard-limits plan-timing-verified-at plan-timing-verification-plan-sha256; do
         (cd "$ROOT/repo" && "$HYDRA_BIN" kill "$head" --force >/dev/null 2>&1) || true
     done
     if [ "$fail_count" -ne 0 ]; then printf 'Failure evidence: %s\n' "$ROOT"; return; fi
@@ -47,9 +47,22 @@ cmp -s "$ROOT/compiled.json" "$ROOT/repeated.json"
 assert_success $? 'identical inputs compile to identical bytes'
 "$HYDRA_BIN" workflow plan show "$ROOT/compiled.json" > "$ROOT/preview.txt"
 assert_success $? 'compiled plan has a readable scope preview'
+"$HYDRA_BIN" workflow plan tui-data "$ROOT/compiled.json" > "$ROOT/plan-tui.tsv"
+assert_success $? 'native plan projection succeeds without executing work'
+awk 'index($0,"T\t")==1 {print substr($0,3)}' "$ROOT/plan-tui.tsv" > "$ROOT/projected-preview.txt"
+cmp -s "$ROOT/preview.txt" "$ROOT/projected-preview.txt"
+assert_success $? 'native preview preserves the full public approval scope'
+awk -F '\t' '$1=="N" && $2=="verify" && $3=="exec" && $4=="verify" && $5=="compose" {found=1} END {exit !found}' "$ROOT/plan-tui.tsv"
+assert_success $? 'native graph includes the recorded verification dependency'
+awk -F '\t' '$1=="N" {nodes++} $1=="T" {lines++} $1=="Z" {valid=($2==nodes && $3==lines)} END {exit !valid}' "$ROOT/plan-tui.tsv"
+assert_success $? 'native projection has a complete record-count trailer'
 sed 's/"inputs":{/"inputs":[],"invalid_inputs":{/' "$ROOT/compiled.json" > "$ROOT/bad-preview.json"
 "$HYDRA_BIN" workflow plan show "$ROOT/bad-preview.json" > "$ROOT/bad-preview.out" 2>&1
 assert_failure $? 'malformed compiled input declarations fail preview safely'
+"$HYDRA_BIN" workflow plan tui-data "$ROOT/bad-preview.json" > "$ROOT/bad-tui.out" 2>&1
+assert_failure $? 'malformed plans cannot produce native approval previews'
+if grep -q '^HYDRA_PLAN_TUI' "$ROOT/bad-tui.out"; then assert_failure 0 'invalid projection must not emit a partial handshake'
+else assert_success 0 'invalid projection emits no partial handshake'; fi
 reject() {
     sed "$1" "$ROOT/plan.json" > "$ROOT/bad.json"
     "$HYDRA_BIN" workflow plan validate "$ROOT/bad.json" "$ROOT/policy.json" > "$ROOT/rejection.json" 2>&1
@@ -94,6 +107,8 @@ cmp -s "$run_dir/steps/compose/attempt-1/artifacts/report" expected.txt
 assert_success $? 'delivered bytes match independently checked expected contents'
 "$HYDRA_BIN" workflow plan result "$run" > "$ROOT/result.json"
 assert_success $? 'public result command verifies and returns the final deliverable'
+python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$run_dir" 0 verified
+assert_success $? "independently verified timing reconciles with the native aggregate"
 printf 'tampered\n' > "$run_dir/steps/compose/attempt-1/artifacts/report"
 "$HYDRA_BIN" workflow plan result "$run" >/dev/null 2>&1
 assert_failure $? 'result retrieval refuses corrupted sealed bytes despite recorded success'
@@ -106,6 +121,8 @@ git branch -D plan-smoke >/dev/null 2>&1 || true
 assert_failure $? 'admission rejects retained durable head state after branch deletion'
 if [ ! -s "$ROOT/durable.out" ]; then empty_status=0; else empty_status=1; fi
 assert_success "$empty_status" 'durable head rejection creates no workflow run'
+# shellcheck disable=SC1091
+. "$REPO/tests/workflow_plan_statistics_cases.sh"
 sed 's/"verdict":"pass"/"verdict":"fail"/' check.sh > "$ROOT/check.sh"
 cp "$ROOT/check.sh" check.sh
 git add check.sh && git commit -qm 'negative assessment fixture'
@@ -118,6 +135,9 @@ run="$(sed -n '1p' "$ROOT/negative.out")"
 "$HYDRA_BIN" workflow status "$run" --json > "$ROOT/negative-status.json"
 grep -q '"state":"failed"' "$ROOT/negative-status.json"
 assert_success $? 'negative assessment makes the overall run fail'
+negative_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
+python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$negative_dir" 0 unverified
+assert_success $? "negative verification remains missing in the eligible plan cohort"
 grep -q '"step_id":"verify","state":"succeeded"' "$ROOT/negative-status.json"
 assert_success $? 'negative verdict is evaluated after all child steps succeeded'
 {

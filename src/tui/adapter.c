@@ -1,65 +1,63 @@
 #define _POSIX_C_SOURCE 200809L
-#include "adapter.h"
-#include "process.h"
-#include "selection.h"
-#include "text.h"
-#include <errno.h>
-#include <fcntl.h>
-#include <spawn.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/select.h>
-#include <sys/wait.h>
-#include <time.h>
-#include <unistd.h>
-extern char **environ;
-
-int refresh_model(struct app *app) {
-    struct output_child child;
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+#include "internal.h"
+void record_snapshot(struct app *app, bool valid) {
+    size_t i;
+    double queue = 0;
+    bool known = app->model.head_count == 0;
+    if (app->history_count == 120) {
+        memmove(app->queue_history, app->queue_history + 1, 119 * sizeof(double));
+        memmove(app->history_valid, app->history_valid + 1, 119 * sizeof(bool));
+        app->history_count--;
+    }
+    for (i = 0; i < app->model.head_count; i++) if (app->model.heads[i].head_id[0]) {
+        queue += app->model.heads[i].queue; known = true;
+    }
+    app->queue_history[app->history_count] = queue;
+    app->history_valid[app->history_count++] = valid && known && !app->fleet;
+    app->snapshot_stale = !valid;
+    if (valid) app->snapshot_at = time(NULL);
+}
+FILE *capture_adapter(struct app *app, const char *command, const char *option, long budget_ms) {
+    struct native_capture capture={.fd=-1};
+    char *argv[]={(char *)app->hydra,(char *)command,(char *)option,NULL};
     FILE *input;
+    if (!native_capture_start(&capture,argv,budget_ms)) return NULL;
+    while (!native_capture_step(&capture)) {
+        struct timespec pause={0,10000000L};
+        (void)nanosleep(&pause,NULL);
+    }
+    if (capture.timed_out) copy_text(app->notice,sizeof(app->notice),"shell data adapter timed out; showing last good snapshot");
+    input=native_capture_take(&capture);
+    if (!input && !app->notice[0]) copy_text(app->notice,sizeof(app->notice),"shell data adapter failed; showing last good snapshot");
+    return input;
+}
+int accept_model_data(struct app *app, FILE *input) {
     struct model *next;
-    size_t bytes = 0U;
-    bool failed = false;
-    char buffer[8192], error[TEXT] = "";
-    char *argv[] = {(char *)app->hydra, (char *)(app->fleet ? "fleet" : "tui"), (char *)(app->fleet ? "tui-data" : "--data"), NULL};
-    if (output_start(&child, argv, app->fleet ? 3500L : 2000L)) return -1;
-    input = tmpfile();
-    if (input == NULL) { (void)output_finish(&child, true); return -1; }
-    for (;;) {
-        ssize_t length = output_read(&child, buffer, sizeof(buffer));
-        if (length == 0) break;
-        if (length < 0) { failed = true; break; }
-        bytes += (size_t)length;
-        if (bytes > MAX_DATA_BYTES || fwrite(buffer, 1U, (size_t)length, input) != (size_t)length) {
-            failed = true; break;
-        }
-    }
-    if (output_finish(&child, failed)) {
-        fclose(input);
-        copy_text(app->notice, sizeof(app->notice), child.timed_out ?
-                  "shell data adapter timed out; showing last good snapshot" :
-                  "shell data adapter failed; showing last good snapshot");
-        return -1;
-    }
-    rewind(input);
+    char error[TEXT] = "";
+    if (!input) return -1;
     next = malloc(sizeof(*next));
     if (next == NULL) {
         fclose(input);
-        copy_text(app->notice, sizeof(app->notice), "native model allocation failed");
+        copy_text(app->snapshot_error, sizeof(app->snapshot_error), "native model allocation failed");
         return -1;
     }
     if (load_model_stream(input, next, error, sizeof(error)) != 0) {
         fclose(input);
         free(next);
-        copy_text(app->notice, sizeof(app->notice), error);
+        copy_text(app->snapshot_error, sizeof(app->snapshot_error), error);
         return -1;
     }
     fclose(input);
-    if (app->fleet && app->selected < app->model.head_count) {
+    if (app->selected < app->model.head_count) {
         const struct head *previous = &app->model.heads[app->selected]; size_t index;
         for (index = 0; index < next->head_count; index++) {
-            if (strcmp(previous->head_id, next->heads[index].head_id) == 0 && strcmp(previous->remote_host, next->heads[index].remote_host) == 0) { app->selected = index; break; }
+            if ((previous->head_id[0] ? !strcmp(previous->head_id,next->heads[index].head_id) :
+                !strcmp(previous->branch,next->heads[index].branch)) && !strcmp(previous->remote_host,next->heads[index].remote_host)) {
+                app->selected=index; break;
+            }
         }
     }
     app->model = *next;
@@ -67,10 +65,23 @@ int refresh_model(struct app *app) {
     if (app->selected >= app->model.head_count && app->model.head_count > 0U) {
         app->selected = app->model.head_count - 1U;
     }
-    app->notice[0] = '\0';
+    app->snapshot_error[0] = '\0';
     return 0;
 }
-
+int refresh_model(struct app *app) {
+    int result;
+    char notice[TEXT];
+    FILE *input;
+    native_observations_cancel(app,0);
+    copy_text(notice,sizeof(notice),app->notice); app->notice[0]='\0';
+    input=capture_adapter(app,app->fleet ? "fleet" : "tui",
+        app->fleet ? "tui-visual-data" : "--data",app->fleet ? 3500 : 2000);
+    if (!input) copy_text(app->snapshot_error,sizeof(app->snapshot_error),app->notice[0] ? app->notice : "Snapshot observation unavailable");
+    copy_text(app->notice,sizeof(app->notice),notice);
+    result = accept_model_data(app,input);
+    record_snapshot(app, result == 0);
+    return result;
+}
 void refresh_current_session(struct app *app) {
     int pipefd[2], status = 0, ready, attempt;
     pid_t pid;
@@ -114,7 +125,6 @@ void refresh_current_session(struct app *app) {
         copy_text(app->current_session, sizeof(app->current_session), output);
     }
 }
-
 void capture_preview(struct app *app) {
     if (app->fleet) return;
     struct output_child child;

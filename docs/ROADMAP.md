@@ -574,6 +574,198 @@ Acceptance: duplicate triggers and competing workers do not create duplicate tas
 claims. Work growth remains bounded, cancellation propagates, and restart recovery
 does not invent completion or replay uncertain actions.
 
+## Native workspace and standalone termviz track
+
+This track develops dependency-free C terminal infrastructure, using Hydra as its
+first real consumer and eventual standalone release as the direction. Work in the
+existing visualization worktree. Build milestones in order; integrate a real shell
+before expanding the widget catalogue. Existing visualization architecture and
+limits are documented in [VISUALIZATION.md](VISUALIZATION.md) and the
+[termviz module guide](../src/termviz/README.md).
+
+Termviz owns reusable rendering, layout, input routing, and terminal screen
+interpretation. Hydra owns agent/workflow semantics and authoritative actions.
+Keep OS-specific terminal lifecycle and PTY process handling in small adapters,
+separate from the portable core. Add no third-party dependencies. Preserve the
+shell-only path, current CLI/state contracts, and tmux authority for Hydra heads;
+the standalone shell example does not introduce a competing Hydra execution owner.
+
+The workspace foundation and first embedded-shell milestone are implemented.
+See [workspace acceptance](WORKSPACE_ACCEPTANCE.md) for reproducible checks and
+the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset.
+
+### Milestone 3: useful Hydra workspace
+
+- [x] Establish a reviewed visual target with clear project -> head -> run navigation,
+      prominent selected work, concise status summaries, and contextual actions.
+      Keep raw identifiers and detailed provenance available on demand; avoid
+      repeated hints and diagnostic fields as the primary workspace content.
+- [x] Make an interactive agent pane a first-class part of the workspace. Users
+      should converse with Codex or another qualified CLI about an objective,
+      inspect its proposed plan alongside the conversation, request revisions,
+      and return to the same agent session while work is running.
+- [x] Use conversation-first planning (concept A) as the default, with a discoverable
+      toggle to the comprehensive plan overview (concept B) and back. Expand the
+      dependency graph, validation and approval context on demand while keeping the
+      agent pane available. Preserve the agent session, unsent input, plan revision,
+      selection and pane scroll positions; restore prior focus when returning.
+      Use the monitoring/intervention layout (concept C) during execution, with the
+      same conversation and selected run available across layouts.
+      Connect the implemented statistics layout (concept D) to these workspace
+      layouts; allow the agent pane to be revealed without losing statistics
+      filters or conversation.
+- [x] Present agent-authored plans through the existing plan workflow: objective,
+      steps, dependencies, inputs/outputs, checks, validation errors and current
+      revision. Distinguish a conversational proposal from a validated executable
+      plan and from a running workflow. Surface explicit approval of the exact
+      plan being executed; revisions invalidate any prior approval.
+- [x] Design planning, execution and recovery layouts around the same selected
+      project/run context. Preserve draft and session context when changing panes;
+      make focus and whether input reaches an agent or Hydra unambiguous.
+
+Acceptance: review concrete narrow/wide layout examples, then use the workspace to
+ask an agent for a plan, request a meaningful revision, inspect validation and the
+changed dependency graph, and explicitly approve that version through the existing
+shell-authoritative workflow. Merely receiving an agent message never starts work.
+Draft, validated, awaiting approval, running and failed states are visibly distinct.
+Toggle from conversation to comprehensive overview and back during plan revision;
+verify that unsent input, session identity, selected step, scroll and focus survive.
+The overview toggle changes presentation only, never approval or execution state.
+The existing planning implementation is integrated into this branch; see the
+[planner recipe](PLANNER_RECIPE.md) and [compilation contract](PLAN_COMPILATION.md).
+The native workspace now loads draft/policy files with P, validates with V, shows
+revision-aware complete previews and dependencies, and preserves layout state
+across A/B/C/D. Native dialogs continue agent I/O. E accepts the exact displayed
+digest, rechecks the revision and delegates execution to a durable owner through
+the existing engine; UI exit and duplicate launch refusal are covered by a real
+workflow test. C now follows selected run/step evidence and delegates explicit
+request decisions, resume and cancellation to the existing CLI. Local navigation
+groups recorded runs under matching head branches and opens selected evidence;
+unmatched runs remain under the project. Visual review and the representative
+agent-authored workflow passed; see [the real acceptance record](WORKSPACE_REAL_ACCEPTANCE.md).
+
+### Milestone 4: integrated working terminals
+
+- [x] Attach interactive panes to existing Hydra sessions while preserving tmux
+      ownership. Keep the planning conversation distinct from worker sessions and
+      retain session identity when switching or reconnecting.
+- [x] Qualify real Codex and other selected agent CLIs, expanding terminal behavior
+      only for observed needs. Exercise interactive prompts, paste, scrolling,
+      resize, full-screen output, interruption and permission requests.
+- [x] Support multiple terminal panes and switching between agents. Show attention
+      indicators backed by actual observations; distinguish waiting for user input,
+      unknown state, disconnected transport and process exit.
+
+Acceptance: author/revise a plan in the interactive agent pane, switch to a worker's
+existing session, interact with it, then return to the original conversation. Resize
+and reconnect without duplicate execution, lost session identity or damaged terminal
+state. Record tested CLI versions and unsupported behavior explicitly.
+
+The workspace now supports two visible existing tmux clients per A/B/C layout,
+with four cached clients, independent scrollback and focus, and retained unsent
+drafts across layout changes. Narrow layouts reveal one focused agent at a time.
+Agent attention remains explicitly unknown without exact instance observations;
+recorded exit/failure, stale data and client disconnection have separate labels.
+Workflow input requests remain identified in C. Codex CLI 0.153.3 is qualified in
+the recorded local configuration; no additional CLI was selected.
+
+### Milestone 5: operational views
+
+- [x] Integrate workflow graphs, host status, selected-step output, verification
+      evidence, failures and recovery actions into the workspace's navigation and
+      detail panes. Preserve useful existing overview/graph views.
+- [x] Distinguish observed progress from declared intent, stale or missing data,
+      blocked dependencies and requests for a decision. Offer the next applicable
+      action with enough context to assess its effect.
+- [x] Extend the local [statistics view](STATISTICS.md) with queue delay, total
+      execution duration, recorded independent verification time and owner recovery
+      counts. Minimal lifecycle scalars define future measurements; unsupported
+      historical values remain unknown. Filters, coverage, percentiles, trends,
+      freshness and contributing evidence are qualified through real workflows.
+- [ ] Add remote workflow cohorts when the fleet protocol supplies reliable evidence.
+- [x] Show resource utilization and provider token/cost totals only where reliable
+      measurements exist. Preserve source, freshness, sample counts and explicit
+      unknowns; do not add telemetry collection merely to populate the view.
+- [x] Preserve agent session/input and shared selected work when switching
+      between statistics, planning and monitoring layouts. Current statistics
+      filters, run/step/host drill-down and workspace return are implemented.
+- [x] Keep the interactive agent pane available to discuss a blocked step or revise
+      future work, with explicit scope and approval before execution changes.
+
+Acceptance: trace a failed step from the graph to its output and evidence, understand
+why dependents are waiting, inspect host/data freshness, and perform the supported
+recovery action through the existing CLI. No fabricated progress or inferred success.
+For D, reconcile displayed aggregates with their underlying records for a selected
+time range, including failed, missing and stale observations. Verify filtering,
+drill-down and return navigation; missing measurements never appear as zero.
+
+Implemented in C: recorded run switching, dependency selection, bounded step
+output, request/binding inspection, fresh artifact verification with tamper refusal,
+and explicit approve/reject/resume/cancel controls. The controls retain the engine's
+separate decision/resume boundary and do not restart terminal runs. PTY tests cover
+an existing approval-wait workflow and preserve an attached shell's unsent draft
+through decisions and UI closure. Local project/head/run navigation is connected.
+Agent-authored planning and recovery are qualified in the recorded exercise; the
+compiled-plan schema is unchanged. Its approval-wait boundary was exercised through
+a separately authorized existing workflow, not added to compiled plans.
+
+Local statistics are implemented and qualified at 40x10, 80x24 and 140x40.
+Recorded verification timing is historical evidence; result retrieval independently
+checks current artifacts. Remote workflow cohorts and provider/resource telemetry
+remain future work and require explicit protocol and measurement contracts.
+
+### Milestone 6: interaction and visual polish
+
+- [x] Refine spacing, information density, restrained semantic colors, selection and
+      focus, pane titles, contextual controls and keyboard discoverability.
+- [x] Add useful search/filtering and deliberate empty, loading, disconnected,
+      failed and unavailable states. Preserve readable monochrome/ASCII behavior.
+- [x] Adapt layouts to available space, with focus/zoom for the agent conversation,
+      discoverable hidden panes, and retained selection and independent scrolling.
+
+Acceptance: inspect and interact with planning, running, waiting-for-input and failed
+workflows at 40x10, 80x24 and 140x40. Users can identify selected work, current status,
+input destination and next action without consulting raw IDs or overflowing text.
+Compare actual terminal captures against the reviewed visual target; component tests
+alone do not satisfy visual or interaction acceptance.
+
+### Milestone 7: real-workflow acceptance
+
+- [x] Run a representative multi-agent task from objective discussion and agent-
+      authored plan through revision, explicit approval, execution, intervention,
+      verification and result inspection entirely through the workspace.
+- [x] Exercise a real request for user input, a failed check and supported recovery,
+      plus detach/reconnect. Fix observed workflow friction within this scope.
+- [x] Record reproducible terminal evidence and operator findings, distinguishing
+      automated checks from hands-on usability acceptance and untested combinations.
+
+Acceptance: the operator can tell what is happening, communicate with the planning
+agent and workers, make a required decision, recover a failure and inspect verified
+results without losing context or creating another execution owner. Complete this
+workflow before describing the interface as product-ready.
+
+### Milestone 8: standalone library readiness
+
+Local source extraction, an independent Makefile, preserved licenses and the
+standalone component/PTY acceptance path are implemented. Run
+`make test-termviz-export`; see [ownership and compatibility boundaries](../src/termviz/STANDALONE.md).
+Darwin 25.6.0 arm64 with Apple Clang 17 and UBSan passed. Linux aarch64 on
+LinuxKit 6.12.67 with Debian GCC 12.2 passed standalone component/PTY checks and
+ASan/UBSan on 8 September 2026. Other platform runtime qualification remains
+unavailable. The caller-owned core and optional POSIX boundary are preserved;
+this establishes local source readiness, not a standalone release.
+
+- [x] Stabilize the API from real Hydra and standalone use, document storage/process
+      ownership and compatibility limits, and prepare an independently buildable
+      source tree with examples and tests. Compatibility remains explicitly
+      unpublished and source consumers must rebuild when updating.
+- [x] Qualify the supported platforms and package/license boundaries. Keep Hydra
+      semantics outside termviz and publish only after a separate release decision.
+
+Full terminal compatibility, a broad widget catalogue, new telemetry collection and
+remote execution changes require their own bounded scope. Local implementation and
+qualification do not authorize repository creation, pushing or publication.
+
 ## Simplification alongside feature work
 
 - [ ] Keep spawn queues, workflow scheduling, and future pools on one admission and

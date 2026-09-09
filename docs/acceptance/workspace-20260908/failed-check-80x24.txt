@@ -1,0 +1,24 @@
+ HYDRA WORKSPACE / C MONITOR / Local
+ [ ] runs / Y approve / N reject / R resume / X cancel / A conversation / B pl
+╭─PLAN / EVIDENCE─────────────────────────────────────────────────────────────╮
+│FOCUS / scroll 15                                                            │
+│OBSERVED EVIDENCE / run failed / verify                                      │
+│52']; got ['staging-only', '9999', '999', '9.99']. Expected 4 rows including │
+│header and TOTAL; got 5.                                                     │
+│                                                                             │
+│                                                                             │
+│Standard error (last 8192 bytes)                                             │
+│                                                                             │
+│                                                                             │
+│Input requests (recorded binding, expiry and decision)                       │
+│No recorded input requests.                                                  │
+│                                                                             │
+│Workspace control results (last 8192 bytes)                                  │
+│Not recorded.                                                                │
+│                                                                             │
+│Artifact verification                                                        │
+│Not verified: the run has not succeeded.                                     │
+│                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
+Current snapshot / age 2s / Focused pane expanded / z restores splits
+Tab focus z zoom a interact S split D stats q quit

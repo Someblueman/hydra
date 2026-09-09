@@ -5,5 +5,5 @@
 
 /* argv is borrowed; returned JSON belongs to the caller. */
 json_object *f_cli(int argc, char **argv);
-int f_tui_data(unsigned seconds, unsigned jobs);
+int f_tui_data(unsigned seconds, unsigned jobs, bool hosts);
 #endif

@@ -1,0 +1,10 @@
+ HYDRA WORKSPACE / C MONITOR / Local
+FOCUS / PLAN / EVIDENCE
+OBSERVED / failed / spawn
+Workflow run_0e6123d7d1ce8fff341f: fail
+ed (source: recorded)
+  spawn [spawn]: succeeded (attempts=1)
+  preflight [exec]: succeeded (attempts
+=1)
+  compose [exec]: succeeded (attempts=1
+Y approve N reject R resume X cancel

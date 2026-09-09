@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "verdict": "pass",
+  "subject_sha256": "3198ee2db843848077545dfda13cac114fe4e04ad58f789c51c6e98672c55c70",
+  "requirements": [
+    "production-report"
+  ],
+  "evidence": "Exact CSV cells match independent production aggregation: 2 services alphabetically, then TOTAL; requests=2300, errors=12, error_rate_pct=0.52. Header, two-decimal rates, row count and exclusion of non-production contributions verified."
+}

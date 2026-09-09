@@ -3,6 +3,30 @@
 cmd_workflow() {
     _cw_action="${1:-}"
     case "$_cw_action" in
+        tui-data)
+            _load_lib workflow_tui
+            workflow_tui_data
+            ;;
+        --workspace-links)
+            [ "$#" -eq 1 ] || return 2
+            _load_lib workflow_links
+            workflow_links
+            ;;
+        --workspace-control)
+            _load_lib workflow_control
+            shift
+            workflow_control "$@"
+            ;;
+        --workspace-evidence)
+            _load_lib workflow_evidence
+            shift
+            workflow_evidence "$@"
+            ;;
+        statistics-data)
+            [ "$#" -eq 1 ] || return 2
+            _load_lib workflow_statistics
+            workflow_statistics_data
+            ;;
         plan) shift; cmd_workflow_plan "$@" ;;
         -h|--help|'')
             printf '%s\n' \
@@ -59,6 +83,7 @@ cmd_workflow() {
             workflow_atomic_scalar "$_cw_tmp/run-id" "$_cw_run"
             workflow_atomic_scalar "$_cw_tmp/schema-version" 1
             workflow_atomic_scalar "$_cw_tmp/runtime-version" 1
+            workflow_atomic_scalar "$_cw_tmp/recovery-count" 0
             workflow_atomic_scalar "$_cw_tmp/project-id" "$_cw_project"
             workflow_atomic_scalar "$_cw_tmp/definition-path" "$_cw_file"
             workflow_atomic_scalar "$_cw_tmp/definition-hash" "$_cw_hash"
@@ -92,6 +117,9 @@ cmd_workflow() {
             : > "$_cw_tmp/events.jsonl"
             mv "$_cw_tmp" "$_cw_dir" || { rm -rf "$_cw_tmp"; return 1; }
             workflow_event "$_cw_dir" "" run.created
+            if [ -n "${_workflow_plan_launch:-}" ]; then
+                workflow_atomic_scalar "$_workflow_plan_launch/run-id" "$_cw_run" || return 1
+            fi
             printf '%s\n' "$_cw_run"
             workflow_drive "$_cw_dir"
             ;;

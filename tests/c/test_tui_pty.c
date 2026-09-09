@@ -22,6 +22,7 @@ struct session {
     int master;
     int slave;
     struct termios original;
+    bool slow_output;
 };
 
 static int tests;
@@ -108,7 +109,9 @@ static void child_session(const struct session *session, const char *tui, const 
     if (getenv("HYDRA_TEST_COLOR") != NULL) unsetenv("NO_COLOR");
     else setenv("NO_COLOR", "1", 1);
     setenv("PATH", path, 1);
-    execl(tui_path, tui_path, "--hydra", hydra_path, (char *)NULL);
+    if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
+    else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
+    else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "heads", (char *)NULL);
     _exit(127);
 }
 
@@ -155,6 +158,14 @@ static bool wait_for_raw(struct session *session) {
     return false;
 }
 
+static ssize_t read_marker_output(struct session *session, char *buffer, size_t size) {
+    ssize_t length;
+    if (session->slow_output && size > 64U) size = 64U;
+    length = read(session->master, buffer, size);
+    if (session->slow_output && length > 0) sleep_ms(2);
+    return length;
+}
+
 /* Keep both observations: one PTY read can contain the entire frame. */
 static bool wait_for_markers(struct session *session, const char *marker,
                              const char *second, long timeout_ms) {
@@ -163,7 +174,7 @@ static bool wait_for_markers(struct session *session, const char *marker,
     size_t used = 0U;
     long long deadline = monotonic_ms() + timeout_ms;
     while (monotonic_ms() < deadline) {
-        ssize_t length = read(session->master, captured + used, sizeof(captured) - used - 1U);
+        ssize_t length = read_marker_output(session, captured + used, sizeof(captured) - used - 1U);
         if (length > 0) {
             used += (size_t)length;
             captured[used] = '\0';
@@ -461,6 +472,8 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
     return 0;
 }
 
+#include "test_tui_visualization.inc"
+
 int main(int argc, char **argv) {
     if (argc == 5 && strcmp(argv[1], "--measure") == 0) {
         return measure_interactive(argv[2], argv[3], argv[4]);
@@ -473,6 +486,9 @@ int main(int argc, char **argv) {
     test_session_failure();
     test_themes(argv[1], argv[2], argv[3]);
     test_mouse(argv[1], argv[2], argv[3]);
+    test_visualization(argv[1], argv[2], argv[3]);
+    test_visualization_refresh(argv[1], argv[2], argv[3]);
+    test_visualization_hosts(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
     test_palette(argv[1], argv[2], argv[3]);

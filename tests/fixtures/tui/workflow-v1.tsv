@@ -1,0 +1,8 @@
+HYDRA_WORKFLOW_TUI	1
+W	run_aaaaaaaaaaaaaaaaaaaa	visualization-proof	running
+N	run_aaaaaaaaaaaaaaaaaaaa	prepare	spawn	succeeded	1	-
+N	run_aaaaaaaaaaaaaaaaaaaa	build	exec	running	1	prepare
+N	run_aaaaaaaaaaaaaaaaaaaa	tests	exec	failed	2	prepare
+N	run_aaaaaaaaaaaaaaaaaaaa	review	message	queued	0	build,tests
+W	run_bbbbbbbbbbbbbbbbbbbb	second-run	succeeded
+N	run_bbbbbbbbbbbbbbbbbbbb	finish	exec	succeeded	1	-

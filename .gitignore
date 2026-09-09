@@ -22,3 +22,6 @@ CLAUDE.md
 # Generated native build and packaging outputs
 build/
 dist/
+
+# Python test bytecode
+__pycache__/

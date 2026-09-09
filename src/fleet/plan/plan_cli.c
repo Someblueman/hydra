@@ -56,9 +56,16 @@ static json_object *preview_command(char **argv, bool *printed) {
     json_object *compiled = NULL;
 
     compiled = plan_read(argv[1]);
-    if (compiled && !plan_preview(compiled)) { json_object_put(compiled); *printed = true; return NULL; }
+    if (compiled && !plan_preview(compiled, stdout)) { json_object_put(compiled); *printed = true; return NULL; }
     json_object_put(compiled);
     return result;
+}
+
+static json_object *tui_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]);
+    if (compiled && !plan_tui(compiled)) *printed = true;
+    json_object_put(compiled);
+    return NULL;
 }
 
 static json_object *result_command(char **argv, bool *printed) {
@@ -70,7 +77,9 @@ static json_object *result_command(char **argv, bool *printed) {
     if (!f_path(path, sizeof(path), argv[1], "state")) state = f_read(path, 64);
     if (state && !strcmp(state, "succeeded\n")) {
         json_object *delivery = plan_delivery(argv[1]);
-        if (delivery) result = f_success("workflow plan result", delivery);
+        if (delivery && !strcmp(argv[0], "result-view")) {
+            plan_delivery_view(delivery); json_object_put(delivery); *printed = true;
+        } else if (delivery) result = f_success("workflow plan result", delivery);
     }
     free(state);
     return result;
@@ -219,7 +228,9 @@ json_object *plan_cli(int argc, char **argv) {
         json_object *(*call)(char **argv, bool *printed);
     } commands[] = {
         {"preview", 2, preview_command},
+        {"tui-data", 2, tui_command},
         {"result", 2, result_command},
+        {"result-view", 2, result_command},
         {"show", 2, show_command},
         {"admit", 5, admit_command},
         {"finish", 2, finish_command},

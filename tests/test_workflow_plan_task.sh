@@ -79,6 +79,9 @@ fi
 "$root/bin/hydra" workflow plan compile "$fixture/plan.json" "$fixture/policy.json" "$fixture/compiled.json" > "$fixture/compile.json"
 digest="$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$fixture/compile.json")"
 "$root/bin/hydra" workflow plan show "$fixture/compiled.json" > "$fixture/preview"
+"$root/bin/hydra" workflow plan tui-data "$fixture/compiled.json" > "$fixture/tui-preview"
+grep -q 'transport:' "$fixture/tui-preview"
+grep -q 'repairs' "$fixture/tui-preview"
 code=0
 "$root/bin/hydra" workflow plan run "$fixture/compiled.json" --accept "$digest" > "$fixture/run.out" 2> "$fixture/run.err" || code=$?
 run="$(sed -n '1p' "$fixture/run.out")"

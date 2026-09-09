@@ -1,11 +1,11 @@
 #define _POSIX_C_SOURCE 200809L
-#include "model.h"
+#include "internal.h"
 #include "text.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 
-static size_t split_fields(char *line, char **fields, size_t capacity) {
+size_t split_fields(char *line, char **fields, size_t capacity) {
     size_t count = 0U;
     char *cursor = line;
     if (capacity == 0U) return 0U;
@@ -81,11 +81,47 @@ static int head_record(struct model *model, char **fields, char *error, size_t e
     return 0;
 }
 
+static int host_record(struct model *model, char **fields, char *error, size_t error_size) {
+    struct host_observation *host;
+    size_t i;
+    if (model->host_count == 16 || !fields[1][0] || strlen(fields[1]) >= 128 || strlen(fields[4]) >= 128 ||
+        (strcmp(fields[2], "responded") && strcmp(fields[2], "failed"))) {
+        copy_text(error, error_size, "invalid fleet host observation"); return -1;
+    }
+    for (i = 0; i < model->host_count; i++) if (!strcmp(model->hosts[i].name, fields[1])) {
+        copy_text(error, error_size, "duplicate fleet host observation"); return -1;
+    }
+    host = &model->hosts[model->host_count++];
+    copy_text(host->name, sizeof(host->name), fields[1]); copy_text(host->state, sizeof(host->state), fields[2]);
+    copy_text(host->error, sizeof(host->error), fields[4]);
+    if (!parse_unsigned(fields[3], &host->heads)) { copy_text(error, error_size, "invalid fleet head count"); return -1; }
+    return 0;
+}
+
+static bool valid_handshake(size_t count, char **fields) {
+    if (count != 2U) return false;
+    if (!strcmp(fields[0], "HYDRA_TUI")) return !strcmp(fields[1], "2");
+    return !strcmp(fields[0], "HYDRA_FLEET_TUI") &&
+        (!strcmp(fields[1], "1") || !strcmp(fields[1], "2"));
+}
+
+static void recovery_record(struct model *model, char **fields) {
+    struct recovery *recovery;
+    if (model->recovery_count >= MAX_RECOVERY) return;
+    recovery = &model->recovery[model->recovery_count++];
+    memset(recovery, 0, sizeof(*recovery));
+    copy_text(recovery->kind, sizeof(recovery->kind), fields[1]);
+    copy_text(recovery->label, sizeof(recovery->label), fields[2]);
+    copy_text(recovery->source, sizeof(recovery->source), fields[3]);
+    copy_text(recovery->confidence, sizeof(recovery->confidence), fields[4]);
+    copy_text(recovery->action, sizeof(recovery->action), fields[5]);
+}
+
 int load_model_stream(FILE *input, struct model *model, char *error, size_t error_size) {
     char *line = NULL;
     size_t line_size = 0U;
     ssize_t length;
-    bool handshake = false, fleet_stream = false;
+    bool handshake = false, fleet_stream = false, fleet_hosts = false;
     memset(model, 0, sizeof(*model));
     while ((length = getline(&line, &line_size, input)) >= 0) {
         char *fields[40];
@@ -94,29 +130,24 @@ int load_model_stream(FILE *input, struct model *model, char *error, size_t erro
         if (length > 0 && line[length - 1] == '\r') line[--length] = '\0';
         count = split_fields(line, fields, sizeof(fields) / sizeof(fields[0]));
         if (!handshake) {
-            if (count != 2U || !((strcmp(fields[0], "HYDRA_TUI") == 0 && strcmp(fields[1], "2") == 0) || (strcmp(fields[0], "HYDRA_FLEET_TUI") == 0 && strcmp(fields[1], "1") == 0))) {
+            if (!valid_handshake(count, fields)) {
                 copy_text(error, error_size, "native data protocol handshake failed");
                 free(line);
                 return -1;
             }
             fleet_stream = strcmp(fields[0], "HYDRA_FLEET_TUI") == 0;
+            fleet_hosts = fleet_stream && !strcmp(fields[1], "2");
             handshake = true;
             continue;
         }
-        if (fleet_stream && count == 7U && strcmp(fields[0], "F") == 0) {
+        if (fleet_hosts && count == 5 && !strcmp(fields[0], "T")) {
+            if (host_record(model, fields, error, error_size)) { free(line); return -1; }
+        } else if (fleet_stream && count == 7U && strcmp(fields[0], "F") == 0) {
             if (fleet_record(model, fields, error, error_size)) { free(line); return -1; }
         } else if (!fleet_stream && count == 30U && strcmp(fields[0], "H") == 0) {
             if (head_record(model, fields, error, error_size)) { free(line); return -1; }
         } else if (count == 6U && strcmp(fields[0], "R") == 0) {
-            struct recovery *recovery;
-            if (model->recovery_count >= MAX_RECOVERY) continue;
-            recovery = &model->recovery[model->recovery_count++];
-            memset(recovery, 0, sizeof(*recovery));
-            copy_text(recovery->kind, sizeof(recovery->kind), fields[1]);
-            copy_text(recovery->label, sizeof(recovery->label), fields[2]);
-            copy_text(recovery->source, sizeof(recovery->source), fields[3]);
-            copy_text(recovery->confidence, sizeof(recovery->confidence), fields[4]);
-            copy_text(recovery->action, sizeof(recovery->action), fields[5]);
+            recovery_record(model, fields);
         } else {
             copy_text(error, error_size, "native data contains a malformed record");
             free(line);
