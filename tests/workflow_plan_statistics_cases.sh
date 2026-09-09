@@ -15,8 +15,8 @@ for timing_field in verified-at verification-plan-sha256; do
         "$HYDRA_BIN" workflow plan run "$ROOT/timing-$timing_field.json" --accept "$timing_digest" \
         > "$ROOT/timing-$timing_field.out" 2> "$ROOT/timing-$timing_field.err"
     assert_success $? "optional $timing_field persistence failure preserves verified delivery"
-    test -f "$ROOT/timing-$timing_field.fault" && test -f "$ROOT/timing-$timing_field.fault.seeded"
-    assert_success $? "injected $timing_field write failure after seeding old timing"
+    if [ -f "$ROOT/timing-$timing_field.fault" ] && [ -f "$ROOT/timing-$timing_field.fault.seeded" ]; then timing_marker_status=0; else timing_marker_status=1; fi
+    assert_success "$timing_marker_status" "injected $timing_field write failure after seeding old timing"
     timing_run="$(sed -n '1p' "$ROOT/timing-$timing_field.out")"
     timing_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$timing_run" -print)"
     assert_equal succeeded "$(cat "$timing_dir/state")" "verified plan succeeds without $timing_field"
