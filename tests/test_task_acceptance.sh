@@ -269,7 +269,7 @@ for sealed_id in "$workflow_id" "$execution_id"; do
     grep -q '"result_state":"ready"' "$fixture/seal-status"
 done
 task result build --id "$workflow_id" > "$fixture/workflow-result"
-task observe build --id "$workflow_id" --event-limit 2 > "$fixture/workflow-observation"
+task observe build --id "$workflow_id" --event-limit 2 > "$fixture/workflow-observation" || { cat "$fixture/workflow-observation"; exit 1; }
 grep -q '"event_observation"' "$fixture/workflow-observation"
 grep -q '"attempt_history"' "$fixture/workflow-observation"
 grep -q '"artifact_inventory"' "$fixture/workflow-observation"
@@ -299,7 +299,7 @@ if grep -q '"sequence":' "$fixture/workflow-observation"; then
     [ -n "$first_sequence" ]
     if grep -q "\"sequence\":$first_sequence" "$fixture/workflow-reconnect"; then exit 1; fi
 fi
-task observe build --id "$workflow_id" --stream-id replaced-stream > "$fixture/workflow-reset"
+task observe build --id "$workflow_id" --stream-id replaced-stream > "$fixture/workflow-reset" || { cat "$fixture/workflow-reset"; exit 1; }
 grep -q '"stream_reset":true' "$fixture/workflow-reset"
 grep -q '"events":\[\]' "$fixture/workflow-reset"
 cp "$events_path" "$fixture/events-saved"
@@ -322,6 +322,7 @@ bulk_cursor=0
 bulk_offset=0
 bulk_stream=
 bulk_seen=0
+bulk_saw_truncated=0
 while [ "$bulk_cursor" -lt 200 ]; do
     if [ -n "$bulk_stream" ]; then
         task observe build --id "$workflow_id" --cursor "$bulk_cursor" --event-limit 128 --byte-offset "$bulk_offset" --stream-id "$bulk_stream" > "$fixture/bulk-observation"
@@ -339,17 +340,19 @@ for index, event in enumerate(events, cursor + 1):
     if event["sequence"] != index:
         raise SystemExit("non-contiguous event sequence")
 print(observation["next_cursor"], observation["next_byte_offset"],
-      observation["stream_id"], len(events), observation["scan_truncated"])
+      observation["stream_id"], len(events), str(observation["scan_truncated"]).lower())
 PY
 )"
     # shellcheck disable=SC2086
     set -- $bulk_values
     bulk_cursor=$1; bulk_offset=$2; bulk_stream=$3; bulk_count=$4; bulk_truncated=$5
     [ "$bulk_count" -gt 0 ]
+    [ "$bulk_truncated" = true ] && bulk_saw_truncated=1
     bulk_seen=$((bulk_seen + bulk_count))
 done
 [ "$bulk_seen" -eq 200 ]
-[ "$bulk_truncated" = true ]
+[ "$bulk_saw_truncated" -eq 1 ]
+[ "$bulk_truncated" = false ]
 printf '%s\n' '{"schema_version":1,"sequence":201,"type":"bulk.append"}' >> "$events_path"
 task observe build --id "$workflow_id" --cursor 200 --byte-offset "$bulk_offset" --stream-id "$bulk_stream" > "$fixture/bulk-append"
 grep -q '"sequence":201' "$fixture/bulk-append"
@@ -368,6 +371,12 @@ grep -q '"next_byte_offset":0' "$fixture/bulk-replaced-stream"
 printf '%s' '{"schema_version":1,"sequence":202' >> "$events_path"
 task observe build --id "$workflow_id" --cursor 201 --byte-offset "$bulk_append_offset" --stream-id "$bulk_stream" > "$fixture/bulk-partial"
 grep -q '"stream_reset":true' "$fixture/bulk-partial"
+grep -q "\"next_byte_offset\":$bulk_append_offset" "$fixture/bulk-partial"
+truncate -s "$bulk_append_offset" "$events_path"
+printf '%s\n' '{"schema_version":1,"sequence":201,"type":"bulk.duplicate"}' >> "$events_path"
+task observe build --id "$workflow_id" --cursor 200 --byte-offset "$bulk_offset" --stream-id "$bulk_stream" > "$fixture/bulk-duplicate"
+grep -q '"stream_reset":true' "$fixture/bulk-duplicate"
+grep -q "\"next_byte_offset\":$bulk_offset" "$fixture/bulk-duplicate"
 cp "$fixture/events-saved" "$events_path"
 grep -q '"result_sha256":' "$fixture/workflow-result"
 grep -q '"path":"result.txt"' "$fixture/workflow-result"
