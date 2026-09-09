@@ -122,6 +122,18 @@ static void structured_recipe_controls(json_object *compiled, json_object *check
     for (size_t i = 0; bad[i]; i++) { f_string_add(check, "definition", bad[i]); assert(!plan_recipe_digest(compiled, "check", recipe)); f_string_add(record, "validator_recipe_sha256", recipe); assert(plan_report(compiled, check, report, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") == PLAN_INVALID); }
     f_string_add(check, "definition", "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"case-1\",\"expected\":1}]}"); assert(!plan_recipe_digest(compiled, "check", recipe)); f_string_add(record, "validator_recipe_sha256", recipe);
 }
+static void assessment_report_cases(json_object *compiled, json_object *check, json_object *report, json_object *record, const char *subject, char recipe[65]) {
+    json_object *observation = json_object_array_get_idx(f_field(record, "observations"), 0), *raw = f_field(observation, "raw"), *counts = f_field(record, "counts"); char validator[65], evidence_hash[65];
+    f_string_add(check, "method", "assessment"); f_string_add(check, "definition", "Rubric text");
+    f_string_add(f_field(json_object_array_get_idx(f_field(f_field(compiled, "plan"), "obligations"), 0), "evaluation"), "method", "assessment");
+    f_string_add(observation, "id", "obligation"); json_object_object_add(record, "case_inventory", f_parse_value("[\"obligation\"]")); f_string_add(raw, "verdict", "pass"); f_string_add(raw, "explanation", "Accepted");
+    json_object_object_add(record, "reviewer_decision", f_parse_value("{\"rubric\":\"Rubric text\",\"source_locators\":[\"fixture\"],\"disagreement\":\"None\",\"authority\":\"fixture\"}"));
+    assert(!plan_check_digest(compiled, "check", validator) && !plan_recipe_digest(compiled, "check", recipe)); f_string_add(report, "validator_sha256", validator); f_string_add(record, "validator_recipe_sha256", recipe); assert(!plan_digest(raw, validator)); f_string_add(observation, "raw_sha256", validator); assert(!plan_digest(f_field(record, "observations"), evidence_hash)); f_string_add(record, "raw_evidence_sha256", evidence_hash); assert(plan_report(compiled, check, report, subject) == PLAN_PASS);
+    f_string_add(raw, "verdict", "fail"); json_object_object_add(counts, "failed", json_object_new_int(1)); f_string_add(report, "domain_verdict", "fail"); f_string_add(report, "verdict", "fail"); assert(!plan_digest(raw, validator)); f_string_add(observation, "raw_sha256", validator); assert(!plan_digest(f_field(record, "observations"), evidence_hash)); f_string_add(record, "raw_evidence_sha256", evidence_hash); assert(plan_report(compiled, check, report, subject) == PLAN_FAIL);
+    json_object_object_add(counts, "failed", json_object_new_int(0)); f_string_add(raw, "verdict", "inconclusive"); f_string_add(report, "domain_verdict", "inconclusive"); f_string_add(report, "verdict", "inconclusive"); assert(!plan_digest(raw, validator)); f_string_add(observation, "raw_sha256", validator); assert(!plan_digest(f_field(record, "observations"), evidence_hash)); f_string_add(record, "raw_evidence_sha256", evidence_hash); assert(plan_report(compiled, check, report, subject) == PLAN_INCONCLUSIVE);
+    json_object_object_del(f_field(record, "reviewer_decision"), "authority"); assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    f_string_add(check, "definition", "Changed rubric"); assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+}
 static void structured_report_cases(void) {
     const char *subject = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     char validator[65], recipe[65], raw_hash[65], evidence_hash[65];
@@ -141,6 +153,7 @@ static void structured_report_cases(void) {
     assert(plan_report(compiled, check, report, subject) == PLAN_PASS); record = json_object_array_get_idx(f_field(report, "evidence_records"), 0);
     structured_measurement_controls(compiled, check, report, record, subject, raw_hash, evidence_hash);
     structured_recipe_controls(compiled, check, report, record, recipe);
+    assessment_report_cases(compiled, check, report, record, subject, recipe);
     json_object_object_del(f_field(record, "invocation"), "exit_code"); json_object_object_add(f_field(record, "invocation"), "exit_code", json_object_new_int(1)); assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
     json_object_object_del(f_field(record, "invocation"), "exit_code"); json_object_object_add(f_field(record, "invocation"), "exit_code", json_object_new_int(0)); json_object_object_del(record, "case_inventory"); assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
     json_object_put(report); json_object_put(raw); json_object_put(compiled);
