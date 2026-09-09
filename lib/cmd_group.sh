@@ -122,8 +122,12 @@ cmd_group_wait() {
         # Re-read mappings in case sessions were killed
         mappings="$(state_list_heads_for_group "$group_name")"
 
-        # Cache tmux sessions once per poll iteration (perf: avoid N subprocess calls)
-        _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+        # Cache tmux sessions once per poll iteration (perf: avoid N
+        # subprocess calls). Headless heads have no terminal to probe.
+        _cached_tmux_sessions=""
+        if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then
+            _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+        fi
         _session_exists_cached() {
             echo "$_cached_tmux_sessions" | grep -qx "$1" 2>/dev/null
         }
@@ -134,6 +138,15 @@ cmd_group_wait() {
             : > "$tmp_active"
 
             printf '%s\n' "$mappings" | while IFS=' ' read -r branch session _rest; do
+                if [ "$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)" = headless ] || [ "$session" = - ]; then
+                    _group_head_dir="$(_state_head_dir "$branch" 2>/dev/null || true)"
+                    _group_instance="$(sed -n '1p' "$_group_head_dir/current-instance" 2>/dev/null || true)"
+                    _group_observed="$(sed -n '1p' "$_group_head_dir/instances/$_group_instance/observed-status" 2>/dev/null || true)"
+                    case "$_group_observed" in
+                        idle|exited|failed|unavailable) continue ;;
+                        *) echo "$branch" >> "$tmp_active"; continue ;;
+                    esac
+                fi
                 if _session_exists_cached "$session"; then
                     echo "$branch" >> "$tmp_active"
                 fi
@@ -213,7 +226,8 @@ cmd_group_status() {
     : > "$tmp_sessions"
 
     printf '%s\n' "$mappings" | while IFS=' ' read -r branch session ai _group timestamp deps pr; do
-        if tmux_session_exists "$session"; then
+        _group_mode="$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)"
+        if [ "$_group_mode" = headless ] || [ "$session" = - ] || tmux_session_exists "$session"; then
             status="active"
         else
             status="dead"
@@ -227,14 +241,14 @@ cmd_group_status() {
         fi
 
         # Store session info
-        echo "$branch|$session|$status|${ai:-"-"}|$duration_secs|${deps:-"-"}|${pr:-"-"}" >> "$tmp_sessions"
+        echo "$branch|$session|$_group_mode|$status|${ai:-"-"}|$duration_secs|${deps:-"-"}|${pr:-"-"}" >> "$tmp_sessions"
     done
 
     if [ -n "$json_output" ]; then
         # JSON output
         printf '{"schema_version":1,"ok":true,"command":"group status","data":{"group":"%s","sessions":[' "$(json_escape "$group_name")"
         first=1
-        while IFS='|' read -r branch session status ai duration_secs deps pr; do
+        while IFS='|' read -r branch session group_mode status ai duration_secs deps pr; do
             [ "$first" -eq 1 ] && first=0 || printf ','
 
             # Handle optional fields
@@ -247,9 +261,10 @@ cmd_group_status() {
             pr_json="null"
             [ -n "$pr" ] && [ "$pr" != "-" ] && pr_json="$pr"
 
-            printf '{"branch": "%s", "session": "%s", "status": "%s", "ai": %s, "duration_seconds": %s, "deps": %s, "pr": %s}' \
+            printf '{"branch": "%s", "session": "%s", "terminal_mode": "%s", "status": "%s", "ai": %s, "duration_seconds": %s, "deps": %s, "pr": %s}' \
                 "$(json_escape "$branch")" \
                 "$(json_escape "$session")" \
+                "$(json_escape "$group_mode")" \
                 "$status" \
                 "$ai_json" \
                 "$duration_secs" \
@@ -269,7 +284,7 @@ cmd_group_status() {
         echo "=========================="
         echo ""
 
-        while IFS='|' read -r branch session status ai duration_secs deps pr; do
+        while IFS='|' read -r branch session group_mode status ai duration_secs deps pr; do
             # Build status indicator
             case "$status" in
                 active)
@@ -295,7 +310,7 @@ cmd_group_status() {
             [ -n "$deps" ] && [ "$deps" != "-" ] && info="$info [deps: $deps]"
             [ -n "$pr" ] && [ "$pr" != "-" ] && info="$info [PR #$pr]"
 
-            printf "  %-6s %s -> %s %s\n" "$status_str" "$branch" "$session" "$info"
+            printf "  %-6s %s -> %s [%s] %s\n" "$status_str" "$branch" "$session" "$group_mode" "$info"
         done < "$tmp_sessions"
 
         echo ""

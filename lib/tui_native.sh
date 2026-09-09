@@ -127,13 +127,22 @@ tui_native_emit_invalid_heads() {
         _tneih_id="$(basename "$_tneih_dir")"
         _tneih_branch="$(sed -n '1p' "$_tneih_dir/branch" 2>/dev/null || true)"
         _tneih_instance="$(sed -n '1p' "$_tneih_dir/current-instance" 2>/dev/null || true)"
+        _tneih_mode="$( [ -s "$_tneih_dir/terminal-mode" ] && sed -n '1p' "$_tneih_dir/terminal-mode" || echo interactive )"
+        _tneih_instance_mode="$( [ -s "$_tneih_dir/instances/$_tneih_instance/terminal-mode" ] && sed -n '1p' "$_tneih_dir/instances/$_tneih_instance/terminal-mode" || echo interactive )"
         if ! hydra_valid_id "$_tneih_id" || \
            [ "$(sed -n '1p' "$_tneih_dir/head-id" 2>/dev/null || true)" != "$_tneih_id" ] || \
            [ -z "$_tneih_branch" ] || \
            [ -z "$(sed -n '1p' "$_tneih_dir/session" 2>/dev/null || true)" ] || \
+           { [ -f "$_tneih_dir/terminal-mode" ] && ! grep -Eq '^(interactive|headless)$' "$_tneih_dir/terminal-mode"; } || \
+           { [ "$_tneih_mode" = headless ] && [ "$(sed -n '1p' "$_tneih_dir/session" 2>/dev/null || true)" != - ]; } || \
+           { [ "$_tneih_mode" = interactive ] && [ "$(sed -n '1p' "$_tneih_dir/session" 2>/dev/null || true)" = - ]; } || \
            ! hydra_valid_id "$_tneih_instance" || \
            [ ! -d "$_tneih_dir/instances/$_tneih_instance" ] || \
-           [ "$(sed -n '1p' "$_tneih_dir/instances/$_tneih_instance/instance-id" 2>/dev/null || true)" != "$_tneih_instance" ]; then
+           [ "$(sed -n '1p' "$_tneih_dir/instances/$_tneih_instance/instance-id" 2>/dev/null || true)" != "$_tneih_instance" ] || \
+           { [ -f "$_tneih_dir/instances/$_tneih_instance/terminal-mode" ] && ! grep -Eq '^(interactive|headless)$' "$_tneih_dir/instances/$_tneih_instance/terminal-mode"; } || \
+           [ "$_tneih_instance_mode" != "$_tneih_mode" ] || \
+           { [ "$_tneih_instance_mode" = headless ] && [ "$(sed -n '1p' "$_tneih_dir/instances/$_tneih_instance/session" 2>/dev/null || true)" != - ]; } || \
+           { [ "$_tneih_instance_mode" = interactive ] && [ "$(sed -n '1p' "$_tneih_dir/instances/$_tneih_instance/session" 2>/dev/null || true)" = - ]; }; then
             printf 'R\tmalformed-state\t%s\t%s\texact\thydra state verify\n' \
                 "$(tui_native_safe_field "${_tneih_branch:-$_tneih_id}")" \
                 "$(tui_native_safe_field "$_tneih_dir")"
@@ -145,7 +154,7 @@ tui_native_emit_invalid_heads() {
 # Fields never contain tabs or newlines. The first row is the protocol handshake.
 tui_native_emit_data() {
     printf 'HYDRA_TUI\t2\n'
-    tmux_load_snapshot
+    if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then tmux_load_snapshot; else tmux_clear_snapshot; fi
     _tned_project_id="$(hydra_get_project_id 2>/dev/null || true)"
     _tned_project_dir=""
     if [ -n "$_tned_project_id" ]; then
@@ -169,8 +178,14 @@ tui_native_emit_data() {
 
     while IFS=' ' read -r _tned_status _tned_branch _tned_session _tned_ai _tned_group _tned_created _tned_deps _tned_pr _tned_extra; do
         [ -n "$_tned_branch" ] || continue
+        _tned_mode="$(get_terminal_mode_for_branch "$_tned_branch" 2>/dev/null || echo interactive)"
         _tned_liveness=stopped
-        if [ "$_tned_status" = active ]; then
+        if [ "$_tned_mode" = headless ]; then
+            _tned_status=active
+            # Native observation has no process-owner probe; preserve the
+            # distinction between active intent and unknown liveness.
+            _tned_liveness=unavailable
+        elif [ "$_tned_status" = active ]; then
             _tned_liveness=live
         fi
 

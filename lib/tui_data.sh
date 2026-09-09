@@ -22,8 +22,8 @@ tui_build_list() {
         return 0
     fi
 
-    # Batch tmux observation for this refresh
-    tmux_load_snapshot
+    # Batch tmux observation only when at least one interactive head exists.
+    if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then tmux_load_snapshot; else tmux_clear_snapshot; fi
     _now="$(date +%s)"
 
     # Read active head records and write to temp file with status
@@ -31,7 +31,11 @@ tui_build_list() {
     while IFS=' ' read -r branch session ai group _ts _deps _pr; do
         [ -z "$branch" ] && continue
 
-        if tmux_snapshot_has_session "$session" 2>/dev/null; then
+        _tui_mode="$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)"
+        if [ "$_tui_mode" = headless ] || [ "$session" = - ]; then
+            sess_status="ALIVE"
+            activity="IDLE"
+        elif tmux_snapshot_has_session "$session" 2>/dev/null; then
             sess_status="ALIVE"
             activity="IDLE"
 
@@ -43,45 +47,45 @@ tui_build_list() {
                 activity="BUSY"
             elif [ "$_win_act" -eq 0 ]; then
                 # Fallback: pane hashing when window_activity is unavailable
-            if [ -n "$TUI_ACTIVITY_DIR" ] && [ -d "$TUI_ACTIVITY_DIR" ]; then
-                hash_file="$TUI_ACTIVITY_DIR/${session}.hash"
-                time_file="$TUI_ACTIVITY_DIR/${session}.time"
-                _activity_interval="${HYDRA_TUI_ACTIVITY_INTERVAL:-3}"
-                _now="$(date +%s)"
-                _skip_capture=0
-                if [ -f "$hash_file" ] && [ -f "$time_file" ]; then
-                    _last_time="$(cat "$time_file" 2>/dev/null || echo 0)"
-                    if [ "$(( _now - _last_time ))" -lt "$_activity_interval" ]; then
-                        _skip_capture=1
-                        if [ "$(( _now - _last_time ))" -lt 5 ]; then
-                            activity="BUSY"
-                        fi
-                    fi
-                fi
-                if [ "$_skip_capture" -eq 0 ]; then
-                    current_hash="$(tmux capture-pane -t "$session" -p 2>/dev/null | cksum)"
-                    if [ -f "$hash_file" ]; then
-                        last_hash="$(cat "$hash_file")"
-                        if [ "$current_hash" != "$last_hash" ]; then
-                            activity="BUSY"
-                            echo "$current_hash" > "$hash_file"
-                            echo "$_now" > "$time_file"
-                        else
-                            if [ -f "$time_file" ]; then
-                                last_time="$(cat "$time_file")"
-                                idle_secs=$((_now - last_time))
-                                if [ "$idle_secs" -lt 5 ]; then
-                                    activity="BUSY"
-                                fi
+                if [ -n "$TUI_ACTIVITY_DIR" ] && [ -d "$TUI_ACTIVITY_DIR" ]; then
+                    hash_file="$TUI_ACTIVITY_DIR/${session}.hash"
+                    time_file="$TUI_ACTIVITY_DIR/${session}.time"
+                    _activity_interval="${HYDRA_TUI_ACTIVITY_INTERVAL:-3}"
+                    _now="$(date +%s)"
+                    _skip_capture=0
+                    if [ -f "$hash_file" ] && [ -f "$time_file" ]; then
+                        _last_time="$(cat "$time_file" 2>/dev/null || echo 0)"
+                        if [ "$(( _now - _last_time ))" -lt "$_activity_interval" ]; then
+                            _skip_capture=1
+                            if [ "$(( _now - _last_time ))" -lt 5 ]; then
+                                activity="BUSY"
                             fi
                         fi
-                    else
-                        echo "$current_hash" > "$hash_file"
-                        echo "$_now" > "$time_file"
-                        activity="BUSY"
+                    fi
+                    if [ "$_skip_capture" -eq 0 ]; then
+                        current_hash="$(tmux capture-pane -t "$session" -p 2>/dev/null | cksum)"
+                        if [ -f "$hash_file" ]; then
+                            last_hash="$(cat "$hash_file")"
+                            if [ "$current_hash" != "$last_hash" ]; then
+                                activity="BUSY"
+                                echo "$current_hash" > "$hash_file"
+                                echo "$_now" > "$time_file"
+                            else
+                                if [ -f "$time_file" ]; then
+                                    last_time="$(cat "$time_file")"
+                                    idle_secs=$((_now - last_time))
+                                    if [ "$idle_secs" -lt 5 ]; then
+                                        activity="BUSY"
+                                    fi
+                                fi
+                            fi
+                        else
+                            echo "$current_hash" > "$hash_file"
+                            echo "$_now" > "$time_file"
+                            activity="BUSY"
+                        fi
                     fi
                 fi
-            fi
             fi
         else
             sess_status="DEAD"
@@ -160,6 +164,12 @@ tui_capture_preview() {
 
     if [ -z "$_session" ]; then
         printf "%s(no session)%s\n" "$TUI_DIM" "$TUI_RESET"
+        return 0
+    fi
+
+    _preview_branch="$(get_branch_for_session "$_session" 2>/dev/null || true)"
+    if [ -n "$_preview_branch" ] && [ "$(get_terminal_mode_for_branch "$_preview_branch" 2>/dev/null || echo interactive)" = headless ]; then
+        printf "%s(headless; no terminal pane)%s\n" "$TUI_DIM" "$TUI_RESET"
         return 0
     fi
 

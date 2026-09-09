@@ -18,8 +18,17 @@ tui_action_switch() {
 
     session="$(printf '%s' "$selected_line" | cut -f2)"
     status="$(printf '%s' "$selected_line" | cut -f4)"
+    branch="$(printf '%s' "$selected_line" | cut -f1)"
 
     if [ -z "$session" ]; then
+        return 0
+    fi
+
+    if [ "$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)" = headless ] || [ "$session" = - ]; then
+        tui_pause_for_interaction
+        printf "%s[INFO] Head '%s' is headless and has no attachable terminal%s\n" "$TUI_YELLOW" "$branch" "$TUI_RESET"
+        printf "Use 'hydra exec --branch %s ...' for command or adapter execution.\n" "$branch"
+        tui_resume_after_interaction
         return 0
     fi
 

@@ -66,7 +66,10 @@ _kill_teardown() {
         return 1
     fi
 
-    if tmux_session_exists "$_td_session"; then
+    _td_mode="$(get_terminal_mode_for_branch "$_td_branch" 2>/dev/null || echo interactive)"
+    if [ "$_td_mode" = headless ] || [ "$_td_session" = - ]; then
+        echo "  Headless execution has no tmux session; completing durable teardown..."
+    elif tmux_session_exists "$_td_session"; then
         echo "  Killing tmux session '$_td_session'..."
         if ! tmux kill-session -t "$_td_session" 2>/dev/null; then
             echo "  Failed to kill tmux session '$_td_session'" >&2

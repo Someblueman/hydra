@@ -43,6 +43,7 @@ _hydra() {
                         '--ai[AI tool to use]:ai:(claude aider codex cursor agy opencode copilot gemini)' \
                         '--profile[Agent profile to use]:profile:(none claude codex cursor agy opencode copilot aider gemini)' \
                         '--no-agent[Create a plain shell head]' \
+                        '--headless[Create a terminal-free execution head]' \
                         '--dry-run[Print plan without mutation]' \
                         '--prompt[Task text]:task:' \
                         '--prompt-file[Read task from file]:file:_files' \

@@ -119,6 +119,11 @@ cmd_regenerate() {
     failed=0
     while IFS=' ' read -r branch session _ai _group _timestamp _deps _pr; do
         [ -n "$branch" ] || continue
+        if [ "$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)" = headless ] || [ "$session" = - ]; then
+            echo "Headless head '$branch' has no terminal to regenerate; keeping its durable instance"
+            skipped=$((skipped + 1))
+            continue
+        fi
         if [ -n "$session" ] && tmux_session_exists "$session"; then
             echo "Session already exists for '$branch'; skipping"
             skipped=$((skipped + 1))

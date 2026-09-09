@@ -120,6 +120,9 @@ complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l after -d 'Wait fo
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s t -l template -d 'Apply session template'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn; and not __fish_seen_subcommand_from -l --layout -n --count --ai --agents -i --issue --pr --pr-new --after -t --template' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
 
+# Complete headless spawn option
+complete -c hydra -n '__fish_seen_subcommand_from spawn' -l headless -d 'Create a terminal-free execution head'
+
 # Complete list command
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l json -d 'Output in JSON format'
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l deps -d 'Show dependency tree'

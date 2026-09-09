@@ -128,8 +128,18 @@ state_v2_create_head() {
     _sv2ch_provider_session="${15:-}"
     _sv2ch_scopes="${16:-}"
     _sv2ch_completion_policy="${17:-declared-done}"
+    # Terminal is an optional presentation/attachment resource.  Existing
+    # callers omit this field and retain the interactive contract.
+    _sv2ch_terminal_mode="${18:-interactive}"
 
     if [ -z "$_sv2ch_branch" ] || [ -z "$_sv2ch_session" ]; then
+        return 1
+    fi
+    case "$_sv2ch_terminal_mode" in interactive|headless) ;; *) return 1 ;; esac
+    if [ "$_sv2ch_terminal_mode" = headless ] && [ "$_sv2ch_session" != - ]; then
+        return 1
+    fi
+    if [ "$_sv2ch_terminal_mode" = interactive ] && [ "$_sv2ch_session" = - ]; then
         return 1
     fi
     case "$_sv2ch_completion_policy" in
@@ -173,16 +183,19 @@ state_v2_create_head() {
     }
     chmod -R go-rwx "$_sv2ch_tmp" 2>/dev/null || true
 
+    _sv2ch_desired=running
+    [ "$_sv2ch_terminal_mode" = headless ] && _sv2ch_desired=headless
     if ! state_v2_write_scalar "$_sv2ch_tmp/head-id" "$_sv2ch_head" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/branch" "$_sv2ch_branch" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/session" "$_sv2ch_session" || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/terminal-mode" "$_sv2ch_terminal_mode" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/profile" "$_sv2ch_profile" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/group" "$_sv2ch_group" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/created-at" "$_sv2ch_created" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/dependencies" "$_sv2ch_deps" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/pr" "$_sv2ch_pr" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/current-instance" "$_sv2ch_instance" || \
-       ! state_v2_write_scalar "$_sv2ch_tmp/desired-state" "running" || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/desired-state" "$_sv2ch_desired" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/completion-policy" "$_sv2ch_completion_policy" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/worktree" "$_sv2ch_worktree" || \
        ! state_v2_write_text "$_sv2ch_tmp/task" "$_sv2ch_task" || \
@@ -190,6 +203,7 @@ state_v2_create_head() {
        ! state_v2_write_scalar "$_sv2ch_tmp/base-ref" "$_sv2ch_base_ref" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/instance-id" "$_sv2ch_instance" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/session" "$_sv2ch_session" || \
+       ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/terminal-mode" "$_sv2ch_terminal_mode" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/started-at" "$_sv2ch_created" || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/observed-status" starting || \
        ! state_v2_write_scalar "$_sv2ch_tmp/instances/$_sv2ch_instance/observed-source" hydra || \
@@ -252,15 +266,24 @@ state_v2_verify() {
                 state_v2_scalar_valid "$_sv2v_head/instances/$_sv2v_instance/$_sv2v_file" || \
                     _sv2v_instance_required_missing=1
             done
+            _sv2v_mode="$( [ -s "$_sv2v_head/terminal-mode" ] && sed -n '1p' "$_sv2v_head/terminal-mode" || echo interactive )"
+            _sv2v_instance_mode="$( [ -s "$_sv2v_head/instances/$_sv2v_instance/terminal-mode" ] && sed -n '1p' "$_sv2v_head/instances/$_sv2v_instance/terminal-mode" || echo interactive )"
             if ! hydra_valid_id "$_sv2v_head_id" || \
                [ "$(sed -n '1p' "$_sv2v_head/head-id" 2>/dev/null || true)" != "$_sv2v_head_id" ] || \
                [ -z "$(sed -n '1p' "$_sv2v_head/branch" 2>/dev/null || true)" ] || \
                [ -z "$(sed -n '1p' "$_sv2v_head/session" 2>/dev/null || true)" ] || \
+               { [ -f "$_sv2v_head/terminal-mode" ] && ! grep -Eq '^(interactive|headless)$' "$_sv2v_head/terminal-mode"; } || \
+               { [ "$_sv2v_mode" = headless ] && [ "$(sed -n '1p' "$_sv2v_head/session" 2>/dev/null || true)" != - ]; } || \
+               { [ "$_sv2v_mode" = interactive ] && [ "$(sed -n '1p' "$_sv2v_head/session" 2>/dev/null || true)" = - ]; } || \
                [ "$_sv2v_required_missing" -ne 0 ] || \
-               ! grep -Eq '^(running|stopping|stopped)$' "$_sv2v_head/desired-state" 2>/dev/null || \
+               ! grep -Eq '^(running|headless|stopping|stopped)$' "$_sv2v_head/desired-state" 2>/dev/null || \
                ! grep -Eq '^(declared-done|observed-exit-zero|either)$' "$_sv2v_head/completion-policy" 2>/dev/null || \
                ! hydra_valid_id "$_sv2v_instance" || \
                [ ! -d "$_sv2v_head/instances/$_sv2v_instance" ] || \
+               { [ -f "$_sv2v_head/instances/$_sv2v_instance/terminal-mode" ] && ! grep -Eq '^(interactive|headless)$' "$_sv2v_head/instances/$_sv2v_instance/terminal-mode"; } || \
+               { [ "$_sv2v_instance_mode" != "$_sv2v_mode" ]; } || \
+               { [ "$_sv2v_instance_mode" = headless ] && [ "$(sed -n '1p' "$_sv2v_head/instances/$_sv2v_instance/session" 2>/dev/null || true)" != - ]; } || \
+               { [ "$_sv2v_instance_mode" = interactive ] && [ "$(sed -n '1p' "$_sv2v_head/instances/$_sv2v_instance/session" 2>/dev/null || true)" = - ]; } || \
                [ "$_sv2v_instance_required_missing" -ne 0 ] || \
                [ "$(sed -n '1p' "$_sv2v_head/instances/$_sv2v_instance/instance-id" 2>/dev/null || true)" != "$_sv2v_instance" ]; then
                 echo "state v2: invalid head record $_sv2v_head" >&2

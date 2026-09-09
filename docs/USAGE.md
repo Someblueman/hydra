@@ -114,7 +114,9 @@ hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
 ```
 
-`--profile` selects an agent; `--no-agent` selects a plain shell. Interactive
+`--profile` selects an agent; `--no-agent` selects a plain shell. `spawn --headless`
+creates a terminal-free workspace head (use `hydra exec --branch <branch> -- ...`
+to run a command). Interactive
 profiles include `agy` (Antigravity), `cursor` (Cursor Agent), `opencode`, `claude`,
 and `codex`, plus launch-only integrations. Headless execution also supports `pi`.
 See the complete [supported-agent matrix](PROFILES.md) and [headless contract](AGENT_CONTRACT.md). `exec` runs a
@@ -287,4 +289,3 @@ The larger keymap below belongs to the maintained basic shell TUI.
 | `q` | Quit |
 
 Environment variables: `HYDRA_TUI_PREVIEW_LINES`, `HYDRA_TUI_REFRESH_MS`, `HYDRA_TUI_ACTIVITY_INTERVAL`, `HYDRA_NONINTERACTIVE`.
-
