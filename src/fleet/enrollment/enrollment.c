@@ -21,6 +21,12 @@ static bool package_matches(const char *path, const char *expected) {
 static bool prefix_matches(const char *value, const char *prefix) {
     size_t n; if (!prefix || !*prefix) return true; if (!value) return false; n = strlen(prefix); return !strncmp(value, prefix, n) && (value[n] == '\0' || value[n] == '/');
 }
+static const char *source_config(json_object *row) {
+    json_object *sources = f_field(row, "sources"); size_t i;
+    if (!json_object_is_type(sources, json_type_array)) return NULL;
+    for (i = 0; i < json_object_array_length(sources); i++) { json_object *s = json_object_array_get_idx(sources, i); if (f_string(s, "kind") && !strcmp(f_string(s, "kind"), "ssh-config")) return f_string(s, "locator"); }
+    return NULL;
+}
 static int progress_path(char path[F_PATH], const char *digest_value) {
     char dir[F_PATH]; if (f_path(dir, sizeof(dir), f_home, "fleet/enrollment") || f_mkdirs(dir)) return -1;
     return snprintf(path, F_PATH, "%s/%s.json", dir, digest_value) >= F_PATH ? -1 : 0;
@@ -57,8 +63,10 @@ static json_object *review(const char *input, const char *output, const char *id
     f_string_add(intent, "principal", f_string(f_field(f_field(row, "resolution"), "data"), "user")); f_string_add(intent, "required_capability", f_string(f_field(qualification, "data"), "required_capability"));
     f_string_add(intent, "project", project); f_string_add(intent, "alias", alias ? alias : f_string(row, "candidate_id"));
     source = f_field(row, "sources"); json_object_object_add(intent, "sources", source ? json_object_get(source) : json_object_new_array());
+    if (source_config(row)) { char config_hash[65]; if (f_hash(source_config(row), config_hash)) goto done; f_string_add(intent, "ssh_config", source_config(row)); f_string_add(intent, "ssh_config_sha256", config_hash); }
     host = json_object_new_object(); f_string_add(host, "target", target); f_string_add(host, "fingerprint", fingerprint); f_string_add(host, "project", project); f_string_add(host, "alias", alias ? alias : f_string(row, "candidate_id"));
     if (package) { f_string_add(host, "package", package); f_string_add(host, "package_sha256", package_digest); f_string_add(host, "prefix", prefix ? prefix : ""); }
+    if (source_config(row)) { char config_hash[65]; f_string_add(host, "ssh_config", source_config(row)); if (!f_hash(source_config(row), config_hash)) f_string_add(host, "ssh_config_sha256", config_hash); }
     json_object_object_add(intent, "host", host); json_object_object_add(intent, "reviewed_at", json_object_new_int64((int64_t)time(NULL)));
     if (f_write(output, json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN), strlen(json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN)), true) || f_hash(output, hash)) { json_object_put(qualification); json_object_put(intent); return f_error("fleet-enrollment-review", "io_failed", "cannot write the reviewed intent"); }
     json_object_object_add(intent, "intent_sha256", json_object_new_string(hash));
@@ -69,13 +77,14 @@ done: json_object_put(qualification); json_object_put(intent); return f_error("f
 }
 static json_object *apply_host(json_object *host, unsigned seconds) {
     json_object *row = json_object_new_object(), *response; struct f_remote remote = {0};
-    const char *target; const char *fingerprint; const char *alias; const char *project; const char *package; const char *package_digest; const char *prefix;
+    const char *target; const char *fingerprint; const char *alias; const char *project; const char *package; const char *package_digest; const char *prefix; const char *config; const char *config_hash;
     target = f_string(host, "target"); fingerprint = f_string(host, "fingerprint"); alias = f_string(host, "alias"); project = f_string(host, "project");
-    package = f_string(host, "package"); package_digest = f_string(host, "package_sha256"); prefix = f_string(host, "prefix");
+    package = f_string(host, "package"); package_digest = f_string(host, "package_sha256"); prefix = f_string(host, "prefix"); config = f_string(host, "ssh_config"); config_hash = f_string(host, "ssh_config_sha256");
+    if (config && (!config_hash || !abs_path(config) || !package_matches(config, config_hash))) goto invalid;
     if (!target || !fingerprint || !alias || !project || !f_target(target) || !f_name(alias) || !abs_path(project) || f_copy(remote.name, sizeof(remote.name), alias) || f_copy(remote.target, sizeof(remote.target), target) || f_copy(remote.hydra, sizeof(remote.hydra), "hydra")) goto invalid;
     /* Establish the reviewed peer before any mutation and reuse its strict
      * OpenSSH control connection for bootstrap/init. */
-    remote.multiplex = true;
+    remote.multiplex = true; if (config && f_copy(remote.ssh_config, sizeof(remote.ssh_config), config)) goto invalid;
     f_string_add(row, "alias", alias); f_string_add(row, "target", target);
     { char *actual = f_peer_fingerprint(&remote, seconds); if (!actual) { f_string_add(row, "status", "outcome_unknown"); f_string_add(row, "error", "peer fingerprint unavailable"); } else if (strcmp(actual, fingerprint)) { f_string_add(row, "status", "host_key_changed"); f_string_add(row, "error", "authenticated peer fingerprint differs from reviewed identity"); free(actual); } else {
         if (package) { json_object *boot = f_bootstrap(&remote, package, package_digest, seconds); bool boot_ok = json_object_get_boolean(f_field(boot, "ok")); const char *code = f_string(f_field(boot, "error"), "code"); if (!boot_ok) { f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "bootstrap_failed"); json_object_put(boot); return row; } json_object_put(boot); }
