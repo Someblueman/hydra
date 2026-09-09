@@ -84,44 +84,72 @@ static json_object *observation_timestamps(json_object *accepted, json_object *s
     return times;
 }
 
-static void waiting(json_object *object, json_object *state, const char *task_id) {
-    const char *name = f_string(state, "state"), *failure = f_string(state, "failure"), *admission_state = f_string(f_field(state, "admission"), "state");
-    const char *reason = "none", *detail = "execution state is recorded; no receiver wait is active";
-    char action[256]; json_object *value = json_object_new_object();
-    (void)snprintf(action, sizeof(action), "inspect hydra fleet overview --json for %s", task_id);
-    if (!name) {
-        reason = "reconciliation"; detail = "receiver state is missing or malformed";
-        (void)snprintf(action, sizeof(action), "reconcile task %s before any retry", task_id);
-    } else if (!strcmp(name, "accepted")) {
-        reason = "admission"; detail = "task is accepted but has no launch claim";
-        (void)snprintf(action, sizeof(action), "review the specification, then start task %s with its exact trust digest", task_id);
-    } else if (admission_state && !strcmp(admission_state, "queued")) {
-        reason = "admission"; detail = "receiver admission is queued for capacity";
-        (void)snprintf(action, sizeof(action), "wait for the receiver admission claim for %s", task_id);
-    } else if (!strcmp(name, "waiting_approval")) {
-        reason = "approval"; detail = "workflow execution is suspended for an approval decision";
-        (void)snprintf(action, sizeof(action), "inspect and decide the pending approval for %s", task_id);
-    } else if (!strcmp(name, "outcome_unknown") || (failure &&
-               (strstr(failure, "reconcil") || strstr(failure, "owner_unavailable")))) {
-        reason = "reconciliation"; detail = "the receiver retained an uncertain outcome";
-        (void)snprintf(action, sizeof(action), "reconnect and reconcile %s; do not replay it", task_id);
-    } else if (failure && (strstr(failure, "auth") || strstr(failure, "credential"))) {
-        reason = "authentication"; detail = "receiver authentication or provider credentials need attention";
-        (void)snprintf(action, sizeof(action), "inspect receiver authentication before resuming %s", task_id);
-    } else if (failure && (strstr(failure, "dependency") || strstr(failure, "startup"))) {
-        reason = "dependency"; detail = "a required receiver dependency or startup step is unavailable";
-        (void)snprintf(action, sizeof(action), "inspect receiver capabilities and dependency diagnostics for %s", task_id);
-    } else if (name && (!strcmp(name, "starting") || !strcmp(name, "running"))) {
-        detail = "receiver owner has recorded active execution";
-        (void)snprintf(action, sizeof(action), "inspect bounded logs for %s", task_id);
-    } else if (name && (!strcmp(name, "failed") || !strcmp(name, "expired"))) {
-        detail = failure ? failure : "receiver recorded a terminal failure";
-        (void)snprintf(action, sizeof(action), "inspect logs and retained evidence for %s", task_id);
-    } else if (name && (!strcmp(name, "succeeded") || !strcmp(name, "cancelled"))) {
-        detail = "receiver recorded a terminal execution state";
-        (void)snprintf(action, sizeof(action), "inspect the retained result snapshot for %s", task_id);
+enum waiting_action {
+    WAIT_OVERVIEW, WAIT_RECONCILE, WAIT_START, WAIT_ADMISSION, WAIT_APPROVAL,
+    WAIT_AUTH, WAIT_DEPENDENCY, WAIT_LOGS, WAIT_RESULT
+};
+
+struct waiting_values {
+    const char *reason;
+    const char *detail;
+    enum waiting_action action;
+};
+
+static bool contains_any(const char *value, const char *first, const char *second) {
+    return value && (strstr(value, first) || strstr(value, second));
+}
+
+static bool failure_waiting_values(const char *failure, struct waiting_values *result) {
+    if (contains_any(failure, "reconcil", "owner_unavailable")) {
+        *result = (struct waiting_values){"reconciliation", "the receiver retained an uncertain outcome", WAIT_RECONCILE}; return true;
     }
-    f_string_add(value, "reason", reason); f_string_add(value, "detail", detail); f_string_add(value, "next_action", action);
+    if (contains_any(failure, "auth", "credential")) {
+        *result = (struct waiting_values){"authentication", "receiver authentication or provider credentials need attention", WAIT_AUTH}; return true;
+    }
+    if (contains_any(failure, "dependency", "startup")) {
+        *result = (struct waiting_values){"dependency", "a required receiver dependency or startup step is unavailable", WAIT_DEPENDENCY}; return true;
+    }
+    return false;
+}
+
+static struct waiting_values waiting_values(const char *name, const char *admission, const char *failure) {
+    struct waiting_values result = {"none", "execution state is recorded; no receiver wait is active", WAIT_OVERVIEW};
+    if (!name) return (struct waiting_values){"reconciliation", "receiver state is missing or malformed", WAIT_RECONCILE};
+    if (!strcmp(name, "accepted")) return (struct waiting_values){"admission", "task is accepted but has no launch claim", WAIT_START};
+    if (admission && !strcmp(admission, "queued")) return (struct waiting_values){"admission", "receiver admission is queued for capacity", WAIT_ADMISSION};
+    if (!strcmp(name, "waiting_approval")) return (struct waiting_values){"approval", "workflow execution is suspended for an approval decision", WAIT_APPROVAL};
+    if (!strcmp(name, "outcome_unknown")) return (struct waiting_values){"reconciliation", "the receiver retained an uncertain outcome", WAIT_RECONCILE};
+    if (failure_waiting_values(failure, &result)) return result;
+    if (!strcmp(name, "starting") || !strcmp(name, "running"))
+        return (struct waiting_values){"none", "receiver owner has recorded active execution", WAIT_LOGS};
+    if (!strcmp(name, "failed") || !strcmp(name, "expired"))
+        return (struct waiting_values){"none", failure ? failure : "receiver recorded a terminal failure", WAIT_LOGS};
+    if (!strcmp(name, "succeeded") || !strcmp(name, "cancelled"))
+        return (struct waiting_values){"none", "receiver recorded a terminal execution state", WAIT_RESULT};
+    return result;
+}
+
+static void waiting_action(char action[256], enum waiting_action kind, const char *task_id) {
+    const char *format = "inspect hydra fleet overview --json for %s";
+    switch (kind) {
+    case WAIT_RECONCILE: format = "reconcile task %s before any retry"; break;
+    case WAIT_START: format = "review the specification, then start task %s with its exact trust digest"; break;
+    case WAIT_ADMISSION: format = "wait for the receiver admission claim for %s"; break;
+    case WAIT_APPROVAL: format = "inspect and decide the pending approval for %s"; break;
+    case WAIT_AUTH: format = "inspect receiver authentication before resuming %s"; break;
+    case WAIT_DEPENDENCY: format = "inspect receiver capabilities and dependency diagnostics for %s"; break;
+    case WAIT_LOGS: format = "inspect bounded logs for %s"; break;
+    case WAIT_RESULT: format = "inspect the retained result snapshot for %s"; break;
+    default: break;
+    }
+    (void)snprintf(action, 256, format, task_id);
+}
+
+static void waiting(json_object *object, json_object *state, const char *task_id) {
+    struct waiting_values values = waiting_values(f_string(state, "state"), f_string(f_field(state, "admission"), "state"), f_string(state, "failure"));
+    char action[256]; json_object *value = json_object_new_object();
+    waiting_action(action, values.action, task_id);
+    f_string_add(value, "reason", values.reason); f_string_add(value, "detail", values.detail); f_string_add(value, "next_action", action);
     json_object_object_add(object, "waiting", value);
 }
 
@@ -170,47 +198,74 @@ static int add_pending(json_object *task, const char *project, const char *run) 
     json_object_object_add(task, "pending_requests", requests); return 0;
 }
 
+static bool step_fields_valid(char **fields, size_t count, size_t total) {
+    return count >= 10 && total < OBSERVATION_STEPS && f_name(fields[1]) &&
+        safe_text(fields[2], 64) && safe_text(fields[9], 128);
+}
+
+static void step_attempt(json_object *step, char attempt_id[128], const char *authoritative, const char *attempts) {
+    if (authoritative && f_name(authoritative) && snprintf(attempt_id, 128, "attempt-%s", authoritative) < 128)
+        f_string_add(step, "attempt_id", attempt_id);
+    else if (attempts && f_name(attempts) && strcmp(attempts, "0") && snprintf(attempt_id, 128, "attempt-%s", attempts) < 128)
+        f_string_add(step, "attempt_id", attempt_id);
+    else json_object_object_add(step, "attempt_id", json_object_new_null());
+}
+
+static const char *step_waiting_reason(const char *state) {
+    if (state && !strcmp(state, "waiting-approval")) return "approval";
+    if (state && (!strcmp(state, "waiting") || !strcmp(state, "waiting_remote"))) return "dependency";
+    return "none";
+}
+
 static int add_step(json_object *steps, const char *run_dir, char **fields, size_t count, size_t *total) {
     char steps_dir[F_PATH], path[F_PATH], *state = NULL, *attempts = NULL, *authoritative = NULL, attempt_id[128];
     json_object *step; const char *profile;
-    if (count < 10 || *total >= OBSERVATION_STEPS || !f_name(fields[1]) ||
-        !safe_text(fields[2], 64) || !safe_text(fields[9], 128)) return -1;
+    if (!step_fields_valid(fields, count, *total)) return -1;
     if (f_path(steps_dir, sizeof(steps_dir), run_dir, "steps") || f_path(path, sizeof(path), steps_dir, fields[1])) return -1;
     state = scalar(path, "state"); attempts = scalar(path, "attempts"); authoritative = scalar(path, "authoritative-attempt");
     step = json_object_new_object(); f_string_add(step, "step_id", fields[1]);
     f_string_add(step, "kind", fields[2]);
     profile = fields[9]; f_string_add(step, "agent_profile", strcmp(profile, "-") ? profile : "unavailable");
     nullable(step, "state", state ? state : "unavailable");
-    if (authoritative && f_name(authoritative) && snprintf(attempt_id, sizeof(attempt_id), "attempt-%s", authoritative) < (int)sizeof(attempt_id))
-        f_string_add(step, "attempt_id", attempt_id);
-    else if (attempts && f_name(attempts) && strcmp(attempts, "0") && snprintf(attempt_id, sizeof(attempt_id), "attempt-%s", attempts) < (int)sizeof(attempt_id))
-        f_string_add(step, "attempt_id", attempt_id);
-    else json_object_object_add(step, "attempt_id", json_object_new_null());
-    if (state && (!strcmp(state, "waiting") || !strcmp(state, "waiting-approval") || !strcmp(state, "waiting_remote"))) {
-        f_string_add(step, "waiting_reason", !strcmp(state, "waiting-approval") ? "approval" : "dependency");
-    } else f_string_add(step, "waiting_reason", "none");
+    step_attempt(step, attempt_id, authoritative, attempts);
+    f_string_add(step, "waiting_reason", step_waiting_reason(state));
     json_object_array_add(steps, step); (*total)++;
     free(state); free(attempts); free(authoritative); return 0;
 }
 
-static json_object *steps_for(json_object *state, const char *directory) {
+static bool graph_paths(json_object *state, char run_dir[F_PATH], char graph_path[F_PATH]) {
     const char *kind = f_string(state, "work_kind"), *project = f_string(state, "execution_project_id"), *run = f_string(state, "run_id");
-    json_object *steps = json_object_new_array(); size_t total = 0;
-    char run_dir[F_PATH], graph_path[F_PATH], *graph, *line, *save;
-    if (!kind || strcmp(kind, "workflow") || !project || !run || !f_name(project) || !f_name(run) ||
-        snprintf(run_dir, sizeof(run_dir), "%s/state/v2/projects/%s/workflows/runs/%s", f_home, project, run) >= (int)sizeof(run_dir) ||
-        f_path(graph_path, sizeof(graph_path), run_dir, "graph.tsv") || !private_regular(graph_path) ||
-        !(graph = f_read(graph_path, OBSERVATION_GRAPH_LIMIT))) goto fallback;
+    if (!kind || strcmp(kind, "workflow") || !project || !run || !f_name(project) || !f_name(run)) return false;
+    if (snprintf(run_dir, F_PATH, "%s/state/v2/projects/%s/workflows/runs/%s", f_home, project, run) >= F_PATH) return false;
+    return !f_path(graph_path, F_PATH, run_dir, "graph.tsv") && private_regular(graph_path);
+}
+
+static int parse_steps(json_object *steps, const char *run_dir, char *graph) {
+    char *line, *save = NULL; size_t total = 0;
     save = NULL;
     for (line = strtok_r(graph, "\n", &save); line && total < OBSERVATION_STEPS; line = strtok_r(NULL, "\n", &save)) {
         char *fields[32], *cursor = line; size_t count = 0;
         while (count < sizeof(fields) / sizeof(fields[0]) && (fields[count] = strtok_r(cursor, "\t", &cursor))) count++;
-        if (count && !strcmp(fields[0], "step") && add_step(steps, run_dir, fields, count, &total)) { free(graph); goto fallback; }
+        if (count && !strcmp(fields[0], "step") && add_step(steps, run_dir, fields, count, &total)) return -1;
     }
-    free(graph); if (json_object_array_length(steps)) return steps;
-fallback:
-    { json_object *step = json_object_new_object(); f_string_add(step, "step_id", "unavailable"); json_object_object_add(step, "attempt_id", json_object_new_null()); f_string_add(step, "kind", kind && !strcmp(kind, "workflow") ? "workflow" : "exec"); f_string_add(step, "agent_profile", "unavailable"); f_string_add(step, "state", f_string(state, "state") ? f_string(state, "state") : "unavailable"); f_string_add(step, "waiting_reason", "reconciliation"); json_object_array_add(steps, step); }
-    (void)directory; return steps;
+    return json_object_array_length(steps) ? 0 : -1;
+}
+
+static void add_unavailable_step(json_object *steps, json_object *state, const char *kind) {
+    json_object *step = json_object_new_object();
+    f_string_add(step, "step_id", "unavailable"); json_object_object_add(step, "attempt_id", json_object_new_null());
+    f_string_add(step, "kind", kind && !strcmp(kind, "workflow") ? "workflow" : "exec");
+    f_string_add(step, "agent_profile", "unavailable"); f_string_add(step, "state", f_string(state, "state") ? f_string(state, "state") : "unavailable");
+    f_string_add(step, "waiting_reason", "reconciliation"); json_object_array_add(steps, step);
+}
+
+static json_object *steps_for(json_object *state, const char *directory) {
+    const char *kind = f_string(state, "work_kind"); json_object *steps = json_object_new_array();
+    char run_dir[F_PATH], graph_path[F_PATH], *graph = NULL;
+    if (graph_paths(state, run_dir, graph_path) && (graph = f_read(graph_path, OBSERVATION_GRAPH_LIMIT)) && !parse_steps(steps, run_dir, graph)) {
+        free(graph); return steps;
+    }
+    free(graph); add_unavailable_step(steps, state, kind); (void)directory; return steps;
 }
 
 static void current_step_identity(json_object *task, json_object *steps) {

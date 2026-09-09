@@ -82,6 +82,12 @@ static bool is_tui_data(const char *action) {
     return !strcmp(action, "tui-data") || !strcmp(action, "tui-visual-data");
 }
 
+static json_object *aggregate_action(const char *action, const struct fleet_options *options) {
+    if (!strcmp(action, "overview")) return f_observation_aggregate(options->seconds, options->jobs);
+    if (!strcmp(action, "list") || !strcmp(action, "doctor")) return f_aggregate(action, options->seconds, options->jobs);
+    return NULL;
+}
+
 json_object *f_cli(int argc, char **argv) {
     const char *action;
     struct fleet_options options = {.seconds = 5, .jobs = 4, .interval = 5, .rest = argc};
@@ -122,8 +128,10 @@ json_object *f_cli(int argc, char **argv) {
         return NULL;
     }
     if (!strcmp(action, "reconcile")) action = "list";
-    if (!strcmp(action, "overview") && !options.name) return f_observation_aggregate(options.seconds, options.jobs);
-    if ((!strcmp(action, "list") || !strcmp(action, "doctor")) && !options.name) return f_aggregate(action, options.seconds, options.jobs);
+    if (!options.name) {
+        result = aggregate_action(action, &options);
+        if (result) return result;
+    }
     if (!options.name || f_remote_load(options.name, &remote)) return f_error("fleet", "invalid_alias", "register a remote with hydra remote add");
     if (!strcmp(action, "bootstrap")) {
         if (!options.input || !options.digest) return f_error("fleet-bootstrap", "invalid_input", "input package and sha256 are required");

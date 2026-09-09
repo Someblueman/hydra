@@ -106,6 +106,18 @@ static bool observation_response_valid(json_object *data, const char *id) {
     return true;
 }
 
+static bool response_binding_valid(json_object *response, const struct remote_options *options, json_object *package) {
+    json_object *data = f_field(response, "data");
+    const char *received = f_string(data, "task_id"), *digest = f_string(data, "spec_sha256"), *received_key = f_string(data, "submission_key");
+    if (options->observe) {
+        json_object *task = f_field(data, "task");
+        return observation_response_valid(data, options->id) && f_string(task, "task_id");
+    }
+    if (!received || strncmp(received, "task_", 5) || !task_hex(received + 5, 64) || !task_hex(digest, 64)) return false;
+    if (options->submit) return received_key && !strcmp(received_key, options->key) && !strcmp(digest, f_string(package, "spec_sha256"));
+    return !strcmp(received, options->id);
+}
+
 static bool number(const char *text, unsigned minimum, unsigned maximum, unsigned *result) {
     unsigned long value = strtoul(text, NULL, 10);
     if (!*text || strspn(text, "0123456789") != strlen(text) || value < minimum || value > maximum) return false;
@@ -237,17 +249,8 @@ json_object *task_remote_cli(int argc, char **argv) {
     json_object_put(response);
     request = make_request(options, argv[0], package);
     response = f_request(&remote, request, options->seconds);
-    if (json_object_get_boolean(f_field(response, "ok"))) {
-        json_object *data = f_field(response, "data"); const char *received = f_string(data, "task_id"), *digest = f_string(data, "spec_sha256"), *received_key = f_string(data, "submission_key");
-        bool valid;
-        if (options->observe) {
-            json_object *task = f_field(data, "task");
-            received = f_string(task, "task_id"); valid = observation_response_valid(data, options->id) && received;
-        } else {
-            valid = received && !strncmp(received, "task_", 5) && task_hex(received + 5, 64) && task_hex(digest, 64);
-            if (valid) valid = options->submit ? received_key && !strcmp(received_key, options->key) && !strcmp(digest, f_string(package, "spec_sha256")) : !strcmp(received, options->id);
-        }
-        if (!valid) { json_object_put(response); response = f_error("fleet-task", "invalid_response", "the receiver returned a task handle with inconsistent bindings"); }
+    if (json_object_get_boolean(f_field(response, "ok")) && !response_binding_valid(response, options, package)) {
+        json_object_put(response); response = f_error("fleet-task", "invalid_response", "the receiver returned a task handle with inconsistent bindings");
     }
     if (options->result_read && json_object_get_boolean(f_field(response, "ok"))) response = result_output(options, response);
     if ((options->submit || options->start || options->cancel || options->resume || options->decide) && uncertain(response)) {

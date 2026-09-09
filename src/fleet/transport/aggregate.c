@@ -110,48 +110,82 @@ static bool pending_requests_valid(json_object *pending) {
     return true;
 }
 
+static bool observation_reason_valid(const char *reason) {
+    static const char *const reasons[] = {"admission", "dependency", "authentication", "approval", "reconciliation", "none", NULL};
+    size_t i;
+    for (i = 0; reasons[i]; i++) if (!strcmp(reason, reasons[i])) return true;
+    return false;
+}
+
+static bool observation_owner_valid(json_object *owner) {
+    return json_object_is_type(owner, json_type_object) && bounded_text(owner, "kind", 64, false) &&
+        bounded_text(owner, "state", 64, false) && bounded_text(owner, "recorded_state", 64, true) &&
+        bounded_text(owner, "failure", 1024, true);
+}
+
+static bool observation_waiting_valid(json_object *waiting) {
+    const char *reason = f_string(waiting, "reason");
+    return json_object_is_type(waiting, json_type_object) && bounded_text(waiting, "reason", 32, false) &&
+        bounded_text(waiting, "detail", 1024, false) && bounded_text(waiting, "next_action", 1024, false) &&
+        reason && observation_reason_valid(reason);
+}
+
+static bool observation_times_valid(json_object *times) {
+    return json_object_is_type(times, json_type_object) && observation_time(times, "accepted_at") &&
+        observation_time(times, "started_at") && observation_time(times, "resumed_at") &&
+        observation_time(times, "finished_at") && observation_time(times, "receiver_observed_at");
+}
+
+static bool observation_contract_valid(json_object *contract) {
+    return json_object_is_type(contract, json_type_object) && bounded_text(contract, "availability", 32, false) &&
+        bounded_text(contract, "reason", 1024, false) &&
+        bounded_string_array(f_field(contract, "missing_evidence"), OBSERVATION_REQUEST_LIMIT);
+}
+
+static bool observation_step_valid(json_object *step) {
+    return json_object_is_type(step, json_type_object) && bounded_text(step, "step_id", 128, false) &&
+        bounded_text(step, "attempt_id", 128, true) && bounded_text(step, "state", 64, false) &&
+        bounded_text(step, "agent_profile", 128, false) && bounded_text(step, "kind", 64, false) &&
+        bounded_text(step, "waiting_reason", 32, false);
+}
+
+static bool observation_steps_valid(json_object *steps) {
+    size_t i;
+    if (!json_object_is_type(steps, json_type_array) || json_object_array_length(steps) > OBSERVATION_STEP_LIMIT) return false;
+    for (i = 0; i < json_object_array_length(steps); i++) if (!observation_step_valid(json_object_array_get_idx(steps, i))) return false;
+    return true;
+}
+
+static bool observation_task_valid(json_object *task) {
+    json_object *owner, *waiting, *times, *contract, *pending, *steps;
+    json_object *configuration = f_field(task, "effective_configuration");
+    if (!json_object_is_type(task, json_type_object) || !bounded_text(task, "task_id", 128, false) ||
+        !bounded_text(task, "run_id", 128, true) || !bounded_text(task, "step_id", 128, true) ||
+        !bounded_text(task, "attempt_id", 128, true) || !bounded_text(task, "execution_state", 64, false) ||
+        !bounded_text(task, "assigned_host", 256, true) || !bounded_text(task, "workspace", F_PATH, true) ||
+        !bounded_text(task, "agent_profile", 128, false)) return false;
+    owner = f_field(task, "execution_owner"); waiting = f_field(task, "waiting"); times = f_field(task, "observation_timestamps");
+    contract = f_field(task, "contract"); pending = f_field(task, "pending_requests"); steps = f_field(task, "steps");
+    return observation_owner_valid(owner) && observation_waiting_valid(waiting) && observation_times_valid(times) &&
+        json_object_is_type(configuration, json_type_object) &&
+        strlen(json_object_to_json_string_ext(configuration, JSON_C_TO_STRING_PLAIN)) < 131072 &&
+        observation_contract_valid(contract) && pending_requests_valid(pending) && observation_steps_valid(steps);
+}
+
+static bool duplicate_task(json_object *tasks, size_t index, const char *task_id) {
+    size_t i;
+    for (i = 0; i < index; i++) if (!strcmp(f_string(json_object_array_get_idx(tasks, i), "task_id"), task_id)) return true;
+    return false;
+}
+
 static bool observation_snapshot_valid(json_object *snapshot) {
-    json_object *tasks, *times, *waiting, *owner, *steps, *pending; size_t i, j;
+    json_object *tasks; size_t i;
     if (!json_object_is_type(snapshot, json_type_object) || !f_number_is(snapshot, "snapshot_schema_version", 1) ||
-        !observation_time(snapshot, "receiver_observed_at") ||
-        !(tasks = f_field(snapshot, "tasks")) || !json_object_is_type(tasks, json_type_array) ||
-        json_object_array_length(tasks) > OBSERVATION_TASK_LIMIT) return false;
+        !observation_time(snapshot, "receiver_observed_at") || !(tasks = f_field(snapshot, "tasks")) ||
+        !json_object_is_type(tasks, json_type_array) || json_object_array_length(tasks) > OBSERVATION_TASK_LIMIT) return false;
     for (i = 0; i < json_object_array_length(tasks); i++) {
-        json_object *task = json_object_array_get_idx(tasks, i); const char *reason;
-        if (!json_object_is_type(task, json_type_object) || !bounded_text(task, "task_id", 128, false) ||
-            !bounded_text(task, "run_id", 128, true) ||
-            !bounded_text(task, "step_id", 128, true) || !bounded_text(task, "attempt_id", 128, true) ||
-            !bounded_text(task, "execution_state", 64, false) || !bounded_text(task, "assigned_host", 256, true) ||
-            !bounded_text(task, "workspace", F_PATH, true) || !bounded_text(task, "agent_profile", 128, false) ||
-            !(owner = f_field(task, "execution_owner")) || !json_object_is_type(owner, json_type_object) ||
-            !bounded_text(owner, "kind", 64, false) || !bounded_text(owner, "state", 64, false) ||
-            !bounded_text(owner, "recorded_state", 64, true) || !bounded_text(owner, "failure", 1024, true) ||
-            !(waiting = f_field(task, "waiting")) || !json_object_is_type(waiting, json_type_object) ||
-            !bounded_text(waiting, "reason", 32, false) || !bounded_text(waiting, "detail", 1024, false) ||
-            !bounded_text(waiting, "next_action", 1024, false) || !(reason = f_string(waiting, "reason")) ||
-            (strcmp(reason, "admission") && strcmp(reason, "dependency") && strcmp(reason, "authentication") &&
-             strcmp(reason, "approval") && strcmp(reason, "reconciliation") && strcmp(reason, "none")) ||
-            !(times = f_field(task, "observation_timestamps")) || !json_object_is_type(times, json_type_object) ||
-            !observation_time(times, "accepted_at") || !observation_time(times, "started_at") ||
-            !observation_time(times, "resumed_at") || !observation_time(times, "finished_at") ||
-            !observation_time(times, "receiver_observed_at") ||
-            !json_object_is_type(f_field(task, "effective_configuration"), json_type_object) ||
-            strlen(json_object_to_json_string_ext(f_field(task, "effective_configuration"), JSON_C_TO_STRING_PLAIN)) >= 131072 ||
-            !(json_object_is_type(f_field(task, "contract"), json_type_object)) ||
-            !bounded_text(f_field(task, "contract"), "availability", 32, false) ||
-            !bounded_text(f_field(task, "contract"), "reason", 1024, false) ||
-            !bounded_string_array(f_field(f_field(task, "contract"), "missing_evidence"), OBSERVATION_REQUEST_LIMIT) ||
-            !(pending = f_field(task, "pending_requests")) || !pending_requests_valid(pending) ||
-            !(steps = f_field(task, "steps")) || !json_object_is_type(steps, json_type_array) ||
-            json_object_array_length(steps) > OBSERVATION_STEP_LIMIT) return false;
-        for (j = 0; j < i; j++) if (!strcmp(f_string(json_object_array_get_idx(tasks, j), "task_id"), f_string(task, "task_id"))) return false;
-        for (j = 0; j < json_object_array_length(steps); j++) {
-            json_object *step = json_object_array_get_idx(steps, j);
-            if (!json_object_is_type(step, json_type_object) || !bounded_text(step, "step_id", 128, false) ||
-                !bounded_text(step, "attempt_id", 128, true) || !bounded_text(step, "state", 64, false) ||
-                !bounded_text(step, "agent_profile", 128, false) || !bounded_text(step, "kind", 64, false) ||
-                !bounded_text(step, "waiting_reason", 32, false)) return false;
-        }
+        json_object *task = json_object_array_get_idx(tasks, i);
+        if (!observation_task_valid(task) || duplicate_task(tasks, i, f_string(task, "task_id"))) return false;
     }
     return true;
 }
@@ -244,41 +278,85 @@ static json_object *decorate(json_object *row, const struct f_remote *remote, in
     }
 }
 
-json_object *f_observation_aggregate(unsigned seconds, unsigned jobs) {
-    json_object *names = f_remotes(), *hosts = json_object_new_array(), *result, *data = json_object_new_object();
-    size_t count = json_object_array_length(names), next = 0, finished = 0; unsigned active = 0, i;
-    struct worker { pid_t pid; size_t index; char path[F_PATH]; } workers[16] = {{0}};
-    char directory[] = "/tmp/hydra-fleet-observe.XXXXXX"; bool partial = false; int64_t now = (int64_t)time(NULL);
-    if (count > 16 || !jobs || jobs > 16 || !mkdtemp(directory)) { json_object_put(names); json_object_put(hosts); json_object_put(data); return f_error("fleet-overview", "limit", "fleet observation supports at most 16 hosts and 16 workers"); }
+struct observation_worker {
+    pid_t pid;
+    size_t index;
+    char path[F_PATH];
+};
+
+static int launch_observation_worker(struct observation_worker *worker, const char *directory, json_object *names, unsigned seconds) {
+    struct f_remote remote; json_object *row; const char *text, *name; pid_t pid;
+    if (snprintf(worker->path, sizeof(worker->path), "%s/%zu", directory, worker->index) >= (int)sizeof(worker->path)) return -1;
+    pid = fork();
+    if (pid != 0) { worker->pid = pid < 0 ? 0 : pid; return pid < 0 ? -1 : 0; }
+    name = json_object_get_string(json_object_array_get_idx(names, worker->index));
+    row = f_remote_load(name, &remote) ? f_error("fleet-overview", "invalid_alias", "remote alias is unavailable") : f_observe(&remote, "overview", seconds);
+    f_string_add(row, "host", name); text = json_object_to_json_string_ext(row, JSON_C_TO_STRING_PLAIN);
+    _exit(f_write(worker->path, text, strlen(text), false) ? 1 : 0);
+}
+
+static bool collect_observation_worker(struct observation_worker *worker, json_object *names, json_object *hosts, int64_t now, bool *partial) {
+    int status; char *text; json_object *row; struct f_remote remote; const char *name;
+    if (!worker->pid || waitpid(worker->pid, &status, WNOHANG) != worker->pid) return false;
+    worker->pid = 0; name = json_object_get_string(json_object_array_get_idx(names, worker->index));
+    text = f_read(worker->path, OBSERVATION_CACHE_LIMIT); row = text ? f_parse(text) : NULL; free(text);
+    if (!row || f_remote_load(name, &remote)) {
+        json_object_put(row); row = f_error("fleet-overview", "invalid_response", "host worker did not return a valid observation"); f_string_add(row, "host", name);
+    } else row = decorate(row, &remote, now);
+    if (!json_object_get_boolean(f_field(row, "ok")) || f_field(f_field(row, "data"), "cached")) *partial = true;
+    json_object_array_add(hosts, row); unlink(worker->path); return true;
+}
+
+static void stop_observation_workers(struct observation_worker *workers, unsigned jobs) {
+    unsigned i;
+    for (i = 0; i < jobs; i++) if (workers[i].pid) {
+        int status; kill(workers[i].pid, SIGTERM);
+        while (waitpid(workers[i].pid, &status, 0) < 0 && errno == EINTR) { }
+        unlink(workers[i].path);
+    }
+}
+
+static void launch_ready_workers(struct observation_worker *workers, json_object *names, size_t count, unsigned jobs,
+                                 unsigned seconds, const char *directory, size_t *next, unsigned *active) {
+    unsigned i;
+    for (i = 0; i < jobs && *next < count; i++) {
+        if (workers[i].pid) continue;
+        workers[i].index = (*next)++;
+        if (launch_observation_worker(&workers[i], directory, names, seconds)) { f_stopped = SIGTERM; break; }
+        (*active)++;
+    }
+}
+
+static void collect_ready_workers(struct observation_worker *workers, json_object *names, json_object *hosts,
+                                  unsigned jobs, int64_t now, bool *partial, unsigned *active, size_t *finished) {
+    unsigned i;
+    for (i = 0; i < jobs; i++) if (collect_observation_worker(&workers[i], names, hosts, now, partial)) {
+        (*active)--; (*finished)++;
+    }
+}
+
+static void run_observation_workers(json_object *names, json_object *hosts, struct observation_worker *workers,
+                                    size_t count, unsigned jobs, unsigned seconds, const char *directory, int64_t now, bool *partial) {
+    size_t next = 0, finished = 0; unsigned active = 0;
     while (finished < count && !f_stopped) {
-        for (i = 0; i < jobs && next < count; i++) {
-            if (workers[i].pid) continue;
-            workers[i].index = next++;
-            if (snprintf(workers[i].path, sizeof(workers[i].path), "%s/%zu", directory, workers[i].index) >= (int)sizeof(workers[i].path)) { f_stopped = SIGTERM; break; }
-            workers[i].pid = fork();
-            if (workers[i].pid == 0) {
-                struct f_remote remote; json_object *row; const char *text, *name = json_object_get_string(json_object_array_get_idx(names, workers[i].index));
-                row = f_remote_load(name, &remote) ? f_error("fleet-overview", "invalid_alias", "remote alias is unavailable") : f_observe(&remote, "overview", seconds);
-                f_string_add(row, "host", name); text = json_object_to_json_string_ext(row, JSON_C_TO_STRING_PLAIN);
-                _exit(f_write(workers[i].path, text, strlen(text), false) ? 1 : 0);
-            }
-            if (workers[i].pid < 0) { workers[i].pid = 0; f_stopped = SIGTERM; break; }
-            active++;
-        }
-        for (i = 0; i < jobs; i++) {
-            int status; char *text; json_object *row; struct f_remote remote; const char *name;
-            if (!workers[i].pid || waitpid(workers[i].pid, &status, WNOHANG) != workers[i].pid) continue;
-            workers[i].pid = 0; active--; finished++; name = json_object_get_string(json_object_array_get_idx(names, workers[i].index));
-            text = f_read(workers[i].path, OBSERVATION_CACHE_LIMIT); row = text ? f_parse(text) : NULL; free(text);
-            if (!row || f_remote_load(name, &remote)) { json_object_put(row); row = f_error("fleet-overview", "invalid_response", "host worker did not return a valid observation"); f_string_add(row, "host", name); }
-            else row = decorate(row, &remote, now);
-            if (!json_object_get_boolean(f_field(row, "ok")) || f_field(f_field(row, "data"), "cached")) partial = true;
-            json_object_array_add(hosts, row); unlink(workers[i].path);
-        }
+        launch_ready_workers(workers, names, count, jobs, seconds, directory, &next, &active);
+        collect_ready_workers(workers, names, hosts, jobs, now, partial, &active, &finished);
         if (active) { struct timespec pause = {0, 20000000}; nanosleep(&pause, NULL); }
     }
-    for (i = 0; i < jobs; i++) if (workers[i].pid) { int status; kill(workers[i].pid, SIGTERM); while (waitpid(workers[i].pid, &status, 0) < 0 && errno == EINTR) { } unlink(workers[i].path); }
-    rmdir(directory); json_object_put(names); json_object_array_sort(hosts, host_order); json_object_object_add(data, "hosts", hosts); json_object_object_add(data, "partial", json_object_new_boolean(partial));
+    stop_observation_workers(workers, jobs);
+}
+
+json_object *f_observation_aggregate(unsigned seconds, unsigned jobs) {
+    json_object *names = f_remotes(), *hosts = json_object_new_array(), *result, *data = json_object_new_object();
+    size_t count = json_object_array_length(names); struct observation_worker workers[16] = {{0}};
+    char directory[] = "/tmp/hydra-fleet-observe.XXXXXX"; bool partial = false; int64_t now = (int64_t)time(NULL);
+    if (count > 16 || !jobs || jobs > 16 || !mkdtemp(directory)) {
+        json_object_put(names); json_object_put(hosts); json_object_put(data);
+        return f_error("fleet-overview", "limit", "fleet observation supports at most 16 hosts and 16 workers");
+    }
+    run_observation_workers(names, hosts, workers, count, jobs, seconds, directory, now, &partial);
+    rmdir(directory); json_object_put(names); json_object_array_sort(hosts, host_order);
+    json_object_object_add(data, "hosts", hosts); json_object_object_add(data, "partial", json_object_new_boolean(partial));
     if (f_stopped) { json_object_put(data); return f_error("fleet-overview", "cancelled", "observation was interrupted; cached snapshots remain available"); }
     result = f_success("fleet-overview", data); return result;
 }

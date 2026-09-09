@@ -196,11 +196,54 @@ static void recovery_record(struct model *model, char **fields) {
     copy_text(recovery->action, sizeof(recovery->action), fields[5]);
 }
 
+struct stream_state {
+    bool fleet_stream;
+    bool fleet_hosts;
+    bool fleet_v3;
+};
+
+static int parse_handshake(size_t count, char **fields, struct stream_state *state, char *error, size_t error_size) {
+    if (!valid_handshake(count, fields)) {
+        copy_text(error, error_size, "native data protocol handshake failed");
+        return -1;
+    }
+    state->fleet_stream = strcmp(fields[0], "HYDRA_FLEET_TUI") == 0;
+    state->fleet_v3 = state->fleet_stream && !strcmp(fields[1], "3");
+    state->fleet_hosts = state->fleet_stream && (!strcmp(fields[1], "2") || state->fleet_v3);
+    return 0;
+}
+
+static int fleet_record_line(struct model *model, const struct stream_state *state, size_t count, char **fields,
+                             char *error, size_t error_size) {
+    if (state->fleet_v3 && count == 9U && !strcmp(fields[0], "T")) return host_record_v3(model, fields, error, error_size);
+    if (state->fleet_hosts && count == 5 && !strcmp(fields[0], "T")) return host_record(model, fields, error, error_size);
+    if (state->fleet_stream && count == 7U && !strcmp(fields[0], "F")) return fleet_record(model, fields, error, error_size);
+    if (state->fleet_v3 && count == 17U && !strcmp(fields[0], "O")) return task_record(model, fields, error, error_size);
+    return 1;
+}
+
+static int local_record_line(struct model *model, size_t count, char **fields, char *error, size_t error_size) {
+    if (count == 30U && !strcmp(fields[0], "H")) return head_record(model, fields, error, error_size);
+    if (count == 6U && !strcmp(fields[0], "R")) { recovery_record(model, fields); return 0; }
+    return 1;
+}
+
+static int parse_record(struct model *model, const struct stream_state *state, size_t count, char **fields,
+                        char *error, size_t error_size) {
+    int result;
+    if (count == 6U && !strcmp(fields[0], "R")) { recovery_record(model, fields); return 0; }
+    result = state->fleet_stream ? fleet_record_line(model, state, count, fields, error, error_size) :
+        local_record_line(model, count, fields, error, error_size);
+    if (result != 1) return result;
+    copy_text(error, error_size, "native data contains a malformed record");
+    return -1;
+}
+
 int load_model_stream(FILE *input, struct model *model, char *error, size_t error_size) {
     char *line = NULL;
     size_t line_size = 0U;
     ssize_t length;
-    bool handshake = false, fleet_stream = false, fleet_hosts = false, fleet_v3 = false;
+    bool handshake = false; struct stream_state state = {0};
     memset(model, 0, sizeof(*model));
     while ((length = getline(&line, &line_size, input)) >= 0) {
         char *fields[40];
@@ -209,35 +252,11 @@ int load_model_stream(FILE *input, struct model *model, char *error, size_t erro
         if (length > 0 && line[length - 1] == '\r') line[--length] = '\0';
         count = split_fields(line, fields, sizeof(fields) / sizeof(fields[0]));
         if (!handshake) {
-            if (!valid_handshake(count, fields)) {
-                copy_text(error, error_size, "native data protocol handshake failed");
-                free(line);
-                return -1;
-            }
-            fleet_stream = strcmp(fields[0], "HYDRA_FLEET_TUI") == 0;
-            fleet_hosts = fleet_stream && !strcmp(fields[1], "2");
-            fleet_v3 = fleet_stream && !strcmp(fields[1], "3");
-            fleet_hosts = fleet_hosts || fleet_v3;
+            if (parse_handshake(count, fields, &state, error, error_size)) { free(line); return -1; }
             handshake = true;
             continue;
         }
-        if (fleet_v3 && count == 9U && !strcmp(fields[0], "T")) {
-            if (host_record_v3(model, fields, error, error_size)) { free(line); return -1; }
-        } else if (fleet_hosts && count == 5 && !strcmp(fields[0], "T")) {
-            if (host_record(model, fields, error, error_size)) { free(line); return -1; }
-        } else if (fleet_stream && count == 7U && strcmp(fields[0], "F") == 0) {
-            if (fleet_record(model, fields, error, error_size)) { free(line); return -1; }
-        } else if (fleet_v3 && count == 17U && !strcmp(fields[0], "O")) {
-            if (task_record(model, fields, error, error_size)) { free(line); return -1; }
-        } else if (!fleet_stream && count == 30U && strcmp(fields[0], "H") == 0) {
-            if (head_record(model, fields, error, error_size)) { free(line); return -1; }
-        } else if (count == 6U && strcmp(fields[0], "R") == 0) {
-            recovery_record(model, fields);
-        } else {
-            copy_text(error, error_size, "native data contains a malformed record");
-            free(line);
-            return -1;
-        }
+        if (parse_record(model, &state, count, fields, error, error_size)) { free(line); return -1; }
     }
     free(line);
     if (!handshake) {

@@ -93,34 +93,33 @@ static void host_record_v3(json_object *listed, json_object *observed, json_obje
     printf("\t"); field_limit(confirmed, 40); printf("\t"); field_limit(age, 40); putchar('\n');
 }
 
+static void task_record_line(json_object *data, json_object *task, const char *name) {
+    json_object *steps = f_field(task, "steps"), *step = NULL, *waiting = f_field(task, "waiting"), *owner = f_field(task, "execution_owner");
+    const char *step_id = text_value(task, "step_id"), *attempt_id = text_value(task, "attempt_id"), *profile = text_value(task, "agent_profile");
+    char observed_at[40], confirmed[40]; size_t pending = 0;
+    if (!routable(name, 128)) return;
+    if (json_object_is_type(steps, json_type_array) && json_object_array_length(steps)) step = json_object_array_get_idx(steps, 0);
+    if (!strcmp(step_id, "-")) step_id = text_value(step, "step_id");
+    if (!strcmp(attempt_id, "-")) attempt_id = text_value(step, "attempt_id");
+    if (!strcmp(profile, "-")) profile = text_value(step, "agent_profile");
+    if (json_object_is_type(f_field(task, "pending_requests"), json_type_array)) pending = json_object_array_length(f_field(task, "pending_requests"));
+    json_token(data, "receiver_observed_at", observed_at); json_token(data, "last_confirmed_at", confirmed);
+    printf("O\t"); field_limit(name, 128); printf("\t"); field_limit(text_value(task, "task_id"), 128);
+    printf("\t"); field_limit(text_value(task, "run_id"), 128); printf("\t"); field_limit(step_id, 128);
+    printf("\t"); field_limit(attempt_id, 128); printf("\t"); field_limit(text_value(task, "workspace"), 768);
+    printf("\t"); field_limit(profile, 128); printf("\t"); field_limit(text_value(owner, "state"), 64);
+    printf("\t"); field_limit(text_value(task, "execution_state"), 64); printf("\t"); field_limit(text_value(waiting, "reason"), 32);
+    printf("\t"); field_limit(text_value(waiting, "detail"), 256); printf("\t"); field_limit(text_value(waiting, "next_action"), 256);
+    printf("\t"); field_limit(observed_at, 40); printf("\t"); field_limit(confirmed, 40);
+    printf("\t"); field_limit(nested_text(data, "freshness", "state"), 32); printf("\t%zu\n", pending);
+}
+
 static void task_records(json_object *observed, const char *name) {
-    json_object *data, *tasks; size_t i;
-    if (!observed || !json_object_get_boolean(f_field(observed, "ok")) ||
-        !(data = f_field(observed, "data")) || !(tasks = f_field(data, "tasks")) ||
-        !json_object_is_type(tasks, json_type_array)) return;
+    json_object *data = f_field(observed, "data"), *tasks = f_field(data, "tasks"); size_t i;
+    if (!observed || !json_object_get_boolean(f_field(observed, "ok")) || !json_object_is_type(tasks, json_type_array)) return;
     for (i = 0; i < json_object_array_length(tasks); i++) {
-        json_object *task = json_object_array_get_idx(tasks, i), *steps, *step = NULL, *waiting, *owner;
-        const char *step_id, *attempt_id, *profile;
-        char observed_at[40], confirmed[40]; size_t pending = 0;
-        if (!json_object_is_type(task, json_type_object) || !routable(name, 128)) continue;
-        steps = f_field(task, "steps");
-        if (json_object_is_type(steps, json_type_array) && json_object_array_length(steps)) step = json_object_array_get_idx(steps, 0);
-        step_id = text_value(task, "step_id"); attempt_id = text_value(task, "attempt_id");
-        if (!strcmp(step_id, "-")) step_id = text_value(step, "step_id");
-        if (!strcmp(attempt_id, "-")) attempt_id = text_value(step, "attempt_id");
-        profile = text_value(task, "agent_profile");
-        if (!strcmp(profile, "-")) profile = text_value(step, "agent_profile");
-        waiting = f_field(task, "waiting"); owner = f_field(task, "execution_owner");
-        if (json_object_is_type(f_field(task, "pending_requests"), json_type_array)) pending = json_object_array_length(f_field(task, "pending_requests"));
-        json_token(data, "receiver_observed_at", observed_at); json_token(data, "last_confirmed_at", confirmed);
-        printf("O\t"); field_limit(name, 128); printf("\t"); field_limit(text_value(task, "task_id"), 128);
-        printf("\t"); field_limit(text_value(task, "run_id"), 128); printf("\t"); field_limit(step_id, 128);
-        printf("\t"); field_limit(attempt_id, 128); printf("\t"); field_limit(text_value(task, "workspace"), 768);
-        printf("\t"); field_limit(profile, 128); printf("\t"); field_limit(text_value(owner, "state"), 64);
-        printf("\t"); field_limit(text_value(task, "execution_state"), 64); printf("\t"); field_limit(text_value(waiting, "reason"), 32);
-        printf("\t"); field_limit(text_value(waiting, "detail"), 256); printf("\t"); field_limit(text_value(waiting, "next_action"), 256);
-        printf("\t"); field_limit(observed_at, 40); printf("\t"); field_limit(confirmed, 40);
-        printf("\t"); field_limit(nested_text(data, "freshness", "state"), 32); printf("\t%zu\n", pending);
+        json_object *task = json_object_array_get_idx(tasks, i);
+        if (json_object_is_type(task, json_type_object)) task_record_line(data, task, name);
     }
 }
 
@@ -130,26 +129,24 @@ static void recovery_record(const char *name, json_object *host) {
     field(f_string(f_field(host, "error"), "code")); puts("\tobserved\tinspect cached snapshot");
 }
 
-int f_tui_data(unsigned seconds, unsigned jobs, bool include_hosts) {
-    json_object *listed, *observed, *list_hosts, *observed_hosts; size_t i;
-    if (!include_hosts) {
-        json_object *result = f_aggregate("list", seconds, jobs), *hosts = f_field(f_field(result, "data"), "hosts");
-        puts("HYDRA_FLEET_TUI\t1");
-        if (!json_object_is_type(hosts, json_type_array)) puts("R\tfleet\tall\tlimit or adapter failure\tobserved\tinspect CLI");
-        for (i = 0; json_object_is_type(hosts, json_type_array) && i < json_object_array_length(hosts); i++) {
-            json_object *host = json_object_array_get_idx(hosts, i), *heads = f_field(f_field(host, "data"), "heads");
-            const char *name = f_string(host, "host");
-            if (!json_object_get_boolean(f_field(host, "ok"))) {
-                printf("R\tfleet\t"); field(name); printf("\t"); field(f_string(f_field(host, "error"), "code")); puts("\tobserved\treconcile"); continue;
-            }
-            head_records(heads, name);
+static int fleet_tui_v1(unsigned seconds, unsigned jobs) {
+    json_object *result = f_aggregate("list", seconds, jobs), *hosts = f_field(f_field(result, "data"), "hosts"); size_t i;
+    puts("HYDRA_FLEET_TUI\t1");
+    if (!json_object_is_type(hosts, json_type_array)) puts("R\tfleet\tall\tlimit or adapter failure\tobserved\tinspect CLI");
+    for (i = 0; json_object_is_type(hosts, json_type_array) && i < json_object_array_length(hosts); i++) {
+        json_object *host = json_object_array_get_idx(hosts, i), *heads = f_field(f_field(host, "data"), "heads");
+        const char *name = f_string(host, "host");
+        if (!json_object_get_boolean(f_field(host, "ok"))) {
+            printf("R\tfleet\t"); field(name); printf("\t"); field(f_string(f_field(host, "error"), "code")); puts("\tobserved\treconcile"); continue;
         }
-        json_object_put(result); return ferror(stdout) ? 1 : 0;
+        head_records(heads, name);
     }
+    json_object_put(result); return ferror(stdout) ? 1 : 0;
+}
 
-    listed = f_aggregate("list", seconds, jobs);
-    observed = f_observation_aggregate(seconds, jobs);
-    list_hosts = f_field(f_field(listed, "data"), "hosts"); observed_hosts = f_field(f_field(observed, "data"), "hosts");
+static int fleet_tui_v3(unsigned seconds, unsigned jobs) {
+    json_object *listed = f_aggregate("list", seconds, jobs), *observed = f_observation_aggregate(seconds, jobs);
+    json_object *list_hosts = f_field(f_field(listed, "data"), "hosts"), *observed_hosts = f_field(f_field(observed, "data"), "hosts"); size_t i;
     puts("HYDRA_FLEET_TUI\t3");
     if (!json_object_is_type(list_hosts, json_type_array) && !json_object_is_type(observed_hosts, json_type_array))
         puts("R\tfleet\tall\tlimit or adapter failure\tobserved\tinspect CLI");
@@ -166,4 +163,9 @@ int f_tui_data(unsigned seconds, unsigned jobs, bool include_hosts) {
         host_record_v3(NULL, observed_host, NULL, name); task_records(observed_host, name); recovery_record(name, observed_host);
     }
     json_object_put(listed); json_object_put(observed); return ferror(stdout) ? 1 : 0;
+}
+
+int f_tui_data(unsigned seconds, unsigned jobs, bool include_hosts) {
+    if (!include_hosts) return fleet_tui_v1(seconds, jobs);
+    return fleet_tui_v3(seconds, jobs);
 }
