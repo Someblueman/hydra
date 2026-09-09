@@ -378,11 +378,11 @@ static void event_observation(json_object *data, json_object *state, json_object
     reset = prepare_event_input(request, generation, &stream_stat, input, byte_offset, &safe_offset, &reset_offset);
     scan.events = events; scan.cursor = cursor; scan.wanted = wanted; scan.byte_offset = byte_offset; scan.safe_offset = safe_offset; scan.reset = reset;
     scan_event_stream(input, &scan); reset = scan.reset; safe_offset = scan.safe_offset;
-    scan.last = event_head_cursor(input, stream_stat.st_size, scan.last);
     /* A bounded scan stops after fgets has consumed the next line.  Resume
      * from that line's start so the caller cannot skip an event. */
     next_byte_offset = scan.scan_truncated ? safe_offset : ftello(input);
     if (next_byte_offset < 0) next_byte_offset = safe_offset;
+    scan.last = event_head_cursor(input, stream_stat.st_size, scan.last);
     fclose(input);
     if (scan.first && cursor + 1U < scan.first) gap = true;
     if (reset || (f_field(request, "stream_id") && strcmp(f_text(f_field(request, "stream_id")), generation))) { json_object_put(events); events = json_object_new_array(); scan.delivered = cursor; next_byte_offset = reset_offset; }

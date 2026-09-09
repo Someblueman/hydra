@@ -212,7 +212,7 @@ steps:
   - id: work
     kind: exec
     needs: [create]
-    retry: 0
+    retry: 1
     idempotent: true
     args:
       head: wf-worker
@@ -229,6 +229,10 @@ steps:
 WORKFLOW
 cat > "$fixture/source/task-work.sh" <<'WORK'
 set -eu
+if [ ! -f result.txt ]; then
+    : > result.txt
+    exit 7
+fi
 cat "$HYDRA_TASK_INPUT_DIR/context" > result.txt
 WORK
 git -C "$fixture/source" add .hydra/workflows/remote.yml task-work.sh
@@ -279,6 +283,15 @@ import json, sys
 task = json.load(open(sys.argv[1]))["data"]["task"]
 attempts = task["attempt_history"]
 assert attempts and all(attempt["retention"] == "retained" and "process_exit" in attempt for attempt in attempts)
+work = [attempt for attempt in attempts if attempt["step_id"] == "work"]
+assert [(attempt["attempt_id"], attempt["state"], attempt["process_exit"]) for attempt in work] == [
+    ("attempt-1", "failed", "7"), ("attempt-2", "succeeded", "0")
+], work
+assert all(attempt["completed_at"] for attempt in work)
+assert task["process_exit"] == {"state": "succeeded", "exit_status": 0}
+assert task["result_collection"]["state"] == "ready"
+assert task["artifact_inventory"]
+assert task["verification"] == {"kind": "integrity", "state": "recorded", "recheck": "not_rechecked"}
 PY
 grep -q '"artifact_inventory"' "$fixture/workflow-observation"
 grep -q '"provider_observations"' "$fixture/workflow-observation"
@@ -288,10 +301,16 @@ grep -q '"verification"' "$fixture/workflow-observation"
 grep -q '"approval_requests"' "$fixture/workflow-observation"
 cursor="$(sed -n 's/.*"next_cursor":\([0-9][0-9]*\).*/\1/p' "$fixture/workflow-observation" | head -n 1)"
 case "$cursor" in ''|*[!0-9]*) exit 1 ;; esac
-task observe build --id "$workflow_id" --cursor "$cursor" > "$fixture/workflow-reconnect"
+stream_id="$(sed -n 's/.*"stream_id":"\([^"]*\)".*/\1/p' "$fixture/workflow-observation" | head -n 1)"
+byte_offset="$(sed -n 's/.*"next_byte_offset":\([0-9][0-9]*\).*/\1/p' "$fixture/workflow-observation" | head -n 1)"
+task observe build --id "$workflow_id" --cursor "$cursor" --byte-offset "$byte_offset" --stream-id "$stream_id" > "$fixture/workflow-reconnect"
+python3 - "$fixture/workflow-observation" "$fixture/workflow-reconnect" <<'PY'
+import json, sys
+pages = [json.load(open(path))["data"]["event_observation"] for path in sys.argv[1:]]
+assert [event["sequence"] for page in pages for event in page["events"]] == list(range(1, pages[-1]["head_cursor"] + 1))
+PY
 grep -q '"retention_gap":false' "$fixture/workflow-reconnect"
 grep -q '"stream_reset":false' "$fixture/workflow-reconnect"
-stream_id="$(sed -n 's/.*"stream_id":"\([^"]*\)".*/\1/p' "$fixture/workflow-observation" | head -n 1)"
 case "$stream_id" in ''|*[!0-9:]*) exit 1 ;; esac
 events_path="$fixture/host/state/v2/projects/$(sed -n 's/.*"execution_project_id":"\([^"]*\)".*/\1/p' "$fixture/host/fleet/tasks/$workflow_id/state.json")/workflows/runs/$(sed -n 's/.*"run_id":"\([^"]*\)".*/\1/p' "$fixture/host/fleet/tasks/$workflow_id/state.json")/events.jsonl"
 last_sequence="$(sed -n 's/.*"head_cursor":\([0-9][0-9]*\).*/\1/p' "$fixture/workflow-reconnect" | head -n 1)"
