@@ -91,12 +91,20 @@ See [EVENTS.md](EVENTS.md), [LIFECYCLE.md](LIFECYCLE.md), and
 
 ## Workflows and integration
 
-Objective planning schema v1 is an optional, closed JSON authoring contract exposed
-by `hydra workflow plan schema`. It lowers local spawn/exec plans into the existing
-workflow runtime. Compilation binds source, declared inputs, context, profiles,
-policy and compiler version; execution requires the exact accepted SHA-256.
-Planning success requires sealed final deliverables and positive reports linked
-to their exact bytes and requirement IDs. Coverage alone is not semantic proof.
+Objective planning schema v1 and schema v2 are optional, closed JSON authoring
+contracts exposed by `hydra workflow plan schema`. The additive 9A `obligations`
+array keeps those plan versions and the compiled-artifact wrapper unchanged:
+legacy plans remain byte-compatible, while explicit obligations are included in
+the canonical plan and therefore in the compiled SHA-256/acceptance binding.
+Each obligation names its intent reference, exact deliverable/step/output subject,
+criterion, evaluation method/check, required report evidence, applicable
+environment, supported completion rule, and limitations. Multiple obligations
+may share one requirement. `workflow plan obligations --json` is a read-only
+projection; legacy rows are marked `derived` with unknown intent/semantic
+evidence. Compilation rejects orphan or circular evidence and unreachable
+evaluation joins with field paths and counterexamples. Structural satisfiability,
+runtime evidence, and semantic adequacy remain separate; coverage alone is not
+semantic proof.
 See [the planner recipe](PLANNER_RECIPE.md) for limits and report format.
 
 Workflow definition schema v1 is the stable finite-DAG contract. Definitions use the

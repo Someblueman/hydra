@@ -117,6 +117,7 @@ int plan_graph(json_object *plan, json_object *errors) {
         if (head && producers != 1) plan_error(errors, "steps.args.head", "unbound_head", "initial plans create every execution head from the bound source");
     }
     coverage(plan, errors);
+    plan_obligations_graph(plan, reach, errors);
     plan_evidence_graph(plan, reach, errors);
     return json_object_array_length(errors) ? -1 : 0;
 }

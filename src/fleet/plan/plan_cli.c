@@ -7,7 +7,17 @@
 static json_object *diagnostics(json_object *errors, json_object *plan) {
     json_object *data = json_object_new_object(), *result;
     json_object_object_add(data, "diagnostics", json_object_get(errors));
-    if (plan) json_object_object_add(data, "coverage", json_object_get(f_field(plan, "requirements")));
+    if (plan) {
+        json_object *obligations = plan_obligations_projection(plan), *reviews = plan_obligations_reviews(plan), *analysis = json_object_new_object();
+        json_object_object_add(data, "coverage", json_object_get(f_field(plan, "requirements")));
+        json_object_object_add(data, "obligations", obligations);
+        json_object_object_add(data, "semantic_reviews", reviews);
+        f_string_add(analysis, "structural", json_object_array_length(errors) ? "not_satisfiable" : "satisfiable");
+        f_string_add(analysis, "obligations", f_field(plan, "obligations") ? (json_object_array_length(errors) ? "not_satisfiable" : "satisfiable") : "legacy_projection");
+        f_string_add(analysis, "runtime", "required");
+        f_string_add(analysis, "semantic", f_field(plan, "obligations") ? (json_object_array_length(reviews) ? "review_required" : "not_assessed") : "unknown");
+        json_object_object_add(data, "analysis", analysis);
+    }
     result = f_success("workflow plan", data);
     json_object_object_add(result, "ok", json_object_new_boolean(json_object_array_length(errors) == 0));
     if (json_object_array_length(errors)) {
@@ -100,6 +110,27 @@ static json_object *show_command(char **argv, bool *printed) {
     }
     json_object_put(compiled);
     return result;
+}
+
+static json_object *obligations_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]), *errors = json_object_new_array(), *result = NULL;
+    char digest[65];
+    (void)printed;
+    if ((argv[2] && strcmp(argv[2], "--json")) || !compiled || !f_number_is(compiled, "schema_version", 1) ||
+        !f_string(compiled, "compiler") || strcmp(f_string(compiled, "compiler"), PLAN_COMPILER) ||
+        plan_validate(f_field(compiled, "plan"), f_field(compiled, "policy"), errors) || plan_digest(compiled, digest)) goto done;
+    {
+        json_object *data = json_object_new_object();
+        json_object_object_add(data, "schema_version", json_object_new_int(1));
+        f_string_add(data, "plan_sha256", digest);
+        json_object_object_add(data, "obligations", plan_obligations_projection(f_field(compiled, "plan")));
+        json_object_object_add(data, "semantic_reviews", plan_obligations_reviews(f_field(compiled, "plan")));
+        f_string_add(data, "structural_proof", f_field(f_field(compiled, "plan"), "obligations") ? "satisfiable" : "legacy_projection");
+        f_string_add(data, "semantic_proof", f_field(f_field(compiled, "plan"), "obligations") ? "not_claimed" : "unknown");
+        result = f_success("workflow plan obligations", data);
+    }
+done:
+    json_object_put(errors); json_object_put(compiled); return result;
 }
 
 static json_object *admit_command(char **argv, bool *printed) {
@@ -232,6 +263,8 @@ json_object *plan_cli(int argc, char **argv) {
         {"result", 2, result_command},
         {"result-view", 2, result_command},
         {"show", 2, show_command},
+        {"obligations", 2, obligations_command},
+        {"obligations", 3, obligations_command},
         {"admit", 5, admit_command},
         {"finish", 2, finish_command},
         {"heads", 2, heads_command},
