@@ -51,6 +51,7 @@ int plan_digest(json_object *value, char digest[65]);
 enum plan_verdict { PLAN_INVALID, PLAN_PASS, PLAN_FAIL, PLAN_INCONCLUSIVE };
 enum plan_verdict plan_check_result(json_object *compiled, const char *run, json_object *check);
 int plan_check_digest(json_object *compiled, const char *check, char digest[65]);
+int plan_recipe_digest(json_object *compiled, const char *check, char digest[65]);
 enum plan_verdict plan_report(json_object *compiled, json_object *check,
                               json_object *report, const char *subject);
 int plan_materialize(json_object *compiled, const char *directory);

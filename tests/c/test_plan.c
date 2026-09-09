@@ -2,6 +2,7 @@
 #include "fleet/support/files.h"
 #include "fleet/plan/plan.h"
 #include <assert.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -105,6 +106,124 @@ static void report_cases(void) {
     assert(plan_report(compiled, check, NULL, subject) == PLAN_INVALID);
     json_object_put(report); json_object_put(compiled);
 }
+static const char *equals_recipe = "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"case-1\",\"expected\":1}]}";
+static json_object *copy_object(json_object *value) {
+    json_object *copy = f_parse(json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN));
+    assert(copy); return copy;
+}
+static json_object *first_record(json_object *report) {
+    return json_object_array_get_idx(f_field(report, "evidence_records"), 0);
+}
+static void seal_observations(json_object *record) {
+    char hash[65]; json_object *observations = f_field(record, "observations");
+    for (size_t i = 0; i < json_object_array_length(observations); i++) {
+        json_object *observation = json_object_array_get_idx(observations, i);
+        assert(!plan_digest(f_field(observation, "raw"), hash));
+        f_string_add(observation, "raw_sha256", hash);
+    }
+    assert(!plan_digest(observations, hash)); f_string_add(record, "raw_evidence_sha256", hash);
+}
+static void bind_report(json_object *compiled, json_object *report) {
+    char hash[65];
+    assert(!plan_check_digest(compiled, "check", hash)); f_string_add(report, "validator_sha256", hash);
+    assert(!plan_recipe_digest(compiled, "check", hash)); f_string_add(first_record(report), "validator_recipe_sha256", hash);
+}
+static void expect_report(json_object *compiled, json_object *report, enum plan_verdict expected) {
+    json_object *check = json_object_array_get_idx(f_field(f_field(compiled, "plan"), "checks"), 0);
+    assert(plan_report(compiled, check, report, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") == expected);
+}
+static void structured_measurement_controls(json_object *compiled, json_object *source) {
+    json_object *report = copy_object(source), *record = first_record(report);
+    json_object *raw = f_field(json_object_array_get_idx(f_field(record, "observations"), 0), "raw");
+    const char *bad[] = {"\"looks good\"", "{}", "null", "[]", NULL};
+    for (size_t i = 0; bad[i]; i++) {
+        json_object_object_add(raw, "measurement", f_parse_value(bad[i]));
+        seal_observations(record); expect_report(compiled, report, PLAN_INVALID);
+    }
+    json_object_object_del(raw, "measurement"); seal_observations(record); expect_report(compiled, report, PLAN_INVALID);
+    json_object_object_add(raw, "measurement", json_object_new_double(1.5));
+    seal_observations(record); expect_report(compiled, report, PLAN_PASS);
+    json_object_put(report);
+}
+static void structured_recipe_controls(json_object *source_compiled, json_object *source_report) {
+    json_object *compiled = copy_object(source_compiled), *report = copy_object(source_report);
+    json_object *check = json_object_array_get_idx(f_field(f_field(compiled, "plan"), "checks"), 0);
+    const char *bad[] = {
+        "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"case-1\",\"expected\":1},{\"id\":\"case-1\",\"expected\":1}]}",
+        "{}", "{\"predicate\":\"unsupported\",\"cases\":[{\"id\":\"case-1\",\"expected\":1}]}", NULL};
+    for (size_t i = 0; bad[i]; i++) {
+        f_string_add(check, "definition", bad[i]); bind_report(compiled, report);
+        expect_report(compiled, report, PLAN_INVALID);
+    }
+    f_string_add(check, "definition", equals_recipe); bind_report(compiled, report);
+    expect_report(compiled, report, PLAN_PASS);
+    json_object_put(report); json_object_put(compiled);
+}
+static void structured_failure_controls(json_object *compiled, json_object *source) {
+    json_object *report = copy_object(source), *record = first_record(report);
+    json_object *raw = f_field(json_object_array_get_idx(f_field(record, "observations"), 0), "raw");
+    json_object *counts = f_field(record, "counts"), *invocation = f_field(record, "invocation");
+    json_object_object_add(raw, "actual", json_object_new_int(0)); seal_observations(record);
+    json_object_object_add(counts, "failed", json_object_new_int(1));
+    expect_report(compiled, report, PLAN_INVALID); /* Inverted PASS cannot hide a known failed observation. */
+    f_string_add(report, "domain_verdict", "fail"); f_string_add(report, "verdict", "fail");
+    expect_report(compiled, report, PLAN_FAIL);
+    json_object_object_add(counts, "failed", json_object_new_int(0)); expect_report(compiled, report, PLAN_INVALID);
+    json_object_object_add(raw, "actual", json_object_new_int(1)); seal_observations(record);
+    f_string_add(report, "domain_verdict", "pass"); f_string_add(report, "verdict", "pass"); expect_report(compiled, report, PLAN_PASS);
+    json_object_object_add(invocation, "exit_code", json_object_new_int(1)); expect_report(compiled, report, PLAN_INVALID);
+    f_string_add(report, "domain_verdict", "fail"); f_string_add(report, "verdict", "fail"); expect_report(compiled, report, PLAN_FAIL);
+    json_object_object_add(invocation, "exit_code", json_object_new_int(0));
+    f_string_add(report, "domain_verdict", "pass"); f_string_add(report, "verdict", "pass"); expect_report(compiled, report, PLAN_PASS);
+    json_object_object_add(record, "case_inventory", json_object_new_array()); expect_report(compiled, report, PLAN_INVALID);
+    json_object_put(report);
+}
+static void structured_metadata_controls(json_object *compiled, json_object *source) {
+    json_object *report = copy_object(source), *record = first_record(report), *invocation = f_field(record, "invocation");
+    json_object_object_add(invocation, "argv", f_parse_value("[1]")); expect_report(compiled, report, PLAN_INVALID);
+    json_object_object_add(invocation, "argv", f_parse_value("[\"fixture\"]")); expect_report(compiled, report, PLAN_PASS);
+    json_object_object_add(record, "limitations", f_parse_value("[false]")); expect_report(compiled, report, PLAN_INVALID);
+    json_object_object_add(record, "limitations", json_object_new_array()); expect_report(compiled, report, PLAN_PASS);
+    json_object_put(report);
+}
+static void assessment_report_cases(json_object *source_compiled, json_object *source_report) {
+    json_object *compiled = copy_object(source_compiled), *report = copy_object(source_report);
+    json_object *check = json_object_array_get_idx(f_field(f_field(compiled, "plan"), "checks"), 0);
+    json_object *record = first_record(report), *counts = f_field(record, "counts");
+    json_object *observation = json_object_array_get_idx(f_field(record, "observations"), 0), *raw = f_field(observation, "raw"), *review;
+    f_string_add(check, "method", "assessment"); f_string_add(check, "definition", "Rubric text");
+    f_string_add(f_field(json_object_array_get_idx(f_field(f_field(compiled, "plan"), "obligations"), 0), "evaluation"), "method", "assessment");
+    f_string_add(observation, "id", "obligation"); json_object_object_add(record, "case_inventory", f_parse_value("[\"obligation\"]"));
+    f_string_add(raw, "verdict", "pass"); f_string_add(raw, "explanation", "Accepted");
+    review = f_parse("{\"rubric\":\"Rubric text\",\"source_locators\":[\"fixture\"],\"disagreement\":\"None\",\"authority\":\"fixture\"}");
+    json_object_object_add(record, "reviewer_decision", review);
+    bind_report(compiled, report); seal_observations(record); expect_report(compiled, report, PLAN_PASS);
+    f_string_add(raw, "verdict", "fail"); json_object_object_add(counts, "failed", json_object_new_int(1));
+    f_string_add(report, "domain_verdict", "fail"); f_string_add(report, "verdict", "fail"); seal_observations(record); expect_report(compiled, report, PLAN_FAIL);
+    json_object_object_add(counts, "failed", json_object_new_int(0)); f_string_add(raw, "verdict", "inconclusive");
+    f_string_add(report, "domain_verdict", "inconclusive"); f_string_add(report, "verdict", "inconclusive"); seal_observations(record); expect_report(compiled, report, PLAN_INCONCLUSIVE);
+    json_object_object_del(review, "authority"); expect_report(compiled, report, PLAN_INVALID);
+    f_string_add(review, "authority", "fixture"); expect_report(compiled, report, PLAN_INCONCLUSIVE);
+    f_string_add(check, "definition", "Changed rubric"); bind_report(compiled, report); expect_report(compiled, report, PLAN_INVALID);
+    f_string_add(review, "rubric", "Changed rubric"); expect_report(compiled, report, PLAN_INCONCLUSIVE);
+    json_object_object_add(review, "source_locators", f_parse_value("[7]")); expect_report(compiled, report, PLAN_INVALID);
+    json_object_object_add(review, "source_locators", f_parse_value("[\"fixture\"]")); expect_report(compiled, report, PLAN_INCONCLUSIVE);
+    json_object_put(report); json_object_put(compiled);
+}
+static void structured_report_cases(void) {
+    const char *subject = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    json_object *compiled = json_object_new_object(), *plan = fixture(), *check, *report, *record;
+    assert(plan); json_object_object_add(compiled, "plan", plan); check = json_object_array_get_idx(f_field(plan, "checks"), 0);
+    f_string_add(check, "definition", equals_recipe);
+    json_object_object_add(plan, "obligations", f_parse_value("[{\"id\":\"obligation\",\"evaluation\":{\"check\":\"check\"},\"required_evidence\":[\"measurements\"]}]"));
+    report = f_parse("{\"schema_version\":3,\"execution_status\":\"completed\",\"evidence_status\":\"valid\",\"domain_verdict\":\"pass\",\"verdict\":\"pass\",\"limitations\":[],\"requirements\":[\"content\"],\"evidence\":\"fixture\",\"evidence_records\":[{\"obligation_id\":\"obligation\",\"validator_identity\":\"fixture\",\"invocation\":{\"argv\":[\"fixture\"],\"exit_code\":0},\"environment\":{\"host\":\"local\",\"toolchain\":\"fixture\"},\"case_inventory\":[\"case-1\"],\"observations\":[{\"id\":\"case-1\",\"raw\":{\"measurement\":1,\"actual\":1}}],\"counts\":{\"executed\":1,\"failed\":0,\"skipped\":0},\"limitations\":[]}]}");
+    record = first_record(report); f_string_add(report, "subject_sha256", subject); f_string_add(record, "subject_manifest_sha256", subject);
+    bind_report(compiled, report); seal_observations(record); expect_report(compiled, report, PLAN_PASS);
+    structured_measurement_controls(compiled, report); structured_recipe_controls(compiled, report);
+    structured_failure_controls(compiled, report); structured_metadata_controls(compiled, report);
+    assessment_report_cases(compiled, report);
+    json_object_put(report); json_object_put(compiled);
+}
 static void distributed_graph_cases(void) {
     json_object *plan = plan_read("tests/fixtures/plan-task/plan.json"), *policy = plan_read("tests/fixtures/plan-task/policy.json");
     assert(plan && policy); expect(plan, policy, NULL);
@@ -182,6 +301,6 @@ static void obligation_cases(void) {
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    terminal_cases(); graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
+    terminal_cases(); graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); structured_report_cases(); assert(!f_remove_tree(root));
     puts("planning graph, policy, canonical JSON and parser checks passed"); return 0;
 }

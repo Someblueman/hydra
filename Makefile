@@ -336,6 +336,7 @@ test-fleet: test-discovery $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)
 	HYDRA_TEST_HEADLESS=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan.sh
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_headless_plan_adapter.sh
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan.sh
+	sh tests/test_workflow_plan_v3.sh
 	@for verdict in pass fail inconclusive stale-subject stale-validator missing-coverage crash bad-artifact changed-harness; do \
 		HYDRA_TEST_PLAN_TASK_VERDICT="$$verdict" HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh || exit 1; \
 	done

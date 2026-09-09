@@ -93,6 +93,17 @@ void plan_delivery_view(json_object *delivery) {
         printf("\nCheck %s: %s\nSubject SHA-256: %s\nRequirements:", check_id, f_string(report, "verdict"), f_string(report, "subject_sha256"));
         for (i = 0; i < json_object_array_length(requirements); i++) printf(" %s", f_text(json_object_array_get_idx(requirements, i)));
         printf("\nEvidence: %s\n", f_string(report, "evidence"));
+        if (f_number_is(report, "schema_version", 3)) {
+            json_object *records = f_field(report, "evidence_records");
+            printf("Execution status: %s\nEvidence status: %s\nDomain verdict: %s\n",
+                f_string(report, "execution_status"), f_string(report, "evidence_status"), f_string(report, "domain_verdict"));
+            for (i = 0; i < json_object_array_length(records); i++) {
+                json_object *record = json_object_array_get_idx(records, i), *counts = f_field(record, "counts");
+                printf("Obligation %s: executed=%d failed=%d skipped=%d\n", f_string(record, "obligation_id"),
+                    json_object_get_int(f_field(counts, "executed")), json_object_get_int(f_field(counts, "failed")),
+                    json_object_get_int(f_field(counts, "skipped")));
+            }
+        }
     }
 }
 int plan_finish(const char *run) {
