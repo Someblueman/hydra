@@ -274,6 +274,12 @@ grep -q '"event_observation"' "$fixture/workflow-observation"
 grep -q '"attempt_history"' "$fixture/workflow-observation"
 grep -q '"process_exit":"0"' "$fixture/workflow-observation"
 grep -q '"completed_at"' "$fixture/workflow-observation"
+python3 - "$fixture/workflow-observation" <<'PY'
+import json, sys
+task = json.load(open(sys.argv[1]))["data"]["task"]
+attempts = task["attempt_history"]
+assert attempts and all(attempt["retention"] == "retained" and "process_exit" in attempt for attempt in attempts)
+PY
 grep -q '"artifact_inventory"' "$fixture/workflow-observation"
 grep -q '"provider_observations"' "$fixture/workflow-observation"
 grep -q '"process_exit"' "$fixture/workflow-observation"

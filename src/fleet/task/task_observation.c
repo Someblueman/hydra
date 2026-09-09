@@ -407,11 +407,25 @@ static unsigned step_attempt_count(const char *step_root) {
     free(text); return count;
 }
 
+static void add_missing_attempt(json_object *attempts, json_object *attempt, unsigned number) {
+    char id[32]; (void)snprintf(id, sizeof(id), "attempt-%u", number); f_string_add(attempt, "attempt_id", id);
+    f_string_add(attempt, "retention", "missing"); json_object_object_add(attempt, "state", json_object_new_null());
+    json_object_object_add(attempt, "process_exit", json_object_new_null()); json_object_object_add(attempt, "completed_at", json_object_new_null());
+    json_object_object_add(attempt, "failure_class", json_object_new_null()); f_string_add(attempt, "result_collection", "unavailable"); f_string_add(attempt, "verification", "unavailable");
+    json_object_array_add(attempts, attempt);
+}
+
 static void add_one_attempt(json_object *attempts, const char *step_root, const char *step_id, unsigned number) {
     json_object *attempt = json_object_new_object(); char attempt_root[F_PATH] = "", *exit_status = NULL, *completed_at = NULL, *failure_class = NULL;
     f_string_add(attempt, "step_id", step_id ? step_id : "unavailable");
     (void)snprintf(attempt_root, sizeof(attempt_root), "%s/attempt-%u", step_root, number);
-    if (step_root[0]) { struct stat attempt_stat; if (lstat(attempt_root, &attempt_stat) || !S_ISDIR(attempt_stat.st_mode)) { json_object_put(attempt); return; } }
+    if (step_root[0]) {
+        struct stat attempt_stat;
+        if (lstat(attempt_root, &attempt_stat) || !S_ISDIR(attempt_stat.st_mode)) {
+            add_missing_attempt(attempts, attempt, number); return;
+        }
+    }
+    f_string_add(attempt, "retention", "retained");
     { char id[32]; (void)snprintf(id, sizeof(id), "attempt-%u", number); f_string_add(attempt, "attempt_id", id); }
     if (step_root[0]) { exit_status = scalar(attempt_root, "exit-code"); completed_at = scalar(attempt_root, "completed-at"); failure_class = scalar(attempt_root, "failure-class"); }
     if (exit_status && !strcmp(exit_status, "0")) f_string_add(attempt, "state", "succeeded");
