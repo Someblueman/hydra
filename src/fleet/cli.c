@@ -47,6 +47,15 @@ struct fleet_options {
     int rest;
     bool explicit_timeout;
 };
+static json_object *bootstrap_alias(struct f_remote *remote, const struct fleet_options *options) {
+    json_object *result;
+    if (!options->input || !options->digest) return f_error("fleet-bootstrap", "invalid_input", "input package and sha256 are required");
+    result = f_bootstrap(remote, options->input, options->digest, NULL, options->explicit_timeout ? options->seconds : 60);
+    if (json_object_get_boolean(f_field(result, "ok")) && f_remote_save(remote)) {
+        json_object_put(result); return f_error("fleet-bootstrap", "alias_update_failed", "installed package exists but its alias could not be saved");
+    }
+    return result;
+}
 static json_object *parse_options(int argc, char **argv, struct fleet_options *options) {
     const struct { const char *name; const char **value; } fields[] = {
         {"--project", &options->project},
@@ -109,7 +118,7 @@ json_object *f_cli(int argc, char **argv) {
     if (domain_cli(argc, argv, &result)) return result;
     if (!strcmp(action, "help") || !strcmp(action, "--help")) {
         json_object *data = json_object_new_object();
-        f_string_add(data, "usage", "fleet discover|qualify ...; fleet enroll review --input QUALIFICATION --output INTENT --project /absolute [--package FILE --sha256 HASH --prefix /path]; fleet enroll apply --input INTENT --confirm DIGEST; fleet list|overview|doctor|reconcile|watch [--timeout N --jobs N]; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path -- ARGS");
+        f_string_add(data, "usage", "fleet discover|qualify ...; fleet enroll review --input QUALIFICATION --candidate ID [--candidate ID...] --output INTENT --project /absolute [--package FILE --sha256 HASH --prefix /path]; fleet enroll apply --input INTENT --confirm DIGEST; fleet list|overview|doctor|reconcile|watch [--timeout N --jobs N]; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path -- ARGS");
         return f_success("fleet-help", data);
     }
     result = parse_options(argc, argv, &options);
@@ -143,10 +152,7 @@ json_object *f_cli(int argc, char **argv) {
         if (result) return result;
     }
     if (!options.name || f_remote_load(options.name, &remote)) return f_error("fleet", "invalid_alias", "register a remote with hydra remote add");
-    if (!strcmp(action, "bootstrap")) {
-        if (!options.input || !options.digest) return f_error("fleet-bootstrap", "invalid_input", "input package and sha256 are required");
-        return f_bootstrap(&remote, options.input, options.digest, options.explicit_timeout ? options.seconds : 60);
-    }
+    if (!strcmp(action, "bootstrap")) return bootstrap_alias(&remote, &options);
     result = f_observe(&remote, "handshake", options.seconds);
     if (!json_object_get_boolean(f_field(result, "ok"))) return result;
     if (!supported(result, action)) { json_object_put(result); return f_error("fleet", "capability_unavailable", "remote does not advertise this operation"); }

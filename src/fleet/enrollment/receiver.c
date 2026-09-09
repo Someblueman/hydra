@@ -2,6 +2,7 @@
 #include "fleet/support/files.h"
 #include "fleet/support/json.h"
 #include "fleet/transport/server.h"
+#include "fleet/support/process.h"
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
@@ -19,11 +20,23 @@ static bool operation_name(const char *operation, char name[256]) {
 /* Store the exact effect-bearing request, independently of JSON key order.
  * A reused operation ID cannot authorize another project or init argument. */
 static json_object *request_binding(json_object *request) {
-    const char *const keys[] = {"protocol", "action", "project", "args", NULL};
+    const char *const keys[] = {"protocol", "action", "project", "args", "expected_peer_fingerprint", NULL};
     json_object *binding = json_object_new_object(); size_t i;
     for (i = 0; keys[i]; i++)
         json_object_object_add(binding, keys[i], json_object_get(f_field(request, keys[i])));
     return binding;
+}
+
+json_object *enrollment_preflight(json_object *request) {
+    const char *project = f_string(request, "project"); struct f_capture cap = {0};
+    json_object *data; char *argv[] = {"git", "-C", (char *)project, "rev-parse", "--show-toplevel", NULL};
+    if (!project || project[0] != '/') return f_error("fleet-enrollment", "invalid_project", "review an existing absolute project path");
+    if (f_run(argv, NULL, 0, 5, &cap) || cap.status || !cap.out[0]) {
+        f_capture_free(&cap); return f_error("fleet-enrollment", "invalid_project", "reviewed project must be an accessible Git working tree");
+    }
+    cap.out[strcspn(cap.out, "\r\n")] = '\0'; data = json_object_new_object();
+    f_string_add(data, "requested_project", project); f_string_add(data, "canonical_project", cap.out);
+    f_string_add(data, "hydra", f_hydra); f_capture_free(&cap); return f_success("fleet-enrollment-preflight", data);
 }
 
 static int save_record(const char *path, const char *directory, json_object *record, bool replace) {

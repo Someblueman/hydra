@@ -402,3 +402,7 @@ test-discovery: build-fleet
 test-enrollment: build-fleet
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_enrollment.py
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_enrollment_receiver.py
+
+.PHONY: test-enrollment-ssh
+test-enrollment-ssh: build-fleet
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_enrollment_ssh.py

@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", "execution-headless", NULL};
+static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "enrollment-init", "enrollment-preflight", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", "execution-headless", NULL};
 bool f_terminal_available(void) {
     struct f_capture cap = {0}; char *argv[] = {"tmux", "-V", NULL};
     unsigned major = 0, minor = 0;
@@ -140,6 +140,7 @@ static json_object *admission_inspect(json_object *args, size_t count) {
 
 static json_object *builtin_request(const char *action, json_object *request) {
     if (!strcmp(action, "handshake")) return f_handshake();
+    if (!strcmp(action, "enrollment-preflight")) return enrollment_preflight(request);
     if (!strcmp(action, "list")) return snapshot();
     if (!strcmp(action, "overview")) return task_overview();
     if (!strcmp(action, "auth")) return auth_serve(request);

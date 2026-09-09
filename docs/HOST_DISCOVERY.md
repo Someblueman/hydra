@@ -179,5 +179,6 @@ apply`; see [host enrollment](HOST_ENROLLMENT.md). These commands require an
 actual peer fingerprint from qualification, bind the selected source/candidate,
 principal, capability, project, and optional package digest/prefix into a
 digest-confirmed intent, and preserve typed outcomes. They do not copy
-credentials or trust repositories implicitly. This remains local controlled-
-transport qualification; it does not claim live host or provider qualification.
+credentials or trust repositories implicitly. Controlled transport and ephemeral loopback OpenSSH acceptance are described
+in the enrollment guide; neither establishes live external host or provider
+qualification.

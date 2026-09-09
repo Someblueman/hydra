@@ -27,6 +27,7 @@ class EnrollmentReceiverTest(unittest.TestCase):
             "#!/usr/bin/env python3\n"
             "import os, pathlib, sys, time\n"
             "if 'init' in sys.argv:\n"
+            "    pathlib.Path(os.environ['ENROLL_CHILD_PID']).write_text(str(os.getpid()))\n"
             "    pathlib.Path(os.environ['ENROLL_STARTED']).touch()\n"
             "    while os.environ.get('ENROLL_HOLD') and not pathlib.Path(os.environ['ENROLL_HOLD']).exists(): time.sleep(.01)\n"
             "    with open(os.environ['ENROLL_COUNTER'], 'a') as count: count.write('init\\n')\n"
@@ -35,9 +36,9 @@ class EnrollmentReceiverTest(unittest.TestCase):
         wrapper.chmod(0o755)
         self.env = dict(os.environ, HYDRA_HOME=str(self.home), HOME=str(self.root),
                         HYDRA_BIN_CMD=str(wrapper), ENROLL_REAL=str(source / "bin/hydra"),
-                        ENROLL_COUNTER=str(self.counter), ENROLL_STARTED=str(self.root / "started"))
+                        ENROLL_COUNTER=str(self.counter), ENROLL_CHILD_PID=str(self.root / "child-pid"), ENROLL_STARTED=str(self.root / "started"))
         self.request = {"protocol": 1, "action": "init", "project": str(self.repo),
-                        "args": ["--no-agent", "--trust"], "enrollment_operation_id": "a" * 64 + ":host"}
+                        "args": ["--no-agent", "--trust"], "enrollment_operation_id": "a" * 64 + ":host", "expected_peer_fingerprint": "SHA256:reviewed"}
 
     def start(self, request=None):
         process = subprocess.Popen([self.fleet, "fleet", "serve"], env=self.env,
@@ -68,6 +69,12 @@ class EnrollmentReceiverTest(unittest.TestCase):
     def kill_owner(self, process):
         if process.poll() is None:
             os.killpg(process.pid, signal.SIGKILL)
+            child = self.root / "child-pid"
+            if child.exists():
+                try:
+                    os.killpg(int(child.read_text()), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
         process.communicate(timeout=10)
 
     def test_duplicate_reconciles_exact_result_after_lost_response(self):
@@ -82,7 +89,7 @@ class EnrollmentReceiverTest(unittest.TestCase):
         self.assertTrue(self.call()["ok"])
         other = self.root / "other"
         subprocess.run(["git", "init", "-q", str(other)], check=True)
-        for changed in (dict(self.request, project=str(other)), dict(self.request, args=["--no-agent"])):
+        for changed in (dict(self.request, project=str(other)), dict(self.request, args=["--no-agent"]), dict(self.request, expected_peer_fingerprint="SHA256:changed")):
             self.assertEqual(self.call(changed)["error"]["code"], "intent_changed")
         self.assertEqual(self.count(), ["init"])
 
