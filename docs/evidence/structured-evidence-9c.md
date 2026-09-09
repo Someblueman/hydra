@@ -9,14 +9,17 @@ A v3 report contains `execution_status`, `evidence_status`,
 `domain_verdict`, and the compatibility `verdict`, plus the exact
 `subject_sha256` and the accepted `validator_sha256`. Its `evidence_records`
 array has one record per obligation. Each record binds the obligation to the
-subject manifest, validator identity and recipe hash, invocation, execution
-environment, raw observations, and a hash of the canonical observations.
+subject manifest, validator identity and the hash of the accepted validator
+recipe, invocation, execution environment, an explicit case inventory, raw
+observations, and a hash of the canonical observations.
 
-Each observation has an identifier, an outcome (`pass`, `fail`, or `skip`),
-and a raw evidence hash. The trusted adapter recomputes executed, failed, and
-skipped counts from those outcomes and compares them with the recorded
-counts. A pass requires completed execution, valid evidence, no failed or
-skipped observations, and a domain verdict derived from those observations.
+Each observation has an identifier, the supported `equals` predicate,
+expected and actual values, a raw payload, and a hash recomputed from that
+payload. The trusted adapter recomputes each outcome, executed/failed counts,
+and case inventory coverage; report supplied outcomes cannot override it. A
+pass requires completed execution with exit code zero, valid evidence, no
+failed or skipped observations, and a domain verdict derived from those
+observations.
 Missing or stale bindings, duplicate or incomplete obligation records,
 inconclusive execution, and changed raw observations invalidate the report.
 When an obligation declares `measurements` as required evidence, at least one

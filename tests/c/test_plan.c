@@ -105,6 +105,26 @@ static void report_cases(void) {
     assert(plan_report(compiled, check, NULL, subject) == PLAN_INVALID);
     json_object_put(report); json_object_put(compiled);
 }
+static void structured_report_cases(void) {
+    const char *subject = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    char validator[65], recipe[65], raw_hash[65], evidence_hash[65];
+    json_object *compiled = json_object_new_object(), *plan = fixture(), *check, *report, *record, *observation, *raw, *observations;
+    assert(plan); json_object_object_add(compiled, "plan", plan); check = json_object_array_get_idx(f_field(plan, "checks"), 0);
+    json_object_object_add(plan, "obligations", f_parse_value("[{\"id\":\"obligation\",\"evaluation\":{\"check\":\"check\"},\"required_evidence\":[\"measurements\"]}]"));
+    assert(!plan_check_digest(compiled, "check", validator) && !plan_recipe_digest(compiled, "check", recipe));
+    raw = f_parse("{\"measurement\":1}"); assert(!plan_digest(raw, raw_hash));
+    observation = f_parse("{\"id\":\"case-1\",\"predicate\":\"equals\",\"expected\":1,\"actual\":1,\"raw\":{\"measurement\":1},\"raw_sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\"}");
+    f_string_add(observation, "raw_sha256", raw_hash); observations = json_object_new_array(); json_object_array_add(observations, observation); assert(!plan_digest(observations, evidence_hash));
+    record = f_parse("{\"obligation_id\":\"obligation\"}"); f_string_add(record, "subject_manifest_sha256", subject); f_string_add(record, "validator_identity", "fixture"); f_string_add(record, "validator_recipe_sha256", recipe);
+    json_object_object_add(record, "invocation", f_parse("{\"argv\":[\"fixture\"],\"exit_code\":0}")); json_object_object_add(record, "environment", f_parse("{\"host\":\"local\",\"toolchain\":\"fixture\"}"));
+    json_object_object_add(record, "case_inventory", f_parse_value("[\"case-1\"]")); json_object_object_add(record, "observations", observations); f_string_add(record, "raw_evidence_sha256", evidence_hash); json_object_object_add(record, "counts", f_parse("{\"executed\":1,\"failed\":0,\"skipped\":0}")); json_object_object_add(record, "limitations", json_object_new_array());
+    report = f_parse("{\"schema_version\":3,\"execution_status\":\"completed\",\"evidence_status\":\"valid\",\"domain_verdict\":\"pass\",\"verdict\":\"pass\",\"subject_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"validator_sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"evidence_records\":[],\"limitations\":[],\"requirements\":[\"content\"],\"evidence\":\"fixture\"}");
+    f_string_add(report, "validator_sha256", validator); { json_object *records = json_object_new_array(); json_object_array_add(records, record); json_object_object_add(report, "evidence_records", records); }
+    assert(plan_report(compiled, check, report, subject) == PLAN_PASS); record = json_object_array_get_idx(f_field(report, "evidence_records"), 0);
+    json_object_object_del(f_field(record, "invocation"), "exit_code"); json_object_object_add(f_field(record, "invocation"), "exit_code", json_object_new_int(1)); assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    json_object_object_del(f_field(record, "invocation"), "exit_code"); json_object_object_add(f_field(record, "invocation"), "exit_code", json_object_new_int(0)); json_object_object_del(record, "case_inventory"); assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    json_object_put(report); json_object_put(raw); json_object_put(compiled);
+}
 static void distributed_graph_cases(void) {
     json_object *plan = plan_read("tests/fixtures/plan-task/plan.json"), *policy = plan_read("tests/fixtures/plan-task/policy.json");
     assert(plan && policy); expect(plan, policy, NULL);
@@ -182,6 +202,6 @@ static void obligation_cases(void) {
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    terminal_cases(); graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
+    terminal_cases(); graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); structured_report_cases(); assert(!f_remove_tree(root));
     puts("planning graph, policy, canonical JSON and parser checks passed"); return 0;
 }
