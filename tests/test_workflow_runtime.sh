@@ -231,8 +231,8 @@ PATH="$test_root/statistics-bin:$PATH" HYDRA_TEST_REAL_MV="$statistics_real_mv" 
     HYDRA_TEST_STATS_FIELD=started-at HYDRA_TEST_STATS_MARKER="$test_root/start.fault" \
     "$HYDRA_BIN" workflow run "$test_root/start-fault.yml" > "$test_root/start-fault.out"
 assert_success $? "optional run start timestamp failure does not block execution"
-test -f "$test_root/start.fault"
-assert_success $? "run start timestamp write failure was exercised"
+if [ -f "$test_root/start.fault" ]; then statistics_marker_status=0; else statistics_marker_status=1; fi
+assert_success "$statistics_marker_status" "run start timestamp write failure was exercised"
 start_fault_run="$(sed -n '1p' "$test_root/start-fault.out")"
 start_fault_dir="$(run_dir_for "$start_fault_run")"
 assert_equal succeeded "$(cat "$start_fault_dir/state")" "run without start timing still succeeds"
@@ -256,8 +256,8 @@ PATH="$test_root/statistics-bin:$PATH" HYDRA_TEST_REAL_MV="$statistics_real_mv" 
     HYDRA_TEST_STATS_FIELD=recovery-count HYDRA_TEST_STATS_MARKER="$test_root/recovery.fault" \
     "$HYDRA_BIN" workflow resume "$backoff_run" >/dev/null
 assert_success $? "resume completes a retry with durable backoff"
-test -f "$test_root/recovery.fault"
-assert_success $? "optional recovery counter write failure was exercised"
+if [ -f "$test_root/recovery.fault" ]; then statistics_marker_status=0; else statistics_marker_status=1; fi
+assert_success "$statistics_marker_status" "optional recovery counter write failure was exercised"
 python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$backoff_dir" - unverified
 assert_success $? "failed counter persistence discards the old count and remains unknown"
 assert_equal "$backoff_at" "$(cat "$backoff_dir/steps/retry/attempt-1/retry-at")" "restart preserves retry deadline"
