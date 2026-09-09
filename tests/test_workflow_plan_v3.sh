@@ -27,12 +27,14 @@ obs = [{'id': 'case-1', 'raw': raw, 'raw_sha256': raw_hash}]
 inventory = ['case-1']
 if mode == 'drop': obs = []; inventory = []
 if mode == 'raw-tampered': obs[0]['raw']['actual'] = 'Tampered after hashing'
-if mode == 'missing-measurement': obs[0]['raw'].pop('measurement')
+if mode == 'missing-measurement':
+    obs[0]['raw'].pop('measurement')
+    obs[0]['raw_sha256'] = hashlib.sha256(json.dumps(obs[0]['raw'], sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 evidence_hash = hashlib.sha256(json.dumps(obs, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 subject_hash = hashlib.sha256(data).hexdigest()
 if mode == 'stale-subject': subject_hash = '0' * 64
 exit_code = 7 if mode == 'nonzero' else 0
-failed = 1 if mode in ('wrong-artifact', 'nonzero') else 0
+failed = 1 if mode == 'wrong-artifact' else 0
 recipe_hash = '0' * 64 if mode == 'changed-predicate' else context['check-recipe']
 report = {'schema_version': 3, 'execution_status': 'completed', 'evidence_status': 'valid',
  'domain_verdict': 'fail' if failed else 'pass', 'verdict': 'fail' if failed else 'pass',
@@ -47,6 +49,16 @@ open(output, 'w').write(json.dumps(report, separators=(',', ':')) + '\n')
 PY
 CHECK
 chmod +x "$fixture/repo/check.sh"
+cat > "$fixture/repo/compose.sh" <<'COMPOSE'
+#!/bin/sh
+set -eu
+if [ "${HYDRA_V3_FAULT:-}" = wrong-artifact ]; then
+    printf 'Wrong candidate artifact\n' > "$HYDRA_WORKFLOW_OUTPUTS_DIR/report.txt"
+else
+    printf 'Delivered report\n' > "$HYDRA_WORKFLOW_OUTPUTS_DIR/report.txt"
+fi
+COMPOSE
+chmod +x "$fixture/repo/compose.sh"
 cp "$root/tests/fixtures/plan/plan.json" "$fixture/plan.json"
 cp "$root/tests/fixtures/plan/policy.json" "$fixture/policy.json"
 python3 - "$fixture/plan.json" <<'PY'
@@ -75,6 +87,15 @@ path = os.environ['PLAN']
 text = open(path).read().replace('plan-smoke', os.environ['BRANCH'])
 open(path, 'w').write(text)
 PY
+    if [ "$mode" = malformed-recipe ]; then
+        PLAN="$fixture/plan.json" python3 - <<'PY'
+import json, os
+path = os.environ['PLAN']
+plan = json.load(open(path))
+plan['checks'][0]['definition'] = '{}'
+json.dump(plan, open(path, 'w'), separators=(',', ':'))
+PY
+    fi
     rm -f "$fixture/compiled.json"
     "$root/bin/hydra" workflow plan compile "$fixture/plan.json" "$fixture/policy.json" "$fixture/compiled.json" > "$fixture/compile-$mode.json" 2> "$fixture/compile-$mode.err" || { cat "$fixture/compile-$mode.err"; cat "$fixture/compile-$mode.json"; cat "$fixture/plan.json"; exit 1; }
     "$root/bin/hydra" workflow plan check-definition "$fixture/compiled.json" check >/dev/null
@@ -98,5 +119,6 @@ run_case raw-tampered failed
 run_case stale-subject failed
 run_case missing-measurement failed
 run_case changed-predicate failed
+run_case malformed-recipe failed
 run_case nonzero failed
 echo 'Public workflow v3 evidence controls passed'
