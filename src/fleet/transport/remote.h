@@ -5,14 +5,14 @@
 
 struct f_remote { char name[128], target[256], hydra[F_PATH], home[F_PATH]; bool multiplex;
     /* Transient discovery policy only; never persisted in an alias record. */
-    char ssh_config[F_PATH];
+    char ssh_config[F_PATH], peer_fingerprint[256];
 };
 struct f_capture;
 /* Inputs are borrowed; returned JSON belongs to the caller. SSH capture uses f_capture_free. */
 int f_ssh(const struct f_remote *remote, const char *command, const char *input, size_t size, unsigned seconds, bool tty, struct f_capture *cap);
 /* Returns the fingerprint reported by the authenticated SSH peer. The value is
  * caller-owned and must be freed; no known_hosts text is treated as identity. */
-char *f_peer_fingerprint(const struct f_remote *remote, unsigned seconds);
+char *f_peer_fingerprint(struct f_remote *remote, unsigned seconds);
 bool f_target(const char *value);
 int f_remote_load(const char *name, struct f_remote *remote);
 int f_remote_save(const struct f_remote *remote);

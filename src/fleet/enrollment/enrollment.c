@@ -103,13 +103,14 @@ static json_object *apply_host(json_object *host, unsigned seconds) {
 invalid: f_string_add(row, "status", "invalid_intent"); return row;
 }
 static json_object *apply(const char *path, const char *confirm, unsigned seconds) {
-    json_object *intent = f_read_json(path, F_LIMIT), *host, *hosts, *result, *rows, *progress = NULL, *previous, *item; char hash[65], verify[F_PATH], saved[65], progress_file[F_PATH] = "", lock_path[F_PATH]; int lock_fd = -1; size_t i;
+    json_object *intent = f_read_json(path, F_LIMIT), *host, *hosts = NULL, *result, *rows, *progress = NULL, *previous, *item; char hash[65], verify[F_PATH], saved[65], progress_file[F_PATH] = "", lock_path[F_PATH]; int lock_fd = -1; size_t i;
     if (!intent || !f_string(intent, "kind") || strcmp(f_string(intent, "kind"), "fleet-enrollment-intent") || !digest(confirm) || !digest(f_string(intent, "intent_sha256"))) goto invalid;
     if (f_copy(saved, sizeof(saved), f_string(intent, "intent_sha256"))) goto invalid; json_object_object_del(intent, "intent_sha256");
     if (snprintf(verify, sizeof(verify), "%s.verify", path) >= (int)sizeof(verify) || f_write(verify, json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN), strlen(json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN)), true) || f_hash(verify, hash)) { unlink(verify); goto invalid; }
     unlink(verify); if (strcmp(hash, saved) || strcmp(hash, confirm)) goto invalid;
     json_object_object_add(intent, "intent_sha256", json_object_new_string(saved)); result = json_object_new_object(); f_string_add(result, "intent_sha256", saved); rows = json_object_new_array(); json_object_object_add(result, "hosts", rows);
-    if (!progress_path(progress_file, saved)) {
+    if (progress_path(progress_file, saved)) goto progress_failed;
+    {
         if (snprintf(lock_path, sizeof(lock_path), "%s.lock", progress_file) >= (int)sizeof(lock_path) || (lock_fd = open(lock_path, O_CREAT | O_RDWR, 0600)) < 0 || flock(lock_fd, LOCK_EX | LOCK_NB)) goto progress_busy;
         progress = f_read_json(progress_file, F_LIMIT);
     }
@@ -117,7 +118,7 @@ static json_object *apply(const char *path, const char *confirm, unsigned second
     for (i = 0; i < json_object_array_length(hosts); i++) { char opid[256]; host = json_object_array_get_idx(hosts, i); if (!f_string(host, "operation_id")) { snprintf(opid, sizeof(opid), "%s:%s", saved, f_string(host, "alias")); f_string_add(host, "operation_id", opid); } previous = prior_row(progress, f_string(host, "alias")); if (previous && f_string(previous, "status") && !strcmp(f_string(previous, "status"), "enrolled")) item = json_object_get(previous); else { item = json_object_new_object(); f_string_add(item, "alias", f_string(host, "alias")); f_string_add(item, "target", f_string(host, "target")); f_string_add(item, "operation_id", f_string(host, "operation_id")); f_string_add(item, "status", "pending"); json_object_array_add(rows, item); json_object_array_del_idx(rows, json_object_array_length(rows) - 1, 1); json_object_put(item); item = apply_host(host, seconds); } json_object_array_add(rows, item); if (progress_file[0] && save_progress(progress_file, result)) goto progress_failed; }
     if (lock_fd >= 0) { (void)flock(lock_fd, LOCK_UN); close(lock_fd); } if (progress) json_object_put(progress); if (!f_field(intent, "hosts")) json_object_put(hosts); json_object_put(intent); return f_success("fleet-enrollment-apply", result);
 progress_busy: if (lock_fd >= 0) close(lock_fd); json_object_put(result); json_object_put(intent); return f_error("fleet-enrollment-apply", "apply_in_progress", "another enrollment apply holds this intent");
-progress_failed: if (lock_fd >= 0) { (void)flock(lock_fd, LOCK_UN); close(lock_fd); } if (progress) json_object_put(progress); if (!f_field(intent, "hosts")) json_object_put(hosts); json_object_put(result); json_object_put(intent); return f_error("fleet-enrollment-apply", "progress_io_failed", "enrollment progress could not be durably saved");
+progress_failed: if (lock_fd >= 0) { (void)flock(lock_fd, LOCK_UN); close(lock_fd); } if (progress) json_object_put(progress); if (hosts && !f_field(intent, "hosts")) json_object_put(hosts); json_object_put(result); json_object_put(intent); return f_error("fleet-enrollment-apply", "progress_io_failed", "enrollment progress could not be durably saved");
 invalid: json_object_put(intent); return f_error("fleet-enrollment-apply", "review_required", "intent digest, confirmation, or reviewed fields do not match");
 }
 json_object *enrollment_cli(int argc, char **argv) {

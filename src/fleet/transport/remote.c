@@ -97,6 +97,7 @@ json_object *f_request(const struct f_remote *remote, json_object *request, unsi
         const char *marker = "Server host key: "; char *start = strstr(cap.err, marker), *end;
         if (start) { start += strlen(marker); start = strstr(start, "SHA256:"); end = start; while (start && *end && *end != '\n' && *end != '\r' && *end != ' ') end++; if (start && end > start) { char key[256]; size_t length = (size_t)(end - start); if (length < sizeof(key)) { memcpy(key, start, length); key[length] = '\0'; f_string_add(f_field(result, "data"), "peer_fingerprint", key); } } }
     }
+    if (result && json_object_get_boolean(f_field(result, "ok")) && !f_string(f_field(result, "data"), "peer_fingerprint") && remote->peer_fingerprint[0]) f_string_add(f_field(result, "data"), "peer_fingerprint", remote->peer_fingerprint);
     if (result && json_object_get_boolean(f_field(result, "ok")) && f_string(request, "expected_peer_fingerprint")) {
         const char *expected = f_string(request, "expected_peer_fingerprint"), *actual = f_string(f_field(result, "data"), "peer_fingerprint");
         if (!actual || strcmp(expected, actual)) { json_object_put(result); result = f_error("fleet", "host_key_changed", "mutation peer fingerprint differs from reviewed identity"); }
@@ -152,7 +153,7 @@ int f_ssh(const struct f_remote *remote, const char *command, const char *input,
     if (remote->multiplex) {
         char dir[F_PATH];
         if (f_path(dir, sizeof(dir), f_home, "fleet/sockets") || f_mkdirs(dir)) return -1;
-        if (snprintf(socket, sizeof(socket), "ControlPath=%s/%%C", dir) >= (int)sizeof(socket)) return -1;
+        if (snprintf(socket, sizeof(socket), "ControlPath=%s/%%C-%ld", dir, (long)getpid()) >= (int)sizeof(socket)) return -1;
         argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlMaster=auto";
         argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlPersist=60";
         argv[n++] = (char *)"-o"; argv[n++] = socket;
@@ -162,8 +163,8 @@ int f_ssh(const struct f_remote *remote, const char *command, const char *input,
     return f_run(argv, input, size, seconds, cap);
 }
 
-char *f_peer_fingerprint(const struct f_remote *remote, unsigned seconds) {
-    struct f_capture cap = {0}; char timeout[64], *fingerprint = NULL;
+char *f_peer_fingerprint(struct f_remote *remote, unsigned seconds) {
+    struct f_capture cap = {0}; char timeout[64], socket[F_PATH], *fingerprint = NULL;
     char *argv[32]; size_t n = 0; const char *marker = "Server host key: ";
     char *start, *end; int status;
     snprintf(timeout, sizeof(timeout), "ConnectTimeout=%u", seconds);
@@ -173,8 +174,13 @@ char *f_peer_fingerprint(const struct f_remote *remote, unsigned seconds) {
     argv[n++] = (char *)"-o"; argv[n++] = (char *)"StrictHostKeyChecking=yes";
     argv[n++] = (char *)"-o"; argv[n++] = (char *)"UpdateHostKeys=no";
     argv[n++] = (char *)"-o"; argv[n++] = timeout;
-    /* Identity capture must perform a real key exchange. A reused
-     * ControlMaster does not repeat the Server host key diagnostic. */
+    if (remote->multiplex) {
+        char dir[F_PATH];
+        if (f_path(dir, sizeof(dir), f_home, "fleet/sockets") || f_mkdirs(dir) ||
+            snprintf(socket, sizeof(socket), "ControlPath=%s/%%C-%ld", dir, (long)getpid()) >= (int)sizeof(socket)) return NULL;
+        argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlMaster=auto";
+        argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlPersist=60"; argv[n++] = (char *)"-o"; argv[n++] = socket;
+    }
     argv[n++] = (char *)remote->target; argv[n++] = (char *)"env LC_ALL=C  'hydra' fleet serve"; argv[n] = NULL;
     status = f_run(argv, "{\"protocol\":1,\"action\":\"handshake\"}", sizeof("{\"protocol\":1,\"action\":\"handshake\"}") - 1, seconds, &cap);
     if (!status && cap.err && (start = strstr(cap.err, marker))) {
@@ -182,6 +188,7 @@ char *f_peer_fingerprint(const struct f_remote *remote, unsigned seconds) {
         while (start && *end && *end != '\n' && *end != '\r' && *end != ' ') end++;
         if (start && end > start && (fingerprint = malloc((size_t)(end - start) + 1))) {
             memcpy(fingerprint, start, (size_t)(end - start)); fingerprint[end - start] = '\0';
+            (void)f_copy(remote->peer_fingerprint, sizeof(remote->peer_fingerprint), fingerprint);
         }
     }
     f_capture_free(&cap); return fingerprint;
