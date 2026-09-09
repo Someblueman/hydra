@@ -19,6 +19,9 @@ class EnrollmentTest(unittest.TestCase):
         self.ssh.write_text(textwrap.dedent("""\
             #!/usr/bin/env python3
             import json, os, subprocess, sys
+            if "-G" in sys.argv:
+                print("hostname good\\nuser tester\\nport 22\\nproxyjump none\\n")
+                sys.exit(0)
             request = json.load(sys.stdin)
             target = os.environ.get("ENROLL_TARGET", "good")
             print("debug1: Server host key: ssh-ed25519 " + os.environ["ENROLL_FINGERPRINT"], file=sys.stderr)
@@ -38,6 +41,9 @@ class EnrollmentTest(unittest.TestCase):
 
     def run_cli(self, *args, check=True):
         return subprocess.run([self.cli, "fleet", "enroll", *args], env=self.env, text=True, capture_output=True, check=check)
+
+    def run_fleet(self, *args):
+        return subprocess.run([self.cli, "fleet", *args], env=self.env, text=True, capture_output=True, check=True)
 
     def qualification(self, fingerprint="SHA256:fixture"):
         value = {"schema_version": 1, "ok": True, "data": {"required_capability": "list", "candidates": [{
@@ -96,6 +102,19 @@ class EnrollmentTest(unittest.TestCase):
         result = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
         self.assertEqual(json.loads(result.stdout)["data"]["hosts"][0]["status"], "invalid_intent")
         self.assertFalse(self.counter.exists())
+
+    def test_real_qualify_output_can_be_reviewed_and_applied(self):
+        config = self.tmp / "ssh-config"
+        config.write_text("Host good\n  HostName good\n  User tester\n")
+        qualified = self.run_fleet("qualify", "--ssh", "good", "--ssh-config", str(config), "--require", "list")
+        qualification = self.tmp / "qualified.json"
+        qualification.write_text(qualified.stdout)
+        intent = self.tmp / "intent.json"
+        self.run_cli("review", "--input", str(qualification), "--candidate", "cand_676f6f64", "--project", str(self.tmp / "project"), "--output", str(intent))
+        digest = json.loads(intent.read_text())["intent_sha256"]
+        applied = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
+        self.assertEqual(json.loads(applied.stdout)["data"]["hosts"][0]["status"], "enrolled")
+        self.assertTrue((self.home / "fleet" / "remotes" / "cand_676f6f64.json").exists())
 
 
 if __name__ == "__main__":
