@@ -21,6 +21,7 @@
 #define OBSERVATION_STEPS 512U
 #define OBSERVATION_REQUESTS 32U
 #define OBSERVATION_GRAPH_LIMIT (256U * 1024U)
+#define OBSERVATION_ATTEMPTS 512U
 
 static int object_id_order(const void *left, const void *right) {
     const char *a = f_string(*(json_object *const *)left, "request_id");
@@ -402,7 +403,7 @@ static unsigned step_attempt_count(const char *step_root) {
     char *text = scalar(step_root, "attempts"); unsigned count = 1;
     if (text && f_name(text) && strspn(text, "0123456789") == strlen(text)) {
         unsigned long parsed = strtoul(text, NULL, 10);
-        if (parsed > 0 && parsed <= 10000) count = (unsigned)parsed;
+        if (parsed <= 10000) count = (unsigned)parsed;
     }
     free(text); return count;
 }
@@ -415,11 +416,20 @@ static void add_missing_attempt(json_object *attempts, json_object *attempt, uns
     json_object_array_add(attempts, attempt);
 }
 
+static void add_unavailable_attempt(json_object *attempts, json_object *attempt, unsigned number) {
+    char id[32]; (void)snprintf(id, sizeof(id), "attempt-%u", number); f_string_add(attempt, "attempt_id", id);
+    f_string_add(attempt, "retention", "unavailable"); json_object_object_add(attempt, "state", json_object_new_null());
+    json_object_object_add(attempt, "process_exit", json_object_new_null()); json_object_object_add(attempt, "completed_at", json_object_new_null());
+    json_object_object_add(attempt, "failure_class", json_object_new_null()); f_string_add(attempt, "result_collection", "unavailable"); f_string_add(attempt, "verification", "unavailable");
+    json_object_array_add(attempts, attempt);
+}
+
 static void add_one_attempt(json_object *attempts, const char *step_root, const char *step_id, unsigned number) {
     json_object *attempt = json_object_new_object(); char attempt_root[F_PATH] = "", *exit_status = NULL, *completed_at = NULL, *failure_class = NULL;
     f_string_add(attempt, "step_id", step_id ? step_id : "unavailable");
     (void)snprintf(attempt_root, sizeof(attempt_root), "%s/attempt-%u", step_root, number);
-    if (step_root[0]) {
+    if (!step_root[0]) { add_unavailable_attempt(attempts, attempt, number); return; }
+    {
         struct stat attempt_stat;
         if (lstat(attempt_root, &attempt_stat) || !S_ISDIR(attempt_stat.st_mode)) {
             add_missing_attempt(attempts, attempt, number); return;
@@ -437,19 +447,23 @@ static void add_one_attempt(json_object *attempts, const char *step_root, const 
     json_object_array_add(attempts, attempt); free(exit_status); free(completed_at); free(failure_class);
 }
 
-static void add_step_attempt_history(json_object *attempts, const char *step_root, const char *step_id) {
-    unsigned n, count = step_root[0] ? step_attempt_count(step_root) : 1;
-    for (n = 1; n <= count; n++) add_one_attempt(attempts, step_root, step_id, n);
+static size_t add_step_attempt_history(json_object *attempts, const char *step_root, const char *step_id, size_t remaining, bool *truncated) {
+    unsigned n, count = step_root[0] ? step_attempt_count(step_root) : 1, start = 1;
+    if (count > remaining) { *truncated = true; start = count - (unsigned)remaining + 1U; }
+    for (n = start; n <= count && (size_t)(n - start) < remaining; n++) add_one_attempt(attempts, step_root, step_id, n);
+    return count < remaining ? count : remaining;
 }
 
-static void add_step_attempts(json_object *attempts, json_object *state, json_object *steps) {
-    size_t i;
+static bool add_step_attempts(json_object *attempts, json_object *state, json_object *steps) {
+    size_t i, total = 0; bool truncated = false;
     for (i = 0; i < json_object_array_length(steps); i++) {
         json_object *step = json_object_array_get_idx(steps, i); const char *step_id = f_string(step, "step_id");
         char step_root[F_PATH] = "";
-        if (f_string(state, "work_kind") && !strcmp(f_string(state, "work_kind"), "workflow") && f_name(f_string(state, "execution_project_id")) && f_name(f_string(state, "run_id")) && step_id && f_name(step_id) && snprintf(step_root, sizeof(step_root), "%s/state/v2/projects/%s/workflows/runs/%s/steps/%s", f_home, f_string(state, "execution_project_id"), f_string(state, "run_id"), step_id) >= (int)sizeof(step_root)) step_root[0] = '\0';
-        add_step_attempt_history(attempts, step_root, step_id);
+        if (!step_id || !strcmp(step_id, "unavailable") || !f_string(state, "work_kind") || strcmp(f_string(state, "work_kind"), "workflow") || !f_name(f_string(state, "execution_project_id")) || !f_name(f_string(state, "run_id")) || !f_name(step_id) || snprintf(step_root, sizeof(step_root), "%s/state/v2/projects/%s/workflows/runs/%s/steps/%s", f_home, f_string(state, "execution_project_id"), f_string(state, "run_id"), step_id) >= (int)sizeof(step_root)) step_root[0] = '\0';
+        if (total < OBSERVATION_ATTEMPTS) total += add_step_attempt_history(attempts, step_root, step_id, OBSERVATION_ATTEMPTS - total, &truncated);
+        else truncated = true;
     }
+    return truncated;
 }
 
 static void add_v2_result_evidence(json_object *artifacts, json_object *verification, const char *directory) {
@@ -488,9 +502,10 @@ static void add_collection_evidence(json_object *task, json_object *state) {
 
 static void v2_evidence(json_object *task, json_object *state, const char *directory, json_object *steps) {
     json_object *attempts = json_object_new_array(), *artifacts = json_object_new_array(), *provider = json_object_new_object(), *verification = json_object_new_object();
-    add_step_attempts(attempts, state, steps); add_v2_result_evidence(artifacts, verification, directory); add_provider_evidence(provider, directory); add_process_evidence(task, state); add_collection_evidence(task, state);
+    bool attempts_truncated = add_step_attempts(attempts, state, steps); add_v2_result_evidence(artifacts, verification, directory); add_provider_evidence(provider, directory); add_process_evidence(task, state); add_collection_evidence(task, state);
     json_object_object_add(task, "attempt_history", attempts); json_object_object_add(task, "artifact_inventory", artifacts);
     json_object_object_add(task, "provider_observations", provider); json_object_object_add(task, "verification", verification);
+    json_object_object_add(task, "attempt_history_truncated", json_object_new_boolean(attempts_truncated));
     json_object_object_add(task, "approval_requests", json_object_get(f_field(task, "pending_requests")));
 }
 
@@ -545,7 +560,7 @@ json_object *task_observation(const char *id, json_object *request) {
     if (!task_id_valid(id) || task_store_root(root) || f_path(directory, sizeof(directory), root, id) || lstat(directory, &st) || !S_ISDIR(st.st_mode) ||
         !(task = build_observation(id, directory, now))) return f_error("fleet-observation", "recovery_required", "receiver task records are missing, malformed, or no longer safe to inspect");
     state = task_read_record(directory, "state.json");
-    { json_object *data = json_object_new_object(); json_object_object_add(data, "snapshot_schema_version", json_object_new_int(1)); nullable_now(data, "receiver_observed_at", now); event_observation(data, state, request); v2_evidence(task, state, directory, f_field(task, "steps")); json_object_object_add(data, "task", task); json_object_put(state); return f_success("fleet-observation", data); }
+    { json_object *data = json_object_new_object(); json_object_object_add(data, "snapshot_schema_version", json_object_new_int(1)); nullable_now(data, "receiver_observed_at", now); event_observation(data, state, request); json_object_object_add(data, "task", task); json_object_put(state); return f_success("fleet-observation", data); }
 }
 
 json_object *task_overview(void) {
