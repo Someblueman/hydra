@@ -233,13 +233,13 @@ static json_object *check_definition_command(char **argv, bool *printed) {
     json_object_put(errors); json_object_put(compiled); return result;
 }
 static json_object *check_recipe_command(char **argv, bool *printed) {
-    json_object *compiled = plan_read(argv[1]), *result = NULL; char digest[65];
+    json_object *compiled = plan_read(argv[1]), *result = NULL, *errors = json_object_new_array(); char digest[65];
     (void)printed;
-    if (compiled && f_number_is(compiled, "schema_version", 1) && !plan_recipe_digest(compiled, argv[2], digest)) {
+    if (compiled && f_number_is(compiled, "schema_version", 1) && !plan_validate(f_field(compiled, "plan"), f_field(compiled, "policy"), errors) && !plan_recipe_digest(compiled, argv[2], digest)) {
         json_object *data = json_object_new_object(); f_string_add(data, "check", argv[2]); f_string_add(data, "validator_recipe_sha256", digest);
         result = f_success("workflow plan check-recipe", data);
     }
-    json_object_put(compiled); return result;
+    json_object_put(errors); json_object_put(compiled); return result;
 }
 
 static json_object *check_context_command(char **argv, bool *printed) {
