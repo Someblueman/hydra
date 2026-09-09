@@ -323,7 +323,7 @@ static void event_observation(json_object *data, json_object *state, json_object
     }
     fclose(input);
     if (first && cursor + 1U < first) gap = true;
-    if (f_field(request, "stream_id") && strcmp(f_text(f_field(request, "stream_id")), generation)) { json_object_put(events); events = json_object_new_array(); }
+    if (reset || (f_field(request, "stream_id") && strcmp(f_text(f_field(request, "stream_id")), generation))) { json_object_put(events); events = json_object_new_array(); }
     json_object_object_add(stream, "schema_version", json_object_new_int(1)); json_object_object_add(stream, "events", events);
     json_object_object_add(stream, "available", json_object_new_boolean(available)); f_string_add(stream, "stream_id", generation);
     json_object_object_add(stream, "oldest_cursor", json_object_new_int64(first ? first - 1U : cursor));
@@ -349,6 +349,7 @@ static void v2_evidence(json_object *task, json_object *state, const char *direc
         for (n = 1; n <= count; n++) {
             json_object *attempt = json_object_new_object(); char attempt_root[F_PATH] = "", *attempt_state = NULL, *exit_status = NULL;
             f_string_add(attempt, "step_id", step_id ? step_id : "unavailable"); (void)snprintf(attempt_root, sizeof(attempt_root), "%s/attempt-%u", step_root, n);
+            if (step_root[0]) { struct stat attempt_stat; if (lstat(attempt_root, &attempt_stat) || !S_ISDIR(attempt_stat.st_mode)) { json_object_put(attempt); continue; } }
             { char id[32]; (void)snprintf(id, sizeof(id), "attempt-%u", n); f_string_add(attempt, "attempt_id", id); }
             if (step_root[0]) { attempt_state = scalar(attempt_root, "state"); exit_status = scalar(attempt_root, "exit-status"); }
             nullable(attempt, "state", attempt_state); nullable(attempt, "process_exit", exit_status);
