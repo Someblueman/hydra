@@ -37,6 +37,7 @@ struct task_observation {
     char workspace[SOURCE_TEXT], profile[128], owner[64], state[64];
     char waiting_reason[32], waiting_detail[TEXT], next_action[TEXT];
     char receiver_observed[40], last_confirmed[40], freshness[32];
+    char result_state[32], verification_state[32];
     unsigned pending;
 };
 

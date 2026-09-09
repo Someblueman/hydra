@@ -111,7 +111,9 @@ static void task_record_line(json_object *data, json_object *task, const char *n
     printf("\t"); field_limit(text_value(task, "execution_state"), 64); printf("\t"); field_limit(text_value(waiting, "reason"), 32);
     printf("\t"); field_limit(text_value(waiting, "detail"), 256); printf("\t"); field_limit(text_value(waiting, "next_action"), 256);
     printf("\t"); field_limit(observed_at, 40); printf("\t"); field_limit(confirmed, 40);
-    printf("\t"); field_limit(nested_text(data, "freshness", "state"), 32); printf("\t%zu\n", pending);
+    printf("\t"); field_limit(nested_text(data, "freshness", "state"), 32); printf("\t%zu", pending);
+    printf("\t"); field_limit(text_value(f_field(task, "result_collection"), "state"), 32);
+    printf("\t"); field_limit(text_value(f_field(task, "verification"), "state"), 32); putchar('\n');
 }
 
 static void task_records(json_object *observed, const char *name) {

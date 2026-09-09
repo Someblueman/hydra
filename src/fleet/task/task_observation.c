@@ -4,6 +4,7 @@
 #include "fleet/task/task.h"
 #include <dirent.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -283,6 +284,82 @@ static void current_step_identity(json_object *task, json_object *steps) {
         f_string_add(task, "agent_profile", f_string(selected, "agent_profile"));
 }
 
+/* V2 observations are deliberately read-only and bounded.  A cursor is the
+ * last sequence the client has confirmed; the receiver returns sequence+1.
+ * Retention and malformed streams are reported explicitly instead of being
+ * silently treated as an empty stream. */
+static void event_observation(json_object *data, json_object *state, json_object *request) {
+    json_object *stream = json_object_new_object(), *events = json_object_new_array();
+    const char *project = f_string(state, "execution_project_id"), *run = f_string(state, "run_id");
+    char path[F_PATH]; FILE *input = NULL; char line[8192]; unsigned cursor = 0, wanted = 128, first = 0, last = 0;
+    bool gap = false, reset = false; size_t returned = 0; unsigned delivered = 0;
+    if (f_field(request, "cursor") && json_object_is_type(f_field(request, "cursor"), json_type_int) && json_object_get_int64(f_field(request, "cursor")) >= 0)
+        cursor = (unsigned)json_object_get_int64(f_field(request, "cursor"));
+    if (f_field(request, "event_limit") && json_object_is_type(f_field(request, "event_limit"), json_type_int) && json_object_get_int64(f_field(request, "event_limit")) >= 1 && json_object_get_int64(f_field(request, "event_limit")) <= 128)
+        wanted = (unsigned)json_object_get_int64(f_field(request, "event_limit"));
+    if (!project || !run || !f_name(project) || !f_name(run) || snprintf(path, sizeof(path), "%s/state/v2/projects/%s/workflows/runs/%s/events.jsonl", f_home, project, run) >= (int)sizeof(path) || !(input = fopen(path, "r"))) {
+        json_object_object_add(stream, "schema_version", json_object_new_int(1)); json_object_object_add(stream, "events", events);
+        json_object_object_add(stream, "oldest_cursor", json_object_new_int64(cursor));
+        json_object_object_add(stream, "retention_gap", json_object_new_boolean(false)); json_object_object_add(stream, "stream_reset", json_object_new_boolean(false));
+        json_object_object_add(stream, "next_cursor", json_object_new_int64(cursor)); json_object_object_add(stream, "head_cursor", json_object_new_int64(cursor)); f_string_add(stream, "duplicate_policy", "sequence-cursor");
+        json_object_object_add(data, "event_observation", stream); return;
+    }
+    while (fgets(line, sizeof(line), input)) {
+        json_object *event; json_object *sequence;
+        if (!strchr(line, '\n') && !feof(input)) { reset = true; break; }
+        event = f_parse(line); sequence = f_field(event, "sequence");
+        if (!event || !json_object_is_type(event, json_type_object) || !f_number_is(event, "schema_version", 1) || !json_object_is_type(sequence, json_type_int) || json_object_get_int64(sequence) < 1 || json_object_get_int64(sequence) > 4294967295U) { json_object_put(event); reset = true; break; }
+        { unsigned value = (unsigned)json_object_get_int64(sequence);
+          if (!first) first = value;
+          if (last && value != last + 1U) reset = true;
+          last = value;
+          if (value > cursor && returned < wanted) { json_object_array_add(events, event); returned++; delivered = value; } else json_object_put(event); }
+    }
+    fclose(input);
+    if (first && cursor + 1U < first) gap = true;
+    json_object_object_add(stream, "schema_version", json_object_new_int(1)); json_object_object_add(stream, "events", events);
+    json_object_object_add(stream, "oldest_cursor", json_object_new_int64(first ? first - 1U : cursor));
+    if (!delivered) delivered = cursor;
+    json_object_object_add(stream, "next_cursor", json_object_new_int64(delivered));
+    json_object_object_add(stream, "head_cursor", json_object_new_int64(last));
+    json_object_object_add(stream, "retention_gap", json_object_new_boolean(gap)); json_object_object_add(stream, "stream_reset", json_object_new_boolean(reset));
+    f_string_add(stream, "duplicate_policy", "sequence-cursor");
+    json_object_object_add(data, "event_observation", stream);
+}
+
+static void v2_evidence(json_object *task, json_object *state, const char *directory, json_object *steps) {
+    json_object *attempts = json_object_new_array(), *artifacts = json_object_new_array(), *provider = json_object_new_object(), *verification = json_object_new_object(), *result = NULL;
+    char path[F_PATH]; size_t i;
+    for (i = 0; i < json_object_array_length(steps); i++) {
+        json_object *step = json_object_array_get_idx(steps, i), *attempt = json_object_new_object();
+        f_string_add(attempt, "step_id", f_string(step, "step_id")); nullable(attempt, "attempt_id", f_string(step, "attempt_id"));
+        nullable(attempt, "state", f_string(step, "state")); f_string_add(attempt, "process_exit", "unavailable");
+        f_string_add(attempt, "result_collection", "unavailable"); f_string_add(attempt, "verification", "unavailable");
+        json_object_array_add(attempts, attempt);
+    }
+    if (!f_path(path, sizeof(path), directory, "result.json")) result = f_read_json(path, TASK_PACKAGE_LIMIT + 1024);
+    if (result && json_object_is_type(f_field(f_field(result, "result"), "artifacts"), json_type_array)) {
+        json_object *source = f_parse(json_object_to_json_string_ext(f_field(f_field(result, "result"), "artifacts"), JSON_C_TO_STRING_PLAIN));
+        for (i = 0; source && i < json_object_array_length(source); i++) { json_object *item = json_object_array_get_idx(source, i); json_object_object_del(item, "hex"); json_object_array_add(artifacts, json_object_get(item)); }
+        json_object_put(source);
+        { json_object *checked = task_result_verify(result); f_string_add(verification, "state", json_object_get_boolean(f_field(checked, "ok")) ? "verified" : "unavailable"); json_object_put(checked); }
+    } else f_string_add(verification, "state", "unavailable");
+    if (!f_path(path, sizeof(path), directory, "provenance.json")) {
+        json_object *observed = f_read_json(path, 131072);
+        if (observed) { json_object_object_add(provider, "observation", observed); f_string_add(provider, "state", "available"); }
+    }
+    if (!f_string(provider, "state")) f_string_add(provider, "state", "unavailable");
+    json_object_object_add(task, "attempt_history", attempts); json_object_object_add(task, "artifact_inventory", artifacts);
+    json_object_object_add(task, "provider_observations", provider); json_object_object_add(task, "verification", verification);
+    { json_object *process = json_object_new_object(); nullable(process, "state", f_string(state, "state"));
+      if (f_field(state, "exit_status")) json_object_object_add(process, "exit_status", json_object_get(f_field(state, "exit_status"))); else json_object_object_add(process, "exit_status", json_object_new_null());
+      json_object_object_add(task, "process_exit", process); }
+    { json_object *collection = json_object_new_object(); const char *result_state = f_string(state, "result_state");
+      f_string_add(collection, "state", result_state && !strcmp(result_state, "ready") ? "ready" : "unavailable"); nullable(collection, "error", f_string(state, "result_error")); json_object_object_add(task, "result_collection", collection); }
+    json_object_object_add(task, "approval_requests", json_object_get(f_field(task, "pending_requests")));
+    json_object_put(result);
+}
+
 static json_object *build_observation(const char *id, const char *directory, int64_t now) {
     json_object *accepted = task_read_record(directory, "acceptance.json"), *state = task_read_record(directory, "state.json");
     char path[F_PATH]; json_object *package = NULL, *spec = NULL, *task = NULL, *steps;
@@ -322,17 +399,19 @@ static json_object *build_observation(const char *id, const char *directory, int
         f_string_add(contract, "availability", "unavailable"); f_string_add(contract, "reason", "no receiver obligation record is attached to task protocol 1");
         json_object_object_add(contract, "missing_evidence", missing); json_object_object_add(task, "contract", contract);
     }
+    v2_evidence(task, state, directory, steps);
     json_object_put(accepted); json_object_put(state); json_object_put(package); json_object_put(spec); return task;
 bad:
     json_object_put(accepted); json_object_put(state); json_object_put(package); json_object_put(spec); json_object_put(task);
     return NULL;
 }
 
-json_object *task_observation(const char *id) {
-    char root[F_PATH], directory[F_PATH]; struct stat st; json_object *task; int64_t now = (int64_t)time(NULL);
+json_object *task_observation(const char *id, json_object *request) {
+    char root[F_PATH], directory[F_PATH]; struct stat st; json_object *task, *state = NULL; int64_t now = (int64_t)time(NULL);
     if (!task_id_valid(id) || task_store_root(root) || f_path(directory, sizeof(directory), root, id) || lstat(directory, &st) || !S_ISDIR(st.st_mode) ||
         !(task = build_observation(id, directory, now))) return f_error("fleet-observation", "recovery_required", "receiver task records are missing, malformed, or no longer safe to inspect");
-    { json_object *data = json_object_new_object(); json_object_object_add(data, "snapshot_schema_version", json_object_new_int(1)); nullable_now(data, "receiver_observed_at", now); json_object_object_add(data, "task", task); return f_success("fleet-observation", data); }
+    state = task_read_record(directory, "state.json");
+    { json_object *data = json_object_new_object(); json_object_object_add(data, "snapshot_schema_version", json_object_new_int(1)); nullable_now(data, "receiver_observed_at", now); event_observation(data, state, request); v2_evidence(task, state, directory, f_field(task, "steps")); json_object_object_add(data, "task", task); json_object_put(state); return f_success("fleet-observation", data); }
 }
 
 json_object *task_overview(void) {
