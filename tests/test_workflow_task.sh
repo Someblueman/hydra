@@ -18,6 +18,7 @@ cleanup() {
         [ -f "$workspace/.git/hydra/project-id" ] || continue
         (cd "$workspace" && "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :
     done
+    test_tmux_fixture_cleanup "$fixture" || return 1
     if [ "${passed:-0}" = 1 ]; then rm -rf "$fixture"; else printf 'Task DAG evidence: %s\n' "$fixture" >&2; fi
 }
 test_code=0

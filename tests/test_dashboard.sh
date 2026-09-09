@@ -177,7 +177,10 @@ main() {
     fi
     
     # Set up cleanup trap
-    trap cleanup_test_env EXIT INT TERM
+    trap cleanup_test_env EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    trap 'exit 129' HUP
 
     # A dashboard test run must not sweep unrelated hydra-* resources.
     mkdir -p "$UNRELATED_TEST_DIR"

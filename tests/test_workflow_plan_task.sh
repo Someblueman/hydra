@@ -12,9 +12,11 @@ cleanup() {
         [ -f "$workspace/.git/hydra/project-id" ] || continue
         (cd "$workspace" && "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :
     done
+    test_tmux_fixture_cleanup "$fixture" || return 1
     if [ "${passed:-0}" = 1 ]; then rm -rf "$fixture"; else printf 'Plan task evidence: %s\n' "$fixture" >&2; fi
 }
-trap cleanup EXIT
+test_code=0
+trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP

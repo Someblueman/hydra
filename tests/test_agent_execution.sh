@@ -6,19 +6,19 @@ umask 002
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
+# shellcheck source=/dev/null
+. "$root/tests/tmux_fixture_cleanup.sh"
 cleanup() {
     if [ -n "${owner:-}" ]; then kill -TERM "$owner" 2>/dev/null || :; wait "$owner" 2>/dev/null || :; fi
-    canonical="$(cd "$fixture" && pwd -P)"
-    tmux list-sessions -F '#{session_name}|#{session_path}' 2>/dev/null | while IFS='|' read -r session path; do
-        case "$path" in "$fixture"/*|"$canonical"/*) tmux kill-session -t "$session" 2>/dev/null || : ;; esac
-    done
+    test_tmux_fixture_cleanup "$fixture" || return 1
     if [ "${HYDRA_TEST_KEEP:-0}" = 1 ]; then
         printf 'Preserved agent fixture: %s\n' "$fixture" >&2
     else
         rm -rf "$fixture"
     fi
 }
-trap cleanup 0
+test_code=0
+trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 mkdir "$fixture/repo"

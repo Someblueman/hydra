@@ -5,33 +5,28 @@ set -eu
 umask 002
 root="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
+# shellcheck source=/dev/null
+. "$root/tests/workflow_task_cleanup.sh"
 cleanup() {
     [ -z "${owned_group:-}" ] || kill -KILL "-$owned_group" 2>/dev/null || :
     [ -z "${owned_owner:-}" ] || kill -KILL "$owned_owner" 2>/dev/null || :
-    for workspace in "$fixture"/host/fleet/tasks/task_*/workspace; do
-        [ -f "$workspace/.git/hydra/project-id" ] || continue
-        (cd "$workspace" && HYDRA_HOME="$fixture/host" "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :
+    for cleanup_home in "$fixture/host" "$fixture"/deadline-*-home; do
+        [ -d "$cleanup_home" ] || continue
+        workflow_task_fixture_quiesce "$cleanup_home" || return 1
+        for workspace in "$cleanup_home"/fleet/tasks/task_*/workspace; do
+            [ -f "$workspace/.git/hydra/project-id" ] || continue
+            (cd "$workspace" && HYDRA_HOME="$cleanup_home" "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :
+        done
     done
-    # Public teardown may refuse the deliberately dirty fixture worktrees. Remove
-    # only their remaining terminal instances before deleting disposable files.
-    for cleanup_head in "$fixture"/host/state/v2/projects/*/heads/*; do
-        [ -f "$cleanup_head/session" ] || continue
-        [ -f "$cleanup_head/current-instance" ] || continue
-        [ "$(cat "$cleanup_head/terminal-mode" 2>/dev/null)" != headless ] || continue
-        cleanup_session="$(cat "$cleanup_head/session")"
-        cleanup_instance="$(cat "$cleanup_head/current-instance")"
-        cleanup_id="$(tmux display-message -p -t "=$cleanup_session" '#{session_id}' 2>/dev/null)" || continue
-        [ -n "$cleanup_id" ] || continue
-        [ "$(tmux show-environment -t "$cleanup_id" HYDRA_INSTANCE_ID 2>/dev/null)" = "HYDRA_INSTANCE_ID=$cleanup_instance" ] || continue
-        tmux kill-session -t "$cleanup_id" 2>/dev/null || :
-    done
+    test_tmux_fixture_cleanup "$fixture" || return 1
     if [ "${HYDRA_TEST_KEEP:-0}" = 1 ]; then
         printf 'Preserved task fixture: %s\n' "$fixture" >&2
     else
         rm -rf "$fixture"
     fi
 }
-trap cleanup 0
+test_code=0
+trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 # shellcheck source=/dev/null
@@ -369,19 +364,24 @@ sleep 1
 task start build --id "$queue_id" --trust-spec "$queue_digest" > "$fixture/queue-status"
 grep -q '"failure":"queue_deadline"' "$fixture/queue-status"
 [ ! -e "$fixture/host/fleet/tasks/$queue_id/launch.json" ]
-# Distinct startup and execution timers operate independently of transport.
+# A deadline can kill an admission writer and deliberately retain its lock.
+# Give each destructive timer probe its own receiver state.
 for phase in startup execution; do
-    phase_prefix="$fixture/deadline-$phase"
+    phase_host="deadline-$phase"
+    phase_prefix="$fixture/$phase_host"
+    (cd "$fixture/receiver" && HYDRA_HOME="$phase_prefix-home" "$root/bin/hydra" init --no-agent --json) > "$phase_prefix-init"
+    "$root/bin/hydra" remote add "$phase_host" loopback --hydra "$root/bin/hydra" --home "$phase_prefix-home" >/dev/null
     sed -e "s/\"${phase}_seconds\":[0-9]*/\"${phase}_seconds\":1/" \
-        -e 's/\["true"\]/["sleep","10"]/' "$fixture/spec" > "$phase_prefix-spec"
+        -e 's/\["true"\]/["sleep","10"]/' -e "s/\"host\":\"build\"/\"host\":\"$phase_host\"/" \
+        "$fixture/spec" > "$phase_prefix-spec"
     task prepare --source "$fixture/source" --spec "$phase_prefix-spec" --output "$phase_prefix-package" > "$phase_prefix-preview"
     phase_digest="$(sed -n 's/.*"spec_sha256":"\([^"]*\)".*/\1/p' "$phase_prefix-preview")"
     if [ "$phase" = startup ]; then : > "$fixture/transport/slow-clone"; fi
-    task submit build --input "$phase_prefix-package" --key "$phase-deadline" --trust-spec "$phase_digest" > "$phase_prefix-receipt"
+    task submit "$phase_host" --input "$phase_prefix-package" --key "$phase-deadline" --trust-spec "$phase_digest" > "$phase_prefix-receipt"
     phase_id="$(sed -n 's/.*"task_id":"\([^"]*\)".*/\1/p' "$phase_prefix-receipt")"
     attempt=0
     while [ "$attempt" -lt 100 ]; do
-        task status build --id "$phase_id" > "$phase_prefix-status"
+        task status "$phase_host" --id "$phase_id" > "$phase_prefix-status"
         if grep -q '"state":"failed"' "$phase_prefix-status"; then break; fi
         sleep 0.1; attempt=$((attempt + 1))
     done
@@ -432,7 +432,8 @@ for kind in exec workflow; do
     task submit build --input "$fixture/cancel-$kind-package" --key "cancel-$kind" --trust-spec "$control_digest" > "$fixture/control-receipt"
     control_id="$(sed -n 's/.*"task_id":"\([^"]*\)".*/\1/p' "$fixture/control-receipt")"
     attempt=0
-    while [ ! -f "$marker" ] && [ "$attempt" -lt 100 ]; do sleep 0.1; attempt=$((attempt + 1)); done
+    # Allow the spec's 60-second startup budget before asserting live cancellation.
+    while [ ! -f "$marker" ] && [ "$attempt" -lt 600 ]; do sleep 0.1; attempt=$((attempt + 1)); done
     [ -f "$marker" ]
     task logs build --id "$control_id" > "$fixture/live-logs"
     grep -q '"available":true' "$fixture/live-logs"
@@ -472,10 +473,13 @@ for kind in exec workflow; do
 done
 
 # Storage corruption is recovery-required, never a reason to replace acceptance.
+cp "$fixture/host/fleet/tasks/$id/state.json" "$fixture/state-before-corruption.json"
 printf '{}' > "$fixture/host/fleet/tasks/$id/state.json"
 if task submit build --input "$fixture/package" --key same-key > "$fixture/error"; then exit 1; fi
 grep -q '"code":"recovery_required"' "$fixture/error"
 cmp "$fixture/original-acceptance" "$fixture/host/fleet/tasks/$id/acceptance.json"
+# Restore only after corruption assertions, so teardown can reconcile the owner.
+cp "$fixture/state-before-corruption.json" "$fixture/host/fleet/tasks/$id/state.json"
 # shellcheck source=/dev/null
 . "$root/tests/task_terminal_reconcile_cases.sh"
 printf 'Task acceptance and execution: deduplication, lost acknowledgments, exec/workflow attempts, selected inputs, gates, mapping, outages, and corruption passed\n'

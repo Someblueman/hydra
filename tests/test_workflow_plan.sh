@@ -7,15 +7,19 @@ ROOT="$(mktemp -d)"
 export HYDRA_HOME="$ROOT/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 # shellcheck disable=SC1091
 . "$REPO/tests/helpers.sh"
+# shellcheck source=/dev/null
+. "$REPO/tests/tmux_fixture_cleanup.sh"
 test_count=0 pass_count=0 fail_count=0
 cleanup() {
     for head in plan-smoke plan-negative plan-obligation plan-guard-graph plan-guard-limits plan-timing-verified-at plan-timing-verification-plan-sha256; do
         (cd "$ROOT/repo" && "$HYDRA_BIN" kill "$head" --force >/dev/null 2>&1) || true
     done
+    test_tmux_fixture_cleanup "$ROOT" || return 1
     if [ "$fail_count" -ne 0 ]; then printf 'Failure evidence: %s\n' "$ROOT"; return; fi
     rm -rf "$ROOT"
 }
-trap cleanup EXIT
+test_code=0
+trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
