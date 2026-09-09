@@ -27,6 +27,11 @@ static const char *source_config(json_object *row) {
     for (i = 0; i < json_object_array_length(sources); i++) { json_object *s = json_object_array_get_idx(sources, i); if (f_string(s, "kind") && !strcmp(f_string(s, "kind"), "ssh-config")) return f_string(s, "locator"); }
     return NULL;
 }
+static const char *first_text(json_object *value) {
+    if (f_text(value)) return f_text(value);
+    if (json_object_is_type(value, json_type_array) && json_object_array_length(value)) return f_text(json_object_array_get_idx(value, 0));
+    return NULL;
+}
 static int progress_path(char path[F_PATH], const char *digest_value) {
     char dir[F_PATH]; if (f_path(dir, sizeof(dir), f_home, "fleet/enrollment") || f_mkdirs(dir)) return -1;
     return snprintf(path, F_PATH, "%s/%s.json", dir, digest_value) >= F_PATH ? -1 : 0;
@@ -60,11 +65,11 @@ static json_object *review(const char *input, const char *output, const char *id
         (prefix && !abs_path(prefix))) goto done;
     intent = json_object_new_object(); json_object_object_add(intent, "schema_version", json_object_new_int(1)); f_string_add(intent, "kind", "fleet-enrollment-intent");
     f_string_add(intent, "candidate_id", f_string(row, "candidate_id")); f_string_add(intent, "target", target); f_string_add(intent, "accepted_host_key", fingerprint);
-    f_string_add(intent, "principal", f_string(f_field(f_field(row, "resolution"), "data"), "user")); f_string_add(intent, "required_capability", f_string(f_field(qualification, "data"), "required_capability"));
+    f_string_add(intent, "principal", first_text(f_field(f_field(row, "resolution"), "data"))); f_string_add(intent, "required_capability", f_string(f_field(qualification, "data"), "required_capability"));
     f_string_add(intent, "project", project); f_string_add(intent, "alias", alias ? alias : f_string(row, "candidate_id"));
     source = f_field(row, "sources"); json_object_object_add(intent, "sources", source ? json_object_get(source) : json_object_new_array());
     if (source_config(row)) { char config_hash[65]; if (f_hash(source_config(row), config_hash)) goto done; f_string_add(intent, "ssh_config", source_config(row)); f_string_add(intent, "ssh_config_sha256", config_hash); }
-    host = json_object_new_object(); f_string_add(host, "target", target); f_string_add(host, "fingerprint", fingerprint); f_string_add(host, "project", project); f_string_add(host, "alias", alias ? alias : f_string(row, "candidate_id")); f_string_add(host, "principal", f_string(f_field(f_field(row, "resolution"), "data"), "user")); f_string_add(host, "required_capability", f_string(f_field(qualification, "data"), "required_capability"));
+    host = json_object_new_object(); f_string_add(host, "target", target); f_string_add(host, "fingerprint", fingerprint); f_string_add(host, "project", project); f_string_add(host, "alias", alias ? alias : f_string(row, "candidate_id")); f_string_add(host, "principal", first_text(f_field(f_field(row, "resolution"), "data"))); f_string_add(host, "required_capability", f_string(f_field(qualification, "data"), "required_capability"));
     if (package) { f_string_add(host, "package", package); f_string_add(host, "package_sha256", package_digest); f_string_add(host, "prefix", prefix ? prefix : ""); }
     if (source_config(row)) { char config_hash[65]; f_string_add(host, "ssh_config", source_config(row)); if (!f_hash(source_config(row), config_hash)) f_string_add(host, "ssh_config_sha256", config_hash); }
     json_object_object_add(intent, "host", host); json_object_object_add(intent, "reviewed_at", json_object_new_int64((int64_t)time(NULL)));

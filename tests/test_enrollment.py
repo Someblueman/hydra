@@ -20,8 +20,9 @@ class EnrollmentTest(unittest.TestCase):
             #!/usr/bin/env python3
             import json, os, subprocess, sys
             if "-G" in sys.argv:
-                print("hostname good\\nuser tester\\nport 22\\nproxyjump none\\n")
-                sys.exit(0)
+                result = subprocess.run(["/usr/bin/ssh", *sys.argv[1:]], text=True, capture_output=True)
+                sys.stdout.write(result.stdout)
+                sys.exit(result.returncode)
             request = json.load(sys.stdin)
             target = os.environ.get("ENROLL_TARGET", "good")
             print("debug1: Server host key: ssh-ed25519 " + os.environ["ENROLL_FINGERPRINT"], file=sys.stderr)
@@ -114,7 +115,9 @@ class EnrollmentTest(unittest.TestCase):
         digest = json.loads(intent.read_text())["intent_sha256"]
         applied = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
         self.assertEqual(json.loads(applied.stdout)["data"]["hosts"][0]["status"], "enrolled")
-        self.assertTrue((self.home / "fleet" / "remotes" / "cand_676f6f64.json").exists())
+        alias = json.loads((self.home / "fleet" / "remotes" / "cand_676f6f64.json").read_text())
+        self.assertEqual(alias["target"], "good")
+        self.assertEqual(alias.get("ssh_config"), str(config))
 
 
 if __name__ == "__main__":

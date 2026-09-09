@@ -23,7 +23,7 @@ int f_remote_load(const char *name, struct f_remote *remote) {
     if (!obj) return -1;
     if (!f_number_is(obj, "schema_version", 1) || !f_target(f_string(obj, "target"))) goto done;
     if (f_copy(remote->name, sizeof(remote->name), name) || f_copy(remote->target, sizeof(remote->target), f_string(obj, "target")) ||
-        f_copy(remote->hydra, sizeof(remote->hydra), f_string(obj, "hydra")) || f_copy(remote->home, sizeof(remote->home), f_string(obj, "home"))) goto done;
+        f_copy(remote->hydra, sizeof(remote->hydra), f_string(obj, "hydra")) || f_copy(remote->home, sizeof(remote->home), f_string(obj, "home")) || f_copy(remote->ssh_config, sizeof(remote->ssh_config), f_string(obj, "ssh_config"))) goto done;
     if (!remote->hydra[0] || (remote->hydra[0] != '/' && strcmp(remote->hydra, "hydra"))) goto done;
     if (remote->home[0] && remote->home[0] != '/') goto done;
     remote->multiplex = json_object_get_boolean(f_field(obj, "multiplex")); status = 0;
@@ -35,6 +35,7 @@ int f_remote_save(const struct f_remote *remote) {
     if (remote_path(path, remote->name) || f_path(dir, sizeof(dir), f_home, "fleet/remotes") || f_mkdirs(dir)) goto done;
     json_object_object_add(obj, "schema_version", json_object_new_int(1));
     f_string_add(obj, "target", remote->target); f_string_add(obj, "hydra", remote->hydra); f_string_add(obj, "home", remote->home);
+    if (remote->ssh_config[0]) f_string_add(obj, "ssh_config", remote->ssh_config);
     json_object_object_add(obj, "multiplex", json_object_new_boolean(remote->multiplex));
     { const char *text = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN); status = f_write(path, text, strlen(text), true); }
 done:
