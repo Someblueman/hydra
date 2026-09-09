@@ -48,7 +48,7 @@ static int prepare(const char *directory, json_object *package, json_object *sta
 }
 static int spawn_head(const char *directory, json_object *state, int64_t startup, struct f_control *control) {
     struct f_capture cap = {0}; json_object *evidence = NULL; int status = -1;
-    char *spawn[] = {(char *)f_hydra, "spawn", "task", "--no-agent", NULL};
+    char *spawn[] = {(char *)f_hydra, "spawn", "task", "--headless", "--no-agent", NULL};
     char *provenance[] = {(char *)f_hydra, "provenance", "task", "--json", NULL};
     if (step(spawn, startup, control) || phase(provenance, startup, &cap, control)) { f_string_add(state, "failure", monotonic() >= startup ? "startup_deadline" : "startup_failed"); goto done; }
     evidence = f_parse(cap.out);

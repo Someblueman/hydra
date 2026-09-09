@@ -23,7 +23,7 @@ spawn_rollback_session() {
             lifecycle.spawn-failed hydra local '{}' >/dev/null 2>&1 || true
     fi
 
-    if [ -n "$_session" ]; then
+    if [ -n "$_session" ] && [ "$_session" != - ]; then
         kill_session "$_session" 2>/dev/null || true
         release_session_lock "$_session" 2>/dev/null || true
     fi
@@ -106,7 +106,7 @@ ensure_ai_on_path() {
 }
 
 # Print a complete, non-mutating plan for one head.
-# Usage: spawn_dry_run <branch> <layout> <profile> <group> <deps> <pr> <template> <task>
+# Usage: spawn_dry_run <branch> <layout> <profile> <group> <deps> <pr> <template> <task> [policy] [scopes] [terminal_mode]
 spawn_dry_run() {
     _sdr_branch="$1"
     _sdr_layout="$2"
@@ -118,6 +118,7 @@ spawn_dry_run() {
     _sdr_task="${8:-}"
     _sdr_policy="${9:-declared-done}"
     _sdr_scopes="${10:-}"
+    _sdr_terminal_mode="${11:-interactive}"
     _sdr_project="$(hydra_get_project_id 2>/dev/null)" || {
         echo "Error: project is not initialized" >&2
         echo "Next: hydra init --profile $_sdr_profile   or   hydra init --no-agent" >&2
@@ -151,6 +152,7 @@ spawn_dry_run() {
         echo "  git: git worktree add -b $_sdr_branch -- <worktree>"
     fi
     echo "  layout: $_sdr_layout"
+    echo "  terminal_mode: $_sdr_terminal_mode"
     echo "  profile: $_sdr_profile"
     echo "  launch: $_sdr_launch"
     echo "  group: ${_sdr_group:--}"
@@ -185,7 +187,7 @@ spawn_dry_run() {
 }
 
 # Helper function to spawn a single session
-# Usage: spawn_single <branch> <layout> [profile] [group] [deps] [pr_number] [template] [task] [completion_policy] [scopes]
+# Usage: spawn_single <branch> <layout> [profile] [group] [deps] [pr_number] [template] [task] [completion_policy] [scopes] [terminal_mode]
 # Returns: Session name on stdout, 1 on failure
 spawn_single() {
     branch="$1"
@@ -198,6 +200,9 @@ spawn_single() {
     task="${8:-}"
     completion_policy="${9:-declared-done}"
     scopes="${10:-}"
+    terminal_mode="${11:-interactive}"
+
+    case "$terminal_mode" in interactive|headless) ;; *) echo "Error: invalid terminal mode '$terminal_mode'" >&2; return 1 ;; esac
 
     # Wait for dependencies if specified
     if [ -n "$deps" ] && [ "$deps" != "-" ]; then
@@ -213,8 +218,8 @@ spawn_single() {
     # Best-effort cleanup of stale session-name locks
     cleanup_stale_locks 2>/dev/null || true
 
-    # Check tmux availability
-    if ! check_tmux_version; then
+    # Interactive heads require tmux; headless heads deliberately do not.
+    if [ "$terminal_mode" = interactive ] && ! check_tmux_version; then
         return 1
     fi
 
@@ -256,7 +261,7 @@ spawn_single() {
 
     # Check if branch already has a session
     existing_session="$(get_session_for_branch "$branch" 2>/dev/null || true)"
-    if [ -n "$existing_session" ] && tmux_session_exists "$existing_session"; then
+    if [ -n "$existing_session" ] && { [ "$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)" = headless ] || tmux_session_exists "$existing_session"; }; then
         echo "Error: Branch '$branch' already has an active session '$existing_session'" >&2
         echo "Use 'hydra switch' to switch to it" >&2
         return 1
@@ -297,30 +302,35 @@ spawn_admitted() {
         echo "Warning: Continuing despite setup failure (HYDRA_SETUP_CONTINUE set)" >&2
     fi
 
-    # Generate session name
-    session="$(generate_session_name "$branch")"
+    # Generate a tmux session name only for interactive heads.  The durable
+    # sentinel keeps the legacy scalar shape while terminal-mode identifies
+    # that no terminal was requested.
+    if [ "$terminal_mode" = headless ]; then
+        session=-
+    else
+        session="$(generate_session_name "$branch")"
+    fi
 
     # Run pre-spawn hook (best-effort)
     run_hook pre-spawn "$worktree_path" "$repo_root" "" "$branch"
 
-    # Create tmux session
-    echo "Creating tmux session '$session'..." >&2
-    if ! create_session "$session" "$worktree_path"; then
-        # Clean up worktree if session creation failed
-        # Release any reserved session name lock
+    # Create the optional terminal only for interactive execution.
+    if [ "$terminal_mode" = interactive ]; then
+        echo "Creating tmux session '$session'..." >&2
+        if ! create_session "$session" "$worktree_path"; then
+            release_session_lock "$session" 2>/dev/null || true
+            delete_worktree "$worktree_path" 2>/dev/null || true
+            release_lock "$project_worktree_lock"
+            return 1
+        fi
         release_session_lock "$session" 2>/dev/null || true
-        delete_worktree "$worktree_path" 2>/dev/null || true
-        release_lock "$project_worktree_lock"
-        return 1
     fi
-    # Release the reserved session name lock now that session is created
-    release_session_lock "$session" 2>/dev/null || true
 
     # Commit durable identity and task before any agent process sees the task.
     committed_head="$(state_v2_create_head "$project_id" "$branch" "$session" "$ai_tool" \
         "${group:--}" "$spawn_timestamp" "${deps:--}" "${pr_number:--}" "$repo_root" \
         "$head_id" "$instance_id" "$worktree_path" "$task" "$base_ref" "$provider_session_id" \
-        "$scopes" "$completion_policy")" || {
+        "$scopes" "$completion_policy" "$terminal_mode")" || {
         echo "Error: Failed to commit durable head state" >&2
         spawn_rollback_session "$session" "$branch" "$worktree_path"
         release_lock "$project_worktree_lock"
@@ -353,6 +363,35 @@ spawn_start_session() {
     provenance_capture_instance "$branch" launch "$launch_command" || {
         return 1
     }
+
+    if [ "$terminal_mode" = headless ]; then
+        event_emit "$project_id" "$head_id" "$instance_id" lifecycle.started hydra local \
+            "{\"profile\":\"$(json_escape "$ai_tool")\",\"terminal_mode\":\"headless\"}" >/dev/null || return 1
+        # A no-agent head is ready for `hydra exec`.  Profiles that provide a
+        # launch command run without a pane and retain their durable identity.
+        if [ "$ai_tool" != none ]; then
+            mkdir -p "$head_dir/logs" || return 1
+            (
+                export HYDRA_PROJECT_ID="$project_id" HYDRA_HEAD_ID="$head_id" \
+                    HYDRA_INSTANCE_ID="$instance_id" HYDRA_BRANCH="$branch" \
+                    HYDRA_WORKTREE="$worktree_path" HYDRA_STATE_DIR="$head_dir" \
+                    HYDRA_TASK_FILE="$head_dir/task"
+                cd "$worktree_path" || exit 1
+                sh -c "$launch_command" >"$head_dir/logs/$instance_id.log" 2>&1
+            ) &
+            _headless_pid=$!
+            state_v2_write_scalar "$head_dir/instances/$instance_id/pid" "$_headless_pid" || return 1
+        fi
+        if [ "$ai_tool" = none ]; then
+            # Workspace-only heads have no worker owner; do not infer liveness
+            # from the existence of their worktree.
+            lifecycle_set_observed "$branch" idle hydra exact || return 1
+        else
+            lifecycle_set_observed "$branch" running hydra exact || return 1
+        fi
+        run_hook post-spawn "$worktree_path" "$repo_root" "" "$branch"
+        return 0
+    fi
 
     tmux set-environment -t "$session" HYDRA_PROJECT_ID "$project_id" 2>/dev/null || true
     tmux set-environment -t "$session" HYDRA_HEAD_ID "$head_id" 2>/dev/null || true

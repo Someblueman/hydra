@@ -230,7 +230,10 @@ provenance_capture_head() {
     chmod 700 "$_pch_dir" 2>/dev/null || true
     if ! state_v2_write_scalar "$_pch_dir/hydra-version" "$HYDRA_VERSION" || \
        ! state_v2_write_scalar "$_pch_dir/git-version" "$(git --version 2>/dev/null | sed -n '1p')" || \
-       ! state_v2_write_scalar "$_pch_dir/tmux-version" "$(tmux -V 2>/dev/null | sed -n '1p')" || \
+       ! state_v2_write_scalar "$_pch_dir/tmux-version" "$(
+           _pch_mode="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" 2>/dev/null || echo interactive)"
+           if [ "$_pch_mode" = headless ]; then printf 'unavailable'; else tmux -V 2>/dev/null | sed -n '1p'; fi
+       )" || \
        ! state_v2_write_scalar "$_pch_dir/base-ref" "$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/base-ref")" || \
        ! state_v2_write_scalar "$_pch_dir/task-hash" "$(hydra_hash < "$_pch_task")" || \
        ! state_v2_write_scalar "$_pch_dir/task-bytes" "$(LC_ALL=C wc -c < "$_pch_task" | tr -d ' ')" || \

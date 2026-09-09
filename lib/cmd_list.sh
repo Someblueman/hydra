@@ -137,10 +137,14 @@ cmd_list() {
     state_rows="$(state_list_heads)"
 
     # Cache current session once before the loop (perf: issue #36)
-    current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
-
-    # Batch tmux observation for this command
-    tmux_load_snapshot
+    current_session=""
+    if state_has_interactive_heads && command -v tmux >/dev/null 2>&1; then
+        current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null || true)"
+        # Batch tmux observation for interactive rows only.
+        tmux_load_snapshot
+    else
+        tmux_clear_snapshot
+    fi
 
     if [ -n "$json_output" ]; then
         tmpjson="$(mktemp)"
@@ -157,7 +161,8 @@ cmd_list() {
     while IFS=' ' read -r branch session ai group timestamp deps pr; do
         [ -z "$filter_group" ] || [ "$group" = "$filter_group" ] || continue
         total=$((total + 1))
-        if tmux_snapshot_has_session "$session"; then
+        _row_mode="$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)"
+        if [ "$_row_mode" = headless ] || tmux_snapshot_has_session "$session"; then
             status=active; active=$((active + 1))
         else
             status=dead; dead=$((dead + 1))
@@ -194,9 +199,10 @@ cmd_list() {
                 fi
             fi
 
-            printf '{"branch": "%s", "session": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s, "deps": %s, "pr": %s, "pr_status": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s, "git": %s}\n' \
+            printf '{"branch": "%s", "session": "%s", "terminal_mode": "%s", "ai": %s, "group": %s, "status": "%s", "duration_seconds": %s, "duration_human": "%s", "timestamp": %s, "current": %s, "deps": %s, "pr": %s, "pr_status": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s, "git": %s}\n' \
                 "$(json_escape "$branch")" \
                 "$(json_escape "$session")" \
+                "$(json_escape "$_row_mode")" \
                 "$ai_json" \
                 "$group_json" \
                 "$status" \

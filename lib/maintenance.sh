@@ -15,7 +15,8 @@ count_dead_sessions() {
         return 0
     fi
     while IFS=' ' read -r _branch _session _rest; do
-        if [ -n "$_session" ] && ! tmux_session_exists "$_session"; then
+        _mode="$(get_terminal_mode_for_branch "$_branch" 2>/dev/null || echo interactive)"
+        if [ "$_mode" != headless ] && [ -n "$_session" ] && ! tmux_session_exists "$_session"; then
             _dead=$((_dead + 1))
         fi
     done <<EOF
@@ -142,7 +143,8 @@ clean_dead_heads() {
 
     _dead_branches=""
     while IFS=' ' read -r _branch _session _ai _group _timestamp _deps _pr; do
-        if [ -n "$_session" ] && tmux_session_exists "$_session"; then
+        _mode="$(get_terminal_mode_for_branch "$_branch" 2>/dev/null || echo interactive)"
+        if [ "$_mode" = headless ] || { [ -n "$_session" ] && tmux_session_exists "$_session"; }; then
             :
         elif state_update_field "$_branch" desired-state stopped; then
             _dead_cleaned=$((_dead_cleaned + 1))

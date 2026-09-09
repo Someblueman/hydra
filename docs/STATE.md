@@ -11,15 +11,35 @@ Projects live at `projects/<project_id>` and heads at
 and pack identifiers are validated opaque IDs. Human branch names and other labels
 are scalar record values rather than filesystem keys.
 
-Each head records its branch, tmux session, profile, group, creation time,
+Each head records its branch, optional tmux session, terminal mode, profile, group, creation time,
 dependencies, PR, desired state, completion policy, worktree, task, scopes, base
 reference, current instance, and retained instance history. Events, messages,
 receipts, transcripts, execution results, gates, and provenance extend that head.
 Workflow runs and integration reports are project-scoped siblings of `heads`.
 
-Active readers select heads whose `desired-state` is `running` or `stopping`.
+Active readers select heads whose `desired-state` is `running`, `headless`, or
+`stopping`.
 Teardown records `stopped` but retains history for inspection and recovery. Resume
 keeps the head ID, creates a new instance ID, and records the predecessor link.
+
+## Optional terminal execution
+
+Interactive heads use `terminal-mode=interactive` and retain their generated tmux
+session name. A headless head uses `terminal-mode=headless`, the legacy session
+scalar is the explicit sentinel `-`, and its initial `desired-state=headless`; its
+instance repeats the mode and sentinel. The distinct desired-state token is
+intentional: pre-terminal readers only select `running`/`stopping`, so they ignore
+a new headless record (and their state verifier refuses the unknown token) instead
+of classifying `session=-` as a dead interactive session. New readers treat
+`headless` as active and lifecycle teardown transitions it through `stopping` to
+`stopped`.
+Headless workspaces and command/adapter execution do not probe or invoke tmux.
+Lifecycle liveness comes from durable observations, so an absent terminal is not a
+dead worker. Readers default a missing `terminal-mode` on older state-v2 records to
+`interactive`, preserving existing behavior. The session/mode pairing is verified
+and invalid combinations fail closed. Teardown never removes the workspace merely
+because a terminal is unavailable; `hydra kill` performs the requested durable
+teardown for either mode and retains lifecycle evidence.
 
 ## Mutation and verification
 
