@@ -150,6 +150,7 @@ json_object *task_serve(json_object *request) {
     }
     if (!strcmp(operation, "result") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_result(f_string(request, "task_id"));
     if (!strcmp(operation, "cancel") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_cancel(f_string(request, "task_id"));
+    if (!strcmp(operation, "observe") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_observation(f_string(request, "task_id"));
     if (!strcmp(operation, "submit") && !f_field(request, "task_id")) {
         const char *trust = f_string(request, "trust_spec"), *digest = f_string(f_field(request, "package"), "spec_sha256"); json_object *accepted;
         if (f_field(request, "trust_spec") && (!task_hex(trust, 64) || !digest || strcmp(trust, digest))) return f_error("fleet-task-submit", "trust_required", "--trust-spec must match the prepared specification digest");

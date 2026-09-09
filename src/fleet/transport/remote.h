@@ -15,4 +15,6 @@ json_object *f_remote_cli(int argc, char **argv);
 json_object *f_request(const struct f_remote *remote, json_object *request, unsigned seconds);
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds);
 json_object *f_aggregate(const char *action, unsigned seconds, unsigned jobs);
+/* Bounded remote observation aggregation with host-local stale-cache projection. */
+json_object *f_observation_aggregate(unsigned seconds, unsigned jobs);
 #endif

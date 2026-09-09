@@ -101,6 +101,10 @@ id="$(sed -n 's/.*"task_id":"\([^"]*\)".*/\1/p' "$fixture/receipt-1")"
 for n in 2 3 4 5 6; do cmp "$fixture/receipt-1" "$fixture/receipt-$n"; done
 task status build --id "$id" > "$fixture/status"
 grep -q '"state":"accepted"' "$fixture/status"
+task observe build --id "$id" > "$fixture/observation"
+grep -q '"snapshot_schema_version":1' "$fixture/observation"
+grep -q '"execution_state":"accepted"' "$fixture/observation"
+grep -q '"reason":"admission"' "$fixture/observation"
 [ "$(find "$fixture/host/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" -eq 1 ]
 cmp "$fixture/package" "$fixture/host/fleet/tasks/$id/package.json"
 cp "$fixture/host/fleet/tasks/$id/acceptance.json" "$fixture/original-acceptance"

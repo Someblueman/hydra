@@ -31,7 +31,7 @@ _hydra_completion() {
             result) COMPREPLY=($(compgen -W "--id --output --timeout" -- "${cur}")); return 0 ;;
             logs) COMPREPLY=($(compgen -W "--id --source --stream --offset --limit --step --attempt" -- "${cur}")); return 0 ;;
             cancel) COMPREPLY=($(compgen -W "--id --timeout" -- "${cur}")); return 0 ;;
-            status) COMPREPLY=($(compgen -W "--id" -- "${cur}")); return 0 ;;
+            status|observe) COMPREPLY=($(compgen -W "--id" -- "${cur}")); return 0 ;;
         esac
     fi
     
@@ -45,7 +45,7 @@ _hydra_completion() {
             return 0
             ;;
         fleet)
-            COMPREPLY=($(compgen -W "handshake list doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            COMPREPLY=($(compgen -W "handshake list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
             return 0
             ;;
         auth)
@@ -53,7 +53,7 @@ _hydra_completion() {
             return 0
             ;;
         task)
-            COMPREPLY=($(compgen -W "prepare inspect submit start resume requests decide status cancel logs result inspect-result collect collected help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "prepare inspect submit start resume requests decide status observe cancel logs result inspect-result collect collected help" -- "${cur}"))
             return 0
             ;;
         prepare)

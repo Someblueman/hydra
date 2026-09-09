@@ -144,7 +144,7 @@ supported required capabilities. The receiver recognizes the existing local `exe
 explicitly configured admission label `NAME`. Other unsupported names fail explicitly;
 executable detection does not qualify provider prompt delivery or resume.
 The handshake advertises task protocol 1 with `task-accept`, `task-start`,
-`task-status`, `task-cancel`, `task-logs`, and `task-result`.
+`task-status`, `task-observe`, `task-cancel`, `task-logs`, and `task-result`.
 
 Acceptance atomically publishes a nonempty private directory under
 `$HYDRA_HOME/fleet/tasks/task_ID`, containing the validated `package.json`, immutable
@@ -184,6 +184,37 @@ repeat submission. An unpublished `.accept.*` directory is not an accepted task.
 The receiver rejects symlinked task storage and directories writable by another
 user. These protections preserve metadata integrity; tasks are not an operating
 system sandbox.
+
+## Read-only run and host overview
+
+`fleet overview` reads receiver-owned task records and aggregates one bounded snapshot
+per configured host:
+
+```sh
+hydra fleet overview --json
+hydra fleet task observe build --id task_ID
+```
+
+The receiver response uses snapshot schema 1 and includes task/run/step identity,
+assigned host and workspace, effective configuration, recorded execution owner,
+execution state, ordered workflow steps, pending approval requests, waiting reason and
+next action, and independent observation timestamps. A timestamp that cannot be
+validated is JSON `null`; it is never replaced with epoch zero. Owner state is the
+durable recorded owner state, not a PID or transport-liveness claim.
+
+The coordinator stores only successful snapshots in a host-bound cache under its
+private Hydra home. Cache entries bind the configured alias, SSH target, and selected
+remote home. A transport failure may return the last confirmed snapshot with
+`cached:true`, `connection.state` set to the failure class, and `freshness.state` set
+to `stale`; it never relabels the recorded execution state. Unknown or malformed
+responses are reported as recovery evidence and are not used as cache entries.
+
+The native fleet adapter advertises `HYDRA_FLEET_TUI<TAB>3` for the overview stream.
+Version 3 retains bounded host/head rows and adds freshness columns plus task rows for
+owner, waiting reason, next action, receiver observation time, last confirmation, and
+freshness. Version 1 and 2 fixtures remain readable for compatibility. The TUI uses
+these rows for display only; attaching, interruption, and all other mutations remain
+explicit shell-CLI operations.
 
 ## Receiver-owned execution
 

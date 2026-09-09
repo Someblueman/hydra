@@ -93,7 +93,7 @@ json_object *f_cli(int argc, char **argv) {
     if (!strcmp(action, "task")) return task_cli(argc - 1, argv + 1);
     if (!strcmp(action, "help") || !strcmp(action, "--help")) {
         json_object *data = json_object_new_object();
-        f_string_add(data, "usage", "fleet list|doctor|reconcile|watch [--timeout N --jobs N]; fleet admission HOST -- status [--json|--summary]; fleet admission HOST -- inspect ID; fleet task help; fleet auth help; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet package --source DIR --binary FILE --output FILE; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path [--instance ID] [--input FILE --output FILE --run ID] -- ARGS");
+        f_string_add(data, "usage", "fleet list|overview|doctor|reconcile|watch [--timeout N --jobs N]; fleet admission HOST -- status [--json|--summary]; fleet admission HOST -- inspect ID; fleet task help; fleet auth help; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet package --source DIR --binary FILE --output FILE; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path [--instance ID] [--input FILE --output FILE --run ID] -- ARGS");
         return f_success("fleet-help", data);
     }
     result = parse_options(argc, argv, &options);
@@ -122,6 +122,7 @@ json_object *f_cli(int argc, char **argv) {
         return NULL;
     }
     if (!strcmp(action, "reconcile")) action = "list";
+    if (!strcmp(action, "overview") && !options.name) return f_observation_aggregate(options.seconds, options.jobs);
     if ((!strcmp(action, "list") || !strcmp(action, "doctor")) && !options.name) return f_aggregate(action, options.seconds, options.jobs);
     if (!options.name || f_remote_load(options.name, &remote)) return f_error("fleet", "invalid_alias", "register a remote with hydra remote add");
     if (!strcmp(action, "bootstrap")) {

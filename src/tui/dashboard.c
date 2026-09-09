@@ -81,12 +81,26 @@ static void dashboard_charts(struct app *app, struct tv_canvas *c, struct tv_rec
     tv_panel(c, r, app->fleet ? "HOST OBSERVATIONS" : "QUEUE DEPTH / known heads");
     if (app->fleet) {
         int row = r.y + 2;
+        if (app->model.task_count) {
+            tv_panel(c, r, "REMOTE TASKS / receiver-owned observations");
+            for (i = 0; i < app->model.task_count && row < r.y + r.height - 2; i++) {
+                const struct task_observation *task = &app->model.tasks[i];
+                dashboard_text(c, r.x + 2, row++, r.width - 4, !strcmp(task->freshness, "stale") ? TV_WARNING : TV_BASE,
+                               "%s / %s / owner %s / %s", task->task_id, task->state, task->owner, task->freshness);
+                if (row < r.y + r.height - 2)
+                    dashboard_text(c, r.x + 4, row++, r.width - 6, !strcmp(task->waiting_reason, "none") ? TV_BASE : TV_WARNING,
+                                   "wait %s / %s / next: %s", task->waiting_reason, task->waiting_detail, task->next_action);
+            }
+            dashboard_text(c, r.x + 2, r.y + r.height - 2, r.width - 4, TV_BORDER,
+                           "%zu task observations / owner state and freshness are receiver evidence", app->model.task_count);
+            return;
+        }
         for (i = 0; i < app->model.host_count && row < r.y + r.height - 2; i++) {
             const struct host_observation *host = &app->model.hosts[i];
             if (!strcmp(host->state, "failed")) dashboard_text(c, r.x + 2, row++, r.width - 4, TV_WARNING,
-                           "%s / failed / -- heads / %s", host->name, host->error);
+                           "%s / failed / -- heads / %s / %s", host->name, host->error, host->freshness);
             else dashboard_text(c, r.x + 2, row++, r.width - 4, TV_BASE,
-                           "%s / responded / %u heads", host->name, host->heads);
+                           "%s / responded / %u heads / %s", host->name, host->heads, host->freshness);
         }
         dashboard_text(c, r.x + 2, r.y + r.height - 2, r.width - 4, TV_BORDER, "H hosts / %zu total / CPU and memory unavailable", app->model.host_count);
         if (row == r.y + 2) dashboard_text(c, r.x + 2, row, r.width - 4, TV_WARNING, "No host observations; inspect Recovery");
@@ -158,6 +172,7 @@ void render_dashboard(struct app *app) {
         half = width * 3 / 5;
         middle = height / 2;
         if (middle > 12 && app->model.head_count < 8) middle = 12;
+        if (app->fleet && app->model.task_count && height - middle - 7 < 6) middle = 10;
         if (middle < 10) middle = 10;
         dashboard_heads(app, &c, (struct tv_rect){0, 6, half - 1, middle});
         dashboard_detail(app, &c, (struct tv_rect){half, 6, width - half, middle});

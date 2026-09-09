@@ -119,8 +119,11 @@ branch  session  profile  status  activity  group  pr
 ```
 
 The internal native adapter begins with `HYDRA_TUI<TAB>2`, followed by bounded `H`
-head and `R` recovery rows whose fields contain no tabs or newlines. Unsupported
-protocol versions fail closed. This adapter is not a general automation API.
+head and `R` recovery rows whose fields contain no tabs or newlines. The fleet
+overview adapter uses `HYDRA_FLEET_TUI<TAB>3`: it retains version-2 `T` host and `F`
+head rows, extends `T` with connection/freshness fields, and adds bounded `O` task
+rows. Version-1 and version-2 fleet fixtures remain readable. Unsupported protocol
+versions fail closed. This adapter is not a general automation API.
 
 Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. Both
 retain navigation, search, refresh, preview, switch, spawn, group assignment,
