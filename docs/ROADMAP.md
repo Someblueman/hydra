@@ -163,6 +163,8 @@ These are delivery milestones, not assigned release versions.
       lowering explicitly; preserve published spawn semantics and existing compiled
       artifact bindings. Unsupported remote or terminal capabilities fail before
       launch, rather than silently changing the requested execution mode.
+      Implementation and controlled acceptance: [T2 record](T2_ACCEPTANCE.md).
+      Live authenticated-host qualification remains required.
       Acceptance: on hosts without tmux installed, submit a command and an available
       authenticated headless adapter, disconnect, reconnect, collect exact outputs,
       and consume them in a dependent step. Run the corresponding local compiled

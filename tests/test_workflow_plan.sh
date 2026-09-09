@@ -26,6 +26,21 @@ if [ "${HYDRA_TEST_REPORT_V2:-0}" = 1 ]; then
 fi
 cp "$REPO/tests/fixtures/plan/plan.json" "$ROOT/plan.json"
 cp "$REPO/tests/fixtures/plan/policy.json" "$ROOT/policy.json"
+if [ "${HYDRA_TEST_HEADLESS:-0}" = 1 ]; then
+    # shellcheck source=/dev/null
+    . "$REPO/tests/headless_path.sh"
+    headless_path "$ROOT/no-tmux"
+    python3 - "$ROOT/plan.json" <<'PYPLAN'
+import json, sys
+path = sys.argv[1]
+plan = json.load(open(path))
+for step in plan['steps']:
+    if step['kind'] == 'spawn':
+        step['args']['terminal_mode'] = 'headless'
+with open(path, 'w') as out:
+    json.dump(plan, out, indent=2)
+PYPLAN
+fi
 merge_obligations() {
     python3 - "$1" "$2" "$3" "$4" <<'PY'
 import json, sys

@@ -100,8 +100,13 @@ static bool task_recipe(json_object *step) {
     return !f_field(args, "source_step") || (plan_id(producer) && strcmp(f_string(step, "role"), "verify") &&
         plan_has(f_field(step, "needs"), producer));
 }
+static bool spawn_recipe(json_object *args, const char *role, json_object *writes) {
+    const char *const keys[] = {"branch", "terminal_mode", NULL};
+    const char *terminal = f_string(args, "terminal_mode"); json_object *value;
+    if (!task_keys(args, keys) || !plan_id(f_string(args, "branch")) || strcmp(role, "work") || json_object_array_length(writes)) return false;
+    return !json_object_object_get_ex(args, "terminal_mode", &value) || (terminal && (!strcmp(terminal, "interactive") || !strcmp(terminal, "headless")));
+}
 static bool recipe(json_object *step, json_object *env, json_object *errors, const char *path, bool distributed) {
-    const char *const spawn_keys[] = {"branch", NULL};
     const char *kind = f_string(step, "kind"), *role = f_string(step, "role");
     json_object *args = f_field(step, "args"), *writes = f_field(step, "writes");
     size_t i;
@@ -112,7 +117,7 @@ static bool recipe(json_object *step, json_object *env, json_object *errors, con
     if (distributed) {
         if (!task_recipe(step)) goto invalid;
     } else if (!strcmp(kind, "spawn")) {
-        if (!task_keys(args, spawn_keys) || !plan_id(f_string(args, "branch")) || strcmp(role, "work") || json_object_array_length(writes)) goto invalid;
+        if (!spawn_recipe(args, role, writes)) goto invalid;
         if (!plan_has(f_field(env, "effects"), "worktree")) goto unauthorized;
     } else {
         if (!exec_recipe(args, env, errors, path)) return false;

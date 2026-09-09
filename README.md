@@ -53,7 +53,8 @@ that a task is complete or that its changes are correct.
 
 ## Installation
 
-You need Git, tmux 3.0 or newer, Make, and a C99 compiler. Fleet additionally needs
+You need Git, Make, and a C99 compiler. Interactive heads need tmux 3.0 or newer;
+headless execution and installation work without it. Fleet additionally needs
 `pkg-config` and JSON-C development files (`brew install json-c pkg-config` on
 macOS, or `apt install libjson-c-dev pkg-config` on Ubuntu). The installer builds
 the native TUI; build the fleet coordinator before installing.

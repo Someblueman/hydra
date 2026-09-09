@@ -71,12 +71,12 @@ static int mapped_project(const char *requested, char canonical[F_PATH], char id
 }
 static bool dependencies(json_object *spec) {
     json_object *caps = f_field(spec, "capabilities"); size_t i;
-    const char *supported[] = {"exec", "workflow", "git", "tmux", "agent-headless", "workflow-data", "workflow-approval-wait", NULL};
+    const char *supported[] = {"exec", "workflow", "git", "tmux", "agent-headless", "workflow-data", "workflow-approval-wait", "execution-headless", NULL};
     for (i = 0; i < json_object_array_length(caps); i++) {
         const char *name = f_text(json_object_array_get_idx(caps, i)); size_t j;
         if (!strncmp(name, "label.", 6) && f_name(name + 6)) continue;
         for (j = 0; supported[j] && strcmp(name, supported[j]); j++) {}
-        if (!supported[j]) return false;
+        if (!supported[j] || (!strcmp(name, "tmux") && !f_terminal_available())) return false;
     }
     return true;
 }
@@ -110,8 +110,8 @@ json_object *task_accept(json_object *package, const char *key) {
     if (!dependencies(spec)) {
         result = f_error("fleet-task-submit", "capability_unavailable", "the task requires a capability this receiver does not implement"); goto done;
     }
-    if (!executable("git", "--version") || !executable("tmux", "-V") || !executable(f_hydra, "version")) {
-        result = f_error("fleet-task-submit", "missing_dependency", "the receiving host requires working Git, tmux, and the Hydra shell CLI"); goto done;
+    if (!executable("git", "--version") || !executable(f_hydra, "version")) {
+        result = f_error("fleet-task-submit", "missing_dependency", "the receiving host requires working Git and the Hydra shell CLI"); goto done;
     }
     if (f_stopped) { result = f_error("fleet-task-submit", "cancelled", "submission was interrupted before acceptance"); goto done; }
     accepted = json_object_new_object(); json_object_object_add(accepted, "schema_version", json_object_new_int(1));

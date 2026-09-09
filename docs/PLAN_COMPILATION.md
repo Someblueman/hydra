@@ -174,3 +174,21 @@ ambiguities, uses valid handoffs, and reaches the final deliverable. Keep those
 semantic assessments separate from deterministic compiler tests. Test the complete
 public path with at least one feature and one research objective; a schema-only demo
 cannot qualify objective delivery.
+
+## Explicit terminal mode (T2, unreleased)
+
+Schema 1 spawn recipes accept an optional `args.terminal_mode` with values
+`interactive` and `headless`. An omitted field preserves interactive spawn and
+the prior compiled representation. Explicit headless recipes lower to the existing
+workflow spawn operation with `--headless --no-agent`; following command or adapter
+exec steps operate on that terminal-free head. The mode is part of the accepted
+compiled digest, normalized workflow, and runtime graph binding. Changing it after
+acceptance requires a new compilation and digest. Unknown modes or mode fields on
+non-spawn recipes are rejected.
+
+Schema 2 task recipes use the detached receiver's headless execution. Their task
+specifications may declare `["exec", "execution-headless"]` to require T2 receivers;
+`["exec"]` remains readable with its existing digest. All source, artifact,
+placement, tool, and budget bindings remain enforced. A headless adapter in a
+local schema 1 plan remains an explicit profile exec recipe; remote adapter
+execution uses the existing workflow-task adapter contract.

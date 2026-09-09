@@ -10,6 +10,34 @@ task capability shipped in v2.1.0. Headless adapters and durable approval
 suspension described here are available in v2.2.0; see the
 [changelog](../CHANGELOG.md#220---2026-09-07).
 
+## Terminal-free execution (T2, unreleased)
+
+Detached `exec` tasks create T1 headless workspaces. Git and the Hydra shell CLI
+are required on the receiver; tmux is required only for terminal operations.
+The receiver advertises `execution-headless` and advertises `tmux` only when
+version 3.0 or newer works. Declare `execution-headless` in a task's capabilities
+when terminal-free execution is required: older receivers reject that contract,
+using the receiver capability check before acceptance. A declared `tmux`
+requirement fails before acceptance on a receiver without a usable terminal.
+Existing task digests and acceptance records remain unchanged. Receiver capability
+checks follow existing-key lookup: an identical retry can recover its original
+receipt after capability disappearance, while changed content under the same key
+still conflicts. Protocol incompatibility remains a separate client check.
+
+Workflow tasks preserve each spawn's requested mode. To run a workflow without
+tmux, set `args.terminal_mode: headless` on its spawn steps and use a separate
+`exec` step for a headless adapter. An omitted mode still means interactive;
+there is no fallback. The workflow checks terminal requirements before dispatching
+its first step. Unsupported explicit modes fail validation. Bootstrap and the
+installer work without tmux, and doctor treats its absence as informational when
+there are no interactive heads. Existing interactive heads still require it.
+
+Terminal absence does not establish process termination. Detached task ownership,
+submission-key reconciliation, retained reservations for unknown outcomes,
+cancellation confirmation, bounded logs, and sealed result collection use the
+same contracts as other remote tasks. See [T2 acceptance](T2_ACCEPTANCE.md) for
+controlled transport evidence and the separate live-host qualification requirement.
+
 ## Prepare and preview
 
 Choose an exact commit with `git rev-parse HEAD`, an explicit registered host alias,

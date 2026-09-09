@@ -69,7 +69,8 @@ hydra fleet package --source /path/to/hydra \
 hydra fleet bootstrap ovh --input /tmp/hydra-linux.json --sha256 HASH
 ```
 
-Bootstrap requires existing Git and tmux. It verifies the package hash, transfers
+Bootstrap requires existing Git. Tmux 3.0 or newer is needed for interactive
+terminal operations, not bootstrap or headless tasks. It verifies the package hash, transfers
 a hash-verified installer executable, rejects non-allowlisted paths, qualifies the
 shell and fleet handshakes in isolated state, and publishes an immutable directory
 at `~/.local/share/hydra/fleet/HASH`. Only then does it update the local alias's

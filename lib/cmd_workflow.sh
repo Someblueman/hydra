@@ -69,6 +69,8 @@ cmd_workflow() {
             workflow_require_trust "$_cw_file" || return 1
             workflow_parse "$_cw_file" validate || return 1
             workflow_data_validate "$_cw_file" || { cli_error workflow invalid_data "invalid workflow data manifest" "check declared paths, types, bounds, references and dependencies"; return 1; }
+            _cw_terminal="$(workflow_parse "$_cw_file" terminal)" || return 1
+            [ -z "$_cw_terminal" ] || check_tmux_version || return 1
             _cw_runs="$(workflow_runs_dir)" || return 1; mkdir -p "$_cw_runs" || return 1
             _cw_project="$(hydra_get_project_id)" _cw_base="$(git rev-parse HEAD)"
             _cw_run="$(hydra_new_id run "$_cw_project|workflow|$_cw_file")" || return 1

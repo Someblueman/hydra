@@ -17,6 +17,7 @@ cleanup() {
     for cleanup_head in "$fixture"/host/state/v2/projects/*/heads/*; do
         [ -f "$cleanup_head/session" ] || continue
         [ -f "$cleanup_head/current-instance" ] || continue
+        [ "$(cat "$cleanup_head/terminal-mode" 2>/dev/null)" != headless ] || continue
         cleanup_session="$(cat "$cleanup_head/session")"
         cleanup_instance="$(cat "$cleanup_head/current-instance")"
         cleanup_id="$(tmux display-message -p -t "=$cleanup_session" '#{session_id}' 2>/dev/null)" || continue
@@ -33,6 +34,9 @@ cleanup() {
 trap cleanup 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
+# shellcheck source=/dev/null
+. "$root/tests/headless_path.sh"
+headless_path "$fixture/no-tmux"
 HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
 HYDRA_HOME="$fixture/client"
 HYDRA_TEST_TRANSPORT="$fixture/transport"
@@ -89,6 +93,8 @@ task() { "$root/bin/hydra" fleet task "$@"; }
 if printf '{"protocol":1,"action":"handshake"}\000trailing' | "$HYDRA_FLEET_BIN" fleet serve > "$fixture/error"; then exit 1; fi
 grep -q '"code":"invalid_request"' "$fixture/error"
 task prepare --source "$fixture/source" --spec "$fixture/spec" --output "$fixture/package" > "$fixture/preview"
+# shellcheck source=/dev/null
+. "$root/tests/task_terminal_cases.sh"
 # Six simultaneous clients must converge on one immutable acceptance.
 pids=""
 for n in 1 2 3 4 5 6; do
@@ -207,6 +213,7 @@ steps:
     idempotent: false
     args:
       branch: wf-worker
+      terminal_mode: headless
   - id: work
     kind: exec
     needs: [create]
@@ -301,6 +308,8 @@ grep -q '"code":"io_failed"' "$fixture/result-error"
 . "$root/tests/task_agent_cases.sh"
 # shellcheck disable=SC1091
 . "$root/tests/task_approval_cases.sh"
+
+task submit build --input "$fixture/execution-headless-package" --key headless-required > "$fixture/headless-accepted"
 
 # A command that emits a symlink cannot produce a valid artifact snapshot.
 sed -e 's@\["true"\]@["ln","-s","/dev/null","result.txt"]@' -e 's/"outputs":\[\]/"outputs":["result.txt"]/' "$fixture/spec" > "$fixture/unsafe-output-spec"
@@ -467,4 +476,6 @@ printf '{}' > "$fixture/host/fleet/tasks/$id/state.json"
 if task submit build --input "$fixture/package" --key same-key > "$fixture/error"; then exit 1; fi
 grep -q '"code":"recovery_required"' "$fixture/error"
 cmp "$fixture/original-acceptance" "$fixture/host/fleet/tasks/$id/acceptance.json"
+# shellcheck source=/dev/null
+. "$root/tests/task_terminal_reconcile_cases.sh"
 printf 'Task acceptance and execution: deduplication, lost acknowledgments, exec/workflow attempts, selected inputs, gates, mapping, outages, and corruption passed\n'

@@ -117,6 +117,13 @@ Other failures require `hydra integrate cleanup run_ID --apply` and a new previe
 Promotion revalidates the manifest, every candidate, the verified worktree, approval,
 and target ref before a local fast-forward. Hydra never pushes as part of integration.
 
+Spawn steps accept `args.terminal_mode: headless` for a terminal-free workspace,
+or `interactive` for a tmux terminal. Omitting the field preserves interactive
+spawn. A headless spawn has no profile; use a following profile exec step to run
+an adapter. Unknown modes and modes on non-spawn steps fail validation. A workflow
+that requests a terminal checks tmux before dispatching its first step, without
+falling back to another execution mode.
+
 Headless agent steps use `args.profile`, `prompt_file` or `prompt_input`, optional
 `requires`, and an optional declared `result_file`. They run through the same
 supervised exec path. See [Agent contract v1](AGENT_CONTRACT.md) for the finite

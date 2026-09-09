@@ -114,7 +114,7 @@ json_object *f_bootstrap(struct f_remote *remote, const char *file, const char *
     memcpy(input, binary, binarysize); memcpy(input + binarysize, text, strlen(text));
     /* Only numeric lengths and verified hexadecimal hashes enter this fixed script. */
     snprintf(command, sizeof(command),
-        "set -eu; command -v git >/dev/null; command -v tmux >/dev/null; "
+        "set -eu; command -v git >/dev/null; "
         "stage=$(mktemp -d); trap 'rm -rf \"$stage\"' EXIT HUP INT TERM; "
         "head -c %zu > \"$stage/fleet\"; "
         "if command -v sha256sum >/dev/null; then actual=$(sha256sum \"$stage/fleet\"); else actual=$(shasum -a 256 \"$stage/fleet\"); fi; "
