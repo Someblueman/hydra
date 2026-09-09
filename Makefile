@@ -362,6 +362,10 @@ CLANG_TIDY ?= build/quality-tools/bin/clang-tidy
 QUALITY_C_SYSROOT = $(shell if [ "$$(uname -s)" = Darwin ]; then xcrun --show-sdk-path; fi)
 QUALITY_C_FLAGS = $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(if $(QUALITY_C_SYSROOT),-isysroot $(QUALITY_C_SYSROOT))
 .PHONY: quality-c test-quality-c
+.PHONY: quality-c-flags
+quality-c-flags:
+	@printf '%s\n' $(QUALITY_C_FLAGS)
+
 quality-c:
 	@pkg-config --exists json-c
 	@sh scripts/quality-c.sh docs/quality/cognitive-complexity.tsv $(CLANG_TIDY) $(NATIVE_SOURCES) $(wildcard tests/c/*.c) -- $(QUALITY_C_FLAGS)

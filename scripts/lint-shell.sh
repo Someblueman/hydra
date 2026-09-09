@@ -1,6 +1,9 @@
 #!/bin/sh
 # Shared POSIX/style and syntax policy for make, CI and development hooks.
 set -eu
+if [ "${1:-}" = --version ]; then
+    exec shellcheck --version
+fi
 if [ "$#" -eq 0 ]; then
     find . -type f \( -name '*.sh' -o -path './bin/hydra' \) -exec sh "$0" {} +
     exit $?

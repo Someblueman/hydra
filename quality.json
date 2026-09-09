@@ -62,24 +62,71 @@
           "clang-tidy==22.1.8"
         ]
       ]
+    },
+    "shell-lint": {
+      "command": [
+        "sh",
+        "scripts/lint-shell.sh"
+      ],
+      "version": "0.11.0",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
+    },
+    "c-incremental": {
+      "command": [
+        "sh",
+        "scripts/quality-c-incremental.sh"
+      ],
+      "version": "22.1.8",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
     }
   },
   "checks": [
     {
       "name": "Hydra native shell lint (ShellCheck and dash)",
-      "tool": "make",
-      "args": [
-        "lint"
-      ],
+      "tool": "shell-lint",
+      "args": [],
       "patterns": [
         "*.sh",
         "bin/hydra"
       ],
-      "files": false,
+      "files": true,
       "stage": "fast",
       "failure_codes": [
         1,
         2
+      ],
+      "inputs": [
+        "scripts/lint-shell.sh",
+        "**/.shellcheckrc"
+      ]
+    },
+    {
+      "name": "Hydra C complexity regression gate",
+      "tool": "c-incremental",
+      "args": [],
+      "patterns": [
+        "*.c",
+        "*.h",
+        "*.inc"
+      ],
+      "files": true,
+      "stage": "full",
+      "failure_codes": [
+        1,
+        2
+      ],
+      "scope": "translation-units",
+      "inputs": [
+        "Makefile",
+        "scripts/quality-c.sh",
+        "scripts/quality-c-incremental.sh",
+        "docs/quality/*.tsv"
       ]
     },
     {
@@ -98,7 +145,7 @@
         "quality.json"
       ],
       "files": false,
-      "stage": "full",
+      "stage": "manual",
       "failure_codes": [
         1,
         2
