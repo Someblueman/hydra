@@ -308,7 +308,7 @@ $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 
 -include $(FLEET_OBJECTS:.o=.d) $(BUILD_DIR)/fleet/main.d $(FLEET_TEST_BINS:%=%.d)
 
-test-fleet: $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)/test-workflow-schedule $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
+test-fleet: test-discovery $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)/test-workflow-schedule $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
 	$(BUILD_DIR)/test-plan
 	$(BUILD_DIR)/test-workflow-schedule
 	$(BUILD_DIR)/test-agent-auth
@@ -385,3 +385,9 @@ sanitize-workspace:
 	@$(MAKE) BUILD_DIR=build/workspace-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-termviz test-workspace-pty
 
 $(BUILD_DIR)/termviz-workspace $(BUILD_DIR)/termviz-example $(BUILD_DIR)/test-termviz $(BUILD_DIR)/test-termviz-present $(BUILD_DIR)/test-termviz-unicode $(BUILD_DIR)/test-termviz-terminal $(BUILD_DIR)/test-termviz-input: $(TERMVIZ_HEADERS)
+
+# Read-only discovery acceptance uses real OpenSSH config expansion and a
+# controlled SSH executable; it does not use tmux or contact network hosts.
+.PHONY: test-discovery
+test-discovery: build-fleet
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/discovery/test_discovery.py

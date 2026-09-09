@@ -4,6 +4,10 @@ Fleet coordinates up to 16 trusted Hydra hosts through OpenSSH. It provides pinn
 bootstrap, observation, remote head and workflow operations, interactive attach,
 explicit configuration/history transport, and a native fleet view.
 
+[`fleet discover` and `fleet qualify`](HOST_DISCOVERY.md) inspect explicitly
+selected OpenSSH aliases/static records and qualify them with a strict read-only
+handshake. Candidate evidence stays separate from registered aliases and trust.
+
 The [remote task interface](REMOTE_TASKS.md) prepares exact source/input packages,
 persists receiver-owned acceptance and execution, and supports disconnected
 command/workflow runs, bounded logs, cancellation, and verified result collection.

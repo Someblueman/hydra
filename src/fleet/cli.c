@@ -8,6 +8,7 @@
 #include "fleet/fleet.h"
 #include "fleet/task/task.h"
 #include "fleet/auth/agent_auth.h"
+#include "fleet/discovery/discovery.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -88,6 +89,12 @@ static json_object *aggregate_action(const char *action, const struct fleet_opti
     return NULL;
 }
 
+static json_object *domain_cli(int argc, char **argv) {
+    if (!strcmp(argv[0], "discover") || !strcmp(argv[0], "qualify")) return hd_cli(argc, argv);
+    if (!strcmp(argv[0], "auth")) return auth_cli(argc - 1, argv + 1);
+    if (!strcmp(argv[0], "task")) return task_cli(argc - 1, argv + 1);
+    return NULL;
+}
 json_object *f_cli(int argc, char **argv) {
     const char *action;
     struct fleet_options options = {.seconds = 5, .jobs = 4, .interval = 5, .rest = argc};
@@ -95,11 +102,11 @@ json_object *f_cli(int argc, char **argv) {
     json_object *result, *request, *args; struct f_remote remote;
     if (argc < 1) return f_error("fleet", "invalid_input", "use hydra fleet help");
     action = argv[0];
-    if (!strcmp(action, "auth")) return auth_cli(argc - 1, argv + 1);
-    if (!strcmp(action, "task")) return task_cli(argc - 1, argv + 1);
+    result = domain_cli(argc, argv);
+    if (result) return result;
     if (!strcmp(action, "help") || !strcmp(action, "--help")) {
         json_object *data = json_object_new_object();
-        f_string_add(data, "usage", "fleet list|overview|doctor|reconcile|watch [--timeout N --jobs N]; fleet admission HOST -- status [--json|--summary]; fleet admission HOST -- inspect ID; fleet task help; fleet auth help; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet package --source DIR --binary FILE --output FILE; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path [--instance ID] [--input FILE --output FILE --run ID] -- ARGS");
+        f_string_add(data, "usage", "fleet discover|qualify --ssh ALIAS ... [--inventory FILE --select NAME ...] [--ssh-config /path] [--require CAPABILITY]; fleet list|overview|doctor|reconcile|watch [--timeout N --jobs N]; fleet admission HOST -- status [--json|--summary]; fleet admission HOST -- inspect ID; fleet task help; fleet auth help; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet package --source DIR --binary FILE --output FILE; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path [--instance ID] [--input FILE --output FILE --run ID] -- ARGS");
         return f_success("fleet-help", data);
     }
     result = parse_options(argc, argv, &options);

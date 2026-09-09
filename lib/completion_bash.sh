@@ -45,7 +45,11 @@ _hydra_completion() {
             return 0
             ;;
         fleet)
-            COMPREPLY=($(compgen -W "handshake list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            COMPREPLY=($(compgen -W "handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            return 0
+            ;;
+        discover|qualify)
+            COMPREPLY=($(compgen -W "--ssh --inventory --select --ssh-config --timeout --require --json" -- "${cur}"))
             return 0
             ;;
         auth)

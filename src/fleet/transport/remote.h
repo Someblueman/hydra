@@ -3,7 +3,10 @@
 #include "fleet/fleet.h"
 #include <json-c/json.h>
 
-struct f_remote { char name[128], target[256], hydra[F_PATH], home[F_PATH]; bool multiplex; };
+struct f_remote { char name[128], target[256], hydra[F_PATH], home[F_PATH]; bool multiplex;
+    /* Transient discovery policy only; never persisted in an alias record. */
+    char ssh_config[F_PATH];
+};
 struct f_capture;
 /* Inputs are borrowed; returned JSON belongs to the caller. SSH capture uses f_capture_free. */
 int f_ssh(const struct f_remote *remote, const char *command, const char *input, size_t size, unsigned seconds, bool tty, struct f_capture *cap);
@@ -13,6 +16,8 @@ int f_remote_save(const struct f_remote *remote);
 json_object *f_remotes(void);
 json_object *f_remote_cli(int argc, char **argv);
 json_object *f_request(const struct f_remote *remote, json_object *request, unsigned seconds);
+/* Borrowed handshake data; shares the fleet observation compatibility gate. */
+bool f_handshake_compatible(json_object *data);
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds);
 json_object *f_aggregate(const char *action, unsigned seconds, unsigned jobs);
 /* Bounded remote observation aggregation with host-local stale-cache projection. */
