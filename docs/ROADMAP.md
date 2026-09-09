@@ -574,6 +574,90 @@ Acceptance: duplicate triggers and competing workers do not create duplicate tas
 claims. Work growth remains bounded, cancellation propagates, and restart recovery
 does not invent completion or replay uncertain actions.
 
+#### H. Host discovery, qualification, and staged onboarding
+
+Add a candidate-to-operation path around the existing explicit SSH fleet. Discovery
+is an inventory and qualification feed, not a new trust authority or an automatic
+enrollment mechanism. Keep the shell CLI as the mutation path, the existing
+host-key and handshake contracts as the qualification boundary, and receiver-owned
+remote-task state as the recovery authority. This track can begin against the
+current fleet implementation.
+
+- [ ] **H1 — Candidate discovery and read-only qualification.** Import effective
+      OpenSSH aliases and explicitly selected static inventory records without
+      copying private keys or rewriting SSH configuration. Normalize endpoints,
+      preserve source provenance/freshness, assign stable candidate IDs, and
+      deduplicate conservatively; a hostname, address, provider ID, or mDNS name
+      is not a verified host identity. Add a machine-readable candidate/result
+      schema and a read-only probe that uses BatchMode, strict host-key checking,
+      bounded time/output, and the existing Hydra handshake/capability checks.
+      Unknown or changed host keys stop for operator review; discovery never
+      accepts a key, creates a fleet alias, installs Hydra, changes PATH, maps a
+      project, or submits a task.
+      Acceptance: a prepared alias (including a jump host) produces deterministic
+      candidate and qualification output; unknown/changed keys, authentication
+      failure, unreachable hosts, protocol mismatch, and missing capability have
+      distinct typed results; a mixed ten-host run retains every row and evidence;
+      discovery and probing leave aliases, remote state, and installations
+      unchanged.
+
+- [ ] **H2 — Reviewed qualification and explicit enrollment.** Add a reviewable
+      operation intent using existing state/CLI mechanisms; do not introduce a
+      second execution authority or require a new digest-plan subsystem. Bind each
+      selected host to its candidate/source identity, accepted host-key
+      fingerprint, Unix principal/target, required protocol/capability, project
+      mapping, and (when requested) the exact pinned package digest and remote
+      prefix. Apply only after explicit operator confirmation. Reuse the current
+      staged, hash-verified bootstrap and fleet-init/trust boundaries; do not copy
+      credentials, private keys, or repository trust implicitly. Record per-host
+      progress and partial failure. A lost response to a mutation is
+      outcome_unknown and must be reconciled against the receiver with the same
+      identity before any retry; never blind-replay an uncertain action.
+      Acceptance: one-host onboarding proves the selected key, package bytes,
+      prerequisites, project/path decision, and resulting alias/state agree with
+      the reviewed intent; a ten-host mixed apply preserves successes and typed
+      failures; interruption, duplicate submission, owner loss, and lost response
+      tests reconcile without duplicate effects or inferred success; a changed
+      key, package, target, project, or policy requires renewed review.
+
+- [ ] **H3 — Bounded scale and opt-in source adapters.** Extend the same candidate
+      contract to selected mDNS/DNS-SD, VPN/provider, cloud-tag, and
+      configuration-management inventory sources only after H1 is useful. Treat
+      source records as untrusted, timestamped metadata; keep provider
+      credentials outside candidate state and make source scope/cache behavior
+      explicit. For 50–100 candidates, import snapshots locally and qualify in
+      deterministic batches no larger than the current 16-host bounded observer;
+      retain per-host progress, stale/conflict evidence, and resume/reconcile
+      semantics. A TUI or richer batching view is a presentation layer over these
+      records, not another authority.
+      Acceptance: fixture-backed adapters reject malformed/secret-bearing input;
+      source disappearance, stale data, duplicate identities, and key conflicts
+      remain visible; a 50-host run can resume without rerunning completed
+      mutations; a 100-host import is bounded and does not silently widen the
+      selected set. No provider membership or discovery record grants execution
+      permission.
+
+Dependencies and coordination: H1 depends only on the current explicit fleet
+aliases, strict OpenSSH policy, and versioned handshake. H2 reuses the current
+package/bootstrap, fleet-init/trust, and remote-task contracts documented in
+[FLEET.md](FLEET.md), [SECURITY.md](SECURITY.md), and
+[REMOTE_TASKS.md](REMOTE_TASKS.md); it may proceed without a new planner or
+daemon. H3 is follow-on work after H1/H2 and should not broaden the trust boundary.
+T1/T2, 9A, and V1 are active parallel tracks in separate tasks: T1/T2 become
+dependencies only for tmux-independent/headless enrollment, 9A is relevant if
+onboarding obligations are later compiled into objective plans, and V1 can supply
+freshness/attempt presentation when its observation contract lands. This H track
+does not mark any of those milestones complete, reclassify them as delivered, or
+rewrite their acceptance.
+
+Scope guardrails: do not auto-scan arbitrary networks, auto-accept host keys,
+silently replace aliases after key rotation, copy secrets, auto-trust repositories,
+submit remote work as a side effect of discovery, add a permanent daemon/database,
+or claim that source reachability proves host health. Keep shared multi-user
+inventory and automatic failover outside this slice until their authority and
+reconciliation contracts are separately approved.
+
+
 ## Native workspace and standalone termviz track
 
 This track develops dependency-free C terminal infrastructure, using Hydra as its
