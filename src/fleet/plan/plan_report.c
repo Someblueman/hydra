@@ -126,134 +126,240 @@ static bool nonempty_string(json_object *object, const char *key) {
     return value && *value && strlen(value) <= 8192;
 }
 
-/* A v3 record is deliberately concrete. The adapter owns the verdict: the
- * report's counts and prose are checked against observations and never used
- * as a substitute for them. */
-static bool evidence_record(json_object *record, json_object *compiled, json_object *plan, const char *subject,
-                            const char *check_id, bool *failed,
-                            bool *skipped) {
+static bool text_list(json_object *values, size_t minimum, size_t maximum) {
+    size_t i;
+    if (!plan_list(values, minimum, maximum)) return false;
+    for (i = 0; i < json_object_array_length(values); i++)
+        if (!plan_text(json_object_array_get_idx(values, i))) return false;
+    return true;
+}
+
+static json_object *accepted_recipe(json_object *compiled, const char *check_id) {
+    json_object *accepted = recipe(compiled, check_id);
+    const char *predicate = f_string(accepted, "predicate");
+    if (predicate && !strcmp(predicate, "equals") &&
+        task_keys(accepted, (const char *const[]){"predicate", "cases", NULL}) &&
+        plan_list(f_field(accepted, "cases"), 1, 4096) && valid_recipe_cases(accepted)) return accepted;
+    json_object_put(accepted); return NULL;
+}
+
+static bool record_shape(json_object *record) {
     const char *const keys[] = {"obligation_id", "subject_manifest_sha256", "validator_identity",
-        "validator_recipe_sha256", "invocation", "environment", "case_inventory", "observations", "raw_evidence_sha256",
-        "counts", "limitations", "reviewer_decision", NULL};
-    const char *const invocation_keys[] = {"argv", "exit_code", NULL};
-    const char *const environment_keys[] = {"host", "toolchain", NULL};
-    const char *const observation_keys[] = {"id", "raw", "raw_sha256", NULL};
-    const char *const count_keys[] = {"executed", "failed", "skipped", NULL};
+        "validator_recipe_sha256", "invocation", "environment", "case_inventory", "observations",
+        "raw_evidence_sha256", "counts", "limitations", "reviewer_decision", NULL};
+    json_object *invocation = f_field(record, "invocation"), *environment = f_field(record, "environment");
+    return task_keys(record, keys) &&
+        task_keys(invocation, (const char *const[]){"argv", "exit_code", NULL}) &&
+        text_list(f_field(invocation, "argv"), 1, 128) &&
+        json_object_is_type(f_field(invocation, "exit_code"), json_type_int) &&
+        task_keys(environment, (const char *const[]){"host", "toolchain", NULL}) &&
+        nonempty_string(environment, "host") && nonempty_string(environment, "toolchain") &&
+        plan_list(f_field(record, "case_inventory"), 1, 4096) &&
+        plan_list(f_field(record, "observations"), 1, 4096) &&
+        task_hex(f_string(record, "raw_evidence_sha256"), 64) &&
+        task_keys(f_field(record, "counts"), (const char *const[]){"executed", "failed", "skipped", NULL}) &&
+        text_list(f_field(record, "limitations"), 0, 32);
+}
+
+static bool record_bindings(json_object *record, json_object *compiled, const char *subject,
+                            const char *check_id) {
     const char *id = f_string(record, "obligation_id"), *hash = f_string(record, "subject_manifest_sha256");
-    json_object *o, *observations, *counts, *inventory, *accepted; char digest[65], recipe_hash[65]; size_t i; bool has_measurement = false;
-    int executed = 0, failures = 0, skips = 0;
-    accepted = recipe(compiled, check_id);
-    if (!accepted || !json_object_is_type(accepted, json_type_object) ||
-        !f_string(accepted, "predicate") || strcmp(f_string(accepted, "predicate"), "equals") ||
-        !task_keys(accepted, (const char *const[]){"predicate", "cases", NULL}) ||
-        !plan_list(f_field(accepted, "cases"), 1, 4096) || !valid_recipe_cases(accepted)) goto bad;
-    if (!task_keys(record, keys) || !plan_id(id) || !obligation(plan, id) ||
-        !f_string(f_field(obligation(plan, id), "evaluation"), "check") ||
-        strcmp(f_string(f_field(obligation(plan, id), "evaluation"), "check"), check_id) ||
-        !task_hex(hash, 64) || strcmp(hash, subject) || !nonempty_string(record, "validator_identity") ||
-        !task_hex(f_string(record, "validator_recipe_sha256"), 64) || plan_recipe_digest(compiled, check_id, recipe_hash) ||
-        strcmp(f_string(record, "validator_recipe_sha256"), recipe_hash) ||
-        !task_keys(f_field(record, "invocation"), invocation_keys) ||
-        !json_object_is_type(f_field(record, "invocation"), json_type_object) ||
-        !json_object_is_type(f_field(f_field(record, "invocation"), "argv"), json_type_array) ||
-        !json_object_is_type(f_field(f_field(record, "invocation"), "exit_code"), json_type_int) ||
-        !task_keys(f_field(record, "environment"), environment_keys) ||
-        !nonempty_string(f_field(record, "environment"), "host") ||
-        !nonempty_string(f_field(record, "environment"), "toolchain") ||
-        !plan_list(f_field(record, "case_inventory"), 1, 4096) || !plan_list(f_field(record, "observations"), 1, 4096) || !task_hex(f_string(record, "raw_evidence_sha256"), 64) ||
-        !task_keys(f_field(record, "counts"), count_keys) || !plan_list(f_field(record, "limitations"), 0, 32)) goto bad;
-    (void)check_id;
-    inventory = f_field(record, "case_inventory"); observations = f_field(record, "observations");
-    if (json_object_get_int(f_field(f_field(record, "invocation"), "exit_code")) != 0) *failed = true;
-    for (i = 0; i < json_object_array_length(observations); i++) {
-        bool equal;
-        o = json_object_array_get_idx(observations, i);
-        if (!task_keys(o, observation_keys) || !plan_id(f_string(o, "id")) || !f_field(o, "raw") || !recipe_case(accepted, f_string(o, "id")) ||
-            !f_field(f_field(o, "raw"), "actual") || !task_hex(f_string(o, "raw_sha256"), 64) ||
-            plan_digest(f_field(o, "raw"), digest) || strcmp(digest, f_string(o, "raw_sha256"))) goto bad;
-        equal = json_object_equal(f_field(f_field(o, "raw"), "actual"), f_field(recipe_case(accepted, f_string(o, "id")), "expected"));
-        executed++;
-        if (!equal) failures++;
-        if (meaningful_measurement(f_field(o, "raw"))) has_measurement = true;
-        for (size_t j = 0; j < i; j++) if (!strcmp(f_string(o, "id"), f_string(json_object_array_get_idx(observations, j), "id"))) goto bad;
-        if (!plan_has(inventory, f_string(o, "id"))) goto bad;
+    json_object *declared = obligation(f_field(compiled, "plan"), id);
+    const char *owner = f_string(f_field(declared, "evaluation"), "check");
+    char recipe_hash[65];
+    return plan_id(id) && owner && !strcmp(owner, check_id) && task_hex(hash, 64) &&
+        !strcmp(hash, subject) && nonempty_string(record, "validator_identity") &&
+        task_hex(f_string(record, "validator_recipe_sha256"), 64) &&
+        !plan_recipe_digest(compiled, check_id, recipe_hash) &&
+        !strcmp(f_string(record, "validator_recipe_sha256"), recipe_hash);
+}
+
+static bool unique_object_ids(json_object *items, const char *key) {
+    size_t i, j;
+    for (i = 0; i < json_object_array_length(items); i++) {
+        const char *id = f_string(json_object_array_get_idx(items, i), key);
+        if (!id) return false;
+        for (j = 0; j < i; j++)
+            if (!strcmp(id, f_string(json_object_array_get_idx(items, j), key))) return false;
     }
-    for (i = 0; i < json_object_array_length(f_field(accepted, "cases")); i++) {
-        json_object *expected_case = json_object_array_get_idx(f_field(accepted, "cases"), i);
-        const char *id = f_string(expected_case, "id"); bool found = false; size_t j;
-        if (!plan_id(id) || !f_field(expected_case, "expected")) { goto bad; }
-        for (j = 0; j < json_object_array_length(observations); j++) if (!strcmp(id, f_string(json_object_array_get_idx(observations, j), "id"))) found = true;
-        if (!found || !plan_has(inventory, id)) { goto bad; }
-    }
+    return true;
+}
+
+static bool inventory_matches(json_object *inventory, json_object *accepted) {
+    size_t i, j;
+    if (json_object_array_length(inventory) != json_object_array_length(f_field(accepted, "cases"))) return false;
     for (i = 0; i < json_object_array_length(inventory); i++) {
-        const char *id = f_text(json_object_array_get_idx(inventory, i)); bool found = false; size_t j;
-        if (!plan_id(id) || !recipe_case(accepted, id)) { goto bad; }
-        for (j = 0; j < json_object_array_length(observations); j++) if (!strcmp(id, f_string(json_object_array_get_idx(observations, j), "id"))) found = true;
-        if (!found) { goto bad; }
-        for (j = 0; j < i; j++) if (!strcmp(id, f_text(json_object_array_get_idx(inventory, j)))) { goto bad; }
+        const char *id = f_text(json_object_array_get_idx(inventory, i));
+        if (!plan_id(id) || !recipe_case(accepted, id)) return false;
+        for (j = 0; j < i; j++)
+            if (!strcmp(id, f_text(json_object_array_get_idx(inventory, j)))) return false;
     }
-    if (plan_digest(observations, digest) || strcmp(digest, f_string(record, "raw_evidence_sha256"))) { goto bad; }
-    if (plan_has(f_field(obligation(plan, id), "required_evidence"), "measurements") && !has_measurement) { goto bad; }
-    counts = f_field(record, "counts");
-    if (!f_number_is(counts, "executed", executed) || !f_number_is(counts, "failed", failures) || !f_number_is(counts, "skipped", skips)) goto bad;
-    *failed = *failed || failures != 0; *skipped = *skipped || skips != 0;
-    json_object_put(accepted); return true;
-bad:
-    json_object_put(accepted); return false;
+    return true;
+}
+
+struct observation_counts { int executed, failed; bool measured, inconclusive; };
+
+static bool raw_observation_valid(json_object *observed) {
+    char digest[65];
+    return task_keys(observed, (const char *const[]){"id", "raw", "raw_sha256", NULL}) &&
+        plan_id(f_string(observed, "id")) && json_object_is_type(f_field(observed, "raw"), json_type_object) &&
+        task_hex(f_string(observed, "raw_sha256"), 64) && !plan_digest(f_field(observed, "raw"), digest) &&
+        !strcmp(digest, f_string(observed, "raw_sha256"));
+}
+
+static bool observation_valid(json_object *observed, json_object *accepted) {
+    return raw_observation_valid(observed) && recipe_case(accepted, f_string(observed, "id")) &&
+        f_field(f_field(observed, "raw"), "actual");
+}
+
+/* Unique observations over the entire accepted case set prevent dropped cases
+ * from being hidden by a report-supplied inventory or recomputed counts. */
+static bool count_observations(json_object *observations, json_object *accepted,
+                               struct observation_counts *counts) {
+    size_t i;
+    if (json_object_array_length(observations) != json_object_array_length(f_field(accepted, "cases")) ||
+        !unique_object_ids(observations, "id")) return false;
+    for (i = 0; i < json_object_array_length(observations); i++) {
+        json_object *observed = json_object_array_get_idx(observations, i), *raw = f_field(observed, "raw");
+        json_object *expected;
+        if (!observation_valid(observed, accepted)) return false;
+        expected = recipe_case(accepted, f_string(observed, "id"));
+        counts->executed++;
+        if (!json_object_equal(f_field(raw, "actual"), f_field(expected, "expected"))) counts->failed++;
+        if (meaningful_measurement(raw)) counts->measured = true;
+    }
+    return true;
+}
+
+static bool record_counts_match(json_object *record, json_object *compiled,
+                                 const struct observation_counts *observed) {
+    json_object *counts = f_field(record, "counts");
+    json_object *declared = obligation(f_field(compiled, "plan"), f_string(record, "obligation_id"));
+    char digest[65];
+    if (plan_has(f_field(declared, "required_evidence"), "measurements") && !observed->measured) return false;
+    return !plan_digest(f_field(record, "observations"), digest) &&
+        !strcmp(digest, f_string(record, "raw_evidence_sha256")) &&
+        f_number_is(counts, "executed", observed->executed) &&
+        f_number_is(counts, "failed", observed->failed) && f_number_is(counts, "skipped", 0);
+}
+
+/* Assessments preserve a reviewer's explicit decision and evidence. They do
+ * not acquire machine-checkable semantics by imitating executable predicates. */
+static bool assessment_observation(json_object *record, struct observation_counts *counts) {
+    json_object *observations = f_field(record, "observations"), *inventory = f_field(record, "case_inventory");
+    json_object *observed, *raw; const char *id = f_string(record, "obligation_id"), *verdict, *inventory_id;
+    if (json_object_array_length(observations) != 1 || json_object_array_length(inventory) != 1) return false;
+    observed = json_object_array_get_idx(observations, 0); raw = f_field(observed, "raw");
+    verdict = f_string(raw, "verdict"); inventory_id = f_text(json_object_array_get_idx(inventory, 0));
+    if (!raw_observation_valid(observed) || strcmp(f_string(observed, "id"), id) ||
+        !inventory_id || strcmp(inventory_id, id) || !verdict ||
+        (strcmp(verdict, "pass") && strcmp(verdict, "fail") && strcmp(verdict, "inconclusive"))) return false;
+    counts->executed = 1;
+    counts->failed = !strcmp(verdict, "fail");
+    counts->inconclusive = !strcmp(verdict, "inconclusive");
+    counts->measured = meaningful_measurement(raw);
+    return true;
+}
+
+static bool record_observations(json_object *record, json_object *compiled, json_object *check,
+                                 struct observation_counts *counts) {
+    json_object *accepted; bool valid;
+    if (!strcmp(f_string(check, "method"), "assessment")) return assessment_observation(record, counts);
+    accepted = accepted_recipe(compiled, f_string(check, "id"));
+    if (!accepted) return false;
+    valid = inventory_matches(f_field(record, "case_inventory"), accepted) &&
+        count_observations(f_field(record, "observations"), accepted, counts);
+    json_object_put(accepted); return valid;
+}
+
+static bool evidence_record(json_object *record, json_object *compiled, const char *subject,
+                            json_object *check, bool *failed, bool *inconclusive) {
+    struct observation_counts counts = {0};
+    if (!record_shape(record) || !record_bindings(record, compiled, subject, f_string(check, "id")) ||
+        !record_observations(record, compiled, check, &counts) || !record_counts_match(record, compiled, &counts)) return false;
+    if (counts.failed || json_object_get_int64(f_field(f_field(record, "invocation"), "exit_code")) != 0) *failed = true;
+    if (counts.inconclusive) *inconclusive = true;
+    return true;
+}
+
+static bool state_is(json_object *report, const char *key, const char *a, const char *b, const char *c) {
+    const char *value = f_string(report, key);
+    return value && (!strcmp(value, a) || !strcmp(value, b) || !strcmp(value, c));
+}
+
+static bool report_v3_shape(json_object *report) {
+    const char *const keys[] = {"schema_version", "execution_status", "evidence_status", "domain_verdict",
+        "verdict", "subject_sha256", "validator_sha256", "evidence_records", "limitations", "requirements", "evidence", NULL};
+    const char *verdict = f_string(report, "verdict"), *domain = f_string(report, "domain_verdict");
+    return f_number_is(report, "schema_version", 3) && task_keys(report, keys) &&
+        state_is(report, "execution_status", "completed", "failed", "skipped") &&
+        state_is(report, "evidence_status", "valid", "invalid", "inconclusive") &&
+        state_is(report, "domain_verdict", "pass", "fail", "inconclusive") &&
+        verdict && !strcmp(verdict, domain) &&
+        plan_list(f_field(report, "evidence_records"), 1, 256) &&
+        plan_list(f_field(report, "requirements"), 1, 64) &&
+        text_list(f_field(report, "limitations"), 0, 32) && plan_text(f_field(report, "evidence"));
+}
+
+static bool report_v3_bindings(json_object *compiled, json_object *check, json_object *report,
+                               const char *subject) {
+    const char *hash = f_string(report, "subject_sha256"), *validator = f_string(report, "validator_sha256");
+    char definition[65];
+    return task_hex(hash, 64) && !strcmp(hash, subject) && task_hex(validator, 64) &&
+        !plan_check_digest(compiled, f_string(check, "id"), definition) && !strcmp(validator, definition) &&
+        report_coverage(f_field(f_field(compiled, "plan"), "requirements"),
+                        f_field(report, "requirements"), f_string(check, "id"));
+}
+
+static bool records_have_obligation(json_object *records, const char *id) {
+    size_t i;
+    for (i = 0; i < json_object_array_length(records); i++)
+        if (!strcmp(f_string(json_object_array_get_idx(records, i), "obligation_id"), id)) return true;
+    return false;
+}
+
+static bool records_cover_obligations(json_object *records, json_object *compiled, const char *check_id) {
+    json_object *obligations = f_field(f_field(compiled, "plan"), "obligations"); size_t i;
+    if (!unique_object_ids(records, "obligation_id")) return false;
+    for (i = 0; i < json_object_array_length(obligations); i++) {
+        json_object *item = json_object_array_get_idx(obligations, i);
+        const char *owner = f_string(f_field(item, "evaluation"), "check");
+        if (owner && !strcmp(owner, check_id) && !records_have_obligation(records, f_string(item, "id"))) return false;
+    }
+    return true;
+}
+
+static bool assessment_records_valid(json_object *records, json_object *check) {
+    const char *const keys[] = {"rubric", "source_locators", "disagreement", "authority", NULL}; size_t i;
+    for (i = 0; i < json_object_array_length(records); i++) {
+        json_object *review = f_field(json_object_array_get_idx(records, i), "reviewer_decision");
+        if (!task_keys(review, keys) || !plan_text(f_field(review, "rubric")) ||
+            strcmp(f_string(review, "rubric"), f_string(check, "definition")) ||
+            !text_list(f_field(review, "source_locators"), 1, 64) ||
+            !plan_text(f_field(review, "disagreement")) || !plan_text(f_field(review, "authority"))) return false;
+    }
+    return true;
+}
+
+static enum plan_verdict derived_verdict(json_object *report, bool failed, bool inconclusive) {
+    const char *domain = f_string(report, "domain_verdict");
+    if (failed || inconclusive || strcmp(f_string(report, "execution_status"), "completed") ||
+        strcmp(f_string(report, "evidence_status"), "valid")) {
+        if (strcmp(domain, failed ? "fail" : "inconclusive")) return PLAN_INVALID;
+        return failed ? PLAN_FAIL : PLAN_INCONCLUSIVE;
+    }
+    return !strcmp(domain, "pass") ? PLAN_PASS : PLAN_INVALID;
 }
 
 static enum plan_verdict report_v3(json_object *compiled, json_object *check, json_object *report, const char *subject) {
-    const char *const keys[] = {"schema_version", "execution_status", "evidence_status", "domain_verdict",
-        "verdict", "subject_sha256", "validator_sha256", "evidence_records", "limitations", "requirements", "evidence", NULL};
-    const char *execution = f_string(report, "execution_status"), *evidence = f_string(report, "evidence_status");
-    const char *domain = f_string(report, "domain_verdict"), *verdict = f_string(report, "verdict");
-    json_object *records = f_field(report, "evidence_records"), *requirements = f_field(report, "requirements");
-    json_object *obligations = f_field(f_field(compiled, "plan"), "obligations");
-    bool failed = false, skipped = false; size_t i; char definition[65];
-    if (!f_number_is(report, "schema_version", 3) || !task_keys(report, keys) ||
-        !execution || (strcmp(execution, "completed") && strcmp(execution, "failed") && strcmp(execution, "skipped")) ||
-        !evidence || (strcmp(evidence, "valid") && strcmp(evidence, "invalid") && strcmp(evidence, "inconclusive")) ||
-        !domain || (strcmp(domain, "pass") && strcmp(domain, "fail") && strcmp(domain, "inconclusive")) ||
-        !verdict || strcmp(verdict, domain) || !task_hex(f_string(report, "subject_sha256"), 64) ||
-        strcmp(f_string(report, "subject_sha256"), subject) || !task_hex(f_string(report, "validator_sha256"), 64) ||
-        plan_check_digest(compiled, f_string(check, "id"), definition) || strcmp(f_string(report, "validator_sha256"), definition) ||
-        !plan_list(records, 1, 256) || !plan_list(requirements, 1, 64) || !report_coverage(f_field(f_field(compiled, "plan"), "requirements"), requirements, f_string(check, "id")) ||
-        !plan_list(f_field(report, "limitations"), 0, 32) ||
-        !plan_text(f_field(report, "evidence"))) return false;
+    json_object *records = f_field(report, "evidence_records"); bool failed = false, inconclusive = false; size_t i;
+    const char *id = f_string(check, "id");
+    if (!report_v3_shape(report) || !report_v3_bindings(compiled, check, report, subject)) return PLAN_INVALID;
     for (i = 0; i < json_object_array_length(records); i++)
-        if (!evidence_record(json_object_array_get_idx(records, i), compiled, f_field(compiled, "plan"), subject,
-                              f_string(check, "id"), &failed, &skipped)) return false;
-    for (i = 0; i < json_object_array_length(records); i++) {
-        size_t j;
-        for (j = 0; j < i; j++)
-            if (!strcmp(f_string(json_object_array_get_idx(records, i), "obligation_id"),
-                        f_string(json_object_array_get_idx(records, j), "obligation_id"))) return PLAN_INVALID;
-    }
-    for (i = 0; i < json_object_array_length(obligations); i++) {
-        json_object *o = json_object_array_get_idx(obligations, i), *eval = f_field(o, "evaluation");
-        if (eval && !strcmp(f_string(eval, "check"), f_string(check, "id"))) {
-            /* record IDs are obligations; avoid accepting partial coverage */
-            bool found = false; size_t j;
-            for (j = 0; j < json_object_array_length(records); j++)
-                if (!strcmp(f_string(json_object_array_get_idx(records, j), "obligation_id"), f_string(o, "id"))) found = true;
-            if (!found) return false;
-        }
-    }
-    if (!strcmp(f_string(check, "method"), "assessment")) {
-        for (i = 0; i < json_object_array_length(records); i++) {
-            const char *const review_keys[] = {"rubric", "source_locators", "disagreement", "authority", NULL};
-            json_object *review = f_field(json_object_array_get_idx(records, i), "reviewer_decision");
-            if (!task_keys(review, review_keys) || !plan_text(f_field(review, "rubric")) ||
-                !plan_list(f_field(review, "source_locators"), 1, 64) ||
-                !plan_text(f_field(review, "disagreement")) || !plan_text(f_field(review, "authority"))) return PLAN_INVALID;
-        }
-    }
-    if (failed || skipped || strcmp(execution, "completed") || strcmp(evidence, "valid")) {
-        if (!strcmp(domain, failed ? "fail" : "inconclusive") && !strcmp(verdict, domain))
-            return failed ? PLAN_FAIL : PLAN_INCONCLUSIVE;
-        return PLAN_INVALID;
-    }
-    return !strcmp(domain, "pass") && !strcmp(verdict, "pass") ? PLAN_PASS : PLAN_INVALID;
+        if (!evidence_record(json_object_array_get_idx(records, i), compiled, subject, check, &failed, &inconclusive)) return PLAN_INVALID;
+    if (!records_cover_obligations(records, compiled, id)) return PLAN_INVALID;
+    if (!strcmp(f_string(check, "method"), "assessment") && !assessment_records_valid(records, check)) return PLAN_INVALID;
+    return derived_verdict(report, failed, inconclusive);
 }
 
 static bool requires_measurements(json_object *compiled, const char *check_id) {
