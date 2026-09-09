@@ -79,7 +79,7 @@ class EnrollmentTest(unittest.TestCase):
         self.run_cli("review", "--input", str(qualification), "--candidate", "cand_676f6f64", "--project", str(self.tmp), "--output", str(intent))
         digest = json.loads(intent.read_text())["intent_sha256"]
         result = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
-        self.assertEqual(json.loads(result.stdout)["data"]["hosts"][0]["status"], "outcome_unknown")
+        self.assertEqual(json.loads(result.stdout)["data"]["hosts"][0]["status"], "review_required")
         self.assertFalse(self.counter.exists())
 
 
