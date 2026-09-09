@@ -199,7 +199,7 @@ json_object *f_serve(json_object *request) {
         char record[F_PATH];
         if (!enrollment_record(record, f_string(request, "enrollment_operation_id"))) {
             char *seen = f_read(record, 64);
-            if (seen) { free(seen); return f_success("fleet-enrollment-reconciled", json_object_new_object()); }
+            if (seen) { bool complete = !strncmp(seen, "succeeded", 9); free(seen); if (complete) return f_success("fleet-enrollment-reconciled", json_object_new_object()); return f_error("fleet-enrollment", "outcome_unknown", "receiver operation remains pending; reconcile its durable result before retrying"); }
             (void)f_write(record, "pending", 7, true);
             { json_object *init_result = run_hydra(argv, seconds); if (json_object_get_boolean(f_field(init_result, "ok"))) (void)f_write(record, "succeeded", 9, true); return init_result; }
         }
