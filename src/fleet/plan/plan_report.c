@@ -1,5 +1,6 @@
 #include "fleet/plan/plan.h"
 #include "fleet/task/task.h"
+#include <stdio.h>
 #include <string.h>
 
 int plan_check_digest(json_object *compiled, const char *check, char digest[65]) {
@@ -265,6 +266,8 @@ json_object *plan_validation_context(json_object *compiled, const char *step) {
         if (strcmp(owner, step)) continue;
         if (plan_check_digest(compiled, id, digest)) goto bad;
         f_string_add(data, id, digest);
+        if (plan_recipe_digest(compiled, id, digest)) goto bad;
+        { char recipe_id[128]; if (snprintf(recipe_id, sizeof(recipe_id), "%s-recipe", id) >= (int)sizeof(recipe_id)) goto bad; f_string_add(data, recipe_id, digest); }
     }
     return data;
 bad:

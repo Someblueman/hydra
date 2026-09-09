@@ -232,6 +232,15 @@ static json_object *check_definition_command(char **argv, bool *printed) {
     }
     json_object_put(errors); json_object_put(compiled); return result;
 }
+static json_object *check_recipe_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]), *result = NULL; char digest[65];
+    (void)printed;
+    if (compiled && f_number_is(compiled, "schema_version", 1) && !plan_recipe_digest(compiled, argv[2], digest)) {
+        json_object *data = json_object_new_object(); f_string_add(data, "check", argv[2]); f_string_add(data, "validator_recipe_sha256", digest);
+        result = f_success("workflow plan check-recipe", data);
+    }
+    json_object_put(compiled); return result;
+}
 
 static json_object *check_context_command(char **argv, bool *printed) {
     json_object *compiled = plan_read(argv[1]), *data = plan_validation_context(compiled, argv[2]), *result = NULL;
@@ -273,6 +282,7 @@ json_object *plan_cli(int argc, char **argv) {
         {"bindings", 4, bindings_command},
         {"data-match", 3, data_match_command},
         {"check-definition", 3, check_definition_command},
+        {"check-recipe", 3, check_recipe_command},
         {"check-context", 3, check_context_command},
         {"step-check", 3, step_check_command},
         {"repair", 2, repair_command},
