@@ -6,13 +6,14 @@
 #include "fleet/fleet.h"
 #include "fleet/task/task.h"
 #include "fleet/auth/agent_auth.h"
+#include "fleet/enrollment/receiver.h"
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", "execution-headless", NULL};
+static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "enrollment-init", "enrollment-preflight", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", "execution-headless", NULL};
 bool f_terminal_available(void) {
     struct f_capture cap = {0}; char *argv[] = {"tmux", "-V", NULL};
     unsigned major = 0, minor = 0;
@@ -67,7 +68,7 @@ json_object *f_handshake(void) {
     json_object_object_add(data, "native", native);
     return f_success("fleet-handshake", data);
 }
-static json_object *run_hydra(char **argv, unsigned seconds) {
+json_object *f_run_hydra(char **argv, unsigned seconds) {
     struct f_capture cap = {0}; json_object *result, *data;
     if (f_run(argv, NULL, 0, seconds, &cap)) { f_capture_free(&cap); return f_error("fleet", "exec_failed", "cannot execute local Hydra"); }
     result = f_parse(cap.out);
@@ -90,9 +91,9 @@ static json_object *snapshot(void) {
         json_object_object_add(data, "projects", json_object_new_int(0)); return f_success("snapshot", data);
     }
     {
-        json_object *result = run_hydra(argv, 15), *heads = f_field(f_field(result, "data"), "heads"); size_t i;
+        json_object *result = f_run_hydra(argv, 15), *heads = f_field(f_field(result, "data"), "heads"); size_t i;
         char *capacity[] = {(char *)f_hydra, "admission", "status", "--summary", NULL};
-        if (f_field(result, "data")) json_object_object_add(f_field(result, "data"), "admission", run_hydra(capacity, 5));
+        if (f_field(result, "data")) json_object_object_add(f_field(result, "data"), "admission", f_run_hydra(capacity, 5));
         for (i = 0; json_object_is_type(heads, json_type_array) && i < json_object_array_length(heads); i++) {
             json_object *head = json_object_array_get_idx(heads, i); const char *project = f_string(head, "project_id"); char *value;
             if (!project || !f_name(project) || snprintf(path, sizeof(path), "%s/state/v2/projects/%s/repo-root", f_home, project) >= (int)sizeof(path)) continue;
@@ -134,20 +135,21 @@ static json_object *admission_inspect(json_object *args, size_t count) {
     bool inspect = !strcmp(sub, "inspect") && count == 2 && f_name(option);
     char *argv[] = {(char *)f_hydra, "admission", (char *)sub, count == 2 ? (char *)option : NULL, NULL};
     if (!status && !inspect) return f_error("fleet-admission", "invalid_input", "use status [--json|--summary] or inspect ID; configure policy on the receiving host");
-    return run_hydra(argv, 5);
+    return f_run_hydra(argv, 5);
 }
 
 static json_object *builtin_request(const char *action, json_object *request) {
     if (!strcmp(action, "handshake")) return f_handshake();
+    if (!strcmp(action, "enrollment-preflight")) return enrollment_preflight(request);
     if (!strcmp(action, "list")) return snapshot();
     if (!strcmp(action, "overview")) return task_overview();
     if (!strcmp(action, "auth")) return auth_serve(request);
     if (!strcmp(action, "task")) return task_serve(request);
     return NULL;
 }
-
 json_object *f_serve(json_object *request) {
     const char *action = f_string(request, "action"), *project = f_string(request, "project"), *instance = f_string(request, "instance");
+    json_object *operation = NULL;
     json_object *args = f_field(request, "args"); size_t i, n = 0, count = 0;
     char *argv[140]; unsigned seconds = 300;
     if (!f_number_is(request, "protocol", F_PROTOCOL) || !action)
@@ -188,5 +190,7 @@ json_object *f_serve(json_object *request) {
     }
     argv[n] = NULL;
     setenv("HYDRA_NONINTERACTIVE", "1", 1);
-    return run_hydra(argv, seconds);
+    if (!strcmp(action, "init") && json_object_object_get_ex(request, "enrollment_operation_id", &operation))
+        return enrollment_apply_request(request, argv, seconds);
+    return f_run_hydra(argv, seconds);
 }

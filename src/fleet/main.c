@@ -39,15 +39,8 @@ int main(int argc, char **argv) {
     else if (argc >= 2 && !strcmp(argv[1], "agent-profile")) result = agent_profile_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "agent-run")) result = agent_run_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "remote")) result = f_remote_cli(argc - 2, argv + 2);
-    else if (argc == 3 && !strcmp(argv[1], "install")) {
-        char *text = f_read(NULL, F_LIMIT), temp[] = "/tmp/hydra-package.XXXXXX", hash[65]; int fd = mkstemp(temp);
-        json_object *package = text ? f_parse(text) : NULL;
-        if (fd >= 0) close(fd);
-        if (fd < 0 || !package || f_write(temp, text, strlen(text), true) || f_hash(temp, hash) || strcmp(hash, argv[2])) result = f_error("fleet-bootstrap", "hash_mismatch", "package digest failed");
-        else result = f_install(package, hash);
-        if (fd >= 0) unlink(temp);
-        json_object_put(package); free(text);
-    } else if (argc == 3 && !strcmp(argv[1], "fleet") && !strcmp(argv[2], "serve")) {
+    else if (argc >= 2 && (!strcmp(argv[1], "install") || !strcmp(argv[1], "install-check"))) result = f_install_cli(argc - 1, argv + 1);
+    else if (argc == 3 && !strcmp(argv[1], "fleet") && !strcmp(argv[2], "serve")) {
         json_object *request = f_read_json(NULL, F_LIMIT);
         result = request ? f_serve(request) : f_error("fleet", "invalid_request", "expected one bounded JSON object");
         json_object_put(request);
