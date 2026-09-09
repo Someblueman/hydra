@@ -1,5 +1,6 @@
 #include "fleet/plan/plan.h"
 #include "fleet/task/task.h"
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -51,6 +52,25 @@ static json_object *recipe_case(json_object *recipe_value, const char *id) {
     for (i = 0; i < json_object_array_length(cases); i++)
         if (f_string(json_object_array_get_idx(cases, i), "id") && !strcmp(f_string(json_object_array_get_idx(cases, i), "id"), id)) return json_object_array_get_idx(cases, i);
     return NULL;
+}
+
+/* Measurements are deliberately limited to small finite numeric observations;
+ * narrative strings and unbounded/container values cannot satisfy the evidence requirement. */
+static bool meaningful_measurement(json_object *raw) {
+    json_object *measurement = f_field(raw, "measurement");
+    if (!measurement || (!json_object_is_type(measurement, json_type_int) && !json_object_is_type(measurement, json_type_double))) return false;
+    return isfinite(json_object_get_double(measurement)) && fabs(json_object_get_double(measurement)) <= 1000000000000.0;
+}
+
+static bool valid_recipe_cases(json_object *accepted) {
+    json_object *cases = f_field(accepted, "cases"); size_t i, j;
+    for (i = 0; i < json_object_array_length(cases); i++) {
+        json_object *item = json_object_array_get_idx(cases, i);
+        const char *id = f_string(item, "id"); json_object *expected = f_field(item, "expected");
+        if (!task_keys(item, (const char *const[]){"id", "expected", NULL}) || !plan_id(id) || !expected || json_object_is_type(expected, json_type_null)) return false;
+        for (j = 0; j < i; j++) if (!strcmp(id, f_string(json_object_array_get_idx(cases, j), "id"))) return false;
+    }
+    return true;
 }
 
 static bool report_claims(json_object *requirements, json_object *claimed, const char *id) {
@@ -126,7 +146,7 @@ static bool evidence_record(json_object *record, json_object *compiled, json_obj
     if (!accepted || !json_object_is_type(accepted, json_type_object) ||
         !f_string(accepted, "predicate") || strcmp(f_string(accepted, "predicate"), "equals") ||
         !task_keys(accepted, (const char *const[]){"predicate", "cases", NULL}) ||
-        !plan_list(f_field(accepted, "cases"), 1, 4096)) goto bad;
+        !plan_list(f_field(accepted, "cases"), 1, 4096) || !valid_recipe_cases(accepted)) goto bad;
     if (!task_keys(record, keys) || !plan_id(id) || !obligation(plan, id) ||
         !f_string(f_field(obligation(plan, id), "evaluation"), "check") ||
         strcmp(f_string(f_field(obligation(plan, id), "evaluation"), "check"), check_id) ||
@@ -154,7 +174,7 @@ static bool evidence_record(json_object *record, json_object *compiled, json_obj
         equal = json_object_equal(f_field(f_field(o, "raw"), "actual"), f_field(recipe_case(accepted, f_string(o, "id")), "expected"));
         executed++;
         if (!equal) failures++;
-        if (json_object_is_type(f_field(o, "raw"), json_type_object) && f_field(f_field(o, "raw"), "measurement")) has_measurement = true;
+        if (meaningful_measurement(f_field(o, "raw"))) has_measurement = true;
         for (size_t j = 0; j < i; j++) if (!strcmp(f_string(o, "id"), f_string(json_object_array_get_idx(observations, j), "id"))) goto bad;
         if (!plan_has(inventory, f_string(o, "id"))) goto bad;
     }
