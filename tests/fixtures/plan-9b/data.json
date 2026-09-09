@@ -1,0 +1,63 @@
+{
+  "schema_version": 2,
+  "inputs": {},
+  "steps": {
+    "produce": {
+      "outputs": {
+        "value": {
+          "path": "value.json",
+          "type": "object",
+          "max_bytes": 4096,
+          "contract": {
+            "schema": "measurement",
+            "version": 1,
+            "type": "object",
+            "cardinality": {
+              "min": 1,
+              "max": 1
+            },
+            "fields": {
+              "candidate": {
+                "type": "string",
+                "equals": "current"
+              },
+              "duration": {
+                "type": "integer",
+                "unit": "ms",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "consume": {
+      "inputs": {
+        "value": {
+          "step": "produce",
+          "output": "value",
+          "contract": {
+            "schema": "measurement",
+            "version": 1,
+            "type": "object",
+            "cardinality": {
+              "min": 1,
+              "max": 1
+            },
+            "fields": {
+              "candidate": {
+                "type": "string",
+                "equals": "current"
+              },
+              "duration": {
+                "type": "integer",
+                "unit": "ms",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -4,6 +4,7 @@
 #include "fleet/task/task.h"
 #include "fleet/workflow/workflow_data.h"
 #include <ctype.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -20,14 +21,25 @@ static json_object *string_token(const char **p) {
     copy = malloc(length + 1); if (!copy) return NULL;
     memcpy(copy, start, length); copy[length] = '\0'; value = f_parse_value(copy); free(copy); return value;
 }
+static bool member_name(json_object *key) {
+    const char *name = f_text(key);
+    return name && strlen(name) == (size_t)json_object_get_string_len(key);
+}
+static bool primitive_token(const char **p) {
+    const char *start = *p; char *end;
+    while (**p && !strchr(",]} \r\n\t", **p)) (*p)++;
+    if (*p == start) return false;
+    errno = 0; (void)strtoll(start, &end, 10);
+    /* JSON-C saturates out-of-range integer tokens. Never accept that lossy parse.
+     * Decimal/exponent tokens and keywords still go through the strict parser. */
+    return end != *p || errno != ERANGE;
+}
 static bool unique_members(const char **p, unsigned depth) {
     char close; json_object *names = NULL; bool object, ok = false;
     whitespace(p); if (depth > 32 || !**p) return false;
     if (**p == '"') { json_object *s = string_token(p); ok = s != NULL; json_object_put(s); return ok; }
     if (**p != '{' && **p != '[') {
-        const char *start = *p;
-        while (**p && !strchr(",]} \r\n\t", **p)) (*p)++;
-        return *p != start;
+        return primitive_token(p);
     }
     object = **p == '{'; close = object ? '}' : ']'; (*p)++;
     if (object) names = json_object_new_object();
@@ -37,7 +49,7 @@ static bool unique_members(const char **p, unsigned depth) {
             json_object *key; const char *name;
             whitespace(p); if (**p != '"' || !(key = string_token(p))) goto done;
             name = f_text(key);
-            if (!name || f_field(names, name)) { json_object_put(key); goto done; }
+            if (!member_name(key) || f_field(names, name)) { json_object_put(key); goto done; }
             json_object_object_add(names, name, json_object_new_boolean(true)); json_object_put(key);
             whitespace(p); if (*(*p)++ != ':') goto done;
         }
@@ -49,14 +61,19 @@ static bool unique_members(const char **p, unsigned depth) {
 done:
     json_object_put(names); return ok;
 }
+bool plan_json_unique(const char *text) {
+    const char *p = text;
+    if (!text || !unique_members(&p, 0)) return false;
+    whitespace(&p); return !*p;
+}
 json_object *plan_read(const char *path) {
-    char *text = malloc(PLAN_LIMIT + 1); const char *p = text; json_object *value = NULL;
+    char *text = malloc(PLAN_LIMIT + 1); json_object *value = NULL;
     FILE *file = fopen(path, "rb"); size_t length;
     if (!text || !file) goto done;
     length = fread(text, 1, PLAN_LIMIT + 1, file);
     if (ferror(file) || length > PLAN_LIMIT || memchr(text, '\0', length)) goto done;
     text[length] = '\0';
-    if (unique_members(&p, 0)) { whitespace(&p); if (!*p) value = f_parse(text); }
+    if (plan_json_unique(text)) value = f_parse(text);
 done:
     if (file) fclose(file);
     free(text); return value;

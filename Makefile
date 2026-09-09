@@ -275,7 +275,7 @@ FLEET_SOURCES = $(filter src/fleet/%.c,$(NATIVE_SOURCES))
 FLEET_JSON_CFLAGS = $(shell pkg-config --cflags json-c)
 FLEET_JSON_LIB = $(shell pkg-config --variable=libdir json-c)/libjson-c.a
 
-.PHONY: build-fleet test-fleet
+.PHONY: build-fleet test-fleet test-workflow-contracts
 build-fleet: $(BUILD_DIR)/hydra-fleet
 
 # Compile shared fleet code once. Compiler dependency files track the actual
@@ -308,6 +308,9 @@ $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 
 -include $(FLEET_OBJECTS:.o=.d) $(BUILD_DIR)/fleet/main.d $(FLEET_TEST_BINS:%=%.d)
 
+test-workflow-contracts: build-fleet
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/workflow_contract_cases.py --runtime
+
 test-fleet: test-discovery $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)/test-workflow-schedule $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
 	$(BUILD_DIR)/test-plan
 	$(BUILD_DIR)/test-workflow-schedule
@@ -317,6 +320,7 @@ test-fleet: test-discovery $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_agent_execution.sh
 	$(BUILD_DIR)/test-workflow-data
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_data.sh
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/workflow_contract_cases.py --runtime
 	HYDRA_TEST_DAG_REPLAY=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
 	HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
 	HYDRA_TEST_DAG_RESULT_LOST=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
