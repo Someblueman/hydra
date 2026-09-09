@@ -53,7 +53,7 @@ json_object *hd_probe(json_object *candidate, const char *config, const struct h
         f_string_add(f_field(result, "error"), "message", "strict SSH handshake failed; see the typed code and review the selected SSH configuration");
     }
     result = check_handshake(result, options->capability);
-    /* OpenSSH verifies the key, but the fleet handshake does not report a
-     * fingerprint or a persistent host ID. Do not synthesize either identity. */
+    /* f_request attaches the peer-reported fingerprint from the same strict
+     * authenticated connection; known_hosts text is never used as identity. */
     return result;
 }

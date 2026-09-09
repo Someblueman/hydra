@@ -14,9 +14,11 @@ no SSH connection and sends no remote command. `qualify` resolves the same
 selection, then sends exactly the existing fleet protocol-1 `handshake` request
 through fleet's SSH transport. It checks the existing Hydra 2.x, fleet, state,
 event, and JSON compatibility gate and the advertised required capability
-(`list` by default). Even `--require spawn` only checks the advertisement; it
-does not invoke `spawn`. Compatibility is not project trust, enrollment, proof
-that an advertised operation works, or permission to submit work.
+(`list` by default). A successful handshake also records `data.peer_fingerprint`,
+taken from the authenticated SSH session's peer-key exchange; it is not copied
+from known_hosts or inventory text. Even `--require spawn` only checks the
+advertisement; it does not invoke `spawn`. Compatibility is not project trust,
+enrollment, proof that an advertised operation works, or permission to submit work.
 
 Repeat `--ssh [USER@]ALIAS`, or supply one `--inventory` and repeat `--select NAME`.
 There is no scan, wildcard alias expansion, automatic selection of an entire
@@ -108,7 +110,7 @@ resolves and, when requested, qualifies. Partial failure has `ok: false` and
 | `target` | Selected OpenSSH target, preserved exactly. |
 | `deduplication` | Always `exact_target_only`. |
 | `sources` | Entries with `kind` (`ssh-config` or `static`), `locator`, selected `name`, `observed_at`, `age_seconds`, `freshness`, and `labels`. |
-| `verified_identity` | Null in H1: the current handshake supplies neither persistent host ID nor accepted key fingerprint. Neither is fabricated. |
+| `verified_identity` | Null in H1: candidate identity remains separate from qualification `data.peer_fingerprint`, which is evidence from the current authenticated SSH session rather than a candidate identity. |
 | `resolution` | Envelope with effective endpoint configuration or typed failure. |
 | `qualification` | Qualify only: handshake evidence envelope or typed failure. Protocol/capability failures retain received handshake data. |
 | `qualified_at` | Qualify only: check completion time, including failed/unvisited checks. |
@@ -171,3 +173,11 @@ Local qualification on 2026-09-09, from integrated baseline
   188 advisory functions, no complexity regressions, no ceiling changes.
 - Full tmux-dependent fleet/remote-task integration was left to the coordinator's
   serialized acceptance slot. These checks do not claim live SSH qualification.
+
+Reviewed enrollment is available through `fleet enroll review` and `fleet enroll
+apply`; see [host enrollment](HOST_ENROLLMENT.md). These commands require an
+actual peer fingerprint from qualification, bind the selected source/candidate,
+principal, capability, project, and optional package digest/prefix into a
+digest-confirmed intent, and preserve typed outcomes. They do not copy
+credentials or trust repositories implicitly. This remains local controlled-
+transport qualification; it does not claim live host or provider qualification.

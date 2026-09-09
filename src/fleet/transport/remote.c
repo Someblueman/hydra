@@ -92,6 +92,10 @@ json_object *f_request(const struct f_remote *remote, json_object *request, unsi
     if (n < 0 || n >= (int)sizeof(command) || f_ssh(remote, command, input, strlen(input), seconds, false, &cap)) goto done;
     result = f_parse(cap.out);
     if (result && cap.status && json_object_get_boolean(f_field(result, "ok"))) { json_object_put(result); result = NULL; }
+    if (result && json_object_get_boolean(f_field(result, "ok")) && cap.err) {
+        const char *marker = "Server host key: "; char *start = strstr(cap.err, marker), *end;
+        if (start) { start += strlen(marker); end = start; while (*end && *end != '\n' && *end != '\r' && *end != ' ') end++; if (end > start) { char key[256]; size_t length = (size_t)(end - start); if (length < sizeof(key)) { memcpy(key, start, length); key[length] = '\0'; f_string_add(f_field(result, "data"), "peer_fingerprint", key); } } }
+    }
     if (!result || !json_object_is_type(f_field(result, "ok"), json_type_boolean) || !f_number_is(result, "schema_version", 1) || !f_string(result, "command") || (json_object_get_boolean(f_field(result, "ok")) ? !json_object_is_type(f_field(result, "data"), json_type_object) : (!f_string(f_field(result, "error"), "code") || !f_string(f_field(result, "error"), "message") || !f_string(f_field(result, "error"), "recovery")))) {
         json_object_put(result);
         result = f_error("fleet", cap.status ? transport_code(&cap) : "invalid_response", cap.err[0] ? cap.err : "missing or invalid fleet response");
@@ -133,9 +137,9 @@ done:
 
 int f_ssh(const struct f_remote *remote, const char *command, const char *input, size_t size, unsigned seconds, bool tty, struct f_capture *cap) {
     char timeout[64], socket[F_PATH];
-    char *argv[28]; size_t n = 0;
+    char *argv[32]; size_t n = 0;
     snprintf(timeout, sizeof(timeout), "ConnectTimeout=%u", seconds);
-    argv[n++] = (char *)"ssh"; argv[n++] = (char *)(tty ? "-t" : "-T");
+    argv[n++] = (char *)"ssh"; argv[n++] = (char *)(tty ? "-t" : "-T"); argv[n++] = (char *)"-vv";
     if (remote->ssh_config[0]) { argv[n++] = (char *)"-F"; argv[n++] = (char *)remote->ssh_config; }
     argv[n++] = (char *)"-o"; argv[n++] = (char *)"BatchMode=yes";
     argv[n++] = (char *)"-o"; argv[n++] = (char *)"StrictHostKeyChecking=yes";
@@ -151,6 +155,36 @@ int f_ssh(const struct f_remote *remote, const char *command, const char *input,
     argv[n++] = (char *)remote->target; argv[n++] = (char *)command; argv[n] = NULL;
     if (tty) { execvp("ssh", argv); return -1; }
     return f_run(argv, input, size, seconds, cap);
+}
+
+char *f_peer_fingerprint(const struct f_remote *remote, unsigned seconds) {
+    struct f_capture cap = {0}; char timeout[64], socket[F_PATH], *fingerprint = NULL;
+    char *argv[32]; size_t n = 0; const char *marker = "Server host key: ";
+    char *start, *end; int status;
+    snprintf(timeout, sizeof(timeout), "ConnectTimeout=%u", seconds);
+    argv[n++] = (char *)"ssh"; argv[n++] = (char *)"-T"; argv[n++] = (char *)"-vv";
+    if (remote->ssh_config[0]) { argv[n++] = (char *)"-F"; argv[n++] = (char *)remote->ssh_config; }
+    argv[n++] = (char *)"-o"; argv[n++] = (char *)"BatchMode=yes";
+    argv[n++] = (char *)"-o"; argv[n++] = (char *)"StrictHostKeyChecking=yes";
+    argv[n++] = (char *)"-o"; argv[n++] = (char *)"UpdateHostKeys=no";
+    argv[n++] = (char *)"-o"; argv[n++] = timeout;
+    if (remote->multiplex) {
+        char dir[F_PATH];
+        if (f_path(dir, sizeof(dir), f_home, "fleet/sockets") || f_mkdirs(dir) ||
+            snprintf(socket, sizeof(socket), "ControlPath=%s/%%C", dir) >= (int)sizeof(socket)) return NULL;
+        argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlMaster=auto";
+        argv[n++] = (char *)"-o"; argv[n++] = (char *)"ControlPersist=60"; argv[n++] = (char *)"-o"; argv[n++] = socket;
+    }
+    argv[n++] = (char *)remote->target; argv[n++] = (char *)"env LC_ALL=C  'hydra' fleet serve"; argv[n] = NULL;
+    status = f_run(argv, "{\"protocol\":1,\"action\":\"handshake\"}", sizeof("{\"protocol\":1,\"action\":\"handshake\"}") - 1, seconds, &cap);
+    if (!status && cap.err && (start = strstr(cap.err, marker))) {
+        start += strlen(marker); end = start;
+        while (*end && *end != '\n' && *end != '\r' && *end != ' ') end++;
+        if (end > start && (fingerprint = malloc((size_t)(end - start) + 1))) {
+            memcpy(fingerprint, start, (size_t)(end - start)); fingerprint[end - start] = '\0';
+        }
+    }
+    f_capture_free(&cap); return fingerprint;
 }
 
 bool f_target(const char *s) {
