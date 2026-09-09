@@ -114,6 +114,26 @@ fixture tests and local authentication do not close another provider's remote
 requirement. Claude remains explicitly deferred rather than blocking the other
 implemented profiles.
 
+### Feature-branch integration — 9 September 2026
+
+The `codex/hydra-next-wave` branch integrates T1 terminal-independent execution,
+9A outcome obligations, and V1 remote visibility, including their C quality fixes.
+This is local implementation status, not publication or full distributed/provider
+qualification. The acceptance requirements below remain the delivery contract;
+remaining qualification and integration evidence are recorded separately.
+
+Next implementation wave: **T2**, **9B**, and **H1**. These extend the integrated
+terminal, obligation, and fleet contracts independently. V2 remains the next
+visibility slice; T3 and H2 follow their stated dependencies. This sequencing does
+not authorize live provider campaigns, host enrollment, or publication implicitly.
+
+Research for follow-on decisions: [interactive parity](research/interactive-parity-report.md)
+and its [decision brief](research/interactive-parity-decision-brief.md), plus
+[host discovery and onboarding](research/host-discovery-onboarding-report.md)
+and its [decision brief](research/host-discovery-onboarding-decision-brief.md).
+The reports describe the audited baseline and retain their research-date context;
+the H track below incorporates the authorized onboarding recommendations.
+
 #### T. Optional tmux for headless and remote execution
 
 Decision: make tmux optional for headless execution, retaining it for interactive
@@ -643,8 +663,9 @@ package/bootstrap, fleet-init/trust, and remote-task contracts documented in
 [FLEET.md](FLEET.md), [SECURITY.md](SECURITY.md), and
 [REMOTE_TASKS.md](REMOTE_TASKS.md); it may proceed without a new planner or
 daemon. H3 is follow-on work after H1/H2 and should not broaden the trust boundary.
-T1/T2, 9A, and V1 are active parallel tracks in separate tasks: T1/T2 become
-dependencies only for tmux-independent/headless enrollment, 9A is relevant if
+T1, 9A, and V1 implementations are integrated on the feature branch; T2 remains
+the next remote-execution milestone. T1/T2 become dependencies only for
+tmux-independent/headless enrollment, 9A is relevant if
 onboarding obligations are later compiled into objective plans, and V1 can supply
 freshness/attempt presentation when its observation contract lands. This H track
 does not mark any of those milestones complete, reclassify them as delivered, or
