@@ -114,18 +114,18 @@ fixture tests and local authentication do not close another provider's remote
 requirement. Claude remains explicitly deferred rather than blocking the other
 implemented profiles.
 
-### Feature-branch integration — 9 September 2026
+### Feature-branch integration — 10 September 2026
 
-The `codex/hydra-next-wave` branch integrates T1 terminal-independent execution,
-9A outcome obligations, and V1 remote visibility, including their C quality fixes.
-This is local implementation status, not publication or full distributed/provider
-qualification. The acceptance requirements below remain the delivery contract;
-remaining qualification and integration evidence are recorded separately.
+The local `codex/release-next` branch integrates **T1, 9A, V1, T2, 9B, H1,
+V2, 9C, and H2**. The latest slice adds bounded attempt/event observations,
+structured verifier evidence, and reviewed host enrollment with reconciliation.
+See [the earlier integration evidence](evidence/next-wave-integration.md) and
+[V2/9C/H2 acceptance](evidence/observation-enrollment-integration.md) for the exact
+checks and qualification limits. Main and the published release are unchanged.
 
-Next implementation wave: **T2**, **9B**, and **H1**. These extend the integrated
-terminal, obligation, and fleet contracts independently. V2 remains the next
-visibility slice; T3 and H2 follow their stated dependencies. This sequencing does
-not authorize live provider campaigns, host enrollment, or publication implicitly.
+Follow-on milestones retain their stated dependencies and are not selected by
+this status update. Local qualification does not authorize live provider
+campaigns, enrollment of operational hosts, or publication.
 
 Research for follow-on decisions: [interactive parity](research/interactive-parity-report.md)
 and its [decision brief](research/interactive-parity-decision-brief.md), plus
@@ -266,24 +266,27 @@ implication, isolation or semantic correctness is claimed.
 ##### 9C. Structured evidence and validation of the validator
 
 Depends on 9A–9B; extend the accepted report contract with explicit versioning.
+Locally qualified with report schema v3; no LLM judge is implemented, so judge
+calibration and ordering sensitivity are not claimed. See the integration evidence
+above for the executable and assessment controls.
 
-- [ ] Bind each evidence record to its obligation, subject manifest, verifier
+- [x] Bind each evidence record to its obligation, subject manifest, verifier
       identity/recipe, invocation, environment, observations, and hashed raw evidence.
       Preserve counts of executed, failed, and skipped cases, limitations, and any
       required reviewer decision. Retain prose as explanation, not as a replacement
       for required measurements or observations.
-- [ ] For machine-checkable obligations, derive verdicts through trusted adapters
+- [x] For machine-checkable obligations, derive verdicts through trusted adapters
       from accepted predicates and sealed observations. Check the actual candidate
       and executed tests; provenance establishes identity, not semantic correctness,
       and logs still depend on the trustworthiness of their collection path.
-- [ ] Qualify validators using relevant positive and negative controls: omitted work,
+- [x] Qualify validators using relevant positive and negative controls: omitted work,
       stale subjects, missing measurements, dropped failures, inverted assertions,
       unsupported claims, and selected mutations. Treat mutation/coverage results
       as bounded evidence of test strength, not a universal completion score.
-- [ ] Keep execution status, evidence validity, and domain outcome distinct in the
+- [x] Keep execution status, evidence validity, and domain outcome distinct in the
       result model and UI. Final acceptance inspects every mandatory obligation on
       the assembled candidate; successful leaf tasks cannot substitute for it.
-- [ ] For assessments, retain the rubric, source/evidence locators, disagreement,
+- [x] For assessments, retain the rubric, source/evidence locators, disagreement,
       and acceptance authority. Calibrate LLM judges on known cases and test ordering
       sensitivity where relevant; more judges, different models, or different hosts
       do not by themselves establish independent evidence.
@@ -535,7 +538,7 @@ operator visibility and qualification work, not claims of new runtime behavior.
       without raw-state inspection. Disconnect one host while others stay reachable:
       its cached state is visibly stale, with last-confirmed time, and is never
       relabeled failed or confirmed running merely because transport was lost.
-- [ ] **V2 — Attempt detail, ordered events, and resumable logs.** Reuse existing
+- [x] **V2 — Attempt detail, ordered events, and resumable logs.** Reuse existing
       run/step/attempt log selectors and byte offsets; add a bounded, versioned event
       observation contract with stable sequence/cursor semantics. Define reconnect,
       duplicate-event, retention-gap, and stream-reset behavior. Expose attempt
@@ -638,7 +641,7 @@ current fleet implementation.
       from still-required, explicitly authorized live SSH/jump/key qualification.
       No live host or provider qualification is claimed.
 
-- [ ] **H2 — Reviewed qualification and explicit enrollment.** Add a reviewable
+- [x] **H2 — Reviewed qualification and explicit enrollment.** Add a reviewable
       operation intent using existing state/CLI mechanisms; do not introduce a
       second execution authority or require a new digest-plan subsystem. Bind each
       selected host to its candidate/source identity, accepted host-key
