@@ -18,6 +18,9 @@ static bool unknown_code(const char *code) {
 static bool package_matches(const char *path, const char *expected) {
     char actual[65]; return path && expected && digest(expected) && !f_hash(path, actual) && !strcmp(actual, expected);
 }
+static bool prefix_matches(const char *value, const char *prefix) {
+    size_t n; if (!prefix || !*prefix) return true; if (!value) return false; n = strlen(prefix); return !strncmp(value, prefix, n) && (value[n] == '\0' || value[n] == '/');
+}
 static int progress_path(char path[F_PATH], const char *digest_value) {
     char dir[F_PATH]; if (f_path(dir, sizeof(dir), f_home, "fleet/enrollment") || f_mkdirs(dir)) return -1;
     return snprintf(path, F_PATH, "%s/%s.json", dir, digest_value) >= F_PATH ? -1 : 0;
@@ -45,7 +48,7 @@ static json_object *review(const char *input, const char *output, const char *id
     json_object *qualification = f_read_json(input, F_LIMIT), *row, *data, *intent = NULL, *host, *source;
     const char *target, *fingerprint; char hash[65];
     if (!qualification || !f_number_is(qualification, "schema_version", 1) || !json_object_get_boolean(f_field(qualification, "ok")) ||
-        !(row = candidate(qualification, id)) || strcmp(f_string(row, "status"), "compatible") ||
+        !(row = candidate(qualification, id)) || !f_string(row, "status") || strcmp(f_string(row, "status"), "compatible") ||
         !(data = f_field(row, "qualification")) || !(fingerprint = f_string(f_field(data, "data"), "peer_fingerprint")) || strncmp(fingerprint, "SHA256:", 7) ||
         !(target = f_string(row, "target")) || !abs_path(project) || (package && (!abs_path(package) || !package_matches(package, package_digest))) ||
         (prefix && !abs_path(prefix))) goto done;
@@ -76,13 +79,13 @@ static json_object *apply_host(json_object *host, unsigned seconds) {
     f_string_add(row, "alias", alias); f_string_add(row, "target", target);
     { char *actual = f_peer_fingerprint(&remote, seconds); if (!actual) { f_string_add(row, "status", "outcome_unknown"); f_string_add(row, "error", "peer fingerprint unavailable"); } else if (strcmp(actual, fingerprint)) { f_string_add(row, "status", "host_key_changed"); f_string_add(row, "error", "authenticated peer fingerprint differs from reviewed identity"); free(actual); } else {
         if (package) { json_object *boot = f_bootstrap(&remote, package, package_digest, seconds); bool boot_ok = json_object_get_boolean(f_field(boot, "ok")); const char *code = f_string(f_field(boot, "error"), "code"); if (!boot_ok) { f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "bootstrap_failed"); json_object_put(boot); return row; } json_object_put(boot); }
-        { json_object *request = json_object_new_object(), *args = json_object_new_array(); json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", "init"); f_string_add(request, "project", project); f_string_add(request, "expected_peer_fingerprint", fingerprint); json_object_array_add(args, json_object_new_string("--no-agent")); json_object_object_add(request, "args", args); response = f_request(&remote, request, seconds); json_object_put(request); if (json_object_get_boolean(f_field(response, "ok"))) { const char *installed = f_string(f_field(response, "data"), "hydra"); if (prefix && *prefix && (!installed || strncmp(installed, prefix, strlen(prefix)))) { f_string_add(row, "status", "prefix_mismatch"); f_string_add(row, "error", "bootstrap path differed from reviewed prefix"); } else f_string_add(row, "status", "enrolled"); } else { const char *code = f_string(f_field(response, "error"), "code"); f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "remote_failed"); } json_object_put(response); }
+        { json_object *request = json_object_new_object(), *args = json_object_new_array(); json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", "init"); f_string_add(request, "project", project); f_string_add(request, "expected_peer_fingerprint", fingerprint); json_object_array_add(args, json_object_new_string("--no-agent")); json_object_object_add(request, "args", args); response = f_request(&remote, request, seconds); json_object_put(request); if (json_object_get_boolean(f_field(response, "ok"))) { const char *installed = f_string(f_field(response, "data"), "hydra"); if (!prefix_matches(installed, prefix)) { f_string_add(row, "status", "prefix_mismatch"); f_string_add(row, "error", "bootstrap path differed from reviewed prefix"); } else f_string_add(row, "status", "enrolled"); } else { const char *code = f_string(f_field(response, "error"), "code"); f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "remote_failed"); } json_object_put(response); }
     }} return row;
 invalid: f_string_add(row, "status", "invalid_intent"); return row;
 }
 static json_object *apply(const char *path, const char *confirm, unsigned seconds) {
     json_object *intent = f_read_json(path, F_LIMIT), *host, *hosts, *result, *rows, *progress = NULL, *previous, *item; char hash[65], verify[F_PATH], saved[65], progress_file[F_PATH] = ""; size_t i;
-    if (!intent || strcmp(f_string(intent, "kind"), "fleet-enrollment-intent") || !digest(confirm) || !digest(f_string(intent, "intent_sha256"))) goto invalid;
+    if (!intent || !f_string(intent, "kind") || strcmp(f_string(intent, "kind"), "fleet-enrollment-intent") || !digest(confirm) || !digest(f_string(intent, "intent_sha256"))) goto invalid;
     if (f_copy(saved, sizeof(saved), f_string(intent, "intent_sha256"))) goto invalid; json_object_object_del(intent, "intent_sha256");
     if (snprintf(verify, sizeof(verify), "%s.verify", path) >= (int)sizeof(verify) || f_write(verify, json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN), strlen(json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN)), true) || f_hash(verify, hash)) { unlink(verify); goto invalid; }
     unlink(verify); if (strcmp(hash, saved) || strcmp(hash, confirm)) goto invalid;
