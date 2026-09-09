@@ -51,22 +51,29 @@ static json_object *review(const char *input, const char *output, const char *id
     f_string_add(intent, "output", output); f_string_add(intent, "intent_sha256", hash); json_object_put(qualification); return f_success("fleet-enrollment-review", intent);
 done: json_object_put(qualification); json_object_put(intent); return f_error("fleet-enrollment-review", "invalid_review", "qualification must contain an actual peer fingerprint and a compatible candidate");
 }
-static json_object *apply(const char *path, const char *confirm, unsigned seconds) {
-    json_object *intent = f_read_json(path, F_LIMIT), *host, *result, *rows, *row; struct f_remote remote = {0}; char hash[65], verify[F_PATH];
-    const char *saved; const char *target; const char *fingerprint; const char *alias; const char *project; const char *package; const char *package_digest; const char *prefix;
-    if (!intent || strcmp(f_string(intent, "kind"), "fleet-enrollment-intent") || !digest(confirm) || !digest(f_string(intent, "intent_sha256"))) goto invalid;
-    saved = f_string(intent, "intent_sha256"); json_object_object_del(intent, "intent_sha256");
-    if (snprintf(verify, sizeof(verify), "%s.verify", path) >= (int)sizeof(verify) || f_write(verify, json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN), strlen(json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN)), true) || f_hash(verify, hash)) { unlink(verify); goto invalid; }
-    unlink(verify); if (strcmp(hash, saved) || strcmp(hash, confirm)) goto invalid;
-    json_object_object_add(intent, "intent_sha256", json_object_new_string(saved));
-    host = f_field(intent, "host"); target = f_string(host, "target"); fingerprint = f_string(host, "fingerprint"); alias = f_string(host, "alias"); project = f_string(host, "project");
+static json_object *apply_host(json_object *host, unsigned seconds) {
+    json_object *row = json_object_new_object(), *response; struct f_remote remote = {0};
+    const char *target; const char *fingerprint; const char *alias; const char *project; const char *package; const char *package_digest; const char *prefix;
+    target = f_string(host, "target"); fingerprint = f_string(host, "fingerprint"); alias = f_string(host, "alias"); project = f_string(host, "project");
     package = f_string(host, "package"); package_digest = f_string(host, "package_sha256"); prefix = f_string(host, "prefix");
     if (!target || !fingerprint || !alias || !project || !f_target(target) || !f_name(alias) || !abs_path(project) || f_copy(remote.name, sizeof(remote.name), alias) || f_copy(remote.target, sizeof(remote.target), target) || f_copy(remote.hydra, sizeof(remote.hydra), "hydra")) goto invalid;
-    result = json_object_new_object(); f_string_add(result, "intent_sha256", saved); rows = json_object_new_array(); json_object_object_add(result, "hosts", rows); row = json_object_new_object(); f_string_add(row, "alias", alias); f_string_add(row, "target", target);
+    f_string_add(row, "alias", alias); f_string_add(row, "target", target);
     { char *actual = f_peer_fingerprint(&remote, seconds); if (!actual) { f_string_add(row, "status", "outcome_unknown"); f_string_add(row, "error", "peer fingerprint unavailable"); } else if (strcmp(actual, fingerprint)) { f_string_add(row, "status", "host_key_changed"); f_string_add(row, "error", "authenticated peer fingerprint differs from reviewed identity"); free(actual); } else {
-        if (package) { json_object *boot = f_bootstrap(&remote, package, package_digest, seconds); bool boot_ok = json_object_get_boolean(f_field(boot, "ok")); const char *code = f_string(f_field(boot, "error"), "code"); if (!boot_ok) { f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "bootstrap_failed"); json_object_put(boot); json_object_array_add(rows, row); return f_success("fleet-enrollment-apply", result); } json_object_put(boot); }
-        { json_object *request = json_object_new_object(), *args = json_object_new_array(); json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", "init"); f_string_add(request, "project", project); json_object_array_add(args, json_object_new_string("--no-agent")); json_object_object_add(request, "args", args); result = f_request(&remote, request, seconds); json_object_put(request); if (json_object_get_boolean(f_field(result, "ok"))) { f_string_add(row, "status", "enrolled"); } else { const char *code = f_string(f_field(result, "error"), "code"); f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "remote_failed"); } json_object_put(result); if (prefix && *prefix) f_string_add(row, "reviewed_prefix", prefix); }
-    }} json_object_array_add(rows, row); return f_success("fleet-enrollment-apply", result);
+        if (package) { json_object *boot = f_bootstrap(&remote, package, package_digest, seconds); bool boot_ok = json_object_get_boolean(f_field(boot, "ok")); const char *code = f_string(f_field(boot, "error"), "code"); if (!boot_ok) { f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "bootstrap_failed"); json_object_put(boot); return row; } json_object_put(boot); }
+        { json_object *request = json_object_new_object(), *args = json_object_new_array(); json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(request, "action", "init"); f_string_add(request, "project", project); json_object_array_add(args, json_object_new_string("--no-agent")); json_object_object_add(request, "args", args); response = f_request(&remote, request, seconds); json_object_put(request); if (json_object_get_boolean(f_field(response, "ok"))) { f_string_add(row, "status", "enrolled"); } else { const char *code = f_string(f_field(response, "error"), "code"); f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "remote_failed"); } json_object_put(response); if (prefix && *prefix) f_string_add(row, "reviewed_prefix", prefix); }
+    }} return row;
+invalid: f_string_add(row, "status", "invalid_intent"); return row;
+}
+static json_object *apply(const char *path, const char *confirm, unsigned seconds) {
+    json_object *intent = f_read_json(path, F_LIMIT), *host, *hosts, *result, *rows; char hash[65], verify[F_PATH], saved[65]; size_t i;
+    if (!intent || strcmp(f_string(intent, "kind"), "fleet-enrollment-intent") || !digest(confirm) || !digest(f_string(intent, "intent_sha256"))) goto invalid;
+    if (f_copy(saved, sizeof(saved), f_string(intent, "intent_sha256"))) goto invalid; json_object_object_del(intent, "intent_sha256");
+    if (snprintf(verify, sizeof(verify), "%s.verify", path) >= (int)sizeof(verify) || f_write(verify, json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN), strlen(json_object_to_json_string_ext(intent, JSON_C_TO_STRING_PLAIN)), true) || f_hash(verify, hash)) { unlink(verify); goto invalid; }
+    unlink(verify); if (strcmp(hash, saved) || strcmp(hash, confirm)) goto invalid;
+    json_object_object_add(intent, "intent_sha256", json_object_new_string(saved)); result = json_object_new_object(); f_string_add(result, "intent_sha256", saved); rows = json_object_new_array(); json_object_object_add(result, "hosts", rows);
+    hosts = f_field(intent, "hosts"); if (!json_object_is_type(hosts, json_type_array)) { hosts = json_object_new_array(); host = f_field(intent, "host"); if (host) json_object_array_add(hosts, json_object_get(host)); }
+    for (i = 0; i < json_object_array_length(hosts); i++) json_object_array_add(rows, apply_host(json_object_array_get_idx(hosts, i), seconds));
+    if (!f_field(intent, "hosts")) json_object_put(hosts); json_object_put(intent); return f_success("fleet-enrollment-apply", result);
 invalid: json_object_put(intent); return f_error("fleet-enrollment-apply", "review_required", "intent digest, confirmation, or reviewed fields do not match");
 }
 json_object *enrollment_cli(int argc, char **argv) {
