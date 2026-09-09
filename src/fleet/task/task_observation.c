@@ -293,7 +293,7 @@ static void event_observation(json_object *data, json_object *state, json_object
     const char *project = f_string(state, "execution_project_id"), *run = f_string(state, "run_id");
     char path[F_PATH]; FILE *input = NULL; char line[8192]; unsigned cursor = 0, wanted = 128, first = 0, last = 0;
     bool gap = false, reset = false, available = false, scan_truncated = false; size_t returned = 0, bytes = 0; unsigned delivered = 0; off_t byte_offset = 0;
-    char generation[128] = ""; struct stat stream_stat; off_t next_byte_offset = 0;
+    char generation[128] = ""; struct stat stream_stat; off_t next_byte_offset = 0, safe_offset = 0, line_start;
     if (f_field(request, "cursor") && json_object_is_type(f_field(request, "cursor"), json_type_int) && json_object_get_int64(f_field(request, "cursor")) >= 0)
         cursor = (unsigned)json_object_get_int64(f_field(request, "cursor"));
     if (f_field(request, "event_limit") && json_object_is_type(f_field(request, "event_limit"), json_type_int) && json_object_get_int64(f_field(request, "event_limit")) >= 1 && json_object_get_int64(f_field(request, "event_limit")) <= 128)
@@ -311,26 +311,35 @@ static void event_observation(json_object *data, json_object *state, json_object
     }
     available = true;
     (void)snprintf(generation, sizeof(generation), "%llu:%llu", (unsigned long long)stream_stat.st_dev, (unsigned long long)stream_stat.st_ino);
-    if (f_field(request, "stream_id") && (!f_text(f_field(request, "stream_id")) || strcmp(f_text(f_field(request, "stream_id")), generation))) reset = true;
-    if (!reset && byte_offset <= stream_stat.st_size && fseeko(input, byte_offset, SEEK_SET)) reset = true;
-    if (reset) byte_offset = 0;
+    safe_offset = byte_offset;
+    if (f_field(request, "stream_id") && (!f_text(f_field(request, "stream_id")) || strcmp(f_text(f_field(request, "stream_id")), generation))) {
+        /* A different inode is a new stream.  Re-read from its beginning and
+         * retain the caller's cursor while returning an explicit reset. */
+        reset = true; safe_offset = 0;
+    }
+    if (byte_offset > stream_stat.st_size || (!reset && fseeko(input, byte_offset, SEEK_SET))) { reset = true; safe_offset = 0; }
+    if (reset) (void)fseeko(input, safe_offset, SEEK_SET);
     while (fgets(line, sizeof(line), input)) {
         json_object *event; json_object *sequence;
-        if (!strchr(line, '\n') && !feof(input)) { reset = true; break; }
-        bytes += strlen(line); if (bytes > 262144U) { scan_truncated = true; break; }
+        line_start = ftello(input) - (off_t)strlen(line);
+        if (!strchr(line, '\n') && !feof(input)) { reset = true; safe_offset = line_start; break; }
+        bytes += strlen(line); if (bytes > 262144U) { scan_truncated = true; safe_offset = line_start; break; }
         event = f_parse(line); sequence = f_field(event, "sequence");
-        if (!event || !json_object_is_type(event, json_type_object) || !f_number_is(event, "schema_version", 1) || !json_object_is_type(sequence, json_type_int) || json_object_get_int64(sequence) < 1 || json_object_get_int64(sequence) > 4294967295U) { json_object_put(event); reset = true; break; }
+        if (!event || !json_object_is_type(event, json_type_object) || !f_number_is(event, "schema_version", 1) || !json_object_is_type(sequence, json_type_int) || json_object_get_int64(sequence) < 1 || json_object_get_int64(sequence) > 4294967295U) { json_object_put(event); reset = true; safe_offset = line_start; break; }
         { unsigned value = (unsigned)json_object_get_int64(sequence);
           if (!first) first = value;
-          if (last && value != last + 1U) { reset = true; json_object_put(event); break; }
+          if ((last && value != last + 1U) || (byte_offset > 0 && !last && cursor < 4294967295U && value != cursor + 1U)) { reset = true; safe_offset = line_start; json_object_put(event); break; }
           last = value;
           if (value > cursor && returned < wanted) { json_object_array_add(events, event); returned++; delivered = value; } else json_object_put(event); }
         if (returned >= wanted) break;
     }
-    next_byte_offset = ftello(input); if (next_byte_offset < 0) next_byte_offset = byte_offset;
+    /* A bounded scan stops after fgets has consumed the next line.  Resume
+     * from that line's start so the caller cannot skip an event. */
+    next_byte_offset = scan_truncated ? safe_offset : ftello(input);
+    if (next_byte_offset < 0) next_byte_offset = safe_offset;
     fclose(input);
     if (first && cursor + 1U < first) gap = true;
-    if (reset || (f_field(request, "stream_id") && strcmp(f_text(f_field(request, "stream_id")), generation))) { json_object_put(events); events = json_object_new_array(); delivered = cursor; }
+    if (reset || (f_field(request, "stream_id") && strcmp(f_text(f_field(request, "stream_id")), generation))) { json_object_put(events); events = json_object_new_array(); delivered = cursor; next_byte_offset = safe_offset; }
     json_object_object_add(stream, "schema_version", json_object_new_int(1)); json_object_object_add(stream, "events", events);
     json_object_object_add(stream, "available", json_object_new_boolean(available)); f_string_add(stream, "stream_id", generation);
     json_object_object_add(stream, "scan_truncated", json_object_new_boolean(scan_truncated));

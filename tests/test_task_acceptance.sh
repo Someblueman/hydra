@@ -307,6 +307,68 @@ tail -n +2 "$fixture/events-saved" > "$events_path"
 task observe build --id "$workflow_id" > "$fixture/workflow-gap"
 grep -q '"retention_gap":true' "$fixture/workflow-gap"
 cp "$fixture/events-saved" "$events_path"
+# Exercise byte-offset pagination across the bounded 256 KiB scan window.  A
+# large record makes the reader stop before event-limit, so the returned offset
+# must point at the first unconsumed line and every sequence must be observed
+# exactly once on the following requests.
+python3 - "$events_path" <<'PY'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as stream:
+    for sequence in range(1, 201):
+        stream.write(json.dumps({"schema_version": 1, "sequence": sequence,
+                                 "type": "bulk", "payload": "x" * 3200}) + "\n")
+PY
+bulk_cursor=0
+bulk_offset=0
+bulk_stream=
+bulk_seen=0
+while [ "$bulk_cursor" -lt 200 ]; do
+    if [ -n "$bulk_stream" ]; then
+        task observe build --id "$workflow_id" --cursor "$bulk_cursor" --event-limit 128 --byte-offset "$bulk_offset" --stream-id "$bulk_stream" > "$fixture/bulk-observation"
+    else
+        task observe build --id "$workflow_id" --cursor "$bulk_cursor" --event-limit 128 --byte-offset "$bulk_offset" > "$fixture/bulk-observation"
+    fi
+    bulk_values="$(python3 - "$fixture/bulk-observation" "$bulk_cursor" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    document = json.load(stream)
+observation = document["data"]["event_observation"]
+events = observation["events"]
+cursor = int(sys.argv[2])
+for index, event in enumerate(events, cursor + 1):
+    if event["sequence"] != index:
+        raise SystemExit("non-contiguous event sequence")
+print(observation["next_cursor"], observation["next_byte_offset"],
+      observation["stream_id"], len(events), observation["scan_truncated"])
+PY
+)"
+    # shellcheck disable=SC2086
+    set -- $bulk_values
+    bulk_cursor=$1; bulk_offset=$2; bulk_stream=$3; bulk_count=$4; bulk_truncated=$5
+    [ "$bulk_count" -gt 0 ]
+    bulk_seen=$((bulk_seen + bulk_count))
+done
+[ "$bulk_seen" -eq 200 ]
+[ "$bulk_truncated" = true ]
+printf '%s\n' '{"schema_version":1,"sequence":201,"type":"bulk.append"}' >> "$events_path"
+task observe build --id "$workflow_id" --cursor 200 --byte-offset "$bulk_offset" --stream-id "$bulk_stream" > "$fixture/bulk-append"
+grep -q '"sequence":201' "$fixture/bulk-append"
+bulk_append_offset="$(python3 - "$fixture/bulk-append" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    print(json.load(stream)["data"]["event_observation"]["next_byte_offset"])
+PY
+)"
+task observe build --id "$workflow_id" --cursor 200 --byte-offset 4294967295 --stream-id "$bulk_stream" > "$fixture/bulk-invalid-offset"
+grep -q '"stream_reset":true' "$fixture/bulk-invalid-offset"
+grep -q '"next_byte_offset":0' "$fixture/bulk-invalid-offset"
+task observe build --id "$workflow_id" --cursor 200 --byte-offset "$bulk_offset" --stream-id replaced-stream > "$fixture/bulk-replaced-stream"
+grep -q '"stream_reset":true' "$fixture/bulk-replaced-stream"
+grep -q '"next_byte_offset":0' "$fixture/bulk-replaced-stream"
+printf '%s' '{"schema_version":1,"sequence":202' >> "$events_path"
+task observe build --id "$workflow_id" --cursor 201 --byte-offset "$bulk_append_offset" --stream-id "$bulk_stream" > "$fixture/bulk-partial"
+grep -q '"stream_reset":true' "$fixture/bulk-partial"
+cp "$fixture/events-saved" "$events_path"
 grep -q '"result_sha256":' "$fixture/workflow-result"
 grep -q '"path":"result.txt"' "$fixture/workflow-result"
 grep -q '"dirty":true' "$fixture/workflow-result"
