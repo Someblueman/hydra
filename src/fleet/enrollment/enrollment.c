@@ -70,6 +70,9 @@ static json_object *apply_host(json_object *host, unsigned seconds) {
     target = f_string(host, "target"); fingerprint = f_string(host, "fingerprint"); alias = f_string(host, "alias"); project = f_string(host, "project");
     package = f_string(host, "package"); package_digest = f_string(host, "package_sha256"); prefix = f_string(host, "prefix");
     if (!target || !fingerprint || !alias || !project || !f_target(target) || !f_name(alias) || !abs_path(project) || f_copy(remote.name, sizeof(remote.name), alias) || f_copy(remote.target, sizeof(remote.target), target) || f_copy(remote.hydra, sizeof(remote.hydra), "hydra")) goto invalid;
+    /* Establish the reviewed peer before any mutation and reuse its strict
+     * OpenSSH control connection for bootstrap/init. */
+    remote.multiplex = true;
     f_string_add(row, "alias", alias); f_string_add(row, "target", target);
     { char *actual = f_peer_fingerprint(&remote, seconds); if (!actual) { f_string_add(row, "status", "outcome_unknown"); f_string_add(row, "error", "peer fingerprint unavailable"); } else if (strcmp(actual, fingerprint)) { f_string_add(row, "status", "host_key_changed"); f_string_add(row, "error", "authenticated peer fingerprint differs from reviewed identity"); free(actual); } else {
         if (package) { json_object *boot = f_bootstrap(&remote, package, package_digest, seconds); bool boot_ok = json_object_get_boolean(f_field(boot, "ok")); const char *code = f_string(f_field(boot, "error"), "code"); if (!boot_ok) { f_string_add(row, "status", unknown_code(code) ? "outcome_unknown" : "failed"); f_string_add(row, "error", code ? code : "bootstrap_failed"); json_object_put(boot); return row; } json_object_put(boot); }
