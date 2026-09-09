@@ -311,7 +311,7 @@ $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 test-workflow-contracts: build-fleet
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/workflow_contract_cases.py --runtime
 
-test-fleet: test-discovery $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)/test-workflow-schedule $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
+test-fleet: test-discovery test-enrollment $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)/test-workflow-schedule $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
 	$(BUILD_DIR)/test-plan
 	$(BUILD_DIR)/test-workflow-schedule
 	$(BUILD_DIR)/test-agent-auth
@@ -397,3 +397,8 @@ $(BUILD_DIR)/termviz-workspace $(BUILD_DIR)/termviz-example $(BUILD_DIR)/test-te
 .PHONY: test-discovery
 test-discovery: build-fleet
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/discovery/test_discovery.py
+
+.PHONY: test-enrollment
+test-enrollment: build-fleet
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_enrollment.py
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_enrollment_receiver.py
