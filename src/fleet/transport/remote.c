@@ -100,12 +100,18 @@ done:
     free(exe); free(home); f_capture_free(&cap);
     return result ? result : f_error("fleet", "transport_failed", "cannot start SSH transport");
 }
+bool f_handshake_compatible(json_object *data) {
+    const char *version = f_string(data, "hydra_version");
+    return f_number_is(data, "fleet_protocol", F_PROTOCOL) && f_number_is(data, "state_schema", 2) &&
+        f_number_is(data, "event_schema", 1) && f_number_is(data, "json_schema", 1) &&
+        version && !strncmp(version, "2.", 2) && json_object_is_type(f_field(data, "capabilities"), json_type_array);
+}
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds) {
     json_object *req = json_object_new_object(), *res, *data, *caps;
     json_object_object_add(req, "protocol", json_object_new_int(F_PROTOCOL)); f_string_add(req, "action", "handshake");
     res = f_request(remote, req, seconds); data = f_field(res, "data"); caps = f_field(data, "capabilities");
     if (!json_object_get_boolean(f_field(res, "ok"))) goto done;
-    if (!f_number_is(data, "fleet_protocol", F_PROTOCOL) || !f_number_is(data, "state_schema", 2) || !f_number_is(data, "event_schema", 1) || !f_number_is(data, "json_schema", 1) || !f_string(data, "hydra_version") || strncmp(f_string(data, "hydra_version"), "2.", 2) || !json_object_is_type(caps, json_type_array)) {
+    if (!f_handshake_compatible(data)) {
         json_object_put(res); res = f_error("fleet", "version_mismatch", "remote Hydra or fleet protocol is incompatible"); goto done;
     }
     if (strcmp(action, "handshake")) {
@@ -127,9 +133,10 @@ done:
 
 int f_ssh(const struct f_remote *remote, const char *command, const char *input, size_t size, unsigned seconds, bool tty, struct f_capture *cap) {
     char timeout[64], socket[F_PATH];
-    char *argv[24]; size_t n = 0;
+    char *argv[28]; size_t n = 0;
     snprintf(timeout, sizeof(timeout), "ConnectTimeout=%u", seconds);
     argv[n++] = (char *)"ssh"; argv[n++] = (char *)(tty ? "-t" : "-T");
+    if (remote->ssh_config[0]) { argv[n++] = (char *)"-F"; argv[n++] = (char *)remote->ssh_config; }
     argv[n++] = (char *)"-o"; argv[n++] = (char *)"BatchMode=yes";
     argv[n++] = (char *)"-o"; argv[n++] = (char *)"StrictHostKeyChecking=yes";
     argv[n++] = (char *)"-o"; argv[n++] = timeout;

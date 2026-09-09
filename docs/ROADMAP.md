@@ -603,7 +603,7 @@ host-key and handshake contracts as the qualification boundary, and receiver-own
 remote-task state as the recovery authority. This track can begin against the
 current fleet implementation.
 
-- [ ] **H1 — Candidate discovery and read-only qualification.** Import effective
+- [x] **H1 — Candidate discovery and read-only qualification.** Import effective
       OpenSSH aliases and explicitly selected static inventory records without
       copying private keys or rewriting SSH configuration. Normalize endpoints,
       preserve source provenance/freshness, assign stable candidate IDs, and
@@ -620,6 +620,11 @@ current fleet implementation.
       distinct typed results; a mixed ten-host run retains every row and evidence;
       discovery and probing leave aliases, remote state, and installations
       unchanged.
+      Implemented as `fleet discover` / `fleet qualify` with explicit alias/static
+      selection and strict handshake-only probes. [Contract and acceptance](HOST_DISCOVERY.md)
+      distinguish real OpenSSH config expansion plus controlled ten-host evidence
+      from still-required, explicitly authorized live SSH/jump/key qualification.
+      No live host or provider qualification is claimed.
 
 - [ ] **H2 — Reviewed qualification and explicit enrollment.** Add a reviewable
       operation intent using existing state/CLI mechanisms; do not introduce a

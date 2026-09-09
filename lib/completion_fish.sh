@@ -23,7 +23,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l retain-raw
 complete -c hydra -f -n '__fish_use_subcommand' -a 'remote' -d 'Manage OpenSSH aliases'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'fleet' -d 'Inspect trusted remote installations'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote' -a 'add remove list'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth' -a 'handshake list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth' -a 'handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect submit start resume requests decide status observe cancel logs result inspect-result collect collected help'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l source -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l spec -r
@@ -231,5 +231,11 @@ complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcomm
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l source -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l approve -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from auth' -l executable -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l ssh -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l inventory -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l select -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l ssh-config -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from qualify' -l require -r
+
 EOF
 }
