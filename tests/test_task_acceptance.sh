@@ -272,6 +272,8 @@ task result build --id "$workflow_id" > "$fixture/workflow-result"
 task observe build --id "$workflow_id" --event-limit 2 > "$fixture/workflow-observation" || { cat "$fixture/workflow-observation"; exit 1; }
 grep -q '"event_observation"' "$fixture/workflow-observation"
 grep -q '"attempt_history"' "$fixture/workflow-observation"
+grep -q '"process_exit":"0"' "$fixture/workflow-observation"
+grep -q '"completed_at"' "$fixture/workflow-observation"
 grep -q '"artifact_inventory"' "$fixture/workflow-observation"
 grep -q '"provider_observations"' "$fixture/workflow-observation"
 grep -q '"process_exit"' "$fixture/workflow-observation"
