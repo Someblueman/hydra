@@ -24,7 +24,7 @@ struct remote_options {
     const char *host, *output, *timeout, *input, *key, *id, *trust;
     const char *stream, *offset, *limit, *source, *step, *attempt;
     const char *request_id, *decision, *actor;
-    const char *cursor, *event_limit, *stream_id;
+    const char *cursor, *event_limit, *byte_offset, *stream_id;
     bool submit, start, cancel, logs, resume, decide, result_read, observe;
     unsigned log_offset, log_limit, seconds;
     unsigned event_cursor, event_count;
@@ -136,6 +136,7 @@ static json_object *parse_limits(struct remote_options *options) {
         options->event_count = 128;
         if (options->event_limit && !number(options->event_limit, 1, 128, &options->event_count))
             return f_error("fleet-task-observe", "invalid_input", "event limit must be 1-128");
+        { unsigned ignored; if (options->byte_offset && !number(options->byte_offset, 0, 4294967295U, &ignored)) return f_error("fleet-task-observe", "invalid_input", "byte offset must be 0-4294967295"); }
         return NULL;
     }
     if (!options->logs) return NULL;
@@ -185,6 +186,7 @@ static json_object *parse_options(int argc, char **argv, struct remote_options *
         {"--cursor", options->observe, &options->cursor},
         {"--event-limit", options->observe, &options->event_limit}
         ,{"--stream-id", options->observe, &options->stream_id}
+        ,{"--byte-offset", options->observe, &options->byte_offset}
     };
     for (i = 2; i < argc; i++) {
         const char **destination = NULL;
@@ -223,6 +225,7 @@ static json_object *make_request(const struct remote_options *options, const cha
         json_object_object_add(request, "cursor", json_object_new_int64(options->event_cursor));
         json_object_object_add(request, "event_limit", json_object_new_int64(options->event_count));
         if (options->stream_id) f_string_add(request, "stream_id", options->stream_id);
+        if (options->byte_offset) json_object_object_add(request, "byte_offset", json_object_new_int64(strtol(options->byte_offset, NULL, 10)));
     }
     if (options->submit) { json_object_object_add(request, "package", json_object_get(package)); f_string_add(request, "submission_key", options->key); }
     else f_string_add(request, "task_id", options->id);

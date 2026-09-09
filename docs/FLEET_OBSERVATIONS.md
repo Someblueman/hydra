@@ -2,8 +2,10 @@
 
 `hydra fleet task observe HOST --id TASK_ID` returns the receiver-owned
 observation snapshot. V2 adds `--cursor N` and `--event-limit N` (1 through
-128). The cursor is the last event sequence the client has confirmed. A
-reconnect sends that cursor and receives only later events, in sequence order;
+128). The cursor is the last event sequence the client has confirmed.
+`next_byte_offset` is the byte position paired with that cursor for bounded
+retained journals; send it back as `--byte-offset` with the same `--stream-id`.
+A reconnect sends that cursor and byte position and receives only later events, in sequence order;
 repeating a cursor is therefore safe and does not duplicate transitions.
 
 The `event_observation` object is bounded and versioned. `next_cursor` is the
