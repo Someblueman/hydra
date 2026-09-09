@@ -142,6 +142,93 @@ static bool check_subject(json_object *plan, json_object *obligation, json_objec
     return true;
 }
 
+static bool obligation_shape_valid(json_object *obligation, json_object *envelope,
+                                   const char *const subject_keys[],
+                                   const char *const evaluation_keys[]) {
+    json_object *subject_value = f_field(obligation, "subject");
+    json_object *evaluation = f_field(obligation, "evaluation");
+    if (!task_keys(subject_value, subject_keys)) return false;
+    if (!task_keys(evaluation, evaluation_keys) || !f_string(evaluation, "method")) return false;
+    if (strcmp(f_string(evaluation, "method"), "executable") &&
+        strcmp(f_string(evaluation, "method"), "assessment")) return false;
+    if (!environment(f_field(obligation, "environment"), envelope)) return false;
+    if (!strings(f_field(obligation, "limitations"), 0, 32)) return false;
+    if (f_string(obligation, "domain") && strcmp(f_string(obligation, "domain"), "feature") &&
+        strcmp(f_string(obligation, "domain"), "performance") &&
+        strcmp(f_string(obligation, "domain"), "research")) return false;
+    return true;
+}
+
+static bool obligation_contract_valid(json_object *plan, json_object *obligation,
+                                      json_object *envelope, json_object *errors,
+                                      const char *path, const char *id,
+                                      const char *const subject_keys[],
+                                      const char *const evaluation_keys[]) {
+    bool valid = true;
+    if (!intent_reference(plan, f_string(obligation, "intent_ref"))) {
+        plan_obligation_error(errors, path, "invalid_intent_reference", "intent_ref must be objective or a declared context:<path>", id, f_string(obligation, "intent_ref"));
+        valid = false;
+    }
+    if (!completion_rule(f_string(obligation, "completion_rule"))) {
+        plan_obligation_error(errors, path, "unsupported_completion_rule", "only pass/verdict=pass completion is supported by workflow plan v1", id, f_string(obligation, "completion_rule"));
+        valid = false;
+    }
+    if (!evidence_fields(f_field(obligation, "required_evidence"))) {
+        plan_obligation_error(errors, path, "missing_required_evidence", "required_evidence must include subject_sha256, verdict and evidence report fields", id, "subject_sha256 + verdict + evidence");
+        valid = false;
+    }
+    if (!plan_text(f_field(obligation, "criterion")) || !obligation_shape_valid(obligation, envelope, subject_keys, evaluation_keys)) valid = false;
+    if (!valid)
+        plan_obligation_error(errors, path, "invalid_obligation", "intent, exact subject, criterion, evaluation, evidence, environment, completion rule, limitations and optional domain are required", id, "all required fields must be explicit; unsupported completion rules are not inferred");
+    return valid;
+}
+
+static int validate_obligation_record(json_object *plan, json_object *obligations,
+                                      json_object *requirements, json_object *envelope,
+                                      json_object *errors, bool *owned, size_t index,
+                                      const char *const obligation_keys[],
+                                      const char *const subject_keys[],
+                                      const char *const evaluation_keys[]) {
+    json_object *obligation = json_object_array_get_idx(obligations, index);
+    json_object *requirement, *check, *evaluation;
+    const char *id = f_string(obligation, "id");
+    const char *requirement_id = f_string(obligation, "requirement");
+    char path[128]; int status = 0;
+    snprintf(path, sizeof(path), "obligations[%zu]", index);
+    if (!task_keys(obligation, obligation_keys) || !plan_id(id) || obligation_index(obligations, id) != (int)index) {
+        plan_obligation_error(errors, path, "invalid_obligation", "obligation has unknown fields, an invalid ID or a duplicate ID", id, "obligation IDs must be unique and bounded");
+        return -1;
+    }
+    requirement = record(requirements, requirement_id);
+    if (!requirement) {
+        plan_obligation_error(errors, path, "orphan_obligation", "obligation names no requirement", id, requirement_id ? requirement_id : "<missing requirement>");
+        return -1;
+    }
+    if (!owned) return -1;
+    owned[(size_t)plan_index(requirements, requirement_id)] = true;
+    evaluation = f_field(obligation, "evaluation");
+    check = record(f_field(plan, "checks"), f_string(evaluation, "check"));
+    if (!obligation_contract_valid(plan, obligation, envelope, errors, path, id, subject_keys, evaluation_keys)) return -1;
+    if (!check_subject(plan, obligation, requirement, check, errors, index)) status = -1;
+    if (!check) {
+        snprintf(path, sizeof(path), "obligations[%zu].evaluation.check", index);
+        plan_obligation_error(errors, path, "missing_evaluation", "obligation evaluation names no check", id, f_string(evaluation, "check"));
+        status = -1;
+    }
+    return status;
+}
+
+static int validate_obligation_coverage(json_object *requirements, bool *owned, json_object *errors) {
+    size_t i; int status = 0;
+    if (!owned) return -1;
+    for (i = 0; i < json_object_array_length(requirements); i++) if (!owned[i]) {
+        char path[128]; snprintf(path, sizeof(path), "requirements[%zu].obligations", i);
+        plan_error(errors, path, "missing_obligation", "every requirement in an explicit obligation plan needs at least one distinct obligation");
+        status = -1;
+    }
+    return status;
+}
+
 int plan_obligations_validate(json_object *plan, json_object *errors) {
     const char *const keys[] = {"id", "requirement", "intent_ref", "subject", "criterion",
                                 "evaluation", "required_evidence", "environment",
@@ -157,63 +244,14 @@ int plan_obligations_validate(json_object *plan, json_object *errors) {
         return -1;
     }
     owned = calloc(json_object_array_length(requirements), sizeof(*owned));
-    for (i = 0; i < json_object_array_length(obligations); i++) {
-        json_object *obligation = json_object_array_get_idx(obligations, i);
-        json_object *requirement, *check, *evaluation, *env;
-        const char *id = f_string(obligation, "id");
-        const char *requirement_id = f_string(obligation, "requirement");
-        const char *domain = f_string(obligation, "domain");
-        char path[128];
-        snprintf(path, sizeof(path), "obligations[%zu]", i);
-        if (!task_keys(obligation, keys) || !plan_id(id) || obligation_index(obligations, id) != (int)i) {
-            plan_obligation_error(errors, path, "invalid_obligation", "obligation has unknown fields, an invalid ID or a duplicate ID", id, "obligation IDs must be unique and bounded");
-            status = -1; continue;
-        }
-        requirement = record(requirements, requirement_id);
-        if (!requirement) {
-            plan_obligation_error(errors, path, "orphan_obligation", "obligation names no requirement", id, requirement_id ? requirement_id : "<missing requirement>");
-            status = -1; continue;
-        }
-        owned[(size_t)plan_index(requirements, requirement_id)] = true;
-        evaluation = f_field(obligation, "evaluation"); env = f_field(obligation, "environment");
-        check = record(f_field(plan, "checks"), f_string(evaluation, "check"));
-        if (!intent_reference(plan, f_string(obligation, "intent_ref"))) {
-            plan_obligation_error(errors, path, "invalid_intent_reference", "intent_ref must be objective or a declared context:<path>", id, f_string(obligation, "intent_ref"));
-            status = -1;
-        }
-        if (!completion_rule(f_string(obligation, "completion_rule"))) {
-            plan_obligation_error(errors, path, "unsupported_completion_rule", "only pass/verdict=pass completion is supported by workflow plan v1", id, f_string(obligation, "completion_rule"));
-            status = -1;
-        }
-        if (!evidence_fields(f_field(obligation, "required_evidence"))) {
-            plan_obligation_error(errors, path, "missing_required_evidence", "required_evidence must include subject_sha256, verdict and evidence report fields", id, "subject_sha256 + verdict + evidence");
-            status = -1;
-        }
-        if (!intent_reference(plan, f_string(obligation, "intent_ref")) || !plan_text(f_field(obligation, "criterion")) ||
-            !task_keys(f_field(obligation, "subject"), subject_keys) ||
-            !task_keys(evaluation, evaluation_keys) || !f_string(evaluation, "method") ||
-            (strcmp(f_string(evaluation, "method"), "executable") && strcmp(f_string(evaluation, "method"), "assessment")) ||
-            !environment(env, envelope) ||
-            !completion_rule(f_string(obligation, "completion_rule")) || !strings(f_field(obligation, "limitations"), 0, 32) ||
-            (domain && strcmp(domain, "feature") && strcmp(domain, "performance") && strcmp(domain, "research"))) {
-            plan_obligation_error(errors, path, "invalid_obligation", "intent, exact subject, criterion, evaluation, evidence, environment, completion rule, limitations and optional domain are required", id, "all required fields must be explicit; unsupported completion rules are not inferred");
-            status = -1; continue;
-        }
-        if (!check_subject(plan, obligation, requirement, check, errors, i)) status = -1;
-        if (!check) {
-            snprintf(path, sizeof(path), "obligations[%zu].evaluation.check", i);
-            plan_obligation_error(errors, path, "missing_evaluation", "obligation evaluation names no check", id, f_string(evaluation, "check"));
-            status = -1;
-        }
+    if (!owned && json_object_array_length(requirements)) {
+        plan_error(errors, "obligations", "allocation_failed", "obligation coverage could not be allocated");
+        return -1;
     }
-    if (owned) {
-        for (i = 0; i < json_object_array_length(requirements); i++) if (!owned[i]) {
-            char path[128]; snprintf(path, sizeof(path), "requirements[%zu].obligations", i);
-            plan_error(errors, path, "missing_obligation", "every requirement in an explicit obligation plan needs at least one distinct obligation");
-            status = -1;
-        }
-        free(owned);
-    }
+    for (i = 0; i < json_object_array_length(obligations); i++)
+        status |= validate_obligation_record(plan, obligations, requirements, envelope, errors, owned, i, keys, subject_keys, evaluation_keys);
+    status |= validate_obligation_coverage(requirements, owned, errors);
+    free(owned);
     return status;
 }
 
@@ -228,42 +266,86 @@ static bool consumes_subject(json_object *plan, json_object *check, json_object 
     return false;
 }
 
-int plan_obligations_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors) {
-    json_object *obligations = f_field(plan, "obligations"), *steps = f_field(plan, "steps");
-    size_t i, j, k;
-    bool evidence_reach[PLAN_OBLIGATIONS][PLAN_OBLIGATIONS] = {{false}};
-    if (!obligations || json_object_array_length(errors)) return 0;
-    for (i = 0; i < json_object_array_length(obligations); i++) {
-        json_object *obligation = json_object_array_get_idx(obligations, i);
-        json_object *evaluation = f_field(obligation, "evaluation");
-        json_object *check = record(f_field(plan, "checks"), f_string(evaluation, "check"));
-        json_object *subject_value = f_field(obligation, "subject");
-        int check_index = plan_index(steps, f_string(check, "step"));
-        int subject_index = plan_index(steps, f_string(subject_value, "step"));
-        char path[128], counterexample[512];
-        if (check && subject_index >= 0 && check_index >= 0 &&
-            consumes_subject(plan, check, subject_value) && check_index != subject_index && reach[check_index][subject_index]) continue;
-        snprintf(path, sizeof(path), "obligations[%zu].evaluation", i);
-        snprintf(counterexample, sizeof(counterexample), "check step %s does not reach subject step %s through declared needs and subject input", f_string(check, "step") ? f_string(check, "step") : "<missing>", f_string(subject_value, "step") ? f_string(subject_value, "step") : "<missing>");
-        plan_obligation_error(errors, path, "impossible_evaluation", "required evidence cannot evaluate the exact candidate on a reachable path", f_string(obligation, "id"), counterexample);
-    }
-    /* Evidence labels that name another obligation are explicit joins. They
-     * must form an acyclic relation; ordinary report field labels are leaves. */
+static bool obligation_path_valid(json_object *plan, json_object *obligation, json_object *steps,
+                                  bool reach[PLAN_STEPS][PLAN_STEPS]) {
+    json_object *evaluation = f_field(obligation, "evaluation");
+    json_object *check = record(f_field(plan, "checks"), f_string(evaluation, "check"));
+    json_object *subject_value = f_field(obligation, "subject");
+    int check_index = plan_index(steps, f_string(check, "step"));
+    int subject_index = plan_index(steps, f_string(subject_value, "step"));
+    if (!check || check_index < 0 || subject_index < 0) return false;
+    if (check_index == subject_index || !consumes_subject(plan, check, subject_value)) return false;
+    return reach[check_index][subject_index];
+}
+
+static void report_obligation_path_error(json_object *plan, json_object *obligation,
+                                         json_object *errors, size_t index) {
+    json_object *evaluation = f_field(obligation, "evaluation");
+    json_object *check = record(f_field(plan, "checks"), f_string(evaluation, "check"));
+    json_object *subject_value = f_field(obligation, "subject");
+    const char *check_step = f_string(check, "step");
+    const char *subject_step = f_string(subject_value, "step");
+    char path[128], counterexample[512];
+    snprintf(path, sizeof(path), "obligations[%zu].evaluation", index);
+    snprintf(counterexample, sizeof(counterexample), "check step %s does not reach subject step %s through declared needs and subject input", check_step ? check_step : "<missing>", subject_step ? subject_step : "<missing>");
+    plan_obligation_error(errors, path, "impossible_evaluation", "required evidence cannot evaluate the exact candidate on a reachable path", f_string(obligation, "id"), counterexample);
+}
+
+static int validate_obligation_paths(json_object *plan, json_object *obligations,
+                                     json_object *steps, bool reach[PLAN_STEPS][PLAN_STEPS],
+                                     json_object *errors) {
+    size_t i; int status = 0;
+    for (i = 0; i < json_object_array_length(obligations); i++)
+        if (!obligation_path_valid(plan, json_object_array_get_idx(obligations, i), steps, reach)) {
+            report_obligation_path_error(plan, json_object_array_get_idx(obligations, i), errors, i);
+            status = -1;
+        }
+    return status;
+}
+
+/* Evidence labels that name another obligation are explicit joins. They must
+ * form an acyclic relation; ordinary report field labels are leaves. */
+static void evidence_join_edges(json_object *obligations,
+                                bool evidence_reach[PLAN_OBLIGATIONS][PLAN_OBLIGATIONS]) {
+    size_t i, j;
     for (i = 0; i < json_object_array_length(obligations); i++) {
         json_object *evidence = f_field(json_object_array_get_idx(obligations, i), "required_evidence");
         for (j = 0; j < json_object_array_length(evidence); j++) {
-            const char *ref = f_text(json_object_array_get_idx(evidence, j));
-            int target = obligation_index(obligations, ref);
-            if (target < 0) continue;
-            evidence_reach[i][(size_t)target] = true;
+            int target = obligation_index(obligations, f_text(json_object_array_get_idx(evidence, j)));
+            if (target >= 0) evidence_reach[i][(size_t)target] = true;
         }
     }
+}
+
+static void evidence_join_closure(json_object *obligations,
+                                  bool evidence_reach[PLAN_OBLIGATIONS][PLAN_OBLIGATIONS]) {
+    size_t i, j, k;
     for (k = 0; k < json_object_array_length(obligations); k++)
         for (i = 0; i < json_object_array_length(obligations); i++)
             for (j = 0; j < json_object_array_length(obligations); j++)
                 evidence_reach[i][j] = evidence_reach[i][j] || (evidence_reach[i][k] && evidence_reach[k][j]);
-    for (i = 0; i < json_object_array_length(obligations); i++) if (evidence_reach[i][i])
-        plan_obligation_error(errors, "obligations.required_evidence", "circular_evidence", "required evidence joins form a cycle", f_string(json_object_array_get_idx(obligations, i), "id"), f_string(json_object_array_get_idx(obligations, i), "id"));
+}
+
+static int report_evidence_cycles(json_object *obligations,
+                                  bool evidence_reach[PLAN_OBLIGATIONS][PLAN_OBLIGATIONS],
+                                  json_object *errors) {
+    size_t i; int status = 0;
+    for (i = 0; i < json_object_array_length(obligations); i++) if (evidence_reach[i][i]) {
+        const char *id = f_string(json_object_array_get_idx(obligations, i), "id");
+        plan_obligation_error(errors, "obligations.required_evidence", "circular_evidence", "required evidence joins form a cycle", id, id);
+        status = -1;
+    }
+    return status;
+}
+
+int plan_obligations_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors) {
+    json_object *obligations = f_field(plan, "obligations");
+    bool evidence_reach[PLAN_OBLIGATIONS][PLAN_OBLIGATIONS] = {{false}};
+    if (!obligations || json_object_array_length(errors)) return 0;
+    validate_obligation_paths(plan, obligations, f_field(plan, "steps"), reach, errors);
+    evidence_join_edges(obligations, evidence_reach);
+    evidence_join_closure(obligations, evidence_reach);
+    report_evidence_cycles(obligations, evidence_reach, errors);
     return json_object_array_length(errors) ? -1 : 0;
 }
 
