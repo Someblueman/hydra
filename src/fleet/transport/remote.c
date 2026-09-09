@@ -96,6 +96,10 @@ json_object *f_request(const struct f_remote *remote, json_object *request, unsi
         const char *marker = "Server host key: "; char *start = strstr(cap.err, marker), *end;
         if (start) { start += strlen(marker); end = start; while (*end && *end != '\n' && *end != '\r' && *end != ' ') end++; if (end > start) { char key[256]; size_t length = (size_t)(end - start); if (length < sizeof(key)) { memcpy(key, start, length); key[length] = '\0'; f_string_add(f_field(result, "data"), "peer_fingerprint", key); } } }
     }
+    if (result && json_object_get_boolean(f_field(result, "ok")) && f_string(request, "expected_peer_fingerprint")) {
+        const char *expected = f_string(request, "expected_peer_fingerprint"), *actual = f_string(f_field(result, "data"), "peer_fingerprint");
+        if (!actual || strcmp(expected, actual)) { json_object_put(result); result = f_error("fleet", "host_key_changed", "mutation peer fingerprint differs from reviewed identity"); }
+    }
     if (!result || !json_object_is_type(f_field(result, "ok"), json_type_boolean) || !f_number_is(result, "schema_version", 1) || !f_string(result, "command") || (json_object_get_boolean(f_field(result, "ok")) ? !json_object_is_type(f_field(result, "data"), json_type_object) : (!f_string(f_field(result, "error"), "code") || !f_string(f_field(result, "error"), "message") || !f_string(f_field(result, "error"), "recovery")))) {
         json_object_put(result);
         result = f_error("fleet", cap.status ? transport_code(&cap) : "invalid_response", cap.err[0] ? cap.err : "missing or invalid fleet response");
