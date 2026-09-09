@@ -34,7 +34,8 @@ evidence_hash = hashlib.sha256(json.dumps(obs, sort_keys=True, separators=(',', 
 subject_hash = hashlib.sha256(data).hexdigest()
 if mode == 'stale-subject': subject_hash = '0' * 64
 exit_code = 7 if mode == 'nonzero' else 0
-failed = 1 if mode == 'wrong-artifact' else 0
+failed = 1 if mode in ('wrong-artifact', 'nonzero') else 0
+counted_failures = 1 if mode == 'wrong-artifact' else 0
 recipe_hash = '0' * 64 if mode == 'changed-predicate' else context['check-recipe']
 report = {'schema_version': 3, 'execution_status': 'completed', 'evidence_status': 'valid',
  'domain_verdict': 'fail' if failed else 'pass', 'verdict': 'fail' if failed else 'pass',
@@ -44,7 +45,7 @@ report = {'schema_version': 3, 'execution_status': 'completed', 'evidence_status
  'validator_identity': 'fixture-v3', 'validator_recipe_sha256': recipe_hash,
  'invocation': {'argv': ['python3', 'check.sh'], 'exit_code': exit_code}, 'environment': {'host': 'local', 'toolchain': 'python3'},
  'case_inventory': inventory, 'observations': obs, 'raw_evidence_sha256': evidence_hash,
- 'counts': {'executed': len(obs), 'failed': failed, 'skipped': 0}, 'limitations': []}]}
+ 'counts': {'executed': len(obs), 'failed': counted_failures, 'skipped': 0}, 'limitations': []}]}
 open(output, 'w').write(json.dumps(report, separators=(',', ':')) + '\n')
 PY
 CHECK
@@ -77,7 +78,7 @@ cd "$fixture/repo"
 git init -q; git config user.name Test; git config user.email test@example.invalid; git add .; git commit -qm fixture
 "$root/bin/hydra" init --no-agent --trust >/dev/null
 run_case() {
-    mode=$1; expected=$2
+    mode=$1; expected=$2; report_verdict=$3
     branch="plan-smoke-${mode:-ok}"
     active_branch=$branch
     cp "$fixture/plan.base.json" "$fixture/plan.json"
@@ -108,17 +109,19 @@ PY
     state=$(cat "$run_dir/state")
     [ -s "$run_dir/steps/verify/attempt-1/outputs/check.json" ]
     grep -q '"type":"run\.' "$run_dir/events.jsonl"
+    actual_verdict=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["verdict"])' "$run_dir/steps/verify/attempt-1/outputs/check.json")
+    [ "$actual_verdict" = "$report_verdict" ]
     "$root/bin/hydra" kill "$branch" --force >/dev/null 2>&1 || true
     active_branch=
     [ "$state" = "$expected" ] || exit 1
 }
-run_case '' succeeded
-run_case wrong-artifact failed
-run_case drop failed
-run_case raw-tampered failed
-run_case stale-subject failed
-run_case missing-measurement failed
-run_case changed-predicate failed
-run_case malformed-recipe failed
-run_case nonzero failed
+run_case '' succeeded pass
+run_case wrong-artifact failed fail
+run_case drop failed pass
+run_case raw-tampered failed pass
+run_case stale-subject failed pass
+run_case missing-measurement failed pass
+run_case changed-predicate failed pass
+run_case malformed-recipe failed pass
+run_case nonzero failed fail
 echo 'Public workflow v3 evidence controls passed'
