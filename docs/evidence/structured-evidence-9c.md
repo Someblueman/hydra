@@ -13,10 +13,13 @@ subject manifest, validator identity and the hash of the accepted validator
 recipe, invocation, execution environment, an explicit case inventory, raw
 observations, and a hash of the canonical observations.
 
-Each observation has an identifier, the supported `equals` predicate,
-expected and actual values, a raw payload, and a hash recomputed from that
-payload. The trusted adapter recomputes each outcome, executed/failed counts,
-and case inventory coverage; report supplied outcomes cannot override it. A
+For executable v3 checks, the accepted check definition is a structured recipe
+with predicate `equals` and a fixed list of case IDs and expected values. Each
+observation only supplies its case ID and sealed raw payload; the adapter
+extracts `raw.actual`, compares it with the accepted expected value, and
+recomputes the raw hash. The trusted adapter recomputes each outcome,
+executed/failed counts, and exact recipe case coverage; report supplied
+predicates, expected values, and inventories cannot override it. A
 pass requires completed execution with exit code zero, valid evidence, no
 failed or skipped observations, and a domain verdict derived from those
 observations.

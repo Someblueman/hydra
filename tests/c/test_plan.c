@@ -110,11 +110,12 @@ static void structured_report_cases(void) {
     char validator[65], recipe[65], raw_hash[65], evidence_hash[65];
     json_object *compiled = json_object_new_object(), *plan = fixture(), *check, *report, *record, *observation, *raw, *observations;
     assert(plan); json_object_object_add(compiled, "plan", plan); check = json_object_array_get_idx(f_field(plan, "checks"), 0);
+    f_string_add(check, "definition", "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"case-1\",\"expected\":1}]}" );
     json_object_object_add(plan, "obligations", f_parse_value("[{\"id\":\"obligation\",\"evaluation\":{\"check\":\"check\"},\"required_evidence\":[\"measurements\"]}]"));
     assert(!plan_check_digest(compiled, "check", validator) && !plan_recipe_digest(compiled, "check", recipe));
     raw = f_parse("{\"measurement\":1}"); assert(!plan_digest(raw, raw_hash));
     observation = f_parse("{\"id\":\"case-1\",\"predicate\":\"equals\",\"expected\":1,\"actual\":1,\"raw\":{\"measurement\":1},\"raw_sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\"}");
-    f_string_add(observation, "raw_sha256", raw_hash); observations = json_object_new_array(); json_object_array_add(observations, observation); assert(!plan_digest(observations, evidence_hash));
+    json_object_object_del(observation, "predicate"); json_object_object_del(observation, "expected"); json_object_object_del(observation, "actual"); json_object_object_add(f_field(observation, "raw"), "actual", json_object_new_int(1)); assert(!plan_digest(f_field(observation, "raw"), raw_hash)); f_string_add(observation, "raw_sha256", raw_hash); observations = json_object_new_array(); json_object_array_add(observations, observation); assert(!plan_digest(observations, evidence_hash));
     record = f_parse("{\"obligation_id\":\"obligation\"}"); f_string_add(record, "subject_manifest_sha256", subject); f_string_add(record, "validator_identity", "fixture"); f_string_add(record, "validator_recipe_sha256", recipe);
     json_object_object_add(record, "invocation", f_parse("{\"argv\":[\"fixture\"],\"exit_code\":0}")); json_object_object_add(record, "environment", f_parse("{\"host\":\"local\",\"toolchain\":\"fixture\"}"));
     json_object_object_add(record, "case_inventory", f_parse_value("[\"case-1\"]")); json_object_object_add(record, "observations", observations); f_string_add(record, "raw_evidence_sha256", evidence_hash); json_object_object_add(record, "counts", f_parse("{\"executed\":1,\"failed\":0,\"skipped\":0}")); json_object_object_add(record, "limitations", json_object_new_array());

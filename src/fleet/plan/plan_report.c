@@ -36,6 +36,22 @@ int plan_recipe_digest(json_object *compiled, const char *check, char digest[65]
     i = plan_digest(binding, digest); json_object_put(binding); return (int)i;
 }
 
+static json_object *recipe(json_object *compiled, const char *check) {
+    json_object *checks = f_field(f_field(compiled, "plan"), "checks"); size_t i;
+    for (i = 0; i < json_object_array_length(checks); i++) {
+        json_object *candidate = json_object_array_get_idx(checks, i);
+        if (f_string(candidate, "id") && !strcmp(f_string(candidate, "id"), check)) return f_parse_value(f_string(candidate, "definition"));
+    }
+    return NULL;
+}
+
+static json_object *recipe_case(json_object *recipe_value, const char *id) {
+    json_object *cases = f_field(recipe_value, "cases"); size_t i;
+    for (i = 0; i < json_object_array_length(cases); i++)
+        if (f_string(json_object_array_get_idx(cases, i), "id") && !strcmp(f_string(json_object_array_get_idx(cases, i), "id"), id)) return json_object_array_get_idx(cases, i);
+    return NULL;
+}
+
 static bool report_claims(json_object *requirements, json_object *claimed, const char *id) {
     size_t i, j;
     for (i = 0; i < json_object_array_length(claimed); i++) {
@@ -100,17 +116,19 @@ static bool evidence_record(json_object *record, json_object *compiled, json_obj
         "counts", "limitations", "reviewer_decision", NULL};
     const char *const invocation_keys[] = {"argv", "exit_code", NULL};
     const char *const environment_keys[] = {"host", "toolchain", NULL};
-    const char *const observation_keys[] = {"id", "predicate", "expected", "actual", "raw", "raw_sha256", NULL};
+    const char *const observation_keys[] = {"id", "raw", "raw_sha256", NULL};
     const char *const count_keys[] = {"executed", "failed", "skipped", NULL};
     const char *id = f_string(record, "obligation_id"), *hash = f_string(record, "subject_manifest_sha256");
-    json_object *o, *observations, *counts, *inventory; char digest[65], recipe[65]; size_t i; bool has_measurement = false;
+    json_object *o, *observations, *counts, *inventory, *accepted; char digest[65], recipe_hash[65]; size_t i; bool has_measurement = false;
     int executed = 0, failures = 0, skips = 0;
     if (!task_keys(record, keys) || !plan_id(id) || !obligation(plan, id) ||
         !f_string(f_field(obligation(plan, id), "evaluation"), "check") ||
         strcmp(f_string(f_field(obligation(plan, id), "evaluation"), "check"), check_id) ||
         !task_hex(hash, 64) || strcmp(hash, subject) || !nonempty_string(record, "validator_identity") ||
-        !task_hex(f_string(record, "validator_recipe_sha256"), 64) || plan_recipe_digest(compiled, check_id, recipe) ||
-        strcmp(f_string(record, "validator_recipe_sha256"), recipe) ||
+        !task_hex(f_string(record, "validator_recipe_sha256"), 64) || plan_recipe_digest(compiled, check_id, recipe_hash) ||
+        strcmp(f_string(record, "validator_recipe_sha256"), recipe_hash) || !(accepted = recipe(compiled, check_id)) ||
+        !task_keys(accepted, (const char *const[]){"predicate", "cases", NULL}) || strcmp(f_string(accepted, "predicate"), "equals") ||
+        !plan_list(f_field(accepted, "cases"), 1, 4096) ||
         !task_keys(f_field(record, "invocation"), invocation_keys) ||
         !json_object_is_type(f_field(record, "invocation"), json_type_object) ||
         !json_object_is_type(f_field(f_field(record, "invocation"), "argv"), json_type_array) ||
@@ -124,32 +142,38 @@ static bool evidence_record(json_object *record, json_object *compiled, json_obj
     inventory = f_field(record, "case_inventory"); observations = f_field(record, "observations");
     if (json_object_get_int(f_field(f_field(record, "invocation"), "exit_code")) != 0) *failed = true;
     for (i = 0; i < json_object_array_length(observations); i++) {
-        const char *predicate; bool equal;
+        bool equal;
         o = json_object_array_get_idx(observations, i);
-        predicate = f_string(o, "predicate");
-        if (!task_keys(o, observation_keys) || !plan_id(f_string(o, "id")) || !predicate || strcmp(predicate, "equals") ||
-            !f_field(o, "expected") || !f_field(o, "actual") || !f_field(o, "raw") || !task_hex(f_string(o, "raw_sha256"), 64) ||
+        if (!task_keys(o, observation_keys) || !plan_id(f_string(o, "id")) || !f_field(o, "raw") || !recipe_case(accepted, f_string(o, "id")) ||
+            !f_field(f_field(o, "raw"), "actual") || !task_hex(f_string(o, "raw_sha256"), 64) ||
             plan_digest(f_field(o, "raw"), digest) || strcmp(digest, f_string(o, "raw_sha256"))) return false;
-        equal = json_object_equal(f_field(o, "expected"), f_field(o, "actual"));
+        equal = json_object_equal(f_field(f_field(o, "raw"), "actual"), f_field(recipe_case(accepted, f_string(o, "id")), "expected"));
         executed++;
         if (!equal) failures++;
         if (json_object_is_type(f_field(o, "raw"), json_type_object) && f_field(f_field(o, "raw"), "measurement")) has_measurement = true;
         for (size_t j = 0; j < i; j++) if (!strcmp(f_string(o, "id"), f_string(json_object_array_get_idx(observations, j), "id"))) return false;
         if (!plan_has(inventory, f_string(o, "id"))) return false;
     }
+    for (i = 0; i < json_object_array_length(f_field(accepted, "cases")); i++) {
+        json_object *expected_case = json_object_array_get_idx(f_field(accepted, "cases"), i);
+        const char *id = f_string(expected_case, "id"); bool found = false; size_t j;
+        if (!plan_id(id) || !f_field(expected_case, "expected")) { json_object_put(accepted); return false; }
+        for (j = 0; j < json_object_array_length(observations); j++) if (!strcmp(id, f_string(json_object_array_get_idx(observations, j), "id"))) found = true;
+        if (!found || !plan_has(inventory, id)) { json_object_put(accepted); return false; }
+    }
     for (i = 0; i < json_object_array_length(inventory); i++) {
         const char *id = f_text(json_object_array_get_idx(inventory, i)); bool found = false; size_t j;
-        if (!plan_id(id)) return false;
+        if (!plan_id(id) || !recipe_case(accepted, id)) { json_object_put(accepted); return false; }
         for (j = 0; j < json_object_array_length(observations); j++) if (!strcmp(id, f_string(json_object_array_get_idx(observations, j), "id"))) found = true;
-        if (!found) return false;
-        for (j = 0; j < i; j++) if (!strcmp(id, f_text(json_object_array_get_idx(inventory, j)))) return false;
+        if (!found) { json_object_put(accepted); return false; }
+        for (j = 0; j < i; j++) if (!strcmp(id, f_text(json_object_array_get_idx(inventory, j)))) { json_object_put(accepted); return false; }
     }
-    if (plan_digest(observations, digest) || strcmp(digest, f_string(record, "raw_evidence_sha256"))) return false;
-    if (plan_has(f_field(obligation(plan, id), "required_evidence"), "measurements") && !has_measurement) return false;
+    if (plan_digest(observations, digest) || strcmp(digest, f_string(record, "raw_evidence_sha256"))) { json_object_put(accepted); return false; }
+    if (plan_has(f_field(obligation(plan, id), "required_evidence"), "measurements") && !has_measurement) { json_object_put(accepted); return false; }
     counts = f_field(record, "counts");
     if (!f_number_is(counts, "executed", executed) || !f_number_is(counts, "failed", failures) || !f_number_is(counts, "skipped", skips)) return false;
     *failed = *failed || failures != 0; *skipped = *skipped || skips != 0;
-    return true;
+    json_object_put(accepted); return true;
 }
 
 static enum plan_verdict report_v3(json_object *compiled, json_object *check, json_object *report, const char *subject) {
