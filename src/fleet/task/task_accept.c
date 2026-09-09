@@ -153,12 +153,14 @@ static json_object *task_read_operation(json_object *request, const char *operat
 }
 
 json_object *task_serve(json_object *request) {
-    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", "stream", "offset", "limit", "source", "step", "attempt", "cursor", "event_limit", "request_id", "decision", "by", NULL};
+    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", "stream", "offset", "limit", "source", "step", "attempt", "cursor", "event_limit", "stream_id", "request_id", "decision", "by", NULL};
     const char *operation = f_string(request, "operation");
     if (!task_keys(request, keys) || !operation) return f_error("fleet-task", "invalid_input", "invalid task request");
     if (strcmp(operation, "decide") && (f_field(request, "request_id") || f_field(request, "decision") || f_field(request, "by"))) return f_error("fleet-task", "invalid_input", "decision fields require decide");
     if (strcmp(operation, "logs") && (f_field(request, "stream") || f_field(request, "offset") || f_field(request, "limit") || f_field(request, "source") || f_field(request, "step") || f_field(request, "attempt"))) return f_error("fleet-task", "invalid_input", "log options require the logs operation");
     if (strcmp(operation, "observe") && (f_field(request, "cursor") || f_field(request, "event_limit"))) return f_error("fleet-task", "invalid_input", "event options require the observe operation");
+    if (strcmp(operation, "observe") && f_field(request, "stream_id")) return f_error("fleet-task", "invalid_input", "stream identity requires the observe operation");
+    if (!strcmp(operation, "observe") && f_field(request, "stream_id") && (!f_text(f_field(request, "stream_id")) || strlen(f_text(f_field(request, "stream_id"))) >= 128)) return f_error("fleet-task-observe", "invalid_input", "stream identity is bounded text");
     if (!strcmp(operation, "observe") && ((f_field(request, "cursor") && (!json_object_is_type(f_field(request, "cursor"), json_type_int) || json_object_get_int64(f_field(request, "cursor")) < 0 || json_object_get_int64(f_field(request, "cursor")) > 4294967295U)) || (f_field(request, "event_limit") && (!json_object_is_type(f_field(request, "event_limit"), json_type_int) || json_object_get_int64(f_field(request, "event_limit")) < 1 || json_object_get_int64(f_field(request, "event_limit")) > 128)))) return f_error("fleet-task-observe", "invalid_input", "cursor must be 0-4294967295 and event-limit must be 1-128");
     { json_object *read = task_read_operation(request, operation); if (read) return read; }
     if (!strcmp(operation, "submit") && !f_field(request, "task_id")) {

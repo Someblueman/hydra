@@ -14,11 +14,13 @@ stream, such as malformed or discontinuous retained records. These conditions
 are explicit and are never reported as an empty event list. A missing stream
 is an empty unavailable observation with the same cursor contract.
 
-The task snapshot keeps process exit, result collection, verification,
+The task snapshot keeps process exit, result collection, integrity verification,
 approval requests, attempt history, artifact inventory, and provider
 observations in separate fields. A process exit of zero does not create a
 result collection or verification record, and neither is treated as an
-accepted result when the corresponding evidence is unavailable.
+accepted result when the corresponding evidence is unavailable. An
+`integrity_verified` value describes receiver-side bundle/file verification and
+does not claim domain acceptance.
 
 Log retrieval continues to use the existing `--source`, `--stream`,
 `--offset`, `--limit`, `--step`, and `--attempt` selectors. Event cursors do
