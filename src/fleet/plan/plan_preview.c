@@ -61,6 +61,21 @@ int plan_preview(json_object *compiled, FILE *out) {
                 fprintf(out, "  Check %s (%s): %s; %s/%s evaluates %s\n", f_string(c, "id"), f_string(c, "method"), f_string(c, "definition"), f_string(c, "step"), f_string(c, "report"), f_string(c, "deliverable"));
             }
         }
+        {
+            json_object *obligations = plan_obligations_projection(plan), *reviews = plan_obligations_reviews(plan);
+            fprintf(out, "\nOutcome obligations (structural reachability only):\n");
+            for (i = 0; i < json_object_array_length(obligations); i++) {
+                json_object *o = json_object_array_get_idx(obligations, i), *subject = f_field(o, "subject"), *evaluation = f_field(o, "evaluation");
+                fprintf(out, "  %s: requirement %s; subject %s/%s/%s; %s via %s; structural=%s; semantic=%s%s\n",
+                    f_string(o, "id") ? f_string(o, "id") : "-", f_string(o, "requirement") ? f_string(o, "requirement") : "-",
+                    f_string(subject, "deliverable") ? f_string(subject, "deliverable") : "-", f_string(subject, "step") ? f_string(subject, "step") : "-", f_string(subject, "output") ? f_string(subject, "output") : "-",
+                    f_string(evaluation, "method") ? f_string(evaluation, "method") : "-", f_string(evaluation, "check") ? f_string(evaluation, "check") : "-",
+                    f_string(o, "structural_status") ? f_string(o, "structural_status") : "-", f_string(o, "semantic_status") ? f_string(o, "semantic_status") : "-",
+                    json_object_get_boolean(f_field(o, "derived")) ? " (derived legacy projection)" : "");
+            }
+            if (json_object_array_length(reviews)) fprintf(out, "Semantic review required: %zu obligation(s); structural compilation does not prove criterion adequacy.\n", json_object_array_length(reviews));
+            json_object_put(obligations); json_object_put(reviews);
+        }
     }
     fprintf(out, "\nSource: %s\nSource commit: %s\nSource fingerprint: %s\nCompiler: %s\nAcceptance digest: %s\n",
         f_string(f_field(compiled, "source"), "root"), f_string(f_field(compiled, "source"), "commit"), f_string(f_field(compiled, "source"), "sha256"), PLAN_COMPILER, digest);
@@ -75,7 +90,7 @@ int plan_preview(json_object *compiled, FILE *out) {
         }
     }
     fprintf(out, "%s\n", "Run requires --accept with this exact digest. Policy is bound in the artifact.");
-    fprintf(out, "%s\n", "Write scopes are declarations, not OS isolation. Coverage is traceability, not proof that the objective is satisfied.");
+    fprintf(out, "%s\n", "Write scopes are declarations, not OS isolation. Coverage and structural obligation reachability are not proof that the objective is semantically satisfied.");
     status = ferror(out) ? -1 : 0;
 done:
     json_object_put(errors); return status;

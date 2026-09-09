@@ -1,0 +1,28 @@
+[
+  {
+    "id": "content-behavior",
+    "requirement": "content",
+    "intent_ref": "objective",
+    "subject": {"deliverable": "report", "step": "compose", "output": "report"},
+    "criterion": "Report has the expected contents",
+    "evaluation": {"method": "executable", "check": "check"},
+    "required_evidence": ["subject_sha256", "verdict", "evidence"],
+    "environment": {"hosts": ["local"], "tools": ["sh"], "effects": ["execute"]},
+    "completion_rule": "verdict=pass",
+    "limitations": ["fixture-only"],
+    "domain": "feature"
+  },
+  {
+    "id": "content-failure-boundary",
+    "requirement": "content",
+    "intent_ref": "objective",
+    "subject": {"deliverable": "report", "step": "compose", "output": "report"},
+    "criterion": "Incorrect content is rejected",
+    "evaluation": {"method": "executable", "check": "check"},
+    "required_evidence": ["subject_sha256", "verdict", "evidence"],
+    "environment": {"hosts": ["local"], "tools": ["sh"], "effects": ["execute"]},
+    "completion_rule": "verdict=pass",
+    "limitations": ["fixture-only"],
+    "domain": "feature"
+  }
+]

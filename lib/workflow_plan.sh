@@ -33,6 +33,11 @@ cmd_workflow_plan() (
             elif [ "$#" -eq 3 ] && [ "$3" = --json ]; then workflow_plan_tool show "$2"
             else exit 1; fi
             ;;
+        obligations)
+            if [ "$#" -eq 2 ]; then workflow_plan_tool obligations "$2"
+            elif [ "$#" -eq 3 ] && [ "$3" = --json ]; then workflow_plan_tool obligations "$2" --json
+            else exit 1; fi
+            ;;
         tui-data)
             [ "$#" -eq 2 ] || exit 1
             workflow_plan_tool tui-data "$2"
@@ -77,6 +82,7 @@ cmd_workflow_plan() (
                 '       hydra workflow plan validate <plan.json> <policy.json>' \
                 '       hydra workflow plan compile <plan.json> <policy.json> <new-output.json>' \
                 '       hydra workflow plan show <compiled.json> [--json]' \
+                '       hydra workflow plan obligations <compiled.json> [--json]' \
                 '       hydra workflow plan run <compiled.json> --accept <sha256>' \
                 '       hydra workflow plan result <run-id>' \
                 '       hydra workflow plan check-definition <compiled.json> <check-id>' \

@@ -5,6 +5,7 @@
 
 #define PLAN_LIMIT (256U * 1024U)
 #define PLAN_STEPS 64U
+#define PLAN_OBLIGATIONS 256U
 #define PLAN_COMPILER "hydra-plan-1"
 /* All returned JSON objects are owned by the caller. Diagnostics accumulate in
  * a caller-owned array; no validation function executes proposed operations. */
@@ -12,6 +13,9 @@ json_object *plan_cli(int argc, char **argv);
 json_object *plan_read(const char *path);
 json_object *plan_canonical(json_object *value);
 void plan_error(json_object *errors, const char *path, const char *code, const char *message);
+void plan_obligation_error(json_object *errors, const char *path, const char *code,
+                           const char *message, const char *obligation,
+                           const char *counterexample);
 bool plan_id(const char *text);
 bool plan_list(json_object *value, size_t minimum, size_t maximum);
 bool plan_text(json_object *value);
@@ -20,6 +24,10 @@ int plan_index(json_object *steps, const char *id);
 int plan_validate(json_object *plan, json_object *policy, json_object *errors);
 int plan_graph(json_object *plan, json_object *errors);
 int plan_evidence_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors);
+int plan_obligations_validate(json_object *plan, json_object *errors);
+int plan_obligations_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors);
+json_object *plan_obligations_projection(json_object *plan);
+json_object *plan_obligations_reviews(json_object *plan);
 int plan_lower(json_object *plan, const char *directory);
 json_object *plan_task_bindings(json_object *plan, json_object *data, json_object *source, const char *scratch, json_object *errors);
 json_object *plan_validation_context(json_object *compiled, const char *step);

@@ -90,6 +90,17 @@ void plan_error(json_object *errors, const char *path, const char *code, const c
     entry = json_object_new_object(); f_string_add(entry, "path", path); f_string_add(entry, "code", code); f_string_add(entry, "message", message);
     json_object_array_add(errors, entry);
 }
+void plan_obligation_error(json_object *errors, const char *path, const char *code,
+                          const char *message, const char *obligation,
+                          const char *counterexample) {
+    json_object *entry;
+    if (json_object_array_length(errors) >= 128) return;
+    entry = json_object_new_object();
+    f_string_add(entry, "path", path); f_string_add(entry, "code", code); f_string_add(entry, "message", message);
+    if (obligation) f_string_add(entry, "obligation_id", obligation);
+    if (counterexample) f_string_add(entry, "counterexample", counterexample);
+    json_object_array_add(errors, entry);
+}
 bool plan_text(json_object *value) { const char *s = f_text(value); return s && *s && strlen(s) <= 8192; }
 bool plan_list(json_object *value, size_t minimum, size_t maximum) {
     return json_object_is_type(value, json_type_array) && json_object_array_length(value) >= minimum && json_object_array_length(value) <= maximum;

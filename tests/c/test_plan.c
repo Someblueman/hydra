@@ -142,9 +142,35 @@ static void check_ownership_cases(void) {
         json_object_put(plan); json_object_put(policy);
     }
 }
+static json_object *obligation_set(void) {
+    return f_parse_value("[{\"id\":\"content-behavior\",\"requirement\":\"content\",\"intent_ref\":\"objective\",\"subject\":{\"deliverable\":\"report\",\"step\":\"compose\",\"output\":\"report\"},\"criterion\":\"Report has the expected contents\",\"evaluation\":{\"method\":\"executable\",\"check\":\"check\"},\"required_evidence\":[\"subject_sha256\",\"verdict\",\"evidence\"],\"environment\":{\"hosts\":[\"local\"],\"tools\":[\"sh\"],\"effects\":[\"execute\"]},\"completion_rule\":\"verdict=pass\",\"limitations\":[\"fixture-only\"]},{\"id\":\"content-failure\",\"requirement\":\"content\",\"intent_ref\":\"objective\",\"subject\":{\"deliverable\":\"report\",\"step\":\"compose\",\"output\":\"report\"},\"criterion\":\"Incorrect content is rejected\",\"evaluation\":{\"method\":\"executable\",\"check\":\"check\"},\"required_evidence\":[\"subject_sha256\",\"verdict\",\"evidence\"],\"environment\":{\"hosts\":[\"local\"],\"tools\":[\"sh\"],\"effects\":[\"execute\"]},\"completion_rule\":\"verdict=pass\",\"limitations\":[\"fixture-only\"]}]");
+}
+static void obligation_cases(void) {
+    json_object *plan = fixture(), *policy = plan_read("tests/fixtures/plan/policy.json"), *obligations;
+    assert(plan && policy); obligations = obligation_set(); assert(obligations);
+    json_object_object_add(plan, "obligations", obligations); expect(plan, policy, NULL);
+    json_object_object_del(plan, "obligations"); json_object_object_add(plan, "obligations", obligation_set());
+    json_object_object_add(json_object_array_get_idx(f_field(plan, "obligations"), 0), "subject", f_parse_value("{\"deliverable\":\"report\",\"step\":\"spawn\",\"output\":\"report\"}"));
+    expect(plan, policy, "impossible_evaluation"); json_object_put(plan); json_object_put(policy);
+
+    plan = fixture(); policy = plan_read("tests/fixtures/plan/policy.json"); obligations = obligation_set();
+    json_object_object_add(plan, "obligations", obligations);
+    json_object_object_add(json_object_array_get_idx(f_field(plan, "obligations"), 0), "required_evidence", f_parse_value("[\"subject_sha256\",\"verdict\"]"));
+    expect(plan, policy, "missing_required_evidence"); json_object_put(plan); json_object_put(policy);
+
+    plan = fixture(); policy = plan_read("tests/fixtures/plan/policy.json"); obligations = obligation_set();
+    json_object_object_add(plan, "obligations", obligations);
+    json_object_object_add(json_object_array_get_idx(f_field(plan, "obligations"), 0), "required_evidence", f_parse_value("[\"subject_sha256\",\"verdict\",\"evidence\",\"content-failure\"]"));
+    json_object_object_add(json_object_array_get_idx(f_field(plan, "obligations"), 1), "required_evidence", f_parse_value("[\"subject_sha256\",\"verdict\",\"evidence\",\"content-behavior\"]"));
+    expect(plan, policy, "circular_evidence"); json_object_put(plan); json_object_put(policy);
+
+    plan = fixture(); policy = plan_read("tests/fixtures/plan/policy.json"); obligations = obligation_set();
+    json_object_object_add(plan, "obligations", obligations); f_string_add(plan, "objective", "Improve performance while preserving text content");
+    obligations = plan_obligations_reviews(plan); assert(json_object_array_length(obligations) == 2); json_object_put(obligations); json_object_put(plan); json_object_put(policy);
+}
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
+    graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); assert(!f_remove_tree(root));
     puts("planning graph, policy, canonical JSON and parser checks passed"); return 0;
 }

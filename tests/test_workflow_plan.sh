@@ -9,7 +9,7 @@ export HYDRA_HOME="$ROOT/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_S
 . "$REPO/tests/helpers.sh"
 test_count=0 pass_count=0 fail_count=0
 cleanup() {
-    for head in plan-smoke plan-negative plan-guard-graph plan-guard-limits plan-timing-verified-at plan-timing-verification-plan-sha256; do
+    for head in plan-smoke plan-negative plan-obligation plan-guard-graph plan-guard-limits plan-timing-verified-at plan-timing-verification-plan-sha256; do
         (cd "$ROOT/repo" && "$HYDRA_BIN" kill "$head" --force >/dev/null 2>&1) || true
     done
     if [ "$fail_count" -ne 0 ]; then printf 'Failure evidence: %s\n' "$ROOT"; return; fi
@@ -26,12 +26,44 @@ if [ "${HYDRA_TEST_REPORT_V2:-0}" = 1 ]; then
 fi
 cp "$REPO/tests/fixtures/plan/plan.json" "$ROOT/plan.json"
 cp "$REPO/tests/fixtures/plan/policy.json" "$ROOT/policy.json"
+merge_obligations() {
+    python3 - "$1" "$2" "$3" "$4" <<'PY'
+import json, sys
+base = json.load(open(sys.argv[1]))
+obligations = json.load(open(sys.argv[2]))
+base["obligations"] = obligations
+if sys.argv[4] == "performance":
+    base["objective"] = "Improve performance while preserving text content"
+elif sys.argv[4] == "research":
+    base["objective"] = "Report the observed result and its limitations"
+json.dump(base, open(sys.argv[3], "w"), separators=(",", ":"))
+PY
+}
+merge_obligations "$ROOT/plan.json" "$REPO/tests/fixtures/plan-9a/feature-obligations.json" "$ROOT/feature-plan.json" feature
+merge_obligations "$ROOT/plan.json" "$REPO/tests/fixtures/plan-9a/performance-misleading.json" "$ROOT/performance-plan.json" performance
+merge_obligations "$ROOT/plan.json" "$REPO/tests/fixtures/plan-9a/research-valid.json" "$ROOT/research-plan.json" research
 cd "$ROOT/repo" || exit 1
 git init -q && git config user.name Test && git config user.email test@example.com
 git add . && git commit -qm fixture
 "$HYDRA_BIN" init --no-agent --trust >/dev/null
 "$HYDRA_BIN" workflow plan schema > "$ROOT/schema.json"
 assert_success $? 'planning schema is discoverable through the public CLI'
+for case in feature performance research; do
+    "$HYDRA_BIN" workflow plan validate "$ROOT/${case}-plan.json" "$ROOT/policy.json" > "$ROOT/${case}-validate.json"
+    assert_success $? "9A $case obligation plan validates"
+    "$HYDRA_BIN" workflow plan compile "$ROOT/${case}-plan.json" "$ROOT/policy.json" "$ROOT/${case}-compiled.json" > "$ROOT/${case}-compile.json"
+    assert_success $? "9A $case obligation plan compiles"
+    grep -q '"obligations":' "$ROOT/${case}-validate.json"
+    assert_success $? "9A $case validation exposes obligation projection"
+done
+grep -q 'semantic_review_required' "$ROOT/performance-validate.json"
+assert_success $? 'performance text check remains a semantic review, not structural proof'
+grep -q 'semantic_review_required' "$ROOT/research-validate.json"
+assert_success $? 'research obligation remains a semantic review, not structural proof'
+"$HYDRA_BIN" workflow plan obligations "$ROOT/feature-compiled.json" --json > "$ROOT/obligations.json"
+assert_success $? 'public CLI exposes the versioned obligation projection'
+grep -q '"structural_proof":"satisfiable"' "$ROOT/obligations.json"
+assert_success $? 'explicit obligation projection reports structural satisfiability only'
 "$HYDRA_BIN" workflow plan validate "$ROOT/plan.json" "$ROOT/policy.json" > "$ROOT/validate.json"
 assert_success $? 'complete plan validates with structured coverage'
 grep -q '"coverage":' "$ROOT/validate.json"

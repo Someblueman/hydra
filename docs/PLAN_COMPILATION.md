@@ -69,6 +69,40 @@ another authorization source. The optional native helper is required.
 | Verification | Exact artifact under evaluation, check definition, required verdict/evidence |
 | Execution envelope | Allowed hosts/tools/effects, parallelism, time and artifact limits, retry/repair budgets |
 
+### Outcome obligations (9A)
+
+Schema 1 and schema 2 remain the published plan versions. 9A is an additive
+closed extension: a plan may include a root `obligations` array without changing
+the plan or compiled-artifact version. Existing plans and compiled artifacts do
+not acquire invented obligations; the CLI exposes a clearly marked derived
+legacy projection instead. An explicit obligation is bound into the canonical
+plan and therefore into the compiled SHA-256 and acceptance binding.
+
+Each explicit record has a unique `id`, `requirement`, `intent_ref` (`objective`
+or a declared `context:<path>`), exact `subject` (`deliverable`, `step`, and
+`output`), observable `criterion`, `evaluation` (`method` and `check`),
+`required_evidence`, envelope-scoped `environment`, a bounded completion rule
+(`pass` or `verdict=pass` in the current workflow), and `limitations`. Multiple
+obligations may reference one requirement. Required report evidence includes
+the exact subject digest, verdict, and evidence explanation; an obligation ID in
+`required_evidence` is an explicit join and joins must be acyclic.
+
+The compiler proves only structural satisfiability: the exact candidate output
+exists, the selected check produces the required report, and the verifier is
+reachable from the subject through declared dependencies. Orphan checks,
+orphan obligations, missing joins, wrong subjects, unreachable validators and
+circular evidence are rejected with a field path, obligation ID, and bounded
+counterexample. Structural proof is distinct from runtime evidence and from a
+semantic judgment that the criterion captures the objective. Performance and
+research domains, or objectives that introduce performance language, remain
+`semantic_review_required`; a text/content check is never reported as a proven
+performance result.
+
+Use `hydra workflow plan obligations <compiled.json> --json` for the small,
+read-only projection consumed by operator views. It reports structural status,
+semantic-review status, exact subject, evaluation and missing/required evidence
+without becoming another mutation or evidence authority.
+
 Some criteria need executable tests; others require evidence assessment or explicit
 human judgment. Record that distinction. A design review can be an intermediate
 output, but a feature objective must still reach implementation and whole-feature
