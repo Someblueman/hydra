@@ -27,8 +27,14 @@ class EnrollmentTest(unittest.TestCase):
             target = os.environ.get("ENROLL_TARGET", "good")
             print("debug1: Server host key: ssh-ed25519 " + os.environ["ENROLL_FINGERPRINT"], file=sys.stderr)
             if request.get("action") == "init":
-                with open(os.environ["ENROLL_COUNTER"], "a") as f: f.write("init\\n")
+                op = request.get("enrollment_operation_id", "").replace(":", "_")
+                record = os.path.join(os.environ.get("HYDRA_HOME", ""), "fleet", "enrollment-ops", op)
+                if not os.path.exists(record):
+                    with open(os.environ["ENROLL_COUNTER"], "a") as f: f.write("init\\n")
             result = subprocess.run([os.environ["HYDRA_FLEET_BIN"], "fleet", "serve"], input=json.dumps(request), text=True, capture_output=True)
+            if request.get("action") == "init" and os.environ.get("ENROLL_DROP_INIT_RESPONSE") and not os.path.exists(os.environ["ENROLL_DROP_INIT_RESPONSE"]):
+                open(os.environ["ENROLL_DROP_INIT_RESPONSE"], "w").close()
+                sys.exit(255)
             if os.environ.get("ENROLL_STDOUT_MARKER") and request.get("action") == "handshake":
                 print("Server host key: ssh-ed25519 SHA256:fixture")
             sys.stdout.write(result.stdout)
@@ -88,6 +94,19 @@ class EnrollmentTest(unittest.TestCase):
         result = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
         self.assertEqual(json.loads(result.stdout)["data"]["hosts"][0]["status"], "review_required")
         self.assertFalse(self.counter.exists())
+
+    def test_lost_response_reconciles_without_second_init(self):
+        drop = self.tmp / "dropped"
+        self.env["ENROLL_DROP_INIT_RESPONSE"] = str(drop)
+        qualification = self.qualification()
+        intent = self.tmp / "intent.json"
+        self.run_cli("review", "--input", str(qualification), "--candidate", "cand_676f6f64", "--project", str(self.tmp / "project"), "--output", str(intent))
+        digest = json.loads(intent.read_text())["intent_sha256"]
+        first = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
+        self.assertEqual(json.loads(first.stdout)["data"]["hosts"][0]["status"], "outcome_unknown")
+        second = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
+        self.assertEqual(json.loads(second.stdout)["data"]["hosts"][0]["status"], "enrolled")
+        self.assertEqual(self.counter.read_text().splitlines(), ["init"])
 
     def test_reviewed_ssh_config_change_requires_renewal(self):
         config = self.tmp / "ssh-config"
