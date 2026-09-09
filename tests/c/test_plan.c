@@ -2,6 +2,7 @@
 #include "fleet/support/files.h"
 #include "fleet/plan/plan.h"
 #include <assert.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -122,6 +123,27 @@ static void structured_report_cases(void) {
     report = f_parse("{\"schema_version\":3,\"execution_status\":\"completed\",\"evidence_status\":\"valid\",\"domain_verdict\":\"pass\",\"verdict\":\"pass\",\"subject_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"validator_sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"evidence_records\":[],\"limitations\":[],\"requirements\":[\"content\"],\"evidence\":\"fixture\"}");
     f_string_add(report, "validator_sha256", validator); { json_object *records = json_object_new_array(); json_object_array_add(records, record); json_object_object_add(report, "evidence_records", records); }
     assert(plan_report(compiled, check, report, subject) == PLAN_PASS); record = json_object_array_get_idx(f_field(report, "evidence_records"), 0);
+    {
+        json_object *record_raw = f_field(json_object_array_get_idx(f_field(record, "observations"), 0), "raw");
+        json_object *record_observations = f_field(record, "observations");
+        const char *bad_measurements[] = {"looks good", "{}", NULL};
+        for (size_t i = 0; bad_measurements[i]; i++) {
+            json_object_object_add(record_raw, "measurement", f_parse_value(bad_measurements[i][0] == '{' ? bad_measurements[i] : "\"looks good\""));
+            assert(!plan_digest(record_raw, raw_hash)); f_string_add(json_object_array_get_idx(record_observations, 0), "raw_sha256", raw_hash);
+            assert(!plan_digest(record_observations, evidence_hash)); f_string_add(record, "raw_evidence_sha256", evidence_hash);
+            assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+            json_object_object_add(record_raw, "measurement", json_object_new_int(1)); assert(!plan_digest(record_raw, raw_hash));
+            f_string_add(json_object_array_get_idx(record_observations, 0), "raw_sha256", raw_hash); assert(!plan_digest(record_observations, evidence_hash)); f_string_add(record, "raw_evidence_sha256", evidence_hash);
+        }
+        json_object_object_add(record_raw, "measurement", json_object_new_double(NAN));
+        assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+        json_object_object_add(record_raw, "measurement", json_object_new_int(1)); assert(!plan_digest(record_raw, raw_hash));
+        f_string_add(json_object_array_get_idx(record_observations, 0), "raw_sha256", raw_hash); assert(!plan_digest(record_observations, evidence_hash)); f_string_add(record, "raw_evidence_sha256", evidence_hash);
+    }
+    f_string_add(check, "definition", "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"case-1\",\"expected\":1},{\"id\":\"case-1\",\"expected\":1}]}" );
+    assert(!plan_recipe_digest(compiled, "check", recipe)); f_string_add(record, "validator_recipe_sha256", recipe); assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    f_string_add(check, "definition", "{}"); assert(!plan_recipe_digest(compiled, "check", recipe)); f_string_add(record, "validator_recipe_sha256", recipe); assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
+    f_string_add(check, "definition", "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"case-1\",\"expected\":1}]}" ); assert(!plan_recipe_digest(compiled, "check", recipe)); f_string_add(record, "validator_recipe_sha256", recipe);
     json_object_object_del(f_field(record, "invocation"), "exit_code"); json_object_object_add(f_field(record, "invocation"), "exit_code", json_object_new_int(1)); assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
     json_object_object_del(f_field(record, "invocation"), "exit_code"); json_object_object_add(f_field(record, "invocation"), "exit_code", json_object_new_int(0)); json_object_object_del(record, "case_inventory"); assert(plan_report(compiled, check, report, subject) == PLAN_INVALID);
     json_object_put(report); json_object_put(raw); json_object_put(compiled);

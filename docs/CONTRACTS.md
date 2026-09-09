@@ -106,6 +106,12 @@ evaluation joins with field paths and counterexamples. Structural satisfiability
 runtime evidence, and semantic adequacy remain separate; coverage alone is not
 semantic proof.
 See [the planner recipe](PLANNER_RECIPE.md) for limits and report format.
+Structured v3 reports require each obligation's `measurements` evidence to contain
+at least one finite JSON integer or floating-point observation. Narrative strings,
+nulls, objects, arrays, and non-finite numeric values do not satisfy that evidence
+requirement. The human-readable delivery view separately prints v3 execution,
+evidence, and domain statuses plus per-obligation counts; legacy report views retain
+their existing fields.
 
 Workflow definition schema v1 is the stable finite-DAG contract. Definitions use the
 documented restricted YAML subset, every step declares idempotency, argv is the

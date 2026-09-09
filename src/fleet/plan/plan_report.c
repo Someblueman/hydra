@@ -54,12 +54,12 @@ static json_object *recipe_case(json_object *recipe_value, const char *id) {
     return NULL;
 }
 
-/* Measurements are deliberately limited to small finite numeric observations;
- * narrative strings and unbounded/container values cannot satisfy the evidence requirement. */
+/* Measurements are deliberately limited to finite numeric observations;
+ * narrative strings and container values cannot satisfy the evidence requirement. */
 static bool meaningful_measurement(json_object *raw) {
     json_object *measurement = f_field(raw, "measurement");
     if (!measurement || (!json_object_is_type(measurement, json_type_int) && !json_object_is_type(measurement, json_type_double))) return false;
-    return isfinite(json_object_get_double(measurement)) && fabs(json_object_get_double(measurement)) <= 1000000000000.0;
+    return isfinite(json_object_get_double(measurement));
 }
 
 static bool valid_recipe_cases(json_object *accepted) {
