@@ -55,7 +55,10 @@ exec /bin/sh -c "$2"
         assert "host-a" in s.screen.text()
         s.send("j"); s.pump(.3)
         assert "host-b" in s.screen.text(), s.screen.text()
-        (transport/"offline-a").write_text(""); time.sleep(2.2); s.pump(.6)
+        (transport/"offline-a").write_text("")
+        deadline=time.time()+8
+        while time.time()<deadline and "stale" not in s.screen.text().lower():
+            s.pump(.25)
         s.send("H"); s.pump(.4)
         assert "stale" in s.screen.text().lower(), s.screen.text()
     finally: s.close(keys=b"q")
