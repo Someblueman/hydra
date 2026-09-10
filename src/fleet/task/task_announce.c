@@ -73,76 +73,74 @@ static json_object *invalid(const char *message) {
     return f_error("fleet-task-announce", "invalid_input", message);
 }
 
+struct announce_page { json_object *data, *task, *stream, *events; uint64_t cursor, offset, oldest, head; bool available, gap, reset, truncated; const char *stream_id; };
+
+static bool page_envelope(json_object *parsed, struct announce_page *page) {
+    const char *command = f_string(parsed, "command");
+    if (!f_number_is(parsed, "schema_version", 1) || !json_object_is_type(f_field(parsed, "ok"), json_type_boolean) ||
+        !json_object_get_boolean(f_field(parsed, "ok")) || !command || strcmp(command, "fleet-observation")) return false;
+    page->data = f_field(parsed, "data"); page->task = f_field(page->data, "task");
+    if (!json_object_is_type(page->data, json_type_object) || !json_object_is_type(page->task, json_type_object)) return false;
+    if (!f_string(page->task, "task_id") || strncmp(f_string(page->task, "task_id"), "task_", 5) ||
+        !task_hex(f_string(page->task, "task_id") + 5, 64)) return false;
+    return task_observation_response_valid(page->data, f_string(page->task, "task_id"));
+}
+
+static bool page_stream(struct announce_page *page) {
+    const unsigned char *p;
+    page->stream = f_field(page->data, "event_observation"); page->events = f_field(page->stream, "events");
+    if (!json_object_is_type(page->stream, json_type_object) || !f_number_is(page->stream, "schema_version", 1) ||
+        !json_object_is_type(page->events, json_type_array) || json_object_array_length(page->events) > 128U ||
+        !boolean_field(page->stream, "available", &page->available) || !boolean_field(page->stream, "retention_gap", &page->gap) ||
+        !boolean_field(page->stream, "stream_reset", &page->reset) || !bounded_int(page->stream, "next_cursor", &page->cursor) ||
+        !bounded_int(page->stream, "next_byte_offset", &page->offset) || !bounded_int(page->stream, "oldest_cursor", &page->oldest) ||
+        !bounded_int(page->stream, "head_cursor", &page->head) || !f_text(f_field(page->stream, "duplicate_policy")) ||
+        strcmp(f_text(f_field(page->stream, "duplicate_policy")), "sequence-cursor") || page->head < page->oldest || page->cursor > page->head) return false;
+    page->truncated = false;
+    if (f_field(page->stream, "scan_truncated") && !boolean_field(page->stream, "scan_truncated", &page->truncated)) return false;
+    page->stream_id = f_text(f_field(page->stream, "stream_id"));
+    if (!page->available && json_object_array_length(page->events)) return false;
+    if (page->available && !page->stream_id) return false;
+    if (page->stream_id && strlen(page->stream_id) >= 128) return false;
+    if (page->stream_id) for (p = (const unsigned char *)page->stream_id; *p; p++) if (*p < 32 || *p > 126) return false;
+    return true;
+}
+
+static bool render_events(struct text_buffer *text, const struct announce_page *page) {
+    size_t i; uint64_t previous = 0, sequence; const char *task_run = f_string(page->task, "run_id"), *task_step = f_string(page->task, "step_id");
+    for (i = 0; i < json_object_array_length(page->events); i++) {
+        json_object *event = json_object_array_get_idx(page->events, i); const char *event_run, *event_step;
+        if (!json_object_is_type(event, json_type_object) || !bounded_int(event, "sequence", &sequence) || !sequence ||
+            (!previous && sequence <= page->oldest) || (previous && sequence != previous + 1U) || !f_text(f_field(event, "type")) || !f_text(f_field(event, "detail"))) return false;
+        event_run = f_text(f_field(event, "run_id")); event_step = f_text(f_field(event, "step_id"));
+        if ((task_run && event_run && strcmp(task_run, event_run)) || (task_step && event_step && strcmp(task_step, event_step))) return false;
+        if (!append(text, "event time=") || !append_sanitized_field(text, event, "occurred_at", "unknown") || !append(text, " run=") ||
+            !append_sanitized_field(text, event, "run_id", "-") || !append(text, " step=") || !append_sanitized_field(text, event, "step_id", "-") ||
+            !append(text, " sequence=") || !append_number(text, sequence) || !append(text, " type=") || !append_sanitized_field(text, event, "type", "unknown") ||
+            !append(text, " detail=") || !append_sanitized_field(text, event, "detail", "") || !append(text, "\n")) return false;
+        previous = sequence;
+    }
+    return !previous || previous == page->cursor;
+}
+
+static bool render_page(struct text_buffer *text, const struct announce_page *page) {
+    if (!append(text, "task id=") || !append_sanitized_field(text, page->task, "task_id", "unknown") || !append(text, " state=") ||
+        !append_sanitized_field(text, page->task, "execution_state", "unknown") || !append(text, " receiver_observed_at=") ||
+        !append_json_value(text, page->data, "receiver_observed_at", "unavailable") || !append(text, " evidence=saved_snapshot\n")) return false;
+    if (!page->available && (!append(text, "history unavailable reason=") || !append_field(text, page->stream, "unavailable_reason", "unavailable") || !append(text, "\n"))) return false;
+    if (page->gap && !append(text, "history retention_gap=true\n")) return false;
+    if (page->reset && !append(text, "history stream_reset=true\n")) return false;
+    if (page->truncated && !append(text, "history truncated=true\n")) return false;
+    if (!render_events(text, page) || !append(text, "resume cursor=") || !append_number(text, page->cursor) || !append(text, " byte_offset=") ||
+        !append_number(text, page->offset) || !append(text, " stream_id=") || !(page->stream_id ? append_sanitized_field(text, page->stream, "stream_id", "unavailable") : append(text, "unavailable")) || !append(text, "\n")) return false;
+    return true;
+}
+
 json_object *task_announce_cli(int argc, char **argv) {
-    const char *input = NULL; json_object *parsed = NULL, *data, *task, *stream, *events;
-    struct text_buffer text = {0}; size_t i; uint64_t previous = 0, sequence, cursor, offset, oldest, head;
-    bool available, gap, reset, truncated = false; const char *stream_id;
+    const char *input; json_object *parsed = NULL; struct announce_page page = {0}; struct text_buffer text = {0};
     if (argc != 3 || strcmp(argv[1], "--input") || !argv[2][0]) return invalid("announce requires --input FILE");
     input = argv[2]; parsed = f_read_json(input, 262144U);
     if (!parsed) return invalid("saved observation is missing, malformed, or oversized");
-    if (!f_number_is(parsed, "schema_version", 1) || !json_object_is_type(f_field(parsed, "ok"), json_type_boolean) ||
-        !json_object_get_boolean(f_field(parsed, "ok")) || !f_string(parsed, "command") || strcmp(f_string(parsed, "command"), "fleet-observation")) {
-        json_object_put(parsed); return invalid("saved observation envelope is invalid");
-    }
-    data = f_field(parsed, "data");
-    if (!json_object_is_type(data, json_type_object)) { json_object_put(parsed); return invalid("saved observation has no data object"); }
-    task = f_field(data, "task");
-    if (!json_object_is_type(task, json_type_object) || !f_string(task, "task_id") ||
-        strncmp(f_string(task, "task_id"), "task_", 5) || !task_hex(f_string(task, "task_id") + 5, 64) ||
-        !task_observation_response_valid(data, f_string(task, "task_id"))) {
-        json_object_put(parsed); return invalid("saved observation failed normalized validation");
-    }
-    stream = f_field(data, "event_observation"); events = f_field(stream, "events");
-    if (!json_object_is_type(stream, json_type_object) || !f_number_is(stream, "schema_version", 1) ||
-        !json_object_is_type(events, json_type_array) || json_object_array_length(events) > 128U ||
-        !boolean_field(stream, "available", &available) || !boolean_field(stream, "retention_gap", &gap) ||
-        !boolean_field(stream, "stream_reset", &reset) ||
-        !bounded_int(stream, "next_cursor", &cursor) || !bounded_int(stream, "next_byte_offset", &offset) ||
-        !bounded_int(stream, "oldest_cursor", &oldest) || !bounded_int(stream, "head_cursor", &head) ||
-        !f_text(f_field(stream, "duplicate_policy")) || strcmp(f_text(f_field(stream, "duplicate_policy")), "sequence-cursor") ||
-        head < oldest || cursor > head) {
-        json_object_put(parsed); return invalid("event observation page is malformed or exceeds its bound");
-    }
-    if (f_field(stream, "scan_truncated") && !boolean_field(stream, "scan_truncated", &truncated)) goto bad;
-    stream_id = f_text(f_field(stream, "stream_id"));
-    if (available && !stream_id) { json_object_put(parsed); return invalid("available event history has no stream identity"); }
-    if (stream_id) {
-        const unsigned char *p;
-        if (strlen(stream_id) >= 128) { json_object_put(parsed); return invalid("stream identity is too long"); }
-        for (p = (const unsigned char *)stream_id; *p; p++) if (*p < 32 || *p > 126) { json_object_put(parsed); return invalid("stream identity contains non-ASCII characters"); }
-    }
-    if (!available && json_object_array_length(events)) goto bad;
-    if (!append(&text, "task id=") || !append_sanitized_field(&text, task, "task_id", "unknown") ||
-        !append(&text, " state=") || !append_sanitized_field(&text, task, "execution_state", "unknown") ||
-        !append(&text, " receiver_observed_at=") || !append_json_value(&text, data, "receiver_observed_at", "unavailable") ||
-        !append(&text, " evidence=saved_snapshot\n")) goto bad;
-    if (!available) {
-        if (!append(&text, "history unavailable reason=") || !append_field(&text, stream, "unavailable_reason", "unavailable") || !append(&text, "\n")) goto bad;
-    } else if (gap && (!append(&text, "history retention_gap=true\n"))) goto bad;
-    if (reset && !append(&text, "history stream_reset=true\n")) goto bad;
-    if (truncated && !append(&text, "history truncated=true\n")) goto bad;
-    for (i = 0; i < json_object_array_length(events); i++) {
-        json_object *event = json_object_array_get_idx(events, i);
-        const char *task_run = f_string(task, "run_id"), *task_step = f_string(task, "step_id");
-        const char *event_run, *event_step;
-        if (!json_object_is_type(event, json_type_object) ||
-            !bounded_int(event, "sequence", &sequence) || !sequence || (!previous && sequence <= oldest) ||
-            (previous && sequence != previous + 1U) ||
-            !f_text(f_field(event, "type")) || !f_text(f_field(event, "detail"))) goto bad;
-        event_run = f_text(f_field(event, "run_id")); event_step = f_text(f_field(event, "step_id"));
-        if ((task_run && event_run && strcmp(task_run, event_run)) || (task_step && event_step && strcmp(task_step, event_step))) goto bad;
-        if (!append(&text, "event time=") || !append_sanitized_field(&text, event, "occurred_at", "unknown") ||
-            !append(&text, " run=") || !append_sanitized_field(&text, event, "run_id", "-") ||
-            !append(&text, " step=") || !append_sanitized_field(&text, event, "step_id", "-") ||
-            !append(&text, " sequence=") || !append_number(&text, sequence) ||
-            !append(&text, " type=")) goto bad;
-        if (!append_sanitized_field(&text, event, "type", "unknown") || !append(&text, " detail=") || !append_sanitized_field(&text, event, "detail", "") || !append(&text, "\n")) goto bad;
-        previous = sequence;
-    }
-    if (previous && previous != cursor) goto bad;
-    if (!append(&text, "resume cursor=") || !append_number(&text, cursor) || !append(&text, " byte_offset=") || !append_number(&text, offset)) goto bad;
-    if (!append(&text, " stream_id=") || !(stream_id ? append_sanitized_field(&text, stream, "stream_id", "unavailable") : append(&text, "unavailable")) || !append(&text, "\n")) goto bad;
-    { json_object *result = json_object_new_object(); f_string_add(result, "task_id", f_string(task, "task_id")); f_string_add(result, "announcement", text.value ? text.value : ""); free(text.value); json_object_put(parsed); return f_success("fleet-task-announce", result); }
-bad:
-    free(text.value); json_object_put(parsed); return invalid("saved observation contains unsafe or inconsistent event data");
+    if (!page_envelope(parsed, &page) || !page_stream(&page) || !render_page(&text, &page)) { free(text.value); json_object_put(parsed); return invalid("saved observation is invalid or inconsistent"); }
+    { json_object *result = json_object_new_object(); f_string_add(result, "task_id", f_string(page.task, "task_id")); f_string_add(result, "announcement", text.value ? text.value : ""); free(text.value); json_object_put(parsed); return f_success("fleet-task-announce", result); }
 }
