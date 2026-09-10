@@ -163,8 +163,10 @@ malformed input, limits, cancellation, and preservation of configuration/state.
 This is **local fixture qualification**. It does not prove a live jump connection,
 actual key negotiation/rotation, external installation behavior, or live provider
 capability. Those remain explicitly operator-authorized live qualification
-requirements. Tests contact no real host. H2 enrollment/bootstrap/trust mutation
-and H3 source adapters are outside this implementation.
+requirements. Tests contact no real host. Reviewed enrollment/bootstrap/trust
+mutations use the separate [enrollment contract](HOST_ENROLLMENT.md). The H3
+snapshot adapters above import supplied records; they do not discover live
+provider membership or access provider credentials.
 
 Local qualification on 2026-09-09, from integrated baseline
 `0190bf938d82fa7d136369f96ed9061d6c0e2df6`:

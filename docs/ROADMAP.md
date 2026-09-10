@@ -1,7 +1,7 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 8 September 2026
+> - **Snapshot:** 10 September 2026
 > - **Current release:** `v2.3.0` distributed workflows and resource admission
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
@@ -117,15 +117,20 @@ implemented profiles.
 ### Feature-branch integration — 10 September 2026
 
 The local `codex/release-next` branch integrates **T1, 9A, V1, T2, 9B, H1,
-V2, 9C, and H2**. The latest slice adds bounded attempt/event observations,
-structured verifier evidence, and reviewed host enrollment with reconciliation.
-See [the earlier integration evidence](evidence/next-wave-integration.md) and
-[V2/9C/H2 acceptance](evidence/observation-enrollment-integration.md) for the exact
-checks and qualification limits. Main and the published release are unchanged.
+V2, 9C, H2, V3, V4, 9D and H3** within their documented local qualification.
+It also includes 9E explanation/comparison tools and finite patterns, 9F sealed
+artifact reuse and precompiled manifest maps, bounded head-event archives, statistics export/comparison, and
+saved task announcements. **9E and 9F remain partially qualified**; semantic
+planner evaluation, broader graph forms, global task/run retention and several
+telemetry measurements remain open.
+See [the latest workstream acceptance](evidence/workstream-integration-20260910.md),
+[earlier integration evidence](evidence/next-wave-integration.md), and
+[V2/9C/H2 acceptance](evidence/observation-enrollment-integration.md) for exact
+checks and limits. Main and the published release are unchanged.
 
-Follow-on milestones retain their stated dependencies and are not selected by
-this status update. Local qualification does not authorize live provider
-campaigns, enrollment of operational hosts, or publication.
+The user selected the remaining V, 9 and H workstreams. Other roadmap tracks
+retain their original selection boundaries. Local qualification does not
+establish live provider results, operational-host enrollment, or publication.
 
 Research for follow-on decisions: [interactive parity](research/interactive-parity-report.md)
 and its [decision brief](research/interactive-parity-decision-brief.md), plus
@@ -302,23 +307,23 @@ silently inherit earlier verdicts. Existing subject/recipe integrity checks rema
 Depends on 9A–9C. Use one shared contract/evidence model with focused recipes; avoid
 separate schedulers, universal ontologies, or a DAG node for every test assertion.
 
-- [ ] **Features:** bind user-visible behavior and failure boundaries; run the public
+- [x] **Features:** bind user-visible behavior and failure boundaries; run the public
       CLI/UI against the assembled candidate, check interfaces and regressions, and
       exercise interruption/recovery where relevant. Reuse existing harnesses and
       appropriate property/metamorphic checks; negative controls must expose missing
       behavior even when the process exits successfully.
-- [ ] **Performance:** bind baseline, candidate, workload, environment/toolchain,
+- [x] **Performance:** bind baseline, candidate, workload, environment/toolchain,
       units, warm-up, trial structure, failures/exclusions, analysis, and stopping
       rules. Preserve raw samples, respect measurement exclusivity, and use an
       uncertainty method appropriate to the metric and dependent observations.
       Distinguish target established, target not established, and invalid/insufficient
       measurement; repeated searching must not cherry-pick a favorable confirmation.
-- [ ] **Research:** bind questions, source/data provenance, transformations, claim
+- [x] **Research:** bind questions, source/data provenance, transformations, claim
       locations, competing explanations, methods, and limitations. Distinguish
       exploration from confirmation and invalid instrumentation from a substantive
       negative result. Use source audits, reproducible analyses, or proof checkers
       as appropriate; review whether formalized statements match the actual question.
-- [ ] Make completion depend on the requested outcome. A valid negative experiment
+- [x] Make completion depend on the requested outcome. A valid negative experiment
       can complete an investigation without satisfying an optimization target or
       supporting a hypothesis. Repair invalid work, not a scientifically inconvenient
       answer; a new hypothesis or acceptance method needs a visible new version.
@@ -329,14 +334,20 @@ absent despite green superficial tests, insufficient/no-improvement performance
 evidence, an unsupported research claim, and a valid negative research result.
 Fixture transport success or agent agreement alone does not qualify these outcomes.
 
+Local qualification: the [feature](evidence/9d-feature-outcome.md),
+[performance](evidence/9d-performance-outcome.md), and
+[research](evidence/9d-research-outcome.md) pilots passed their public outcome
+checks and declared negative controls. These results apply to the supplied
+feature, one synthetic performance workload and the finite research dataset.
+
 ##### 9E. Explainable planning and measured plan quality
 
 Start the baseline with 9A; use 9B–9D contracts and pilots to qualify the tools.
 
-- [ ] Add reusable bounded decomposition patterns and explanations linking each
+- [x] Add reusable bounded decomposition patterns and explanations linking each
       node/dependency to an outcome, input, evidence need, or effect constraint.
       Keep small cohesive tasks small; the cost of planning and composition counts.
-- [ ] Extend the existing CLI to inspect obligations, explain dependencies, compare
+- [x] Extend the existing CLI to inspect obligations, explain dependencies, compare
       candidate plans, test contract examples, and show invalidation after changes.
       Command names and schema details are selected during implementation, not
       promised here as existing interfaces.
@@ -360,6 +371,13 @@ plan validity or throughput. Reject every declared deterministic corruption case
 qualify semantic improvements with observed results and explicit limits. Planning
 benefit must exceed its overhead on the workload where improvement is claimed.
 
+Local implementation: [plan inspection](PLAN_INSPECTION.md) and
+[finite patterns](PLAN_PATTERNS.md) provide complete structural explanations,
+deterministic bound comparisons, public serial/fork/join outcomes and six
+incorrect-artifact controls. They do not establish stochastic planner quality,
+estimate calibration or a planning benefit that exceeds overhead. The broader
+matched task-class evaluation remains open.
+
 ##### 9F. Selective repair and bounded graph expressiveness
 
 Select after contract/evidence pilots demonstrate a useful workload. Preserve the
@@ -369,11 +387,11 @@ finite execution DAG, original coordinator, and unknown-outcome reconciliation.
       experiments whose findings inform a separately compiled next plan. Add maps
       over admitted finite manifests and conditional branches only with explicit
       cardinality, skipped-output semantics, and fixed join membership.
-- [ ] Qualify selective repair of affected dependency closures. Reuse an artifact
+- [x] Qualify selective repair of affected dependency closures. Reuse an artifact
       only when its input, source, recipe, contract, environment, effect assumptions,
       and evidence dependencies remain valid. Current whole-plan check binding
       needs an explicit versioned reuse policy; merely skipping nodes is insufficient.
-- [ ] Require fresh affected checks after repair. Different bytes do not prove a
+- [x] Require fresh affected checks after repair. Different bytes do not prove a
       meaningful correction. Preserve valid unrelated work where qualified, but
       never treat an uncertain external effect or a rerun of an LLM as cached truth.
 - [ ] If staged plans are insufficient, admit proposed expansions through the same
@@ -387,6 +405,15 @@ Test changed inputs, contracts,
 environments and acceptance rules, branch skips, empty/bounded maps, interrupted
 repair, exhausted budgets, and unknown remote outcomes. No skipped branch may create
 false completion, and no expansion may enlarge authority or duplicate uncertain work.
+
+Local qualification: [versioned sealed-artifact reuse](PLAN_REUSE.md) preserves
+qualified original attempts, reruns affected checks, and revalidates proofs after
+interrupted repair. The supported policy is local artifact-only execution under
+explicit complete-dependency assumptions. [Finite manifest maps](PLAN_MANIFEST.md)
+lower at most eight members and boolean selection into fixed joins, including
+checked empty/all-skipped outputs. Runtime membership changes, late conditional
+evaluation and dynamic expansion remain unsupported; rejection does not qualify
+those graph forms.
 
 Research basis (8 September 2026): the review combined current Hydra code and bounded
 probes with [CWL typed workflows](https://www.commonwl.org/v1.2/Workflow.html),
@@ -521,10 +548,10 @@ An agent is a managed process, not an OS-isolated container. Terminal replacemen
 alone does not provide execution visibility or isolation. These milestones can
 start before T1–T3 using the existing remote task owner and observation endpoints;
 apply them to the implemented [distributed runs](DISTRIBUTED_DAG.md). Extend item
-9's obligation/evidence explanations as those milestones land. V1–V4 are planned
-operator visibility and qualification work, not claims of new runtime behavior.
+9's obligation/evidence explanations as those milestones land. V1–V4 qualify
+operator visibility over the existing execution and mutation authorities.
 
-- [ ] **V1 — Run and host overview with explicit observation freshness.** Define a
+- [x] **V1 — Run and host overview with explicit observation freshness.** Define a
       versioned receiver snapshot with task/run/step/attempt identity, assigned host,
       workspace, agent profile, execution owner, state, pending requests, and
       observation timestamps. Show effective configuration and concrete waiting
@@ -551,7 +578,7 @@ operator visibility and qualification work, not claims of new runtime behavior.
       without silently omitting transitions or presenting duplicate transitions.
       Missing retained history is explicitly reported. A successful process with
       missing artifacts or failed verification cannot appear as an accepted result.
-- [ ] **V3 — Controls with visible acknowledgments.** Present cancellation requested,
+- [x] **V3 — Controls with visible acknowledgments.** Present cancellation requested,
       delivered, and confirmed stopped as distinct stages. Bind approvals and other
       mutations to the exact task/attempt or candidate they concern; preserve existing
       authorization and mutation paths. Unknown cancellation remains visible. Keep
@@ -561,7 +588,7 @@ operator visibility and qualification work, not claims of new runtime behavior.
       Acceptance: lose a cancellation response, reconnect, and show the receiver's
       recorded outcome without duplicate effects or a false stopped state. Reject
       stale approvals and ensure workspace cleanup cannot discard active/dirty work.
-- [ ] **V4 — Recovery visibility qualification.** Exercise the complete public CLI
+- [x] **V4 — Recovery visibility qualification.** Exercise the complete public CLI
       and TUI path through submission, execution, SSH loss, reconnect, cancellation,
       and collection. Reconcile the original attempt before deciding on further
       execution; loss of a heartbeat or connection does not authorize replacement
@@ -582,7 +609,18 @@ operator visibility and qualification work, not claims of new runtime behavior.
       or accepted outcome claims. Preserve referenced raw evidence and contract
       versions for the declared audit/reuse window; disclose expired evidence.
       Keep retention gaps distinguishable from empty output or absent events.
-- [ ] Add accessible event-announcer and comparison views over the same evidence.
+- [x] Add accessible event-announcer and comparison views over the same evidence.
+      [ASCII saved-task announcements and native cohort comparisons](OBSERVABILITY.md)
+      retain identity, uncertainty and event-resume metadata.
+
+[Recovery qualification](evidence/recovery-visibility-v4.md) exercises two local
+receiver homes through the public CLI and a real TUI with controlled SSH loss.
+[Metrics](OBSERVABILITY.md) now export measured coordinator queue/elapsed/verified
+times and owner-recovery outcomes with known denominators. Receiver unknown
+outcome counts, total manual interventions and network bytes remain unmeasured.
+[Retention](RETENTION.md) defines preserved evidence and current bounds; only
+head-event archives have the new explicit quota/expiry operation. Global
+receiver-task and workflow-run archive/quota mechanisms remain open.
 
 Acceptance: operators can explain what is running, where, why it is waiting, how
 fresh that information is, and whether a requested action took effect. Retention
@@ -660,7 +698,7 @@ current fleet implementation.
       tests reconcile without duplicate effects or inferred success; a changed
       key, package, target, project, or policy requires renewed review.
 
-- [ ] **H3 — Bounded scale and opt-in source adapters.** Extend the same candidate
+- [x] **H3 — Bounded scale and opt-in source adapters.** Extend the same candidate
       contract to selected mDNS/DNS-SD, VPN/provider, cloud-tag, and
       configuration-management inventory sources only after H1 is useful. Treat
       source records as untrusted, timestamped metadata; keep provider
@@ -677,17 +715,22 @@ current fleet implementation.
       selected set. No provider membership or discovery record grants execution
       permission.
 
+[H3 local qualification](evidence/h3-source-batches.md) covers the four supplied
+snapshot formats, 100 distinct selected targets, 16-host probe/apply batches,
+private progress, interruption and lost-response reconciliation. No live vendor
+discovery client or provider credential path is included.
+
 Dependencies and coordination: H1 depends only on the current explicit fleet
 aliases, strict OpenSSH policy, and versioned handshake. H2 reuses the current
 package/bootstrap, fleet-init/trust, and remote-task contracts documented in
 [FLEET.md](FLEET.md), [SECURITY.md](SECURITY.md), and
 [REMOTE_TASKS.md](REMOTE_TASKS.md); it may proceed without a new planner or
 daemon. H3 is follow-on work after H1/H2 and should not broaden the trust boundary.
-T1, 9A, and V1 implementations are integrated on the feature branch; T2 remains
-the next remote-execution milestone. T1/T2 become dependencies only for
-tmux-independent/headless enrollment, 9A is relevant if
-onboarding obligations are later compiled into objective plans, and V1 can supply
-freshness/attempt presentation when its observation contract lands. This H track
+T1, T2, 9A and V1 implementations are integrated on the feature branch; T3
+remains a separate distributed qualification milestone. T1/T2 become dependencies
+only for tmux-independent/headless enrollment, 9A is relevant if
+onboarding obligations are later compiled into objective plans, and V1 supplies
+freshness presentation through its observation contract. This H track
 does not mark any of those milestones complete, reclassify them as delivered, or
 rewrite their acceptance.
 

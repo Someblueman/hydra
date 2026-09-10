@@ -56,8 +56,10 @@ A modeled preference is reported only when matched candidates have nonoverlappin
 critical-path ranges and no cost disadvantage. Overlapping/missing estimates,
 tradeoffs, changed scope or an estimated lower bound exceeding a hard timeout
 leave the choice unresolved. This does not claim measured planning benefit or
-global optimality. Reusable patterns and held-out outcome evaluation are separate
-9E qualification work.
+global optimality. [Finite patterns](PLAN_PATTERNS.md) add public serial/fork/join
+outcomes and deterministic incorrect-artifact controls. Matched planner-quality
+evaluation, estimate calibration and measured semantic benefit remain open 9E
+qualification work.
 
 ## Verification
 
