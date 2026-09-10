@@ -23,6 +23,11 @@ def json_digest(value):
     return digest(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).replace("/", r"\/").encode())
 
 
+def result_digest(value):
+    # Task envelopes retain JSON-C insertion order, unlike plan proof digests.
+    return digest(json.dumps(value, ensure_ascii=False, separators=(",", ":")).replace("/", r"\/").encode())
+
+
 def find_fixture(fixture):
     homes = fixture / "home"
     runs = list(homes.glob("state/v2/projects/*/workflows/runs/*"))
@@ -46,8 +51,11 @@ def recorded_environment(run, home, fleet_bin):
     return env
 
 
-def run_result(source, home, run_id, fleet_bin, expect_pass):
+def run_result(source, home, run_id, fleet_bin, expect_pass, changed_path=False):
     env = recorded_environment(run_path(home, run_id), home, fleet_bin)
+    if changed_path:
+        env["PATH"] += ":/hydra-undeclared-tool-path"
+    accepted_before = sorted(str(path.relative_to(home)) for path in home.glob("fleet/tasks/task_*/acceptance.json"))
     command = [str(ROOT / "bin" / "hydra"), "workflow", "plan", "result", run_id]
     result = subprocess.run(command, cwd=source, env=env, capture_output=True,
                             text=True, timeout=45)
@@ -56,6 +64,7 @@ def run_result(source, home, run_id, fleet_bin, expect_pass):
             raise AssertionError(result.stdout + result.stderr)
     elif result.returncode == 0:
         raise AssertionError("corrupted copied fixture was accepted: " + result.stdout)
+    assert sorted(str(path.relative_to(home)) for path in home.glob("fleet/tasks/task_*/acceptance.json")) == accepted_before
     return result
 
 
@@ -107,9 +116,27 @@ def tamper_receipt(run):
 def tamper_result(run):
     path = run / "steps/produce/attempt-1/remote/result.json"
     value = json.loads(path.read_text())
+    assert result_digest(value["result"]) == value["result_sha256"], "result canonical hash parity"
     value["result"]["receipt"]["task_id"] = "task_" + "0" * 64
-    path.write_text(json.dumps(value, sort_keys=True) + "\n")
+    value["result_sha256"] = result_digest(value["result"])
+    path.write_text(json.dumps(value) + "\n")
     rehash_reuse_record(run, "produce", "remote/result.json")
+
+
+def terminal_result(run, state, exit_status=None):
+    path = run / "steps/produce/attempt-1/remote/result.json"
+    value = json.loads(path.read_text())
+    assert result_digest(value["result"]) == value["result_sha256"], "result canonical hash parity"
+    value["result"]["receipt"]["runtime"]["state"] = state
+    if exit_status is not None:
+        value["result"]["receipt"]["runtime"]["exit_status"] = exit_status
+    value["result_sha256"] = result_digest(value["result"])
+    path.write_text(json.dumps(value) + "\n")
+    rehash_reuse_record(run, "produce", "remote/result.json")
+
+
+def unknown_step(run):
+    (run / "steps/produce/state").write_text("outcome_unknown\n")
 
 
 def tamper_failures(run):
@@ -197,11 +224,18 @@ def main():
     original_record = json.loads((run_path(original_home, run_id) / "repair-2.json").read_text())
     assert json_digest(original_record["evidence"]) == original_record["sha256"], "canonical hash parity"
     run_result(original_source, original_home, run_id, args.fleet_bin, True)
+    run_result(original_source, original_home, run_id, args.fleet_bin, False, changed_path=True)
+    print("changed-current-environment: rejected without new acceptance")
     policy_controls(fixture, original_source, original_home, run_id, args.fleet_bin)
     cases = [("input", tamper_input), ("environment", tamper_environment),
              ("recipe", tamper_recipe),
              ("acceptance", tamper_acceptance), ("receipt-rehashed", tamper_receipt),
              ("result-rehashed", tamper_result), ("malformed-failures", tamper_failures),
+             ("unknown-result-rehashed", lambda run: terminal_result(run, "outcome_unknown")),
+             ("failed-result-rehashed", lambda run: terminal_result(run, "failed")),
+             ("cancelled-result-rehashed", lambda run: terminal_result(run, "cancelled")),
+             ("nonzero-success-result", lambda run: terminal_result(run, "succeeded", 7)),
+             ("unknown-step-outcome", unknown_step),
              ("compiled-contract", tamper_compiled), ("source-binding", tamper_source_binding),
              ("unknown-proof-step", tamper_unknown_step), ("dependency-removal", tamper_dependency_removal)]
     with tempfile.TemporaryDirectory(prefix="hydra-plan-reuse-") as scratch:

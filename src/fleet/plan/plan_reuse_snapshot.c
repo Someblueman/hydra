@@ -50,6 +50,8 @@ static bool remote_valid(const char *run, const char *id, const char *attempt,
      * Both must bind to this original dispatch; compare the task identity. */
     json_object *final = f_field(f_field(result, "result"), "receipt");
     valid = json_object_get_boolean(f_field(checked, "ok")) &&
+        !strcmp(f_string(f_field(final, "runtime"), "state"), "succeeded") &&
+        f_number_is(f_field(final, "runtime"), "exit_status", 0) &&
         wt_parent_receipt(run, id, attempt, binding, final) &&
         !strcmp(f_string(receipt, "task_id"), f_string(final, "task_id"));
 done:
