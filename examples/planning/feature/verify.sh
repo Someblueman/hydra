@@ -22,8 +22,8 @@ tar -xf "$HYDRA_WORKFLOW_INPUTS_DIR/subject" -C "$verify_root"
     if ./catalog-slug; then exit 1; else test "$?" -eq 2; fi
 )
 digest="$(shasum -a 256 "$HYDRA_WORKFLOW_INPUTS_DIR/subject" | cut -d ' ' -f 1)"
-validator="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"]["check"])' "$HYDRA_WORKFLOW_VALIDATION_FILE")"
-recipe="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"]["check-recipe"])' "$HYDRA_WORKFLOW_VALIDATION_FILE")"
+validator="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"]["slug-check"])' "$HYDRA_WORKFLOW_VALIDATION_FILE")"
+recipe="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"]["slug-check-recipe"])' "$HYDRA_WORKFLOW_VALIDATION_FILE")"
 python3 - "$HYDRA_WORKFLOW_OUTPUTS_DIR/verification.json" "$digest" "$validator" "$recipe" <<'PY'
 import hashlib, json, sys
 out, subject, validator, recipe = sys.argv[1:]
