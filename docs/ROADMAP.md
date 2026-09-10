@@ -126,7 +126,11 @@ announcements. **9E remains partially qualified**: a finite planner pilot found 
 interface-conformance difference but no demonstrated semantic planning advantage.
 Runtime graph expansion remains conditional on a workload that needs it; current
 finite patterns do not require it.
-See [the review scope and open decisions](RELEASE_NEXT_SCOPE.md),
+The user explicitly included the implemented 9E tools and successful real cleanup
+workflow in review on 10 September 2026. Broader comparative planning-quality
+research remains open, but does not block review readiness or require a new
+experiment for this scope.
+See [the review scope and acceptance boundaries](RELEASE_NEXT_SCOPE.md),
 [remaining-work acceptance](evidence/remaining-work-20260910.md),
 [workstream acceptance](evidence/workstream-integration-20260910.md),
 [earlier integration evidence](evidence/next-wave-integration.md), and

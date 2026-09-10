@@ -21,11 +21,12 @@ historical evidence below applies to the revisions named in each record.
 
 ## Outstanding review and release decisions
 
-- **9E remains selected and incomplete.** Accepting the implemented tools as a
-  bounded release slice requires an explicit scope decision; that decision must
-  leave broad measured planning quality open. Neither the frozen toy pilot nor
-  one maintenance workload closes stochastic variability, held-out outcome errors,
-  calibration or benefit exceeding overhead.
+- **9E review scope is settled.** On 10 September 2026 the user explicitly
+  selected the implemented 9E tools and successful real Python cleanup workflow
+  for review, leaving broader comparative planning-quality research open. That
+  research is not a review-readiness blocker and no new experiment is required.
+  Neither the frozen toy pilot nor one maintenance workload closes stochastic
+  variability, held-out outcome errors, calibration or benefit exceeding overhead.
 - **T2 live qualification, T3 and provider checks remain open.** T2 needs an
   authorized tmux-free host and authenticated adapter. T3 needs the full distributed
   scenario in that environment. The [roadmap provider list](ROADMAP.md#2-adapter-conformance-and-headless-execution-remaining-live-qualification)
@@ -47,9 +48,10 @@ use staged finite plans. Load balancing, performance baseline work, dynamic pool
 remote statistics cohorts and new provider/resource telemetry retain their existing
 backlog selection boundaries. Nothing here selects another feature or campaign.
 
-## Bounded proposal for the remaining 9E decision
+## Optional future 9E research
 
-Before running another experiment, select one representative task class and an
+No further experiment is part of this review scope. If the user later selects
+this research, first select one representative task class and an
 explicit comparison question. A suitable first question is whether contract-aware
 planning improves independently verified maintenance outcomes enough to pay for
 its planning and correction time, with scheduling and placement fixed.
@@ -64,7 +66,7 @@ order within the approved budget; report uncertainty and insufficient evidence
 when that budget cannot distinguish the threshold. Compare scheduling separately
 only after the planning comparison warrants it.
 
-This is a proposal, not a launched experiment. A single successful pair can prove
+This future proposal is deferred, not a launched or required experiment. A single successful pair can prove
 the measurement path; it cannot close broad task-class quality or calibration.
 No operational host calls, provider runs, push, merge, tag or release are authorized
 by this record.
