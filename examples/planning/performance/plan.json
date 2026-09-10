@@ -26,31 +26,31 @@
       "id": "binding",
       "criterion": "Bind exact baseline.sh and candidate.sh hashes, records.txt hash and byte count, command forms, host/OS/Python environment, nanosecond units, and protocol metadata.",
       "deliverable": "report",
-      "check": "assessment"
+      "check": "performance-check"
     },
     {
       "id": "protocol",
       "criterion": "Show two warm-ups, ten trials per implementation, raw samples, failures and exclusive measurement.",
       "deliverable": "report",
-      "check": "assessment"
+      "check": "performance-check"
     },
     {
       "id": "analysis",
       "criterion": "Report counts, median, nearest-rank p95, paired relative-change interval, and fixed stopping rule from raw samples.",
       "deliverable": "report",
-      "check": "assessment"
+      "check": "performance-check"
     },
     {
       "id": "outcome",
       "criterion": "Classify target established only for ten valid paired trials, available p95s, candidate median at least 10% lower, and a paired 90% interval entirely below zero; otherwise classify accurately.",
       "deliverable": "report",
-      "check": "assessment"
+      "check": "performance-check"
     },
     {
       "id": "limits",
       "criterion": "State that this bounded workload does not establish Hydra-wide performance or scalability.",
       "deliverable": "report",
-      "check": "assessment"
+      "check": "performance-check"
     }
   ],
   "checks": [
@@ -292,6 +292,158 @@
     {
       "id": "performance-outcome",
       "requirement": "outcome",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "The sealed performance report is independently recomputed and classified with preserved raw evidence.",
+      "evaluation": {
+        "method": "executable",
+        "check": "performance-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded synthetic workload"
+      ]
+    },
+    {
+      "id": "binding-check",
+      "requirement": "binding",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "The sealed performance report is independently recomputed and classified with preserved raw evidence.",
+      "evaluation": {
+        "method": "executable",
+        "check": "performance-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded synthetic workload"
+      ]
+    },
+    {
+      "id": "protocol-check",
+      "requirement": "protocol",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "The sealed performance report is independently recomputed and classified with preserved raw evidence.",
+      "evaluation": {
+        "method": "executable",
+        "check": "performance-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded synthetic workload"
+      ]
+    },
+    {
+      "id": "analysis-check",
+      "requirement": "analysis",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "The sealed performance report is independently recomputed and classified with preserved raw evidence.",
+      "evaluation": {
+        "method": "executable",
+        "check": "performance-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded synthetic workload"
+      ]
+    },
+    {
+      "id": "limits-check",
+      "requirement": "limits",
       "intent_ref": "objective",
       "subject": {
         "deliverable": "report",
