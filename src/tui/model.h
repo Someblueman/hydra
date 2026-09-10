@@ -38,6 +38,7 @@ struct task_observation {
     char waiting_reason[32], waiting_detail[TEXT], next_action[TEXT];
     char receiver_observed[40], last_confirmed[40], freshness[32];
     char result_state[32], verification_state[32];
+    char spec_sha256[65], cancellation[32], cancellation_scope[64], cancel_requested_at[40], request_id[128];
     unsigned pending;
 };
 

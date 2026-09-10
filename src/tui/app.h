@@ -41,6 +41,7 @@ struct app {
     struct workflow_model *workflows;
     size_t workflow_run, workflow_node;
     size_t host_selected;
+    size_t task_selected;
     int graph_x, graph_y;
     bool workflow_stale, graph_follow;
     time_t workflow_at;

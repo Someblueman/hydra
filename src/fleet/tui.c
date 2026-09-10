@@ -113,7 +113,16 @@ static void task_record_line(json_object *data, json_object *task, const char *n
     printf("\t"); field_limit(observed_at, 40); printf("\t"); field_limit(confirmed, 40);
     printf("\t"); field_limit(nested_text(data, "freshness", "state"), 32); printf("\t%zu", pending);
     printf("\t"); field_limit(text_value(f_field(task, "result_collection"), "state"), 32);
-    printf("\t"); field_limit(text_value(f_field(task, "verification"), "state"), 32); putchar('\n');
+    printf("\t"); field_limit(text_value(f_field(task, "verification"), "state"), 32);
+    printf("\t"); field_limit(text_value(task, "spec_sha256"), 65);
+    printf("\t"); field_limit(text_value(task, "cancellation"), 32);
+    printf("\t"); field_limit(text_value(task, "cancellation_scope"), 64);
+    printf("\t"); json_token(task, "cancel_requested_at", observed_at);
+    printf("\t");
+    if (json_object_is_type(f_field(task, "pending_requests"), json_type_array) && json_object_array_length(f_field(task, "pending_requests")))
+        field_limit(text_value(json_object_array_get_idx(f_field(task, "pending_requests"), 0), "request_id"), 128);
+    else field("-");
+    putchar('\n');
 }
 
 static void task_records(json_object *observed, const char *name) {

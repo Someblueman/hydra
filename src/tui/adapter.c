@@ -37,6 +37,8 @@ FILE *capture_adapter(struct app *app, const char *command, const char *option, 
 int accept_model_data(struct app *app, FILE *input) {
     struct model *next;
     char error[TEXT] = "";
+    char previous_task_host[128] = "", previous_task_id[128] = "";
+    bool had_task = app->task_selected < app->model.task_count;
     if (!input) return -1;
     next = malloc(sizeof(*next));
     if (next == NULL) {
@@ -60,8 +62,18 @@ int accept_model_data(struct app *app, FILE *input) {
             }
         }
     }
+    if (had_task) {
+        copy_text(previous_task_host, sizeof(previous_task_host), app->model.tasks[app->task_selected].host);
+        copy_text(previous_task_id, sizeof(previous_task_id), app->model.tasks[app->task_selected].task_id);
+    }
     app->model = *next;
     free(next);
+    app->task_selected = 0;
+    if (had_task) {
+        size_t index;
+        for (index = 0; index < app->model.task_count; index++)
+            if (!strcmp(previous_task_host, app->model.tasks[index].host) && !strcmp(previous_task_id, app->model.tasks[index].task_id)) { app->task_selected = index; break; }
+    }
     if (app->selected >= app->model.head_count && app->model.head_count > 0U) {
         app->selected = app->model.head_count - 1U;
     }

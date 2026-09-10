@@ -80,8 +80,8 @@ static void dashboard_fleet_tasks(struct app *app, struct tv_canvas *c, struct t
     tv_panel(c, r, "REMOTE TASKS / receiver-owned observations");
     for (i = 0; i < app->model.task_count && row < r.y + r.height - 2; i++) {
         const struct task_observation *task = &app->model.tasks[i];
-        dashboard_text(c, r.x + 2, row++, r.width - 4, !strcmp(task->freshness, "stale") ? TV_WARNING : TV_BASE,
-                       "%s / %s / owner %s / %s", task->task_id, task->state, task->owner, task->freshness);
+        dashboard_text(c, r.x + 2, row++, r.width - 4, !strcmp(task->freshness, "stale") || strcmp(task->cancellation, "-") ? TV_WARNING : TV_BASE,
+                       "%c %s / %s / owner %s / %s / cancel %s", i == app->task_selected ? '>' : ' ', task->task_id, task->state, task->owner, task->freshness, task->cancellation);
         if (row < r.y + r.height - 2)
             dashboard_text(c, r.x + 4, row++, r.width - 6, !strcmp(task->waiting_reason, "none") ? TV_BASE : TV_WARNING,
                            "wait %s / %s / next: %s", task->waiting_reason, task->waiting_detail, task->next_action);
@@ -91,7 +91,7 @@ static void dashboard_fleet_tasks(struct app *app, struct tv_canvas *c, struct t
                            "result %s / verification %s", task->result_state, task->verification_state);
     }
     dashboard_text(c, r.x + 2, r.y + r.height - 2, r.width - 4, TV_BORDER,
-                   "%zu task observations / owner state and freshness are receiver evidence", app->model.task_count);
+                   "%zu task observations / j k select / Y approve N reject R resume X cancel", app->model.task_count);
 }
 
 static void dashboard_fleet_hosts(struct app *app, struct tv_canvas *c, struct tv_rect r) {

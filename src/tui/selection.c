@@ -43,6 +43,11 @@ static bool move_workspace_selection(struct app *app, int direction) {
         if (direction < 0 && app->host_selected) app->host_selected--;
         return true;
     }
+    if (app->fleet && app->model.task_count) {
+        if (direction > 0 && app->task_selected + 1 < app->model.task_count) app->task_selected++;
+        if (direction < 0 && app->task_selected) app->task_selected--;
+        return true;
+    }
     return false;
 }
 
