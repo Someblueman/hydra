@@ -203,6 +203,82 @@
       "limitations": [
         "fixture-only"
       ]
+    },
+    {
+      "id": "bounds-check",
+      "requirement": "bounds",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "catalog",
+        "step": "feature-compose",
+        "output": "catalog"
+      },
+      "criterion": "The sealed catalog archive passes normalization, bounds and CLI checks.",
+      "evaluation": {
+        "method": "executable",
+        "check": "slug-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "fixture-only"
+      ]
+    },
+    {
+      "id": "cli-check",
+      "requirement": "cli",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "catalog",
+        "step": "feature-compose",
+        "output": "catalog"
+      },
+      "criterion": "The sealed catalog archive passes normalization, bounds and CLI checks.",
+      "evaluation": {
+        "method": "executable",
+        "check": "slug-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "fixture-only"
+      ]
     }
   ]
 }
