@@ -34,22 +34,22 @@ void retarget_selection(struct app *app) {
     }
     app->selected = app->model.head_count;
 }
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+static void bounded_selection(size_t *index, size_t count, int direction) {
+    if (*index >= count) { *index = 0; return; }
+    if (direction > 0 && *index + 1 < count) (*index)++;
+    if (direction < 0 && *index) (*index)--;
+}
 static bool move_workspace_selection(struct app *app, int direction) {
-    if (app->view == 8) { statistics_move(app, direction); return true; }
-    if (app->view == 7) { native_workspace_move(app, direction); return true; }
-    if (app->view == 5) { workflow_move(app, direction); return true; }
-    if (app->view == 6) {
-        if (direction > 0 && app->host_selected + 1 < app->model.host_count) app->host_selected++;
-        if (direction < 0 && app->host_selected) app->host_selected--;
-        return true;
+    switch (app->view) {
+        case 8: statistics_move(app, direction); return true;
+        case 7: native_workspace_move(app, direction); return true;
+        case 5: workflow_move(app, direction); return true;
+        case 6: bounded_selection(&app->host_selected, app->model.host_count, direction); return true;
+        case 4:
+            if (!app->fleet || !app->model.task_count) return false;
+            bounded_selection(&app->task_selected, app->model.task_count, direction); return true;
+        default: return false;
     }
-    if (app->fleet && app->model.task_count) {
-        if (direction > 0 && app->task_selected + 1 < app->model.task_count) app->task_selected++;
-        if (direction < 0 && app->task_selected) app->task_selected--;
-        return true;
-    }
-    return false;
 }
 
 void move_selection(struct app *app, int direction) {

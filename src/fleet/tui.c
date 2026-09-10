@@ -117,7 +117,7 @@ static void task_record_line(json_object *data, json_object *task, const char *n
     printf("\t"); field_limit(text_value(task, "spec_sha256"), 65);
     printf("\t"); field_limit(text_value(task, "cancellation"), 32);
     printf("\t"); field_limit(text_value(task, "cancellation_scope"), 64);
-    printf("\t"); json_token(task, "cancel_requested_at", observed_at);
+    printf("\t"); json_token(task, "cancel_requested_at", observed_at); field_limit(observed_at, 40);
     printf("\t");
     if (json_object_is_type(f_field(task, "pending_requests"), json_type_array) && json_object_array_length(f_field(task, "pending_requests")))
         field_limit(text_value(json_object_array_get_idx(f_field(task, "pending_requests"), 0), "request_id"), 128);

@@ -34,12 +34,16 @@ FILE *capture_adapter(struct app *app, const char *command, const char *option, 
     if (!input && !app->notice[0]) copy_text(app->notice,sizeof(app->notice),"shell data adapter failed; showing last good snapshot");
     return input;
 }
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+static size_t refreshed_task_selection(const struct app *app, const struct model *next) {
+    if (app->task_selected >= app->model.task_count) return app->model.task_count ? next->task_count : 0;
+    const struct task_observation *previous = &app->model.tasks[app->task_selected];
+    for (size_t index = 0; index < next->task_count; index++)
+        if (!strcmp(previous->host, next->tasks[index].host) && !strcmp(previous->task_id, next->tasks[index].task_id)) return index;
+    return next->task_count;
+}
 int accept_model_data(struct app *app, FILE *input) {
     struct model *next;
     char error[TEXT] = "";
-    char previous_task_host[128] = "", previous_task_id[128] = "";
-    bool had_task = app->task_selected < app->model.task_count;
     if (!input) return -1;
     next = malloc(sizeof(*next));
     if (next == NULL) {
@@ -63,18 +67,9 @@ int accept_model_data(struct app *app, FILE *input) {
             }
         }
     }
-    if (had_task) {
-        copy_text(previous_task_host, sizeof(previous_task_host), app->model.tasks[app->task_selected].host);
-        copy_text(previous_task_id, sizeof(previous_task_id), app->model.tasks[app->task_selected].task_id);
-    }
+    app->task_selected = refreshed_task_selection(app, next);
     app->model = *next;
     free(next);
-    app->task_selected = 0;
-    if (had_task) {
-        size_t index;
-        for (index = 0; index < app->model.task_count; index++)
-            if (!strcmp(previous_task_host, app->model.tasks[index].host) && !strcmp(previous_task_id, app->model.tasks[index].task_id)) { app->task_selected = index; break; }
-    }
     if (app->selected >= app->model.head_count && app->model.head_count > 0U) {
         app->selected = app->model.head_count - 1U;
     }

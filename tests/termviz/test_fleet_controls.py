@@ -24,19 +24,20 @@ with tempfile.TemporaryDirectory(prefix="hydra-fleet-controls-") as folder:
 printf 'ARGS:%s\\n' "$*" >> {log}
 if [ "$1" = fleet ] && [ "$2" = tui-visual-data ]; then
   state=$(cat {mode})
-  cancel=-; scope=-; requested=-; taskstate=waiting_approval; freshness=fresh
+  cancel=-; scope=-; requested=-; taskstate=waiting_approval; freshness=fresh; request=req-2
   case "$state" in
     requested) cancel=requested; scope=managed_commands; requested=2026-09-10T00:00:01Z ;;
     delivered) cancel=delivered; scope=managed_commands; requested=2026-09-10T00:00:02Z ;;
     confirmed) cancel=confirmed_stopped; scope=managed_commands; requested=2026-09-10T00:00:03Z ;;
     stale) freshness=stale ;;
+    changed) request=req-3 ;;
     unknown) cancel=unknown; scope=managed_commands; requested=2026-09-10T00:00:04Z; taskstate=outcome_unknown ;;
   esac
   printf 'HYDRA_FLEET_TUI\\t3\\n'
   printf 'F\\tbuild\\t/project\\tbranch\\thead\\tinstance\\tLIVE\\n'
   printf 'T\\tbuild\\tresponded\\t0\\t-\\treachable\\tfresh\\t1\\t1\\n'
   printf 'O\\tbuild\\ttask_1\\t-\\t-\\t-\\t-\\tnone\\trecorded\\trunning\\tnone\\t-\\tinspect\\t1\\t1\\t%s\\t0\\tunavailable\\tunavailable\\t%s\\t-\\t-\\t-\\t-\\n' "$freshness" "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-  printf 'O\\tbuild\\ttask_2\\t-\\t-\\t-\\t-\\tnone\\twaiting\\t%s\\tapproval\\tReview\\tdecide\\t1\\t1\\t%s\\t1\\tunavailable\\tunavailable\\t%s\\t%s\\t%s\\t%s\\treq-2\\n' "$taskstate" "$freshness" "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789" "$cancel" "$scope" "$requested"
+  printf 'O\\tbuild\\ttask_2\\t-\\t-\\t-\\t-\\tnone\\twaiting\\t%s\\tapproval\\tReview\\tdecide\\t1\\t1\\t%s\\t1\\tunavailable\\tunavailable\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$taskstate" "$freshness" "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789" "$cancel" "$scope" "$requested" "$request"
   exit 0
 fi
 if [ "$1" = fleet ] && [ "$2" = task ]; then
@@ -64,6 +65,9 @@ exit 0
         session.send(word + "\r")
         session.pump(.5)
 
+    def mutations():
+        return [line for line in log.read_text().splitlines() if line.startswith("ARGS:fleet task ")]
+
     s = launch()
     try:
         # Every approval/control argv carries the selected task's request and spec binding.
@@ -76,7 +80,7 @@ exit 0
         assert "task resume build --id task_2 --trust-spec " + DIGEST in lines
 
         # A receiver change while the modal is open prevents a stale mutation.
-        before = count.read_text()
+        before = mutations()
         s.send("Y")
         s.until("INPUT TO HYDRA", timeout=3)
         mode.write_text("stale")
@@ -84,7 +88,24 @@ exit 0
         s.pump(.4)
         s.send("approve\r")
         s.pump(.5)
-        assert count.read_text() == before
+        assert mutations() == before
+        assert "Task evidence changed during confirmation" in s.screen.text()
+    finally:
+        s.close(keys=b"q")
+
+    # Fresh observations can still replace the bound request while confirming.
+    mode.write_text("fresh")
+    s = launch()
+    try:
+        before = mutations()
+        s.send("Y")
+        s.until("INPUT TO HYDRA", timeout=3)
+        mode.write_text("changed")
+        time.sleep(2.2)
+        s.pump(.4)
+        s.send("approve\r")
+        s.pump(.5)
+        assert mutations() == before
         assert "Task evidence changed during confirmation" in s.screen.text()
     finally:
         s.close(keys=b"q")
@@ -115,8 +136,7 @@ exit 0
     s = launch()
     try:
         s.send("X")
-        s.pump(.5)
-        assert "stale or uncertain" in s.screen.text()
+        s.until("stale or uncertain", timeout=3)
         assert count.read_text() == "1\n"
     finally:
         s.close(keys=b"q")

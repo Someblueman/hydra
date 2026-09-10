@@ -4,15 +4,19 @@
 #endif
 #include "internal.h"
 /* A bounded set of detached CLI owners; no lifecycle engine in the UI. */
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+static const char *control_outcome(int status, bool fleet) {
+    if (!WIFEXITED(status)) return "interrupted; outcome unknown";
+    if (!WEXITSTATUS(status)) return fleet ? "dispatch finished; outcome unconfirmed" : "completed";
+    if (fleet) return "dispatch failed; outcome unconfirmed";
+    return WEXITSTATUS(status) == 3 ? "paused for input" : "failed";
+}
 void native_controls_tick(struct app *app) {
     size_t i;
     for (i=0;i<4;i++) if (app->control_pids[i]>0) {
         int status=0;
         pid_t result=waitpid(app->control_pids[i],&status,WNOHANG);
         if (result==app->control_pids[i]) {
-            const char *state=!WIFEXITED(status) ? "interrupted; outcome unknown" :
-                WEXITSTATUS(status)==0 ? (app->fleet ? "dispatch finished; outcome unconfirmed" : "completed") : WEXITSTATUS(status)==3 ? "paused for input" : "failed";
+            const char *state = control_outcome(status, app->fleet);
             snprintf(app->notice,sizeof(app->notice),"Control %s / refresh task evidence: %s",state,app->control_labels[i]);
             app->control_pids[i]=0;
         } else if (result<0 && errno==ECHILD) {
