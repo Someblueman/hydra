@@ -62,12 +62,20 @@
     {
       "id": "assessment",
       "method": "executable",
-      "definition": "research_check.py independently recomputes FCFS/SJF schedules, metrics, source digest, claim locations, limits and recommendation, then emits schema-3 evidence.",
+      "definition": "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"fcfs\",\"expected\":{\"mean_wait\":11.583333333333334,\"mean_turnaround\":14.166666666666666,\"p95_turnaround\":19,\"max_wait\":18,\"worst_wait_job\":\"L\"}},{\"id\":\"sjf\",\"expected\":{\"mean_wait\":4.0,\"mean_turnaround\":6.583333333333333,\"p95_turnaround\":31,\"max_wait\":22,\"worst_wait_job\":\"A\"}},{\"id\":\"recommendation\",\"expected\":{\"recommendation\":\"neither qualifies\",\"constraint_checks\":{\"FCFS\":false,\"SJF\":false}}}]}",
       "step": "check",
       "input": "subject",
       "report": "assessment",
       "deliverable": "report"
     }
+  ],
+  "obligations": [
+    {"id":"means","requirement":"means","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"Report mean waiting time and mean turnaround for both policies.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]},
+    {"id":"tails","requirement":"tails","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"Report nearest-rank p95 turnaround and maximum wait.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]},
+    {"id":"fairness","requirement":"fairness","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"Identify worst waits and distinguish observation from starvation proof.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]},
+    {"id":"recommendation","requirement":"recommendation","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"State both constraints and a recommendation without relaxing them.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]},
+    {"id":"reproduce","requirement":"reproduce","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"Retain the method, results, schedule and metric appendix.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]},
+    {"id":"limits","requirement":"limits","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"State all bounded-study limitations.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]}
   ],
   "steps": [
     {
