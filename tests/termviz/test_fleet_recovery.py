@@ -165,12 +165,10 @@ exec /bin/sh -c "$2"
         assert first["task"]["task_id"]==task_b
         assert first["task"]["attempt_history"][0]["attempt_id"]=="attempt-1"
         for host, task in (specs[1],):
-            for _ in range(80):
-                document=json.loads(run([str(BIN),"fleet","task","status",host,"--id",task],env,source))
-                data=document.get("data",document)
-                if data.get("runtime",{}).get("state")=="succeeded": break
-                assert data.get("runtime",{}).get("state") not in ("failed","outcome_unknown")
-                time.sleep(.1)
+            completed = wait_for(lambda: status(host, task),
+                lambda data: data.get("runtime", {}).get("result_state") == "ready",
+                "verified receiver result after successful process exit")
+            assert completed["runtime"]["state"] == "succeeded"
             out=base/(task+".result")
             run([str(BIN),"fleet","task","result",host,"--id",task,"--output",str(out)],env,source)
             assert out.stat().st_size > 0
@@ -225,16 +223,17 @@ steps:
     (base/"wf-spec.json").write_text(json.dumps(wf_spec)); wf_package=base/"wf-package.json"
     preview=json.loads(run([str(BIN),"fleet","task","prepare","--source",str(source),"--spec",str(base/"wf-spec.json"),"--output",str(wf_package)],env,source)); wf_digest=preview["data"]["spec_sha256"]
     receipt=json.loads(run([str(BIN),"fleet","task","submit","host-b","--input",str(wf_package),"--key","v4-workflow","--trust-spec",wf_digest],env,source)); wf_id=receipt.get("task_id") or receipt["data"]["task_id"]
-    def workflow_logs(offset=0, source_kind="owner"):
+    def workflow_logs(offset=0, source_kind="owner", limit=4096):
         selection = [] if source_kind == "owner" else ["--step", "work", "--attempt", "1"]
         return json.loads(run([str(BIN), "fleet", "task", "logs", "host-b", "--id", wf_id,
             "--source", source_kind, *selection, "--offset", str(offset),
-            "--limit", "4096"], env, source))["data"]["log"]
+            "--limit", str(limit)], env, source))["data"]["log"]
 
     wait_for(lambda: status("host-b", wf_id),
              lambda data: data.get("runtime", {}).get("run_id"), "workflow run assigned")
-    prefix = wait_for(workflow_logs, lambda data: b"run_" in bytes.fromhex(data.get("hex", "")),
-                      "published owner log and run identity while execution is gated")
+    prefix = wait_for(lambda: workflow_logs(limit=64),
+        lambda data: len(bytes.fromhex(data.get("hex", ""))) == 64 and not data["eof"],
+        "bounded owner-log prefix while execution is gated")
     def workflow_observation():
         return json.loads(run([str(BIN), "fleet", "task", "observe", "host-b", "--id", wf_id,
                               "--event-limit", "2"], env, source))
@@ -302,7 +301,7 @@ steps:
     assert [(row["attempt_id"], row["state"]) for row in attempts] == [("attempt-1", "succeeded")], attempts
     suffix = workflow_logs(prefix["next_offset"])
     full_log = workflow_logs()
-    assert prefix["next_offset"] > 0
+    assert prefix["next_offset"] == 64 and suffix["hex"]
     assert prefix["hex"] + suffix["hex"] == full_log["hex"]
     assert suffix["next_offset"] == full_log["next_offset"]
     work_log = workflow_logs(source_kind="work")
@@ -327,6 +326,7 @@ steps:
         assert "evidence=saved_snapshot" in text and "resume cursor=" in text
         (base / f"announcement-{index}.txt").write_text(text)
     (base / "summary.json").write_text(json.dumps({"task":wf_id,"run":run_id,"attempt":"attempt-1",
-        "events":seen,"log_bytes":suffix["next_offset"],"result":"workflow-result","no_replay":True},indent=2))
+        "events":seen,"log_bytes":suffix["next_offset"],"prefix_bytes":prefix["next_offset"],
+        "resumed_bytes":len(bytes.fromhex(suffix["hex"])),"result":"workflow-result","no_replay":True},indent=2))
 
 print("PASS V4 real two-receiver TUI restart: same task/run/attempt, complete events/logs/result, isolated owner loss and no replay")
