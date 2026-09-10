@@ -50,13 +50,18 @@ cmd_events() {
     _ce_project=""
     _ce_head=""
     _ce_type=""
-    _ce_max="1000"
+    _ce_max="1000" _ce_archive_count="32" _ce_archive_bytes="67108864" _ce_archive_seconds="2592000" _ce_dry_run=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --project) [ $# -ge 2 ] || return 1; _ce_project="$2"; shift 2 ;;
             --head) [ $# -ge 2 ] || return 1; _ce_head="$2"; shift 2 ;;
             --type) [ $# -ge 2 ] || return 1; _ce_type="$2"; shift 2 ;;
             --max-events) [ $# -ge 2 ] || return 1; _ce_max="$2"; shift 2 ;;
+            --archive-max-count) [ $# -ge 2 ] || return 1; _ce_archive_count="$2"; shift 2 ;;
+            --archive-max-bytes) [ $# -ge 2 ] || return 1; _ce_archive_bytes="$2"; shift 2 ;;
+            --archive-keep-seconds) [ $# -ge 2 ] || return 1; _ce_archive_seconds="$2"; shift 2 ;;
+            --dry-run) _ce_dry_run=1; shift ;;
+            --apply) _ce_dry_run=0; shift ;;
             *) echo "Error: unknown events option '$1'" >&2; return 1 ;;
         esac
     done
@@ -72,7 +77,12 @@ cmd_events() {
             ;;
         repair) _ce_backup="$(event_repair_file "$_ce_file" "$1" "$2")" && echo "Corrupt input saved to $_ce_backup" ;;
         retain)
-            _ce_archive="$(event_retain_file "$_ce_file" "$_ce_max" "$1" "$2")" || return 1
+            _ce_lock="events_$1_$2"
+            acquire_lock "$_ce_lock" "event retention" "$2" || return 1
+            _ce_status=0
+            _ce_archive="$( _event_retain_file_locked "$_ce_file" "$_ce_max" "$1" "$2" "$_ce_archive_count" "$_ce_archive_bytes" "$_ce_archive_seconds" "$_ce_dry_run" )" || _ce_status=$?
+            release_lock "$_ce_lock"
+            [ "$_ce_status" -eq 0 ] || return "$_ce_status"
             [ -z "$_ce_archive" ] || echo "Archive: $_ce_archive"
             ;;
         *) echo "Usage: hydra events <verify|tail|filter|repair|retain>" >&2; return 1 ;;
