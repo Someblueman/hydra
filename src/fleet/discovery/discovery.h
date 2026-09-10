@@ -3,7 +3,8 @@
 #include "fleet/fleet.h"
 #include <json-c/json.h>
 
-#define HD_HOSTS 16
+#define HD_HOSTS 100
+#define HD_QUALIFY_BATCH 16
 struct hd_options {
     const char *ssh[HD_HOSTS], *select[HD_HOSTS];
     size_t ssh_count, select_count;

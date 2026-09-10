@@ -63,6 +63,8 @@ static json_object *run_discovery(const struct hd_options *options, json_object 
     json_object_object_add(data, "candidate_schema_version", json_object_new_int(1));
     json_object_object_add(data, "observed_at", json_object_new_int64((int64_t)time(NULL)));
     json_object_object_add(data, "candidates", rows);
+    json_object_object_add(data, "qualification_batch_size", json_object_new_int(HD_QUALIFY_BATCH));
+    json_object_object_add(data, "qualification_batch_count", json_object_new_int((int)((json_object_array_length(rows) + HD_QUALIFY_BATCH - 1) / HD_QUALIFY_BATCH)));
     json_object_object_add(data, "partial_failure", json_object_new_boolean(failed));
     f_string_add(data, "required_capability", options->probe ? options->capability : "");
     result = failed ? f_error("fleet-discovery", f_stopped ? "cancelled" : "partial_failure", "one or more selected candidates could not be resolved or qualified") : f_success("fleet-discovery", NULL);
