@@ -38,6 +38,7 @@ make build-plan-precompile
 precompiler="$PWD/build/plan-precompile"
 fixture="$(mktemp -d)"
 cp -R examples/planning/manifest-map "$fixture/source"
+cp examples/planning/native/payload.sh "$fixture/source/"
 export HYDRA_HOME="$fixture/home"
 cd "$fixture/source"
 git init -q && git add . && git -c user.name=Test -c user.email=test@example.invalid commit -qm source
