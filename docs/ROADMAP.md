@@ -402,10 +402,12 @@ remain open; these results do not justify a more elaborate planner.
 A [real Python cleanup workload](evidence/python-cleanup-20260910/README.md)
 replaced duplicated precompilers with native C and retired the toy runner while
 preserving useful independent tests. Its matched serial/parallel executions both
-passed (106.33/106.69 seconds); no scheduling advantage or planning benefit was
-observed. The record preserves planning overhead, failed attempts and unknown
-provider cost. This qualifies one maintenance workflow, not the broader semantic
-planning-quality, stochastic-variability or calibration requirements above.
+passed (106.33/106.69 seconds), qualifying real planning, execution and independent
+verification on this maintenance workflow. Those timings are descriptive: the
+cleanup was not expected to benefit from parallelism, and speedup is not an
+acceptance criterion or a deficiency in this qualification. The record preserves
+planning overhead, failed attempts and unknown provider cost. Broader semantic
+planning-quality, stochastic-variability and calibration research remains open.
 
 ##### 9F. Selective repair and bounded graph expressiveness
 
