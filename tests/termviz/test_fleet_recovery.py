@@ -1,5 +1,7 @@
 """Two real receiver homes observed through the native fleet TUI."""
-import json, os, re, signal, subprocess, tempfile, time
+import json, os, signal, subprocess, tempfile, time
+import shutil
+from contextlib import contextmanager
 from pathlib import Path
 from pty_support import Session
 ROOT = Path(__file__).resolve().parents[2]
@@ -7,9 +9,71 @@ BIN = ROOT / "bin/hydra"
 BUILD = Path(os.environ.get("BUILD_DIR", ROOT / "build"))
 
 def run(args, env, cwd):
-    return subprocess.run(args, env=env, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True).stdout
+    result = subprocess.run(args, env=env, cwd=cwd, text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    with (base / "commands.jsonl").open("a") as log:
+        log.write(json.dumps({"argv": args, "cwd": str(cwd), "exit": result.returncode,
+                              "stdout": result.stdout, "stderr": result.stderr}) + "\n")
+    if result.returncode:
+        raise AssertionError(f"{args}: {result.returncode}\n{result.stdout}\n{result.stderr}")
+    return result.stdout
 
-with tempfile.TemporaryDirectory(prefix="hydra-v4-real-") as td:
+
+def wait_for(read, predicate, label, timeout=40):
+    deadline = time.monotonic() + timeout
+    observed = None
+    while time.monotonic() < deadline:
+        observed = read()
+        if predicate(observed):
+            return observed
+        time.sleep(.15)
+    raise AssertionError(f"{label}: {observed}")
+
+
+def select_task(session, task):
+    session.until(task, 15)
+    for _ in range(8):
+        if "> " + task in session.screen.text():
+            return
+        session.send("j")
+        session.pump(.15)
+    raise AssertionError("task could not be selected: " + session.screen.text())
+
+
+@contextmanager
+def fixture():
+    path = Path(tempfile.mkdtemp(prefix="hydra-v4-real-"))
+    succeeded = False
+    cleanup_failed = False
+    try:
+        yield path
+        succeeded = True
+    finally:
+        for name in ["a", "b"]:
+            home = path / f"host-{name}"
+            if not home.is_dir():
+                continue
+            for gate in ["release", "release-workflow"]:
+                (home / gate).touch()
+            cleanup = subprocess.run(["sh", "-c", 
+                'root="$1"; fixture="$2"; HYDRA_HOME="$3"; export HYDRA_HOME; '
+                '. "$root/tests/workflow_task_cleanup.sh"; '
+                'workflow_task_fixture_quiesce "$HYDRA_HOME" && test_tmux_fixture_cleanup "$fixture"',
+                "fixture-cleanup", str(ROOT), str(path), str(home)],
+                capture_output=True, text=True, timeout=45)
+            if cleanup.returncode:
+                succeeded = False
+                cleanup_failed = True
+                print(cleanup.stderr, flush=True)
+        if succeeded and os.environ.get("HYDRA_TEST_KEEP_FIXTURE") != "1":
+            shutil.rmtree(path)
+        else:
+            print("V4 evidence:", path, flush=True)
+        if cleanup_failed:
+            raise AssertionError("fixture cleanup could not confirm quiescence")
+
+
+with fixture() as td:
     base=Path(td); source=base/"source"; source.mkdir(); transport=base/"transport"; transport.mkdir(); client=base/"client"
     for name in ("a","b"):
         receiver=base/f"receiver-{name}"; receiver.mkdir()
@@ -32,7 +96,7 @@ case "$1" in
 esac
 exec /bin/sh -c "$2"
 '''); ssh.chmod(0o755)
-    env={**os.environ,"PATH":f"{base}:{os.environ['PATH']}","HYDRA_TEST_GIT":subprocess.run(["command","-v","git"],shell=True,text=True,stdout=subprocess.PIPE).stdout.strip(),"HYDRA_HOME":str(client)}
+    env={**os.environ,"PATH":f"{base}:{os.environ['PATH']}","HYDRA_HOME":str(client)}
     (base/"git").symlink_to(subprocess.run(["sh","-c","command -v git"],text=True,stdout=subprocess.PIPE).stdout.strip())
     env["PATH"]=f"{base}:{env['PATH']}"
     run([str(BIN),"init","--no-agent","--json"],env,source)
@@ -104,8 +168,8 @@ exec /bin/sh -c "$2"
             for _ in range(80):
                 document=json.loads(run([str(BIN),"fleet","task","status",host,"--id",task],env,source))
                 data=document.get("data",document)
-                if data.get("state")=="succeeded": break
-                assert data.get("state") not in ("failed","outcome_unknown")
+                if data.get("runtime",{}).get("state")=="succeeded": break
+                assert data.get("runtime",{}).get("state") not in ("failed","outcome_unknown")
                 time.sleep(.1)
             out=base/(task+".result")
             run([str(BIN),"fleet","task","result",host,"--id",task,"--output",str(out)],env,source)
@@ -151,27 +215,107 @@ steps:
       name: result
       argv: [test, -s, result.txt]
 """)
-    (source/"workflow-work.sh").write_text("set -eu\nprintf workflow-prefix\nwhile [ ! -f \"$HYDRA_HOME/release-workflow\" ]; do sleep .1; done\nprintf workflow-result > result.txt\n")
+    (source/"workflow-work.sh").write_text(
+        "set -eu\nprintf '%s\\n' workflow-prefix\n"
+        "while [ ! -f \"$HYDRA_HOME/release-workflow\" ]; do sleep .1; done\n"
+        "printf '%s\\n' workflow-suffix\nprintf workflow-result > result.txt\n")
     subprocess.run(["git","add",".hydra/workflows/v4.yml","workflow-work.sh"],cwd=source,check=True)
     subprocess.run(["git","-c","commit.gpgSign=false","commit","-qm","v4 workflow"],cwd=source,check=True)
     wf_spec=json.loads((base/"spec-b.json").read_text()); wf_spec["limits"]["execution_seconds"]=120; wf_spec["source"]["commit"]=subprocess.run(["git","rev-parse","HEAD"],cwd=source,text=True,stdout=subprocess.PIPE,check=True).stdout.strip(); wf_spec["work"]={"kind":"workflow","path":".hydra/workflows/v4.yml"}; wf_spec["completion"]="workflow-success"; wf_spec["outputs"]=["result.txt"]
     (base/"wf-spec.json").write_text(json.dumps(wf_spec)); wf_package=base/"wf-package.json"
     preview=json.loads(run([str(BIN),"fleet","task","prepare","--source",str(source),"--spec",str(base/"wf-spec.json"),"--output",str(wf_package)],env,source)); wf_digest=preview["data"]["spec_sha256"]
     receipt=json.loads(run([str(BIN),"fleet","task","submit","host-b","--input",str(wf_package),"--key","v4-workflow","--trust-spec",wf_digest],env,source)); wf_id=receipt.get("task_id") or receipt["data"]["task_id"]
-    (base/"host-b"/"release-workflow").write_text("")
-    for _ in range(300):
-        wf_status=status("host-b",wf_id)
-        if wf_status.get("runtime",{}).get("state")=="succeeded": break
-        assert wf_status.get("runtime",{}).get("state") not in ("failed","outcome_unknown"); time.sleep(.1)
-    assert wf_status.get("runtime",{}).get("state")=="succeeded"
-    for _ in range(100):
-        if wf_status.get("runtime",{}).get("result_state")=="ready": break
-        time.sleep(.1); wf_status=status("host-b",wf_id)
-    assert wf_status.get("runtime",{}).get("result_state")=="ready"
-    observed=json.loads(run([str(BIN),"fleet","task","observe","host-b","--id",wf_id,"--event-limit","2"],env,source))["data"]
-    stream=observed["event_observation"]; assert stream["available"] and not stream["retention_gap"] and stream["events"]
-    assert observed["task"]["attempt_history"] and observed["task"]["attempt_history"][0]["attempt_id"]
-    resumed=json.loads(run([str(BIN),"fleet","task","observe","host-b","--id",wf_id,"--cursor",str(stream["next_cursor"]),"--byte-offset",str(stream["next_byte_offset"]),"--stream-id",stream["stream_id"],"--event-limit","2"],env,source))["data"]["event_observation"]
-    assert resumed["stream_reset"] is False and resumed["oldest_cursor"] <= resumed["head_cursor"]
+    def workflow_logs(offset=0, source_kind="owner"):
+        selection = [] if source_kind == "owner" else ["--step", "work", "--attempt", "1"]
+        return json.loads(run([str(BIN), "fleet", "task", "logs", "host-b", "--id", wf_id,
+            "--source", source_kind, *selection, "--offset", str(offset),
+            "--limit", "4096"], env, source))["data"]["log"]
 
-print("PASS V4 real two-receiver TUI observation: distinct task identities, stale reconnect, and verified result packages")
+    wait_for(lambda: status("host-b", wf_id),
+             lambda data: data.get("runtime", {}).get("run_id"), "workflow run assigned")
+    prefix = wait_for(workflow_logs, lambda data: b"run_" in bytes.fromhex(data.get("hex", "")),
+                      "published owner log and run identity while execution is gated")
+    def workflow_observation():
+        return json.loads(run([str(BIN), "fleet", "task", "observe", "host-b", "--id", wf_id,
+                              "--event-limit", "2"], env, source))
+    observed_document = wait_for(workflow_observation, lambda document: any(
+        row.get("step_id") == "work" and row.get("state") == "running"
+        for row in document["data"]["task"]["steps"]), "original work attempt running")
+    observed = observed_document["data"]
+    stream = observed["event_observation"]
+    assert stream["available"] and stream["events"] and not stream["retention_gap"]
+    run_id = observed["task"]["run_id"]
+    work_attempt = [row for row in observed["task"]["steps"] if row["step_id"] == "work"]
+    assert [(row["attempt_id"], row["state"]) for row in work_attempt] == [("attempt-1", "running")], work_attempt
+    (base / "observe-before.json").write_text(json.dumps(observed_document))
+    (base / "log-before.json").write_text(json.dumps(prefix))
+
+    observer = Session([str(BUILD / "hydra-tui"), "--fleet", "--view", "overview"],
+                       140, 40, env=tui_env, cwd=source)
+    try:
+        select_task(observer, wf_id)
+        observer.until("State: running", 15)
+        assert status("host-b", wf_id)["runtime"]["state"] == "running"
+    finally:
+        observer.close(keys=b"q")
+    # The observing process is gone while this original task remains gated.
+    assert status("host-b", wf_id)["runtime"]["state"] == "running"
+    (transport / "offline-a").write_text("")
+    restarted = Session([str(BUILD / "hydra-tui"), "--fleet", "--view", "overview"],
+                        140, 40, env=tui_env, cwd=source)
+    try:
+        select_task(restarted, wf_id)
+        restarted.until("State: running", 15)
+        assert status("host-b", wf_id)["runtime"]["state"] == "running"
+        (base / "host-b" / "release-workflow").write_text("")
+        finished = wait_for(lambda: status("host-b", wf_id),
+            lambda data: data.get("runtime", {}).get("result_state") == "ready", "original result sealed", 60)
+        assert finished["runtime"]["state"] == "succeeded", finished
+        assert finished["runtime"]["run_id"] == run_id
+        restarted.until("State: succeeded", 15)
+        assert "> " + wf_id in restarted.screen.text()
+        assert "host host-b" in restarted.screen.text()
+        (base / "observer-after.txt").write_text(restarted.screen.text())
+    finally:
+        restarted.close(keys=b"q")
+        (transport / "offline-a").unlink(missing_ok=True)
+
+    seen = [event["sequence"] for event in stream["events"]]
+    for page in range(32):
+        resumed = json.loads(run([str(BIN), "fleet", "task", "observe", "host-b", "--id", wf_id,
+            "--cursor", str(stream["next_cursor"]), "--byte-offset", str(stream["next_byte_offset"]),
+            "--stream-id", stream["stream_id"], "--event-limit", "2"], env, source))["data"]
+        current = resumed["event_observation"]
+        assert resumed["task"]["run_id"] == run_id and resumed["task"]["task_id"] == wf_id
+        assert current["stream_id"] == stream["stream_id"] and not current["stream_reset"] and not current["retention_gap"]
+        seen.extend(event["sequence"] for event in current["events"])
+        stream = current
+        if stream["next_cursor"] == stream["head_cursor"]:
+            break
+        assert current["events"], current
+    assert seen == list(range(1, stream["head_cursor"] + 1)), seen
+    assert stream["head_cursor"] >= 10
+    attempts = [row for row in resumed["task"]["attempt_history"] if row["step_id"] == "work"]
+    assert [(row["attempt_id"], row["state"]) for row in attempts] == [("attempt-1", "succeeded")], attempts
+    suffix = workflow_logs(prefix["next_offset"])
+    full_log = workflow_logs()
+    assert prefix["next_offset"] > 0
+    assert prefix["hex"] + suffix["hex"] == full_log["hex"]
+    assert suffix["next_offset"] == full_log["next_offset"]
+    work_log = workflow_logs(source_kind="work")
+    work_text = bytes.fromhex(work_log["hex"])
+    assert b"workflow-prefix" in work_text and b"workflow-suffix" in work_text, work_text
+    output = base / "workflow-result.json"
+    run([str(BIN), "fleet", "task", "result", "host-b", "--id", wf_id, "--output", str(output)], env, source)
+    inspected = json.loads(run([str(BIN), "fleet", "task", "inspect-result", "--input", str(output)], env, source))
+    assert inspected["ok"] is True
+    result = json.loads(output.read_text())["result"]
+    artifacts = [row for row in result["artifacts"] if row["path"] == "result.txt"]
+    assert len(artifacts) == 1 and bytes.fromhex(artifacts[0]["hex"]) == b"workflow-result", artifacts
+    assert len(list((base / "host-a/fleet/tasks").glob("task_*/acceptance.json"))) == 1
+    assert len(list((base / "host-b/fleet/tasks").glob("task_*/acceptance.json"))) == 2
+    assert status("host-a", task_a)["runtime"]["state"] == "outcome_unknown"
+    (base / "summary.json").write_text(json.dumps({"task":wf_id,"run":run_id,"attempt":"attempt-1",
+        "events":seen,"log_bytes":suffix["next_offset"],"result":"workflow-result","no_replay":True},indent=2))
+
+print("PASS V4 real two-receiver TUI restart: same task/run/attempt, complete events/logs/result, isolated owner loss and no replay")
