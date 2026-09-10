@@ -1,0 +1,493 @@
+{
+  "schema_version": 1,
+  "id": "performance-record-count-v2",
+  "objective": "Qualify a bounded baseline versus candidate record-count workload through exclusive raw trials, deterministic paired uncertainty analysis, and an independent recomputation checker.",
+  "context": [
+    "SPEC.md"
+  ],
+  "assumptions": [
+    "The measurement step is one exclusive process and is run only during an authorized measurement window.",
+    "Ten trials per implementation are the fixed stopping rule; no retries or cherry-picking are allowed.",
+    "The result may be target not established or invalid/insufficient measurement.",
+    "The checker independently recomputes summaries and outcome from raw samples and fails on altered or truncated evidence.",
+    "measure.py, analyze.py, compose.sh and checker.py are fixed deterministic source material.",
+    "The checker validates the sealed manifest against current source and workload hashes."
+  ],
+  "questions": [],
+  "deliverables": [
+    {
+      "id": "report",
+      "description": "Sealed performance report with raw samples and analysis.",
+      "step": "compose",
+      "output": "report",
+      "destination": "run-artifact"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "binding",
+      "criterion": "Bind exact baseline.sh and candidate.sh hashes, records.txt hash and byte count, command forms, host/OS/Python environment, nanosecond units, and protocol metadata.",
+      "deliverable": "report",
+      "check": "performance-check"
+    },
+    {
+      "id": "protocol",
+      "criterion": "Show two warm-ups, ten trials per implementation, raw samples, failures and exclusive measurement.",
+      "deliverable": "report",
+      "check": "performance-check"
+    },
+    {
+      "id": "analysis",
+      "criterion": "Report counts, median, nearest-rank p95, paired relative-change interval, and fixed stopping rule from raw samples.",
+      "deliverable": "report",
+      "check": "performance-check"
+    },
+    {
+      "id": "outcome",
+      "criterion": "Classify target established only for ten valid alternating trial pairs when the median paired relative change is at most -10% and its 90% bootstrap upper bound is below zero; otherwise classify accurately.",
+      "deliverable": "report",
+      "check": "performance-check"
+    },
+    {
+      "id": "limits",
+      "criterion": "State that this bounded workload does not establish Hydra-wide performance or scalability.",
+      "deliverable": "report",
+      "check": "performance-check"
+    }
+  ],
+  "checks": [
+    {
+      "id": "performance-check",
+      "method": "executable",
+      "definition": "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"performance-outcome\",\"expected\":\"pass\"}]}",
+      "step": "check",
+      "input": "subject",
+      "report": "assessment",
+      "deliverable": "report"
+    }
+  ],
+  "steps": [
+    {
+      "id": "spawn_work",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {
+        "branch": "performance-work-v2",
+        "terminal_mode": "headless"
+      }
+    },
+    {
+      "id": "spawn_check",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {
+        "branch": "performance-check-v2",
+        "terminal_mode": "headless"
+      }
+    },
+    {
+      "id": "measure",
+      "role": "work",
+      "kind": "exec",
+      "needs": [
+        "spawn_work",
+        "spawn_check"
+      ],
+      "writes": [],
+      "args": {
+        "head": "performance-work-v2",
+        "argv": [
+          "python3",
+          "measure.py"
+        ],
+        "timeout": 120
+      }
+    },
+    {
+      "id": "analyze",
+      "role": "work",
+      "kind": "exec",
+      "needs": [
+        "spawn_work",
+        "measure"
+      ],
+      "writes": [],
+      "args": {
+        "head": "performance-work-v2",
+        "argv": [
+          "python3",
+          "analyze.py"
+        ],
+        "timeout": 60
+      }
+    },
+    {
+      "id": "compose",
+      "role": "compose",
+      "kind": "exec",
+      "needs": [
+        "spawn_work",
+        "measure",
+        "analyze"
+      ],
+      "writes": [],
+      "args": {
+        "head": "performance-work-v2",
+        "argv": [
+          "sh",
+          "compose.sh"
+        ],
+        "timeout": 60
+      }
+    },
+    {
+      "id": "check",
+      "role": "verify",
+      "kind": "exec",
+      "needs": [
+        "spawn_check",
+        "compose",
+        "measure"
+      ],
+      "writes": [],
+      "args": {
+        "head": "performance-check-v2",
+        "argv": [
+          "python3",
+          "checker.py"
+        ],
+        "timeout": 60
+      }
+    }
+  ],
+  "data": {
+    "schema_version": 1,
+    "inputs": {
+      "records": {
+        "path": "records.txt",
+        "type": "file",
+        "max_bytes": 131072
+      }
+    },
+    "steps": {
+      "measure": {
+        "inputs": {
+          "records": {
+            "input": "records"
+          }
+        },
+        "outputs": {
+          "raw": {
+            "path": "raw.csv",
+            "type": "file",
+            "max_bytes": 32768
+          },
+          "environment": {
+            "path": "environment.txt",
+            "type": "file",
+            "max_bytes": 8192
+          },
+          "manifest": {
+            "path": "manifest.json",
+            "type": "file",
+            "max_bytes": 16384
+          }
+        }
+      },
+      "analyze": {
+        "inputs": {
+          "raw": {
+            "step": "measure",
+            "output": "raw"
+          },
+          "manifest": {
+            "step": "measure",
+            "output": "manifest"
+          }
+        },
+        "outputs": {
+          "analysis": {
+            "path": "analysis.json",
+            "type": "file",
+            "max_bytes": 32768
+          }
+        }
+      },
+      "compose": {
+        "inputs": {
+          "analysis": {
+            "step": "analyze",
+            "output": "analysis"
+          },
+          "raw": {
+            "step": "measure",
+            "output": "raw"
+          },
+          "environment": {
+            "step": "measure",
+            "output": "environment"
+          },
+          "manifest": {
+            "step": "measure",
+            "output": "manifest"
+          }
+        },
+        "outputs": {
+          "report": {
+            "path": "report.json",
+            "type": "file",
+            "max_bytes": 131072
+          }
+        }
+      },
+      "check": {
+        "inputs": {
+          "subject": {
+            "step": "compose",
+            "output": "report"
+          },
+          "raw": {
+            "step": "measure",
+            "output": "raw"
+          },
+          "manifest": {
+            "step": "measure",
+            "output": "manifest"
+          },
+          "records": {
+            "input": "records"
+          }
+        },
+        "outputs": {
+          "assessment": {
+            "path": "assessment",
+            "type": "object",
+            "max_bytes": 32768
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "hosts": [
+      "local"
+    ],
+    "tools": [
+      "sh",
+      "python3"
+    ],
+    "effects": [
+      "worktree",
+      "execute"
+    ],
+    "writes": [],
+    "parallelism": 2,
+    "timeout_seconds": 900,
+    "artifact_bytes": 524288,
+    "max_heads": 2,
+    "disk_mb": 2,
+    "retry_budget": 0,
+    "repair_budget": 0
+  },
+  "obligations": [
+    {
+      "id": "performance-outcome",
+      "requirement": "outcome",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "The sealed performance report is independently recomputed and classified with preserved raw evidence.",
+      "evaluation": {
+        "method": "executable",
+        "check": "performance-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256",
+        "measurements"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded synthetic workload"
+      ]
+    },
+    {
+      "id": "binding-check",
+      "requirement": "binding",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "The sealed performance report is independently recomputed and classified with preserved raw evidence.",
+      "evaluation": {
+        "method": "executable",
+        "check": "performance-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256",
+        "measurements"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded synthetic workload"
+      ]
+    },
+    {
+      "id": "protocol-check",
+      "requirement": "protocol",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "The sealed performance report is independently recomputed and classified with preserved raw evidence.",
+      "evaluation": {
+        "method": "executable",
+        "check": "performance-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256",
+        "measurements"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded synthetic workload"
+      ]
+    },
+    {
+      "id": "analysis-check",
+      "requirement": "analysis",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "The sealed performance report is independently recomputed and classified with preserved raw evidence.",
+      "evaluation": {
+        "method": "executable",
+        "check": "performance-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256",
+        "measurements"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded synthetic workload"
+      ]
+    },
+    {
+      "id": "limits-check",
+      "requirement": "limits",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "The sealed performance report is independently recomputed and classified with preserved raw evidence.",
+      "evaluation": {
+        "method": "executable",
+        "check": "performance-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256",
+        "measurements"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded synthetic workload"
+      ]
+    }
+  ]
+}

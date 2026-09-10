@@ -21,7 +21,10 @@ Requirements:
 - `limits`: explain the limits of 12 synthetic jobs, exact-duration knowledge,
   one server, non-preemption, and lack of general production evidence.
 
-The source dataset is the authority for this bounded research question. Do not
-make broader factual claims requiring external research. Use `measure.sh` to
-produce evidence, an analyst to interpret it, composition to produce the final
-report, and an independent assessor to evaluate the sealed final artifact.
+The source dataset is the authority for this bounded research question. The
+source-bound deterministic analyzer writes a JSON report and a separate checker
+recomputes schedules, metrics and constraint decisions from jobs.csv. The checker
+also enforces the exact question, claim locations, scope explanations and source
+provenance required by this exemplar; it is not a general prose judge. A complete
+negative recommendation is valid research evidence. Malformed input is invalid
+instrumentation and does not become a substantive negative finding.
