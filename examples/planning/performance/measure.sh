@@ -9,11 +9,15 @@ printf 'implementation,trial,elapsed_ns,status,count\n' > "$out/raw.csv"
 sha256sum "$input" | awk '{print $1}' > "$out/workload.sha256"
 uname -srm > "$out/environment.txt"
 printf 'shell=%s\n' "${SHELL:-unknown}" >> "$out/environment.txt"
+printf '%s\n' "$(cat analyst.txt)" > "$out/analyst-prompt"
 for impl in baseline candidate; do
     script="$base"; [ "$impl" = candidate ] && script="$candidate"
     "$script" "$input" >/dev/null
     "$script" "$input" >/dev/null
-    for trial in 1 2 3 4 5 6 7 8 9 10; do
+done
+for trial in 1 2 3 4 5 6 7 8 9 10; do
+    for impl in baseline candidate; do
+        script="$base"; [ "$impl" = candidate ] && script="$candidate"
         start=$(date +%s%N)
         status=0
         count=$($script "$input" 2>/dev/null) || status=$?
