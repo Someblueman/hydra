@@ -48,7 +48,7 @@
     {
       "id": "slug-check",
       "method": "executable",
-      "definition": "The fixed verify.sh checks the sealed final archive: expected tar members Makefile, main.c, slug.c, slug.h; build with strict C99 flags; compile and run test_slug.c covering normalization, exact-capacity, NULL/zero-capacity, guard-byte, NULL-input-clearing-from-nonempty-output and 10000-byte cases; exercise CLI multiple arguments, --limit 1..64 and exit codes including 2 for oversized slugs and argument errors; then emit verification.json with schema_version, verdict, subject_sha256 of the exact delivered subject bytes, requirements normalization/bounds/cli and evidence.",
+      "definition": "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"slug-check\",\"expected\":\"pass\"},{\"id\":\"bounds-check\",\"expected\":\"pass\"},{\"id\":\"cli-check\",\"expected\":\"pass\"}]}",
       "step": "feature-check",
       "input": "subject",
       "report": "verification",

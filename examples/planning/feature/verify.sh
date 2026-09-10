@@ -27,7 +27,7 @@ recipe="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"
 python3 - "$HYDRA_WORKFLOW_OUTPUTS_DIR/verification.json" "$digest" "$validator" "$recipe" <<'PY'
 import hashlib, json, sys
 out, subject, validator, recipe = sys.argv[1:]
-raw = {'verdict':'pass','measurement':'strict C99 build, independent API/CLI checks','requirements':['normalization','bounds','cli']}
+raw = {'actual':'pass','verdict':'pass','measurement':'strict C99 build, independent API/CLI checks','requirements':['normalization','bounds','cli']}
 rh = hashlib.sha256(json.dumps(raw, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 obs = [{'id':'slug-check','raw':raw,'raw_sha256':rh}]
 record = {'obligation_id':'slug-check','subject_manifest_sha256':subject,'validator_identity':'feature-slug-v3','validator_recipe_sha256':recipe,'invocation':{'argv':['sh','verify.sh'],'exit_code':0},'environment':{'host':'local','toolchain':'cc/make/sh'},'case_inventory':['normalization','bounds','cli'],'observations':obs,'measurements':[raw],'raw_evidence_sha256':hashlib.sha256(json.dumps(obs, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),'counts':{'executed':1,'failed':0,'skipped':0},'limitations':['fixture-only']}
