@@ -128,6 +128,37 @@ class EnrollmentTest(unittest.TestCase):
         self.assertEqual(json.loads(second.stdout)["data"]["hosts"][0]["status"], "enrolled")
         self.assertEqual(self.counter.read_text().splitlines(), ["init"])
 
+    def test_fifty_host_apply_advances_in_sixteen_host_batches(self):
+        targets = [f"host{i}" for i in range(50)]
+        inventory = self.tmp / "inventory.json"
+        config = self.tmp / "ssh-config"
+        config.write_text("Host *\n  HostName %h\n  User tester\n")
+        inventory.write_text(json.dumps({"schema_version": 1, "observed_at": 1,
+            "hosts": [{"name": t, "target": t, "labels": []} for t in targets]}))
+        qualified = {"schema_version": 1, "ok": True, "data": {"candidates": [], "required_capability": "list"}}
+        for start in range(0, 50, 16):
+            batch = targets[start:start + 16]
+            part = json.loads(self.run_fleet("qualify", "--require", "list", *sum((["--ssh", t] for t in batch), [])).stdout)
+            qualified["data"]["candidates"].extend(part["data"]["candidates"])
+        for row in qualified["data"]["candidates"]:
+            row["qualification"]["data"]["peer_fingerprint"] = "SHA256:fixture"
+        source = self.tmp / "qualified.json"; source.write_text(json.dumps(qualified))
+        intent = self.tmp / "intent.json"
+        args = ["review", "--input", str(source), "--project", str(self.tmp / "project"), "--output", str(intent)]
+        for row in qualified["data"]["candidates"]:
+            args += ["--candidate", row["candidate_id"]]
+        self.run_cli(*args)
+        digest = json.loads(intent.read_text())["intent_sha256"]
+        first = json.loads(self.run_cli("apply", "--input", str(intent), "--confirm", digest).stdout)
+        self.assertEqual(sum(r["status"] == "enrolled" for r in first["data"]["hosts"]), 16)
+        second = json.loads(self.run_cli("apply", "--input", str(intent), "--confirm", digest).stdout)
+        self.assertEqual(sum(r["status"] == "enrolled" for r in second["data"]["hosts"]), 32)
+        third = json.loads(self.run_cli("apply", "--input", str(intent), "--confirm", digest).stdout)
+        self.assertEqual(sum(r["status"] == "enrolled" for r in third["data"]["hosts"]), 48)
+        fourth = json.loads(self.run_cli("apply", "--input", str(intent), "--confirm", digest).stdout)
+        self.assertEqual(sum(r["status"] == "enrolled" for r in fourth["data"]["hosts"]), 50)
+        self.assertEqual(len(self.counter.read_text().splitlines()), 50)
+
     def test_peer_mismatch_has_zero_mutations(self):
         qualification = self.qualification("SHA256:reviewed")
         intent = self.tmp / "intent.json"
