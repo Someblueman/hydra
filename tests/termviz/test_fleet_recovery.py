@@ -73,7 +73,11 @@ exec /bin/sh -c "$2"
         s.send("H"); s.pump(.4)
         assert "stale" in s.screen.text().lower(), s.screen.text()
         # Kill exactly host A's recorded owner while its receiver task is gated.
-        os.kill(owner, signal.SIGSTOP); os.killpg(group, signal.SIGKILL); os.kill(owner, signal.SIGKILL)
+        os.kill(owner, signal.SIGSTOP)
+        try: os.killpg(group, signal.SIGKILL)
+        except ProcessLookupError: pass
+        try: os.kill(owner, signal.SIGKILL)
+        except ProcessLookupError: pass
         (transport/"offline-a").unlink()
         deadline=time.time()+5
         while time.time()<deadline:
@@ -147,18 +151,23 @@ steps:
       name: result
       argv: [test, -s, result.txt]
 """)
-    (source/"workflow-work.sh").write_text("set -eu\nprintf workflow-result > result.txt\n")
+    (source/"workflow-work.sh").write_text("set -eu\nprintf workflow-prefix\nwhile [ ! -f \"$HYDRA_HOME/release-workflow\" ]; do sleep .1; done\nprintf workflow-result > result.txt\n")
     subprocess.run(["git","add",".hydra/workflows/v4.yml","workflow-work.sh"],cwd=source,check=True)
     subprocess.run(["git","-c","commit.gpgSign=false","commit","-qm","v4 workflow"],cwd=source,check=True)
-    wf_spec=json.loads((base/"spec-b.json").read_text()); wf_spec["source"]["commit"]=subprocess.run(["git","rev-parse","HEAD"],cwd=source,text=True,stdout=subprocess.PIPE,check=True).stdout.strip(); wf_spec["work"]={"kind":"workflow","path":".hydra/workflows/v4.yml"}; wf_spec["completion"]="workflow-success"; wf_spec["outputs"]=["result.txt"]
+    wf_spec=json.loads((base/"spec-b.json").read_text()); wf_spec["limits"]["execution_seconds"]=120; wf_spec["source"]["commit"]=subprocess.run(["git","rev-parse","HEAD"],cwd=source,text=True,stdout=subprocess.PIPE,check=True).stdout.strip(); wf_spec["work"]={"kind":"workflow","path":".hydra/workflows/v4.yml"}; wf_spec["completion"]="workflow-success"; wf_spec["outputs"]=["result.txt"]
     (base/"wf-spec.json").write_text(json.dumps(wf_spec)); wf_package=base/"wf-package.json"
     preview=json.loads(run([str(BIN),"fleet","task","prepare","--source",str(source),"--spec",str(base/"wf-spec.json"),"--output",str(wf_package)],env,source)); wf_digest=preview["data"]["spec_sha256"]
     receipt=json.loads(run([str(BIN),"fleet","task","submit","host-b","--input",str(wf_package),"--key","v4-workflow","--trust-spec",wf_digest],env,source)); wf_id=receipt.get("task_id") or receipt["data"]["task_id"]
-    for _ in range(150):
+    (base/"host-b"/"release-workflow").write_text("")
+    for _ in range(300):
         wf_status=status("host-b",wf_id)
         if wf_status.get("runtime",{}).get("state")=="succeeded": break
         assert wf_status.get("runtime",{}).get("state") not in ("failed","outcome_unknown"); time.sleep(.1)
     assert wf_status.get("runtime",{}).get("state")=="succeeded"
+    for _ in range(100):
+        if wf_status.get("runtime",{}).get("result_state")=="ready": break
+        time.sleep(.1); wf_status=status("host-b",wf_id)
+    assert wf_status.get("runtime",{}).get("result_state")=="ready"
     observed=json.loads(run([str(BIN),"fleet","task","observe","host-b","--id",wf_id,"--event-limit","2"],env,source))["data"]
     stream=observed["event_observation"]; assert stream["available"] and not stream["retention_gap"] and stream["events"]
     assert observed["task"]["attempt_history"] and observed["task"]["attempt_history"][0]["attempt_id"]
