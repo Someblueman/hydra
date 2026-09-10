@@ -1,8 +1,10 @@
 {
   "schema_version": 1,
-  "id": "performance-record-count-v1",
+  "id": "performance-record-count-v2",
   "objective": "Qualify a bounded baseline versus candidate record-count workload through exclusive raw trials, deterministic paired uncertainty analysis, and an independent recomputation checker.",
-  "context": [],
+  "context": [
+    "SPEC.md"
+  ],
   "assumptions": [
     "The measurement step is one exclusive process and is run only during an authorized measurement window.",
     "Ten trials per implementation are the fixed stopping rule; no retries or cherry-picking are allowed.",
@@ -42,7 +44,7 @@
     },
     {
       "id": "outcome",
-      "criterion": "Classify target established only for ten valid paired trials, available p95s, candidate median at least 10% lower, and a paired 90% interval entirely below zero; otherwise classify accurately.",
+      "criterion": "Classify target established only for ten valid alternating trial pairs when the median paired relative change is at most -10% and its 90% bootstrap upper bound is below zero; otherwise classify accurately.",
       "deliverable": "report",
       "check": "performance-check"
     },
@@ -72,7 +74,8 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "performance-work-v2"
+        "branch": "performance-work-v2",
+        "terminal_mode": "headless"
       }
     },
     {
@@ -82,7 +85,8 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "performance-check-v2"
+        "branch": "performance-check-v2",
+        "terminal_mode": "headless"
       }
     },
     {
@@ -90,7 +94,8 @@
       "role": "work",
       "kind": "exec",
       "needs": [
-        "spawn_work"
+        "spawn_work",
+        "spawn_check"
       ],
       "writes": [],
       "args": {
@@ -184,12 +189,12 @@
           "environment": {
             "path": "environment.txt",
             "type": "file",
-            "max_bytes": 4096
+            "max_bytes": 8192
           },
           "manifest": {
             "path": "manifest.json",
             "type": "file",
-            "max_bytes": 8192
+            "max_bytes": 16384
           }
         }
       },
@@ -261,7 +266,7 @@
           "assessment": {
             "path": "assessment",
             "type": "object",
-            "max_bytes": 8192
+            "max_bytes": 32768
           }
         }
       }
@@ -309,14 +314,15 @@
         "evidence",
         "case_inventory",
         "observations",
-        "raw_evidence_sha256"
+        "raw_evidence_sha256",
+        "measurements"
       ],
       "environment": {
         "hosts": [
           "local"
         ],
         "tools": [
-          "sh"
+          "python3"
         ],
         "effects": [
           "execute"
@@ -347,14 +353,15 @@
         "evidence",
         "case_inventory",
         "observations",
-        "raw_evidence_sha256"
+        "raw_evidence_sha256",
+        "measurements"
       ],
       "environment": {
         "hosts": [
           "local"
         ],
         "tools": [
-          "sh"
+          "python3"
         ],
         "effects": [
           "execute"
@@ -385,14 +392,15 @@
         "evidence",
         "case_inventory",
         "observations",
-        "raw_evidence_sha256"
+        "raw_evidence_sha256",
+        "measurements"
       ],
       "environment": {
         "hosts": [
           "local"
         ],
         "tools": [
-          "sh"
+          "python3"
         ],
         "effects": [
           "execute"
@@ -423,14 +431,15 @@
         "evidence",
         "case_inventory",
         "observations",
-        "raw_evidence_sha256"
+        "raw_evidence_sha256",
+        "measurements"
       ],
       "environment": {
         "hosts": [
           "local"
         ],
         "tools": [
-          "sh"
+          "python3"
         ],
         "effects": [
           "execute"
@@ -461,14 +470,15 @@
         "evidence",
         "case_inventory",
         "observations",
-        "raw_evidence_sha256"
+        "raw_evidence_sha256",
+        "measurements"
       ],
       "environment": {
         "hosts": [
           "local"
         ],
         "tools": [
-          "sh"
+          "python3"
         ],
         "effects": [
           "execute"

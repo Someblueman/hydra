@@ -1,32 +1,27 @@
 # 9D research outcome
 
-This bounded investigation was executed through Hydra's public plan workflow from a clean disposable Git source repository. Compilation was kept outside the source repository, and the accepted digest was passed explicitly to the public plan runner.
+The current deterministic research recipe was executed through the public plan workflow in two separate disposable source repositories. It uses no model provider. The independent checker recomputes both non-preemptive schedules from the sealed 12-job synthetic trace, including input-order tie breaks, waits and nearest-rank p95. Five cases cover FCFS, SJF, recommendation, scope and provenance across all six obligations.
 
-## Positive investigation
+The substantive result is **neither qualifies**: FCFS has p95 turnaround 19 and maximum wait 18 (limit 16); SJF has p95 turnaround 31 and maximum wait 22. This valid negative completes the specified investigation. It does not establish a production policy ranking or satisfy an optimization objective.
 
-- Source repository: `/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/tmp.uocOGyoxAK`
-- Compiled/output root: `/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/tmp.kWa6WGWw3B`
-- Accepted plan SHA-256: `7f21b83f00939578207ec09c96a62f9908d8cd258619b0e7b625af6c93a33dce`
-- Public run ID: `run_0fa9133dc069b918626b`
-- State: `succeeded`; `workflow plan result` returned `verdict: pass`.
-- Sealed report SHA-256: `94ee1e5025015a0df25100c08d6d988c2d049245a27fc5e87f0e3efa7711aace`.
-- Independent assessment: schema 3, `evidence_status: valid`, `domain_verdict: pass`, all six obligations covered, and three cases executed with zero failures.
+The checker binds the exact question, both competing explanations, thresholds, source hash, transformations, claim locations and limits. Raw observations preserve the claimed and independently recomputed values. Malformed instrumentation is invalid; a well-formed unsupported claim is valid evidence of a failed claim.
 
-The actual recommendation for this trace is **neither qualifies**. FCFS has p95 turnaround 19 and maximum wait 18, so it fails the maximum-wait limit of 16. SJF has p95 turnaround 31 and maximum wait 22, so it fails both limits. The checker therefore records `constraint_checks: {"FCFS": false, "SJF": false}` without relaxing either limit.
+## valid-negative
 
-The independent method recomputes deterministic non-preemptive FCFS and SJF schedules from `jobs.csv`, using waiting time `start - arrival`, turnaround `finish - arrival`, nearest-rank p95 `ceil(0.95*n)`, and input-order tie breaking. The evidence recipe cases use the valid plan identifiers `fcfs`, `sjf`, and `recommendation`; policy names and reported metrics remain FCFS and SJF.
+- Public run: `run_6bad0dba53a686be63bf`; state `succeeded`; run/result exits `0/0`.
+- Accepted plan: `3067e0b9d2748c1f09208658e57b3ab8b053ef9c1186a4a00cea37a97ed852f6`.
+- Source: `/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-research-public-syj3_8l6/valid-negative/repo`.
+- State home: `/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-research-public-syj3_8l6/valid-negative/home`.
+- Subject: `94ee1e5025015a0df25100c08d6d988c2d049245a27fc5e87f0e3efa7711aace`.
+- Assessment: schema 3, evidence `valid`, domain `pass`.
 
-Source and study limits are explicit: 12 synthetic jobs, one server, exact known durations, non-preemption, and no production evidence. The result qualifies this supplied trace and its reproducibility path. It does not establish a production scheduling choice, a general policy ranking, or an optimization target.
+## unsupported-claim
 
-## Negative claim guard
+- Public run: `run_f9dc3303897f9e21631e`; state `failed`; run/result exits `1/1`.
+- Accepted plan: `0185bf5dc7a1ff6f9ca250fc05698c1b89ec5ea60a0a730a98fde5e9524e95a0`.
+- Source: `/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-research-public-syj3_8l6/unsupported-claim/repo`.
+- State home: `/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-research-public-syj3_8l6/unsupported-claim/home`.
+- Subject: `c32040045369b5559e3fcf708800ab6c63a98cff67e0934d94f0e2a0f696f5e1`.
+- Assessment: schema 3, evidence `valid`, domain `fail`.
 
-A separate fresh public run intentionally changed the composed claim to `SJF is generally best` while leaving the independent checker and recipe unchanged:
-
-- Source repository: `/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/tmp.6inXFyaebv`
-- Compiled/output root: `/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/tmp.oYGhfIIX1q`
-- Accepted plan SHA-256: `0cb07ff0b65b826800a959873747a313ea0f2e7d0712a4302390ea51f57d51e8`
-- Public run ID: `run_155306363200c8a82e8f`
-- State: `failed` at `check`; spawn, analysis, and composition completed.
-- `workflow plan result` rejected the run with `invalid_or_stale_plan` because verification did not pass.
-
-This negative run is evidence that unsupported recommendation claims are rejected. It is a claim guard, not a competing result or optimization experiment.
+In the negative control, composition succeeded but the independently checked recommendation `SJF is generally best` failed. The public result gate rejected it. Five focused unit tests also cover altered scope/provenance/question/claim locations/explanations, missing measurements, false metrics and malformed CSV. These are bounded deterministic checks, not general prose assessment.

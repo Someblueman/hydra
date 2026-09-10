@@ -1,92 +1,132 @@
 #!/usr/bin/env python3
-import csv, hashlib, json, math, os, sys
+"""Independent fixed-trace schedule and claim checks; no prose judge."""
+import csv
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import sys
 
-LIMITS = ["12 synthetic jobs", "one server", "exact known durations", "non-preemptive", "no production evidence"]
+LIMITS = ['12 synthetic jobs', 'one server', 'exact known durations', 'non-preemptive', 'no production evidence']
+QUESTION = 'For this supplied 12-job trace, compare non-preemptive FCFS and SJF under p95 turnaround <=22 and max wait <=16.'
+EXPLANATIONS = ['mean and tail metrics can disagree because a few long waits dominate tails', 'observed long wait is not proof of starvation']
+LOCATIONS = ['/claims/recommendation', '/policies/FCFS', '/policies/SJF']
+METRICS = ('mean_wait', 'mean_turnaround', 'p95_turnaround', 'max_wait', 'worst_wait_job')
+CASE_IDS = ['fcfs', 'sjf', 'recommendation', 'scope', 'provenance']
 
-def digest(path):
-    with open(path, "rb") as stream: return hashlib.sha256(stream.read()).hexdigest()
+
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':')).replace('/', r'\/').encode()
+
 
 def jobs_from(path):
-    with open(path, newline="") as stream: rows = list(csv.DictReader(stream))
-    if len(rows) != 12 or (rows and set(rows[0]) != {"id", "arrival", "duration"}): raise ValueError("invalid jobs schema")
-    seen, jobs = set(), []
-    for order, row in enumerate(rows):
-        if not row["id"] or row["id"] in seen: raise ValueError("duplicate job id")
-        arrival, duration = int(row["arrival"]), int(row["duration"])
-        if arrival < 0 or duration <= 0: raise ValueError("invalid job bounds")
-        seen.add(row["id"]); jobs.append({"id": row["id"], "arrival": arrival, "duration": duration, "order": order})
+    with path.open(newline='') as source:
+        rows = list(csv.DictReader(source))
+    if len(rows) != 12 or set(rows[0]) != {'id', 'arrival', 'duration'}:
+        raise ValueError('expected the complete 12-job source table')
+    jobs = []
+    for index, row in enumerate(rows):
+        arrival, duration = int(row['arrival']), int(row['duration'])
+        if not row['id'] or any(job['id'] == row['id'] for job in jobs) or arrival < 0 or duration <= 0:
+            raise ValueError('invalid or duplicate job')
+        jobs.append(dict(id=row['id'], arrival=arrival, duration=duration, order=index))
     return jobs
 
+
 def simulate(jobs, policy):
-    left, time, schedule = [dict(x) for x in jobs], 0, []
-    while left:
-        ready = [x for x in left if x["arrival"] <= time]
-        if not ready: time = min(x["arrival"] for x in left); ready = [x for x in left if x["arrival"] <= time]
-        key = (lambda x: (x["arrival"], x["order"])) if policy == "FCFS" else (lambda x: (x["duration"], x["arrival"], x["order"]))
-        job = min(ready, key=key); left.remove(job); start, finish = time, time + job["duration"]; time = finish
-        schedule.append({"id": job["id"], "start": start, "finish": finish, "wait": start - job["arrival"], "turnaround": finish - job["arrival"]})
-    turns, waits = [x["turnaround"] for x in schedule], [x["wait"] for x in schedule]
-    return {"schedule": schedule, "mean_wait": sum(waits) / len(waits), "mean_turnaround": sum(turns) / len(turns), "p95_turnaround": sorted(turns)[math.ceil(.95 * len(turns)) - 1], "max_wait": max(waits), "worst_wait_job": max(schedule, key=lambda x: x["wait"])["id"]}
+    remaining, now, schedule = list(jobs), 0, []
+    while remaining:
+        available = [job for job in remaining if job['arrival'] <= now]
+        if not available:
+            now = min(job['arrival'] for job in remaining)
+            available = [job for job in remaining if job['arrival'] <= now]
+        key = (lambda job: (job['arrival'], job['order'])) if policy == 'FCFS' else (
+            lambda job: (job['duration'], job['arrival'], job['order']))
+        job = min(available, key=key)
+        remaining.remove(job)
+        finish = now + job['duration']
+        schedule.append(dict(id=job['id'], start=now, finish=finish,
+                             wait=now-job['arrival'], turnaround=finish-job['arrival']))
+        now = finish
+    waits, turns = [row['wait'] for row in schedule], [row['turnaround'] for row in schedule]
+    return dict(schedule=schedule, mean_wait=sum(waits)/len(waits), mean_turnaround=sum(turns)/len(turns),
+                p95_turnaround=sorted(turns)[math.ceil(.95*len(turns))-1], max_wait=max(waits),
+                worst_wait_job=max(schedule, key=lambda row: row['wait'])['id'])
 
-def canonical(value): return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
-def check(report, jobs, subject_hash):
-    failures, actual = [], {p: simulate(jobs, p) for p in ("FCFS", "SJF")}
-    if not isinstance(report, dict) or report.get("schema_version") != 3: return ["schema_version"], actual
-    expected_keys = {"schema_version", "question", "provenance", "policies", "claims", "claim_locations", "limitations"}
-    if set(report) != expected_keys: failures.append("report_schema")
-    provenance = report.get("provenance", {})
-    if not isinstance(provenance, dict) or provenance.get("data_path") != "jobs.csv" or provenance.get("data_sha256") != subject_hash or provenance.get("method") != "deterministic non-preemptive simulation; tie arrival then input order": failures.append("provenance")
-    if report.get("policies") != actual: failures.append("policies")
-    claims = report.get("claims", {})
-    if not isinstance(claims, dict) or set(claims) != {"question", "recommendation", "constraint_checks", "limits", "competing_explanations"}: failures.append("claims_schema")
-    else:
-        qualified = {p: actual[p]["p95_turnaround"] <= 22 and actual[p]["max_wait"] <= 16 for p in actual}
-        recommendation = next((p for p, ok in qualified.items() if ok), "neither qualifies")
-        if claims.get("recommendation") != recommendation: failures.append("recommendation")
-        if claims.get("constraint_checks") != qualified: failures.append("constraint_checks")
-        if claims.get("limits") != LIMITS: failures.append("claim_limits")
-        if not isinstance(claims.get("question"), str) or not claims["question"]: failures.append("question")
-        if not isinstance(claims.get("competing_explanations"), list) or len(claims["competing_explanations"]) < 2: failures.append("explanations")
-    locations = report.get("claim_locations")
-    if not isinstance(locations, list) or not locations or not all(isinstance(x, str) and x.startswith("/") for x in locations): failures.append("claim_locations")
-    if report.get("limitations") != LIMITS: failures.append("limitations")
-    return failures, actual
+def assess(report, jobs, data_hash):
+    actual = {policy: simulate(jobs, policy) for policy in ['FCFS', 'SJF']}
+    qualified = {policy: row['p95_turnaround'] <= 22 and row['max_wait'] <= 16 for policy, row in actual.items()}
+    recommendation = next((policy for policy, passes in qualified.items() if passes), 'neither qualifies')
+    claimed = report.get('claims', {})
+    policies = report.get('policies', {})
+    if not isinstance(claimed, dict) or not isinstance(policies, dict):
+        raise ValueError('claims and policies must be objects')
+    raws, failures = {}, []
+    for policy in ['FCFS', 'SJF']:
+        agrees = policies.get(policy) == actual[policy]
+        raws[policy.lower()] = {'actual': {key: actual[policy][key] for key in METRICS} if agrees else None,
+                               'recomputed': actual[policy], 'claimed': policies.get(policy)}
+        if not agrees: failures.append(policy.lower())
+    expected_claim = dict(recommendation=recommendation, constraint_checks=qualified)
+    observed_claim = {key: claimed.get(key) for key in expected_claim}
+    raws['recommendation'] = {'actual': observed_claim, 'recomputed': expected_claim}
+    if observed_claim != expected_claim: failures.append('recommendation')
+    scope = (set(report) == {'schema_version','question','provenance','policies','claims','claim_locations','limitations'} and
+             report.get('schema_version') == 3 and report.get('question') == QUESTION and
+             set(claimed) == {'question','recommendation','constraint_checks','limits','competing_explanations'} and
+             claimed.get('question') == QUESTION and claimed.get('limits') == LIMITS and
+             claimed.get('competing_explanations') == EXPLANATIONS and
+             report.get('claim_locations') == LOCATIONS and report.get('limitations') == LIMITS)
+    raws['scope'] = {'actual': 'pass' if scope else 'fail', 'question': report.get('question'), 'claims': claimed,
+                    'claim_locations': report.get('claim_locations'), 'limitations': report.get('limitations')}
+    if not scope: failures.append('scope')
+    expected_provenance = dict(data_path='jobs.csv', data_sha256=data_hash,
+                              method='deterministic non-preemptive simulation; tie arrival then input order')
+    provenance = report.get('provenance') == expected_provenance
+    raws['provenance'] = {'actual': 'pass' if provenance else 'fail',
+                          'claimed': report.get('provenance'), 'expected': expected_provenance}
+    if not provenance: failures.append('provenance')
+    return raws, failures
+
 
 def main():
-    inp, out = os.environ["HYDRA_WORKFLOW_INPUTS_DIR"], os.environ["HYDRA_WORKFLOW_OUTPUTS_DIR"]
-    validation = json.load(open(os.environ["HYDRA_WORKFLOW_VALIDATION_FILE"])); data = validation.get("data", {})
-    subject = os.path.join(inp, "subject"); subject_hash = digest(subject); report, jobs, failures = {}, [], []
+    inputs, output = Path(os.environ['HYDRA_WORKFLOW_INPUTS_DIR']), Path(os.environ['HYDRA_WORKFLOW_OUTPUTS_DIR'])
+    bindings = json.loads(Path(os.environ['HYDRA_WORKFLOW_VALIDATION_FILE']).read_text())['data']
+    subject = (inputs/'subject').read_bytes()
+    instrumentation_valid = True
     try:
-        jobs_path = os.path.join(inp, "jobs")
-        report, jobs = json.load(open(subject)), jobs_from(jobs_path)
-        failures, actual = check(report, jobs, digest(jobs_path))
-    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as error:
-        failures, actual = ["malformed_input:" + type(error).__name__], {}
-    qualified = {p: x["p95_turnaround"] <= 22 and x["max_wait"] <= 16 for p, x in actual.items()}
-    recommendation = next((p for p, ok in qualified.items() if ok), "neither qualifies") if qualified else None
-    raw_actual = {"policies": actual, "recommendation": recommendation, "constraint_checks": qualified}
-    claimed = report.get("claims", {}) if isinstance(report, dict) else {}
-    raw = {"actual": raw_actual, "claimed": {"recommendation": claimed.get("recommendation"), "constraint_checks": claimed.get("constraint_checks")}, "checks": failures or "all quantities recomputed"}
-    metric_actual = {p: {key: actual[p][key] for key in ("mean_wait", "mean_turnaround", "p95_turnaround", "max_wait", "worst_wait_job")} for p in ("FCFS", "SJF") if p in actual}
-    observations = [{"id": p.lower(), "raw": {"actual": metric_actual[p]}, "raw_sha256": hashlib.sha256(canonical({"actual": metric_actual[p]}).encode()).hexdigest()} for p in ("FCFS", "SJF")]
-    rec_raw = {"actual": {"recommendation": recommendation, "constraint_checks": qualified}}
-    observations.append({"id": "recommendation", "raw": rec_raw, "raw_sha256": hashlib.sha256(canonical(rec_raw).encode()).hexdigest()})
+        report = json.loads(subject)
+        if not isinstance(report, dict): raise ValueError('subject must be an object')
+        raws, failures = assess(report, jobs_from(inputs/'jobs'), sha((inputs/'jobs').read_bytes()))
+    except (OSError, ValueError, TypeError, KeyError) as error:
+        instrumentation_valid = False
+        failures = list(CASE_IDS)
+        raws = {case: {'actual': None, 'error': f'{type(error).__name__}: {error}'} for case in CASE_IDS}
+    observations = [dict(id=case, raw=raws[case], raw_sha256=sha(canonical(raws[case]))) for case in CASE_IDS]
+    passed = instrumentation_valid and not failures
     records = []
-    for obligation in ("means", "tails", "fairness", "recommendation", "reproduce", "limits"):
-        records.append({"obligation_id": obligation, "subject_manifest_sha256": subject_hash, "validator_identity": "research-checker-v4", "validator_recipe_sha256": data.get("assessment-recipe"), "invocation": {"argv": ["python3", "research_check.py"], "exit_code": 0 if not failures else 1}, "environment": {"host": "local", "toolchain": "python3"}, "case_inventory": ["fcfs", "sjf", "recommendation"], "observations": observations, "raw_evidence_sha256": hashlib.sha256(canonical(observations).encode()).hexdigest(), "counts": {"executed": len(observations), "failed": 1 if failures else 0, "skipped": 0}, "limitations": ["bounded finite trace"]})
-    result = {"schema_version": 3, "execution_status": "completed", "evidence_status": "valid" if not failures else "invalid", "domain_verdict": "pass" if not failures else "fail", "verdict": "pass" if not failures else "fail", "subject_sha256": subject_hash, "validator_sha256": data.get("assessment"), "requirements": ["means", "tails", "fairness", "recommendation", "reproduce", "limits"], "evidence": "independent recomputation against jobs.csv", "limitations": ["bounded finite trace"], "evidence_records": records}
-    os.makedirs(out, exist_ok=True)
-    with open(os.path.join(out, "assessment"), "w") as stream: json.dump(result, stream, separators=(",", ":"))
-    print(json.dumps(result, separators=(",", ":"))); return 0 if not failures else 1
+    for obligation in ['means','tails','fairness','recommendation','reproduce','limits']:
+        records.append(dict(obligation_id=obligation, subject_manifest_sha256=sha(subject),
+            validator_identity='research-checker-v5', validator_recipe_sha256=bindings['assessment-recipe'],
+            invocation=dict(argv=['python3','research_check.py'], exit_code=0 if passed else 1),
+            environment=dict(host='local',toolchain=sys.version), case_inventory=CASE_IDS, observations=observations,
+            raw_evidence_sha256=sha(canonical(observations)),
+            counts=dict(executed=len(CASE_IDS), failed=len(failures), skipped=0),
+            limitations=['Fixed finite trace and exact claim schema; no general prose or production inference.']))
+    result = dict(schema_version=3, execution_status='completed', evidence_status='valid' if instrumentation_valid else 'invalid',
+        domain_verdict='pass' if passed else 'fail', verdict='pass' if passed else 'fail', subject_sha256=sha(subject),
+        validator_sha256=bindings['assessment'], requirements=['means','tails','fairness','recommendation','reproduce','limits'],
+        evidence='Independent schedules, metrics, source and fixed-scope claim checks. Failed cases: '+(', '.join(failures) or 'none'),
+        limitations=records[0]['limitations'], evidence_records=records)
+    output.mkdir(exist_ok=True)
+    (output/'assessment').write_text(json.dumps(result,separators=(',',':'))+'\n')
+    return 0 if passed else 1
 
-if __name__ == "__main__":
-    try: sys.exit(main())
-    except Exception as error:
-        fallback = {"schema_version": 3, "execution_status": "completed", "evidence_status": "invalid", "domain_verdict": "fail", "verdict": "fail", "requirements": [], "evidence": "checker error: " + type(error).__name__}
-        try:
-            os.makedirs(os.environ["HYDRA_WORKFLOW_OUTPUTS_DIR"], exist_ok=True)
-            with open(os.path.join(os.environ["HYDRA_WORKFLOW_OUTPUTS_DIR"], "assessment"), "w") as stream: json.dump(fallback, stream, separators=(",", ":"))
-        except Exception:
-            pass
-        print(json.dumps(fallback)); sys.exit(1)
+if __name__ == '__main__':
+    sys.exit(main())

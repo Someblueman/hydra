@@ -15,9 +15,11 @@ Requirements:
 - `analysis`: report sample counts, failures, median and nearest-rank p95 for
   each implementation, plus a seeded paired bootstrap percentile interval for
   the median relative change. Use raw CSV as authority and state the stopping
-  rule: ten valid paired trials or an invalid result if any trial fails.
-- `outcome`: classify the result as target established only if candidate median
-  is at least 10% lower and both p95 values are available; otherwise report
+  rule: exactly ten pairs, including failures, with no exclusions or retries.
+  A failed warm-up, trial, timeout, incorrect count or incomplete set is invalid.
+- `outcome`: classify the result as target established only if the median paired
+  relative change is at most -10% and the upper bootstrap interval is below zero;
+  the effect and interval use the same estimator. Otherwise report
   target not established or invalid/insufficient measurement as appropriate.
 - `limits`: explain that this is one synthetic text workload on one host and
   does not establish Hydra-wide CPU, latency, scalability, or user-facing
@@ -26,3 +28,16 @@ Requirements:
 The independent checker must recompute the digest, trial counts, summaries, paired
 interval and classification from the sealed raw output and fail on missing, altered
 or inconsistent evidence. Altered and truncated raw evidence are explicit negative controls.
+
+Two warm-ups per implementation precede ten pairs, with baseline/candidate order
+reversed on every pair. Timing includes fresh process startup. At ten observations
+the nearest-rank p95 is the sample maximum and cannot establish a population tail.
+The 90% paired bootstrap percentile interval assumes independent trial pairs;
+temporal drift and correlated system activity can make it overconfident.
+
+The measurement owner requires `HYDRA_PERFORMANCE_EXCLUSIVE=1` after coordinating
+a quiet window for other Hydra jobs. This flag records operator coordination; it
+does not isolate the computer or exclude unrelated system activity. Raw load
+observations and exact source, workload, shell, awk and Python hashes are retained.
+A correctly classified valid result can complete the investigation whether the
+target is established or not. Invalid instrumentation does not pass the checker.

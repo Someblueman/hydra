@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "id": "research-scheduling-deterministic-v1",
-  "objective": "Deliver a completed research report comparing non-preemptive FCFS and SJF on the supplied jobs.csv trace (12 synthetic jobs, one server, exact known durations): mean waiting and turnaround per policy, nearest-rank p95 turnaround and maximum wait per policy with explanation of disagreement with means, worst-wait job per policy with the observed-wait versus starvation distinction, an explicit recommendation under p95 turnaround at most 22 and maximum wait at most 16 that plainly reports if neither policy qualifies, a retained schedule and metric reproducibility appendix, and stated scope limits. Measurement produces sealed evidence, an analyst interprets it, composition emits the final report with its reproducibility appendix, and an independent assessor verifies the sealed final artifact against SPEC.md. A correct report must state a failed constraint rather than relax the limits.",
+  "id": "research-scheduling-deterministic-v2",
+  "objective": "Deliver a completed research report comparing non-preemptive FCFS and SJF on the supplied jobs.csv trace (12 synthetic jobs, one server, exact known durations): mean waiting and turnaround per policy, nearest-rank p95 turnaround and maximum wait per policy with explanation of disagreement with means, worst-wait job per policy with the observed-wait versus starvation distinction, an explicit recommendation under p95 turnaround at most 22 and maximum wait at most 16 that plainly reports if neither policy qualifies, a retained schedule and metric reproducibility appendix, and stated scope limits. Deterministic analysis produces a source-bound report; an independent checker recomputes schedules and validates the fixed-scope claims against SPEC.md.",
   "context": [
     "SPEC.md"
   ],
@@ -14,7 +14,7 @@
   "deliverables": [
     {
       "id": "report",
-      "description": "The completed research report (report.md) composed from the analyst draft plus the sealed metrics and schedule, including the reproducibility appendix; delivered as a run artifact.",
+      "description": "Completed JSON report with both schedules, metrics, recommendation, provenance and scope limitations.",
       "step": "compose",
       "output": "report",
       "destination": "run-artifact"
@@ -62,7 +62,7 @@
     {
       "id": "assessment",
       "method": "executable",
-      "definition": "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"fcfs\",\"expected\":{\"mean_wait\":11.583333333333334,\"mean_turnaround\":14.166666666666666,\"p95_turnaround\":19,\"max_wait\":18,\"worst_wait_job\":\"L\"}},{\"id\":\"sjf\",\"expected\":{\"mean_wait\":4.0,\"mean_turnaround\":6.583333333333333,\"p95_turnaround\":31,\"max_wait\":22,\"worst_wait_job\":\"A\"}},{\"id\":\"recommendation\",\"expected\":{\"recommendation\":\"neither qualifies\",\"constraint_checks\":{\"FCFS\":false,\"SJF\":false}}}]}",
+      "definition": "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"fcfs\",\"expected\":{\"mean_wait\":11.583333333333334,\"mean_turnaround\":14.166666666666666,\"p95_turnaround\":19,\"max_wait\":18,\"worst_wait_job\":\"L\"}},{\"id\":\"sjf\",\"expected\":{\"mean_wait\":4.0,\"mean_turnaround\":6.583333333333333,\"p95_turnaround\":31,\"max_wait\":22,\"worst_wait_job\":\"A\"}},{\"id\":\"recommendation\",\"expected\":{\"recommendation\":\"neither qualifies\",\"constraint_checks\":{\"FCFS\":false,\"SJF\":false}}},{\"id\":\"scope\",\"expected\":\"pass\"},{\"id\":\"provenance\",\"expected\":\"pass\"}]}",
       "step": "check",
       "input": "subject",
       "report": "assessment",
@@ -70,12 +70,222 @@
     }
   ],
   "obligations": [
-    {"id":"means","requirement":"means","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"Report mean waiting time and mean turnaround for both policies.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]},
-    {"id":"tails","requirement":"tails","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"Report nearest-rank p95 turnaround and maximum wait.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]},
-    {"id":"fairness","requirement":"fairness","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"Identify worst waits and distinguish observation from starvation proof.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]},
-    {"id":"recommendation","requirement":"recommendation","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"State both constraints and a recommendation without relaxing them.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]},
-    {"id":"reproduce","requirement":"reproduce","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"Retain the method, results, schedule and metric appendix.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]},
-    {"id":"limits","requirement":"limits","intent_ref":"objective","subject":{"deliverable":"report","step":"compose","output":"report"},"criterion":"State all bounded-study limitations.","evaluation":{"method":"executable","check":"assessment"},"required_evidence":["subject_sha256","verdict","evidence"],"environment":{"hosts":["local"],"tools":["sh"],"effects":["execute"]},"completion_rule":"verdict=pass","limitations":["bounded trace"]}
+    {
+      "id": "means",
+      "requirement": "means",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "Report mean waiting time and mean turnaround for both policies.",
+      "evaluation": {
+        "method": "executable",
+        "check": "assessment"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh",
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded trace"
+      ]
+    },
+    {
+      "id": "tails",
+      "requirement": "tails",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "Report nearest-rank p95 turnaround and maximum wait.",
+      "evaluation": {
+        "method": "executable",
+        "check": "assessment"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh",
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded trace"
+      ]
+    },
+    {
+      "id": "fairness",
+      "requirement": "fairness",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "Identify worst waits and distinguish observation from starvation proof.",
+      "evaluation": {
+        "method": "executable",
+        "check": "assessment"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh",
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded trace"
+      ]
+    },
+    {
+      "id": "recommendation",
+      "requirement": "recommendation",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "State both constraints and a recommendation without relaxing them.",
+      "evaluation": {
+        "method": "executable",
+        "check": "assessment"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh",
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded trace"
+      ]
+    },
+    {
+      "id": "reproduce",
+      "requirement": "reproduce",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "Retain the method, results, schedule and metric appendix.",
+      "evaluation": {
+        "method": "executable",
+        "check": "assessment"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh",
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded trace"
+      ]
+    },
+    {
+      "id": "limits",
+      "requirement": "limits",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "State all bounded-study limitations.",
+      "evaluation": {
+        "method": "executable",
+        "check": "assessment"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh",
+          "python3"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded trace"
+      ]
+    }
   ],
   "steps": [
     {
@@ -85,7 +295,8 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "research-work-deterministic"
+        "branch": "research-work-deterministic",
+        "terminal_mode": "headless"
       }
     },
     {
@@ -99,9 +310,8 @@
       "args": {
         "head": "research-work-deterministic",
         "argv": [
-          "sh",
-          "-c",
-          "python3 research_report.py"
+          "python3",
+          "research_report.py"
         ],
         "timeout": 60
       }
@@ -130,7 +340,8 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "research-check-deterministic"
+        "branch": "research-check-deterministic",
+        "terminal_mode": "headless"
       }
     },
     {
@@ -145,9 +356,8 @@
       "args": {
         "head": "research-check-deterministic",
         "argv": [
-          "sh",
-          "-c",
-          "python3 research_check.py"
+          "python3",
+          "research_check.py"
         ],
         "timeout": 60
       }
@@ -206,7 +416,7 @@
           "assessment": {
             "path": "assessment",
             "type": "object",
-            "max_bytes": 16384
+            "max_bytes": 65536
           }
         }
       }
@@ -217,7 +427,8 @@
       "local"
     ],
     "tools": [
-      "sh"
+      "sh",
+      "python3"
     ],
     "effects": [
       "worktree",
