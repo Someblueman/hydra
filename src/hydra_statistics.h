@@ -55,4 +55,10 @@ struct hs_metric_summary {
 enum hs_evidence hs_sample(const struct hs_model *m, enum hs_metric metric, size_t index, uint64_t *value);
 void hs_metric_summarize(const struct hs_model *m, const struct hs_filter *filter,
                          enum hs_metric metric, struct hs_metric_summary *out);
+/* Stable machine projection over the validated, bounded model. */
+bool hs_write_metrics_json(FILE *out, const struct hs_model *m,
+                           const struct hs_filter *filter);
+bool hs_write_metrics_compare_json(FILE *out, const struct hs_model *left,
+                                   const struct hs_model *right,
+                                   const struct hs_filter *filter);
 #endif
