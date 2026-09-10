@@ -1,0 +1,314 @@
+{
+  "schema_version": 1,
+  "id": "performance-record-count-v1",
+  "objective": "Qualify a bounded baseline versus candidate record-count workload through raw exclusive trials and an independently checked report.",
+  "context": [],
+  "assumptions": [
+    "records.txt, baseline.sh, candidate.sh, measure.sh, compose.sh, analyst.txt and assessor.txt are fixed source material.",
+    "The measurement step is one exclusive process and is run only during an authorized measurement window.",
+    "Ten trials per implementation are the fixed stopping rule; no retries or cherry-picking are allowed.",
+    "The result may be target not established or invalid/insufficient measurement."
+  ],
+  "questions": [],
+  "deliverables": [
+    {
+      "id": "report",
+      "description": "Sealed performance report with raw samples and analysis.",
+      "step": "compose",
+      "output": "report",
+      "destination": "run-artifact"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "binding",
+      "criterion": "Bind baseline, candidate, workload digest, environment, units and command forms.",
+      "deliverable": "report",
+      "check": "assessment"
+    },
+    {
+      "id": "protocol",
+      "criterion": "Show two warm-ups, ten trials per implementation, raw samples, failures and exclusive measurement.",
+      "deliverable": "report",
+      "check": "assessment"
+    },
+    {
+      "id": "analysis",
+      "criterion": "Report counts, median, nearest-rank p95, relative change and fixed stopping rule from raw samples.",
+      "deliverable": "report",
+      "check": "assessment"
+    },
+    {
+      "id": "outcome",
+      "criterion": "Classify target established only for ten valid trials, available p95s and at least 10% median improvement; otherwise classify accurately.",
+      "deliverable": "report",
+      "check": "assessment"
+    },
+    {
+      "id": "limits",
+      "criterion": "State that this bounded workload does not establish Hydra-wide performance or scalability.",
+      "deliverable": "report",
+      "check": "assessment"
+    }
+  ],
+  "checks": [
+    {
+      "id": "assessment",
+      "method": "assessment",
+      "definition": "Independent assessor recomputes the sealed report's raw evidence and classification against SPEC.md.",
+      "step": "assess",
+      "input": "subject",
+      "report": "assessment",
+      "deliverable": "report"
+    }
+  ],
+  "steps": [
+    {
+      "id": "spawn_work",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {
+        "branch": "performance-work-v1"
+      }
+    },
+    {
+      "id": "spawn_check",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {
+        "branch": "performance-check-v1"
+      }
+    },
+    {
+      "id": "measure",
+      "role": "work",
+      "kind": "exec",
+      "needs": [
+        "spawn_work"
+      ],
+      "writes": [],
+      "args": {
+        "head": "performance-work-v1",
+        "argv": [
+          "sh",
+          "measure.sh"
+        ],
+        "timeout": 120
+      }
+    },
+    {
+      "id": "analyze",
+      "role": "work",
+      "kind": "exec",
+      "needs": [
+        "spawn_work",
+        "measure"
+      ],
+      "writes": [],
+      "args": {
+        "head": "performance-work-v1",
+        "profile": "opencode",
+        "prompt_input": "prompt",
+        "result_file": "draft",
+        "timeout": 240
+      }
+    },
+    {
+      "id": "compose",
+      "role": "compose",
+      "kind": "exec",
+      "needs": [
+        "spawn_work",
+        "measure",
+        "analyze"
+      ],
+      "writes": [],
+      "args": {
+        "head": "performance-work-v1",
+        "argv": [
+          "sh",
+          "compose.sh"
+        ],
+        "timeout": 60
+      }
+    },
+    {
+      "id": "prepare",
+      "role": "work",
+      "kind": "exec",
+      "needs": [
+        "spawn_check",
+        "compose"
+      ],
+      "writes": [],
+      "args": {
+        "head": "performance-check-v1",
+        "argv": [
+          "sh",
+          "assessment_prompt.sh"
+        ],
+        "timeout": 60
+      }
+    },
+    {
+      "id": "assess",
+      "role": "verify",
+      "kind": "exec",
+      "needs": [
+        "spawn_check",
+        "compose",
+        "prepare"
+      ],
+      "writes": [],
+      "args": {
+        "head": "performance-check-v1",
+        "profile": "opencode",
+        "prompt_input": "prompt",
+        "result_file": "assessment",
+        "timeout": 240
+      }
+    }
+  ],
+  "data": {
+    "schema_version": 1,
+    "inputs": {
+      "records": {
+        "path": "records.txt",
+        "type": "file",
+        "max_bytes": 131072
+      }
+    },
+    "steps": {
+      "measure": {
+        "inputs": {
+          "records": {
+            "input": "records"
+          }
+        },
+        "outputs": {
+          "raw": {
+            "path": "raw.csv",
+            "type": "file",
+            "max_bytes": 32768
+          },
+          "workload_sha256": {
+            "path": "workload.sha256",
+            "type": "file",
+            "max_bytes": 128
+          },
+          "environment": {
+            "path": "environment.txt",
+            "type": "file",
+            "max_bytes": 4096
+          },
+          "analyst_prompt": {
+            "path": "analyst-prompt",
+            "type": "file",
+            "max_bytes": 8192
+          }
+        }
+      },
+      "analyze": {
+        "inputs": {
+          "prompt": {
+            "step": "measure",
+            "output": "analyst_prompt"
+          }
+        },
+        "outputs": {
+          "draft": {
+            "path": "draft",
+            "type": "file",
+            "max_bytes": 16384
+          }
+        }
+      },
+      "compose": {
+        "inputs": {
+          "draft": {
+            "step": "analyze",
+            "output": "draft"
+          },
+          "raw": {
+            "step": "measure",
+            "output": "raw"
+          },
+          "workload_sha256": {
+            "step": "measure",
+            "output": "workload_sha256"
+          },
+          "environment": {
+            "step": "measure",
+            "output": "environment"
+          }
+        },
+        "outputs": {
+          "report": {
+            "path": "report.md",
+            "type": "file",
+            "max_bytes": 65536
+          }
+        }
+      },
+      "prepare": {
+        "inputs": {
+          "subject": {
+            "step": "compose",
+            "output": "report"
+          }
+        },
+        "outputs": {
+          "assessment-prompt": {
+            "path": "assessment-prompt",
+            "type": "file",
+            "max_bytes": 65536
+          }
+        }
+      },
+      "assess": {
+        "inputs": {
+          "prompt": {
+            "step": "prepare",
+            "output": "assessment-prompt"
+          },
+          "subject": {
+            "step": "compose",
+            "output": "report"
+          }
+        },
+        "outputs": {
+          "assessment": {
+            "path": "assessment",
+            "type": "object",
+            "max_bytes": 8192
+          }
+        }
+      }
+    }
+  },
+  "envelope": {
+    "hosts": [
+      "local"
+    ],
+    "tools": [
+      "sh",
+      "profile:opencode"
+    ],
+    "effects": [
+      "worktree",
+      "execute"
+    ],
+    "writes": [],
+    "parallelism": 2,
+    "timeout_seconds": 900,
+    "artifact_bytes": 524288,
+    "max_heads": 2,
+    "disk_mb": 2,
+    "retry_budget": 0,
+    "repair_budget": 0
+  }
+}

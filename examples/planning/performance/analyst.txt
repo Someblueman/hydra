@@ -1,0 +1,7 @@
+Write a concise Markdown performance report from the sealed raw.csv, workload.sha256 and environment.txt.
+Read SPEC.md, baseline.sh and candidate.sh. Recompute medians and nearest-rank p95 from raw.csv using only
+rows with status=ok, but report every failure. Show the exact workload digest, commands, units, warm-ups,
+ten alternating trials per implementation, and the stopping rule. Classify as target established only when
+there are ten valid trials for both implementations, p95 exists for both, and candidate median is at least
+10% below baseline. Otherwise distinguish target not established from invalid/insufficient measurement.
+Do not claim Hydra-wide performance or use outside sources. Return only Markdown.
