@@ -6,7 +6,6 @@ retry a workflow.
 
 ```sh
 hydra workflow statistics-json
-hydra workflow statistics-announce
 hydra workflow statistics-compare <left-statistics.tsv> <right-statistics.tsv>
 ```
 
@@ -18,11 +17,24 @@ and known denominators plus sum, integer mean, maximum, nearest-rank p50 and
 p95 when samples are known. A metric with eligible records but no known samples
 is `unknown`; a metric with no eligible records is `unavailable`. Missing values
 are `null`, never zero. Invalid, truncated, or oversized feeds fail closed.
+New task attempts record coordinator dispatch and terminal observation times.
+First ready-to-dispatch queue time survives repair and reconciliation; these
+values do not measure the receiver's separate admission queue. Earlier receipts
+without these fields remain unknown.
+The `coverage` object reports partial runs and bounded-feed warnings, so a valid
+partial sample is not mistaken for complete history.
 
-`statistics-announce` emits one short ASCII line for the snapshot, each run,
-each warning, and the final coverage count. A missing run state is announced as
-unknown, and warning lines preserve the distinction between an empty sample and
-failed evidence.
+`recovery_outcomes` counts matched runs with a known positive coordinator
+owner-recovery count. Successful unplanned runs and successfully verified planned
+runs count as success; failed or cancelled runs count as unsuccessful. A still
+running or unverified recovered run remains unknown. The fraction uses only the
+known terminal denominator, and missing recovery history has its own count.
+Approval continuation and automatic step retries are not owner recovery.
+
+The current workflow feed does not record receiver unknown outcomes, total manual
+interventions or actual network transfer bytes. Those fields remain explicitly
+unmeasured. An approval count or package file size would measure narrower things
+and is not substituted for them.
 
 `statistics-compare` loads two previously captured feed files through the same
 native parser and emits both metric summaries plus deltas for mean, maximum,
@@ -36,7 +48,8 @@ bytes, provider cost, CPU, memory, and tokens are explicitly unavailable.
 hydra fleet task announce --input observation.json
 ```
 
-This command reads one saved observation page and prints an ASCII announcement
+This command reads one saved observation page and returns an ASCII announcement
+in the JSON response field `data.announcement`
 for the recorded task state and each retained event. It validates the normalized
 task identity and observation schema before reading the event page, accepts at
 most 128 events, and requires strictly increasing contiguous sequence numbers.

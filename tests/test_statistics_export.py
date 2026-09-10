@@ -27,9 +27,24 @@ def main():
     }
     assert document["metrics"]["verified"]["known"] == 2
     assert document["remote"]["state"] == "unavailable"
+    assert document["recovery_outcomes"] == {
+        "scope": "coordinator_owner_recovery", "eligible": 2, "known_terminal": 1,
+        "succeeded": 0, "failed_or_cancelled": 1, "unknown": 1,
+        "missing_recovery_history": 2, "success_fraction_among_known": 0,
+    }
+    assert document["unmeasured"]["manual_interventions"] is None
+    assert document["coverage"]["partial"] is False
 
     with tempfile.TemporaryDirectory() as folder:
         folder = Path(folder)
+        recovered = folder / "recovered.tsv"
+        recovered.write_text(FIXTURE.read_text().replace("1788699790\t0\t1", "1788699790\t1\t1")
+                             .replace("Z\t8\t11", "X\tMore records exist\nZ\t8\t11"))
+        changed = json.loads(run(core, "statistics-json", str(recovered)).stdout)
+        assert changed["recovery_outcomes"]["succeeded"] == 1
+        assert changed["recovery_outcomes"]["success_fraction_among_known"] == 0.5
+        assert changed["coverage"] == {"partial": True, "partial_runs": 0,
+            "warnings": 1, "last_warning": "More records exist"}
         malformed = folder / "malformed.tsv"
         malformed.write_text("HYDRA_STATISTICS\t2\t10\n")
         result = run(core, "statistics-json", str(malformed))

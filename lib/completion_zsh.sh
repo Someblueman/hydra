@@ -33,7 +33,7 @@ _hydra() {
                     elif [[ $words[2] == auth ]]; then
                         _arguments '1:action:(auth)' '2:auth action:(status preview copy login help)' '--agent[Agent]:agent:(codex pi opencode claude agy cursor)' '--provider[Credential provider]:provider:' '--source[Private credential file]:file:_files' '--approve[Exact preview hash]:SHA256:' '--executable[Remote login executable]:path:'
                     elif [[ $words[2] == task ]]; then
-                        _arguments '1:action:(task)' '2:task action:(prepare inspect submit start resume requests decide status observe cancel logs result inspect-result collect collected help)' '--source[Repository for prepare or owner/work for logs]:source:' '--spec[Task specification]:file:_files' '--input[Prepared package]:file:_files' '--output[New package file]:file:_files' '--key[Stable submission key]:key:' '--id[Accepted task ID]:task ID:' '--request[Approval request ID]:request:' '--decision[Decision]:decision:(approve reject)' '--by[Actor label]:label:' '--trust-spec[Authorize exact task digest]:SHA256:' '--stream[Log stream]:stream:(stdout stderr)' '--offset[Byte offset]:offset:' '--limit[Page bytes]:limit:' '--step[Workflow log step]:step:' '--attempt[Workflow attempt]:attempt:' '--timeout[Result or cancellation transport deadline]:seconds:' '--into[Collection repository]:directory:_files -/' '--format[Collection output]:format:(candidates)'
+                        _arguments '1:action:(task)' '2:task action:(prepare inspect announce submit start resume requests decide status observe cancel logs result inspect-result collect collected help)' '--source[Repository for prepare or owner/work for logs]:source:' '--spec[Task specification]:file:_files' '--input[Prepared package]:file:_files' '--output[New package file]:file:_files' '--key[Stable submission key]:key:' '--id[Accepted task ID]:task ID:' '--request[Approval request ID]:request:' '--decision[Decision]:decision:(approve reject)' '--by[Actor label]:label:' '--trust-spec[Authorize exact task digest]:SHA256:' '--stream[Log stream]:stream:(stdout stderr)' '--offset[Byte offset]:offset:' '--limit[Page bytes]:limit:' '--step[Workflow log step]:step:' '--attempt[Workflow attempt]:attempt:' '--timeout[Result or cancellation transport deadline]:seconds:' '--into[Collection repository]:directory:_files -/' '--format[Collection output]:format:(candidates)'
                     else
                         _arguments '1:action:(handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui)' '*:argument:'
                     fi
@@ -112,10 +112,10 @@ _hydra() {
                     ;;
                 workflow)
                     if [[ ${words[2]} == plan ]]; then
-                        _arguments '2:planning action:(schema validate compile show run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '*:file:_files'
+                        _arguments '2:planning action:(schema validate compile show obligations checks explain compare run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '*:file:_files'
                         return
                     fi
-                    _arguments '1:subcommand:(list show validate dry-run run status cancel resume replay requests decide plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
+                    _arguments '1:subcommand:(list show validate dry-run run status cancel resume replay requests decide statistics-data statistics-json statistics-compare plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
                     ;;
                 sync)
                     _arguments '--from[Source ref]:ref:' '--gate[Approved gate]:name:' '--dry-run[Simulate without mutation]' '1:head:_hydra_sessions'

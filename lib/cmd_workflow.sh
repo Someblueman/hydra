@@ -38,12 +38,6 @@ cmd_workflow() {
             [ -x "$_cw_core" ] || { cli_error workflow unavailable "native statistics exporter unavailable" "build hydra-core"; return 1; }
             "$_cw_core" statistics-json "$_cw_tmp"
             ;;
-        statistics-announce)
-            [ "$#" -eq 1 ] || return 2
-            _load_lib workflow_statistics
-            _load_lib workflow_observability
-            workflow_observability_announce
-            ;;
         statistics-compare)
             [ "$#" -eq 3 ] || return 2
             _load_lib core
@@ -60,6 +54,9 @@ cmd_workflow() {
                 '       hydra workflow dry-run <id|path>' \
                 '       hydra workflow run <id|path>' \
                 '       hydra workflow plan --help' \
+                '       hydra workflow statistics-data' \
+                '       hydra workflow statistics-json' \
+                '       hydra workflow statistics-compare <left.tsv> <right.tsv>' \
                 '       hydra workflow status <run-id> [--json]' \
                 '       hydra workflow cancel <run-id>' \
                 '       hydra workflow resume <run-id>' \

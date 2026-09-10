@@ -33,6 +33,16 @@ workflow_task_start() {
     _wts_attempt="$_wts_sd/attempt-$_wts_number"
     (umask 077; mkdir -p "$_wts_attempt") || return 1
     workflow_atomic_scalar "$_wts_sd/attempts" "$_wts_number"
+    # Measure the first coordinator dispatch for a new attempt. Reconciliation
+    # must not replace an original timestamp or invent history for old receipts.
+    if [ ! -d "$_wts_attempt/remote" ] && [ ! -e "$_wts_attempt/started-at" ]; then
+        _wts_started="$(date +%s)"
+        workflow_atomic_scalar "$_wts_attempt/started-at" "$_wts_started" || return 1
+        workflow_atomic_scalar "$_wts_sd/started-at" "$_wts_started" || return 1
+        if [ "$_wts_number" -eq 1 ]; then
+            workflow_atomic_scalar "$_wts_sd/initial-started-at" "$_wts_started" || return 1
+        fi
+    fi
     workflow_atomic_scalar "$_wts_sd/state" running
     workflow_event "$_wts_run" "$_wts_id" step.running task_reconciliation
     (
@@ -76,6 +86,11 @@ workflow_task_start() {
         if [ -f "$_wts_run/cancel-requested" ]; then
             case "$_wts_state" in succeeded|failed) _wts_state=cancelled ;; esac
         fi
+        case "$_wts_state" in
+            succeeded|failed|cancelled)
+                workflow_atomic_scalar "$_wts_attempt/completed-at" "$(date +%s)" || exit 1
+                ;;
+        esac
         case "$_wts_state" in succeeded|failed) workflow_atomic_scalar "$_wts_sd/authoritative-attempt" "$_wts_number" ;; esac
         workflow_atomic_scalar "$_wts_sd/state" "$_wts_state"
         workflow_event "$_wts_run" "$_wts_id" "step.$_wts_state" task_observation

@@ -24,7 +24,7 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'remote' -d 'Manage OpenSSH a
 complete -c hydra -f -n '__fish_use_subcommand' -a 'fleet' -d 'Inspect trusted remote installations'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote' -a 'add remove list'
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth' -a 'handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect submit start resume requests decide status observe cancel logs result inspect-result collect collected help'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect announce submit start resume requests decide status observe cancel logs result inspect-result collect collected help'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l source -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l spec -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l input -r
@@ -156,7 +156,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from scope' -a 'set show check'
 complete -c hydra -f -n '__fish_seen_subcommand_from resource' -a 'allocate status env release'
 complete -c hydra -f -n '__fish_seen_subcommand_from gate' -a 'run approve status'
 complete -c hydra -f -n '__fish_seen_subcommand_from context' -a 'create'
-complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and not __fish_seen_subcommand_from plan' -a 'list show validate dry-run run status cancel resume replay requests decide plan'
+complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and not __fish_seen_subcommand_from plan' -a 'list show validate dry-run run status cancel resume replay requests decide statistics-data statistics-json statistics-compare plan'
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -a 'train status report cancel resume approve promote cleanup'
 complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -a 'doctor'
 complete -c hydra -f -n '__fish_seen_subcommand_from snapshot' -l native -d 'Try the optional read-only native helper'
@@ -182,7 +182,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l gate -d 'Appr
 complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l dry-run -d 'Simulate without mutation'
 complete -c hydra -f -n '__fish_seen_subcommand_from land' -l into -d 'Current target branch'
 complete -c hydra -f -n '__fish_seen_subcommand_from land' -l keep-head -d 'Keep source head after landing'
-complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -a 'schema validate compile show run result'
+complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -a 'schema validate compile show obligations checks explain compare run result'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l accept -r -d 'Accept exact compiled digest'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow' -l json -d 'Output versioned status JSON'
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -l base -d 'Explicit base ref'

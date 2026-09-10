@@ -110,8 +110,18 @@ $(BUILD_DIR)/libhydra.o: src/libhydra.c src/libhydra.h | $(BUILD_DIR)
 $(BUILD_DIR)/libhydra.a: $(BUILD_DIR)/libhydra.o
 	$(AR) rcs $@ $<
 
-$(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a
-	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(BUILD_DIR)/libhydra.a -o $@
+CORE_STATS_SOURCES = src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_export.c src/hydra_statistics_cli.c
+
+$(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a $(CORE_STATS_SOURCES) src/hydra_statistics.h
+	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(CORE_STATS_SOURCES) $(BUILD_DIR)/libhydra.a -o $@
+
+$(BUILD_DIR)/test-statistics-export: tests/c/test_statistics_export.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_export.c src/hydra_statistics.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_statistics_export.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_export.c -o $@
+
+.PHONY: test-statistics-export
+test-statistics-export: build-core $(BUILD_DIR)/test-statistics-export
+	$(BUILD_DIR)/test-statistics-export
+	python3 tests/test_statistics_export.py $(BUILD_DIR)/hydra-core
 
 TUI_SOURCES = $(filter src/tui/%.c,$(NATIVE_SOURCES))
 TUI_OBJECTS = $(patsubst src/tui/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SOURCES))
@@ -173,7 +183,7 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 test-parity: build-core
 	@sh tests/test_core.sh
 
-test-all: test-plan-workspace test-attached-pty test-termviz-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
+test-all: test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-termviz-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
 sanitize-core:
 	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-c
@@ -310,6 +320,16 @@ $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 
 test-workflow-contracts: build-fleet
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/workflow_contract_cases.py --runtime
+
+.PHONY: test-plan-outcomes test-task-announce test-plan-reuse
+test-plan-outcomes: build-fleet
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 -m unittest tests/test_plan_patterns.py tests/test_performance_outcome.py tests/test_research_outcome.py
+
+test-task-announce: build-fleet
+	python3 tests/test_task_announce.py "$(CURDIR)/$(BUILD_DIR)/hydra-fleet"
+
+test-plan-reuse: build-fleet
+	HYDRA_TEST_PLAN_REPAIR=combine HYDRA_TEST_PLAN_REUSE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh
 
 .PHONY: test-plan-inspection
 test-plan-inspection: build-fleet

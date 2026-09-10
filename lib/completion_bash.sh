@@ -57,14 +57,14 @@ _hydra_completion() {
             return 0
             ;;
         task)
-            COMPREPLY=($(compgen -W "prepare inspect submit start resume requests decide status observe cancel logs result inspect-result collect collected help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "prepare inspect announce submit start resume requests decide status observe cancel logs result inspect-result collect collected help" -- "${cur}"))
             return 0
             ;;
         prepare)
             COMPREPLY=($(compgen -W "--source --spec --output" -- "${cur}"))
             return 0
             ;;
-        inspect|inspect-result)
+        inspect|inspect-result|announce)
             COMPREPLY=($(compgen -W "--input" -- "${cur}"))
             return 0
             ;;
@@ -94,7 +94,7 @@ _hydra_completion() {
         resource) COMPREPLY=($(compgen -W "allocate status env release" -- ${cur})); return 0 ;;
         gate) COMPREPLY=($(compgen -W "run approve status" -- ${cur})); return 0 ;;
         context) COMPREPLY=($(compgen -W "create" -- ${cur})); return 0 ;;
-        workflow) COMPREPLY=($(compgen -W "list show validate dry-run run status cancel resume replay requests decide plan" -- ${cur})); return 0 ;;
+        workflow) COMPREPLY=($(compgen -W "list show validate dry-run run status cancel resume replay requests decide statistics-data statistics-json statistics-compare plan" -- ${cur})); return 0 ;;
         integrate) COMPREPLY=($(compgen -W "train status report cancel resume approve promote cleanup" -- ${cur})); return 0 ;;
         worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
         snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
@@ -213,7 +213,7 @@ _hydra_completion() {
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--into --gate --dry-run --keep-head" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[@]}" =~ workflow ]]; then
-        if [[ "${prev}" == plan ]]; then COMPREPLY=($(compgen -W "schema validate compile show run result" -- "${cur}")); return 0; fi
+        if [[ "${prev}" == plan ]]; then COMPREPLY=($(compgen -W "schema validate compile show obligations checks explain compare run result" -- "${cur}")); return 0; fi
         if [[ "${COMP_WORDS[@]}" =~ plan && "${cur}" == -* ]]; then COMPREPLY=($(compgen -W "--accept --json" -- "${cur}")); return 0; fi
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--json" -- ${cur})); return 0 ;; esac
     fi

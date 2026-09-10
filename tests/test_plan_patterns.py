@@ -20,7 +20,7 @@ class Patterns(unittest.TestCase):
         self.repo = self.base / 'repo'
         shutil.copytree(SOURCE, self.repo, ignore=shutil.ignore_patterns('__pycache__'))
         self.env = dict(os.environ, HYDRA_HOME=str(self.base / 'home'),
-                        HYDRA_FLEET_BIN=str(ROOT / 'build/hydra-fleet'))
+                        HYDRA_FLEET_BIN=os.environ.get("HYDRA_FLEET_BIN", str(ROOT / "build/hydra-fleet")))
         for args in [['git', 'init', '-q'], ['git', 'add', '.'],
                      ['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
                       '-c', 'commit.gpgSign=false', 'commit', '-qm', 'pattern source']]:

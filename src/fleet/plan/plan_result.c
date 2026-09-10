@@ -27,8 +27,9 @@ int plan_attempt_directory(const char *run, const char *step, char directory[F_P
         snprintf(directory, F_PATH, "%s/steps/%s/attempt-%ld", run, step, attempt) < F_PATH) status = 0;
     free(number); return status;
 }
-/* Read the current attempt's sealed receipt, including while its validator is
- * finishing. Previous repair rounds cannot supply evidence for this round. */
+/* Read the selected attempt's sealed receipt, including while its validator is
+ * finishing. A versioned reuse proof can retain an unchanged original attempt;
+ * affected steps always point to their new repair attempt. */
 json_object *plan_artifact(json_object *compiled, const char *run, const char *step, const char *name, char path[F_PATH]) {
     char directory[F_PATH]; json_object *receipt, *file, *decl;
     if (!plan_id(name) || plan_attempt_directory(run, step, directory) || snprintf(path, F_PATH, "%s/artifacts/%s", directory, name) >= F_PATH) return NULL;

@@ -16,3 +16,5 @@ The baseline median was 46.017354 ms; candidate median was 7.021604 ms. The pair
 Fresh-process startup is included. Ten pairs give limited precision; sample p95 is the maximum observation, not a population-tail guarantee. The bootstrap assumes independent pairs and can understate correlated noise or drift. The paired effect and interval use the same estimator; these bounds are conditional on that assumption.
 
 Five focused checker tests cover valid no-improvement evidence, missing/duplicated/wrong-result/nonzero/zero-time/bad-order trials, altered source/tree/workload/tool units/protocol, missing or failed warmups, recorded failures, altered raw bytes, false claims and intervals, and removed limits. Synthetic controls are explicitly separate from the real timing run. Valid no-improvement completes this measurement investigation as `target not established`; invalid or insufficient instrumentation fails acceptance.
+
+The checked-in baseline later received a comment-only ShellCheck annotation for its deliberately unused line value. The retained measurement source and manifest identify the exact pre-annotation bytes; no post-annotation timing run is claimed.

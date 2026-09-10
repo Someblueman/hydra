@@ -20,8 +20,8 @@ static bool load_fixture(struct hs_model *m) {
     return ok;
 }
 
-static int statistics_export_cases(void) {
-    struct hs_model model, other;
+static void statistics_export_cases(void) {
+    struct hs_model model;
     struct hs_filter filter = {0};
     char json[32768];
     FILE *out;
@@ -45,6 +45,14 @@ static int statistics_export_cases(void) {
     assert(strstr(json, "\"recoveries\":{\"state\":\"known\""));
     fclose(out);
 
+}
+
+static void statistics_compare_cases(void) {
+    struct hs_model model, other;
+    struct hs_filter filter = {.attention = true};
+    char json[32768];
+    FILE *out;
+    assert(load_fixture(&model));
     assert(load_fixture(&other));
     other.runs[0].started = 0;
     out = tmpfile(); assert(out);
@@ -58,10 +66,12 @@ static int statistics_export_cases(void) {
     out = tmpfile(); assert(out);
     assert(!hs_load(out, &other));
     fclose(out);
-    puts("Statistics exporter: bounded JSON metrics, comparison and fail-closed input passed");
-    return 0;
+
 }
 
 int main(void) {
-    return statistics_export_cases();
+    statistics_export_cases();
+    statistics_compare_cases();
+    puts("Statistics exporter: bounded JSON metrics, comparison and fail-closed input passed");
+    return 0;
 }

@@ -18,7 +18,7 @@ def page(events=None, *, available=True, gap=False, reset=False, truncated=False
     data = {
         "snapshot_schema_version": 1, "receiver_observed_at": 123,
         "task": {
-            "task_id": task_id, "run_id": None, "step_id": None,
+            "task_id": task_id, "run_id": "run_a", "step_id": None,
             "attempt_id": None, "assigned_host": None, "workspace": None,
             "agent_profile": "codex", "execution_state": "running",
             "execution_owner": {"kind": "receiver", "state": "running", "recorded_state": None, "failure": None},
@@ -66,6 +66,16 @@ def main():
             result = run(binary, path)
             assert result.returncode == 0, result.stderr
             assert expected in json.loads(result.stdout)["data"]["announcement"]
+
+        historical = page(events=[dict(page()["data"]["event_observation"]["events"][0], step_id="create")])
+        historical["data"]["task"]["step_id"] = "work"
+        path = folder / "previous-step.json"; path.write_text(json.dumps(historical))
+        result = run(binary, path)
+        assert result.returncode == 0
+        assert "step=create" in json.loads(result.stdout)["data"]["announcement"]
+        foreign = page(events=[dict(page()["data"]["event_observation"]["events"][0], run_id="run_other")])
+        path = folder / "foreign-run.json"; path.write_text(json.dumps(foreign))
+        assert run(binary, path).returncode != 0
 
         bad = page(events=[dict(page()["data"]["event_observation"]["events"][0], sequence=2),
                            dict(page()["data"]["event_observation"]["events"][0], sequence=4)])

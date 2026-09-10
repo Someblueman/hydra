@@ -86,16 +86,18 @@ workflow_plan_repair_assert() {
 workflow_plan_repair_fault_setup() {
     HYDRA_REPAIR_REAL_BIN="$HYDRA_FLEET_BIN"
     HYDRA_REPAIR_FAULT_MARKER="$fixture/repair-fault"
-    export HYDRA_REPAIR_REAL_BIN HYDRA_REPAIR_FAULT_MARKER
+    HYDRA_REPAIR_FAULT_STEP=inspect
+    [ "${HYDRA_TEST_PLAN_REUSE:-0}" != 1 ] || HYDRA_REPAIR_FAULT_STEP=verify
+    export HYDRA_REPAIR_REAL_BIN HYDRA_REPAIR_FAULT_MARKER HYDRA_REPAIR_FAULT_STEP
     cat > "$fixture/fleet-wrapper" <<'WRAPPER'
 #!/bin/sh
 set -eu
 if [ "${1:-}" = workflow-plan ] && [ "${2:-}" = repair ] && [ ! -f "$HYDRA_REPAIR_FAULT_MARKER" ]; then
     # Producer reset is durable before the next step's write is refused.
-    chmod 500 "$3/steps/inspect"
+    chmod 500 "$3/steps/$HYDRA_REPAIR_FAULT_STEP"
     result=0
     "$HYDRA_REPAIR_REAL_BIN" "$@" || result=$?
-    chmod 700 "$3/steps/inspect"
+    chmod 700 "$3/steps/$HYDRA_REPAIR_FAULT_STEP"
     : > "$HYDRA_REPAIR_FAULT_MARKER"
     exit "$result"
 fi
@@ -108,8 +110,10 @@ WRAPPER
 workflow_plan_repair_fault_resume() {
     [ "$code" != 0 ]
     [ -s "$run_dir/repair-pending.json" ]
-    [ "$(cat "$run_dir/steps/produce/attempts")" = 2 ]
-    [ "$(cat "$run_dir/steps/inspect/attempts")" = 1 ]
+    reset_step=produce pending_step=inspect
+    if [ "${HYDRA_TEST_PLAN_REUSE:-0}" = 1 ]; then reset_step=compose pending_step=verify; fi
+    [ "$(cat "$run_dir/steps/$reset_step/attempts")" = 2 ]
+    [ "$(cat "$run_dir/steps/$pending_step/attempts")" = 1 ]
     cp "$run_dir/repair-2.json" "$fixture/repair-original"
     "$root/bin/hydra" workflow resume "$run" > "$fixture/resume.out" 2> "$fixture/resume.err"
     cmp "$fixture/repair-original" "$run_dir/repair-2.json"

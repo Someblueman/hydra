@@ -195,3 +195,7 @@ specifications may declare `["exec", "execution-headless"]` to require T2 receiv
 placement, tool, and budget bindings remain enforced. A headless adapter in a
 local schema 1 plan remains an explicit profile exec recipe; remote adapter
 execution uses the existing workflow-task adapter contract.
+
+## Selective repair policy
+
+Schema-2 plans can explicitly opt into [sealed artifact reuse](PLAN_REUSE.md). Original historical receipts remain authoritative for qualified unchanged steps; affected steps and checks receive fresh repair attempts. The default whole-plan binding and repair behavior remains available.

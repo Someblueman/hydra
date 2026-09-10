@@ -39,6 +39,43 @@ static void write_summary(FILE *out, const struct hs_metric_summary *s) {
     fputc('}', out);
 }
 
+struct recovery_outcomes { size_t eligible, successes, failures, unknown, missing_history; };
+
+static int recovery_outcome(const struct hs_model *m, size_t index) {
+    const struct hs_run *run = &m->runs[index];
+    uint64_t ignored;
+    if (!strcmp(run->state, "failed") || !strcmp(run->state, "cancelled")) return 2;
+    if (strcmp(run->state, "succeeded")) return 0;
+    if (run->planned && hs_sample(m, HS_VERIFIED, index, &ignored) != HS_KNOWN) return 0;
+    return 1;
+}
+
+static struct recovery_outcomes recovery_counts(const struct hs_model *m, const struct hs_filter *filter) {
+    struct recovery_outcomes counts = {0};
+    for (size_t i = 0; i < m->run_count; i++) {
+        if (!hs_matches(m, i, filter)) continue;
+        if (!m->runs[i].recoveries_known) { counts.missing_history++; continue; }
+        if (!m->runs[i].recoveries) continue;
+        counts.eligible++;
+        switch (recovery_outcome(m, i)) {
+            case 1: counts.successes++; break;
+            case 2: counts.failures++; break;
+            default: counts.unknown++; break;
+        }
+    }
+    return counts;
+}
+
+static void write_recovery_outcomes(FILE *out, const struct hs_model *m, const struct hs_filter *filter) {
+    struct recovery_outcomes c = recovery_counts(m, filter);
+    size_t known = c.successes + c.failures;
+    fprintf(out, ",\"recovery_outcomes\":{\"scope\":\"coordinator_owner_recovery\",\"eligible\":%zu,\"known_terminal\":%zu,\"succeeded\":%zu,\"failed_or_cancelled\":%zu,\"unknown\":%zu,\"missing_recovery_history\":%zu,\"success_fraction_among_known\":",
+            c.eligible, known, c.successes, c.failures, c.unknown, c.missing_history);
+    if (known) fprintf(out, "%.9g", (double)c.successes / (double)known);
+    else fputs("null", out);
+    fputs("},\"unmeasured\":{\"unknown_receiver_outcomes\":null,\"manual_interventions\":null,\"network_transfer_bytes\":null}", out);
+}
+
 static bool write_one(FILE *out, const struct hs_model *m,
                       const struct hs_filter *filter) {
     enum hs_metric metric;
@@ -57,6 +94,11 @@ static bool write_one(FILE *out, const struct hs_model *m,
         hs_metric_summarize(m, filter, metric, &summary);
         write_summary(out, &summary);
     }
+    fputc('}', out);
+    write_recovery_outcomes(out, m, filter);
+    fprintf(out, ",\"coverage\":{\"partial\":%s,\"partial_runs\":%zu,\"warnings\":%zu,\"last_warning\":",
+            (m->warnings || cohort.partial_runs) ? "true" : "false", cohort.partial_runs, m->warnings);
+    write_json_string(out, m->warning);
     fputs("},\"remote\":{\"state\":\"unavailable\",\"transfer_bytes\":null,\"provider_cost\":null,\"cpu_seconds\":null,\"memory_bytes\":null,\"tokens\":null}}", out);
     return !ferror(out);
 }

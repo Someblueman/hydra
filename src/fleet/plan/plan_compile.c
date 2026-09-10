@@ -119,6 +119,7 @@ static bool complete_binding(json_object *plan, const char *source, const char *
         json_object *tasks = plan_task_bindings(plan, f_field(compiled, "data"), binding, scratch, errors);
         if (!tasks) return false;
         json_object_object_add(compiled, "tasks", tasks);
+        if (plan_reuse_environment(compiled, scratch, errors)) return false;
     }
     after = source_binding(source); stable = after && json_object_equal(binding, after); json_object_put(after);
     if (!stable) { plan_error(errors, "source", "source_changed", "source changed while resolving inputs"); return false; }

@@ -14,9 +14,7 @@ static int statistics_command(int argc, char **argv) {
     return -1;
 }
 
-static int core_dispatch(int argc, char **argv) {
-    int statistics_result = statistics_command(argc, argv);
-    if (statistics_result >= 0) return statistics_result;
+static int information_command(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--protocol-version") == 0) {
         printf("%d\n", HYDRA_PROTOCOL_VERSION);
         return 0;
@@ -30,6 +28,10 @@ static int core_dispatch(int argc, char **argv) {
                HYDRA_PROTOCOL_VERSION, HYDRA_CORE_VERSION);
         return 0;
     }
+    return -1;
+}
+
+static int data_command(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "validate-state") == 0) {
         if (hydra_validate_state(argv[2], stderr) != 0) return 1;
         fputs("{\"protocol_version\":1,\"ok\":true,\"validation\":\"state-v2\"}\n", stdout);
@@ -40,6 +42,10 @@ static int core_dispatch(int argc, char **argv) {
         fputs("{\"protocol_version\":1,\"ok\":true,\"validation\":\"events-v1\"}\n", stdout);
         return 0;
     }
+    return -1;
+}
+
+static int format_command(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "json-string") == 0) {
         if (hydra_json_write_string(stdout, argv[2]) != 0 || fputc('\n', stdout) == EOF) return 1;
         return 0;
@@ -47,10 +53,15 @@ static int core_dispatch(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "snapshot") == 0) {
         return hydra_write_snapshot(argv[2], stdout, stderr) == 0 ? 0 : 1;
     }
-    usage(stderr);
-    return 2;
+    return -1;
 }
 
 int main(int argc, char **argv) {
-    return core_dispatch(argc, argv);
+    int result = information_command(argc, argv);
+    if (result < 0) result = statistics_command(argc, argv);
+    if (result < 0) result = data_command(argc, argv);
+    if (result < 0) result = format_command(argc, argv);
+    if (result >= 0) return result;
+    usage(stderr);
+    return 2;
 }

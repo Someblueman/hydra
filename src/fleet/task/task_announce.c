@@ -24,14 +24,6 @@ static bool append(struct text_buffer *buffer, const char *text) {
     return true;
 }
 
-static bool append_field(struct text_buffer *buffer, json_object *object, const char *key, const char *fallback) {
-    json_object *value = f_field(object, key); const char *text = f_text(value);
-    const unsigned char *p;
-    if (!text) text = fallback;
-    for (p = (const unsigned char *)text; *p; p++) if (*p < 32 || *p == 127) return false;
-    return append(buffer, text);
-}
-
 static bool append_sanitized_field(struct text_buffer *buffer, json_object *object, const char *key, const char *fallback) {
     json_object *value = f_field(object, key); const char *text = f_text(value); size_t i, length;
     if (!text) text = fallback;
@@ -106,14 +98,22 @@ static bool page_stream(struct announce_page *page) {
     return true;
 }
 
+static bool event_binding_valid(json_object *event, const char *task_run) {
+    const char *event_run = f_string(event, "run_id");
+    json_object *step = f_field(event, "step_id");
+    /* The current step is not a filter over earlier or sibling events. */
+    return task_run && event_run && !strcmp(task_run, event_run) &&
+        (!step || json_object_is_type(step, json_type_null) || f_text(step));
+}
+
 static bool render_events(struct text_buffer *text, const struct announce_page *page) {
-    size_t i; uint64_t previous = 0, sequence; const char *task_run = f_string(page->task, "run_id"), *task_step = f_string(page->task, "step_id");
+    size_t i; uint64_t previous = 0, sequence; const char *task_run = f_string(page->task, "run_id");
     for (i = 0; i < json_object_array_length(page->events); i++) {
-        json_object *event = json_object_array_get_idx(page->events, i); const char *event_run, *event_step;
-        if (!json_object_is_type(event, json_type_object) || !bounded_int(event, "sequence", &sequence) || !sequence ||
+        json_object *event = json_object_array_get_idx(page->events, i);
+        if (!json_object_is_type(event, json_type_object) || !f_number_is(event, "schema_version", 1) ||
+            !f_text(f_field(event, "occurred_at")) || !bounded_int(event, "sequence", &sequence) || !sequence ||
             (!previous && sequence <= page->oldest) || (previous && sequence != previous + 1U) || !f_text(f_field(event, "type")) || !f_text(f_field(event, "detail"))) return false;
-        event_run = f_text(f_field(event, "run_id")); event_step = f_text(f_field(event, "step_id"));
-        if ((task_run && event_run && strcmp(task_run, event_run)) || (task_step && event_step && strcmp(task_step, event_step))) return false;
+        if (!event_binding_valid(event, task_run)) return false;
         if (!append(text, "event time=") || !append_sanitized_field(text, event, "occurred_at", "unknown") || !append(text, " run=") ||
             !append_sanitized_field(text, event, "run_id", "-") || !append(text, " step=") || !append_sanitized_field(text, event, "step_id", "-") ||
             !append(text, " sequence=") || !append_number(text, sequence) || !append(text, " type=") || !append_sanitized_field(text, event, "type", "unknown") ||
@@ -127,7 +127,7 @@ static bool render_page(struct text_buffer *text, const struct announce_page *pa
     if (!append(text, "task id=") || !append_sanitized_field(text, page->task, "task_id", "unknown") || !append(text, " state=") ||
         !append_sanitized_field(text, page->task, "execution_state", "unknown") || !append(text, " receiver_observed_at=") ||
         !append_json_value(text, page->data, "receiver_observed_at", "unavailable") || !append(text, " evidence=saved_snapshot\n")) return false;
-    if (!page->available && (!append(text, "history unavailable reason=") || !append_field(text, page->stream, "unavailable_reason", "unavailable") || !append(text, "\n"))) return false;
+    if (!page->available && (!append(text, "history unavailable reason=") || !append_sanitized_field(text, page->stream, "unavailable_reason", "unavailable") || !append(text, "\n"))) return false;
     if (page->gap && !append(text, "history retention_gap=true\n")) return false;
     if (page->reset && !append(text, "history stream_reset=true\n")) return false;
     if (page->truncated && !append(text, "history truncated=true\n")) return false;
