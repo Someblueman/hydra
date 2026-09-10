@@ -26,7 +26,7 @@ def main():
     record = {
         'obligation_id': 'assembly-check', 'subject_manifest_sha256': subject_hash,
         'validator_identity': 'pattern-check-v2', 'validator_recipe_sha256': bindings['check-recipe'],
-        'invocation': {'argv': ['sh', 'check.sh'], 'exit_code': 0 if passed else 1},
+        'invocation': {'argv': ['python3', 'check.py'], 'exit_code': 0 if passed else 1},
         'environment': {'host': 'local', 'toolchain': sys.version},
         'case_inventory': ['assembly-case'], 'observations': observations,
         'raw_evidence_sha256': digest(observations),

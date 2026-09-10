@@ -12,6 +12,7 @@ class ManifestMap(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.repo = Path(self.temp.name) / 'repo'
         shutil.copytree(SOURCE, self.repo)
+        shutil.copy2(ROOT / "examples/planning/native/payload.sh", self.repo / "payload.sh")
         self.env = dict(os.environ, HYDRA_HOME=str(Path(self.temp.name) / 'home'),
                         HYDRA_FLEET_BIN=os.environ.get('HYDRA_FLEET_BIN', str(ROOT / 'build/hydra-fleet')))
         for args in [['git', 'init', '-q'], ['git', 'add', '.'],
@@ -37,17 +38,47 @@ class ManifestMap(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return json.loads(output.read_text())
 
+    def run_payloads(self, plan, shell):
+        inputs = Path(self.temp.name) / 'payload inputs'
+        outputs = Path(self.temp.name) / 'payload outputs'
+        inputs.mkdir(exist_ok=True); outputs.mkdir(exist_ok=True)
+        env = dict(self.env, HYDRA_WORKFLOW_INPUTS_DIR=str(inputs), HYDRA_WORKFLOW_OUTPUTS_DIR=str(outputs))
+        for step in plan['steps']:
+            if step['id'].startswith('work-item-'):
+                subprocess.run([shell, *step['args']['argv'][1:]], cwd=self.repo, env=env,
+                               check=True, capture_output=True, timeout=5)
+                ident = step['id'].removeprefix('work-item-')
+                shutil.copy2(outputs / f'result-{ident}.json', inputs / f'member-{ident}')
+        compose = next(step['args']['argv'] for step in plan['steps'] if step['id'] == 'compose')
+        result = subprocess.run([shell, *compose[1:]], cwd=self.repo, env=env,
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads((outputs / 'report.json').read_text()), compose, env
+
     def test_empty_bounded_and_conditional_manifests_lower_and_compile(self):
         for items in ([], [{'id': 'only', 'value': 7, 'enabled': False}],
                       [{'id': 'a', 'value': -2, 'enabled': True}, {'id': 'b', 'value': 3, 'enabled': False}],
-                      [{'id': ident, 'value': 1, 'enabled': True} for ident in ['compose', 'check', 'manifest']],
-                      [{'id': f'i{i}', 'value': i - 4, 'enabled': True} for i in range(8)]):
+                      [{'id': ident, 'value': 1, 'enabled': True} for ident in ['compose', 'check', 'manifest', 'enabled', 'skipped']],
+                      [{'id': f'i{i}', 'value': i - 4, 'enabled': True} for i in range(8)],
+                      [{'id': f'i{i}' + 'x' * 30, 'value': -10 if i % 2 else 10, 'enabled': i % 3 != 0} for i in range(8)]):
             with self.subTest(items=items):
                 plan = self.precompile({'schema_version': 1, 'items': items})
                 value = json.loads(plan.read_text())
                 ids = [x['id'] for x in value['steps']]
                 self.assertEqual(sum(x['enabled'] for x in items), sum(x.startswith('work-') for x in ids))
                 self.compile(plan)
+                expected = [{'id': x['id'], 'value': x['value'], 'square': x['value'] ** 2} if x['enabled']
+                            else {'id': x['id'], 'value': x['value'], 'status': 'skipped'} for x in items]
+                for shell in ('sh', 'dash'):
+                    report, _, _ = self.run_payloads(value, shell)
+                    self.assertEqual(report, {'schema_version': 1, 'members': expected})
+
+    def test_join_refuses_missing_worker_output(self):
+        path = self.precompile({'schema_version': 1, 'items': [{'id': 'a', 'value': 2, 'enabled': True}]})
+        _, compose, env = self.run_payloads(json.loads(path.read_text()), 'sh')
+        (Path(env['HYDRA_WORKFLOW_INPUTS_DIR']) / 'member-a').unlink()
+        result = subprocess.run(compose, cwd=self.repo, env=env, capture_output=True, timeout=5)
+        self.assertNotEqual(result.returncode, 0)
 
     def test_manifest_rejects_closed_schema_bounds_and_unsupported_inputs(self):
         cases = [

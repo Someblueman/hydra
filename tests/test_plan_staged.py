@@ -20,12 +20,13 @@ class Staged(unittest.TestCase):
         self.base = Path(self.temp.name)
         self.repo = self.base / "repo"
         shutil.copytree(SOURCE, self.repo, ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copy2(ROOT / "examples/planning/native/payload.sh", self.repo / "payload.sh")
         self.finding = self.repo / "finding.json"
         self.manifest = self.repo / "manifest.json"
         self.public = self.base / "result.json"
         self.wrapper = self.base / "hydra"
         self.wrapper.write_text(
-            "#!/usr/bin/env python3\nfrom pathlib import Path\nprint((Path(__file__).parent/'result.json').read_text())\n"
+            '#!/bin/sh\ncat "$(dirname "$0")/result.json"\n'
         )
         self.wrapper.chmod(0o755)
         self.env = {**os.environ, "HYDRA_BIN": str(self.wrapper)}
@@ -103,7 +104,7 @@ class Staged(unittest.TestCase):
             [{"id": "only", "value": 2, "enabled": False}],
             [
                 {"id": name, "value": 2, "enabled": True}
-                for name in ("finding", "manifest", "compose", "check")
+                for name in ("finding", "manifest", "compose", "check", "enabled", "skipped")
             ],
             [{"id": f"i{i}", "value": i, "enabled": True} for i in range(8)],
         ):
@@ -122,8 +123,52 @@ class Staged(unittest.TestCase):
                 join = plan["data"]["steps"]["compose"]["inputs"]
                 self.assertEqual(
                     set(join),
-                    {"finding", "manifest", *("member-" + name for name in selected)},
+                    {"member-" + name for name in selected},
                 )
+                self.assertEqual(set(plan['data']['steps']['check']['inputs']),
+                                 {'finding', 'manifest', 'subject'})
+                inputs = self.base / 'joined inputs'
+                outputs = self.base / 'joined outputs'
+                inputs.mkdir(exist_ok=True); outputs.mkdir(exist_ok=True)
+                for item in items:
+                    if item['enabled']:
+                        (inputs / ('member-' + item['id'])).write_text(json.dumps({
+                            'id': item['id'], 'value': item['value'], 'square': item['value'] ** 2}))
+                compose = next(step['args']['argv'] for step in plan['steps'] if step['id'] == 'compose')
+                env = {**self.env, 'HYDRA_WORKFLOW_INPUTS_DIR': str(inputs),
+                       'HYDRA_WORKFLOW_OUTPUTS_DIR': str(outputs)}
+                for shell in ('sh', 'dash'):
+                    subprocess.run([shell, *compose[1:]], cwd=self.repo, env=env, check=True,
+                                   capture_output=True, timeout=5)
+                    self.assertEqual(json.loads((outputs / 'report.json').read_text()), {
+                        'schema_version': 1, 'selected_ids': selected,
+                        'members': json.loads(self.finding.read_text())['results']})
+
+    def test_stage1_checker_keeps_finding_refusal_boundaries(self):
+        inputs = self.base / 'inputs'
+        output = self.base / 'stage1-check'
+        output.mkdir()
+        validation = self.base / 'validation.json'
+        validation.write_text(json.dumps({'data': {'check': 'a' * 64, 'check-recipe': 'b' * 64}}))
+        env = {**self.env, 'HYDRA_WORKFLOW_INPUTS_DIR': str(inputs),
+               'HYDRA_WORKFLOW_OUTPUTS_DIR': str(output), 'HYDRA_WORKFLOW_VALIDATION_FILE': str(validation)}
+        for fault in ('valid', 'selection', 'source', 'arithmetic', 'result-hash', 'false-type', 'extra'):
+            with self.subTest(fault=fault):
+                finding = json.loads(self.finding.read_text())
+                if fault == 'selection': finding['selected_ids'] = []
+                elif fault == 'source': finding['source_sha256'] = '0' * 64
+                elif fault == 'arithmetic': finding['results'][0]['square'] += 1
+                elif fault == 'result-hash': finding['result_sha256'] = '0' * 64
+                elif fault == 'false-type': finding['schema_version'] = True
+                elif fault == 'extra': finding['extra'] = 1
+                (inputs / 'subject').write_text(json.dumps(finding))
+                result = subprocess.run(['python3', 'check.py', 'stage1'], cwd=self.repo, env=env,
+                                        capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 0 if fault == 'valid' else 1, result.stderr)
+                report = json.loads((output / 'check.json').read_text())
+                self.assertEqual(report['verdict'], 'pass' if fault == 'valid' else 'fail')
+                self.assertEqual(report['evidence_records'][0]['invocation']['argv'],
+                                 ['python3', 'check.py', 'stage1'])
 
     def test_boundaries_refuse_before_public_result_lookup(self):
         original = self.manifest.read_text()

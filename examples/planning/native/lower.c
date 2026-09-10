@@ -9,6 +9,29 @@ static json_object *strings(const char *first, const char *second) {
     if (second) json_object_array_add(array, json_object_new_string(second));
     return array;
 }
+/* Caller owns the argv array. The shared source-bound shell payload receives
+ * only IDs and values already admitted by the finite manifest contract. */
+static json_object *payload_command(const char *mode) {
+    json_object *argv = strings("sh", "payload.sh");
+    json_object_array_add(argv, json_object_new_string(mode));
+    return argv;
+}
+static json_object *compose_command(const struct manifest *manifest, bool staged) {
+    json_object *argv = payload_command(staged ? "staged" : "manifest");
+    json_object *items = f_field(manifest->value, "items");
+    size_t i;
+    for (i = 0; i < json_object_array_length(items); i++) {
+        json_object *item = json_object_array_get_idx(items, i);
+        bool enabled = json_object_get_boolean(f_field(item, "enabled"));
+        char value[16];
+        if (staged && !enabled) continue;
+        snprintf(value, sizeof(value), "%d", json_object_get_int(f_field(item, "value")));
+        json_object_array_add(argv, json_object_new_string(enabled ? "enabled" : "skipped"));
+        json_object_array_add(argv, json_object_get(f_field(item, "id")));
+        json_object_array_add(argv, json_object_new_string(value));
+    }
+    return argv;
+}
 static json_object *reference(const char *step, const char *output) {
     json_object *value = json_object_new_object();
     f_string_add(value, step ? "step" : "input", step ? step : output);
@@ -42,7 +65,7 @@ static void execute(json_object *steps, const char *id, const char *role, const 
 }
 static json_object *base_plan(bool staged) {
     json_object *plan = f_parse("{\"schema_version\":1,\"context\":[],\"questions\":[],\"steps\":[],"
-        "\"envelope\":{\"hosts\":[\"local\"],\"tools\":[\"python3\"],\"effects\":[\"worktree\",\"execute\"],"
+        "\"envelope\":{\"hosts\":[\"local\"],\"tools\":[\"sh\",\"python3\"],\"effects\":[\"worktree\",\"execute\"],"
         "\"writes\":[],\"parallelism\":4,\"timeout_seconds\":600,\"artifact_bytes\":65536,\"max_heads\":10,"
         "\"disk_mb\":1,\"retry_budget\":0,\"repair_budget\":0},"
         "\"data\":{\"schema_version\":1,\"inputs\":{},\"steps\":{}}}");
@@ -106,7 +129,7 @@ static void member_steps(json_object *plan, const struct manifest *manifest, con
         snprintf(head, sizeof(head), "%s-item-%s", prefix, f_string(item, "id"));
         snprintf(path, sizeof(path), "result-%s.json", f_string(item, "id"));
         snprintf(value, sizeof(value), "%d", json_object_get_int(f_field(item, "value")));
-        argv = strings("python3", "worker.py");
+        argv = payload_command("worker");
         json_object_array_add(argv, json_object_get(f_field(item, "id"))); json_object_array_add(argv, json_object_new_string(value));
         execute(steps, id, "work", head, strings(dependency, NULL), argv);
         json_object_array_add(needs, json_object_new_string(id));
@@ -123,11 +146,9 @@ static void handoffs(json_object *plan, const struct manifest *manifest, bool st
     json_object *compose_outputs = json_object_new_object(), *check_outputs = json_object_new_object();
     size_t i;
     json_object_object_add(inputs, "manifest", output_file("file", "manifest.json", 4096));
-    json_object_object_add(compose_inputs, "manifest", reference(NULL, "manifest"));
     json_object_object_add(check_inputs, "manifest", reference(NULL, "manifest"));
     if (staged) {
         json_object_object_add(inputs, "finding", output_file("file", "finding.json", 8192));
-        json_object_object_add(compose_inputs, "finding", reference(NULL, "finding"));
         json_object_object_add(check_inputs, "finding", reference(NULL, "finding"));
     }
     for (i = 0; i < json_object_array_length(items); i++) {
@@ -146,17 +167,19 @@ static void handoffs(json_object *plan, const struct manifest *manifest, bool st
     json_object_object_add(steps, "compose", compose); json_object_object_add(steps, "check", check);
 }
 json_object *precompile_lower(const struct manifest *manifest, bool staged) {
-    json_object *plan = base_plan(staged), *steps, *needs;
+    json_object *plan = base_plan(staged), *steps, *needs, *compose;
     const char *prefix = staged ? "staged" : "manifest";
     char compose_head[32], check_head[32];
     if (!plan) return NULL;
+    compose = compose_command(manifest, staged);
+    if (!compose) { json_object_put(plan); return NULL; }
     steps = f_field(plan, "steps"); needs = strings(staged ? "spawn-compose" : NULL, NULL);
     member_steps(plan, manifest, prefix, needs);
     if (!staged) json_object_array_add(needs, json_object_new_string("spawn-compose"));
     snprintf(compose_head, sizeof(compose_head), "%s-compose", prefix);
     snprintf(check_head, sizeof(check_head), "%s-check", prefix);
     spawn(steps, "spawn-compose", compose_head);
-    execute(steps, "compose", "compose", compose_head, needs, strings("python3", "compose.py"));
+    execute(steps, "compose", "compose", compose_head, needs, compose);
     spawn(steps, "spawn-check", check_head);
     execute(steps, "check", "verify", check_head, strings("spawn-check", "compose"), strings("python3", "check.py"));
     handoffs(plan, manifest, staged); acceptance(plan, staged);

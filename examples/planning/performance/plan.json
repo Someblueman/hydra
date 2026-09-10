@@ -10,7 +10,7 @@
     "Ten trials per implementation are the fixed stopping rule; no retries or cherry-picking are allowed.",
     "The result may be target not established or invalid/insufficient measurement.",
     "The checker independently recomputes summaries and outcome from raw samples and fails on altered or truncated evidence.",
-    "measure.py, analyze.py, compose.sh and checker.py are fixed deterministic source material.",
+    "measure.py, analyze.py and checker.py are fixed deterministic source material.",
     "The checker validates the sealed manifest against current source and workload hashes."
   ],
   "questions": [],
@@ -108,8 +108,8 @@
       }
     },
     {
-      "id": "analyze",
-      "role": "work",
+      "id": "compose",
+      "role": "compose",
       "kind": "exec",
       "needs": [
         "spawn_work",
@@ -121,25 +121,6 @@
         "argv": [
           "python3",
           "analyze.py"
-        ],
-        "timeout": 60
-      }
-    },
-    {
-      "id": "compose",
-      "role": "compose",
-      "kind": "exec",
-      "needs": [
-        "spawn_work",
-        "measure",
-        "analyze"
-      ],
-      "writes": [],
-      "args": {
-        "head": "performance-work-v2",
-        "argv": [
-          "sh",
-          "compose.sh"
         ],
         "timeout": 60
       }
@@ -198,38 +179,11 @@
           }
         }
       },
-      "analyze": {
-        "inputs": {
-          "raw": {
-            "step": "measure",
-            "output": "raw"
-          },
-          "manifest": {
-            "step": "measure",
-            "output": "manifest"
-          }
-        },
-        "outputs": {
-          "analysis": {
-            "path": "analysis.json",
-            "type": "file",
-            "max_bytes": 32768
-          }
-        }
-      },
       "compose": {
         "inputs": {
-          "analysis": {
-            "step": "analyze",
-            "output": "analysis"
-          },
           "raw": {
             "step": "measure",
             "output": "raw"
-          },
-          "environment": {
-            "step": "measure",
-            "output": "environment"
           },
           "manifest": {
             "step": "measure",

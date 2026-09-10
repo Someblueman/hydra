@@ -1,7 +1,14 @@
 # Native finite-example precompiler
 
 Build with `make build-plan-precompile`, then use the absolute binary path from
-a copied example repository:
+a copied example repository. Copy the one shared shell payload into that
+repository before committing its source snapshot:
+
+```sh
+cp /path/to/hydra/examples/planning/native/payload.sh /path/to/example/repo/
+```
+
+Then generate its plan:
 
 ```sh
 /path/to/hydra/build/plan-precompile manifest manifest.json plan.json
@@ -23,5 +30,7 @@ FIFO/device inputs are rejected before reading.
 `make test-plan-outcomes test-plan-staged` exercises the retained Python boundary
 drivers and independent checkers. `make test-plan-staged-public` runs both real
 stages. `HYDRA_PLAN_PRECOMPILE_BIN` selects a separately built helper for testing.
-The tiny example workers, composers and semantic checkers remain Python: they are
-payloads and independent oracles, not a second planning implementation.
+Worker arithmetic and fixed joins use the shared POSIX `payload.sh`. The native
+planner passes validated IDs, bounded integers and frozen membership as ordinary
+arguments; the join copies the actual worker artifacts. Python independently
+checks the resulting membership, arithmetic, types and source-bound findings.

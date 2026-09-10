@@ -16,7 +16,8 @@ emits schema-3 evidence; structural compilation does not claim runtime success.
 hydra workflow plan compile plan.json policy.json ../compiled.json
 ```
 
-Copy this directory to a disposable Git repository, generate and commit the
-source plan, then initialize Hydra with `--no-agent --trust`. Keep `HYDRA_HOME`
-and the compiled output outside the source repository. Review the compiled plan
+Copy this directory and `../native/payload.sh` into a disposable Git repository.
+Generate and commit the source plan and shared payload, then initialize Hydra
+with `--no-agent --trust`. Keep `HYDRA_HOME` and the compiled output outside the
+source repository. Review the compiled plan
 and pass its exact returned SHA-256 to `hydra workflow plan run ... --accept ...`.

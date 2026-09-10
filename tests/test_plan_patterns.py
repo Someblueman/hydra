@@ -71,7 +71,7 @@ class Patterns(unittest.TestCase):
         for name, (content, expected) in cases.items():
             with self.subTest(name=name):
                 (self.base / 'subject').write_bytes(content)
-                result = subprocess.run(['sh', 'check.sh'], cwd=self.repo, env=env, capture_output=True)
+                result = subprocess.run(['python3', 'check.py'], cwd=self.repo, env=env, capture_output=True)
                 report = json.loads((self.base / 'check').read_text())
                 self.assertEqual(result.returncode == 0, expected, result.stderr)
                 self.assertEqual(report['verdict'], 'pass' if expected else 'fail')

@@ -28,6 +28,11 @@ Run the public compiler from a clean disposable source repository. Keep the
 state home and compiled plan outside that repository: creating runtime state
 inside it changes the source fingerprint and invalidates admission.
 
+The fixed worker and join recipes use one shared POSIX payload. Copy
+`examples/planning/native/payload.sh` into the copied example repository before
+committing and compiling. The join receives frozen membership in its arguments;
+the independent checker still consumes the bound manifest and checks all results.
+
 ```sh
 make build-plan-precompile
 precompiler="$PWD/build/plan-precompile"

@@ -66,7 +66,8 @@ def main():
     with (inputs / "raw").open(newline="") as handle:
         rows = list(csv.DictReader(handle))
     result = analyze(manifest, rows)
-    (Path(os.environ["HYDRA_WORKFLOW_OUTPUTS_DIR"]) / "analysis.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n")
+    result["raw_samples"] = (inputs / "raw").read_text().splitlines()
+    (Path(os.environ["HYDRA_WORKFLOW_OUTPUTS_DIR"]) / "report.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n")
 
 
 if __name__ == "__main__":

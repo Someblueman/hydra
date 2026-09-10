@@ -5,6 +5,7 @@
       "local"
     ],
     "tools": [
+      "sh",
       "python3"
     ],
     "effects": [

@@ -37,6 +37,7 @@ def main():
         source,
         ignore=shutil.ignore_patterns("__pycache__"),
     )
+    shutil.copy2(ROOT / "examples/planning/native/payload.sh", source / "payload.sh")
     manifest = source / "manifest.json"
     value = json.loads(manifest.read_text())
     if args.case == "empty":
@@ -175,7 +176,7 @@ def main():
         "verdict": "pass",
         "source_files": {
             p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in source.glob("*.py")
+            for p in [*source.glob("*.py"), source / "payload.sh"]
         },
     }
     args.output.write_text(json.dumps(summary, indent=2) + "\n")

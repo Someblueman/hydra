@@ -31,6 +31,8 @@ git commit -m 'Planning example source'
 ```
 
 Review the policy, source recipes, declared writes and exact checker recipe. Copy every example source file into the disposable repository root before compiling; plans bind the copied source and data hashes.
+For `manifest-map` and `staged`, also copy `examples/planning/native/payload.sh`
+into that repository. It supplies their shared fixed worker and join recipes.
 Run `hydra workflow plan run ../compiled.json --accept <reported-sha256>` only
 with authorization for that exact scope. Record the returned run ID, inspect
 `workflow status <run-id> --json`, and use `workflow plan result <run-id>` to

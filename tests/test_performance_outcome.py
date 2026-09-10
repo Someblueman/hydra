@@ -2,7 +2,6 @@
 """Synthetic measurement controls, not performance measurements."""
 import copy
 import csv
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -15,9 +14,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "examples/planning/performance"
-spec = importlib.util.spec_from_file_location("performance_analysis", SOURCE / "analyze.py")
-analysis = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(analysis)
+
 
 
 class PerformanceOutcome(unittest.TestCase):
@@ -78,10 +75,10 @@ class PerformanceOutcome(unittest.TestCase):
             writer = csv.DictWriter(handle, fieldnames=list(self.rows[0]))
             writer.writeheader()
             writer.writerows(rows)
-        report = analysis.analyze(manifest, rows)
-        report["raw_samples"] = (self.inputs / "raw").read_text().splitlines()
-        (self.inputs / "subject").write_text(json.dumps(report))
-        return report
+        subprocess.run([sys.executable, str(SOURCE / "analyze.py")], env=self.env,
+                       check=True, capture_output=True, text=True, timeout=20)
+        shutil.copy2(self.outputs / "report.json", self.inputs / "subject")
+        return json.loads((self.inputs / "subject").read_text())
 
     def check(self, success):
         result = subprocess.run([sys.executable, str(SOURCE / "checker.py")], cwd=SOURCE,
