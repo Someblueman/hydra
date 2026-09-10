@@ -4,12 +4,12 @@
   "objective": "Qualify a bounded baseline versus candidate record-count workload through exclusive raw trials, deterministic paired uncertainty analysis, and an independent recomputation checker.",
   "context": [],
   "assumptions": [
-    "records.txt, baseline.sh, candidate.sh, measure.sh, compose.sh, analyst.txt and assessor.txt are fixed source material.",
     "The measurement step is one exclusive process and is run only during an authorized measurement window.",
     "Ten trials per implementation are the fixed stopping rule; no retries or cherry-picking are allowed.",
     "The result may be target not established or invalid/insufficient measurement.",
-    "Analysis and checking are deterministic repository scripts; no live provider or narrative verdict is used.",
-    "The checker independently recomputes summaries and outcome from raw samples and fails on altered or truncated evidence."
+    "The checker independently recomputes summaries and outcome from raw samples and fails on altered or truncated evidence.",
+    "measure.py, analyze.py, compose.sh and checker.py are fixed deterministic source material.",
+    "The checker validates the sealed manifest against current source and workload hashes."
   ],
   "questions": [],
   "deliverables": [
