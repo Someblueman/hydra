@@ -146,23 +146,40 @@ static json_object *snapshot_record(json_object *hosts, const char *kind, const 
     }
     return NULL;
 }
+struct inventory_view { json_object *hosts, *snapshot; const char *kind, *locator; int64_t observed_at; };
+static void inventory_view_init(struct inventory_view *view, json_object *inventory, const struct hd_options *options) {
+    view->snapshot = f_field(inventory, "source_snapshot"); view->hosts = f_field(inventory, "hosts");
+    view->kind = "static"; view->locator = options->inventory;
+    view->observed_at = json_object_get_int64(f_field(inventory, "observed_at"));
+    if (view->snapshot) {
+        view->kind = f_string(view->snapshot, "kind"); view->locator = f_string(view->snapshot, "locator");
+        view->observed_at = json_object_get_int64(f_field(view->snapshot, "observed_at"));
+        view->hosts = f_field(view->snapshot, "records");
+    }
+}
+static json_object *inventory_record(struct inventory_view *view, const char *name) {
+    return view->snapshot ? snapshot_record(view->hosts, view->kind, name) : selected_record(view->hosts, name);
+}
+static const char *inventory_target(struct inventory_view *view, json_object *record) {
+    return record ? (view->snapshot ? snapshot_target(record, view->kind) : f_string(record, "target")) : NULL;
+}
+static bool add_inventory_row(json_object *rows, struct inventory_view *view, const char *name) {
+    json_object *record = inventory_record(view, name), *row; const char *target = inventory_target(view, record);
+    if (!record || !target || !(row = candidate_add(rows, target))) return false;
+    source_add(row, view->kind, view->locator, name, view->observed_at, f_field(record, "labels"));
+    if (view->snapshot) {
+        json_object *source = json_object_array_get_idx(f_field(row, "sources"), json_object_array_length(f_field(row, "sources")) - 1);
+        f_string_add(source, "scope", f_string(view->snapshot, "scope")); f_string_add(source, "freshness", f_string(view->snapshot, "freshness"));
+    }
+    return true;
+}
 static int add_inventory(json_object *rows, const struct hd_options *options) {
-    json_object *inventory, *hosts, *snapshot; const char *kind = "static", *locator = NULL; int64_t observed_at; struct stat st;
-    size_t i; int status = -1;
+    json_object *inventory; struct inventory_view view; struct stat st; size_t i; int status = -1;
     if (stat(options->inventory, &st) || !S_ISREG(st.st_mode) || st.st_size > 1024 * 1024) return -1;
     inventory = f_read_json(options->inventory, 1024 * 1024);
     if (!inventory_valid(inventory)) goto done;
-    observed_at = json_object_get_int64(f_field(inventory, "observed_at"));
-    snapshot = f_field(inventory, "source_snapshot");
-    hosts = f_field(inventory, "hosts");
-    if (snapshot) { kind = f_string(snapshot, "kind"); locator = f_string(snapshot, "locator"); observed_at = json_object_get_int64(f_field(snapshot, "observed_at")); hosts = f_field(snapshot, "records"); }
-    for (i = 0; i < options->select_count; i++) {
-        json_object *record = snapshot ? snapshot_record(hosts, kind, options->select[i]) : selected_record(hosts, options->select[i]), *row;
-        const char *name = options->select[i], *target = record ? (snapshot ? snapshot_target(record, kind) : f_string(record, "target")) : NULL;
-        if (!record || !target || !(row = candidate_add(rows, target))) goto done;
-        source_add(row, kind, locator ? locator : options->inventory, name, observed_at, f_field(record, "labels"));
-        if (snapshot) { json_object *source = json_object_array_get_idx(f_field(row, "sources"), json_object_array_length(f_field(row, "sources")) - 1); f_string_add(source, "scope", f_string(snapshot, "scope")); f_string_add(source, "freshness", f_string(snapshot, "freshness")); }
-    }
+    inventory_view_init(&view, inventory, options);
+    for (i = 0; i < options->select_count; i++) if (!add_inventory_row(rows, &view, options->select[i])) goto done;
     status = 0;
 done:
     json_object_put(inventory); return status;
