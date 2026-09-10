@@ -23,7 +23,7 @@ if [ "$1" = fleet ] && [ "$2" = tui-visual-data ]; then
   printf 'F\\tbuild\\t/project\\tbranch\\thead\\tinstance\\tLIVE\\n'
   printf 'T\\tbuild\\tresponded\\t0\\t-\\treachable\\tfresh\\t1\\t1\\n'
   printf 'O\\tbuild\\ttask_1\\t-\\t-\\t-\\t-\\tnone\\trecorded\\trunning\\tnone\\t-\\tinspect\\t1\\t1\\t%s\\t0\\tunavailable\\tunavailable\\t%s\\t-\\t-\\t-\\t-\\n' "$state" "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-  printf 'O\\tbuild\\ttask_2\\t-\\t-\\t-\\t-\\tnone\\twaiting\\twaiting_approval\\tapproval\\tReview\\tdecide\\t1\\t1\\t%s\\t1\\tunavailable\\tunavailable\\t%s\\trequested\\tmanaged_commands\\t1\\treq-2\\n' "$state" "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  printf 'O\\tbuild\\ttask_2\\t-\\t-\\t-\\t-\\tnone\\twaiting\\twaiting_approval\\tapproval\\tReview\\tdecide\\t1\\t1\\t%s\\t1\\tunavailable\\tunavailable\\t%s\\t-\\t-\\t-\\treq-2\\n' "$state" "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
   exit 0
 fi
 printf '%s\\n' "$@" >> {log}
@@ -33,11 +33,11 @@ exit 0
     env = {**os.environ, "TERM": "xterm-256color", "HYDRA_BIN_CMD": str(wrapper), "HYDRA_HOME": str(base / "home")}
     s = Session([str(BUILD / "hydra-tui"), "--fleet", "--view", "overview"], 120, 40, env=env, cwd=base)
     try:
-        s.send("j")
         s.until("task_2", timeout=8)
         assert "task_2" in s.screen.text()
+        s.pump(1.0)
         s.send("j")
-        s.pump(.3)
+        s.pump(.5)
         assert "req-2" in s.screen.text()
         s.send("X")
         s.until("Type cancel to dispatch for the selected task", timeout=5)
