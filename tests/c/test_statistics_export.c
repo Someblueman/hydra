@@ -20,7 +20,7 @@ static bool load_fixture(struct hs_model *m) {
     return ok;
 }
 
-int main(void) {
+static int statistics_export_cases(void) {
     struct hs_model model, other;
     struct hs_filter filter = {0};
     char json[32768];
@@ -60,4 +60,8 @@ int main(void) {
     fclose(out);
     puts("Statistics exporter: bounded JSON metrics, comparison and fail-closed input passed");
     return 0;
+}
+
+int main(void) {
+    return statistics_export_cases();
 }

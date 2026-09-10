@@ -14,7 +14,7 @@ static int statistics_command(int argc, char **argv) {
     return -1;
 }
 
-int main(int argc, char **argv) {
+static int core_dispatch(int argc, char **argv) {
     int statistics_result = statistics_command(argc, argv);
     if (statistics_result >= 0) return statistics_result;
     if (argc == 2 && strcmp(argv[1], "--protocol-version") == 0) {
@@ -49,4 +49,8 @@ int main(int argc, char **argv) {
     }
     usage(stderr);
     return 2;
+}
+
+int main(int argc, char **argv) {
+    return core_dispatch(argc, argv);
 }

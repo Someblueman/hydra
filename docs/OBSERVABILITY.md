@@ -10,21 +10,25 @@ hydra workflow statistics-announce
 hydra workflow statistics-compare <left-statistics.tsv> <right-statistics.tsv>
 ```
 
-`statistics-json` produces a versioned JSON document containing the sampled
-runs, steps, warnings, and coverage counts. Missing scalar evidence is `null`;
-it is unknown rather than zero. If collection cannot produce a valid feed, the
-document has `availability: unavailable` and an empty projection.
+`statistics-json` produces a versioned JSON document from the validated native
+statistics model. It includes the observed timestamp, filter snapshot, matched
+run and step cohort, and queue, elapsed, verified, and recovery metrics. Timing
+values are seconds; recovery values are counts. Each metric carries eligible
+and known denominators plus sum, integer mean, maximum, nearest-rank p50 and
+p95 when samples are known. A metric with eligible records but no known samples
+is `unknown`; a metric with no eligible records is `unavailable`. Missing values
+are `null`, never zero. Invalid, truncated, or oversized feeds fail closed.
 
 `statistics-announce` emits one short ASCII line for the snapshot, each run,
 each warning, and the final coverage count. A missing run state is announced as
 unknown, and warning lines preserve the distinction between an empty sample and
 failed evidence.
 
-`statistics-compare` compares two previously captured feed files. It reports
-the sampled run and step counts and their deltas. The result is unavailable if
-either file is missing, symlinked, or unreadable. These counts describe the
-recorded sample only; they do not infer remote transfer bytes, provider cost,
-CPU, memory, tokens, or other remote metrics that the feed does not record.
+`statistics-compare` loads two previously captured feed files through the same
+native parser and emits both metric summaries plus deltas for mean, maximum,
+p50, and p95. It preserves unknown and unavailable states rather than ranking
+incomparable cohorts. These are recorded local samples only; remote transfer
+bytes, provider cost, CPU, memory, and tokens are explicitly unavailable.
 
 ## Saved task announcements
 
