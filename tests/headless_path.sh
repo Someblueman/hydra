@@ -10,8 +10,8 @@ headless_path() {
         _hp_directory=$(CDPATH='' cd -- "${_hp_directory:-.}" 2>/dev/null && pwd -P) || continue
         for _hp_entry in "$_hp_directory"/* "$_hp_directory"/.[!.]* "$_hp_directory"/..?*; do
             _hp_name=${_hp_entry##*/}
-            [ "$_hp_name" != tmux ] && [ -f "$_hp_entry" ] && [ -x "$_hp_entry" ] || continue
-            [ ! -e "$1/$_hp_name" ] && [ ! -L "$1/$_hp_name" ] || continue
+            if [ "$_hp_name" = tmux ] || [ ! -f "$_hp_entry" ] || [ ! -x "$_hp_entry" ]; then continue; fi
+            if [ -e "$1/$_hp_name" ] || [ -L "$1/$_hp_name" ]; then continue; fi
             ln -s "$_hp_entry" "$1/$_hp_name"
         done
     done

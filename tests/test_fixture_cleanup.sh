@@ -79,10 +79,10 @@ for split_code in 1 0; do
         # shellcheck source=/dev/null
         . "$root/tests/dashboard_cases.sh"
         # Called by the sourced dashboard case.
-        # shellcheck disable=SC2329
+        # shellcheck disable=SC2329,SC2317
         print_error() { printf '%s\n' "$*" >&2; }
         split_calls=0
-        # shellcheck disable=SC2329
+        # shellcheck disable=SC2329,SC2317
         tmux() {
             case "$1" in
                 list-panes) printf 'one pane\n' ;;

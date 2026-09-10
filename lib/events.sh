@@ -231,6 +231,30 @@ _event_retain_file_locked() {
     [ "$_ert_count_limit" -ge "$HYDRA_EVENT_ARCHIVE_MIN_COUNT" ] && [ "$_ert_count_limit" -le "$HYDRA_EVENT_ARCHIVE_MAX_COUNT" ] || return 1
     [ "$_ert_bytes_limit" -ge "$HYDRA_EVENT_ARCHIVE_MIN_BYTES" ] && [ "$_ert_bytes_limit" -le "$HYDRA_EVENT_ARCHIVE_MAX_BYTES" ] || return 1
     [ "$_ert_keep_seconds" -ge "$HYDRA_EVENT_ARCHIVE_MIN_SECONDS" ] && [ "$_ert_keep_seconds" -le "$HYDRA_EVENT_ARCHIVE_MAX_SECONDS" ] || return 1
+    # Complete an already-published rotation before evaluating a new tail policy
+    # or expiring archives. New events may have arrived since the interruption.
+    for _ert_pending in "$(dirname "$_ert_file")/archive"/events-*.jsonl; do
+        _event_meta_valid "$_ert_pending.meta" "$_ert_pending" "$_ert_project/$_ert_head" || continue
+        [ "$_emv_first" = "$(head -n 1 "$_ert_file" | _event_sequence)" ] || continue
+        _ert_check="$(mktemp_adjacent "$_ert_file")" || return 1
+        if ! head -n "$_emv_count" "$_ert_file" > "$_ert_check" || ! cmp -s "$_ert_check" "$_ert_pending"; then
+            rm -f "$_ert_check"
+            echo "Error: published event archive conflicts with the current prefix; reconcile the stream" >&2
+            return 1
+        fi
+        rm -f "$_ert_check"
+        if [ "$_ert_dry_run" -eq 1 ]; then
+            printf 'would-resume\t%s\t%s-%s\n' "$_ert_pending" "$_emv_first" "$_emv_last"
+            return 0
+        fi
+        _ert_full_last="$(tail -n 1 "$_ert_file" | _event_sequence)"
+        _event_uint "$_ert_full_last" 4294967293 || return 1
+        _ert_tmp="$(mktemp_adjacent "$_ert_file")" || return 1
+        tail -n +"$((_emv_count + 1))" "$_ert_file" > "$_ert_tmp" || { rm -f "$_ert_tmp"; return 1; }
+        _event_write_next_sequence "$_ert_file" $((_ert_full_last + 1)) || { rm -f "$_ert_tmp"; return 1; }
+        atomic_replace "$_ert_file" "$_ert_tmp" || return 1
+        printf '%s\n' "$_ert_pending"
+    done
     _ert_count="$(awk 'END { print NR + 0 }' "$_ert_file")"
     [ "$_ert_count" -le "$_ert_max" ] && return 0
     _ert_archive_dir="$(dirname "$_ert_file")/archive"; mkdir -p "$_ert_archive_dir" || return 1

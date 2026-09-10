@@ -30,7 +30,7 @@ fixture_lock() {
     _fl_build=${BUILD_DIR:-$_fl_root/build}
     case $_fl_build in /*) ;; *) _fl_build="$_fl_root/$_fl_build" ;; esac
     _fl_binary="$_fl_build/fixture-lock"
-    if [ ! -x "$_fl_binary" ] || [ "$_fl_root/tests/fixture/lock.c" -nt "$_fl_binary" ]; then
+    if [ ! -x "$_fl_binary" ] || [ -n "$(find "$_fl_root/tests/fixture/lock.c" -newer "$_fl_binary" -print)" ]; then
         mkdir -p "$_fl_build"
         _fl_temp=$(mktemp "$_fl_build/fixture-lock.XXXXXX") || return 1
         if "${CC:-cc}" -std=c99 -Wall -Wextra -Werror -pedantic "$_fl_root/tests/fixture/lock.c" -o "$_fl_temp"; then

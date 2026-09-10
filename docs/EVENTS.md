@@ -40,8 +40,16 @@ default remains apply when neither flag is supplied). Archive policy options are
 - `--archive-keep-seconds`: 1 through 31536000 seconds from archive creation.
 
 Each archive has a `.meta` record with its stream ID, first and last sequence,
-creation and expiry times, byte count, event count, and SHA-256. An archive whose
-expiry has passed is removed only during a later retention operation, and its bounded
+creation and expiry times, byte count, event count, and SHA-256. If interrupted
+after publishing an archive and metadata but before trimming the stream, retry
+after reconciling the stale writer lock. Retention validates and byte-compares
+the published prefix, completes its trim without another archive or renewed
+expiry, then evaluates the requested tail policy. Later appended events are
+preserved. Dry-run reports `would-resume` without trimming; conflicting prefix
+bytes require reconciliation and leave the stream unchanged.
+
+An archive whose expiry has passed is removed only during a later retention
+operation, and its bounded
 record is appended to `archive/expiry-summary.jsonl` with `status: "expired"` and the
 same sequence range and hash. Thus an expired range is distinguishable from an empty
 stream or a stream that was never created. The summary retains the most recent 64
