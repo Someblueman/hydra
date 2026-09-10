@@ -148,6 +148,27 @@ and its [decision brief](research/host-discovery-onboarding-decision-brief.md).
 The reports describe the audited baseline and retain their research-date context;
 the H track below incorporates the authorized onboarding recommendations.
 
+### Research follow-up map — 10 September 2026
+
+The 9 September reports are historical audits, not current implementation status.
+This table maps their recommendations to the canonical backlog. New unchecked
+items below capture remaining work; they do not expand the qualified release-next
+candidate or launch implementation, provider access, or live-host experiments.
+
+| Research recommendation | Roadmap destination and current boundary |
+| --- | --- |
+| Execution separate from terminal attachment | T1/T2 implementation is integrated; T2 live qualification and T3 remain open. |
+| Exact outcome and recovery semantics | 9A–9F and V1–V4 retain their recorded implementation and qualification limits. |
+| Direct attach and saved multi-machine interaction | I1 below extends existing local/remote attach; no replacement PTY server is selected. |
+| Semantic attention and compact review navigation | I2/I3 below; observations and external links cannot grant acceptance. |
+| Provider breadth and exact-session qualification | Item 2 retains the authenticated adapter matrix. |
+| Idle efficiency and 1/10/50-worktree performance | Item 10, including the multi-client and attention cases below. |
+| SSH/static discovery, reviewed enrollment, bounded snapshot imports | H1–H3 are locally qualified; supplied snapshots are not live discovery clients. |
+| Live source acquisition and snapshot changes | H4 below, one explicitly selected source at a time. |
+| Onboarding filters, detail, progress and low-friction review | H5 below; existing CLI batching remains the execution path. |
+| Revocation and reviewed key rotation | H6 below; existing changed-key rejection remains required. |
+| Cloud-manager integrations, shared inventory and runtime replacement | Conditional decisions at the end of this roadmap; not prerequisites for I/H work. |
+
 #### T. Optional tmux for headless and remote execution
 
 Decision: make tmux optional for headless execution, retaining it for interactive
@@ -515,6 +536,13 @@ objective, not a claim about the current periodic snapshot implementation.
       the initial supported-platform baselines and product needs, then freeze them
       before evaluating optimizations. Retain stalls and uncertainty; never treat
       a short-run maximum as a guaranteed worst case or missing counters as zero.
+- [ ] Include one and three attached clients, local interactive/local headless/
+      remote headless cases, and disconnect/reconnect under output pressure.
+      Attribute PTY parsing, generated/transmitted frames and per-client rendering;
+      record unsupported combinations explicitly. Qualify I2 attention signals
+      against annotated blocked/question/approval, working, done-but-unseen, idle
+      and unknown cases, reporting false positives and missed signals separately.
+      These measurements do not make an attention hint an accepted outcome.
 
 Acceptance: publish reproducible baseline evidence for every matrix cell on macOS
 and Linux, with explicit unsupported measurements and separate live-agent coverage.
@@ -669,6 +697,48 @@ stays bounded while preserving active recovery and the documented deduplication
 window. V1–V4 provide the observation surface used by T3; they do not require a new
 permanent daemon, terminal server, scheduler, or automatic coordinator failover.
 
+#### I. Interactive parity and review navigation
+
+Follow-up to the [interactive parity report](research/interactive-parity-report.md).
+Extend the current attached-terminal and V1–V4 interfaces; keep the existing task
+owner, tmux terminal lifecycle and shell mutation path. These are outstanding
+operator workflows, not a proposal for a new server, scheduler or provider manager.
+
+- [ ] **I1 — Saved multi-machine interaction and direct attach.** Provide one
+      operator view across explicitly registered trusted SSH machines, with direct
+      navigation to an exact host/project/head terminal capability. Keep headless
+      tasks inspectable without offering terminal input. Preserve independent
+      client selection and detach without changing the execution owner.
+      Acceptance: two clients can inspect/attach across two hosts; one offline
+      host does not freeze the other. Cached rows are visibly stale, input is
+      disabled until fresh target identity is established, and reconnect is
+      bounded. A renamed/replaced head cannot receive stale input. Background
+      connections never answer authentication prompts or install software.
+
+- [ ] **I2 — Attention rollups and next-action navigation.** Surface exact-instance
+      questions, approval waits and unreviewed results across workspaces/hosts,
+      with source, freshness and a route to the corresponding evidence/action.
+      Keep each client's seen/unseen state separate from provider state and
+      objective acceptance; unsupported observations remain unknown.
+      Acceptance: annotated event/PTY cases cover stale sessions, duplicate events,
+      two independent clients, acknowledgement and reconnect. Seen state never
+      approves a gate; quiet output or a provider done badge never accepts a result.
+      Publish attention error measurements through item 10 before parity claims.
+
+- [ ] **I3 — Compact review queue and external evidence references.** Navigate
+      from a ready-to-review task to its exact diff, artifact inventory, checks,
+      provenance and existing approval/integration actions. Allow read-only links
+      to provider transcripts, logs and PRs when explicitly supplied or available
+      through a selected adapter; do not require a cloud account.
+      Acceptance: changed subjects invalidate readiness; failed checks, missing or
+      expired artifacts and inaccessible links remain explicit. CLI/TUI identify
+      the same task/attempt/subject. Opening an external reference cannot promote,
+      push, merge or substitute provider status for Hydra verification.
+
+I1 builds on V1–V4 and existing interactive attach; tmux-free distributed
+qualification stays in T2/T3. I2/I3 reuse lifecycle, outcome and review contracts.
+Select independently useful slices, with item 10 measuring their overhead.
+
 #### 8. Dynamic task pools and schedules
 
 Select this work only when real workloads need newly discovered tasks or persistent
@@ -755,6 +825,39 @@ current fleet implementation.
       mutations; a 100-host import is bounded and does not silently widen the
       selected set. No provider membership or discovery record grants execution
       permission.
+
+- [ ] **H4 — Opt-in live inventory acquisition and snapshot diffs.** Acquire one
+      selected mDNS/DNS-SD, VPN, cloud or configuration-management source through
+      its normal client/API and feed the existing candidate importer. Choose the
+      first source and account/network scope when selecting implementation. Keep
+      credentials outside records, bound acquisition time/bytes/rate, and expose
+      cache age plus added/removed/changed/conflicting candidates before selection.
+      Acceptance: stale cache, unavailable credentials, partial responses, source
+      disappearance and identity conflicts preserve provenance and do not widen
+      selection or mutate enrollment intent. Fixture coverage and separately
+      authorized live-source qualification are reported independently.
+
+- [ ] **H5 — Onboarding operator view and workflow qualification.** Add filters,
+      candidate details, snapshot changes and per-host apply/resume/reconcile
+      progress over H1–H3 records, delegating actions to the existing CLI.
+      Acceptance: with a prepared alias/key/credentials/package, reach one-host
+      review in at most three explicit commands and one confirmation; show the
+      exact actions and bindings before apply. CLI/JSON/TUI agree on identity and
+      typed state. Mixed ten-host and interrupted 50-host runs retain every row,
+      success and unknown outcome; 100-host views remain bounded and responsive.
+      No UI retry replays an uncertain mutation or silently bootstraps a host.
+
+- [ ] **H6 — Scoped revocation and reviewed key rotation.** Define explicit local
+      revocation for candidate/source, transport, package and project decisions,
+      retaining who/when/reason and the superseded binding under existing state
+      conventions. Re-import cannot revive a revoked identity silently. A changed
+      key shows old/new fingerprints and observation provenance; acceptance uses
+      the operator's OpenSSH process and requires fresh enrollment review.
+      Acceptance: revoked bindings block new operations and invalidate pending
+      intents; alias reuse, endpoint changes and source refresh cannot bypass the
+      block. Existing accepted tasks/evidence remain inspectable. Revocation alone
+      never cancels tasks, uninstalls packages, deletes remote state or rewrites
+      known_hosts; those actions retain their own explicit authorization.
 
 [H3 local qualification](evidence/h3-source-batches.md) covers the four supplied
 snapshot formats, 100 distinct selected targets, 16-host probe/apply batches,
@@ -1005,6 +1108,13 @@ prioritized backlog:
 - A2A adapters for independently operated agent services when SSH fleet is insufficient;
 - bounded best-of-N recipes over existing tasks, gates, and integration primitives;
   reviewed decomposition patterns are now scoped in item 9E.
+- provider/cloud-manager execution or review integrations beyond I3's read-only
+  references: first select a concrete workflow and credential/ownership boundary;
+- team-shared discovery inventory: first define per-user authorization, approver
+  identity and conflicting trust decisions; H4–H6 retain per-user state;
+- replacement server-owned PTYs or live runtime handoff: require a demonstrated
+  limitation of existing tmux attach and an explicit lifecycle/migration decision.
+  The interactive-parity research does not select this runtime replacement.
 
 Provider cognition dashboards, exact cross-provider context/cost routing, automatic
 unreviewed decomposition, dirty-file shadow synchronization, Git-as-consensus
