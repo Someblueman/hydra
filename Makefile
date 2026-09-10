@@ -183,7 +183,7 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 test-parity: build-core
 	@sh tests/test_core.sh
 
-test-all: test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-termviz-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
+test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-termviz-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
 sanitize-core:
 	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-c
@@ -320,6 +320,13 @@ $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 
 test-workflow-contracts: build-fleet
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/workflow_contract_cases.py --runtime
+
+.PHONY: test-fleet-controls test-fleet-recovery
+test-fleet-controls: build-tui
+	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_fleet_controls.py
+
+test-fleet-recovery: build-core build-fleet build-tui
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_fleet_recovery.py
 
 .PHONY: test-plan-outcomes test-task-announce test-plan-reuse
 test-plan-outcomes: build-fleet

@@ -242,6 +242,7 @@ steps:
         row.get("step_id") == "work" and row.get("state") == "running"
         for row in document["data"]["task"]["steps"]), "original work attempt running")
     observed = observed_document["data"]
+    observation_pages = [observed_document]
     stream = observed["event_observation"]
     assert stream["available"] and stream["events"] and not stream["retention_gap"]
     run_id = observed["task"]["run_id"]
@@ -282,9 +283,11 @@ steps:
 
     seen = [event["sequence"] for event in stream["events"]]
     for page in range(32):
-        resumed = json.loads(run([str(BIN), "fleet", "task", "observe", "host-b", "--id", wf_id,
+        resumed_document = json.loads(run([str(BIN), "fleet", "task", "observe", "host-b", "--id", wf_id,
             "--cursor", str(stream["next_cursor"]), "--byte-offset", str(stream["next_byte_offset"]),
-            "--stream-id", stream["stream_id"], "--event-limit", "2"], env, source))["data"]
+            "--stream-id", stream["stream_id"], "--event-limit", "2"], env, source))
+        observation_pages.append(resumed_document)
+        resumed = resumed_document["data"]
         current = resumed["event_observation"]
         assert resumed["task"]["run_id"] == run_id and resumed["task"]["task_id"] == wf_id
         assert current["stream_id"] == stream["stream_id"] and not current["stream_reset"] and not current["retention_gap"]
@@ -315,6 +318,14 @@ steps:
     assert len(list((base / "host-a/fleet/tasks").glob("task_*/acceptance.json"))) == 1
     assert len(list((base / "host-b/fleet/tasks").glob("task_*/acceptance.json"))) == 2
     assert status("host-a", task_a)["runtime"]["state"] == "outcome_unknown"
+    for index, page in enumerate(observation_pages):
+        saved = base / f"observe-page-{index}.json"
+        saved.write_text(json.dumps(page))
+        announced = json.loads(run([str(BIN), "fleet", "task", "announce", "--input", str(saved)], env, source))
+        text = announced["data"]["announcement"]
+        assert all(ord(char) < 128 for char in text)
+        assert "evidence=saved_snapshot" in text and "resume cursor=" in text
+        (base / f"announcement-{index}.txt").write_text(text)
     (base / "summary.json").write_text(json.dumps({"task":wf_id,"run":run_id,"attempt":"attempt-1",
         "events":seen,"log_bytes":suffix["next_offset"],"result":"workflow-result","no_replay":True},indent=2))
 
