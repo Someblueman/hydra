@@ -62,4 +62,21 @@ exec /bin/sh -c "$2"
         s.send("H"); s.pump(.4)
         assert "stale" in s.screen.text().lower(), s.screen.text()
     finally: s.close(keys=b"q")
-print("PASS V4 real two-receiver TUI observation: distinct task identities, host rows and stale transport evidence")
+    (transport/"offline-a").unlink()
+    s=Session([str(BUILD/"hydra-tui"),"--fleet","--view","overview"],140,40,env=tui_env,cwd=source)
+    try:
+        s.until(task_a,15); s.until(task_b,15)
+        for host, task in specs:
+            for _ in range(80):
+                status=json.loads(run([str(BIN),"fleet","task","status",host,"--id",task],env,source))
+                data=status.get("data",status)
+                if data.get("state")=="succeeded": break
+                assert data.get("state") not in ("failed","outcome_unknown")
+                time.sleep(.1)
+            out=base/(task+".result")
+            run([str(BIN),"fleet","task","result",host,"--id",task,"--output",str(out)],env,source)
+            assert out.stat().st_size > 0
+            inspected=json.loads(run([str(BIN),"fleet","task","inspect-result","--input",str(out)],env,source))
+            assert inspected.get("ok") is True
+    finally: s.close(keys=b"q")
+print("PASS V4 real two-receiver TUI observation: distinct task identities, stale reconnect, and verified result packages")
