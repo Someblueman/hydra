@@ -40,7 +40,9 @@ host has only `name`, `target`, and `labels`. Schema 2 adds a closed
 100 `records`. Record identity and target fields are projected by kind:
 instance/host for mDNS, peer/address for VPN, instance_id/private_ip for cloud
 tags, and host/address for configuration management. Secrets are rejected and
-record identifiers are unique.
+record identifiers are unique. These are explicitly supplied bounded interchange
+formats, not network discovery clients or vendor API export parsers. mDNS records
+support port 22 only; another port is rejected rather than silently discarded.
 
 The public progress export is a qualification result for inspection and review.
 Its private authority record is keyed by a hash of the export path under

@@ -13,10 +13,20 @@ struct hd_options {
     unsigned seconds;
     bool probe;
 };
+struct hd_progress {
+    int lock;
+    char path[F_PATH];
+    json_object *record;
+};
 /* Inputs are borrowed. Returned JSON belongs to the caller. Config output is
  * caller-owned and must be unlinked after all SSH children have exited. */
 json_object *hd_cli(int argc, char **argv);
 json_object *hd_sources(const struct hd_options *options);
+/* Borrow rows/options; progress owns its record/lock until hd_progress_close. */
+json_object *hd_progress_open(struct hd_progress *progress, const struct hd_options *options, json_object *rows);
+int hd_progress_save(struct hd_progress *progress, json_object *rows);
+void hd_progress_close(struct hd_progress *progress);
+json_object *hd_batch(const struct hd_options *options, json_object *rows);
 json_object *hd_resolve(const char *target, const char *config, unsigned seconds);
 json_object *hd_probe(json_object *candidate, const char *config, const struct hd_options *options);
 int hd_config(char path[F_PATH], const char *source);

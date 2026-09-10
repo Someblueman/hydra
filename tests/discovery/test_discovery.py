@@ -170,22 +170,28 @@ class DiscoveryTest(unittest.TestCase):
             source = next(s for s in row["sources"] if s["kind"] == kind)
             self.assertEqual(source["locator"], f"fixture:{kind}")
             self.assertEqual(source["observed_at"], 1)
+            self.assertEqual(source["scope"], "fixture")
+            self.assertEqual(source["freshness"], "source_reported")
 
     def test_snapshot_rejects_malformed_secret_time_and_schema_smuggling(self):
         base = {"instance": "x", "host": "good", "port": 22, "labels": []}
-        for record in [dict(base, token="secret"), dict(base, port="22")]:
+        for record in [dict(base, token="secret"), dict(base, port="22"), dict(base, port=2222), dict(base, host="-option")]:
             self.assertEqual(self.run_cli("discover", "--inventory", str(self.snapshot("mdns", [record])), "--select", "x", success=False)["error"]["code"], "invalid_inventory")
         for at in [-1, 9999999999]:
             self.assertEqual(self.run_cli("discover", "--inventory", str(self.snapshot("mdns", [base], at)), "--select", "x", success=False)["error"]["code"], "invalid_inventory")
         old = self.path / "old.json"; old.write_text(json.dumps({"schema_version": 1, "observed_at": 1, "hosts": [], "source_snapshot": {}}))
         self.assertEqual(self.run_cli("discover", "--inventory", str(old), "--select", "x", success=False)["error"]["code"], "invalid_inventory")
+        path = self.snapshot("mdns", [base, dict(base, host="other")])
+        self.run_cli("discover", "--inventory", str(path), "--select", "x", success=False)
 
     def test_snapshot_import_bound_is_one_hundred(self):
-        records = [{"host": f"h{i}", "address": "good", "labels": []} for i in range(100)]
+        records = [{"host": f"h{i}", "address": f"host{i}", "labels": []} for i in range(100)]
         path = self.snapshot("config-management", records)
         names = [arg for i in range(100) for arg in ("--select", f"h{i}")]
-        result = self.run_cli("discover", "--inventory", str(path), *names, "--ssh", "good")
-        self.assertEqual(len(result["data"]["candidates"]), 1)
+        result = self.run_cli("discover", "--inventory", str(path), *names)
+        self.assertEqual(len(result["data"]["candidates"]), 100)
+        self.assertEqual({row["target"] for row in result["data"]["candidates"]},
+                         {f"host{i}" for i in range(100)})
         path.write_text(json.dumps({"schema_version": 2, "observed_at": 1, "hosts": [], "source_snapshot": {"kind": "config-management", "locator": "fixture", "scope": "fixture", "observed_at": 1, "freshness": "source_reported", "records": records + [{"host": "h100", "address": "good", "labels": []}]}}))
         self.run_cli("discover", "--inventory", str(path), *names, "--select", "h100", success=False)
 
@@ -196,9 +202,73 @@ class DiscoveryTest(unittest.TestCase):
         args = [arg for i in range(20) for arg in ("--select", f"h{i}")]
         progress = self.path / "progress.json"
         first = self.run_cli("qualify", "--inventory", str(inventory), *args, "--progress", str(progress), success=True)
-        self.assertEqual(sum("resolution" in row for row in first["data"]["candidates"]), 16)
+        self.assertEqual(sum("qualification" in row for row in first["data"]["candidates"]), 16)
+        self.assertFalse(first["data"]["complete"])
+        self.assertEqual(first["data"]["pending_count"], 4)
+        self.assertEqual(len((self.path / "calls").read_text().splitlines()), 16)
+        # The exported report is untrusted input and is never the resume authority.
+        first["data"]["candidates"][0]["candidate_id"] = "forged"
+        first["data"]["candidates"][0]["qualification"]["data"]["peer_fingerprint"] = "SHA256:forged"
+        progress.write_text(json.dumps(first))
         second = self.run_cli("qualify", "--inventory", str(inventory), *args, "--progress", str(progress), success=True)
-        self.assertEqual(sum("resolution" in row for row in second["data"]["candidates"]), 20)
+        self.assertEqual(sum("qualification" in row for row in second["data"]["candidates"]), 20)
+        self.assertTrue(second["data"]["complete"])
+        self.assertEqual(second["data"]["processed_this_batch"], 4)
+        self.assertEqual(len((self.path / "calls").read_text().splitlines()), 20)
+        self.assertNotIn("forged", json.dumps(second))
+        third = self.run_cli("qualify", "--inventory", str(inventory), *args, "--progress", str(progress))
+        self.assertEqual(third["data"]["processed_this_batch"], 0)
+        self.assertEqual(len((self.path / "calls").read_text().splitlines()), 20)
+
+    def test_progress_rejects_changed_source_policy_and_private_corruption(self):
+        inventory = self.snapshot("vpn", [{"peer": "selected", "address": "good", "labels": []}])
+        progress = self.path / "resume.json"
+        args = ("--inventory", str(inventory), "--select", "selected", "--progress", str(progress))
+        original = inventory.read_bytes()
+        self.run_cli("qualify", *args)
+        private = next((self.home / "fleet/discovery").glob("*.json"))
+        before = private.read_bytes()
+        data = json.loads(original)
+        data["source_snapshot"]["scope"] = "changed scope"
+        inventory.write_text(json.dumps(data))
+        self.assertEqual(self.run_cli("qualify", *args, success=False)["error"]["code"], "progress_binding_changed")
+        inventory.write_bytes(original)
+        old_config = self.included.read_text()
+        self.included.write_text(old_config.replace("User builder", "User changed"))
+        self.assertEqual(self.run_cli("qualify", *args, success=False)["error"]["code"], "progress_binding_changed")
+        self.assertEqual(before, private.read_bytes())
+        self.included.write_text(old_config)
+        data = json.loads(original)
+        data["source_snapshot"]["records"] = []
+        inventory.write_text(json.dumps(data))
+        self.assertEqual(self.run_cli("qualify", *args, success=False)["error"]["code"], "invalid_inventory")
+        self.assertEqual(before, private.read_bytes())
+        inventory.write_bytes(original)
+        private.write_text("malformed")
+        self.assertEqual(self.run_cli("qualify", *args, success=False)["error"]["code"], "progress_invalid")
+        self.assertEqual(len((self.path / "calls").read_text().splitlines()), 1)
+
+    def test_progress_lock_and_failed_retry_keep_evidence(self):
+        progress = self.path / "progress.json"
+        args = ("--ssh", "slow", "--timeout", "1", "--progress", str(progress))
+        process = subprocess.Popen(self.command("qualify", *args), env=self.env,
+                                   text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        deadline = time.monotonic() + 10
+        while not (self.path / "pid").exists() and time.monotonic() < deadline:
+            time.sleep(.01)
+        self.assertTrue((self.path / "pid").exists())
+        second = self.run_cli("qualify", *args, success=False)
+        self.assertEqual(second["error"]["code"], "progress_busy")
+        stdout, stderr = process.communicate(timeout=5)
+        self.assertEqual(process.returncode, 1, stderr)
+        row = json.loads(stdout)["data"]["candidates"][0]
+        self.assertEqual(row["qualification_attempts"], 1)
+        result = self.run_cli("qualify", *args, success=False)
+        row = result["data"]["candidates"][0]
+        self.assertEqual(row["qualification_attempts"], 2)
+        self.assertEqual(len(row["qualification_history"]), 1)
+        self.assertEqual(row["qualification_history"][0]["result"]["error"]["code"], "timeout")
 
     def test_cancel_retains_unvisited_rows_and_reaps_ssh(self):
         process = subprocess.Popen(self.command("qualify", "--ssh", "slow", "--ssh", "zzz",

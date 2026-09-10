@@ -54,7 +54,7 @@ static bool snapshot_record_valid(json_object *record, const char *kind) {
         !hd_text(snapshot_identifier(record, kind), 128) || !target_valid(snapshot_target(record, kind)) ||
         !labels_valid(f_field(record, "labels"))) return false;
     return !strcmp(kind, "mdns") ? json_object_is_type(f_field(record, "port"), json_type_int) &&
-        json_object_get_int(f_field(record, "port")) == 22 : true;
+        json_object_get_int64(f_field(record, "port")) == 22 : true;
 }
 static bool duplicate_snapshot_id(json_object *records, size_t index, const char *kind) {
     const char *identifier = snapshot_identifier(json_object_array_get_idx(records, index), kind);
