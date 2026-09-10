@@ -65,12 +65,14 @@ static int progress_lock(const char *digest, char path[F_PATH]) {
     return fd;
 }
 static json_object *apply_hosts(json_object *intent, json_object *progress, const char *path, unsigned seconds) {
-    json_object *hosts = f_field(intent, "hosts"), *rows = f_field(progress, "hosts"); size_t i; bool partial = false;
+    json_object *hosts = f_field(intent, "hosts"), *rows = f_field(progress, "hosts"); size_t i, attempted = 0; bool partial = false;
     for (i = 0; i < json_object_array_length(hosts); i++) {
         json_object *row = json_object_array_get_idx(rows, i), *failure;
         if (!strcmp(f_string(row, "status"), "enrolled")) continue;
+        if (attempted >= 16) { partial = true; continue; }
         if (f_stopped) { partial = true; break; }
         failure = enrollment_host_apply(json_object_array_get_idx(hosts, i), row, progress, path, seconds);
+        attempted++;
         if (failure) return failure;
         if (strcmp(f_string(row, "status"), "enrolled")) partial = true;
     }
