@@ -13,7 +13,7 @@ static bool selection(const char **items, size_t *count, const char *value) {
     items[(*count)++] = value; return true;
 }
 static bool option_value(struct hd_options *options, const char *key, const char *value) {
-    if (!strcmp(key, "--ssh")) return selection(options->ssh, &options->ssh_count, value);
+    if (!strcmp(key, "--ssh")) return options->ssh_count < HD_QUALIFY_BATCH && selection(options->ssh, &options->ssh_count, value);
     if (!strcmp(key, "--select")) return selection(options->select, &options->select_count, value);
     if (!strcmp(key, "--inventory") && !options->inventory) { options->inventory = value; return true; }
     if (!strcmp(key, "--ssh-config") && !options->config) { options->config = value; return true; }
