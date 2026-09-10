@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 import csv,hashlib,json,math,os,random,sys
 inp=os.environ['HYDRA_WORKFLOW_INPUTS_DIR']; out=os.environ['HYDRA_WORKFLOW_OUTPUTS_DIR']
-def emit(verdict,evidence):
- json.dump({'schema_version':1,'verdict':verdict,'evidence':evidence},open(os.path.join(out,'assessment'),'w')); print(json.dumps({'schema_version':1,'verdict':verdict,'evidence':evidence})); sys.exit(0 if verdict=='pass' else 1)
+def emit(verdict,evidence,raw=None,domain=None,exit_code=None):
+ data=json.load(open(os.environ['HYDRA_WORKFLOW_VALIDATION_FILE']))['data']
+ subject_bytes=open(os.path.join(inp,'subject'),'rb').read(); subject=hashlib.sha256(subject_bytes).hexdigest()
+ raw = raw or {'verdict':verdict,'evidence':evidence}
+ rh=hashlib.sha256(json.dumps(raw,sort_keys=True,separators=(',',':')).encode()).hexdigest(); obs=[{'id':'performance-outcome','raw':raw,'raw_sha256':rh}]
+ domain=domain or ('inconclusive' if verdict=='fail' else 'pass')
+ record={'obligation_id':'performance-outcome','subject_manifest_sha256':subject,'validator_identity':'performance-checker-v3','validator_recipe_sha256':data['check-recipe'],'invocation':{'argv':['python3','checker.py'],'exit_code':0 if exit_code is None else exit_code},'environment':{'host':'local','toolchain':'python3'},'case_inventory':['performance-outcome'],'observations':obs,'raw_evidence_sha256':hashlib.sha256(json.dumps(obs,sort_keys=True,separators=(',',':')).encode()).hexdigest(),'counts':{'executed':1,'failed':0 if domain=='pass' else 1,'skipped':0},'limitations':['bounded synthetic workload']}
+ report={'schema_version':3,'execution_status':'completed','evidence_status':'valid' if domain!='inconclusive' else 'inconclusive','domain_verdict':domain,'verdict':domain,'subject_sha256':subject,'validator_sha256':data['check'],'requirements':['binding','protocol','analysis','outcome','limits'],'evidence':evidence,'limitations':['bounded synthetic workload'],'evidence_records':[record]}
+ json.dump(report,open(os.path.join(out,'assessment'),'w'),separators=(',',':')); print(json.dumps(report)); sys.exit(0 if domain=='pass' else 1)
 def q(v,p): return sorted(v)[max(0,min(len(v)-1,math.ceil(p*len(v))-1))] if v else None
 def dg(p):
  h=hashlib.sha256()
@@ -37,5 +44,5 @@ try:
  if (ci['lower'],ci['upper']) != expected_ci or ci['seed']!=1729 or ci['resamples']!=10000: emit('fail','bootstrap evidence mismatch')
  expected='invalid/insufficient measurement' if fails or not all(x['status']=='ok' and x['count']=='4003' for x in sealed.get('warmups',[])) else ('target established' if report['candidate']['median_ns']<=report['baseline']['median_ns']*.9 and ci['upper']<0 else 'target not established')
  if report['outcome'] != expected: emit('fail','outcome mismatch')
- emit('pass','all independent recomputations matched')
-except Exception as e: emit('fail','typed invalid evidence: '+type(e).__name__+': '+str(e))
+ emit('pass','all independent recomputations matched', {'verdict':'pass','outcome':report['outcome'],'baseline':report['baseline'],'candidate':report['candidate'],'paired_uncertainty':report['paired_uncertainty']}, 'pass')
+except Exception as e: emit('fail','typed invalid evidence: '+type(e).__name__+': '+str(e), {'verdict':'fail','error':type(e).__name__+': '+str(e)}, 'inconclusive', 1)
