@@ -8,10 +8,11 @@
 
 static bool config_source(json_object *row, const char **config) {
     const char *explicit_config = f_string(row, "ssh_config");
+    json_object *explicit_value;
     json_object *sources = f_field(row, "sources"); size_t i;
     *config = NULL;
-    if (explicit_config) {
-        if (!enrollment_path(explicit_config)) return false;
+    if (json_object_object_get_ex(row, "ssh_config", &explicit_value)) {
+        if (!explicit_config || !enrollment_path(explicit_config)) return false;
         *config = explicit_config; return true;
     }
     if (!json_object_is_type(sources, json_type_array)) return true;
