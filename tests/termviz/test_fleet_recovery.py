@@ -112,4 +112,57 @@ exec /bin/sh -c "$2"
             assert second["task"]["task_id"]==task and second["task"]["run_id"]==first["task"]["run_id"]
             assert second["event_observation"]["oldest_cursor"] <= second["event_observation"]["head_cursor"]
     finally: s.close(keys=b"q")
+    # A real workflow task supplies retained events and attempt/log evidence.
+    wfdir=source/".hydra"/"workflows"; wfdir.mkdir(parents=True)
+    (wfdir/"v4.yml").write_text("""version: 1
+id: v4-events
+parallelism: 1
+resources:
+  disk_mb: 1
+  max_heads: 2
+steps:
+  - id: create
+    kind: spawn
+    needs: []
+    retry: 0
+    idempotent: false
+    args:
+      branch: v4-worker
+      terminal_mode: headless
+  - id: work
+    kind: exec
+    needs: [create]
+    retry: 0
+    idempotent: true
+    args:
+      head: v4-worker
+      argv: [sh, workflow-work.sh]
+  - id: verify
+    kind: gate
+    needs: [work]
+    retry: 0
+    idempotent: true
+    args:
+      head: v4-worker
+      name: result
+      argv: [test, -s, result.txt]
+""")
+    (source/"workflow-work.sh").write_text("set -eu\nprintf workflow-result > result.txt\n")
+    subprocess.run(["git","add",".hydra/workflows/v4.yml","workflow-work.sh"],cwd=source,check=True)
+    subprocess.run(["git","-c","commit.gpgSign=false","commit","-qm","v4 workflow"],cwd=source,check=True)
+    wf_spec=json.loads((base/"spec-b.json").read_text()); wf_spec["source"]["commit"]=subprocess.run(["git","rev-parse","HEAD"],cwd=source,text=True,stdout=subprocess.PIPE,check=True).stdout.strip(); wf_spec["work"]={"kind":"workflow","path":".hydra/workflows/v4.yml"}; wf_spec["completion"]="workflow-success"; wf_spec["outputs"]=["result.txt"]
+    (base/"wf-spec.json").write_text(json.dumps(wf_spec)); wf_package=base/"wf-package.json"
+    preview=json.loads(run([str(BIN),"fleet","task","prepare","--source",str(source),"--spec",str(base/"wf-spec.json"),"--output",str(wf_package)],env,source)); wf_digest=preview["data"]["spec_sha256"]
+    receipt=json.loads(run([str(BIN),"fleet","task","submit","host-b","--input",str(wf_package),"--key","v4-workflow","--trust-spec",wf_digest],env,source)); wf_id=receipt.get("task_id") or receipt["data"]["task_id"]
+    for _ in range(150):
+        wf_status=status("host-b",wf_id)
+        if wf_status.get("runtime",{}).get("state")=="succeeded": break
+        assert wf_status.get("runtime",{}).get("state") not in ("failed","outcome_unknown"); time.sleep(.1)
+    assert wf_status.get("runtime",{}).get("state")=="succeeded"
+    observed=json.loads(run([str(BIN),"fleet","task","observe","host-b","--id",wf_id,"--event-limit","2"],env,source))["data"]
+    stream=observed["event_observation"]; assert stream["available"] and not stream["retention_gap"] and stream["events"]
+    assert observed["task"]["attempt_history"] and observed["task"]["attempt_history"][0]["attempt_id"]
+    resumed=json.loads(run([str(BIN),"fleet","task","observe","host-b","--id",wf_id,"--cursor",str(stream["next_cursor"]),"--byte-offset",str(stream["next_byte_offset"]),"--stream-id",stream["stream_id"],"--event-limit","2"],env,source))["data"]["event_observation"]
+    assert resumed["stream_reset"] is False and resumed["oldest_cursor"] <= resumed["head_cursor"]
+
 print("PASS V4 real two-receiver TUI observation: distinct task identities, stale reconnect, and verified result packages")
