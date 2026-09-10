@@ -1,22 +1,18 @@
 {
   "schema_version": 1,
-  "id": "feature-slug-v5",
+  "id": "feature-slug-deterministic-v1",
   "objective": "Complete the existing C command catalog-slug by implementing slugify in slug.c according to SPEC.md and slug.h, and deliver a buildable sealed source archive catalog.tar containing the integrated command (main.c, slug.c, slug.h, Makefile), not just a patch or a review. The existing CLI and public header are fixed. Requirements: normalization - ASCII letters become lowercase; digits remain; runs of other bytes become one hyphen between words; leading/trailing delimiters disappear; empty or delimiter-only input gives the empty string; non-ASCII bytes are delimiters and no Unicode transliteration is claimed. bounds - slugify(input, output, capacity) returns 0 and a terminated string on success; if the result does not fit, input is NULL, output is NULL, or capacity is zero, return -1; when output is non-NULL and capacity is positive, every error leaves output[0] equal to zero; never write outside capacity. cli - the existing command builds with strict C99 warnings and supports multiple arguments and --limit 1..64; an oversized slug fails with exit 2; existing command argument errors retain their behavior. The implementation worker returns raw C as its final answer; a composition step supplies the fixed slug.h include and terminating newline around it, builds catalog-slug and emits catalog.tar; the fixed acceptance scripts verify.sh and test_slug.c independently check the sealed final archive.",
   "context": [
     "SPEC.md",
     "slug.h"
   ],
   "assumptions": [
-    "The source repository is clean at HEAD; worker.txt, compose.sh, verify.sh, test_slug.c, main.c, slug.h, Makefile and SPEC.md are fixed acceptance material and must not be modified.",
-    "The opencode profile runs the implementation worker; its final text is written verbatim to the implementation output and must be raw C without Markdown fences or commentary.",
-    "worker.txt scopes the worker to reading only SPEC.md, slug.h and main.c, returning raw C source without running commands or touching tests; all execution and exercise is left to the independent verifier, which avoids the previous worker timeout.",
-    "worker.txt explicitly forbids repository edits, commits, spawned agents and changes to acceptance tests, so the worker step declares no repository writes.",
-    "A previous worker source handled NULL input correctly but omitted the slug.h include despite the prompt; compose.sh now deterministically prefixes the fixed slug.h include line and appends a terminating LF around the worker text, never modifying the worker function logic, and still strict-builds and runs the same smoke plus independent tests.",
     "test_slug.c seeds output[0] with X before the NULL-input error case, so the clear-on-error contract is exercised from nonempty output; this is a strictly stronger check of the unchanged bounds criterion.",
-    "worker.txt explicitly highlights the error contract: with NULL input and a valid positive-capacity output, the error must clear output[0] even if it currently contains nonzero data.",
     "verify.sh runs on a separate head, builds the sealed archive, compiles and runs test_slug.c, exercises the CLI, and always emits a pass verdict with the fixed requirement IDs normalization, bounds and cli on success; any failure exits nonzero.",
     "Earlier runs' evidence is retained; this plan does not replay or alter it.",
-    "Heads feature-work-v5 and feature-check-v5 are fresh names created by this plan at the current repository HEAD, avoiding heads created by earlier runs; retries and repair budgets are zero."
+    "Heads feature-work-v5 and feature-check-v5 are fresh names created by this plan at the current repository HEAD, avoiding heads created by earlier runs; retries and repair budgets are zero.",
+    "compose_deterministic.sh is a fixed implementation source assembled in the work head; no provider is called.",
+    "verify.sh independently tests the sealed archive and includes green-exit missing-behavior controls."
   ],
   "questions": [],
   "deliverables": [
@@ -67,23 +63,7 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "feature-work-v5"
-      }
-    },
-    {
-      "id": "feature-work",
-      "role": "work",
-      "kind": "exec",
-      "needs": [
-        "spawn-work"
-      ],
-      "writes": [],
-      "args": {
-        "head": "feature-work-v5",
-        "profile": "opencode",
-        "prompt_input": "worker_prompt",
-        "result_file": "implementation",
-        "timeout": 240
+        "branch": "feature-work-deterministic"
       }
     },
     {
@@ -91,17 +71,14 @@
       "role": "compose",
       "kind": "exec",
       "needs": [
-        "feature-work"
+        "spawn-work"
       ],
-      "writes": [
-        "feature-work-v5:slug.c",
-        "feature-work-v5:catalog-slug"
-      ],
+      "writes": [],
       "args": {
-        "head": "feature-work-v5",
+        "head": "feature-work-deterministic",
         "argv": [
           "sh",
-          "compose.sh"
+          "compose_deterministic.sh"
         ],
         "timeout": 120
       }
@@ -113,7 +90,7 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "feature-check-v5"
+        "branch": "feature-check-deterministic"
       }
     },
     {
@@ -126,7 +103,7 @@
       ],
       "writes": [],
       "args": {
-        "head": "feature-check-v5",
+        "head": "feature-check-deterministic",
         "argv": [
           "sh",
           "verify.sh"
@@ -145,27 +122,7 @@
       }
     },
     "steps": {
-      "feature-work": {
-        "inputs": {
-          "worker_prompt": {
-            "input": "worker_prompt"
-          }
-        },
-        "outputs": {
-          "implementation": {
-            "path": "implementation",
-            "type": "file",
-            "max_bytes": 65536
-          }
-        }
-      },
       "feature-compose": {
-        "inputs": {
-          "implementation": {
-            "step": "feature-work",
-            "output": "implementation"
-          }
-        },
         "outputs": {
           "catalog": {
             "path": "catalog.tar",
@@ -196,8 +153,7 @@
       "local"
     ],
     "tools": [
-      "sh",
-      "profile:opencode"
+      "sh"
     ],
     "effects": [
       "worktree",
