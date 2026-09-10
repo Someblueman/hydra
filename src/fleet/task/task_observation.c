@@ -428,8 +428,11 @@ static void add_unavailable_attempt(json_object *attempts, json_object *attempt,
 static void add_one_attempt(json_object *attempts, const char *step_root, const char *step_id, unsigned number) {
     json_object *attempt = json_object_new_object(); char attempt_root[F_PATH] = "", *exit_status = NULL, *completed_at = NULL, *failure_class = NULL;
     f_string_add(attempt, "step_id", step_id ? step_id : "unavailable");
-    (void)snprintf(attempt_root, sizeof(attempt_root), "%s/attempt-%u", step_root, number);
     if (!step_root[0]) { add_unavailable_attempt(attempts, attempt, number); return; }
+    {
+        int length = snprintf(attempt_root, sizeof(attempt_root), "%s/attempt-%u", step_root, number);
+        if (length < 0 || (size_t)length >= sizeof(attempt_root)) { add_unavailable_attempt(attempts, attempt, number); return; }
+    }
     {
         struct stat attempt_stat;
         if (lstat(attempt_root, &attempt_stat) || !S_ISDIR(attempt_stat.st_mode)) {
