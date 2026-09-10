@@ -1,5 +1,5 @@
 """Two real receiver homes observed through the native fleet TUI."""
-import json, os, re, subprocess, tempfile, time
+import json, os, re, signal, subprocess, tempfile, time
 from pathlib import Path
 from pty_support import Session
 ROOT = Path(__file__).resolve().parents[2]
@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix="hydra-v4-real-") as td:
         run([str(BIN),"init","--no-agent","--json"], {**os.environ,"HYDRA_HOME":str(base/f"host-{name}")}, receiver)
     subprocess.run(["git","init","-q"],cwd=source,check=True)
     subprocess.run(["git","config","user.name","V4"],cwd=source,check=True); subprocess.run(["git","config","user.email","v4@example.invalid"],cwd=source,check=True)
-    (source/"payload.sh").write_text("sleep 2; printf v4-result > result.txt\n")
+    (source/"payload.sh").write_text("while [ ! -f \"$HYDRA_HOME/release\" ]; do sleep .1; done; printf v4-result > result.txt\n")
     subprocess.run(["git","add","payload.sh"],cwd=source,check=True); subprocess.run(["git","-c","commit.gpgSign=false","commit","-qm","payload"],cwd=source,check=True)
     ssh=base/"ssh"; ssh.write_text(f'''#!/bin/sh
 set -eu
@@ -48,6 +48,8 @@ exec /bin/sh -c "$2"
         receipt=json.loads(run([str(BIN),"fleet","task","submit",host,"--input",str(package),"--key",f"v4-{name}","--trust-spec",digest],env,source))
         specs.append((host,receipt.get("task_id") or receipt["data"]["task_id"]))
     task_a,task_b=specs[0][1],specs[1][1]
+    def status(host, task):
+        return json.loads(run([str(BIN),"fleet","task","status",host,"--id",task],env,source)).get("data", {})
     tui_env={**env,"HYDRA_BIN_CMD":str(BIN),"TERM":"xterm-256color"}
     s=Session([str(BUILD/"hydra-tui"),"--fleet","--view","overview"],140,40,env=tui_env,cwd=source)
     try:
@@ -55,21 +57,49 @@ exec /bin/sh -c "$2"
         assert "host-a" in s.screen.text()
         s.send("j"); s.pump(.3)
         assert "host-b" in s.screen.text(), s.screen.text()
+        owner=0
+        for _ in range(50):
+            owner=int(status("host-a",task_a).get("runtime",{}).get("owner_pid") or 0)
+            if owner: break
+            time.sleep(.1)
+        assert owner > 0
+        child=subprocess.run(["ps","-axo","pid=,ppid="],text=True,stdout=subprocess.PIPE,check=True).stdout.splitlines()
+        group=next((int(line.split()[0]) for line in child if len(line.split())>1 and int(line.split()[1])==owner),0)
+        assert group > 0
         (transport/"offline-a").write_text("")
         deadline=time.time()+8
         while time.time()<deadline and "stale" not in s.screen.text().lower():
             s.pump(.25)
         s.send("H"); s.pump(.4)
         assert "stale" in s.screen.text().lower(), s.screen.text()
+        # Kill exactly host A's recorded owner while its receiver task is gated.
+        os.kill(owner, signal.SIGSTOP); os.killpg(group, signal.SIGKILL); os.kill(owner, signal.SIGKILL)
+        (transport/"offline-a").unlink()
+        deadline=time.time()+5
+        while time.time()<deadline:
+            try:
+                if status("host-a",task_a).get("runtime",{}).get("state")=="outcome_unknown": break
+            except subprocess.CalledProcessError: pass
+            time.sleep(.1)
+        assert status("host-a",task_a).get("runtime",{}).get("state")=="outcome_unknown"
+        (transport/"offline-a").write_text("")
+        (base/"host-b"/"release").write_text("")
+        deadline=time.time()+10
+        while time.time()<deadline and status("host-b",task_b).get("runtime",{}).get("state")!="succeeded": time.sleep(.1)
+        assert status("host-b",task_b).get("runtime",{}).get("state")=="succeeded"
     finally: s.close(keys=b"q")
     (transport/"offline-a").unlink()
     s=Session([str(BUILD/"hydra-tui"),"--fleet","--view","overview"],140,40,env=tui_env,cwd=source)
     try:
         s.until(task_a,15); s.until(task_b,15)
-        for host, task in specs:
+        first=json.loads(run([str(BIN),"fleet","task","observe","host-b","--id",task_b,"--event-limit","2"],env,source))["data"]
+        assert "event_observation" in first and "attempt_history" in first["task"]
+        assert first["task"]["task_id"]==task_b
+        assert first["task"]["attempt_history"][0]["attempt_id"]=="attempt-1"
+        for host, task in (specs[1],):
             for _ in range(80):
-                status=json.loads(run([str(BIN),"fleet","task","status",host,"--id",task],env,source))
-                data=status.get("data",status)
+                document=json.loads(run([str(BIN),"fleet","task","status",host,"--id",task],env,source))
+                data=document.get("data",document)
                 if data.get("state")=="succeeded": break
                 assert data.get("state") not in ("failed","outcome_unknown")
                 time.sleep(.1)
@@ -78,5 +108,8 @@ exec /bin/sh -c "$2"
             assert out.stat().st_size > 0
             inspected=json.loads(run([str(BIN),"fleet","task","inspect-result","--input",str(out)],env,source))
             assert inspected.get("ok") is True
+            second=json.loads(run([str(BIN),"fleet","task","observe",host,"--id",task,"--cursor",str(first["event_observation"]["next_cursor"]),"--event-limit","2"],env,source))["data"]
+            assert second["task"]["task_id"]==task and second["task"]["run_id"]==first["task"]["run_id"]
+            assert second["event_observation"]["oldest_cursor"] <= second["event_observation"]["head_cursor"]
     finally: s.close(keys=b"q")
 print("PASS V4 real two-receiver TUI observation: distinct task identities, stale reconnect, and verified result packages")
