@@ -29,10 +29,10 @@ import hashlib, json, sys
 out, subject, validator, recipe = sys.argv[1:]
 raw = {'actual':'pass','verdict':'pass','measurement':1,'requirements':['normalization','bounds','cli']}
 rh = hashlib.sha256(json.dumps(raw, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-obs = [{'id':'slug-check','raw':raw,'raw_sha256':rh}]
+obs = [{'id':name,'raw':raw,'raw_sha256':rh} for name in ('slug-check','bounds-check','cli-check')]
 record = {'obligation_id':'slug-check','subject_manifest_sha256':subject,'validator_identity':'feature-slug-v3','validator_recipe_sha256':recipe,'invocation':{'argv':['sh','verify.sh'],'exit_code':0},'environment':{'host':'local','toolchain':'cc/make/sh'},'case_inventory':['normalization','bounds','cli'],'observations':obs,'measurements':[raw],'raw_evidence_sha256':hashlib.sha256(json.dumps(obs, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),'counts':{'executed':1,'failed':0,'skipped':0},'limitations':['fixture-only']}
-record2=dict(record); record2['obligation_id']='bounds-check'; record2['observations']=[dict(obs[0], id='bounds-check')]
-record3=dict(record); record3['obligation_id']='cli-check'; record3['observations']=[dict(obs[0], id='cli-check')]
+record2=dict(record); record2['obligation_id']='bounds-check'; record2['observations']=obs
+record3=dict(record); record3['obligation_id']='cli-check'; record3['observations']=obs
 for rr in (record2, record3): rr['raw_evidence_sha256']=hashlib.sha256(json.dumps(rr['observations'], sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 report = {'schema_version':3,'execution_status':'completed','evidence_status':'valid','domain_verdict':'pass','verdict':'pass','subject_sha256':subject,'validator_sha256':validator,'requirements':['normalization','bounds','cli'],'evidence':'sealed archive independently built and tested','measurements':[raw],'limitations':['fixture-only'],'evidence_records':[record,record2,record3]}
 json.dump(report, open(out, 'w'), separators=(',', ':')); open(out, 'a').write('\n')
