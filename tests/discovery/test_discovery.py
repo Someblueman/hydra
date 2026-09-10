@@ -189,6 +189,17 @@ class DiscoveryTest(unittest.TestCase):
         path.write_text(json.dumps({"schema_version": 2, "observed_at": 1, "hosts": [], "source_snapshot": {"kind": "config-management", "locator": "fixture", "scope": "fixture", "observed_at": 1, "freshness": "source_reported", "records": records + [{"host": "h100", "address": "good", "labels": []}]}}))
         self.run_cli("discover", "--inventory", str(path), *names, "--select", "h100", success=False)
 
+    def test_qualification_progress_advances_sixteen_hosts(self):
+        inventory = self.path / "batch.json"
+        records = [{"name": f"h{i}", "target": f"host{i}", "labels": []} for i in range(20)]
+        inventory.write_text(json.dumps({"schema_version": 1, "observed_at": 1, "hosts": records}))
+        args = [arg for i in range(20) for arg in ("--select", f"h{i}")]
+        progress = self.path / "progress.json"
+        first = self.run_cli("qualify", "--inventory", str(inventory), *args, "--progress", str(progress), success=True)
+        self.assertEqual(sum("resolution" in row for row in first["data"]["candidates"]), 16)
+        second = self.run_cli("qualify", "--inventory", str(inventory), *args, "--progress", str(progress), success=True)
+        self.assertEqual(sum("resolution" in row for row in second["data"]["candidates"]), 20)
+
     def test_cancel_retains_unvisited_rows_and_reaps_ssh(self):
         process = subprocess.Popen(self.command("qualify", "--ssh", "slow", "--ssh", "zzz",
                                                 "--timeout", "30"), env=self.env,

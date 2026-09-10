@@ -1,6 +1,7 @@
 #include "fleet/discovery/discovery.h"
 #include "fleet/support/json.h"
 #include "fleet/support/process.h"
+#include "fleet/support/files.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -17,6 +18,7 @@ static bool option_value(struct hd_options *options, const char *key, const char
     if (!strcmp(key, "--select")) return selection(options->select, &options->select_count, value);
     if (!strcmp(key, "--inventory") && !options->inventory) { options->inventory = value; return true; }
     if (!strcmp(key, "--ssh-config") && !options->config) { options->config = value; return true; }
+    if (!strcmp(key, "--progress") && !options->progress) { options->progress = value; return hd_text(value, F_PATH); }
     if (!strcmp(key, "--require") && options->probe && hd_text(value, 128)) { options->capability = value; return true; }
     if (!strcmp(key, "--timeout")) {
         char *end; unsigned long seconds = strtoul(value, &end, 10);
@@ -54,10 +56,17 @@ static bool enrich(json_object *row, const struct hd_options *options, const cha
     return ok;
 }
 static json_object *run_discovery(const struct hd_options *options, json_object *rows) {
-    char config[F_PATH]; json_object *data, *result; size_t i; bool failed = false;
+    char config[F_PATH]; json_object *data, *result, *old = NULL; size_t i, processed = 0; bool failed = false;
     if (hd_config(config, options->config)) { json_object_put(rows); return f_error("fleet-discovery", "ssh_config_failed", "cannot prepare private strict SSH config; use an absolute literal config path"); }
-    for (i = 0; i < json_object_array_length(rows); i++)
-        if (!enrich(json_object_array_get_idx(rows, i), options, config)) failed = true;
+    if (options->progress) old = f_read_json(options->progress, F_LIMIT);
+    for (i = 0; i < json_object_array_length(rows); i++) {
+        json_object *row = json_object_array_get_idx(rows, i); bool done = false; size_t j;
+        json_object *prior = old ? f_field(f_field(old, "data"), "candidates") : NULL;
+        for (j = 0; json_object_is_type(prior, json_type_array) && j < json_object_array_length(prior); j++) { json_object *p = json_object_array_get_idx(prior, j); if (!strcmp(f_string(p, "target"), f_string(row, "target")) && f_string(p, "status")) { done = true; json_object_array_put_idx(rows, i, json_object_get(p)); row = p; break; } }
+        if (done) continue;
+        if (options->probe && processed >= HD_QUALIFY_BATCH) continue;
+        if (!enrich(row, options, config)) failed = true; processed++;
+    }
     unlink(config);
     data = json_object_new_object();
     json_object_object_add(data, "candidate_schema_version", json_object_new_int(1));
@@ -68,7 +77,7 @@ static json_object *run_discovery(const struct hd_options *options, json_object 
     json_object_object_add(data, "partial_failure", json_object_new_boolean(failed));
     f_string_add(data, "required_capability", options->probe ? options->capability : "");
     result = failed ? f_error("fleet-discovery", f_stopped ? "cancelled" : "partial_failure", "one or more selected candidates could not be resolved or qualified") : f_success("fleet-discovery", NULL);
-    json_object_object_add(result, "data", data); return result;
+    json_object_object_add(result, "data", data); if (options->progress) { const char *text = json_object_to_json_string_ext(result, JSON_C_TO_STRING_PLAIN); if (f_write(options->progress, text, strlen(text), true)) { json_object_put(old); json_object_put(result); return f_error("fleet-discovery", "progress_io_failed", "cannot save qualification progress"); } } json_object_put(old); return result;
 }
 json_object *hd_cli(int argc, char **argv) {
     struct hd_options options = {.seconds = 5, .capability = "list"}; json_object *rows;

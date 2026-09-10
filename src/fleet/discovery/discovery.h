@@ -9,6 +9,7 @@ struct hd_options {
     const char *ssh[HD_HOSTS], *select[HD_HOSTS];
     size_t ssh_count, select_count;
     const char *inventory, *config, *capability;
+    const char *progress;
     unsigned seconds;
     bool probe;
 };
