@@ -28,7 +28,7 @@ git commit -m 'Planning example source'
 "$hydra_bin" workflow plan show ../compiled.json
 ```
 
-Review the policy, source recipes, declared writes and provider permissions.
+Review the policy, source recipes, declared writes and exact checker recipe. Copy every example source file into the disposable repository root before compiling; plans bind the copied source and data hashes.
 Run `hydra workflow plan run ../compiled.json --accept <reported-sha256>` only
 with authorization for that exact scope. Record the returned run ID, inspect
 `workflow status <run-id> --json`, and use `workflow plan result <run-id>` to

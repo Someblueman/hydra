@@ -55,9 +55,9 @@
   ],
   "checks": [
     {
-      "id": "assessment",
-      "method": "assessment",
-      "definition": "checker.py independently recomputes raw row validity, per-implementation median and p95, paired relative-change interval and outcome from the sealed report and raw samples; it emits a structured pass/fail object.",
+      "id": "performance-check",
+      "method": "executable",
+      "definition": "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"performance-outcome\",\"expected\":\"pass\"}]}",
       "step": "check",
       "input": "subject",
       "report": "assessment",
@@ -287,5 +287,45 @@
     "disk_mb": 2,
     "retry_budget": 0,
     "repair_budget": 0
-  }
+  },
+  "obligations": [
+    {
+      "id": "performance-outcome",
+      "requirement": "outcome",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "The sealed performance report is independently recomputed and classified with preserved raw evidence.",
+      "evaluation": {
+        "method": "executable",
+        "check": "performance-check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded synthetic workload"
+      ]
+    }
+  ]
 }
