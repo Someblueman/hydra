@@ -1,9 +1,10 @@
 # Release-next review scope
 
-This is the local review candidate on `codex/release-next`, inspected at
-`ecaee6b` on 10 September 2026. It assigns no version and does not establish
-release acceptance. Later implementation commits need their own recorded checks;
-historical evidence below applies to the revisions named in each record.
+This is the locally verified review candidate on `codex/release-next` on
+10 September 2026. The [native acceptance record](evidence/native-python-removal-20260910.md)
+binds the final implementation tree and local checks. It assigns no version and
+does not establish release acceptance. Historical evidence below applies to the
+revisions named in each record, including the earlier `ecaee6b` review snapshot.
 
 ## Included implementation and local qualification
 
@@ -17,10 +18,16 @@ historical evidence below applies to the revisions named in each record.
 | V1–V4 | Freshness-aware observations, resumable events/logs, exact-target controls and original-attempt recovery | [Observation integration](evidence/observation-enrollment-integration.md), [recovery](evidence/recovery-visibility-v4.md). Two local receiver homes and controlled SSH loss qualify these paths, not an external-host soak. |
 | Visibility and retention | Recorded metrics, accessible saved-event/comparison views and protected local task/run evidence expiry | [Remaining-work acceptance](evidence/remaining-work-20260910.md). Transport-process bytes are not wire traffic; off-CLI intervention and provider cost remain unknown. Quotas exclude workspaces and concurrent admission; external claims need pins. |
 | H1–H3 | Selected discovery, explicit enrollment intent and bounded source-snapshot batches | [Discovery](HOST_DISCOVERY.md), [H2 integration](evidence/observation-enrollment-integration.md), [H3](evidence/h3-source-batches.md). Controlled probes/enrollment and supplied vendor snapshots do not qualify live hosts or vendor clients. |
-| Python cleanup | Shared native example precompiler and retired redundant evaluation plumbing with retained independent coverage | [Cleanup evidence](evidence/python-cleanup-20260910/README.md). Its source revisions, inventories and workflow outcomes remain historical; subsequent cleanup must be checked separately. |
+| Python cleanup | Native planning producers/checkers, CLI fixtures and independent PTY observers; no Python dependency in the active build, tests, examples, export or CI | [Native boundary](PYTHON_USAGE.md), [coverage](../tests/native/README.md), [PTY coverage](../tests/termviz/README.md) and [native review](quality/native-python-removal.md). The earlier [cleanup evidence](evidence/python-cleanup-20260910/README.md) remains tied to its recorded source revisions and workflow outcomes. |
 
 ## Outstanding review and release decisions
 
+- **Native migration is locally verified.** The [native acceptance
+  record](evidence/native-python-removal-20260910.md) binds implementation tree
+  `187208cfa474e79d7ae2fd4c99bd9abfebc6ccc5` to completed local acceptance,
+  quality gates and public workflow outcomes, with zero Python invocations.
+  Failed fixture runs, repairs and exact continuations are retained; no single
+  uninterrupted `make test-all` pass is claimed.
 - **9E review scope is settled.** On 10 September 2026 the user explicitly
   selected the implemented 9E tools and successful real Python cleanup workflow
   for review, leaving broader comparative planning-quality research open. That
@@ -36,9 +43,9 @@ historical evidence below applies to the revisions named in each record.
 - **H live-host limits remain visible.** Actual SSH/jump-host/key and operational
   enrollment qualification needs separately authorized targets; supplied inventories
   and local receiver fixtures are the current claim boundary.
-- **Final candidate acceptance is separate from historical slice checks.** The
-  leader must bind the integrated candidate to relevant local acceptance and review
-  results. The [release definition of done](ROADMAP.md#release-definition-of-done)
+- **Release acceptance is separate from local candidate checks.** The
+  integrated candidate has recorded local acceptance and review results.
+  The [release definition of done](ROADMAP.md#release-definition-of-done)
   still requires applicable compatibility, installation, documentation and exact
   end-to-end evidence. Hosted CI, publication artifacts and release identity are
   later gates, not established by this documentation reconciliation.

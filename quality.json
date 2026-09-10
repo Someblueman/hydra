@@ -11,13 +11,10 @@
     "src",
     "Makefile",
     "docs/quality",
-    "quality.json"
+    "quality.json",
+    "examples/planning"
   ],
-  "exclude": [
-    "*.py",
-    "__pycache__/*",
-    "*/__pycache__/*"
-  ],
+  "exclude": [],
   "tools": {
     "make": {
       "command": [
@@ -41,27 +38,14 @@
     },
     "clang-tidy": {
       "command": [
-        "{root}/build/quality-tools/bin/clang-tidy"
+        "sh",
+        "scripts/clang-tidy.sh"
       ],
       "version": "22.1.8",
       "version_args": [
         "--version"
       ],
-      "install": [
-        [
-          "uv",
-          "venv",
-          "{root}/build/quality-tools"
-        ],
-        [
-          "uv",
-          "pip",
-          "install",
-          "--python",
-          "{root}/build/quality-tools/bin/python",
-          "clang-tidy==22.1.8"
-        ]
-      ]
+      "install": []
     },
     "shell-lint": {
       "command": [
@@ -126,7 +110,8 @@
         "Makefile",
         "scripts/quality-c.sh",
         "scripts/quality-c-incremental.sh",
-        "docs/quality/*.tsv"
+        "docs/quality/*.tsv",
+        "scripts/native-tests.mk"
       ]
     },
     {
@@ -142,7 +127,8 @@
         "Makefile",
         "scripts/quality-c.sh",
         "docs/quality/*.tsv",
-        "quality.json"
+        "quality.json",
+        "scripts/native-tests.mk"
       ],
       "files": false,
       "stage": "manual",

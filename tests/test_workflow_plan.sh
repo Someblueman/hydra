@@ -3,6 +3,9 @@
 set -u
 REPO="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 HYDRA_BIN="$REPO/bin/hydra"
+export HYDRA_TEST_ROOT="$REPO"
+# shellcheck source=/dev/null
+. "$REPO/tests/fixture-tools.sh"
 ROOT="$(mktemp -d)"
 export HYDRA_HOME="$ROOT/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 # shellcheck disable=SC1091
@@ -34,29 +37,10 @@ if [ "${HYDRA_TEST_HEADLESS:-0}" = 1 ]; then
     # shellcheck source=/dev/null
     . "$REPO/tests/headless_path.sh"
     headless_path "$ROOT/no-tmux"
-    python3 - "$ROOT/plan.json" <<'PYPLAN'
-import json, sys
-path = sys.argv[1]
-plan = json.load(open(path))
-for step in plan['steps']:
-    if step['kind'] == 'spawn':
-        step['args']['terminal_mode'] = 'headless'
-with open(path, 'w') as out:
-    json.dump(plan, out, indent=2)
-PYPLAN
+    fixture_json headless-plan "$ROOT/plan.json"
 fi
 merge_obligations() {
-    python3 - "$1" "$2" "$3" "$4" <<'PY'
-import json, sys
-base = json.load(open(sys.argv[1]))
-obligations = json.load(open(sys.argv[2]))
-base["obligations"] = obligations
-if sys.argv[4] == "performance":
-    base["objective"] = "Improve performance while preserving text content"
-elif sys.argv[4] == "research":
-    base["objective"] = "Report the observed result and its limitations"
-json.dump(base, open(sys.argv[3], "w"), separators=(",", ":"))
-PY
+    fixture_json merge-obligations "$1" "$2" "$3" "$4"
 }
 merge_obligations "$ROOT/plan.json" "$REPO/tests/fixtures/plan-9a/feature-obligations.json" "$ROOT/feature-plan.json" feature
 merge_obligations "$ROOT/plan.json" "$REPO/tests/fixtures/plan-9a/performance-misleading.json" "$ROOT/performance-plan.json" performance
@@ -116,6 +100,10 @@ if grep -q '^HYDRA_PLAN_TUI' "$ROOT/bad-tui.out"; then assert_failure 0 'invalid
 else assert_success 0 'invalid projection emits no partial handshake'; fi
 reject() {
     sed "$1" "$ROOT/plan.json" > "$ROOT/bad.json"
+    cmp -s "$ROOT/plan.json" "$ROOT/bad.json"
+    mutation_status=$?
+    assert_equal 1 "$mutation_status" "$2 mutation changes fixture bytes"
+    [ "$mutation_status" -eq 1 ] || return
     "$HYDRA_BIN" workflow plan validate "$ROOT/bad.json" "$ROOT/policy.json" > "$ROOT/rejection.json" 2>&1
     assert_failure $? "$2"
     grep -q "\"code\":\"$3\"" "$ROOT/rejection.json"
@@ -158,7 +146,9 @@ cmp -s "$run_dir/steps/compose/attempt-1/artifacts/report" expected.txt
 assert_success $? 'delivered bytes match independently checked expected contents'
 "$HYDRA_BIN" workflow plan result "$run" > "$ROOT/result.json"
 assert_success $? 'public result command verifies and returns the final deliverable'
-python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$run_dir" 0 verified
+# shellcheck source=/dev/null
+. "$(dirname "$HYDRA_BIN")/../tests/fixture-tools.sh"
+statistics_evidence "$HYDRA_BIN" "$run_dir" 0 verified
 assert_success $? "independently verified timing reconciles with the native aggregate"
 printf 'tampered\n' > "$run_dir/steps/compose/attempt-1/artifacts/report"
 "$HYDRA_BIN" workflow plan result "$run" >/dev/null 2>&1
@@ -187,7 +177,9 @@ run="$(sed -n '1p' "$ROOT/negative.out")"
 grep -q '"state":"failed"' "$ROOT/negative-status.json"
 assert_success $? 'negative assessment makes the overall run fail'
 negative_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
-python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$negative_dir" 0 unverified
+# shellcheck source=/dev/null
+. "$(dirname "$HYDRA_BIN")/../tests/fixture-tools.sh"
+statistics_evidence "$HYDRA_BIN" "$negative_dir" 0 unverified
 assert_success $? "negative verification remains missing in the eligible plan cohort"
 grep -q '"step_id":"verify","state":"succeeded"' "$ROOT/negative-status.json"
 assert_success $? 'negative verdict is evaluated after all child steps succeeded'

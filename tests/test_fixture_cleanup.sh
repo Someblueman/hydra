@@ -97,34 +97,6 @@ for split_code in 1 0; do
 done
 
 # Receiver teardown follows its real lock, never an unrelated reused PID.
-python3 - "$root" "$base" <<'PYLOCK'
-import fcntl
-import json
-import os
-from pathlib import Path
-import subprocess
-import sys
-import time
-
-root, fixture = map(Path, sys.argv[1:])
-record = fixture / "home/fleet/tasks/task_owner"
-record.mkdir(parents=True)
-(record / "state.json").write_text(json.dumps({"state": "running", "owner_pid": os.getpid()}))
-lock = record / "owner.lock"
-command = ["sh", "-c", '. "$1/tests/workflow_task_cleanup.sh"; workflow_task_fixture_quiesce "$2/home"',
-           "fixture-owner", str(root), str(fixture)]
-env = dict(os.environ, root=str(root), fixture=str(fixture))
-with lock.open("w") as owner:
-    fcntl.flock(owner, fcntl.LOCK_EX)
-    child = subprocess.Popen(command, env=env)
-    try:
-        time.sleep(0.5)
-        assert child.poll() is None, "cleanup must wait for the receiver lock"
-        fcntl.flock(owner, fcntl.LOCK_UN)
-        assert child.wait(timeout=5) == 0, "released lock must permit cleanup despite the live recorded PID"
-    finally:
-        if child.poll() is None:
-            child.kill()
-            child.wait()
-print("PASS receiver cleanup: real owner lock blocks; reused PID does not")
-PYLOCK
+# shellcheck source=/dev/null
+. "$root/tests/fixture-tools.sh"
+fixture_lock check "$root" "$base"

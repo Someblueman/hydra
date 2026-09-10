@@ -8,7 +8,7 @@ agent-toolkit's `tools/quality/bin/quality --root /path/to/hydra doctor` to veri
 setup, including GNU Make 3.81 and the pinned C checker.
 
 Shell coverage is sources in bin/hydra, lib, scripts, tests, install/uninstall,
-and assets/demos. C sources, headers, and included fragments in src and tests/c are included in the Stop-stage C pilot. The 500-line threshold is
+and assets/demos. C sources, headers, and included fragments in src, tests and examples/planning are included in the Stop-stage C pilot. The 500-line threshold is
 advisory. Existing dirty work is not automatically repaired; the hook limits
 repair continuation to one block and reports unresolved findings.
 
@@ -32,8 +32,9 @@ Native .c files are discovered recursively. Fleet/TUI builds and C analysis use
 the same source inventory, including the domain subdirectories.
 
 Provision with the toolkit quality `setup` command using the existing quality.json,
-or `uv venv build/quality-tools` followed by
-`uv pip install --python build/quality-tools/bin/python clang-tidy==22.1.8`.
+or install a native LLVM 22 distribution providing clang-tidy 22.1.8
+(`brew install llvm@22` on macOS). `scripts/clang-tidy.sh` locates the native
+binary; `HYDRA_CLANG_TIDY` can select its exact path.
 Check-time installation is disabled. At Stop, `scripts/quality-c-incremental.sh`
 checks cognitive complexity for changed C translation units using the same native
 flags and reviewed baseline. Header, included-fragment, Makefile, checker-script

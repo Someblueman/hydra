@@ -11,13 +11,14 @@ their layout can affect both source and binary compatibility.
 make                    # portable C99 static library, no POSIX adapters
 make test               # six component suites
 make examples           # chart and POSIX workspace examples
-make test-pty           # actual shell/PTY interaction, Python 3 standard library
+make test-pty           # actual shell/PTY interaction, native C observer
 build/termviz-workspace --shell
 ```
 
 `CC`, `AR`, `CFLAGS` and `CPPFLAGS` can be overridden on the make command line.
 The build requires GNU make. The POSIX examples need a terminal and the host PTY
-interfaces. Python and `ps` (procps on Debian) are test dependencies only.
+interfaces. The PTY tests use a C compiler and `ps` (procps on Debian); no Python
+interpreter or JSON-C library is required.
 Linux owned-session cleanup uses `/proc`; deliberately detached sessions are
 outside the adapter's ownership. `make clean` removes this extracted
 tree's `build` directory.

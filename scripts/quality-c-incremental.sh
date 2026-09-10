@@ -1,7 +1,7 @@
 #!/bin/sh
 # Lifecycle complexity check; make quality-c retains the full static analyzer.
 set -eu
-tool=build/quality-tools/bin/clang-tidy
+tool=scripts/clang-tidy.sh
 if [ "${1:-}" = --version ]; then
     exec "$tool" --version
 fi

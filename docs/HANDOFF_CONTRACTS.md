@@ -181,7 +181,7 @@ markers and absence of launch records on rejection. The checked-in
 Tests cover missing semantic fields, unit mismatch, stale candidate identity,
 lossy conversion, individually valid but incompatible components, compatible
 success, source/configuration binding, incomplete candidate coverage, and legacy
-opt-in boundaries. Python 3 is needed for these structured fixtures.
+opt-in boundaries. The structured fixtures are native C programs built with JSON-C.
 
 Local fixtures and the existing receipt checks do not replace qualification on
 an external host or live provider. That qualification remains explicit and is

@@ -84,7 +84,9 @@ assert_equal "$(id -u)" "$(cat "$run_dir/approvals/$request/decision/principal-u
 "$HYDRA_BIN" workflow resume "$run" >/dev/null
 assert_success $? "explicit resume applies the surviving decision"
 assert_equal succeeded "$(cat "$run_dir/state")" "resumed workflow completes"
-python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$run_dir" 0 unverified
+# shellcheck source=/dev/null
+. "$(dirname "$HYDRA_BIN")/../tests/fixture-tools.sh"
+statistics_evidence "$HYDRA_BIN" "$run_dir" 0 unverified
 assert_success $? "approval continuation is excluded from owner recovery and queue samples"
 assert_equal 1 "$(grep -c '^before$' "$ROOT/effects")" "resume preserves the completed non-idempotent attempt"
 assert_equal 1 "$(grep -c '^after$' "$ROOT/effects")" "approved action executes once"

@@ -1,6 +1,8 @@
 #!/bin/sh
 # Sourced after the shared acceptance fixture's original identity/count checks.
 # shellcheck disable=SC2154
+# shellcheck source=/dev/null
+. "$root/tests/fixture-tools.sh"
 # Simulate dependency availability only; no terminal session is created.
 cat > "$fixture/bin/tmux" <<'TMUX'
 #!/bin/sh
@@ -8,14 +10,7 @@ cat > "$fixture/bin/tmux" <<'TMUX'
 printf 'tmux 3.3\n'
 TMUX
 chmod +x "$fixture/bin/tmux"
-python3 - "$fixture/spec" "$fixture/terminal-live-spec" <<'PY'
-import json, sys
-spec = json.load(open(sys.argv[1]))
-spec['capabilities'] = ['exec', 'tmux']
-spec['work']['argv'] = ['sh', '-c', 'printf "executed\\n" >> "$HYDRA_HOME/terminal-executions"']
-with open(sys.argv[2], 'w') as out:
-    json.dump(spec, out)
-PY
+fixture_json terminal-spec "$fixture/spec" "$fixture/terminal-live-spec"
 task prepare --source "$fixture/source" --spec "$fixture/terminal-live-spec" --output "$fixture/terminal-live-package" > "$fixture/terminal-live-preview"
 terminal_digest="$(sed -n 's/.*"spec_sha256":"\([^"]*\)".*/\1/p' "$fixture/terminal-live-preview")"
 : > "$fixture/transport/lose-ack"

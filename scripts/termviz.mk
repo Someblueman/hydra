@@ -31,7 +31,9 @@ build/test-workspace-child: tests/c/test_workspace_child.c | build
 examples: build/termviz-example build/termviz-workspace
 test: $(TEST_BINS)
 	@set -e; for test in $(TEST_BINS); do "$$test"; done
-test-pty: examples build/test-workspace-child
-	python3 -c 'import sys; sys.path.insert(0,"tests/termviz"); from test_pty import workspace,shell,interruption; workspace(); shell(); interruption()'
+build/test-pty: tests/termviz/test_pty.c tests/termviz/pty_support.c tests/termviz/screen_support.c tests/termviz/fixture_support.c tests/termviz/pty_support.h | build
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(WARN) $(filter %.c,$^) -o $@
+test-pty: examples build/test-workspace-child build/test-pty
+	build/test-pty --standalone
 clean:
 	rm -rf build

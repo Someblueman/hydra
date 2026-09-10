@@ -2,28 +2,19 @@
 # Sourced acceptance helper: retain host tools but make tmux undiscoverable.
 # The caller owns and removes the supplied disposable directory.
 headless_path() {
-    python3 - "$1" <<'PY'
-import os
-import sys
-from pathlib import Path
-out = Path(sys.argv[1])
-out.mkdir(parents=True, exist_ok=True)
-for directory in os.environ['PATH'].split(os.pathsep):
-    try:
-        entries = list(Path(directory).iterdir())
-    except OSError:
-        continue
-    for entry in entries:
-        try:
-            usable = entry.name != 'tmux' and entry.is_file() and os.access(entry, os.X_OK)
-        except OSError:
-            usable = False
-        if not usable:
-            continue
-        destination = out / entry.name
-        if not destination.exists():
-            destination.symlink_to(entry.absolute())
-PY
+    mkdir -p "$1"
+    _hp_remaining="${PATH}:"
+    while [ -n "$_hp_remaining" ]; do
+        _hp_directory=${_hp_remaining%%:*}
+        _hp_remaining=${_hp_remaining#*:}
+        _hp_directory=$(CDPATH='' cd -- "${_hp_directory:-.}" 2>/dev/null && pwd -P) || continue
+        for _hp_entry in "$_hp_directory"/* "$_hp_directory"/.[!.]* "$_hp_directory"/..?*; do
+            _hp_name=${_hp_entry##*/}
+            [ "$_hp_name" != tmux ] && [ -f "$_hp_entry" ] && [ -x "$_hp_entry" ] || continue
+            [ ! -e "$1/$_hp_name" ] && [ ! -L "$1/$_hp_name" ] || continue
+            ln -s "$_hp_entry" "$1/$_hp_name"
+        done
+    done
     PATH="$1"
     export PATH
     ! command -v tmux >/dev/null 2>&1

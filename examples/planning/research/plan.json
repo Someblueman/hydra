@@ -7,7 +7,7 @@
   ],
   "assumptions": [
     "jobs.csv and SPEC.md are authoritative bounded source material.",
-    "research_report.py and research_check.py are deterministic independent implementations; no provider is called.",
+    "Native research report and checker are deterministic independent implementations; no provider is called.",
     "A valid negative recommendation that neither policy qualifies completes the bounded investigation."
   ],
   "questions": [],
@@ -95,7 +95,7 @@
         ],
         "tools": [
           "sh",
-          "python3"
+          "./plan-example"
         ],
         "effects": [
           "execute"
@@ -131,7 +131,7 @@
         ],
         "tools": [
           "sh",
-          "python3"
+          "./plan-example"
         ],
         "effects": [
           "execute"
@@ -167,7 +167,7 @@
         ],
         "tools": [
           "sh",
-          "python3"
+          "./plan-example"
         ],
         "effects": [
           "execute"
@@ -203,7 +203,7 @@
         ],
         "tools": [
           "sh",
-          "python3"
+          "./plan-example"
         ],
         "effects": [
           "execute"
@@ -239,7 +239,7 @@
         ],
         "tools": [
           "sh",
-          "python3"
+          "./plan-example"
         ],
         "effects": [
           "execute"
@@ -275,7 +275,7 @@
         ],
         "tools": [
           "sh",
-          "python3"
+          "./plan-example"
         ],
         "effects": [
           "execute"
@@ -310,8 +310,8 @@
       "args": {
         "head": "research-work-deterministic",
         "argv": [
-          "python3",
-          "research_report.py"
+          "./plan-example",
+          "research-report"
         ],
         "timeout": 60
       }
@@ -356,8 +356,8 @@
       "args": {
         "head": "research-check-deterministic",
         "argv": [
-          "python3",
-          "research_check.py"
+          "./plan-example",
+          "research-check"
         ],
         "timeout": 60
       }
@@ -428,7 +428,7 @@
     ],
     "tools": [
       "sh",
-      "python3"
+      "./plan-example"
     ],
     "effects": [
       "worktree",

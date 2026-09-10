@@ -14,7 +14,7 @@
     ],
     "tools": [
       "sh",
-      "python3"
+      "./plan-example"
     ],
     "effects": [
       "worktree",
@@ -139,8 +139,8 @@
       "args": {
         "head": "forkjoin-check",
         "argv": [
-          "python3",
-          "check.py"
+          "./plan-example",
+          "pattern-check"
         ],
         "timeout": 30
       }
@@ -261,7 +261,7 @@
         ],
         "tools": [
           "sh",
-          "python3"
+          "./plan-example"
         ],
         "effects": [
           "execute"

@@ -148,9 +148,10 @@ HOME="$source_home" PREFIX="$source_prefix" sh "$repo_root/uninstall.sh" --purge
 archive_checkout="$test_root/source-archive"
 archive_prefix="$test_root/archive-prefix"
 archive_home="$test_root/archive-home"
-mkdir -p "$archive_checkout" "$archive_home"
+mkdir -p "$archive_checkout/scripts" "$archive_home"
 cp "$repo_root/Makefile" "$repo_root/install.sh" "$archive_checkout/"
 cp -R "$repo_root/bin" "$repo_root/lib" "$repo_root/src" "$archive_checkout/"
+cp "$repo_root/scripts/native-tests.mk" "$archive_checkout/scripts/"
 HOME="$archive_home" PREFIX="$archive_prefix" HYDRA_INSTALL_CORE=required HYDRA_BUILD_CORE=1 \
     sh "$archive_checkout/install.sh" > "$test_root/archive-source.out" 2>&1
 assert_success $? "source archive auto-builds native TUI without Git metadata"

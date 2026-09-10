@@ -2,6 +2,8 @@
 # Public compiled adapter plan, exact artifact, and dependent verifier without tmux.
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
+# shellcheck source=/dev/null
+. "$root/tests/fixture-tools.sh"
 fixture="$(mktemp -d)"
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1
 cleanup() {
@@ -23,22 +25,7 @@ cat > "$fixture/profile.json" <<JSON
 {"schema_version":1,"executable":"$root/tests/fixtures/agents/echo-worker.sh","argv":["--new",{"input":"session_id"}],"prompt":"stdin","session":"generated","adapter":"canonical-jsonl","probe_argv":["--help"],"probe_tokens":["echo-worker-v1"]}
 JSON
 "$root/bin/hydra" agent import fixture "$fixture/profile.json" >/dev/null
-python3 - "$root" "$fixture" <<'PY'
-import json, sys
-from pathlib import Path
-root, fixture = map(Path, sys.argv[1:])
-plan = json.loads((root / 'tests/fixtures/plan/plan.json').read_text())
-policy = json.loads((root / 'tests/fixtures/plan/policy.json').read_text())
-for obj in (plan, policy):
-    obj['envelope']['tools'].append('profile:fixture')
-plan['steps'][0]['args']['terminal_mode'] = 'headless'
-plan['steps'][1]['args'] = dict(head='plan-smoke', profile='fixture', prompt_input='prompt', result_file='report', timeout=30)
-plan['data']['inputs']['prompt'] = dict(path='prompt.txt', type='file', max_bytes=128)
-plan['data']['steps']['compose']['inputs'] = dict(prompt=dict(input='prompt'))
-plan['data']['steps']['compose']['outputs']['report']['path'] = 'report'
-(fixture / 'plan.json').write_text(json.dumps(plan))
-(fixture / 'policy.json').write_text(json.dumps(policy))
-PY
+fixture_json adapter-plan "$root" "$fixture"
 cd "$fixture/repo"
 git init -q
 git config user.name Test

@@ -8,7 +8,7 @@ members remain explicit skipped records in the report. Empty and all-skipped
 manifests still compile to a checked report with no worker steps.
 
 The manifest is a declared repository input. It cannot select hosts, tools,
-commands, or effects. `check.py` independently reconstructs every expected record and
+commands, or effects. `./plan-example manifest-check` independently reconstructs every expected record and
 emits schema-3 evidence; structural compilation does not claim runtime success.
 
 ```sh
@@ -16,7 +16,8 @@ emits schema-3 evidence; structural compilation does not claim runtime success.
 hydra workflow plan compile plan.json policy.json ../compiled.json
 ```
 
-Copy this directory and `../native/payload.sh` into a disposable Git repository.
+Build `make build-plan-precompile build-plan-example` from Hydra.
+Copy this directory, `build/plan-example` and `../native/payload.sh` into a disposable Git repository.
 Generate and commit the source plan and shared payload, then initialize Hydra
 with `--no-agent --trust`. Keep `HYDRA_HOME` and the compiled output outside the
 source repository. Review the compiled plan

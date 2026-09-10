@@ -24,9 +24,9 @@ integer/boolean types and duplicate-key checks. IDs such as `finding`, `compose`
 and `check` are supported through prefixes. Empty and all-skipped selections still
 produce an independently checked report.
 
-Build the native helper once with `make build-plan-precompile`. Copy
-`examples/planning/native/payload.sh` into the staged example repository before
-committing its source. Both check steps use `check.py`: `stage1` selects finding
+Build the native helper once with `make build-plan-precompile build-plan-example`. Copy
+`examples/planning/native/payload.sh` and `build/plan-example` into the staged example repository before
+committing its source. Both check steps use `./plan-example staged-check`: `stage1` selects finding
 validation, and no argument selects the final joined-report validation.
 Run the stage-1 plan through the ordinary compile/run/result commands. Copy the
 accepted `report` deliverable to `finding.json` beside `manifest.json`, then run:
@@ -44,7 +44,7 @@ existing policy, graph, retry or repair limits. Each stage requires a separate
 admissible compilation and independently verified result.
 
 Focused tests use a public-result double to isolate semantic gates; the retained
-`tests/test_plan_staged_public.py` test runs both actual plans, retrieves their real
+`tests/native/test_plan_staged_public.c` test runs both actual plans, retrieves their real
 results, and rejects changed local findings and stale source before compilation.
 Current qualification is recorded in the remaining-work evidence index. This
 finite pattern does not require runtime expansion; dynamic membership and late

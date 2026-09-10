@@ -114,3 +114,7 @@ by using a fresh, isolated app server with the refreshed native login. The
 blocked result and records successful model/tool interaction, three stages of
 execution and recovery, final artifact verification and final-code checks.
 Linux standalone component/PTY and ASan/UBSan qualification also passed there.
+
+The captured results above retain their original observer and tool versions.
+Current regression coverage uses native C PTY drivers; the
+[port mapping](../tests/termviz/README.md) lists the preserved scenarios.

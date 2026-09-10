@@ -8,7 +8,7 @@ performance.
 Requirements:
 
 - `binding`: identify exact baseline and candidate script hashes, workload bytes and
-  digest, host/OS/Python timer environment, units, and command forms.
+  digest, host/OS/native monotonic timer environment, units, and command forms.
 - `protocol`: perform two warm-up runs, then ten alternating baseline/candidate
   trials in one exclusive process, recording every raw elapsed sample in
   nanoseconds; do not discard failures or cherry-pick trials.
@@ -38,6 +38,10 @@ temporal drift and correlated system activity can make it overconfident.
 The measurement owner requires `HYDRA_PERFORMANCE_EXCLUSIVE=1` after coordinating
 a quiet window for other Hydra jobs. This flag records operator coordination; it
 does not isolate the computer or exclude unrelated system activity. Raw load
-observations and exact source, workload, shell, awk and Python hashes are retained.
+observations and exact source, workload, shell, awk and native executable hashes are retained.
 A correctly classified valid result can complete the investigation whether the
 target is established or not. Invalid instrumentation does not pass the checker.
+
+Native analysis admits positive integer nanoseconds up to 2^53-1 so conversion
+to floating-point ratio arithmetic is exact. Larger values produce invalid
+measurement evidence; the ten-second sample timeout is far below this bound.

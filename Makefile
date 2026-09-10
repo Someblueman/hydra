@@ -27,8 +27,8 @@ lint:
 	@sh scripts/lint-shell.sh
 	@echo "All checks passed!"
 
-# Run shell-only tests; native suites have build prerequisites in their own targets.
-test:
+# Run CLI shell tests with their native structured-data fixture helpers.
+test: build-fleet build-test-fixture $(BUILD_DIR)/native-tests/statistics-evidence $(BUILD_DIR)/test-statistics
 	@echo "Running tests..."
 	@if [ -d tests ] && [ -n "$$(ls -A tests/test_*.sh 2>/dev/null)" ]; then \
 		for test in tests/test_*.sh; do \
@@ -84,7 +84,7 @@ $(BUILD_DIR)/test-workspace-child: tests/c/test_workspace_child.c | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_workspace_child.c -o $@
 
 test-workspace-pty: example-workspace build-tui $(BUILD_DIR)/test-workspace-child
-	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_pty.py
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-pty"
 
 $(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c -o $@
@@ -92,7 +92,7 @@ $(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.c s
 .PHONY: test-statistics sanitize-statistics
 test-statistics: $(BUILD_DIR)/test-statistics build-tui
 	$(BUILD_DIR)/test-statistics
-	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_statistics_pty.py
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-statistics-pty"
 
 sanitize-statistics:
 	@$(MAKE) BUILD_DIR=build/statistics-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-statistics
@@ -121,7 +121,7 @@ $(BUILD_DIR)/test-statistics-export: tests/c/test_statistics_export.c src/hydra_
 .PHONY: test-statistics-export
 test-statistics-export: build-core $(BUILD_DIR)/test-statistics-export
 	$(BUILD_DIR)/test-statistics-export
-	python3 tests/test_statistics_export.py $(BUILD_DIR)/hydra-core
+	"$(BUILD_DIR)/native-tests/test-statistics-export" $(BUILD_DIR)/hydra-core
 
 TUI_SOURCES = $(filter src/tui/%.c,$(NATIVE_SOURCES))
 TUI_OBJECTS = $(patsubst src/tui/%.c,$(BUILD_DIR)/tui/%.o,$(TUI_SOURCES))
@@ -164,19 +164,19 @@ test-tui: build-tui $(BUILD_DIR)/test-tui-input
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_native_tui.sh
 
 test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
-	@mkdir -p "$(CURDIR)/$(BUILD_DIR)/test-tui-home"
-	@: > "$(CURDIR)/$(BUILD_DIR)/test-tui-home/sentinel"
-	@before="$$(find "$(CURDIR)/$(BUILD_DIR)/test-tui-home" -type f -exec cksum {} \; | sort | cksum)"; \
-	HYDRA_HOME="$(CURDIR)/$(BUILD_DIR)/test-tui-home" \
+	@mkdir -p "$(abspath $(BUILD_DIR))/test-tui-home"
+	@: > "$(abspath $(BUILD_DIR))/test-tui-home/sentinel"
+	@before="$$(find "$(abspath $(BUILD_DIR))/test-tui-home" -type f -exec cksum {} \; | sort | cksum)"; \
+	HYDRA_HOME="$(abspath $(BUILD_DIR))/test-tui-home" \
 		HYDRA_TEST_BIN="$(CURDIR)/bin/hydra" \
 		HYDRA_TUI_BIN="$(CURDIR)/tests/fixtures/tui/crash-native.sh" \
 		HYDRA_TEST_CRASH_DISPATCH="$(CURDIR)/tests/fixtures/tui/crash-dispatch.sh" \
 		HYDRA_TEST_SLOW_HYDRA="$(CURDIR)/tests/fixtures/tui/slow-hydra.sh" \
 		HYDRA_TEST_EOF_HYDRA="$(CURDIR)/tests/fixtures/tui/eof-hydra.sh" \
-		$(BUILD_DIR)/test-tui-pty "$(CURDIR)/$(BUILD_DIR)/hydra-tui" \
+		$(BUILD_DIR)/test-tui-pty "$(abspath $(BUILD_DIR))/hydra-tui" \
 		"$(CURDIR)/tests/fixtures/tui/fake-hydra.sh" "$(CURDIR)/tests/fixtures/tui/fake-bin"; \
 	status=$$?; \
-	after="$$(find "$(CURDIR)/$(BUILD_DIR)/test-tui-home" -type f -exec cksum {} \; | sort | cksum)"; \
+	after="$$(find "$(abspath $(BUILD_DIR))/test-tui-home" -type f -exec cksum {} \; | sort | cksum)"; \
 	if [ "$$before" != "$$after" ]; then echo "native crash path changed Hydra state" >&2; exit 1; fi; \
 	exit $$status
 
@@ -289,6 +289,17 @@ FLEET_JSON_LIB = $(shell pkg-config --variable=libdir json-c)/libjson-c.a
 .PHONY: build-fleet test-fleet test-workflow-contracts
 build-fleet: $(BUILD_DIR)/hydra-fleet
 
+.PHONY: build-test-fixture
+build-test-fixture: $(BUILD_DIR)/native-tests/fixture-json
+FIXTURE_JSON_SOURCES = $(filter-out tests/fixture/lock.c,$(wildcard tests/fixture/*.c))
+$(BUILD_DIR)/native-tests/fixture-json: $(FIXTURE_JSON_SOURCES) tests/fixture/fixture.h $(BUILD_DIR)/libhydra-fleet.a
+	@mkdir -p "$(@D)"
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(FIXTURE_JSON_SOURCES) $(BUILD_DIR)/libhydra-fleet.a $(FLEET_JSON_LIB) -lm -o $@
+
+$(BUILD_DIR)/native-tests/statistics-evidence: tests/native/statistics_evidence.c
+	@mkdir -p "$(@D)"
+	$(CC) $(CORE_CFLAGS) $< -o $@
+
 # Compile shared fleet code once. Compiler dependency files track the actual
 # header/.inc closure for each object and test, including sanitizer builds.
 FLEET_OBJECTS = $(patsubst src/fleet/%.c,$(BUILD_DIR)/fleet/%.o,$(filter-out src/fleet/main.c,$(FLEET_SOURCES)))
@@ -309,9 +320,15 @@ $(BUILD_DIR)/hydra-fleet: $(BUILD_DIR)/fleet/main.o $(BUILD_DIR)/libhydra-fleet.
 build-plan-precompile: $(BUILD_DIR)/plan-precompile
 
 # Shared native precompiler for the finite planning examples; not installed.
-PLAN_PRECOMPILE_SOURCES = $(wildcard examples/planning/native/*.c)
+PLAN_PRECOMPILE_SOURCES = examples/planning/native/precompile.c examples/planning/native/lower.c examples/planning/native/staged.c
 $(BUILD_DIR)/plan-precompile: $(PLAN_PRECOMPILE_SOURCES) examples/planning/native/precompile.h $(BUILD_DIR)/libhydra-fleet.a
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(PLAN_PRECOMPILE_SOURCES) $(BUILD_DIR)/libhydra-fleet.a $(FLEET_JSON_LIB) -lm -o $@
+
+.PHONY: build-plan-example
+build-plan-example: $(BUILD_DIR)/plan-example
+PLAN_EXAMPLE_SOURCES = $(wildcard examples/planning/native/example*.c)
+$(BUILD_DIR)/plan-example: $(PLAN_EXAMPLE_SOURCES) $(wildcard examples/planning/native/example*.h) $(BUILD_DIR)/libhydra-fleet.a
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(PLAN_EXAMPLE_SOURCES) $(BUILD_DIR)/libhydra-fleet.a $(FLEET_JSON_LIB) -lm -o $@
 
 $(BUILD_DIR)/test-fleet: tests/c/test_fleet.c
 $(BUILD_DIR)/test-task-package: tests/c/test_task_package.c
@@ -328,91 +345,94 @@ $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 -include $(FLEET_OBJECTS:.o=.d) $(BUILD_DIR)/fleet/main.d $(FLEET_TEST_BINS:%=%.d)
 
 test-workflow-contracts: build-fleet
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/workflow_contract_cases.py --runtime
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/workflow-contract-cases" --runtime
 
 .PHONY: test-fleet-controls test-fleet-recovery
 test-fleet-controls: build-tui
-	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_fleet_controls.py
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-fleet-controls"
 
 test-fleet-recovery: build-core build-fleet build-tui
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_fleet_recovery.py
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-fleet-recovery"
 
 .PHONY: test-plan-outcomes test-task-announce test-plan-reuse test-retention test-workflow-metrics test-plan-staged test-plan-staged-public
 test-plan-outcomes: build-fleet build-plan-precompile
-	HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 -m unittest tests/test_plan_patterns.py tests/test_performance_outcome.py tests/test_research_outcome.py tests/test_plan_manifest.py
+	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-patterns"
+	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-performance-outcome"
+	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-research-outcome"
+	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-manifest"
 
 test-task-announce: build-fleet
-	python3 tests/test_task_announce.py "$(CURDIR)/$(BUILD_DIR)/hydra-fleet"
+	"$(BUILD_DIR)/native-tests/test-task-announce" "$(abspath $(BUILD_DIR))/hydra-fleet"
 
 test-plan-reuse: build-fleet
-	HYDRA_TEST_PLAN_REPAIR=combine HYDRA_TEST_PLAN_REUSE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh
+	HYDRA_TEST_PLAN_REPAIR=combine HYDRA_TEST_PLAN_REUSE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
 
 test-retention: build-fleet
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_retention.py
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-retention"
 
 test-workflow-metrics: build-fleet build-core
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_workflow_task_metrics.py
-	python3 tests/test_statistics_export.py "$(CURDIR)/$(BUILD_DIR)/hydra-core"
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-workflow-task-metrics"
+	"$(BUILD_DIR)/native-tests/test-statistics-export" "$(abspath $(BUILD_DIR))/hydra-core"
 
 test-plan-staged: build-fleet build-plan-precompile
-	HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_plan_staged.py
+	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-staged"
 
 test-plan-staged-public: build-fleet build-plan-precompile
-	HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" python3 tests/test_plan_staged_public.py --fleet "$(CURDIR)/$(BUILD_DIR)/hydra-fleet" --output "$(BUILD_DIR)/staged-public.json"
+	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" "$(BUILD_DIR)/native-tests/test-plan-staged-public" --fleet "$(abspath $(BUILD_DIR))/hydra-fleet" --output "$(BUILD_DIR)/staged-public.json"
 
 .PHONY: test-plan-inspection
 test-plan-inspection: build-fleet
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_plan_inspection.py
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-inspection"
 
 test-fleet: test-discovery test-enrollment test-retention test-workflow-metrics test-plan-staged $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)/test-workflow-schedule $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
 	$(BUILD_DIR)/test-plan
 	$(BUILD_DIR)/test-workflow-schedule
 	$(BUILD_DIR)/test-agent-auth
 	$(BUILD_DIR)/test-agent-profile
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_agent_auth.sh
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_agent_execution.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_agent_auth.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_agent_execution.sh
 	$(BUILD_DIR)/test-workflow-data
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_data.sh
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/workflow_contract_cases.py --runtime
-	HYDRA_TEST_DAG_REPLAY=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_RESULT_LOST=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_RESULT_BAD=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_PARALLELISM=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_CRASH=2 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_SOURCE=1 HYDRA_TEST_DAG_SOURCE_TAMPER=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_PLAN_SOURCE=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh
-	HYDRA_TEST_PLAN_SOURCE=dirty HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_data.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/workflow-contract-cases" --runtime
+	HYDRA_TEST_DAG_REPLAY=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_DAG_RESULT_LOST=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_DAG_RESULT_BAD=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_DAG_PARALLELISM=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_DAG_CRASH=2 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_DAG_SOURCE=1 HYDRA_TEST_DAG_SOURCE_TAMPER=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
+	HYDRA_TEST_PLAN_SOURCE=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
+	HYDRA_TEST_PLAN_SOURCE=dirty HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
 	@for fault in dispatch key attempt placement cancel cancel-offline; do \
-		HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="$$fault" HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_task.sh || exit 1; \
+		HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="$$fault" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh || exit 1; \
 	done
-	HYDRA_TEST_HEADLESS=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan.sh
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_headless_plan_adapter.sh
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan.sh
+	HYDRA_TEST_HEADLESS=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_headless_plan_adapter.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan.sh
 	sh tests/test_workflow_plan_v3.sh
 	@for verdict in pass fail inconclusive stale-subject stale-validator missing-coverage crash bad-artifact changed-harness; do \
-		HYDRA_TEST_PLAN_TASK_VERDICT="$$verdict" HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh || exit 1; \
+		HYDRA_TEST_PLAN_TASK_VERDICT="$$verdict" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh || exit 1; \
 	done
-	HYDRA_TEST_PLAN_REPAIR=pass HYDRA_TEST_PLAN_REPAIR_BUDGET=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh
+	HYDRA_TEST_PLAN_REPAIR=pass HYDRA_TEST_PLAN_REPAIR_BUDGET=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
 	@for repair in pass exhaust same crash combine; do \
-		HYDRA_TEST_PLAN_REPAIR="$$repair" HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh || exit 1; \
+		HYDRA_TEST_PLAN_REPAIR="$$repair" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh || exit 1; \
 	done
-	HYDRA_TEST_PLAN_REPAIR=pass HYDRA_TEST_PLAN_SOURCE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh
-	HYDRA_TEST_REPORT_V2=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan.sh
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_approval.sh
+	HYDRA_TEST_PLAN_REPAIR=pass HYDRA_TEST_PLAN_SOURCE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
+	HYDRA_TEST_REPORT_V2=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_approval.sh
 	$(BUILD_DIR)/test-fleet
 	$(BUILD_DIR)/test-task-package
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_fleet.sh
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_fleet_install.sh
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_task_package.sh
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_task_acceptance.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_fleet.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_fleet_install.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_task_package.sh
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_task_acceptance.sh
 
 .PHONY: sanitize-fleet
 sanitize-fleet:
 	$(MAKE) BUILD_DIR=build/fleet-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-fleet
 
 # C analysis and reviewed complexity ceiling; use the native build flags.
-CLANG_TIDY ?= build/quality-tools/bin/clang-tidy
+CLANG_TIDY ?= scripts/clang-tidy.sh
 QUALITY_C_SYSROOT = $(shell if [ "$$(uname -s)" = Darwin ]; then xcrun --show-sdk-path; fi)
 QUALITY_C_FLAGS = $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(if $(QUALITY_C_SYSROOT),-isysroot $(QUALITY_C_SYSROOT))
 .PHONY: quality-c test-quality-c
@@ -422,14 +442,14 @@ quality-c-flags:
 
 quality-c:
 	@pkg-config --exists json-c
-	@sh scripts/quality-c.sh docs/quality/cognitive-complexity.tsv $(CLANG_TIDY) $(NATIVE_SOURCES) $(wildcard tests/c/*.c) -- $(QUALITY_C_FLAGS)
+	@sh scripts/quality-c.sh docs/quality/cognitive-complexity.tsv $(CLANG_TIDY) $(NATIVE_SOURCES) $(wildcard tests/c/*.c tests/native/*.c tests/fixture/*.c tests/termviz/*.c examples/planning/native/*.c examples/planning/feature/*.c) -- $(QUALITY_C_FLAGS)
 
 test-quality-c:
 	@sh tests/quality_c_cases.sh "$(CLANG_TIDY)"
 
 .PHONY: test-attached-pty sanitize-attached
 test-attached-pty: build-tui
-	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_attached_pty.py
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attached-pty"
 sanitize-attached:
 	@$(MAKE) BUILD_DIR=build/attached-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-attached-pty
 
@@ -439,9 +459,9 @@ test-termviz-export:
 
 .PHONY: test-plan-workspace sanitize-plan-workspace
 test-plan-workspace: build-tui build-fleet
-	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_plan_workspace.py
-	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_plan_launch.py
-	BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_workflow_controls.py
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-workspace"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-launch"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-workflow-controls"
 sanitize-plan-workspace:
 	@$(MAKE) BUILD_DIR=build/plan-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-plan-workspace
 
@@ -454,13 +474,15 @@ $(BUILD_DIR)/termviz-workspace $(BUILD_DIR)/termviz-example $(BUILD_DIR)/test-te
 # controlled SSH executable; it does not use tmux or contact network hosts.
 .PHONY: test-discovery
 test-discovery: build-fleet
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/discovery/test_discovery.py
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-discovery" "$(abspath $(BUILD_DIR))/native-tests/discovery-ssh-fixture"
 
 .PHONY: test-enrollment
 test-enrollment: build-fleet
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_enrollment.py
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_enrollment_receiver.py
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-enrollment" "$(abspath $(BUILD_DIR))/native-tests/enrollment-ssh-fixture" "$(abspath $(BUILD_DIR))/native-tests/enrollment-receiver-fixture"
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-enrollment-receiver" "$(abspath $(BUILD_DIR))/native-tests/enrollment-receiver-fixture"
 
 .PHONY: test-enrollment-ssh
 test-enrollment-ssh: build-fleet
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_enrollment_ssh.py
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-enrollment-ssh" "$(abspath $(BUILD_DIR))/native-tests/enrollment-loopback-fixture" "$(abspath $(BUILD_DIR))/native-tests/enrollment-receiver-fixture"
+
+include scripts/native-tests.mk

@@ -123,7 +123,9 @@ done
 viz_run="$(awk -F '\t' '$1=="R" {print $2; exit}' "$viz_tmp/statistics.tsv")"
 viz_record="$(find "$HYDRA_HOME/state/v2" -type d -name "$viz_run" | head -n 1)"
 [ -n "$viz_record" ]
-python3 "$viz_root/tests/statistics_evidence.py" "$viz_bin" "$viz_record" 0 unverified
+# shellcheck source=/dev/null
+. "$viz_root/tests/fixture-tools.sh"
+statistics_evidence "$viz_bin" "$viz_record" 0 unverified
 rm "$viz_record/started-at" "$viz_record/recovery-count" "$viz_record/steps/build/initial-ready-at"
 rm "$viz_record/steps/build/started-at"
 printf '123456\n' > "$viz_tmp/outside-start"

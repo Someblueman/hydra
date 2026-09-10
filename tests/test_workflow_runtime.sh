@@ -219,7 +219,9 @@ retry_run="$(sed -n '1p' "$test_root/retry.out")"
 retry_dir="$(run_dir_for "$retry_run")"
 assert_equal 2 "$(sed -n '1p' "$retry_dir/steps/retry/attempts")" "retry count is authoritative"
 assert_equal 2 "$(sed -n '1p' "$test_root/retry-count")" "retry side effect ran exactly twice"
-python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$retry_dir" 0 unverified
+# shellcheck source=/dev/null
+. "$(dirname "$HYDRA_BIN")/../tests/fixture-tools.sh"
+statistics_evidence "$HYDRA_BIN" "$retry_dir" 0 unverified
 assert_success $? "automatic retries retain zero owner recoveries and reconcile native timing"
 
 mkdir "$test_root/statistics-bin"
@@ -236,7 +238,9 @@ assert_success "$statistics_marker_status" "run start timestamp write failure wa
 start_fault_run="$(sed -n '1p' "$test_root/start-fault.out")"
 start_fault_dir="$(run_dir_for "$start_fault_run")"
 assert_equal succeeded "$(cat "$start_fault_dir/state")" "run without start timing still succeeds"
-python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$start_fault_dir" 0 unverified
+# shellcheck source=/dev/null
+. "$(dirname "$HYDRA_BIN")/../tests/fixture-tools.sh"
+statistics_evidence "$HYDRA_BIN" "$start_fault_dir" 0 unverified
 assert_success $? "missing start timestamp remains unknown in native duration coverage"
 
 # A persisted backoff survives coordinator loss and preserves completed evidence.
@@ -258,7 +262,9 @@ PATH="$test_root/statistics-bin:$PATH" HYDRA_TEST_REAL_MV="$statistics_real_mv" 
 assert_success $? "resume completes a retry with durable backoff"
 if [ -f "$test_root/recovery.fault" ]; then statistics_marker_status=0; else statistics_marker_status=1; fi
 assert_success "$statistics_marker_status" "optional recovery counter write failure was exercised"
-python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$backoff_dir" - unverified
+# shellcheck source=/dev/null
+. "$(dirname "$HYDRA_BIN")/../tests/fixture-tools.sh"
+statistics_evidence "$HYDRA_BIN" "$backoff_dir" - unverified
 assert_success $? "failed counter persistence discards the old count and remains unknown"
 assert_equal "$backoff_at" "$(cat "$backoff_dir/steps/retry/attempt-1/retry-at")" "restart preserves retry deadline"
 assert_equal 2 "$(cat "$test_root/backoff-count")" "backoff recovery executes exactly one retry"
@@ -464,7 +470,9 @@ assert_success $? "stale run resumes its retryable interrupted step"
 assert_equal succeeded "$(sed -n '1p' "$resume_dir/state")" "resumed run reaches success"
 assert_equal 1 "$(sed -n '1p' "$test_root/effect-count")" "resume never repeats a completed non-idempotent effect"
 assert_equal 2 "$(sed -n '1p' "$test_root/resume-count")" "interrupted idempotent attempt retries once"
-python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$resume_dir" 1 unverified
+# shellcheck source=/dev/null
+. "$(dirname "$HYDRA_BIN")/../tests/fixture-tools.sh"
+statistics_evidence "$HYDRA_BIN" "$resume_dir" 1 unverified
 assert_success $? "owner recovery counted once with whole-run duration and first queue delay"
 
 echo "============================================"

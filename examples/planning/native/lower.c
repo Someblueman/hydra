@@ -65,7 +65,7 @@ static void execute(json_object *steps, const char *id, const char *role, const 
 }
 static json_object *base_plan(bool staged) {
     json_object *plan = f_parse("{\"schema_version\":1,\"context\":[],\"questions\":[],\"steps\":[],"
-        "\"envelope\":{\"hosts\":[\"local\"],\"tools\":[\"sh\",\"python3\"],\"effects\":[\"worktree\",\"execute\"],"
+        "\"envelope\":{\"hosts\":[\"local\"],\"tools\":[\"sh\",\"./plan-example\"],\"effects\":[\"worktree\",\"execute\"],"
         "\"writes\":[],\"parallelism\":4,\"timeout_seconds\":600,\"artifact_bytes\":65536,\"max_heads\":10,"
         "\"disk_mb\":1,\"retry_budget\":0,\"repair_budget\":0},"
         "\"data\":{\"schema_version\":1,\"inputs\":{},\"steps\":{}}}");
@@ -88,7 +88,7 @@ static void acceptance(json_object *plan, bool staged) {
     json_object *check = f_parse("{\"id\":\"check\",\"method\":\"executable\",\"step\":\"check\",\"input\":\"subject\",\"report\":\"check\",\"deliverable\":\"report\"}");
     json_object *req = f_parse("{\"deliverable\":\"report\",\"check\":\"check\"}");
     json_object *obligation = f_parse("{\"intent_ref\":\"objective\",\"subject\":{\"deliverable\":\"report\",\"step\":\"compose\",\"output\":\"report\"},"
-        "\"evaluation\":{\"method\":\"executable\",\"check\":\"check\"},\"environment\":{\"hosts\":[\"local\"],\"tools\":[\"python3\"],\"effects\":[\"execute\"]},"
+        "\"evaluation\":{\"method\":\"executable\",\"check\":\"check\"},\"environment\":{\"hosts\":[\"local\"],\"tools\":[\"./plan-example\"],\"effects\":[\"execute\"]},"
         "\"completion_rule\":\"verdict=pass\"}");
     json_object *deliverables = json_object_new_array(), *checks = json_object_new_array();
     json_object *requirements = json_object_new_array(), *obligations = json_object_new_array();
@@ -181,7 +181,7 @@ json_object *precompile_lower(const struct manifest *manifest, bool staged) {
     spawn(steps, "spawn-compose", compose_head);
     execute(steps, "compose", "compose", compose_head, needs, compose);
     spawn(steps, "spawn-check", check_head);
-    execute(steps, "check", "verify", check_head, strings("spawn-check", "compose"), strings("python3", "check.py"));
+    execute(steps, "check", "verify", check_head, strings("spawn-check", "compose"), strings("./plan-example", staged ? "staged-check" : "manifest-check"));
     handoffs(plan, manifest, staged); acceptance(plan, staged);
     return plan;
 }

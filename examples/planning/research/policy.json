@@ -6,7 +6,7 @@
     ],
     "tools": [
       "sh",
-      "python3"
+      "./plan-example"
     ],
     "effects": [
       "worktree",

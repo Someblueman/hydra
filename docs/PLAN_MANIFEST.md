@@ -18,7 +18,7 @@ tools, commands, or effects. Item IDs and values are data arguments to the fixed
 worker command. Generated names use separate prefixes so IDs such as `compose`,
 `check` and `manifest` cannot replace a join or its manifest input.
 
-The independent `check.py` reconstructs all expected IDs, values, squares, and
+The independent `./plan-example manifest-check` reconstructs all expected IDs, values, squares, and
 skips from the bound manifest. It emits schema-3 evidence with one checker case,
 true validation bindings, and a pass/fail verdict. Structural compilation proves
 only that the static plan is bounded and connected; it does not prove runtime
@@ -34,11 +34,11 @@ committing and compiling. The join receives frozen membership in its arguments;
 the independent checker still consumes the bound manifest and checks all results.
 
 ```sh
-make build-plan-precompile
+make build-plan-precompile build-plan-example
 precompiler="$PWD/build/plan-precompile"
 fixture="$(mktemp -d)"
 cp -R examples/planning/manifest-map "$fixture/source"
-cp examples/planning/native/payload.sh "$fixture/source/"
+cp examples/planning/native/payload.sh build/plan-example "$fixture/source/"
 export HYDRA_HOME="$fixture/home"
 cd "$fixture/source"
 git init -q && git add . && git -c user.name=Test -c user.email=test@example.invalid commit -qm source

@@ -4,6 +4,8 @@ set -eu
 # A common Ubuntu login umask must not create shared task-state ancestors.
 umask 002
 root="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=/dev/null
+. "$root/tests/fixture-tools.sh"
 fixture="$(mktemp -d)"
 # shellcheck source=/dev/null
 . "$root/tests/workflow_task_cleanup.sh"
@@ -278,21 +280,7 @@ grep -q '"event_observation"' "$fixture/workflow-observation"
 grep -q '"attempt_history"' "$fixture/workflow-observation"
 grep -q '"process_exit":"0"' "$fixture/workflow-observation"
 grep -q '"completed_at"' "$fixture/workflow-observation"
-python3 - "$fixture/workflow-observation" <<'PY'
-import json, sys
-task = json.load(open(sys.argv[1]))["data"]["task"]
-attempts = task["attempt_history"]
-assert attempts and all(attempt["retention"] == "retained" and "process_exit" in attempt for attempt in attempts)
-work = [attempt for attempt in attempts if attempt["step_id"] == "work"]
-assert [(attempt["attempt_id"], attempt["state"], attempt["process_exit"]) for attempt in work] == [
-    ("attempt-1", "failed", "7"), ("attempt-2", "succeeded", "0")
-], work
-assert all(attempt["completed_at"] for attempt in work)
-assert task["process_exit"] == {"state": "succeeded", "exit_status": 0}
-assert task["result_collection"]["state"] == "ready"
-assert task["artifact_inventory"]
-assert task["verification"] == {"kind": "integrity", "state": "recorded", "recheck": "not_rechecked"}
-PY
+fixture_json observe-check "$fixture/workflow-observation"
 grep -q '"artifact_inventory"' "$fixture/workflow-observation"
 grep -q '"provider_observations"' "$fixture/workflow-observation"
 grep -q '"process_exit"' "$fixture/workflow-observation"
@@ -304,11 +292,7 @@ case "$cursor" in ''|*[!0-9]*) exit 1 ;; esac
 stream_id="$(sed -n 's/.*"stream_id":"\([^"]*\)".*/\1/p' "$fixture/workflow-observation" | head -n 1)"
 byte_offset="$(sed -n 's/.*"next_byte_offset":\([0-9][0-9]*\).*/\1/p' "$fixture/workflow-observation" | head -n 1)"
 task observe build --id "$workflow_id" --cursor "$cursor" --byte-offset "$byte_offset" --stream-id "$stream_id" > "$fixture/workflow-reconnect"
-python3 - "$fixture/workflow-observation" "$fixture/workflow-reconnect" <<'PY'
-import json, sys
-pages = [json.load(open(path))["data"]["event_observation"] for path in sys.argv[1:]]
-assert [event["sequence"] for page in pages for event in page["events"]] == list(range(1, pages[-1]["head_cursor"] + 1))
-PY
+fixture_json observe-pages "$fixture/workflow-observation" "$fixture/workflow-reconnect"
 grep -q '"retention_gap":false' "$fixture/workflow-reconnect"
 grep -q '"stream_reset":false' "$fixture/workflow-reconnect"
 case "$stream_id" in ''|*[!0-9:]*) exit 1 ;; esac
@@ -338,13 +322,7 @@ cp "$fixture/events-saved" "$events_path"
 # large record makes the reader stop before event-limit, so the returned offset
 # must point at the first unconsumed line and every sequence must be observed
 # exactly once on the following requests.
-python3 - "$events_path" <<'PY'
-import json, sys
-with open(sys.argv[1], "w", encoding="utf-8") as stream:
-    for sequence in range(1, 201):
-        stream.write(json.dumps({"schema_version": 1, "sequence": sequence,
-                                 "type": "bulk", "payload": "x" * 3200}) + "\n")
-PY
+fixture_json bulk-events "$events_path"
 bulk_cursor=0
 bulk_offset=0
 bulk_stream=
@@ -356,19 +334,7 @@ while [ "$bulk_cursor" -lt 200 ]; do
     else
         task observe build --id "$workflow_id" --cursor "$bulk_cursor" --event-limit 128 --byte-offset "$bulk_offset" > "$fixture/bulk-observation"
     fi
-    bulk_values="$(python3 - "$fixture/bulk-observation" "$bulk_cursor" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as stream:
-    document = json.load(stream)
-observation = document["data"]["event_observation"]
-events = observation["events"]
-cursor = int(sys.argv[2])
-for index, event in enumerate(events, cursor + 1):
-    if event["sequence"] != index:
-        raise SystemExit("non-contiguous event sequence")
-print(observation["next_cursor"], observation["next_byte_offset"],
-      observation["stream_id"], len(events), str(observation["scan_truncated"]).lower())
-PY
+    bulk_values="$(fixture_json bulk-page "$fixture/bulk-observation" "$bulk_cursor"
 )"
     # shellcheck disable=SC2086
     set -- $bulk_values
@@ -383,11 +349,7 @@ done
 printf '%s\n' '{"schema_version":1,"sequence":201,"type":"bulk.append"}' >> "$events_path"
 task observe build --id "$workflow_id" --cursor 200 --byte-offset "$bulk_offset" --stream-id "$bulk_stream" > "$fixture/bulk-append"
 grep -q '"sequence":201' "$fixture/bulk-append"
-bulk_append_offset="$(python3 - "$fixture/bulk-append" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as stream:
-    print(json.load(stream)["data"]["event_observation"]["next_byte_offset"])
-PY
+bulk_append_offset="$(fixture_json offset "$fixture/bulk-append"
 )"
 task observe build --id "$workflow_id" --cursor 200 --byte-offset 4294967295 --stream-id "$bulk_stream" > "$fixture/bulk-invalid-offset"
 grep -q '"stream_reset":true' "$fixture/bulk-invalid-offset"

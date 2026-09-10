@@ -10,7 +10,7 @@
       "local"
     ],
     "tools": [
-      "python3"
+      "./plan-example"
     ],
     "effects": [
       "worktree",
@@ -48,8 +48,8 @@
       "args": {
         "head": "staged-stage1",
         "argv": [
-          "python3",
-          "stage1_run.py"
+          "./plan-example",
+          "staged-produce"
         ],
         "timeout": 30
       }
@@ -65,8 +65,8 @@
       "args": {
         "head": "staged-stage1",
         "argv": [
-          "python3",
-          "check.py",
+          "./plan-example",
+          "staged-check",
           "stage1"
         ],
         "timeout": 30
@@ -170,7 +170,7 @@
           "local"
         ],
         "tools": [
-          "python3"
+          "./plan-example"
         ],
         "effects": [
           "execute"

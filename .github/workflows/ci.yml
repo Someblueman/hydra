@@ -35,14 +35,10 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
     - name: Install pinned analysis dependencies
       run: |
-        brew install json-c pkg-config
-        python -m venv build/quality-tools
-        build/quality-tools/bin/python -m pip install clang-tidy==22.1.8
+        brew install json-c pkg-config llvm@22
+        "$(brew --prefix llvm@22)/bin/clang-tidy" --version | grep 'version 22.1.8'
     - name: Verify baseline policy and analyze C
       run: make test-quality-c quality-c
     - name: Preserve complete analyzer report
@@ -65,7 +61,7 @@ jobs:
     - name: Install test dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git tmux dash
+        sudo apt-get install -y git tmux dash build-essential libjson-c-dev pkg-config
     
     - name: Run tests
       run: make test

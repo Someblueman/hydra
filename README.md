@@ -216,6 +216,10 @@ and [standalone library guide](src/termviz/STANDALONE.md).
 See the [simplification review](docs/CODEBASE_SIMPLIFICATION.md#follow-up-module-boundaries)
 for ownership boundaries and measured results.
 
+Testing requires a C99 compiler, JSON-C development files and pkg-config in
+addition to Git, tmux, dash and ShellCheck. Python is not required; Make builds
+the native test fixtures and example programs.
+
 ```sh
 make lint       # ShellCheck and shell syntax
 make test-all   # Complete acceptance suite, including native and PTY checks

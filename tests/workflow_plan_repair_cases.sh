@@ -70,7 +70,9 @@ workflow_plan_repair_assert() {
         printf 'candidate\ncomposed\n' > "$fixture/expected"
         cmp "$fixture/expected" "$run_dir/steps/compose/attempt-2/artifacts/result"
         "$root/bin/hydra" workflow plan result "$run" > "$fixture/result.json"
-        python3 "$root/tests/statistics_evidence.py" "$root/bin/hydra" "$run_dir" "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" verified
+        # shellcheck source=/dev/null
+        . "$root/tests/fixture-tools.sh"
+        statistics_evidence "$root/bin/hydra" "$run_dir" "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" verified
         task_count=6
         [ "$HYDRA_TEST_PLAN_REPAIR" != combine ] || task_count=8
         [ "$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" = "$task_count" ]

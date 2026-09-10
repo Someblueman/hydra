@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
+# shellcheck source=/dev/null
+. "$root/tests/fixture-tools.sh"
+make -s -C "$root" BUILD_DIR="${BUILD_DIR:-build}" build-test-fixture
+fixture_native="${BUILD_DIR:-$root/build}/native-tests/fixture-json"
+case "$fixture_native" in /*) ;; *) fixture_native="$root/$fixture_native" ;; esac
 fixture=$(mktemp -d)
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 active_branch=
@@ -10,53 +15,13 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 mkdir "$fixture/repo"
+cp "$fixture_native" "$fixture/repo/fixture-native"
 cp "$root/tests/fixtures/plan/repo/compose.sh" "$fixture/repo/"
 cp "$root/tests/fixtures/plan/repo/expected.txt" "$fixture/repo/"
 cat > "$fixture/repo/check.sh" <<'CHECK'
 #!/bin/sh
 set -eu
-python3 - "$HYDRA_WORKFLOW_INPUTS_DIR/subject" "$HYDRA_WORKFLOW_VALIDATION_FILE" "$HYDRA_WORKFLOW_OUTPUTS_DIR/check.json" <<'PY'
-import hashlib, json, os, sys
-subject, validation, output = sys.argv[1:]
-data = open(subject, 'rb').read(); context = json.load(open(validation))['data']
-mode = os.environ.get('HYDRA_V3_FAULT', '')
-assessment = mode.startswith('assessment-')
-actual = data.decode()
-obligation_id = 'content-check'
-raw = ({'verdict': 'inconclusive' if mode == 'assessment-inconclusive' else ('fail' if mode == 'assessment-fail' else 'pass'), 'explanation': 'Assessment fixture', 'measurement': len(data)} if assessment else {'actual': actual, 'measurement': len(data)})
-raw_hash = hashlib.sha256(json.dumps(raw, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-obs = [{'id': 'case-1', 'raw': raw, 'raw_sha256': raw_hash}]
-inventory = [obligation_id] if assessment else ['case-1']
-if assessment: obs[0]['id'] = obligation_id
-if mode == 'drop': obs = []; inventory = []
-if mode == 'raw-tampered': obs[0]['raw']['actual'] = 'Tampered after hashing'
-if mode == 'missing-measurement':
-    obs[0]['raw'].pop('measurement')
-    obs[0]['raw_sha256'] = hashlib.sha256(json.dumps(obs[0]['raw'], sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-evidence_hash = hashlib.sha256(json.dumps(obs, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-subject_hash = hashlib.sha256(data).hexdigest()
-if mode == 'stale-subject': subject_hash = '0' * 64
-exit_code = 7 if mode == 'nonzero' else 0
-failed = 1 if mode in ('wrong-artifact', 'nonzero', 'assessment-fail') else 0
-counted_failures = 1 if mode in ('wrong-artifact', 'assessment-fail') else 0
-domain = 'inconclusive' if mode == 'assessment-inconclusive' else ('fail' if failed else 'pass')
-recipe_hash = '0' * 64 if mode in ('changed-predicate', 'assessment-stale-rubric') else context['check-recipe']
-if assessment:
-    if mode != 'assessment-missing-authority':
-        reviewer = {'rubric': 'Assessment rubric: determine whether the report is acceptable.', 'source_locators': ['fixture'], 'disagreement': 'None', 'authority': 'fixture'}
-    else:
-        reviewer = {'rubric': 'Assessment rubric: determine whether the report is acceptable.', 'source_locators': ['fixture'], 'disagreement': 'None'}
-report = {'schema_version': 3, 'execution_status': 'completed', 'evidence_status': 'valid',
- 'domain_verdict': domain, 'verdict': domain,
- 'subject_sha256': subject_hash, 'validator_sha256': context['check'], 'requirements': ['content'],
- 'evidence': 'structured fixture', 'limitations': [], 'evidence_records': [{
- 'obligation_id': 'content-check', 'subject_manifest_sha256': subject_hash,
- 'validator_identity': 'fixture-v3', 'validator_recipe_sha256': recipe_hash,
- 'invocation': {'argv': ['python3', 'check.sh'], 'exit_code': exit_code}, 'environment': {'host': 'local', 'toolchain': 'python3'},
- 'case_inventory': inventory, 'observations': obs, 'raw_evidence_sha256': evidence_hash,
- 'counts': {'executed': len(obs), 'failed': counted_failures, 'skipped': 0}, 'limitations': [], **({'reviewer_decision': reviewer} if assessment else {})}]}
-open(output, 'w').write(json.dumps(report, separators=(',', ':')) + '\n')
-PY
+exec "$(dirname "$0")/fixture-native" v3-report "$HYDRA_WORKFLOW_INPUTS_DIR/subject" "$HYDRA_WORKFLOW_VALIDATION_FILE" "$HYDRA_WORKFLOW_OUTPUTS_DIR/check.json"
 CHECK
 chmod +x "$fixture/repo/check.sh"
 cat > "$fixture/repo/compose.sh" <<'COMPOSE'
@@ -71,17 +36,7 @@ COMPOSE
 chmod +x "$fixture/repo/compose.sh"
 cp "$root/tests/fixtures/plan/plan.json" "$fixture/plan.json"
 cp "$root/tests/fixtures/plan/policy.json" "$fixture/policy.json"
-python3 - "$fixture/plan.json" <<'PY'
-import json, sys
-p = json.load(open(sys.argv[1]))
-p['envelope']['timeout_seconds'] = 40
-for step in p['steps']:
-    if step['kind'] == 'exec':
-        step['args']['timeout'] = 10
-p['checks'][0]['definition'] = json.dumps({'predicate':'equals','cases':[{'id':'case-1','expected':'Delivered report\n'}]}, separators=(',', ':'))
-p['obligations'] = [{'id':'content-check','requirement':'content','intent_ref':'objective','subject':{'deliverable':'report','step':'compose','output':'report'},'criterion':'The sealed report has the expected content','evaluation':{'method':'executable','check':'check'},'required_evidence':['subject_sha256','verdict','evidence','measurements'],'environment':{'hosts':['local'],'tools':['sh'],'effects':['execute']},'completion_rule':'verdict=pass','limitations':['fixture-only']}]
-json.dump(p, open(sys.argv[1], 'w'), separators=(',', ':'))
-PY
+fixture_json v3-plan "$fixture/plan.json"
 cp "$fixture/plan.json" "$fixture/plan.base.json"
 cd "$fixture/repo"
 git init -q; git config user.name Test; git config user.email test@example.invalid; git add .; git commit -qm fixture
@@ -91,33 +46,7 @@ run_case() {
     branch="plan-smoke-${mode:-ok}"
     active_branch=$branch
     cp "$fixture/plan.base.json" "$fixture/plan.json"
-    BRANCH="$branch" PLAN="$fixture/plan.json" python3 - <<'PY'
-import os
-path = os.environ['PLAN']
-text = open(path).read().replace('plan-smoke', os.environ['BRANCH'])
-open(path, 'w').write(text)
-PY
-    if [ "$mode" = malformed-recipe ]; then
-        PLAN="$fixture/plan.json" python3 - <<'PY'
-import json, os
-path = os.environ['PLAN']
-plan = json.load(open(path))
-plan['checks'][0]['definition'] = '{}'
-json.dump(plan, open(path, 'w'), separators=(',', ':'))
-PY
-    fi
-    case "$mode" in
-        assessment-pass|assessment-fail|assessment-inconclusive|assessment-missing-authority|assessment-stale-rubric)
-            PLAN="$fixture/plan.json" python3 - <<'PY'
-import json, os
-path = os.environ['PLAN']; plan = json.load(open(path))
-plan['checks'][0]['method'] = 'assessment'
-plan['checks'][0]['definition'] = 'Assessment rubric: determine whether the report is acceptable.'
-plan['obligations'][0]['evaluation']['method'] = 'assessment'
-json.dump(plan, open(path, 'w'), separators=(',', ':'))
-PY
-            ;;
-    esac
+    fixture_json v3-mode "$fixture/plan.json" "$mode" "$branch"
     rm -f "$fixture/compiled.json"
     "$root/bin/hydra" workflow plan compile "$fixture/plan.json" "$fixture/policy.json" "$fixture/compiled.json" > "$fixture/compile-$mode.json" 2> "$fixture/compile-$mode.err" || { cat "$fixture/compile-$mode.err"; cat "$fixture/compile-$mode.json"; cat "$fixture/plan.json"; exit 1; }
     "$root/bin/hydra" workflow plan check-definition "$fixture/compiled.json" check >/dev/null
@@ -130,7 +59,7 @@ PY
     state=$(cat "$run_dir/state")
     [ -s "$run_dir/steps/verify/attempt-1/outputs/check.json" ]
     grep -q '"type":"run\.' "$run_dir/events.jsonl"
-    actual_verdict=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["verdict"])' "$run_dir/steps/verify/attempt-1/outputs/check.json")
+    actual_verdict=$(fixture_json verdict "$run_dir/steps/verify/attempt-1/outputs/check.json")
     [ "$actual_verdict" = "$report_verdict" ]
     "$root/bin/hydra" kill "$branch" --force >/dev/null 2>&1 || true
     active_branch=

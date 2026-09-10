@@ -1,11 +1,11 @@
 # Native finite-example precompiler
 
-Build with `make build-plan-precompile`, then use the absolute binary path from
+Build with `make build-plan-precompile build-plan-example`, then use the absolute binary path from
 a copied example repository. Copy the one shared shell payload into that
 repository before committing its source snapshot:
 
 ```sh
-cp /path/to/hydra/examples/planning/native/payload.sh /path/to/example/repo/
+cp /path/to/hydra/examples/planning/native/payload.sh /path/to/hydra/build/plan-example /path/to/example/repo/
 ```
 
 Then generate its plan:
@@ -27,10 +27,14 @@ manifest's parent, and preserves caller-relative output paths. Refused inputs
 leave an existing output untouched. Inputs must be bounded regular JSON files;
 FIFO/device inputs are rejected before reading.
 
-`make test-plan-outcomes test-plan-staged` exercises the retained Python boundary
+`make test-plan-outcomes test-plan-staged` exercises the native boundary
 drivers and independent checkers. `make test-plan-staged-public` runs both real
 stages. `HYDRA_PLAN_PRECOMPILE_BIN` selects a separately built helper for testing.
 Worker arithmetic and fixed joins use the shared POSIX `payload.sh`. The native
 planner passes validated IDs, bounded integers and frozen membership as ordinary
-arguments; the join copies the actual worker artifacts. Python independently
+arguments; the join copies the actual worker artifacts. The native checker independently
 checks the resulting membership, arithmetic, types and source-bound findings.
+
+`plan-example` dispatches the finite manifest, pattern, staged, feature, research
+and performance programs. Producer and checker predicates remain separate; shared
+support handles strict JSON, file I/O, hashing and evidence formatting.
