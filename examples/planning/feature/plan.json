@@ -114,13 +114,7 @@
   ],
   "data": {
     "schema_version": 1,
-    "inputs": {
-      "worker_prompt": {
-        "path": "worker.txt",
-        "type": "file",
-        "max_bytes": 4096
-      }
-    },
+    "inputs": {},
     "steps": {
       "feature-compose": {
         "outputs": {
