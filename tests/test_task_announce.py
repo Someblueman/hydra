@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def page(events=None, *, available=True, gap=False, reset=False, truncated=False):
+    task_id = "task_" + "a" * 64
+    events = events if events is not None else [{
+        "schema_version": 1, "sequence": 1,
+        "occurred_at": "2026-01-01T00:00:00Z", "run_id": "run_a",
+        "step_id": None, "type": "run.created", "detail": "hello",
+    }]
+    data = {
+        "snapshot_schema_version": 1, "receiver_observed_at": 123,
+        "task": {
+            "task_id": task_id, "run_id": None, "step_id": None,
+            "attempt_id": None, "assigned_host": None, "workspace": None,
+            "agent_profile": "codex", "execution_state": "running",
+            "execution_owner": {"kind": "receiver", "state": "running", "recorded_state": None, "failure": None},
+            "waiting": {"reason": "none", "detail": "", "next_action": ""},
+            "observation_timestamps": {"accepted_at": 1, "started_at": 2, "resumed_at": None, "finished_at": None, "receiver_observed_at": 123},
+            "effective_configuration": {},
+            "contract": {"availability": "available", "reason": "", "missing_evidence": []},
+            "steps": [], "pending_requests": [],
+        },
+        "event_observation": {
+            "schema_version": 1, "events": events, "available": available,
+            "stream_id": "dev:ino", "scan_truncated": truncated,
+            "next_byte_offset": 100, "oldest_cursor": 0,
+            "next_cursor": len(events), "head_cursor": len(events),
+            "retention_gap": gap, "stream_reset": reset,
+            "duplicate_policy": "sequence-cursor",
+        },
+    }
+    return {"schema_version": 1, "ok": True, "command": "fleet-observation", "data": data}
+
+
+def run(binary, path):
+    return subprocess.run([binary, "fleet", "task", "announce", "--input", str(path)], text=True, capture_output=True)
+
+
+def main():
+    binary = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "build/hydra-fleet")
+    with tempfile.TemporaryDirectory() as folder:
+        folder = Path(folder)
+        good = folder / "good.json"
+        good.write_text(json.dumps(page()))
+        result = run(binary, good)
+        assert result.returncode == 0, result.stderr
+        announcement = json.loads(result.stdout)["data"]["announcement"]
+        assert "task id=task_" in announcement and "receiver_observed_at=123" in announcement
+        assert "event time=2026-01-01T00:00:00Z run=run_a step=- sequence=1 type=run.created detail=hello" in announcement
+        assert "resume cursor=1 byte_offset=100 stream_id=dev:ino" in announcement
+
+        for name, kwargs, expected in (("gap", {"gap": True}, "retention_gap=true"),
+                                       ("reset", {"reset": True}, "stream_reset=true"),
+                                       ("truncated", {"truncated": True}, "truncated=true"),
+                                       ("missing", {"available": False}, "history unavailable")):
+            path = folder / (name + ".json")
+            path.write_text(json.dumps(page(**kwargs)))
+            result = run(binary, path)
+            assert result.returncode == 0, result.stderr
+            assert expected in json.loads(result.stdout)["data"]["announcement"]
+
+        bad = page(events=[dict(page()["data"]["event_observation"]["events"][0], sequence=2),
+                           dict(page()["data"]["event_observation"]["events"][0], sequence=4)])
+        path = folder / "out-of-order.json"; path.write_text(json.dumps(bad))
+        result = run(binary, path)
+        assert result.returncode != 0 and "announcement" not in result.stdout
+
+        escaped = page(events=[dict(page()["data"]["event_observation"]["events"][0], detail="x\n\x1b[31m")])
+        path = folder / "escaped.json"; path.write_text(json.dumps(escaped))
+        result = run(binary, path)
+        assert result.returncode == 0
+        text = json.loads(result.stdout)["data"]["announcement"]
+        assert "x??[31m" in text and "\x1b" not in text and "\n\x1b" not in text
+
+        many = []
+        for sequence in range(1, 130):
+            many.append(dict(page()["data"]["event_observation"]["events"][0], sequence=sequence))
+        path = folder / "too-many.json"; path.write_text(json.dumps(page(events=many)))
+        result = run(binary, path)
+        assert result.returncode != 0
+
+        path = folder / "malformed.json"; path.write_text("{}")
+        result = run(binary, path)
+        assert result.returncode != 0
+        path.write_text("{" + "x" * 270000)
+        result = run(binary, path)
+        assert result.returncode != 0
+    print("Task observation announcer validation, gaps, resets and sanitization passed")
+
+
+if __name__ == "__main__":
+    main()

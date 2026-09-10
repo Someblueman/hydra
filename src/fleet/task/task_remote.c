@@ -68,7 +68,7 @@ static bool pending_requests_valid(json_object *pending) {
     return true;
 }
 
-static bool observation_response_valid(json_object *data, const char *id) {
+bool task_observation_response_valid(json_object *data, const char *id) {
     json_object *task, *owner, *waiting, *times, *steps, *pending, *contract; const char *reason; size_t i;
     if (!f_number_is(data, "snapshot_schema_version", 1) ||
         !observation_time(data, "receiver_observed_at") ||
@@ -113,7 +113,7 @@ static bool response_binding_valid(json_object *response, const struct remote_op
     const char *received = f_string(data, "task_id"), *digest = f_string(data, "spec_sha256"), *received_key = f_string(data, "submission_key");
     if (options->observe) {
         json_object *task = f_field(data, "task");
-        return observation_response_valid(data, options->id) && f_string(task, "task_id");
+        return task_observation_response_valid(data, options->id) && f_string(task, "task_id");
     }
     if (!received || strncmp(received, "task_", 5) || !task_hex(received + 5, 64) || !task_hex(digest, 64)) return false;
     if (options->submit) return received_key && !strcmp(received_key, options->key) && !strcmp(digest, f_string(package, "spec_sha256"));

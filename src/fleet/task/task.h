@@ -20,6 +20,8 @@ json_object *task_prepare(const char *source, const char *input_source, json_obj
 json_object *task_inspect(json_object *package);
 json_object *task_cli(int argc, char **argv);
 json_object *task_remote_cli(int argc, char **argv);
+json_object *task_announce_cli(int argc, char **argv);
+bool task_observation_response_valid(json_object *data, const char *id);
 json_object *task_serve(json_object *request);
 json_object *task_accept(json_object *package, const char *key);
 json_object *task_status(const char *id);
