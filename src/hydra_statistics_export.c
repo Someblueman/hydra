@@ -144,3 +144,47 @@ bool hs_write_metrics_compare_json(FILE *out, const struct hs_model *left,
     fputs("}}}", out);
     return !ferror(out);
 }
+
+static void write_text_cohort(FILE *out, const char *label, const struct hs_model *model,
+                              const struct hs_filter *filter) {
+    struct hs_summary cohort;
+    struct recovery_outcomes recovered = recovery_counts(model, filter);
+    hs_summarize(model, filter, &cohort);
+    fprintf(out, "%s observed=%llu runs=%zu steps=%zu partial_runs=%zu warnings=%zu\n",
+            label, (unsigned long long)model->observed, cohort.runs, cohort.steps,
+            cohort.partial_runs, model->warnings);
+    fprintf(out, "%s recovery_outcomes scope=coordinator_owner_recovery eligible=%zu known_terminal=%zu succeeded=%zu failed_or_cancelled=%zu unknown=%zu missing_history=%zu\n",
+            label, recovered.eligible, recovered.successes + recovered.failures,
+            recovered.successes, recovered.failures, recovered.unknown, recovered.missing_history);
+    for (enum hs_metric metric = HS_QUEUE; metric < HS_METRICS; metric++) {
+        struct hs_metric_summary value;
+        hs_metric_summarize(model, filter, metric, &value);
+        fprintf(out, "%s %s unit=%s state=%s eligible=%zu known=%zu ", label, metric_name(metric),
+                metric == HS_RECOVERIES ? "count" : "seconds", evidence_state(&value), value.eligible, value.known);
+        if (value.known) fprintf(out, "sum=%llu mean=%llu max=%llu p50=%llu p95=%llu\n",
+            (unsigned long long)value.sum, (unsigned long long)(value.sum / value.known),
+            (unsigned long long)value.maximum, (unsigned long long)value.p50, (unsigned long long)value.p95);
+        else fputs("sum=unknown mean=unknown max=unknown p50=unknown p95=unknown\n", out);
+    }
+}
+
+bool hs_write_metrics_compare_text(FILE *out, const struct hs_model *left,
+                                   const struct hs_model *right,
+                                   const struct hs_filter *filter) {
+    if (!out || !left || !right || !filter) return false;
+    fputs("Saved workflow statistics comparison; delta is right minus left. No ranking or causal claim.\n", out);
+    write_text_cohort(out, "left", left, filter); write_text_cohort(out, "right", right, filter);
+    for (enum hs_metric metric = HS_QUEUE; metric < HS_METRICS; metric++) {
+        struct hs_metric_summary l, r;
+        hs_metric_summarize(left, filter, metric, &l); hs_metric_summarize(right, filter, metric, &r);
+        fprintf(out, "delta %s ", metric_name(metric));
+        if (l.known && r.known) fprintf(out, "state=known mean=%lld max=%lld p50=%lld p95=%lld\n",
+            (long long)(r.sum / r.known) - (long long)(l.sum / l.known),
+            (long long)r.maximum - (long long)l.maximum,
+            (long long)r.p50 - (long long)l.p50, (long long)r.p95 - (long long)l.p95);
+        else fprintf(out, "state=%s mean=unknown max=unknown p50=unknown p95=unknown\n",
+                     !l.eligible || !r.eligible ? "unavailable" : "unknown");
+    }
+    fputs("unmeasured: receiver_unknown_outcomes, total_manual_interventions, network_transfer_bytes, provider_usage.\n", out);
+    return !ferror(out);
+}

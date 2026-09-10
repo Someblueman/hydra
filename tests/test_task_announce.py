@@ -40,8 +40,8 @@ def page(events=None, *, available=True, gap=False, reset=False, truncated=False
     return {"schema_version": 1, "ok": True, "command": "fleet-observation", "data": data}
 
 
-def run(binary, path):
-    return subprocess.run([binary, "fleet", "task", "announce", "--input", str(path)], text=True, capture_output=True)
+def run(binary, path, *options):
+    return subprocess.run([binary, "fleet", "task", "announce", "--input", str(path), *options], text=True, capture_output=True)
 
 
 def main():
@@ -56,6 +56,14 @@ def main():
         assert "task id=task_" in announcement and "receiver_observed_at=123" in announcement
         assert "event time=2026-01-01T00:00:00Z run=run_a step=- sequence=1 type=run.created detail=hello" in announcement
         assert "resume cursor=1 byte_offset=100 stream_id=dev:ino" in announcement
+        plain = run(binary, good, "--format", "text")
+        assert plain.returncode == 0 and plain.stdout == announcement and not plain.stderr
+        explicit_json = run(binary, good, "--format", "json")
+        assert explicit_json.returncode == 0 and explicit_json.stdout == result.stdout
+        for options in (("--format", "html"), ("--format",), ("--format", "text", "--format", "json"),
+                        ("--input", str(good)), ("--unknown", "text")):
+            rejected = run(binary, good, *options)
+            assert rejected.returncode != 0 and "announcement" not in rejected.stdout
 
         for name, kwargs, expected in (("gap", {"gap": True}, "retention_gap=true"),
                                        ("reset", {"reset": True}, "stream_reset=true"),
@@ -115,6 +123,8 @@ def main():
         assert result.returncode == 0
         text = json.loads(result.stdout)["data"]["announcement"]
         assert "x??[31m" in text and "\x1b" not in text and "\n\x1b" not in text
+        plain = run(binary, path, "--format", "text")
+        assert plain.returncode == 0 and plain.stdout == text
 
         non_ascii = page(events=[dict(page()["data"]["event_observation"]["events"][0], detail="caf\u00e9")])
         path = folder / "non-ascii.json"; path.write_text(json.dumps(non_ascii))
@@ -133,6 +143,8 @@ def main():
         path = folder / "malformed.json"; path.write_text("{}")
         result = run(binary, path)
         assert result.returncode != 0
+        result = run(binary, path, "--format", "text")
+        assert result.returncode != 0 and not result.stdout.startswith("task id=")
         path.write_text("{" + "x" * 270000)
         result = run(binary, path)
         assert result.returncode != 0

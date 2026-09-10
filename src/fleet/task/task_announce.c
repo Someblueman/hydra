@@ -136,11 +136,32 @@ static bool render_page(struct text_buffer *text, const struct announce_page *pa
     return true;
 }
 
+static bool announce_options(int argc, char **argv, const char **input, bool *plain) {
+    const char *format = NULL;
+    for (int i = 1; i < argc; i++) {
+        const char **destination;
+        if (!strcmp(argv[i], "--input")) destination = input;
+        else if (!strcmp(argv[i], "--format")) destination = &format;
+        else return false;
+        if (*destination || ++i == argc || !argv[i][0]) return false;
+        *destination = argv[i];
+    }
+    if (!*input || (format && strcmp(format, "json") && strcmp(format, "text"))) return false;
+    *plain = format && !strcmp(format, "text");
+    return true;
+}
+
 json_object *task_announce_cli(int argc, char **argv) {
-    const char *input; json_object *parsed = NULL; struct announce_page page = {0}; struct text_buffer text = {0};
-    if (argc != 3 || strcmp(argv[1], "--input") || !argv[2][0]) return invalid("announce requires --input FILE");
-    input = argv[2]; parsed = f_read_json(input, 262144U);
+    const char *input = NULL; bool plain = false;
+    json_object *parsed = NULL; struct announce_page page = {0}; struct text_buffer text = {0};
+    if (!announce_options(argc, argv, &input, &plain)) return invalid("announce requires --input FILE [--format json|text]");
+    parsed = f_read_json(input, 262144U);
     if (!parsed) return invalid("saved observation is missing, malformed, or oversized");
     if (!page_envelope(parsed, &page) || !page_stream(&page) || !render_page(&text, &page)) { free(text.value); json_object_put(parsed); return invalid("saved observation is invalid or inconsistent"); }
+    if (plain) {
+        bool written = fwrite(text.value, 1, text.length, stdout) == text.length && fflush(stdout) == 0;
+        free(text.value); json_object_put(parsed);
+        return written ? NULL : f_error("fleet-task-announce", "io_failed", "cannot write announcement");
+    }
     { json_object *result = json_object_new_object(); f_string_add(result, "task_id", f_string(page.task, "task_id")); f_string_add(result, "announcement", text.value ? text.value : ""); free(text.value); json_object_put(parsed); return f_success("fleet-task-announce", result); }
 }

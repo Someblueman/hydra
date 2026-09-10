@@ -5,12 +5,15 @@
 #include <string.h>
 
 static void usage(FILE *out) {
-    fputs("usage: hydra-core [--version|--protocol-version|capabilities|validate-state <root>|validate-events <file>|json-string <text>|snapshot <root>|statistics-json <feed>|statistics-compare <left> <right>]\n", out);
+    fputs("usage: hydra-core [--version|--protocol-version|capabilities|validate-state <root>|validate-events <file>|json-string <text>|snapshot <root>|statistics-json <feed>|statistics-compare <left> <right> [--format json|text]]\n", out);
 }
 
 static int statistics_command(int argc, char **argv) {
     if (argc == 3 && !strcmp(argv[1], "statistics-json")) return hs_statistics_cli_json(argv[2], stdout, stderr);
-    if (argc == 4 && !strcmp(argv[1], "statistics-compare")) return hs_statistics_cli_compare(argv[2], argv[3], stdout, stderr);
+    if ((argc == 4 || argc == 6) && !strcmp(argv[1], "statistics-compare")) {
+        if (argc == 6 && (strcmp(argv[4], "--format") || (strcmp(argv[5], "json") && strcmp(argv[5], "text")))) return -1;
+        return hs_statistics_cli_compare(argv[2], argv[3], argc == 6 && !strcmp(argv[5], "text"), stdout, stderr);
+    }
     return -1;
 }
 

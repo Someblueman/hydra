@@ -40,14 +40,16 @@ int hs_statistics_cli_json(const char *path, FILE *out, FILE *err) {
 }
 
 int hs_statistics_cli_compare(const char *left_path, const char *right_path,
-                              FILE *out, FILE *err) {
+                              bool plain, FILE *out, FILE *err) {
     struct hs_model *left = NULL, *right = NULL;
     struct hs_filter filter = {0};
     int result = load_path(left_path, &left, err);
     if (result) return result;
     result = load_path(right_path, &right, err);
     if (result) { free(left); return result; }
-    result = hs_write_metrics_compare_json(out, left, right, &filter) && fputc('\n', out) != EOF ? 0 : 1;
+    if (plain) result = hs_write_metrics_compare_text(out, left, right, &filter) ? 0 : 1;
+    else result = hs_write_metrics_compare_json(out, left, right, &filter) && fputc('\n', out) != EOF ? 0 : 1;
+    if (fflush(out) != 0) result = 1;
     free(left); free(right);
     return result;
 }

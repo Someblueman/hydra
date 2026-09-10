@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -63,6 +64,41 @@ def main():
         assert compared["delta"]["metrics"]["queue"] == {
             "state": "known", "mean": 0, "max": 0, "p50": 0, "p95": 0,
         }
+        different = folder / "different.tsv"
+        different.write_text(FIXTURE.read_text().replace("1788787810", "1788787820"))
+        empty = folder / "empty.tsv"
+        empty.write_text("HYDRA_STATISTICS\t2\t1788789600\nZ\t0\t0\n")
+        missing = folder / "missing.tsv"
+        lines = FIXTURE.read_text().splitlines()
+        missing.write_text("\n".join([lines[0], *[row for row in lines if "run_dddddddddddddddddddd" in row], "Z\t1\t1", ""]))
+        for right in (FIXTURE, different, empty, missing, recovered):
+            expected = json.loads(run(core, "statistics-compare", str(FIXTURE), str(right)).stdout)
+            plain = run(core, "statistics-compare", str(FIXTURE), str(right), "--format", "text")
+            assert plain.returncode == 0 and not plain.stderr
+            assert all(char == "\n" or 32 <= ord(char) < 127 for char in plain.stdout)
+            assert "delta is right minus left" in plain.stdout
+            for name, metric in expected["delta"]["metrics"].items():
+                line = next(line for line in plain.stdout.splitlines() if line.startswith(f"delta {name} "))
+                fields = dict(field.split("=", 1) for field in line.split()[2:])
+                assert fields == {key: "unknown" if value is None else str(value) for key, value in metric.items()}
+            for side in ("left", "right"):
+                for name, metric in expected[side]["metrics"].items():
+                    line = next(line for line in plain.stdout.splitlines() if line.startswith(f"{side} {name} "))
+                    fields = dict(field.split("=", 1) for field in line.split()[2:])
+                    assert fields.pop("unit") == ("count" if name == "recoveries" else "seconds")
+                    assert fields == {key: "unknown" if value is None else str(value) for key, value in metric.items()}
+            assert "network_transfer_bytes" in plain.stdout and "provider_usage" in plain.stdout
+        for bad in (malformed, partial, oversized):
+            result = run(core, "statistics-compare", str(FIXTURE), str(bad), "--format", "text")
+            assert result.returncode != 0 and result.stdout == ""
+        for options in (("--format", "html"), ("--format",), ("--format", "text", "--format", "json")):
+            result = run(core, "statistics-compare", str(FIXTURE), str(FIXTURE), *options)
+            assert result.returncode != 0 and result.stdout == ""
+        public = subprocess.run([str(ROOT / "bin/hydra"), "workflow", "statistics-compare",
+            str(FIXTURE), str(FIXTURE), "--format", "text"], text=True, capture_output=True,
+            env=dict(os.environ, HYDRA_CORE=str(Path(core).resolve()), HYDRA_HOME=str(folder / "home")))
+        expected = run(core, "statistics-compare", str(FIXTURE), str(FIXTURE), "--format", "text")
+        assert public.returncode == 0 and public.stdout == expected.stdout, public.stderr
     print("Statistics exporter JSON, comparison and fail-closed bounds passed")
 
 

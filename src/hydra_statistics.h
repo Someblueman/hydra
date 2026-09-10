@@ -61,7 +61,10 @@ bool hs_write_metrics_json(FILE *out, const struct hs_model *m,
 bool hs_write_metrics_compare_json(FILE *out, const struct hs_model *left,
                                    const struct hs_model *right,
                                    const struct hs_filter *filter);
+bool hs_write_metrics_compare_text(FILE *out, const struct hs_model *left,
+                                   const struct hs_model *right,
+                                   const struct hs_filter *filter);
 int hs_statistics_cli_json(const char *path, FILE *out, FILE *err);
 int hs_statistics_cli_compare(const char *left_path, const char *right_path,
-                              FILE *out, FILE *err);
+                              bool plain, FILE *out, FILE *err);
 #endif

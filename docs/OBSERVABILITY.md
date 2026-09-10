@@ -7,6 +7,7 @@ retry a workflow.
 ```sh
 hydra workflow statistics-json
 hydra workflow statistics-compare <left-statistics.tsv> <right-statistics.tsv>
+hydra workflow statistics-compare <left-statistics.tsv> <right-statistics.tsv> --format text
 ```
 
 `statistics-json` produces a versioned JSON document from the validated native
@@ -41,16 +42,23 @@ native parser and emits both metric summaries plus deltas for mean, maximum,
 p50, and p95. It preserves unknown and unavailable states rather than ranking
 incomparable cohorts. These are recorded local samples only; remote transfer
 bytes, provider cost, CPU, memory, and tokens are explicitly unavailable.
+`--format text` displays the same validated summaries and deltas as plain ASCII
+lines, with units, eligible/known denominators, observation times, partial-history
+counts and recovery outcomes. No JSON extraction or terminal escape processing is
+needed. Both feeds must validate before any comparison is printed. JSON remains
+the default format; deltas always mean right minus left and imply no causal result.
 
 ## Saved task announcements
 
 ```sh
-hydra fleet task announce --input observation.json
+hydra fleet task announce --input observation.json --format text
 ```
 
-This command reads one saved observation page and returns an ASCII announcement
-in the JSON response field `data.announcement`
-for the recorded task state and each retained event. It validates the normalized
+This command reads one saved observation page and prints ASCII lines for the
+recorded task state and each retained event. `--format text` needs no JSON
+extraction and emits no terminal controls. The default `--format json` retains
+the same announcement in the response field `data.announcement`. Invalid input
+returns a nonzero status and a structured error before any announcement. It validates the normalized
 task identity and observation schema before reading the event page, accepts at
 most 128 events, and requires strictly increasing contiguous sequence numbers.
 Event time, run, step, sequence, type, and detail are printed on one line;
@@ -63,3 +71,6 @@ truncated scans explicitly. Its final line exposes the resumable cursor,
 byte offset, and stream ID. Those values must be retained together when a
 caller resumes observation; a changed stream ID requires starting from the
 reported reset offset.
+
+Storage scope and preservation requirements are documented in [Retention](RETENTION.md).
+The real two-receiver UI/CLI qualification is recorded in [V4 evidence](evidence/recovery-visibility-v4.md).

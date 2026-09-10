@@ -39,11 +39,12 @@ cmd_workflow() {
             "$_cw_core" statistics-json "$_cw_tmp"
             ;;
         statistics-compare)
-            [ "$#" -eq 3 ] || return 2
+            [ "$#" -eq 3 ] || [ "$#" -eq 5 ] || return 2
             _load_lib core
             _cw_core="$(hydra_core_path 2>/dev/null || true)"
             [ -x "$_cw_core" ] || { cli_error workflow unavailable "native statistics exporter unavailable" "build hydra-core"; return 1; }
-            "$_cw_core" statistics-compare "$2" "$3"
+            shift
+            "$_cw_core" statistics-compare "$@"
             ;;
         plan) shift; cmd_workflow_plan "$@" ;;
         -h|--help|'')
@@ -56,7 +57,7 @@ cmd_workflow() {
                 '       hydra workflow plan --help' \
                 '       hydra workflow statistics-data' \
                 '       hydra workflow statistics-json' \
-                '       hydra workflow statistics-compare <left.tsv> <right.tsv>' \
+                '       hydra workflow statistics-compare <left.tsv> <right.tsv> [--format json|text]' \
                 '       hydra workflow status <run-id> [--json]' \
                 '       hydra workflow cancel <run-id>' \
                 '       hydra workflow resume <run-id>' \
