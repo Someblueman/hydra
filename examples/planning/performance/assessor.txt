@@ -1,6 +1,0 @@
-Independently assess the submitted report against SPEC.md. Read only SPEC.md, baseline.sh and candidate.sh
-from this repository. Check that the report contains the exact workload digest, environment/toolchain,
-protocol, all ten trials and failures, recomputed median and nearest-rank p95, the 10% target rule, correct
-classification, and stated limits. The report's raw CSV is sealed in its appendix; recompute from it and
-reject altered, missing or inconsistent rows. Return exactly one JSON object: {"verdict":"pass"|"fail",
-"evidence":"..."}. Do not use external sources.

@@ -23,6 +23,6 @@ Requirements:
   does not establish Hydra-wide CPU, latency, scalability, or user-facing
   improvement.
 
-The independent checker must recompute the digest, trial counts, summaries and
-classification from the sealed raw output and fail on missing, altered or
-inconsistent evidence.
+The independent checker must recompute the digest, trial counts, summaries, paired
+interval and classification from the sealed raw output and fail on missing, altered
+or inconsistent evidence. Altered and truncated raw evidence are explicit negative controls.

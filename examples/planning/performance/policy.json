@@ -6,7 +6,7 @@
     ],
     "tools": [
       "sh",
-      "profile:opencode"
+      "python3"
     ],
     "effects": [
       "worktree",

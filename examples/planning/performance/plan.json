@@ -1,13 +1,15 @@
 {
   "schema_version": 1,
   "id": "performance-record-count-v1",
-  "objective": "Qualify a bounded baseline versus candidate record-count workload through raw exclusive trials and an independently checked report.",
+  "objective": "Qualify a bounded baseline versus candidate record-count workload through exclusive raw trials, deterministic paired uncertainty analysis, and an independent recomputation checker.",
   "context": [],
   "assumptions": [
     "records.txt, baseline.sh, candidate.sh, measure.sh, compose.sh, analyst.txt and assessor.txt are fixed source material.",
     "The measurement step is one exclusive process and is run only during an authorized measurement window.",
     "Ten trials per implementation are the fixed stopping rule; no retries or cherry-picking are allowed.",
-    "The result may be target not established or invalid/insufficient measurement."
+    "The result may be target not established or invalid/insufficient measurement.",
+    "Analysis and checking are deterministic repository scripts; no live provider or narrative verdict is used.",
+    "The checker independently recomputes summaries and outcome from raw samples and fails on altered or truncated evidence."
   ],
   "questions": [],
   "deliverables": [
@@ -34,13 +36,13 @@
     },
     {
       "id": "analysis",
-      "criterion": "Report counts, median, nearest-rank p95, relative change and fixed stopping rule from raw samples.",
+      "criterion": "Report counts, median, nearest-rank p95, paired relative-change interval, and fixed stopping rule from raw samples.",
       "deliverable": "report",
       "check": "assessment"
     },
     {
       "id": "outcome",
-      "criterion": "Classify target established only for ten valid trials, available p95s and at least 10% median improvement; otherwise classify accurately.",
+      "criterion": "Classify target established only for ten valid paired trials, available p95s, candidate median at least 10% lower, and a paired 90% interval entirely below zero; otherwise classify accurately.",
       "deliverable": "report",
       "check": "assessment"
     },
@@ -55,8 +57,8 @@
     {
       "id": "assessment",
       "method": "assessment",
-      "definition": "Independent assessor recomputes the sealed report's raw evidence and classification against SPEC.md.",
-      "step": "assess",
+      "definition": "checker.py independently recomputes raw row validity, per-implementation median and p95, paired relative-change interval and outcome from the sealed report and raw samples; it emits a structured pass/fail object.",
+      "step": "check",
       "input": "subject",
       "report": "assessment",
       "deliverable": "report"
@@ -70,7 +72,7 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "performance-work-v1"
+        "branch": "performance-work-v2"
       }
     },
     {
@@ -80,7 +82,7 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "performance-check-v1"
+        "branch": "performance-check-v2"
       }
     },
     {
@@ -92,7 +94,7 @@
       ],
       "writes": [],
       "args": {
-        "head": "performance-work-v1",
+        "head": "performance-work-v2",
         "argv": [
           "sh",
           "measure.sh"
@@ -110,11 +112,12 @@
       ],
       "writes": [],
       "args": {
-        "head": "performance-work-v1",
-        "profile": "opencode",
-        "prompt_input": "prompt",
-        "result_file": "draft",
-        "timeout": 240
+        "head": "performance-work-v2",
+        "argv": [
+          "python3",
+          "analyze.py"
+        ],
+        "timeout": 60
       }
     },
     {
@@ -128,7 +131,7 @@
       ],
       "writes": [],
       "args": {
-        "head": "performance-work-v1",
+        "head": "performance-work-v2",
         "argv": [
           "sh",
           "compose.sh"
@@ -137,39 +140,22 @@
       }
     },
     {
-      "id": "prepare",
-      "role": "work",
-      "kind": "exec",
-      "needs": [
-        "spawn_check",
-        "compose"
-      ],
-      "writes": [],
-      "args": {
-        "head": "performance-check-v1",
-        "argv": [
-          "sh",
-          "assessment_prompt.sh"
-        ],
-        "timeout": 60
-      }
-    },
-    {
-      "id": "assess",
+      "id": "check",
       "role": "verify",
       "kind": "exec",
       "needs": [
         "spawn_check",
         "compose",
-        "prepare"
+        "measure"
       ],
       "writes": [],
       "args": {
-        "head": "performance-check-v1",
-        "profile": "opencode",
-        "prompt_input": "prompt",
-        "result_file": "assessment",
-        "timeout": 240
+        "head": "performance-check-v2",
+        "argv": [
+          "python3",
+          "checker.py"
+        ],
+        "timeout": 60
       }
     }
   ],
@@ -204,34 +190,29 @@
             "path": "environment.txt",
             "type": "file",
             "max_bytes": 4096
-          },
-          "analyst_prompt": {
-            "path": "analyst-prompt",
-            "type": "file",
-            "max_bytes": 8192
           }
         }
       },
       "analyze": {
         "inputs": {
-          "prompt": {
+          "raw": {
             "step": "measure",
-            "output": "analyst_prompt"
+            "output": "raw"
           }
         },
         "outputs": {
-          "draft": {
-            "path": "draft",
+          "analysis": {
+            "path": "analysis.json",
             "type": "file",
-            "max_bytes": 16384
+            "max_bytes": 32768
           }
         }
       },
       "compose": {
         "inputs": {
-          "draft": {
+          "analysis": {
             "step": "analyze",
-            "output": "draft"
+            "output": "analysis"
           },
           "raw": {
             "step": "measure",
@@ -248,36 +229,21 @@
         },
         "outputs": {
           "report": {
-            "path": "report.md",
+            "path": "report.json",
             "type": "file",
-            "max_bytes": 65536
+            "max_bytes": 131072
           }
         }
       },
-      "prepare": {
+      "check": {
         "inputs": {
           "subject": {
             "step": "compose",
             "output": "report"
-          }
-        },
-        "outputs": {
-          "assessment-prompt": {
-            "path": "assessment-prompt",
-            "type": "file",
-            "max_bytes": 65536
-          }
-        }
-      },
-      "assess": {
-        "inputs": {
-          "prompt": {
-            "step": "prepare",
-            "output": "assessment-prompt"
           },
-          "subject": {
-            "step": "compose",
-            "output": "report"
+          "raw": {
+            "step": "measure",
+            "output": "raw"
           }
         },
         "outputs": {
@@ -296,7 +262,7 @@
     ],
     "tools": [
       "sh",
-      "profile:opencode"
+      "python3"
     ],
     "effects": [
       "worktree",
