@@ -26,9 +26,10 @@ capabilities. Agent agnosticism does not imply identical provider features or
 portable private conversation history. Hydra owns execution, recovery, and evidence;
 provider interaction belongs behind explicit adapters.
 
-This file contains only outstanding work and the policies that constrain it.
-Implemented behavior belongs in the changelog and focused contract documentation;
-completed roadmap items are removed rather than retained as checked history.
+This file contains outstanding work and the policies that constrain it. Checked
+items in the selected, unreleased tracks record local qualification, not shipment.
+After release, move completed scope to the changelog and focused contracts rather
+than retaining it as backlog history.
 
 2.0.0 is the final version assigned in advance. After 2.0, work is selected from one
 backlog and released when a coherent feature or meaningful change is ready. The
@@ -125,7 +126,9 @@ announcements. **9E remains partially qualified**: a finite planner pilot found 
 interface-conformance difference but no demonstrated semantic planning advantage.
 Runtime graph expansion remains conditional on a workload that needs it; current
 finite patterns do not require it.
-See [the latest workstream acceptance](evidence/workstream-integration-20260910.md),
+See [the review scope and open decisions](RELEASE_NEXT_SCOPE.md),
+[remaining-work acceptance](evidence/remaining-work-20260910.md),
+[workstream acceptance](evidence/workstream-integration-20260910.md),
 [earlier integration evidence](evidence/next-wave-integration.md), and
 [V2/9C/H2 acceptance](evidence/observation-enrollment-integration.md) for exact
 checks and limits. Main and the published release are unchanged.
@@ -144,14 +147,15 @@ the H track below incorporates the authorized onboarding recommendations.
 #### T. Optional tmux for headless and remote execution
 
 Decision: make tmux optional for headless execution, retaining it for interactive
-heads. This is planned behavior, not a change to current dependency requirements.
+heads. T1 is locally qualified; T2 has controlled acceptance but still needs live-host
+qualification. Interactive heads retain their tmux requirement.
 See [the updated analysis](research/tmux-optional-execution.md) for the current
 implementation, affected contracts, and design tradeoffs. Resource admission and
 finite distributed execution are implemented; T1 and T2 extend that execution to
 hosts without tmux, and T3 qualifies the same distributed scenario in that mode.
 These are delivery milestones, not assigned release versions.
 
-- [ ] **T1 — Terminal-independent workspace and execution identity.** Separate
+- [x] **T1 — Terminal-independent workspace and execution identity.** Separate
       workspace, trust, identity, and provenance creation from terminal launch in
       the shell mutation path. Support a headless execution with no terminal;
       preserve existing interactive spawn/attach behavior. Define the durable
@@ -163,6 +167,8 @@ These are delivery milestones, not assigned release versions.
       artifacts without invoking tmux; status and teardown work for both execution
       modes. Existing state and interactive workflows remain readable and usable,
       with migration/rollback checks where the durable contract changes.
+      Local evidence: [headless and interactive regressions](T2_ACCEPTANCE.md)
+      and [combined integration](evidence/next-wave-integration.md).
 - [ ] **T2 — Remote execution and planning without tmux.** Route remote exec and
       headless workflow steps through T1 and the existing detached task owner.
       Make admission, bootstrap, doctor, installation, and capability negotiation
@@ -212,15 +218,15 @@ block basic load balancing. Relevant item **7** diagnostics can accompany each s
 
 ##### 9A. Satisfiable outcome obligations and compiler diagnostics
 
-- [ ] Represent each mandatory outcome with an intent reference, exact subject,
+- [x] Represent each mandatory outcome with an intent reference, exact subject,
       observable criterion, evaluation method, required evidence, applicable
       environment, completion rule, and limitations. Allow a requirement to have
       distinct behavior, failure-handling, performance, or other obligations.
-- [ ] Check that every required obligation has a reachable, satisfiable evaluation
+- [x] Check that every required obligation has a reachable, satisfiable evaluation
       path for the right candidate. Reject orphan or circular evidence dependencies
       and missing joins; distinguish structural proof, runtime obligations, and
       semantic judgments about whether criteria actually capture the objective.
-- [ ] Preserve assumptions and unresolved questions explicitly. Give authors
+- [x] Preserve assumptions and unresolved questions explicitly. Give authors
       diagnostics with field paths, obligation IDs, and counterexamples; never
       silently weaken an objective or acceptance criterion to obtain a valid plan.
 
@@ -229,6 +235,10 @@ paths, while valid multiple-obligation cases compile. A changed performance obje
 with unchanged text-content checks is identified by semantic review, not misreported
 as something the structural compiler can prove. Start a fixed set of valid and
 misleading plans across feature, performance, and research tasks for later milestones.
+
+Local qualification: [compiler obligations](PLAN_COMPILATION.md#outcome-obligations-9a)
+and [integration acceptance](evidence/next-wave-integration.md) cover the structural
+contract and negative cases. Semantic review remains a separate requirement.
 
 ##### 9B. Producer and consumer contracts at every handoff
 
