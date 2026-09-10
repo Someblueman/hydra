@@ -60,7 +60,7 @@ def main():
         for name, kwargs, expected in (("gap", {"gap": True}, "retention_gap=true"),
                                        ("reset", {"reset": True}, "stream_reset=true"),
                                        ("truncated", {"truncated": True}, "truncated=true"),
-                                       ("missing", {"available": False}, "history unavailable")):
+                                       ("missing", {"available": False, "events": []}, "history unavailable")):
             path = folder / (name + ".json")
             path.write_text(json.dumps(page(**kwargs)))
             result = run(binary, path)
@@ -73,12 +73,31 @@ def main():
         result = run(binary, path)
         assert result.returncode != 0 and "announcement" not in result.stdout
 
+        cursor_gap = page()
+        cursor_gap["data"]["event_observation"]["next_cursor"] = 2
+        path = folder / "cursor-gap.json"; path.write_text(json.dumps(cursor_gap))
+        result = run(binary, path)
+        assert result.returncode != 0
+
+        wrong_envelope = page()
+        wrong_envelope["schema_version"] = 2
+        path = folder / "wrong-envelope.json"; path.write_text(json.dumps(wrong_envelope))
+        result = run(binary, path)
+        assert result.returncode != 0
+
         escaped = page(events=[dict(page()["data"]["event_observation"]["events"][0], detail="x\n\x1b[31m")])
         path = folder / "escaped.json"; path.write_text(json.dumps(escaped))
         result = run(binary, path)
         assert result.returncode == 0
         text = json.loads(result.stdout)["data"]["announcement"]
         assert "x??[31m" in text and "\x1b" not in text and "\n\x1b" not in text
+
+        non_ascii = page(events=[dict(page()["data"]["event_observation"]["events"][0], detail="caf\u00e9")])
+        path = folder / "non-ascii.json"; path.write_text(json.dumps(non_ascii))
+        result = run(binary, path)
+        assert result.returncode == 0
+        text = json.loads(result.stdout)["data"]["announcement"]
+        assert "caf?" in text and all(ord(char) < 128 for char in text)
 
         many = []
         for sequence in range(1, 130):
