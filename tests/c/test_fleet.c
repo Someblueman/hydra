@@ -39,6 +39,17 @@ static void capture_streams(void) {
     assert(fread(bytes, 1, sizeof(bytes), err) == 3 && !memcmp(bytes, "err", 3));
     fclose(out); fclose(err); f_capture_free(&cap);
 }
+static void capture_partial_input(void) {
+    struct f_capture cap = {0};
+    char *short_read[] = {"sh", "-c", "dd bs=1 count=3 2>/dev/null", NULL};
+    assert(!f_run(short_read, "longer input", 12, 2, &cap));
+    assert(cap.in_bytes == 3 && cap.out_bytes == 3 && !cap.input_complete && cap.measurement_complete);
+    f_capture_free(&cap);
+    char *no_read[] = {"sh", "-c", "exit 7", NULL};
+    assert(!f_run(no_read, "unsent", 6, 2, &cap));
+    assert(cap.status == 7 && cap.in_bytes == 0 && cap.out_bytes == 0 && !cap.input_complete && cap.measurement_complete);
+    f_capture_free(&cap);
+}
 int main(void) {
     char dir[] = "/tmp/hydra-fleet-unit.XXXXXX", path[F_PATH]; json_object *obj, *bundle, *files, *file, *result;
     struct f_capture cap = {0}; char *quoted, *text;
@@ -51,7 +62,8 @@ int main(void) {
     quoted = f_quote("a'b;$(touch nope)"); assert(quoted && !strcmp(quoted, "'a'\\''b;$(touch nope)'")); free(quoted);
     assert(!f_target("-oProxyCommand=evil") && !f_target("host;evil") && f_target("ubuntu@example.test"));
     assert(!f_run(echo, "literal input", 13, 2, &cap));
-    assert(cap.status == 0 && !strcmp(cap.out, "literal input") && !strcmp(cap.err, "error")); f_capture_free(&cap);
+    assert(cap.status == 0 && cap.in_bytes == 13 && cap.input_complete && !strcmp(cap.out, "literal input") && !strcmp(cap.err, "error")); f_capture_free(&cap);
+    capture_partial_input();
     assert(!f_run(hang, NULL, 0, 1, &cap) && cap.timeout && cap.status == 124); f_capture_free(&cap);
     bundle = json_object_new_object(); files = json_object_new_array(); file = json_object_new_object();
     json_object_object_add(bundle, "schema_version", json_object_new_int(1)); f_string_add(bundle, "kind", "config");

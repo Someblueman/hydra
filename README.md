@@ -176,6 +176,11 @@ through the CLI. See the
 [planner recipe](docs/PLANNER_RECIPE.md) and
 [feature and research examples](examples/planning/README.md).
 
+Use [workflow metrics](docs/OBSERVABILITY.md) to inspect recorded queue and outcome
+timing, recovery, operator actions and transport bytes with explicit unknowns.
+[Retention policies](docs/RETENTION.md) preview or expire local task/run evidence
+while preserving submission identities, recovery dependencies and pinned claims.
+
 ## Documentation
 
 | Topic | Guide |

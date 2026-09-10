@@ -114,8 +114,13 @@ static int log_directory(const char *id, json_object *runtime, json_object *requ
     }
     return dir;
 }
+static json_object *logs_receipt(const char *id) {
+    json_object *response = task_status(id);
+    if (!f_field(f_field(response, "data"), "retention")) return response;
+    json_object_put(response); return f_error("fleet-task-logs", "evidence_expired", "this task's retained log evidence expired; an empty log is not being reported");
+}
 json_object *task_logs(const char *id, json_object *request) {
-    json_object *response = task_status(id), *data = f_field(response, "data"), *log = NULL;
+    json_object *response = logs_receipt(id), *data = f_field(response, "data"), *log = NULL;
     const char *stream = f_field(request, "stream") ? f_string(request, "stream") : "stdout";
     json_object *start = f_field(request, "offset"), *count = f_field(request, "limit");
     int64_t offset = start ? json_object_get_int64(start) : 0, limit = count ? json_object_get_int64(count) : 4096;

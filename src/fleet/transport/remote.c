@@ -153,24 +153,39 @@ static bool response_valid(json_object *result) {
     if (json_object_get_boolean(f_field(result, "ok"))) return json_object_is_type(f_field(result, "data"), json_type_object);
     return f_string(error, "code") && f_string(error, "message") && f_string(error, "recovery");
 }
-json_object *f_request(const struct f_remote *remote, json_object *request, unsigned seconds) {
+static json_object *measured_response(const struct f_remote *remote, struct f_capture *cap) {
+    json_object *result;
+    result = f_parse(cap->out);
+    if (result && cap->status && json_object_get_boolean(f_field(result, "ok"))) { json_object_put(result); result = NULL; }
+    if (!response_valid(result)) {
+        json_object_put(result);
+        result = f_error("fleet", cap->status ? transport_code(cap) : "invalid_response", cap->err[0] ? cap->err : "missing or invalid fleet response");
+    } else if (json_object_get_boolean(f_field(result, "ok"))) {
+        response_peer(result, remote, cap->err);
+    }
+    return result;
+}
+json_object *f_request_measured(const struct f_remote *remote, json_object *request, unsigned seconds,
+                                 size_t *request_bytes, size_t *response_bytes, bool *request_complete) {
     struct f_capture cap = {0}; json_object *result = NULL;
     char *exe = f_quote(remote->hydra), *home = f_quote(remote->home); char command[F_PATH * 8 + 128];
     const char *input = json_object_to_json_string_ext(request, JSON_C_TO_STRING_PLAIN); int n;
+    if (request_bytes) *request_bytes = 0;
+    if (response_bytes) *response_bytes = 0;
+    if (request_complete) *request_complete = false;
     if (!exe || !home) goto done;
     n = snprintf(command, sizeof(command), "env LC_ALL=C %s%s %s fleet serve", remote->home[0] ? "HYDRA_HOME=" : "", remote->home[0] ? home : "", exe);
     if (n < 0 || n >= (int)sizeof(command) || f_ssh(remote, command, input, strlen(input), seconds, false, &cap)) goto done;
-    result = f_parse(cap.out);
-    if (result && cap.status && json_object_get_boolean(f_field(result, "ok"))) { json_object_put(result); result = NULL; }
-    if (!response_valid(result)) {
-        json_object_put(result);
-        result = f_error("fleet", cap.status ? transport_code(&cap) : "invalid_response", cap.err[0] ? cap.err : "missing or invalid fleet response");
-    } else if (json_object_get_boolean(f_field(result, "ok"))) {
-        response_peer(result, remote, cap.err);
-    }
+    if (response_bytes) *response_bytes = cap.out_bytes;
+    if (request_bytes) *request_bytes = cap.in_bytes;
+    if (request_complete) *request_complete = cap.measurement_complete;
+    result = measured_response(remote, &cap);
  done:
     free(exe); free(home); f_capture_free(&cap);
     return result ? result : f_error("fleet", "transport_failed", "cannot start SSH transport");
+}
+json_object *f_request(const struct f_remote *remote, json_object *request, unsigned seconds) {
+    return f_request_measured(remote, request, seconds, NULL, NULL, NULL);
 }
 bool f_handshake_compatible(json_object *data) {
     const char *version = f_string(data, "hydra_version");

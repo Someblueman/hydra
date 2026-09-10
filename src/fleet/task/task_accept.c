@@ -4,6 +4,7 @@
 #include "fleet/support/process.h"
 #include "fleet/transport/server.h"
 #include "fleet/task/task.h"
+#include "fleet/retention/retention.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,11 @@ static json_object *receipt(const char *directory, const char *id, const char *d
         f_string_add(state, "result_state", "unknown"); f_string_add(state, "result_error", "owner_unavailable");
     }
     task_cancel_view(directory, stored_digest, state);
+    json_object *retained = retention_state(directory);
+    if (retained) {
+        json_object_object_add(accepted, "retention", retained);
+        f_string_add(state, "result_state", "expired"); f_string_add(state, "result_error", "evidence_expired");
+    }
     json_object_object_add(accepted, "runtime", json_object_get(state));
     result = f_success("fleet-task", json_object_get(accepted));
 done:

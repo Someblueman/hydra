@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "evaluation_id": "9e-heldout-20260910-v2",
+  "repair": {
+    "original_v1_sha256": "5171ccdaccbf0deb22a050cb6bcb78095100b17b5f5589d72a2e8c2f8d0e6162",
+    "correction": "Replaced mm-02 placeholder digests with SHA-256 values for the declared UTF-8 member bytes and added those member bytes to inputs.files.",
+    "reason": "The v1 mm-02 case could not independently verify membership hashes because it supplied neither real member bytes nor matching digests.",
+    "semantic_results_observed": false
+  },
+  "freeze": {
+    "status": "frozen_before_candidate_generation",
+    "case_count": 9,
+    "revision_policy": "immutable_after_candidate_observation",
+    "ground_truth_rule": "Each expected result is determined from the case inputs and stated contract, independently of any candidate plan."
+  },
+  "source_basis": [
+    "docs/ROADMAP.md section 9E",
+    "docs/PLAN_INSPECTION.md",
+    "docs/PLAN_PATTERNS.md",
+    "docs/PLAN_MANIFEST.md"
+  ],
+  "matched_evaluation_contract": {
+    "scope": "One disposable repository containing only the case fixture, candidate plan, declared checker, and bounded outputs; no network, provider, or pre-existing Hydra run state.",
+    "tools": ["/bin/sh", "python3", "git", "hydra workflow plan validate", "hydra workflow plan compile"],
+    "tool_policy": "The same tool paths, source snapshot, policy, checker bytes, and environment are used for every candidate in a case.",
+    "budgets": {
+      "plan_validation_seconds": 30,
+      "plan_execution_seconds": 120,
+      "checker_seconds": 30,
+      "artifact_bytes": 65536,
+      "max_heads": 4,
+      "max_parallelism": 2,
+      "repair_budget": 0,
+      "network": "forbidden"
+    },
+    "acceptance": "A candidate passes only when its compiled plan is admissible, its checker runs, and the independently specified expected verdict and exact artifact bytes match. Process exit alone is insufficient evidence."
+  },
+  "comparison_limits": {
+    "decomposition": "Compare required-node coverage, dependency validity, verification effort, artifact transfers, and declared rework risk.",
+    "scheduling": "Compare only the fixed admitted graph under parallelism 1 versus 2; report observed elapsed time and critical path, without ranking arbitrary graphs.",
+    "placement": "No host-placement claim; all cases use one local host.",
+    "estimates": "Unknown transfer sizes and rework probabilities remain unknown. Estimates do not relax hard budgets.",
+    "benefit_claim": "No semantic planning improvement or global optimality claim is permitted from this nine-case set."
+  },
+  "cases": [
+    {
+      "id": "fc-01-normalize-record",
+      "class": "feature_correctness",
+      "objective": "Normalize two input records into the fixed report format while preserving record order.",
+      "inputs": {"records": ["  alpha  ", "BETA"]},
+      "acceptance": {"artifact_path": "report.txt", "exact_bytes": "alpha\nbeta\n", "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "wrong-case", "bytes": "alpha\nBETA\n", "expected_verdict": "fail", "reason": "Second record was not normalized."},
+        {"id": "wrong-order", "bytes": "beta\nalpha\n", "expected_verdict": "fail", "reason": "Input order was not preserved."}
+      ],
+      "decomposition_tradeoff": {"serial": "One worker can parse and render both records; no transfer boundary.", "fork_join": "Two independent record workers can run at parallelism 2, followed by an ordered composer; this adds two artifact transfers and ordering validation.", "measurement": "Compare fixed graph elapsed time and validation effort only; do not infer a universal preference."}
+    },
+    {
+      "id": "fc-02-reject-duplicate-config",
+      "class": "feature_correctness",
+      "objective": "Parse a small configuration and reject duplicate keys before producing a sealed configuration artifact.",
+      "inputs": {"config_bytes": "mode=fast\nworkers=2\nmode=safe\n"},
+      "acceptance": {"artifact_path": "config-result.json", "exact_bytes": "{\"error\":\"duplicate key: mode\",\"verdict\":\"fail\"}\n", "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "last-write-wins", "bytes": "{\"mode\":\"safe\",\"workers\":2}\n", "expected_verdict": "fail", "reason": "Duplicate input was silently accepted."},
+        {"id": "wrong-error", "bytes": "{\"error\":\"invalid integer\",\"verdict\":\"fail\"}\n", "expected_verdict": "fail", "reason": "Reported error does not identify the violated contract."}
+      ],
+      "decomposition_tradeoff": {"serial": "Parsing and duplicate detection are a single ordered validation step.", "fork_join": "Independent syntax and uniqueness checks may run in parallel only if the composer preserves both diagnostics; extra composition is not justified by throughput here.", "measurement": "Record required checks and rework risk; parallel execution cannot waive the duplicate-key obligation."}
+    },
+    {
+      "id": "fc-03-two-member-report",
+      "class": "feature_correctness",
+      "objective": "Assemble both validated member outputs into the fixed two-line report and verify every byte.",
+      "inputs": {"member_a": "A:validated input\n", "member_b": "B:validated input\n"},
+      "acceptance": {"artifact_path": "subject", "exact_bytes": "A:validated input\nB:validated input\n", "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "missing-member", "bytes": "A:validated input\n", "expected_verdict": "fail", "reason": "Required member B is absent."},
+        {"id": "truncated-final-newline", "bytes": "A:validated input\nB:validated input", "expected_verdict": "fail", "reason": "The sealed byte contract requires the final newline."}
+      ],
+      "decomposition_tradeoff": {"serial": "Member A then member B creates one extra dependency edge.", "fork_join": "Members A and B are independent and may run at parallelism 2; compose joins both before the checker.", "measurement": "Compare the fixed serial and fork/join graphs from the same source and policy; verify transfer and join obligations separately."}
+    },
+    {
+      "id": "fr-01-schedule-metrics",
+      "class": "finite_research_claim",
+      "objective": "Recompute the stated scheduling metrics from a finite exact-duration dataset and report the policy comparison.",
+      "inputs": {"jobs_csv": "job,duration\nA,3\nB,1\nC,2\n"},
+      "acceptance": {"artifact_path": "research.json", "exact_json": {"fcfs": {"mean_wait": 2.333333, "max_wait": 4}, "sjf": {"mean_wait": 1.333333, "max_wait": 3}}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "mean-only", "json": {"fcfs": {"mean_wait": 2.333333}, "sjf": {"mean_wait": 1.333333}}, "expected_verdict": "fail", "reason": "Required maximum-wait metric is missing."},
+        {"id": "wrong-sjf-order", "json": {"fcfs": {"mean_wait": 2.333333, "max_wait": 4}, "sjf": {"mean_wait": 2.333333, "max_wait": 4}}, "expected_verdict": "fail", "reason": "SJF values are not recomputed from the declared durations."}
+      ],
+      "decomposition_tradeoff": {"serial": "One analyst can recompute both policies from the same CSV.", "fork_join": "Separate policy workers can compute FCFS and SJF at parallelism 2, then a composer checks shared input identity and metric schema.", "measurement": "Keep recomputation and composition costs visible; do not treat parallel policy analysis as evidence that one policy is globally better."}
+    },
+    {
+      "id": "fr-02-threshold-negative",
+      "class": "finite_research_claim",
+      "objective": "Determine whether either policy satisfies both fixed thresholds on the finite observed metrics.",
+      "inputs": {"metrics": {"fcfs": {"p95_turnaround": 19, "max_wait": 18}, "sjf": {"p95_turnaround": 31, "max_wait": 22}}, "thresholds": {"p95_turnaround_max": 22, "max_wait_max": 16}},
+      "acceptance": {"artifact_path": "claim.json", "exact_json": {"claim": "no_policy_satisfies_both_thresholds", "fcfs": "fail_max_wait", "sjf": "fail_both"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "false-positive", "json": {"claim": "fcfs_satisfies_both_thresholds", "fcfs": "pass", "sjf": "fail_both"}, "expected_verdict": "fail", "reason": "FCFS max wait 18 exceeds threshold 16."},
+        {"id": "mean-confusion", "json": {"claim": "sjf_satisfies_both_thresholds", "fcfs": "fail_max_wait", "sjf": "pass"}, "expected_verdict": "fail", "reason": "SJF p95 turnaround and max wait both exceed limits."}
+      ],
+      "decomposition_tradeoff": {"serial": "One assessor can check both policies against both thresholds.", "fork_join": "Policy-specific threshold checks may run independently, followed by a claim composer that preserves the negative result.", "measurement": "Parallel checks reduce no hard budget and must not convert an observed negative into a recommendation."}
+    },
+    {
+      "id": "fr-03-preserve-uncertainty",
+      "class": "finite_research_claim",
+      "objective": "Preserve an unknown transfer estimate and avoid inventing a calibrated probability while reporting the finite result.",
+      "inputs": {"observations": ["completed=3", "rework_probability=unknown", "transfer_bytes=unknown"]},
+      "acceptance": {"artifact_path": "limits.json", "exact_json": {"completed": 3, "rework_probability": null, "transfer_bytes": null, "claim": "finite_observation_only"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "invented-probability", "json": {"completed": 3, "rework_probability": 0.2, "transfer_bytes": null, "claim": "finite_observation_only"}, "expected_verdict": "fail", "reason": "Unknown rework probability was presented as calibrated."},
+        {"id": "timeout-as-estimate", "json": {"completed": 3, "rework_probability": null, "transfer_bytes": 120, "claim": "finite_observation_only"}, "expected_verdict": "fail", "reason": "Unknown transfer size was fabricated from an unrelated value."}
+      ],
+      "decomposition_tradeoff": {"serial": "One report writer can preserve the two unknown fields explicitly.", "fork_join": "Independent evidence extraction and limitation review can join before sealing; the join adds validation work without creating new measurements.", "measurement": "Compare preservation and validation effort, never estimated confidence or global plan quality."}
+    },
+    {
+      "id": "mm-01-exact-members",
+      "class": "manifest_membership",
+      "objective": "Accept a manifest only when its member set exactly matches the declared finite set.",
+      "inputs": {"declared_members": ["alpha", "beta", "gamma"], "manifest_members": ["alpha", "beta", "gamma"]},
+      "acceptance": {"artifact_path": "manifest-result.json", "exact_json": {"members": ["alpha", "beta", "gamma"], "missing": [], "extra": [], "verdict": "pass"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "missing-gamma", "json": {"members": ["alpha", "beta"], "missing": ["gamma"], "extra": [], "verdict": "pass"}, "expected_verdict": "fail", "reason": "A missing declared member cannot be accepted."},
+        {"id": "extra-delta", "json": {"members": ["alpha", "beta", "delta", "gamma"], "missing": [], "extra": ["delta"], "verdict": "pass"}, "expected_verdict": "fail", "reason": "An undeclared member is present."}
+      ],
+      "decomposition_tradeoff": {"serial": "One manifest checker compares the complete sorted set.", "fork_join": "Per-member checks can run at parallelism 2, but a deterministic set composer must still detect both missing and extra members.", "measurement": "Report membership-check count and composition overhead; do not infer arbitrary decomposition optimality."}
+    },
+    {
+      "id": "mm-02-hash-bound-members",
+      "class": "manifest_membership",
+      "objective": "Bind each manifest member to its exact declared SHA-256 and reject a changed member byte stream.",
+      "inputs": {"manifest": {"alpha": "71f49e4f25b46d85934e84dc2cd7263fc3e886196e66fb4dae5da8d290c29e1c", "beta": "895530c53db52ae4d83617feecea2e53e76b819051f9e3c677c887c76b001504"}, "files": {"alpha": "alpha evidence\n", "beta": "beta evidence\n"}},
+      "acceptance": {"artifact_path": "manifest-result.json", "exact_json": {"checked": ["alpha", "beta"], "mismatches": [], "verdict": "pass"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "changed-beta", "json": {"checked": ["alpha", "beta"], "mismatches": ["beta"], "verdict": "pass"}, "expected_verdict": "fail", "reason": "A hash mismatch cannot be reported as a pass."},
+        {"id": "unchecked-beta", "json": {"checked": ["alpha"], "mismatches": [], "verdict": "pass"}, "expected_verdict": "fail", "reason": "Every declared member must be checked."}
+      ],
+      "decomposition_tradeoff": {"serial": "One checker reads and hashes both bounded members.", "fork_join": "Member hashing may run independently at parallelism 2, followed by a complete mismatch composer.", "measurement": "Compare verification effort and transfers; a faster partial check is invalid if it omits a member."}
+    },
+    {
+      "id": "mm-03-selected-and-skipped",
+      "class": "manifest_membership",
+      "objective": "Preserve explicit selected and skipped records for a finite manifest, with no silent omission.",
+      "inputs": {"declared_members": ["a", "b", "c"], "selection": {"a": true, "b": false, "c": true}},
+      "acceptance": {"artifact_path": "selection.json", "exact_json": {"selected": ["a", "c"], "skipped": [{"id": "b", "reason": "selection=false"}], "missing_records": [], "verdict": "pass"}, "verdict": "pass"},
+      "incorrect_artifacts": [
+        {"id": "silent-skip", "json": {"selected": ["a", "c"], "skipped": [], "missing_records": ["b"], "verdict": "pass"}, "expected_verdict": "fail", "reason": "The skipped member lacks the required explicit record."},
+        {"id": "wrong-selection", "json": {"selected": ["a", "b", "c"], "skipped": [], "missing_records": [], "verdict": "pass"}, "expected_verdict": "fail", "reason": "Selection=false for b must be preserved."}
+      ],
+      "decomposition_tradeoff": {"serial": "One manifest pass can emit selected and skipped records in canonical order.", "fork_join": "Selection checks may run per member, but a composer must retain all three records and canonicalize ordering.", "measurement": "Compare decomposition and validation effort; parallelism cannot erase explicit skipped-member evidence."}
+    }
+  ]
+}

@@ -15,7 +15,7 @@ workflow_statistics_scalar() {
 }
 
 workflow_statistics_data() (
-    printf 'HYDRA_STATISTICS\t2\t%s\n' "$(date +%s)"
+    printf 'HYDRA_STATISTICS\t3\t%s\n' "$(date +%s)"
     _wst_root="$(workflow_runs_dir 2>/dev/null)" || { printf 'X\tProject identity unavailable\n'; printf 'Z\t0\t0\n'; return; }
     _wst_runs=0 _wst_steps=0
     for _wst_dir in "$_wst_root"/run_*; do
@@ -30,11 +30,12 @@ workflow_statistics_data() (
         _wst_complete=complete
         [ -f "$_wst_dir/graph.tsv" ] && [ ! -L "$_wst_dir/graph.tsv" ] || _wst_complete=partial
         workflow_statistics_run_metrics "$_wst_dir"
-        printf 'R\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_wst_id" \
+        printf 'R\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_wst_id" \
             "$(workflow_statistics_scalar "$_wst_dir/workflow-id")" "$_wst_state" \
             "$(workflow_statistics_scalar "$_wst_dir/project-id")" \
             "$(workflow_statistics_scalar "$_wst_dir/created-at")" "$_wst_complete" \
-            "$_wsr_start" "$_wsr_end" "$_wsr_verified" "$_wsr_count" "$_wsr_plan"
+            "$_wsr_start" "$_wsr_end" "$_wsr_verified" "$_wsr_count" "$_wsr_plan" \
+            "$_wsr_unknown" "$_wsr_interventions" "$_wsr_transfer"
         if [ "$_wst_complete" = partial ] || [ -L "$_wst_dir/steps" ]; then
             printf 'X\tRecorded steps unavailable\n'; continue
         fi
@@ -103,6 +104,18 @@ workflow_statistics_run_metrics() {
     _wsr_start="$(workflow_statistics_scalar "$_wsr_dir/started-at")"
     _wsr_end="$(workflow_statistics_scalar "$_wsr_dir/completed-at")"
     _wsr_verified=- _wsr_plan=0
+    _wsr_unknown=- _wsr_interventions=- _wsr_transfer=-
+    _load_lib workflow_task
+    _wsr_metrics="$(workflow_task_tool metrics-tsv "$_wsr_dir" 2>/dev/null || true)"
+    while IFS='	' read -r _wsr_metric _wsr_state _wsr_eligible _wsr_known _wsr_sum; do
+        case "$_wsr_metric:$_wsr_state:$_wsr_eligible:$_wsr_known:$_wsr_sum" in
+            unknown_receiver_outcomes:known:*:*:[0-9]*) _wsr_unknown=$_wsr_sum ;;
+            recorded_operator_actions:known:*:*:[0-9]*) _wsr_interventions=$_wsr_sum ;;
+            transport_stdio_bytes:known:*:*:[0-9]*) _wsr_transfer=$_wsr_sum ;;
+        esac
+    done <<EOF
+$_wsr_metrics
+EOF
     if [ -f "$_wsr_dir/compiled.json" ] && [ ! -L "$_wsr_dir/compiled.json" ]; then
         _wsr_plan=1
         _wsr_digest="$(workflow_statistics_scalar "$_wsr_dir/plan-accepted")"
@@ -116,5 +129,6 @@ workflow_statistics_run_metrics() {
     if [ "$_wsr_before" != "$(workflow_statistics_scalar "$_wsr_dir/state")" ] ||
         [ "$_wsr_count" != "$(workflow_statistics_scalar "$_wsr_dir/recovery-count")" ]; then
         _wsr_start=- _wsr_end=- _wsr_verified=- _wsr_count=-
+        _wsr_unknown=- _wsr_interventions=- _wsr_transfer=-
     fi
 }

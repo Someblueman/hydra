@@ -2,6 +2,13 @@
 
 These fixed examples exercise Hydra's public planning and independent outcome checks without an authenticated provider. `feature` assembles a missing slug implementation and validates the sealed candidate with a separate build and public CLI checks. `performance` measures a fixed line-count comparison and independently recomputes its result. `research` answers a bounded scheduling question from a supplied trace and accepts a reproducible negative result. `patterns` compares bounded static decompositions.
 
+[Finite manifest maps](manifest-map/README.md) freeze selected and skipped members
+before admission. [Staged planning](../../docs/PLAN_STAGED.md) passes an accepted,
+source-bound finding into a separately compiled static graph. The
+[planner evaluation pilot](evaluation/README.md) retains six frozen candidates,
+independent finite cases and incorrect-artifact controls; its observed interface
+conformance difference does not establish a planning benefit.
+
 Run each in a **new disposable Git repository**. Do not run these spawn recipes
 inside Hydra's implementation checkout. For example, from the Hydra checkout:
 

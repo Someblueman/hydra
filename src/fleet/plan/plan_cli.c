@@ -1,6 +1,7 @@
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/plan/plan.h"
+#include "fleet/retention/retention.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -82,6 +83,7 @@ static json_object *result_command(char **argv, bool *printed) {
     json_object *result = NULL;
     char path[F_PATH];
     (void)printed;
+    if (retention_expired(argv[1])) return f_error("workflow plan result", "evidence_expired", "the declared audit window expired; retained state is not a currently verifiable outcome");
 
     char *state = NULL;
     if (!f_path(path, sizeof(path), argv[1], "state")) state = f_read(path, 64);

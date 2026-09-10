@@ -10,6 +10,7 @@
 #include "fleet/auth/agent_auth.h"
 #include "fleet/discovery/discovery.h"
 #include "fleet/enrollment/enrollment.h"
+#include "fleet/retention/retention.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -105,6 +106,7 @@ static bool domain_cli(int argc, char **argv, json_object **result) {
     else if (!strcmp(argv[0], "enroll")) *result = enrollment_cli(argc - 1, argv + 1);
     else if (!strcmp(argv[0], "auth")) *result = auth_cli(argc - 1, argv + 1);
     else if (!strcmp(argv[0], "task")) *result = task_cli(argc - 1, argv + 1);
+    else if (!strcmp(argv[0], "retention")) *result = retention_cli(argc - 1, argv + 1);
     else return false;
     return true;
 }

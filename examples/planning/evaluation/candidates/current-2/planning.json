@@ -1,0 +1,23 @@
+{
+  "candidate": "current-2",
+  "contract_set": "9e-visible-contracts-20260910-v1",
+  "grouping": [
+    {"group": "feature", "contracts": ["normalize_records", "reject_duplicate_config", "compose_two_members"], "reason": "independent exact text and byte transformations"},
+    {"group": "research", "contracts": ["schedule_metrics", "threshold_claim", "preserve_unknowns"], "reason": "bounded finite calculations with explicit unknown handling"},
+    {"group": "manifest", "contracts": ["exact_members", "hash_bound_members", "selected_skipped"], "reason": "finite ordered membership and evidence records"}
+  ],
+  "dependencies": ["Each solve request is self-contained.", "Hashing consumes only checker-supplied member bytes.", "Artifact JSON is compact and deterministic."],
+  "decomposition": {"mode": "fixed serial dispatch", "parallelism": 1, "reason": "one request has no shared state and the contracts are small"},
+  "scheduling": {"mode": "serial", "reason": "fixed graph with no cross-contract dependency", "limits": {"max_heads": 4, "max_parallelism": 2, "exec_seconds": 120, "checker_seconds": 30, "repair_budget": 0}},
+  "host_placement": {"mode": "local", "reason": "stdlib-only execution satisfies the network-forbidden packet"},
+  "time_estimates_before_execution": {"implementation_seconds": [1, 10], "validation_seconds": [1, 10], "transfer_seconds": [0, 1]},
+  "effort": {"implementation": "small", "validation": "small", "transfer_obligations": "supplied JSON only"},
+  "validation": ["Run each of the nine visible training examples and compare complete artifacts.", "Compile the module and exercise the JSON stdin/stdout CLI."],
+  "limitations": ["No global optimality claim.", "No calibrated probabilities or confidence estimates.", "Unknown values remain unknown.", "Training and validation were performed with prior conversational exposure to the public packet; no hidden or prior candidate artifacts were used.", "Process exit is not semantic acceptance."],
+  "transfer_obligations": "No network or external transfer; retain only bounded JSON artifacts.",
+  "training_observations": ["FCFS preserves CSV order; SJF preserves stable input order for ties.", "The hash training case intentionally produces a mismatch.", "False selections produce explicit skipped records."],
+  "actual_start_utc": "2026-09-10T10:51:12Z",
+  "actual_end_utc": "2026-09-10T10:52:19Z",
+  "elapsed_seconds": 67,
+  "measurement_state": "measured"
+}

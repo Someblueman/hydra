@@ -3,6 +3,7 @@
 #include "fleet/plan/plan.h"
 #include "fleet/task/task.h"
 #include "fleet/workflow/workflow_data.h"
+#include "fleet/retention/retention.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -42,6 +43,7 @@ json_object *plan_artifact(json_object *compiled, const char *run, const char *s
 json_object *plan_delivery(const char *run) {
     char path[F_PATH], digest[65]; json_object *compiled = NULL, *plan, *data, *delivery = NULL, *checks, *errors = json_object_new_array();
     size_t i; int status = -1;
+    if (retention_expired(run)) goto done;
     if (f_path(path, sizeof(path), run, "compiled.json") || !(compiled = plan_read(path))) goto done;
     plan = f_field(compiled, "plan"); data = f_field(compiled, "data");
     if (plan_validate(plan, f_field(compiled, "policy"), errors)) goto done;

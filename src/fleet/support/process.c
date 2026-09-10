@@ -49,12 +49,24 @@ static bool drain_stream(struct capture_stream *stream, int index, struct f_cont
     }
     return full;
 }
+static void measure_input(FILE *in, size_t size, bool child_started, struct f_capture *cap, int result) {
+    cap->measurement_complete = result == 0 && !cap->stop_unknown && cap->out_bytes < F_LIMIT && cap->err_bytes < F_LIMIT;
+    if (in && size && child_started) {
+        off_t consumed = lseek(fileno(in), 0, SEEK_CUR);
+        if (consumed < 0 || (unsigned long long)consumed > size) {
+            cap->input_complete = false; cap->measurement_complete = false;
+        } else {
+            cap->in_bytes = (size_t)consumed;
+            cap->input_complete = (size_t)consumed == size;
+        }
+    }
+}
 static int run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap, struct f_control *control) {
     struct capture_stream streams[2] = {{{-1, -1}, NULL, 0}, {{-1, -1}, NULL, 0}};
     int status = 0, result = -1;
     pid_t pid = -1; FILE *in = NULL;
-    long deadline, cancel_grace = control ? (long)control->grace_seconds * 1000L : 0L; bool stopped = false;
-    memset(cap, 0, sizeof(*cap)); cap->status = 1;
+    long deadline, cancel_grace = control ? (long)control->grace_seconds * 1000L : 0L; bool stopped = false, child_started = false;
+    memset(cap, 0, sizeof(*cap)); cap->status = 1; cap->input_complete = size == 0;
     cap->out = calloc(F_LIMIT + 1, 1); cap->err = calloc(F_LIMIT + 1, 1);
     streams[0].buffer = cap->out; streams[1].buffer = cap->err;
     if (!cap->out || !cap->err || !(in = tmpfile())) goto done;
@@ -71,6 +83,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
         close(streams[0].pipe[0]); close(streams[0].pipe[1]); close(streams[1].pipe[0]); close(streams[1].pipe[1]); fclose(in);
         execvp(argv[0], argv); _exit(127);
     }
+    child_started = true;
     (void)setpgid(pid, pid);
     close(streams[0].pipe[1]); streams[0].pipe[1] = -1; close(streams[1].pipe[1]); streams[1].pipe[1] = -1;
     fcntl(streams[0].pipe[0], F_SETFL, O_NONBLOCK); fcntl(streams[1].pipe[0], F_SETFL, O_NONBLOCK);
@@ -105,6 +118,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
 done:
     cap->out_bytes = streams[0].used; cap->err_bytes = streams[1].used;
     if (pid > 0) { kill(-pid, SIGKILL); while (waitpid(pid, &status, cap->stop_unknown ? WNOHANG : 0) < 0 && errno == EINTR) { } }
+    measure_input(in, size, child_started, cap, result);
     if (in) fclose(in);
     if (streams[0].pipe[0] >= 0) close(streams[0].pipe[0]);
     if (streams[0].pipe[1] >= 0) close(streams[0].pipe[1]);

@@ -2,6 +2,7 @@
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/task/task.h"
+#include "fleet/retention/retention.h"
 #include <dirent.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -561,14 +562,16 @@ bad:
 
 json_object *task_observation(const char *id, json_object *request) {
     char root[F_PATH], directory[F_PATH]; struct stat st; json_object *task, *state = NULL; int64_t now = (int64_t)time(NULL);
-    if (!task_id_valid(id) || task_store_root(root) || f_path(directory, sizeof(directory), root, id) || lstat(directory, &st) || !S_ISDIR(st.st_mode) ||
-        !(task = build_observation(id, directory, now))) return f_error("fleet-observation", "recovery_required", "receiver task records are missing, malformed, or no longer safe to inspect");
+    if (!task_id_valid(id) || task_store_root(root) || f_path(directory, sizeof(directory), root, id) || lstat(directory, &st) || !S_ISDIR(st.st_mode))
+        return f_error("fleet-observation", "recovery_required", "receiver task records are missing, malformed, or no longer safe to inspect");
+    if (retention_expired(directory)) return f_error("fleet-observation", "evidence_expired", "task observation evidence expired; inspect status for the original identity and expiry receipt");
+    if (!(task = build_observation(id, directory, now))) return f_error("fleet-observation", "recovery_required", "receiver task records are missing, malformed, or no longer safe to inspect");
     state = task_read_record(directory, "state.json");
     { json_object *data = json_object_new_object(); json_object_object_add(data, "snapshot_schema_version", json_object_new_int(1)); nullable_now(data, "receiver_observed_at", now); event_observation(data, state, request); json_object_object_add(data, "task", task); json_object_put(state); return f_success("fleet-observation", data); }
 }
 
 json_object *task_overview(void) {
-    char root[F_PATH]; DIR *dir = NULL; struct dirent *entry; size_t count = 0; int64_t now = (int64_t)time(NULL);
+    char root[F_PATH]; DIR *dir = NULL; struct dirent *entry; size_t count = 0, expired = 0; int64_t now = (int64_t)time(NULL);
     json_object *data = json_object_new_object(), *tasks = json_object_new_array();
     json_object_object_add(data, "snapshot_schema_version", json_object_new_int(1));
     nullable_now(data, "receiver_observed_at", now);
@@ -577,9 +580,11 @@ json_object *task_overview(void) {
     while ((entry = readdir(dir))) {
         char directory[F_PATH]; json_object *task;
         if (entry->d_name[0] == '.' || !task_id_valid(entry->d_name)) continue;
-        if (count >= OBSERVATION_TASKS || f_path(directory, sizeof(directory), root, entry->d_name)) { closedir(dir); json_object_put(data); return f_error("fleet-overview", "limit", "receiver observation exceeds the 512-task bound"); }
+        if (count + expired >= OBSERVATION_TASKS || f_path(directory, sizeof(directory), root, entry->d_name)) { closedir(dir); json_object_put(data); return f_error("fleet-overview", "limit", "receiver observation exceeds the 512-task bound"); }
+        if (retention_expired(directory)) { expired++; continue; }
         task = build_observation(entry->d_name, directory, now);
         if (task) { json_object_array_add(tasks, task); count++; }
     }
+    json_object_object_add(data, "expired_task_count", json_object_new_int64((int64_t)expired));
     closedir(dir); json_object_array_sort(tasks, task_order); return f_success("fleet-overview", data);
 }

@@ -2,7 +2,7 @@
 # Real task executions with required intermediate and combined validation.
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
 export HYDRA_FLEET_BIN
@@ -10,6 +10,7 @@ export HYDRA_FLEET_BIN
 . "$root/tests/workflow_task_cleanup.sh"
 cleanup() {
     workflow_task_fixture_quiesce || return 1
+    if [ "${HYDRA_TEST_KEEP_FIXTURE:-0}" = 1 ]; then printf 'Plan task evidence: %s\n' "$fixture" >&2; return 0; fi
     for workspace in "$HYDRA_HOME"/fleet/tasks/task_*/workspace; do
         [ -f "$workspace/.git/hydra/project-id" ] || continue
         (cd "$workspace" && "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :

@@ -20,6 +20,7 @@ def main():
     result = run(core, "statistics-json", str(FIXTURE))
     assert result.returncode == 0, result.stderr
     document = json.loads(result.stdout)
+    assert document["schema_version"] == 1
     assert document["observed"] == 1788789600
     assert document["cohort"] == {"runs": 8, "steps": 11}
     assert document["metrics"]["queue"] == {
@@ -38,6 +39,29 @@ def main():
 
     with tempfile.TemporaryDirectory() as folder:
         folder = Path(folder)
+        recorded = folder / "recorded-v3.tsv"
+        recorded.write_text("HYDRA_STATISTICS\t3\t1788789600\n"
+            "R\trun_a\tworkflow\tsucceeded\tp\t2026-09-07T13:00:00Z\tcomplete\t1788787800\t1788787900\t-\t0\t0\t2\t3\t4096\n"
+            "Z\t1\t0\n")
+        recorded_doc = json.loads(run(core, "statistics-json", str(recorded)).stdout)
+        assert recorded_doc["schema_version"] == 2
+        assert recorded_doc["unmeasured"] == {"total_manual_interventions": None,
+            "network_transfer_bytes": None, "provider_usage": None}
+        assert recorded_doc["recorded"] == {
+            "unknown_receiver_outcomes": {"state": "known", "eligible": 1, "known": 1, "sum": 2},
+            "recorded_operator_actions": {"state": "known", "eligible": 1, "known": 1, "sum": 3},
+            "transport_stdio_bytes": {"state": "known", "eligible": 1, "known": 1, "sum": 4096},
+        }
+        mixed = folder / "mixed-v3.tsv"
+        mixed.write_text(recorded.read_text().replace("Z\t1\t0\n",
+            "R\trun_b\tworkflow\tsucceeded\tp\t2026-09-07T13:00:00Z\tcomplete\t1788787800\t1788787900\t-\t0\t0\t-\t-\t-\nZ\t2\t0\n"))
+        mixed_doc = json.loads(run(core, "statistics-json", str(mixed)).stdout)
+        assert all(value == {"state": "partial", "eligible": 2, "known": 1, "sum": None}
+                   for value in mixed_doc["recorded"].values())
+        mixed_compare = json.loads(run(core, "statistics-compare", str(FIXTURE), str(recorded)).stdout)
+        assert mixed_compare["schema_version"] == 2
+        assert mixed_compare["left"]["schema_version"] == 1
+        assert mixed_compare["right"]["schema_version"] == 2
         recovered = folder / "recovered.tsv"
         recovered.write_text(FIXTURE.read_text().replace("1788699790\t0\t1", "1788699790\t1\t1")
                              .replace("Z\t8\t11", "X\tMore records exist\nZ\t8\t11"))

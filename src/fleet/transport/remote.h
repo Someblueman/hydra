@@ -22,6 +22,12 @@ int f_remote_enrolled(const struct f_remote *remote, bool publish);
 json_object *f_remotes(void);
 json_object *f_remote_cli(int argc, char **argv);
 json_object *f_request(const struct f_remote *remote, json_object *request, unsigned seconds);
+/* As f_request, also expose application-protocol byte counts from the
+ * completed stdin/stdout pump.  SSH framing and stderr diagnostics are not
+ * included. */
+json_object *f_request_measured(const struct f_remote *remote, json_object *request,
+                                unsigned seconds, size_t *request_bytes,
+                                size_t *response_bytes, bool *request_complete);
 /* Borrowed handshake data; shares the fleet observation compatibility gate. */
 bool f_handshake_compatible(json_object *data);
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds);

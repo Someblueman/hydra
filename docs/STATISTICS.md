@@ -108,14 +108,20 @@ instead of displaying a truncated sample as complete.
 are tab-separated; `-` is missing scalar evidence. Each record ends in a newline.
 
 ```text
-HYDRA_STATISTICS  2  snapshot_epoch_seconds
-R  run_id  workflow_name  state  project_id  created_at_utc  complete|partial  first_drive_epoch  terminal_epoch  verified_epoch  recovery_count  compiled_plan_0_or_1
+HYDRA_STATISTICS  3  snapshot_epoch_seconds
+R  run_id  workflow_name  state  project_id  created_at_utc  complete|partial  first_drive_epoch  terminal_epoch  verified_epoch  recovery_count  compiled_plan_0_or_1  receiver_unknown_outcomes  recorded_operator_actions  transfer_bytes
 S  run_id  step_id  kind  state  attempts  latest_started_epoch  latest_completed_epoch  first_ready_epoch  first_started_epoch
 X  coverage_warning
 Z  run_count  step_count
 ```
 
 `R` precedes its `S` records. Creation timestamps use `YYYY-MM-DDTHH:MM:SSZ`.
+Version 3's final three run fields are derived from durable attempt evidence:
+current receiver `outcome_unknown` observations, explicit operator events, and
+per-attempt transport stdio aggregates. Retries and measured partial reads
+contribute their observed bytes. Interrupted or unverified capture leaves
+transfer bytes unknown; `-` means no eligible evidence was retained. Version 2 remains readable for older
+saved feeds and exposes those three projections as unmeasured.
 The required final `Z` counts detect truncation. The C reader rejects unsupported
 versions, duplicate identities, malformed framing/counts, oversized fields and
 streams above 1 MiB. Invalid numeric/date evidence remains unknown. This feed is

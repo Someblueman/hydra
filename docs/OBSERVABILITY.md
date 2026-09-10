@@ -32,21 +32,30 @@ running or unverified recovered run remains unknown. The fraction uses only the
 known terminal denominator, and missing recovery history has its own count.
 Approval continuation and automatic step retries are not owner recovery.
 
-The current workflow feed does not record receiver unknown outcomes, total manual
-interventions or actual network transfer bytes. Those fields remain explicitly
-unmeasured. An approval count or package file size would measure narrower things
-and is not substituted for them.
+Statistics feed version 3 adds `recorded` metrics with eligible/known denominators:
+`unknown_receiver_outcomes` counts the latest validated receiver state for each
+attempt, `recorded_operator_actions` counts recorded approval, cancellation and
+explicit resume events, and `transport_stdio_bytes` sums consumed stdin and captured
+stdout of each local or SSH transport process, including retries and partial reads.
+These bytes exclude stderr, SSH framing/encryption and other wire traffic. They do
+not prove remote receipt. Historical unknown incidents overwritten by newer
+observations, human actions outside these CLI events, wire bytes and provider usage
+remain unmeasured.
 
-`statistics-compare` loads two previously captured feed files through the same
-native parser and emits both metric summaries plus deltas for mean, maximum,
-p50, and p95. It preserves unknown and unavailable states rather than ranking
-incomparable cohorts. These are recorded local samples only; remote transfer
-bytes, provider cost, CPU, memory, and tokens are explicitly unavailable.
-`--format text` displays the same validated summaries and deltas as plain ASCII
-lines, with units, eligible/known denominators, observation times, partial-history
-counts and recovery outcomes. No JSON extraction or terminal escape processing is
-needed. Both feeds must validate before any comparison is printed. JSON remains
-the default format; deltas always mean right minus left and imply no causal result.
+Feed version 3 exports JSON schema version 2 with those recorded fields and an
+explicit `unmeasured` object. Saved version-2 feeds retain their schema-version-1
+JSON projection. A comparison containing either newer feed declares JSON version 2;
+each side also declares its own version. Consumers must check the version before
+interpreting fields.
+
+Each attempt has a bounded `remote/transport-metrics.json` aggregate. A durable
+incomplete marker precedes transport; an interrupted or failed metric write leaves
+coverage unknown, including after later retries. Missing, malformed, expired and
+out-of-range records cannot become measured zero. Event counts require the complete
+recorded prefix beginning with `run.created` and contiguous, matching run IDs. Native
+JSON and text exports use the same calculations; a partially known cohort has state
+`partial` and a null sum. Export remains an explicit read operation. Version-2 feeds
+remain readable with their historical unavailable fields.
 
 ## Saved task announcements
 

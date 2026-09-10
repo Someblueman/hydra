@@ -13,6 +13,8 @@ struct hs_run {
     uint64_t created, started, completed, verified;
     unsigned recoveries;
     bool recoveries_known, planned;
+    uint64_t unknown_outcomes, interventions, transfer_bytes;
+    bool unknown_outcomes_known, interventions_known, transfer_bytes_known;
     bool partial;
 };
 struct hs_step {
@@ -29,6 +31,7 @@ struct hs_model {
     struct hs_step steps[HS_STEPS];
     size_t run_count, step_count, warnings;
     uint64_t observed;
+    unsigned schema_version;
     char warning[256];
 };
 struct hs_filter { unsigned days; bool attention; char query[80], workflow[80]; };

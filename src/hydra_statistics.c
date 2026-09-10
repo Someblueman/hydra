@@ -69,6 +69,12 @@ static void run_metrics(struct hs_run *r, char **f, uint64_t observed) {
     r->recoveries_known = number(f[10], 999999, &value);
     if (r->recoveries_known) r->recoveries = (unsigned)value;
     r->planned = !strcmp(f[11], "1");
+    if (f[12]) r->unknown_outcomes_known = number(f[12], 999999, &value);
+    if (r->unknown_outcomes_known) r->unknown_outcomes = value;
+    if (f[13]) r->interventions_known = number(f[13], 999999, &value);
+    if (r->interventions_known) r->interventions = value;
+    if (f[14]) r->transfer_bytes_known = number(f[14], UINT64_MAX, &value);
+    if (r->transfer_bytes_known) r->transfer_bytes = value;
 }
 
 static void step_metrics(struct hs_step *s, char **f, uint64_t observed) {
@@ -77,29 +83,34 @@ static void step_metrics(struct hs_step *s, char **f, uint64_t observed) {
     if (number(f[9], observed, &value)) s->first_started = value;
 }
 
+static bool run_row(char **fields, size_t count, unsigned version) {
+    return count == (version == 3 ? 15U : 12U) && !strcmp(fields[0], "R");
+}
 bool hs_load(FILE *input, struct hs_model *m) {
     char line[2048];
     size_t bytes = 0;
     bool header = false, ended = false;
     memset(m, 0, sizeof(*m));
     while (fgets(line, sizeof(line), input)) {
-        char *f[12], *p;
+        char *f[15] = {0}, *p;
         size_t n = strlen(line), count = 1, i;
         uint64_t value;
         if (ended || !n || line[n-1] != '\n' || (bytes += n) > 1024U * 1024U) return false;
         line[n-1] = '\0'; f[0] = line;
         for (p = line; *p; p++) if (*p == '\t') {
-            if (count == 12) return false;
+            if (count == 15) return false;
             *p = '\0'; f[count++] = p + 1;
         }
         if (!header) {
-            if (count != 3 || strcmp(f[0], "HYDRA_STATISTICS") || strcmp(f[1], "2") ||
+            if (count != 3 || strcmp(f[0], "HYDRA_STATISTICS") ||
+                (strcmp(f[1], "2") && strcmp(f[1], "3")) ||
                 !number(f[2], 253402300799ULL, &m->observed) || !m->observed) return false;
+            m->schema_version = (unsigned)(f[1][0] - '0');
             header = true; continue;
         }
         if (count == 2 && !strcmp(f[0], "X")) {
             m->warnings++; if (!copy(m->warning, sizeof(m->warning), f[1])) return false;
-        } else if (count == 12 && !strcmp(f[0], "R")) {
+        } else if (run_row(f, count, m->schema_version)) {
             struct hs_run *r;
             if (m->run_count == HS_RUNS || !id(f[1])) return false;
             for (i = 0; i < m->run_count; i++) if (!strcmp(m->runs[i].id, f[1])) return false;

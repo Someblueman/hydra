@@ -64,7 +64,7 @@ static int probe(const char *path, const char *run_id) {
 }
 
 static void malformed(struct hs_model *m) {
-    assert(!load("HYDRA_STATISTICS\t3\t10\nZ\t0\t0\n",m));
+    assert(!load("HYDRA_STATISTICS\t4\t10\nZ\t0\t0\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t10\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t10\nZ\t1\t0\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t10\nZ\t0\t0\nX\tafter terminator\n",m));

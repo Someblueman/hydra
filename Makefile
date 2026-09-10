@@ -328,7 +328,7 @@ test-fleet-controls: build-tui
 test-fleet-recovery: build-core build-fleet build-tui
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_fleet_recovery.py
 
-.PHONY: test-plan-outcomes test-task-announce test-plan-reuse
+.PHONY: test-plan-outcomes test-task-announce test-plan-reuse test-retention test-workflow-metrics test-plan-staged test-plan-staged-public test-planner-evaluation-public
 test-plan-outcomes: build-fleet
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 -m unittest tests/test_plan_patterns.py tests/test_performance_outcome.py tests/test_research_outcome.py tests/test_plan_manifest.py
 
@@ -338,11 +338,27 @@ test-task-announce: build-fleet
 test-plan-reuse: build-fleet
 	HYDRA_TEST_PLAN_REPAIR=combine HYDRA_TEST_PLAN_REUSE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" sh tests/test_workflow_plan_task.sh
 
+test-retention: build-fleet
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_retention.py
+
+test-workflow-metrics: build-fleet build-core
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_workflow_task_metrics.py
+	python3 tests/test_statistics_export.py "$(CURDIR)/$(BUILD_DIR)/hydra-core"
+
+test-plan-staged: build-fleet
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_plan_staged.py
+
+test-plan-staged-public: build-fleet
+	python3 tests/test_plan_staged_public.py --fleet "$(CURDIR)/$(BUILD_DIR)/hydra-fleet" --output "$(BUILD_DIR)/staged-public.json"
+
+test-planner-evaluation-public: build-fleet
+	python3 tests/test_planner_evaluation_public.py --fleet "$(CURDIR)/$(BUILD_DIR)/hydra-fleet" --output "$(BUILD_DIR)/planner-evaluation-public.json"
+
 .PHONY: test-plan-inspection
 test-plan-inspection: build-fleet
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_plan_inspection.py
 
-test-fleet: test-discovery test-enrollment $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)/test-workflow-schedule $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
+test-fleet: test-discovery test-enrollment test-retention test-workflow-metrics test-plan-staged $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)/test-workflow-schedule $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
 	$(BUILD_DIR)/test-plan
 	$(BUILD_DIR)/test-workflow-schedule
 	$(BUILD_DIR)/test-agent-auth

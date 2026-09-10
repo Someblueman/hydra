@@ -119,10 +119,12 @@ implemented profiles.
 The local `codex/release-next` branch integrates **T1, 9A, V1, T2, 9B, H1,
 V2, 9C, H2, V3, V4, 9D and H3** within their documented local qualification.
 It also includes 9E explanation/comparison tools and finite patterns, 9F sealed
-artifact reuse and precompiled manifest maps, bounded head-event archives, statistics export/comparison, and
-saved task announcements. **9E and 9F remain partially qualified**; semantic
-planner evaluation, broader graph forms, global task/run retention and several
-telemetry measurements remain open.
+artifact reuse, precompiled manifest maps and independently checked staged plans,
+bounded head-event archives, statistics export/comparison, and saved task
+announcements. **9E remains partially qualified**: a finite planner pilot found an
+interface-conformance difference but no demonstrated semantic planning advantage.
+Runtime graph expansion remains conditional on a workload that needs it; current
+finite patterns do not require it.
 See [the latest workstream acceptance](evidence/workstream-integration-20260910.md),
 [earlier integration evidence](evidence/next-wave-integration.md), and
 [V2/9C/H2 acceptance](evidence/observation-enrollment-integration.md) for exact
@@ -375,15 +377,19 @@ Local implementation: [plan inspection](PLAN_INSPECTION.md) and
 [finite patterns](PLAN_PATTERNS.md) provide complete structural explanations,
 deterministic bound comparisons, public serial/fork/join outcomes and six
 incorrect-artifact controls. They do not establish stochastic planner quality,
-estimate calibration or a planning benefit that exceeds overhead. The broader
-matched task-class evaluation remains open.
+estimate calibration or a planning benefit that exceeds overhead. The
+[finite task-class pilot](../examples/planning/evaluation/README.md) retains six
+frozen candidates, nine independently specified cases and eighteen incorrect artifacts.
+Its interface-conformance difference disappears in a separate post hoc protocol
+diagnostic. Broader planning-benefit, human-correction and calibration measurements
+remain open; these results do not justify a more elaborate planner.
 
 ##### 9F. Selective repair and bounded graph expressiveness
 
 Select after contract/evidence pilots demonstrate a useful workload. Preserve the
 finite execution DAG, original coordinator, and unknown-outcome reconciliation.
 
-- [ ] First support hierarchical patterns lowered into static graphs and staged
+- [x] First support hierarchical patterns lowered into static graphs and staged
       experiments whose findings inform a separately compiled next plan. Add maps
       over admitted finite manifests and conditional branches only with explicit
       cardinality, skipped-output semantics, and fixed join membership.
@@ -411,7 +417,10 @@ qualified original attempts, reruns affected checks, and revalidates proofs afte
 interrupted repair. The supported policy is local artifact-only execution under
 explicit complete-dependency assumptions. [Finite manifest maps](PLAN_MANIFEST.md)
 lower at most eight members and boolean selection into fixed joins, including
-checked empty/all-skipped outputs. Runtime membership changes, late conditional
+checked empty/all-skipped outputs. [Staged findings](PLAN_STAGED.md) drive a
+separately compiled static graph only after their source, selection, results and
+public acceptance are reverified. Real two-stage outcomes cover empty, skipped,
+colliding-name and maximum-cardinality maps. Runtime membership changes, late conditional
 evaluation and dynamic expansion remain unsupported; rejection does not qualify
 those graph forms.
 
@@ -601,10 +610,10 @@ operator visibility over the existing execution and mutation authorities.
       cannot block observation of another, and stale results cannot advance
       dependent work.
 
-- [ ] Measure queue delay, time to verified result, unknown outcomes, recovery
+- [x] Measure queue delay, time to verified result, unknown outcomes, recovery
       success, manual interventions, and transfer size. Make metric export optional
       and report provider usage only when available.
-- [ ] Define retention and archive policies for submission keys, event metadata,
+- [x] Define retention and archive policies for submission keys, event metadata,
       logs, and artifacts without discarding evidence required by active recovery
       or accepted outcome claims. Preserve referenced raw evidence and contract
       versions for the declared audit/reuse window; disclose expired evidence.
@@ -616,11 +625,18 @@ operator visibility over the existing execution and mutation authorities.
 [Recovery qualification](evidence/recovery-visibility-v4.md) exercises two local
 receiver homes through the public CLI and a real TUI with controlled SSH loss.
 [Metrics](OBSERVABILITY.md) now export measured coordinator queue/elapsed/verified
-times and owner-recovery outcomes with known denominators. Receiver unknown
-outcome counts, total manual interventions and network bytes remain unmeasured.
-[Retention](RETENTION.md) defines preserved evidence and current bounds; only
-head-event archives have the new explicit quota/expiry operation. Global
-receiver-task and workflow-run archive/quota mechanisms remain open.
+times and owner-recovery outcomes with known denominators, latest validated receiver
+unknown states, recorded approval/cancel/resume actions, and consumed transport
+stdin plus captured stdout. This qualification covers those recorded CLI actions
+and transport-process bytes; human activity outside these events, historical unknown
+incidents replaced by newer observations, wire traffic and provider usage remain
+unmeasured. Missing/partial coverage cannot become a measured zero.
+[Retention](RETENTION.md) now applies explicit local receiver-task and workflow-run
+policies with audit windows, transitive reference/pin protection, permanent
+submission identities and visible expiry. It preserves workspaces. Quotas bound the
+maintenance projection, not concurrent admission or whole-disk use. External claims
+need explicit local pins. [Remaining-work acceptance](evidence/remaining-work-20260910.md)
+records real default and sanitizer evidence for both capabilities.
 
 Acceptance: operators can explain what is running, where, why it is waiting, how
 fresh that information is, and whether a requested action took effect. Retention

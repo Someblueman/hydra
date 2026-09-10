@@ -156,11 +156,14 @@ cmd_workflow() {
             _cw_runs="$(workflow_runs_dir)" || return 1; _cw_dir="$_cw_runs/$2"; [ -d "$_cw_dir" ] || { cli_error "workflow status" run_not_found "workflow run not found: $2" "inspect the project workflow runs"; return 1; }
             _cw_state="$(sed -n '1p' "$_cw_dir/state")"; _cw_owner="$(sed -n '1p' "$_cw_dir/owner-pid" 2>/dev/null || true)"
             if [ "$_cw_state" = running ] && ! workflow_run_owner_fresh "$_cw_dir"; then _cw_state=stale; fi
+            _cw_expired=false
+            [ ! -e "$_cw_dir/retention.json" ] && [ ! -L "$_cw_dir/retention.json" ] || _cw_expired=true
             if [ "${3:-}" = --json ]; then
-                printf '{"schema_version":1,"ok":true,"command":"workflow status","data":{"run_id":"%s","state":"%s","source":"recorded","steps":[' "$2" "$_cw_state"; _cw_first=1
+                printf '{"schema_version":1,"ok":true,"command":"workflow status","data":{"run_id":"%s","state":"%s","source":"recorded","evidence_expired":%s,"steps":[' "$2" "$_cw_state" "$_cw_expired"; _cw_first=1
                 while IFS="$(printf '\t')" read -r _cw_tag _cw_id _cw_rest; do [ "$_cw_tag" = step ] || continue; [ "$_cw_first" -eq 1 ] || printf ','; _cw_first=0; printf '{"step_id":"%s","state":"%s","attempts":%s}' "$_cw_id" "$(sed -n '1p' "$_cw_dir/steps/$_cw_id/state")" "$(sed -n '1p' "$_cw_dir/steps/$_cw_id/attempts")"; done < "$_cw_dir/graph.tsv"; printf ']}}\n'
             else
                 printf 'Workflow %s: %s (source: recorded)\n' "$2" "$_cw_state"
+                [ "$_cw_expired" != true ] || printf '  Evidence expired; this historical state is not a verified outcome.\n'
                 while IFS="$(printf '\t')" read -r _cw_tag _cw_id _cw_kind _cw_rest; do [ "$_cw_tag" = step ] || continue; printf '  %s [%s]: %s (attempts=%s)\n' "$_cw_id" "$_cw_kind" "$(sed -n '1p' "$_cw_dir/steps/$_cw_id/state")" "$(sed -n '1p' "$_cw_dir/steps/$_cw_id/attempts")"; done < "$_cw_dir/graph.tsv"
             fi
             ;;
@@ -220,6 +223,9 @@ cmd_workflow() {
             case "$_cw_state" in succeeded|failed|cancelled) return 0 ;; esac
             if [ "$_cw_state" = running ] && workflow_run_owner_active "$_cw_dir"; then cli_error workflow already_running "workflow owner is still active" "wait or cancel the run"; return 1; fi
             workflow_bindings_match "$_cw_dir" || { workflow_atomic_scalar "$_cw_dir/state" recovery-required; cli_error workflow binding_mismatch "recorded workflow bindings do not match this checkout" "restore the recorded project and base commit"; return 1; }
+            if [ "${HYDRA_WORKFLOW_LOCKED_RUN:-}" != "$_cw_dir" ]; then
+                workflow_event "$_cw_dir" "" run.resume_requested source=local-cli
+            fi
             workflow_event "$_cw_dir" "" run.recovered "previous_owner=$_cw_owner"; workflow_drive "$_cw_dir"
             ;;
         *)
