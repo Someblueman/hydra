@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-import csv,json,math,os,sys
-report=json.load(open(sys.argv[1])); rows=list(csv.DictReader(open(sys.argv[2],newline='')))
-def q(v,p):
- s=sorted(v); return s[max(0,min(len(s)-1,math.ceil(p*len(s))-1))]
-vals={"baseline":{},"candidate":{}}
+import csv,hashlib,json,math,os,random,sys
+inp=os.environ['HYDRA_WORKFLOW_INPUTS_DIR']; out=os.environ['HYDRA_WORKFLOW_OUTPUTS_DIR']; report=json.load(open(os.path.join(inp,'subject'))); rows=list(csv.DictReader(open(os.path.join(inp,'raw'),newline=''))); manifest=json.load(open(os.path.join(inp,'manifest')))
+def q(v,p): return sorted(v)[max(0,min(len(v)-1,math.ceil(p*len(v))-1))] if v else None
+def dg(p): return hashlib.sha256(open(p,'rb').read()).hexdigest()
+checks=[]; checks += [('raw_binding',report['raw_samples']==open(os.path.join(inp,'raw')).read().splitlines())]
+for k,v in manifest['sources'].items(): checks += [('source_'+k,dg(os.path.join(os.environ.get('HYDRA_WORKFLOW_REPO_ROOT',os.getcwd()),v['path']))==v['sha256'])]
+checks += [('workload',dg(os.path.join(os.environ.get('HYDRA_WORKFLOW_INPUTS_DIR'), 'records'))==manifest['workload']['sha256'])]
+vals={'baseline':{},'candidate':{}}; fails=[]; ids=[]
 for r in rows:
- if r['status']=='ok' and r['count']=='4003': vals[r['implementation']][int(r['trial'])]=int(r['elapsed_ns'])
-fail=[r for r in rows if r['status']!='ok' or r['count']!='4003']
-checks=[]
-checks.append(('row_count',len(rows)==20)); checks.append(('failures_preserved',report['raw_summary']['failures']==fail))
-for impl in ('baseline','candidate'):
- v=list(vals[impl].values()); got=report[impl]; checks += [(impl+'_n',got['n']==len(v)),(impl+'_median',got['median_ns']==q(v,.5) if v else False),(impl+'_p95',got['p95_ns']==q(v,.95) if v else False)]
-pairs=[vals['candidate'][i]/vals['baseline'][i]-1.0 for i in sorted(set(vals['baseline'])&set(vals['candidate']))]
-pu=report['paired_uncertainty']['values']; checks += [('paired_n',pu['n']==len(pairs)),('paired_p05',pu['p05_relative_change']==q(pairs,.05) if pairs else False),('paired_p95',pu['p95_relative_change']==q(pairs,.95) if pairs else False)]
-valid=(len(rows)==20 and not fail and len(vals['baseline'])==10 and len(vals['candidate'])==10 and len(pairs)==10)
-expected='invalid/insufficient measurement' if not valid else ('target established' if report['candidate']['median_ns']<=report['baseline']['median_ns']*.9 and pu['p95_relative_change']<0 else 'target not established')
-checks.append(('outcome',report['outcome']==expected)); checks.append(('raw_binding',report['raw_samples']==open(sys.argv[2]).read().splitlines()))
-passed=all(x[1] for x in checks)
-json.dump({'schema_version':1,'verdict':'pass' if passed else 'fail','evidence':'; '.join(k for k,v in checks if not v) or 'all independent recomputations matched'},sys.stdout); print()
-sys.exit(0 if passed else 1)
+ ids.append(r['sample_id'])
+ if r['status']!='ok' or r['count']!='4003': fails.append(r)
+ else: vals[r['implementation']][int(r['trial'])]=int(r['elapsed_ns'])
+checks += [('rows',len(rows)==20),('ids',len(set(ids))==20),('failures',report['raw_summary']['failures']==fails)]
+for k in vals:
+ v=list(vals[k].values()); checks += [(k+'_stats',report[k]=={'n':len(v),'median_ns':q(v,.5),'p95_ns':q(v,.95)})]
+pairs=[vals['candidate'][i]/vals['baseline'][i]-1 for i in sorted(set(vals['baseline'])&set(vals['candidate']))]; rng=random.Random(1729); boots=[q([pairs[rng.randrange(len(pairs))] for _ in pairs],.5) for _ in range(10000)] if pairs else []
+ci=report['paired_uncertainty']; checks += [('ci',ci['lower']==q(boots,.05) and ci['upper']==q(boots,.95) and ci['seed']==1729 and ci['resamples']==10000)]
+valid=len(rows)==20 and len(set(ids))==20 and not fails and all(len(vals[x])==10 for x in vals) and len(pairs)==10
+expected='invalid/insufficient measurement' if not valid else ('target established' if report['candidate']['median_ns']<=report['baseline']['median_ns']*.9 and ci['upper']<0 else 'target not established'); checks += [('outcome',report['outcome']==expected)]
+json.dump({'schema_version':1,'verdict':'pass' if all(v for _,v in checks) else 'fail','evidence':'; '.join(k for k,v in checks if not v) or 'all independent recomputations matched'},open(os.path.join(out,'assessment'),'w')); print(open(os.path.join(out,'assessment')).read()); sys.exit(0 if all(v for _,v in checks) else 1)

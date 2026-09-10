@@ -24,7 +24,7 @@
   "requirements": [
     {
       "id": "binding",
-      "criterion": "Bind baseline, candidate, workload digest, environment, units and command forms.",
+      "criterion": "Bind exact baseline.sh and candidate.sh hashes, records.txt hash and byte count, command forms, host/OS/Python environment, nanosecond units, and protocol metadata.",
       "deliverable": "report",
       "check": "assessment"
     },
@@ -96,8 +96,8 @@
       "args": {
         "head": "performance-work-v2",
         "argv": [
-          "sh",
-          "measure.sh"
+          "python3",
+          "measure.py"
         ],
         "timeout": 120
       }
@@ -181,15 +181,15 @@
             "type": "file",
             "max_bytes": 32768
           },
-          "workload_sha256": {
-            "path": "workload.sha256",
-            "type": "file",
-            "max_bytes": 128
-          },
           "environment": {
             "path": "environment.txt",
             "type": "file",
             "max_bytes": 4096
+          },
+          "manifest": {
+            "path": "manifest.json",
+            "type": "file",
+            "max_bytes": 8192
           }
         }
       },
@@ -198,6 +198,10 @@
           "raw": {
             "step": "measure",
             "output": "raw"
+          },
+          "manifest": {
+            "step": "measure",
+            "output": "manifest"
           }
         },
         "outputs": {
@@ -218,13 +222,13 @@
             "step": "measure",
             "output": "raw"
           },
-          "workload_sha256": {
-            "step": "measure",
-            "output": "workload_sha256"
-          },
           "environment": {
             "step": "measure",
             "output": "environment"
+          },
+          "manifest": {
+            "step": "measure",
+            "output": "manifest"
           }
         },
         "outputs": {
@@ -244,6 +248,13 @@
           "raw": {
             "step": "measure",
             "output": "raw"
+          },
+          "manifest": {
+            "step": "measure",
+            "output": "manifest"
+          },
+          "records": {
+            "input": "records"
           }
         },
         "outputs": {

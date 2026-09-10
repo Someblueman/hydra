@@ -7,15 +7,15 @@ performance.
 
 Requirements:
 
-- `binding`: identify exact baseline and candidate scripts, workload bytes and
-  digest, host/OS/shell/toolchain, units, and command forms.
+- `binding`: identify exact baseline and candidate script hashes, workload bytes and
+  digest, host/OS/Python timer environment, units, and command forms.
 - `protocol`: perform two warm-up runs, then ten alternating baseline/candidate
   trials in one exclusive process, recording every raw elapsed sample in
   nanoseconds; do not discard failures or cherry-pick trials.
 - `analysis`: report sample counts, failures, median and nearest-rank p95 for
-  each implementation, and candidate change relative to baseline. Use the
-  raw CSV as the authority and state the stopping rule: ten valid paired trials
-  or an invalid result if any trial fails.
+  each implementation, plus a seeded paired bootstrap percentile interval for
+  the median relative change. Use raw CSV as authority and state the stopping
+  rule: ten valid paired trials or an invalid result if any trial fails.
 - `outcome`: classify the result as target established only if candidate median
   is at least 10% lower and both p95 values are available; otherwise report
   target not established or invalid/insufficient measurement as appropriate.
