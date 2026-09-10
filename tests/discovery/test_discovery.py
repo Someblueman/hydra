@@ -148,6 +148,47 @@ class DiscoveryTest(unittest.TestCase):
         result = self.run_cli("qualify", "--ssh", "oversized", success=False)
         self.assertEqual(result["data"]["candidates"][0]["qualification"]["error"]["code"], "output_limit")
 
+    def snapshot(self, kind, records, observed=1):
+        path = self.path / f"{kind}.json"
+        path.write_text(json.dumps({"schema_version": 2, "observed_at": observed,
+            "hosts": [], "source_snapshot": {"kind": kind, "locator": f"fixture:{kind}",
+            "scope": "fixture", "observed_at": observed, "freshness": "source_reported",
+            "records": records}}))
+        return path
+
+    def test_supported_snapshot_projections_bind_source(self):
+        cases = {
+            "mdns": ({"instance": "printer", "host": "good", "port": 22, "labels": ["lan"]}, "printer", "good"),
+            "vpn": ({"peer": "peer-a", "address": "good", "labels": ["vpn"]}, "peer-a", "good"),
+            "cloud-tags": ({"instance_id": "i-1", "private_ip": "good", "labels": ["prod"]}, "i-1", "good"),
+            "config-management": ({"host": "node-a", "address": "good", "labels": ["web"]}, "node-a", "good"),
+        }
+        for kind, (record, name, target) in cases.items():
+            result = self.run_cli("discover", "--inventory", str(self.snapshot(kind, [record])), "--select", name, "--ssh", target)
+            row = result["data"]["candidates"][0]
+            self.assertEqual(row["target"], target)
+            source = next(s for s in row["sources"] if s["kind"] == kind)
+            self.assertEqual(source["locator"], f"fixture:{kind}")
+            self.assertEqual(source["observed_at"], 1)
+
+    def test_snapshot_rejects_malformed_secret_time_and_schema_smuggling(self):
+        base = {"instance": "x", "host": "good", "port": 22, "labels": []}
+        for record in [dict(base, token="secret"), dict(base, port="22")]:
+            self.assertEqual(self.run_cli("discover", "--inventory", str(self.snapshot("mdns", [record])), "--select", "x", success=False)["error"]["code"], "invalid_inventory")
+        for at in [-1, 9999999999]:
+            self.assertEqual(self.run_cli("discover", "--inventory", str(self.snapshot("mdns", [base], at)), "--select", "x", success=False)["error"]["code"], "invalid_inventory")
+        old = self.path / "old.json"; old.write_text(json.dumps({"schema_version": 1, "observed_at": 1, "hosts": [], "source_snapshot": {}}))
+        self.assertEqual(self.run_cli("discover", "--inventory", str(old), "--select", "x", success=False)["error"]["code"], "invalid_inventory")
+
+    def test_snapshot_import_bound_is_one_hundred(self):
+        records = [{"host": f"h{i}", "address": "good", "labels": []} for i in range(100)]
+        path = self.snapshot("config-management", records)
+        names = [arg for i in range(100) for arg in ("--select", f"h{i}")]
+        result = self.run_cli("discover", "--inventory", str(path), *names, "--ssh", "good")
+        self.assertEqual(len(result["data"]["candidates"]), 1)
+        path.write_text(json.dumps({"schema_version": 2, "observed_at": 1, "hosts": [], "source_snapshot": {"kind": "config-management", "locator": "fixture", "scope": "fixture", "observed_at": 1, "freshness": "source_reported", "records": records + [{"host": "h100", "address": "good", "labels": []}]}}))
+        self.run_cli("discover", "--inventory", str(path), *names, "--select", "h100", success=False)
+
     def test_cancel_retains_unvisited_rows_and_reaps_ssh(self):
         process = subprocess.Popen(self.command("qualify", "--ssh", "slow", "--ssh", "zzz",
                                                 "--timeout", "30"), env=self.env,

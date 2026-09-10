@@ -117,7 +117,7 @@ static int add_inventory(json_object *rows, const struct hd_options *options) {
     hosts = f_field(inventory, "hosts");
     if (snapshot) { kind = f_string(snapshot, "kind"); locator = f_string(snapshot, "locator"); observed_at = json_object_get_int64(f_field(snapshot, "observed_at")); hosts = f_field(snapshot, "records"); }
     for (i = 0; i < options->select_count; i++) {
-        json_object *record = selected_record(hosts, options->select[i]), *row; const char *target = NULL, *name = options->select[i];
+        json_object *record = snapshot ? NULL : selected_record(hosts, options->select[i]), *row; const char *target = NULL, *name = options->select[i];
         if (snapshot) {
             if (!record) { size_t j; for (j = 0; j < json_object_array_length(hosts); j++) { json_object *r = json_object_array_get_idx(hosts, j); const char *candidate = !strcmp(kind, "mdns") ? f_string(r, "instance") : !strcmp(kind, "vpn") ? f_string(r, "peer") : !strcmp(kind, "cloud-tags") ? f_string(r, "instance_id") : f_string(r, "host"); if (candidate && !strcmp(candidate, name)) { record = r; break; } } }
             target = record ? (!strcmp(kind, "mdns") ? f_string(record, "host") : !strcmp(kind, "vpn") ? f_string(record, "address") : !strcmp(kind, "cloud-tags") ? f_string(record, "private_ip") : f_string(record, "address")) : NULL;
