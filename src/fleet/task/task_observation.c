@@ -530,6 +530,10 @@ static json_object *build_observation(const char *id, const char *directory, int
     spec = task_spec(f_field(package, "spec"), true);
     if (!spec) goto bad;
     task = json_object_new_object(); f_string_add(task, "task_id", id);
+    f_string_add(task, "spec_sha256", digest);
+    nullable(task, "cancellation", f_string(state, "cancellation"));
+    nullable(task, "cancellation_scope", f_string(state, "cancellation_scope"));
+    json_object_object_add(task, "cancel_requested_at", f_field(state, "cancel_requested_at") ? json_object_get(f_field(state, "cancel_requested_at")) : json_object_new_null());
     nullable(task, "run_id", f_string(state, "run_id"));
     json_object_object_add(task, "step_id", json_object_new_null());
     json_object_object_add(task, "attempt_id", json_object_new_null());

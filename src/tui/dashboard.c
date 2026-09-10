@@ -75,23 +75,45 @@ static void dashboard_detail(struct app *app, struct tv_canvas *c, struct tv_rec
     }
 }
 
-static void dashboard_fleet_tasks(struct app *app, struct tv_canvas *c, struct tv_rect r) {
-    size_t i; int row = r.y + 2;
-    tv_panel(c, r, "REMOTE TASKS / receiver-owned observations");
-    for (i = 0; i < app->model.task_count && row < r.y + r.height - 2; i++) {
-        const struct task_observation *task = &app->model.tasks[i];
-        dashboard_text(c, r.x + 2, row++, r.width - 4, !strcmp(task->freshness, "stale") ? TV_WARNING : TV_BASE,
-                       "%s / %s / owner %s / %s", task->task_id, task->state, task->owner, task->freshness);
-        if (row < r.y + r.height - 2)
-            dashboard_text(c, r.x + 4, row++, r.width - 6, !strcmp(task->waiting_reason, "none") ? TV_BASE : TV_WARNING,
-                           "wait %s / %s / next: %s", task->waiting_reason, task->waiting_detail, task->next_action);
-        if (row < r.y + r.height - 2)
-            dashboard_text(c, r.x + 4, row++, r.width - 6,
-                           !strcmp(task->result_state, "ready") && !strcmp(task->verification_state, "integrity_verified") ? TV_BASE : TV_WARNING,
-                           "result %s / verification %s", task->result_state, task->verification_state);
+static void fleet_binding_line(struct tv_canvas *c, struct tv_rect r, int *row,
+                               const char *label, const char *value, enum tv_style tone) {
+    char text[512];
+    snprintf(text, sizeof(text), "%s%s", label, value);
+    size_t used = 0, length = strlen(text), width = (size_t)(r.width - 4);
+    while (used < length && *row < r.y + r.height - 2) {
+        dashboard_text(c, r.x + 2, (*row)++, (int)width, tone, "%.*s", (int)width, text + used);
+        used += width;
     }
+}
+static void selected_task_details(struct tv_canvas *c, struct tv_rect r, int *row,
+                                 const struct task_observation *task) {
+    char text[512];
+    snprintf(text, sizeof(text), "%s / owner %s / %s / host %s", task->state, task->owner, task->freshness, task->host);
+    fleet_binding_line(c, r, row, "State: ", text, TV_BASE);
+    snprintf(text, sizeof(text), "%s / scope %s / requested %s", task->cancellation, task->cancellation_scope, task->cancel_requested_at);
+    fleet_binding_line(c, r, row, "Cancellation: ", text, TV_WARNING);
+    fleet_binding_line(c, r, row, "Wait: ", task->waiting_reason, TV_WARNING);
+    fleet_binding_line(c, r, row, "Next: ", task->next_action, TV_BASE);
+    fleet_binding_line(c, r, row, "Spec: ", task->spec_sha256, TV_BORDER);
+    fleet_binding_line(c, r, row, "Request: ", task->request_id, TV_BORDER);
+    snprintf(text, sizeof(text), "%s / verification %s", task->result_state, task->verification_state);
+    fleet_binding_line(c, r, row, "Result: ", text, TV_BASE);
+}
+static void dashboard_fleet_tasks(struct app *app, struct tv_canvas *c, struct tv_rect r) {
+    int row = r.y + 2, available = r.height - 14;
+    size_t selected = app->task_selected, start;
+    tv_panel(c, r, "REMOTE TASKS / receiver-owned observations");
+    if (available < 1) available = 1;
+    if (available > 5) available = 5;
+    start = selected < app->model.task_count && selected >= (size_t)available ? selected - (size_t)available + 1 : 0;
+    for (size_t i = start; i < app->model.task_count && i < start + (size_t)available; i++)
+        dashboard_text(c, r.x + 2, row++, r.width - 4, i == selected ? TV_SELECTED : TV_BASE,
+                       "%c %s", i == selected ? '>' : ' ', app->model.tasks[i].task_id);
+    row++;
+    if (selected < app->model.task_count) selected_task_details(c, r, &row, &app->model.tasks[selected]);
+    else fleet_binding_line(c, r, &row, "Selection changed: ", "use j/k to select a current task", TV_WARNING);
     dashboard_text(c, r.x + 2, r.y + r.height - 2, r.width - 4, TV_BORDER,
-                   "%zu task observations / owner state and freshness are receiver evidence", app->model.task_count);
+                   "%zu tasks / j k select / Y approve N reject R resume X cancel", app->model.task_count);
 }
 
 static void dashboard_fleet_hosts(struct app *app, struct tv_canvas *c, struct tv_rect r) {
@@ -184,7 +206,9 @@ void render_dashboard(struct app *app) {
         if (strcmp(display_status(h), "LIVE") == 0) live++; else attention++;
         gates += h->gates >= h->approved ? h->gates - h->approved : 0;
     }
-    if (width >= 90 && height >= 20) {
+    if (app->fleet && app->model.task_count) {
+        dashboard_fleet_tasks(app, &c, (struct tv_rect){0, 0, width, height});
+    } else if (width >= 90 && height >= 20) {
         int card = width / 4;
         dashboard_card(&c, 0, card - 1, "HEADS", app->model.head_count, "current snapshot", TV_STRONG);
         dashboard_card(&c, card, card - 1, app->fleet ? "UNOBSERVED" : "LIVE", app->fleet ? attention : live, app->fleet ? "remote liveness" : "local sessions", TV_STRONG);

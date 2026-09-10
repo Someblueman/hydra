@@ -177,6 +177,9 @@ void native_links_accept(struct app *app, FILE *input);
 bool native_links_match(struct app *app, size_t run, size_t head);
 void native_controls_tick(struct app *app);
 bool native_control_submit(struct app *app, const char *run, const char *action, const char *request);
+bool native_fleet_control_submit(struct app *app, const struct task_observation *task,
+                                 const char *action, const char *request, const char *trust);
+bool native_fleet_control_key(struct app *app, char key, const char *action);
 void native_evidence_destroy(struct app *app);
 void native_evidence_tick(struct app *app, bool watch);
 bool native_plan_launch(struct app *app, const char *digest);

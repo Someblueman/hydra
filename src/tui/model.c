@@ -169,6 +169,11 @@ static int task_record(struct model *model, size_t count, char **fields, char *e
     if (!parse_unsigned(fields[16], &task->pending)) { copy_text(error, error_size, "invalid fleet task pending count"); return -1; }
     copy_text(task->result_state, sizeof(task->result_state), count > 17U ? fields[17] : "unavailable");
     copy_text(task->verification_state, sizeof(task->verification_state), count > 18U ? fields[18] : "unavailable");
+    copy_text(task->spec_sha256, sizeof(task->spec_sha256), count > 19U ? fields[19] : "-");
+    copy_text(task->cancellation, sizeof(task->cancellation), count > 20U ? fields[20] : "-");
+    copy_text(task->cancellation_scope, sizeof(task->cancellation_scope), count > 21U ? fields[21] : "-");
+    copy_text(task->cancel_requested_at, sizeof(task->cancel_requested_at), count > 22U ? fields[22] : "-");
+    copy_text(task->request_id, sizeof(task->request_id), count > 23U ? fields[23] : "-");
     {
         size_t i;
         for (i = 0; i < model->host_count; i++) if (!strcmp(model->hosts[i].name, task->host)) {
@@ -220,7 +225,7 @@ static int fleet_record_line(struct model *model, const struct stream_state *sta
     if (state->fleet_v3 && count == 9U && !strcmp(fields[0], "T")) return host_record_v3(model, fields, error, error_size);
     if (state->fleet_hosts && count == 5 && !strcmp(fields[0], "T")) return host_record(model, fields, error, error_size);
     if (state->fleet_stream && count == 7U && !strcmp(fields[0], "F")) return fleet_record(model, fields, error, error_size);
-    if (state->fleet_v3 && (count == 17U || count == 19U) && !strcmp(fields[0], "O")) return task_record(model, count, fields, error, error_size);
+    if (state->fleet_v3 && (count == 17U || count == 19U || count == 24U) && !strcmp(fields[0], "O")) return task_record(model, count, fields, error, error_size);
     return 1;
 }
 
