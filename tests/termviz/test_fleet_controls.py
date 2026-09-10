@@ -10,7 +10,7 @@ BUILD = Path(os.environ.get("BUILD_DIR", ROOT / "build")).resolve()
 
 with tempfile.TemporaryDirectory(prefix="hydra-fleet-controls-") as folder:
     base = Path(folder)
-    log = Path("/tmp/hydra-fleet-dispatch.log")
+    log = base / "dispatch.log"
     log.unlink(missing_ok=True)
     mode = base / "mode"
     mode.write_text("fresh")
