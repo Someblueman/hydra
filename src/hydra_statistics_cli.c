@@ -13,7 +13,12 @@ static int load_path(const char *path, struct hs_model **model, FILE *err) {
         return 1;
     }
     value = calloc(1, sizeof(*value));
-    if (!value || !hs_load(input, value)) {
+    if (!value) {
+        if (input != stdin) fclose(input);
+        fprintf(err, "statistics_invalid_feed: out of memory\n");
+        return 1;
+    }
+    if (!hs_load(input, value)) {
         if (input != stdin) fclose(input);
         free(value);
         fprintf(err, "statistics_invalid_feed: malformed, truncated, or oversized feed\n");

@@ -33,10 +33,12 @@ static bool append_field(struct text_buffer *buffer, json_object *object, const 
 }
 
 static bool append_sanitized_field(struct text_buffer *buffer, json_object *object, const char *key, const char *fallback) {
-    json_object *value = f_field(object, key); const char *text = f_text(value); const unsigned char *p;
+    json_object *value = f_field(object, key); const char *text = f_text(value); size_t i, length;
     if (!text) text = fallback;
-    for (p = (const unsigned char *)text; *p; p++) {
-        char replacement[2] = {(char)((*p < 32 || *p > 126) ? '?' : *p), '\0'};
+    length = strlen(text);
+    for (i = 0; i < length; i++) {
+        unsigned char byte = (unsigned char)text[i];
+        char replacement[2] = {(char)((byte < 32 || byte > 126) ? '?' : byte), '\0'};
         if (!append(buffer, replacement)) return false;
     }
     return true;
@@ -79,7 +81,7 @@ json_object *task_announce_cli(int argc, char **argv) {
     input = argv[2]; parsed = f_read_json(input, 262144U);
     if (!parsed) return invalid("saved observation is missing, malformed, or oversized");
     if (!f_number_is(parsed, "schema_version", 1) || !json_object_is_type(f_field(parsed, "ok"), json_type_boolean) ||
-        !json_object_get_boolean(f_field(parsed, "ok")) || strcmp(f_string(parsed, "command"), "fleet-observation")) {
+        !json_object_get_boolean(f_field(parsed, "ok")) || !f_string(parsed, "command") || strcmp(f_string(parsed, "command"), "fleet-observation")) {
         json_object_put(parsed); return invalid("saved observation envelope is invalid");
     }
     data = f_field(parsed, "data");
@@ -123,11 +125,12 @@ json_object *task_announce_cli(int argc, char **argv) {
         json_object *event = json_object_array_get_idx(events, i);
         const char *task_run = f_string(task, "run_id"), *task_step = f_string(task, "step_id");
         const char *event_run, *event_step;
-        if (!json_object_is_type(event, json_type_object) || !f_number_is(event, "schema_version", 1) ||
-            !bounded_int(event, "sequence", &sequence) || !sequence || (previous && sequence != previous + 1U) ||
-            !f_text(f_field(event, "type")) || !f_text(f_field(event, "detail"))) { fprintf(stderr, "DEBUG event fields\\n"); goto bad; }
+        if (!json_object_is_type(event, json_type_object) ||
+            !bounded_int(event, "sequence", &sequence) || !sequence || (!previous && sequence <= oldest) ||
+            (previous && sequence != previous + 1U) ||
+            !f_text(f_field(event, "type")) || !f_text(f_field(event, "detail"))) goto bad;
         event_run = f_text(f_field(event, "run_id")); event_step = f_text(f_field(event, "step_id"));
-        if ((task_run && event_run && strcmp(task_run, event_run)) || (task_step && event_step && strcmp(task_step, event_step))) { fprintf(stderr, "DEBUG identity\\n"); goto bad; }
+        if ((task_run && event_run && strcmp(task_run, event_run)) || (task_step && event_step && strcmp(task_step, event_step))) goto bad;
         if (!append(&text, "event time=") || !append_sanitized_field(&text, event, "occurred_at", "unknown") ||
             !append(&text, " run=") || !append_sanitized_field(&text, event, "run_id", "-") ||
             !append(&text, " step=") || !append_sanitized_field(&text, event, "step_id", "-") ||

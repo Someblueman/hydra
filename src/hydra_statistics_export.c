@@ -61,6 +61,19 @@ static bool write_one(FILE *out, const struct hs_model *m,
     return !ferror(out);
 }
 
+static void write_metric_delta(FILE *out, const struct hs_metric_summary *left,
+                               const struct hs_metric_summary *right) {
+    bool known = left->known && right->known;
+    fprintf(out, "{\"state\":\"%s\"", known ? "known" : (!left->eligible || !right->eligible) ? "unavailable" : "unknown");
+    if (known) fprintf(out, ",\"mean\":%lld,\"max\":%lld,\"p50\":%lld,\"p95\":%lld",
+                       (long long)(right->sum / right->known) - (long long)(left->sum / left->known),
+                       (long long)right->maximum - (long long)left->maximum,
+                       (long long)right->p50 - (long long)left->p50,
+                       (long long)right->p95 - (long long)left->p95);
+    else fputs(",\"mean\":null,\"max\":null,\"p50\":null,\"p95\":null", out);
+    fputc('}', out);
+}
+
 bool hs_write_metrics_json(FILE *out, const struct hs_model *m,
                            const struct hs_filter *filter) {
     if (!out || !m || !filter) return false;
@@ -84,16 +97,7 @@ bool hs_write_metrics_compare_json(FILE *out, const struct hs_model *left,
         if (metric != HS_QUEUE) fputc(',', out);
         hs_metric_summarize(left, filter, metric, &l);
         hs_metric_summarize(right, filter, metric, &r);
-        fprintf(out, "\"%s\":{\"state\":\"%s\"", metric_name(metric),
-                (l.known && r.known) ? "known" : (!l.eligible || !r.eligible) ? "unavailable" : "unknown");
-        if (l.known && r.known) {
-            fprintf(out, ",\"mean\":%lld,\"max\":%lld,\"p50\":%lld,\"p95\":%lld",
-                    (long long)(r.sum / r.known) - (long long)(l.sum / l.known),
-                    (long long)r.maximum - (long long)l.maximum,
-                    (long long)r.p50 - (long long)l.p50,
-                    (long long)r.p95 - (long long)l.p95);
-        } else fputs(",\"mean\":null,\"max\":null,\"p50\":null,\"p95\":null", out);
-        fputc('}', out);
+        fprintf(out, "\"%s\":", metric_name(metric)); write_metric_delta(out, &l, &r);
     }
     fputs("}}}", out);
     return !ferror(out);

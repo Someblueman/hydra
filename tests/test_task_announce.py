@@ -84,6 +84,20 @@ def main():
         path = folder / "wrong-envelope.json"; path.write_text(json.dumps(wrong_envelope))
         result = run(binary, path)
         assert result.returncode != 0
+        for value in (None, 7):
+            missing_command = page()
+            missing_command.pop("command", None)
+            if value is not None:
+                missing_command["command"] = value
+            path = folder / "missing-command.json"; path.write_text(json.dumps(missing_command))
+            result = run(binary, path)
+            assert result.returncode != 0
+
+        below_oldest = page()
+        below_oldest["data"]["event_observation"]["oldest_cursor"] = 2
+        path = folder / "below-oldest.json"; path.write_text(json.dumps(below_oldest))
+        result = run(binary, path)
+        assert result.returncode != 0
 
         escaped = page(events=[dict(page()["data"]["event_observation"]["events"][0], detail="x\n\x1b[31m")])
         path = folder / "escaped.json"; path.write_text(json.dumps(escaped))
