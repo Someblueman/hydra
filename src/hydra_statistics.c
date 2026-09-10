@@ -62,7 +62,7 @@ enum hs_state hs_state(const char *s) {
 }
 
 static void run_metrics(struct hs_run *r, char **f, uint64_t observed) {
-    uint64_t value;
+    uint64_t value = 0;
     if (number(f[7], observed, &value)) r->started = value;
     if (number(f[8], observed, &value)) r->completed = value;
     if (number(f[9], observed, &value)) r->verified = value;
