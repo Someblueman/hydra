@@ -6,15 +6,23 @@
 #include <string.h>
 #include <time.h>
 
-static const char *config_source(json_object *row) {
+static bool config_source(json_object *row, const char **config) {
+    const char *explicit_config = f_string(row, "ssh_config");
     json_object *sources = f_field(row, "sources"); size_t i;
-    if (!json_object_is_type(sources, json_type_array)) return NULL;
+    *config = NULL;
+    if (explicit_config) {
+        if (!enrollment_path(explicit_config)) return false;
+        *config = explicit_config; return true;
+    }
+    if (!json_object_is_type(sources, json_type_array)) return true;
     for (i = 0; i < json_object_array_length(sources); i++) {
         json_object *source = json_object_array_get_idx(sources, i);
         const char *kind = f_string(source, "kind"), *locator = f_string(source, "locator");
-        if (kind && !strcmp(kind, "ssh-config") && enrollment_path(locator)) return locator;
+        if (kind && !strcmp(kind, "ssh-config")) {
+            if (enrollment_path(locator)) { *config = locator; return true; }
+        }
     }
-    return NULL;
+    return true;
 }
 static json_object *selected_candidate(json_object *qualification, const char *id) {
     json_object *rows = f_field(f_field(qualification, "data"), "candidates"); size_t i;
@@ -36,9 +44,9 @@ static bool compatible_candidate(json_object *row) {
         json_object_is_type(resolution, json_type_object) && enrollment_digest(f_string(resolution, "policy_sha256"));
 }
 static json_object *review_host(json_object *row, const struct enrollment_options *options, const char *required) {
-    const char *config = config_source(row), *alias = options->alias ? options->alias : f_string(row, "candidate_id");
+    const char *config, *alias = options->alias ? options->alias : f_string(row, "candidate_id");
     json_object *host = json_object_new_object(), *resolved = f_field(f_field(row, "resolution"), "data"); char hash[65];
-    if (!compatible_candidate(row) || !f_name(alias) || strlen(alias) >= 128 ||
+    if (!config_source(row, &config) || !compatible_candidate(row) || !f_name(alias) || strlen(alias) >= 128 ||
         !json_object_is_type(f_field(resolved, "user"), json_type_array) ||
         !hd_text(f_text(json_object_array_get_idx(f_field(resolved, "user"), 0)), 128)) goto bad;
     f_string_add(host, "candidate_id", f_string(row, "candidate_id"));
