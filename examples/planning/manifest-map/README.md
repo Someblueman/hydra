@@ -1,6 +1,6 @@
 # Finite manifest map
 
-`precompile.py` is a PRE-COMPILE boundary: it validates a closed schema-1
+The shared native `build/plan-precompile manifest` command is a PRE-COMPILE boundary: it validates a closed schema-1
 manifest (at most eight unique IDs, integer values -10..10, boolean `enabled`)
 and lowers it into an ordinary static schema-1 plan. The generated plan has one
 worker per enabled member, a fixed composition join, and a checker join. Disabled
@@ -12,7 +12,7 @@ commands, or effects. `check.py` independently reconstructs every expected recor
 emits schema-3 evidence; structural compilation does not claim runtime success.
 
 ```sh
-python3 precompile.py manifest.json plan.json
+/path/to/hydra/build/plan-precompile manifest manifest.json plan.json
 hydra workflow plan compile plan.json policy.json ../compiled.json
 ```
 

@@ -1,45 +1,34 @@
-# Bounded planner evaluation pilot
+# Archived planner evaluation pilot
 
-This packet measures conformance to nine finite task contracts across feature
-correctness, finite research claims and manifest membership. Six frozen candidates
-were generated in two groups, `current-1..3` and `contract-aware-1..3`, using the
-same visible contracts and limits. Candidates implement
-`solve(contract_id, input_payload)` and return the artifact value. Generation
-metadata records proposed decomposition, scheduling, placement and estimates;
-these proposals do not override compiler policy or establish calibrated estimates.
+This superseded toy runner was retired during the real Python cleanup workload.
+Its candidates, contracts, held-out cases and execution code remain reproducible
+at baseline commit `b0fb5b1d9220189ad2498a244274ae498a3c7d0c`. The evidence below
+belongs to that source snapshot. Removing the active runner does not change its
+recorded observations or qualify broader 9E planning benefit.
 
-The independently supplied case oracle checks complete values and rejects eighteen
-declared incorrect artifacts. Candidate code is frozen before evaluation. The
-public execution wrapper holds the graph and local placement fixed, so this pilot
-cannot attribute an outcome to scheduling, host placement or decomposition quality.
-It uses two heads, a 120-second aggregate timeout, 65,536-byte artifact envelope,
-parallelism at most two and no repair or retry. Every public result still requires
-a bound, independently computed schema-3 check report.
+## Reproduce the historical packet
 
-## Reproduce
-
-From the repository root, evaluate a frozen candidate directly:
+Export the complete historical source into a disposable directory. This uses Git
+history without switching this checkout or creating a Git worktree:
 
 ```sh
+archive="$(mktemp -d)"
+git archive b0fb5b1d9220189ad2498a244274ae498a3c7d0c | tar -x -C "$archive"
+cd "$archive"
+mkdir -p build
 python3 examples/planning/evaluation/evaluate.py \
   --candidate examples/planning/evaluation/candidates/contract-aware-1/candidate.py \
   --output build/planner-contract-aware-1.json
-```
-
-Exercise all six through actual compilation, explicit digest admission, execution
-and public result verification in retained disposable repositories:
-
-```sh
+make build-core build-fleet
 python3 tests/test_planner_evaluation_public.py \
   --output build/planner-public.json
 ```
 
-The public test retains command output, compilation/explanation, source commit,
-candidate and checker hashes, run identity and raw checker report. A failed current
-candidate is an expected semantic result; the test requires valid evidence covering
-all nine cases, so an infrastructure error cannot count as a rejected candidate.
-The source candidates were inspected as cooperative generated examples. The
-evaluation subprocess bounds time but is not a sandbox for hostile code.
+The public driver retains its own disposable source repositories, exact command
+logs, run identities and independently computed schema-3 reports. Its expected
+negative candidates are semantic outcomes; infrastructure failures are failures.
+The optional active Make target was removed with the runner. The archived target
+remains available in the export above.
 
 ## Observations and limits
 
@@ -85,7 +74,7 @@ The original held-out v1 file was frozen before candidate generation. Review fou
 that its hash-bound case supplied fabricated digests and no corresponding bytes,
 making the expected passing answer unsatisfiable. Before evaluating any candidate,
 v2 repaired only that case with explicit bytes and their real SHA-256 digests. V1
-remains here for audit. V2 was created after generation, so its inherited freeze
+remains in the archived source for audit. V2 was created after generation, so its inherited freeze
 label is not evidence of a pre-generation v2 freeze. The oracle recomputes hashes
 and enforces JSON types independently; it does not accept a claimed digest or
 Python's equivalence between booleans and integers.

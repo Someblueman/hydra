@@ -18,6 +18,7 @@ HYDRA = ROOT / "bin/hydra"
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--fleet", type=Path, default=ROOT / "build/hydra-fleet")
+    parser.add_argument("--precompiler", type=Path, default=Path(os.environ.get("HYDRA_PLAN_PRECOMPILE_BIN", ROOT / "build/plan-precompile")))
     parser.add_argument(
         "--case",
         choices=("normal", "empty", "all-skipped", "collision", "maximum"),
@@ -136,8 +137,8 @@ def main():
     )
     (source / "finding.json").write_bytes(accepted_bytes)
     precompile = [
-        "python3",
-        "precompile.py",
+        str(args.precompiler.resolve()),
+        "staged",
         "manifest.json",
         stage1["run_id"],
         base / "plan2.json",

@@ -378,8 +378,9 @@ Local implementation: [plan inspection](PLAN_INSPECTION.md) and
 deterministic bound comparisons, public serial/fork/join outcomes and six
 incorrect-artifact controls. They do not establish stochastic planner quality,
 estimate calibration or a planning benefit that exceeds overhead. The
-[finite task-class pilot](../examples/planning/evaluation/README.md) retains six
-frozen candidates, nine independently specified cases and eighteen incorrect artifacts.
+[archived finite task-class pilot](../examples/planning/evaluation/README.md) records six
+frozen candidates, nine independently specified cases and eighteen incorrect artifacts
+at its exact historical source commit. Its superseded active runner has been retired.
 Its interface-conformance difference disappears in a separate post hoc protocol
 diagnostic. Broader planning-benefit, human-correction and calibration measurements
 remain open; these results do not justify a more elaborate planner.

@@ -1,6 +1,6 @@
 # Finite manifest planning pattern
 
-`examples/planning/manifest-map/precompile.py` validates a closed schema-1
+The shared native `build/plan-precompile manifest` command validates a closed schema-1
 manifest before the public planner sees it. The manifest contains only
 `schema_version: 1` and an `items` array. Each item has a unique bounded ID, an
 integer `value` from -10 through 10, and a boolean `enabled`; there are at most
@@ -29,12 +29,14 @@ state home and compiled plan outside that repository: creating runtime state
 inside it changes the source fingerprint and invalidates admission.
 
 ```sh
+make build-plan-precompile
+precompiler="$PWD/build/plan-precompile"
 fixture="$(mktemp -d)"
 cp -R examples/planning/manifest-map "$fixture/source"
 export HYDRA_HOME="$fixture/home"
 cd "$fixture/source"
 git init -q && git add . && git -c user.name=Test -c user.email=test@example.invalid commit -qm source
-python3 precompile.py manifest.json plan.json
+"$precompiler" manifest manifest.json plan.json
 git add plan.json && git -c user.name=Test -c user.email=test@example.invalid commit -qm plan
 hydra init --no-agent --trust
 hydra workflow plan compile plan.json policy.json "$fixture/compiled.json"

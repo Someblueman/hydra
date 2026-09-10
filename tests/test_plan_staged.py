@@ -11,6 +11,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "examples/planning/staged"
+PRECOMPILER = os.environ.get("HYDRA_PLAN_PRECOMPILE_BIN", str(ROOT / "build/plan-precompile"))
 
 
 class Staged(unittest.TestCase):
@@ -81,7 +82,7 @@ class Staged(unittest.TestCase):
         output = self.base / "plan.json"
         output.write_text("prior plan")
         result = subprocess.run(
-            ["python3", "precompile.py", "manifest.json", "run_fixture", output],
+            [PRECOMPILER, "staged", "manifest.json", "run_fixture", output],
             cwd=self.repo,
             env=self.env,
             text=True,

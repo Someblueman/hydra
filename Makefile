@@ -261,6 +261,7 @@ help:
 	@echo "  make build-core - Build the optional read-only native helper"
 	@echo "  make build-tui - Build the optional native mission-control TUI"
 	@echo "  make test-c    - Run native library unit tests"
+	@echo "  make build-plan-precompile - Build native finite-example planner"
 	@echo "  make test-tui  - Run deterministic native TUI acceptance"
 	@echo "  make test-tui-pty - Run real pseudo-terminal safety and input acceptance"
 	@echo "  make test-parity - Verify shell/native protocol parity and fallbacks"
@@ -304,6 +305,14 @@ $(BUILD_DIR)/libhydra-fleet.a: $(FLEET_OBJECTS)
 $(BUILD_DIR)/hydra-fleet: $(BUILD_DIR)/fleet/main.o $(BUILD_DIR)/libhydra-fleet.a
 	$(CC) $(CORE_CFLAGS) $^ $(FLEET_JSON_LIB) -lm -o $@
 
+.PHONY: build-plan-precompile
+build-plan-precompile: $(BUILD_DIR)/plan-precompile
+
+# Shared native precompiler for the finite planning examples; not installed.
+PLAN_PRECOMPILE_SOURCES = $(wildcard examples/planning/native/*.c)
+$(BUILD_DIR)/plan-precompile: $(PLAN_PRECOMPILE_SOURCES) examples/planning/native/precompile.h $(BUILD_DIR)/libhydra-fleet.a
+	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) $(PLAN_PRECOMPILE_SOURCES) $(BUILD_DIR)/libhydra-fleet.a $(FLEET_JSON_LIB) -lm -o $@
+
 $(BUILD_DIR)/test-fleet: tests/c/test_fleet.c
 $(BUILD_DIR)/test-task-package: tests/c/test_task_package.c
 $(BUILD_DIR)/test-task-result: tests/c/test_task_result.c
@@ -328,9 +337,9 @@ test-fleet-controls: build-tui
 test-fleet-recovery: build-core build-fleet build-tui
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" BUILD_DIR="$(abspath $(BUILD_DIR))" python3 tests/termviz/test_fleet_recovery.py
 
-.PHONY: test-plan-outcomes test-task-announce test-plan-reuse test-retention test-workflow-metrics test-plan-staged test-plan-staged-public test-planner-evaluation-public
-test-plan-outcomes: build-fleet
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 -m unittest tests/test_plan_patterns.py tests/test_performance_outcome.py tests/test_research_outcome.py tests/test_plan_manifest.py
+.PHONY: test-plan-outcomes test-task-announce test-plan-reuse test-retention test-workflow-metrics test-plan-staged test-plan-staged-public
+test-plan-outcomes: build-fleet build-plan-precompile
+	HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 -m unittest tests/test_plan_patterns.py tests/test_performance_outcome.py tests/test_research_outcome.py tests/test_plan_manifest.py
 
 test-task-announce: build-fleet
 	python3 tests/test_task_announce.py "$(CURDIR)/$(BUILD_DIR)/hydra-fleet"
@@ -345,14 +354,11 @@ test-workflow-metrics: build-fleet build-core
 	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_workflow_task_metrics.py
 	python3 tests/test_statistics_export.py "$(CURDIR)/$(BUILD_DIR)/hydra-core"
 
-test-plan-staged: build-fleet
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_plan_staged.py
+test-plan-staged: build-fleet build-plan-precompile
+	HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 tests/test_plan_staged.py
 
-test-plan-staged-public: build-fleet
-	python3 tests/test_plan_staged_public.py --fleet "$(CURDIR)/$(BUILD_DIR)/hydra-fleet" --output "$(BUILD_DIR)/staged-public.json"
-
-test-planner-evaluation-public: build-fleet
-	python3 tests/test_planner_evaluation_public.py --fleet "$(CURDIR)/$(BUILD_DIR)/hydra-fleet" --output "$(BUILD_DIR)/planner-evaluation-public.json"
+test-plan-staged-public: build-fleet build-plan-precompile
+	HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" python3 tests/test_plan_staged_public.py --fleet "$(CURDIR)/$(BUILD_DIR)/hydra-fleet" --output "$(BUILD_DIR)/staged-public.json"
 
 .PHONY: test-plan-inspection
 test-plan-inspection: build-fleet

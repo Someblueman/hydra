@@ -4,6 +4,7 @@ import json, os, shutil, subprocess, tempfile, unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / 'examples/planning/manifest-map'
+PRECOMPILER = os.environ.get('HYDRA_PLAN_PRECOMPILE_BIN', str(ROOT / 'build/plan-precompile'))
 
 class ManifestMap(unittest.TestCase):
     def setUp(self):
@@ -24,7 +25,7 @@ class ManifestMap(unittest.TestCase):
             subprocess.run(['git', 'add', 'manifest.json'], cwd=self.repo, check=True, capture_output=True)
             subprocess.run(['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'manifest update'], cwd=self.repo, check=True, capture_output=True)
         output = self.repo / 'plan.json'
-        result = subprocess.run(['python3', 'precompile.py', 'manifest.json', output], cwd=self.repo,
+        result = subprocess.run([PRECOMPILER, 'manifest', 'manifest.json', output], cwd=self.repo,
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0 if success else 1, result.stderr)
         return output
@@ -72,12 +73,12 @@ class ManifestMap(unittest.TestCase):
                      ' ' * 4097, '{"schema_version":1,"items":']
         for raw in raw_cases:
             (self.repo / 'manifest.json').write_text(raw)
-            result = subprocess.run(['python3', 'precompile.py', 'manifest.json', output],
+            result = subprocess.run([PRECOMPILER, 'manifest', 'manifest.json', output],
                                     cwd=self.repo, capture_output=True)
             self.assertEqual(result.returncode, 1)
             self.assertEqual(output.read_text(), 'preserve prior output')
         (self.repo / 'different.json').write_text('{"schema_version":1,"items":[]}')
-        result = subprocess.run(['python3', 'precompile.py', 'different.json', output],
+        result = subprocess.run([PRECOMPILER, 'manifest', 'different.json', output],
                                 cwd=self.repo, capture_output=True)
         self.assertEqual(result.returncode, 1)
 

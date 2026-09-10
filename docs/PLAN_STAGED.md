@@ -3,7 +3,7 @@
 `examples/planning/staged` demonstrates a two-stage finite workflow. Stage 1
 reads the declared `manifest.json`, computes bounded squares, and emits a schema-3
 finding containing the source hash, selected IDs, result hash, and exact results.
-`precompile.py` accepts only that fresh, internally consistent finding; a changed
+The shared native `build/plan-precompile staged` command accepts only that fresh, internally consistent finding; a changed
 source, stale hash, unsupported status, forged selection, or altered result is
 rejected. It then lowers the frozen selection into an ordinary static schema-1
 DAG with one worker per selected item, a fixed join, and an independent checker.
@@ -24,11 +24,12 @@ integer/boolean types and duplicate-key checks. IDs such as `finding`, `compose`
 and `check` are supported through prefixes. Empty and all-skipped selections still
 produce an independently checked report.
 
+Build the native helper once with `make build-plan-precompile`.
 Run the stage-1 plan through the ordinary compile/run/result commands. Copy the
 accepted `report` deliverable to `finding.json` beside `manifest.json`, then run:
 
 ```sh
-HYDRA_BIN=/path/to/hydra/bin/hydra python3 precompile.py manifest.json RUN_ID plan2.json
+HYDRA_BIN=/path/to/hydra/bin/hydra /path/to/hydra/build/plan-precompile staged manifest.json RUN_ID plan2.json
 ```
 
 The precompiler calls the real `workflow plan result RUN_ID`, verifies its passing
