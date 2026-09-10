@@ -34,6 +34,6 @@ record = {'obligation_id':'slug-check','subject_manifest_sha256':subject,'valida
 record2=dict(record); record2['obligation_id']='bounds-check'; record2['observations']=[dict(obs[0], id='bounds-check')]
 record3=dict(record); record3['obligation_id']='cli-check'; record3['observations']=[dict(obs[0], id='cli-check')]
 for rr in (record2, record3): rr['raw_evidence_sha256']=hashlib.sha256(json.dumps(rr['observations'], sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-report = {'schema_version':3,'execution_status':'completed','evidence_status':'valid','domain_verdict':'pass','verdict':'pass','subject_sha256':subject,'validator_sha256':validator,'requirements':['normalization','bounds','cli'],'evidence':'sealed archive independently built and tested','limitations':['fixture-only'],'evidence_records':[record,record2,record3]}
+report = {'schema_version':3,'execution_status':'completed','evidence_status':'valid','domain_verdict':'pass','verdict':'pass','subject_sha256':subject,'validator_sha256':validator,'requirements':['normalization','bounds','cli'],'evidence':'sealed archive independently built and tested','measurements':[raw],'limitations':['fixture-only'],'evidence_records':[record,record2,record3]}
 json.dump(report, open(out, 'w'), separators=(',', ':')); open(out, 'a').write('\n')
 PY
