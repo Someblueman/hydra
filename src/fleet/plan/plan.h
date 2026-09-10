@@ -10,6 +10,8 @@
 /* All returned JSON objects are owned by the caller. Diagnostics accumulate in
  * a caller-owned array; no validation function executes proposed operations. */
 json_object *plan_cli(int argc, char **argv);
+/* Offline inspections borrow paths and return caller-owned JSON. */
+json_object *plan_inspect_cli(int argc, char **argv);
 json_object *plan_read(const char *path);
 /* Borrows NUL-terminated JSON text; checks member uniqueness and exact signed integer tokens. */
 bool plan_json_unique(const char *text);

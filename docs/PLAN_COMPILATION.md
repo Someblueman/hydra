@@ -1,5 +1,8 @@
 # From objective to executable work
 
+For offline node/dependency explanations, bound estimates and deterministic
+candidate comparisons, see [Plan inspection](PLAN_INSPECTION.md).
+
 Status: local plans and schema-2 distributed execution, required validation,
 source handoff, bounded repair and scheduling replay implemented, 8 September 2026.
 The public `hydra workflow plan` interface provides schema discovery, validation,
