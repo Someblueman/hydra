@@ -161,7 +161,7 @@ $(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c src/tui/input.c $(TERMVIZ_
 
 test-tui: build-tui $(BUILD_DIR)/test-tui-input
 	$(BUILD_DIR)/test-tui-input
-	@sh tests/test_native_tui.sh
+	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_native_tui.sh
 
 test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 	@mkdir -p "$(CURDIR)/$(BUILD_DIR)/test-tui-home"

@@ -8,7 +8,7 @@ pass_count=0
 fail_count=0
 test_root="$(mktemp -d)"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-tui="$repo_root/build/hydra-tui"
+tui="${HYDRA_TUI_BIN:-$repo_root/build/hydra-tui}"
 fixture="$repo_root/tests/fixtures/tui/native-v2.tsv"
 
 # shellcheck source=helpers.sh
