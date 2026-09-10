@@ -54,4 +54,8 @@ Public workflow qualification (10 September 2026):
 
 Exact retained evidence: `/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-patterns-public-j_d07m2j/summary.json`. The wrong-composition process exited successfully; the independent checker failed and the public result gate refused acceptance.
 
+The [finite manifest pattern](PLAN_MANIFEST.md) additionally lowers up to eight
+members and boolean selection into a static plan, including checked empty maps
+and explicit skipped-member records.
+
 No timing advantage, semantic planning improvement or calibrated rework estimate is claimed. These are finite static patterns and a reproducible deterministic comparison baseline. A new scientific question belongs in a separately compiled plan with its own acceptance; it is not a retry of the old claim.

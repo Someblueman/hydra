@@ -330,7 +330,7 @@ test-fleet-recovery: build-core build-fleet build-tui
 
 .PHONY: test-plan-outcomes test-task-announce test-plan-reuse
 test-plan-outcomes: build-fleet
-	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 -m unittest tests/test_plan_patterns.py tests/test_performance_outcome.py tests/test_research_outcome.py
+	HYDRA_FLEET_BIN="$(CURDIR)/$(BUILD_DIR)/hydra-fleet" python3 -m unittest tests/test_plan_patterns.py tests/test_performance_outcome.py tests/test_research_outcome.py tests/test_plan_manifest.py
 
 test-task-announce: build-fleet
 	python3 tests/test_task_announce.py "$(CURDIR)/$(BUILD_DIR)/hydra-fleet"
