@@ -11,4 +11,4 @@ int slugify(const char *input, char *output, size_t capacity) {
 SRC
 make
 mkdir -p "$HYDRA_WORKFLOW_OUTPUTS_DIR"
-tar -cf "$HYDRA_WORKFLOW_OUTPUTS_DIR/catalog.tar" main.c slug.c slug.h Makefile
+COPYFILE_DISABLE=1 tar -cf "$HYDRA_WORKFLOW_OUTPUTS_DIR/catalog.tar" main.c slug.c slug.h Makefile
