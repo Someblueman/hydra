@@ -22,14 +22,20 @@ enrollment, proof that an advertised operation works, or permission to submit wo
 
 Repeat `--ssh [USER@]ALIAS`, or supply one `--inventory` and repeat `--select NAME`.
 There is no scan, wildcard alias expansion, automatic selection of an entire
-inventory, or dynamic inventory execution. The combined selection allows at most
-16 distinct targets. Repeated identical selectors are ignored. The selected
-inventory must be a regular file of at most 1 MiB, with at most 1,024 records.
+inventory, or dynamic inventory execution. Direct SSH selection allows at most
+16 aliases; explicit inventory selections allow at most 100 distinct targets.
+Repeated identical selectors are ignored. The selected inventory must be a
+regular file of at most 1 MiB, with at most 1,024 schema-1 static records or 100
+schema-2 source records. Qualification processes at most 16 targets per call;
+larger selections require an absolute `--progress` export path and repeated calls.
+See [source snapshots and durable resume](HOST_ENROLLMENT.md) for the private
+progress binding and its distinction from the public export.
 Invalid or missing selectors reject the whole input before OpenSSH runs.
 
 Both commands always print one JSON envelope, including without `--json`.
-Results are current source snapshots on stdout; H1 creates no candidate database
-and never imports a saved result as authority. To keep a private snapshot, use
+Results are source snapshots on stdout; a saved public result is never imported
+as authority. Qualification with `--progress` retains private bound progress and
+marks previously successful rows as requiring reauthentication. To keep a snapshot, use
 `umask 077` before redirecting output to an operator-selected file. Refresh by
 repeating the selection and compare retained snapshots by candidate ID. A missing
 source in a later snapshot deletes neither an alias nor a previous snapshot.

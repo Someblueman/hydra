@@ -68,6 +68,11 @@ class EnrollmentTest(unittest.TestCase):
                 open(hold + ".started", "w").close()
                 while not os.path.exists(hold):
                     time.sleep(.01)
+            hold = os.environ.get("ENROLL_HOLD_QUALIFY")
+            if hold and request.get("action") == "handshake":
+                open(hold + ".started", "w").close()
+                while not os.path.exists(hold):
+                    time.sleep(.01)
             if policy.get("bad_project") and request.get("action") == "enrollment-preflight":
                 request["project"] = "/nonexistent/hydra-enrollment-fixture"
 
@@ -127,6 +132,85 @@ class EnrollmentTest(unittest.TestCase):
         second = self.run_cli("apply", "--input", str(intent), "--confirm", digest)
         self.assertEqual(json.loads(second.stdout)["data"]["hosts"][0]["status"], "enrolled")
         self.assertEqual(self.counter.read_text().splitlines(), ["init"])
+
+    def test_fifty_host_apply_advances_in_sixteen_host_batches(self):
+        targets = [f"host{i}" for i in range(50)]
+        inventory = self.tmp / "inventory.json"
+        config = self.tmp / "ssh-config"
+        config.write_text("Host *\n  HostName %h\n  User tester\n")
+        inventory.write_text(json.dumps({"schema_version": 1, "observed_at": 1,
+            "hosts": [{"name": t, "target": t, "labels": []} for t in targets]}))
+        progress = self.tmp / "qualification-progress.json"
+        select = sum((["--select", t] for t in targets), [])
+        qualify = ["qualify", "--inventory", str(inventory), "--ssh-config", str(config),
+                   "--require", "list", "--progress", str(progress), *select]
+        first = json.loads(self.run_fleet(*qualify).stdout)
+        self.assertEqual(first["data"]["processed_this_batch"], 16)
+        self.assertEqual(first["data"]["remaining_count"], 34)
+        hold = self.tmp / "qualify-hold"
+        self.env["ENROLL_HOLD_QUALIFY"] = str(hold)
+        interrupted = subprocess.Popen([self.cli, "fleet", *qualify], env=self.env, text=True,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and interrupted.poll() is None and not Path(str(hold) + ".started").exists():
+            time.sleep(.01)
+        self.assertTrue(Path(str(hold) + ".started").exists(), "qualification never reached the held handshake")
+        interrupted.send_signal(signal.SIGTERM)
+        hold.touch()
+        output, error = interrupted.communicate(timeout=20)
+        self.assertTrue(output, error)
+        self.env.pop("ENROLL_HOLD_QUALIFY")
+        qualification_runs = []
+        for _ in range(5):
+            result = subprocess.run([self.cli, "fleet", *qualify], env=self.env, text=True, capture_output=True)
+            self.assertIn(result.returncode, (0, 1), result.stderr)
+            current = json.loads(result.stdout)
+            self.assertLessEqual(current["data"]["processed_this_batch"], 16)
+            qualification_runs.append(current)
+            if current["data"]["complete"]:
+                break
+        fourth = qualification_runs[-1]
+        self.assertTrue(fourth["data"]["complete"], qualification_runs)
+        source = self.tmp / "qualified.json"; source.write_text(json.dumps(fourth))
+        intent = self.tmp / "intent.json"
+        args = ["review", "--input", str(source), "--project", str(self.tmp / "project"), "--output", str(intent)]
+        for row in fourth["data"]["candidates"]:
+            args += ["--candidate", row["candidate_id"]]
+        self.run_cli(*args)
+        digest = json.loads(intent.read_text())["intent_sha256"]
+        drop = self.tmp / "dropped-init"
+        self.env["ENROLL_DROP_INIT_RESPONSE"] = str(drop)
+        applied = json.loads(self.run_cli("apply", "--input", str(intent), "--confirm", digest).stdout)
+        self.assertEqual(sum(r["status"] == "enrolled" for r in applied["data"]["hosts"]), 15)
+        self.assertEqual(applied["data"]["hosts"][0]["status"], "outcome_unknown")
+        reconciled = json.loads(self.run_cli("apply", "--input", str(intent), "--confirm", digest).stdout)
+        self.assertEqual(sum(r["status"] == "enrolled" for r in reconciled["data"]["hosts"]), 31)
+        apply_hold = self.tmp / "apply-hold"
+        self.env["ENROLL_HOLD_PREFLIGHT"] = str(apply_hold)
+        interrupted_apply = subprocess.Popen([self.cli, "fleet", "enroll", "apply", "--input", str(intent), "--confirm", digest],
+                                             env=self.env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and interrupted_apply.poll() is None and not Path(str(apply_hold) + ".started").exists():
+            time.sleep(.01)
+        self.assertTrue(Path(str(apply_hold) + ".started").exists(), "apply never reached the second batch")
+        interrupted_apply.send_signal(signal.SIGTERM)
+        apply_hold.touch()
+        output, error = interrupted_apply.communicate(timeout=20)
+        self.assertTrue(output, error)
+        self.env.pop("ENROLL_HOLD_PREFLIGHT")
+        resumed_apply = self.apply(intent, digest)
+        for _ in range(3):
+            if sum(r["status"] == "enrolled" for r in resumed_apply["hosts"]) == 50:
+                break
+            resumed_apply = self.apply(intent, digest)
+        self.assertEqual(sum(r["status"] == "enrolled" for r in resumed_apply["hosts"]), 50)
+        duplicate = self.apply(intent, digest)
+        self.assertEqual(duplicate["hosts"], resumed_apply["hosts"])
+        self.assertEqual(len(self.counter.read_text().splitlines()), 50)
+        for target in targets:
+            operations = list((self.tmp / "receivers" / target / "fleet" / "enrollment-ops").iterdir())
+            self.assertEqual(len(operations), 1, target)
+            self.assertEqual(json.loads(operations[0].read_text())["state"], "completed")
 
     def test_peer_mismatch_has_zero_mutations(self):
         qualification = self.qualification("SHA256:reviewed")

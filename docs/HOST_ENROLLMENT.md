@@ -26,6 +26,35 @@ the complete effective `ssh -G` policy. The public policy projection omits
 ProxyCommand arguments and private key contents. Changes to these reviewed
 fields require a fresh review. Older draft intents must be reviewed again.
 
+Host qualification accepts at most 100 inventory selections and at most 16
+direct `--ssh` aliases in one invocation. Qualification processes at most 16
+selected candidates per invocation; a larger selection requires an absolute
+`--progress` export path and is resumed from its private progress record. Apply
+also processes at most 16 unfinished enrollment rows per invocation, retaining
+completed rows for later resumes.
+
+Inventory schema 1 contains `schema_version`, `observed_at`, and `hosts`; each
+host has only `name`, `target`, and `labels`. Schema 2 adds a closed
+`source_snapshot` object with `kind` (`mdns`, `vpn`, `cloud-tags`, or
+`config-management`), `locator`, `scope`, `observed_at`, `freshness`, and up to
+100 `records`. Record identity and target fields are projected by kind:
+instance/host for mDNS, peer/address for VPN, instance_id/private_ip for cloud
+tags, and host/address for configuration management. Secrets are rejected and
+record identifiers are unique. These are explicitly supplied bounded interchange
+formats, not network discovery clients or vendor API export parsers. mDNS records
+support port 22 only; another port is rejected rather than silently discarded.
+
+The public progress export is a qualification result for inspection and review.
+Its private authority record is keyed by a hash of the export path under
+`$HYDRA_HOME/fleet/discovery/`; it binds the inventory and SSH-config digests,
+selected candidates and sources, resolved policy digests, and required
+capability. A changed source, policy, selection, or corrupt private record
+returns a binding or progress error instead of reusing stale qualifications.
+Retained successful results are marked for reauthentication; failed results
+retain bounded history. An explicit absolute `--ssh-config` is carried into
+each candidate and is hashed into the binding and later reviewed enrollment
+intent.
+
 A pinned package requires its exact local digest and an absolute destination:
 
 ```sh
