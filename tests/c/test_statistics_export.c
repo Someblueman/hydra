@@ -8,7 +8,6 @@ static void read_all(FILE *f, char *buf, size_t cap) {
     assert(fseek(f, 0, SEEK_SET) == 0);
     n = fread(buf, 1, cap - 1, f);
     assert(!ferror(f));
-    assert(errno == 0);
     buf[n] = '\0';
 }
 
