@@ -25,9 +25,9 @@ try:
  if len(rows)!=20 or len(set(ids))!=20 or any(set(vals[k])!=set(range(1,11)) for k in vals): emit('fail','trial identity/count mismatch')
  if report['raw_samples'] != open(os.path.join(inp,'raw')).read().splitlines(): emit('fail','raw samples mismatch')
  if report['raw_summary']['failures'] != fails: emit('fail','failure evidence mismatch')
-def stats(v): return {'n':len(v),'median_ns':q(v,.5),'p95_ns':q(v,.95)}
-for k in vals:
- if report[k] != stats(list(vals[k].values())): emit('fail','summary mismatch: '+k)
+ def stats(v): return {'n':len(v),'median_ns':q(v,.5),'p95_ns':q(v,.95)}
+ for k in vals:
+  if report[k] != stats(list(vals[k].values())): emit('fail','summary mismatch: '+k)
  for k,v in sealed['sources'].items():
   current=os.path.join(os.environ.get('HYDRA_WORKFLOW_REPO_ROOT',os.getcwd()),v['path'])
   if dg(current)!=v['sha256']: emit('fail','source hash mismatch: '+k)
