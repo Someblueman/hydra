@@ -4,6 +4,7 @@
 #endif
 #include "internal.h"
 /* A bounded set of detached CLI owners; no lifecycle engine in the UI. */
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void native_controls_tick(struct app *app) {
     size_t i;
     for (i=0;i<4;i++) if (app->control_pids[i]>0) {

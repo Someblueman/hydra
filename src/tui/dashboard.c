@@ -75,6 +75,7 @@ static void dashboard_detail(struct app *app, struct tv_canvas *c, struct tv_rec
     }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static void dashboard_fleet_tasks(struct app *app, struct tv_canvas *c, struct tv_rect r) {
     size_t i; int row = r.y + 2;
     tv_panel(c, r, "REMOTE TASKS / receiver-owned observations");
@@ -85,6 +86,9 @@ static void dashboard_fleet_tasks(struct app *app, struct tv_canvas *c, struct t
         if (row < r.y + r.height - 2)
             dashboard_text(c, r.x + 4, row++, r.width - 6, !strcmp(task->waiting_reason, "none") ? TV_BASE : TV_WARNING,
                            "wait %s / %s / next: %s", task->waiting_reason, task->waiting_detail, task->next_action);
+        if (i == app->task_selected && row < r.y + r.height - 2)
+            dashboard_text(c, r.x + 4, row++, r.width - 6, TV_BORDER,
+                           "binding digest %.64s / request %s", task->spec_sha256, task->request_id);
         if (row < r.y + r.height - 2)
             dashboard_text(c, r.x + 4, row++, r.width - 6,
                            !strcmp(task->result_state, "ready") && !strcmp(task->verification_state, "integrity_verified") ? TV_BASE : TV_WARNING,

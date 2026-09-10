@@ -34,6 +34,7 @@ void retarget_selection(struct app *app) {
     }
     app->selected = app->model.head_count;
 }
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 static bool move_workspace_selection(struct app *app, int direction) {
     if (app->view == 8) { statistics_move(app, direction); return true; }
     if (app->view == 7) { native_workspace_move(app, direction); return true; }

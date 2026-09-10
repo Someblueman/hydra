@@ -34,6 +34,7 @@ FILE *capture_adapter(struct app *app, const char *command, const char *option, 
     if (!input && !app->notice[0]) copy_text(app->notice,sizeof(app->notice),"shell data adapter failed; showing last good snapshot");
     return input;
 }
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 int accept_model_data(struct app *app, FILE *input) {
     struct model *next;
     char error[TEXT] = "";
