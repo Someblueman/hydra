@@ -128,7 +128,8 @@ jobs:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-native
       run: |
         mkdir -p "$TMUX_TMPDIR"
-        make build-fleet test-fleet build-core build-tui test-c test-tui test-tui-pty test-parity
+        make build-fleet build-core build-tui
+        make test-fleet test-c test-tui test-tui-pty test-parity
 
     - name: Qualify native workspace, statistics and standalone export
       env:

@@ -1,5 +1,6 @@
 #define _XOPEN_SOURCE 700
 #include "fleet_recovery_support.h"
+#include <inttypes.h>
 #include <errno.h>
 #include <glob.h>
 #include <json-c/json.h>
@@ -9,6 +10,14 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+static void wait_for_payload(void) {
+    char path[4096];
+    double deadline = tv_now() + 30;
+    tv_format(path, sizeof(path), "%s/host-a/payload-started", base);
+    while (!tv_exists(path) && tv_now() < deadline)
+        tv_sleep(.05);
+    CHECK(tv_exists(path), "held payload started before owner-loss injection");
+}
 int main(void) {
     struct tv_session s;
     char path[4096], receiver[4096], home[4096], transport[4096], oldpath[32768], newpath[32768],
@@ -56,7 +65,8 @@ int main(void) {
     RUN("git", "config", "user.name", "V4");
     RUN("git", "config", "user.email", "v4@example.invalid");
     tv_format(path, sizeof(path), "%s/payload.sh", source);
-    tv_write(path, "while [ ! -f \"$HYDRA_HOME/release\" ]; do sleep .1; done; printf v4-result > "
+    tv_write(path, ": > \"$HYDRA_HOME/payload-started\"\n"
+                   "while [ ! -f \"$HYDRA_HOME/release\" ]; do sleep .1; done; printf v4-result > "
                    "result.txt\n");
     RUN("git", "add", "payload.sh");
     RUN("git", "-c", "commit.gpgSign=false", "commit", "-qm", "payload");
@@ -119,6 +129,7 @@ int main(void) {
     tv_send(&s, "j");
     tv_pump(&s, .3);
     CHECK(tv_contains(&s, "host-b"), "second receiver selectable");
+    wait_for_payload();
     for (i = 0; i < 50 && !owner; i++) {
         data = status(host[0], task[0]);
         owner = (pid_t)json_object_get_int64(optional(optional(data, "runtime"), "owner_pid"));
@@ -127,6 +138,16 @@ int main(void) {
             tv_sleep(.1);
     }
     CHECK(owner > 0, "recorded owner PID");
+    tv_write(offline, "");
+    deadline = tv_now() + 8;
+    while (tv_now() < deadline && !tv_contains(&s, "stale") && !tv_contains(&s, "STALE"))
+        tv_pump(&s, .25);
+    tv_send(&s, "H");
+    tv_pump(&s, .4);
+    CHECK(tv_contains(&s, "stale") || tv_contains(&s, "STALE"), "lost transport visible stale");
+    CHECK(!kill(owner, SIGSTOP), "stop recorded owner");
+    /* Freeze the owner before selecting its current execution group: startup
+     * commands can exit and be replaced after owner_pid first appears. */
     RUN("ps", "-axo", "pid=,ppid=");
     {
         const char *p = output;
@@ -143,14 +164,6 @@ int main(void) {
         }
     }
     CHECK(group > 0, "owned command group");
-    tv_write(offline, "");
-    deadline = tv_now() + 8;
-    while (tv_now() < deadline && !tv_contains(&s, "stale") && !tv_contains(&s, "STALE"))
-        tv_pump(&s, .25);
-    tv_send(&s, "H");
-    tv_pump(&s, .4);
-    CHECK(tv_contains(&s, "stale") || tv_contains(&s, "STALE"), "lost transport visible stale");
-    CHECK(!kill(owner, SIGSTOP), "stop recorded owner");
     CHECK(!kill(-group, SIGKILL) || errno == ESRCH, "kill only owned command group");
     CHECK(!kill(owner, SIGKILL) || errno == ESRCH, "kill recorded owner");
     CHECK(!unlink(offline), "restore A transport");
@@ -191,7 +204,7 @@ int main(void) {
               json_object_get_boolean(field(document, "ok")),
           "native result verified");
     json_object_put(document);
-    tv_format(cursor, sizeof(cursor), "%lld",
+    tv_format(cursor, sizeof(cursor), "%" PRId64,
               json_object_get_int64(field(field(first, "event_observation"), "next_cursor")));
     document = parse(H("fleet", "task", "observe", host[1], "--id", task[1], "--cursor", cursor,
                        "--event-limit", "2"));
@@ -306,9 +319,9 @@ int main(void) {
     seen = json_object_new_array();
     sequences(field(stream, "events"), seen);
     for (page = 0; page < 32; page++) {
-        tv_format(cursor, sizeof(cursor), "%lld",
+        tv_format(cursor, sizeof(cursor), "%" PRId64,
                   json_object_get_int64(field(stream, "next_cursor")));
-        tv_format(byte_offset, sizeof(byte_offset), "%lld",
+        tv_format(byte_offset, sizeof(byte_offset), "%" PRId64,
                   json_object_get_int64(field(stream, "next_byte_offset")));
         tv_format(stream_id, sizeof(stream_id), "%s", string(field(stream, "stream_id")));
         document =
