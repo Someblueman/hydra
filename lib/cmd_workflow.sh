@@ -27,6 +27,24 @@ cmd_workflow() {
             _load_lib workflow_statistics
             workflow_statistics_data
             ;;
+        statistics-json)
+            [ "$#" -eq 1 ] || return 2
+            _load_lib workflow_statistics
+            _load_lib workflow_observability
+            workflow_observability_json
+            ;;
+        statistics-announce)
+            [ "$#" -eq 1 ] || return 2
+            _load_lib workflow_statistics
+            _load_lib workflow_observability
+            workflow_observability_announce
+            ;;
+        statistics-compare)
+            [ "$#" -eq 3 ] || return 2
+            _load_lib workflow_statistics
+            _load_lib workflow_observability
+            workflow_observability_compare "$2" "$3"
+            ;;
         plan) shift; cmd_workflow_plan "$@" ;;
         -h|--help|'')
             printf '%s\n' \
