@@ -34,8 +34,10 @@ static bool snapshot_valid(json_object *snapshot) {
     for (i = 0; i < json_object_array_length(records); i++) {
         json_object *record = json_object_array_get_idx(records, i);
         const char *kind = f_string(snapshot, "kind");
+        size_t j; const char *identifier = !strcmp(kind, "mdns") ? f_string(record, "instance") : !strcmp(kind, "vpn") ? f_string(record, "peer") : !strcmp(kind, "cloud-tags") ? f_string(record, "instance_id") : f_string(record, "host");
+        for (j = 0; j < i; j++) { json_object *prior = json_object_array_get_idx(records, j); const char *previous = !strcmp(kind, "mdns") ? f_string(prior, "instance") : !strcmp(kind, "vpn") ? f_string(prior, "peer") : !strcmp(kind, "cloud-tags") ? f_string(prior, "instance_id") : f_string(prior, "host"); if (identifier && previous && !strcmp(identifier, previous)) return false; }
         if (f_field(record, "password") || f_field(record, "token") || f_field(record, "secret") || f_field(record, "private_key")) return false;
-        if (!strcmp(kind, "mdns")) { static const char *const k[] = {"instance", "host", "port", "labels", NULL}; if (!hd_keys(record, k) || !hd_text(f_string(record, "instance"), 128) || !hd_text(f_string(record, "host"), 256) || !json_object_is_type(f_field(record, "port"), json_type_int) || !labels_valid(f_field(record, "labels"))) return false; }
+        if (!strcmp(kind, "mdns")) { static const char *const k[] = {"instance", "host", "port", "labels", NULL}; if (!hd_keys(record, k) || !hd_text(f_string(record, "instance"), 128) || !f_target(f_string(record, "host")) || !json_object_is_type(f_field(record, "port"), json_type_int) || json_object_get_int(f_field(record, "port")) != 22 || !labels_valid(f_field(record, "labels"))) return false; }
         else if (!strcmp(kind, "vpn")) { static const char *const k[] = {"peer", "address", "labels", NULL}; if (!hd_keys(record, k) || !hd_text(f_string(record, "peer"), 128) || !target_valid(f_string(record, "address")) || !labels_valid(f_field(record, "labels"))) return false; }
         else if (!strcmp(kind, "cloud-tags")) { static const char *const k[] = {"instance_id", "private_ip", "labels", NULL}; if (!hd_keys(record, k) || !hd_text(f_string(record, "instance_id"), 128) || !target_valid(f_string(record, "private_ip")) || !labels_valid(f_field(record, "labels"))) return false; }
         else { static const char *const k[] = {"host", "address", "labels", NULL}; if (!hd_keys(record, k) || !hd_text(f_string(record, "host"), 128) || !target_valid(f_string(record, "address")) || !labels_valid(f_field(record, "labels"))) return false; }
@@ -124,6 +126,7 @@ static int add_inventory(json_object *rows, const struct hd_options *options) {
         } else target = record ? f_string(record, "target") : NULL;
         if (!record || !target || !(row = candidate_add(rows, target))) goto done;
         source_add(row, kind, locator ? locator : options->inventory, name, observed_at, f_field(record, "labels"));
+        if (snapshot) { json_object *source = json_object_array_get_idx(f_field(row, "sources"), json_object_array_length(f_field(row, "sources")) - 1); f_string_add(source, "scope", f_string(snapshot, "scope")); f_string_add(source, "freshness", f_string(snapshot, "freshness")); }
     }
     status = 0;
 done:
