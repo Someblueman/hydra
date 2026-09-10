@@ -25,9 +25,12 @@ static bool record_valid(json_object *record) {
 static bool snapshot_valid(json_object *snapshot) {
     static const char *const keys[] = {"kind", "locator", "scope", "observed_at", "freshness", "records", NULL};
     json_object *records; size_t i;
-    if (!hd_keys(snapshot, keys) || !hd_text(f_string(snapshot, "kind"), 64) || !hd_text(f_string(snapshot, "locator"), F_PATH) ||
-        !hd_text(f_string(snapshot, "scope"), 256) || !json_object_is_type(f_field(snapshot, "observed_at"), json_type_int) ||
+    { int64_t observed = json_object_get_int64(f_field(snapshot, "observed_at"));
+    if (!hd_keys(snapshot, keys) || !hd_text(f_string(snapshot, "kind"), 64) ||
+        (strcmp(f_string(snapshot, "kind"), "mdns") && strcmp(f_string(snapshot, "kind"), "vpn") && strcmp(f_string(snapshot, "kind"), "cloud-tags") && strcmp(f_string(snapshot, "kind"), "config-management")) ||
+        !hd_text(f_string(snapshot, "locator"), F_PATH) || !hd_text(f_string(snapshot, "scope"), 256) || !json_object_is_type(f_field(snapshot, "observed_at"), json_type_int) || observed < 0 || observed > (int64_t)time(NULL) ||
         !hd_text(f_string(snapshot, "freshness"), 64) || !(records = f_field(snapshot, "records")) || !json_object_is_type(records, json_type_array) || json_object_array_length(records) > 100) return false;
+    }
     for (i = 0; i < json_object_array_length(records); i++) {
         json_object *record = json_object_array_get_idx(records, i);
         if (!record_valid(record) || f_field(record, "password") || f_field(record, "token") || f_field(record, "secret") || f_field(record, "private_key")) return false;
@@ -35,9 +38,10 @@ static bool snapshot_valid(json_object *snapshot) {
     return true;
 }
 static bool inventory_valid(json_object *inventory) {
-    static const char *const keys[] = {"schema_version", "observed_at", "hosts", "source_snapshot", NULL};
+    static const char *const keys1[] = {"schema_version", "observed_at", "hosts", NULL};
+    static const char *const keys2[] = {"schema_version", "observed_at", "hosts", "source_snapshot", NULL};
     json_object *hosts = f_field(inventory, "hosts"), *at = f_field(inventory, "observed_at"); size_t i, j;
-    if (!hd_keys(inventory, keys) || (!f_number_is(inventory, "schema_version", 1) && !f_number_is(inventory, "schema_version", 2)) ||
+    if ((!f_number_is(inventory, "schema_version", 1) && !f_number_is(inventory, "schema_version", 2)) || (f_number_is(inventory, "schema_version", 1) ? !hd_keys(inventory, keys1) : !hd_keys(inventory, keys2)) ||
         !json_object_is_type(at, json_type_int) || json_object_get_int64(at) < 0 ||
         json_object_get_int64(at) > (int64_t)time(NULL) || !json_object_is_type(hosts, json_type_array) ||
         json_object_array_length(hosts) > 1024) return false;
@@ -98,19 +102,20 @@ static json_object *selected_record(json_object *hosts, const char *name) {
     return NULL;
 }
 static int add_inventory(json_object *rows, const struct hd_options *options) {
-    json_object *inventory, *hosts, *snapshot; const char *kind = "static", *locator = NULL; struct stat st;
+    json_object *inventory, *hosts, *snapshot; const char *kind = "static", *locator = NULL; int64_t observed_at; struct stat st;
     size_t i; int status = -1;
     if (stat(options->inventory, &st) || !S_ISREG(st.st_mode) || st.st_size > 1024 * 1024) return -1;
     inventory = f_read_json(options->inventory, 1024 * 1024);
     if (!inventory_valid(inventory)) goto done;
+    observed_at = json_object_get_int64(f_field(inventory, "observed_at"));
     snapshot = f_field(inventory, "source_snapshot");
-    if (snapshot) { kind = f_string(snapshot, "kind"); locator = f_string(snapshot, "locator"); }
     hosts = f_field(inventory, "hosts");
+    if (snapshot) { kind = f_string(snapshot, "kind"); locator = f_string(snapshot, "locator"); observed_at = json_object_get_int64(f_field(snapshot, "observed_at")); hosts = f_field(snapshot, "records"); }
     for (i = 0; i < options->select_count; i++) {
         json_object *record = selected_record(hosts, options->select[i]), *row;
         if (!record || !(row = candidate_add(rows, f_string(record, "target")))) goto done;
         source_add(row, kind, locator ? locator : options->inventory, options->select[i],
-                   json_object_get_int64(f_field(inventory, "observed_at")), f_field(record, "labels"));
+                   observed_at, f_field(record, "labels"));
     }
     status = 0;
 done:
