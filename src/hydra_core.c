@@ -1,10 +1,11 @@
 #include "libhydra.h"
+#include "hydra_statistics.h"
 
 #include <stdio.h>
 #include <string.h>
 
 static void usage(FILE *out) {
-    fputs("usage: hydra-core [--version|--protocol-version|capabilities|validate-state <root>|validate-events <file>|json-string <text>|snapshot <root>]\n", out);
+    fputs("usage: hydra-core [--version|--protocol-version|capabilities|validate-state <root>|validate-events <file>|json-string <text>|snapshot <root>|statistics-json <feed>|statistics-compare <left> <right>]\n", out);
 }
 
 int main(int argc, char **argv) {
@@ -38,6 +39,10 @@ int main(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "snapshot") == 0) {
         return hydra_write_snapshot(argv[2], stdout, stderr) == 0 ? 0 : 1;
     }
+    if (argc == 3 && strcmp(argv[1], "statistics-json") == 0)
+        return hs_statistics_cli_json(argv[2], stdout, stderr);
+    if (argc == 4 && strcmp(argv[1], "statistics-compare") == 0)
+        return hs_statistics_cli_compare(argv[2], argv[3], stdout, stderr);
     usage(stderr);
     return 2;
 }

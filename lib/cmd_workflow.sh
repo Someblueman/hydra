@@ -30,8 +30,13 @@ cmd_workflow() {
         statistics-json)
             [ "$#" -eq 1 ] || return 2
             _load_lib workflow_statistics
-            _load_lib workflow_observability
-            workflow_observability_json
+            _load_lib core
+            _cw_tmp="$(mktemp "${TMPDIR:-/tmp}/hydra-statistics.XXXXXX")" || return 1
+            trap 'rm -f "$_cw_tmp"' EXIT HUP INT TERM
+            workflow_statistics_data >"$_cw_tmp" || return 1
+            _cw_core="$(hydra_core_path 2>/dev/null || true)"
+            [ -x "$_cw_core" ] || { cli_error workflow unavailable "native statistics exporter unavailable" "build hydra-core"; return 1; }
+            "$_cw_core" statistics-json "$_cw_tmp"
             ;;
         statistics-announce)
             [ "$#" -eq 1 ] || return 2
@@ -41,9 +46,10 @@ cmd_workflow() {
             ;;
         statistics-compare)
             [ "$#" -eq 3 ] || return 2
-            _load_lib workflow_statistics
-            _load_lib workflow_observability
-            workflow_observability_compare "$2" "$3"
+            _load_lib core
+            _cw_core="$(hydra_core_path 2>/dev/null || true)"
+            [ -x "$_cw_core" ] || { cli_error workflow unavailable "native statistics exporter unavailable" "build hydra-core"; return 1; }
+            "$_cw_core" statistics-compare "$2" "$3"
             ;;
         plan) shift; cmd_workflow_plan "$@" ;;
         -h|--help|'')
