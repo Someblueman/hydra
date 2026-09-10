@@ -13,7 +13,8 @@
       "local"
     ],
     "tools": [
-      "sh"
+      "sh",
+      "python3"
     ],
     "effects": [
       "worktree",
@@ -22,7 +23,7 @@
     "writes": [],
     "parallelism": 4,
     "timeout_seconds": 180,
-    "artifact_bytes": 16384,
+    "artifact_bytes": 32768,
     "max_heads": 5,
     "disk_mb": 1,
     "retry_budget": 0,
@@ -36,7 +37,8 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "serial-a"
+        "branch": "serial-a",
+        "terminal_mode": "headless"
       }
     },
     {
@@ -46,7 +48,8 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "serial-b"
+        "branch": "serial-b",
+        "terminal_mode": "headless"
       }
     },
     {
@@ -56,7 +59,8 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "serial-compose"
+        "branch": "serial-compose",
+        "terminal_mode": "headless"
       }
     },
     {
@@ -120,7 +124,8 @@
       "needs": [],
       "writes": [],
       "args": {
-        "branch": "serial-check"
+        "branch": "serial-check",
+        "terminal_mode": "headless"
       }
     },
     {
@@ -256,7 +261,8 @@
           "local"
         ],
         "tools": [
-          "sh"
+          "sh",
+          "python3"
         ],
         "effects": [
           "execute"

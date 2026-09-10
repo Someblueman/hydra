@@ -1,27 +1,83 @@
 #!/usr/bin/env python3
-import json, os, shutil, subprocess, tempfile, unittest
-ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BIN=os.path.join(ROOT,'bin','hydra'); SRC=os.path.join(ROOT,'examples','planning','patterns')
-FILES=['worker_a.sh','worker_b.sh','compose.sh','check.sh','policy.json']
-class PlanPatterns(unittest.TestCase):
- def fixture(self,kind):
-  d=tempfile.mkdtemp();
-  for f in FILES+[kind+'.json']: shutil.copy(os.path.join(SRC,f),d)
-  subprocess.run(['git','init','-q'],cwd=d,check=True); subprocess.run(['git','add','.'],cwd=d,check=True); subprocess.run(['git','-c','user.name=test','-c','user.email=test@example.invalid','commit','-qm','fixture'],cwd=d,check=True); return d
- def cli(self,args,cwd): return subprocess.run([BIN,*args],cwd=cwd,text=True,capture_output=True)
- def test_both_compile_and_inspect(self):
-  for kind in ('serial','forkjoin'):
-   d=self.fixture(kind); v=self.cli(['workflow','plan','validate',kind+'.json','policy.json'],d); self.assertEqual(v.returncode,0,v.stderr+v.stdout); self.assertTrue(json.loads(v.stdout)['ok'])
-   c=tempfile.mktemp(prefix=kind+'-pattern-',suffix='.json'); x=self.cli(['workflow','plan','compile',kind+'.json','policy.json',c],d); self.assertEqual(x.returncode,0,x.stderr); self.assertEqual(self.cli(['workflow','plan','explain',c],d).returncode,0)
- def test_only_dependency_edges_differ(self):
-  a=json.load(open(os.path.join(SRC,'serial.json'))); b=json.load(open(os.path.join(SRC,'forkjoin.json')))
-  for d in (a,b): d['steps']=[dict(s,needs=[]) for s in d['steps']]
-  self.assertEqual(a['objective'],b['objective']); self.assertEqual(a['envelope'],b['envelope']); self.assertEqual(a['data'],b['data']); self.assertEqual(a['requirements'],b['requirements'])
- def test_missing_artifact_contract_fails(self):
-  d=self.fixture('serial'); p=os.path.join(d,'serial.json'); x=json.load(open(p)); x['data']['steps']['compose']['inputs']['a']['output']='missing'; open(p,'w').write(json.dumps(x)); v=self.cli(['workflow','plan','validate',p,os.path.join(d,'policy.json')],d); self.assertNotEqual(v.returncode,0)
- def test_heldout_checker_cases(self):
-  with tempfile.TemporaryDirectory() as d:
-   validation=os.path.join(d,'validation'); json.dump({'data':{'check':'a'*64,'check-recipe':'b'*64}},open(validation,'w'))
-   for name,content,want in [('correct',b'A:validated input\nB:validated input\n',0),('wrong',b'A:validated input\nB:wrong\n',1),('missing',b'A:validated input\n',1),('reordered',b'B:validated input\nA:validated input\n',1),('extra',b'A:validated input\nB:validated input\nextra\n',1)]:
-    subject=os.path.join(d,'subject'); out=os.path.join(d,'check'); open(subject,'wb').write(content); env=dict(os.environ,HYDRA_WORKFLOW_INPUTS_DIR=d,HYDRA_WORKFLOW_OUTPUTS_DIR=d,HYDRA_WORKFLOW_VALIDATION_FILE=validation); shutil.copy(os.path.join(SRC,'check.sh'),os.path.join(d,'check.sh')); os.chmod(os.path.join(d,'check.sh'),0o755); p=subprocess.run(['sh',os.path.join(d,'check.sh')],env=env); self.assertEqual(p.returncode,want,name); self.assertEqual(json.load(open(out))['verdict'],'pass' if want==0 else 'fail')
-if __name__=='__main__': unittest.main()
+"""Public compiler comparison plus independently specified corruption cases."""
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / 'examples/planning/patterns'
+BIN = ROOT / 'bin/hydra'
+
+class Patterns(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='hydra-pattern-check-')
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.repo = self.base / 'repo'
+        shutil.copytree(SOURCE, self.repo, ignore=shutil.ignore_patterns('__pycache__'))
+        self.env = dict(os.environ, HYDRA_HOME=str(self.base / 'home'),
+                        HYDRA_FLEET_BIN=str(ROOT / 'build/hydra-fleet'))
+        for args in [['git', 'init', '-q'], ['git', 'add', '.'],
+                     ['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+                      '-c', 'commit.gpgSign=false', 'commit', '-qm', 'pattern source']]:
+            subprocess.run(args, cwd=self.repo, check=True, capture_output=True)
+
+    def cli(self, *args):
+        result = subprocess.run([str(BIN), 'workflow', 'plan', *map(str,args)],
+                                cwd=self.repo, env=self.env, capture_output=True, text=True)
+        return result, json.loads(result.stdout)
+
+    def test_matched_compilation_and_complete_explanation(self):
+        compiled = []
+        for name in ['serial', 'forkjoin']:
+            path = self.base / (name + '.compiled.json')
+            result, value = self.cli('compile', name + '.json', 'policy.json', path)
+            self.assertEqual(result.returncode, 0, value)
+            result, explained = self.cli('explain', path)
+            self.assertEqual(result.returncode, 0, explained)
+            self.assertEqual(len(explained['data']['nodes']), 8)
+            compiled.append(path)
+        result, value = self.cli('compare', *compiled)
+        self.assertEqual(result.returncode, 0, value)
+        self.assertTrue(value['data']['matched_scope'], value)
+        self.assertEqual(value['data']['left']['edges'], value['data']['right']['edges'] + 1)
+        self.assertEqual(value['data']['modeled_preference'], 'unresolved')
+
+    def test_missing_contract_output_rejected(self):
+        path = self.repo / 'serial.json'
+        plan = json.loads(path.read_text())
+        plan['data']['steps']['compose']['inputs']['a']['output'] = 'missing'
+        path.write_text(json.dumps(plan))
+        result, _ = self.cli('validate', path, 'policy.json')
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_heldout_artifacts(self):
+        # These expected outcomes are specified independently of the checker.
+        cases = {'correct': (b'A:validated input\nB:validated input\n', True),
+                 'wrong': (b'A:validated input\nB:wrong\n', False),
+                 'missing-member': (b'A:validated input\n', False),
+                 'reordered': (b'B:validated input\nA:validated input\n', False),
+                 'truncated': (b'A:validated input\nB:validated input', False),
+                 'extra': (b'A:validated input\nB:validated input\nextra\n', False),
+                 'empty': (b'', False)}
+        validation = self.base / 'validation'
+        validation.write_text(json.dumps({'data': {'check': 'a'*64, 'check-recipe': 'b'*64}}))
+        env = dict(self.env, HYDRA_WORKFLOW_INPUTS_DIR=str(self.base),
+                   HYDRA_WORKFLOW_OUTPUTS_DIR=str(self.base), HYDRA_WORKFLOW_VALIDATION_FILE=str(validation))
+        for name, (content, expected) in cases.items():
+            with self.subTest(name=name):
+                (self.base / 'subject').write_bytes(content)
+                result = subprocess.run(['sh', 'check.sh'], cwd=self.repo, env=env, capture_output=True)
+                report = json.loads((self.base / 'check').read_text())
+                self.assertEqual(result.returncode == 0, expected, result.stderr)
+                self.assertEqual(report['verdict'], 'pass' if expected else 'fail')
+                self.assertEqual(report['evidence_status'], 'valid')
+                self.assertEqual(report['evidence_records'][0]['counts'],
+                                 {'executed': 1, 'failed': 0 if expected else 1, 'skipped': 0})
+
+if __name__ == '__main__':
+    unittest.main()
