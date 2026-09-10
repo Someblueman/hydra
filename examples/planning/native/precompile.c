@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 700
 /* Example-only native boundary. The installed Hydra runtime does not depend on it. */
 #include "precompile.h"
 #include <fcntl.h>
