@@ -56,9 +56,10 @@ static bool enrich(json_object *row, const struct hd_options *options, const cha
     return ok;
 }
 static json_object *run_discovery(const struct hd_options *options, json_object *rows) {
-    char config[F_PATH]; json_object *data, *result, *old = NULL; size_t i, processed = 0; bool failed = false;
+    char config[F_PATH], source_hash[65] = ""; json_object *data, *result, *old = NULL; size_t i, processed = 0; bool failed = false;
     if (hd_config(config, options->config)) { json_object_put(rows); return f_error("fleet-discovery", "ssh_config_failed", "cannot prepare private strict SSH config; use an absolute literal config path"); }
-    if (options->progress) old = f_read_json(options->progress, F_LIMIT);
+    if (options->inventory) (void)f_hash(options->inventory, source_hash);
+    if (options->progress) { old = f_read_json(options->progress, F_LIMIT); if (old && source_hash[0] && (!f_string(f_field(old, "data"), "source_sha256") || strcmp(source_hash, f_string(f_field(old, "data"), "source_sha256")))) { json_object_put(old); old = NULL; } }
     for (i = 0; i < json_object_array_length(rows); i++) {
         json_object *row = json_object_array_get_idx(rows, i); bool done = false; size_t j;
         json_object *prior = old ? f_field(f_field(old, "data"), "candidates") : NULL;
@@ -76,6 +77,7 @@ static json_object *run_discovery(const struct hd_options *options, json_object 
     json_object_object_add(data, "qualification_batch_count", json_object_new_int((int)((json_object_array_length(rows) + HD_QUALIFY_BATCH - 1) / HD_QUALIFY_BATCH)));
     json_object_object_add(data, "partial_failure", json_object_new_boolean(failed));
     f_string_add(data, "required_capability", options->probe ? options->capability : "");
+    if (source_hash[0]) f_string_add(data, "source_sha256", source_hash);
     result = failed ? f_error("fleet-discovery", f_stopped ? "cancelled" : "partial_failure", "one or more selected candidates could not be resolved or qualified") : f_success("fleet-discovery", NULL);
     json_object_object_add(result, "data", data); if (options->progress) { const char *text = json_object_to_json_string_ext(result, JSON_C_TO_STRING_PLAIN); if (f_write(options->progress, text, strlen(text), true)) { json_object_put(old); json_object_put(result); return f_error("fleet-discovery", "progress_io_failed", "cannot save qualification progress"); } } json_object_put(old); return result;
 }

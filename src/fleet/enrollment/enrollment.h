@@ -2,7 +2,7 @@
 #define HYDRA_FLEET_ENROLLMENT_H
 #include "fleet/fleet.h"
 #include <json-c/json.h>
-#define ENROLL_HOSTS 16
+#define ENROLL_HOSTS 100
 struct enrollment_options {
     const char *input, *output, *project, *package, *sha256, *prefix, *alias, *confirm;
     const char *candidates[ENROLL_HOSTS]; size_t count; unsigned seconds;
