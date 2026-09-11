@@ -41,8 +41,8 @@ extern char **environ;
 #define NATIVE_TERMINALS 4
 #define NATIVE_TERMINAL_CELLS (512U * 256U)
 #define WORKSPACE_CAPACITY (512U * 256U)
-#define NATIVE_ATTENTION_ITEMS 128U
-#define NATIVE_ATTENTION_SEEN 256U
+#define NATIVE_ATTENTION_ITEMS 512U
+#define NATIVE_ATTENTION_SEEN 512U
 struct native_capture {
     pid_t pid;
     int fd, status;

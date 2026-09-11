@@ -142,23 +142,34 @@ static void discard_input(struct app *app, char ch) {
 static void workspace_arrow(struct app *app, char key) {
     if (app->view == 7) (void)native_workspace_key(app, key);
 }
+static void selection_arrow(struct app *app, char key, int direction) {
+    if (app->view == 9) (void)native_attention_key(app, key);
+    else move_selection(app, direction);
+}
+static void discard_legacy_mouse(char *key) {
+    size_t count;
+    for (count = 0U; count < 3U; count++) if (read_key(20, key) <= 0) break;
+}
+static void begin_paste_discard(struct app *app, char *key) {
+    app->input_mode = INPUT_DISCARD_PASTE;
+    app->paste_matched = 0U;
+    copy_text(app->notice, sizeof(app->notice), "bracketed paste ignored");
+    if (read_key(20, key) > 0) discard_input(app, *key);
+}
 
 static void dispatch_escape(struct app *app, const char *sequence) {
     char ch;
     if (sequence[0] == '<') handle_mouse(app, sequence);
-    else if (strcmp(sequence, "A") == 0) move_selection(app, -1);
-    else if (strcmp(sequence, "B") == 0) move_selection(app, 1);
+    else if (strcmp(sequence, "A") == 0) selection_arrow(app, 'A', -1);
+    else if (strcmp(sequence, "B") == 0) selection_arrow(app, 'B', 1);
     else if (strcmp(sequence, "C") == 0) workspace_arrow(app, 'l');
     else if (strcmp(sequence, "D") == 0) workspace_arrow(app, 'h');
     else if (strcmp(sequence, "M") == 0) {
         /* Legacy X10 carries three bytes after CSI M; never treat them as keys. */
-        for (size_t count = 0U; count < 3U; count++) if (read_key(20, &ch) <= 0) break;
+        discard_legacy_mouse(&ch);
     }
     else if (strcmp(sequence, "200~") == 0) {
-        app->input_mode = INPUT_DISCARD_PASTE;
-        app->paste_matched = 0U;
-        copy_text(app->notice, sizeof(app->notice), "bracketed paste ignored");
-        if (read_key(20, &ch) > 0) discard_input(app, ch);
+        begin_paste_discard(app, &ch);
     }
 }
 

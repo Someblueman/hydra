@@ -9,7 +9,7 @@
 
 
 void native_observations_cancel(struct app *app, size_t source) {
-    if (app->observations && source<4) native_capture_destroy(&app->observations->jobs[source]);
+    if (app->observations && source<5) native_capture_destroy(&app->observations->jobs[source]);
 }
 
 void native_observations_destroy(struct app *app) {

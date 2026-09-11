@@ -294,6 +294,7 @@ static void render_help(struct app *app) {
     linef(app, "KEYBOARD HELP");
     if (app->rows < 20) {
         linef(app, "j/k move  Enter detail  Esc back");
+        linef(app, "I attention  s mark seen (attention view)");
         linef(app, "v views  / search  d diagnostics");
         linef(app, app->fleet ? "a attach  c interrupt" : ": actions  p output  Space/A mark");
         linef(app, app->fleet ? "t theme  ? close help  q quit" : "G group x kill t theme ? help q quit");
@@ -305,6 +306,7 @@ static void render_help(struct app *app) {
     linef(app, "v / o / w / H   Next view / overview / workflows / hosts");
     linef(app, "/               Search heads");
     linef(app, "d               Show / hide diagnostics");
+    linef(app, "I               Attention; Enter details; s marks seen locally");
     if (app->fleet) {
         linef(app, "a               Attach to remote terminal");
         linef(app, "c               Interrupt remote head (confirmed)");
@@ -381,7 +383,7 @@ static void render_snapshot_hint(struct app *app, bool headless) {
 
 static void render_key_hint(struct app *app) {
     style(app, TONE_STRONG);
-    if (app->view == 9) linef(app, "j/k select  Enter details  I refresh  Esc heads  q quit");
+    if (app->view == 9) linef(app, "j/k select  Enter details  s seen  I refresh  Esc heads  q quit");
     else if (app->view == 5) linef(app, app->cols < 60 ? "j/k node [/] run ? help q quit" : "j/k node  [/] run  h/l/J/K pan  ? help  q quit");
     else if (app->view == 6) linef(app, "j/k host  Enter heads  ? help  q quit");
     else if (app->cols < 60) linef(app, app->fleet ? "a attach  c interrupt  ? help  q quit" : "Enter open  : actions  ? help  q quit");

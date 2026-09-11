@@ -834,6 +834,7 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 }
 
 #include "test_tui_visualization.inc"
+#include "test_tui_attention.inc"
 
 int main(int argc, char **argv) {
     char timeout_pids[128];
@@ -856,6 +857,8 @@ int main(int argc, char **argv) {
     test_visualization(argv[1], argv[2], argv[3]);
     test_visualization_refresh(argv[1], argv[2], argv[3]);
     test_visualization_hosts(argv[1], argv[2], argv[3]);
+    test_attention(argv[1], argv[2], argv[3]);
+    test_attention_clients(argv[1], argv[2], argv[3]);
     test_fleet_attach(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);

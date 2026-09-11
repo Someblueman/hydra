@@ -27,6 +27,14 @@ case "${1:-}:${2:-}" in
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
         cat "$fixture_dir/workflow-v1.tsv"
         ;;
+    workflow:attention-data|fleet:attention-data)
+        if [ -n "${HYDRA_TEST_ATTENTION_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_ATTENTION_FAIL_FILE" ]; then exit 1; fi
+        fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
+        cat "${HYDRA_ATTENTION_FIXTURE:-$fixture_dir/attention-v1.tsv}"
+        if [ -n "${HYDRA_ATTENTION_DONE_FILE:-}" ]; then
+            : > "$HYDRA_ATTENTION_DONE_FILE"
+        fi
+        ;;
     tui:--data)
         if [ -n "${HYDRA_TEST_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_FAIL_FILE" ]; then exit 1; fi
         if [ -n "${HYDRA_TEST_TUI_DELAY:-}" ]; then sleep "$HYDRA_TEST_TUI_DELAY"; fi
