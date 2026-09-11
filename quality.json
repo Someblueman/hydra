@@ -235,7 +235,7 @@
       "For TUI or interaction changes, inspect the affected real PTY workflow for readable layout, navigation, input routing and terminal restoration; automated assertions do not establish visual quality.",
       "For state, recovery or cancellation changes, assess the relevant failure interleaving and durable evidence; distinguish controlled fixtures from live-host or authenticated-provider qualification.",
       "For performance claims, compare measured equivalent workloads and report setup, runner contention and queue time separately; passing tests does not establish speedup.",
-      "Release and live-host/provider acceptance require the evidence and scope decisions in docs/RELEASE_NEXT_SCOPE.md; passing CI does not establish publication or release acceptance."
+      "Release and live-host/provider acceptance require the evidence and scope decisions in docs/ROADMAP.md; passing CI does not establish publication or release acceptance."
     ]
   }
 }

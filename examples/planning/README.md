@@ -3,8 +3,8 @@
 These fixed examples exercise Hydra's public planning and independent outcome checks without an authenticated provider. `feature` assembles a missing slug implementation and validates the sealed candidate with a separate build and public CLI checks. `performance` measures a fixed line-count comparison and independently recomputes its result. `research` answers a bounded scheduling question from a supplied trace and accepts a reproducible negative result. `patterns` compares bounded static decompositions.
 
 [Finite manifest maps](manifest-map/README.md) freeze selected and skipped members
-before admission. [Staged planning](../../docs/PLAN_STAGED.md) passes an accepted,
-source-bound finding into a separately compiled static graph. The
+before admission. Staged planning passes an accepted, source-bound finding into a
+separately compiled static graph. The
 [planner evaluation pilot](evaluation/README.md) retains six frozen candidates,
 independent finite cases and incorrect-artifact controls; its observed interface
 conformance difference does not establish a planning benefit.
@@ -45,4 +45,7 @@ a newly compiled artifact and acceptance. A failed run is retained as evidence;
 it does not authorize silent retries or weaker checks. Runtime/provider versions,
 source paths and content affect the compiled digest.
 
-Write scopes remain declarations, not OS isolation. Performance execution requires an explicitly coordinated measurement window. See the [planner recipe](../../docs/PLANNER_RECIPE.md), historical [provider qualification](../../docs/evidence/plan-qualification.md), and current [feature](../../docs/evidence/9d-feature-outcome.md), [performance](../../docs/evidence/9d-performance-outcome.md), and [research](../../docs/evidence/9d-research-outcome.md) evidence. The retained historical provider runs are not prerequisites for these deterministic examples.
+Write scopes remain declarations, not OS isolation. Performance execution requires
+an explicitly coordinated measurement window. See [workflows](../../docs/workflows.md)
+for the shared planner and approval rules. These deterministic examples do not
+depend on retained provider qualification records.

@@ -4,11 +4,11 @@ Fleet coordinates up to 16 trusted Hydra hosts through OpenSSH. It provides pinn
 bootstrap, observation, remote head and workflow operations, interactive attach,
 explicit configuration/history transport, and a native fleet view.
 
-[`fleet discover` and `fleet qualify`](HOST_DISCOVERY.md) inspect explicitly
+`fleet discover` and `fleet qualify` inspect explicitly
 selected OpenSSH aliases/static records and qualify them with a strict read-only
 handshake. Candidate evidence stays separate from registered aliases and trust.
 
-The [remote task interface](REMOTE_TASKS.md) prepares exact source/input packages,
+The `remote task interface` prepares exact source/input packages,
 persists receiver-owned acceptance and execution, and supports disconnected
 command/workflow runs, bounded logs, cancellation, and verified result collection.
 Successful committed results enter the existing local integration and approval
@@ -84,14 +84,20 @@ checksums are release identities; do not bootstrap unreviewed packages.
 
 Fleet headless tasks support Antigravity (`agy`), Cursor Agent, OpenCode, Claude
 Code, Codex, and Pi when the selected CLI and credentials are available on that
-host. See [supported agents](PROFILES.md) and the [qualification record](WORKFLOW_AGENT_ACCEPTANCE.md)
-for the difference between implemented contracts and completed live host checks.
+host. See [agent profiles and inputs](USAGE.md#agent-profiles-and-inputs) for the
+headless/interactive matrix and resolution order. Implemented adapters and live
+qualification are separate claims; provider sign-in must be checked on the host.
 
 ## Authenticate agents
 
 Use `hydra fleet auth login HOST --agent NAME` for native sign-in, or preview and
-explicitly copy a supported local credential. See [host authentication](HOST_AUTH.md)
-for provider selection, credential locations, storage guarantees, and recovery.
+explicitly copy a supported local credential. SSH access and agent authentication
+are separate. Native sign-in keeps provider tokens on the remote Unix account;
+credential copy uses an approval-bound preview, transfers only the selected private
+file over SSH stdin, and never stores credentials in packages, logs, or Hydra state.
+Codex, Pi, OpenCode, and Claude support portable-file copy; Antigravity and Cursor
+use native sign-in only. An interrupted transfer is unconfirmed and must be checked
+with host/provider status before another explicit copy.
 
 ## Observe and reconcile
 
@@ -212,8 +218,8 @@ hydra fleet admission build -- inspect task_ID
 
 Initialized-host snapshots include capacity and observation timestamps. These are
 observations; the receiving shell authority grants every reservation against live
-policy. See [resource admission](ADMISSION.md) for limits, labels, queue deadlines,
-and retained claims after owner loss.
+policy. See [Contracts](CONTRACTS.md#durable-state-v2) for limits, labels, queue
+deadlines, and retained claims after owner loss.
 
 ## Native fleet view
 
@@ -229,4 +235,5 @@ carry host, project, and observed instance through the public CLI. Local mutatio
 shortcuts and local pane preview are disabled in fleet mode. Paths/identifiers
 that cannot be represented safely within native text bounds require the CLI.
 
-See [fleet acceptance](FLEET_ACCEPTANCE.md) for exact qualification evidence.
+Qualification evidence is host- and provider-specific; local fixtures and controlled
+SSH failures do not establish live-provider or external-host qualification.

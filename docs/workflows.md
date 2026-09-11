@@ -1,7 +1,7 @@
 # Static workflows
 
-For named artifacts and durable operator decisions, see [Workflow data and approval
-waits](WORKFLOW_DATA.md).
+Named artifacts and durable operator decisions use the sealed outputs, approval
+waits, and exact digest rules described below.
 
 Hydra workflow schema `1` describes a finite DAG with one local coordinator. Repository
 definitions live at `.hydra/workflows/<id>.yml` (or `.yaml`).
@@ -43,7 +43,7 @@ true. Supported kinds and required arguments are: `spawn` (`branch`), `wait`
 (`head`), `exec` (`head` and `command` or `argv`), `message` (`head`, `message`), `gate`
 (`head`, `name`, and `command` or `argv`), `approve` (`head`, `name`, `by`), `approval-wait` (`head`, `name`), and
 `kill` (`head`), and `task` (`task_input`). Task steps use the native fleet runtime
-described in [Distributed task steps](WORKFLOW_TASKS.md). Optional delegation arguments are `group`, `profile`, `reason`,
+described by the native fleet runtime. Optional delegation arguments are `group`, `profile`, `reason`,
 `completion_policy`, `timeout`, `force`, and `allow_shell`. `command` and `argv`
 are mutually exclusive.
 
@@ -126,10 +126,12 @@ falling back to another execution mode.
 
 Headless agent steps use `args.profile`, `prompt_file` or `prompt_input`, optional
 `requires`, and an optional declared `result_file`. They run through the same
-supervised exec path. See [Agent contract v1](AGENT_CONTRACT.md) for the finite
-profile schema, exact-session resume, capability evidence, output bounds, and
-retention, and [Workflow data](WORKFLOW_DATA.md) for sealed handoff and remote
-approval waits. Provider completion does not satisfy a verification gate.
+supervised exec path. Profiles are literal bounded declarations, never shell
+templates. Resume requires the exact recorded session, head, instance, worktree,
+and profile. Sealed outputs bind declared bytes and digests to downstream inputs;
+approval waits record an explicit decision and stale decisions cannot launch a
+changed plan. Provider completion is an observation and does not satisfy a
+verification gate.
 
 ## Supported workflow agents
 
@@ -139,12 +141,12 @@ Imported profiles can add a plain script or another declared worker. Select the
 profile with `args.profile`, deliver a verified `prompt_input` or `prompt_file`,
 and require only capabilities the profile declares. Cursor does not declare usage
 reporting. Use an independent compare or gate step to verify the result.
-See [supported agents](PROFILES.md) and [the headless contract](AGENT_CONTRACT.md)
-for executable requirements, exact resume, and live qualification status.
+Inspect built-in declarations with `hydra agent contract NAME`; live provider
+authentication and qualification remain separate from help probes.
 
 ## Objective planning
 
-Use [`hydra workflow plan`](PLANNER_RECIPE.md) to author a bounded JSON plan,
+Use [`hydra workflow plan`](../README.md#plan-an-objective) to author a bounded JSON plan,
 compile and review its source/input/policy bindings, then run the exact accepted
 artifact through this same scheduler. Final success requires artifact-bound
 verification reports for the declared deliverables. This optional native path

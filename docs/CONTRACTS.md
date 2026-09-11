@@ -12,7 +12,7 @@ contracts.
 
 - `hydra version` and `--version` print `Hydra version <semver>`.
 - CLI syntax documented by `hydra help` is public. An incompatible removal requires
-  a major release and the deprecation policy in [VERSIONING.md](VERSIONING.md).
+  a major release and the deprecation policy in the changelog.
 - Machine interfaces reject unsupported schema or protocol versions. They do not
   guess, silently downgrade, or accept a different format as a fallback.
 - Readers ignore unknown JSON output fields within a supported schema version.
@@ -51,11 +51,17 @@ C0 controls and preserves other UTF-8 bytes.
 `$HYDRA_HOME/state/v2` with `schema-version` equal to `2` is the only runtime state
 authority. Projects, heads, instances, workflow runs, integration reports, messages,
 claims, resources, gates, and provenance use validated opaque IDs as path keys.
-Human labels are scalar values, never path identity. See [STATE.md](STATE.md).
+Human labels are scalar values, never path identity. See [Durable state v2](#durable-state-v2).
 
 The seven-field global map and project `compat-map` are not 2.0 runtime formats.
-`hydra state migrate` may read verified 1.9 projections solely to retire them after a
-backup. Rollback restores those files only so a user can downgrade to 1.9.
+Before migration, finish or stop active mutations, preserve local work, then run
+`hydra state verify` and `hydra state migrate --dry-run`. The dry run must report
+authoritative state v2 as verified. Run `hydra state migrate`, then
+`hydra state verify`; retain the generated backup path printed by migration.
+For a 1.9 rollback, use that exact path:
+`hydra state rollback "$HOME/.hydra/backups/state-YYYYMMDDTHHMMSS-PID"`, then
+`hydra state verify`. Rollback restores state and obsolete projections only; it does
+not replay commands or restore active owners.
 
 Writers use project- or record-scoped directory locks and adjacent-file rename.
 Failure to acquire a lock is a failed mutation; there is no unlocked write path.
@@ -73,15 +79,16 @@ Head history remains after teardown with `desired-state=stopped`.
 - Teardown defaults to no transcript. `redacted` and `full` are explicit policies;
   retained transcripts are bounded and instance-scoped.
 
-See [EVENTS.md](EVENTS.md), [LIFECYCLE.md](LIFECYCLE.md), and
-[MESSAGING.md](MESSAGING.md).
+Lifecycle, event, and message records follow the schemas described in this guide.
 
 ## Profiles, tasks, adapters, and scopes
 
-- Built-in and custom profile fields, confidence labels, and resolution order are
-  defined in [PROFILES.md](PROFILES.md). Headless declarations, provider translations,
-  exact recorded-session resume, and capability requirements are versioned in
-  [AGENT_CONTRACT.md](AGENT_CONTRACT.md).
+- Built-in profiles are `agy`, `cursor`, `opencode`, `claude`, `codex`, and `pi`.
+  `--profile` selects one explicitly; `--no-agent` selects a shell, and multiple
+  detected providers require an explicit choice. Custom profiles are private,
+  schema-versioned literal declarations. Headless prompt transport, provider
+  translations, exact recorded-session resume, and capability requirements are
+  bounded by the rules in [workflows](workflows.md).
 - Task text is resolved before launch, stored privately, and delivered as one quoted
   argument. Events contain only its hash and byte count.
 - Adapter input is bounded canonical JSON schema v1 and must name the current
@@ -105,7 +112,7 @@ evidence. Compilation rejects orphan or circular evidence and unreachable
 evaluation joins with field paths and counterexamples. Structural satisfiability,
 runtime evidence, and semantic adequacy remain separate; coverage alone is not
 semantic proof.
-See [the planner recipe](PLANNER_RECIPE.md) for limits and report format.
+See [workflows](workflows.md) for planner limits and report format.
 Structured v3 reports require each obligation's `measurements` evidence to contain
 at least one finite JSON integer or floating-point observation. Narrative strings,
 nulls, objects, arrays, and non-finite numeric values do not satisfy that evidence
@@ -149,7 +156,7 @@ Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. B
 retain navigation, search, refresh, preview, switch, spawn, group assignment,
 dashboard, regenerate, confirmed kill, and help behavior. Native mutations execute
 the public shell CLI with explicit argv and never write Hydra state directly. See
-[NATIVE_TUI.md](NATIVE_TUI.md).
+Native UI behavior is covered by the public CLI and protocol rules in this guide.
 
 ## Process, install, and platform contracts
 
@@ -158,7 +165,7 @@ a recognized shell pane; `--force` or `--pane` is required to target anything el
 
 Source and prefix installs provide `bin/hydra`, `lib/hydra/*.sh`, and an optional
 qualified `hydra-tui`. Core shell operation requires POSIX `sh`, Git, and tmux 3.0 or
-newer on supported macOS and Linux systems. See [SUPPORT.md](SUPPORT.md).
+newer on supported macOS and Linux systems. The root README lists supported tools.
 
 ## Fleet coordination (since v2.1.0)
 
@@ -168,7 +175,7 @@ without shell interpolation, and delegates head/workflow mutations to the local
 shell CLI. Fleet's alias, package, and inert bundle stores are distinct from live
 state v2. Lost mutation responses never cause automatic replay.
 
-[Task package schema 1](REMOTE_TASKS.md#transfer-and-binding-contract) binds an
+Task package schema 1 binds an
 exact Git bundle, selected inputs, work, destination, completion policy, and limits
 for local preparation and validation. Task protocol 1 advertises `task-accept`
 and `task-status`: receiver-owned receipts and pending launch intent are published
@@ -189,3 +196,42 @@ collection preserves checkout/index/ordinary refs; changed private bindings fail
 local gate, approval, and promotion flow without restoring remote live state.
 Fleet stdin rejects embedded NUL bytes
 and input beyond its 8 MiB bound instead of accepting a truncated JSON prefix.
+
+## Durable state, trust, and execution boundaries
+
+State v2 is project-scoped beneath `$HYDRA_HOME/state/v2`. Records are replaced
+atomically under locks; malformed, linked, oversized, or partially written records
+fail closed. Identity, branch, worktree, instance, and profile bindings are checked
+on resume and collection. A missing owner, stale observation, timeout, or lost
+transport is an unknown outcome and never authorizes replay. Release or cancellation
+of a reservation requires confirmed termination and is scoped to the owning task.
+
+Repository-controlled configuration is inert until `hydra init --trust` records an
+approval. Trust covers regular files and symlink-safe paths under `.hydra`; linked,
+special, or changed configuration invalidates the approval. Submitted workflows use
+the restricted YAML subset, explicit argv, declared inputs/outputs, and exact
+digests. Shell strings require both `allow_shell: true` and a current trust decision.
+
+Headless agent profiles are literal, schema-versioned declarations. Prompt and resume
+slots are bounded and cannot contain shell templates; an exact recorded session,
+head, instance, worktree, and profile are required for resume. Provider completion
+is an observation, not verification or approval. Remote task packages bind an exact
+source commit, selected regular-file inputs, output declarations, capabilities, and
+deadlines; checksums detect changes but do not replace SSH authentication.
+
+Admission is enforced by the receiving host's shell authority under one lock. FIFO
+queue deadlines, host/project limits, labels, disk floors, and retained unknown
+reservations apply to exec, gates, heads, resume, workflows, and remote tasks. A
+capacity snapshot is observational and never grants a slot; a reservation is not an
+execution deduplication lock.
+
+## Compatibility and release policy
+
+The public surface includes CLI syntax, machine-readable JSON, durable state and
+event schemas, installation layout, and documented shell behavior. Patch releases
+fix defects, minor releases add compatible capabilities, and major releases remove
+or replace incompatible contracts. After 2.0, versions are selected at release time
+from compatibility impact. Public interfaces remain functional for at least one
+minor-release window before removal, except where a security or integrity fix
+requires immediate removal with migration guidance. Releases are cut only from the
+exact qualified commit; local checks do not publish or grant release-write access.

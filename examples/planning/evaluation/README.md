@@ -57,8 +57,8 @@ conformance. It does not demonstrate a semantic planning advantage or a benefit
 that exceeds planning overhead. The diagnostic is not the primary outcome and does
 not retroactively change the declared API.
 
-The [direct reports and diagnostic](../../../docs/evidence/planner-evaluation-20260910.json)
-retain every declared case, corruption result, candidate hash and generation record.
+The evaluation inputs retain every declared case, corruption result, candidate hash
+and generation record.
 
 Recorded generation durations are 67 and 67 seconds for current candidates 2 and 3,
 and 87, 38 and 34 seconds for the contract-aware candidates. Current candidate 1's
@@ -79,8 +79,6 @@ label is not evidence of a pre-generation v2 freeze. The oracle recomputes hashe
 and enforces JSON types independently; it does not accept a claimed digest or
 Python's equivalence between booleans and integers.
 
-The [remaining-work evidence](../../../docs/evidence/remaining-work-20260910.md)
-records current public acceptance and exact hashes. The broader 9E planning-benefit
-requirement remains open. These results support keeping independent checking and
+The broader 9E planning-benefit requirement remains open. These results support keeping independent checking and
 making the candidate interface explicit; they do not justify more elaborate
 planning machinery or relaxed budgets.

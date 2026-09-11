@@ -1,5 +1,6 @@
 # clang-tidy 22.1.8; threshold 15; macOS; reviewed module boundaries after de7dd9c
-# See docs/CODEBASE_SIMPLIFICATION.md and docs/quality/workspace-rebase.md.
+# Reviewed per-function ceilings consumed by make quality-c; historical reports are
+# intentionally not retained in the repository.
 src/fleet/agent/agent_cli.c	agent_profile_cli	30
 src/fleet/agent/agent_decode.c	agy	21
 src/fleet/agent/agent_decode.c	canonical	35

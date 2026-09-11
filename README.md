@@ -72,7 +72,7 @@ hydra doctor
 Add `$HOME/.local/bin` to your shell's `PATH` to keep the command available in new
 terminals. You can also run `bin/hydra` directly from a checkout without installing.
 Headless agents: **Antigravity (`agy`), Cursor Agent, OpenCode, Claude Code,
-Codex, and Pi**. See the [supported-agent matrix](docs/PROFILES.md) for interactive
+Codex, and Pi**. See [agent profiles and inputs](docs/USAGE.md#agent-profiles-and-inputs) for interactive
 launch support, executable names, capabilities, and live qualification limits.
 Cursor requires `cursor-agent`. Cursor local/remote and Antigravity remote live
 qualification await sign-in; Claude remote qualification remains deferred.
@@ -81,9 +81,8 @@ GitHub CLI, `fzf`, and coding agents are optional integrations. For a compiler-f
 local installation, skip `make build-fleet` and set `HYDRA_INSTALL_TUI=never` when
 running the installer.
 
-Upgrading from 1.9? Follow the [2.0 migration guide](docs/MIGRATING_TO_2.0.md),
-including its backup and verification steps. See [platform support](docs/SUPPORT.md)
-for installation and upgrade guarantees.
+Upgrading from 1.9? Review the compatibility and backup notes in
+[Contracts](docs/CONTRACTS.md) before upgrading.
 
 ## Start a task
 
@@ -110,7 +109,7 @@ hydra spawn feature/tests --profile codex --prompt "Add tests for search"
 ```
 
 Agents run in the head's worktree. Choose `--no-agent` whenever you want a regular
-shell. [Profiles and task inputs](docs/PROFILES.md) describes selection and setup.
+shell. [Agent profiles and inputs](docs/USAGE.md#agent-profiles-and-inputs) describes selection and setup.
 
 ## Inspect and finish
 
@@ -128,7 +127,7 @@ message is not evidence of consumption or completion.
 Use `hydra tui --basic` for the shell interface. In native mission control,
 `j`/`k` navigate, `Enter` opens details, `p` shows terminal output, and `:` opens
 actions. Use `d` for diagnostics, `Esc` to return to heads, `?` for help, and `q`
-to exit. The [dashboard](docs/dashboard-demo.md) brings live panes into one tmux view.
+to exit.
 
 After reviewing and preserving the work you need, stop the head from your original
 terminal:
@@ -138,8 +137,8 @@ hydra kill feature/search
 ```
 
 Stopping a head removes its session and worktree and retains lifecycle history.
-Its Git branch remains available. See [operations](docs/OPERATIONS.md) and
-[verified integration](docs/workflows.md) for review, recovery, and landing changes.
+Its Git branch remains available. See [workflows](docs/workflows.md) for review,
+recovery, and landing changes.
 
 ## Manage a fleet
 
@@ -168,18 +167,12 @@ The optional native helper supports `hydra workflow plan`: discover the JSON
 schema, validate an agent-authored proposal, compile and review an immutable
 DAG, then execute it with an exact acceptance digest. Retrieve the final
 verified artifacts with `hydra workflow plan result <run-id>`. Schema-2 plans
-[distribute tasks across explicit hosts](docs/WORKFLOW_TASKS.md), require bound
-validation, hand off collected Git commits, and support bounded candidate repair.
+require bound validation, hand off collected Git commits, and support bounded
+candidate repair.
 Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
 Planning does not call a model itself; an ordinary agent authors the proposal
 through the CLI. See the
-[planner recipe](docs/PLANNER_RECIPE.md) and
-[feature and research examples](examples/planning/README.md).
-
-Use [workflow metrics](docs/OBSERVABILITY.md) to inspect recorded queue and outcome
-timing, recovery, operator actions and transport bytes with explicit unknowns.
-[Retention policies](docs/RETENTION.md) preview or expire local task/run evidence
-while preserving submission identities, recovery dependencies and pinned claims.
+the [planning examples](examples/planning/README.md).
 
 ## Documentation
 
@@ -187,17 +180,11 @@ while preserving submission identities, recovery dependencies and pinned claims.
 | --- | --- |
 | Commands, layouts, hooks, configuration, and TUI keys | [Usage](docs/USAGE.md) |
 | Remote hosts, bootstrap, and fleet operations | [Fleet](docs/FLEET.md) |
-| Submit, monitor, cancel, collect, and integrate remote tasks | [Remote tasks](docs/REMOTE_TASKS.md) |
-| Host/project limits, FIFO queues, reservations, and recovery | [Resource admission](docs/ADMISSION.md) |
-| Agent profiles and prompts | [Profiles](docs/PROFILES.md) |
+| Agent profiles and prompts | [Usage: agent profiles and inputs](docs/USAGE.md#agent-profiles-and-inputs) |
 | Workflows and guarded integration | [Workflows](docs/workflows.md) |
-| Agent-authored objectives and compiled local DAGs | [Planner recipe](docs/PLANNER_RECIPE.md) |
-| Scopes, collisions, resources, and gates | [Parallel safety](docs/PARALLEL_SAFETY.md) |
-| Lifecycle, messaging, and automation | [Automation](docs/AUTOMATION.md) · [Events](docs/EVENTS.md) |
-| State, recovery, and provenance | [State](docs/STATE.md) · [Operations](docs/OPERATIONS.md) · [Provenance](docs/PROVENANCE.md) |
-| Native helpers and terminal behavior | [Native core](docs/NATIVE_CORE.md) · [Native TUI](docs/NATIVE_TUI.md) |
-| Public interfaces and trust boundaries | [Contracts](docs/CONTRACTS.md) · [Security](docs/SECURITY.md) |
-| Releases and upcoming work | [Release notes](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) |
+| Agent-authored objectives and staged plans | [Workflows](docs/workflows.md) |
+| State, trust, and public interfaces | [Contracts](docs/CONTRACTS.md) |
+| Releases and upcoming work | [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) |
 
 ## Development
 
@@ -211,10 +198,7 @@ JSON and subprocess capture. The native TUI lives in `src/tui/`, with independen
 compiled model, adapter, process, selection, rendering, input and terminal modules.
 Workspace views include A/B/C layouts, attached tmux clients, draft validation,
 exact-digest execution and selected-run evidence. Statistics and graph rendering
-use the reusable `src/termviz/` components; see the [workspace guide](docs/NATIVE_TUI.md)
-and [standalone library guide](src/termviz/STANDALONE.md).
-See the [simplification review](docs/CODEBASE_SIMPLIFICATION.md#follow-up-module-boundaries)
-for ownership boundaries and measured results.
+use the reusable `src/termviz/` components; see its [standalone library guide](src/termviz/STANDALONE.md).
 
 Testing requires a C99 compiler, JSON-C development files and pkg-config in
 addition to Git, tmux, dash and ShellCheck. Python is not required; Make builds
@@ -237,9 +221,8 @@ CI splits the same case list between `FLEET_SHARD=odd` and `FLEET_SHARD=even`,
 with two workers per runner to limit process contention;
 the default `FLEET_SHARD=all` retains the complete local suite.
 
-Contributions should include checks appropriate to their scope. Versions after
-2.0 are chosen at release time from compatibility impact; see the
-[release policy](docs/VERSIONING.md).
+Contributions should include checks appropriate to their scope. Versions are
+chosen at release time from compatibility impact and documented in the changelog.
 
 ## Uninstall
 

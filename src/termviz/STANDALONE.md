@@ -25,23 +25,23 @@ tree's `build` directory.
 
 ## Ownership and compatibility
 
-- [Core API](src/termviz/termviz.h): the caller allocates cells and presenter history.
+- [Core API](termviz.h): the caller allocates cells and presenter history.
   Views borrow storage and must not outlive it. Rendering does not allocate or
   perform OS access; output functions write to the supplied stream.
-- [Layout](src/termviz/workspace.h): a caller-owned value object. Pane IDs remain
+- [Layout](workspace.h): a caller-owned value object. Pane IDs remain
   stable until reinitialization. The caller owns labels, domain data and actions.
-- [Terminal](src/termviz/terminal.h): the caller supplies disjoint primary,
+- [Terminal](terminal.h): the caller supplies disjoint primary,
   alternate and history buffers and drives input/output in its event loop.
-  [Protocol limits](src/termviz/TERMINAL.md) are explicit; this is a bounded terminal
+  [Protocol limits](TERMINAL.md) are explicit; this is a bounded terminal
   subset, not a general replacement for an established terminal emulator.
-- [POSIX terminal](src/termviz/posix.h) and [PTY](src/termviz/pty_posix.h) adapters
+- [POSIX terminal](posix.h) and [PTY](pty_posix.h) adapters
   are optional. The application owns signal policy, child lifecycle and cleanup.
   The example closes its owned child; an application attaching to an external
   session must distinguish its client process from the external execution owner.
 
-The source is MIT licensed under [LICENSE](LICENSE). Preserve its copyright and
+The source is MIT licensed under [LICENSE](../../LICENSE). Preserve its copyright and
 permission notice when copying or redistributing. The checked-in Unicode tables
-carry their separate [Unicode license](src/termviz/UNICODE-LICENSE.txt); preserve it
+carry their separate [Unicode license](UNICODE-LICENSE.txt); preserve it
 and the provenance in `unicode_tables.inc`. Standard C/POSIX interfaces introduce
 no bundled third-party runtime. Compiler/toolchain licensing remains the user's
 installation's responsibility.

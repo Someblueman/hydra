@@ -11,4 +11,4 @@ checks partial streams and failure events from providers that exit zero.
 Format references: [Antigravity](https://antigravity.google/docs/cli/headless/),
 [Cursor](https://cursor.com/docs/cli/reference/output-format), and
 [OpenCode](https://opencode.ai/docs/cli/). Live versions and qualification limits
-are recorded in `docs/WORKFLOW_AGENT_ACCEPTANCE.md`.
+are qualified separately from these synthetic conformance fixtures.
