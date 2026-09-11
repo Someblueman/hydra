@@ -131,7 +131,7 @@ workflow in scope on 10 September 2026. Broader comparative planning-quality
 research remains open and is outside this release.
 See [Contracts](CONTRACTS.md) and [workflows](workflows.md) for current scope and
 acceptance boundaries; dated evidence is intentionally kept out of the repository.
-historical checks and limits. The [release record](https://github.com/Someblueman/hydra/releases/tag/v2.4.0)
+Historical checks and limits remain bound to their source records. The [release record](https://github.com/Someblueman/hydra/releases/tag/v2.4.0)
 identifies the published commit and artifacts; historical evidence remains bound
 to the revisions it names.
 
@@ -139,33 +139,46 @@ The user selected the remaining V, 9 and H workstreams. Other roadmap tracks
 retain their original selection boundaries. Local qualification does not
 establish live provider results, operational-host enrollment, or publication.
 
-Research for follow-on decisions: `interactive parity`
-and its `decision brief`, plus
-`host discovery and onboarding`
-and its `decision brief`.
-The reports describe the audited baseline and retain their research-date context;
-the H track below incorporates the authorized onboarding recommendations.
+Research for follow-on decisions is retained in the historical source index:
+[interactive parity report][src-interactive-report], [interactive parity decision
+brief][src-interactive-brief], [host discovery report][src-host-report], [host
+discovery decision brief][src-host-brief], [performance measurement research][src-performance],
+[optional-tmux analysis][src-tmux], and [tmux control-mode prototype][src-tmux-prototype].
+They describe the audited baseline and retain their research-date context; this
+roadmap is the canonical backlog and the H track incorporates the authorized
+onboarding recommendations.
 
-### Research follow-up map — 10 September 2026
+[src-interactive-report]: https://github.com/Someblueman/hydra/blob/66a5baad011d50b17949f981b807f31627c59250/docs/research/interactive-parity-report.md
+[src-interactive-brief]: https://github.com/Someblueman/hydra/blob/66a5baad011d50b17949f981b807f31627c59250/docs/research/interactive-parity-decision-brief.md
+[src-host-report]: https://github.com/Someblueman/hydra/blob/66a5baad011d50b17949f981b807f31627c59250/docs/research/host-discovery-onboarding-report.md
+[src-host-brief]: https://github.com/Someblueman/hydra/blob/66a5baad011d50b17949f981b807f31627c59250/docs/research/host-discovery-onboarding-decision-brief.md
+[src-performance]: https://github.com/Someblueman/hydra/blob/66a5baad011d50b17949f981b807f31627c59250/docs/research/performance-baselines.md
+[src-tmux]: https://github.com/Someblueman/hydra/blob/66a5baad011d50b17949f981b807f31627c59250/docs/research/tmux-optional-execution.md
+[src-tmux-prototype]: https://github.com/Someblueman/hydra/blob/66a5baad011d50b17949f981b807f31627c59250/docs/research/tmux-control-mode-prototype.md
+[src-workflow-acceptance]: https://github.com/Someblueman/hydra/blob/66a5baad011d50b17949f981b807f31627c59250/docs/WORKFLOW_AGENT_ACCEPTANCE.md
 
-The 9 September reports are historical audits, not current implementation status.
-This table maps their recommendations to the canonical backlog. New unchecked
+### Research follow-up map — 11 September 2026
+
+These reports are historical audits, not current implementation status. V1–V4 and
+H1–H3 are implemented within their documented local qualification; this table
+maps the remaining recommendations to the canonical backlog. New unchecked
 items below capture remaining work; they do not expand the 2.4.0 scope or launch
 implementation, provider access, or live-host experiments.
 
-| Research recommendation | Roadmap destination and current boundary |
+| Source finding | Roadmap destination, status, dependency, and next action |
 | --- | --- |
-| Execution separate from terminal attachment | T1/T2 implementation is integrated; T2 live qualification and T3 remain open. |
-| Exact outcome and recovery semantics | 9A–9F and V1–V4 retain their recorded implementation and qualification limits. |
-| Direct attach and saved multi-machine interaction | I1 below extends existing local/remote attach; no replacement PTY server is selected. |
-| Semantic attention and compact review navigation | I2/I3 below; observations and external links cannot grant acceptance. |
-| Provider breadth and exact-session qualification | Item 2 retains the authenticated adapter matrix. |
-| Idle efficiency and 1/10/50-worktree performance | Item 10, including the multi-client and attention cases below. |
-| SSH/static discovery, reviewed enrollment, bounded snapshot imports | H1–H3 are locally qualified; supplied snapshots are not live discovery clients. |
-| Live source acquisition and snapshot changes | H4 below, one explicitly selected source at a time. |
-| Onboarding filters, detail, progress and low-friction review | H5 below; existing CLI batching remains the execution path. |
-| Revocation and reviewed key rotation | H6 below; existing changed-key rejection remains required. |
-| Cloud-manager integrations, shared inventory and runtime replacement | Conditional decisions at the end of this roadmap; not prerequisites for I/H work. |
+| Herdr's server/client attachment model ([interactive parity][src-interactive-report]). | [I1](#i-interactive-parity-and-review-navigation) — OPEN; uses V1–V4 and existing attach. It can proceed independently of 9E, load balancing, and T3. Next: implement and qualify direct attach across saved trusted machines. |
+| Herdr's semantic attention model ([interactive parity][src-interactive-report]). | [I2](#i-interactive-parity-and-review-navigation) — OPEN; reuses lifecycle and outcome contracts and can proceed independently of 9E, load balancing, and T3. Next: implement and qualify exact-instance attention with item 10's false-positive, missed-signal, and overhead evidence. |
+| Compact review and external evidence references from the interaction research ([interactive parity][src-interactive-brief]). | [I3](#i-interactive-parity-and-review-navigation) — OPEN; reuses lifecycle, outcome, and review contracts and can proceed independently of 9E, load balancing, and T3. Next: implement and qualify evidence, artifact, provenance, and approval navigation. |
+| Terminal attachment remains separate from the durable execution owner ([optional tmux][src-tmux]). | [T2](#t-optional-tmux-for-headless-and-remote-execution) implementation is integrated; live qualification remains OPEN, and [T3](#t-optional-tmux-for-headless-and-remote-execution) follows it. Next: qualify an authenticated host without tmux, then the two-host scenario; interactive heads retain tmux. |
+| Control-mode polling is a bounded historical lead ([tmux prototype][src-tmux-prototype]). | Item 10 may evaluate it, but reconnect, restart, partial frames, sustained CPU/RSS, resize, and platform parity remain unqualified. Next: measure the supported matrix before selecting a change. |
+| Scheduled input, coordinated omission, monotonic clocks, attribution, and counter limits ([performance research][src-performance]). | [Item 10](#10-performance-baselines-idle-efficiency-and-change-locality) remains OPEN and supplies I2 attention-error/overhead evidence. Next: establish 1/10/50-worktree baselines with agent/tmux/observer attribution and explicit unknown counters before budgets or parity claims. |
+| Discovery supplies untrusted coordinates and needs typed, private candidate state ([host discovery][src-host-report]). | [H4](#h-host-discovery-qualification-and-staged-onboarding) — OPEN; depends on H1–H3 and the existing candidate/SSH contracts. Next: select one live source, then implement and qualify bounded acquisition and snapshot diffs. |
+| Onboarding needs provenance, freshness, identity, and typed progress ([host discovery][src-host-brief]). | [H5](#h-host-discovery-qualification-and-staged-onboarding) — OPEN; depends on H1–H3 and the existing CLI mutation path. Next: implement and qualify review, filters, detail, and interrupted multi-host progress. |
+| Changed keys and source conflicts require explicit revocation and review ([host discovery][src-host-report]). | [H6](#h-host-discovery-qualification-and-staged-onboarding) — OPEN; depends on existing host-key and enrollment contracts. Next: implement and qualify scoped revocation and reviewed key rotation without cancelling or replaying tasks. |
+| Real Codex, Pi, OpenCode, and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 retains its open provider matrix. An operator-provided Ubuntu VPS is available for the next qualification; prepare its tmux-absent environment and verify the current package and provider status. |
+| Structural plan inspection and finite comparisons are implemented and locally qualified; broader planning-quality evaluation remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality) — OPEN for matched held-out work, semantic quality, correction, and calibration measurements. Next: define and measure that workload before claiming planning benefit. |
+| Runtime membership/expansion, PTY server replacement, cloud-manager integration, and shared inventory remain conditional ([optional tmux][src-tmux], [host discovery][src-host-brief]). | 9F's qualified finite reuse remains implemented; the conditional extensions are not prerequisites for I/H work. Next: revisit only with an explicit authority, workload, and acceptance decision. |
 
 #### T. Optional tmux for headless and remote execution
 
@@ -485,7 +498,10 @@ Begin measurement alongside item 9, before changing refresh or scheduling policy
 this is not blocked by 9F or load balancing. Item 9D concerns performance tasks
 executed by Hydra; this milestone measures Hydra itself. Feed fleet overhead and
 contention evidence into item 6 and expose useful counters through item 7.
-Measurement design remains a future qualification activity.
+Measurement qualification remains open. The [performance research][src-performance]
+sets the method: schedule inputs independently of render completion, use monotonic
+timestamps and tagged stimuli, record clock uncertainty, attribute agent/tmux/
+observer work separately, and treat unsupported counters as unknown.
 
 Target: **with no changes, Hydra should do almost no work; with one changed
 worktree, work should be mostly confined to that worktree.** This is an acceptance
@@ -697,7 +713,7 @@ permanent daemon, terminal server, scheduler, or automatic coordinator failover.
 
 #### I. Interactive parity and review navigation
 
-Follow-up to the `interactive parity report`.
+Follow-up to the [interactive parity report][src-interactive-report].
 Extend the current attached-terminal and V1–V4 interfaces; keep the existing task
 owner, tmux terminal lifecycle and shell mutation path. These are outstanding
 operator workflows, not a proposal for a new server, scheduler or provider manager.
