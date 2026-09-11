@@ -22,6 +22,21 @@ void native_observations_destroy(struct app *app) {
     free(app->observations); app->observations=NULL;
 }
 
+static void complete_snapshot(struct app *app, FILE *input, bool timed_out) {
+    bool complete=input!=NULL;
+    int result=accept_model_data(app,input);
+    record_snapshot(app,result==0);
+    if (!strcmp(app->notice,"Loading snapshot...")) app->notice[0]='\0';
+    if (result && (timed_out || !complete)) copy_text(app->snapshot_error,sizeof(app->snapshot_error),timed_out ?
+        "shell data adapter timed out; showing last good snapshot" : "shell data adapter failed; showing last good snapshot");
+    if (app->fleet && app->statistics) statistics_visible(app);
+}
+
+static long observation_budget(const struct app *app, size_t source) {
+    if (app->fleet) return HYDRA_FLEET_TUI_CAPTURE_BUDGET_MS;
+    return source==0 ? HYDRA_TUI_LOCAL_CAPTURE_BUDGET_MS : 3500L;
+}
+
 void native_observations_tick(struct app *app, bool request) {
     size_t i;
     native_plan_tick(app,request);
@@ -40,12 +55,7 @@ void native_observations_tick(struct app *app, bool request) {
             bool timed_out=p->timed_out;
             input=native_capture_take(p);
             if (i==0) {
-                bool complete=input!=NULL;
-                int result=accept_model_data(app,input);
-                record_snapshot(app,result==0);
-                if (result && (timed_out || !complete)) copy_text(app->snapshot_error,sizeof(app->snapshot_error),timed_out ?
-                    "shell data adapter timed out; showing last good snapshot" : "shell data adapter failed; showing last good snapshot");
-                if (app->fleet && app->statistics) statistics_visible(app);
+                complete_snapshot(app,input,timed_out);
             } else if (i==1) (void)accept_workflows(app,input);
             else if (i==2) (void)accept_statistics(app,input);
             else native_links_accept(app,input);
@@ -53,8 +63,8 @@ void native_observations_tick(struct app *app, bool request) {
         if (request && !p->pid && (i==0 || (!app->fleet && ((i==1 && (app->view==5 || app->view==7)) || (i==2 && app->view==8) || (i==3 && app->view==7))))) {
             char *argv[]={(char *)app->hydra,i==0 ? app->fleet ? "fleet" : "tui" : "workflow",
                 i==0 ? app->fleet ? "tui-visual-data" : "--data" : i==1 ? "tui-data" : i==2 ? "statistics-data" : "--workspace-links",NULL};
-            if (!native_capture_start(p,argv,app->fleet ? HYDRA_FLEET_TUI_CAPTURE_BUDGET_MS : 3500L)) {
-                if (i==0) { record_snapshot(app,false); copy_text(app->snapshot_error,sizeof(app->snapshot_error),"Unable to start snapshot observation"); }
+            if (!native_capture_start(p,argv,observation_budget(app,i))) {
+                if (i==0) { record_snapshot(app,false); app->notice[0]='\0'; copy_text(app->snapshot_error,sizeof(app->snapshot_error),"Unable to start snapshot observation"); }
                 else if (i==1) (void)accept_workflows(app,NULL);
                 else if (i==2) (void)accept_statistics(app,NULL);
                 else native_links_accept(app,NULL);

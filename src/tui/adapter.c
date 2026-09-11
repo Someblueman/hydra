@@ -79,21 +79,6 @@ int accept_model_data(struct app *app, FILE *input) {
     app->snapshot_error[0] = '\0';
     return 0;
 }
-int refresh_model(struct app *app) {
-    int result;
-    char notice[TEXT];
-    FILE *input;
-    native_observations_cancel(app,0);
-    copy_text(notice,sizeof(notice),app->notice); app->notice[0]='\0';
-    input=capture_adapter(app,app->fleet ? "fleet" : "tui",
-        app->fleet ? "tui-visual-data" : "--data",
-        app->fleet ? HYDRA_FLEET_TUI_CAPTURE_BUDGET_MS : 3500L);
-    if (!input) copy_text(app->snapshot_error,sizeof(app->snapshot_error),app->notice[0] ? app->notice : "Snapshot observation unavailable");
-    copy_text(app->notice,sizeof(app->notice),notice);
-    result = accept_model_data(app,input);
-    record_snapshot(app, result == 0);
-    return result;
-}
 void refresh_current_session(struct app *app) {
     int pipefd[2], status = 0, ready, attempt;
     pid_t pid;

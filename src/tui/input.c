@@ -322,12 +322,11 @@ int interactive_main(struct app *app) {
     char key;
     if (!terminal_ready(app)) return 3;
     terminal_watch(app);
-    if (refresh_model(app) != 0 && app->model.head_count == 0U) return 4;
-    if (app->view == 5 && !app->fleet) (void)refresh_workflows(app, NULL);
-    if (app->view == 8) (void)refresh_statistics(app, NULL);
+    copy_text(app->notice, sizeof(app->notice), "Loading snapshot...");
 
     refresh_current_session(app);
     if (enter_raw(app) != 0) return 4;
+    native_observations_tick(app, true);
     capture_preview(app);
     last_refresh = time(NULL);
     app->running = true;

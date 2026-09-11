@@ -29,6 +29,7 @@ case "${1:-}:${2:-}" in
         ;;
     tui:--data)
         if [ -n "${HYDRA_TEST_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_FAIL_FILE" ]; then exit 1; fi
+        if [ -n "${HYDRA_TEST_TUI_DELAY:-}" ]; then sleep "$HYDRA_TEST_TUI_DELAY"; fi
         if [ -n "${HYDRA_TUI_FIXTURE:-}" ]; then
             cat "$HYDRA_TUI_FIXTURE"
         else

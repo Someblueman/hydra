@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -31,6 +32,7 @@ static int failures;
 static long long monotonic_ms(void);
 static int open_session(struct session *, const char *, const char *, const char *, unsigned short, unsigned short);
 static bool wait_for_raw(struct session *);
+static bool wait_for_model(struct session *);
 static bool wait_for_marker(struct session *, const char *, long);
 static bool wait_for_marker_capture(struct session *, const char *, long, char *, size_t *);
 static int wait_for_exit(struct session *);
@@ -84,6 +86,23 @@ static bool wait_for_file(const char *path, long timeout_ms) {
     return marker_file_exists(path);
 }
 
+static bool pids_gone(const char *path) {
+    FILE *file;
+    long pid;
+    unsigned count=0U;
+    int trailing;
+    if (!path || (file=fopen(path,"r")) == NULL) return false;
+    while (fscanf(file,"%ld",&pid) == 1) {
+        if (pid <= 0 || pid > (long)INT_MAX || kill((pid_t)pid,0) == 0 || errno != ESRCH) {
+            fclose(file); return false;
+        }
+        count++;
+    }
+    do trailing=fgetc(file); while (trailing==' ' || trailing=='\t' || trailing=='\n' || trailing=='\r');
+    fclose(file);
+    return count > 0U && trailing == EOF;
+}
+
 static bool wait_for_stop_drain(struct session *session, const char *path, long timeout_ms,
                                 char *captured, size_t *used, long long *stopped_at) {
     long long deadline=monotonic_ms()+timeout_ms;
@@ -100,13 +119,20 @@ static bool wait_for_stop_drain(struct session *session, const char *path, long 
 }
 
 static void capture_bytes(char *captured, size_t *used, const char *buffer, size_t length) {
-    size_t available = *used < 65535U ? 65535U - *used : 0U;
-    size_t copy = length < available ? length : available;
-    if (copy > 0U) {
-        memcpy(captured + *used, buffer, copy);
-        *used += copy;
-        captured[*used] = '\0';
+    const size_t capacity = 65535U;
+    if (length >= capacity) {
+        memcpy(captured, buffer + length - capacity, capacity);
+        *used = capacity;
+    } else {
+        size_t drop = *used + length > capacity ? *used + length - capacity : 0U;
+        if (drop > 0U) {
+            memmove(captured, captured + drop, *used - drop);
+            *used -= drop;
+        }
+        memcpy(captured + *used, buffer, length);
+        *used += length;
     }
+    captured[*used] = '\0';
 }
 
 static long long monotonic_ms(void) {
@@ -347,6 +373,12 @@ static bool wait_for_raw(struct session *session) {
     return false;
 }
 
+/* Raw mode is the startup responsiveness barrier; model-dependent tests use
+ * this separate barrier so delayed observations remain genuinely asynchronous. */
+static bool wait_for_model(struct session *session) {
+    return wait_for_marker(session, "heads  |  Row", 12000);
+}
+
 static void drain_start_output(struct session *session) {
     char buffer[4096];
     ssize_t length;
@@ -491,6 +523,7 @@ static void test_small_list(const char *tui, const char *hydra, const char *fake
     struct session session;
     if (!result(open_session(&session, tui, hydra, fake_bin, 40, 10) == 0, "open minimum-size terminal")) return;
     result(wait_for_raw(&session), "small list enters raw mode");
+    (void)wait_for_model(&session);
     write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads:", 1000);
     write_input(session.master, "feature\n", 8U);
@@ -516,6 +549,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     (void)unsetenv("FAKE_TMUX_CURRENT_SESSION");
     if (!opened) return;
     result(wait_for_raw(&session), "interactive TUI enters raw mode");
+    (void)wait_for_model(&session);
     write_input(session.master, "j\r", 2U);
     result(wait_for_marker(&session, "HEAD DETAIL  feature-stale", 1000),
            "keyboard navigation opens the selected head detail");
@@ -640,6 +674,7 @@ static void test_fleet_attach(const char *tui, const char *hydra, const char *fa
         return;
     }
     result(wait_for_raw(&session), "fleet view enters raw mode");
+    (void)wait_for_model(&session);
     write_input(session.master, "a", 1U);
     sleep_ms(200);
     argv_file = fopen(argv_path, "r");
@@ -664,6 +699,7 @@ static void test_fleet_attach(const char *tui, const char *hydra, const char *fa
         return;
     }
     result(wait_for_raw(&session), "unknown-freshness fleet view enters raw mode");
+    (void)wait_for_model(&session);
     result(wait_for_marker(&session, "builder", 1000), "unknown-freshness fleet row is visible");
     write_input(session.master, "a", 1U);
     result(wait_for_marker(&session, "Remote target is stale", 3000), "unknown host freshness shows refusal notice");
@@ -696,14 +732,62 @@ static void test_signal(const char *tui, const char *hydra, const char *fake_bin
 
 static void test_preflight_failure(const char *tui, const char *hydra, const char *fake_bin,
                                    unsigned short cols, unsigned short rows, int expected,
+                                   bool await_failure, const char *failure_marker,
+                                   const char *pid_file, bool quit_while_running,
                                    const char *message) {
     struct session session;
     if (open_session(&session, tui, hydra, fake_bin, cols, rows) != 0) {
         result(false, message); return;
     }
-    result(wait_for_exit(&session) == expected, message);
+    if (expected == 0) {
+        result(wait_for_raw(&session), message);
+        if (quit_while_running) {
+            result(wait_for_file(pid_file, 1000), "early quit observes a live capture owner");
+            write_input(session.master, "q", 1U);
+            result(wait_for_exit(&session) == 0, "early quit stops the active capture");
+            result(pids_gone(pid_file), "early quit removes the capture owner and descendant");
+            result(terminal_restored(&session), "early quit preserves terminal state");
+            close_session(&session);
+            return;
+        }
+        if (await_failure)
+            result(wait_for_marker(&session, failure_marker, 12000),
+                   "failed observation reaches a bounded failure state");
+        if (pid_file) result(wait_for_file(pid_file, 1000) && pids_gone(pid_file),
+                             "timed-out capture owner and descendant are gone before quit");
+        write_input(session.master, "q", 1U);
+        result(wait_for_exit(&session) == 0, await_failure ?
+               "bounded failed observation is reaped before quit" :
+               "bounded failed observation quits cleanly");
+        if (pid_file) result(pids_gone(pid_file), "timed-out capture has no owner after quit");
+    } else result(wait_for_exit(&session) == expected, message);
     result(terminal_restored(&session), "preflight failure preserves terminal state");
     close_session(&session);
+}
+
+static void test_delayed_initial_snapshot(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    char output[65536] = "";
+    size_t used = 0U;
+    if (setenv("HYDRA_TEST_TUI_DELAY", "4", 1) == 0) {
+        if (open_session(&session, tui, hydra, fake_bin, 80, 24) == 0) {
+            result(wait_for_raw(&session), "delayed initial snapshot reaches raw mode before data");
+            result(wait_for_marker_capture(&session, "Loading snapshot...", 1000, output, &used),
+                   "delayed initial snapshot renders loading state");
+            write_input(session.master, "?", 1U);
+            result(wait_for_marker_capture(&session, "HELP", 1000, output, &used),
+                   "delayed initial snapshot accepts input while loading");
+            write_input(session.master, "?", 1U);
+            output[0] = '\0'; used = 0U;
+            result(wait_for_marker_capture(&session, "Row 1 of 3", 15000, output, &used),
+                   "delayed initial snapshot eventually renders model data");
+            write_input(session.master, "q", 1U);
+            result(wait_for_exit(&session) == 0, "delayed initial snapshot quits cleanly");
+            result(terminal_restored(&session), "delayed initial snapshot restores terminal");
+            close_session(&session);
+        } else result(false, "open delayed snapshot pseudo-terminal");
+        (void)unsetenv("HYDRA_TEST_TUI_DELAY");
+    } else result(false, "configure delayed snapshot fixture");
 }
 
 static void test_crash_fallback(const char *dispatch, const char *fake_bin) {
@@ -752,6 +836,7 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 #include "test_tui_visualization.inc"
 
 int main(int argc, char **argv) {
+    char timeout_pids[128];
     if (argc == 4 && strcmp(argv[1], "--i1-measure") == 0) {
         unsigned heads;
         if (!measure_unsigned(argv[2], &heads) || heads == 0U || heads > 10U) return 2;
@@ -778,17 +863,33 @@ int main(int argc, char **argv) {
     test_signal(argv[1], argv[2], argv[3], SIGINT, "SIGINT");
     test_signal(argv[1], argv[2], argv[3], SIGTERM, "SIGTERM");
     test_signal(argv[1], argv[2], argv[3], SIGHUP, "SIGHUP");
-    test_preflight_failure(argv[1], argv[2], argv[3], 39, 9, 3, "narrow terminal fails before raw mode");
-    test_preflight_failure(argv[1], "/usr/bin/false", argv[3], 80, 24, 4,
-                           "adapter failure exits without entering raw mode");
+    test_preflight_failure(argv[1], argv[2], argv[3], 39, 9, 3, false,
+                           "shell data adapter", NULL, false,
+                           "narrow terminal fails before raw mode");
+    test_preflight_failure(argv[1], "/usr/bin/false", argv[3], 80, 24, 0,
+                           true, "shell data adapter failed",
+                           NULL, false,
+                           "adapter failure remains responsive in raw mode");
+    snprintf(timeout_pids, sizeof(timeout_pids), "/tmp/hydra-timeout-pids-%ld", (long)getpid());
+    (void)unlink(timeout_pids);
+    (void)setenv("HYDRA_TEST_PID_FILE", timeout_pids, 1);
     if (getenv("HYDRA_TEST_SLOW_HYDRA") != NULL) {
-        test_preflight_failure(argv[1], getenv("HYDRA_TEST_SLOW_HYDRA"), argv[3], 80, 24, 4,
-                               "hung adapter is terminated by the bounded refresh timeout");
+        (void)unlink(timeout_pids);
+        test_preflight_failure(argv[1], getenv("HYDRA_TEST_SLOW_HYDRA"), argv[3], 80, 24, 0,
+                               true, "shell data adapter timed out",
+                               timeout_pids, true,
+                               "hung adapter remains responsive in raw mode");
     }
     if (getenv("HYDRA_TEST_EOF_HYDRA") != NULL) {
-        test_preflight_failure(argv[1], getenv("HYDRA_TEST_EOF_HYDRA"), argv[3], 80, 24, 4,
-                               "adapter deadline remains bounded after stdout EOF");
+        (void)unlink(timeout_pids);
+        test_preflight_failure(argv[1], getenv("HYDRA_TEST_EOF_HYDRA"), argv[3], 80, 24, 0,
+                               true, "shell data adapter timed out",
+                               timeout_pids, false,
+                               "adapter EOF remains responsive in raw mode");
     }
+    (void)unsetenv("HYDRA_TEST_PID_FILE");
+    (void)unlink(timeout_pids);
+    test_delayed_initial_snapshot(argv[1], argv[2], argv[3]);
     test_crash_fallback(getenv("HYDRA_TEST_CRASH_DISPATCH"), argv[3]);
     printf("Tests: %d, Failed: %d\n", tests, failures);
     return failures == 0 ? 0 : 1;

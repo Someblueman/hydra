@@ -247,7 +247,6 @@ const struct head *head_for_branch(const struct app *app, const char *branch);
 void record_snapshot(struct app *app, bool valid);
 FILE *capture_adapter(struct app *app, const char *command, const char *option, long budget_ms);
 int accept_model_data(struct app *app, FILE *input);
-int refresh_model(struct app *app);
 void refresh_current_session(struct app *app);
 void capture_preview(struct app *app);
 size_t split_fields(char *line, char **fields, size_t capacity);
