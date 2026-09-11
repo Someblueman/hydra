@@ -10,6 +10,7 @@
 #include "fleet/auth/agent_auth.h"
 #include "fleet/discovery/discovery.h"
 #include "fleet/enrollment/enrollment.h"
+#include "fleet/attention_tui.h"
 #include "fleet/retention/retention.h"
 #include "tui/fleet_budget.h"
 #include <stdlib.h>
@@ -109,6 +110,21 @@ static json_object *parse_options(int argc, char **argv, struct fleet_options *o
 static bool is_tui_data(const char *action) {
     return !strcmp(action, "tui-data") || !strcmp(action, "tui-visual-data");
 }
+static json_object *attention_data_action(void)
+{
+    json_object *overview = f_observation_aggregate(HYDRA_FLEET_TUI_REQUEST_SECONDS, 16);
+    json_object *attention;
+    if (!json_object_get_boolean(f_field(overview, "ok"))) return overview;
+    attention = f_attention_aggregate(overview);
+    if (f_attention_tui_data(attention)) {
+        if (attention != overview) json_object_put(attention);
+        json_object_put(overview);
+        return f_error("fleet-attention", "projection_failed", "attention snapshot could not be encoded for the native TUI");
+    }
+    if (attention != overview) json_object_put(attention);
+    json_object_put(overview);
+    return NULL;
+}
 
 static json_object *aggregate_action(const char *action, const struct fleet_options *options) {
     if (!strcmp(action, "overview")) return f_observation_aggregate(options->seconds, options->jobs);
@@ -151,6 +167,9 @@ json_object *f_cli(int argc, char **argv) {
     if (!strcmp(action, "tui")) return launch_tui();
     if (is_tui_data(action)) {
         (void)f_tui_data(HYDRA_FLEET_TUI_REQUEST_SECONDS, 16, !strcmp(action, "tui-visual-data")); return NULL;
+    }
+    if (!strcmp(action, "attention-data")) {
+        return attention_data_action();
     }
     if (!strcmp(action, "package")) {
         if (!options.source || !options.binary || !options.output) return f_error("fleet-package", "invalid_input", "source, target binary, and output are required");

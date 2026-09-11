@@ -1,6 +1,7 @@
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/workflow/workflow_data.h"
+#include "fleet/attention_tui.h"
 #include "fleet/task/task.h"
 #include <string.h>
 #include <stdlib.h>
@@ -12,6 +13,17 @@ static int attempt_command(const char *action, json_object *manifest, const char
     if (!strcmp(action, "seal")) return wd_seal(manifest, step, attempt);
     return -1;
 }
+static json_object *attention_data(const char *project)
+{
+    json_object *result = wd_attention(project);
+    if (!json_object_get_boolean(f_field(result, "ok"))) return result;
+    if (f_attention_tui_data(result)) {
+        json_object_put(result);
+        return f_error("workflow-attention", "projection_failed", "attention snapshot could not be encoded for the native TUI");
+    }
+    json_object_put(result);
+    return NULL;
+}
 json_object *wd_cli(int argc, char **argv) {
     json_object *manifest = NULL, *result; char data[F_PATH], graph[F_PATH]; int status = -1;
     if (argc == 2 && !strcmp(argv[0], "fingerprint")) {
@@ -19,6 +31,8 @@ json_object *wd_cli(int argc, char **argv) {
         if (wd_fingerprint(argv[1], digest)) return f_error("workflow-data", "binding_failed", "cannot fingerprint the bounded worktree evidence");
         puts(digest); return NULL;
     }
+    if (argc == 2 && !strcmp(argv[0], "attention")) return wd_attention(argv[1]);
+    if (argc == 2 && !strcmp(argv[0], "attention-data")) return attention_data(argv[1]);
     if (argc == 4 && !strcmp(argv[0], "validate")) {
         char scratch[] = "/tmp/hydra-workflow-data.XXXXXX";
         if (mkdtemp(scratch)) {

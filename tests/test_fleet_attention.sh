@@ -55,6 +55,27 @@ if grep -q '"step_id":"step_b","attempt_id":"attempt-a"' "$fixture/attention"; t
 unset HYDRA_TEST_OFFLINE_FILE
 cache_good="$fixture/cache-good"
 cp "$HYDRA_HOME/fleet/observations/build.json" "$cache_good"
+"$root/bin/hydra" fleet attention-data --json > "$fixture/attention-data"
+grep -q '^HYDRA_ATTENTION	1$' "$fixture/attention-data"
+grep -q "^ITEM$(printf '\t').*$(printf '\t')run_parallel$(printf '\t')step_a$(printf '\t')attempt-a$(printf '\t')" "$fixture/attention-data"
+grep -q "^ITEM$(printf '\t').*$(printf '\t')run_parallel$(printf '\t')step_b$(printf '\t')attempt-b$(printf '\t')" "$fixture/attention-data"
+[ "$(awk -F '\t' '$1 == "ITEM" && $13 == "request_a" { n++ } END { print n + 0 }' "$fixture/attention-data")" -eq 1 ]
+[ "$(awk -F '\t' '$1 == "ITEM" && $13 == "request_b" { n++ } END { print n + 0 }' "$fixture/attention-data")" -eq 1 ]
+json_items="$(grep -o '"kind":"\(approval\|result\|unknown\|approval_expired\)"' "$fixture/attention" | wc -l | tr -d ' ')"
+data_items="$(grep -c '^ITEM	' "$fixture/attention-data")"
+[ "$data_items" -eq "$json_items" ]
+data_count="$(awk -F '\t' '/^END	/ { print $2 }' "$fixture/attention-data")"
+[ "$data_count" -eq "$data_items" ]
+awk -F '\t' '/^ITEM	/ { if (NF != 19 || length($15) != 64 || length($16) != 64 || $15 !~ /^[0-9a-f]+$/ || $16 !~ /^[0-9a-f]+$/) exit 1 }' "$fixture/attention-data"
+cat > "$fixture/bin/shasum" <<'SHASUM'
+#!/bin/sh
+exit 1
+SHASUM
+chmod +x "$fixture/bin/shasum"
+if "$root/bin/hydra" fleet attention-data --json > "$fixture/attention-data-malformed"; then exit 1; fi
+grep -q '"code":"projection_failed"' "$fixture/attention-data-malformed"
+if grep -q '^HYDRA_ATTENTION	1$' "$fixture/attention-data-malformed"; then exit 1; fi
+rm "$fixture/bin/shasum"
 for case in past malformed null zero; do
   HYDRA_TEST_EXPIRY="$case"
   export HYDRA_TEST_EXPIRY

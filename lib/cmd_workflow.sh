@@ -7,6 +7,14 @@ cmd_workflow() {
             _load_lib workflow_tui
             workflow_tui_data
             ;;
+        attention)
+            _load_lib workflow_attention
+            workflow_attention "$@"
+            ;;
+        attention-data)
+            _load_lib workflow_attention
+            workflow_attention_data "$@"
+            ;;
         --workspace-links)
             [ "$#" -eq 1 ] || return 2
             _load_lib workflow_links
@@ -58,6 +66,7 @@ cmd_workflow() {
                 '       hydra workflow statistics-data' \
                 '       hydra workflow statistics-json' \
                 '       hydra workflow statistics-compare <left.tsv> <right.tsv> [--format json|text]' \
+                '       hydra workflow attention --json' \
                 '       hydra workflow status <run-id> [--json]' \
                 '       hydra workflow cancel <run-id>' \
                 '       hydra workflow resume <run-id>' \

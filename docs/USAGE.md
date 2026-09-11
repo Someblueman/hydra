@@ -61,6 +61,7 @@ hydra workflow validate examples/workflows/local-review.yml
 hydra workflow dry-run examples/workflows/local-review.yml
 hydra workflow run examples/workflows/local-review.yml
 hydra workflow status run_ID --json
+hydra workflow attention --json
 hydra workflow cancel run_ID
 hydra workflow requests run_ID --json
 hydra workflow decide run_ID step_REQUEST_ID approve --by reviewer
@@ -113,6 +114,11 @@ hydra tui                                          # native mission control; vis
 hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
 ```
+
+Attention results are immutable run/step/attempt evidence. A sealed result remains
+inspectable when its execution head is no longer live; missing recorded head or
+instance identity is reported as `identity_provenance: not_recorded` and never
+grants attachment or action authority.
 
 ## Agent profiles and inputs
 
