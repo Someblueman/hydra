@@ -14,4 +14,7 @@
 #define F_VERSION "2.4.0"
 /* Process configuration is initialized by main before dispatch. */
 extern const char *f_home, *f_hydra;
+struct json_object;
+/* Caller owns the returned JSON; this projection is read-only. */
+struct json_object *f_attention_aggregate(struct json_object *aggregate);
 #endif

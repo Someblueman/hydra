@@ -65,6 +65,9 @@ grep -q '"snapshot_schema_version":1' "$fixture/overview"
 grep -q '"state":"reachable"' "$fixture/overview"
 grep -q '"state":"fresh"' "$fixture/overview"
 [ -f "$HYDRA_HOME/fleet/observations/good.json" ]
+"$root/bin/hydra" fleet attention --json > "$fixture/attention"
+grep -q '"command":"fleet-attention"' "$fixture/attention"
+grep -q '"items":\[\]' "$fixture/attention"
 HYDRA_TEST_OFFLINE_FILE="$fixture/offline"
 export HYDRA_TEST_OFFLINE_FILE
 : > "$HYDRA_TEST_OFFLINE_FILE"

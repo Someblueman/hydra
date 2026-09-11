@@ -103,6 +103,7 @@ with host/provider status before another explicit copy.
 
 ```sh
 hydra fleet handshake --json              # this installation
+hydra fleet attention --json               # read-only exact task attention rollup
 hydra fleet list --json --timeout 5 --jobs 4
 hydra fleet doctor ovh --json
 hydra fleet reconcile --json
@@ -121,6 +122,23 @@ Desired state is not live agent progress. Doctor retains the remote diagnostic
 output and never accepts `--fix`. Aggregate results contain `data.hosts`; each row
 has `host`, `ok`, and data or a structured error. Partial failures preserve good
 results and return nonzero. Empty fleets produce a successful empty array.
+
+`fleet attention --json` projects the same bounded observations into deterministic
+read-only items. Approval rows carry the exact host/task/run/step/attempt/spec
+identity and request ID, joined to one unique observed step attempt. Expired
+numeric approval records are emitted as `approval_expired` with no action route;
+zero means no expiry, while missing, null, or malformed expiry values are
+explicit `unknown` observations. Ready result rows carry a `task-result`
+inspection route and remain review candidates until
+Hydra verification accepts them. Cached or stale rows remain visible with
+`route.fresh_action` false; approvals never expose a fresh action route. Missing
+identity, missing or malformed expiry, ambiguous approval bindings, unsupported waiting states,
+offline hosts, and malformed observations produce explicit `unknown` rows. The
+`revision` field is a canonical semantic object string that includes identity,
+request expiry/state, execution/result/verification state, and excludes observation
+timestamps, so repeated polls and reordered or duplicate requests do not create
+new revisions. This slice does not infer provider questions or provide client-local
+acknowledgement; TUI navigation and local workflow approvals remain later slices.
 
 Timeouts bound each SSH invocation, including command execution. Observation uses
 one handshake and one operation, each with its own deadline. Workers fill available
