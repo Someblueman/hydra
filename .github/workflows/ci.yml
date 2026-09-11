@@ -126,7 +126,7 @@ jobs:
       run: |
         mkdir -p "$TMUX_TMPDIR"
         make build-fleet build-core build-tui
-        make test-fleet test-c test-tui test-tui-pty test-parity
+        make test-c test-tui test-tui-pty test-parity
 
     - name: Qualify native workspace, statistics and standalone export
       env:
@@ -182,5 +182,43 @@ jobs:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-sanitize
       run: |
         mkdir -p "$TMUX_TMPDIR"
-        make sanitize
+        make sanitize-core sanitize-tui sanitize-workspace sanitize-attached sanitize-plan-workspace sanitize-statistics
 
+
+  fleet:
+    name: Fleet ${{ matrix.mode }} (${{ matrix.os }}, ${{ matrix.shard }})
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        mode: [sanitizers, acceptance]
+        shard: [odd, even]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install shell dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux libjson-c-dev pkg-config
+
+    - name: Install shell dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: brew install tmux shellcheck json-c pkg-config
+
+    - name: Run fleet acceptance
+      if: matrix.mode == 'acceptance'
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-fleet
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} test-fleet
+
+    - name: Run fleet sanitizers
+      if: matrix.mode == 'sanitizers'
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-fleet-sanitize
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} sanitize-fleet

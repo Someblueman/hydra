@@ -4,6 +4,12 @@ set -eu
 directory=$1
 name=$2
 shift 2
+# Make executes recursive recipes under -n; forward that dry run without a PASS or log.
+test_make_flags=${MAKEFLAGS:-}
+case ${test_make_flags%% *} in
+    -*) ;;
+    *n*) exec "$@" ;;
+esac
 mkdir -p "$directory"
 log="$directory/$name.log"
 started=$(date +%s)

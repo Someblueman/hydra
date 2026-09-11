@@ -48,4 +48,15 @@ sh "$root/scripts/run-test.sh" "$fixture/logs" failure sh -c 'echo deliberate fa
 grep -q '^FAIL failure ' "$fixture/fail"
 grep -qx 'deliberate failure' "$fixture/logs/failure.log"
 grep -qx 'deliberate failure' "$fixture/fail"
+cat > "$fixture/dry.mk" <<'MAKEFILE'
+parent:
+	+@sh "$(TEST_RUNNER)" "$(TEST_LOGS)" dry $(MAKE) -f "$(TEST_MAKEFILE)" child
+child:
+	@echo real-child
+MAKEFILE
+make -n -f "$fixture/dry.mk" TEST_RUNNER="$root/scripts/run-test.sh" \
+    TEST_LOGS="$fixture/logs" TEST_MAKEFILE="$fixture/dry.mk" parent > "$fixture/dry.out"
+[ ! -f "$fixture/logs/dry.log" ]
+grep -q 'echo real-child' "$fixture/dry.out"
+if grep -q '^PASS' "$fixture/dry.out"; then exit 1; fi
 printf 'PASS test helpers\n'

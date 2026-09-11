@@ -233,6 +233,9 @@ fixtures. Use `make test-fleet TEST_JOBS=1` for a serial run or set `TEST_JOBS`
 to another worker count. Case timings appear in the console; complete output
 is retained in `build/test-logs/` (under the selected `BUILD_DIR` for sanitizer
 builds). Failed cases print their output and fail the target.
+CI splits the same case list between `FLEET_SHARD=odd` and `FLEET_SHARD=even`,
+with two workers per runner to limit process contention;
+the default `FLEET_SHARD=all` retains the complete local suite.
 
 Contributions should include checks appropriate to their scope. Versions after
 2.0 are chosen at release time from compatibility impact; see the

@@ -68,7 +68,18 @@ test-fleet: fleet-test-build
 	+$(MAKE) -j$(TEST_JOBS) test-fleet-cases
 
 .PHONY: test-fleet-cases $(addprefix fleet-case-,$(FLEET_CASES))
-test-fleet-cases: $(addprefix fleet-case-,$(FLEET_CASES))
+# CI divides this same ordered inventory across two runners; local runs keep all cases.
+FLEET_SHARD ?= all
+ifeq ($(FLEET_SHARD),all)
+FLEET_SELECTED_CASES = $(FLEET_CASES)
+else ifeq ($(FLEET_SHARD),odd)
+FLEET_SELECTED_CASES = $(shell printf '%s\n' $(FLEET_CASES) | awk 'NR % 2')
+else ifeq ($(FLEET_SHARD),even)
+FLEET_SELECTED_CASES = $(shell printf '%s\n' $(FLEET_CASES) | awk '!(NR % 2)')
+else
+$(error FLEET_SHARD must be all, odd or even)
+endif
+test-fleet-cases: $(addprefix fleet-case-,$(FLEET_SELECTED_CASES))
 
 fleet-case-native-plan:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-plan
