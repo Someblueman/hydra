@@ -11,7 +11,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 HYDRA_BIN="$repo_root/bin/hydra"
 HYDRA_HOME="$test_root/home"
 HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
-core="$repo_root/build/hydra-core"
+core="${HYDRA_CORE:-$repo_root/build/hydra-core}"
 export HYDRA_HOME HYDRA_STATE_V2_ROOT
 
 # shellcheck source=helpers.sh

@@ -5,13 +5,11 @@ on:
     branches: 
       - main
       - develop
-      - 'feature/**'
-      - 'fix/**'
-      - 'refactor/**'
-      - 'hotfix/**'
       - 'release/**'
-  pull_request:
-    branches: [ main, develop, 'release/**' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   lint:
@@ -64,9 +62,21 @@ jobs:
         sudo apt-get install -y git tmux dash build-essential libjson-c-dev pkg-config
     
     - name: Run shell tests with dash
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-test
       run: |
+        mkdir -p "$TMUX_TMPDIR"
         sudo ln -sf /bin/dash /bin/sh
         make test
+
+    - name: Run extended CLI and recovery acceptance
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-test
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make test-fleet-controls test-fleet-recovery test-plan-inspection \
+          test-plan-outcomes test-statistics-export test-task-announce \
+          test-plan-reuse smoke-onboarding
 
   compatibility:
     name: Shell Compatibility
@@ -222,3 +232,19 @@ jobs:
       run: |
         mkdir -p "$TMUX_TMPDIR"
         make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} sanitize-fleet
+
+  release-gate:
+    name: release-gate
+    if: ${{ always() }}
+    needs: [lint, quality-c, test, compatibility, native, sanitize, fleet]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Require every full qualification job
+      run: |
+        test "${{ needs.lint.result }}" = success
+        test "${{ needs.quality-c.result }}" = success
+        test "${{ needs.test.result }}" = success
+        test "${{ needs.compatibility.result }}" = success
+        test "${{ needs.native.result }}" = success
+        test "${{ needs.sanitize.result }}" = success
+        test "${{ needs.fleet.result }}" = success
