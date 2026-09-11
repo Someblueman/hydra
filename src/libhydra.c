@@ -373,7 +373,6 @@ static int hydra_collect_heads(const char *root, struct hydra_head_record **reco
             struct hydra_head_record *record;
             char head_path[PATH_MAX];
             char scalar_path[PATH_MAX];
-            if (head_entry->d_name[0] == '.') continue;
             if (strncmp(head_entry->d_name, "head_", 5U) != 0) continue;
             if (count == capacity) {
                 if (capacity > (size_t)-1 / 2U / sizeof(*records)) {
@@ -406,7 +405,7 @@ static int hydra_collect_heads(const char *root, struct hydra_head_record **reco
         closedir(heads);
     }
     closedir(projects);
-    qsort(records, count, sizeof(*records), hydra_compare_heads);
+    if (count > 1U) qsort(records, count, sizeof(*records), hydra_compare_heads);
     *records_out = records;
     *count_out = count;
     *projects_out = project_count;
