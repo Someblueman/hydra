@@ -871,8 +871,8 @@ package/bootstrap, fleet-init/trust, and remote-task contracts documented in
 [FLEET.md](FLEET.md), [SECURITY.md](SECURITY.md), and
 [REMOTE_TASKS.md](REMOTE_TASKS.md); it may proceed without a new planner or
 daemon. H3 is follow-on work after H1/H2 and should not broaden the trust boundary.
-T1, T2, 9A and V1 implementations are integrated on the feature branch; T3
-remains a separate distributed qualification milestone. T1/T2 become dependencies
+T1, T2, 9A and V1 implementations are included in 2.4.0 within their documented
+qualification limits; T3 remains a separate distributed qualification milestone. T1/T2 become dependencies
 only for tmux-independent/headless enrollment, 9A is relevant if
 onboarding obligations are later compiled into objective plans, and V1 supplies
 freshness presentation through its observation contract. This H track
