@@ -120,7 +120,7 @@ int main(void) {
     setenv("PTY_HYDRA", f.hydra, 1);
     tv_format(script, sizeof(script),
               "#!/bin/sh\nif [ \"$1:$2\" = tui:--data ] && [ -f \"$PTY_FIXTURE/slow\" ]; then\n  "
-              "touch \"$PTY_FIXTURE/started\"\n  sleep 3\nfi\nif [ \"$1:$2\" = tui:--data ] && [ "
+              "touch \"$PTY_FIXTURE/started\"\n  sleep 5\nfi\nif [ \"$1:$2\" = tui:--data ] && [ "
               "-f \"$PTY_FIXTURE/observation-fixture\" ]; then\n  read -r observed confidence < "
               "\"$PTY_FIXTURE/observation-fixture\"\n  \"$PTY_HYDRA\" \"$@\" | awk -F '\\t' -v "
               "OFS='\\t' -v observed=\"$observed\" -v confidence=\"$confidence\" '$1==\"H\" "

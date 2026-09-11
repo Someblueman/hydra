@@ -6,6 +6,6 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size);
 void group_marked_action(struct app *app);
 void kill_marked_action(struct app *app);
 void execute_palette(struct app *app, const char *query);
-void fleet_action(struct app *app, bool attach);
+void fleet_action(struct app *app);
 
 #endif

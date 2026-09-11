@@ -11,6 +11,7 @@
 #include "fleet/discovery/discovery.h"
 #include "fleet/enrollment/enrollment.h"
 #include "fleet/retention/retention.h"
+#include "tui/fleet_budget.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -25,12 +26,27 @@ static bool supported(json_object *handshake, const char *action) {
     }
     return false;
 }
-static json_object *attach_remote(const struct f_remote *remote, json_object *response, unsigned seconds) {
-    const char *session = f_string(f_field(response, "data"), "session"); char *quoted, command[F_PATH * 4];
+static json_object *attach_remote(const struct f_remote *remote, json_object *response, const char *project, const char *branch, const char *instance, unsigned seconds) {
+    const char *session_id = f_string(f_field(response, "data"), "session_id");
+    char *quoted_project = NULL, *quoted_hydra = NULL, *quoted_home = NULL, *quoted_branch = NULL, *quoted_instance = NULL, command[F_PATH * 5 + 128];
     struct f_capture cap = {0};
-    if (!session || !(quoted = f_quote(session))) return f_error("fleet-attach", "invalid_response", "remote session is missing");
-    if (snprintf(command, sizeof(command), "tmux attach-session -t %s", quoted) >= (int)sizeof(command)) { free(quoted); return f_error("fleet-attach", "invalid_response", "session name is too long"); }
-    free(quoted); f_ssh(remote, command, NULL, 0, seconds, true, &cap);
+    if (!session_id || !project || project[0] != '/' || !branch || !instance ||
+        !(quoted_project = f_quote(project)) ||
+        !(quoted_hydra = f_quote(remote->hydra)) ||
+        (remote->home[0] && !(quoted_home = f_quote(remote->home))) ||
+        !(quoted_branch = f_quote(branch)) ||
+        !(quoted_instance = f_quote(instance))) {
+        free(quoted_project); free(quoted_hydra); free(quoted_home); free(quoted_branch); free(quoted_instance);
+        return f_error("fleet-attach", "invalid_response", "remote session identity is missing");
+    }
+    if (snprintf(command, sizeof(command), "cd %s && env LC_ALL=C %s%s %s fleet-local attach %s %s", quoted_project,
+                 remote->home[0] ? "HYDRA_HOME=" : "", remote->home[0] ? quoted_home : "",
+                 quoted_hydra, quoted_branch, quoted_instance) >= (int)sizeof(command)) {
+        free(quoted_project); free(quoted_hydra); free(quoted_home); free(quoted_branch); free(quoted_instance);
+        return f_error("fleet-attach", "invalid_response", "remote attachment command is too long");
+    }
+    free(quoted_project); free(quoted_hydra); free(quoted_home); free(quoted_branch); free(quoted_instance);
+    f_ssh(remote, command, NULL, 0, seconds, true, &cap);
     return f_error("fleet-attach", "transport_failed", "cannot execute interactive SSH");
 }
 static json_object *launch_tui(void) {
@@ -128,7 +144,7 @@ json_object *f_cli(int argc, char **argv) {
     if (!strcmp(action, "handshake") && !options.name) return f_handshake();
     if (!strcmp(action, "tui")) return launch_tui();
     if (is_tui_data(action)) {
-        (void)f_tui_data(1, 16, !strcmp(action, "tui-visual-data")); return NULL;
+        (void)f_tui_data(HYDRA_FLEET_TUI_REQUEST_SECONDS, 16, !strcmp(action, "tui-visual-data")); return NULL;
     }
     if (!strcmp(action, "package")) {
         if (!options.source || !options.binary || !options.output) return f_error("fleet-package", "invalid_input", "source, target binary, and output are required");
@@ -183,6 +199,10 @@ json_object *f_cli(int argc, char **argv) {
         const char *text = json_object_to_json_string_ext(f_field(result, "data"), JSON_C_TO_STRING_PLAIN);
         if (!options.output || f_write(options.output, text, strlen(text), false)) { json_object_put(result); return f_error("fleet-export", "io_failed", "a new output path is required"); }
     }
-    if (!strcmp(action, "attach")) { json_object *failure = attach_remote(&remote, result, options.seconds); json_object_put(result); return failure; }
+    if (!strcmp(action, "attach")) {
+        const char *branch = options.rest < argc ? argv[options.rest] : NULL;
+        json_object *failure = attach_remote(&remote, result, options.project, branch, options.instance, options.seconds);
+        json_object_put(result); return failure;
+    }
     return result;
 }

@@ -8,7 +8,20 @@ case "${1:-}:${2:-}" in
         ;;
     fleet:tui-visual-data)
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
-        cat "$fixture_dir/fleet-v2.tsv"
+        if [ -n "${HYDRA_TEST_FLEET_FRESH:-}" ]; then
+            cat "$fixture_dir/fleet-fresh.tsv"
+        else
+            cat "$fixture_dir/fleet-v2.tsv"
+        fi
+        ;;
+    fleet:attach)
+        if [ -n "${HYDRA_TEST_ATTACH_ARGV:-}" ]; then
+            printf '%s\n' "$@" > "$HYDRA_TEST_ATTACH_ARGV"
+        fi
+        printf 'FAKE REMOTE ATTACH'
+        printf ' <%s>' "$@"
+        printf '\n'
+        sleep 1
         ;;
     workflow:tui-data)
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"

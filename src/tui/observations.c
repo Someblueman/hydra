@@ -3,6 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "fleet_budget.h"
 /* One in-flight read per source. Completed snapshots replace whole models;
  * terminal input and output continue while an adapter runs or times out. */
 
@@ -52,7 +53,7 @@ void native_observations_tick(struct app *app, bool request) {
         if (request && !p->pid && (i==0 || (!app->fleet && ((i==1 && (app->view==5 || app->view==7)) || (i==2 && app->view==8) || (i==3 && app->view==7))))) {
             char *argv[]={(char *)app->hydra,i==0 ? app->fleet ? "fleet" : "tui" : "workflow",
                 i==0 ? app->fleet ? "tui-visual-data" : "--data" : i==1 ? "tui-data" : i==2 ? "statistics-data" : "--workspace-links",NULL};
-            if (!native_capture_start(p,argv,app->fleet ? 3500 : 2000)) {
+            if (!native_capture_start(p,argv,app->fleet ? HYDRA_FLEET_TUI_CAPTURE_BUDGET_MS : 3500L)) {
                 if (i==0) { record_snapshot(app,false); copy_text(app->snapshot_error,sizeof(app->snapshot_error),"Unable to start snapshot observation"); }
                 else if (i==1) (void)accept_workflows(app,NULL);
                 else if (i==2) (void)accept_statistics(app,NULL);

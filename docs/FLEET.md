@@ -128,6 +128,10 @@ slots as hosts finish. Defaults are 4 workers and 5 seconds per observation call
 `--jobs` accepts 1–16 and `--timeout` accepts 1–300 seconds. Mutation calls default
 to 300 seconds after negotiation. Output is bounded to 8 MiB per stream.
 
+The native fleet TUI gives each remote request a 3-second deadline. Its snapshot
+adapter allows 13 seconds for the four serial request phases (list and overview,
+each with a handshake and action) plus one second of local capture overhead.
+
 Errors distinguish `host_key_failed`, `authentication_failed`, `offline`, `timeout`,
 `version_mismatch`, `capability_unavailable`, malformed responses, command failures,
 and interrupted/unknown outcomes. OpenSSH uses exit 255 for many failures: known
@@ -166,9 +170,15 @@ Head signal/cancel delivers foreground `INT` (tmux `C-c`) after rechecking the
 observed instance under the existing lifecycle lock. A stale instance is refused.
 The response means delivered, not task completion. It preserves the head,
 worktree, and dirty files. Only `INT` is supported by the direct interrupt command. Use workflow
-cancel for whole-workflow cancellation. Attach resolves that instance's session,
-then runs ordinary interactive `ssh -t ... tmux attach-session`; tmux detach works
-normally. A usable terminal and TERM are required.
+cancel for whole-workflow cancellation. Attach first checks the advertised
+receiver capability, then opens an interactive SSH session with the saved
+`HYDRA_HOME`, project, branch, and instance arguments. The receiver validates the
+current lifecycle and evaluates the exact project/head/instance environment in a
+same-server tmux format-and-attach command. The session ID helps target that
+server command but is never an identity proof; replacement sessions and restarted
+servers are refused. Receivers must support `session_id` and `fleet-local attach`;
+older receivers fail closed and must be upgraded for interactive attachment. A
+usable terminal and TERM are required.
 
 ```sh
 hydra fleet workflow ovh --project /srv/project -- run /srv/plan.yml
@@ -229,11 +239,20 @@ hydra fleet tui
 ```
 
 The native view displays host-qualified heads and recorded desired state. `j/k`,
-search, and views work as usual; recovery shows offline hosts. `a` attaches, `c`
-requests a confirmed interrupt, and `q` restores the terminal and exits. Actions
-carry host, project, and observed instance through the public CLI. Local mutation
-shortcuts and local pane preview are disabled in fleet mode. Paths/identifiers
-that cannot be represented safely within native text bounds require the CLI.
+search, and views work as usual; recovery shows offline hosts. Select a current
+interactive head and press `a` to open its pane in the operator workspace. The
+selection includes host, project, branch, head, and current instance; attachment
+is refused for stale or unreachable hosts, headless heads, missing identities,
+and replaced instances. The remote shell rechecks that composite identity and
+the live tmux session before handing the client to tmux.
+
+Inside an attached pane, `Ctrl-B Tab` changes focus back to Hydra, `Ctrl-B x`
+closes the selected client while leaving the owner session alive, and `Ctrl-B q`
+exits the operator view. `c` requests a confirmed interrupt and `q` restores the
+terminal and exits when no pane is focused. Actions carry host, project, and
+observed instance through the public CLI. Local mutation shortcuts and local
+pane preview are disabled in fleet mode. Paths/identifiers that cannot be
+represented safely within native text bounds require the CLI.
 
 Qualification evidence is host- and provider-specific; local fixtures and controlled
 SSH failures do not establish live-provider or external-host qualification.

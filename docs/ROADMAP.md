@@ -718,7 +718,7 @@ Extend the current attached-terminal and V1–V4 interfaces; keep the existing t
 owner, tmux terminal lifecycle and shell mutation path. These are outstanding
 operator workflows, not a proposal for a new server, scheduler or provider manager.
 
-- [ ] **I1 — Saved multi-machine interaction and direct attach.** Provide one
+- [x] **I1 — Saved multi-machine interaction and direct attach.** Provide one
       operator view across explicitly registered trusted SSH machines, with direct
       navigation to an exact host/project/head terminal capability. Keep headless
       tasks inspectable without offering terminal input. Preserve independent

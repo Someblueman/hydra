@@ -97,6 +97,7 @@ struct native_terminal {
     struct tv_terminal_model *screen;
     struct tv_cell *cells, *history;
     char head[TEXT], instance[TEXT], label[TEXT];
+    char remote_host[128], remote_project[SOURCE_TEXT];
     size_t scroll;
     bool scrolling;
 };
@@ -228,7 +229,7 @@ int output_finish(struct output_child *child, bool failed);
 void group_marked_action(struct app *app);
 void kill_marked_action(struct app *app);
 void execute_palette(struct app *app, const char *query);
-void fleet_action(struct app *app, bool attach);
+void fleet_action(struct app *app);
 bool parse_theme(const char *name, int *theme);
 void style(const struct app *app, enum tone tone);
 const char *theme_name(int theme);

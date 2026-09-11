@@ -3,6 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "fleet_budget.h"
 void record_snapshot(struct app *app, bool valid) {
     size_t i;
     double queue = 0;
@@ -62,7 +63,9 @@ int accept_model_data(struct app *app, FILE *input) {
         const struct head *previous = &app->model.heads[app->selected]; size_t index;
         for (index = 0; index < next->head_count; index++) {
             if ((previous->head_id[0] ? !strcmp(previous->head_id,next->heads[index].head_id) :
-                !strcmp(previous->branch,next->heads[index].branch)) && !strcmp(previous->remote_host,next->heads[index].remote_host)) {
+                !strcmp(previous->branch,next->heads[index].branch)) &&
+                !strcmp(previous->remote_host,next->heads[index].remote_host) &&
+                !strcmp(previous->remote_project,next->heads[index].remote_project)) {
                 app->selected=index; break;
             }
         }
@@ -83,7 +86,8 @@ int refresh_model(struct app *app) {
     native_observations_cancel(app,0);
     copy_text(notice,sizeof(notice),app->notice); app->notice[0]='\0';
     input=capture_adapter(app,app->fleet ? "fleet" : "tui",
-        app->fleet ? "tui-visual-data" : "--data",app->fleet ? 3500 : 2000);
+        app->fleet ? "tui-visual-data" : "--data",
+        app->fleet ? HYDRA_FLEET_TUI_CAPTURE_BUDGET_MS : 3500L);
     if (!input) copy_text(app->snapshot_error,sizeof(app->snapshot_error),app->notice[0] ? app->notice : "Snapshot observation unavailable");
     copy_text(app->notice,sizeof(app->notice),notice);
     result = accept_model_data(app,input);
