@@ -158,10 +158,10 @@ HOME="$archive_home" PREFIX="$archive_prefix" HYDRA_INSTALL_CORE=required HYDRA_
 if [ "$archive_status" -ne 0 ]; then cat "$test_root/archive-source.out"; fi
 assert_success "$archive_status" "source archive auto-builds native TUI without Git metadata"
 assert_file "$archive_prefix/libexec/hydra/hydra-tui" "auto install builds and installs native TUI when a compiler is available"
-assert_equal "hydra-2.3.0-source-tree" \
+assert_equal "hydra-2.4.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-core.source")" \
     "source archive records explicit non-commit provenance"
-assert_equal "hydra-2.3.0-source-tree" \
+assert_equal "hydra-2.4.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-tui.source")" \
     "source archive records explicit native TUI provenance"
 

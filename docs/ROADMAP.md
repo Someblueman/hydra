@@ -1,8 +1,8 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 10 September 2026
-> - **Current release:** `v2.3.0` distributed workflows and resource admission
+> - **Snapshot:** 11 September 2026
+> - **Release:** `v2.4.0` native workspace and verified planning
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   [Release policy](VERSIONING.md) · [Contracts](CONTRACTS.md) ·
@@ -26,10 +26,10 @@ capabilities. Agent agnosticism does not imply identical provider features or
 portable private conversation history. Hydra owns execution, recovery, and evidence;
 provider interaction belongs behind explicit adapters.
 
-This file contains outstanding work and the policies that constrain it. Checked
-items in the selected, unreleased tracks record local qualification, not shipment.
-After release, move completed scope to the changelog and focused contracts rather
-than retaining it as backlog history.
+This file contains outstanding work and the policies that constrain it. Completed
+implementation is recorded in the [2.4.0 changelog](../CHANGELOG.md#240---2026-09-11)
+and focused contracts. Checked items below retain the qualification boundaries for
+related open work; they do not close live-host or provider acceptance.
 
 2.0.0 is the final version assigned in advance. After 2.0, work is selected from one
 backlog and released when a coherent feature or meaningful change is ready. The
@@ -115,9 +115,9 @@ fixture tests and local authentication do not close another provider's remote
 requirement. Claude remains explicitly deferred rather than blocking the other
 implemented profiles.
 
-### Feature-branch integration — 10 September 2026
+### 2.4.0 scope and qualification boundaries
 
-The local `codex/release-next` branch integrates **T1, 9A, V1, T2, 9B, H1,
+Hydra 2.4.0 includes **T1, 9A, V1, T2, 9B, H1,
 V2, 9C, H2, V3, V4, 9D and H3** within their documented local qualification.
 It also includes 9E explanation/comparison tools and finite patterns, 9F sealed
 artifact reuse, precompiled manifest maps and independently checked staged plans,
@@ -127,15 +127,16 @@ interface-conformance difference but no demonstrated semantic planning advantage
 Runtime graph expansion remains conditional on a workload that needs it; current
 finite patterns do not require it.
 The user explicitly included the implemented 9E tools and successful real cleanup
-workflow in review on 10 September 2026. Broader comparative planning-quality
-research remains open, but does not block review readiness or require a new
-experiment for this scope.
-See [the review scope and acceptance boundaries](RELEASE_NEXT_SCOPE.md),
+workflow in scope on 10 September 2026. Broader comparative planning-quality
+research remains open and is outside this release.
+See [the release scope and acceptance boundaries](RELEASE_NEXT_SCOPE.md),
 [remaining-work acceptance](evidence/remaining-work-20260910.md),
 [workstream acceptance](evidence/workstream-integration-20260910.md),
 [earlier integration evidence](evidence/next-wave-integration.md), and
 [V2/9C/H2 acceptance](evidence/observation-enrollment-integration.md) for exact
-checks and limits. Main and the published release are unchanged.
+historical checks and limits. The [release record](https://github.com/Someblueman/hydra/releases/tag/v2.4.0)
+identifies the published commit and artifacts; historical evidence remains bound
+to the revisions it names.
 
 The user selected the remaining V, 9 and H workstreams. Other roadmap tracks
 retain their original selection boundaries. Local qualification does not
@@ -152,8 +153,8 @@ the H track below incorporates the authorized onboarding recommendations.
 
 The 9 September reports are historical audits, not current implementation status.
 This table maps their recommendations to the canonical backlog. New unchecked
-items below capture remaining work; they do not expand the qualified release-next
-candidate or launch implementation, provider access, or live-host experiments.
+items below capture remaining work; they do not expand the 2.4.0 scope or launch
+implementation, provider access, or live-host experiments.
 
 | Research recommendation | Roadmap destination and current boundary |
 | --- | --- |

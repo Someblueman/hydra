@@ -91,7 +91,7 @@ assert_file "$prefix1/lib/hydra/git.sh" "install.sh installs libraries"
 
 ver_out="$(HOME="$home1" HYDRA_ROOT='' HYDRA_HOME='' "$prefix1/bin/hydra" version 2>&1)"
 assert_success $? "installed hydra version should succeed"
-assert_contains "$ver_out" "Hydra version 2.3.0" "installed hydra reports 2.3.0"
+assert_contains "$ver_out" "Hydra version 2.4.0" "installed hydra reports 2.4.0"
 
 doc_out="$(cd "$home1" && HOME="$home1" HYDRA_HOME="$home1/.hydra" HYDRA_ROOT='' "$prefix1/bin/hydra" doctor 2>&1)"
 assert_success $? "installed hydra doctor should succeed"
@@ -100,7 +100,7 @@ assert_contains "$doc_out" "$prefix1/lib/hydra" "doctor should name installed li
 
 # Replace the installed binary with an older version marker, then reinstall into
 # the same prefix. User state lives outside PREFIX and must survive the upgrade.
-sed 's/HYDRA_VERSION="2.3.0"/HYDRA_VERSION="2.2.1"/' "$prefix1/bin/hydra" > "$prefix1/bin/hydra.upgrade"
+sed 's/HYDRA_VERSION="2.4.0"/HYDRA_VERSION="2.3.0"/' "$prefix1/bin/hydra" > "$prefix1/bin/hydra.upgrade"
 mv "$prefix1/bin/hydra.upgrade" "$prefix1/bin/hydra"
 chmod +x "$prefix1/bin/hydra"
 mkdir -p "$home1/.hydra"
@@ -111,7 +111,7 @@ printf '%s\n' 'preserve-upgrade-state' > "$home1/.hydra/upgrade-marker"
 ) >/dev/null
 assert_success $? "install.sh should upgrade an existing PREFIX"
 upgrade_ver="$(HOME="$home1" HYDRA_ROOT='' HYDRA_HOME='' "$prefix1/bin/hydra" version 2>&1)"
-assert_contains "$upgrade_ver" "Hydra version 2.3.0" "upgrade replaces the older binary"
+assert_contains "$upgrade_ver" "Hydra version 2.4.0" "upgrade replaces the older binary"
 assert_equal "preserve-upgrade-state" "$(sed -n '1p' "$home1/.hydra/upgrade-marker")" "upgrade preserves HYDRA_HOME state"
 
 un_out="$(

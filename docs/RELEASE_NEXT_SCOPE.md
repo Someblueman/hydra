@@ -1,10 +1,12 @@
-# Release-next review scope
+# Hydra 2.4.0 release scope
 
-This is the locally verified review candidate on `codex/release-next` on
-10 September 2026. The [native acceptance record](evidence/native-python-removal-20260910.md)
-binds the final implementation tree and local checks. It assigns no version and
-does not establish release acceptance. Historical evidence below applies to the
-revisions named in each record, including the earlier `ecaee6b` review snapshot.
+This defines the compatible additions and qualification limits of Hydra 2.4.0.
+The [release record](https://github.com/Someblueman/hydra/releases/tag/v2.4.0)
+identifies the published commit and artifacts. The
+[native acceptance record](evidence/native-python-removal-20260910.md) binds the
+implementation tree and local checks from 10 September 2026. Historical evidence
+below applies to the revisions named in each record, including the earlier
+`ecaee6b` review snapshot; it does not replace exact merged-main release qualification.
 
 ## Included implementation and local qualification
 
@@ -20,7 +22,7 @@ revisions named in each record, including the earlier `ecaee6b` review snapshot.
 | H1–H3 | Selected discovery, explicit enrollment intent and bounded source-snapshot batches | [Discovery](HOST_DISCOVERY.md), [H2 integration](evidence/observation-enrollment-integration.md), [H3](evidence/h3-source-batches.md). Controlled probes/enrollment and supplied vendor snapshots do not qualify live hosts or vendor clients. |
 | Python cleanup | Native planning producers/checkers, CLI fixtures and independent PTY observers; no Python dependency in the active build, tests, examples, export or CI | [Native boundary](PYTHON_USAGE.md), [coverage](../tests/native/README.md), [PTY coverage](../tests/termviz/README.md) and [native review](quality/native-python-removal.md). The earlier [cleanup evidence](evidence/python-cleanup-20260910/README.md) remains tied to its recorded source revisions and workflow outcomes. |
 
-## Outstanding review and release decisions
+## Qualification boundaries
 
 - **Native migration is locally verified.** The [native acceptance
   record](evidence/native-python-removal-20260910.md) binds implementation tree
@@ -43,12 +45,12 @@ revisions named in each record, including the earlier `ecaee6b` review snapshot.
 - **H live-host limits remain visible.** Actual SSH/jump-host/key and operational
   enrollment qualification needs separately authorized targets; supplied inventories
   and local receiver fixtures are the current claim boundary.
-- **Release acceptance is separate from local candidate checks.** The
-  integrated candidate has recorded local acceptance and review results.
-  The [release definition of done](ROADMAP.md#release-definition-of-done)
-  still requires applicable compatibility, installation, documentation and exact
-  end-to-end evidence. Hosted CI, publication artifacts and release identity are
-  later gates, not established by this documentation reconciliation.
+- **Release acceptance is separate from historical candidate checks.** The
+  [release definition of done](ROADMAP.md#release-definition-of-done) requires
+  compatibility, installation, documentation and exact end-to-end evidence for
+  the merged commit. The release record binds hosted checks, publication
+  artifacts and release identity; the historical records below retain their
+  original revisions and qualification limits.
 
 Dynamic expansion under 9F remains conditional on an actual workload that cannot
 use staged finite plans. Load balancing, performance baseline work, dynamic pools,
@@ -57,7 +59,7 @@ backlog selection boundaries. Nothing here selects another feature or campaign.
 
 ## Optional future 9E research
 
-No further experiment is part of this review scope. If the user later selects
+No further experiment is part of this release scope. If the user later selects
 this research, first select one representative task class and an
 explicit comparison question. A suitable first question is whether contract-aware
 planning improves independently verified maintenance outcomes enough to pay for
