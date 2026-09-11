@@ -34,7 +34,7 @@ The underlying tmux dependency remains:
 | --- | --- | --- |
 | Disconnected task ownership | [task_launch.c](../../src/fleet/task/task_launch.c) syncs launch intent, retains an owner lock, double-forks, calls `setsid`, and redirects stdio | Reuse; do not substitute terminal liveness for ownership |
 | Command supervision | [process.c](../../src/fleet/support/process.c) manages process groups, deadlines, bounded capture, and cancellation | Reuse and qualify the changed execution path |
-| Remote exec workspace | [task_execute.c](../../src/fleet/task/task_execute.c) calls `spawn task --no-agent` before `exec` | Create workspace/identity without a terminal |
+| Remote exec workspace | [task_execute.c](../../src/fleet/task/task_execute.c) calls `spawn task --headless --no-agent` before `exec` | Create workspace/identity without a terminal |
 | Receiver requirements | [task_accept.c](../../src/fleet/task/task_accept.c) and [bootstrap.c](../../src/fleet/transport/bootstrap.c) require tmux | Check capabilities needed by the actual operation |
 | Local plan contract | [plan_schema.c](../../src/fleet/plan/plan_schema.c) supports local spawn/exec; [plan_graph.c](../../src/fleet/plan/plan_graph.c) requires exec to depend on its head's spawn | Explicit compatible extension and lowering for terminal-free workspaces |
 | Durable head lifecycle | [state_v2.sh](../../lib/state_v2.sh), [lifecycle.sh](../../lib/lifecycle.sh), and [kill.sh](../../lib/kill.sh) assume terminal session fields or use tmux observation/teardown | Define terminal-independent state and update all affected readers/writers |

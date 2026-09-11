@@ -1,0 +1,24 @@
+# Finite manifest map
+
+The shared native `build/plan-precompile manifest` command is a PRE-COMPILE boundary: it validates a closed schema-1
+manifest (at most eight unique IDs, integer values -10..10, boolean `enabled`)
+and lowers it into an ordinary static schema-1 plan. The generated plan has one
+worker per enabled member, a fixed composition join, and a checker join. Disabled
+members remain explicit skipped records in the report. Empty and all-skipped
+manifests still compile to a checked report with no worker steps.
+
+The manifest is a declared repository input. It cannot select hosts, tools,
+commands, or effects. `./plan-example manifest-check` independently reconstructs every expected record and
+emits schema-3 evidence; structural compilation does not claim runtime success.
+
+```sh
+/path/to/hydra/build/plan-precompile manifest manifest.json plan.json
+hydra workflow plan compile plan.json policy.json ../compiled.json
+```
+
+Build `make build-plan-precompile build-plan-example` from Hydra.
+Copy this directory, `build/plan-example` and `../native/payload.sh` into a disposable Git repository.
+Generate and commit the source plan and shared payload, then initialize Hydra
+with `--no-agent --trust`. Keep `HYDRA_HOME` and the compiled output outside the
+source repository. Review the compiled plan
+and pass its exact returned SHA-256 to `hydra workflow plan run ... --accept ...`.

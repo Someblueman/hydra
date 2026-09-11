@@ -2,7 +2,11 @@
 #define HYDRA_FLEET_SUPPORT_PROCESS_H
 #include "fleet/fleet.h"
 
-struct f_capture { char *out, *err; size_t out_bytes, err_bytes; int status; bool timeout, cancelled, stop_unknown; };
+/* in_bytes is the child stdin file offset observed after wait, not the bytes
+ * staged by the parent; input_complete is true only when the child consumed
+ * the complete request. measurement_complete also requires complete output
+ * capture; these are transport process stdio counts, never SSH wire bytes. */
+struct f_capture { char *out, *err; size_t in_bytes, out_bytes, err_bytes; int status; bool input_complete, measurement_complete, timeout, cancelled, stop_unknown; };
 /* Borrowed log descriptors and stop context; remaining budgets span invocations. */
 struct f_control {
     bool (*stop)(void *context);

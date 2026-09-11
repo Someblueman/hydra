@@ -53,7 +53,8 @@ static void repair_contexts(json_object *plan, json_object *errors) {
         if (!strcmp(f_string(step, "role"), "verify")) continue;
         json_object *inputs = f_field(f_field(data, f_string(step, "id")), "inputs");
         json_object_object_foreach(inputs, name, ref) { (void)name; if (f_field(ref, "repair")) context = true; }
-        if (!context) plan_error(errors, "data", "missing_repair_context", "repairable producers and composers require an input with repair: plan");
+        if (!context && !f_field(f_field(f_field(plan, "reuse_policy"), "steps"), f_string(step, "id")))
+            plan_error(errors, "data", "missing_repair_context", "repairable producers and composers require an input with repair: plan unless explicitly eligible for sealed-artifact reuse");
     }
 }
 int plan_evidence_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors) {

@@ -91,13 +91,33 @@ See [EVENTS.md](EVENTS.md), [LIFECYCLE.md](LIFECYCLE.md), and
 
 ## Workflows and integration
 
-Objective planning schema v1 is an optional, closed JSON authoring contract exposed
-by `hydra workflow plan schema`. It lowers local spawn/exec plans into the existing
-workflow runtime. Compilation binds source, declared inputs, context, profiles,
-policy and compiler version; execution requires the exact accepted SHA-256.
-Planning success requires sealed final deliverables and positive reports linked
-to their exact bytes and requirement IDs. Coverage alone is not semantic proof.
+Objective planning schema v1 and schema v2 are optional, closed JSON authoring
+contracts exposed by `hydra workflow plan schema`. The additive 9A `obligations`
+array keeps those plan versions and the compiled-artifact wrapper unchanged:
+legacy plans remain byte-compatible, while explicit obligations are included in
+the canonical plan and therefore in the compiled SHA-256/acceptance binding.
+Each obligation names its intent reference, exact deliverable/step/output subject,
+criterion, evaluation method/check, required report evidence, applicable
+environment, supported completion rule, and limitations. Multiple obligations
+may share one requirement. `workflow plan obligations --json` is a read-only
+projection; legacy rows are marked `derived` with unknown intent/semantic
+evidence. Compilation rejects orphan or circular evidence and unreachable
+evaluation joins with field paths and counterexamples. Structural satisfiability,
+runtime evidence, and semantic adequacy remain separate; coverage alone is not
+semantic proof.
 See [the planner recipe](PLANNER_RECIPE.md) for limits and report format.
+Structured v3 reports require each obligation's `measurements` evidence to contain
+at least one finite JSON integer or floating-point observation. Narrative strings,
+nulls, objects, arrays, and non-finite numeric values do not satisfy that evidence
+requirement. The human-readable delivery view separately prints v3 execution,
+evidence, and domain statuses plus per-obligation counts; legacy report views retain
+their existing fields.
+Assessment checks use their accepted definition as rubric text rather than an
+executable predicate. Each obligation contributes one observation keyed by its
+obligation ID, with a `verdict` of `pass`, `fail`, or `inconclusive`; assessment
+records also require nonempty rubric, source locators, disagreement, and authority
+review fields. Assessment records bind the same definition-and-arguments recipe
+digest, but do not claim machine verification of rubric correctness.
 
 Workflow definition schema v1 is the stable finite-DAG contract. Definitions use the
 documented restricted YAML subset, every step declares idempotency, argv is the
@@ -119,8 +139,11 @@ branch  session  profile  status  activity  group  pr
 ```
 
 The internal native adapter begins with `HYDRA_TUI<TAB>2`, followed by bounded `H`
-head and `R` recovery rows whose fields contain no tabs or newlines. Unsupported
-protocol versions fail closed. This adapter is not a general automation API.
+head and `R` recovery rows whose fields contain no tabs or newlines. The fleet
+overview adapter uses `HYDRA_FLEET_TUI<TAB>3`: it retains version-2 `T` host and `F`
+head rows, extends `T` with connection/freshness fields, and adds bounded `O` task
+rows. Version-1 and version-2 fleet fixtures remain readable. Unsupported protocol
+versions fail closed. This adapter is not a general automation API.
 
 Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. Both
 retain navigation, search, refresh, preview, switch, spawn, group assignment,

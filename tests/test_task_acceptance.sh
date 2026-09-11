@@ -4,35 +4,36 @@ set -eu
 # A common Ubuntu login umask must not create shared task-state ancestors.
 umask 002
 root="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=/dev/null
+. "$root/tests/fixture-tools.sh"
 fixture="$(mktemp -d)"
+# shellcheck source=/dev/null
+. "$root/tests/workflow_task_cleanup.sh"
 cleanup() {
     [ -z "${owned_group:-}" ] || kill -KILL "-$owned_group" 2>/dev/null || :
     [ -z "${owned_owner:-}" ] || kill -KILL "$owned_owner" 2>/dev/null || :
-    for workspace in "$fixture"/host/fleet/tasks/task_*/workspace; do
-        [ -f "$workspace/.git/hydra/project-id" ] || continue
-        (cd "$workspace" && HYDRA_HOME="$fixture/host" "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :
+    for cleanup_home in "$fixture/host" "$fixture"/deadline-*-home; do
+        [ -d "$cleanup_home" ] || continue
+        workflow_task_fixture_quiesce "$cleanup_home" || return 1
+        for workspace in "$cleanup_home"/fleet/tasks/task_*/workspace; do
+            [ -f "$workspace/.git/hydra/project-id" ] || continue
+            (cd "$workspace" && HYDRA_HOME="$cleanup_home" "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :
+        done
     done
-    # Public teardown may refuse the deliberately dirty fixture worktrees. Remove
-    # only their remaining terminal instances before deleting disposable files.
-    for cleanup_head in "$fixture"/host/state/v2/projects/*/heads/*; do
-        [ -f "$cleanup_head/session" ] || continue
-        [ -f "$cleanup_head/current-instance" ] || continue
-        cleanup_session="$(cat "$cleanup_head/session")"
-        cleanup_instance="$(cat "$cleanup_head/current-instance")"
-        cleanup_id="$(tmux display-message -p -t "=$cleanup_session" '#{session_id}' 2>/dev/null)" || continue
-        [ -n "$cleanup_id" ] || continue
-        [ "$(tmux show-environment -t "$cleanup_id" HYDRA_INSTANCE_ID 2>/dev/null)" = "HYDRA_INSTANCE_ID=$cleanup_instance" ] || continue
-        tmux kill-session -t "$cleanup_id" 2>/dev/null || :
-    done
+    test_tmux_fixture_cleanup "$fixture" || return 1
     if [ "${HYDRA_TEST_KEEP:-0}" = 1 ]; then
         printf 'Preserved task fixture: %s\n' "$fixture" >&2
     else
         rm -rf "$fixture"
     fi
 }
-trap cleanup 0
+test_code=0
+trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
+# shellcheck source=/dev/null
+. "$root/tests/headless_path.sh"
+headless_path "$fixture/no-tmux"
 HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
 HYDRA_HOME="$fixture/client"
 HYDRA_TEST_TRANSPORT="$fixture/transport"
@@ -89,6 +90,8 @@ task() { "$root/bin/hydra" fleet task "$@"; }
 if printf '{"protocol":1,"action":"handshake"}\000trailing' | "$HYDRA_FLEET_BIN" fleet serve > "$fixture/error"; then exit 1; fi
 grep -q '"code":"invalid_request"' "$fixture/error"
 task prepare --source "$fixture/source" --spec "$fixture/spec" --output "$fixture/package" > "$fixture/preview"
+# shellcheck source=/dev/null
+. "$root/tests/task_terminal_cases.sh"
 # Six simultaneous clients must converge on one immutable acceptance.
 pids=""
 for n in 1 2 3 4 5 6; do
@@ -101,6 +104,10 @@ id="$(sed -n 's/.*"task_id":"\([^"]*\)".*/\1/p' "$fixture/receipt-1")"
 for n in 2 3 4 5 6; do cmp "$fixture/receipt-1" "$fixture/receipt-$n"; done
 task status build --id "$id" > "$fixture/status"
 grep -q '"state":"accepted"' "$fixture/status"
+task observe build --id "$id" > "$fixture/observation"
+grep -q '"snapshot_schema_version":1' "$fixture/observation"
+grep -q '"execution_state":"accepted"' "$fixture/observation"
+grep -q '"reason":"admission"' "$fixture/observation"
 [ "$(find "$fixture/host/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" -eq 1 ]
 cmp "$fixture/package" "$fixture/host/fleet/tasks/$id/package.json"
 cp "$fixture/host/fleet/tasks/$id/acceptance.json" "$fixture/original-acceptance"
@@ -203,10 +210,11 @@ steps:
     idempotent: false
     args:
       branch: wf-worker
+      terminal_mode: headless
   - id: work
     kind: exec
     needs: [create]
-    retry: 0
+    retry: 1
     idempotent: true
     args:
       head: wf-worker
@@ -223,6 +231,10 @@ steps:
 WORKFLOW
 cat > "$fixture/source/task-work.sh" <<'WORK'
 set -eu
+if [ ! -f result.txt ]; then
+    : > result.txt
+    exit 7
+fi
 cat "$HYDRA_TASK_INPUT_DIR/context" > result.txt
 WORK
 git -C "$fixture/source" add .hydra/workflows/remote.yml task-work.sh
@@ -263,6 +275,98 @@ for sealed_id in "$workflow_id" "$execution_id"; do
     grep -q '"result_state":"ready"' "$fixture/seal-status"
 done
 task result build --id "$workflow_id" > "$fixture/workflow-result"
+task observe build --id "$workflow_id" --event-limit 2 > "$fixture/workflow-observation" || { cat "$fixture/workflow-observation"; exit 1; }
+grep -q '"event_observation"' "$fixture/workflow-observation"
+grep -q '"attempt_history"' "$fixture/workflow-observation"
+grep -q '"process_exit":"0"' "$fixture/workflow-observation"
+grep -q '"completed_at"' "$fixture/workflow-observation"
+fixture_json observe-check "$fixture/workflow-observation"
+grep -q '"artifact_inventory"' "$fixture/workflow-observation"
+grep -q '"provider_observations"' "$fixture/workflow-observation"
+grep -q '"process_exit"' "$fixture/workflow-observation"
+grep -q '"result_collection"' "$fixture/workflow-observation"
+grep -q '"verification"' "$fixture/workflow-observation"
+grep -q '"approval_requests"' "$fixture/workflow-observation"
+cursor="$(sed -n 's/.*"next_cursor":\([0-9][0-9]*\).*/\1/p' "$fixture/workflow-observation" | head -n 1)"
+case "$cursor" in ''|*[!0-9]*) exit 1 ;; esac
+stream_id="$(sed -n 's/.*"stream_id":"\([^"]*\)".*/\1/p' "$fixture/workflow-observation" | head -n 1)"
+byte_offset="$(sed -n 's/.*"next_byte_offset":\([0-9][0-9]*\).*/\1/p' "$fixture/workflow-observation" | head -n 1)"
+task observe build --id "$workflow_id" --cursor "$cursor" --byte-offset "$byte_offset" --stream-id "$stream_id" > "$fixture/workflow-reconnect"
+fixture_json observe-pages "$fixture/workflow-observation" "$fixture/workflow-reconnect"
+grep -q '"retention_gap":false' "$fixture/workflow-reconnect"
+grep -q '"stream_reset":false' "$fixture/workflow-reconnect"
+case "$stream_id" in ''|*[!0-9:]*) exit 1 ;; esac
+events_path="$fixture/host/state/v2/projects/$(sed -n 's/.*"execution_project_id":"\([^"]*\)".*/\1/p' "$fixture/host/fleet/tasks/$workflow_id/state.json")/workflows/runs/$(sed -n 's/.*"run_id":"\([^"]*\)".*/\1/p' "$fixture/host/fleet/tasks/$workflow_id/state.json")/events.jsonl"
+last_sequence="$(sed -n 's/.*"head_cursor":\([0-9][0-9]*\).*/\1/p' "$fixture/workflow-reconnect" | head -n 1)"
+if [ -n "$last_sequence" ]; then
+    next_sequence=$((last_sequence + 1))
+    printf '{"schema_version":1,"sequence":%s,"type":"test.append"}\n' "$next_sequence" >> "$events_path"
+    task observe build --id "$workflow_id" --cursor "$cursor" --stream-id "$stream_id" > "$fixture/workflow-append"
+    grep -q '"stream_reset":false' "$fixture/workflow-append"
+    grep -q "\"sequence\":$next_sequence" "$fixture/workflow-append"
+fi
+if grep -q '"sequence":' "$fixture/workflow-observation"; then
+    first_sequence="$(sed -n 's/.*"sequence":\([0-9][0-9]*\).*/\1/p' "$fixture/workflow-observation" | head -n 1)"
+    [ -n "$first_sequence" ]
+    if grep -q "\"sequence\":$first_sequence" "$fixture/workflow-reconnect"; then exit 1; fi
+fi
+task observe build --id "$workflow_id" --stream-id replaced-stream > "$fixture/workflow-reset" || { cat "$fixture/workflow-reset"; exit 1; }
+grep -q '"stream_reset":true' "$fixture/workflow-reset"
+grep -q '"events":\[\]' "$fixture/workflow-reset"
+cp "$events_path" "$fixture/events-saved"
+tail -n +2 "$fixture/events-saved" > "$events_path"
+task observe build --id "$workflow_id" > "$fixture/workflow-gap"
+grep -q '"retention_gap":true' "$fixture/workflow-gap"
+cp "$fixture/events-saved" "$events_path"
+# Exercise byte-offset pagination across the bounded 256 KiB scan window.  A
+# large record makes the reader stop before event-limit, so the returned offset
+# must point at the first unconsumed line and every sequence must be observed
+# exactly once on the following requests.
+fixture_json bulk-events "$events_path"
+bulk_cursor=0
+bulk_offset=0
+bulk_stream=
+bulk_seen=0
+bulk_saw_truncated=0
+while [ "$bulk_cursor" -lt 200 ]; do
+    if [ -n "$bulk_stream" ]; then
+        task observe build --id "$workflow_id" --cursor "$bulk_cursor" --event-limit 128 --byte-offset "$bulk_offset" --stream-id "$bulk_stream" > "$fixture/bulk-observation"
+    else
+        task observe build --id "$workflow_id" --cursor "$bulk_cursor" --event-limit 128 --byte-offset "$bulk_offset" > "$fixture/bulk-observation"
+    fi
+    bulk_values="$(fixture_json bulk-page "$fixture/bulk-observation" "$bulk_cursor"
+)"
+    # shellcheck disable=SC2086
+    set -- $bulk_values
+    bulk_cursor=$1; bulk_offset=$2; bulk_stream=$3; bulk_count=$4; bulk_truncated=$5
+    [ "$bulk_count" -gt 0 ]
+    [ "$bulk_truncated" = true ] && bulk_saw_truncated=1
+    bulk_seen=$((bulk_seen + bulk_count))
+done
+[ "$bulk_seen" -eq 200 ]
+[ "$bulk_saw_truncated" -eq 1 ]
+[ "$bulk_truncated" = false ]
+printf '%s\n' '{"schema_version":1,"sequence":201,"type":"bulk.append"}' >> "$events_path"
+task observe build --id "$workflow_id" --cursor 200 --byte-offset "$bulk_offset" --stream-id "$bulk_stream" > "$fixture/bulk-append"
+grep -q '"sequence":201' "$fixture/bulk-append"
+bulk_append_offset="$(fixture_json offset "$fixture/bulk-append"
+)"
+task observe build --id "$workflow_id" --cursor 200 --byte-offset 4294967295 --stream-id "$bulk_stream" > "$fixture/bulk-invalid-offset"
+grep -q '"stream_reset":true' "$fixture/bulk-invalid-offset"
+grep -q '"next_byte_offset":0' "$fixture/bulk-invalid-offset"
+task observe build --id "$workflow_id" --cursor 200 --byte-offset "$bulk_offset" --stream-id replaced-stream > "$fixture/bulk-replaced-stream"
+grep -q '"stream_reset":true' "$fixture/bulk-replaced-stream"
+grep -q '"next_byte_offset":0' "$fixture/bulk-replaced-stream"
+printf '%s' '{"schema_version":1,"sequence":202' >> "$events_path"
+task observe build --id "$workflow_id" --cursor 201 --byte-offset "$bulk_append_offset" --stream-id "$bulk_stream" > "$fixture/bulk-partial"
+grep -q '"stream_reset":true' "$fixture/bulk-partial"
+grep -q "\"next_byte_offset\":$bulk_append_offset" "$fixture/bulk-partial"
+truncate -s "$bulk_append_offset" "$events_path"
+printf '%s\n' '{"schema_version":1,"sequence":201,"type":"bulk.duplicate"}' >> "$events_path"
+task observe build --id "$workflow_id" --cursor 200 --byte-offset "$bulk_offset" --stream-id "$bulk_stream" > "$fixture/bulk-duplicate"
+grep -q '"stream_reset":true' "$fixture/bulk-duplicate"
+grep -q "\"next_byte_offset\":$bulk_offset" "$fixture/bulk-duplicate"
+cp "$fixture/events-saved" "$events_path"
 grep -q '"result_sha256":' "$fixture/workflow-result"
 grep -q '"path":"result.txt"' "$fixture/workflow-result"
 grep -q '"dirty":true' "$fixture/workflow-result"
@@ -297,6 +401,8 @@ grep -q '"code":"io_failed"' "$fixture/result-error"
 . "$root/tests/task_agent_cases.sh"
 # shellcheck disable=SC1091
 . "$root/tests/task_approval_cases.sh"
+
+task submit build --input "$fixture/execution-headless-package" --key headless-required > "$fixture/headless-accepted"
 
 # A command that emits a symlink cannot produce a valid artifact snapshot.
 sed -e 's@\["true"\]@["ln","-s","/dev/null","result.txt"]@' -e 's/"outputs":\[\]/"outputs":["result.txt"]/' "$fixture/spec" > "$fixture/unsafe-output-spec"
@@ -356,19 +462,24 @@ sleep 1
 task start build --id "$queue_id" --trust-spec "$queue_digest" > "$fixture/queue-status"
 grep -q '"failure":"queue_deadline"' "$fixture/queue-status"
 [ ! -e "$fixture/host/fleet/tasks/$queue_id/launch.json" ]
-# Distinct startup and execution timers operate independently of transport.
+# A deadline can kill an admission writer and deliberately retain its lock.
+# Give each destructive timer probe its own receiver state.
 for phase in startup execution; do
-    phase_prefix="$fixture/deadline-$phase"
+    phase_host="deadline-$phase"
+    phase_prefix="$fixture/$phase_host"
+    (cd "$fixture/receiver" && HYDRA_HOME="$phase_prefix-home" "$root/bin/hydra" init --no-agent --json) > "$phase_prefix-init"
+    "$root/bin/hydra" remote add "$phase_host" loopback --hydra "$root/bin/hydra" --home "$phase_prefix-home" >/dev/null
     sed -e "s/\"${phase}_seconds\":[0-9]*/\"${phase}_seconds\":1/" \
-        -e 's/\["true"\]/["sleep","10"]/' "$fixture/spec" > "$phase_prefix-spec"
+        -e 's/\["true"\]/["sleep","10"]/' -e "s/\"host\":\"build\"/\"host\":\"$phase_host\"/" \
+        "$fixture/spec" > "$phase_prefix-spec"
     task prepare --source "$fixture/source" --spec "$phase_prefix-spec" --output "$phase_prefix-package" > "$phase_prefix-preview"
     phase_digest="$(sed -n 's/.*"spec_sha256":"\([^"]*\)".*/\1/p' "$phase_prefix-preview")"
     if [ "$phase" = startup ]; then : > "$fixture/transport/slow-clone"; fi
-    task submit build --input "$phase_prefix-package" --key "$phase-deadline" --trust-spec "$phase_digest" > "$phase_prefix-receipt"
+    task submit "$phase_host" --input "$phase_prefix-package" --key "$phase-deadline" --trust-spec "$phase_digest" > "$phase_prefix-receipt"
     phase_id="$(sed -n 's/.*"task_id":"\([^"]*\)".*/\1/p' "$phase_prefix-receipt")"
     attempt=0
     while [ "$attempt" -lt 100 ]; do
-        task status build --id "$phase_id" > "$phase_prefix-status"
+        task status "$phase_host" --id "$phase_id" > "$phase_prefix-status"
         if grep -q '"state":"failed"' "$phase_prefix-status"; then break; fi
         sleep 0.1; attempt=$((attempt + 1))
     done
@@ -419,7 +530,8 @@ for kind in exec workflow; do
     task submit build --input "$fixture/cancel-$kind-package" --key "cancel-$kind" --trust-spec "$control_digest" > "$fixture/control-receipt"
     control_id="$(sed -n 's/.*"task_id":"\([^"]*\)".*/\1/p' "$fixture/control-receipt")"
     attempt=0
-    while [ ! -f "$marker" ] && [ "$attempt" -lt 100 ]; do sleep 0.1; attempt=$((attempt + 1)); done
+    # Allow the spec's 60-second startup budget before asserting live cancellation.
+    while [ ! -f "$marker" ] && [ "$attempt" -lt 600 ]; do sleep 0.1; attempt=$((attempt + 1)); done
     [ -f "$marker" ]
     task logs build --id "$control_id" > "$fixture/live-logs"
     grep -q '"available":true' "$fixture/live-logs"
@@ -459,8 +571,13 @@ for kind in exec workflow; do
 done
 
 # Storage corruption is recovery-required, never a reason to replace acceptance.
+cp "$fixture/host/fleet/tasks/$id/state.json" "$fixture/state-before-corruption.json"
 printf '{}' > "$fixture/host/fleet/tasks/$id/state.json"
 if task submit build --input "$fixture/package" --key same-key > "$fixture/error"; then exit 1; fi
 grep -q '"code":"recovery_required"' "$fixture/error"
 cmp "$fixture/original-acceptance" "$fixture/host/fleet/tasks/$id/acceptance.json"
+# Restore only after corruption assertions, so teardown can reconcile the owner.
+cp "$fixture/state-before-corruption.json" "$fixture/host/fleet/tasks/$id/state.json"
+# shellcheck source=/dev/null
+. "$root/tests/task_terminal_reconcile_cases.sh"
 printf 'Task acceptance and execution: deduplication, lost acknowledgments, exec/workflow attempts, selected inputs, gates, mapping, outages, and corruption passed\n'

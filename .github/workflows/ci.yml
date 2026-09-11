@@ -35,14 +35,10 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
     - name: Install pinned analysis dependencies
       run: |
-        brew install json-c pkg-config
-        python -m venv build/quality-tools
-        build/quality-tools/bin/python -m pip install clang-tidy==22.1.8
+        brew install json-c pkg-config llvm@22
+        "$(brew --prefix llvm@22)/bin/clang-tidy" --version | grep 'version 22.1.8'
     - name: Verify baseline policy and analyze C
       run: make test-quality-c quality-c
     - name: Preserve complete analyzer report
@@ -65,14 +61,10 @@ jobs:
     - name: Install test dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git tmux dash
+        sudo apt-get install -y git tmux dash build-essential libjson-c-dev pkg-config
     
-    - name: Run tests
-      run: make test
-    
-    - name: Test with dash
+    - name: Run shell tests with dash
       run: |
-        echo "Running tests with dash as sh..."
         sudo ln -sf /bin/dash /bin/sh
         make test
 
@@ -113,6 +105,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: lint
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
 
@@ -132,7 +125,8 @@ jobs:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-native
       run: |
         mkdir -p "$TMUX_TMPDIR"
-        make build-fleet test-fleet build-core build-tui test-c test-tui test-tui-pty test-parity
+        make build-fleet build-core build-tui
+        make test-c test-tui test-tui-pty test-parity
 
     - name: Qualify native workspace, statistics and standalone export
       env:
@@ -148,13 +142,6 @@ jobs:
         tui_package_dir="$(make package-tui | tail -n 1)"
         test "$(cat "$tui_package_dir/hydra-tui.source")" = "$(git rev-parse HEAD)"
 
-    - name: Run sanitizer tests
-      env:
-        TMUX_TMPDIR: ${{ runner.temp }}/hydra-sanitize
-      run: |
-        mkdir -p "$TMUX_TMPDIR"
-        make sanitize
-
     - name: Qualify shell-only and offline native installs
       env:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-install
@@ -169,3 +156,69 @@ jobs:
         else
           ldd build/hydra-core
         fi
+
+  sanitize:
+    name: Native sanitizers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install shell dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux libjson-c-dev pkg-config
+
+    - name: Install shell dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: brew install tmux shellcheck json-c pkg-config
+
+    - name: Run sanitizer tests
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-sanitize
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make sanitize-core sanitize-tui sanitize-workspace sanitize-attached sanitize-plan-workspace sanitize-statistics
+
+
+  fleet:
+    name: Fleet ${{ matrix.mode }} (${{ matrix.os }}, ${{ matrix.shard }})
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        mode: [sanitizers, acceptance]
+        shard: [odd, even]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install shell dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux libjson-c-dev pkg-config
+
+    - name: Install shell dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: brew install tmux shellcheck json-c pkg-config
+
+    - name: Run fleet acceptance
+      if: matrix.mode == 'acceptance'
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-fleet
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} test-fleet
+
+    - name: Run fleet sanitizers
+      if: matrix.mode == 'sanitizers'
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-fleet-sanitize
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} sanitize-fleet

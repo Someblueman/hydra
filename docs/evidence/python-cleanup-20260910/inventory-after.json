@@ -1,0 +1,507 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "b0fb5b1d9220189ad2498a244274ae498a3c7d0c",
+  "count": 44,
+  "lines": 6490,
+  "files": [
+    {
+      "path": "examples/planning/manifest-map/check.py",
+      "lines": 67,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/manifest-map/compose.py",
+      "lines": 12,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "a1624605c5594e0afe81ac0a1d02a4dc96a1be11c293299dcf6b295c040d301b",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/manifest-map/worker.py",
+      "lines": 5,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/patterns/check.py",
+      "lines": 47,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "706204bd72d7adf09f482428347350d1fa64733161a6b9da561a7972c3aa4115",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/performance/analyze.py",
+      "lines": 73,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "221098207649f1f7509b7cba421cb6e2c94956e29ea694e79178647ac892cadc",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/performance/checker.py",
+      "lines": 176,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "aed6c946802103462c33acb91cc9bf8ac4de672ad9e5566b5d74fb24b2c4e634",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/performance/measure.py",
+      "lines": 84,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "20b94932c408232ff0ebc6ec57f73902ad1376da2ddb79c229f52450350a2df9",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/research/research_check.py",
+      "lines": 132,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "b52b5277ede9c7fec3123d0eae4c91a06dc3665abb653fdf8a62a8838d29c652",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/research/research_report.py",
+      "lines": 16,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "1a9766a0f60bf388cb4bee34b3ac38a9e95bc78d55ce3faeeff583526a913492",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/staged/check.py",
+      "lines": 82,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "b52612f2fd9cb3c7ad73fe97da221259679e62ea2cf965cea7f45e6e9698fd9e",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/staged/compose.py",
+      "lines": 16,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "25e924163701822419c9968bb1c387a44d700d604fd9fe2764dceb986b8093bc",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/staged/stage1_check.py",
+      "lines": 107,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "5487703ac270311fbf973c1fdf70025b3459aaf360ee078e11549b34221c92bb",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/staged/stage1_run.py",
+      "lines": 62,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "9889bb1b34a30a7e241d4eda41bd4de2f9291fbc85705cb209e41770393c6c1b",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/staged/unique_json.py",
+      "lines": 13,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "f5ed054b3253a20304018323833aa1bb942b5f286cd6717a38d38456b893e64f",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/staged/worker.py",
+      "lines": 11,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle",
+      "sha256": "ae1c31d3a37fcf68ab45cab1ed48de47cdb5f7278ff8891bcc4e00d696485231",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/discovery/ssh_fixture.py",
+      "lines": 95,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "0bc4eb1e4d85eb01470b849941fbe501142a9aa75b70f52e29b66e9be848d86e",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/discovery/test_discovery.py",
+      "lines": 293,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "ac0d80f3221ae089873d05390bef9b74a5447e25a0c582f51e65048c6af55002",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/statistics_evidence.py",
+      "lines": 66,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "816eb55f43d7a23da6c14fe9d8ba6555c92de61f57d749501e7d8cd9e137ef05",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/termviz/pty_support.py",
+      "lines": 233,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions",
+      "sha256": "f0c989799e2f47f7dabd87055fdf54284e534d38853ed01474275a70318cf078",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/termviz/test_attached_pty.py",
+      "lines": 280,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions",
+      "sha256": "656a47f1d8fb3d1efdf43e5f9c85bcbf2d41f8bd817dffd3c52fa70c9e582711",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/termviz/test_fleet_controls.py",
+      "lines": 145,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions",
+      "sha256": "d16b772d1ec1c845c9ab722ccc04c0940c035ce9a63dde904dfaad8b6e369330",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/termviz/test_fleet_recovery.py",
+      "lines": 332,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions",
+      "sha256": "b90a9279cffa46babd91b00d629da70e68e60d1734d2d52971a6c4d45c67c092",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/termviz/test_plan_launch.py",
+      "lines": 190,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions",
+      "sha256": "c635e3830f94b4abfe342702db00cf66efd59b351cbb49e84aff78cc01757cb0",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/termviz/test_plan_workspace.py",
+      "lines": 75,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions",
+      "sha256": "8fa2efb32e181d3d1856775218b5c361acacdf48195aa78a1f993d3cd69d6fac",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/termviz/test_pty.py",
+      "lines": 189,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions",
+      "sha256": "adb6642c7bdc55f4c95afdfdb20911839f198e6dc2598e04ed05726f8f1dc722",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/termviz/test_statistics_pty.py",
+      "lines": 183,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions",
+      "sha256": "9ea706447cc1945c40cd25eba8271f1bf2c7aff245b42ab4b5ff818ec31ac948",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/termviz/test_workflow_controls.py",
+      "lines": 174,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions",
+      "sha256": "a687da78fba5be5d05b23449a218b0e43f2c741564140bb0bfc50f55d9959841",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_enrollment.py",
+      "lines": 451,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "d02b5377772d09b8f2ee9b977e1631c14ede6e557eeeec57e04a3dcaa842affa",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_enrollment_receiver.py",
+      "lines": 139,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "cee382c82c5f950ade0fa57e297f94e97cddafa255fc1edcb2828e724d3fe310",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_enrollment_ssh.py",
+      "lines": 164,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "64d8f69aa4ba0ea9fe588062b56482a20daeb57398c7ad01caa7ab558d5df96d",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_performance_outcome.py",
+      "lines": 162,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "e27dc8da40959ea3d1907039262524a653676e295d57bb0a0a499eb46c11f78a",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_plan_inspection.py",
+      "lines": 149,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "f6ba85fd99f5a5eadc298d4d764a7706a6ed185725fd4a25dae087baddadc60b",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_plan_manifest.py",
+      "lines": 138,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "434e53815a6cee4d1c1663e663bcda6c74f2ef4f4b4c6b6600da72668ea095f8",
+      "unchanged_from_baseline": false
+    },
+    {
+      "path": "tests/test_plan_patterns.py",
+      "lines": 83,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "18d73cc8147d1cffe0818a2c27c059100015f66fe2b8af3d474d2f11990ddf91",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_plan_reuse_invalidation.py",
+      "lines": 253,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "26fc8857af4a6a8a71dc52983a9e1d226a07baa58057ee4b4ee67f18e0b211d1",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_plan_staged.py",
+      "lines": 235,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "9abf3bc1b67de03c92d89cf97a718568b76279598a8e4ff9177d839f68bdc321",
+      "unchanged_from_baseline": false
+    },
+    {
+      "path": "tests/test_plan_staged_public.py",
+      "lines": 186,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "d662e768d9db849fbd5fad7100dd437ececd6db976571b7fe4626dcb59f3beb8",
+      "unchanged_from_baseline": false
+    },
+    {
+      "path": "tests/test_research_outcome.py",
+      "lines": 91,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "7202e975de50c935f7751d8573c23d7af5819561853ea71ab9cb72ad6a4196d6",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_retention.py",
+      "lines": 264,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "3f69235bb2660698aa83847c5668ee1b3197b1528d53554cbc7324b95b7844d7",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_retention_accepted.py",
+      "lines": 107,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "1ec253de34adaa9f4a74a193e772e1e7678dc14ecc48a2d7b575fc9c2970e988",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_statistics_export.py",
+      "lines": 130,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "bad610e714a81aa05463dee827ffcb6dabdb7973f32d4d284a3794638d1221a3",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_task_announce.py",
+      "lines": 155,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "d978a87b7e8eeafedfd56229a28148c594dcd4cadd6709998af8df3e38005e97",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_workflow_task_metrics.py",
+      "lines": 125,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "eaf41cd3b08b28f2b873c3a031743c3afd3cdda5e366b98d0a6ecd1b1786bddb",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/workflow_contract_cases.py",
+      "lines": 500,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support",
+      "sha256": "f8f7cebf5957547fbac2b899ed60356321077b935ff59932f77062a4bf9584cc",
+      "unchanged_from_baseline": true
+    }
+  ],
+  "retained_unchanged": [
+    "examples/planning/manifest-map/check.py",
+    "examples/planning/manifest-map/compose.py",
+    "examples/planning/manifest-map/worker.py",
+    "examples/planning/patterns/check.py",
+    "examples/planning/performance/analyze.py",
+    "examples/planning/performance/checker.py",
+    "examples/planning/performance/measure.py",
+    "examples/planning/research/research_check.py",
+    "examples/planning/research/research_report.py",
+    "examples/planning/staged/check.py",
+    "examples/planning/staged/compose.py",
+    "examples/planning/staged/stage1_check.py",
+    "examples/planning/staged/stage1_run.py",
+    "examples/planning/staged/unique_json.py",
+    "examples/planning/staged/worker.py",
+    "tests/discovery/ssh_fixture.py",
+    "tests/discovery/test_discovery.py",
+    "tests/statistics_evidence.py",
+    "tests/termviz/pty_support.py",
+    "tests/termviz/test_attached_pty.py",
+    "tests/termviz/test_fleet_controls.py",
+    "tests/termviz/test_fleet_recovery.py",
+    "tests/termviz/test_plan_launch.py",
+    "tests/termviz/test_plan_workspace.py",
+    "tests/termviz/test_pty.py",
+    "tests/termviz/test_statistics_pty.py",
+    "tests/termviz/test_workflow_controls.py",
+    "tests/test_enrollment.py",
+    "tests/test_enrollment_receiver.py",
+    "tests/test_enrollment_ssh.py",
+    "tests/test_performance_outcome.py",
+    "tests/test_plan_inspection.py",
+    "tests/test_plan_patterns.py",
+    "tests/test_plan_reuse_invalidation.py",
+    "tests/test_research_outcome.py",
+    "tests/test_retention.py",
+    "tests/test_retention_accepted.py",
+    "tests/test_statistics_export.py",
+    "tests/test_task_announce.py",
+    "tests/test_workflow_task_metrics.py",
+    "tests/workflow_contract_cases.py"
+  ],
+  "changed_only_for_entrypoint_migration": [
+    "tests/test_plan_manifest.py",
+    "tests/test_plan_staged.py",
+    "tests/test_plan_staged_public.py"
+  ],
+  "existing_shell_files_with_python": [
+    {
+      "path": "examples/planning/feature/verify.sh",
+      "sha256": "c07030f53bfd6fda1b4bfc2799b9dce9a15ed2ac053feb190ee0bc588ec73644",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/patterns/check.sh",
+      "sha256": "1a6e7050d32a74e8f337bbdb18e237971d31ca831abd5c09a9685f66821c4699",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "examples/planning/performance/compose.sh",
+      "sha256": "a86e1200c6517c1cb8c19e63649be98ac591cc35ae3393e85ccbd3e04d6f7e56",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/headless_path.sh",
+      "sha256": "386557a4aa92ff1aeb0e998f5504de339db9f564e310713c55eeac9b29683aa3",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/task_terminal_cases.sh",
+      "sha256": "8b24b539ada847dfcec39ac6ef33d4fdd93cd4ca92984a9075a4dd30abcc7292",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/task_terminal_reconcile_cases.sh",
+      "sha256": "eb41a020cda66c3f0cb518c4ca842796c702acf4e13b04ef70579fa56455d94c",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_fixture_cleanup.sh",
+      "sha256": "34e2d306c9d8f28b51160a15119582ca800cf6cbd1d57b2edc88598be282429c",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_headless_plan_adapter.sh",
+      "sha256": "ec62dfe5c33628ef0abcada884665d5d17aecd5a4a8cee352c93dcfbb9a4abe4",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_task_acceptance.sh",
+      "sha256": "d0b4a5bfede9c6803b5b88126412ad48d2f65457479653d679811aba7844dd40",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_visualization.sh",
+      "sha256": "29984141eeebf541de00f4bff72b6c2e20148303336f7cdfd72cb9b076862259",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_workflow_approval.sh",
+      "sha256": "3db585d33403ad62e1ce8391e46656d66fd2324ac878adc0b3daf0a097a9858c",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_workflow_plan.sh",
+      "sha256": "f09720d7e59b184751585e90047d529590d7e9a99843b28bb5a538cfb5d5eb03",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_workflow_plan_v3.sh",
+      "sha256": "93b9e2ae320c97ae5296e4a9547fa1aa99f2923ab9aec244fc17fcc3b742b41d",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_workflow_runtime.sh",
+      "sha256": "0e69ddbdbc96914de7863e0d5ebda8891d99a6072466bf0685a5956dc54a9140",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/test_workflow_task.sh",
+      "sha256": "6978cc292365e305804a80662c6426d3fc9895d1d9e8afdf4c6b178a8eb3756e",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/workflow_plan_repair_cases.sh",
+      "sha256": "557c55805604c9967fe070f2ad5c57bce2f96b8c46822643352724f6a5ff5ab9",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/workflow_plan_reuse_cases.sh",
+      "sha256": "84c307e47dc8e7ffb2c5dbfc26a35d23cee549e8fe0c0cad22894e2b748ea529",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/workflow_plan_statistics_cases.sh",
+      "sha256": "bdf56f3f5aae7bd8f5fa3d6cb176198aaebf457770108f987c403bab75f12f9e",
+      "unchanged_from_baseline": true
+    },
+    {
+      "path": "tests/workflow_task_cleanup.sh",
+      "sha256": "1f94b16b5726bc4228a5ecbdc6c267e9eeb247cfab67913c0217aff0739800d9",
+      "unchanged_from_baseline": true
+    }
+  ],
+  "new_embedded_python": false,
+  "interpretation": "Existing shell-embedded Python is unchanged. No Python was moved into shell or added to installed runtime. The new shell workflow invokes explicit existing Python test/oracle files."
+}

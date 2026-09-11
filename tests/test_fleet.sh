@@ -14,6 +14,7 @@ cat > "$fixture/bin/ssh" <<'SSH'
 #!/bin/sh
 set -eu
 while [ $# -gt 2 ]; do shift; done
+if [ -n "${HYDRA_TEST_OFFLINE_FILE:-}" ] && [ -f "$HYDRA_TEST_OFFLINE_FILE" ] && [ "$1" = good ]; then exit 255; fi
 case "$1" in
     key) echo 'Host key verification failed.' >&2; exit 255 ;;
     auth) echo 'Permission denied (publickey).' >&2; exit 255 ;;
@@ -30,6 +31,19 @@ export PATH
 "$root/bin/hydra" remote add good good --hydra "$root/bin/hydra"
 "$root/bin/hydra" fleet list --json > "$fixture/result"
 grep -q '"heads":\[\]' "$fixture/result"
+"$root/bin/hydra" fleet overview --json > "$fixture/overview"
+grep -q '"snapshot_schema_version":1' "$fixture/overview"
+grep -q '"state":"reachable"' "$fixture/overview"
+grep -q '"state":"fresh"' "$fixture/overview"
+[ -f "$HYDRA_HOME/fleet/observations/good.json" ]
+HYDRA_TEST_OFFLINE_FILE="$fixture/offline"
+export HYDRA_TEST_OFFLINE_FILE
+: > "$HYDRA_TEST_OFFLINE_FILE"
+"$root/bin/hydra" fleet overview --json > "$fixture/stale-overview"
+grep -q '"cached":true' "$fixture/stale-overview"
+grep -q '"state":"stale"' "$fixture/stale-overview"
+grep -q '"state":"unreachable"' "$fixture/stale-overview"
+rm "$HYDRA_TEST_OFFLINE_FILE"
 if "$root/bin/hydra" remote add bad 'host;touch nope' >/dev/null 2>&1; then exit 1; fi
 for host in key auth offline slow malformed skew; do
     "$root/bin/hydra" remote add "$host" "$host" >/dev/null

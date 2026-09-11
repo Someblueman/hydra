@@ -19,7 +19,7 @@ static void check(int condition, const char *message) {
     }
 }
 
-static void snapshot_output_failure(void) {
+static void snapshot_empty_state(void) {
     char root[] = "/tmp/hydra-snapshot-output.XXXXXX", schema[256], projects[256];
     FILE *record = NULL, *readonly = NULL;
     if (!mkdtemp(root)) { check(0, "snapshot failure fixture"); return; }
@@ -28,6 +28,18 @@ static void snapshot_output_failure(void) {
     record = fopen(schema, "w");
     if (record) { fputs("2\n", record); fclose(record); }
     if (!record || mkdir(projects, 0700)) { check(0, "snapshot failure fixture"); goto done; }
+    FILE *snapshot = tmpfile();
+    check(snapshot && hydra_write_snapshot(root, snapshot, stderr) == 0,
+          "empty snapshot succeeds");
+    if (snapshot) {
+        char output[256];
+        rewind(snapshot);
+        size_t bytes = fread(output, 1U, sizeof(output) - 1U, snapshot);
+        output[bytes] = '\0';
+        check(strstr(output, "\"projects\":0,\"heads\":[]") != NULL,
+              "empty snapshot contains no projects or heads");
+        fclose(snapshot);
+    }
     readonly = fopen(schema, "r");
     check(readonly && hydra_write_snapshot(root, readonly, stderr) != 0,
           "snapshot reports output errors");
@@ -38,7 +50,7 @@ done:
 
 int main(void) {
     FILE *json = tmpfile();
-    snapshot_output_failure();
+    snapshot_empty_state();
     char buffer[128];
     size_t bytes;
     check(hydra_valid_id("project_0123456789abcdef") == 1, "valid opaque ID");

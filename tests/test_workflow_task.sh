@@ -6,7 +6,9 @@ if [ "${HYDRA_TEST_DAG_PARALLELISM:-0}" = 1 ]; then
     export HYDRA_TEST_DAG_LOST_ACK
 fi
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+# shellcheck source=/dev/null
+. "$root/tests/fixture-tools.sh"
+fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
 HYDRA_HOME="$fixture/home"
 HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
 export HYDRA_HOME HYDRA_FLEET_BIN HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
@@ -14,10 +16,12 @@ export HYDRA_HOME HYDRA_FLEET_BIN HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_N
 . "$root/tests/workflow_task_cleanup.sh"
 cleanup() {
     workflow_task_fixture_quiesce || return 1
+    if [ "${HYDRA_TEST_KEEP_FIXTURE:-0}" = 1 ]; then printf 'Task DAG evidence: %s\n' "$fixture" >&2; return 0; fi
     for workspace in "$HYDRA_HOME"/fleet/tasks/task_*/workspace; do
         [ -f "$workspace/.git/hydra/project-id" ] || continue
         (cd "$workspace" && "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :
     done
+    test_tmux_fixture_cleanup "$fixture" || return 1
     if [ "${passed:-0}" = 1 ]; then rm -rf "$fixture"; else printf 'Task DAG evidence: %s\n' "$fixture" >&2; fi
 }
 test_code=0
@@ -25,6 +29,9 @@ trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
+# shellcheck source=/dev/null
+. "$root/tests/headless_path.sh"
+headless_path "$fixture/no-tmux"
 mkdir -p "$fixture/source"
 cd "$fixture/source"
 git init -q
@@ -214,6 +221,11 @@ if [ "${HYDRA_TEST_DAG_PARALLELISM:-0}" = 1 ]; then expected_tasks=3; fi
 [ "$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" = "$expected_tasks" ]
 [ -s "$run_dir/steps/produce/attempt-1/remote/collection.json" ]
 [ -s "$run_dir/steps/consume/attempt-1/remote/receipt.json" ]
+transport_records="$(find "$run_dir/steps" -path '*/attempt-*/remote/transport-metrics.json' -type f | wc -l | tr -d ' ')"
+[ "$transport_records" -gt 0 ]
+fixture_json transport-metrics "$run_dir" "${HYDRA_TEST_DAG_LOST_ACK:-0}"
+"$root/bin/hydra" workflow statistics-data > "$fixture/statistics.tsv"
+awk -F '\t' -v id="$run" '$1 == "R" && $2 == id {found=1; if ($13 == "-" || $14 == "-" || $15 == "-") bad=1} END {exit !found || bad}' "$fixture/statistics.tsv"
 if [ "${HYDRA_TEST_DAG_REPLAY:-0}" = 1 ]; then
     "$root/bin/hydra" workflow replay "$run" > "$fixture/replay-1.json"
     "$root/bin/hydra" workflow replay "$run" > "$fixture/replay-2.json"

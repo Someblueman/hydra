@@ -132,6 +132,24 @@ lifecycle_liveness() {
     _ll_branch="$1"
     lifecycle_load_head "$_ll_branch" || return 1
     _ll_session="$(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/session" 2>/dev/null || true)"
+    _ll_mode="$( [ -s "$LIFECYCLE_HEAD_DIR/terminal-mode" ] && sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" || echo interactive )"
+    if [ "$_ll_mode" = headless ] || [ "$_ll_session" = - ]; then
+        # A terminal-free worker is observed through its owner evidence, never
+        # through tmux. A workspace-only head has no owner and is unavailable,
+        # not live; missing tmux is therefore not a dead worker.
+        _ll_observed="$(lifecycle_read observed-status)"
+        _ll_pid="$(lifecycle_read pid)"
+        case "$_ll_observed" in
+            starting|running)
+                case "$_ll_pid" in ''|*[!0-9]*) printf 'unavailable\n' ;; *)
+                    if kill -0 "$_ll_pid" 2>/dev/null; then printf 'live\n'; else printf 'unavailable\n'; fi
+                ;; esac
+                ;;
+            idle|unavailable) printf 'unavailable\n' ;;
+            *) printf 'stopped\n' ;;
+        esac
+        return 0
+    fi
     if [ -n "$_ll_session" ] && tmux has-session -t "$_ll_session" 2>/dev/null; then
         printf 'live\n'
     else
@@ -147,11 +165,13 @@ lifecycle_snapshot() {
     LIFECYCLE_SNAPSHOT_CONFIDENCE="unavailable"
     LIFECYCLE_SNAPSHOT_LIVENESS="unavailable"
     LIFECYCLE_SNAPSHOT_POLICY=""
+    LIFECYCLE_SNAPSHOT_TERMINAL_MODE="interactive"
     LIFECYCLE_SNAPSHOT_COMPLETE=false
     if ! lifecycle_load_head "$_ls_branch" 2>/dev/null; then
         return 0
     fi
     LIFECYCLE_SNAPSHOT_INSTANCE="$LIFECYCLE_INSTANCE_ID"
+    LIFECYCLE_SNAPSHOT_TERMINAL_MODE="$( [ -s "$LIFECYCLE_HEAD_DIR/terminal-mode" ] && sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" || echo interactive )"
     LIFECYCLE_SNAPSHOT_OUTCOME="$(lifecycle_read declared-outcome)"
     LIFECYCLE_SNAPSHOT_OBSERVED="$(lifecycle_read observed-status)"
     LIFECYCLE_SNAPSHOT_CONFIDENCE="$(lifecycle_read observed-confidence)"
@@ -161,6 +181,7 @@ lifecycle_snapshot() {
     export LIFECYCLE_SNAPSHOT_INSTANCE LIFECYCLE_SNAPSHOT_OUTCOME
     export LIFECYCLE_SNAPSHOT_OBSERVED LIFECYCLE_SNAPSHOT_CONFIDENCE
     export LIFECYCLE_SNAPSHOT_LIVENESS LIFECYCLE_SNAPSHOT_POLICY LIFECYCLE_SNAPSHOT_COMPLETE
+    export LIFECYCLE_SNAPSHOT_TERMINAL_MODE
 }
 
 lifecycle_completion_satisfied() {
@@ -284,6 +305,9 @@ lifecycle_new_instance() {
         return 1
     }
     _lni_new_dir="$LIFECYCLE_HEAD_DIR/instances/$_lni_new"
+    _lni_mode="$( [ -s "$LIFECYCLE_HEAD_DIR/terminal-mode" ] && sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" || echo interactive )"
+    _lni_desired=running
+    [ "$_lni_mode" = headless ] && _lni_desired=headless
     _lni_rollback="$(mktemp -d "$HYDRA_HOME/.lifecycle-rollback.XXXXXX")" || {
         release_lock "$_lni_lock"
         return 1
@@ -303,6 +327,7 @@ lifecycle_new_instance() {
     _lni_now="$(date +%s)"
     if ! state_v2_write_scalar "$_lni_new_dir/instance-id" "$_lni_new" || \
        ! state_v2_write_scalar "$_lni_new_dir/session" "$_lni_session" || \
+       ! state_v2_write_scalar "$_lni_new_dir/terminal-mode" "$( [ -s "$LIFECYCLE_HEAD_DIR/terminal-mode" ] && sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" || echo interactive )" || \
        ! state_v2_write_scalar "$_lni_new_dir/started-at" "$_lni_now" || \
        ! state_v2_write_scalar "$_lni_new_dir/provider-session-id" "$_lni_provider" || \
        ! state_v2_write_scalar "$_lni_new_dir/resume-recipe" "$_lni_recipe" || \
@@ -310,7 +335,7 @@ lifecycle_new_instance() {
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/ended-at" "$_lni_now" || \
        ! state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/current-instance" "$_lni_new" || \
        ! state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/session" "$_lni_session" || \
-       ! state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/desired-state" running; then
+       ! state_v2_write_scalar "$LIFECYCLE_HEAD_DIR/desired-state" "$_lni_desired"; then
         _lifecycle_restore_instance_locked "$_lni_rollback" "$LIFECYCLE_HEAD_DIR" "$LIFECYCLE_INSTANCE_DIR" "$_lni_new_dir" 2>/dev/null || true
         rm -rf "$_lni_rollback"
         release_lock "$_lni_lock"
@@ -330,6 +355,13 @@ lifecycle_archive_transcript() {
     _lat_policy="${3:-none}"
     case "$_lat_policy" in none) return 0 ;; redacted|full) ;; *) return 1 ;; esac
     lifecycle_load_head "$_lat_branch" || return 1
+    _lat_mode="$( [ -s "$LIFECYCLE_HEAD_DIR/terminal-mode" ] && sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" || echo interactive )"
+    if [ "$_lat_mode" = headless ] || [ "$_lat_session" = - ]; then
+        # There is no pane to capture. Keep teardown successful and make the
+        # absence explicit in lifecycle metadata.
+        lifecycle_write_instance_scalar "$_lat_branch" transcript-policy none || return 1
+        return 0
+    fi
     _lat_max="${HYDRA_TRANSCRIPT_MAX_BYTES:-1048576}"
     _lat_keep="${HYDRA_TRANSCRIPT_KEEP:-10}"
     case "$_lat_max:$_lat_keep" in *[!0-9:]*) return 1 ;; esac

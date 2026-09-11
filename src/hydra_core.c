@@ -1,13 +1,23 @@
 #include "libhydra.h"
+#include "hydra_statistics.h"
 
 #include <stdio.h>
 #include <string.h>
 
 static void usage(FILE *out) {
-    fputs("usage: hydra-core [--version|--protocol-version|capabilities|validate-state <root>|validate-events <file>|json-string <text>|snapshot <root>]\n", out);
+    fputs("usage: hydra-core [--version|--protocol-version|capabilities|validate-state <root>|validate-events <file>|json-string <text>|snapshot <root>|statistics-json <feed>|statistics-compare <left> <right> [--format json|text]]\n", out);
 }
 
-int main(int argc, char **argv) {
+static int statistics_command(int argc, char **argv) {
+    if (argc == 3 && !strcmp(argv[1], "statistics-json")) return hs_statistics_cli_json(argv[2], stdout, stderr);
+    if ((argc == 4 || argc == 6) && !strcmp(argv[1], "statistics-compare")) {
+        if (argc == 6 && (strcmp(argv[4], "--format") || (strcmp(argv[5], "json") && strcmp(argv[5], "text")))) return -1;
+        return hs_statistics_cli_compare(argv[2], argv[3], argc == 6 && !strcmp(argv[5], "text"), stdout, stderr);
+    }
+    return -1;
+}
+
+static int information_command(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--protocol-version") == 0) {
         printf("%d\n", HYDRA_PROTOCOL_VERSION);
         return 0;
@@ -21,6 +31,10 @@ int main(int argc, char **argv) {
                HYDRA_PROTOCOL_VERSION, HYDRA_CORE_VERSION);
         return 0;
     }
+    return -1;
+}
+
+static int data_command(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "validate-state") == 0) {
         if (hydra_validate_state(argv[2], stderr) != 0) return 1;
         fputs("{\"protocol_version\":1,\"ok\":true,\"validation\":\"state-v2\"}\n", stdout);
@@ -31,6 +45,10 @@ int main(int argc, char **argv) {
         fputs("{\"protocol_version\":1,\"ok\":true,\"validation\":\"events-v1\"}\n", stdout);
         return 0;
     }
+    return -1;
+}
+
+static int format_command(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "json-string") == 0) {
         if (hydra_json_write_string(stdout, argv[2]) != 0 || fputc('\n', stdout) == EOF) return 1;
         return 0;
@@ -38,6 +56,15 @@ int main(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "snapshot") == 0) {
         return hydra_write_snapshot(argv[2], stdout, stderr) == 0 ? 0 : 1;
     }
+    return -1;
+}
+
+int main(int argc, char **argv) {
+    int result = information_command(argc, argv);
+    if (result < 0) result = statistics_command(argc, argv);
+    if (result < 0) result = data_command(argc, argv);
+    if (result < 0) result = format_command(argc, argv);
+    if (result >= 0) return result;
     usage(stderr);
     return 2;
 }

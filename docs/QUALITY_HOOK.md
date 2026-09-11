@@ -1,14 +1,14 @@
 # Local quality hook pilot
 
-`quality.json` runs the existing `make lint` target after shell-source changes
-and at turn completion through the agent-toolkit Codex adapter. It checks
-ShellCheck 0.11.0 availability and GNU Make 3.81, and `make lint` runs ShellCheck
-with Hydra's POSIX/style flags plus dash syntax checks. These tools must be on
-PATH. Checks do not install tools. Run agent-toolkit's `tools/quality/bin/quality
---root /path/to/hydra doctor` to verify setup.
+`quality.json` uses the agent-toolkit adapter to check changed shell files with
+`scripts/lint-shell.sh`: ShellCheck 0.11.0 with Hydra's POSIX/style flags plus
+dash syntax checks. `make lint` still checks the complete shell inventory when
+invoked explicitly. Tools must be on PATH; checks never install them. Run
+agent-toolkit's `tools/quality/bin/quality --root /path/to/hydra doctor` to verify
+setup, including GNU Make 3.81 and the pinned C checker.
 
 Shell coverage is sources in bin/hydra, lib, scripts, tests, install/uninstall,
-and assets/demos. C sources, headers, and included fragments in src and tests/c are included in the Stop-stage C pilot. The 500-line threshold is
+and assets/demos. C sources, headers, and included fragments in src, tests and examples/planning are included in the Stop-stage C pilot. The 500-line threshold is
 advisory. Existing dirty work is not automatically repaired; the hook limits
 repair continuation to one block and reports unresolved findings.
 
@@ -32,16 +32,22 @@ Native .c files are discovered recursively. Fleet/TUI builds and C analysis use
 the same source inventory, including the domain subdirectories.
 
 Provision with the toolkit quality `setup` command using the existing quality.json,
-or `uv venv build/quality-tools` followed by
-`uv pip install --python build/quality-tools/bin/python clang-tidy==22.1.8`.
-Check-time installation is disabled. C runs only at Stop; shell remains fast-stage.
+or install a native LLVM 22 distribution providing clang-tidy 22.1.8
+(`brew install llvm@22` on macOS). `scripts/clang-tidy.sh` locates the native
+binary; `HYDRA_CLANG_TIDY` can select its exact path.
+Check-time installation is disabled. At Stop, `scripts/quality-c-incremental.sh`
+checks cognitive complexity for changed C translation units using the same native
+flags and reviewed baseline. Header, included-fragment, Makefile, checker-script
+or baseline changes select all C translation units. The full static analyzer is
+manual-stage in quality.json: run `make quality-c` or explicit `quality check`.
+Shell remains fast-stage. Successful fast checks are reused at Stop.
 
 C cognitive complexity is now an incremental regression gate. The reviewed
 `docs/quality/cognitive-complexity.tsv` records ceilings by relative source path
 and function name. A function absent from the table has a ceiling of 15. Higher
 scores fail `make quality-c`; line-number changes do not. Existing analyzer
 warnings remain visible and require review, while compiler/tool failures block.
-The checker version, enabled checks, and threshold remain unchanged. The original
+The full analysis target retains its checker version, enabled checks and threshold. The original
 118-function audit baseline and subsequent dispositions are documented in
 `CODEBASE_SIMPLIFICATION.md`.
 
@@ -63,6 +69,28 @@ separate required CI job. Shell cognitive complexity remains unavailable.
 The complete report is written to `build/quality-c.log` and normalized metrics
 to `build/quality-c.tsv`. Set `QUALITY_C_LOG` to choose another report path.
 Do not redirect make's stdout to the same file that the checker owns.
+The incremental wrapper uses private temporary reports and removes them after
+returning diagnostics, preventing report collisions between worktrees.
+
+## Incremental hooks and worktrees
+
+The turn baseline and successful-check cache use content hashes. Untracked sources
+are included; deletions and configuration changes invalidate the affected check.
+A successful incremental hook is not a full-project acceptance result. The adapter
+serializes checks within one checkout without waiting; busy and concurrent-edit
+results explicitly require a later retry. Linked worktrees use separate locks,
+baselines and caches keyed by their resolved paths.
+
+In each worktree, provision ignored `build/quality-tools` dependencies with
+`quality --root /path/to/worktree setup`, then register hooks with `install-codex`.
+Tracked quality.json follows the branch; ignored tools and local hook registration
+must be established separately. Tools are never borrowed from another checkout.
+
+On 9 September, selected-file trials through the complete hook process took
+0.60 seconds for `lib/notify.sh` and 1.24 seconds for
+`src/fleet/task/task_control.c`. These trials simulated the changed-file baseline
+without editing those sources and ran the actual native checkers. Header/config
+changes still require broader work; the trial timings are not a project-wide bound.
 
 ## Shell pilot evaluation — 7 September 2026
 

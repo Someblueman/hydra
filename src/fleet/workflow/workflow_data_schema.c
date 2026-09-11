@@ -1,6 +1,8 @@
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
 #include "fleet/workflow/workflow_data.h"
+#include "fleet/workflow/workflow_contract.h"
+#include "fleet/plan/plan.h"
 #include "fleet/task/task.h"
 #include <ctype.h>
 #include <stdlib.h>
@@ -12,13 +14,16 @@ bool wd_name(const char *name) {
     for (p = name; *p; p++) if (!strchr("abcdefghijklmnopqrstuvwxyz0123456789_-", *p)) return false;
     return true;
 }
-static bool declarations(json_object *map, bool input) {
-    const char *const keys[] = {"path", "type", "max_bytes", "sha256", "source", NULL};
+static bool declarations(json_object *map, bool input, bool contracts) {
+    const char *const keys[2][7] = {
+        {"path", "type", "max_bytes", "sha256", "source", NULL},
+        {"path", "type", "max_bytes", "sha256", "source", "contract", NULL}
+    };
     if (!json_object_is_type(map, json_type_object) || json_object_object_length(map) > (int)WD_NAMES) return false;
     json_object_object_foreach(map, name, value) {
         const char *type = f_string(value, "type"), *digest = f_string(value, "sha256"), *source = f_string(value, "source");
         json_object *bound = f_field(value, "max_bytes"); int64_t bytes = json_object_get_int64(bound);
-        if (!wd_name(name) || !task_keys(value, keys) || !task_path(f_string(value, "path")) || !type ||
+        if (!wd_name(name) || !task_keys(value, keys[contracts]) || !task_path(f_string(value, "path")) || !type ||
             !json_object_is_type(bound, json_type_int) || bytes < 1 || bytes > TASK_FILE_LIMIT ||
             (f_field(value, "sha256") && (!input || !task_hex(digest, 64))) ||
             (f_field(value, "source") && (!input || !source || (strcmp(source, "repository") && strcmp(source, "task"))))) return false;
@@ -59,9 +64,19 @@ static bool dependency(json_object *graph, const char *step, const char *produce
     return false;
 }
 static bool reference_valid(json_object *manifest, json_object *graph, const char *step, json_object *value) {
-    const char *const keys[] = {"input", "step", "output", "validation", "repair", NULL};
+    const char *const legacy[] = {"input", "step", "output", "validation", "repair", NULL};
+    const char *const keys[] = {"input", "step", "output", "validation", "repair", "contract", "provenance", NULL};
     const char *input = f_string(value, "input"), *producer = f_string(value, "step"), *output = f_string(value, "output");
-    if (!task_keys(value, keys)) return false;
+    bool contracts = f_number_is(manifest, "schema_version", 2);
+    if (!task_keys(value, contracts ? keys : legacy)) return false;
+    const char *provenance = f_string(value, "provenance");
+    if (f_field(value, "provenance")) {
+        if (!provenance) return false;
+        if (!strcmp(provenance, "plan")) return json_object_object_length(value) == 1;
+        return !strcmp(provenance, "step") && json_object_object_length(value) == 2 &&
+            wd_name(producer) && dependency(graph, step, producer) &&
+            f_string(f_field(graph, producer), "kind") && !strcmp(f_string(f_field(graph, producer), "kind"), "task");
+    }
     const char *generated = f_field(value, "validation") ? "validation" : "repair";
     if (f_field(value, generated))
         return json_object_object_length(value) == 1 && f_string(value, generated) &&
@@ -78,20 +93,33 @@ static bool references(json_object *manifest, json_object *graph, const char *st
     }
     return true;
 }
+static bool data_step(json_object *data, json_object *graph, const char *name, json_object *value) {
+    const char *const legacy[] = {"inputs", "outputs", NULL};
+    const char *const keys[] = {"inputs", "outputs", "invariants", "conversion", "candidates", NULL};
+    const char *kind = f_string(f_field(graph, name), "kind");
+    bool contracts = f_number_is(data, "schema_version", 2);
+    if (!wd_name(name) || !kind || !task_keys(value, contracts ? keys : legacy)) return false;
+    if (f_field(value, "inputs") && !references(data, graph, name, f_field(value, "inputs"))) return false;
+    if (!f_field(value, "outputs")) return true;
+    return (!strcmp(kind, "exec") || !strcmp(kind, "task")) && declarations(f_field(value, "outputs"), false, contracts);
+}
+static bool unique_manifest(const char *path) {
+    char *text = f_read(path, WD_LIMIT);
+    bool valid = text && plan_json_unique(text);
+    free(text); return valid;
+}
 json_object *wd_manifest(const char *manifest, const char *graph_path) {
     const char *const keys[] = {"schema_version", "inputs", "steps", NULL};
-    const char *const step_keys[] = {"inputs", "outputs", NULL};
     json_object *data = f_read_json(manifest, WD_LIMIT), *graph = wd_graph_read(graph_path), *steps;
-    if (!data || !graph || !task_keys(data, keys) || !f_number_is(data, "schema_version", 1) ||
-        !declarations(f_field(data, "inputs"), true)) goto bad;
+    if (!data || !graph || !task_keys(data, keys) || (!f_number_is(data, "schema_version", 1) && !f_number_is(data, "schema_version", 2)) ||
+        !declarations(f_field(data, "inputs"), true, f_number_is(data, "schema_version", 2))) goto bad;
     steps = f_field(data, "steps");
     if (!json_object_is_type(steps, json_type_object) || json_object_object_length(steps) > (int)WD_STEPS) goto bad;
     json_object_object_foreach(steps, name, value) {
-        const char *kind = f_string(f_field(graph, name), "kind");
-        if (!wd_name(name) || !kind || !task_keys(value, step_keys) ||
-            (f_field(value, "inputs") && !references(data, graph, name, f_field(value, "inputs"))) ||
-            (f_field(value, "outputs") && ((strcmp(kind, "exec") && strcmp(kind, "task")) || !declarations(f_field(value, "outputs"), false)))) goto bad;
+        if (!data_step(data, graph, name, value)) goto bad;
     }
+    if (f_number_is(data, "schema_version", 2) && !unique_manifest(manifest)) goto bad;
+    if (!wc_manifest(data)) goto bad;
     json_object_put(graph); return data;
 bad:
     json_object_put(graph); json_object_put(data); return NULL;

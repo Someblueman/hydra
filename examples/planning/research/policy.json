@@ -6,7 +6,7 @@
     ],
     "tools": [
       "sh",
-      "profile:opencode"
+      "./plan-example"
     ],
     "effects": [
       "worktree",

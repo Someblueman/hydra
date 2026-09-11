@@ -1,8 +1,8 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 8 September 2026
-> - **Current release:** `v2.3.0` distributed workflows and resource admission
+> - **Snapshot:** 11 September 2026
+> - **Release:** `v2.4.0` native workspace and verified planning
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   [Release policy](VERSIONING.md) · [Contracts](CONTRACTS.md) ·
@@ -26,9 +26,10 @@ capabilities. Agent agnosticism does not imply identical provider features or
 portable private conversation history. Hydra owns execution, recovery, and evidence;
 provider interaction belongs behind explicit adapters.
 
-This file contains only outstanding work and the policies that constrain it.
-Implemented behavior belongs in the changelog and focused contract documentation;
-completed roadmap items are removed rather than retained as checked history.
+This file contains outstanding work and the policies that constrain it. Completed
+implementation is recorded in the [2.4.0 changelog](../CHANGELOG.md#240---2026-09-11)
+and focused contracts. Checked items below retain the qualification boundaries for
+related open work; they do not close live-host or provider acceptance.
 
 2.0.0 is the final version assigned in advance. After 2.0, work is selected from one
 backlog and released when a coherent feature or meaningful change is ready. The
@@ -114,17 +115,73 @@ fixture tests and local authentication do not close another provider's remote
 requirement. Claude remains explicitly deferred rather than blocking the other
 implemented profiles.
 
+### 2.4.0 scope and qualification boundaries
+
+Hydra 2.4.0 includes **T1, 9A, V1, T2, 9B, H1,
+V2, 9C, H2, V3, V4, 9D and H3** within their documented local qualification.
+It also includes 9E explanation/comparison tools and finite patterns, 9F sealed
+artifact reuse, precompiled manifest maps and independently checked staged plans,
+bounded head-event archives, statistics export/comparison, and saved task
+announcements. **9E remains partially qualified**: a finite planner pilot found an
+interface-conformance difference but no demonstrated semantic planning advantage.
+Runtime graph expansion remains conditional on a workload that needs it; current
+finite patterns do not require it.
+The user explicitly included the implemented 9E tools and successful real cleanup
+workflow in scope on 10 September 2026. Broader comparative planning-quality
+research remains open and is outside this release.
+See [the release scope and acceptance boundaries](RELEASE_NEXT_SCOPE.md),
+[remaining-work acceptance](evidence/remaining-work-20260910.md),
+[workstream acceptance](evidence/workstream-integration-20260910.md),
+[earlier integration evidence](evidence/next-wave-integration.md), and
+[V2/9C/H2 acceptance](evidence/observation-enrollment-integration.md) for exact
+historical checks and limits. The [release record](https://github.com/Someblueman/hydra/releases/tag/v2.4.0)
+identifies the published commit and artifacts; historical evidence remains bound
+to the revisions it names.
+
+The user selected the remaining V, 9 and H workstreams. Other roadmap tracks
+retain their original selection boundaries. Local qualification does not
+establish live provider results, operational-host enrollment, or publication.
+
+Research for follow-on decisions: [interactive parity](research/interactive-parity-report.md)
+and its [decision brief](research/interactive-parity-decision-brief.md), plus
+[host discovery and onboarding](research/host-discovery-onboarding-report.md)
+and its [decision brief](research/host-discovery-onboarding-decision-brief.md).
+The reports describe the audited baseline and retain their research-date context;
+the H track below incorporates the authorized onboarding recommendations.
+
+### Research follow-up map — 10 September 2026
+
+The 9 September reports are historical audits, not current implementation status.
+This table maps their recommendations to the canonical backlog. New unchecked
+items below capture remaining work; they do not expand the 2.4.0 scope or launch
+implementation, provider access, or live-host experiments.
+
+| Research recommendation | Roadmap destination and current boundary |
+| --- | --- |
+| Execution separate from terminal attachment | T1/T2 implementation is integrated; T2 live qualification and T3 remain open. |
+| Exact outcome and recovery semantics | 9A–9F and V1–V4 retain their recorded implementation and qualification limits. |
+| Direct attach and saved multi-machine interaction | I1 below extends existing local/remote attach; no replacement PTY server is selected. |
+| Semantic attention and compact review navigation | I2/I3 below; observations and external links cannot grant acceptance. |
+| Provider breadth and exact-session qualification | Item 2 retains the authenticated adapter matrix. |
+| Idle efficiency and 1/10/50-worktree performance | Item 10, including the multi-client and attention cases below. |
+| SSH/static discovery, reviewed enrollment, bounded snapshot imports | H1–H3 are locally qualified; supplied snapshots are not live discovery clients. |
+| Live source acquisition and snapshot changes | H4 below, one explicitly selected source at a time. |
+| Onboarding filters, detail, progress and low-friction review | H5 below; existing CLI batching remains the execution path. |
+| Revocation and reviewed key rotation | H6 below; existing changed-key rejection remains required. |
+| Cloud-manager integrations, shared inventory and runtime replacement | Conditional decisions at the end of this roadmap; not prerequisites for I/H work. |
+
 #### T. Optional tmux for headless and remote execution
 
 Decision: make tmux optional for headless execution, retaining it for interactive
-heads. This is planned behavior, not a change to current dependency requirements.
+heads. T1 is locally qualified; T2 has controlled acceptance but still needs live-host
+qualification. Interactive heads retain their tmux requirement.
 See [the updated analysis](research/tmux-optional-execution.md) for the current
 implementation, affected contracts, and design tradeoffs. Resource admission and
 finite distributed execution are implemented; T1 and T2 extend that execution to
 hosts without tmux, and T3 qualifies the same distributed scenario in that mode.
 These are delivery milestones, not assigned release versions.
 
-- [ ] **T1 — Terminal-independent workspace and execution identity.** Separate
+- [x] **T1 — Terminal-independent workspace and execution identity.** Separate
       workspace, trust, identity, and provenance creation from terminal launch in
       the shell mutation path. Support a headless execution with no terminal;
       preserve existing interactive spawn/attach behavior. Define the durable
@@ -136,6 +193,8 @@ These are delivery milestones, not assigned release versions.
       artifacts without invoking tmux; status and teardown work for both execution
       modes. Existing state and interactive workflows remain readable and usable,
       with migration/rollback checks where the durable contract changes.
+      Local evidence: [headless and interactive regressions](T2_ACCEPTANCE.md)
+      and [combined integration](evidence/next-wave-integration.md).
 - [ ] **T2 — Remote execution and planning without tmux.** Route remote exec and
       headless workflow steps through T1 and the existing detached task owner.
       Make admission, bootstrap, doctor, installation, and capability negotiation
@@ -143,6 +202,8 @@ These are delivery milestones, not assigned release versions.
       lowering explicitly; preserve published spawn semantics and existing compiled
       artifact bindings. Unsupported remote or terminal capabilities fail before
       launch, rather than silently changing the requested execution mode.
+      Implementation and controlled acceptance: [T2 record](T2_ACCEPTANCE.md).
+      Live authenticated-host qualification remains required.
       Acceptance: on hosts without tmux installed, submit a command and an available
       authenticated headless adapter, disconnect, reconnect, collect exact outputs,
       and consume them in a dependent step. Run the corresponding local compiled
@@ -183,15 +244,15 @@ block basic load balancing. Relevant item **7** diagnostics can accompany each s
 
 ##### 9A. Satisfiable outcome obligations and compiler diagnostics
 
-- [ ] Represent each mandatory outcome with an intent reference, exact subject,
+- [x] Represent each mandatory outcome with an intent reference, exact subject,
       observable criterion, evaluation method, required evidence, applicable
       environment, completion rule, and limitations. Allow a requirement to have
       distinct behavior, failure-handling, performance, or other obligations.
-- [ ] Check that every required obligation has a reachable, satisfiable evaluation
+- [x] Check that every required obligation has a reachable, satisfiable evaluation
       path for the right candidate. Reject orphan or circular evidence dependencies
       and missing joins; distinguish structural proof, runtime obligations, and
       semantic judgments about whether criteria actually capture the objective.
-- [ ] Preserve assumptions and unresolved questions explicitly. Give authors
+- [x] Preserve assumptions and unresolved questions explicitly. Give authors
       diagnostics with field paths, obligation IDs, and counterexamples; never
       silently weaken an objective or acceptance criterion to obtain a valid plan.
 
@@ -201,27 +262,31 @@ with unchanged text-content checks is identified by semantic review, not misrepo
 as something the structural compiler can prove. Start a fixed set of valid and
 misleading plans across feature, performance, and research tasks for later milestones.
 
+Local qualification: [compiler obligations](PLAN_COMPILATION.md#outcome-obligations-9a)
+and [integration acceptance](evidence/next-wave-integration.md) cover the structural
+contract and negative cases. Semantic review remains a separate requirement.
+
 ##### 9B. Producer and consumer contracts at every handoff
 
 Depends on 9A's obligation model; reuse sealed artifacts and existing receipt checks.
 
-- [ ] Add pinned producer output and consumer input schemas, cardinality, units,
+- [x] Add pinned producer output and consumer input schemas, cardinality, units,
       versions, identity/provenance requirements, and supported pre/postconditions.
       Begin with exact schema matching and a small supported predicate set; reject
       unsupported constraints rather than claiming arbitrary schema implication.
-- [ ] Validate declared compatibility at compilation and actual values at
+- [x] Validate declared compatibility at compilation and actual values at
       materialization. Values that violate the declared contract, including empty
       objects, missing fields, wrong units/candidates, or missing required evidence,
       must stop the consumer before it executes.
-- [ ] Distinguish data, evidence, effect/order, resource, and provenance relations in
+- [x] Distinguish data, evidence, effect/order, resource, and provenance relations in
       the planning representation. Lower ordering to the existing DAG; resource
       mutexes need not create arbitrary permanent ordering, and descriptive lineage
       links are not all execution prerequisites.
-- [ ] Bind candidate manifests to the relevant collected commit/source tree,
+- [x] Bind candidate manifests to the relevant collected commit/source tree,
       dependency/build inputs, artifacts, and configuration. Support relational
       checks across inputs and recheck invariants after composition; checking one
       declared file does not automatically validate the complete candidate.
-- [ ] Use explicit validated conversion nodes for permitted transformations. Extend
+- [x] Use explicit validated conversion nodes for permitted transformations. Extend
       declared read/write and effect-conflict reasoning where useful, and label
       which constraints the executor actually enforces. Declarations alone do not
       establish isolation, determinism, or safe repetition of external effects.
@@ -231,27 +296,40 @@ cases pass through the public CLI. Include a structurally valid object with miss
 semantic fields, a unit mismatch, stale candidate identity, a lossy conversion,
 and individually valid components whose composition violates a shared invariant.
 
+Implementation: [bounded data-schema-2 contracts](HANDOFF_CONTRACTS.md) preserve
+legacy compiled acceptance bindings. Exact schemas, required fields/units,
+pre/postconditions, lossless integer conversions and candidate manifests are
+checked through existing sealed-artifact and receipt boundaries. Typed execution
+relations must match existing DAG dependencies; resource/provenance annotations
+are descriptive and unsupported mutex enforcement is rejected. Local acceptance
+and its explicit limits are recorded in [9B evidence](evidence/handoff-contracts-9b.md).
+External-host/live-provider qualification remains separate; no arbitrary schema
+implication, isolation or semantic correctness is claimed.
+
 ##### 9C. Structured evidence and validation of the validator
 
 Depends on 9A–9B; extend the accepted report contract with explicit versioning.
+Locally qualified with report schema v3; no LLM judge is implemented, so judge
+calibration and ordering sensitivity are not claimed. See the integration evidence
+above for the executable and assessment controls.
 
-- [ ] Bind each evidence record to its obligation, subject manifest, verifier
+- [x] Bind each evidence record to its obligation, subject manifest, verifier
       identity/recipe, invocation, environment, observations, and hashed raw evidence.
       Preserve counts of executed, failed, and skipped cases, limitations, and any
       required reviewer decision. Retain prose as explanation, not as a replacement
       for required measurements or observations.
-- [ ] For machine-checkable obligations, derive verdicts through trusted adapters
+- [x] For machine-checkable obligations, derive verdicts through trusted adapters
       from accepted predicates and sealed observations. Check the actual candidate
       and executed tests; provenance establishes identity, not semantic correctness,
       and logs still depend on the trustworthiness of their collection path.
-- [ ] Qualify validators using relevant positive and negative controls: omitted work,
+- [x] Qualify validators using relevant positive and negative controls: omitted work,
       stale subjects, missing measurements, dropped failures, inverted assertions,
       unsupported claims, and selected mutations. Treat mutation/coverage results
       as bounded evidence of test strength, not a universal completion score.
-- [ ] Keep execution status, evidence validity, and domain outcome distinct in the
+- [x] Keep execution status, evidence validity, and domain outcome distinct in the
       result model and UI. Final acceptance inspects every mandatory obligation on
       the assembled candidate; successful leaf tasks cannot substitute for it.
-- [ ] For assessments, retain the rubric, source/evidence locators, disagreement,
+- [x] For assessments, retain the rubric, source/evidence locators, disagreement,
       and acceptance authority. Calibrate LLM judges on known cases and test ordering
       sensitivity where relevant; more judges, different models, or different hosts
       do not by themselves establish independent evidence.
@@ -267,23 +345,23 @@ silently inherit earlier verdicts. Existing subject/recipe integrity checks rema
 Depends on 9A–9C. Use one shared contract/evidence model with focused recipes; avoid
 separate schedulers, universal ontologies, or a DAG node for every test assertion.
 
-- [ ] **Features:** bind user-visible behavior and failure boundaries; run the public
+- [x] **Features:** bind user-visible behavior and failure boundaries; run the public
       CLI/UI against the assembled candidate, check interfaces and regressions, and
       exercise interruption/recovery where relevant. Reuse existing harnesses and
       appropriate property/metamorphic checks; negative controls must expose missing
       behavior even when the process exits successfully.
-- [ ] **Performance:** bind baseline, candidate, workload, environment/toolchain,
+- [x] **Performance:** bind baseline, candidate, workload, environment/toolchain,
       units, warm-up, trial structure, failures/exclusions, analysis, and stopping
       rules. Preserve raw samples, respect measurement exclusivity, and use an
       uncertainty method appropriate to the metric and dependent observations.
       Distinguish target established, target not established, and invalid/insufficient
       measurement; repeated searching must not cherry-pick a favorable confirmation.
-- [ ] **Research:** bind questions, source/data provenance, transformations, claim
+- [x] **Research:** bind questions, source/data provenance, transformations, claim
       locations, competing explanations, methods, and limitations. Distinguish
       exploration from confirmation and invalid instrumentation from a substantive
       negative result. Use source audits, reproducible analyses, or proof checkers
       as appropriate; review whether formalized statements match the actual question.
-- [ ] Make completion depend on the requested outcome. A valid negative experiment
+- [x] Make completion depend on the requested outcome. A valid negative experiment
       can complete an investigation without satisfying an optimization target or
       supporting a hypothesis. Repair invalid work, not a scientifically inconvenient
       answer; a new hypothesis or acceptance method needs a visible new version.
@@ -294,14 +372,20 @@ absent despite green superficial tests, insufficient/no-improvement performance
 evidence, an unsupported research claim, and a valid negative research result.
 Fixture transport success or agent agreement alone does not qualify these outcomes.
 
+Local qualification: the [feature](evidence/9d-feature-outcome.md),
+[performance](evidence/9d-performance-outcome.md), and
+[research](evidence/9d-research-outcome.md) pilots passed their public outcome
+checks and declared negative controls. These results apply to the supplied
+feature, one synthetic performance workload and the finite research dataset.
+
 ##### 9E. Explainable planning and measured plan quality
 
 Start the baseline with 9A; use 9B–9D contracts and pilots to qualify the tools.
 
-- [ ] Add reusable bounded decomposition patterns and explanations linking each
+- [x] Add reusable bounded decomposition patterns and explanations linking each
       node/dependency to an outcome, input, evidence need, or effect constraint.
       Keep small cohesive tasks small; the cost of planning and composition counts.
-- [ ] Extend the existing CLI to inspect obligations, explain dependencies, compare
+- [x] Extend the existing CLI to inspect obligations, explain dependencies, compare
       candidate plans, test contract examples, and show invalidation after changes.
       Command names and schema details are selected during implementation, not
       promised here as existing interfaces.
@@ -325,20 +409,42 @@ plan validity or throughput. Reject every declared deterministic corruption case
 qualify semantic improvements with observed results and explicit limits. Planning
 benefit must exceed its overhead on the workload where improvement is claimed.
 
+Local implementation: [plan inspection](PLAN_INSPECTION.md) and
+[finite patterns](PLAN_PATTERNS.md) provide complete structural explanations,
+deterministic bound comparisons, public serial/fork/join outcomes and six
+incorrect-artifact controls. They do not establish stochastic planner quality,
+estimate calibration or a planning benefit that exceeds overhead. The
+[archived finite task-class pilot](../examples/planning/evaluation/README.md) records six
+frozen candidates, nine independently specified cases and eighteen incorrect artifacts
+at its exact historical source commit. Its superseded active runner has been retired.
+Its interface-conformance difference disappears in a separate post hoc protocol
+diagnostic. Broader planning-benefit, human-correction and calibration measurements
+remain open; these results do not justify a more elaborate planner.
+
+A [real Python cleanup workload](evidence/python-cleanup-20260910/README.md)
+replaced duplicated precompilers with native C and retired the toy runner while
+preserving useful independent tests. Its matched serial/parallel executions both
+passed (106.33/106.69 seconds), qualifying real planning, execution and independent
+verification on this maintenance workflow. Those timings are descriptive: the
+cleanup was not expected to benefit from parallelism, and speedup is not an
+acceptance criterion or a deficiency in this qualification. The record preserves
+planning overhead, failed attempts and unknown provider cost. Broader semantic
+planning-quality, stochastic-variability and calibration research remains open.
+
 ##### 9F. Selective repair and bounded graph expressiveness
 
 Select after contract/evidence pilots demonstrate a useful workload. Preserve the
 finite execution DAG, original coordinator, and unknown-outcome reconciliation.
 
-- [ ] First support hierarchical patterns lowered into static graphs and staged
+- [x] First support hierarchical patterns lowered into static graphs and staged
       experiments whose findings inform a separately compiled next plan. Add maps
       over admitted finite manifests and conditional branches only with explicit
       cardinality, skipped-output semantics, and fixed join membership.
-- [ ] Qualify selective repair of affected dependency closures. Reuse an artifact
+- [x] Qualify selective repair of affected dependency closures. Reuse an artifact
       only when its input, source, recipe, contract, environment, effect assumptions,
       and evidence dependencies remain valid. Current whole-plan check binding
       needs an explicit versioned reuse policy; merely skipping nodes is insufficient.
-- [ ] Require fresh affected checks after repair. Different bytes do not prove a
+- [x] Require fresh affected checks after repair. Different bytes do not prove a
       meaningful correction. Preserve valid unrelated work where qualified, but
       never treat an uncertain external effect or a rerun of an LLM as cached truth.
 - [ ] If staged plans are insufficient, admit proposed expansions through the same
@@ -352,6 +458,18 @@ Test changed inputs, contracts,
 environments and acceptance rules, branch skips, empty/bounded maps, interrupted
 repair, exhausted budgets, and unknown remote outcomes. No skipped branch may create
 false completion, and no expansion may enlarge authority or duplicate uncertain work.
+
+Local qualification: [versioned sealed-artifact reuse](PLAN_REUSE.md) preserves
+qualified original attempts, reruns affected checks, and revalidates proofs after
+interrupted repair. The supported policy is local artifact-only execution under
+explicit complete-dependency assumptions. [Finite manifest maps](PLAN_MANIFEST.md)
+lower at most eight members and boolean selection into fixed joins, including
+checked empty/all-skipped outputs. [Staged findings](PLAN_STAGED.md) drive a
+separately compiled static graph only after their source, selection, results and
+public acceptance are reverified. Real two-stage outcomes cover empty, skipped,
+colliding-name and maximum-cardinality maps. Runtime membership changes, late conditional
+evaluation and dynamic expansion remain unsupported; rejection does not qualify
+those graph forms.
 
 Research basis (8 September 2026): the review combined current Hydra code and bounded
 probes with [CWL typed workflows](https://www.commonwl.org/v1.2/Workflow.html),
@@ -419,6 +537,13 @@ objective, not a claim about the current periodic snapshot implementation.
       the initial supported-platform baselines and product needs, then freeze them
       before evaluating optimizations. Retain stalls and uncertainty; never treat
       a short-run maximum as a guaranteed worst case or missing counters as zero.
+- [ ] Include one and three attached clients, local interactive/local headless/
+      remote headless cases, and disconnect/reconnect under output pressure.
+      Attribute PTY parsing, generated/transmitted frames and per-client rendering;
+      record unsupported combinations explicitly. Qualify I2 attention signals
+      against annotated blocked/question/approval, working, done-but-unseen, idle
+      and unknown cases, reporting false positives and missed signals separately.
+      These measurements do not make an attention hint an accepted outcome.
 
 Acceptance: publish reproducible baseline evidence for every matrix cell on macOS
 and Linux, with explicit unsupported measurements and separate live-agent coverage.
@@ -486,10 +611,10 @@ An agent is a managed process, not an OS-isolated container. Terminal replacemen
 alone does not provide execution visibility or isolation. These milestones can
 start before T1–T3 using the existing remote task owner and observation endpoints;
 apply them to the implemented [distributed runs](DISTRIBUTED_DAG.md). Extend item
-9's obligation/evidence explanations as those milestones land. V1–V4 are planned
-operator visibility and qualification work, not claims of new runtime behavior.
+9's obligation/evidence explanations as those milestones land. V1–V4 qualify
+operator visibility over the existing execution and mutation authorities.
 
-- [ ] **V1 — Run and host overview with explicit observation freshness.** Define a
+- [x] **V1 — Run and host overview with explicit observation freshness.** Define a
       versioned receiver snapshot with task/run/step/attempt identity, assigned host,
       workspace, agent profile, execution owner, state, pending requests, and
       observation timestamps. Show effective configuration and concrete waiting
@@ -503,7 +628,7 @@ operator visibility and qualification work, not claims of new runtime behavior.
       without raw-state inspection. Disconnect one host while others stay reachable:
       its cached state is visibly stale, with last-confirmed time, and is never
       relabeled failed or confirmed running merely because transport was lost.
-- [ ] **V2 — Attempt detail, ordered events, and resumable logs.** Reuse existing
+- [x] **V2 — Attempt detail, ordered events, and resumable logs.** Reuse existing
       run/step/attempt log selectors and byte offsets; add a bounded, versioned event
       observation contract with stable sequence/cursor semantics. Define reconnect,
       duplicate-event, retention-gap, and stream-reset behavior. Expose attempt
@@ -516,7 +641,7 @@ operator visibility and qualification work, not claims of new runtime behavior.
       without silently omitting transitions or presenting duplicate transitions.
       Missing retained history is explicitly reported. A successful process with
       missing artifacts or failed verification cannot appear as an accepted result.
-- [ ] **V3 — Controls with visible acknowledgments.** Present cancellation requested,
+- [x] **V3 — Controls with visible acknowledgments.** Present cancellation requested,
       delivered, and confirmed stopped as distinct stages. Bind approvals and other
       mutations to the exact task/attempt or candidate they concern; preserve existing
       authorization and mutation paths. Unknown cancellation remains visible. Keep
@@ -526,7 +651,7 @@ operator visibility and qualification work, not claims of new runtime behavior.
       Acceptance: lose a cancellation response, reconnect, and show the receiver's
       recorded outcome without duplicate effects or a false stopped state. Reject
       stale approvals and ensure workspace cleanup cannot discard active/dirty work.
-- [ ] **V4 — Recovery visibility qualification.** Exercise the complete public CLI
+- [x] **V4 — Recovery visibility qualification.** Exercise the complete public CLI
       and TUI path through submission, execution, SSH loss, reconnect, cancellation,
       and collection. Reconcile the original attempt before deciding on further
       execution; loss of a heartbeat or connection does not authorize replacement
@@ -539,21 +664,81 @@ operator visibility and qualification work, not claims of new runtime behavior.
       cannot block observation of another, and stale results cannot advance
       dependent work.
 
-- [ ] Measure queue delay, time to verified result, unknown outcomes, recovery
+- [x] Measure queue delay, time to verified result, unknown outcomes, recovery
       success, manual interventions, and transfer size. Make metric export optional
       and report provider usage only when available.
-- [ ] Define retention and archive policies for submission keys, event metadata,
+- [x] Define retention and archive policies for submission keys, event metadata,
       logs, and artifacts without discarding evidence required by active recovery
       or accepted outcome claims. Preserve referenced raw evidence and contract
       versions for the declared audit/reuse window; disclose expired evidence.
       Keep retention gaps distinguishable from empty output or absent events.
-- [ ] Add accessible event-announcer and comparison views over the same evidence.
+- [x] Add accessible event-announcer and comparison views over the same evidence.
+      [ASCII saved-task announcements and native cohort comparisons](OBSERVABILITY.md)
+      retain identity, uncertainty and event-resume metadata.
+
+[Recovery qualification](evidence/recovery-visibility-v4.md) exercises two local
+receiver homes through the public CLI and a real TUI with controlled SSH loss.
+[Metrics](OBSERVABILITY.md) now export measured coordinator queue/elapsed/verified
+times and owner-recovery outcomes with known denominators, latest validated receiver
+unknown states, recorded approval/cancel/resume actions, and consumed transport
+stdin plus captured stdout. This qualification covers those recorded CLI actions
+and transport-process bytes; human activity outside these events, historical unknown
+incidents replaced by newer observations, wire traffic and provider usage remain
+unmeasured. Missing/partial coverage cannot become a measured zero.
+[Retention](RETENTION.md) now applies explicit local receiver-task and workflow-run
+policies with audit windows, transitive reference/pin protection, permanent
+submission identities and visible expiry. It preserves workspaces. Quotas bound the
+maintenance projection, not concurrent admission or whole-disk use. External claims
+need explicit local pins. [Remaining-work acceptance](evidence/remaining-work-20260910.md)
+records real default and sanitizer evidence for both capabilities.
 
 Acceptance: operators can explain what is running, where, why it is waiting, how
 fresh that information is, and whether a requested action took effect. Retention
 stays bounded while preserving active recovery and the documented deduplication
 window. V1–V4 provide the observation surface used by T3; they do not require a new
 permanent daemon, terminal server, scheduler, or automatic coordinator failover.
+
+#### I. Interactive parity and review navigation
+
+Follow-up to the [interactive parity report](research/interactive-parity-report.md).
+Extend the current attached-terminal and V1–V4 interfaces; keep the existing task
+owner, tmux terminal lifecycle and shell mutation path. These are outstanding
+operator workflows, not a proposal for a new server, scheduler or provider manager.
+
+- [ ] **I1 — Saved multi-machine interaction and direct attach.** Provide one
+      operator view across explicitly registered trusted SSH machines, with direct
+      navigation to an exact host/project/head terminal capability. Keep headless
+      tasks inspectable without offering terminal input. Preserve independent
+      client selection and detach without changing the execution owner.
+      Acceptance: two clients can inspect/attach across two hosts; one offline
+      host does not freeze the other. Cached rows are visibly stale, input is
+      disabled until fresh target identity is established, and reconnect is
+      bounded. A renamed/replaced head cannot receive stale input. Background
+      connections never answer authentication prompts or install software.
+
+- [ ] **I2 — Attention rollups and next-action navigation.** Surface exact-instance
+      questions, approval waits and unreviewed results across workspaces/hosts,
+      with source, freshness and a route to the corresponding evidence/action.
+      Keep each client's seen/unseen state separate from provider state and
+      objective acceptance; unsupported observations remain unknown.
+      Acceptance: annotated event/PTY cases cover stale sessions, duplicate events,
+      two independent clients, acknowledgement and reconnect. Seen state never
+      approves a gate; quiet output or a provider done badge never accepts a result.
+      Publish attention error measurements through item 10 before parity claims.
+
+- [ ] **I3 — Compact review queue and external evidence references.** Navigate
+      from a ready-to-review task to its exact diff, artifact inventory, checks,
+      provenance and existing approval/integration actions. Allow read-only links
+      to provider transcripts, logs and PRs when explicitly supplied or available
+      through a selected adapter; do not require a cloud account.
+      Acceptance: changed subjects invalidate readiness; failed checks, missing or
+      expired artifacts and inaccessible links remain explicit. CLI/TUI identify
+      the same task/attempt/subject. Opening an external reference cannot promote,
+      push, merge or substitute provider status for Hydra verification.
+
+I1 builds on V1–V4 and existing interactive attach; tmux-free distributed
+qualification stays in T2/T3. I2/I3 reuse lifecycle, outcome and review contracts.
+Select independently useful slices, with item 10 measuring their overhead.
 
 #### 8. Dynamic task pools and schedules
 
@@ -573,6 +758,134 @@ expansion and join semantics rather than introducing a second graph compiler.
 Acceptance: duplicate triggers and competing workers do not create duplicate task
 claims. Work growth remains bounded, cancellation propagates, and restart recovery
 does not invent completion or replay uncertain actions.
+
+#### H. Host discovery, qualification, and staged onboarding
+
+Add a candidate-to-operation path around the existing explicit SSH fleet. Discovery
+is an inventory and qualification feed, not a new trust authority or an automatic
+enrollment mechanism. Keep the shell CLI as the mutation path, the existing
+host-key and handshake contracts as the qualification boundary, and receiver-owned
+remote-task state as the recovery authority. This track can begin against the
+current fleet implementation.
+
+- [x] **H1 — Candidate discovery and read-only qualification.** Import effective
+      OpenSSH aliases and explicitly selected static inventory records without
+      copying private keys or rewriting SSH configuration. Normalize endpoints,
+      preserve source provenance/freshness, assign stable candidate IDs, and
+      deduplicate conservatively; a hostname, address, provider ID, or mDNS name
+      is not a verified host identity. Add a machine-readable candidate/result
+      schema and a read-only probe that uses BatchMode, strict host-key checking,
+      bounded time/output, and the existing Hydra handshake/capability checks.
+      Unknown or changed host keys stop for operator review; discovery never
+      accepts a key, creates a fleet alias, installs Hydra, changes PATH, maps a
+      project, or submits a task.
+      Acceptance: a prepared alias (including a jump host) produces deterministic
+      candidate and qualification output; unknown/changed keys, authentication
+      failure, unreachable hosts, protocol mismatch, and missing capability have
+      distinct typed results; a mixed ten-host run retains every row and evidence;
+      discovery and probing leave aliases, remote state, and installations
+      unchanged.
+      Implemented as `fleet discover` / `fleet qualify` with explicit alias/static
+      selection and strict handshake-only probes. [Contract and acceptance](HOST_DISCOVERY.md)
+      distinguish real OpenSSH config expansion plus controlled ten-host evidence
+      from still-required, explicitly authorized live SSH/jump/key qualification.
+      No live host or provider qualification is claimed.
+
+- [x] **H2 — Reviewed qualification and explicit enrollment.** Add a reviewable
+      operation intent using existing state/CLI mechanisms; do not introduce a
+      second execution authority or require a new digest-plan subsystem. Bind each
+      selected host to its candidate/source identity, accepted host-key
+      fingerprint, Unix principal/target, required protocol/capability, project
+      mapping, and (when requested) the exact pinned package digest and remote
+      prefix. Apply only after explicit operator confirmation. Reuse the current
+      staged, hash-verified bootstrap and fleet-init/trust boundaries; do not copy
+      credentials, private keys, or repository trust implicitly. Record per-host
+      progress and partial failure. A lost response to a mutation is
+      outcome_unknown and must be reconciled against the receiver with the same
+      identity before any retry; never blind-replay an uncertain action.
+      Acceptance: one-host onboarding proves the selected key, package bytes,
+      prerequisites, project/path decision, and resulting alias/state agree with
+      the reviewed intent; a ten-host mixed apply preserves successes and typed
+      failures; interruption, duplicate submission, owner loss, and lost response
+      tests reconcile without duplicate effects or inferred success; a changed
+      key, package, target, project, or policy requires renewed review.
+
+- [x] **H3 — Bounded scale and opt-in source adapters.** Extend the same candidate
+      contract to selected mDNS/DNS-SD, VPN/provider, cloud-tag, and
+      configuration-management inventory sources only after H1 is useful. Treat
+      source records as untrusted, timestamped metadata; keep provider
+      credentials outside candidate state and make source scope/cache behavior
+      explicit. For 50–100 candidates, import snapshots locally and qualify in
+      deterministic batches no larger than the current 16-host bounded observer;
+      retain per-host progress, stale/conflict evidence, and resume/reconcile
+      semantics. A TUI or richer batching view is a presentation layer over these
+      records, not another authority.
+      Acceptance: fixture-backed adapters reject malformed/secret-bearing input;
+      source disappearance, stale data, duplicate identities, and key conflicts
+      remain visible; a 50-host run can resume without rerunning completed
+      mutations; a 100-host import is bounded and does not silently widen the
+      selected set. No provider membership or discovery record grants execution
+      permission.
+
+- [ ] **H4 — Opt-in live inventory acquisition and snapshot diffs.** Acquire one
+      selected mDNS/DNS-SD, VPN, cloud or configuration-management source through
+      its normal client/API and feed the existing candidate importer. Choose the
+      first source and account/network scope when selecting implementation. Keep
+      credentials outside records, bound acquisition time/bytes/rate, and expose
+      cache age plus added/removed/changed/conflicting candidates before selection.
+      Acceptance: stale cache, unavailable credentials, partial responses, source
+      disappearance and identity conflicts preserve provenance and do not widen
+      selection or mutate enrollment intent. Fixture coverage and separately
+      authorized live-source qualification are reported independently.
+
+- [ ] **H5 — Onboarding operator view and workflow qualification.** Add filters,
+      candidate details, snapshot changes and per-host apply/resume/reconcile
+      progress over H1–H3 records, delegating actions to the existing CLI.
+      Acceptance: with a prepared alias/key/credentials/package, reach one-host
+      review in at most three explicit commands and one confirmation; show the
+      exact actions and bindings before apply. CLI/JSON/TUI agree on identity and
+      typed state. Mixed ten-host and interrupted 50-host runs retain every row,
+      success and unknown outcome; 100-host views remain bounded and responsive.
+      No UI retry replays an uncertain mutation or silently bootstraps a host.
+
+- [ ] **H6 — Scoped revocation and reviewed key rotation.** Define explicit local
+      revocation for candidate/source, transport, package and project decisions,
+      retaining who/when/reason and the superseded binding under existing state
+      conventions. Re-import cannot revive a revoked identity silently. A changed
+      key shows old/new fingerprints and observation provenance; acceptance uses
+      the operator's OpenSSH process and requires fresh enrollment review.
+      Acceptance: revoked bindings block new operations and invalidate pending
+      intents; alias reuse, endpoint changes and source refresh cannot bypass the
+      block. Existing accepted tasks/evidence remain inspectable. Revocation alone
+      never cancels tasks, uninstalls packages, deletes remote state or rewrites
+      known_hosts; those actions retain their own explicit authorization.
+
+[H3 local qualification](evidence/h3-source-batches.md) covers the four supplied
+snapshot formats, 100 distinct selected targets, 16-host probe/apply batches,
+private progress, interruption and lost-response reconciliation. No live vendor
+discovery client or provider credential path is included.
+
+Dependencies and coordination: H1 depends only on the current explicit fleet
+aliases, strict OpenSSH policy, and versioned handshake. H2 reuses the current
+package/bootstrap, fleet-init/trust, and remote-task contracts documented in
+[FLEET.md](FLEET.md), [SECURITY.md](SECURITY.md), and
+[REMOTE_TASKS.md](REMOTE_TASKS.md); it may proceed without a new planner or
+daemon. H3 is follow-on work after H1/H2 and should not broaden the trust boundary.
+T1, T2, 9A and V1 implementations are included in 2.4.0 within their documented
+qualification limits; T3 remains a separate distributed qualification milestone. T1/T2 become dependencies
+only for tmux-independent/headless enrollment, 9A is relevant if
+onboarding obligations are later compiled into objective plans, and V1 supplies
+freshness presentation through its observation contract. This H track
+does not mark any of those milestones complete, reclassify them as delivered, or
+rewrite their acceptance.
+
+Scope guardrails: do not auto-scan arbitrary networks, auto-accept host keys,
+silently replace aliases after key rotation, copy secrets, auto-trust repositories,
+submit remote work as a side effect of discovery, add a permanent daemon/database,
+or claim that source reachability proves host health. Keep shared multi-user
+inventory and automatic failover outside this slice until their authority and
+reconciliation contracts are separately approved.
+
 
 ## Native workspace and standalone termviz track
 
@@ -796,6 +1109,13 @@ prioritized backlog:
 - A2A adapters for independently operated agent services when SSH fleet is insufficient;
 - bounded best-of-N recipes over existing tasks, gates, and integration primitives;
   reviewed decomposition patterns are now scoped in item 9E.
+- provider/cloud-manager execution or review integrations beyond I3's read-only
+  references: first select a concrete workflow and credential/ownership boundary;
+- team-shared discovery inventory: first define per-user authorization, approver
+  identity and conflicting trust decisions; H4–H6 retain per-user state;
+- replacement server-owned PTYs or live runtime handoff: require a demonstrated
+  limitation of existing tmux attach and an explicit lifecycle/migration decision.
+  The interactive-parity research does not select this runtime replacement.
 
 Provider cognition dashboards, exact cross-provider context/cost routing, automatic
 unreviewed decomposition, dirty-file shadow synchronization, Git-as-consensus

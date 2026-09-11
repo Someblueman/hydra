@@ -11,13 +11,10 @@
     "src",
     "Makefile",
     "docs/quality",
-    "quality.json"
+    "quality.json",
+    "examples/planning"
   ],
-  "exclude": [
-    "*.py",
-    "__pycache__/*",
-    "*/__pycache__/*"
-  ],
+  "exclude": [],
   "tools": {
     "make": {
       "command": [
@@ -41,46 +38,85 @@
     },
     "clang-tidy": {
       "command": [
-        "{root}/build/quality-tools/bin/clang-tidy"
+        "sh",
+        "scripts/clang-tidy.sh"
       ],
       "version": "22.1.8",
       "version_args": [
         "--version"
       ],
-      "install": [
-        [
-          "uv",
-          "venv",
-          "{root}/build/quality-tools"
-        ],
-        [
-          "uv",
-          "pip",
-          "install",
-          "--python",
-          "{root}/build/quality-tools/bin/python",
-          "clang-tidy==22.1.8"
-        ]
-      ]
+      "install": []
+    },
+    "shell-lint": {
+      "command": [
+        "sh",
+        "scripts/lint-shell.sh"
+      ],
+      "version": "0.11.0",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
+    },
+    "c-incremental": {
+      "command": [
+        "sh",
+        "scripts/quality-c-incremental.sh"
+      ],
+      "version": "22.1.8",
+      "version_args": [
+        "--version"
+      ],
+      "install": []
     }
   },
   "checks": [
     {
       "name": "Hydra native shell lint (ShellCheck and dash)",
-      "tool": "make",
-      "args": [
-        "lint"
-      ],
+      "tool": "shell-lint",
+      "args": [],
       "patterns": [
         "*.sh",
         "bin/hydra"
       ],
-      "files": false,
+      "files": true,
       "stage": "fast",
       "failure_codes": [
         1,
         2
-      ]
+      ],
+      "inputs": [
+        "scripts/lint-shell.sh",
+        "**/.shellcheckrc"
+      ],
+      "kind": "lint"
+    },
+    {
+      "name": "Hydra C complexity regression gate",
+      "tool": "c-incremental",
+      "args": [],
+      "patterns": [
+        "*.c",
+        "*.h",
+        "*.inc"
+      ],
+      "files": true,
+      "stage": "full",
+      "failure_codes": [
+        1,
+        2
+      ],
+      "scope": "translation-units",
+      "inputs": [
+        "Makefile",
+        "scripts/quality-c.sh",
+        "scripts/quality-c-incremental.sh",
+        "docs/quality/*.tsv",
+        "scripts/native-tests.mk",
+        "scripts/*.mk",
+        "scripts/clang-tidy.sh"
+      ],
+      "kind": "lint"
     },
     {
       "name": "Hydra C analysis and complexity regression gate",
@@ -95,18 +131,111 @@
         "Makefile",
         "scripts/quality-c.sh",
         "docs/quality/*.tsv",
-        "quality.json"
+        "quality.json",
+        "scripts/native-tests.mk"
       ],
       "files": false,
-      "stage": "full",
+      "stage": "manual",
       "failure_codes": [
         1,
         2
+      ],
+      "kind": "lint",
+      "inputs": [
+        "Makefile",
+        "scripts/*.mk",
+        "scripts/clang-tidy.sh",
+        "scripts/quality-c.sh",
+        "scripts/quality-c-incremental.sh",
+        "docs/quality/*.tsv"
+      ]
+    },
+    {
+      "name": "Hydra complete acceptance",
+      "tool": "make",
+      "args": [
+        "test-all"
+      ],
+      "patterns": [
+        "*.sh",
+        "*.c",
+        "*.h",
+        "*.inc",
+        "bin/hydra",
+        "Makefile",
+        "scripts/*.mk"
+      ],
+      "files": false,
+      "stage": "manual",
+      "kind": "test",
+      "scope": "project",
+      "failure_codes": [
+        1,
+        2
+      ],
+      "inputs": [
+        "bin/hydra",
+        "lib/**",
+        "src/**",
+        "tests/**",
+        "scripts/**",
+        "examples/planning/**",
+        "assets/demos/**",
+        "install.sh",
+        "uninstall.sh",
+        "Makefile",
+        ".github/workflows/ci.yml"
+      ]
+    },
+    {
+      "name": "Hydra native sanitizers",
+      "tool": "make",
+      "args": [
+        "sanitize"
+      ],
+      "patterns": [
+        "*.sh",
+        "*.c",
+        "*.h",
+        "*.inc",
+        "bin/hydra",
+        "Makefile",
+        "scripts/*.mk"
+      ],
+      "files": false,
+      "stage": "manual",
+      "kind": "test",
+      "scope": "project",
+      "failure_codes": [
+        1,
+        2
+      ],
+      "inputs": [
+        "bin/hydra",
+        "lib/**",
+        "src/**",
+        "tests/**",
+        "scripts/**",
+        "examples/planning/**",
+        "assets/demos/**",
+        "install.sh",
+        "uninstall.sh",
+        "Makefile",
+        ".github/workflows/ci.yml"
       ]
     }
   ],
   "size": {
     "limit": 500,
     "mode": "review"
+  },
+  "verification": {
+    "green": "Changed behavior preserves Hydra POSIX CLI, state and native protocol contracts; affected native builds and existing behavioral checks pass. Broad runtime changes require make test-all, make quality-c and applicable make sanitize targets, with Linux/macOS CI passing before integration. Incremental lint or complexity success alone is not acceptance.",
+    "manual": [
+      "For TUI or interaction changes, inspect the affected real PTY workflow for readable layout, navigation, input routing and terminal restoration; automated assertions do not establish visual quality.",
+      "For state, recovery or cancellation changes, assess the relevant failure interleaving and durable evidence; distinguish controlled fixtures from live-host or authenticated-provider qualification.",
+      "For performance claims, compare measured equivalent workloads and report setup, runner contention and queue time separately; passing tests does not establish speedup.",
+      "Release and live-host/provider acceptance require the evidence and scope decisions in docs/RELEASE_NEXT_SCOPE.md; passing CI does not establish publication or release acceptance."
+    ]
   }
 }

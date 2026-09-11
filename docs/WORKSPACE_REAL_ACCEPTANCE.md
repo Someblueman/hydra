@@ -132,8 +132,8 @@ The existing non-PTY shell test can skip saving terminal state when it has no
 controlling terminal; the dedicated real PTY tests independently checked exact
 termios restoration. Size-threshold advisories are not a warning-free code claim.
 
-The deterministic public boundary tests are `test_plan_workspace.py`, `test_plan_launch.py`,
-`test_workflow_controls.py`, `test_attached_pty.py` and `test_pty.py`.
+The current deterministic public boundary tests are the corresponding native
+C drivers under `tests/termviz`; see their [coverage mapping](../tests/termviz/README.md).
 The full repository acceptance command is `make test-all`; targeted local UBSan
 commands are `make sanitize-plan-workspace sanitize-attached sanitize-workspace`.
 
@@ -161,3 +161,7 @@ path leak: the extracted Makefile built in build/ while its observer inherited
 Hydra's custom directory. The export test now explicitly supplies its own build/
 path; the same custom-directory export check subsequently passed. This failure
 was in qualification setup, separate from the Linux job-cleanup defect.
+
+The captured results above retain their original observer and tool versions.
+Current regression coverage uses native C PTY drivers; the
+[port mapping](../tests/termviz/README.md) lists the preserved scenarios.

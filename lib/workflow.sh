@@ -139,7 +139,7 @@ workflow_parse() {
         else if(k=="requires") arg[step,k]=list(v,field)
         else if(k=="timeout") arg[step,k]=number(v,field,1,86400)
         else if(k=="force" || k=="allow_shell") arg[step,k]=boolean(scalar(v,field),field)
-        else if(k ~ /^(head|branch|group|profile|command|message|name|by|reason|completion_policy|prompt_file|prompt_input|result_file|resume_from|task_input|source_step)$/) {
+        else if(k ~ /^(head|branch|group|profile|command|message|name|by|reason|completion_policy|prompt_file|prompt_input|result_file|resume_from|task_input|source_step|terminal_mode)$/) {
             if(k=="command" && trim(v) ~ /^\[/) fail(field,"use argv for a command list")
             arg[step,k]=scalar(v,field)
         }
@@ -158,7 +158,7 @@ workflow_parse() {
         if(argv[i]!=""){out=out sep "argv=[" argv[i] "]"}
         return out
     }
-    BEGIN { parallelism=1; disk=10240; maxheads=16; argc=20; split("head branch group profile command message name by reason completion_policy timeout force allow_shell prompt_file prompt_input result_file requires resume_from task_input source_step",argkeys," ") }
+    BEGIN { parallelism=1; disk=10240; maxheads=16; argc=21; split("head branch group profile command message name by reason completion_policy timeout force allow_shell prompt_file prompt_input result_file requires resume_from task_input source_step terminal_mode",argkeys," ") }
     {
         sub(/\r$/,""); raw=$0
         if(raw ~ /\t/) fail("line " NR,"tabs are unsupported")
@@ -212,6 +212,8 @@ workflow_parse() {
                     if((arg[i,"prompt_input"]!="" || arg[i,"result_file"]!="") && data=="") fail("steps[" sid[i] "].args","named prompts and result files require a data manifest")
                 } else if(arg[i,"command"]=="" && argv[i]=="") fail("steps[" sid[i] "].args.command","command, argv, or profile is required")
             }
+            if(seen_arg[i,"terminal_mode"] && (kind[i]!="spawn" || arg[i,"terminal_mode"] !~ /^(interactive|headless)$/)) fail("steps[" sid[i] "].args.terminal_mode","requires spawn and interactive or headless")
+            if(arg[i,"terminal_mode"]=="headless" && arg[i,"profile"]!="") fail("steps[" sid[i] "].args.profile","headless spawn cannot launch an interactive profile; use an exec profile step")
             if(kind[i]!="task" && seen_arg[i,"source_step"]) fail("steps[" sid[i] "].args.source_step","requires a task step")
             if(kind[i]=="task" && arg[i,"source_step"]!="" && !index("," needs[i] ",","," arg[i,"source_step"] ",")) fail("steps[" sid[i] "].args.source_step","source producer must be a direct dependency")
             if(kind[i]!="task" && seen_arg[i,"task_input"]) fail("steps[" sid[i] "].args.task_input","requires a task step")
@@ -228,6 +230,7 @@ workflow_parse() {
             if(!found) fail("steps[" sid[i] "].args.resume_from","must name a direct exec dependency with the same head and profile")
         }
         for(i=1;i<=step;i++) visit(i)
+        if(mode=="terminal") {for(i=1;i<=step;i++) if((kind[i]=="spawn" && arg[i,"terminal_mode"]!="headless") || kind[i]=="message") print sid[i]; exit 0}
         if(mode=="validate") exit 0
         if(mode=="identity"){print id;exit 0}
         if(mode=="data"){if(data!="")print data;exit 0}
@@ -245,6 +248,7 @@ workflow_parse() {
                 for(k=1;k<=13;k++) printf "\t%s",(arg[i,argkeys[k]]==""?"-":arg[i,argkeys[k]])
                 printf "\t%s\n",(argv[i]==""?"-":argv[i])
                 if(kind[i]=="task") {printf "task_args\t%s\t%s",sid[i],arg[i,"task_input"]; if(arg[i,"source_step"]!="")printf "\t%s",arg[i,"source_step"];printf "\n"}
+                if(kind[i]=="spawn" && arg[i,"terminal_mode"]!="") print "terminal_mode\t" sid[i] "\t" arg[i,"terminal_mode"]
                 if(kind[i]=="exec" && arg[i,"profile"]!="") {printf "profile_args\t%s",sid[i];for(k=14;k<=18;k++)printf "\t%s",(arg[i,argkeys[k]]==""?"-":arg[i,argkeys[k]]);printf "\n"}
                 if(seen_step[i,"retry_on"] || seen_step[i,"retry_backoff"]) printf "retry_policy\t%s\t%s\t%d\n",sid[i],(retryon[i]==""?"-":retryon[i]),backoff[i]
             }

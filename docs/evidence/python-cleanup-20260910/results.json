@@ -1,0 +1,947 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "b0fb5b1d9220189ad2498a244274ae498a3c7d0c",
+  "cleanup_commit": "9cb84c06879ccde90a16938709983e54680a4f68",
+  "final_source_commit": "6cef5ba8c401020401e5e8817193750a95120beb",
+  "objective_complete": true,
+  "broader_9e_complete": false,
+  "qualified_source_paths": [
+    {
+      "path": "Makefile",
+      "sha256": "07ffc717dd1a1d57b6a3df234c6f420246c1f43efd4484d3e58dbb49c00bbb08",
+      "checkout_matches": true
+    },
+    {
+      "path": "docs/PLAN_MANIFEST.md",
+      "sha256": "8366988f6b7eeb82b801005f19d882cac419730df31fe250574e2543f8bda6d7",
+      "checkout_matches": true
+    },
+    {
+      "path": "docs/PLAN_STAGED.md",
+      "sha256": "d7a737df1573041bb325fbd6a77a5f538031222ba356f73fd36c5fc457dd3f9c",
+      "checkout_matches": true
+    },
+    {
+      "path": "docs/PYTHON_USAGE.md",
+      "sha256": "b72c983d1af51d37393a1eafa97d699b63409a1a7e1007b87084d9621671d197",
+      "checkout_matches": true
+    },
+    {
+      "path": "docs/ROADMAP.md",
+      "sha256": "c5b10372c98bf6febf0106cec8106f6ecdfc8c6baad49931b9215b2c05a3bda3",
+      "checkout_matches": false
+    },
+    {
+      "path": "examples/planning/evaluation/README.md",
+      "sha256": "49cfb425bacf4da9519ecc32f47d6633df1615b557d7b282ec4d85490ba624d0",
+      "checkout_matches": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/contract-aware-1/candidate.py",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/contract-aware-1/planning.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/contract-aware-2/candidate.py",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/contract-aware-2/planning.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/contract-aware-3/candidate.py",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/contract-aware-3/planning.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/current-1/candidate.py",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/current-1/planning.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/current-2/candidate.py",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/current-2/planning.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/current-3/candidate.py",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/current-3/planning.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/check.py",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/evaluate.py",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/plan.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/planner-evaluation-heldout-v2.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/planner-evaluation-heldout.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/planner-visible-contracts.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/policy.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/produce.py",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/evaluation/requests.json",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/manifest-map/README.md",
+      "sha256": "1048af2b976efd49d5dfa70c4e03df8a46759a129322957e4f8fa70269d0a459",
+      "checkout_matches": true
+    },
+    {
+      "path": "examples/planning/manifest-map/precompile.py",
+      "deleted": true
+    },
+    {
+      "path": "examples/planning/native/README.md",
+      "sha256": "9de5c8e04e296900c96e72c75ec88c874a02ca5ce3d5e2fd83879839ce467a7c",
+      "checkout_matches": true
+    },
+    {
+      "path": "examples/planning/native/lower.c",
+      "sha256": "387941b224d34ee322ef2548e144e669eb68c94da2ed991866e7dd29204c45ad",
+      "checkout_matches": true
+    },
+    {
+      "path": "examples/planning/native/precompile.c",
+      "sha256": "b78c4d4354bca15ed07257f8347cf593d57acdd3b68de326b4a6aba44ba5381e",
+      "checkout_matches": true
+    },
+    {
+      "path": "examples/planning/native/precompile.h",
+      "sha256": "d15ccc036564a65762c750d299ff8466af1ad4fff6685e3334989edb789fcbc3",
+      "checkout_matches": true
+    },
+    {
+      "path": "examples/planning/native/staged.c",
+      "sha256": "6deec299a26b31f8c2536c53f16ed30ec31d63764410f142990bfe607b39c5f1",
+      "checkout_matches": true
+    },
+    {
+      "path": "examples/planning/staged/precompile.py",
+      "deleted": true
+    },
+    {
+      "path": "tests/test_plan_manifest.py",
+      "sha256": "434e53815a6cee4d1c1663e663bcda6c74f2ef4f4b4c6b6600da72668ea095f8",
+      "checkout_matches": true
+    },
+    {
+      "path": "tests/test_plan_staged.py",
+      "sha256": "9abf3bc1b67de03c92d89cf97a718568b76279598a8e4ff9177d839f68bdc321",
+      "checkout_matches": true
+    },
+    {
+      "path": "tests/test_plan_staged_public.py",
+      "sha256": "d662e768d9db849fbd5fad7100dd437ececd6db976571b7fe4626dcb59f3beb8",
+      "checkout_matches": true
+    },
+    {
+      "path": "tests/test_planner_evaluation_public.py",
+      "deleted": true
+    }
+  ],
+  "unchanged_runtime_trees": {
+    "bin": "7f65d7d56755fa8f2be1f092fd044e819d9f3cc4",
+    "lib": "4bf44f99f0ab6136dc6c86ff5a2fdf6363e87b02",
+    "src": "822791aef33443356f952c1c189523e19972869c"
+  },
+  "post_source_documentation": {
+    "docs/ROADMAP.md": "Adds the actual maintenance-workflow outcome and preserves open broader9E criteria; runtime/source acceptance remains bound to the source commit."
+  },
+  "python_counts": {
+    "before_files": 56,
+    "after_files": 44,
+    "before_lines": 8277,
+    "after_lines": 6490,
+    "unchanged_retained_files": 41,
+    "caller_only_migrations": 3,
+    "existing_shell_files_with_python_unchanged": 19
+  },
+  "checks": [
+    {
+      "id": "final_default",
+      "exit_code": 0,
+      "command": "make build-plan-precompile test-plan-outcomes test-plan-staged",
+      "log": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/final-direct.log",
+        "bytes": 1009,
+        "sha256": "65b159d6c18693b6296948e7011610979a3d29608caf5aa07986c4539ac81f13"
+      }
+    },
+    {
+      "id": "final_asan_ubsan",
+      "exit_code": 0,
+      "command": "make CC=/opt/homebrew/opt/llvm@22/bin/clang BUILD_DIR=build/python-cleanup/llvm22 CORE_CFLAGS=\"-O1 -g -std=c99 -Wall -Wextra -Werror -pedantic -Isrc -fsanitize=address,undefined -fno-omit-frame-pointer\" build-plan-precompile test-plan-outcomes test-plan-staged",
+      "log": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/final-sanitizers.log",
+        "bytes": 1231,
+        "sha256": "95a80510af102c5032771c1c320a16eaddfce829a2d612630a6c11c6c0dc1b47"
+      }
+    },
+    {
+      "id": "heldout_differential",
+      "exit_code": 0,
+      "command": "sh audit.sh in the baseline with the cleanup applied",
+      "log": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/heldout-differential.log",
+        "bytes": 1097,
+        "sha256": "1fe3ab97f0117fff830257930f2357f266f0598990e352b109b686a2ade78c5e"
+      }
+    },
+    {
+      "id": "public_staged",
+      "exit_code": 0,
+      "command": "python3 tests/test_plan_staged_public.py --fleet build/hydra-fleet --precompiler build/plan-precompile --output build/python-cleanup/staged-public.json",
+      "log": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/staged-public.log",
+        "bytes": 1263,
+        "sha256": "bb0a5990fd830e4200c0bcf37afed2c43ad236135d255ef78430860c51a705f4"
+      }
+    },
+    {
+      "id": "gnu_hash_and_parent_path",
+      "exit_code": 0,
+      "command": "Native staged precompile: shasum unavailable, sha256sum available, manifest outside caller cwd",
+      "log": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/gnu-hash-fallback.log",
+        "bytes": 60,
+        "sha256": "58d342e1304ae2e58b5ab0679e5e976c912800ab9d4d602657547f92a5bd0c1e"
+      }
+    },
+    {
+      "id": "source_export_lint",
+      "exit_code": 0,
+      "command": "make lint in exact source export including final workflow shell recipes; no shell changed in the later POSIX macro correction",
+      "log": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/lint-source.log",
+        "bytes": 8645,
+        "sha256": "effb887a53ed35130a0c2de542b65ddaf7c8824cc7eb43ae19d2ca417ea53d84"
+      }
+    },
+    {
+      "id": "native_analysis",
+      "exit_code": 0,
+      "command": "clang-tidy --checks=-*,clang-analyzer-core.*,clang-analyzer-unix.* --warnings-as-errors=* examples/planning/native/*.c -- -std=c99 -Isrc -I/opt/homebrew/opt/json-c/include -isysroot SDK",
+      "log": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/final-native-analysis.log",
+        "bytes": 240,
+        "sha256": "f416d3dc1e560fb97ed5a1eb347e3da8f9218926849a0eaabd6b851b35424c30"
+      }
+    },
+    {
+      "id": "historical_replay",
+      "exit_code": 0,
+      "command": "Archived original contract-aware-1 evaluation: 9 correct cases and 18 incorrect controls",
+      "log": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/historical-replay.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  ],
+  "runs": [
+    {
+      "label": "parallel",
+      "run_id": "run_b9024fef69af15c59acd",
+      "wall_seconds": 106.69,
+      "public_accepted": true,
+      "result": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/parallel-v4-result.json",
+        "bytes": 15331,
+        "sha256": "38c24bbdf278cec7c7775b8ced26655348bb91000a0b7db7b16367e86e1742f7"
+      },
+      "steps": [
+        {
+          "step": "compose",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/compose/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/compose/attempt-1/stdout",
+            "bytes": 72,
+            "sha256": "ce6a88d005d8e49b4806b05268f486d6b3dadb9cf42ec24531ab2fe3519743a4"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/compose/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "functional",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/functional/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/functional/attempt-1/stdout",
+            "bytes": 35002,
+            "sha256": "b34f22f01bf0c20668cbf6e28759f130a9b104c253e461cfb25ba98c37bb3cc9"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/functional/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "sanitize",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/sanitize/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/sanitize/attempt-1/stdout",
+            "bytes": 41706,
+            "sha256": "f01622cdb49809c4a5a7157692d75c8a201ea22d9f637283bebb48e78f2c4d59"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/sanitize/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "spawn-compose",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/spawn-compose/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/spawn-compose/attempt-1/stdout",
+            "bytes": 126,
+            "sha256": "5f6dcfc379072ad7afc8d0d56f7d80882baec4814991ce4722d3d3e68ff0bf47"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/spawn-compose/attempt-1/stderr",
+            "bytes": 211,
+            "sha256": "3f4e2e22c96462b218caac6ff97a4ce1de926f99c2c9cabb29b0aa3922247a76"
+          }
+        },
+        {
+          "step": "spawn-functional",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/spawn-functional/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/spawn-functional/attempt-1/stdout",
+            "bytes": 132,
+            "sha256": "b093070f730964ce98f3982d4d2097b8e5ed9eff55fdc2b8e2510e1343e45b88"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/spawn-functional/attempt-1/stderr",
+            "bytes": 217,
+            "sha256": "2881471b117a5182c41033883f1b94d23e0531907b4d5979b62bcef3067af888"
+          }
+        },
+        {
+          "step": "spawn-sanitize",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/spawn-sanitize/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/spawn-sanitize/attempt-1/stdout",
+            "bytes": 128,
+            "sha256": "53af66a6d8b0aff58a86b1c4cc245b79df544caab214a1170543cd5ebad0d6c7"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_b9024fef69af15c59acd/steps/spawn-sanitize/attempt-1/stderr",
+            "bytes": 213,
+            "sha256": "c548db1d021520a6ef54022e12f7406edeb936c11c98825bbb0d380f4e5d29ac"
+          }
+        }
+      ]
+    },
+    {
+      "label": "serial",
+      "run_id": "run_632a68921f47afb2d1f9",
+      "wall_seconds": 106.33,
+      "public_accepted": true,
+      "result": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/serial-v4-result.json",
+        "bytes": 15331,
+        "sha256": "b782e4576fde9df1fe4dec27b63cc7f26bcd49e8c64637b6fa7c28e2c4503fa6"
+      },
+      "steps": [
+        {
+          "step": "compose",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/compose/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/compose/attempt-1/stdout",
+            "bytes": 70,
+            "sha256": "2d6ce1858879624d2ed2eac32394bd8250763bb26e3841db2f5da532c26dfbd0"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/compose/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "functional",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/functional/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/functional/attempt-1/stdout",
+            "bytes": 34999,
+            "sha256": "d85d6faa290c6ccae9cbb644bcebb84800b211f51957d2483b105d1b6900a87f"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/functional/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "sanitize",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/sanitize/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/sanitize/attempt-1/stdout",
+            "bytes": 41704,
+            "sha256": "375b382885af31cdbfc85023514fee61362048995158c28af9d0b3e75206779f"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/sanitize/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "spawn-compose",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/spawn-compose/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/spawn-compose/attempt-1/stdout",
+            "bytes": 122,
+            "sha256": "50904793d7fa0c9a84a677d907e2751ceb3d797540129bad305bb2e9f577b533"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/spawn-compose/attempt-1/stderr",
+            "bytes": 207,
+            "sha256": "53f5ce1168b8d07573bf3a89e8c90aef15fbec028c0b1619ae7d05ea416ba07c"
+          }
+        },
+        {
+          "step": "spawn-functional",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/spawn-functional/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/spawn-functional/attempt-1/stdout",
+            "bytes": 128,
+            "sha256": "0219320a01a0871cb202f1da603348a560a9dd9ec52350ba3d4520248ffdf64c"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/spawn-functional/attempt-1/stderr",
+            "bytes": 213,
+            "sha256": "bf391e5c423ce51f5ab72fcc7f24e69b56a93d94d33f1aeb5a5f979eb1646dfe"
+          }
+        },
+        {
+          "step": "spawn-sanitize",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/spawn-sanitize/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/spawn-sanitize/attempt-1/stdout",
+            "bytes": 124,
+            "sha256": "767a21e4a44ad1cda039b0640b0d3e43c111239265adfbb0d59a6ade42f94eb1"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_632a68921f47afb2d1f9/steps/spawn-sanitize/attempt-1/stderr",
+            "bytes": 209,
+            "sha256": "d528dc6f9e61ad28953589d82d79dcb53f336a30fd72444c10d4f6de173c7e1c"
+          }
+        }
+      ]
+    },
+    {
+      "label": "incorrect_leftover_python",
+      "run_id": "run_599941e10d040064489a",
+      "wall_seconds": 58.36,
+      "public_accepted": false,
+      "result": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/leftover-result.json",
+        "bytes": 357,
+        "sha256": "25f62b16d94800e1b6701c23d33458ba9f9cb32f14015dba7534e0c00d6c3c7c"
+      },
+      "steps": [
+        {
+          "step": "compose",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/compose/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/compose/attempt-1/stdout",
+            "bytes": 72,
+            "sha256": "bff8200ab81521d7f004b1a28f978b5d27f2f42b6d94555916b6d0e1ec965901"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/compose/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "functional",
+          "exit_code": 1,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/functional/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/functional/attempt-1/stdout",
+            "bytes": 75,
+            "sha256": "d1001aac5d01afa3e20c5fe729499dea3586d0426eedcd3230f731e66fa83983"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/functional/attempt-1/stderr",
+            "bytes": 30261,
+            "sha256": "d0de98d864ca93663964fc0212810e6e5cb40b327d9070581744b290f98fe95b"
+          }
+        },
+        {
+          "step": "sanitize",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/sanitize/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/sanitize/attempt-1/stdout",
+            "bytes": 41706,
+            "sha256": "529c8da00b866a835ed63a9883cf154c266dbcedd30f6903a021d2ef647e9457"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/sanitize/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "spawn-compose",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/spawn-compose/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/spawn-compose/attempt-1/stdout",
+            "bytes": 126,
+            "sha256": "ed23de954612043022bfeba2a4535a4a495df5be8b1178dbe983f26dd7ba3812"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/spawn-compose/attempt-1/stderr",
+            "bytes": 211,
+            "sha256": "229d6035fb0baf62bfcb4d692007cb059fa4199a0b263354bc61b915a83aa006"
+          }
+        },
+        {
+          "step": "spawn-functional",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/spawn-functional/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/spawn-functional/attempt-1/stdout",
+            "bytes": 132,
+            "sha256": "f5547e2362767ba19677e5d2992e87f18569f7d9fa8366e5be2de6c87ebeaccb"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/spawn-functional/attempt-1/stderr",
+            "bytes": 217,
+            "sha256": "63240281292ce2dfd8d037a5472816aefcb02a5211ef6b0eb6f794caff8bffd3"
+          }
+        },
+        {
+          "step": "spawn-sanitize",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/spawn-sanitize/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/spawn-sanitize/attempt-1/stdout",
+            "bytes": 128,
+            "sha256": "8745570b24b3041ca7112a23e55854fc1cad9d414a21c8c63e412b89390a70f3"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_599941e10d040064489a/steps/spawn-sanitize/attempt-1/stderr",
+            "bytes": 213,
+            "sha256": "f390febe864062a75e7c982bae571cebcf6f9c93db98e737935662c3a722458a"
+          }
+        }
+      ]
+    },
+    {
+      "label": "final_corrected_source",
+      "run_id": "run_93b9aa25717f8fa181ab",
+      "wall_seconds": 53.18,
+      "public_accepted": true,
+      "result": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/final-v2-result.json",
+        "bytes": 15331,
+        "sha256": "785131811aa4daaaa17f8893d3e4ad199a56652a6a26ad1b4a4f2e6e3407d448"
+      },
+      "steps": [
+        {
+          "step": "compose",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/compose/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/compose/attempt-1/stdout",
+            "bytes": 69,
+            "sha256": "f0a1e8c249c24aa5adc3ad36adfb2adfa2dbb73aa399835c569e4c87764df527"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/compose/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "functional",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/functional/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/functional/attempt-1/stdout",
+            "bytes": 34998,
+            "sha256": "0886c6c22d507ac9390d6f3cdf4bbad80eaf8272df73a51ab72a829bbd62c310"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/functional/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "sanitize",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/sanitize/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/sanitize/attempt-1/stdout",
+            "bytes": 41703,
+            "sha256": "a39d5d52fffb09f75e728ad32633d599aa97112aa73e4e82e1e3786d359211b5"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/sanitize/attempt-1/stderr",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "step": "spawn-compose",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/spawn-compose/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/spawn-compose/attempt-1/stdout",
+            "bytes": 120,
+            "sha256": "b04d7a458ae7f39787e45c2b5aba1e698eea6f4b78d10e857463708ef88089a4"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/spawn-compose/attempt-1/stderr",
+            "bytes": 205,
+            "sha256": "d4c7bcb80059585a67e6184bea2d17cb9896438451749032e2f897f5945d59a5"
+          }
+        },
+        {
+          "step": "spawn-functional",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/spawn-functional/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/spawn-functional/attempt-1/stdout",
+            "bytes": 126,
+            "sha256": "2b481670295f0d2a9c735764ef8de63a2bbd30d01cf9505b063a94eabe9eaebc"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/spawn-functional/attempt-1/stderr",
+            "bytes": 211,
+            "sha256": "b19c7221bd7bb5a9bc2ab60dc265166d43041f1f9d00447a924e14d9150d6826"
+          }
+        },
+        {
+          "step": "spawn-sanitize",
+          "exit_code": 0,
+          "exit_file": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/spawn-sanitize/attempt-1/exit-code",
+            "bytes": 2,
+            "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+          },
+          "stdout": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/spawn-sanitize/attempt-1/stdout",
+            "bytes": 122,
+            "sha256": "ef3c66b3d5053ad7dcafc97bd4875745fd753a0a610c81195d58b5697f7b32e8"
+          },
+          "stderr": {
+            "path": "/Users/sws/Code/hydra/build/python-cleanup/home/state/v2/projects/project_2f238c4c4a27dcc8de5d/workflows/runs/run_93b9aa25717f8fa181ab/steps/spawn-sanitize/attempt-1/stderr",
+            "bytes": 207,
+            "sha256": "de99bc65a1045f40a309e1911967821a8a471bc61eb40a99f48b6b433e59a3bf"
+          }
+        }
+      ]
+    }
+  ],
+  "planning": {
+    "request_utc": "2026-09-10T13:34:46.376406+00:00",
+    "selection_utc": "2026-09-10T13:49:13.715273+00:00",
+    "seconds_before_selection": 867.339,
+    "implementation_authoring": "Codex outside execution graph; actual patch sealed and independently tested by Hydra",
+    "human_workload_selections": 1,
+    "human_corrections_after_selection": 0,
+    "provider_cost_usd": null,
+    "provider_cost_reason": "No per-request billing record available; no missing-data substitution.",
+    "estimates_rebound_unchanged": true,
+    "semantic_planner_arms_executed": 1,
+    "fixed_graph_schedules_executed": 2,
+    "placements_executed": [
+      "local"
+    ],
+    "modeled_preference": "unresolved",
+    "observed_pair_seconds": {
+      "parallel": 106.69,
+      "serial": 106.33
+    },
+    "conclusion": "No demonstrated scheduling advantage or planning benefit. One non-randomized pair on a shared machine; no stochastic or calibration claim."
+  },
+  "declared_incorrect_maintenance_artifacts": {
+    "count": 1,
+    "rejected": 1,
+    "false_acceptances": 0,
+    "case": "Working native implementation retaining both superseded Python precompilers"
+  },
+  "rework": [
+    {
+      "event": "Delegated C draft incomplete",
+      "outcome": "No files left; root implemented native helper."
+    },
+    {
+      "event": "Review corrections",
+      "outcome": "Manifest-parent staging, GNU hash fallback, regular-file reads and POSIX realpath feature macro."
+    },
+    {
+      "event": "Apple clang17 ASan startup stall",
+      "outcome": "Stopped owned blocked process tree after sampling; LLVM22.1.8 ASan/UBSan passed.",
+      "evidence": {
+        "path": "/Users/sws/Code/hydra/build/python-cleanup/sanitizer-sample.txt",
+        "bytes": 7011,
+        "sha256": "c49e008a55796acd5bf221de65911eda885f0f2b6f8bff9fb171a28cc8160fa0"
+      }
+    },
+    {
+      "event": "First workflow evidence encoding wrong",
+      "run_id": "run_86b93971d9821086b8b1",
+      "wall_seconds": 93.08,
+      "outcome": "Both checks exited0; native evidence gate refused canonical-hash mismatch; report writer corrected."
+    },
+    {
+      "event": "Existing-head admission refusal",
+      "wall_seconds": 0.57,
+      "outcome": "No execution run published; isolated fresh head identities used."
+    },
+    {
+      "event": "Compiled-output overwrite refused",
+      "outcome": "Used a new output path; no existing artifact replaced."
+    },
+    {
+      "event": "Root lint walked retained fixtures",
+      "outcome": "Stopped only that traversal; make lint passed on exact source export."
+    },
+    {
+      "event": "Analyzer had no enabled checks",
+      "outcome": "Explicit core/unix checks passed with warnings as errors."
+    },
+    {
+      "event": "Incremental-only patch packaged against full baseline",
+      "run_id": "run_feb31ffe97da3bf756c8",
+      "wall_seconds": 11.57,
+      "outcome": "Compose refused before checks; full diff regenerated against explicit b0fb5b1 and verified byte-for-byte against final source commit."
+    }
+  ],
+  "artifacts": {
+    "matched_patch": {
+      "path": "/Users/sws/Code/hydra/build/python-cleanup/cleanup.patch",
+      "bytes": 186101,
+      "sha256": "4267a1509ae4a43a3151dd690328ab1ae292b8289503a690419ef31508859328"
+    },
+    "final_patch": {
+      "path": "/Users/sws/Code/hydra/build/python-cleanup/final-cleanup.patch",
+      "bytes": 186128,
+      "sha256": "5649ada129575451797d57563105108e3359d20057b94a16b553c8d1c95341fc"
+    },
+    "incorrect_patch": {
+      "path": "/Users/sws/Code/hydra/build/python-cleanup/leftover-python.patch",
+      "bytes": 167744,
+      "sha256": "e7af6c7bc26bdff11f637128048c789799ae42450bc0d1a387bdb60fa9cd160b"
+    },
+    "final_native_binary": {
+      "path": "/Users/sws/Code/hydra/build/plan-precompile",
+      "bytes": 133472,
+      "sha256": "594995776fced975804d80714e5e45806a94505b71ba2c5b09d6ff63eeb754c0"
+    },
+    "final_sanitized_binary": {
+      "path": "/Users/sws/Code/hydra/build/python-cleanup/llvm22/plan-precompile",
+      "bytes": 302640,
+      "sha256": "bbc40b485c7fc8783a41c7d0a68e61f5cd82796ccf6e458f21eb13e9f6c7146c"
+    },
+    "runtime_binary": {
+      "path": "/Users/sws/Code/hydra/build/hydra-fleet",
+      "bytes": 534296,
+      "sha256": "e1ea4c5772332745d0c100ad1a60d72aaab5ce95a60f6ac71ec9ff6271250c2f"
+    }
+  },
+  "toolchain": {
+    "default_cc": "Apple clang version 17.0.0 (clang-1700.6.3.2)",
+    "sanitizer_cc": "Homebrew clang version 22.1.8",
+    "platform": "macOS arm64",
+    "linux_executed": false
+  },
+  "publication": {
+    "pushed": false,
+    "merged_main": false,
+    "released": false,
+    "local_main": "2c307c82e97b948ecd6965d8d33e7079a3701eca",
+    "local_origin_main_tracking_reference": "2c307c82e97b948ecd6965d8d33e7079a3701eca"
+  },
+  "packet_hashes": {
+    "README.md": "65577e0c47710e017aaa476c19c89be6cedcd44369e2ccca48c51d899c2a3cb0",
+    "contract.json": "d6c1cf664ef88d7355301033ad14cae05511e1ca408c16d828e70bd2f04bfe53",
+    "draft-compare.json": "e385685a0ee9c512e35854fb2c45afb03ea2c7ad02c6912cf26b56c68062f639",
+    "draft-estimated-compare.json": "2fda8e39db481d9f4e869fe46ca555d89dcdf881186b8577efd6805e2769a619",
+    "draft-estimates.json": "004195c56fe47c3a42415a2f21a4f57d99c0bdf0c079bd8e4818be83708a017f",
+    "draft-explain.json": "e062d84507dc5215aee928e8537535ccbfb25d2e3370579f93eaaafbb81563a9",
+    "estimated-comparison.json": "f52206dd867bb68c1d4284be32db6fea2702652c71d2d49fc3f5cd09202555b7",
+    "estimates.json": "e6c4b27169436a535490bb014758ef493907737258cb0512c647305caf3a1862",
+    "final-explanation.json": "89024bf9cf3e6d4d6717123f0bf87f78ea1a79344f23ceea5ebc8b8bfb583fd2",
+    "final-plan.json": "c104b70f3c70ce09dcd46e6ab9bfc6d94816fc85153645a629cf89d9faeaafff",
+    "final-v2-compiled.json": "f4c876f97efbbf1366f3953bb713a0790ab1993fb56441ae2b2a996f19d0c891",
+    "final-v2-result.json": "785131811aa4daaaa17f8893d3e4ad199a56652a6a26ad1b4a4f2e6e3407d448",
+    "historical-replay.json": "b3cf3a5a06d53e1413f9677b383d2ee31a708d08b4b5185e07ed76a5066bac7c",
+    "inventory-after.json": "5daf9fe580dc2f2c58ab9a9731431a43e48d70fe5874da9cc3e437c1e9478458",
+    "inventory-before.json": "5fbf95b4f560d3b9385524f61fbe5b5f37f96ccdf2e5b2271447e0e5430d303c",
+    "leftover-compiled.json": "1703b8cff0c5c785835968784afa4e460b91a26a85e554dd0253f44fbb76d66c",
+    "leftover-control.json": "f49390aea2413f0e1b6bbbb4ad2d356bb46ee1a6755f99a534aacd0a98111ec4",
+    "leftover-result.json": "25f62b16d94800e1b6701c23d33458ba9f9cb32f14015dba7534e0c00d6c3c7c",
+    "parallel-compiled.json": "9a77e4b24e9f237d9c8e2531f7edf8334120f3765187db5fe81104c307914792",
+    "parallel-v4-result.json": "38c24bbdf278cec7c7775b8ced26655348bb91000a0b7db7b16367e86e1742f7",
+    "parallel.json": "26ee26eef423d3e078cc5a08b0b36b189f8c886b4671e46ef540e68e76390dbf",
+    "policy.json": "9038d1d120003ad719cf10c982355e21b5d7bbfff4c850d406f4abd7fad07b6c",
+    "run-parallel-v4-compiled.json": "5b6b61b4e41d303d37eeb3b0b62614dc343a78dac8bc0cfeb45eceef862b0170",
+    "run-serial-v4-compiled.json": "d640687021bb0f56a08584d0ccdc8dbe1a755966a3062c67acb0ccf0f4b2013f",
+    "run-v4-compare.json": "c761b2096dc5596b021ff2a91ebaa3f435f39e630a2ac34f087faa9dca2f0b11",
+    "run-v4-explain.json": "88c81583dc6aa255b2616004b464e2cf12854cadf59ecc6a80ed7d13d5640493",
+    "selection.json": "5fc64e0cdbd2c0d190c3cf9364e64d6480569bd122d03591f820018b81f886f8",
+    "serial-compiled.json": "acdca91648e9edc150afbcb7bc29759e53e54bf5607a879478ee873bc15ae0fc",
+    "serial-v4-result.json": "b782e4576fde9df1fe4dec27b63cc7f26bcd49e8c64637b6fa7c28e2c4503fa6",
+    "serial.json": "4c4d2326656c72c9125958eec61d513d7448d3f2edc11fd6f21cb718bef2c72d",
+    "workflow/audit.sh": "b70a84cace452cc4cded50507ba991cdc8ec69a2ac75e1ea4ec70e2b943736c7",
+    "workflow/compose.sh": "6f4c150114ff68a26850150db0cc766f7e03db11e668670dbb075d71d47db000",
+    "workflow/sanitizer-cc": "cecc3ddb298646e5acb08d25e603ea609be71d8aa0d0d72d4d6cc611ee17678d",
+    "workflow/verify.sh": "adc069a048e07606278aae56b670df46fb65f3739d3da006971e875b7d2f03ed"
+  }
+}

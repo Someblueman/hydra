@@ -3,19 +3,26 @@
 set -u
 REPO="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 HYDRA_BIN="$REPO/bin/hydra"
+export HYDRA_TEST_ROOT="$REPO"
+# shellcheck source=/dev/null
+. "$REPO/tests/fixture-tools.sh"
 ROOT="$(mktemp -d)"
 export HYDRA_HOME="$ROOT/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 # shellcheck disable=SC1091
 . "$REPO/tests/helpers.sh"
+# shellcheck source=/dev/null
+. "$REPO/tests/tmux_fixture_cleanup.sh"
 test_count=0 pass_count=0 fail_count=0
 cleanup() {
-    for head in plan-smoke plan-negative plan-guard-graph plan-guard-limits plan-timing-verified-at plan-timing-verification-plan-sha256; do
+    for head in plan-smoke plan-negative plan-obligation plan-guard-graph plan-guard-limits plan-timing-verified-at plan-timing-verification-plan-sha256; do
         (cd "$ROOT/repo" && "$HYDRA_BIN" kill "$head" --force >/dev/null 2>&1) || true
     done
+    test_tmux_fixture_cleanup "$ROOT" || return 1
     if [ "$fail_count" -ne 0 ]; then printf 'Failure evidence: %s\n' "$ROOT"; return; fi
     rm -rf "$ROOT"
 }
-trap cleanup EXIT
+test_code=0
+trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
@@ -26,12 +33,40 @@ if [ "${HYDRA_TEST_REPORT_V2:-0}" = 1 ]; then
 fi
 cp "$REPO/tests/fixtures/plan/plan.json" "$ROOT/plan.json"
 cp "$REPO/tests/fixtures/plan/policy.json" "$ROOT/policy.json"
+if [ "${HYDRA_TEST_HEADLESS:-0}" = 1 ]; then
+    # shellcheck source=/dev/null
+    . "$REPO/tests/headless_path.sh"
+    headless_path "$ROOT/no-tmux"
+    fixture_json headless-plan "$ROOT/plan.json"
+fi
+merge_obligations() {
+    fixture_json merge-obligations "$1" "$2" "$3" "$4"
+}
+merge_obligations "$ROOT/plan.json" "$REPO/tests/fixtures/plan-9a/feature-obligations.json" "$ROOT/feature-plan.json" feature
+merge_obligations "$ROOT/plan.json" "$REPO/tests/fixtures/plan-9a/performance-misleading.json" "$ROOT/performance-plan.json" performance
+merge_obligations "$ROOT/plan.json" "$REPO/tests/fixtures/plan-9a/research-valid.json" "$ROOT/research-plan.json" research
 cd "$ROOT/repo" || exit 1
 git init -q && git config user.name Test && git config user.email test@example.com
 git add . && git commit -qm fixture
 "$HYDRA_BIN" init --no-agent --trust >/dev/null
 "$HYDRA_BIN" workflow plan schema > "$ROOT/schema.json"
 assert_success $? 'planning schema is discoverable through the public CLI'
+for case in feature performance research; do
+    "$HYDRA_BIN" workflow plan validate "$ROOT/${case}-plan.json" "$ROOT/policy.json" > "$ROOT/${case}-validate.json"
+    assert_success $? "9A $case obligation plan validates"
+    "$HYDRA_BIN" workflow plan compile "$ROOT/${case}-plan.json" "$ROOT/policy.json" "$ROOT/${case}-compiled.json" > "$ROOT/${case}-compile.json"
+    assert_success $? "9A $case obligation plan compiles"
+    grep -q '"obligations":' "$ROOT/${case}-validate.json"
+    assert_success $? "9A $case validation exposes obligation projection"
+done
+grep -q 'semantic_review_required' "$ROOT/performance-validate.json"
+assert_success $? 'performance text check remains a semantic review, not structural proof'
+grep -q 'semantic_review_required' "$ROOT/research-validate.json"
+assert_success $? 'research obligation remains a semantic review, not structural proof'
+"$HYDRA_BIN" workflow plan obligations "$ROOT/feature-compiled.json" --json > "$ROOT/obligations.json"
+assert_success $? 'public CLI exposes the versioned obligation projection'
+grep -q '"structural_proof":"satisfiable"' "$ROOT/obligations.json"
+assert_success $? 'explicit obligation projection reports structural satisfiability only'
 "$HYDRA_BIN" workflow plan validate "$ROOT/plan.json" "$ROOT/policy.json" > "$ROOT/validate.json"
 assert_success $? 'complete plan validates with structured coverage'
 grep -q '"coverage":' "$ROOT/validate.json"
@@ -65,6 +100,10 @@ if grep -q '^HYDRA_PLAN_TUI' "$ROOT/bad-tui.out"; then assert_failure 0 'invalid
 else assert_success 0 'invalid projection emits no partial handshake'; fi
 reject() {
     sed "$1" "$ROOT/plan.json" > "$ROOT/bad.json"
+    cmp -s "$ROOT/plan.json" "$ROOT/bad.json"
+    mutation_status=$?
+    assert_equal 1 "$mutation_status" "$2 mutation changes fixture bytes"
+    [ "$mutation_status" -eq 1 ] || return
     "$HYDRA_BIN" workflow plan validate "$ROOT/bad.json" "$ROOT/policy.json" > "$ROOT/rejection.json" 2>&1
     assert_failure $? "$2"
     grep -q "\"code\":\"$3\"" "$ROOT/rejection.json"
@@ -107,7 +146,9 @@ cmp -s "$run_dir/steps/compose/attempt-1/artifacts/report" expected.txt
 assert_success $? 'delivered bytes match independently checked expected contents'
 "$HYDRA_BIN" workflow plan result "$run" > "$ROOT/result.json"
 assert_success $? 'public result command verifies and returns the final deliverable'
-python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$run_dir" 0 verified
+# shellcheck source=/dev/null
+. "$(dirname "$HYDRA_BIN")/../tests/fixture-tools.sh"
+statistics_evidence "$HYDRA_BIN" "$run_dir" 0 verified
 assert_success $? "independently verified timing reconciles with the native aggregate"
 printf 'tampered\n' > "$run_dir/steps/compose/attempt-1/artifacts/report"
 "$HYDRA_BIN" workflow plan result "$run" >/dev/null 2>&1
@@ -136,7 +177,9 @@ run="$(sed -n '1p' "$ROOT/negative.out")"
 grep -q '"state":"failed"' "$ROOT/negative-status.json"
 assert_success $? 'negative assessment makes the overall run fail'
 negative_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
-python3 "$(dirname "$HYDRA_BIN")/../tests/statistics_evidence.py" "$HYDRA_BIN" "$negative_dir" 0 unverified
+# shellcheck source=/dev/null
+. "$(dirname "$HYDRA_BIN")/../tests/fixture-tools.sh"
+statistics_evidence "$HYDRA_BIN" "$negative_dir" 0 unverified
 assert_success $? "negative verification remains missing in the eligible plan cohort"
 grep -q '"step_id":"verify","state":"succeeded"' "$ROOT/negative-status.json"
 assert_success $? 'negative verdict is evaluated after all child steps succeeded'

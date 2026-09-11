@@ -22,6 +22,8 @@ for timing_field in verified-at verification-plan-sha256; do
     assert_equal succeeded "$(cat "$timing_dir/state")" "verified plan succeeds without $timing_field"
     "$HYDRA_BIN" workflow plan result "$timing_run" > "$ROOT/timing-$timing_field.result"
     assert_success $? "fresh result verification succeeds without $timing_field"
-    python3 "$REPO/tests/statistics_evidence.py" "$HYDRA_BIN" "$timing_dir" 0 unverified
+    # shellcheck source=/dev/null
+    . "$REPO/tests/fixture-tools.sh"
+    statistics_evidence "$HYDRA_BIN" "$timing_dir" 0 unverified
     assert_success $? "partial $timing_field persistence leaves old verification timing unknown"
 done

@@ -22,6 +22,10 @@ cmd_switch() {
             cli_error switch not_found "No Hydra head found for branch '$_cs_branch'" "run hydra list"
             return 1
         fi
+        if [ "$(get_terminal_mode_for_branch "$_cs_branch" 2>/dev/null || echo interactive)" = headless ]; then
+            cli_error switch unavailable "Head '$_cs_branch' is headless and has no attachable terminal" "use hydra exec --branch $_cs_branch or hydra list"
+            return 1
+        fi
         switch_to_session "$_cs_session"
         return $?
     fi
@@ -267,7 +271,10 @@ cmd_status() {
     done
 
     # Collect system info
-    tmux_ver="$(tmux -V 2>/dev/null || echo "Not installed")"
+    tmux_ver="Not installed"
+    if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then
+        tmux_ver="$(tmux -V 2>/dev/null || echo "Not installed")"
+    fi
     git_ver="$(git --version 2>/dev/null | sed 's/git version //' || echo "Not installed")"
 
     # Repository info
@@ -286,7 +293,7 @@ cmd_status() {
         dead=0
 
         if state_has_heads; then
-            tmux_load_snapshot
+            if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then tmux_load_snapshot; else tmux_clear_snapshot; fi
             while IFS=' ' read -r branch session ai _group timestamp _deps _pr; do
                 # Calculate duration
                 duration_secs=0
@@ -295,7 +302,8 @@ cmd_status() {
                 fi
 
                 # Determine status
-                if tmux_snapshot_has_session "$session"; then
+                _status_mode="$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)"
+                if [ "$_status_mode" = headless ] || tmux_snapshot_has_session "$session"; then
                     status="active"
                     active=$((active + 1))
                 else
@@ -310,9 +318,10 @@ cmd_status() {
                 fi
 
                 lifecycle_snapshot "$branch"
-                printf '{"branch": "%s", "session": "%s", "ai": %s, "status": "%s", "duration_seconds": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s}\n' \
+                printf '{"branch": "%s", "session": "%s", "terminal_mode": "%s", "ai": %s, "status": "%s", "duration_seconds": %s, "instance_id": %s, "declared_outcome": %s, "observed_status": "%s", "observed_confidence": "%s", "liveness": "%s", "complete": %s}\n' \
                     "$(json_escape "$branch")" \
                     "$(json_escape "$session")" \
+                    "$(json_escape "$_status_mode")" \
                     "$ai_json" \
                     "$status" \
                     "$duration_secs" \
@@ -383,7 +392,7 @@ EOF
         active=0
         dead=0
 
-        tmux_load_snapshot
+        if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then tmux_load_snapshot; else tmux_clear_snapshot; fi
         while IFS=' ' read -r branch session ai _group timestamp _deps _pr; do
             # Calculate duration if timestamp exists
             duration_str=""
@@ -407,7 +416,8 @@ EOF
 
             lifecycle_snapshot "$branch"
             lifecycle_info="[declared: ${LIFECYCLE_SNAPSHOT_OUTCOME:-none}] [observed: $LIFECYCLE_SNAPSHOT_OBSERVED/$LIFECYCLE_SNAPSHOT_CONFIDENCE] [live: $LIFECYCLE_SNAPSHOT_LIVENESS]"
-            if tmux_snapshot_has_session "$session"; then
+            _status_mode="$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)"
+            if [ "$_status_mode" = headless ] || tmux_snapshot_has_session "$session"; then
                 echo "  [OK] $branch -> $session $info $lifecycle_info"
                 active=$((active + 1))
             else

@@ -7,6 +7,7 @@ fail_count=0
 root="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
 binary="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+package_binary="${HYDRA_TEST_PACKAGE_BINARY:-$binary}"
 trap 'rm -rf "$fixture"' 0
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
@@ -14,6 +15,9 @@ trap 'exit 143' HUP TERM
 # shellcheck disable=SC1091
 . "$root/tests/helpers.sh"
 
+# shellcheck source=/dev/null
+. "$root/tests/headless_path.sh"
+headless_path "$fixture/no-tmux"
 source_tree="$fixture/source"
 test_home="$fixture/home"
 prefix="$fixture/installed"
@@ -44,6 +48,27 @@ assert_equal 'Hydra fleet protocol 1' "$("$prefix/libexec/hydra/hydra-fleet" --v
 assert_success $? "installed shell discovers its adjacent fleet helper"
 grep -q '"task_protocol":1' "$fixture/handshake.json"
 assert_success $? "installed fleet exposes the task protocol"
+
+# Controlled SSH boundary also exercises the bootstrap script with no tmux.
+mkdir "$fixture/transport"
+cat > "$fixture/transport/ssh" <<'SSH'
+#!/bin/sh
+while [ "$#" -gt 2 ]; do shift; done
+exec /bin/sh -c "$2"
+SSH
+chmod +x "$fixture/transport/ssh"
+(
+    unset HYDRA_ROOT HYDRA_FLEET_BIN
+    export HOME="$test_home" HYDRA_HOME="$test_home/state" PATH="$fixture/transport:$PATH"
+    "$prefix/bin/hydra" remote add bootstrap loopback --hydra "$prefix/bin/hydra" >/dev/null || exit 1
+    "$prefix/bin/hydra" fleet package --source "$root" --binary "$package_binary" --output "$fixture/package" > "$fixture/package.json" || exit 1
+    digest="$(sed -n 's/.*"sha256":"\([^"]*\)".*/\1/p' "$fixture/package.json")"
+    "$prefix/bin/hydra" fleet bootstrap bootstrap --input "$fixture/package" --sha256 "$digest" > "$fixture/bootstrap.json" || exit 1
+    "$prefix/bin/hydra" doctor > "$fixture/doctor.log"
+)
+assert_success $? "pinned bootstrap and doctor work without tmux"
+grep -q '"ok":true' "$fixture/bootstrap.json"
+assert_success $? "bootstrap qualifies the installed protocol without a terminal"
 
 install_fleet "$fixture/disabled" never
 assert_success $? "never mode installs the shell with a fleet binary available"

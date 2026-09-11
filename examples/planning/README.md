@@ -1,11 +1,13 @@
 # Local objective planning examples
 
-These are agent-authored plans exercised through Hydra's public planning CLI.
-`feature` starts with a missing `slugify` implementation and produces an integrated
-source archive that a separate head builds and tests. `research` measures a
-supplied trace, uses an analyst to interpret it, composes a complete report and
-uses a separate assessor session to evaluate the sealed report. Both use the
-existing `opencode` profile, which must already be authenticated.
+These fixed examples exercise Hydra's public planning and independent outcome checks without an authenticated provider. `feature` assembles a missing slug implementation and validates the sealed candidate with a separate build and public CLI checks. `performance` measures a fixed line-count comparison and independently recomputes its result. `research` answers a bounded scheduling question from a supplied trace and accepts a reproducible negative result. `patterns` compares bounded static decompositions.
+
+[Finite manifest maps](manifest-map/README.md) freeze selected and skipped members
+before admission. [Staged planning](../../docs/PLAN_STAGED.md) passes an accepted,
+source-bound finding into a separately compiled static graph. The
+[planner evaluation pilot](evaluation/README.md) retains six frozen candidates,
+independent finite cases and incorrect-artifact controls; its observed interface
+conformance difference does not establish a planning benefit.
 
 Run each in a **new disposable Git repository**. Do not run these spawn recipes
 inside Hydra's implementation checkout. For example, from the Hydra checkout:
@@ -28,7 +30,9 @@ git commit -m 'Planning example source'
 "$hydra_bin" workflow plan show ../compiled.json
 ```
 
-Review the policy, source recipes, declared writes and provider permissions.
+Review the policy, source recipes, declared writes and exact checker recipe. Copy every example source file into the disposable repository root before compiling; plans bind the copied source and data hashes.
+For `manifest-map` and `staged`, also copy `examples/planning/native/payload.sh`
+into that repository. It supplies their shared fixed worker and join recipes.
 Run `hydra workflow plan run ../compiled.json --accept <reported-sha256>` only
 with authorization for that exact scope. Record the returned run ID, inspect
 `workflow status <run-id> --json`, and use `workflow plan result <run-id>` to
@@ -41,8 +45,4 @@ a newly compiled artifact and acceptance. A failed run is retained as evidence;
 it does not authorize silent retries or weaker checks. Runtime/provider versions,
 source paths and content affect the compiled digest.
 
-The worker returns raw source; composition supplies the fixed public header include and
-a final newline before strict compilation. Research prompts embed their sealed input content so an agent does
-not need access to external run directories. Write scopes remain declarations,
-not OS isolation. See [the planner recipe](../../docs/PLANNER_RECIPE.md) and
-[qualification evidence](../../docs/evidence/plan-qualification.md).
+Write scopes remain declarations, not OS isolation. Performance execution requires an explicitly coordinated measurement window. See the [planner recipe](../../docs/PLANNER_RECIPE.md), historical [provider qualification](../../docs/evidence/plan-qualification.md), and current [feature](../../docs/evidence/9d-feature-outcome.md), [performance](../../docs/evidence/9d-performance-outcome.md), and [research](../../docs/evidence/9d-research-outcome.md) evidence. The retained historical provider runs are not prerequisites for these deterministic examples.

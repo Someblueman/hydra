@@ -1,0 +1,1 @@
+{"schema_version":1,"ok":false,"command":"workflow plan","error":{"code":"invalid_or_stale_plan","message":"plan is malformed, unaccepted, changed, unsupported, or lacks passing artifact-bound verification","recovery":"inspect the compiled artifact, source, inputs, head availability and verification; compile and accept fresh scope when bindings change"}}

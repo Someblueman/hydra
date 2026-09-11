@@ -4,6 +4,7 @@
 #include "fleet/support/process.h"
 #include "fleet/transport/server.h"
 #include "fleet/task/task.h"
+#include "fleet/retention/retention.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,11 @@ static json_object *receipt(const char *directory, const char *id, const char *d
         f_string_add(state, "result_state", "unknown"); f_string_add(state, "result_error", "owner_unavailable");
     }
     task_cancel_view(directory, stored_digest, state);
+    json_object *retained = retention_state(directory);
+    if (retained) {
+        json_object_object_add(accepted, "retention", retained);
+        f_string_add(state, "result_state", "expired"); f_string_add(state, "result_error", "evidence_expired");
+    }
     json_object_object_add(accepted, "runtime", json_object_get(state));
     result = f_success("fleet-task", json_object_get(accepted));
 done:
@@ -71,12 +77,12 @@ static int mapped_project(const char *requested, char canonical[F_PATH], char id
 }
 static bool dependencies(json_object *spec) {
     json_object *caps = f_field(spec, "capabilities"); size_t i;
-    const char *supported[] = {"exec", "workflow", "git", "tmux", "agent-headless", "workflow-data", "workflow-approval-wait", NULL};
+    const char *supported[] = {"exec", "workflow", "git", "tmux", "agent-headless", "workflow-data", "workflow-approval-wait", "execution-headless", NULL};
     for (i = 0; i < json_object_array_length(caps); i++) {
         const char *name = f_text(json_object_array_get_idx(caps, i)); size_t j;
         if (!strncmp(name, "label.", 6) && f_name(name + 6)) continue;
         for (j = 0; supported[j] && strcmp(name, supported[j]); j++) {}
-        if (!supported[j]) return false;
+        if (!supported[j] || (!strcmp(name, "tmux") && !f_terminal_available())) return false;
     }
     return true;
 }
@@ -110,8 +116,8 @@ json_object *task_accept(json_object *package, const char *key) {
     if (!dependencies(spec)) {
         result = f_error("fleet-task-submit", "capability_unavailable", "the task requires a capability this receiver does not implement"); goto done;
     }
-    if (!executable("git", "--version") || !executable("tmux", "-V") || !executable(f_hydra, "version")) {
-        result = f_error("fleet-task-submit", "missing_dependency", "the receiving host requires working Git, tmux, and the Hydra shell CLI"); goto done;
+    if (!executable("git", "--version") || !executable(f_hydra, "version")) {
+        result = f_error("fleet-task-submit", "missing_dependency", "the receiving host requires working Git and the Hydra shell CLI"); goto done;
     }
     if (f_stopped) { result = f_error("fleet-task-submit", "cancelled", "submission was interrupted before acceptance"); goto done; }
     accepted = json_object_new_object(); json_object_object_add(accepted, "schema_version", json_object_new_int(1));
@@ -136,20 +142,46 @@ done:
     if (staged) f_remove_tree(stage);
     json_object_put(binding); json_object_put(accepted); json_object_put(state); json_object_put(inspected); return result;
 }
-json_object *task_serve(json_object *request) {
-    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", "stream", "offset", "limit", "source", "step", "attempt", "request_id", "decision", "by", NULL};
-    const char *operation = f_string(request, "operation");
-    if (!task_keys(request, keys) || !operation) return f_error("fleet-task", "invalid_input", "invalid task request");
-    if (strcmp(operation, "decide") && (f_field(request, "request_id") || f_field(request, "decision") || f_field(request, "by"))) return f_error("fleet-task", "invalid_input", "decision fields require decide");
-    if (strcmp(operation, "logs") && (f_field(request, "stream") || f_field(request, "offset") || f_field(request, "limit") || f_field(request, "source") || f_field(request, "step") || f_field(request, "attempt"))) return f_error("fleet-task", "invalid_input", "log options require the logs operation");
+static json_object *task_read_operation(json_object *request, const char *operation) {
     if ((!strcmp(operation, "requests") || !strcmp(operation, "decide")) && !f_field(request, "package") && !f_field(request, "submission_key") &&
         (strcmp(operation, "requests") || !f_field(request, "trust_spec"))) return task_approval(f_string(request, "task_id"), request);
-    if (!strcmp(operation, "resume") && !f_field(request, "package") && !f_field(request, "submission_key")) return task_resume(f_string(request, "task_id"), f_string(request, "trust_spec"));
-    if (!strcmp(operation, "logs") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) {
+    if (!strcmp(operation, "resume") && !f_field(request, "package") && !f_field(request, "submission_key"))
+        return task_resume(f_string(request, "task_id"), f_string(request, "trust_spec"));
+    if (!strcmp(operation, "logs") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec"))
         return task_logs(f_string(request, "task_id"), request);
-    }
-    if (!strcmp(operation, "result") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_result(f_string(request, "task_id"));
-    if (!strcmp(operation, "cancel") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec")) return task_cancel(f_string(request, "task_id"));
+    if (!strcmp(operation, "result") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec"))
+        return task_result(f_string(request, "task_id"));
+    if (!strcmp(operation, "cancel") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec"))
+        return task_cancel(f_string(request, "task_id"));
+    if (!strcmp(operation, "observe") && !f_field(request, "package") && !f_field(request, "submission_key") && !f_field(request, "trust_spec"))
+        return task_observation(f_string(request, "task_id"), request);
+    return NULL;
+}
+
+static json_object *task_validate_option_groups(json_object *request, const char *operation) {
+    if (strcmp(operation, "decide") && (f_field(request, "request_id") || f_field(request, "decision") || f_field(request, "by"))) return f_error("fleet-task", "invalid_input", "decision fields require decide");
+    if (strcmp(operation, "logs") && (f_field(request, "stream") || f_field(request, "offset") || f_field(request, "limit") || f_field(request, "source") || f_field(request, "step") || f_field(request, "attempt"))) return f_error("fleet-task", "invalid_input", "log options require the logs operation");
+    if (strcmp(operation, "observe") && (f_field(request, "cursor") || f_field(request, "event_limit"))) return f_error("fleet-task", "invalid_input", "event options require the observe operation");
+    if (strcmp(operation, "observe") && f_field(request, "stream_id")) return f_error("fleet-task", "invalid_input", "stream identity requires the observe operation");
+    if (strcmp(operation, "observe") && f_field(request, "byte_offset")) return f_error("fleet-task", "invalid_input", "byte offset requires the observe operation");
+    return NULL;
+}
+
+static json_object *task_validate_observe(json_object *request, const char *operation) {
+    if (strcmp(operation, "observe")) return NULL;
+    if (f_field(request, "stream_id") && (!f_text(f_field(request, "stream_id")) || strlen(f_text(f_field(request, "stream_id"))) >= 128)) return f_error("fleet-task-observe", "invalid_input", "stream identity is bounded text");
+    if ((f_field(request, "cursor") && (!json_object_is_type(f_field(request, "cursor"), json_type_int) || json_object_get_int64(f_field(request, "cursor")) < 0 || json_object_get_int64(f_field(request, "cursor")) > 4294967295U)) || (f_field(request, "event_limit") && (!json_object_is_type(f_field(request, "event_limit"), json_type_int) || json_object_get_int64(f_field(request, "event_limit")) < 1 || json_object_get_int64(f_field(request, "event_limit")) > 128))) return f_error("fleet-task-observe", "invalid_input", "cursor must be 0-4294967295 and event-limit must be 1-128");
+    if (f_field(request, "byte_offset") && (!json_object_is_type(f_field(request, "byte_offset"), json_type_int) || json_object_get_int64(f_field(request, "byte_offset")) < 0 || json_object_get_int64(f_field(request, "byte_offset")) > 4294967295U)) return f_error("fleet-task-observe", "invalid_input", "byte offset must be 0-4294967295");
+    return NULL;
+}
+
+json_object *task_serve(json_object *request) {
+    const char *const keys[] = {"protocol", "action", "operation", "package", "submission_key", "task_id", "trust_spec", "stream", "offset", "limit", "source", "step", "attempt", "cursor", "event_limit", "byte_offset", "stream_id", "request_id", "decision", "by", NULL};
+    const char *operation = f_string(request, "operation");
+    if (!task_keys(request, keys) || !operation) return f_error("fleet-task", "invalid_input", "invalid task request");
+    { json_object *invalid = task_validate_option_groups(request, operation); if (invalid) return invalid; }
+    { json_object *invalid = task_validate_observe(request, operation); if (invalid) return invalid; }
+    { json_object *read = task_read_operation(request, operation); if (read) return read; }
     if (!strcmp(operation, "submit") && !f_field(request, "task_id")) {
         const char *trust = f_string(request, "trust_spec"), *digest = f_string(f_field(request, "package"), "spec_sha256"); json_object *accepted;
         if (f_field(request, "trust_spec") && (!task_hex(trust, 64) || !digest || strcmp(trust, digest))) return f_error("fleet-task-submit", "trust_required", "--trust-spec must match the prepared specification digest");

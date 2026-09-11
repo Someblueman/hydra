@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "envelope": {
+    "hosts": [
+      "local"
+    ],
+    "tools": [
+      "sh",
+      "./plan-example"
+    ],
+    "effects": [
+      "worktree",
+      "execute"
+    ],
+    "writes": [],
+    "parallelism": 2,
+    "timeout_seconds": 900,
+    "artifact_bytes": 524288,
+    "max_heads": 2,
+    "disk_mb": 2,
+    "retry_budget": 0,
+    "repair_budget": 0
+  }
+}

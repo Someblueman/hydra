@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "id": "pattern-forkjoin",
+  "objective": "Assemble and independently verify a two-member bounded report from fixed source-bound work.",
+  "context": [],
+  "assumptions": [
+    "The two fixed members are known before compilation; no dynamic join or provider is used.",
+    "Worker artifacts are explicit inputs to one composer and one independent checker."
+  ],
+  "questions": [],
+  "envelope": {
+    "hosts": [
+      "local"
+    ],
+    "tools": [
+      "sh",
+      "./plan-example"
+    ],
+    "effects": [
+      "worktree",
+      "execute"
+    ],
+    "writes": [],
+    "parallelism": 4,
+    "timeout_seconds": 180,
+    "artifact_bytes": 32768,
+    "max_heads": 5,
+    "disk_mb": 1,
+    "retry_budget": 0,
+    "repair_budget": 0
+  },
+  "steps": [
+    {
+      "id": "spawn-a",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {
+        "branch": "forkjoin-a",
+        "terminal_mode": "headless"
+      }
+    },
+    {
+      "id": "spawn-b",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {
+        "branch": "forkjoin-b",
+        "terminal_mode": "headless"
+      }
+    },
+    {
+      "id": "spawn-compose",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {
+        "branch": "forkjoin-compose",
+        "terminal_mode": "headless"
+      }
+    },
+    {
+      "id": "work-a",
+      "role": "work",
+      "kind": "exec",
+      "needs": [
+        "spawn-a"
+      ],
+      "writes": [],
+      "args": {
+        "head": "forkjoin-a",
+        "argv": [
+          "sh",
+          "worker_a.sh"
+        ],
+        "timeout": 30
+      }
+    },
+    {
+      "id": "work-b",
+      "role": "work",
+      "kind": "exec",
+      "needs": [
+        "spawn-b"
+      ],
+      "writes": [],
+      "args": {
+        "head": "forkjoin-b",
+        "argv": [
+          "sh",
+          "worker_b.sh"
+        ],
+        "timeout": 30
+      }
+    },
+    {
+      "id": "compose",
+      "role": "compose",
+      "kind": "exec",
+      "needs": [
+        "spawn-compose",
+        "work-a",
+        "work-b"
+      ],
+      "writes": [],
+      "args": {
+        "head": "forkjoin-compose",
+        "argv": [
+          "sh",
+          "compose.sh"
+        ],
+        "timeout": 30
+      }
+    },
+    {
+      "id": "spawn-check",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {
+        "branch": "forkjoin-check",
+        "terminal_mode": "headless"
+      }
+    },
+    {
+      "id": "check",
+      "role": "verify",
+      "kind": "exec",
+      "needs": [
+        "spawn-check",
+        "compose"
+      ],
+      "writes": [],
+      "args": {
+        "head": "forkjoin-check",
+        "argv": [
+          "./plan-example",
+          "pattern-check"
+        ],
+        "timeout": 30
+      }
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "report",
+      "description": "Bounded assembled report",
+      "step": "compose",
+      "output": "report",
+      "destination": "run-artifact"
+    }
+  ],
+  "checks": [
+    {
+      "id": "check",
+      "method": "executable",
+      "definition": "{\"predicate\":\"equals\",\"cases\":[{\"id\":\"assembly-case\",\"expected\":\"pass\"}]}",
+      "step": "check",
+      "input": "subject",
+      "report": "check",
+      "deliverable": "report"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "assembly",
+      "criterion": "Both fixed worker artifacts are assembled and independently checked.",
+      "deliverable": "report",
+      "check": "check"
+    }
+  ],
+  "data": {
+    "schema_version": 1,
+    "inputs": {},
+    "steps": {
+      "work-a": {
+        "outputs": {
+          "a": {
+            "type": "file",
+            "path": "a",
+            "max_bytes": 128
+          }
+        }
+      },
+      "work-b": {
+        "outputs": {
+          "b": {
+            "type": "file",
+            "path": "b",
+            "max_bytes": 128
+          }
+        }
+      },
+      "compose": {
+        "inputs": {
+          "a": {
+            "step": "work-a",
+            "output": "a"
+          },
+          "b": {
+            "step": "work-b",
+            "output": "b"
+          }
+        },
+        "outputs": {
+          "report": {
+            "type": "file",
+            "path": "report",
+            "max_bytes": 512
+          }
+        }
+      },
+      "check": {
+        "inputs": {
+          "subject": {
+            "step": "compose",
+            "output": "report"
+          }
+        },
+        "outputs": {
+          "check": {
+            "type": "object",
+            "path": "check",
+            "max_bytes": 8192
+          }
+        }
+      }
+    }
+  },
+  "obligations": [
+    {
+      "id": "assembly-check",
+      "requirement": "assembly",
+      "intent_ref": "objective",
+      "subject": {
+        "deliverable": "report",
+        "step": "compose",
+        "output": "report"
+      },
+      "criterion": "Both fixed worker artifacts are assembled and independently checked.",
+      "evaluation": {
+        "method": "executable",
+        "check": "check"
+      },
+      "required_evidence": [
+        "subject_sha256",
+        "verdict",
+        "evidence",
+        "case_inventory",
+        "observations",
+        "raw_evidence_sha256"
+      ],
+      "environment": {
+        "hosts": [
+          "local"
+        ],
+        "tools": [
+          "sh",
+          "./plan-example"
+        ],
+        "effects": [
+          "execute"
+        ]
+      },
+      "completion_rule": "verdict=pass",
+      "limitations": [
+        "bounded fixture"
+      ]
+    }
+  ]
+}

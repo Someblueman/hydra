@@ -42,7 +42,8 @@ get_active_session_count() {
     fi
     _count=0
     while IFS=' ' read -r _branch _session _rest; do
-        if [ -n "$_session" ] && tmux_session_exists "$_session"; then
+        _mode="$(get_terminal_mode_for_branch "$_branch" 2>/dev/null || echo interactive)"
+        if [ "$_mode" = headless ] || { [ -n "$_session" ] && tmux_session_exists "$_session"; }; then
             _count=$((_count + 1))
         fi
     done <<EOF

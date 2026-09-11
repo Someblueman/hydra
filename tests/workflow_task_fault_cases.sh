@@ -40,6 +40,19 @@ case "$HYDRA_TEST_DAG_FAULT" in
         ;;
     *) exit 1 ;;
 esac
+if [ "$HYDRA_TEST_DAG_FAULT" = cancel-offline ]; then
+    HYDRA_TEST_DAG_RUN=$run_dir
+    HYDRA_TEST_DAG_REAL_FIND=$(command -v find)
+    HYDRA_TEST_DAG_REAL_MV=$(command -v mv)
+    export HYDRA_TEST_DAG_RUN HYDRA_TEST_DAG_REAL_FIND HYDRA_TEST_DAG_REAL_MV
+    mkdir "$fixture/snapshot-tools"
+    for tool in find mv; do
+        ln -s "$root/tests/fixtures/workflow/cancel-snapshot.sh" "$fixture/snapshot-tools/$tool"
+    done
+    printf '0\n' > "$fixture/cancel-snapshot-count"
+    PATH="$fixture/snapshot-tools:$PATH"
+    export PATH
+fi
 case "$HYDRA_TEST_DAG_FAULT" in
     cancel*) "$root/bin/hydra" workflow cancel "$run" > "$fixture/fault.out" 2> "$fixture/fault.err" || : ;;
     *) "$root/bin/hydra" workflow resume "$run" > "$fixture/fault.out" 2> "$fixture/fault.err" || : ;;
@@ -52,7 +65,13 @@ if [ "$HYDRA_TEST_DAG_FAULT" = cancel ]; then
         "$root/bin/hydra" workflow resume "$run" > "$fixture/cancel-resume.out" 2> "$fixture/cancel-resume.err" || :
     done
 fi
-[ "$(cat "$run_dir/state")" = "$expected" ]
+actual=$(cat "$run_dir/state")
+if [ "$actual" != "$expected" ]; then
+    printf 'Task DAG %s: expected %s, got %s\n' "$HYDRA_TEST_DAG_FAULT" "$expected" "$actual" >&2
+    cat "$fixture/fault.out" "$fixture/fault.err" >&2
+    exit 1
+fi
+if [ "$HYDRA_TEST_DAG_FAULT" = cancel-offline ]; then [ -f "$fixture/cancel-snapshot-raced" ]; fi
 [ "$(find "$HYDRA_HOME/fleet/tasks" -name acceptance.json | wc -l | tr -d ' ')" = 1 ]
 [ ! -d "$run_dir/steps/consume/attempt-1" ]
 export passed=1

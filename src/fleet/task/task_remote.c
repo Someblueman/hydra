@@ -24,9 +24,101 @@ struct remote_options {
     const char *host, *output, *timeout, *input, *key, *id, *trust;
     const char *stream, *offset, *limit, *source, *step, *attempt;
     const char *request_id, *decision, *actor;
-    bool submit, start, cancel, logs, resume, decide, result_read;
+    const char *cursor, *event_limit, *byte_offset, *stream_id;
+    bool submit, start, cancel, logs, resume, decide, result_read, observe;
     unsigned log_offset, log_limit, seconds;
+    unsigned event_cursor, event_count;
 };
+
+static bool observation_text(json_object *object, const char *key, size_t limit, bool nullable_value) {
+    json_object *value = f_field(object, key); const char *text = f_text(value);
+    const unsigned char *p;
+    if (nullable_value && json_object_is_type(value, json_type_null)) return true;
+    if (!text || strlen(text) >= limit) return false;
+    for (p = (const unsigned char *)text; *p; p++) if (*p < 32 || *p == 127) return false;
+    return true;
+}
+
+static bool observation_time(json_object *object, const char *key) {
+    json_object *value = f_field(object, key);
+    return json_object_is_type(value, json_type_null) ||
+        (json_object_is_type(value, json_type_int) && json_object_get_int64(value) >= 0);
+}
+
+static bool bounded_string_array(json_object *array, size_t limit) {
+    size_t i;
+    if (!json_object_is_type(array, json_type_array) || json_object_array_length(array) > limit) return false;
+    for (i = 0; i < json_object_array_length(array); i++) {
+        const unsigned char *p; const char *value = f_text(json_object_array_get_idx(array, i));
+        if (!value || strlen(value) >= 1024) return false;
+        for (p = (const unsigned char *)value; *p; p++) if (*p < 32 || *p == 127) return false;
+    }
+    return true;
+}
+
+static bool pending_requests_valid(json_object *pending) {
+    size_t i;
+    if (!json_object_is_type(pending, json_type_array) || json_object_array_length(pending) > 32U) return false;
+    for (i = 0; i < json_object_array_length(pending); i++) {
+        json_object *request = json_object_array_get_idx(pending, i);
+        if (!json_object_is_type(request, json_type_object) || !observation_text(request, "request_id", 128, false) ||
+            !observation_text(request, "step_id", 128, false) || !observation_text(request, "state", 64, false) ||
+            !observation_text(request, "message", 1024, true) || !observation_text(request, "expires_at", 128, true)) return false;
+    }
+    return true;
+}
+
+bool task_observation_response_valid(json_object *data, const char *id) {
+    json_object *task, *owner, *waiting, *times, *steps, *pending, *contract; const char *reason; size_t i;
+    if (!f_number_is(data, "snapshot_schema_version", 1) ||
+        !observation_time(data, "receiver_observed_at") ||
+        !(task = f_field(data, "task")) || !json_object_is_type(task, json_type_object) ||
+        !observation_text(task, "task_id", 128, false) || strcmp(f_string(task, "task_id"), id) ||
+        !observation_text(task, "run_id", 128, true) || !observation_text(task, "step_id", 128, true) ||
+        !observation_text(task, "attempt_id", 128, true) || !observation_text(task, "assigned_host", 256, true) ||
+        !observation_text(task, "workspace", F_PATH, true) || !observation_text(task, "agent_profile", 128, false) ||
+        !observation_text(task, "execution_state", 64, false) ||
+        !(owner = f_field(task, "execution_owner")) || !json_object_is_type(owner, json_type_object) ||
+        !observation_text(owner, "kind", 64, false) || !observation_text(owner, "state", 64, false) ||
+        !observation_text(owner, "recorded_state", 64, true) || !observation_text(owner, "failure", 1024, true) ||
+        !(waiting = f_field(task, "waiting")) || !json_object_is_type(waiting, json_type_object) ||
+        !observation_text(waiting, "reason", 32, false) || !observation_text(waiting, "detail", 1024, false) ||
+        !observation_text(waiting, "next_action", 1024, false) || !(reason = f_string(waiting, "reason")) ||
+        (strcmp(reason, "admission") && strcmp(reason, "dependency") && strcmp(reason, "authentication") &&
+         strcmp(reason, "approval") && strcmp(reason, "reconciliation") && strcmp(reason, "none")) ||
+        !(times = f_field(task, "observation_timestamps")) || !json_object_is_type(times, json_type_object) ||
+        !observation_time(times, "accepted_at") || !observation_time(times, "started_at") ||
+        !observation_time(times, "resumed_at") || !observation_time(times, "finished_at") ||
+        !observation_time(times, "receiver_observed_at") ||
+        !json_object_is_type(f_field(task, "effective_configuration"), json_type_object) ||
+        strlen(json_object_to_json_string_ext(f_field(task, "effective_configuration"), JSON_C_TO_STRING_PLAIN)) >= 131072 ||
+        !(contract = f_field(task, "contract")) || !json_object_is_type(contract, json_type_object) ||
+        !observation_text(contract, "availability", 32, false) || !observation_text(contract, "reason", 1024, false) ||
+        !bounded_string_array(f_field(contract, "missing_evidence"), 32U) ||
+        !(steps = f_field(task, "steps")) || !json_object_is_type(steps, json_type_array) ||
+        json_object_array_length(steps) > 512U || !(pending = f_field(task, "pending_requests")) ||
+        !pending_requests_valid(pending)) return false;
+    for (i = 0; i < json_object_array_length(steps); i++) {
+        json_object *step = json_object_array_get_idx(steps, i);
+        if (!json_object_is_type(step, json_type_object) || !observation_text(step, "step_id", 128, false) ||
+            !observation_text(step, "attempt_id", 128, true) || !observation_text(step, "state", 64, false) ||
+            !observation_text(step, "agent_profile", 128, false) || !observation_text(step, "kind", 64, false) ||
+            !observation_text(step, "waiting_reason", 32, false)) return false;
+    }
+    return true;
+}
+
+static bool response_binding_valid(json_object *response, const struct remote_options *options, json_object *package) {
+    json_object *data = f_field(response, "data");
+    const char *received = f_string(data, "task_id"), *digest = f_string(data, "spec_sha256"), *received_key = f_string(data, "submission_key");
+    if (options->observe) {
+        json_object *task = f_field(data, "task");
+        return task_observation_response_valid(data, options->id) && f_string(task, "task_id");
+    }
+    if (!received || strncmp(received, "task_", 5) || !task_hex(received + 5, 64) || !task_hex(digest, 64)) return false;
+    if (options->submit) return received_key && !strcmp(received_key, options->key) && !strcmp(digest, f_string(package, "spec_sha256"));
+    return !strcmp(received, options->id);
+}
 
 static bool number(const char *text, unsigned minimum, unsigned maximum, unsigned *result) {
     unsigned long value = strtoul(text, NULL, 10);
@@ -34,10 +126,22 @@ static bool number(const char *text, unsigned minimum, unsigned maximum, unsigne
     *result = (unsigned)value;
     return true;
 }
+static json_object *parse_observe_limits(struct remote_options *options) {
+    unsigned ignored;
+    if (options->cursor && !number(options->cursor, 0, 4294967295U, &options->event_cursor)) return f_error("fleet-task-observe", "invalid_input", "cursor must be 0-4294967295");
+    options->event_count = 128;
+    if (options->event_limit && !number(options->event_limit, 1, 128, &options->event_count)) return f_error("fleet-task-observe", "invalid_input", "event limit must be 1-128");
+    if (options->byte_offset && !number(options->byte_offset, 0, 4294967295U, &ignored)) return f_error("fleet-task-observe", "invalid_input", "byte offset must be 0-4294967295");
+    return NULL;
+}
+
 static json_object *parse_limits(struct remote_options *options) {
     unsigned attempt;
     if (options->timeout && !number(options->timeout, 1, 300, &options->seconds))
         return f_error(options->cancel ? "fleet-task-cancel" : "fleet-task-result", "invalid_input", "timeout must be 1-300 seconds");
+    if (!options->logs && options->observe) {
+        return parse_observe_limits(options);
+    }
     if (!options->logs) return NULL;
     if (options->attempt && !number(options->attempt, 1, 10000, &attempt))
         return f_error("fleet-task-logs", "invalid_input", "attempt must be 1-10000");
@@ -57,6 +161,7 @@ static json_object *parse_options(int argc, char **argv, struct remote_options *
     options->resume = !strcmp(argv[0], "resume");
     options->decide = !strcmp(argv[0], "decide");
     options->result_read = !strcmp(argv[0], "result");
+    options->observe = !strcmp(argv[0], "observe");
     options->seconds = (options->result_read || options->cancel) ? 30 : 5;
     options->log_limit = 4096;
     if (argc < 2 || !f_name(argv[1])) return f_error("fleet-task", "invalid_input", "select a registered host alias");
@@ -80,7 +185,11 @@ static json_object *parse_options(int argc, char **argv, struct remote_options *
         {"--attempt", options->logs, &options->attempt},
         {"--stream", options->logs, &options->stream},
         {"--offset", options->logs, &options->offset},
-        {"--limit", options->logs, &options->limit}
+        {"--limit", options->logs, &options->limit},
+        {"--cursor", options->observe, &options->cursor},
+        {"--event-limit", options->observe, &options->event_limit}
+        ,{"--stream-id", options->observe, &options->stream_id}
+        ,{"--byte-offset", options->observe, &options->byte_offset}
     };
     for (i = 2; i < argc; i++) {
         const char **destination = NULL;
@@ -98,6 +207,20 @@ static json_object *parse_options(int argc, char **argv, struct remote_options *
     if ((options->submit ? !options->input || !options->key : !options->id) || ((options->start || options->resume || options->decide) && !options->trust) || (options->decide && (!options->request_id || !options->decision))) return f_error("fleet-task", "invalid_input", "required task options are missing");
     return parse_limits(options);
 }
+static void request_log_options(json_object *request, const struct remote_options *options) {
+    if (options->source) f_string_add(request, "source", options->source);
+    if (options->step) f_string_add(request, "step", options->step);
+    if (options->attempt) json_object_object_add(request, "attempt", json_object_new_int64(strtol(options->attempt, NULL, 10)));
+    f_string_add(request, "stream", options->stream ? options->stream : "stdout");
+    json_object_object_add(request, "offset", json_object_new_int64(options->log_offset)); json_object_object_add(request, "limit", json_object_new_int64(options->log_limit));
+}
+
+static void request_observe_options(json_object *request, const struct remote_options *options) {
+    json_object_object_add(request, "cursor", json_object_new_int64(options->event_cursor)); json_object_object_add(request, "event_limit", json_object_new_int64(options->event_count));
+    if (options->stream_id) f_string_add(request, "stream_id", options->stream_id);
+    if (options->byte_offset) json_object_object_add(request, "byte_offset", json_object_new_int64(strtol(options->byte_offset, NULL, 10)));
+}
+
 /* Returns a new request; package is borrowed. */
 static json_object *make_request(const struct remote_options *options, const char *operation, json_object *package) {
     json_object *request = json_object_new_object();
@@ -107,14 +230,8 @@ static json_object *make_request(const struct remote_options *options, const cha
     if (options->decision) f_string_add(request, "decision", options->decision);
     if (options->actor) f_string_add(request, "by", options->actor);
     if (options->trust) f_string_add(request, "trust_spec", options->trust);
-    if (options->logs) {
-        if (options->source) f_string_add(request, "source", options->source);
-        if (options->step) f_string_add(request, "step", options->step);
-        if (options->attempt) json_object_object_add(request, "attempt", json_object_new_int64(strtol(options->attempt, NULL, 10)));
-        f_string_add(request, "stream", options->stream ? options->stream : "stdout");
-        json_object_object_add(request, "offset", json_object_new_int64(options->log_offset));
-        json_object_object_add(request, "limit", json_object_new_int64(options->log_limit));
-    }
+    if (options->logs) request_log_options(request, options);
+    if (options->observe) request_observe_options(request, options);
     if (options->submit) { json_object_object_add(request, "package", json_object_get(package)); f_string_add(request, "submission_key", options->key); }
     else f_string_add(request, "task_id", options->id);
     return request;
@@ -158,11 +275,8 @@ json_object *task_remote_cli(int argc, char **argv) {
     json_object_put(response);
     request = make_request(options, argv[0], package);
     response = f_request(&remote, request, options->seconds);
-    if (json_object_get_boolean(f_field(response, "ok"))) {
-        json_object *data = f_field(response, "data"); const char *received = f_string(data, "task_id"), *digest = f_string(data, "spec_sha256"), *received_key = f_string(data, "submission_key");
-        bool valid = received && !strncmp(received, "task_", 5) && task_hex(received + 5, 64) && task_hex(digest, 64);
-        if (valid) valid = options->submit ? received_key && !strcmp(received_key, options->key) && !strcmp(digest, f_string(package, "spec_sha256")) : !strcmp(received, options->id);
-        if (!valid) { json_object_put(response); response = f_error("fleet-task", "invalid_response", "the receiver returned a task handle with inconsistent bindings"); }
+    if (json_object_get_boolean(f_field(response, "ok")) && !response_binding_valid(response, options, package)) {
+        json_object_put(response); response = f_error("fleet-task", "invalid_response", "the receiver returned a task handle with inconsistent bindings");
     }
     if (options->result_read && json_object_get_boolean(f_field(response, "ok"))) response = result_output(options, response);
     if ((options->submit || options->start || options->cancel || options->resume || options->decide) && uncertain(response)) {

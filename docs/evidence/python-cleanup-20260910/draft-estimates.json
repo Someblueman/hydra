@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "plans": {
+    "acdca91648e9edc150afbcb7bc29759e53e54bf5607a879478ee873bc15ae0fc": {
+      "source": "Uncalibrated pre-execution estimate for one local source rebuild and retained tests; Codex generation cost unavailable.",
+      "cost_unit": "USD",
+      "steps": {
+        "spawn-compose": {
+          "milliseconds": [
+            100,
+            3000
+          ]
+        },
+        "spawn-functional": {
+          "milliseconds": [
+            100,
+            3000
+          ]
+        },
+        "spawn-sanitize": {
+          "milliseconds": [
+            100,
+            3000
+          ]
+        },
+        "compose": {
+          "milliseconds": [
+            100,
+            3000
+          ]
+        },
+        "functional": {
+          "milliseconds": [
+            30000,
+            300000
+          ]
+        },
+        "sanitize": {
+          "milliseconds": [
+            30000,
+            300000
+          ]
+        }
+      }
+    },
+    "9a77e4b24e9f237d9c8e2531f7edf8334120f3765187db5fe81104c307914792": {
+      "source": "Uncalibrated pre-execution estimate for one local source rebuild and retained tests; Codex generation cost unavailable.",
+      "cost_unit": "USD",
+      "steps": {
+        "spawn-compose": {
+          "milliseconds": [
+            100,
+            3000
+          ]
+        },
+        "spawn-functional": {
+          "milliseconds": [
+            100,
+            3000
+          ]
+        },
+        "spawn-sanitize": {
+          "milliseconds": [
+            100,
+            3000
+          ]
+        },
+        "compose": {
+          "milliseconds": [
+            100,
+            3000
+          ]
+        },
+        "functional": {
+          "milliseconds": [
+            30000,
+            300000
+          ]
+        },
+        "sanitize": {
+          "milliseconds": [
+            30000,
+            300000
+          ]
+        }
+      }
+    }
+  }
+}

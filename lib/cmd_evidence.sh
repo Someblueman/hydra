@@ -23,14 +23,17 @@ cmd_lifecycle() {
     _cl_confidence="$(lifecycle_read observed-confidence)"
     _cl_liveness="$(lifecycle_liveness "$_cl_branch")" || return 1
     _cl_policy="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/completion-policy" 2>/dev/null || true)"
+    _cl_terminal_mode="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" 2>/dev/null || echo interactive)"
+    case "$_cl_terminal_mode" in headless|interactive) ;; *) _cl_terminal_mode=interactive ;; esac
     if lifecycle_completion_satisfied "$_cl_branch"; then _cl_complete=true; else _cl_complete=false; fi
     if [ "$_cl_json" -eq 1 ]; then
-        json_success lifecycle "{\"project_id\":\"$LIFECYCLE_PROJECT_ID\",\"head_id\":\"$LIFECYCLE_HEAD_ID\",\"instance_id\":\"$LIFECYCLE_INSTANCE_ID\",\"branch\":\"$(json_escape "$_cl_branch")\",\"declared_outcome\":$(json_string_or_null "$_cl_outcome"),\"observed_status\":$(json_string_or_null "$_cl_observed"),\"observed_confidence\":$(json_string_or_null "$_cl_confidence"),\"liveness\":\"$_cl_liveness\",\"completion_policy\":\"$(json_escape "${_cl_policy:-declared-done}")\",\"complete\":$_cl_complete}"
+        json_success lifecycle "{\"project_id\":\"$LIFECYCLE_PROJECT_ID\",\"head_id\":\"$LIFECYCLE_HEAD_ID\",\"instance_id\":\"$LIFECYCLE_INSTANCE_ID\",\"branch\":\"$(json_escape "$_cl_branch")\",\"terminal_mode\":\"$_cl_terminal_mode\",\"declared_outcome\":$(json_string_or_null "$_cl_outcome"),\"observed_status\":$(json_string_or_null "$_cl_observed"),\"observed_confidence\":$(json_string_or_null "$_cl_confidence"),\"liveness\":\"$_cl_liveness\",\"completion_policy\":\"$(json_escape "${_cl_policy:-declared-done}")\",\"complete\":$_cl_complete}"
     else
         echo "Lifecycle for $_cl_branch"
         echo "  project: $LIFECYCLE_PROJECT_ID"
         echo "  head: $LIFECYCLE_HEAD_ID"
         echo "  instance: $LIFECYCLE_INSTANCE_ID"
+        echo "  terminal mode: $_cl_terminal_mode"
         echo "  declared outcome: ${_cl_outcome:-none}"
         echo "  observed status: ${_cl_observed:-unavailable} (${_cl_confidence:-unavailable})"
         echo "  liveness: $_cl_liveness"
@@ -163,8 +166,10 @@ cmd_adapter() {
 _cmd_resume_abort() {
     _cra_branch="$1"
     _cra_session="$2"
-    tmux kill-session -t "$_cra_session" 2>/dev/null || true
-    release_session_lock "$_cra_session" 2>/dev/null || true
+    if [ "$_cra_session" != - ]; then
+        tmux kill-session -t "$_cra_session" 2>/dev/null || true
+        release_session_lock "$_cra_session" 2>/dev/null || true
+    fi
     lifecycle_abort_new_instance "$_cra_branch" 2>/dev/null || {
         echo "Error: failed to restore the prior lifecycle instance" >&2
     }
@@ -181,7 +186,8 @@ cmd_resume() {
     _cr_old_instance="$LIFECYCLE_INSTANCE_ID"
     _cr_old_dir="$LIFECYCLE_INSTANCE_DIR"
     _cr_old_session="$(sed -n '1p' "$_cr_old_dir/session" 2>/dev/null || true)"
-    if [ -n "$_cr_old_session" ] && tmux has-session -t "$_cr_old_session" 2>/dev/null; then
+    _cr_terminal_mode="$( [ -s "$LIFECYCLE_HEAD_DIR/terminal-mode" ] && sed -n '1p' "$LIFECYCLE_HEAD_DIR/terminal-mode" || echo interactive )"
+    if [ "$_cr_terminal_mode" != headless ] && [ -n "$_cr_old_session" ] && tmux has-session -t "$_cr_old_session" 2>/dev/null; then
         echo "Error: head '$_cr_branch' is already live in $_cr_old_session" >&2
         return 1
     fi
@@ -211,7 +217,7 @@ _cmd_resume_admitted() {
     _cr_lock="resume_${LIFECYCLE_PROJECT_ID}_${LIFECYCLE_HEAD_ID}"
     acquire_lock "$_cr_lock" "resume admitted head" || return 1
     if ! lifecycle_load_head "$_cr_branch" || [ "$LIFECYCLE_INSTANCE_ID" != "$_cr_old_instance" ] ||
-        { [ -n "$_cr_old_session" ] && tmux has-session -t "=$_cr_old_session" 2>/dev/null; }; then
+        { [ "$_cr_terminal_mode" != headless ] && [ -n "$_cr_old_session" ] && tmux has-session -t "=$_cr_old_session" 2>/dev/null; }; then
         echo "Error: head changed while waiting for admission; inspect its current instance" >&2
         release_lock "$_cr_lock"
         return 1
@@ -225,11 +231,15 @@ _cmd_resume_instance() {
     if [ ! -d "$_cr_worktree" ]; then
         create_worktree "$_cr_branch" "$_cr_worktree" || return 1
     fi
-    _cr_session="$(generate_session_name "$_cr_branch")" || return 1
-    create_session "$_cr_session" "$_cr_worktree" || return 1
-    release_session_lock "$_cr_session" 2>/dev/null || true
+    if [ "$_cr_terminal_mode" = headless ]; then
+        _cr_session=-
+    else
+        _cr_session="$(generate_session_name "$_cr_branch")" || return 1
+        create_session "$_cr_session" "$_cr_worktree" || return 1
+        release_session_lock "$_cr_session" 2>/dev/null || true
+    fi
     if ! lifecycle_new_instance "$_cr_branch" "$_cr_session" "$_cr_provider" "$_cr_recipe"; then
-        tmux kill-session -t "$_cr_session" 2>/dev/null || true
+        [ "$_cr_session" = - ] || tmux kill-session -t "$_cr_session" 2>/dev/null || true
         return 1
     fi
     if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/admission-id" "$HEAD_ADMISSION_ID"; then
@@ -240,6 +250,20 @@ _cmd_resume_instance() {
         _cmd_resume_abort "$_cr_branch" "$_cr_session"
         return 1
     }
+    if [ "$_cr_terminal_mode" = headless ]; then
+        event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" lifecycle.resumed hydra local \
+            "{\"previous_instance_id\":\"$_cr_old_instance\",\"profile\":\"$(json_escape "$_cr_profile")\",\"terminal_mode\":\"headless\"}" >/dev/null || {
+            _cmd_resume_abort "$_cr_branch" "$_cr_session"
+            return 1
+        }
+        lifecycle_set_observed "$_cr_branch" idle hydra exact || {
+            _cmd_resume_abort "$_cr_branch" "$_cr_session"
+            return 1
+        }
+        lifecycle_commit_new_instance || echo "Warning: could not remove resume rollback metadata" >&2
+        echo "Resumed $_cr_branch headlessly (instance $LIFECYCLE_INSTANCE_ID)"
+        return 0
+    fi
     for _cr_pair in \
         "HYDRA_PROJECT_ID=$LIFECYCLE_PROJECT_ID" \
         "HYDRA_HEAD_ID=$LIFECYCLE_HEAD_ID" \

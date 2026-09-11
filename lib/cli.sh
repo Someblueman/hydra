@@ -4,18 +4,19 @@
 # Display usage information
 usage() {
     cat <<EOF
-hydra - Manage parallel AI coding sessions with tmux and git worktree
+hydra - Manage parallel AI coding sessions with optional tmux and git worktrees
 
 Usage: hydra <command> [options]
 
 Commands:
-  spawn <branch>    Create a new worktree and tmux session
+  spawn <branch>    Create a new worktree (tmux session unless --headless)
                     Options:
                       -l, --layout <layout>    Apply tmux layout
                       -n, --count <number>     Spawn multiple sessions (1-10)
                       --profile <name>         Select an agent profile
                       --ai <tool>              Override the AI executable
                       --no-agent              Create a first-class plain shell head
+                      --headless              Create a terminal-free execution head
                       --dry-run               Print the resolved plan without mutation
                       --prompt <text>          Record and inject task text at launch
                       --prompt-file <path>     Read task text from a file
@@ -40,7 +41,7 @@ Commands:
   fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
                     Commands: list, doctor, admission, handshake, bootstrap, package, init, spawn,
                               signal, cancel, workflow, attach, export, import,
-                              reconcile, watch, tui, task (see fleet help)
+                              overview, reconcile, watch, tui, task (see fleet help)
                     Options: --project PATH, --instance ID, --jobs 1-16, --timeout 1-300
   capabilities      Print machine-readable Hydra and agent capabilities
   workflow          Run or inspect finite, recoverable workflow definitions

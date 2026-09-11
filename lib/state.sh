@@ -48,7 +48,7 @@ _state_read_field() {
 
 _state_head_is_active() {
     _shia_state="$(sed -n '1p' "$1/desired-state" 2>/dev/null || true)"
-    [ "$_shia_state" = running ] || [ "$_shia_state" = stopping ]
+    [ "$_shia_state" = running ] || [ "$_shia_state" = headless ] || [ "$_shia_state" = stopping ]
 }
 
 _state_read_or_dash() {
@@ -82,7 +82,35 @@ state_has_heads() {
     [ -n "$(state_list_heads | sed -n '1p')" ]
 }
 
+state_has_interactive_heads() {
+    while IFS=' ' read -r _sh_branch _sh_session _sh_rest; do
+        [ -n "$_sh_branch" ] || continue
+        [ "$(get_terminal_mode_for_branch "$_sh_branch" 2>/dev/null || echo interactive)" = interactive ] && return 0
+    done <<EOF
+$(state_list_heads)
+EOF
+    return 1
+}
+
 get_session_for_branch() { [ -n "${1:-}" ] && _state_read_field "$1" session; }
+get_terminal_mode_for_branch() {
+    [ -n "${1:-}" ] || return 1
+    _stm_dir="$(_state_head_dir "$1")" || return 1
+    _stm_mode="$(sed -n '1p' "$_stm_dir/terminal-mode" 2>/dev/null || true)"
+    # State v2 records written before optional-terminal support are interactive.
+    case "$_stm_mode" in headless|interactive) printf '%s\n' "$_stm_mode" ;; *) printf 'interactive\n' ;; esac
+}
+get_terminal_mode_for_session() {
+    [ -n "${1:-}" ] || return 1
+    while IFS=' ' read -r _gtfs_branch _gtfs_session _gtfs_rest; do
+        [ "$_gtfs_session" = "$1" ] || continue
+        get_terminal_mode_for_branch "$_gtfs_branch"
+        return $?
+    done <<EOF
+$(state_list_heads)
+EOF
+    return 1
+}
 get_ai_for_branch() { [ -n "${1:-}" ] && _state_read_field "$1" profile; }
 get_group_for_branch() { [ -n "${1:-}" ] && _state_read_field "$1" group; }
 get_timestamp_for_branch() { [ -n "${1:-}" ] && _state_read_field "$1" created-at; }
@@ -155,7 +183,8 @@ validate_head_state() {
             echo "Warning: Branch '$_vhs_branch' no longer exists" >&2
             _vhs_errors=1
         fi
-        if ! tmux_session_exists "$_vhs_session"; then
+        _vhs_mode="$(get_terminal_mode_for_branch "$_vhs_branch" 2>/dev/null || echo interactive)"
+        if [ "$_vhs_mode" != headless ] && ! tmux_session_exists "$_vhs_session"; then
             echo "Warning: Session '$_vhs_session' no longer exists" >&2
             _vhs_errors=1
         fi
@@ -169,7 +198,8 @@ cleanup_head_state() {
     _chs_failed=0
     while IFS=' ' read -r _chs_branch _chs_session _chs_rest; do
         [ -n "$_chs_branch" ] || continue
-        if ! git_branch_exists "$_chs_branch" || ! tmux_session_exists "$_chs_session"; then
+        _chs_mode="$(get_terminal_mode_for_branch "$_chs_branch" 2>/dev/null || echo interactive)"
+        if ! git_branch_exists "$_chs_branch" || { [ "$_chs_mode" != headless ] && ! tmux_session_exists "$_chs_session"; }; then
             state_update_field "$_chs_branch" desired-state stopped || _chs_failed=1
         fi
     done <<EOF

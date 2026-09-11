@@ -3,6 +3,7 @@
 #include "fleet/plan/plan.h"
 #include "fleet/task/task.h"
 #include "fleet/workflow/workflow_data.h"
+#include "fleet/retention/retention.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -27,8 +28,9 @@ int plan_attempt_directory(const char *run, const char *step, char directory[F_P
         snprintf(directory, F_PATH, "%s/steps/%s/attempt-%ld", run, step, attempt) < F_PATH) status = 0;
     free(number); return status;
 }
-/* Read the current attempt's sealed receipt, including while its validator is
- * finishing. Previous repair rounds cannot supply evidence for this round. */
+/* Read the selected attempt's sealed receipt, including while its validator is
+ * finishing. A versioned reuse proof can retain an unchanged original attempt;
+ * affected steps always point to their new repair attempt. */
 json_object *plan_artifact(json_object *compiled, const char *run, const char *step, const char *name, char path[F_PATH]) {
     char directory[F_PATH]; json_object *receipt, *file, *decl;
     if (!plan_id(name) || plan_attempt_directory(run, step, directory) || snprintf(path, F_PATH, "%s/artifacts/%s", directory, name) >= F_PATH) return NULL;
@@ -41,6 +43,7 @@ json_object *plan_artifact(json_object *compiled, const char *run, const char *s
 json_object *plan_delivery(const char *run) {
     char path[F_PATH], digest[65]; json_object *compiled = NULL, *plan, *data, *delivery = NULL, *checks, *errors = json_object_new_array();
     size_t i; int status = -1;
+    if (retention_expired(run)) goto done;
     if (f_path(path, sizeof(path), run, "compiled.json") || !(compiled = plan_read(path))) goto done;
     plan = f_field(compiled, "plan"); data = f_field(compiled, "data");
     if (plan_validate(plan, f_field(compiled, "policy"), errors)) goto done;
@@ -93,6 +96,17 @@ void plan_delivery_view(json_object *delivery) {
         printf("\nCheck %s: %s\nSubject SHA-256: %s\nRequirements:", check_id, f_string(report, "verdict"), f_string(report, "subject_sha256"));
         for (i = 0; i < json_object_array_length(requirements); i++) printf(" %s", f_text(json_object_array_get_idx(requirements, i)));
         printf("\nEvidence: %s\n", f_string(report, "evidence"));
+        if (f_number_is(report, "schema_version", 3)) {
+            json_object *records = f_field(report, "evidence_records");
+            printf("Execution status: %s\nEvidence status: %s\nDomain verdict: %s\n",
+                f_string(report, "execution_status"), f_string(report, "evidence_status"), f_string(report, "domain_verdict"));
+            for (i = 0; i < json_object_array_length(records); i++) {
+                json_object *record = json_object_array_get_idx(records, i), *counts = f_field(record, "counts");
+                printf("Obligation %s: executed=%d failed=%d skipped=%d\n", f_string(record, "obligation_id"),
+                    json_object_get_int(f_field(counts, "executed")), json_object_get_int(f_field(counts, "failed")),
+                    json_object_get_int(f_field(counts, "skipped")));
+            }
+        }
     }
 }
 int plan_finish(const char *run) {

@@ -18,6 +18,7 @@ spawn_parse_options() {
     pr_new=""
     template_name=""
     no_agent=""
+    headless=""
     dry_run=""
     task_text=""
     task_source=""
@@ -46,6 +47,10 @@ spawn_parse_options() {
                 ;;
             --no-agent)
                 no_agent="1"
+                shift
+                ;;
+            --headless)
+                headless="1"
                 shift
                 ;;
             --dry-run)
@@ -204,6 +209,15 @@ cmd_spawn() {
         echo "Error: --no-agent cannot be combined with --profile/--ai" >&2
         exit 1
     fi
+    if [ -n "$headless" ] && [ -n "$explicit_profile" ] && [ "$explicit_profile" != none ] && [ -z "$no_agent" ]; then
+        echo "Error: --headless cannot launch an interactive profile; use hydra exec --profile with a headless adapter" >&2
+        exit 1
+    fi
+    if [ -n "$headless" ] && [ -z "$explicit_profile" ]; then
+        # Headless spawn is a workspace/execution identity operation. Adapter
+        # invocation is a separate `hydra exec --profile` contract.
+        no_agent=1
+    fi
     if [ -z "$agents_spec" ]; then
         if [ -n "$no_agent" ] || [ -n "${HYDRA_SKIP_AI:-}" ]; then
             ai_tool=none
@@ -255,6 +269,10 @@ $_csp_instructions"
     # Validate count
     if ! echo "$count" | grep -q '^[0-9]\+$' || [ "$count" -lt 1 ] || [ "$count" -gt 10 ]; then
         echo "Error: Count must be a number between 1 and 10" >&2
+        exit 1
+    fi
+    if [ -n "$headless" ] && { [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; }; then
+        echo "Error: --headless currently requires a single head" >&2
         exit 1
     fi
 
@@ -319,7 +337,9 @@ $_csp_instructions"
     fi
 
     if [ -n "$dry_run" ]; then
-        spawn_dry_run "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$pr_num" "$template_name" "$task_text" "$completion_policy" "$scope_rules"
+        _dry_terminal_mode=interactive
+        [ -z "$headless" ] || _dry_terminal_mode=headless
+        spawn_dry_run "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$pr_num" "$template_name" "$task_text" "$completion_policy" "$scope_rules" "$_dry_terminal_mode"
         return $?
     fi
 
@@ -408,7 +428,9 @@ $_csp_instructions"
         spawn_pr_num="$pr_num"
     fi
 
-    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num" "$template_name" "$task_text" "$completion_policy" "$scope_rules")"; then
+    _terminal_mode=interactive
+    [ -z "$headless" ] || _terminal_mode=headless
+    if session="$(spawn_single "$branch" "$layout" "$ai_tool" "$group" "$after_deps" "$spawn_pr_num" "$template_name" "$task_text" "$completion_policy" "$scope_rules" "$_terminal_mode")"; then
         # Handle --pr-new: create a draft PR after spawn
         if [ -n "$pr_new" ]; then
             _load_lib github
@@ -423,7 +445,9 @@ $_csp_instructions"
         fi
 
         # Optionally skip switching (useful for demos/automation)
-        if [ -n "${HYDRA_NO_SWITCH:-}" ]; then
+        if [ "$_terminal_mode" = headless ]; then
+            echo "Headless head '$branch' created (no terminal; use hydra exec --branch $branch -- ...)"
+        elif [ -n "${HYDRA_NO_SWITCH:-}" ]; then
             echo "Session '$session' created (HYDRA_NO_SWITCH set; not attaching)"
         else
             # Switch to the new session (only in terminal)

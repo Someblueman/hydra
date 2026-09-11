@@ -37,6 +37,14 @@ schema-1 workflows and the shell-only core keep their existing interfaces.
    and `coverage`; revise the proposal and repeat. Unknown fields, missing
    coverage, cycles, write conflicts, unsafe handoffs, unsupported capabilities,
    unresolved questions and over-budget or unauthorized scope fail validation.
+   For 9A plans, add one or more explicit root `obligations` per requirement.
+   Bind each obligation to the exact deliverable/step/output subject, its check
+   method and ID, the report fields required as evidence, the applicable
+   environment, a supported `pass` completion rule, and limitations. The
+   validator rejects orphan or circular evidence and unreachable checks with
+   field paths, obligation IDs, and counterexamples. A legacy plan without this
+   array remains valid; its read-only projection is marked `derived` and does
+   not claim intent or semantic evidence.
 7. Run `hydra workflow plan compile plan.json policy.json compiled.json`. The
    destination must be new. Identical explicit inputs produce identical bytes;
    object member ordering does not affect the result. Source content, declared
@@ -52,6 +60,12 @@ schema-1 workflows and the shell-only core keep their existing interfaces.
    `hydra workflow plan result <run-id>`. Inspect the actual final output against
    the original objective; do not substitute child completion or a receipt for
    that assessment.
+
+Before acceptance, inspect `hydra workflow plan obligations compiled.json --json`.
+`structural_proof: satisfiable` means only that the exact candidate and evaluator
+path are reachable. `semantic_proof: not_claimed` remains explicit; performance
+or research obligations require semantic review, and unchanged text/content
+checks do not prove a changed performance objective.
 
 ## Plan and policy envelopes
 

@@ -75,30 +75,79 @@ static void dashboard_detail(struct app *app, struct tv_canvas *c, struct tv_rec
     }
 }
 
-static void dashboard_charts(struct app *app, struct tv_canvas *c, struct tv_rect r) {
-    size_t i;
-    double maximum = 1;
-    tv_panel(c, r, app->fleet ? "HOST OBSERVATIONS" : "QUEUE DEPTH / known heads");
-    if (app->fleet) {
-        int row = r.y + 2;
-        for (i = 0; i < app->model.host_count && row < r.y + r.height - 2; i++) {
-            const struct host_observation *host = &app->model.hosts[i];
-            if (!strcmp(host->state, "failed")) dashboard_text(c, r.x + 2, row++, r.width - 4, TV_WARNING,
-                           "%s / failed / -- heads / %s", host->name, host->error);
-            else dashboard_text(c, r.x + 2, row++, r.width - 4, TV_BASE,
-                           "%s / responded / %u heads", host->name, host->heads);
-        }
-        dashboard_text(c, r.x + 2, r.y + r.height - 2, r.width - 4, TV_BORDER, "H hosts / %zu total / CPU and memory unavailable", app->model.host_count);
-        if (row == r.y + 2) dashboard_text(c, r.x + 2, row, r.width - 4, TV_WARNING, "No host observations; inspect Recovery");
-        return;
+static void fleet_binding_line(struct tv_canvas *c, struct tv_rect r, int *row,
+                               const char *label, const char *value, enum tv_style tone) {
+    char text[512];
+    snprintf(text, sizeof(text), "%s%s", label, value);
+    size_t used = 0, length = strlen(text), width = (size_t)(r.width - 4);
+    while (used < length && *row < r.y + r.height - 2) {
+        dashboard_text(c, r.x + 2, (*row)++, (int)width, tone, "%.*s", (int)width, text + used);
+        used += width;
     }
+}
+static void selected_task_details(struct tv_canvas *c, struct tv_rect r, int *row,
+                                 const struct task_observation *task) {
+    char text[512];
+    snprintf(text, sizeof(text), "%s / owner %s / %s / host %s", task->state, task->owner, task->freshness, task->host);
+    fleet_binding_line(c, r, row, "State: ", text, TV_BASE);
+    snprintf(text, sizeof(text), "%s / scope %s / requested %s", task->cancellation, task->cancellation_scope, task->cancel_requested_at);
+    fleet_binding_line(c, r, row, "Cancellation: ", text, TV_WARNING);
+    fleet_binding_line(c, r, row, "Wait: ", task->waiting_reason, TV_WARNING);
+    fleet_binding_line(c, r, row, "Next: ", task->next_action, TV_BASE);
+    fleet_binding_line(c, r, row, "Spec: ", task->spec_sha256, TV_BORDER);
+    fleet_binding_line(c, r, row, "Request: ", task->request_id, TV_BORDER);
+    snprintf(text, sizeof(text), "%s / verification %s", task->result_state, task->verification_state);
+    fleet_binding_line(c, r, row, "Result: ", text, TV_BASE);
+}
+static void dashboard_fleet_tasks(struct app *app, struct tv_canvas *c, struct tv_rect r) {
+    int row = r.y + 2, available = r.height - 14;
+    size_t selected = app->task_selected, start;
+    tv_panel(c, r, "REMOTE TASKS / receiver-owned observations");
+    if (available < 1) available = 1;
+    if (available > 5) available = 5;
+    start = selected < app->model.task_count && selected >= (size_t)available ? selected - (size_t)available + 1 : 0;
+    for (size_t i = start; i < app->model.task_count && i < start + (size_t)available; i++)
+        dashboard_text(c, r.x + 2, row++, r.width - 4, i == selected ? TV_SELECTED : TV_BASE,
+                       "%c %s", i == selected ? '>' : ' ', app->model.tasks[i].task_id);
+    row++;
+    if (selected < app->model.task_count) selected_task_details(c, r, &row, &app->model.tasks[selected]);
+    else fleet_binding_line(c, r, &row, "Selection changed: ", "use j/k to select a current task", TV_WARNING);
+    dashboard_text(c, r.x + 2, r.y + r.height - 2, r.width - 4, TV_BORDER,
+                   "%zu tasks / j k select / Y approve N reject R resume X cancel", app->model.task_count);
+}
+
+static void dashboard_fleet_hosts(struct app *app, struct tv_canvas *c, struct tv_rect r) {
+    size_t i; int row = r.y + 2;
+    for (i = 0; i < app->model.host_count && row < r.y + r.height - 2; i++) {
+        const struct host_observation *host = &app->model.hosts[i];
+        if (!strcmp(host->state, "failed")) dashboard_text(c, r.x + 2, row++, r.width - 4, TV_WARNING,
+                       "%s / failed / -- heads / %s / %s", host->name, host->error, host->freshness);
+        else dashboard_text(c, r.x + 2, row++, r.width - 4, TV_BASE,
+                       "%s / responded / %u heads / %s", host->name, host->heads, host->freshness);
+    }
+    dashboard_text(c, r.x + 2, r.y + r.height - 2, r.width - 4, TV_BORDER, "H hosts / %zu total / CPU and memory unavailable", app->model.host_count);
+    if (row == r.y + 2) dashboard_text(c, r.x + 2, row, r.width - 4, TV_WARNING, "No host observations; inspect Recovery");
+}
+
+static void dashboard_fleet_charts(struct app *app, struct tv_canvas *c, struct tv_rect r) {
+    if (app->model.task_count) dashboard_fleet_tasks(app, c, r);
+    else dashboard_fleet_hosts(app, c, r);
+}
+
+static void dashboard_queue_chart(struct app *app, struct tv_canvas *c, struct tv_rect r) {
+    size_t i; double maximum = 1;
     for (i = 0; i < app->history_count; i++) if (app->history_valid[i] && app->queue_history[i] > maximum) maximum = app->queue_history[i];
     dashboard_text(c, r.x + 2, r.y + 1, r.width - 4, TV_BORDER, "0..%.0f entries / %zu samples", maximum, app->history_count);
     dashboard_text(c, r.x + 2, r.y + 2, r.width - 4, TV_BORDER, "Known heads only / gaps = unavailable");
-    if (app->history_count < 2) {
-        dashboard_text(c, r.x + 2, r.y + 3, r.width - 4, TV_BASE, "Collecting history; waiting for next refresh");
-    } else tv_plot(c, (struct tv_rect){r.x + 2, r.y + 3, r.width - 4, r.height - 5},
-                   app->queue_history, app->history_valid, app->history_count, maximum, TV_BORDER);
+    if (app->history_count < 2) dashboard_text(c, r.x + 2, r.y + 3, r.width - 4, TV_BASE, "Collecting history; waiting for next refresh");
+    else tv_plot(c, (struct tv_rect){r.x + 2, r.y + 3, r.width - 4, r.height - 5},
+                 app->queue_history, app->history_valid, app->history_count, maximum, TV_BORDER);
+}
+
+static void dashboard_charts(struct app *app, struct tv_canvas *c, struct tv_rect r) {
+    tv_panel(c, r, app->fleet ? "HOST OBSERVATIONS" : "QUEUE DEPTH / known heads");
+    if (app->fleet) dashboard_fleet_charts(app, c, r);
+    else dashboard_queue_chart(app, c, r);
 }
 
 static void dashboard_distribution(struct app *app, struct tv_canvas *c, struct tv_rect r, bool changes) {
@@ -133,6 +182,14 @@ static void dashboard_distribution(struct app *app, struct tv_canvas *c, struct 
                    changes ? "0..%u files / %zu unknown / j k select" : "%u total heads / snapshot counts", changes ? maximum : (unsigned)app->model.head_count, unknown);
 }
 
+static int dashboard_middle_height(const struct app *app, int height) {
+    int middle = height / 2;
+    if (middle > 12 && app->model.head_count < 8) middle = 12;
+    if (app->fleet && app->model.task_count && height - middle - 7 < 6) middle = 10;
+    if (middle < 10) middle = 10;
+    return middle;
+}
+
 void render_dashboard(struct app *app) {
     struct tv_canvas c;
     struct tv_cell *cells;
@@ -149,16 +206,16 @@ void render_dashboard(struct app *app) {
         if (strcmp(display_status(h), "LIVE") == 0) live++; else attention++;
         gates += h->gates >= h->approved ? h->gates - h->approved : 0;
     }
-    if (width >= 90 && height >= 20) {
+    if (app->fleet && app->model.task_count) {
+        dashboard_fleet_tasks(app, &c, (struct tv_rect){0, 0, width, height});
+    } else if (width >= 90 && height >= 20) {
         int card = width / 4;
         dashboard_card(&c, 0, card - 1, "HEADS", app->model.head_count, "current snapshot", TV_STRONG);
         dashboard_card(&c, card, card - 1, app->fleet ? "UNOBSERVED" : "LIVE", app->fleet ? attention : live, app->fleet ? "remote liveness" : "local sessions", TV_STRONG);
         dashboard_card(&c, card * 2, card - 1, "RECOVERY", app->model.recovery_count, "findings to inspect", TV_WARNING);
         dashboard_card(&c, card * 3, width - card * 3, "GATES", app->fleet ? SIZE_MAX : gates, app->fleet ? "unavailable remotely" : "pending approval", TV_WARNING);
         half = width * 3 / 5;
-        middle = height / 2;
-        if (middle > 12 && app->model.head_count < 8) middle = 12;
-        if (middle < 10) middle = 10;
+        middle = dashboard_middle_height(app, height);
         dashboard_heads(app, &c, (struct tv_rect){0, 6, half - 1, middle});
         dashboard_detail(app, &c, (struct tv_rect){half, 6, width - half, middle});
         if (height - middle - 7 >= 6) {

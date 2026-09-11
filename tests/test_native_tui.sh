@@ -8,7 +8,7 @@ pass_count=0
 fail_count=0
 test_root="$(mktemp -d)"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-tui="$repo_root/build/hydra-tui"
+tui="${HYDRA_TUI_BIN:-$repo_root/build/hydra-tui}"
 fixture="$repo_root/tests/fixtures/tui/native-v2.tsv"
 
 # shellcheck source=helpers.sh
@@ -64,7 +64,7 @@ echo "Running native TUI tests..."
 echo "==========================="
 
 assert_equal "2" "$("$tui" --protocol-version)" "native TUI protocol handshake"
-assert_equal "Hydra TUI 2.3.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
+assert_equal "Hydra TUI 2.4.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
 
 awk 'BEGIN { FS = OFS = "\t" } $1 == "H" && !changed { $13 = "invalid"; changed = 1 } { print }' \
     "$fixture" > "$test_root/invalid-number.tsv"
@@ -183,14 +183,14 @@ assert_failure $? "TERM=dumb fails cleanly"
 assert_failure $? "non-TTY invocation fails cleanly"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.3.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.4.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
 chmod +x "$test_root/native-transient"
 HYDRA_TUI_BIN="$test_root/native-transient" "$repo_root/bin/hydra" tui > /dev/null 2> "$test_root/fallback.err"
 assert_failure $? "non-TTY basic fallback still fails cleanly"
 contains "starting the basic TUI" "$test_root/fallback.err" "transient native failure dispatches to basic fallback"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.3.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.4.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
 chmod +x "$test_root/native-success"
 HYDRA_TUI_BIN="$test_root/native-success" "$repo_root/bin/hydra" tui > "$test_root/default.out"
 contains "NATIVE DEFAULT" "$test_root/default.out" "plain tui dispatches to a qualified native executable"
@@ -314,6 +314,17 @@ contains 'DESIRED' "$test_root/fleet.txt" 'fleet labels durable desired state ex
 contains 'ovh' "$test_root/fleet.txt" 'fleet identifies remote hosts in their own column'
 contains 'feature' "$test_root/fleet.txt" 'fleet identifies the remote branch'
 contains 'a attach  c interrupt' "$test_root/fleet.txt" 'fleet advertises only remote-safe actions'
+
+printf 'HYDRA_FLEET_TUI\t3\nT\tbuild\tresponded\t0\t-\tunreachable\tstale\t123\t4\nO\tbuild\ttask_abc\trun_xyz\tstep\tattempt-1\t/work\tnone\trecorded\tcancelled\tnone\t-\tinspect dependency\t123\t123\tfresh\t1\tready\tintegrity_verified\t0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\tconfirmed_stopped\tmanaged_commands\t123\treq-1\n' > "$test_root/fleet-v3.tsv"
+"$tui" --fleet --headless-fixture "$test_root/fleet-v3.tsv" --view hosts --ascii --size 140x30 > "$test_root/fleet-v3-hosts.txt"
+contains 'build' "$test_root/fleet-v3-hosts.txt" 'fleet v3 preserves host identity'
+contains 'stale' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders stale freshness'
+contains 'task_abc' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders task identity'
+contains 'dependency' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders waiting reason'
+"$tui" --fleet --headless-fixture "$test_root/fleet-v3.tsv" --view overview --ascii --size 140x30 > "$test_root/fleet-v3-overview.txt"
+contains 'REMOTE TASKS' "$test_root/fleet-v3-overview.txt" 'fleet overview reserves a task observation panel'
+contains 'inspect dependency' "$test_root/fleet-v3-overview.txt" 'fleet overview renders the next action'
+contains 'confirmed_stopped' "$test_root/fleet-v3-overview.txt" 'fleet overview renders receiver cancellation acknowledgment'
 
 printf '\nTests: %d, Passed: %d, Failed: %d\n' "$test_count" "$pass_count" "$fail_count"
 [ "$fail_count" -eq 0 ]

@@ -11,7 +11,7 @@ fi
 report="${QUALITY_C_LOG:-build/quality-c.log}"
 mkdir -p "$(dirname "$report")"
 if "$tool" --header-filter='(src|tests/c)/' \
-    --checks='-*,clang-analyzer-*,readability-function-cognitive-complexity' \
+    --checks="${QUALITY_C_CHECKS:--*,clang-analyzer-*,readability-function-cognitive-complexity}" \
     --config='{CheckOptions: {readability-function-cognitive-complexity.Threshold: 15, readability-function-cognitive-complexity.DescribeBasicIncrements: false}}' \
     "$@" > "$report" 2>&1; then
     cat "$report"

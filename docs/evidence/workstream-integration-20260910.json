@@ -1,0 +1,766 @@
+{
+  "schema_version": 1,
+  "source_revision": "ef8f853fa844282813d2270deee45175c9f58e64",
+  "source_trees": {
+    "src": "ff35bbc61002e8a588cf6e449fd1eaeab4f49cd5",
+    "lib": "8bd9511131951bdedec7ef1d7509e46288f3e94e",
+    "bin": "7f65d7d56755fa8f2be1f092fd044e819d9f3cc4",
+    "examples": "94fb515331599eb2c4e006432a25bacabdc451b7",
+    "tests": "10b49f47027d2ce5243d6af4570fbc51c8e02a47"
+  },
+  "local_only": true,
+  "status": "qualified_local_slices_with_remaining_roadmap_work",
+  "recovery_fixtures": [
+    {
+      "task": "task_94384a7ffc153f015db32a9f4d0020f464d1bdbcbe2fea4c7c53a97078e6370f",
+      "run": "run_1a402130fea27e2d5224",
+      "attempt": "attempt-1",
+      "events": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "log_bytes": 351,
+      "prefix_bytes": 64,
+      "resumed_bytes": 287,
+      "result": "workflow-result",
+      "no_replay": true,
+      "variant": "default",
+      "path": "/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-v4-real-d_3rqa_2",
+      "result_sha256": "539b91d3ba9d279cc01a676bc90e45be49e46fd2a446c00e058b3da5e7a1de21",
+      "commands_sha256": "6df41ec11448808d878846efc9109962e0176e8fb704ffba859090310ce2c1de",
+      "summary_sha256": "680b942c2a98ef3e251c81be6dd51f5ef0133e56d6c3be1c870b40308ba5fcaf",
+      "observer_after_sha256": "e409897c250e5040e358dc7c5d9d78d0b2e42173549965ed1c4ac1fbc392d476"
+    },
+    {
+      "task": "task_94384a7ffc153f015db32a9f4d0020f464d1bdbcbe2fea4c7c53a97078e6370f",
+      "run": "run_829556b041b9a7965e9d",
+      "attempt": "attempt-1",
+      "events": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "log_bytes": 351,
+      "prefix_bytes": 64,
+      "resumed_bytes": 287,
+      "result": "workflow-result",
+      "no_replay": true,
+      "variant": "ubsan",
+      "path": "/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-v4-real-wj11hu6x",
+      "result_sha256": "5c677edf759090a3be41caad719b792198040fa2d5e99003dca09e891c0d469f",
+      "commands_sha256": "5d307a30a4cf33f12ba6fff805a02166bff7469ae0288335456ec8db88485b7a",
+      "summary_sha256": "cec0d853ae3bb2c87cf18e98f5c4ccf166e7837783db544385f0b2167903a81a",
+      "observer_after_sha256": "6cccb92a33f057883d160ee3cb8fddf3a6688e9878f783fa3cd215dee5479d1d"
+    }
+  ],
+  "retained_outcomes": [
+    {
+      "case": "feature",
+      "run": "run_29af5e7a1073856ff401",
+      "expected_accept": true,
+      "exit": 0,
+      "stdout_sha256": "fbc0f96dd5b094788f18c848e519e236a30880a31eb28d9cdbb37ee5042160c4",
+      "plan_sha256": "83556f1c588a98501516ae1fabfb48d003161186dd652c7fd305df8e41eb5143",
+      "deliverables": {
+        "catalog": {
+          "sha256": "3d0086651f952f700c37a789ca13ab35de730db80822b32c199d95f112880bc7",
+          "bytes": 10240
+        }
+      }
+    },
+    {
+      "case": "feature-absent",
+      "run": "run_ccea62a1dc8533867345",
+      "expected_accept": false,
+      "exit": 1,
+      "stdout_sha256": "25f62b16d94800e1b6701c23d33458ba9f9cb32f14015dba7534e0c00d6c3c7c",
+      "plan_sha256": null,
+      "deliverables": {}
+    },
+    {
+      "case": "performance",
+      "run": "run_f307411e13bb283ccd61",
+      "expected_accept": true,
+      "exit": 0,
+      "stdout_sha256": "73e4784c65f3240e5988952b7d78ddfb82dfc1cb8f527a8bed4e582c068132ed",
+      "plan_sha256": "5a53f89d6cbb9913505d99163d9d47d381a9c16f95a640a8a307130fb40b82f9",
+      "deliverables": {
+        "report": {
+          "sha256": "5f5921880757a9fa5dabf94c9b1cb3ba6fab62691c0eec5edab60152a80dea96",
+          "bytes": 6119
+        }
+      }
+    },
+    {
+      "case": "research-valid-negative",
+      "run": "run_6bad0dba53a686be63bf",
+      "expected_accept": true,
+      "exit": 0,
+      "stdout_sha256": "e4c3d8cf6f2503ab0ee26e4ac5be1cb0b36787e86179cdc027d4d10e5d133e37",
+      "plan_sha256": "3067e0b9d2748c1f09208658e57b3ab8b053ef9c1186a4a00cea37a97ed852f6",
+      "deliverables": {
+        "report": {
+          "sha256": "94ee1e5025015a0df25100c08d6d988c2d049245a27fc5e87f0e3efa7711aace",
+          "bytes": 4928
+        }
+      }
+    },
+    {
+      "case": "research-unsupported-claim",
+      "run": "run_f9dc3303897f9e21631e",
+      "expected_accept": false,
+      "exit": 1,
+      "stdout_sha256": "25f62b16d94800e1b6701c23d33458ba9f9cb32f14015dba7534e0c00d6c3c7c",
+      "plan_sha256": null,
+      "deliverables": {}
+    },
+    {
+      "case": "pattern-serial",
+      "run": "run_6d2c345507ef21da2a7b",
+      "expected_accept": true,
+      "exit": 0,
+      "stdout_sha256": "4956ce9bf57da397e0632dfa76cc301642a5100dc8d7e09558a3321021721701",
+      "plan_sha256": "73660819318a56d6ec22f395da2c4a4f20c669d5f63e908a0c90be40dd3aa33c",
+      "deliverables": {
+        "report": {
+          "sha256": "f72774e6b62ed3493dd357684002ac85b28fe89d32c4650ae026b6fe24efcee0",
+          "bytes": 36
+        }
+      }
+    },
+    {
+      "case": "pattern-forkjoin",
+      "run": "run_89ef62a2e3d626c3708d",
+      "expected_accept": true,
+      "exit": 0,
+      "stdout_sha256": "7db68bfe762ea479105ca700c379bdff186dbc5adf8bbd2085323ba3dc0a8e90",
+      "plan_sha256": "8bc8c6d3fcc319a730a8bb7154271d8d2647a2f0cd99b44fa6e23cb8e7d54cf9",
+      "deliverables": {
+        "report": {
+          "sha256": "f72774e6b62ed3493dd357684002ac85b28fe89d32c4650ae026b6fe24efcee0",
+          "bytes": 36
+        }
+      }
+    },
+    {
+      "case": "pattern-wrong",
+      "run": "run_4ec8d07f818769928259",
+      "expected_accept": false,
+      "exit": 1,
+      "stdout_sha256": "25f62b16d94800e1b6701c23d33458ba9f9cb32f14015dba7534e0c00d6c3c7c",
+      "plan_sha256": null,
+      "deliverables": {}
+    },
+    {
+      "case": "selective-repair",
+      "run": "run_857ba3d3ceb46c8b93f0",
+      "expected_accept": true,
+      "exit": 0,
+      "stdout_sha256": "955b664aa71970ce2560ad9c1befed039a9d0ed741150a6a92a1b83132ab00d4",
+      "plan_sha256": "4eef65a03ba7b0fde0a71c2c771ba11fd2da45797bcb306ee50bc89238708229",
+      "deliverables": {
+        "part": {
+          "sha256": "1e81270f1a47dce22a2e4985250c74b2e3374443734f1492b03ea2cd2af4ec48",
+          "bytes": 10
+        },
+        "final": {
+          "sha256": "b93c36cbbf88568abb28807c7f87d43c11d7e26330c6751fcee87eb791ff0e0c",
+          "bytes": 19
+        }
+      }
+    }
+  ],
+  "completed_check_logs": [
+    {
+      "path": "build/all-streams-shell-suite.log",
+      "sha256": "0c72dfcd1353b6f28ef9bb41bbfb00880e7fe6ac84fdc080558bd465eacff441",
+      "bytes": 105646
+    },
+    {
+      "path": "build/all-streams-native-final.log",
+      "sha256": "a477b0faeed00de5c8fe26461b7a528840499195b88610a19b0650573b1f3459",
+      "bytes": 2919
+    },
+    {
+      "path": "build/v4-retained-default.log",
+      "sha256": "601dd2f18fc4408f73ce4f93e62fcf5d6e3c4724871441d7a070e376d7095d72",
+      "bytes": 405
+    },
+    {
+      "path": "build/v4-retained-sanitize.log",
+      "sha256": "3d4efa6fb1edc18f49f6a40e609fc513de03baf449f8aeaec22d065c05069030",
+      "bytes": 432
+    },
+    {
+      "path": "build/9f-reuse-metrics-final.log",
+      "sha256": "7b9b98ee98e7b0f04f084894cf564084f08f4ff719faf2d9dd103f6112d1044a",
+      "bytes": 849
+    },
+    {
+      "path": "build/9f-reuse-ubsan-final.log",
+      "sha256": "f801f87a7f798c1d816a937648fc5b08e70d4b562f6f0b145e7045ff1485ebce",
+      "bytes": 801
+    },
+    {
+      "path": "build/accessible-views-default.log",
+      "sha256": "ace6184376639aff8690c927fab66c17ce6d869bdfee30fff9ec9dbfa3631c6a",
+      "bytes": 724
+    },
+    {
+      "path": "build/accessible-views-sanitize.log",
+      "sha256": "f6a58eab0930fc14570a6cecca448c787e3613854e6182e830127f7b7c0661a0",
+      "bytes": 747
+    },
+    {
+      "path": "build/all-streams-quality-text.log",
+      "sha256": "86627943a5505a01c3ec6bdec57c0a856bd2bb1437174d2d343f95ae5e936a1d",
+      "bytes": 165328
+    },
+    {
+      "path": "build/all-streams-lint-text.log",
+      "sha256": "9985764db7ee3c98ea7b5f03f52901cce88b9686dceca24f8b41547354a99fa3",
+      "bytes": 8432
+    },
+    {
+      "path": "build/all-streams-fleet-suite.log",
+      "sha256": "c018533af3256c3d0b31e7779a835f38684a1ef904a27eccaec2cff95c42a0d9",
+      "bytes": 32785
+    },
+    {
+      "path": "build/reuse-success-final-default.log",
+      "sha256": "bca1080e615040cebaa16c00f1820c8b6e38937afc5e02b6267d13272944a386",
+      "bytes": 897
+    },
+    {
+      "path": "build/reuse-success-final-sanitize.log",
+      "sha256": "3dd82e4dd201244c5d33331bf50b0a3963f009f602e0baf7a971e0ca11774653",
+      "bytes": 897
+    },
+    {
+      "path": "build/reuse-terminal-default.log",
+      "sha256": "a478e468e7601b04dbd1d4e054f169633f37b852d49cbb82ad3b26cdadc6dd6f",
+      "bytes": 579
+    },
+    {
+      "path": "build/reuse-terminal-sanitize.log",
+      "sha256": "a478e468e7601b04dbd1d4e054f169633f37b852d49cbb82ad3b26cdadc6dd6f",
+      "bytes": 579
+    },
+    {
+      "path": "build/all-streams-quality-reuse-terminal.log",
+      "sha256": "86627943a5505a01c3ec6bdec57c0a856bd2bb1437174d2d343f95ae5e936a1d",
+      "bytes": 165328
+    },
+    {
+      "path": "build/all-streams-tui-default.log",
+      "sha256": "710498de0513c56b7ee698ed872523cad6ba29e476bc001d0f9771c757ea39bb",
+      "bytes": 24478
+    },
+    {
+      "path": "build/all-streams-tui-sanitize.log",
+      "sha256": "0be2500b661e8ddfca30e2793afd314117a0fe6e3f56c831b9cb79734db86749",
+      "bytes": 26361
+    },
+    {
+      "path": "build/all-streams-workspace-final.log",
+      "sha256": "8a4585f2d89c6c922a8d004dd3a7ced16bc50f5176843f4435a54c899072d738",
+      "bytes": 9217
+    },
+    {
+      "path": "build/all-streams-final-integration.log",
+      "sha256": "f0060faa624bc47eb8048677a3be3a1d78d2d70d6f610695d2db7ed28023889d",
+      "bytes": 16039
+    },
+    {
+      "path": "build/all-streams-lint-final-source.log",
+      "sha256": "9985764db7ee3c98ea7b5f03f52901cce88b9686dceca24f8b41547354a99fa3",
+      "bytes": 8432
+    },
+    {
+      "path": "build/all-streams-controls-final.log",
+      "sha256": "752489704a472ca821809385a578e683201a23cf2f2ee4b59b9799e3edf0bbc7",
+      "bytes": 208
+    },
+    {
+      "path": "build/manifest-public-current-default.log",
+      "sha256": "137581fd8d188a355820eaaecc9ea64530a8bac81d3f4da933f48f4e5b8a0b80",
+      "bytes": 419
+    },
+    {
+      "path": "build/manifest-public-sanitize-final.log",
+      "sha256": "92cabaa0cf48ecd71c916566c0a578b76e7923bc7ddc2e6807039fcccd1f8874",
+      "bytes": 419
+    },
+    {
+      "path": "build/manifest-outcomes-integrated.log",
+      "sha256": "781efbcc6603ddc666ad7077eecfed2c1742dfe9ee9accc512b5491a86d56a73",
+      "bytes": 317
+    },
+    {
+      "path": "build/manifest-focused-sanitize.log",
+      "sha256": "50d9d7790fe64483c0b5d1a5b073d0885acc778f8e4f733bfdfeabbd1ae9a36b",
+      "bytes": 104
+    },
+    {
+      "path": "build/manifest-final-lint.log",
+      "sha256": "9985764db7ee3c98ea7b5f03f52901cce88b9686dceca24f8b41547354a99fa3",
+      "bytes": 8432
+    }
+  ],
+  "retained_outcomes_receipt_sha256": "b3c29cd7ed4c1df95fe18a4c5281f7070ec2bebca3aa522c9ab965c082e45798",
+  "real_statistics_feed_sha256": "e16b88ccf59fdb2bfb6b756de2fd24cad56cda8adf57cc035ed48a5df695d1a0",
+  "real_statistics_comparison_sha256": "1d77065a49667ce7bf932b3cfecc226023d3a802c9b2ad96a8309d397cb57625",
+  "full_fleet_runtime": {
+    "runtime_revision": "1488df3ed7f4a2b5496351517d4f7576363ffd9c",
+    "note": "Full make test-fleet began on these normal runtime binaries; later ASCII-format and terminal-success changes use dedicated builds and focused acceptance.",
+    "binaries": {
+      "hydra-core": {
+        "sha256": "d4b94c9129bd060ab410bf3ec699782de355ef000cf7d5a764221633cb371676",
+        "bytes": 53064
+      },
+      "hydra-fleet": {
+        "sha256": "ac99f27bcdcc7a2d3b7337c75353b02d140a6697be46ce57a080864327847922",
+        "bytes": 499688
+      },
+      "hydra-tui": {
+        "sha256": "8e1806e2a82fa893bf1d3c57b9cb655d215e0c6867999c06da9773b4eb07f44e",
+        "bytes": 200440
+      }
+    }
+  },
+  "final_reuse_fixtures": [
+    {
+      "fixture": "/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/tmp.QlgNSup5vw",
+      "run": "run_29349cf830c6b10c3f5a",
+      "proof_sha256": "841114095113a33e3e327f71ced72264d89c006b927ed40c5afe87be5c4bd1db",
+      "accepted_receiver_tasks": 6,
+      "result_file_sha256": "a2e8c9fd82270c60c9c70c552cada61b196e64665f7c8abf2764b7dabd1cb1f0",
+      "original_attempts": {
+        "produce": "1",
+        "inspect": "1",
+        "compose": "2",
+        "verify": "2"
+      },
+      "result_ok": true,
+      "variant": "default"
+    },
+    {
+      "fixture": "/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/tmp.ZgY3owDdS5",
+      "run": "run_7f0238f73b4b5601d699",
+      "proof_sha256": "f495d4dabdf7a98ecc073b1cc373277f0c3f6290fa1b72a80597bbedc697d278",
+      "accepted_receiver_tasks": 6,
+      "result_file_sha256": "3d909ed25387d9cff0eb5dcbbda4e7b10c8aae87717bc6bc0e884711c15c70be",
+      "original_attempts": {
+        "produce": "1",
+        "inspect": "1",
+        "compose": "2",
+        "verify": "2"
+      },
+      "result_ok": true,
+      "variant": "sanitize"
+    }
+  ],
+  "latest_runtime_binaries": {
+    "default": {
+      "hydra-core": "9fa5257534a0039465df1759788e39591fd607ce35cadb8c1982577884557e70",
+      "hydra-fleet": "c4c8b663342e14299d1aa7a759f272113261109e353296ed0929781d86c13982",
+      "hydra-tui": "8e1806e2a82fa893bf1d3c57b9cb655d215e0c6867999c06da9773b4eb07f44e"
+    },
+    "ubsan": {
+      "hydra-core": "ece6da0c6e2cd15df66eb97c5c1a9ffcda6231f4221bb7f098ccda5bf21922e4",
+      "hydra-fleet": "7f1b93683dababf15e568a79bf9543c4031bb20b6c7dfe29c5d3051c107ab993",
+      "hydra-tui": "5180d5a15fceb34ad15c3ca91173ba0c0ae2982f1ad6b0cbfb3cca7299173880"
+    }
+  },
+  "git_publication": {
+    "branch": "codex/release-next",
+    "remote_main_observed": "2c307c82e97b948ecd6965d8d33e7079a3701eca",
+    "pushed": false,
+    "main_merged": false,
+    "released": false,
+    "remote_observation_date": "2026-09-10"
+  },
+  "limits": [
+    "Local fixture qualification does not establish live provider or external network behavior.",
+    "No stochastic matched task-class planner-quality or net planning-benefit result.",
+    "Global run/task archive quotas and several telemetry measurements remain open.",
+    "Finite graph examples do not authorize runtime expansion."
+  ],
+  "manifest_fixtures": [
+    {
+      "case": "empty",
+      "folder": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-5tzmvqt7/empty",
+      "run": "run_8e6a8c75dd25a40adb65",
+      "plan_sha256": "3210db6309dc7ad807ca52d2c1c097a69a72b263b9901b16ec3c732ae96b4265",
+      "accepted": true,
+      "members": 0,
+      "enabled": 0,
+      "report": [],
+      "run_state": "succeeded",
+      "state_path": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-5tzmvqt7/empty/home/state/v2/projects/project_bfb2768b884496614bfe/workflows/runs/run_8e6a8c75dd25a40adb65",
+      "result_sha256": "920b3bdbfcdb961baeb82b59b5c81e5dbe62db5f213d4099723fe82654ac9deb",
+      "variant": "default",
+      "commands_sha256": "7fc584871b975f7ceb2512ccfc3ded8ef7fedff0958258920380b6efaa17e385",
+      "source_sha256": {
+        "precompile.py": "d2e92b9279b8fde06178acd92fbab304488788913f1600b15a55245cdd6b3082",
+        "worker.py": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+        "compose.py": "a1624605c5594e0afe81ac0a1d02a4dc96a1be11c293299dcf6b295c040d301b",
+        "check.py": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+        "manifest.json": "cd45092ced446d3ce4da347ddb5486b08c406eb85175af09df1e819c0b4d7453",
+        "plan.json": "55268809479dabcd70f4d36d0824982cc88675f92e3c9f89aea46c1b240f5c75"
+      }
+    },
+    {
+      "case": "all-skipped",
+      "folder": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-5tzmvqt7/all-skipped",
+      "run": "run_d3617c18d0cc936051f3",
+      "plan_sha256": "fb24a8f5778f0ca6f6e8c2ee96858dbcda61f96c5a498f6825596918be88a49a",
+      "accepted": true,
+      "members": 1,
+      "enabled": 0,
+      "report": [
+        {
+          "id": "off",
+          "value": -10,
+          "status": "skipped"
+        }
+      ],
+      "run_state": "succeeded",
+      "state_path": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-5tzmvqt7/all-skipped/home/state/v2/projects/project_7b7a84bc867f7cbdb3f3/workflows/runs/run_d3617c18d0cc936051f3",
+      "result_sha256": "b6fa1bb955782ce6fb6853e08711bd48d37fed5ff18b3735fae44435e1d077ad",
+      "variant": "default",
+      "commands_sha256": "61f1b032c5626d9e1cff66e569d34c55ba10b395385fd466bd8c01c648576888",
+      "source_sha256": {
+        "precompile.py": "d2e92b9279b8fde06178acd92fbab304488788913f1600b15a55245cdd6b3082",
+        "worker.py": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+        "compose.py": "a1624605c5594e0afe81ac0a1d02a4dc96a1be11c293299dcf6b295c040d301b",
+        "check.py": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+        "manifest.json": "f93111a1430c6299a3b900b5eec7a276b4f58fa66c46c71ca90d5f554742ab82",
+        "plan.json": "55268809479dabcd70f4d36d0824982cc88675f92e3c9f89aea46c1b240f5c75"
+      }
+    },
+    {
+      "case": "mixed",
+      "folder": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-5tzmvqt7/mixed",
+      "run": "run_a753bc03afba482003eb",
+      "plan_sha256": "5b7db203226b8ff0463e471751996254a645d7711f3e412dd1197e9cc35215d0",
+      "accepted": true,
+      "members": 3,
+      "enabled": 2,
+      "report": [
+        {
+          "id": "compose",
+          "value": 1,
+          "square": 1
+        },
+        {
+          "id": "manifest",
+          "value": -3,
+          "status": "skipped"
+        },
+        {
+          "id": "check",
+          "value": 10,
+          "square": 100
+        }
+      ],
+      "run_state": "succeeded",
+      "state_path": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-5tzmvqt7/mixed/home/state/v2/projects/project_81403fc9cfb78393664c/workflows/runs/run_a753bc03afba482003eb",
+      "result_sha256": "d39ef72847ccb6b81cb20d0ed898e8c1337da4f91a6a07f4cc71b9caee982fdd",
+      "variant": "default",
+      "commands_sha256": "45024bbd64be7255f596e6ba2e679faa54d58bfca1601c273f3de6646a7e442b",
+      "source_sha256": {
+        "precompile.py": "d2e92b9279b8fde06178acd92fbab304488788913f1600b15a55245cdd6b3082",
+        "worker.py": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+        "compose.py": "a1624605c5594e0afe81ac0a1d02a4dc96a1be11c293299dcf6b295c040d301b",
+        "check.py": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+        "manifest.json": "44963b0971ed564e0e713c50b8caad46d26a82a80d1e71ea980b6278f382b856",
+        "plan.json": "ecea534359fa4983f9be78ccf4e3301e8f1a3c7fae4c754e17b8103b426f1787"
+      }
+    },
+    {
+      "case": "maximum",
+      "folder": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-5tzmvqt7/maximum",
+      "run": "run_05241b89c5499442c992",
+      "plan_sha256": "04d994b9212f46b7b00d943bb857c0ca50ebb5ec71ddaf28f510fbec0004bbb9",
+      "accepted": true,
+      "members": 8,
+      "enabled": 8,
+      "report": [
+        {
+          "id": "i0",
+          "value": -4,
+          "square": 16
+        },
+        {
+          "id": "i1",
+          "value": -3,
+          "square": 9
+        },
+        {
+          "id": "i2",
+          "value": -2,
+          "square": 4
+        },
+        {
+          "id": "i3",
+          "value": -1,
+          "square": 1
+        },
+        {
+          "id": "i4",
+          "value": 0,
+          "square": 0
+        },
+        {
+          "id": "i5",
+          "value": 1,
+          "square": 1
+        },
+        {
+          "id": "i6",
+          "value": 2,
+          "square": 4
+        },
+        {
+          "id": "i7",
+          "value": 3,
+          "square": 9
+        }
+      ],
+      "run_state": "succeeded",
+      "state_path": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-5tzmvqt7/maximum/home/state/v2/projects/project_4d44fa64c14907e7a5d1/workflows/runs/run_05241b89c5499442c992",
+      "result_sha256": "6789230c2dd8cd96a8078f101761b9501048154e9185babe3d9e2ea8a2436a8e",
+      "variant": "default",
+      "commands_sha256": "9d0d14f35a741f006c67c51eb8fbabe060ce8d0958762270b184425efccf5a74",
+      "source_sha256": {
+        "precompile.py": "d2e92b9279b8fde06178acd92fbab304488788913f1600b15a55245cdd6b3082",
+        "worker.py": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+        "compose.py": "a1624605c5594e0afe81ac0a1d02a4dc96a1be11c293299dcf6b295c040d301b",
+        "check.py": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+        "manifest.json": "a460a0176993110a7f236e065f935f553dabc7a89dd570489d69dda773048d52",
+        "plan.json": "3d2ec2d1db6f1472ea3573b403bdb4fbe13d4b6012b72d0a58bfa53dafb7cad3"
+      }
+    },
+    {
+      "case": "wrong",
+      "folder": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-5tzmvqt7/wrong",
+      "run": "run_d915b6147932744b188e",
+      "plan_sha256": "9fabbd94e1cc6f52d9fed5b3d8de0d153bda54077e6a6ecc0723d4aa27b6924e",
+      "accepted": false,
+      "members": 1,
+      "enabled": 1,
+      "report": null,
+      "run_state": "failed",
+      "state_path": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-5tzmvqt7/wrong/home/state/v2/projects/project_550b8e49056cb6aea8d4/workflows/runs/run_d915b6147932744b188e",
+      "result_sha256": "25f62b16d94800e1b6701c23d33458ba9f9cb32f14015dba7534e0c00d6c3c7c",
+      "variant": "default",
+      "commands_sha256": "55d7df33e5b56a398bd3d932595d05734983ba15d72087049f2c86a28a773b7d",
+      "source_sha256": {
+        "precompile.py": "d2e92b9279b8fde06178acd92fbab304488788913f1600b15a55245cdd6b3082",
+        "worker.py": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+        "compose.py": "ad4b620821fe7fcd1aa85b878c16dae0dbf56257589c9dba8dd3998e5f02374c",
+        "check.py": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+        "manifest.json": "27991747b3f515688a890338ac81e4a89a45c155c7acb8decb0e30d4de2d221d",
+        "plan.json": "31dc3d245c4f924ee38ee1ffcdc9fcf82b736e302e1908f04fe556f99417c59e"
+      }
+    },
+    {
+      "case": "empty",
+      "folder": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-vxgsoo9p/empty",
+      "run": "run_8ab666f6eba4c300d991",
+      "plan_sha256": "580b6362f2ffddc6c118c0685d9c0c90cf5b3919922e5c144e1c174b9ef4e7f8",
+      "accepted": true,
+      "members": 0,
+      "enabled": 0,
+      "report": [],
+      "run_state": "succeeded",
+      "state_path": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-vxgsoo9p/empty/home/state/v2/projects/project_911b393f2ce6db4377bf/workflows/runs/run_8ab666f6eba4c300d991",
+      "result_sha256": "186e5e7687e584a58e94076a4340a4043a8111be6f64ace88349585bfc0bc7fd",
+      "variant": "ubsan",
+      "commands_sha256": "31d925d4333fd672abee98a999cc8cdd8de2f3ff43ec63b8ace8158a0827dac5",
+      "source_sha256": {
+        "precompile.py": "d2e92b9279b8fde06178acd92fbab304488788913f1600b15a55245cdd6b3082",
+        "worker.py": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+        "compose.py": "a1624605c5594e0afe81ac0a1d02a4dc96a1be11c293299dcf6b295c040d301b",
+        "check.py": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+        "manifest.json": "cd45092ced446d3ce4da347ddb5486b08c406eb85175af09df1e819c0b4d7453",
+        "plan.json": "55268809479dabcd70f4d36d0824982cc88675f92e3c9f89aea46c1b240f5c75"
+      }
+    },
+    {
+      "case": "all-skipped",
+      "folder": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-vxgsoo9p/all-skipped",
+      "run": "run_664755b45cf0a6a9ce81",
+      "plan_sha256": "537014b1f231bb32d479d2ccce7cfc0b7b0ab160457e8e7d42e584b59d390cbf",
+      "accepted": true,
+      "members": 1,
+      "enabled": 0,
+      "report": [
+        {
+          "id": "off",
+          "value": -10,
+          "status": "skipped"
+        }
+      ],
+      "run_state": "succeeded",
+      "state_path": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-vxgsoo9p/all-skipped/home/state/v2/projects/project_10f361991627fa8f2785/workflows/runs/run_664755b45cf0a6a9ce81",
+      "result_sha256": "7feaf7ccb90f098ed1a9118deb9e213b98a5f241c05eb0bd963e6001b8182c5a",
+      "variant": "ubsan",
+      "commands_sha256": "9d3ac5cd3105da891caa611c08b632fe60e605012fe5dd64d9364c425608cffb",
+      "source_sha256": {
+        "precompile.py": "d2e92b9279b8fde06178acd92fbab304488788913f1600b15a55245cdd6b3082",
+        "worker.py": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+        "compose.py": "a1624605c5594e0afe81ac0a1d02a4dc96a1be11c293299dcf6b295c040d301b",
+        "check.py": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+        "manifest.json": "f93111a1430c6299a3b900b5eec7a276b4f58fa66c46c71ca90d5f554742ab82",
+        "plan.json": "55268809479dabcd70f4d36d0824982cc88675f92e3c9f89aea46c1b240f5c75"
+      }
+    },
+    {
+      "case": "mixed",
+      "folder": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-vxgsoo9p/mixed",
+      "run": "run_a13bed1752ac65f518ae",
+      "plan_sha256": "e5fdb2a118e8a769a5228f35bbf841859ff774826f6535e1f3c9e141280d0672",
+      "accepted": true,
+      "members": 3,
+      "enabled": 2,
+      "report": [
+        {
+          "id": "compose",
+          "value": 1,
+          "square": 1
+        },
+        {
+          "id": "manifest",
+          "value": -3,
+          "status": "skipped"
+        },
+        {
+          "id": "check",
+          "value": 10,
+          "square": 100
+        }
+      ],
+      "run_state": "succeeded",
+      "state_path": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-vxgsoo9p/mixed/home/state/v2/projects/project_343da91c65d2c63d8d5f/workflows/runs/run_a13bed1752ac65f518ae",
+      "result_sha256": "c359eca7df8d121dcd2dce3d1fb160b70635e5cd006f063ce2705cb3beb8865c",
+      "variant": "ubsan",
+      "commands_sha256": "e0d92553a428b4158e4d7918edeaae2da89f088fcfe3b6718c3caad187dce7de",
+      "source_sha256": {
+        "precompile.py": "d2e92b9279b8fde06178acd92fbab304488788913f1600b15a55245cdd6b3082",
+        "worker.py": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+        "compose.py": "a1624605c5594e0afe81ac0a1d02a4dc96a1be11c293299dcf6b295c040d301b",
+        "check.py": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+        "manifest.json": "44963b0971ed564e0e713c50b8caad46d26a82a80d1e71ea980b6278f382b856",
+        "plan.json": "ecea534359fa4983f9be78ccf4e3301e8f1a3c7fae4c754e17b8103b426f1787"
+      }
+    },
+    {
+      "case": "maximum",
+      "folder": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-vxgsoo9p/maximum",
+      "run": "run_3fbbd7d6c212d9ddc45e",
+      "plan_sha256": "02468bc634c010a21b893d353f1f53bdb9a044e5a4c4220dda7c8d0490afae8e",
+      "accepted": true,
+      "members": 8,
+      "enabled": 8,
+      "report": [
+        {
+          "id": "i0",
+          "value": -4,
+          "square": 16
+        },
+        {
+          "id": "i1",
+          "value": -3,
+          "square": 9
+        },
+        {
+          "id": "i2",
+          "value": -2,
+          "square": 4
+        },
+        {
+          "id": "i3",
+          "value": -1,
+          "square": 1
+        },
+        {
+          "id": "i4",
+          "value": 0,
+          "square": 0
+        },
+        {
+          "id": "i5",
+          "value": 1,
+          "square": 1
+        },
+        {
+          "id": "i6",
+          "value": 2,
+          "square": 4
+        },
+        {
+          "id": "i7",
+          "value": 3,
+          "square": 9
+        }
+      ],
+      "run_state": "succeeded",
+      "state_path": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-vxgsoo9p/maximum/home/state/v2/projects/project_078205f5c31f44c84586/workflows/runs/run_3fbbd7d6c212d9ddc45e",
+      "result_sha256": "fd717243154362c3b10cb1ba27ed63cc14f6bf35ab07472e1a1dd91840d030bf",
+      "variant": "ubsan",
+      "commands_sha256": "c0828d4148d19e10442f228ba98ff37364760f1c22de3ffc0d1d55b8fe9a0bf6",
+      "source_sha256": {
+        "precompile.py": "d2e92b9279b8fde06178acd92fbab304488788913f1600b15a55245cdd6b3082",
+        "worker.py": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+        "compose.py": "a1624605c5594e0afe81ac0a1d02a4dc96a1be11c293299dcf6b295c040d301b",
+        "check.py": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+        "manifest.json": "a460a0176993110a7f236e065f935f553dabc7a89dd570489d69dda773048d52",
+        "plan.json": "3d2ec2d1db6f1472ea3573b403bdb4fbe13d4b6012b72d0a58bfa53dafb7cad3"
+      }
+    },
+    {
+      "case": "wrong",
+      "folder": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-vxgsoo9p/wrong",
+      "run": "run_709baf3e52a220a769ee",
+      "plan_sha256": "8987ba87672cf213bc560a0fe427709bd718f5f8e9d282598fc96228482bba73",
+      "accepted": false,
+      "members": 1,
+      "enabled": 1,
+      "report": null,
+      "run_state": "failed",
+      "state_path": "/private/var/folders/sp/gftbmpy17y1_q_6cp75p8gm40000gn/T/hydra-manifest-public-vxgsoo9p/wrong/home/state/v2/projects/project_efb282862f705303ef88/workflows/runs/run_709baf3e52a220a769ee",
+      "result_sha256": "25f62b16d94800e1b6701c23d33458ba9f9cb32f14015dba7534e0c00d6c3c7c",
+      "variant": "ubsan",
+      "commands_sha256": "4d03402cce0988f83a46fabfc3651efd405a584501021c09c325beb2cbcdb1c2",
+      "source_sha256": {
+        "precompile.py": "d2e92b9279b8fde06178acd92fbab304488788913f1600b15a55245cdd6b3082",
+        "worker.py": "37de421137e9d55ffbf54f63a9f67fc2de2c2a91620731091d4cd5e266ef34af",
+        "compose.py": "ad4b620821fe7fcd1aa85b878c16dae0dbf56257589c9dba8dd3998e5f02374c",
+        "check.py": "653f3e8c7cd9ebf0f71c53e36ecdd64b8f79d8a394e12ec158b38bafe93c5339",
+        "manifest.json": "27991747b3f515688a890338ac81e4a89a45c155c7acb8decb0e30d4de2d221d",
+        "plan.json": "31dc3d245c4f924ee38ee1ffcdc9fcf82b736e302e1908f04fe556f99417c59e"
+      }
+    }
+  ]
+}

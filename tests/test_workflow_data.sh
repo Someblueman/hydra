@@ -6,15 +6,19 @@ ROOT="$(mktemp -d)"
 export HYDRA_HOME="$ROOT/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 # shellcheck disable=SC1091
 . "$(dirname "$0")/helpers.sh"
+# shellcheck source=/dev/null
+. "$(dirname "$0")/tmux_fixture_cleanup.sh"
 test_count=0 pass_count=0 fail_count=0
 cleanup() {
     if [ -d "$ROOT/repo" ]; then
         (cd "$ROOT/repo" && "$HYDRA_BIN" kill data-producer --force >/dev/null 2>&1) || true
         (cd "$ROOT/repo" && "$HYDRA_BIN" kill data-consumer --force >/dev/null 2>&1) || true
     fi
+    test_tmux_fixture_cleanup "$ROOT" || return 1
     rm -rf "$ROOT"
 }
-trap cleanup EXIT
+test_code=0
+trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP

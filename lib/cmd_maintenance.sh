@@ -73,19 +73,15 @@ cmd_doctor() {
     echo ""
     echo "Dependencies:"
 
-    if command -v tmux >/dev/null 2>&1; then
-        if check_tmux_version 2>/dev/null; then
-            print_success "$(tmux -V) (need >= 3.0)"
-        else
-            _tmux_ver="$(tmux -V 2>/dev/null || echo tmux)"
-            doctor_fail "$_tmux_ver is too old (need 3.0+)" \
-                "upgrade tmux to 3.0 or newer, then re-run hydra doctor"
-            errors=$((errors + 1))
-        fi
-    else
-        doctor_fail "tmux is not installed" \
-            "install tmux 3.0 or newer (apt/brew), then re-run hydra doctor"
+    if check_tmux_version 2>/dev/null; then
+        print_success "$(tmux -V) (supports interactive terminals)"
+    elif state_has_interactive_heads; then
+        doctor_fail "Interactive heads require tmux 3.0 or newer" \
+            "install or upgrade tmux, then re-run hydra doctor"
         errors=$((errors + 1))
+    else
+        doctor_info "Interactive terminals unavailable; headless execution does not require tmux" \
+            "install tmux 3.0 or newer to use interactive spawn and attach"
     fi
 
     if command -v git >/dev/null 2>&1; then

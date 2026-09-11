@@ -1,0 +1,2023 @@
+{
+  "schema_version": 1,
+  "scope": "Finite interface-conformance pilot; graph and local placement held fixed. No causal planning-benefit or calibration claim.",
+  "freeze_correction": "Heldout v2 repairs the unsatisfiable v1 hash case after generation and before evaluation; original v1 retained.",
+  "inputs": {
+    "examples/planning/evaluation/planner-visible-contracts.json": "8bfd9b165e8680326af945768d8483c758bd33c5375766f44a70cfa4767914b1",
+    "examples/planning/evaluation/planner-evaluation-heldout.json": "5171ccdaccbf0deb22a050cb6bcb78095100b17b5f5589d72a2e8c2f8d0e6162",
+    "examples/planning/evaluation/planner-evaluation-heldout-v2.json": "67365d52b98eae99b138c2477a526fd277601cff8038ea0fbe31b8526c5000f6",
+    "examples/planning/evaluation/evaluate.py": "08160cf96744c0b6606a15171f0a924fa538412714bebdd055c840b3c6644fc3"
+  },
+  "candidates": [
+    {
+      "name": "contract-aware-1",
+      "generation": {
+        "schema_version": 1,
+        "candidate": "contract-aware-1",
+        "plan_choices": {
+          "decomposition": "fixed serial or fork/join only for independent members",
+          "scheduling": "bounded static DAG, max_parallelism=2",
+          "placement": "local only; placement separate from decomposition"
+        },
+        "obligation_coverage": {
+          "validation": "exact contract outputs and verdicts",
+          "transfer": "bounded declared files",
+          "authority": "no network, max_heads=4, repair_budget=0"
+        },
+        "effort": {
+          "generation_started": "2026-09-10T10:49:32Z",
+          "generation_ended": "2026-09-10T10:50:59Z",
+          "elapsed_seconds": 87
+        },
+        "limitations": [
+          "Visible finite contracts only; no hidden oracle or general optimality claim."
+        ]
+      },
+      "evaluation": {
+        "aggregate": {
+          "accepted_correct": 9,
+          "case_total": 9,
+          "correct_case_failures": 0,
+          "cpu_seconds": 0.0023669999999999976,
+          "false_acceptances": 0,
+          "negative_control_total": 18,
+          "negative_controls_rejected": 18,
+          "wall_seconds": 0.219501666999804
+        },
+        "candidate": {
+          "path": "/Users/sws/Code/hydra/examples/planning/evaluation/candidates/contract-aware-1/candidate.py",
+          "sha256": "8c8b40f2e82f96fec4991d5df7ee68b2e0f206280fcad381a13b3ff3f6788bb6"
+        },
+        "cases": [
+          {
+            "accepted": true,
+            "class": "feature_correctness",
+            "contract_id": "feature.normalize_records.v1",
+            "cpu_seconds": 0.0012449999999999996,
+            "expected_format": "exact_bytes",
+            "id": "fc-01-normalize-record",
+            "negative_controls": [
+              {
+                "id": "wrong-case",
+                "reason": "Second record was not normalized.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-order",
+                "reason": "Input order was not preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.02587433400003647
+          },
+          {
+            "accepted": true,
+            "class": "feature_correctness",
+            "contract_id": "feature.reject_duplicate_config.v1",
+            "cpu_seconds": 0.0001339999999999987,
+            "expected_format": "exact_bytes",
+            "id": "fc-02-reject-duplicate-config",
+            "negative_controls": [
+              {
+                "id": "last-write-wins",
+                "reason": "Duplicate input was silently accepted.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-error",
+                "reason": "Reported error does not identify the violated contract.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.024449291999872003
+          },
+          {
+            "accepted": true,
+            "class": "feature_correctness",
+            "contract_id": "feature.compose_two_members.v1",
+            "cpu_seconds": 0.00013000000000000164,
+            "expected_format": "exact_bytes",
+            "id": "fc-03-two-member-report",
+            "negative_controls": [
+              {
+                "id": "missing-member",
+                "reason": "Required member B is absent.",
+                "rejected": true
+              },
+              {
+                "id": "truncated-final-newline",
+                "reason": "The sealed byte contract requires the final newline.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.025378374999945663
+          },
+          {
+            "accepted": true,
+            "class": "finite_research_claim",
+            "contract_id": "research.schedule_metrics.v1",
+            "cpu_seconds": 0.0001539999999999979,
+            "expected_format": "exact_json",
+            "id": "fr-01-schedule-metrics",
+            "negative_controls": [
+              {
+                "id": "mean-only",
+                "reason": "Required maximum-wait metric is missing.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-sjf-order",
+                "reason": "SJF values are not recomputed from the declared durations.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.025334874999998647
+          },
+          {
+            "accepted": true,
+            "class": "finite_research_claim",
+            "contract_id": "research.threshold_claim.v1",
+            "cpu_seconds": 0.0001439999999999983,
+            "expected_format": "exact_json",
+            "id": "fr-02-threshold-negative",
+            "negative_controls": [
+              {
+                "id": "false-positive",
+                "reason": "FCFS max wait 18 exceeds threshold 16.",
+                "rejected": true
+              },
+              {
+                "id": "mean-confusion",
+                "reason": "SJF p95 turnaround and max wait both exceed limits.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.02404487499984498
+          },
+          {
+            "accepted": true,
+            "class": "finite_research_claim",
+            "contract_id": "research.preserve_unknowns.v1",
+            "cpu_seconds": 0.00012999999999999817,
+            "expected_format": "exact_json",
+            "id": "fr-03-preserve-uncertainty",
+            "negative_controls": [
+              {
+                "id": "invented-probability",
+                "reason": "Unknown rework probability was presented as calibrated.",
+                "rejected": true
+              },
+              {
+                "id": "timeout-as-estimate",
+                "reason": "Unknown transfer size was fabricated from an unrelated value.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.023853750000171203
+          },
+          {
+            "accepted": true,
+            "class": "manifest_membership",
+            "contract_id": "manifest.exact_members.v1",
+            "cpu_seconds": 0.00012900000000000064,
+            "expected_format": "exact_json",
+            "id": "mm-01-exact-members",
+            "negative_controls": [
+              {
+                "id": "missing-gamma",
+                "reason": "A missing declared member cannot be accepted.",
+                "rejected": true
+              },
+              {
+                "id": "extra-delta",
+                "reason": "An undeclared member is present.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.02291224999999031
+          },
+          {
+            "accepted": true,
+            "class": "manifest_membership",
+            "contract_id": "manifest.hash_bound_members.v1",
+            "cpu_seconds": 0.00014000000000000123,
+            "expected_format": "exact_json",
+            "id": "mm-02-hash-bound-members",
+            "negative_controls": [
+              {
+                "id": "changed-beta",
+                "reason": "A hash mismatch cannot be reported as a pass.",
+                "rejected": true
+              },
+              {
+                "id": "unchecked-beta",
+                "reason": "Every declared member must be checked.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.023830374999988635
+          },
+          {
+            "accepted": true,
+            "class": "manifest_membership",
+            "contract_id": "manifest.selected_skipped.v1",
+            "cpu_seconds": 0.00016100000000000142,
+            "expected_format": "exact_json",
+            "id": "mm-03-selected-and-skipped",
+            "negative_controls": [
+              {
+                "id": "silent-skip",
+                "reason": "The skipped member lacks the required explicit record.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-selection",
+                "reason": "Selection=false for b must be preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.023823540999956094
+          }
+        ],
+        "frozen_sources": {
+          "contracts_sha256": "8bfd9b165e8680326af945768d8483c758bd33c5375766f44a70cfa4767914b1",
+          "heldout_sha256": "67365d52b98eae99b138c2477a526fd277601cff8038ea0fbe31b8526c5000f6",
+          "oracle_sha256": "08160cf96744c0b6606a15171f0a924fa538412714bebdd055c840b3c6644fc3"
+        },
+        "schema_version": 1,
+        "status": "pass"
+      }
+    },
+    {
+      "name": "contract-aware-2",
+      "generation": {
+        "schema_version": 1,
+        "candidate": "contract-aware-2",
+        "prior_conversational_exposure": "The agent has seen the visible contract packet and prior task context, but this candidate was generated as a fresh independent artifact without reading prior candidate files or hidden/oracle data.",
+        "required_obligations": [
+          "exact contract-shaped artifact",
+          "independent validation fields and verdict",
+          "bounded file transfer",
+          "fixed local authority"
+        ],
+        "plan_choices": {
+          "decomposition": "serial for dependent parsing; fixed fork/join for independent member checks",
+          "scheduling": "static bounded DAG, max_parallelism=2",
+          "placement": "local only, separate from decomposition and scheduling"
+        },
+        "limits": {
+          "max_heads": 4,
+          "parallelism": 2,
+          "timeout_seconds": 120,
+          "checker_timeout_seconds": 30,
+          "artifact_bytes": 65536,
+          "repair_budget": 0,
+          "network": "forbidden"
+        },
+        "effort": {
+          "generation_started": "2026-09-10T10:53:17Z",
+          "generation_ended": "2026-09-10T10:53:55Z",
+          "elapsed_seconds": 38
+        },
+        "limitations": [
+          "Visible finite contracts and training examples only; no hidden oracle, arbitrary-plan optimality, or extrapolated research claims."
+        ]
+      },
+      "evaluation": {
+        "aggregate": {
+          "accepted_correct": 9,
+          "case_total": 9,
+          "correct_case_failures": 0,
+          "cpu_seconds": 0.0023120000000000016,
+          "false_acceptances": 0,
+          "negative_control_total": 18,
+          "negative_controls_rejected": 18,
+          "wall_seconds": 0.20715950100020564
+        },
+        "candidate": {
+          "path": "/Users/sws/Code/hydra/examples/planning/evaluation/candidates/contract-aware-2/candidate.py",
+          "sha256": "930b0345e7258457087f80d11aec414b1d934b3c0c6bf57a4e28f4fd3d3615a6"
+        },
+        "cases": [
+          {
+            "accepted": true,
+            "class": "feature_correctness",
+            "contract_id": "feature.normalize_records.v1",
+            "cpu_seconds": 0.0012630000000000002,
+            "expected_format": "exact_bytes",
+            "id": "fc-01-normalize-record",
+            "negative_controls": [
+              {
+                "id": "wrong-case",
+                "reason": "Second record was not normalized.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-order",
+                "reason": "Input order was not preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.024141667000094458
+          },
+          {
+            "accepted": true,
+            "class": "feature_correctness",
+            "contract_id": "feature.reject_duplicate_config.v1",
+            "cpu_seconds": 0.00013099999999999917,
+            "expected_format": "exact_bytes",
+            "id": "fc-02-reject-duplicate-config",
+            "negative_controls": [
+              {
+                "id": "last-write-wins",
+                "reason": "Duplicate input was silently accepted.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-error",
+                "reason": "Reported error does not identify the violated contract.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.023422125000024607
+          },
+          {
+            "accepted": true,
+            "class": "feature_correctness",
+            "contract_id": "feature.compose_two_members.v1",
+            "cpu_seconds": 0.00012200000000000058,
+            "expected_format": "exact_bytes",
+            "id": "fc-03-two-member-report",
+            "negative_controls": [
+              {
+                "id": "missing-member",
+                "reason": "Required member B is absent.",
+                "rejected": true
+              },
+              {
+                "id": "truncated-final-newline",
+                "reason": "The sealed byte contract requires the final newline.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.022361041000067416
+          },
+          {
+            "accepted": true,
+            "class": "finite_research_claim",
+            "contract_id": "research.schedule_metrics.v1",
+            "cpu_seconds": 0.0001580000000000019,
+            "expected_format": "exact_json",
+            "id": "fr-01-schedule-metrics",
+            "negative_controls": [
+              {
+                "id": "mean-only",
+                "reason": "Required maximum-wait metric is missing.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-sjf-order",
+                "reason": "SJF values are not recomputed from the declared durations.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.023167167000110567
+          },
+          {
+            "accepted": true,
+            "class": "finite_research_claim",
+            "contract_id": "research.threshold_claim.v1",
+            "cpu_seconds": 0.00014000000000000123,
+            "expected_format": "exact_json",
+            "id": "fr-02-threshold-negative",
+            "negative_controls": [
+              {
+                "id": "false-positive",
+                "reason": "FCFS max wait 18 exceeds threshold 16.",
+                "rejected": true
+              },
+              {
+                "id": "mean-confusion",
+                "reason": "SJF p95 turnaround and max wait both exceed limits.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.02320362499995099
+          },
+          {
+            "accepted": true,
+            "class": "finite_research_claim",
+            "contract_id": "research.preserve_unknowns.v1",
+            "cpu_seconds": 0.00011699999999999905,
+            "expected_format": "exact_json",
+            "id": "fr-03-preserve-uncertainty",
+            "negative_controls": [
+              {
+                "id": "invented-probability",
+                "reason": "Unknown rework probability was presented as calibrated.",
+                "rejected": true
+              },
+              {
+                "id": "timeout-as-estimate",
+                "reason": "Unknown transfer size was fabricated from an unrelated value.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.022738208999953713
+          },
+          {
+            "accepted": true,
+            "class": "manifest_membership",
+            "contract_id": "manifest.exact_members.v1",
+            "cpu_seconds": 0.00012799999999999964,
+            "expected_format": "exact_json",
+            "id": "mm-01-exact-members",
+            "negative_controls": [
+              {
+                "id": "missing-gamma",
+                "reason": "A missing declared member cannot be accepted.",
+                "rejected": true
+              },
+              {
+                "id": "extra-delta",
+                "reason": "An undeclared member is present.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.022933624999950553
+          },
+          {
+            "accepted": true,
+            "class": "manifest_membership",
+            "contract_id": "manifest.hash_bound_members.v1",
+            "cpu_seconds": 0.00013200000000000017,
+            "expected_format": "exact_json",
+            "id": "mm-02-hash-bound-members",
+            "negative_controls": [
+              {
+                "id": "changed-beta",
+                "reason": "A hash mismatch cannot be reported as a pass.",
+                "rejected": true
+              },
+              {
+                "id": "unchecked-beta",
+                "reason": "Every declared member must be checked.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.02261379200012925
+          },
+          {
+            "accepted": true,
+            "class": "manifest_membership",
+            "contract_id": "manifest.selected_skipped.v1",
+            "cpu_seconds": 0.00012099999999999958,
+            "expected_format": "exact_json",
+            "id": "mm-03-selected-and-skipped",
+            "negative_controls": [
+              {
+                "id": "silent-skip",
+                "reason": "The skipped member lacks the required explicit record.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-selection",
+                "reason": "Selection=false for b must be preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.022578249999924083
+          }
+        ],
+        "frozen_sources": {
+          "contracts_sha256": "8bfd9b165e8680326af945768d8483c758bd33c5375766f44a70cfa4767914b1",
+          "heldout_sha256": "67365d52b98eae99b138c2477a526fd277601cff8038ea0fbe31b8526c5000f6",
+          "oracle_sha256": "08160cf96744c0b6606a15171f0a924fa538412714bebdd055c840b3c6644fc3"
+        },
+        "schema_version": 1,
+        "status": "pass"
+      }
+    },
+    {
+      "name": "contract-aware-3",
+      "generation": {
+        "schema_version": 1,
+        "candidate": "contract-aware-3",
+        "prior_conversational_exposure": "The agent has seen the visible packet and prior conversation, but did not read prior candidate artifacts, hidden data, oracle data, or source files for this generation.",
+        "obligations": [
+          "exact output bytes or structured fields",
+          "explicit validation and verdict",
+          "bounded transfer and checker evidence",
+          "fixed local authority"
+        ],
+        "choices": {
+          "decomposition": "serial where parsing depends on prior records; fixed fork/join for independent finite members",
+          "scheduling": "static graph, parallelism 2, no repair",
+          "placement": "local only and independent of decomposition"
+        },
+        "budgets": {
+          "heads": 4,
+          "exec_seconds": 120,
+          "checker_seconds": 30,
+          "artifact_bytes": 65536,
+          "network": false
+        },
+        "timing": {
+          "start": "2026-09-10T10:54:47Z",
+          "end": "2026-09-10T10:55:21Z",
+          "elapsed_seconds": 34
+        },
+        "limitations": [
+          "Only visible finite contracts and examples were exercised; no hidden-oracle or generality claims."
+        ]
+      },
+      "evaluation": {
+        "aggregate": {
+          "accepted_correct": 9,
+          "case_total": 9,
+          "correct_case_failures": 0,
+          "cpu_seconds": 0.002450999999999995,
+          "false_acceptances": 0,
+          "negative_control_total": 18,
+          "negative_controls_rejected": 18,
+          "wall_seconds": 0.21972770800016406
+        },
+        "candidate": {
+          "path": "/Users/sws/Code/hydra/examples/planning/evaluation/candidates/contract-aware-3/candidate.py",
+          "sha256": "3a3fd3f1f39ac19a9029365951d44846d79b9bad0b18ab61ea364cb181f2ec97"
+        },
+        "cases": [
+          {
+            "accepted": true,
+            "class": "feature_correctness",
+            "contract_id": "feature.normalize_records.v1",
+            "cpu_seconds": 0.0013419999999999994,
+            "expected_format": "exact_bytes",
+            "id": "fc-01-normalize-record",
+            "negative_controls": [
+              {
+                "id": "wrong-case",
+                "reason": "Second record was not normalized.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-order",
+                "reason": "Input order was not preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.025260792000153742
+          },
+          {
+            "accepted": true,
+            "class": "feature_correctness",
+            "contract_id": "feature.reject_duplicate_config.v1",
+            "cpu_seconds": 0.00012900000000000064,
+            "expected_format": "exact_bytes",
+            "id": "fc-02-reject-duplicate-config",
+            "negative_controls": [
+              {
+                "id": "last-write-wins",
+                "reason": "Duplicate input was silently accepted.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-error",
+                "reason": "Reported error does not identify the violated contract.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.02431354099985583
+          },
+          {
+            "accepted": true,
+            "class": "feature_correctness",
+            "contract_id": "feature.compose_two_members.v1",
+            "cpu_seconds": 0.00011699999999999905,
+            "expected_format": "exact_bytes",
+            "id": "fc-03-two-member-report",
+            "negative_controls": [
+              {
+                "id": "missing-member",
+                "reason": "Required member B is absent.",
+                "rejected": true
+              },
+              {
+                "id": "truncated-final-newline",
+                "reason": "The sealed byte contract requires the final newline.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.024713708000035695
+          },
+          {
+            "accepted": true,
+            "class": "finite_research_claim",
+            "contract_id": "research.schedule_metrics.v1",
+            "cpu_seconds": 0.00017700000000000007,
+            "expected_format": "exact_json",
+            "id": "fr-01-schedule-metrics",
+            "negative_controls": [
+              {
+                "id": "mean-only",
+                "reason": "Required maximum-wait metric is missing.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-sjf-order",
+                "reason": "SJF values are not recomputed from the declared durations.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.026127708000103667
+          },
+          {
+            "accepted": true,
+            "class": "finite_research_claim",
+            "contract_id": "research.threshold_claim.v1",
+            "cpu_seconds": 0.00015799999999999842,
+            "expected_format": "exact_json",
+            "id": "fr-02-threshold-negative",
+            "negative_controls": [
+              {
+                "id": "false-positive",
+                "reason": "FCFS max wait 18 exceeds threshold 16.",
+                "rejected": true
+              },
+              {
+                "id": "mean-confusion",
+                "reason": "SJF p95 turnaround and max wait both exceed limits.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.02549662499995975
+          },
+          {
+            "accepted": true,
+            "class": "finite_research_claim",
+            "contract_id": "research.preserve_unknowns.v1",
+            "cpu_seconds": 0.00012699999999999864,
+            "expected_format": "exact_json",
+            "id": "fr-03-preserve-uncertainty",
+            "negative_controls": [
+              {
+                "id": "invented-probability",
+                "reason": "Unknown rework probability was presented as calibrated.",
+                "rejected": true
+              },
+              {
+                "id": "timeout-as-estimate",
+                "reason": "Unknown transfer size was fabricated from an unrelated value.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.024829875000023094
+          },
+          {
+            "accepted": true,
+            "class": "manifest_membership",
+            "contract_id": "manifest.exact_members.v1",
+            "cpu_seconds": 0.00013099999999999917,
+            "expected_format": "exact_json",
+            "id": "mm-01-exact-members",
+            "negative_controls": [
+              {
+                "id": "missing-gamma",
+                "reason": "A missing declared member cannot be accepted.",
+                "rejected": true
+              },
+              {
+                "id": "extra-delta",
+                "reason": "An undeclared member is present.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.022873249999975087
+          },
+          {
+            "accepted": true,
+            "class": "manifest_membership",
+            "contract_id": "manifest.hash_bound_members.v1",
+            "cpu_seconds": 0.00012900000000000064,
+            "expected_format": "exact_json",
+            "id": "mm-02-hash-bound-members",
+            "negative_controls": [
+              {
+                "id": "changed-beta",
+                "reason": "A hash mismatch cannot be reported as a pass.",
+                "rejected": true
+              },
+              {
+                "id": "unchecked-beta",
+                "reason": "Every declared member must be checked.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.022702750000007654
+          },
+          {
+            "accepted": true,
+            "class": "manifest_membership",
+            "contract_id": "manifest.selected_skipped.v1",
+            "cpu_seconds": 0.00014099999999999877,
+            "expected_format": "exact_json",
+            "id": "mm-03-selected-and-skipped",
+            "negative_controls": [
+              {
+                "id": "silent-skip",
+                "reason": "The skipped member lacks the required explicit record.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-selection",
+                "reason": "Selection=false for b must be preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "accepted",
+            "wall_seconds": 0.023409459000049537
+          }
+        ],
+        "frozen_sources": {
+          "contracts_sha256": "8bfd9b165e8680326af945768d8483c758bd33c5375766f44a70cfa4767914b1",
+          "heldout_sha256": "67365d52b98eae99b138c2477a526fd277601cff8038ea0fbe31b8526c5000f6",
+          "oracle_sha256": "08160cf96744c0b6606a15171f0a924fa538412714bebdd055c840b3c6644fc3"
+        },
+        "schema_version": 1,
+        "status": "pass"
+      }
+    },
+    {
+      "name": "current-1",
+      "generation": {
+        "candidate": "current-1",
+        "contract_set": "9e-visible-contracts-20260910-v1",
+        "grouping": [
+          {
+            "group": "feature",
+            "contracts": [
+              "normalize_records",
+              "reject_duplicate_config",
+              "compose_two_members"
+            ],
+            "reason": "small deterministic byte and text transforms with independent dispatch"
+          },
+          {
+            "group": "research",
+            "contracts": [
+              "schedule_metrics",
+              "threshold_claim",
+              "preserve_unknowns"
+            ],
+            "reason": "finite calculations and explicit unknown propagation"
+          },
+          {
+            "group": "manifest",
+            "contracts": [
+              "exact_members",
+              "hash_bound_members",
+              "selected_skipped"
+            ],
+            "reason": "ordered membership, byte hashing, and explicit record coverage"
+          }
+        ],
+        "dependencies": [
+          "Each request is self-contained; no contract depends on another contract's output.",
+          "Manifest hashing uses SHA-256 over supplied member bytes only.",
+          "All JSON serialization is compact and deterministic; ordering follows each contract."
+        ],
+        "decomposition": {
+          "mode": "fixed dispatch",
+          "parallelism": 1,
+          "reason": "one bounded request is solved without shared mutable state"
+        },
+        "host_placement": {
+          "mode": "local",
+          "reason": "the packet forbids network access and requires only Python standard library"
+        },
+        "time_ranges_seconds": {
+          "implementation": [
+            1,
+            10
+          ],
+          "validation": [
+            1,
+            10
+          ],
+          "transfer": [
+            0,
+            1
+          ]
+        },
+        "effort": {
+          "implementation": "small",
+          "validation": "small",
+          "transfer_obligations": "none beyond supplied JSON input"
+        },
+        "validation": [
+          "Run each supplied training example through solve and compare exact artifact values.",
+          "Run syntax compilation and bounded CLI smoke checks."
+        ],
+        "limitations": [
+          "No global optimality claim.",
+          "No probabilities or confidence estimates are generated.",
+          "No values are inferred for literal unknown.",
+          "Process exit is not treated as semantic acceptance; artifacts must be compared."
+        ],
+        "training_observations": [
+          "The schedule example requires stable SJF ties and six-place mean rounding.",
+          "The hash example is intentionally a mismatch and must remain fail.",
+          "Selection false values require explicit skipped records."
+        ],
+        "actual_start_utc": null,
+        "actual_end_utc": null,
+        "elapsed_seconds": null,
+        "measurement_state": "not_recorded",
+        "measurement_note": "Generation completed before exact wall-clock timing was recorded; the duration cannot be reconstructed."
+      },
+      "evaluation": {
+        "aggregate": {
+          "accepted_correct": 0,
+          "case_total": 9,
+          "correct_case_failures": 9,
+          "cpu_seconds": 0.006490999999999997,
+          "false_acceptances": 0,
+          "negative_control_total": 18,
+          "negative_controls_rejected": 18,
+          "wall_seconds": 0.2179801239999506
+        },
+        "candidate": {
+          "path": "/Users/sws/Code/hydra/examples/planning/evaluation/candidates/current-1/candidate.py",
+          "sha256": "b4b7946bcd67ae6bcc3af6e4ca1148e409173063ea63f02f7deca7d18095cfff"
+        },
+        "cases": [
+          {
+            "accepted": false,
+            "class": "feature_correctness",
+            "contract_id": "feature.normalize_records.v1",
+            "cpu_seconds": 0.0021100000000000008,
+            "expected_format": "exact_bytes",
+            "id": "fc-01-normalize-record",
+            "negative_controls": [
+              {
+                "id": "wrong-case",
+                "reason": "Second record was not normalized.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-order",
+                "reason": "Input order was not preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.025572791000058714
+          },
+          {
+            "accepted": false,
+            "class": "feature_correctness",
+            "contract_id": "feature.reject_duplicate_config.v1",
+            "cpu_seconds": 0.0005479999999999999,
+            "expected_format": "exact_bytes",
+            "id": "fc-02-reject-duplicate-config",
+            "negative_controls": [
+              {
+                "id": "last-write-wins",
+                "reason": "Duplicate input was silently accepted.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-error",
+                "reason": "Reported error does not identify the violated contract.",
+                "rejected": true
+              }
+            ],
+            "reason": "candidate_error:AttributeError:'str' object has no attribute 'get'",
+            "wall_seconds": 0.02454824999995253
+          },
+          {
+            "accepted": false,
+            "class": "feature_correctness",
+            "contract_id": "feature.compose_two_members.v1",
+            "cpu_seconds": 0.0005209999999999972,
+            "expected_format": "exact_bytes",
+            "id": "fc-03-two-member-report",
+            "negative_controls": [
+              {
+                "id": "missing-member",
+                "reason": "Required member B is absent.",
+                "rejected": true
+              },
+              {
+                "id": "truncated-final-newline",
+                "reason": "The sealed byte contract requires the final newline.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.02327700000000732
+          },
+          {
+            "accepted": false,
+            "class": "finite_research_claim",
+            "contract_id": "research.schedule_metrics.v1",
+            "cpu_seconds": 0.0005229999999999992,
+            "expected_format": "exact_json",
+            "id": "fr-01-schedule-metrics",
+            "negative_controls": [
+              {
+                "id": "mean-only",
+                "reason": "Required maximum-wait metric is missing.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-sjf-order",
+                "reason": "SJF values are not recomputed from the declared durations.",
+                "rejected": true
+              }
+            ],
+            "reason": "candidate_error:AttributeError:'str' object has no attribute 'get'",
+            "wall_seconds": 0.02397362500005329
+          },
+          {
+            "accepted": false,
+            "class": "finite_research_claim",
+            "contract_id": "research.threshold_claim.v1",
+            "cpu_seconds": 0.0005509999999999994,
+            "expected_format": "exact_json",
+            "id": "fr-02-threshold-negative",
+            "negative_controls": [
+              {
+                "id": "false-positive",
+                "reason": "FCFS max wait 18 exceeds threshold 16.",
+                "rejected": true
+              },
+              {
+                "id": "mean-confusion",
+                "reason": "SJF p95 turnaround and max wait both exceed limits.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.023979833000112194
+          },
+          {
+            "accepted": false,
+            "class": "finite_research_claim",
+            "contract_id": "research.preserve_unknowns.v1",
+            "cpu_seconds": 0.0005800000000000007,
+            "expected_format": "exact_json",
+            "id": "fr-03-preserve-uncertainty",
+            "negative_controls": [
+              {
+                "id": "invented-probability",
+                "reason": "Unknown rework probability was presented as calibrated.",
+                "rejected": true
+              },
+              {
+                "id": "timeout-as-estimate",
+                "reason": "Unknown transfer size was fabricated from an unrelated value.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.024285999999847263
+          },
+          {
+            "accepted": false,
+            "class": "manifest_membership",
+            "contract_id": "manifest.exact_members.v1",
+            "cpu_seconds": 0.0005380000000000003,
+            "expected_format": "exact_json",
+            "id": "mm-01-exact-members",
+            "negative_controls": [
+              {
+                "id": "missing-gamma",
+                "reason": "A missing declared member cannot be accepted.",
+                "rejected": true
+              },
+              {
+                "id": "extra-delta",
+                "reason": "An undeclared member is present.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.024143417000004774
+          },
+          {
+            "accepted": false,
+            "class": "manifest_membership",
+            "contract_id": "manifest.hash_bound_members.v1",
+            "cpu_seconds": 0.0005269999999999997,
+            "expected_format": "exact_json",
+            "id": "mm-02-hash-bound-members",
+            "negative_controls": [
+              {
+                "id": "changed-beta",
+                "reason": "A hash mismatch cannot be reported as a pass.",
+                "rejected": true
+              },
+              {
+                "id": "unchecked-beta",
+                "reason": "Every declared member must be checked.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.022754874999918684
+          },
+          {
+            "accepted": false,
+            "class": "manifest_membership",
+            "contract_id": "manifest.selected_skipped.v1",
+            "cpu_seconds": 0.0005929999999999998,
+            "expected_format": "exact_json",
+            "id": "mm-03-selected-and-skipped",
+            "negative_controls": [
+              {
+                "id": "silent-skip",
+                "reason": "The skipped member lacks the required explicit record.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-selection",
+                "reason": "Selection=false for b must be preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.025444332999995822
+          }
+        ],
+        "frozen_sources": {
+          "contracts_sha256": "8bfd9b165e8680326af945768d8483c758bd33c5375766f44a70cfa4767914b1",
+          "heldout_sha256": "67365d52b98eae99b138c2477a526fd277601cff8038ea0fbe31b8526c5000f6",
+          "oracle_sha256": "08160cf96744c0b6606a15171f0a924fa538412714bebdd055c840b3c6644fc3"
+        },
+        "schema_version": 1,
+        "status": "fail"
+      }
+    },
+    {
+      "name": "current-2",
+      "generation": {
+        "candidate": "current-2",
+        "contract_set": "9e-visible-contracts-20260910-v1",
+        "grouping": [
+          {
+            "group": "feature",
+            "contracts": [
+              "normalize_records",
+              "reject_duplicate_config",
+              "compose_two_members"
+            ],
+            "reason": "independent exact text and byte transformations"
+          },
+          {
+            "group": "research",
+            "contracts": [
+              "schedule_metrics",
+              "threshold_claim",
+              "preserve_unknowns"
+            ],
+            "reason": "bounded finite calculations with explicit unknown handling"
+          },
+          {
+            "group": "manifest",
+            "contracts": [
+              "exact_members",
+              "hash_bound_members",
+              "selected_skipped"
+            ],
+            "reason": "finite ordered membership and evidence records"
+          }
+        ],
+        "dependencies": [
+          "Each solve request is self-contained.",
+          "Hashing consumes only checker-supplied member bytes.",
+          "Artifact JSON is compact and deterministic."
+        ],
+        "decomposition": {
+          "mode": "fixed serial dispatch",
+          "parallelism": 1,
+          "reason": "one request has no shared state and the contracts are small"
+        },
+        "scheduling": {
+          "mode": "serial",
+          "reason": "fixed graph with no cross-contract dependency",
+          "limits": {
+            "max_heads": 4,
+            "max_parallelism": 2,
+            "exec_seconds": 120,
+            "checker_seconds": 30,
+            "repair_budget": 0
+          }
+        },
+        "host_placement": {
+          "mode": "local",
+          "reason": "stdlib-only execution satisfies the network-forbidden packet"
+        },
+        "time_estimates_before_execution": {
+          "implementation_seconds": [
+            1,
+            10
+          ],
+          "validation_seconds": [
+            1,
+            10
+          ],
+          "transfer_seconds": [
+            0,
+            1
+          ]
+        },
+        "effort": {
+          "implementation": "small",
+          "validation": "small",
+          "transfer_obligations": "supplied JSON only"
+        },
+        "validation": [
+          "Run each of the nine visible training examples and compare complete artifacts.",
+          "Compile the module and exercise the JSON stdin/stdout CLI."
+        ],
+        "limitations": [
+          "No global optimality claim.",
+          "No calibrated probabilities or confidence estimates.",
+          "Unknown values remain unknown.",
+          "Training and validation were performed with prior conversational exposure to the public packet; no hidden or prior candidate artifacts were used.",
+          "Process exit is not semantic acceptance."
+        ],
+        "transfer_obligations": "No network or external transfer; retain only bounded JSON artifacts.",
+        "training_observations": [
+          "FCFS preserves CSV order; SJF preserves stable input order for ties.",
+          "The hash training case intentionally produces a mismatch.",
+          "False selections produce explicit skipped records."
+        ],
+        "actual_start_utc": "2026-09-10T10:51:12Z",
+        "actual_end_utc": "2026-09-10T10:52:19Z",
+        "elapsed_seconds": 67,
+        "measurement_state": "measured"
+      },
+      "evaluation": {
+        "aggregate": {
+          "accepted_correct": 0,
+          "case_total": 9,
+          "correct_case_failures": 9,
+          "cpu_seconds": 0.006512,
+          "false_acceptances": 0,
+          "negative_control_total": 18,
+          "negative_controls_rejected": 18,
+          "wall_seconds": 0.21888762399998996
+        },
+        "candidate": {
+          "path": "/Users/sws/Code/hydra/examples/planning/evaluation/candidates/current-2/candidate.py",
+          "sha256": "144a150672cab8db38677d8afbdc056b6b5c0475b06cdecb404b04a54dc7884d"
+        },
+        "cases": [
+          {
+            "accepted": false,
+            "class": "feature_correctness",
+            "contract_id": "feature.normalize_records.v1",
+            "cpu_seconds": 0.0022800000000000008,
+            "expected_format": "exact_bytes",
+            "id": "fc-01-normalize-record",
+            "negative_controls": [
+              {
+                "id": "wrong-case",
+                "reason": "Second record was not normalized.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-order",
+                "reason": "Input order was not preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.025596333000066807
+          },
+          {
+            "accepted": false,
+            "class": "feature_correctness",
+            "contract_id": "feature.reject_duplicate_config.v1",
+            "cpu_seconds": 0.0004809999999999988,
+            "expected_format": "exact_bytes",
+            "id": "fc-02-reject-duplicate-config",
+            "negative_controls": [
+              {
+                "id": "last-write-wins",
+                "reason": "Duplicate input was silently accepted.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-error",
+                "reason": "Reported error does not identify the violated contract.",
+                "rejected": true
+              }
+            ],
+            "reason": "candidate_error:AttributeError:'str' object has no attribute 'get'",
+            "wall_seconds": 0.022926500000039596
+          },
+          {
+            "accepted": false,
+            "class": "feature_correctness",
+            "contract_id": "feature.compose_two_members.v1",
+            "cpu_seconds": 0.000504000000000001,
+            "expected_format": "exact_bytes",
+            "id": "fc-03-two-member-report",
+            "negative_controls": [
+              {
+                "id": "missing-member",
+                "reason": "Required member B is absent.",
+                "rejected": true
+              },
+              {
+                "id": "truncated-final-newline",
+                "reason": "The sealed byte contract requires the final newline.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.023096916999975292
+          },
+          {
+            "accepted": false,
+            "class": "finite_research_claim",
+            "contract_id": "research.schedule_metrics.v1",
+            "cpu_seconds": 0.0005390000000000013,
+            "expected_format": "exact_json",
+            "id": "fr-01-schedule-metrics",
+            "negative_controls": [
+              {
+                "id": "mean-only",
+                "reason": "Required maximum-wait metric is missing.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-sjf-order",
+                "reason": "SJF values are not recomputed from the declared durations.",
+                "rejected": true
+              }
+            ],
+            "reason": "candidate_error:AttributeError:'str' object has no attribute 'get'",
+            "wall_seconds": 0.024752000000034968
+          },
+          {
+            "accepted": false,
+            "class": "finite_research_claim",
+            "contract_id": "research.threshold_claim.v1",
+            "cpu_seconds": 0.00048000000000000126,
+            "expected_format": "exact_json",
+            "id": "fr-02-threshold-negative",
+            "negative_controls": [
+              {
+                "id": "false-positive",
+                "reason": "FCFS max wait 18 exceeds threshold 16.",
+                "rejected": true
+              },
+              {
+                "id": "mean-confusion",
+                "reason": "SJF p95 turnaround and max wait both exceed limits.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.023035749999962718
+          },
+          {
+            "accepted": false,
+            "class": "finite_research_claim",
+            "contract_id": "research.preserve_unknowns.v1",
+            "cpu_seconds": 0.0005649999999999995,
+            "expected_format": "exact_json",
+            "id": "fr-03-preserve-uncertainty",
+            "negative_controls": [
+              {
+                "id": "invented-probability",
+                "reason": "Unknown rework probability was presented as calibrated.",
+                "rejected": true
+              },
+              {
+                "id": "timeout-as-estimate",
+                "reason": "Unknown transfer size was fabricated from an unrelated value.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.025056333000065933
+          },
+          {
+            "accepted": false,
+            "class": "manifest_membership",
+            "contract_id": "manifest.exact_members.v1",
+            "cpu_seconds": 0.000560999999999999,
+            "expected_format": "exact_json",
+            "id": "mm-01-exact-members",
+            "negative_controls": [
+              {
+                "id": "missing-gamma",
+                "reason": "A missing declared member cannot be accepted.",
+                "rejected": true
+              },
+              {
+                "id": "extra-delta",
+                "reason": "An undeclared member is present.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.02525162500000988
+          },
+          {
+            "accepted": false,
+            "class": "manifest_membership",
+            "contract_id": "manifest.hash_bound_members.v1",
+            "cpu_seconds": 0.0005909999999999978,
+            "expected_format": "exact_json",
+            "id": "mm-02-hash-bound-members",
+            "negative_controls": [
+              {
+                "id": "changed-beta",
+                "reason": "A hash mismatch cannot be reported as a pass.",
+                "rejected": true
+              },
+              {
+                "id": "unchecked-beta",
+                "reason": "Every declared member must be checked.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.024734458000011728
+          },
+          {
+            "accepted": false,
+            "class": "manifest_membership",
+            "contract_id": "manifest.selected_skipped.v1",
+            "cpu_seconds": 0.000511000000000001,
+            "expected_format": "exact_json",
+            "id": "mm-03-selected-and-skipped",
+            "negative_controls": [
+              {
+                "id": "silent-skip",
+                "reason": "The skipped member lacks the required explicit record.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-selection",
+                "reason": "Selection=false for b must be preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.024437707999823033
+          }
+        ],
+        "frozen_sources": {
+          "contracts_sha256": "8bfd9b165e8680326af945768d8483c758bd33c5375766f44a70cfa4767914b1",
+          "heldout_sha256": "67365d52b98eae99b138c2477a526fd277601cff8038ea0fbe31b8526c5000f6",
+          "oracle_sha256": "08160cf96744c0b6606a15171f0a924fa538412714bebdd055c840b3c6644fc3"
+        },
+        "schema_version": 1,
+        "status": "fail"
+      }
+    },
+    {
+      "name": "current-3",
+      "generation": {
+        "candidate": "current-3",
+        "contract_set": "9e-visible-contracts-20260910-v1",
+        "grouping": [
+          {
+            "group": "feature",
+            "contracts": [
+              "normalize_records",
+              "reject_duplicate_config",
+              "compose_two_members"
+            ],
+            "reason": "independent exact transforms"
+          },
+          {
+            "group": "research",
+            "contracts": [
+              "schedule_metrics",
+              "threshold_claim",
+              "preserve_unknowns"
+            ],
+            "reason": "finite arithmetic and explicit unknown propagation"
+          },
+          {
+            "group": "manifest",
+            "contracts": [
+              "exact_members",
+              "hash_bound_members",
+              "selected_skipped"
+            ],
+            "reason": "ordered membership and complete evidence records"
+          }
+        ],
+        "dependencies": [
+          "Requests are self-contained.",
+          "SHA-256 uses only checker-supplied member bytes.",
+          "JSON artifacts are compact and deterministic."
+        ],
+        "decomposition": {
+          "mode": "fixed serial dispatch",
+          "parallelism": 1,
+          "reason": "no cross-contract dependency or shared mutable state"
+        },
+        "scheduling": {
+          "mode": "serial",
+          "reason": "small bounded requests and repair budget zero",
+          "limits": {
+            "max_heads": 4,
+            "max_parallelism": 2,
+            "exec_seconds": 120,
+            "checker_seconds": 30,
+            "repair_budget": 0
+          }
+        },
+        "host_placement": {
+          "mode": "local",
+          "reason": "stdlib-only, network-forbidden execution"
+        },
+        "time_estimates_before_execution": {
+          "implementation_seconds": [
+            1,
+            10
+          ],
+          "validation_seconds": [
+            1,
+            10
+          ],
+          "transfer_seconds": [
+            0,
+            1
+          ]
+        },
+        "effort": {
+          "implementation": "small",
+          "validation": "small",
+          "transfer_obligations": "none beyond bounded JSON input"
+        },
+        "validation": [
+          "Compare complete artifacts for all nine visible training examples.",
+          "Compile the module and exercise JSON stdin/stdout CLI."
+        ],
+        "limitations": [
+          "No global optimality claim.",
+          "No calibrated probability or confidence claim.",
+          "Unknown values remain unknown.",
+          "Prior conversational exposure to the public packet is a limitation; no hidden, oracle, or prior candidate files were used.",
+          "Process exit alone is not semantic acceptance."
+        ],
+        "transfer_obligations": "No network or external transfer.",
+        "training_observations": [
+          "Stable SJF ordering preserves input order for equal durations.",
+          "The hash example intentionally fails its incorrect binding.",
+          "False selections produce explicit skipped records."
+        ],
+        "actual_start_utc": "2026-09-10T10:53:11Z",
+        "actual_end_utc": "2026-09-10T10:54:18Z",
+        "elapsed_seconds": 67,
+        "measurement_state": "measured"
+      },
+      "evaluation": {
+        "aggregate": {
+          "accepted_correct": 0,
+          "case_total": 9,
+          "correct_case_failures": 9,
+          "cpu_seconds": 0.0066719999999999904,
+          "false_acceptances": 0,
+          "negative_control_total": 18,
+          "negative_controls_rejected": 18,
+          "wall_seconds": 0.22264741399976629
+        },
+        "candidate": {
+          "path": "/Users/sws/Code/hydra/examples/planning/evaluation/candidates/current-3/candidate.py",
+          "sha256": "ce0cb89268ddb65c5f6a2ba08f3cee335a55e28c1b4ff0ac8d1ee5794ea56e94"
+        },
+        "cases": [
+          {
+            "accepted": false,
+            "class": "feature_correctness",
+            "contract_id": "feature.normalize_records.v1",
+            "cpu_seconds": 0.002081999999999997,
+            "expected_format": "exact_bytes",
+            "id": "fc-01-normalize-record",
+            "negative_controls": [
+              {
+                "id": "wrong-case",
+                "reason": "Second record was not normalized.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-order",
+                "reason": "Input order was not preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.0275354159998642
+          },
+          {
+            "accepted": false,
+            "class": "feature_correctness",
+            "contract_id": "feature.reject_duplicate_config.v1",
+            "cpu_seconds": 0.00051,
+            "expected_format": "exact_bytes",
+            "id": "fc-02-reject-duplicate-config",
+            "negative_controls": [
+              {
+                "id": "last-write-wins",
+                "reason": "Duplicate input was silently accepted.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-error",
+                "reason": "Reported error does not identify the violated contract.",
+                "rejected": true
+              }
+            ],
+            "reason": "candidate_error:AttributeError:'str' object has no attribute 'get'",
+            "wall_seconds": 0.02520683300008386
+          },
+          {
+            "accepted": false,
+            "class": "feature_correctness",
+            "contract_id": "feature.compose_two_members.v1",
+            "cpu_seconds": 0.0007979999999999966,
+            "expected_format": "exact_bytes",
+            "id": "fc-03-two-member-report",
+            "negative_controls": [
+              {
+                "id": "missing-member",
+                "reason": "Required member B is absent.",
+                "rejected": true
+              },
+              {
+                "id": "truncated-final-newline",
+                "reason": "The sealed byte contract requires the final newline.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.025291458000083367
+          },
+          {
+            "accepted": false,
+            "class": "finite_research_claim",
+            "contract_id": "research.schedule_metrics.v1",
+            "cpu_seconds": 0.0006040000000000004,
+            "expected_format": "exact_json",
+            "id": "fr-01-schedule-metrics",
+            "negative_controls": [
+              {
+                "id": "mean-only",
+                "reason": "Required maximum-wait metric is missing.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-sjf-order",
+                "reason": "SJF values are not recomputed from the declared durations.",
+                "rejected": true
+              }
+            ],
+            "reason": "candidate_error:AttributeError:'str' object has no attribute 'get'",
+            "wall_seconds": 0.02552491699998427
+          },
+          {
+            "accepted": false,
+            "class": "finite_research_claim",
+            "contract_id": "research.threshold_claim.v1",
+            "cpu_seconds": 0.000612999999999999,
+            "expected_format": "exact_json",
+            "id": "fr-02-threshold-negative",
+            "negative_controls": [
+              {
+                "id": "false-positive",
+                "reason": "FCFS max wait 18 exceeds threshold 16.",
+                "rejected": true
+              },
+              {
+                "id": "mean-confusion",
+                "reason": "SJF p95 turnaround and max wait both exceed limits.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.025341874999867287
+          },
+          {
+            "accepted": false,
+            "class": "finite_research_claim",
+            "contract_id": "research.preserve_unknowns.v1",
+            "cpu_seconds": 0.0004969999999999974,
+            "expected_format": "exact_json",
+            "id": "fr-03-preserve-uncertainty",
+            "negative_controls": [
+              {
+                "id": "invented-probability",
+                "reason": "Unknown rework probability was presented as calibrated.",
+                "rejected": true
+              },
+              {
+                "id": "timeout-as-estimate",
+                "reason": "Unknown transfer size was fabricated from an unrelated value.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.023618582999915816
+          },
+          {
+            "accepted": false,
+            "class": "manifest_membership",
+            "contract_id": "manifest.exact_members.v1",
+            "cpu_seconds": 0.0005150000000000016,
+            "expected_format": "exact_json",
+            "id": "mm-01-exact-members",
+            "negative_controls": [
+              {
+                "id": "missing-gamma",
+                "reason": "A missing declared member cannot be accepted.",
+                "rejected": true
+              },
+              {
+                "id": "extra-delta",
+                "reason": "An undeclared member is present.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.023715541000001394
+          },
+          {
+            "accepted": false,
+            "class": "manifest_membership",
+            "contract_id": "manifest.hash_bound_members.v1",
+            "cpu_seconds": 0.0005129999999999996,
+            "expected_format": "exact_json",
+            "id": "mm-02-hash-bound-members",
+            "negative_controls": [
+              {
+                "id": "changed-beta",
+                "reason": "A hash mismatch cannot be reported as a pass.",
+                "rejected": true
+              },
+              {
+                "id": "unchecked-beta",
+                "reason": "Every declared member must be checked.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.023176458000079947
+          },
+          {
+            "accepted": false,
+            "class": "manifest_membership",
+            "contract_id": "manifest.selected_skipped.v1",
+            "cpu_seconds": 0.0005399999999999988,
+            "expected_format": "exact_json",
+            "id": "mm-03-selected-and-skipped",
+            "negative_controls": [
+              {
+                "id": "silent-skip",
+                "reason": "The skipped member lacks the required explicit record.",
+                "rejected": true
+              },
+              {
+                "id": "wrong-selection",
+                "reason": "Selection=false for b must be preserved.",
+                "rejected": true
+              }
+            ],
+            "reason": "output_mismatch",
+            "wall_seconds": 0.023236332999886145
+          }
+        ],
+        "frozen_sources": {
+          "contracts_sha256": "8bfd9b165e8680326af945768d8483c758bd33c5375766f44a70cfa4767914b1",
+          "heldout_sha256": "67365d52b98eae99b138c2477a526fd277601cff8038ea0fbe31b8526c5000f6",
+          "oracle_sha256": "08160cf96744c0b6606a15171f0a924fa538412714bebdd055c840b3c6644fc3"
+        },
+        "schema_version": 1,
+        "status": "fail"
+      }
+    }
+  ],
+  "posthoc_diagnostic": {
+    "scope": "Post hoc diagnosis only; not a matched or predeclared outcome result. Named-file input maps and single-file output maps are adapted to the declared value interface.",
+    "results": [
+      {
+        "candidate": "current-1",
+        "accepted": 9,
+        "cases": [
+          {
+            "case": "fc-01-normalize-record",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fc-02-reject-duplicate-config",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fc-03-two-member-report",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fr-01-schedule-metrics",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fr-02-threshold-negative",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fr-03-preserve-uncertainty",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "mm-01-exact-members",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "mm-02-hash-bound-members",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "mm-03-selected-and-skipped",
+            "accepted_after_protocol_adaptation": true
+          }
+        ]
+      },
+      {
+        "candidate": "current-2",
+        "accepted": 9,
+        "cases": [
+          {
+            "case": "fc-01-normalize-record",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fc-02-reject-duplicate-config",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fc-03-two-member-report",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fr-01-schedule-metrics",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fr-02-threshold-negative",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fr-03-preserve-uncertainty",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "mm-01-exact-members",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "mm-02-hash-bound-members",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "mm-03-selected-and-skipped",
+            "accepted_after_protocol_adaptation": true
+          }
+        ]
+      },
+      {
+        "candidate": "current-3",
+        "accepted": 9,
+        "cases": [
+          {
+            "case": "fc-01-normalize-record",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fc-02-reject-duplicate-config",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fc-03-two-member-report",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fr-01-schedule-metrics",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fr-02-threshold-negative",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "fr-03-preserve-uncertainty",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "mm-01-exact-members",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "mm-02-hash-bound-members",
+            "accepted_after_protocol_adaptation": true
+          },
+          {
+            "case": "mm-03-selected-and-skipped",
+            "accepted_after_protocol_adaptation": true
+          }
+        ]
+      }
+    ]
+  },
+  "limits": [
+    "Three continuing-context generations per arm are not independent samples of a model population.",
+    "Current arm produced named-file input/output maps instead of the declared artifact-value interface.",
+    "Unknown provider cost, human correction effort and calibration; current-1 generation time not recorded.",
+    "Independent oracle checks complete values and eighteen declared corruptions; no hostile-code isolation claim."
+  ],
+  "public_execution": {
+    "scope": "All six candidates ran through real public compilation, admission and independently bound checker reports. Background fleet qualification ran concurrently; elapsed values are descriptive, not controlled comparative measurements.",
+    "results": [
+      {
+        "candidate": "contract-aware-1",
+        "fixture": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-1-q354kzrp",
+        "source_commit": "8cd5f921706cc427928afecea48d80c6a8c11dd6",
+        "run_id": "run_6b54c802f2b400443787",
+        "plan_sha256": "374e7188c35cab5f6ae695e364171543afc0be1b60e5323d3515b4d246c7d1ac",
+        "candidate_sha256": "8c8b40f2e82f96fec4991d5df7ee68b2e0f206280fcad381a13b3ff3f6788bb6",
+        "checker_sha256": "a5614983ffc6dc276ab0e0c2d229ee5a054767974be84032a9140fd132c05a95",
+        "compile_seconds": 0.4383146670002134,
+        "execution_seconds": 8.421619457999896,
+        "result_seconds": 0.8405690839999806,
+        "verdict": "pass",
+        "counts": {
+          "executed": 9,
+          "failed": 0,
+          "skipped": 0
+        },
+        "public_result": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-1-q354kzrp/result.stdout",
+        "explanation": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-1-q354kzrp/explain.stdout",
+        "report": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-1-q354kzrp/home/state/v2/projects/project_bf788a97543c4f536359/workflows/runs/run_6b54c802f2b400443787/steps/check/attempt-1/outputs/check.json",
+        "public_result_sha256": "eb0815a20dbae240ab72f152f0492db6b1be3f337998e63c1d5f64ae20270ce0",
+        "explanation_sha256": "85bf01a31fa2ac54ce6940f822b0e0ae2bcdd99e9cab1422157093518cbc6971",
+        "report_sha256": "9522f6cef79e572a07682788d1bfefe49c3dff97b885a70586b370049d241d0f"
+      },
+      {
+        "candidate": "contract-aware-2",
+        "fixture": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-2-bxqtn1em",
+        "source_commit": "93bc4f602088137c357c7f33f01dd6f31f6917af",
+        "run_id": "run_f63b93f14f70cc227eed",
+        "plan_sha256": "fe30da1bfbcbc45b8b9ef5e4c49337935857f9af754257b2cbf08f44e604f7d0",
+        "candidate_sha256": "930b0345e7258457087f80d11aec414b1d934b3c0c6bf57a4e28f4fd3d3615a6",
+        "checker_sha256": "a5614983ffc6dc276ab0e0c2d229ee5a054767974be84032a9140fd132c05a95",
+        "compile_seconds": 0.6686500420000812,
+        "execution_seconds": 8.909957625000061,
+        "result_seconds": 0.36343616700014536,
+        "verdict": "pass",
+        "counts": {
+          "executed": 9,
+          "failed": 0,
+          "skipped": 0
+        },
+        "public_result": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-2-bxqtn1em/result.stdout",
+        "explanation": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-2-bxqtn1em/explain.stdout",
+        "report": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-2-bxqtn1em/home/state/v2/projects/project_c2dcc087d14392ed9a7f/workflows/runs/run_f63b93f14f70cc227eed/steps/check/attempt-1/outputs/check.json",
+        "public_result_sha256": "c948bb6cf79d551fa649e0bff1844d5d5c165d13667c6db3bf861b0fc6ed36b8",
+        "explanation_sha256": "225c85393155149eccb244aaa8b0eb7c1e7f5f99bec24ec151ceb0060672c771",
+        "report_sha256": "9661c7754788ebda67e984db3e052696eecb00f475bfefebd54a64ded4d024ca"
+      },
+      {
+        "candidate": "contract-aware-3",
+        "fixture": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-3-3ifncn5d",
+        "source_commit": "3b265a98ec2208035d5aafcc8317af3ddace5bf7",
+        "run_id": "run_907b8c45ecddbc2120f3",
+        "plan_sha256": "51ad5c497bbe55c56a9e97e0ffd289263e19b48106512b5458b06b2520eab4d0",
+        "candidate_sha256": "3a3fd3f1f39ac19a9029365951d44846d79b9bad0b18ab61ea364cb181f2ec97",
+        "checker_sha256": "a5614983ffc6dc276ab0e0c2d229ee5a054767974be84032a9140fd132c05a95",
+        "compile_seconds": 0.3949985829999605,
+        "execution_seconds": 9.74171566699988,
+        "result_seconds": 0.3152385830003368,
+        "verdict": "pass",
+        "counts": {
+          "executed": 9,
+          "failed": 0,
+          "skipped": 0
+        },
+        "public_result": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-3-3ifncn5d/result.stdout",
+        "explanation": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-3-3ifncn5d/explain.stdout",
+        "report": "/Users/sws/Code/hydra/build/qualification/planner-contract-aware-3-3ifncn5d/home/state/v2/projects/project_bedebba7b38913b3ee82/workflows/runs/run_907b8c45ecddbc2120f3/steps/check/attempt-1/outputs/check.json",
+        "public_result_sha256": "eaaa3683ab228b63cd9aa67a0a36e582a8f79db565abc705b1ec4308e84b65b7",
+        "explanation_sha256": "ed83a53554b8f3f58934ebe33559bbaa47deba14e92561176324e0e209147f3d",
+        "report_sha256": "116c72af6bd663ab943ea07c829112a4ed0d95c326562f35f45fe3f355b351e1"
+      },
+      {
+        "candidate": "current-1",
+        "fixture": "/Users/sws/Code/hydra/build/qualification/planner-current-1-19s1qpqm",
+        "source_commit": "a6569510ac320b56acb7789f5bfc744a8fd90e16",
+        "run_id": "run_9d0000aa663c46e90eb3",
+        "plan_sha256": "6702c29b4baa739bb5a1198a01753ce312d1fc3ac014f1343cfc155ccb0022b6",
+        "candidate_sha256": "b4b7946bcd67ae6bcc3af6e4ca1148e409173063ea63f02f7deca7d18095cfff",
+        "checker_sha256": "a5614983ffc6dc276ab0e0c2d229ee5a054767974be84032a9140fd132c05a95",
+        "compile_seconds": 0.2772364170000401,
+        "execution_seconds": 7.840059416999793,
+        "result_seconds": 0.04104979200019443,
+        "verdict": "fail",
+        "counts": {
+          "executed": 9,
+          "failed": 9,
+          "skipped": 0
+        },
+        "public_result": "/Users/sws/Code/hydra/build/qualification/planner-current-1-19s1qpqm/result.stdout",
+        "explanation": "/Users/sws/Code/hydra/build/qualification/planner-current-1-19s1qpqm/explain.stdout",
+        "report": "/Users/sws/Code/hydra/build/qualification/planner-current-1-19s1qpqm/home/state/v2/projects/project_e5c81089a44b06e7ff40/workflows/runs/run_9d0000aa663c46e90eb3/steps/check/attempt-1/outputs/check.json",
+        "public_result_sha256": "25f62b16d94800e1b6701c23d33458ba9f9cb32f14015dba7534e0c00d6c3c7c",
+        "explanation_sha256": "9317f3255e02e295b066afd3ea7b673e8be52469ac15fb1f704d58b77ccdf5a7",
+        "report_sha256": "4fd23d706aa114684d5a9a08780d55812f69182461609db9bf2d8cd65e2ed547"
+      },
+      {
+        "candidate": "current-2",
+        "fixture": "/Users/sws/Code/hydra/build/qualification/planner-current-2-6myscc7d",
+        "source_commit": "68f9cee45a57438312c8e655194152f260c26824",
+        "run_id": "run_d514981991e9c34f49e9",
+        "plan_sha256": "e410f849968fcf0b160567e61b2b891884850a268536509286ea5b4bd66a3176",
+        "candidate_sha256": "144a150672cab8db38677d8afbdc056b6b5c0475b06cdecb404b04a54dc7884d",
+        "checker_sha256": "a5614983ffc6dc276ab0e0c2d229ee5a054767974be84032a9140fd132c05a95",
+        "compile_seconds": 0.49093474999972386,
+        "execution_seconds": 8.043625833000078,
+        "result_seconds": 0.04072962499958521,
+        "verdict": "fail",
+        "counts": {
+          "executed": 9,
+          "failed": 9,
+          "skipped": 0
+        },
+        "public_result": "/Users/sws/Code/hydra/build/qualification/planner-current-2-6myscc7d/result.stdout",
+        "explanation": "/Users/sws/Code/hydra/build/qualification/planner-current-2-6myscc7d/explain.stdout",
+        "report": "/Users/sws/Code/hydra/build/qualification/planner-current-2-6myscc7d/home/state/v2/projects/project_fbca768fbbfc5d696e03/workflows/runs/run_d514981991e9c34f49e9/steps/check/attempt-1/outputs/check.json",
+        "public_result_sha256": "25f62b16d94800e1b6701c23d33458ba9f9cb32f14015dba7534e0c00d6c3c7c",
+        "explanation_sha256": "21bfc5ea0ee84b222d2cebcc8691160ef7461e806bbfdea594b4b37644e638b7",
+        "report_sha256": "ae4b4b4e246ac146ee0e656cd6439ffdcbd38567089443b13ccab8ec903cf2b5"
+      },
+      {
+        "candidate": "current-3",
+        "fixture": "/Users/sws/Code/hydra/build/qualification/planner-current-3-aaieohl1",
+        "source_commit": "bea598276de472fcb9d3104bf410885f988889d6",
+        "run_id": "run_10906df639f47cd20db4",
+        "plan_sha256": "1765e91c4ddd881c80ed1e2f0fc48f8db6521ae740979d356c357878c39b4ce8",
+        "candidate_sha256": "ce0cb89268ddb65c5f6a2ba08f3cee335a55e28c1b4ff0ac8d1ee5794ea56e94",
+        "checker_sha256": "a5614983ffc6dc276ab0e0c2d229ee5a054767974be84032a9140fd132c05a95",
+        "compile_seconds": 0.4125441249998403,
+        "execution_seconds": 7.57956566699977,
+        "result_seconds": 0.0379763340001773,
+        "verdict": "fail",
+        "counts": {
+          "executed": 9,
+          "failed": 9,
+          "skipped": 0
+        },
+        "public_result": "/Users/sws/Code/hydra/build/qualification/planner-current-3-aaieohl1/result.stdout",
+        "explanation": "/Users/sws/Code/hydra/build/qualification/planner-current-3-aaieohl1/explain.stdout",
+        "report": "/Users/sws/Code/hydra/build/qualification/planner-current-3-aaieohl1/home/state/v2/projects/project_cbdd2d8a9bc5b06f546c/workflows/runs/run_10906df639f47cd20db4/steps/check/attempt-1/outputs/check.json",
+        "public_result_sha256": "25f62b16d94800e1b6701c23d33458ba9f9cb32f14015dba7534e0c00d6c3c7c",
+        "explanation_sha256": "2411ea7272be5c45202ce502d468a74e3987dc7b54cdad63f7790ba278b18cc9",
+        "report_sha256": "0caf4ed7b48d4875b79359606f2f46a3f91f73dab1d4b4c6be431b37ebf1074b"
+      }
+    ]
+  }
+}

@@ -3,6 +3,7 @@
 #include "fleet/support/files.h"
 #include "fleet/support/process.h"
 #include "fleet/task/task.h"
+#include "fleet/retention/retention.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -99,6 +100,9 @@ json_object *task_result(const char *id) {
     json_object *response = task_status(id), *receipt = f_field(response, "data"), *envelope = NULL, *checked = NULL;
     char root[F_PATH], directory[F_PATH], path[F_PATH]; const char *bound_id, *bound_digest;
     if (!json_object_get_boolean(f_field(response, "ok"))) return response;
+    if (f_field(receipt, "retention")) {
+        json_object_put(response); return f_error("fleet-task-result", "evidence_expired", "the declared audit window expired; the submission identity remains bound and work must not be replayed");
+    }
     if (task_store_root(root) || f_path(directory, sizeof(directory), root, id) || f_path(path, sizeof(path), directory, "result.json") ||
         !(envelope = f_read_json(path, TASK_PACKAGE_LIMIT + 1024))) goto bad;
     checked = task_result_verify(envelope);

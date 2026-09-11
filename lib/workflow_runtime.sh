@@ -118,6 +118,8 @@ workflow_step_command() {
     case "$_wsc_kind" in
         spawn)
             set -- spawn "$_wsc_branch"
+            _wsc_terminal="$(awk -F '\t' -v id="$_wsc_id" '$1=="terminal_mode" && $2==id {print $3}' "$_wsc_dir/graph.tsv")"
+            [ "$_wsc_terminal" != headless ] || set -- "$@" --headless
             [ -z "$_wsc_group" ] || set -- "$@" --group "$_wsc_group"
             if [ -n "$_wsc_profile" ]; then set -- "$@" --profile "$_wsc_profile"; else set -- "$@" --no-agent; fi
             [ -z "$_wsc_policy" ] || set -- "$@" --completion-policy "$_wsc_policy"
@@ -455,13 +457,14 @@ workflow_drive() {
             done
         fi
 
+        # Count active work first so a concurrent waiting-remote publication cannot look terminal.
+        _wd_nonterminal="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(queued|ready|running|retrying)$' || true)"
         if workflow_waiting_state "$_wd_dir"; then
             trap - HUP INT TERM
             rm -rf "$_wd_drive_lock"
             return 3
         fi
 
-        _wd_nonterminal="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(queued|ready|running|retrying)$' || true)"
         if [ "$_wd_nonterminal" -eq 0 ]; then
             _wd_repaired="$(workflow_plan_repair "$_wd_dir")" || return 1
             if [ "$_wd_repaired" = 1 ]; then

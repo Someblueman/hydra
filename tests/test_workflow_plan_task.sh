@@ -2,22 +2,32 @@
 # Real task executions with required intermediate and combined validation.
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
+HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+export HYDRA_FLEET_BIN
 # shellcheck source=/dev/null
 . "$root/tests/workflow_task_cleanup.sh"
 cleanup() {
     workflow_task_fixture_quiesce || return 1
+    if [ "${HYDRA_TEST_KEEP_FIXTURE:-0}" = 1 ]; then printf 'Plan task evidence: %s\n' "$fixture" >&2; return 0; fi
     for workspace in "$HYDRA_HOME"/fleet/tasks/task_*/workspace; do
         [ -f "$workspace/.git/hydra/project-id" ] || continue
         (cd "$workspace" && "$root/bin/hydra" kill --all --force) >/dev/null 2>&1 || :
     done
-    if [ "${passed:-0}" = 1 ]; then rm -rf "$fixture"; else printf 'Plan task evidence: %s\n' "$fixture" >&2; fi
+    test_tmux_fixture_cleanup "$fixture" || return 1
+    if [ "${passed:-0}" = 1 ] && [ "${HYDRA_TEST_KEEP_FIXTURE:-0}" != 1 ]; then
+        rm -rf "$fixture"
+    else printf 'Plan task evidence: %s\n' "$fixture" >&2; fi
 }
-trap cleanup EXIT
+test_code=0
+trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
+# shellcheck source=/dev/null
+. "$root/tests/headless_path.sh"
+headless_path "$fixture/no-tmux"
 mkdir "$fixture/source"
 cp "$root/tests/fixtures/plan-task/repo/"* "$fixture/source/"
 cp "$root/tests/fixtures/plan-task/plan.json" "$fixture/plan.json"
@@ -45,6 +55,11 @@ if [ -n "${HYDRA_TEST_PLAN_REPAIR:-}" ]; then
     # shellcheck source=/dev/null
     . "$root/tests/workflow_plan_repair_cases.sh"
     workflow_plan_repair_setup
+    if [ "${HYDRA_TEST_PLAN_REUSE:-0}" = 1 ]; then
+        # shellcheck source=/dev/null
+        . "$root/tests/workflow_plan_reuse_cases.sh"
+        workflow_plan_reuse_setup
+    fi
     if [ "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" = 1 ]; then workflow_plan_repair_fault_setup; fi
 fi
 git add .
@@ -60,9 +75,13 @@ for node in produce inspect compose verify; do
         compose) inputs='["subject"]' ;;
         verify) inputs='["subject","validation"]'; outputs='["report.json"]'; argv='["sh","check.sh","final-check","final-content","pass"]' ;;
     esac
-    if [ -n "${HYDRA_TEST_PLAN_REPAIR:-}" ]; then inputs="$(printf '%s' "$inputs" | sed 's/^\[/["repair",/;s/,]/]/')"; fi
+    if [ -n "${HYDRA_TEST_PLAN_REPAIR:-}" ]; then
+        extra=repair
+        case "${HYDRA_TEST_PLAN_REUSE:-0}:$node" in 1:produce|1:inspect) extra=environment ;; esac
+        inputs="$(printf '%s' "$inputs" | sed 's/^\[/["'"$extra"'",/;s/,]/]/')"
+    fi
     cat > "$node.json" <<JSON
-{"schema_version":1,"host":"local","project":"$fixture/source","source":{"commit":"$commit"},"work":{"kind":"exec","argv":$argv},"inputs":$inputs,"outputs":$outputs,"capabilities":["exec"],"completion":"command-exit","limits":{"transport_seconds":10,"queue_seconds":30,"startup_seconds":30,"execution_seconds":30,"cancellation_seconds":5,"log_bytes":4096,"artifact_bytes":4096}}
+{"schema_version":1,"host":"local","project":"$fixture/source","source":{"commit":"$commit"},"work":{"kind":"exec","argv":$argv},"inputs":$inputs,"outputs":$outputs,"capabilities":["exec","execution-headless"],"completion":"command-exit","limits":{"transport_seconds":10,"queue_seconds":30,"startup_seconds":30,"execution_seconds":30,"cancellation_seconds":5,"log_bytes":4096,"artifact_bytes":4096}}
 JSON
 done
 if [ "${HYDRA_TEST_PLAN_REPAIR_BUDGET:-0}" = 1 ]; then
@@ -88,7 +107,7 @@ run="$(sed -n '1p' "$fixture/run.out")"
 run_dir="$(find "$HYDRA_HOME/state/v2/projects" -type d -path "*/workflows/runs/$run" -print)"
 if [ -n "${HYDRA_TEST_PLAN_REPAIR:-}" ]; then
     if [ "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" = 1 ]; then workflow_plan_repair_fault_resume; fi
-    workflow_plan_repair_assert
+    if [ "${HYDRA_TEST_PLAN_REUSE:-0}" = 1 ]; then workflow_plan_reuse_assert; else workflow_plan_repair_assert; fi
 elif [ "${HYDRA_TEST_PLAN_SOURCE:-0}" = dirty ]; then
     [ "$code" != 0 ]
     [ "$(cat "$run_dir/steps/compose/state")" = recovery-required ]

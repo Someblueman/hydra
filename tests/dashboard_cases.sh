@@ -324,6 +324,24 @@ EOF
     return 0
 }
 
+# Allocate the exact test prerequisite without spinning on exhaustion or exit.
+dashboard_test_ensure_panes() {
+    pane_session="$1"
+    pcnt=$(tmux list-panes -t "$pane_session" 2>/dev/null | wc -l | tr -d ' ')
+    while [ "${pcnt:-0}" -lt 3 ]; do
+        if ! tmux split-window -t "$pane_session" -d; then
+            print_error "Could not allocate a test pane for $pane_session"
+            return 1
+        fi
+        previous_pcnt="$pcnt"
+        pcnt=$(tmux list-panes -t "$pane_session" 2>/dev/null | wc -l | tr -d ' ')
+        if [ "${pcnt:-0}" -le "$previous_pcnt" ]; then
+            print_error "Test pane count did not increase for $pane_session"
+            return 1
+        fi
+    done
+}
+
 # Test multi-pane collection via env
 test_multi_pane_collection_env() {
     print_status "Testing multi-pane collection (env: 2 panes per session)..."
@@ -356,12 +374,7 @@ test_multi_pane_collection_env() {
     while IFS=' ' read -r branch session _ai _group _ts; do
         if tmux_session_exists "$session"; then
             expected_sessions=$((expected_sessions + 1))
-            # Ensure exactly >=3 panes by splitting until 3
-            pcnt=$(tmux list-panes -t "$session" 2>/dev/null | wc -l | tr -d ' ')
-            while [ "${pcnt:-0}" -lt 3 ]; do
-                tmux split-window -t "$session" -d 2>/dev/null || true
-                pcnt=$(tmux list-panes -t "$session" 2>/dev/null | wc -l | tr -d ' ')
-            done
+            dashboard_test_ensure_panes "$session" || return 1
         fi
     done <<EOF
 $state_rows

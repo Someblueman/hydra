@@ -1,56 +1,71 @@
-# Hydra v2.3.0 Release Notes
+# Hydra v2.4.0 Release Notes
 
-Release date: 2026-09-08
+Release date: 2026-09-11
 
-Hydra 2.3.0 adds finite distributed workflows and shared resource admission.
-Explicitly placed tasks exchange verified files and Git results, while independent
-checks gate composition and final delivery.
+Hydra 2.4.0 adds a native workspace for planning, execution and evidence review,
+plus bounded planning tools, task recovery visibility and explicit host enrollment.
 
 ## Highlights
 
-- Run workflows across selected trusted hosts with durable coordinator ownership,
-  stable task receipts, verified handoffs, and deterministic scheduling replay.
-- Compile schema-2 distributed plans with artifact-bound validation joins and
-  version-2 reports tied to accepted check definitions. Repair rejected candidates
-  within an accepted whole-graph budget, then validate the combined result.
-- Share FIFO admission across local execution, gates, head startup and resume,
-  queued spawns, and remote tasks and workflows. Receiver policy controls host and
-  project concurrency, disk floors, labels, and queue bounds.
-- Inspect reservations and queue reasons with `hydra admission` and
-  `hydra fleet admission HOST`. Unknown execution retains capacity; resume keeps
-  the original task identity, including after result-collection transport loss.
-- Reject incomplete admission policies, orphan plan checks, corrupt results, and
-  changed handoff identities before they can authorize dependent execution.
+- Work in resizable panes with attached local tmux heads, preserved terminal drafts,
+  project/head/run navigation and recorded statistics. Validate and preview a plan,
+  approve its exact digest, and inspect evidence through the existing workflow engine.
+- Create terminal-independent headless workspaces while interactive heads retain
+  tmux. Structured outcome obligations, handoff contracts and subject-bound reports
+  distinguish execution, evidence and domain results.
+- Explain and compare plans, use finite patterns and maps, reuse sealed artifacts
+  with fresh affected checks, and admit staged plans separately. Public feature,
+  performance and research examples include independent negative controls.
+- Follow observation freshness and resumable events/logs, use exact-target controls,
+  and recover the original attempt after controlled transport loss. Inspect saved
+  events and comparisons and expire eligible local evidence with protection rules.
+- Discover selected hosts, review explicit enrollment intent and apply bounded
+  source-snapshot batches.
+- Build and test without Python. Planning producers/checkers, test fixtures and
+  independent PTY observers now use native code. Standalone termviz export includes
+  a portable static-library build and native component/PTY tests.
+- Fix empty-record sorting under sanitizers, event-rotation recovery, cancellation
+  races and incremental terminal decoding across resize.
 
 ## Compatibility and upgrade
 
-This is a backward-compatible minor release. Upgrade the shell CLI and optional
-native helpers together to 2.3.0, including the selected fleet hosts. Existing state
-v2 and core, TUI, and fleet protocol versions remain unchanged. Existing local plans
-and command workflows remain supported; distributed plans and admission policy are
-opt-in additions. An absent admission policy retains the default limits; an
-existing policy must contain every documented field.
+This is a minor release with compatible additions. Upgrade the shell CLI and
+optional native helpers together to 2.4.0, including selected fleet hosts. State v2,
+core protocol 1, TUI protocol 2 and fleet protocol 1 remain in use. Existing local
+and distributed plans remain supported; new obligations are additive and become
+part of the compiled acceptance digest when supplied.
 
-The attached tar.gz and zip archives contain the exact release source. Verify them
-with `SHA256SUMS`, unpack, and run `sh install.sh`. The shell CLI remains
-compiler-free. Optional native helpers build with
+Older interactive head records default to interactive terminal mode. New headless
+records use an explicit mode and desired-state token: older readers ignore them
+and older state verification refuses that token. Upgrade tools before using
+headless records; do not use older tools to manage those new records. See
+[the state contract](https://github.com/Someblueman/hydra/blob/v2.4.0/docs/STATE.md).
+Interactive Codex restore retains worktree-scoped `resume --last`; headless resume
+requires the exact recorded session and matching execution identity.
+
+The shell CLI remains compiler-free. Build optional helpers with
 `make build-core build-tui build-fleet`; fleet requires JSON-C development files
-and pkg-config, with JSON-C linked statically.
+and pkg-config, with JSON-C linked statically. Native tests and planning examples
+require the documented C toolchain. The source archives are installed with
+`sh install.sh`; verify their bytes against `SHA256SUMS` before installing.
 
 ## Scope and qualification limits
 
-Distributed execution uses finite graphs, explicit placement, and one original
-coordinator. Coordinator failover, automatic reassignment, dynamic expansion, and
-scheduled pools remain outstanding work. A collected result does not grant review
-approval or permission to promote it.
+The [release scope](https://github.com/Someblueman/hydra/blob/v2.4.0/docs/RELEASE_NEXT_SCOPE.md)
+links implementation and historical acceptance records. Local fixtures and
+controlled SSH failures do not qualify operational hosts, external-host soak or
+live provider behavior. T2 live-host acceptance, T3 and the documented outstanding
+provider checks remain open. Performance examples use synthetic work; research
+examples use a finite supplied trace.
 
-The retained [two-host acceptance evidence](https://github.com/Someblueman/hydra/blob/v2.3.0/docs/evidence/distributed/qualification.md)
-uses executable fixtures on macOS and Linux through the public task interfaces;
-it does not establish live AI-provider conformance or identical worker outputs.
-See [distributed workflows](https://github.com/Someblueman/hydra/blob/v2.3.0/docs/DISTRIBUTED_DAG.md)
-and [admission policy](https://github.com/Someblueman/hydra/blob/v2.3.0/docs/ADMISSION.md)
-for the contracts and recovery behavior.
+The selected 9E scope includes the implemented tools and a successfully executed,
+independently checked real Python cleanup workflow. Its serial/parallel timings
+are descriptive; speedup is not an acceptance criterion. Broader planning-quality,
+calibration and benefit-overhead research remains deferred.
 
-Linux sanitizer runs retain a pre-existing, nonfatal UBSan diagnostic in the empty
-record-list sort at `src/libhydra.c:409`. It is unchanged by this release; passing
-CI must not be interpreted as an absence of sanitizer diagnostics.
+Reuse assumes complete dependency declarations. Maps are finite, joins are frozen
+and staged plans need separate admission. Dynamic expansion, coordinator failover,
+automatic reassignment and scheduled pools remain outside this release. Structural
+validity and successful execution do not establish semantic adequacy or grant
+review approval. Historical evidence remains bound to its recorded revisions.
+The release tag and source archives identify the qualified merged main commit.

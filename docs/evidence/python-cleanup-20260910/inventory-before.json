@@ -1,0 +1,342 @@
+{
+  "files": [
+    {
+      "path": "examples/planning/evaluation/candidates/contract-aware-1/candidate.py",
+      "lines": 44,
+      "action": "retire with baseline Git replay",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/contract-aware-2/candidate.py",
+      "lines": 42,
+      "action": "retire with baseline Git replay",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/contract-aware-3/candidate.py",
+      "lines": 42,
+      "action": "retire with baseline Git replay",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/current-1/candidate.py",
+      "lines": 189,
+      "action": "retire with baseline Git replay",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/current-2/candidate.py",
+      "lines": 164,
+      "action": "retire with baseline Git replay",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/evaluation/candidates/current-3/candidate.py",
+      "lines": 162,
+      "action": "retire with baseline Git replay",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/evaluation/check.py",
+      "lines": 99,
+      "action": "retire with baseline Git replay",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/evaluation/evaluate.py",
+      "lines": 401,
+      "action": "retire with baseline Git replay",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/evaluation/produce.py",
+      "lines": 35,
+      "action": "retire with baseline Git replay",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/manifest-map/check.py",
+      "lines": 67,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/manifest-map/compose.py",
+      "lines": 12,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/manifest-map/precompile.py",
+      "lines": 111,
+      "action": "replace with shared native precompiler",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/manifest-map/worker.py",
+      "lines": 5,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/patterns/check.py",
+      "lines": 47,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/performance/analyze.py",
+      "lines": 73,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/performance/checker.py",
+      "lines": 176,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/performance/measure.py",
+      "lines": 84,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/research/research_check.py",
+      "lines": 132,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/research/research_report.py",
+      "lines": 16,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/staged/check.py",
+      "lines": 82,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/staged/compose.py",
+      "lines": 16,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/staged/precompile.py",
+      "lines": 326,
+      "action": "replace with shared native precompiler",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/staged/stage1_check.py",
+      "lines": 107,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/staged/stage1_run.py",
+      "lines": 62,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/staged/unique_json.py",
+      "lines": 13,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "examples/planning/staged/worker.py",
+      "lines": 11,
+      "action": "retain",
+      "purpose": "small example payload or independent semantic/evidence oracle"
+    },
+    {
+      "path": "tests/discovery/ssh_fixture.py",
+      "lines": 95,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/discovery/test_discovery.py",
+      "lines": 293,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/statistics_evidence.py",
+      "lines": 66,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/termviz/pty_support.py",
+      "lines": 233,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions"
+    },
+    {
+      "path": "tests/termviz/test_attached_pty.py",
+      "lines": 280,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions"
+    },
+    {
+      "path": "tests/termviz/test_fleet_controls.py",
+      "lines": 145,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions"
+    },
+    {
+      "path": "tests/termviz/test_fleet_recovery.py",
+      "lines": 332,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions"
+    },
+    {
+      "path": "tests/termviz/test_plan_launch.py",
+      "lines": 190,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions"
+    },
+    {
+      "path": "tests/termviz/test_plan_workspace.py",
+      "lines": 75,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions"
+    },
+    {
+      "path": "tests/termviz/test_pty.py",
+      "lines": 189,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions"
+    },
+    {
+      "path": "tests/termviz/test_statistics_pty.py",
+      "lines": 183,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions"
+    },
+    {
+      "path": "tests/termviz/test_workflow_controls.py",
+      "lines": 174,
+      "action": "retain",
+      "purpose": "PTY terminal interaction and independent screen assertions"
+    },
+    {
+      "path": "tests/test_enrollment.py",
+      "lines": 451,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_enrollment_receiver.py",
+      "lines": 139,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_enrollment_ssh.py",
+      "lines": 164,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_performance_outcome.py",
+      "lines": 162,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_plan_inspection.py",
+      "lines": 149,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_plan_manifest.py",
+      "lines": 137,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_plan_patterns.py",
+      "lines": 83,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_plan_reuse_invalidation.py",
+      "lines": 253,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_plan_staged.py",
+      "lines": 234,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_plan_staged_public.py",
+      "lines": 185,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_planner_evaluation_public.py",
+      "lines": 175,
+      "action": "retire with baseline Git replay",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_research_outcome.py",
+      "lines": 91,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_retention.py",
+      "lines": 264,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_retention_accepted.py",
+      "lines": 107,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_statistics_export.py",
+      "lines": 130,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_task_announce.py",
+      "lines": 155,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/test_workflow_task_metrics.py",
+      "lines": 125,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    },
+    {
+      "path": "tests/workflow_contract_cases.py",
+      "lines": 500,
+      "action": "retain",
+      "purpose": "independent public protocol/boundary test or support"
+    }
+  ],
+  "count": 56,
+  "lines": 8277
+}

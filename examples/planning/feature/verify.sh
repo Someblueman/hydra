@@ -21,5 +21,4 @@ tar -xf "$HYDRA_WORKFLOW_INPUTS_DIR/subject" -C "$verify_root"
     if ./catalog-slug --limit 0 ABC; then exit 1; else test "$?" -eq 2; fi
     if ./catalog-slug; then exit 1; else test "$?" -eq 2; fi
 )
-digest="$(shasum -a 256 "$HYDRA_WORKFLOW_INPUTS_DIR/subject" | cut -d ' ' -f 1)"
-printf '{"schema_version":1,"verdict":"pass","subject_sha256":"%s","requirements":["normalization","bounds","cli"],"evidence":"Built sealed source archive with strict C99; independent normalization, exact-capacity, null/zero-capacity, guard-byte and 10000-byte tests; exercised CLI output and exit codes."}\n' "$digest" > "$HYDRA_WORKFLOW_OUTPUTS_DIR/verification.json"
+./plan-example feature-evidence

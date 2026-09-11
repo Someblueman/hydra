@@ -35,6 +35,10 @@ workflow_evidence() (
     [ -d "$_wev_dir" ] || exit 1
     printf 'HYDRA_WORKFLOW_EVIDENCE\t1\t%s\t%s\n' "$1" "$2"
     cmd_workflow status "$1" || exit 1
+    if [ -e "$_wev_dir/retention.json" ] || [ -L "$_wev_dir/retention.json" ]; then
+        printf 'Evidence expired under the recorded retention policy.\nHYDRA_WORKFLOW_EVIDENCE_END\texpired\n'
+        exit 0
+    fi
     if [ "$2" != - ]; then
         _wev_step="$_wev_dir/steps/$2"
         [ -d "$_wev_step" ] || exit 1

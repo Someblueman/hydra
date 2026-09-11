@@ -7,23 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-09-11
+
+### Added
+
+- Add terminal-independent headless workspaces, structured outcome obligations
+  and handoff contracts, subject-bound evidence and independent validator controls.
+- Inspect and compare compiled plans, use finite patterns and maps, reuse sealed
+  artifacts with fresh affected checks, and admit staged plans separately.
+- Observe task freshness, resume event/log collection and recover the original
+  attempt; use exact-target controls, saved-event views and protected evidence expiry.
+- Discover selected hosts, review explicit enrollment intent and apply bounded
+  source-snapshot batches. See [the scope and qualification limits](docs/RELEASE_NEXT_SCOPE.md).
+
 - Native statistics now include queue delay, total run duration, recorded independent
   verification time and owner recovery counts, with coverage, percentiles, trends
   and contributing evidence. Minimal lifecycle scalars preserve unknown historical
   values; press `M` in statistics to cycle metrics.
-
-### Fixed
-
-- Standalone export qualification uses its own build directory when Hydra is
-  invoked with a custom build path.
-- Closing a standalone PTY on Linux also stops ordinary background jobs in its
-  owned session, while leaving external tmux sessions outside that boundary.
-- Workspace execution approval now reports an already submitted revision before
-  opening another dialog. Finished launch receipts stop polling; unavailable
-  owner observations retain known run evidence. Run switching clears stale action
-  notices, and narrow evidence headers retain the complete waiting state.
-
-### Added
 
 - Optional two-agent splits in A/B/C with distinct existing tmux clients,
   independent scrollback, input focus and preserved drafts across layout changes.
@@ -96,13 +96,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fleet host authentication through native provider sign-in or preview-bound
   copying of private credentials, with selected-provider merges for Pi/OpenCode.
 
+### Fixed
+
+- Avoid an empty-record `qsort` sanitizer diagnostic, preserve split UTF-8 and
+  escape decoding across PTY resize, and harden event-rotation recovery and task
+  cancellation races.
+
+- Standalone export qualification uses its own build directory when Hydra is
+  invoked with a custom build path.
+- Closing a standalone PTY on Linux also stops ordinary background jobs in its
+  owned session, while leaving external tmux sessions outside that boundary.
+- Workspace execution approval now reports an already submitted revision before
+  opening another dialog. Finished launch receipts stop polling; unavailable
+  owner observations retain known run evidence. Run switching clears stale action
+  notices, and narrow evidence headers retain the complete waiting state.
+
 ### Changed
+
+- Remove Python from the active build, tests, planning examples, standalone export
+  and CI. Native producers, independent checkers, fixtures and PTY observers retain
+  the covered behavior; see [the dependency boundary](docs/PYTHON_USAGE.md).
+- Run fleet CI in bounded parallel shards to reduce per-runner process contention.
 
 - Fleet task cancellation allows 30 seconds per transport phase and accepts a
   bounded `--timeout` override so suspended approval result sealing can finish.
-- Interactive Codex restore requires an exact recorded session identity instead of
-  implicitly selecting the latest session. Older heads remain inspectable; see
-  [the migration instructions](docs/AGENT_CONTRACT.md#workflow-profiles-and-migration).
+- Interactive Codex restore retains worktree-scoped `codex resume --last`.
+  Headless resume requires the exact recorded provider session and matching head,
+  instance, worktree and profile; see [the contract](docs/AGENT_CONTRACT.md#workflow-profiles-and-migration).
 
 Workflow-data acceptance is complete. Claude Code remote qualification is deferred
 until native host sign-in is available and remains on the outstanding roadmap.
@@ -927,7 +947,8 @@ remote provider matrix and exact evidence.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/Someblueman/hydra/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/Someblueman/hydra/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/Someblueman/hydra/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/Someblueman/hydra/compare/v2.1.0...v2.2.0

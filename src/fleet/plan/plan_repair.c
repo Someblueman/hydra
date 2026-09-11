@@ -21,9 +21,14 @@ static int round_number(const char *run) {
 }
 static json_object *read_record(const char *run, int round) {
     char path[F_PATH], digest[65]; json_object *record = NULL;
+    const char *const keys[] = {"attempt", "evidence", "sha256", NULL};
+    const char *const evidence_keys[] = {"plan_sha256", "failures", "reuse", NULL};
     if (snprintf(path, sizeof(path), "%s/repair-%d.json", run, round) >= (int)sizeof(path)) return NULL;
     record = plan_read(path);
-    if (!record || !f_number_is(record, "attempt", round) || !f_string(record, "sha256") ||
+    json_object *evidence = f_field(record, "evidence"), *failures = f_field(evidence, "failures");
+    if (!task_keys(record, keys) || !task_keys(evidence, evidence_keys) ||
+        !json_object_is_type(failures, json_type_object) || !json_object_object_length(failures) ||
+        json_object_object_length(failures) > 64 || !f_number_is(record, "attempt", round) || !f_string(record, "sha256") ||
         plan_digest(f_field(record, "evidence"), digest) || strcmp(digest, f_string(record, "sha256"))) {
         json_object_put(record); return NULL;
     }
@@ -33,16 +38,37 @@ static bool accepted(json_object *compiled, json_object *record) {
     char digest[65]; const char *bound = f_string(f_field(record, "evidence"), "plan_sha256");
     return bound && !plan_digest(compiled, digest) && !strcmp(bound, digest);
 }
-static json_object *current_record(const char *run, json_object *compiled, int round) {
+static bool valid_failures(json_object *compiled, json_object *record) {
+    json_object *checks = f_field(f_field(compiled, "plan"), "checks");
+    json_object *failures = f_field(f_field(record, "evidence"), "failures");
+    json_object_object_foreach(failures, id, failure) {
+        int index = plan_index(checks, id); const char *delivery = f_string(failure, "deliverable");
+        if (index < 0 || !delivery) return false;
+        json_object *check = json_object_array_get_idx(checks, (size_t)index);
+        if (strcmp(delivery, f_string(check, "deliverable"))) return false;
+        json_object *report = plan_canonical(failure);
+        json_object_object_del(report, "deliverable");
+        enum plan_verdict verdict = plan_report(compiled, check, report, f_string(report, "subject_sha256"));
+        json_object_put(report);
+        if (verdict != PLAN_FAIL && verdict != PLAN_INCONCLUSIVE) return false;
+    }
+    return true;
+}
+static json_object *current_record(const char *run, json_object *compiled, int round, bool applying) {
     json_object *record = read_record(run, round);
-    if (!record || !accepted(compiled, record)) { json_object_put(record); return NULL; }
+    if (!record || !accepted(compiled, record) || !valid_failures(compiled, record) ||
+        !plan_reuse_verify(run, compiled, f_field(record, "evidence"), round, applying)) {
+        json_object_put(record); return NULL;
+    }
     return record;
 }
-static int reset_steps(const char *run, json_object *compiled, int round) {
+static int reset_steps(const char *run, json_object *compiled, int round, json_object *record) {
     json_object *steps = f_field(f_field(compiled, "plan"), "steps"); char directory[F_PATH], number[16];
+    json_object *kept = f_field(f_field(f_field(record, "evidence"), "reuse"), "steps");
     snprintf(number, sizeof(number), "%d\n", round);
     for (size_t i = 0; i < json_object_array_length(steps); i++) {
         const char *id = f_string(json_object_array_get_idx(steps, i), "id");
+        if (f_field(kept, id)) continue;
         if (snprintf(directory, sizeof(directory), "%s/steps/%s", run, id) >= (int)sizeof(directory) ||
             scalar(directory, "attempts", number) || scalar(directory, "state", "queued\n")) return -1;
     }
@@ -50,10 +76,10 @@ static int reset_steps(const char *run, json_object *compiled, int round) {
 }
 static int apply(const char *run, json_object *compiled, json_object *pending) {
     int round = json_object_get_int(f_field(pending, "attempt")), current = round_number(run), status = -1;
-    json_object *record = current_record(run, compiled, round); char path[F_PATH];
+    json_object *record = current_record(run, compiled, round, true); char path[F_PATH];
     int budget = json_object_get_int(f_field(f_field(f_field(compiled, "plan"), "envelope"), "repair_budget"));
     if (round < 2 || round > budget + 1 || (current != round - 1 && current != round) ||
-        !record || !json_object_equal(record, pending) || reset_steps(run, compiled, round) ||
+        !record || !json_object_equal(record, pending) || reset_steps(run, compiled, round, record) ||
         f_path(path, sizeof(path), run, "repair-pending.json") || unlink(path) || task_sync_dir(run)) goto done;
     status = 0;
 done:
@@ -114,7 +140,7 @@ int plan_task_attempt(const char *run) {
     if (!compiled || !f_number_is(f_field(compiled, "plan"), "schema_version", 2)) goto done;
     int budget = json_object_get_int(f_field(f_field(f_field(compiled, "plan"), "envelope"), "repair_budget"));
     if (round > budget + 1 || f_path(path, sizeof(path), run, "repair-pending.json") || !access(path, F_OK) || errno != ENOENT) goto done;
-    if (round > 1 && !(record = current_record(run, compiled, round))) goto done;
+    if (round > 1 && !(record = current_record(run, compiled, round, false))) goto done;
     status = round;
 done:
     json_object_put(record); json_object_put(compiled); return status;
@@ -122,7 +148,7 @@ done:
 int plan_repair_write(const char *run, const char *directory, const char *name) {
     json_object *compiled = plan_run_definition(run), *context = NULL, *record = NULL; int status = -1, round = round_number(run);
     if (!compiled || !f_number_is(f_field(compiled, "plan"), "schema_version", 2) || round < 1) goto done;
-    if (round > 1 && !(record = current_record(run, compiled, round))) goto done;
+    if (round > 1 && !(record = current_record(run, compiled, round, false))) goto done;
     context = json_object_new_object(); json_object_object_add(context, "schema_version", json_object_new_int(1));
     json_object_object_add(context, "attempt", json_object_new_int(round));
     json_object_object_add(context, "previous", json_object_get(f_field(record, "evidence")));
@@ -133,7 +159,7 @@ done:
 bool plan_repair_fresh(const char *run, json_object *check, const char *subject) {
     int round = round_number(run); json_object *compiled = NULL, *record = NULL; bool fresh = false;
     if (round == 1) return true;
-    if (round < 1 || !(compiled = plan_run_definition(run)) || !(record = current_record(run, compiled, round))) goto done;
+    if (round < 1 || !(compiled = plan_run_definition(run)) || !(record = current_record(run, compiled, round, false))) goto done;
     json_object *failures = f_field(f_field(record, "evidence"), "failures");
     fresh = json_object_is_type(failures, json_type_object);
     json_object_object_foreach(failures, id, failure) {

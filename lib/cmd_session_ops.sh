@@ -49,6 +49,13 @@ cmd_tail() {
         return 1
     fi
 
+    _tail_mode="$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)"
+    if [ "$_tail_mode" = headless ] || [ "$session" = - ]; then
+        echo "=== $branch (headless; no terminal pane) ==="
+        echo "Use 'hydra exec --branch $branch ...' to run commands and collect result artifacts."
+        return 0
+    fi
+
     if ! tmux_session_exists "$session"; then
         echo "Error: Session '$session' is not running" >&2
         return 1
@@ -137,8 +144,12 @@ cmd_broadcast() {
         echo "Broadcasting to all sessions..."
     fi
 
-    # Cache all tmux sessions once to avoid repeated subprocess calls (perf)
-    _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+    # Cache all tmux sessions once to avoid repeated subprocess calls (perf).
+    # Headless rows have no terminal resource and must not probe tmux.
+    _cached_tmux_sessions=""
+    if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then
+        _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+    fi
     _session_exists_cached() {
         echo "$_cached_tmux_sessions" | grep -qx "$1" 2>/dev/null
     }
@@ -148,6 +159,10 @@ cmd_broadcast() {
     printf "0" > "$tmpcount"
 
     echo "$mappings" | while IFS=' ' read -r branch session _ai _group; do
+        if [ "$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)" = headless ] || [ "$session" = - ]; then
+            echo "  Skipping $branch: headless heads have no terminal pane" >&2
+            continue
+        fi
         if _session_exists_cached "$session"; then
             _target=""
             if [ -n "$explicit_pane" ]; then
@@ -248,14 +263,23 @@ cmd_wait_idle() {
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
-    # Cache tmux sessions for initialization (perf)
-    _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+    # Cache tmux sessions for initialization (perf), when any selected head
+    # actually owns an interactive terminal.
+    _cached_tmux_sessions=""
+    if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then
+        _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+    fi
     _session_exists_cached() {
         echo "$_cached_tmux_sessions" | grep -qx "$1" 2>/dev/null
     }
 
     # Initialize tracking
     echo "$mappings" | while IFS=' ' read -r branch session _ai _group; do
+        if [ "$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)" = headless ] || [ "$session" = - ]; then
+            # A headless head is already terminal-idle; its lifecycle
+            # observation remains authoritative for command/agent progress.
+            continue
+        fi
         if _session_exists_cached "$session"; then
             echo "$start_time" > "$tmpdir/$session.time"
             tmux capture-pane -t "$session" -p 2>/dev/null | cksum > "$tmpdir/$session.hash"
@@ -272,12 +296,18 @@ cmd_wait_idle() {
         fi
 
         # Refresh session cache once per poll iteration (perf: avoid N subprocess calls)
-        _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+        _cached_tmux_sessions=""
+        if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then
+            _cached_tmux_sessions="$(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)"
+        fi
 
         # Use file to track idle state across subshell
         echo "idle" > "$tmpdir/status"
 
         echo "$mappings" | while IFS=' ' read -r _branch session _ai _group; do
+            if [ "$(get_terminal_mode_for_branch "$_branch" 2>/dev/null || echo interactive)" = headless ] || [ "$session" = - ]; then
+                continue
+            fi
             if ! _session_exists_cached "$session"; then
                 continue
             fi

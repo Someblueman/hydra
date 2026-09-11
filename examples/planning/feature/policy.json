@@ -13,8 +13,8 @@
       "execute"
     ],
     "writes": [
-      "feature-work-v5:slug.c",
-      "feature-work-v5:catalog-slug"
+      "feature-work-deterministic:slug.c",
+      "feature-work-deterministic:catalog-slug"
     ],
     "parallelism": 2,
     "timeout_seconds": 900,

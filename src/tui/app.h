@@ -23,7 +23,8 @@ struct app {
     struct native_evidence *evidence;
     struct native_links *links;
     pid_t control_pids[4];
-    char control_labels[4][128];
+    /* Full 127-byte task/run identity plus action and label text. */
+    char control_labels[4][160];
     const char *hydra;
     size_t selected, recovery_selected;
     int view, theme;
@@ -41,6 +42,7 @@ struct app {
     struct workflow_model *workflows;
     size_t workflow_run, workflow_node;
     size_t host_selected;
+    size_t task_selected;
     int graph_x, graph_y;
     bool workflow_stale, graph_follow;
     time_t workflow_at;

@@ -80,7 +80,8 @@ static bool dispatch_valid(json_object *record, json_object *binding, json_objec
     }
     json_object_put(checked); return valid;
 }
-static json_object *request(json_object *record, const char *operation, const char *id, bool start) {
+static json_object *request(json_object *record, const char *operation, const char *id, bool start,
+                            const char *metrics_dir) {
     json_object *req = json_object_new_object(), *package = f_field(record, "package"), *response;
     json_object_object_add(req, "protocol", json_object_new_int(F_PROTOCOL));
     f_string_add(req, "action", "task"); f_string_add(req, "operation", operation);
@@ -91,7 +92,7 @@ static json_object *request(json_object *record, const char *operation, const ch
         if (start) f_string_add(req, "trust_spec", f_string(package, "spec_sha256"));
     }
     unsigned seconds = (unsigned)json_object_get_int(f_field(f_field(f_field(package, "spec"), "limits"), "transport_seconds"));
-    response = wt_request(f_field(f_field(record, "binding"), "destination"), req, seconds);
+    response = wt_request(f_field(f_field(record, "binding"), "destination"), req, seconds, metrics_dir);
     json_object_put(req); return response;
 }
 static bool receipt_matches(json_object *receipt, json_object *record, const char *id) {
@@ -129,7 +130,7 @@ static bool collection_transport_failure(json_object *response) {
     return false;
 }
 static json_object *collect(const char *attempt, const char *remote, json_object *record, const char *id, const char *source) {
-    json_object *response = request(record, "result", id, false), *envelope = f_field(f_field(response, "data"), "collection");
+    json_object *response = request(record, "result", id, false, remote), *envelope = f_field(f_field(response, "data"), "collection");
     json_object *checked = task_result_verify(envelope), *collected = NULL; bool valid = false;
     if (!json_object_get_boolean(f_field(response, "ok"))) {
         bool transient = collection_transport_failure(response);
@@ -184,7 +185,7 @@ static enum observation observe(struct execution *execution) {
     if (cancelling) f_stopped = 0; /* Permit one bounded cancellation request. */
     const char *operation = cancelling ? "cancel" : "status";
     if (!*execution->id) operation = "submit";
-    json_object *response = request(execution->record, operation, *execution->id ? execution->id : NULL, !cancelling);
+    json_object *response = request(execution->record, operation, *execution->id ? execution->id : NULL, !cancelling, execution->remote);
     if (json_object_get_boolean(f_field(response, "ok")))
         next = record_observation(execution, f_field(response, "data"), cancelling);
     json_object_put(response); return next;

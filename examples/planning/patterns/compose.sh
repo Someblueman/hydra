@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+cat "$HYDRA_WORKFLOW_INPUTS_DIR/a" "$HYDRA_WORKFLOW_INPUTS_DIR/b" > "$HYDRA_WORKFLOW_OUTPUTS_DIR/report"

@@ -44,6 +44,8 @@ json_object *plan_repair_evidence(const char *run, json_object *compiled) {
         if (append_step(run, compiled, f_string(json_object_array_get_idx(steps, i), "id"), failures)) goto done;
     }
     valid = json_object_object_length(failures) > 0;
+    if (valid && f_field(f_field(compiled, "plan"), "reuse_policy"))
+        json_object_object_add(out, "reuse", plan_reuse_capture(run, compiled, failures));
 done:
     json_object_put(failures);
     if (!valid) { json_object_put(out); return NULL; }

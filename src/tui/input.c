@@ -199,6 +199,7 @@ static void interactive_prompt(struct app *app, char prefix) {
 
 static bool fleet_key(struct app *app, char key) {
     if (!app->fleet) return false;
+    if (app->view == 4 && native_control_key(app, key)) return true;
     switch (key) {
         case 'a': fleet_action(app, true); return true;
         case 'c': fleet_action(app, false); return true;

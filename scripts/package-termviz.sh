@@ -16,5 +16,7 @@ cp "$_package_root/scripts/termviz.mk" "$_package_dest/Makefile"
 cp "$_package_root/src/termviz/STANDALONE.md" "$_package_dest/README.md"
 cp "$_package_root"/examples/workspace*.c "$_package_root/examples/workspace_demo.h" "$_package_root/examples/termviz.c" "$_package_dest/examples/"
 cp "$_package_root"/tests/c/test_termviz*.c "$_package_root/tests/c/test_workspace_child.c" "$_package_dest/tests/c/"
-cp "$_package_root/tests/termviz/pty_support.py" "$_package_root/tests/termviz/test_pty.py" "$_package_dest/tests/termviz/"
+for _package_file in pty_support.h pty_support.c screen_support.c fixture_support.c test_pty.c; do
+    cp "$_package_root/tests/termviz/$_package_file" "$_package_dest/tests/termviz/"
+done
 printf 'Exported termviz source to %s\n' "$_package_dest"

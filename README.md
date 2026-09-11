@@ -53,7 +53,8 @@ that a task is complete or that its changes are correct.
 
 ## Installation
 
-You need Git, tmux 3.0 or newer, Make, and a C99 compiler. Fleet additionally needs
+You need Git, Make, and a C99 compiler. Interactive heads need tmux 3.0 or newer;
+headless execution and installation work without it. Fleet additionally needs
 `pkg-config` and JSON-C development files (`brew install json-c pkg-config` on
 macOS, or `apt install libjson-c-dev pkg-config` on Ubuntu). The installer builds
 the native TUI; build the fleet coordinator before installing.
@@ -175,6 +176,11 @@ through the CLI. See the
 [planner recipe](docs/PLANNER_RECIPE.md) and
 [feature and research examples](examples/planning/README.md).
 
+Use [workflow metrics](docs/OBSERVABILITY.md) to inspect recorded queue and outcome
+timing, recovery, operator actions and transport bytes with explicit unknowns.
+[Retention policies](docs/RETENTION.md) preview or expire local task/run evidence
+while preserving submission identities, recovery dependencies and pinned claims.
+
 ## Documentation
 
 | Topic | Guide |
@@ -210,6 +216,10 @@ and [standalone library guide](src/termviz/STANDALONE.md).
 See the [simplification review](docs/CODEBASE_SIMPLIFICATION.md#follow-up-module-boundaries)
 for ownership boundaries and measured results.
 
+Testing requires a C99 compiler, JSON-C development files and pkg-config in
+addition to Git, tmux, dash and ShellCheck. Python is not required; Make builds
+the native test fixtures and example programs.
+
 ```sh
 make lint       # ShellCheck and shell syntax
 make test-all   # Complete acceptance suite, including native and PTY checks
@@ -217,6 +227,15 @@ make sanitize   # All native sanitizer checks
 make sanitize-fleet # Focused fleet, agent and planning sanitizer checks
 make help       # Build, package, and focused test targets
 ```
+
+Fleet acceptance runs four independent cases at a time after building shared
+fixtures. Use `make test-fleet TEST_JOBS=1` for a serial run or set `TEST_JOBS`
+to another worker count. Case timings appear in the console; complete output
+is retained in `build/test-logs/` (under the selected `BUILD_DIR` for sanitizer
+builds). Failed cases print their output and fail the target.
+CI splits the same case list between `FLEET_SHARD=odd` and `FLEET_SHARD=even`,
+with two workers per runner to limit process contention;
+the default `FLEET_SHARD=all` retains the complete local suite.
 
 Contributions should include checks appropriate to their scope. Versions after
 2.0 are chosen at release time from compatibility impact; see the
