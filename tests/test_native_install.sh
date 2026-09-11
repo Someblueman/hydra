@@ -151,10 +151,12 @@ archive_home="$test_root/archive-home"
 mkdir -p "$archive_checkout/scripts" "$archive_home"
 cp "$repo_root/Makefile" "$repo_root/install.sh" "$archive_checkout/"
 cp -R "$repo_root/bin" "$repo_root/lib" "$repo_root/src" "$archive_checkout/"
-cp "$repo_root/scripts/native-tests.mk" "$archive_checkout/scripts/"
+cp "$repo_root/scripts/"*.mk "$archive_checkout/scripts/"
+archive_status=0
 HOME="$archive_home" PREFIX="$archive_prefix" HYDRA_INSTALL_CORE=required HYDRA_BUILD_CORE=1 \
-    sh "$archive_checkout/install.sh" > "$test_root/archive-source.out" 2>&1
-assert_success $? "source archive auto-builds native TUI without Git metadata"
+    sh "$archive_checkout/install.sh" > "$test_root/archive-source.out" 2>&1 || archive_status=$?
+if [ "$archive_status" -ne 0 ]; then cat "$test_root/archive-source.out"; fi
+assert_success "$archive_status" "source archive auto-builds native TUI without Git metadata"
 assert_file "$archive_prefix/libexec/hydra/hydra-tui" "auto install builds and installs native TUI when a compiler is available"
 assert_equal "hydra-2.3.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-core.source")" \
