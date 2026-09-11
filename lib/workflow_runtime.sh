@@ -457,13 +457,14 @@ workflow_drive() {
             done
         fi
 
+        # Count active work first so a concurrent waiting-remote publication cannot look terminal.
+        _wd_nonterminal="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(queued|ready|running|retrying)$' || true)"
         if workflow_waiting_state "$_wd_dir"; then
             trap - HUP INT TERM
             rm -rf "$_wd_drive_lock"
             return 3
         fi
 
-        _wd_nonterminal="$(find "$_wd_dir/steps" -name state -exec sed -n '1p' {} \; | grep -Ec '^(queued|ready|running|retrying)$' || true)"
         if [ "$_wd_nonterminal" -eq 0 ]; then
             _wd_repaired="$(workflow_plan_repair "$_wd_dir")" || return 1
             if [ "$_wd_repaired" = 1 ]; then
