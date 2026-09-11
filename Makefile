@@ -15,6 +15,9 @@ BUILD_DIR ?= build
 NATIVE_SOURCES = $(shell find src -type f -name '*.c' | LC_ALL=C sort)
 SANITIZER_FLAGS ?= $(shell if [ "$$(uname -s)" = Darwin ]; then printf '%s' '-fsanitize=undefined'; else printf '%s' '-fsanitize=address,undefined'; fi)
 
+# Sanitizer diagnostics must fail a case even when its output is captured.
+export UBSAN_OPTIONS ?= halt_on_error=1
+
 # Installation prefix (no root required when writable)
 PREFIX ?= /usr/local
 DESTDIR ?=
@@ -32,7 +35,7 @@ test: build-fleet build-test-fixture $(BUILD_DIR)/native-tests/statistics-eviden
 	@echo "Running tests..."
 	@if [ -d tests ] && [ -n "$$(ls -A tests/test_*.sh 2>/dev/null)" ]; then \
 		for test in tests/test_*.sh; do \
-			case "$$test" in tests/test_core.sh|tests/test_visualization.sh|tests/test_native_install.sh|tests/test_native_tui.sh|tests/test_fleet.sh|tests/test_fleet_install.sh|tests/test_task_package.sh|tests/test_task_acceptance.sh|tests/test_workflow_plan_task.sh|tests/test_workflow_task.sh|tests/test_workflow_data.sh|tests/test_workflow_plan.sh|tests/test_workflow_approval.sh|tests/test_agent_execution.sh|tests/test_agent_auth.sh) continue ;; esac; \
+			case "$$test" in tests/test_core.sh|tests/test_visualization.sh|tests/test_native_install.sh|tests/test_native_tui.sh|tests/test_fleet.sh|tests/test_fleet_install.sh|tests/test_task_package.sh|tests/test_task_acceptance.sh|tests/test_workflow_plan_task.sh|tests/test_workflow_plan_v3.sh|tests/test_headless_plan_adapter.sh|tests/test_workflow_task.sh|tests/test_workflow_data.sh|tests/test_workflow_plan.sh|tests/test_workflow_approval.sh|tests/test_agent_execution.sh|tests/test_agent_auth.sh) continue ;; esac; \
 			echo "Running $$test..."; \
 			sh "$$test" || exit 1; \
 		done; \
@@ -384,48 +387,6 @@ test-plan-staged-public: build-fleet build-plan-precompile
 test-plan-inspection: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-inspection"
 
-test-fleet: test-discovery test-enrollment test-retention test-workflow-metrics test-plan-staged $(BUILD_DIR)/test-statistics build-fleet $(BUILD_DIR)/test-workflow-schedule $(BUILD_DIR)/test-plan $(BUILD_DIR)/test-agent-auth $(BUILD_DIR)/test-agent-profile $(BUILD_DIR)/test-workflow-data $(BUILD_DIR)/test-fleet $(BUILD_DIR)/test-task-package $(BUILD_DIR)/test-task-result
-	$(BUILD_DIR)/test-plan
-	$(BUILD_DIR)/test-workflow-schedule
-	$(BUILD_DIR)/test-agent-auth
-	$(BUILD_DIR)/test-agent-profile
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_agent_auth.sh
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_agent_execution.sh
-	$(BUILD_DIR)/test-workflow-data
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_data.sh
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/workflow-contract-cases" --runtime
-	HYDRA_TEST_DAG_REPLAY=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_RESULT_LOST=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_RESULT_BAD=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_PARALLELISM=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_CRASH=2 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_DAG_SOURCE=1 HYDRA_TEST_DAG_SOURCE_TAMPER=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh
-	HYDRA_TEST_PLAN_SOURCE=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
-	HYDRA_TEST_PLAN_SOURCE=dirty HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
-	@for fault in dispatch key attempt placement cancel cancel-offline; do \
-		HYDRA_TEST_DAG_LOST_ACK=1 HYDRA_TEST_DAG_FAULT="$$fault" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_task.sh || exit 1; \
-	done
-	HYDRA_TEST_HEADLESS=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan.sh
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_headless_plan_adapter.sh
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan.sh
-	sh tests/test_workflow_plan_v3.sh
-	@for verdict in pass fail inconclusive stale-subject stale-validator missing-coverage crash bad-artifact changed-harness; do \
-		HYDRA_TEST_PLAN_TASK_VERDICT="$$verdict" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh || exit 1; \
-	done
-	HYDRA_TEST_PLAN_REPAIR=pass HYDRA_TEST_PLAN_REPAIR_BUDGET=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
-	@for repair in pass exhaust same crash combine; do \
-		HYDRA_TEST_PLAN_REPAIR="$$repair" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh || exit 1; \
-	done
-	HYDRA_TEST_PLAN_REPAIR=pass HYDRA_TEST_PLAN_SOURCE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
-	HYDRA_TEST_REPORT_V2=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan.sh
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_approval.sh
-	$(BUILD_DIR)/test-fleet
-	$(BUILD_DIR)/test-task-package
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_fleet.sh
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_fleet_install.sh
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_task_package.sh
-	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_task_acceptance.sh
 
 .PHONY: sanitize-fleet
 sanitize-fleet: build-fleet
@@ -487,3 +448,5 @@ test-enrollment-ssh: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-enrollment-ssh" "$(abspath $(BUILD_DIR))/native-tests/enrollment-loopback-fixture" "$(abspath $(BUILD_DIR))/native-tests/enrollment-receiver-fixture"
 
 include scripts/native-tests.mk
+
+include scripts/fleet-tests.mk

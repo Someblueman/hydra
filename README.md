@@ -228,6 +228,12 @@ make sanitize-fleet # Focused fleet, agent and planning sanitizer checks
 make help       # Build, package, and focused test targets
 ```
 
+Fleet acceptance runs four independent cases at a time after building shared
+fixtures. Use `make test-fleet TEST_JOBS=1` for a serial run or set `TEST_JOBS`
+to another worker count. Case timings appear in the console; complete output
+is retained in `build/test-logs/` (under the selected `BUILD_DIR` for sanitizer
+builds). Failed cases print their output and fail the target.
+
 Contributions should include checks appropriate to their scope. Versions after
 2.0 are chosen at release time from compatibility impact; see the
 [release policy](docs/VERSIONING.md).

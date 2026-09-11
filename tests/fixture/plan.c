@@ -70,6 +70,7 @@ int fx_plan(int argc, char **argv) {
                                        "\"submit\",\"submission_key\":\"terminal-direct\"}");
         json_object_object_add(request, "package", fx_read(argv[2]));
         f_emit(request);
+        fx_require(json_object_put(request) == 1, "request ownership");
         return 0;
     }
     if (argc == 4 && !strcmp(argv[1], "terminal-spec")) {

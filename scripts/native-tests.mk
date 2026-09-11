@@ -1,4 +1,8 @@
 # Native independent PTY observers and fixtures.
+$(BUILD_DIR)/fixture-lock: tests/fixture/lock.c
+	@mkdir -p "$(@D)"
+	$(CC) -std=c99 -Wall -Wextra -Werror -pedantic $< -o $@
+
 PTY_SUPPORT = tests/termviz/pty_support.c tests/termviz/screen_support.c tests/termviz/fixture_support.c
 PTY_NAMES = pty statistics-pty fleet-controls fleet-recovery attached-pty plan-workspace plan-launch workflow-controls
 PTY_BINS = $(addprefix $(BUILD_DIR)/native-tests/pty-,$(PTY_NAMES))
@@ -34,7 +38,6 @@ test-retention: $(BUILD_DIR)/native-tests/test-retention
 test-workflow-metrics: $(BUILD_DIR)/native-tests/test-workflow-task-metrics
 test-workflow-metrics: $(BUILD_DIR)/native-tests/test-statistics-export
 test-plan-inspection: $(BUILD_DIR)/native-tests/test-plan-inspection
-test-fleet: $(BUILD_DIR)/native-tests/workflow-contract-cases
 
 $(BUILD_DIR)/native-tests/test-discovery: tests/native/discovery_progress.c
 $(BUILD_DIR)/native-tests/test-enrollment: tests/native/enrollment_batch.c tests/native/enrollment_packages.c

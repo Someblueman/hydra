@@ -63,12 +63,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y git tmux dash build-essential libjson-c-dev pkg-config
     
-    - name: Run tests
-      run: make test
-    
-    - name: Test with dash
+    - name: Run shell tests with dash
       run: |
-        echo "Running tests with dash as sh..."
         sudo ln -sf /bin/dash /bin/sh
         make test
 
@@ -124,13 +120,6 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: brew install tmux shellcheck json-c pkg-config
 
-    - name: Run sanitizer tests
-      env:
-        TMUX_TMPDIR: ${{ runner.temp }}/hydra-sanitize
-      run: |
-        mkdir -p "$TMUX_TMPDIR"
-        make sanitize
-
     - name: Build and test native protocol and mission control
       env:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-native
@@ -167,3 +156,31 @@ jobs:
         else
           ldd build/hydra-core
         fi
+
+  sanitize:
+    name: Native sanitizers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install shell dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y dash shellcheck tmux libjson-c-dev pkg-config
+
+    - name: Install shell dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: brew install tmux shellcheck json-c pkg-config
+
+    - name: Run sanitizer tests
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-sanitize
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make sanitize
+
