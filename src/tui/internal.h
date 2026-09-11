@@ -41,6 +41,8 @@ extern char **environ;
 #define NATIVE_TERMINALS 4
 #define NATIVE_TERMINAL_CELLS (512U * 256U)
 #define WORKSPACE_CAPACITY (512U * 256U)
+#define NATIVE_ATTENTION_ITEMS 128U
+#define NATIVE_ATTENTION_SEEN 256U
 struct native_capture {
     pid_t pid;
     int fd, status;
@@ -91,7 +93,7 @@ struct native_links {
     size_t count;
     bool stale;
 };
-struct native_observations { struct native_capture jobs[4]; };
+struct native_observations { struct native_capture jobs[5]; };
 struct native_terminal {
     struct tv_pty client;
     struct tv_terminal_model *screen;
@@ -174,6 +176,10 @@ void native_terminal_draw(struct app *app, struct native_terminal *t, struct tv_
 void native_observations_cancel(struct app *app, size_t source);
 void native_observations_destroy(struct app *app);
 void native_observations_tick(struct app *app, bool request);
+void native_attention_destroy(struct app *app);
+void native_attention_tick(struct app *app, bool request);
+bool native_attention_key(struct app *app, char key);
+void render_attention(struct app *app);
 void native_links_accept(struct app *app, FILE *input);
 bool native_links_match(struct app *app, size_t run, size_t head);
 void native_controls_tick(struct app *app);

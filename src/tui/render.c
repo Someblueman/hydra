@@ -320,7 +320,7 @@ static void render_help(struct app *app) {
     linef(app, "q               Quit");
 }
 
-static const char *view_names[] = {"Heads", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace", "Statistics"};
+static const char *view_names[] = {"Heads", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace", "Statistics", "Attention"};
 
 static void render_header(struct app *app) {
     char tabs[128];
@@ -350,6 +350,7 @@ static void render_content(struct app *app) {
         case 4: render_dashboard(app); break;
         case 5: render_workflow_graph(app); break;
         case 6: render_hosts(app); break;
+        case 9: render_attention(app); break;
         default: linef(app, "Workspace requires at least 20 columns and 6 rows"); break;
     }
 }
@@ -380,7 +381,8 @@ static void render_snapshot_hint(struct app *app, bool headless) {
 
 static void render_key_hint(struct app *app) {
     style(app, TONE_STRONG);
-    if (app->view == 5) linef(app, app->cols < 60 ? "j/k node [/] run ? help q quit" : "j/k node  [/] run  h/l/J/K pan  ? help  q quit");
+    if (app->view == 9) linef(app, "j/k select  Enter details  I refresh  Esc heads  q quit");
+    else if (app->view == 5) linef(app, app->cols < 60 ? "j/k node [/] run ? help q quit" : "j/k node  [/] run  h/l/J/K pan  ? help  q quit");
     else if (app->view == 6) linef(app, "j/k host  Enter heads  ? help  q quit");
     else if (app->cols < 60) linef(app, app->fleet ? "a attach  c interrupt  ? help  q quit" : "Enter open  : actions  ? help  q quit");
     else if (app->view == 1 && !app->fleet) linef(app, "p output  d diagnostics  Esc back  t theme  ? help  q quit");

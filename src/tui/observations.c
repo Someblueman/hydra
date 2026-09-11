@@ -18,7 +18,7 @@ void native_observations_destroy(struct app *app) {
     free(app->links); app->links=NULL;
     native_controls_tick(app); /* Reap finished owners; active owners survive UI exit. */
     if (!app->observations) return;
-    for (i=0;i<4;i++) native_capture_destroy(&app->observations->jobs[i]);
+    for (i=0;i<5;i++) native_capture_destroy(&app->observations->jobs[i]);
     free(app->observations); app->observations=NULL;
 }
 
@@ -46,7 +46,7 @@ void native_observations_tick(struct app *app, bool request) {
         if (!request) return;
         app->observations=calloc(1,sizeof(*app->observations));
         if (!app->observations) return;
-        for (i=0;i<4;i++) app->observations->jobs[i].fd=-1;
+        for (i=0;i<5;i++) app->observations->jobs[i].fd=-1;
     }
     for (i=0;i<4;i++) {
         struct native_capture *p=&app->observations->jobs[i];
@@ -72,4 +72,5 @@ void native_observations_tick(struct app *app, bool request) {
         }
     }
     native_evidence_tick(app,request);
+    native_attention_tick(app,request);
 }

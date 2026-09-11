@@ -228,7 +228,8 @@ static bool workspace_key(struct app *app, char key) {
 
 static bool select_view(struct app *app, char key) {
     switch (key) {
-        case 'v': app->view = (app->view + 1) % 9; break;
+        case 'v': app->view = (app->view + 1) % 10; break;
+        case 'I': app->view = 9; break;
         case 'W': app->view = 7; break;
         case 'o': app->view = 4; break;
         case 'H': app->view = 6; break;
@@ -241,10 +242,12 @@ static bool select_view(struct app *app, char key) {
         if (!app->fleet) (void)refresh_workflows(app, NULL);
     }
     if (app->view == 8) (void)refresh_statistics(app, NULL);
+    if (app->view == 9) native_attention_tick(app, true);
     return true;
 }
 
 static bool view_key(struct app *app, char key) {
+    if (app->view == 9 && native_attention_key(app, key)) return true;
     if (key == 'D') { statistics_toggle(app); return true; }
     if (app->view == 8 && statistics_key(app, key)) return true;
     if (app->view == 7 && workspace_key(app, key)) return true;
