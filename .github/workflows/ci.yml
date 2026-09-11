@@ -109,6 +109,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: lint
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
 
@@ -122,6 +123,13 @@ jobs:
     - name: Install shell dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: brew install tmux shellcheck json-c pkg-config
+
+    - name: Run sanitizer tests
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-sanitize
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        make sanitize
 
     - name: Build and test native protocol and mission control
       env:
@@ -144,13 +152,6 @@ jobs:
         test "$(cat "$package_dir/hydra-core.source")" = "$(git rev-parse HEAD)"
         tui_package_dir="$(make package-tui | tail -n 1)"
         test "$(cat "$tui_package_dir/hydra-tui.source")" = "$(git rev-parse HEAD)"
-
-    - name: Run sanitizer tests
-      env:
-        TMUX_TMPDIR: ${{ runner.temp }}/hydra-sanitize
-      run: |
-        mkdir -p "$TMUX_TMPDIR"
-        make sanitize
 
     - name: Qualify shell-only and offline native installs
       env:

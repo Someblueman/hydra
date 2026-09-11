@@ -7,6 +7,7 @@ fail_count=0
 root="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
 binary="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+package_binary="${HYDRA_TEST_PACKAGE_BINARY:-$binary}"
 trap 'rm -rf "$fixture"' 0
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
@@ -60,7 +61,7 @@ chmod +x "$fixture/transport/ssh"
     unset HYDRA_ROOT HYDRA_FLEET_BIN
     export HOME="$test_home" HYDRA_HOME="$test_home/state" PATH="$fixture/transport:$PATH"
     "$prefix/bin/hydra" remote add bootstrap loopback --hydra "$prefix/bin/hydra" >/dev/null || exit 1
-    "$prefix/bin/hydra" fleet package --source "$root" --binary "$binary" --output "$fixture/package" > "$fixture/package.json" || exit 1
+    "$prefix/bin/hydra" fleet package --source "$root" --binary "$package_binary" --output "$fixture/package" > "$fixture/package.json" || exit 1
     digest="$(sed -n 's/.*"sha256":"\([^"]*\)".*/\1/p' "$fixture/package.json")"
     "$prefix/bin/hydra" fleet bootstrap bootstrap --input "$fixture/package" --sha256 "$digest" > "$fixture/bootstrap.json" || exit 1
     "$prefix/bin/hydra" doctor > "$fixture/doctor.log"

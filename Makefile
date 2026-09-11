@@ -428,8 +428,9 @@ test-fleet: test-discovery test-enrollment test-retention test-workflow-metrics 
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_task_acceptance.sh
 
 .PHONY: sanitize-fleet
-sanitize-fleet:
-	$(MAKE) BUILD_DIR=build/fleet-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-fleet
+sanitize-fleet: build-fleet
+	# Exercise packaging with the deployable binary; sanitizer debug data exceeds the wire limit.
+	HYDRA_TEST_PACKAGE_BINARY="$(abspath $(BUILD_DIR))/hydra-fleet" $(MAKE) BUILD_DIR=build/fleet-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-fleet
 
 # C analysis and reviewed complexity ceiling; use the native build flags.
 CLANG_TIDY ?= scripts/clang-tidy.sh

@@ -40,7 +40,7 @@ static void lost_install(void) {
   assert(!stat(binary, &before));
   ec_status(ec_apply(intent, digest), "enrolled");
   char actual[65], expected[65];
-  assert(!f_hash(binary, actual) && !f_hash(ec_fleet, expected) &&
+  assert(!f_hash(binary, actual) && !f_hash(p.binary, expected) &&
          !strcmp(actual, expected));
   assert(!stat(binary, &after) && before.st_ino == after.st_ino &&
          same_mtime(&before, &after));

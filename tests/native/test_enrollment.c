@@ -189,10 +189,12 @@ void ec_count(const char *name, const char *line, size_t count) {
   free(v);
 }
 void ec_package_make(struct ec_package *p) {
+  const char *binary = getenv("HYDRA_TEST_PACKAGE_BINARY");
+  assert(!f_copy(p->binary, sizeof p->binary, binary ? binary : ec_fleet));
   nt_path(p->path, ec_root, "package");
   nt_path(p->prefix, ec_root, "exact-prefix");
   json_object *v = EC(false, true, "package", "--source", ec_origin, "--binary",
-                      ec_fleet, "--output", p->path);
+                      p->binary, "--output", p->path);
   assert(!f_copy(p->digest, sizeof p->digest,
                  f_string(f_field(v, "data"), "sha256")));
   json_object_put(v);

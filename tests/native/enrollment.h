@@ -5,7 +5,7 @@ extern char ec_root[F_PATH], ec_home[F_PATH], ec_project[F_PATH],
     ec_counter[F_PATH], ec_cli_path[F_PATH], ec_fleet[F_PATH],
     ec_origin[F_PATH];
 struct ec_package {
-  char path[F_PATH], digest[65], prefix[F_PATH];
+  char path[F_PATH], digest[65], prefix[F_PATH], binary[F_PATH];
 };
 void ec_setup(void);
 void ec_cleanup(void);
