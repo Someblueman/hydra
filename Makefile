@@ -1,7 +1,7 @@
 # Makefile for Hydra
 # POSIX-compliant build and lint tasks
 
-.PHONY: all lint test test-all clean install uninstall test-install test-native-install smoke-onboarding \
+.PHONY: all lint test test-fast test-all clean install uninstall test-install test-native-install smoke-onboarding \
 	dev-setup bench bench-tui build-core build-tui test-c test-tui test-tui-pty test-parity sanitize-core sanitize-tui sanitizer \
 	sanitize bench-core benchmark-core package-core package-tui help
 
@@ -42,6 +42,29 @@ test: build-fleet build-test-fixture $(BUILD_DIR)/native-tests/statistics-eviden
 	else \
 		echo "No tests found in tests/"; \
 	fi
+
+# Fixed PR feedback lane. Keep the shell and native selection explicit so this
+# target remains useful for every change and does not depend on changed-file
+# heuristics. Shared prerequisites are built before any stateful test starts.
+FAST_SHELL_TESTS = foundation paths state json_output git_simple project_trust deps tmux lifecycle
+FAST_NATIVE_BINS = $(filter-out $(BUILD_DIR)/test-task-result,$(FLEET_TEST_BINS))
+.PHONY: test-fast
+test-fast:
+	+@$(MAKE) -j$(TEST_JOBS) build-fleet build-test-fixture build-core build-tui $(BUILD_DIR)/test-statistics $(FAST_NATIVE_BINS)
+	@$(MAKE) lint
+	@echo "Running fast shell tests..."
+	@for name in $(FAST_SHELL_TESTS); do \
+		test="tests/test_$${name}.sh"; \
+		echo "Running $$test..."; \
+		sh "$$test" || exit 1; \
+	done
+	@$(MAKE) -j1 test-c test-tui test-parity test-termviz
+	@$(BUILD_DIR)/test-statistics
+	@echo "Running fast native fleet unit tests..."
+	@for binary in $(FAST_NATIVE_BINS); do \
+		echo "Running $$binary..."; \
+		"$$binary" || exit 1; \
+	done
 
 # Optional read-only native helper. The shell CLI remains the mutation authority.
 build-core: $(BUILD_DIR)/hydra-core
@@ -184,7 +207,7 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 	exit $$status
 
 test-parity: build-core
-	@sh tests/test_core.sh
+	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
 
 test-all: test-fleet-controls test-fleet-recovery test-plan-inspection test-plan-outcomes test-statistics-export test-task-announce test-plan-reuse test-plan-workspace test-attached-pty test-termviz-export test-visualization test-workspace-pty test-statistics lint test test-fleet test-c test-tui test-tui-pty test-parity test-install test-native-install smoke-onboarding
 
@@ -261,6 +284,7 @@ help:
 	@echo "Hydra Makefile targets:"
 	@echo "  make lint      - Run ShellCheck and dash syntax validation"
 	@echo "  make test      - Run the shell-only test suite"
+	@echo "  make test-fast - Run the fixed PR feedback test selection"
 	@echo "  make build-core - Build the optional read-only native helper"
 	@echo "  make build-tui - Build the optional native mission-control TUI"
 	@echo "  make test-c    - Run native library unit tests"

@@ -1,7 +1,7 @@
 # Command and configuration guide
 
-See `hydra help` for complete command syntax. Fleet and
-[remote tasks](REMOTE_TASKS.md) shipped in v2.1.0. Version 2.2.0 adds workflow data,
+See `hydra help` for complete command syntax. Fleet and remote tasks shipped in
+v2.1.0. Version 2.2.0 adds workflow data,
 approval waits, headless adapters, and local objective planning; see the
 [changelog](../CHANGELOG.md) for upgrade notes.
 
@@ -114,22 +114,43 @@ hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
 ```
 
+## Agent profiles and inputs
+
 `--profile` selects an agent; `--no-agent` selects a plain shell. `spawn --headless`
 creates a terminal-free workspace head (use `hydra exec --branch <branch> -- ...`
 to run a command). Interactive
 profiles include `agy` (Antigravity), `cursor` (Cursor Agent), `opencode`, `claude`,
 and `codex`, plus launch-only integrations. Headless execution also supports `pi`.
-See the complete [supported-agent matrix](PROFILES.md) and [headless contract](AGENT_CONTRACT.md). `exec` runs a
+See the complete profile and execution contract in [Contracts](CONTRACTS.md). `exec` runs a
 command through Hydra's supervision and records its result. `send` queues steering
 in the head's inbox, and `recv` reads it from that head. Queuing a message does not
 prove the agent consumed it. Provider safe-point delivery requires the capability
-and receipt described in [automation](AUTOMATION.md).
+and receipt described in [Contracts](CONTRACTS.md).
+
+| Profile | Headless executable and mode | Interactive launch |
+| --- | --- | --- |
+| `agy` | `agy`, print/stream JSON | `agy` prompt mode |
+| `cursor` | `cursor-agent`, print/stream JSON | `cursor-agent` positional prompt |
+| `opencode` | `opencode run --format json` | `opencode --prompt` |
+| `claude` | `claude --print`, stream JSON | `claude` positional prompt |
+| `codex` | `codex exec --json`, stdin prompt | `codex` positional prompt; interactive `resume --last` |
+| `pi` | `pi --print --mode json` | Headless only; use a custom launch profile for an interactive head |
+| `copilot`, `aider`, `gemini` | Launch-only integrations | Matching executable, no declared delivery contract |
+
+Use `hydra agent list`, `hydra agent contract NAME`, and `hydra agent probe NAME` to
+inspect availability. Resolution is explicit CLI profile, host-local project default,
+one detected built-in executable, or `none`; multiple detected agents require an
+explicit choice. Import custom declarations with `hydra agent import NAME adapter.json`.
+Imports cannot replace reserved built-in names. Headless `exec --resume-run RUN_ID`
+requires the exact successful recorded session, head, instance, worktree, and profile;
+it never selects the provider's latest session. Interactive Codex restore is the
+separate cwd-scoped `resume --last` convenience.
 
 A declared `done` outcome is separate from verification: use `exec` or a named
 `gate` to record whether a command passed, then review before integration.
 
 For plan/policy authoring, scope review, report formats and disposable examples,
-see the [planner recipe](PLANNER_RECIPE.md). An accepted digest binds execution
+see [workflows](workflows.md). An accepted digest binds execution
 scope; it does not establish that a natural-language objective was interpreted
 correctly. Inspect the final deliverable and its checks.
 
@@ -188,22 +209,15 @@ hydra completion fish > ~/.config/fish/completions/hydra.fish
 | `HYDRA_TUI_BIN` | Explicit optional `hydra-tui` executable for qualification |
 
 Per-head profile, task, identity, worktree path, instance, and lifecycle event are
-stored in project-scoped state v2. See [profiles](PROFILES.md),
-[state](STATE.md), [events](EVENTS.md), and
-[automation](AUTOMATION.md). Security, out-of-band execution, provenance, and
-related contracts are documented in [security](SECURITY.md),
-[operations](OPERATIONS.md), and [provenance](PROVENANCE.md).
-Parallel coordination and native distribution are documented in
-[parallel safety](PARALLEL_SAFETY.md), [workflows and verified
-integration](workflows.md), and the
-[optional native core](NATIVE_CORE.md). Native/basic dispatch, terminal safety,
+stored in project-scoped state v2. The durable state, security, out-of-band
+execution, provenance, and parallel coordination rules are in
+[Contracts](CONTRACTS.md) and [workflows](workflows.md). Native/basic dispatch, terminal safety,
 keymaps, accessibility, and recovery are documented in
-[native mission control](NATIVE_TUI.md).
+the native helpers.
 
-Supported systems and upgrade policy are in [docs/SUPPORT.md](SUPPORT.md).
-Existing 1.9 installations should follow
-[docs/MIGRATING_TO_2.0.md](MIGRATING_TO_2.0.md) before removing their state
-backup.
+Supported systems and upgrade policy are in the root README and [Contracts](CONTRACTS.md).
+Existing 1.9 installations should review the state backup and migration guidance
+in [Contracts](CONTRACTS.md) before removing their backup.
 
 ## YAML Config (optional)
 
@@ -265,7 +279,7 @@ palette includes the tmux dashboard. Mutations are delegated to the shell CLI wi
 argument-vector execution; native spawn prompts for branch, profile, template, and
 layout, while `Space`/`A` select heads and `G` assigns the selection to a group. `x`
 kills selected heads through the confirming shell command and skips the current tmux
-session. See [Native mission control](NATIVE_TUI.md).
+session. See the native helper behavior in the root README.
 
 The larger keymap below belongs to the maintained basic shell TUI.
 

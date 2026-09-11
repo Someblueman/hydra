@@ -5,7 +5,7 @@
 > - **Release:** `v2.4.0` native workspace and verified planning
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
->   [Release policy](VERSIONING.md) · [Contracts](CONTRACTS.md) ·
+>   `Release policy` · [Contracts](CONTRACTS.md) ·
 >   [Release definition of done](#release-definition-of-done)
 
 ## Purpose
@@ -48,7 +48,8 @@ version number is chosen at release time from compatibility impact.
   headless execution. The tmux-optional milestones below extend the existing task
   owner; they do not introduce another scheduler or remove interactive sessions.
 - Native frontends delegate mutations to the shell CLI instead of duplicating policy.
-- Public changes follow [VERSIONING.md](VERSIONING.md), including deprecation,
+- Public changes follow the compatibility and deprecation policy in
+  [CONTRACTS.md](CONTRACTS.md),
   migration, and rollback requirements. Replace internal interfaces in place;
   do not create competing state authorities or speculative compatibility layers.
 - Mutating commands have bounded failure behavior and an explicit recovery story.
@@ -77,9 +78,9 @@ The observation milestones in priority 7 can start against current remote tasks
 before tmux removal; they build on existing distributed execution and do not wait
 for load balancing.
 The implemented remote submission and collection interface is documented in
-[Remote tasks](REMOTE_TASKS.md), with [qualification evidence](REMOTE_TASK_ACCEPTANCE.md).
-Local objective planning is implemented; see the [planner recipe](PLANNER_RECIPE.md)
-and [delivery qualification](evidence/plan-qualification.md). Remaining priorities
+[FLEET.md](FLEET.md) and [CONTRACTS.md](CONTRACTS.md).
+Local objective planning is implemented; see [workflows](workflows.md)
+and its exact-digest procedure. Remaining priorities
 keep their original numbers so existing references remain meaningful. Item 9 is
 placed ahead of item 6 following the planning and validation review; numbering is
 not execution order. Completed item 5 is recorded under delivered behavior.
@@ -87,9 +88,8 @@ not execution order. Completed item 5 is recorded under delivered behavior.
 #### 2. Adapter conformance and headless execution: remaining live qualification
 
 The workflow data, durable approval, retry, adapter-contract, and headless execution
-implementation is documented in [Workflow data](WORKFLOW_DATA.md) and
-[Agent contract](AGENT_CONTRACT.md). The [acceptance record](WORKFLOW_AGENT_ACCEPTANCE.md)
-contains the local harness matrix, remote qualifications, and failure-test evidence.
+implementation is documented in [workflows](workflows.md) and [CONTRACTS.md](CONTRACTS.md).
+Live provider qualification remains a separate host-level check.
 
 - [ ] Complete Claude Code's remote shared task after native host sign-in: verify
       exact prompt delivery, recorded-session recall, and observed-process
@@ -105,8 +105,8 @@ contains the local harness matrix, remote qualifications, and failure-test evide
       recorded recall, and observed-process cancellation have passed.
 
 Antigravity (`agy`), Cursor Agent (`cursor`), and OpenCode (`opencode`) now have
-implemented interactive and headless profiles. See [supported agents](PROFILES.md)
-for their exact capabilities and authentication boundaries.
+implemented interactive and headless profiles. See [agent profiles and inputs](USAGE.md#agent-profiles-and-inputs)
+for capabilities and authentication boundaries.
 
 Acceptance: retain each unqualified live-provider check until actual execution,
 independent result checks, and observed-process cancellation are recorded on its
@@ -129,11 +129,8 @@ finite patterns do not require it.
 The user explicitly included the implemented 9E tools and successful real cleanup
 workflow in scope on 10 September 2026. Broader comparative planning-quality
 research remains open and is outside this release.
-See [the release scope and acceptance boundaries](RELEASE_NEXT_SCOPE.md),
-[remaining-work acceptance](evidence/remaining-work-20260910.md),
-[workstream acceptance](evidence/workstream-integration-20260910.md),
-[earlier integration evidence](evidence/next-wave-integration.md), and
-[V2/9C/H2 acceptance](evidence/observation-enrollment-integration.md) for exact
+See [Contracts](CONTRACTS.md) and [workflows](workflows.md) for current scope and
+acceptance boundaries; dated evidence is intentionally kept out of the repository.
 historical checks and limits. The [release record](https://github.com/Someblueman/hydra/releases/tag/v2.4.0)
 identifies the published commit and artifacts; historical evidence remains bound
 to the revisions it names.
@@ -142,10 +139,10 @@ The user selected the remaining V, 9 and H workstreams. Other roadmap tracks
 retain their original selection boundaries. Local qualification does not
 establish live provider results, operational-host enrollment, or publication.
 
-Research for follow-on decisions: [interactive parity](research/interactive-parity-report.md)
-and its [decision brief](research/interactive-parity-decision-brief.md), plus
-[host discovery and onboarding](research/host-discovery-onboarding-report.md)
-and its [decision brief](research/host-discovery-onboarding-decision-brief.md).
+Research for follow-on decisions: `interactive parity`
+and its `decision brief`, plus
+`host discovery and onboarding`
+and its `decision brief`.
 The reports describe the audited baseline and retain their research-date context;
 the H track below incorporates the authorized onboarding recommendations.
 
@@ -175,8 +172,8 @@ implementation, provider access, or live-host experiments.
 Decision: make tmux optional for headless execution, retaining it for interactive
 heads. T1 is locally qualified; T2 has controlled acceptance but still needs live-host
 qualification. Interactive heads retain their tmux requirement.
-See [the updated analysis](research/tmux-optional-execution.md) for the current
-implementation, affected contracts, and design tradeoffs. Resource admission and
+See [Contracts](CONTRACTS.md) for the current implementation and affected
+contracts. Resource admission and
 finite distributed execution are implemented; T1 and T2 extend that execution to
 hosts without tmux, and T3 qualifies the same distributed scenario in that mode.
 These are delivery milestones, not assigned release versions.
@@ -193,8 +190,8 @@ These are delivery milestones, not assigned release versions.
       artifacts without invoking tmux; status and teardown work for both execution
       modes. Existing state and interactive workflows remain readable and usable,
       with migration/rollback checks where the durable contract changes.
-      Local evidence: [headless and interactive regressions](T2_ACCEPTANCE.md)
-      and [combined integration](evidence/next-wave-integration.md).
+      Local evidence: `headless and interactive regressions`
+      and `combined integration`.
 - [ ] **T2 — Remote execution and planning without tmux.** Route remote exec and
       headless workflow steps through T1 and the existing detached task owner.
       Make admission, bootstrap, doctor, installation, and capability negotiation
@@ -202,7 +199,7 @@ These are delivery milestones, not assigned release versions.
       lowering explicitly; preserve published spawn semantics and existing compiled
       artifact bindings. Unsupported remote or terminal capabilities fail before
       launch, rather than silently changing the requested execution mode.
-      Implementation and controlled acceptance: [T2 record](T2_ACCEPTANCE.md).
+      Implementation and controlled acceptance: `T2 record`.
       Live authenticated-host qualification remains required.
       Acceptance: on hosts without tmux installed, submit a command and an available
       authenticated headless adapter, disconnect, reconnect, collect exact outputs,
@@ -212,7 +209,7 @@ These are delivery milestones, not assigned release versions.
       replayed and retained reservations are not released by terminal absence.
 - [ ] **T3 — Distributed qualification and operator access.** Use T2 for the
       implemented two-host fan-out, validation, join, composition, and final check
-      described in [Distributed DAGs](DISTRIBUTED_DAG.md). Reuse
+      described in `Distributed DAGs`. Reuse
       priority 7's run/step/attempt visibility through CLI/TUI without requiring attach.
       Interactive terminal access remains an explicit capability; viewing logs is
       not attachment to a headless process's stdin.
@@ -232,7 +229,7 @@ required to complete T1–T3.
 
 Prioritize this work before automatic host placement. The finite distributed DAG,
 required validation joins, bounded whole-graph repair, and scheduling replay are
-[implemented and qualified](evidence/distributed/qualification.md). Retain that
+`implemented and qualified`. Retain that
 execution substrate and the existing public CLI; strengthen what is planned,
 compiled, handed off, and accepted as a completed outcome.
 
@@ -262,8 +259,8 @@ with unchanged text-content checks is identified by semantic review, not misrepo
 as something the structural compiler can prove. Start a fixed set of valid and
 misleading plans across feature, performance, and research tasks for later milestones.
 
-Local qualification: [compiler obligations](PLAN_COMPILATION.md#outcome-obligations-9a)
-and [integration acceptance](evidence/next-wave-integration.md) cover the structural
+Local qualification: `compiler obligations`
+and `integration acceptance` cover the structural
 contract and negative cases. Semantic review remains a separate requirement.
 
 ##### 9B. Producer and consumer contracts at every handoff
@@ -296,13 +293,13 @@ cases pass through the public CLI. Include a structurally valid object with miss
 semantic fields, a unit mismatch, stale candidate identity, a lossy conversion,
 and individually valid components whose composition violates a shared invariant.
 
-Implementation: [bounded data-schema-2 contracts](HANDOFF_CONTRACTS.md) preserve
+Implementation: `bounded data-schema-2 contracts` preserve
 legacy compiled acceptance bindings. Exact schemas, required fields/units,
 pre/postconditions, lossless integer conversions and candidate manifests are
 checked through existing sealed-artifact and receipt boundaries. Typed execution
 relations must match existing DAG dependencies; resource/provenance annotations
 are descriptive and unsupported mutex enforcement is rejected. Local acceptance
-and its explicit limits are recorded in [9B evidence](evidence/handoff-contracts-9b.md).
+and its explicit limits are recorded in `9B evidence`.
 External-host/live-provider qualification remains separate; no arbitrary schema
 implication, isolation or semantic correctness is claimed.
 
@@ -372,9 +369,9 @@ absent despite green superficial tests, insufficient/no-improvement performance
 evidence, an unsupported research claim, and a valid negative research result.
 Fixture transport success or agent agreement alone does not qualify these outcomes.
 
-Local qualification: the [feature](evidence/9d-feature-outcome.md),
-[performance](evidence/9d-performance-outcome.md), and
-[research](evidence/9d-research-outcome.md) pilots passed their public outcome
+Local qualification: the `feature`,
+`performance`, and
+`research` pilots passed their public outcome
 checks and declared negative controls. These results apply to the supplied
 feature, one synthetic performance workload and the finite research dataset.
 
@@ -409,8 +406,8 @@ plan validity or throughput. Reject every declared deterministic corruption case
 qualify semantic improvements with observed results and explicit limits. Planning
 benefit must exceed its overhead on the workload where improvement is claimed.
 
-Local implementation: [plan inspection](PLAN_INSPECTION.md) and
-[finite patterns](PLAN_PATTERNS.md) provide complete structural explanations,
+Local implementation: `plan inspection` and
+`finite patterns` provide complete structural explanations,
 deterministic bound comparisons, public serial/fork/join outcomes and six
 incorrect-artifact controls. They do not establish stochastic planner quality,
 estimate calibration or a planning benefit that exceeds overhead. The
@@ -421,7 +418,7 @@ Its interface-conformance difference disappears in a separate post hoc protocol
 diagnostic. Broader planning-benefit, human-correction and calibration measurements
 remain open; these results do not justify a more elaborate planner.
 
-A [real Python cleanup workload](evidence/python-cleanup-20260910/README.md)
+A `real Python cleanup workload`
 replaced duplicated precompilers with native C and retired the toy runner while
 preserving useful independent tests. Its matched serial/parallel executions both
 passed (106.33/106.69 seconds), qualifying real planning, execution and independent
@@ -459,12 +456,12 @@ environments and acceptance rules, branch skips, empty/bounded maps, interrupted
 repair, exhausted budgets, and unknown remote outcomes. No skipped branch may create
 false completion, and no expansion may enlarge authority or duplicate uncertain work.
 
-Local qualification: [versioned sealed-artifact reuse](PLAN_REUSE.md) preserves
+Local qualification: `versioned sealed-artifact reuse` preserves
 qualified original attempts, reruns affected checks, and revalidates proofs after
 interrupted repair. The supported policy is local artifact-only execution under
-explicit complete-dependency assumptions. [Finite manifest maps](PLAN_MANIFEST.md)
+explicit complete-dependency assumptions. `Finite manifest maps`
 lower at most eight members and boolean selection into fixed joins, including
-checked empty/all-skipped outputs. [Staged findings](PLAN_STAGED.md) drive a
+checked empty/all-skipped outputs. `Staged findings` drive a
 separately compiled static graph only after their source, selection, results and
 public acceptance are reverified. Real two-stage outcomes cover empty, skipped,
 colliding-name and maximum-cardinality maps. Runtime membership changes, late conditional
@@ -488,7 +485,7 @@ Begin measurement alongside item 9, before changing refresh or scheduling policy
 this is not blocked by 9F or load balancing. Item 9D concerns performance tasks
 executed by Hydra; this milestone measures Hydra itself. Feed fleet overhead and
 contention evidence into item 6 and expose useful counters through item 7.
-See [measurement design and research](research/performance-baselines.md).
+Measurement design remains a future qualification activity.
 
 Target: **with no changes, Hydra should do almost no work; with one changed
 worktree, work should be mostly confined to that worktree.** This is an acceptance
@@ -610,7 +607,7 @@ workspaces, provider conversations, and optional terminals as related resources.
 An agent is a managed process, not an OS-isolated container. Terminal replacement
 alone does not provide execution visibility or isolation. These milestones can
 start before T1–T3 using the existing remote task owner and observation endpoints;
-apply them to the implemented [distributed runs](DISTRIBUTED_DAG.md). Extend item
+apply them to the implemented `distributed runs`. Extend item
 9's obligation/evidence explanations as those milestones land. V1–V4 qualify
 operator visibility over the existing execution and mutation authorities.
 
@@ -673,23 +670,23 @@ operator visibility over the existing execution and mutation authorities.
       versions for the declared audit/reuse window; disclose expired evidence.
       Keep retention gaps distinguishable from empty output or absent events.
 - [x] Add accessible event-announcer and comparison views over the same evidence.
-      [ASCII saved-task announcements and native cohort comparisons](OBSERVABILITY.md)
+      `ASCII saved-task announcements and native cohort comparisons`
       retain identity, uncertainty and event-resume metadata.
 
-[Recovery qualification](evidence/recovery-visibility-v4.md) exercises two local
+`Recovery qualification` exercises two local
 receiver homes through the public CLI and a real TUI with controlled SSH loss.
-[Metrics](OBSERVABILITY.md) now export measured coordinator queue/elapsed/verified
+`Metrics` now export measured coordinator queue/elapsed/verified
 times and owner-recovery outcomes with known denominators, latest validated receiver
 unknown states, recorded approval/cancel/resume actions, and consumed transport
 stdin plus captured stdout. This qualification covers those recorded CLI actions
 and transport-process bytes; human activity outside these events, historical unknown
 incidents replaced by newer observations, wire traffic and provider usage remain
 unmeasured. Missing/partial coverage cannot become a measured zero.
-[Retention](RETENTION.md) now applies explicit local receiver-task and workflow-run
+`Retention` now applies explicit local receiver-task and workflow-run
 policies with audit windows, transitive reference/pin protection, permanent
 submission identities and visible expiry. It preserves workspaces. Quotas bound the
 maintenance projection, not concurrent admission or whole-disk use. External claims
-need explicit local pins. [Remaining-work acceptance](evidence/remaining-work-20260910.md)
+need explicit local pins. `Remaining-work acceptance`
 records real default and sanitizer evidence for both capabilities.
 
 Acceptance: operators can explain what is running, where, why it is waiting, how
@@ -700,7 +697,7 @@ permanent daemon, terminal server, scheduler, or automatic coordinator failover.
 
 #### I. Interactive parity and review navigation
 
-Follow-up to the [interactive parity report](research/interactive-parity-report.md).
+Follow-up to the `interactive parity report`.
 Extend the current attached-terminal and V1–V4 interfaces; keep the existing task
 owner, tmux terminal lifecycle and shell mutation path. These are outstanding
 operator workflows, not a proposal for a new server, scheduler or provider manager.
@@ -786,7 +783,7 @@ current fleet implementation.
       discovery and probing leave aliases, remote state, and installations
       unchanged.
       Implemented as `fleet discover` / `fleet qualify` with explicit alias/static
-      selection and strict handshake-only probes. [Contract and acceptance](HOST_DISCOVERY.md)
+      selection and strict handshake-only probes. `Contract and acceptance`
       distinguish real OpenSSH config expansion plus controlled ten-host evidence
       from still-required, explicitly authorized live SSH/jump/key qualification.
       No live host or provider qualification is claimed.
@@ -860,7 +857,7 @@ current fleet implementation.
       never cancels tasks, uninstalls packages, deletes remote state or rewrites
       known_hosts; those actions retain their own explicit authorization.
 
-[H3 local qualification](evidence/h3-source-batches.md) covers the four supplied
+`H3 local qualification` covers the four supplied
 snapshot formats, 100 distinct selected targets, 16-host probe/apply batches,
 private progress, interruption and lost-response reconciliation. No live vendor
 discovery client or provider credential path is included.
@@ -868,8 +865,7 @@ discovery client or provider credential path is included.
 Dependencies and coordination: H1 depends only on the current explicit fleet
 aliases, strict OpenSSH policy, and versioned handshake. H2 reuses the current
 package/bootstrap, fleet-init/trust, and remote-task contracts documented in
-[FLEET.md](FLEET.md), [SECURITY.md](SECURITY.md), and
-[REMOTE_TASKS.md](REMOTE_TASKS.md); it may proceed without a new planner or
+[FLEET.md](FLEET.md) and [CONTRACTS.md](CONTRACTS.md); it may proceed without a new planner or
 daemon. H3 is follow-on work after H1/H2 and should not broaden the trust boundary.
 T1, T2, 9A and V1 implementations are included in 2.4.0 within their documented
 qualification limits; T3 remains a separate distributed qualification milestone. T1/T2 become dependencies
@@ -893,7 +889,7 @@ This track develops dependency-free C terminal infrastructure, using Hydra as it
 first real consumer and eventual standalone release as the direction. Work in the
 existing visualization worktree. Build milestones in order; integrate a real shell
 before expanding the widget catalogue. Existing visualization architecture and
-limits are documented in [VISUALIZATION.md](VISUALIZATION.md) and the
+limits are documented in the native helper behavior in [workflows.md](workflows.md) and the
 [termviz module guide](../src/termviz/README.md).
 
 Termviz owns reusable rendering, layout, input routing, and terminal screen
@@ -904,7 +900,7 @@ shell-only path, current CLI/state contracts, and tmux authority for Hydra heads
 the standalone shell example does not introduce a competing Hydra execution owner.
 
 The workspace foundation and first embedded-shell milestone are implemented.
-See [workspace acceptance](WORKSPACE_ACCEPTANCE.md) for reproducible checks and
+See [workflows](workflows.md) for reproducible checks and
 the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset.
 
 ### Milestone 3: useful Hydra workspace
@@ -944,8 +940,8 @@ Draft, validated, awaiting approval, running and failed states are visibly disti
 Toggle from conversation to comprehensive overview and back during plan revision;
 verify that unsent input, session identity, selected step, scroll and focus survive.
 The overview toggle changes presentation only, never approval or execution state.
-The existing planning implementation is integrated into this branch; see the
-[planner recipe](PLANNER_RECIPE.md) and [compilation contract](PLAN_COMPILATION.md).
+The existing planning implementation is integrated into this branch; see
+[workflows](workflows.md) and [CONTRACTS.md](CONTRACTS.md).
 The native workspace now loads draft/policy files with P, validates with V, shows
 revision-aware complete previews and dependencies, and preserves layout state
 across A/B/C/D. Native dialogs continue agent I/O. E accepts the exact displayed
@@ -955,7 +951,7 @@ workflow test. C now follows selected run/step evidence and delegates explicit
 request decisions, resume and cancellation to the existing CLI. Local navigation
 groups recorded runs under matching head branches and opens selected evidence;
 unmatched runs remain under the project. Visual review and the representative
-agent-authored workflow passed; see [the real acceptance record](WORKSPACE_REAL_ACCEPTANCE.md).
+agent-authored workflow passed; live qualification remains separate.
 
 ### Milestone 4: integrated working terminals
 
@@ -990,7 +986,7 @@ the recorded local configuration; no additional CLI was selected.
 - [x] Distinguish observed progress from declared intent, stale or missing data,
       blocked dependencies and requests for a decision. Offer the next applicable
       action with enough context to assess its effect.
-- [x] Extend the local [statistics view](STATISTICS.md) with queue delay, total
+- [x] Extend the local `statistics view` with queue delay, total
       execution duration, recorded independent verification time and owner recovery
       counts. Minimal lifecycle scalars define future measurements; unsupported
       historical values remain unknown. Filters, coverage, percentiles, trends,
@@ -1148,16 +1144,12 @@ Passing unit tests alone is supporting evidence, not release acceptance.
 Delivered work is intentionally absent from this roadmap. Use these records instead:
 
 - [CHANGELOG.md](../CHANGELOG.md) for shipped features and compatibility changes;
-- [CONTRACTS.md](CONTRACTS.md), [STATE.md](STATE.md), [EVENTS.md](EVENTS.md), and
-  [AUTOMATION.md](AUTOMATION.md) for current local interfaces;
-- [FLEET.md](FLEET.md) and [FLEET_ACCEPTANCE.md](FLEET_ACCEPTANCE.md) for the
-  implemented fleet capability and historical pilot qualification;
-- [REMOTE_TASKS.md](REMOTE_TASKS.md) and [REMOTE_TASK_ACCEPTANCE.md](REMOTE_TASK_ACCEPTANCE.md)
-  for remote submission, disconnected execution, verified collection, and qualification;
+- [CONTRACTS.md](CONTRACTS.md) for current local interfaces, state, trust, and
+  compatibility rules;
+- [FLEET.md](FLEET.md) for the implemented fleet capability;
+- [CONTRACTS.md](CONTRACTS.md) for remote submission, disconnected execution, and
+  verified collection;
 - [workflows.md](workflows.md) for workflow and integration behavior;
-- [DISTRIBUTED_DAG.md](DISTRIBUTED_DAG.md), [WORKFLOW_TASKS.md](WORKFLOW_TASKS.md),
-  and [two-host qualification](evidence/distributed/qualification.md) for completed
-  item 5: finite distributed execution, validation joins, bounded repair and replay;
-- [NATIVE_CORE.md](NATIVE_CORE.md) and [NATIVE_TUI.md](NATIVE_TUI.md) for optional
-  native behavior;
-- [SECURITY.md](SECURITY.md) for current trust boundaries.
+- [workflows.md](workflows.md) for finite distributed execution, validation joins,
+  bounded repair, replay, and optional native behavior;
+- [CONTRACTS.md](CONTRACTS.md) for current trust boundaries.

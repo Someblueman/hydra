@@ -8,5 +8,5 @@ and the native workflow-data prepare/seal boundary using isolated source/run
 fixtures. Its `--runtime` mode additionally runs public supervised workflows,
 including the five negative 9B cases, and checks consumer non-submission.
 
-See [the contract](../../../docs/HANDOFF_CONTRACTS.md) for supported constraints
-and the limits of this evidence.
+See [the public contracts guide](../../../docs/CONTRACTS.md) for supported
+constraints and the limits of this evidence.

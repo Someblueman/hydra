@@ -11,6 +11,7 @@ need a C99 compiler; fleet additionally needs pkg-config and JSON-C development
 files. Run from source with `bin/hydra`; no installation is necessary.
 
 ```sh
+make test-fast                         # first local PR check
 make lint test                         # shell checks
 make build-core build-tui build-fleet   # optional native helpers
 make test-tui test-tui-pty sanitize-tui # focused native UI checks
@@ -25,9 +26,15 @@ may print errors: use exit codes and failure summaries. Exercise spawn/kill exam
 in a disposable Git repository with isolated `HYDRA_HOME`, preserving real work.
 For the first-run path, use `make smoke-onboarding`.
 
+Start with `make test-fast` for the selected fast subset. Use focused targets for
+localized edits and `make test-all`, `make sanitize`, and `make quality-c` for the
+full local qualification set when a change crosses those boundaries. CI runs the
+fast subset as `pr-gate` on pull requests targeting `main`, `develop`, or
+`release/**`; pushes to those branches and manual dispatch run the full `release-gate`.
+
 Keep changes cohesive and source/test files under 500 lines. Document behavior under
-Unreleased in the changelog. Follow [VERSIONING.md](docs/VERSIONING.md) for release
-time version assignment and publication; passing local checks is not a release.
+Unreleased in the changelog. Versions are assigned at release time from compatibility
+impact; passing local checks is not a release.
 
 ## Where to add functionality
 
@@ -52,9 +59,10 @@ actions need a table entry and an argv test, without a new dispatch branch.
 
 Run `make quality-c` for native changes. Its reviewed per-function ceilings catch
 increases; lower an allowance when simplification reduces the measured score.
-See [the simplification report](docs/CODEBASE_SIMPLIFICATION.md) for retained
-complexity and analyzer limitations. Passing this gate does not replace behavioral
-tests. Prefer the next concrete feature to another blanket decomposition pass.
+The quality baseline is retained in `docs/quality/cognitive-complexity.tsv`; it records
+reviewed per-function ceilings and is consumed by `make quality-c`. Passing this gate
+does not replace behavioral tests. Prefer the next concrete feature to another blanket
+decomposition pass.
 
 ## POSIX Compliance
 

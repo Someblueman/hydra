@@ -23,5 +23,10 @@ CLAUDE.md
 build/
 dist/
 
+# Qualification captures and exploratory reports stay outside the maintained docs.
+docs/acceptance/
+docs/evidence/
+docs/research/
+
 # Python test bytecode
 __pycache__/

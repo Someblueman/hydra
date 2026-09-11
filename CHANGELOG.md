@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Observe task freshness, resume event/log collection and recover the original
   attempt; use exact-target controls, saved-event views and protected evidence expiry.
 - Discover selected hosts, review explicit enrollment intent and apply bounded
-  source-snapshot batches. See [the scope and qualification limits](docs/RELEASE_NEXT_SCOPE.md).
+  source-snapshot batches. Current qualification limits are recorded in the release notes.
 
 - Native statistics now include queue delay, total run duration, recorded independent
   verification time and owner recovery counts, with coverage, percentiles, trends
@@ -53,18 +53,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deterministic local objective planning with validation, bound compilation,
   comprehensive preview, exact-digest execution approval and artifact-bound final
   verification. The native workspace branch reuses the existing planning engine;
-  see [the planner recipe](docs/PLANNER_RECIPE.md).
+  see the workflow planning guide.
 
 - Native workspace attachment clients for up to four existing local tmux heads,
   with identity checks, direct terminal input, explicit focus routing, preserved
   drafts, client-only detach and reconnect. Periodic observations now run without
-  blocking terminal I/O. See [attachment boundaries](docs/ATTACHED_TERMINALS.md).
+  blocking terminal I/O.
 
 - Dedicated native statistics view (`D`) with workflow/time/search filters,
   recorded outcomes, retries, latest-attempt timing, run creation trends and
   run/step/graph drill-down. Fleet mode exposes host response coverage and known
   head counts. Missing measurements and failed refreshes remain explicit.
-  See [metric definitions and qualification](docs/STATISTICS.md).
+  Qualification limits are recorded in the release notes.
 - Workspace selected-work summaries and an `a` shortcut to the existing head
   session, preserving workspace context on return.
 
@@ -74,8 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Standalone workspace demo with one real shell through a separate POSIX PTY
   adapter, bounded screen/parser and scrollback, alternate-screen support, resize
   propagation and explicit child cleanup. Hydra heads retain tmux ownership.
-  See [acceptance evidence](docs/WORKSPACE_ACCEPTANCE.md) and the
-  [supported terminal subset](src/termviz/TERMINAL.md).
+  See the [supported terminal subset](src/termviz/TERMINAL.md).
 
 - Antigravity (`agy`) and Cursor Agent headless profiles with bounded event
   translation, explicit recorded-session resume, and native fleet sign-in.
@@ -115,19 +114,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remove Python from the active build, tests, planning examples, standalone export
   and CI. Native producers, independent checkers, fixtures and PTY observers retain
-  the covered behavior; see [the dependency boundary](docs/PYTHON_USAGE.md).
+  the covered behavior; native builds and tests have no Python dependency.
 - Run fleet CI in bounded parallel shards to reduce per-runner process contention.
 
 - Fleet task cancellation allows 30 seconds per transport phase and accepts a
   bounded `--timeout` override so suspended approval result sealing can finish.
 - Interactive Codex restore retains worktree-scoped `codex resume --last`.
   Headless resume requires the exact recorded provider session and matching head,
-  instance, worktree and profile; see [the contract](docs/AGENT_CONTRACT.md#workflow-profiles-and-migration).
+  instance, worktree and profile; see the public contracts guide.
 
 Workflow-data acceptance is complete. Claude Code remote qualification is deferred
 until native host sign-in is available and remains on the outstanding roadmap.
-See [the acceptance record](docs/WORKFLOW_AGENT_ACCEPTANCE.md) for the local and
-remote provider matrix and exact evidence.
+The local and remote provider matrix remains a qualification concern tracked by
+the roadmap; dated evidence is intentionally not stored in the repository.
 ## [2.3.0] - 2026-09-08
 
 ### Added
@@ -249,8 +248,8 @@ Workflow-data and local planning acceptance are complete. Cursor local/remote,
 Antigravity remote, and Claude Code remote live qualification remain outstanding;
 Claude remote sign-in is explicitly deferred. These are qualification limits,
 not claims that the implemented profiles have passed on those hosts.
-See [the acceptance record](docs/WORKFLOW_AGENT_ACCEPTANCE.md) for the local and
-remote provider matrix and exact evidence.
+The local and remote provider matrix remains a qualification concern tracked by
+the roadmap; dated evidence is intentionally not stored in the repository.
 
 ## [2.1.0] - 2026-09-05
 
@@ -346,7 +345,7 @@ remote provider matrix and exact evidence.
 ### Removed
 
 - Dated per-release checklists and the superseded regenerate demo. Release guidance
-  now points to `docs/VERSIONING.md` and the roadmap's release definition of done.
+  now points to the roadmap's release definition of done.
 
 ## [2.0.0] - 2026-09-04
 

@@ -32,4 +32,4 @@ fleet additionally needs JSON-C development files and pkg-config at build time.
   throwaway `git init` repo in a temp dir.
 - For non-interactive automation set `HYDRA_NONINTERACTIVE=1` (skips confirm prompts)
   and `HYDRA_SKIP_AI=1` (does not try to launch an AI CLI on spawn). Runtime state
-  lives in `$HYDRA_HOME/state/v2` (default `~/.hydra/state/v2`); see `docs/STATE.md`.
+  lives in `$HYDRA_HOME/state/v2` (default `~/.hydra/state/v2`); see `docs/CONTRACTS.md`.
