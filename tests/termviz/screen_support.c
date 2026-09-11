@@ -34,6 +34,12 @@ static void clear_cells(struct tv_screen *s) {
     }
 }
 void tv_screen_reset(struct tv_screen *s, int cols, int rows, bool await) {
+    /* A resize changes the grid, not the byte stream already being decoded. */
+    unsigned utf_value = s->utf_value;
+    int utf_remaining = s->utf_remaining;
+    size_t escape_size = s->escape_size;
+    char escape[sizeof(s->escape)];
+    memcpy(escape, s->escape, sizeof(escape));
     free(s->cells);
     free(s->text);
     memset(s, 0, sizeof(*s));
@@ -41,6 +47,12 @@ void tv_screen_reset(struct tv_screen *s, int cols, int rows, bool await) {
     s->cols = cols;
     s->rows = rows;
     s->awaiting_clear = await;
+    if (await) {
+        s->utf_value = utf_value;
+        s->utf_remaining = utf_remaining;
+        s->escape_size = escape_size;
+        memcpy(s->escape, escape, sizeof(escape));
+    }
     s->fg = 0xdddddd;
     s->bg = 0x161616;
     s->cells = calloc((size_t)cols * (size_t)rows, sizeof(*s->cells));

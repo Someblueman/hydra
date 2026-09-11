@@ -7,6 +7,26 @@
 #include <string.h>
 #include <unistd.h>
 static char root[4096], build[4096], demo[4096], child[4096], evidence[4096];
+static void observer_resize(void) {
+    const unsigned char frame[] = "\033[2J\033[H界";
+    size_t split;
+    for (split = 1; split < sizeof(frame) - 1; split++) {
+        struct tv_screen s = {0};
+        tv_screen_reset(&s, 80, 24, false);
+        tv_screen_feed(&s, frame, split);
+        tv_screen_reset(&s, 40, 10, true);
+        tv_screen_feed(&s, frame + split, sizeof(frame) - 1 - split);
+        if (split < 4)
+            CHECK(!s.awaiting_clear && !strcmp(s.cells[0].text, "界"),
+                  "resize completes a split clear sequence");
+        tv_screen_feed(&s, frame, sizeof(frame) - 1);
+        CHECK(!s.awaiting_clear && !s.overflow && !strcmp(s.cells[0].text, "界"),
+              "resize preserves split UTF-8 and CSI streams");
+        free(s.cells);
+        free(s.text);
+    }
+    puts("PASS observer: resize at every UTF-8 and CSI byte boundary");
+}
 static void save(struct tv_session *s, const char *name) {
     char path[4096];
     tv_format(path, sizeof(path), "%s/%s", evidence, name);
@@ -173,6 +193,7 @@ static void hydra(void) {
 }
 int main(int argc, char **argv) {
     tv_init();
+    observer_resize();
     tv_paths(root, sizeof(root), build, sizeof(build));
     tv_format(demo, sizeof(demo), "%s/termviz-workspace", build);
     tv_format(child, sizeof(child), "%s/test-workspace-child", build);
