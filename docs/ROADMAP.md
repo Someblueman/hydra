@@ -168,8 +168,8 @@ implementation, provider access, or live-host experiments.
 | Source finding | Roadmap destination, status, dependency, and next action |
 | --- | --- |
 | Herdr's server/client attachment model ([interactive parity][src-interactive-report]). | [I1](#i-interactive-parity-and-review-navigation) — LOCALLY COMPLETE; independently qualified with two native clients attaching across actual Mac/VPS hosts with exact input routing, clean exits/termios, and owner preservation. |
-| Herdr's semantic attention model ([interactive parity][src-interactive-report]). | [I2](#i-interactive-parity-and-review-navigation) — OPEN; reuses lifecycle and outcome contracts and can proceed independently of 9E, load balancing, and T3. Next: implement and qualify exact-instance attention with item 10's false-positive, missed-signal, and overhead evidence. |
-| Compact review and external evidence references from the interaction research ([interactive parity][src-interactive-brief]). | [I3](#i-interactive-parity-and-review-navigation) — OPEN; reuses lifecycle, outcome, and review contracts and can proceed independently of 9E, load balancing, and T3. Next: implement and qualify evidence, artifact, provenance, and approval navigation. |
+| Herdr's semantic attention model ([interactive parity][src-interactive-report]). | [I2](#i-interactive-parity-and-review-navigation) — LOCALLY COMPLETE; exact-instance attention, independent seen state, annotated error/overhead evidence and combined repository checks are accepted within the [bounded qualification](attention-review-acceptance.md). Item 10 retains the broader performance matrix. |
+| Compact review and external evidence references from the interaction research ([interactive parity][src-interactive-brief]). | [I3](#i-interactive-parity-and-review-navigation) — LOCALLY COMPLETE; exact-subject evidence, artifact, provenance and approval navigation have public CLI/TUI parity, read-only reference/cancellation evidence and completed combined repository checks. See the [qualification](attention-review-acceptance.md). |
 | Terminal attachment remains separate from the durable execution owner ([optional tmux][src-tmux]). | [T2](#t-optional-tmux-for-headless-and-remote-execution) implementation is integrated; live qualification remains OPEN, and [T3](#t-optional-tmux-for-headless-and-remote-execution) follows it. Next: qualify an authenticated host without tmux, then the two-host scenario; interactive heads retain tmux. |
 | Control-mode polling is a bounded historical lead ([tmux prototype][src-tmux-prototype]). | Item 10 may evaluate it, but reconnect, restart, partial frames, sustained CPU/RSS, resize, and platform parity remain unqualified. Next: measure the supported matrix before selecting a change. |
 | Scheduled input, coordinated omission, monotonic clocks, attribution, and counter limits ([performance research][src-performance]). | [Item 10](#10-performance-baselines-idle-efficiency-and-change-locality) remains OPEN and supplies I2 attention-error/overhead evidence. Next: establish 1/10/50-worktree baselines with agent/tmux/observer attribution and explicit unknown counters before budgets or parity claims. |
@@ -722,8 +722,8 @@ permanent daemon, terminal server, scheduler, or automatic coordinator failover.
 
 Follow-up to the [interactive parity report][src-interactive-report].
 Extend the current attached-terminal and V1–V4 interfaces; keep the existing task
-owner, tmux terminal lifecycle and shell mutation path. These are outstanding
-operator workflows, not a proposal for a new server, scheduler or provider manager.
+owner, tmux terminal lifecycle and shell mutation path. The locally qualified
+operator workflows below retain those execution and mutation boundaries.
 
 - [x] **I1 — Saved multi-machine interaction and direct attach.** Provide one
       operator view across explicitly registered trusted SSH machines, with direct
@@ -736,7 +736,7 @@ operator workflows, not a proposal for a new server, scheduler or provider manag
       bounded. A renamed/replaced head cannot receive stale input. Background
       connections never answer authentication prompts or install software.
 
-- [ ] **I2 — Attention rollups and next-action navigation.** Surface exact-instance
+- [x] **I2 — Attention rollups and next-action navigation.** Surface exact-instance
       questions, approval waits and unreviewed results across workspaces/hosts,
       with source, freshness and a route to the corresponding evidence/action.
       Keep each client's seen/unseen state separate from provider state and
@@ -744,12 +744,14 @@ operator workflows, not a proposal for a new server, scheduler or provider manag
       Acceptance: annotated event/PTY cases cover stale sessions, duplicate events,
       two independent clients, acknowledgement and reconnect. Seen state never
       approves a gate; quiet output or a provider done badge never accepts a result.
-      The current local slice documents exact `attention-data` identities, client
-      seen markers, stale-snapshot handling, and read-only review navigation. Final
-      annotated error/overhead measurements remain item 10 evidence; this item stays
-      open until that corpus and the combined repository checks are accepted.
+      Locally qualified: exact `attention-data` identities, independent seen markers,
+      stale-snapshot handling and read-only review navigation. The accepted bounded
+      corpus records 17 TP, 0 FP, 0 FN and one unknown; timing retains two censored
+      public-load observations and full-subtree CPU remains unavailable. Combined
+      repository checks are complete. See [evidence and limits](attention-review-acceptance.md);
+      item 10 retains the broader platform/scaling matrix and numeric budgets.
 
-- [ ] **I3 — Compact review queue and external evidence references.** Navigate
+- [x] **I3 — Compact review queue and external evidence references.** Navigate
       from a ready-to-review task to its exact diff, artifact inventory, checks,
       provenance and existing approval/integration actions. Allow read-only links
       to provider transcripts, logs and PRs when explicitly supplied or available
@@ -757,9 +759,11 @@ operator workflows, not a proposal for a new server, scheduler or provider manag
       Acceptance: changed subjects invalidate readiness; failed checks, missing or
       expired artifacts and inaccessible links remain explicit. CLI/TUI identify
       the same task/attempt/subject. Opening an external reference cannot promote,
-      push, merge or substitute provider status for Hydra verification. The current
-      local slice records the public exact-field CLI routes and native review
-      bindings; final same-subject parity and combined acceptance remain pending.
+      push, merge or substitute provider status for Hydra verification. Locally
+      qualified: public exact-field CLI routes and native review identify the same
+      subject across local/Fleet results and approval requests, including wide and
+      narrow terminals, references and cancellation cleanup. Combined repository
+      checks are complete; see [evidence and limits](attention-review-acceptance.md).
 
 I1 builds on V1–V4 and existing interactive attach; tmux-free distributed
 qualification stays in T2/T3. I2/I3 reuse lifecycle, outcome and review contracts.

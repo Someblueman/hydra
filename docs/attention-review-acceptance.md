@@ -1,10 +1,10 @@
 # Attention and review acceptance
 
-This note records bounded local I2/I3 behavior and accepted attention measurement
-evidence. I2/I3 are delivered locally, but their roadmap acceptance boxes remain
-unchecked because combined validation was stopped before completion. It does not
-claim universal precision/recall, an idle budget, provider or platform parity, or
-release readiness.
+I2/I3 are locally qualified as of 12 September 2026: their focused behavior,
+bounded attention measurements, public CLI/TUI parity and combined repository
+validation are accepted. This note records that scope; it does not claim
+universal precision/recall, an idle budget, provider or platform parity, or
+release readiness. Item 10's broader performance matrix and T2/T3 remain open.
 
 ## Reproduce the public routes
 
@@ -84,6 +84,39 @@ narrow; local pending request **75/75** wide and **16 critical** narrow. Native
 frames were reviewed for status-first readability, exact identity, references,
 terminal restoration, and cancellation cleanup.
 
+## Combined repository validation
+
+Passing evidence covers all **23 `make test-all` prerequisites** and all
+**7 `make sanitize` prerequisites**. This combines completed, source-matched
+earlier checks with the remaining checks and affected-case reruns; it is not a
+claim that either earlier interrupted top-level command exited successfully.
+The local target-to-log inventory is
+`/Users/sws/Code/hydra/build/i3-acceptance-cleanup/INVENTORY.md`, with exact
+commands, environments, exit codes, source/runtime hashes and coverage in the
+adjacent JSON records.
+
+The shell inventory covers all 61 currently eligible scripts: 53 completed
+before the earlier interruption, followed by 8 complete passing runs. The
+previous workflow E2E errors followed termination and fixture removal; its new
+complete run passed 12/12. Full lint passed after the final fixture repair.
+Normal Fleet coverage is 57/57 cases, and native PTY coverage is 284/284.
+Parallel workflow-plan variants exposed a real test-fixture collision on the
+shared `plan-smoke` tmux session. Each interactive fixture now uses its own
+socket. All three affected variants passed together in normal and UBSan runs;
+the failed run and its diagnostics remain in the inventory.
+
+These checks qualify product source at `aeba5490f802c451dc1eff2125f8b1d845fab6c1`
+plus the isolated workflow-plan fixture repair (SHA256
+`d918e70d4c0bfe7302e1c1401a969ee07aa4431af6256b38e5285b01eed8191f`). The final
+normal TUI is
+`ac24ad05be1dfe9efe82e5fb4ba45037c01127e77a8719db4a513d4c9b484128`; Fleet
+remains the measurement binary identified below. Earlier public parity and
+measurement evidence remains applicable to attention/review: the later native
+change only preserves explicit workspace root/run selection during asynchronous
+head arrival and collapse. Normal and UBSan attached/plan-workspace tests cover
+that change. Full C quality and its final workspace delta check passed; existing advisory
+findings remain recorded.
+
 ## Provenance and limits
 
 The final report SHA256 is
@@ -105,12 +138,6 @@ The full raw reports and fixtures remain local artifacts at
 and the adjacent measurement phase; they are not durable public URLs. They record fixture-generated
 input and controlled local transport; they do not establish authenticated
 provider behavior, live SSH, remote platform parity, the item-10 1/10/50 matrix,
-or T2/T3 qualification. Accepted normal repaired cases, the 175-second UBSan
-attached/plan run, scoped quality/review checks, and the repaired five-file lint
-check are recorded in their owning reports; full shell/native/remaining-sanitizer
-validation is incomplete and no all-pass claim is made. The final startup correction now preserves explicit
-root/run selection across asynchronous head arrival and collapse; its attached
-and plan-workspace startup/readiness cases passed in the frozen normal run.
-The accepted attention metrics exercised the attention view; workspace
-initial-selection was not part of that measurement. The remaining combined
-qualification is a separate boundary, and the I2/I3 roadmap boxes stay open.
+or T2/T3 qualification. The accepted attention metrics exercised the attention
+view; workspace initial selection was not part of that measurement. Completing
+the repository validation does not widen those measurement claims.
