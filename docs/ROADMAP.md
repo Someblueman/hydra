@@ -2,7 +2,7 @@
 
 > - **Status:** canonical outstanding-work backlog
 > - **Snapshot:** 11 September 2026
-> - **Release:** `v2.4.0` native workspace and verified planning
+> - **Release:** `v2.5.0` attention, exact review and remote attachment
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   `Release policy` · [Contracts](CONTRACTS.md) ·

@@ -34,7 +34,7 @@
 #include "process.h"
 #include "terminal.h"
 extern char **environ;
-#define HYDRA_TUI_VERSION "2.4.0"
+#define HYDRA_TUI_VERSION "2.5.0"
 #define HYDRA_TUI_PROTOCOL 2
 #define NATIVE_PLAN_LIMIT (256U*1024U)
 #define NATIVE_PLAN_TEXT (1024U*1024U)

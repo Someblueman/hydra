@@ -188,6 +188,13 @@ static bool same_terminal(const struct termios *left, const struct termios *righ
            memcmp(left->c_cc, right->c_cc, sizeof(left->c_cc)) == 0;
 }
 
+static void execute_test_tui(const char *tui_path, const char *hydra_path) {
+    if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "heads", (char *)NULL);
+    else if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
+    else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
+    else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "heads", (char *)NULL);
+}
+
 static void child_session(const struct session *session, const char *tui, const char *hydra, const char *fake_bin) {
     char path[4096];
     const char *old_path = getenv("PATH");
@@ -209,10 +216,7 @@ static void child_session(const struct session *session, const char *tui, const 
     setenv("PATH", path, 1);
     fixture_repo = getenv("HYDRA_FIXTURE_REPO");
     if (fixture_repo != NULL && chdir(fixture_repo) != 0) _exit(122);
-    if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "heads", (char *)NULL);
-    else if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
-    else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
-    else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "heads", (char *)NULL);
+    execute_test_tui(tui_path, hydra_path);
     _exit(127);
 }
 

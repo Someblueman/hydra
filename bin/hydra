@@ -11,7 +11,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_1X_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="2.4.0"
+HYDRA_VERSION="2.5.0"
 export HYDRA_VERSION HYDRA_1X_MAP
 
 # Source helper libraries

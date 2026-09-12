@@ -71,6 +71,14 @@ done:
     return length;
 }
 
+static void measure_control_check(bool condition, bool *valid, int *checks, int line) {
+    if (!condition) {
+        fprintf(stderr,"semantic control failed at line %d\n",line);
+        *valid=false;
+    }
+    (*checks)++;
+}
+
 static int measure_semantic_controls(void) {
     struct measure_screen *s = NULL;
     struct tv_cell *cells = NULL, *previous = NULL;
@@ -83,13 +91,15 @@ static int measure_semantic_controls(void) {
     const char title[] = "\033]0;HEAD head_104729_001 TAG-head_104729_001-v2\007";
     size_t length, delta_length, splits = 0;
     int status = 1, checks = 0;
-#define REGION_CHECK(condition) do { if (!(condition)) { fprintf(stderr,"semantic control failed at line %d\n",__LINE__); goto cleanup; } checks++; } while (0)
+    bool valid=true;
+#define REGION_CHECK(condition) measure_control_check((condition), &valid, &checks, __LINE__)
     s = measure_screen_create(80,16);
     cells = calloc(80U*16U, sizeof(*cells));
     previous = calloc(80U*16U, sizeof(*previous));
-    REGION_CHECK(s && cells && previous);
-    REGION_CHECK(tv_init(&canvas,cells,80U*16U,80,16,true));
-    REGION_CHECK(tv_present_init(&presenter,previous,80U*16U));
+    if (!s || !cells || !previous) goto cleanup;
+    if (!tv_init(&canvas,cells,80U*16U,80,16,true)) goto cleanup;
+    if (!tv_present_init(&presenter,previous,80U*16U)) goto cleanup;
+    checks+=3;
     tv_text(&canvas,(struct tv_rect){identity.x,identity.y,identity.width,1},identity.text,TV_BASE);
     tv_text(&canvas,(struct tv_rect){response.x,response.y,response.width,1},response.text,TV_BASE);
     length = measure_present_bytes(&presenter,&canvas,full,sizeof(full));
@@ -132,10 +142,10 @@ static int measure_semantic_controls(void) {
     REGION_CHECK(measure_semantic_matches(s,&identity,&wrong_response));
     REGION_CHECK(tv_term_resize(&s->terminal,15,4));
     REGION_CHECK(!measure_semantic_matches(s,&identity,&wrong_response));
-    printf("{\"status\":\"passed\",\"checks\":%d,\"fragment_splits\":%zu,\"presenter_bytes\":%zu,"
+    printf("{\"status\":\"%s\",\"checks\":%d,\"fragment_splits\":%zu,\"presenter_bytes\":%zu,"
            "\"incremental_presenter_bytes\":%zu,\"boundary\":\"applied-semantic-region-at-complete-ANSI-sequence\","
-           "\"whole_frame_completion\":null,\"visible_pixels\":null}\n",checks,splits,length,delta_length);
-    status = 0;
+           "\"whole_frame_completion\":null,\"visible_pixels\":null}\n",valid ? "passed" : "failed",checks,splits,length,delta_length);
+    status = valid ? 0 : 1;
 cleanup:
     free(previous); free(cells); free(s);
 #undef REGION_CHECK
@@ -228,6 +238,25 @@ static void measure_finish_expectation(struct measure_live *m, struct measure_ex
     e->pending_late=!found && e->input_ns!=0;
 }
 
+static int measure_ascii(const struct tv_cell *cell) {
+    if (cell->width==0) return ' ';
+    return cell->glyph>=32 && cell->glyph<=126 ? (int)cell->glyph : '?';
+}
+
+static bool measure_write_canvas(const struct tv_canvas *c, FILE *file) {
+    bool ok=true;
+    /* One ASCII character per cell preserves coordinates; styles are excluded. */
+    for (int y=0;y<c->height;y++) {
+        for (int x=0;x<c->width;x++) {
+            const struct tv_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
+            int value=measure_ascii(cell);
+            if (fputc(value,file)==EOF) ok=false;
+        }
+        if (fputc('\n',file)==EOF) ok=false;
+    }
+    return ok;
+}
+
 static bool measure_snapshot(struct measure_live *m, const char *id) {
     const struct tv_canvas *c=m->screen->terminal.alternate_active ?
         &m->screen->terminal.alternate.canvas : &m->screen->terminal.primary.canvas;
@@ -237,15 +266,7 @@ static bool measure_snapshot(struct measure_live *m, const char *id) {
     if (fd<0) return false;
     file=fdopen(fd,"w");
     if (!file) { close(fd); return false; }
-    /* One ASCII character per cell preserves coordinates; styles are excluded. */
-    for (int y=0;y<c->height;y++) {
-        for (int x=0;x<c->width;x++) {
-            const struct tv_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
-            int value=cell->width==0 ? ' ' : cell->glyph>=32 && cell->glyph<=126 ? (int)cell->glyph : '?';
-            if (fputc(value,file)==EOF) ok=false;
-        }
-        if (fputc('\n',file)==EOF) ok=false;
-    }
+    ok=measure_write_canvas(c,file);
     if (fclose(file)) ok=false;
     printf("{\"event\":\"snapshot\",\"id\":\"%s\",\"observed_ns\":%llu,\"checked_ns\":%llu,"
            "\"sequence\":%lu,\"parser_complete\":%s,\"unsupported\":%llu,\"ok\":%s}\n",
@@ -280,50 +301,73 @@ static bool measure_arm(struct measure_live *m, char **part, size_t count) {
     return true;
 }
 
+static bool measure_input(struct measure_live *m, struct measure_expectation *e, char **part) {
+    char bytes[1024]; size_t length,sent; uint64_t started;
+    if (!measure_decode(part[2],bytes,sizeof(bytes),&length)) return false;
+    if (e && e->armed && measure_semantic_matches(m->screen,&e->identity,&e->response)) {
+        e->armed=false;
+        printf("{\"event\":\"invalid-expectation\",\"id\":\"%s\",\"predicate_before_input\":true}\n",e->action);
+    }
+    started=measure_now_ns(); sent=measure_write(m->session.master,bytes,length);
+    if (e && e->armed) e->input_ns=started;
+    printf("{\"event\":\"input\",\"id\":\"%s\",\"sent_ns\":%llu,\"send_end_ns\":%llu,"
+           "\"requested\":%zu,\"sent\":%zu}\n",part[1],(unsigned long long)started,
+           (unsigned long long)measure_now_ns(),length,sent);
+    if (!strcmp(part[0],"Q")) { m->quitting=true; m->quit_ns=measure_now_ns()+UINT64_C(3000000000); }
+    return sent==length;
+}
+
+static bool measure_resize(struct measure_live *m, struct measure_expectation *e, char **part) {
+    unsigned columns,rows; struct winsize size; uint64_t started=measure_now_ns();
+    if (!measure_unsigned(part[2],&columns) || !measure_unsigned(part[3],&rows) ||
+        columns<20 || columns>MEASURE_COLUMNS || rows<6 || rows>MEASURE_ROWS) return false;
+    memset(&size,0,sizeof(size));size.ws_col=(unsigned short)columns;size.ws_row=(unsigned short)rows;
+    if (e && e->armed && measure_semantic_matches(m->screen,&e->identity,&e->response)) {
+        e->armed=false;
+        printf("{\"event\":\"invalid-expectation\",\"id\":\"%s\",\"predicate_before_input\":true}\n",e->action);
+    }
+    if (ioctl(m->session.master,TIOCSWINSZ,&size) || !tv_term_resize(&m->screen->terminal,(int)columns,(int)rows)) return false;
+    if (e && e->armed) e->input_ns=started;
+    printf("{\"event\":\"resize\",\"id\":\"%s\",\"sent_ns\":%llu,\"columns\":%u,\"rows\":%u}\n",
+           part[1],(unsigned long long)started,columns,rows);
+    return true;
+}
+
+static struct measure_expectation *measure_find_expectation(struct measure_live *m, const char *id) {
+    for (size_t i=0;i<m->expectation_count;i++)
+        if (!strcmp(m->expectations[i].action,id)) return &m->expectations[i];
+    return NULL;
+}
+
 /* Private measurement protocol; strings and input bytes are hex encoded. */
 static bool measure_command(struct measure_live *m, char *line) {
     char *part[12],*save=NULL,*word; size_t count=0; struct measure_expectation *e=NULL;
     for (word=strtok_r(line," \r",&save);word && count<12;word=strtok_r(NULL," \r",&save)) part[count++]=word;
     if (word || count<2 || !measure_name(part[1])) return false;
-    for (size_t i=0;i<m->expectation_count;i++)
-        if (!strcmp(m->expectations[i].action,part[1])) e=&m->expectations[i];
+    e=measure_find_expectation(m,part[1]);
     if (!strcmp(part[0],"E")) return measure_arm(m,part,count);
     if (!strcmp(part[0],"C") && count==2) {
         printf("{\"event\":\"clock-sync\",\"id\":\"%s\",\"observer_ns\":%llu}\n",part[1],
                (unsigned long long)measure_now_ns());return true;
     }
     if (!strcmp(part[0],"S") && count==2) return measure_snapshot(m,part[1]);
-    if ((!strcmp(part[0],"I") || !strcmp(part[0],"Q")) && count==3) {
-        char bytes[1024]; size_t length,sent; uint64_t started;
-        if (!measure_decode(part[2],bytes,sizeof(bytes),&length)) return false;
-        if (e && e->armed && measure_semantic_matches(m->screen,&e->identity,&e->response)) {
-            e->armed=false;
-            printf("{\"event\":\"invalid-expectation\",\"id\":\"%s\",\"predicate_before_input\":true}\n",e->action);
-        }
-        started=measure_now_ns(); sent=measure_write(m->session.master,bytes,length);
-        if (e && e->armed) e->input_ns=started;
-        printf("{\"event\":\"input\",\"id\":\"%s\",\"sent_ns\":%llu,\"send_end_ns\":%llu,"
-               "\"requested\":%zu,\"sent\":%zu}\n",part[1],(unsigned long long)started,
-               (unsigned long long)measure_now_ns(),length,sent);
-        if (!strcmp(part[0],"Q")) { m->quitting=true; m->quit_ns=measure_now_ns()+UINT64_C(3000000000); }
-        return sent==length;
-    }
-    if (!strcmp(part[0],"R") && count==4) {
-        unsigned columns,rows; struct winsize size; uint64_t started=measure_now_ns();
-        if (!measure_unsigned(part[2],&columns) || !measure_unsigned(part[3],&rows) ||
-            columns<20 || columns>MEASURE_COLUMNS || rows<6 || rows>MEASURE_ROWS) return false;
-        memset(&size,0,sizeof(size));size.ws_col=(unsigned short)columns;size.ws_row=(unsigned short)rows;
-        if (e && e->armed && measure_semantic_matches(m->screen,&e->identity,&e->response)) {
-            e->armed=false;
-            printf("{\"event\":\"invalid-expectation\",\"id\":\"%s\",\"predicate_before_input\":true}\n",e->action);
-        }
-        if (ioctl(m->session.master,TIOCSWINSZ,&size) || !tv_term_resize(&m->screen->terminal,(int)columns,(int)rows)) return false;
-        if (e && e->armed) e->input_ns=started;
-        printf("{\"event\":\"resize\",\"id\":\"%s\",\"sent_ns\":%llu,\"columns\":%u,\"rows\":%u}\n",
-               part[1],(unsigned long long)started,columns,rows);
-        return true;
-    }
+    if ((!strcmp(part[0],"I") || !strcmp(part[0],"Q")) && count==3) return measure_input(m,e,part);
+    if (!strcmp(part[0],"R") && count==4) return measure_resize(m,e,part);
     return false;
+}
+
+static void measure_observe(struct measure_live *m, struct measure_expectation *e) {
+    if ((e->armed || e->pending_late) && e->input_ns && m->applied_ns>=e->input_ns &&
+        measure_semantic_matches(m->screen,&e->identity,&e->response)) {
+        m->applied_ns=measure_now_ns();
+        if (e->armed) measure_finish_expectation(m,e,m->applied_ns<e->deadline_ns,
+            m->applied_ns<e->deadline_ns ? "predicate" : "deadline");
+        if (e->pending_late) {
+            printf("{\"event\":\"late-observed\",\"id\":\"%s\",\"observed_ns\":%llu,\"deadline_ns\":%llu}\n",
+                   e->action,(unsigned long long)m->applied_ns,(unsigned long long)e->deadline_ns);
+            e->pending_late=false;
+        }
+    }
 }
 
 static bool measure_receive(struct measure_live *m) {
@@ -338,95 +382,8 @@ static bool measure_receive(struct measure_live *m) {
     } else m->overflow=true;
     tv_term_feed(&m->screen->terminal,bytes,(size_t)length);
     m->applied_ns=measure_now_ns();
-    for (size_t i=0;i<m->expectation_count;i++) {
-    struct measure_expectation *e=&m->expectations[i];
-    if ((e->armed || e->pending_late) && e->input_ns && m->applied_ns>=e->input_ns &&
-        measure_semantic_matches(m->screen,&e->identity,&e->response)) {
-        m->applied_ns=measure_now_ns();
-        if (e->armed) measure_finish_expectation(m,e,m->applied_ns<e->deadline_ns,
-            m->applied_ns<e->deadline_ns ? "predicate" : "deadline");
-        if (e->pending_late) {
-            printf("{\"event\":\"late-observed\",\"id\":\"%s\",\"observed_ns\":%llu,\"deadline_ns\":%llu}\n",
-                   e->action,(unsigned long long)m->applied_ns,(unsigned long long)e->deadline_ns);
-            e->pending_late=false;
-        }
-    }
-    }
+    for (size_t i=0;i<m->expectation_count;i++) measure_observe(m,&m->expectations[i]);
     return true;
 }
 
-static int measure_session(const char *tui,const char *hydra,const char *directory,
-                           const char *columns_text,const char *rows_text) {
-    struct measure_live m={0}; unsigned columns,rows; char path[4096],line[2048];size_t used=0;
-    int status=0,result_code=1,raw_fd=-1;bool reaped=false,ready=false,forced=false;uint64_t started=measure_now_ns();
-    if (!measure_unsigned(columns_text,&columns) || !measure_unsigned(rows_text,&rows) ||
-        columns<20 || columns>MEASURE_COLUMNS || rows<6 || rows>MEASURE_ROWS) return 2;
-    m.directory=directory;m.session.master=m.session.slave=-1;m.session.pid=-1;
-    m.screen=measure_screen_create((int)columns,(int)rows);
-    if (!m.screen || snprintf(path,sizeof(path),"%s/terminal.raw",directory)>=(int)sizeof(path)) goto cleanup;
-    raw_fd=open(path,O_WRONLY|O_CREAT|O_EXCL,0600);
-    if (raw_fd<0) goto cleanup;
-    if (fcntl(raw_fd,F_SETFD,FD_CLOEXEC)<0) {close(raw_fd);goto cleanup;}
-    m.raw=fdopen(raw_fd,"wb");
-    if (!m.raw) {close(raw_fd);goto cleanup;}
-    if (open_session(&m.session,tui,hydra,"/usr/bin",(unsigned short)columns,(unsigned short)rows) ||
-        m.session.master>=FD_SETSIZE) goto cleanup;
-    printf("{\"event\":\"spawn\",\"observer_pid\":%ld,\"tui_pid\":%ld,\"started_ns\":%llu}\n",
-           (long)getpid(),(long)m.session.pid,(unsigned long long)started);
-    while (measure_now_ns()-started<UINT64_C(180000000000)) {
-        fd_set readers;struct timeval timeout={0,20000};struct termios current;int selected;
-        pid_t waited;
-        FD_ZERO(&readers);FD_SET(STDIN_FILENO,&readers);FD_SET(m.session.master,&readers);
-        selected=select(m.session.master+1,&readers,NULL,NULL,&timeout);
-        if (selected<0 && errno!=EINTR) break;
-        if (selected>0 && FD_ISSET(m.session.master,&readers) && !measure_receive(&m)) break;
-        if (selected>0 && FD_ISSET(STDIN_FILENO,&readers)) {
-            char c;ssize_t got=read(STDIN_FILENO,&c,1);
-            if (got<=0) break;
-            if (c=='\n') {line[used]='\0';used=0;if (!measure_command(&m,line)) break;}
-            else if (used+1<sizeof(line)) line[used++]=c;
-            else break;
-        }
-        if (!ready && tcgetattr(m.session.slave,&current)==0 && (current.c_lflag&(ICANON|ECHO))==0) {
-            ready=true;printf("{\"event\":\"raw-ready\",\"observed_ns\":%llu}\n",(unsigned long long)measure_now_ns());
-        }
-        for (size_t i=0;i<m.expectation_count;i++) {
-            struct measure_expectation *e=&m.expectations[i];
-            if (e->armed && measure_now_ns()>=e->deadline_ns) measure_finish_expectation(&m,e,false,"deadline");
-        }
-        waited=waitpid(m.session.pid,&status,WNOHANG);
-        if (waited==m.session.pid) {reaped=true;break;}
-        if (waited<0 && errno!=EINTR) break;
-        if (m.quitting && measure_now_ns()>=m.quit_ns) break;
-    }
-cleanup:
-    for (size_t i=0;i<m.expectation_count;i++)
-        if (m.expectations[i].armed) measure_finish_expectation(&m,&m.expectations[i],false,"observer-ended");
-    if (m.session.pid>0 && !reaped) {
-        forced=true;(void)kill(-m.session.pid,SIGTERM);(void)kill(m.session.pid,SIGTERM);
-        for (int i=0;i<50;i++) {
-            if (waitpid(m.session.pid,&status,WNOHANG)==m.session.pid) {reaped=true;break;}
-            (void)measure_receive(&m);sleep_ms(10);
-        }
-        if (!reaped) {
-            (void)kill(-m.session.pid,SIGKILL);(void)kill(m.session.pid,SIGKILL);
-            for (int i=0;i<100;i++) {
-                if (waitpid(m.session.pid,&status,WNOHANG)==m.session.pid) {reaped=true;break;}
-                (void)measure_receive(&m);sleep_ms(10);
-            }
-        }
-    }
-    if (m.session.master>=0) {
-        struct termios current;bool restored=(tcgetattr(m.session.slave,&current)==0 || tcgetattr(m.session.master,&current)==0) &&
-            same_terminal(&m.session.original,&current);
-        int exit_code=reaped && WIFEXITED(status) ? WEXITSTATUS(status) : reaped && WIFSIGNALED(status) ? 128+WTERMSIG(status) : 255;
-        printf("{\"event\":\"exit\",\"exit_code\":%d,\"reaped\":%s,\"forced\":%s,\"terminal_restored\":%s,"
-               "\"pty_bytes\":%zu,\"raw_written\":%zu,\"raw_overflow\":%s}\n",exit_code,reaped ? "true" : "false",
-               forced ? "true" : "false",restored ? "true" : "false",m.bytes,m.raw_written,m.overflow ? "true" : "false");
-        result_code=!reaped || exit_code || forced || !restored || m.overflow;
-        close_session(&m.session);
-    }
-    if (m.raw && fclose(m.raw)) result_code=1;
-    free(m.screen);
-    return result_code;
-}
+#include "test_tui_measure_session.inc"
