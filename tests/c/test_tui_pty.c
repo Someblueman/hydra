@@ -1,4 +1,4 @@
-#define _XOPEN_SOURCE 600
+#define _XOPEN_SOURCE 700
 #ifdef __APPLE__
 #define _DARWIN_C_SOURCE
 #endif
@@ -207,7 +207,7 @@ static void child_session(const struct session *session, const char *tui, const 
     else setenv("NO_COLOR", "1", 1);
     setenv("PATH", path, 1);
     fixture_repo = getenv("HYDRA_FIXTURE_REPO");
-    if (fixture_repo != NULL) (void)chdir(fixture_repo);
+    if (fixture_repo != NULL && chdir(fixture_repo) != 0) _exit(122);
     if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "heads", (char *)NULL);
     else if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
     else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
@@ -448,6 +448,7 @@ static bool wait_for_marker_capture(struct session *session, const char *marker,
         char buffer[4096];
         ssize_t length = read_marker_output(session, buffer, sizeof(buffer));
         if (length > 0) {
+            if ((size_t)length > sizeof(buffer)) return false;
             capture_bytes(captured, used, buffer, (size_t)length);
             if (strstr(captured, marker) != NULL) return true;
         } else {
@@ -522,6 +523,17 @@ static void test_session_failure(void) {
     }
     result(pid > 0 && waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0,
            "failed PTY setup leaves no live session handles");
+    pid = fork();
+    if (pid == 0) {
+        struct session session;
+        if (setenv("HYDRA_FIXTURE_REPO", "/dev/null", 1) != 0 ||
+            open_session(&session, "/bin/sh", "/usr/bin/false", "", 80, 24) != 0) _exit(2);
+        bool stopped = wait_for_exit(&session) == 122 && terminal_restored(&session);
+        close_session(&session);
+        _exit(stopped ? 0 : 1);
+    }
+    result(pid > 0 && waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0,
+           "invalid fixture directory fails before launch and preserves the terminal");
 }
 
 static void test_small_list(const char *tui, const char *hydra, const char *fake_bin) {
@@ -841,8 +853,11 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 #include "test_tui_visualization.inc"
 #include "test_tui_attention.inc"
 #include "test_tui_review.inc"
+#include "test_tui_measure.inc"
 
 static int special_test_mode(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--item10-semantic-controls")) return measure_semantic_controls();
+    if (argc == 7 && !strcmp(argv[1], "--item10-session")) return measure_session(argv[2], argv[3], argv[4], argv[5], argv[6]);
     if (argc == 6 && !strcmp(argv[1], "--review-cancel-owner")) return review_cancel_owner(argv[2], argv[3], argv[4], argv[5]);
     if (argc == 4 && strcmp(argv[1], "--i1-measure") == 0) {
         unsigned heads;

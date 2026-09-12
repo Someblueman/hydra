@@ -503,6 +503,10 @@ sets the method: schedule inputs independently of render completion, use monoton
 timestamps and tagged stimuli, record clock uncertainty, attribute agent/tmux/
 observer work separately, and treat unsupported counters as unknown.
 
+The [local measurement harness](performance-harness.md) provides reproducible
+readiness checks and individual deterministic-worker cells. Its availability
+does not complete the matrix or establish performance budgets below.
+
 Target: **with no changes, Hydra should do almost no work; with one changed
 worktree, work should be mostly confined to that worktree.** This is an acceptance
 objective, not a claim about the current periodic snapshot implementation.

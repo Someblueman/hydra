@@ -176,8 +176,8 @@ $(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS) $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS)
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) tests/c/test_libhydra.c $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tests/c/test_tui_themes.inc tests/c/test_tui_palette.inc tests/c/test_tui_visualization.inc tests/c/test_tui_attention.inc tests/c/test_tui_review.inc | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_tui_pty.c -o $@
+$(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tests/c/test_tui_themes.inc tests/c/test_tui_palette.inc tests/c/test_tui_visualization.inc tests/c/test_tui_attention.inc tests/c/test_tui_review.inc tests/c/test_tui_measure.inc $(TERMVIZ_OBJECTS) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_tui_pty.c $(TERMVIZ_OBJECTS) -o $@
 
 test-c: $(BUILD_DIR)/test-libhydra
 	$(BUILD_DIR)/test-libhydra
@@ -228,6 +228,13 @@ bench-core: build-core
 	@sh scripts/bench-core.sh
 
 benchmark-core: bench-core
+
+.PHONY: bench-i1 test-bench-i1
+bench-i1: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
+	@sh scripts/bench-i1.sh --build "$(abspath $(BUILD_DIR))" $(BENCH_I1_ARGS)
+
+test-bench-i1: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
+	@HYDRA_ITEM10_BUILD="$(abspath $(BUILD_DIR))" sh tests/test_bench_i1.sh
 
 bench-tui: build-tui $(BUILD_DIR)/test-tui-pty
 	@sh scripts/bench-tui.sh

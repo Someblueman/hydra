@@ -55,6 +55,17 @@ static bool review_read(const char *path, char *text, size_t capacity) {
     fclose(file); return ok;
 }
 
+static bool review_header(const struct review_fixture *fixture, char *header, size_t capacity) {
+    const char *end = strchr(fixture->original, '\n');
+    size_t length;
+    if (!end) return false;
+    length = (size_t)(end - fixture->original) + 1U;
+    if (length >= capacity) return false;
+    memcpy(header, fixture->original, length);
+    header[length] = '\0';
+    return true;
+}
+
 static bool review_attention(struct review_fixture *fixture, char revision, const char *attempt) {
     char text[2048], digest[65];
     memset(digest, revision, 64U); digest[64] = '\0';
@@ -125,10 +136,11 @@ static bool review_reload(struct session *session, struct review_fixture *fixtur
 }
 
 static void review_negative_cases(struct session *session, struct review_fixture *fixture) {
-    const char *good = fixture->original; char bad[8192]; char *end;
+    const char *good = fixture->original; char bad[sizeof(fixture->original) + sizeof("trailing\n")]; char *end;
     snprintf(bad, sizeof(bad), "%s", good); end = strstr(bad, "END\t26"); if (end) *end = '\0';
     result(review_reload(session, fixture, bad, "Review unavailable"), "truncated review never displays evidence");
-    snprintf(bad, sizeof(bad), "%strailing\n", good);
+    int written = snprintf(bad, sizeof(bad), "%strailing\n", good);
+    if (written < 0 || (size_t)written >= sizeof(bad)) { result(false, "trailing review fixture fits buffer"); return; }
     result(review_reload(session, fixture, bad, "Review unavailable"), "trailing review records rejected");
     snprintf(bad, sizeof(bad), "%s", good); end = strstr(bad, "END\t26"); if (end) memcpy(end + 4U, "27", 2U);
     result(review_reload(session, fixture, bad, "Review unavailable"), "wrong review counts rejected");
@@ -174,10 +186,8 @@ static void review_supplied_reference_test(struct session *session, struct revie
 }
 
 static void review_bound_cases(struct session *session, struct review_fixture *fixture) {
-    FILE *file; char *end; char text[8192]; size_t i;
-    snprintf(text, sizeof(text), "%s", fixture->original); end = strchr(text, '\n');
-    if (!end) { result(false, "bounded review header exists"); return; }
-    end[1] = '\0';
+    FILE *file; char text[8192]; size_t i;
+    if (!review_header(fixture, text, sizeof(text))) { result(false, "bounded review header fits buffer"); return; }
     file = fopen(fixture->document, "wb");
     if (!file) { result(false, "binary review fixture opens"); return; }
     fputs(text, file); fputs("TEXT\tready", file); fputc(0, file); fputs("\nEND\t1\t0\t0\n", file); fclose(file);
@@ -200,12 +210,11 @@ static void review_bound_cases(struct session *session, struct review_fixture *f
 }
 
 static bool review_exact_cap(struct review_fixture *fixture) {
-    char header[1024], *end, payload[1025]; FILE *file;
+    char header[1024], payload[1025]; FILE *file;
     const char *finish = "END\t1024\t0\t0\n";
     size_t bytes, count = 1024U, i;
-    snprintf(header, sizeof(header), "%s", fixture->original); end = strchr(header, '\n');
-    if (!end) return false;
-    end[1] = '\0'; bytes = 1024U * 1024U - strlen(header) - strlen(finish) - 6U * count;
+    if (!review_header(fixture, header, sizeof(header))) return false;
+    bytes = 1024U * 1024U - strlen(header) - strlen(finish) - 6U * count;
     file = fopen(fixture->document, "wb"); if (!file) return false;
     fputs(header, file);
     for (i = 0U; i < count; i++) {
@@ -220,12 +229,13 @@ static bool review_exact_cap(struct review_fixture *fixture) {
 
 static void review_revoked_cases(struct session *session, struct review_fixture *fixture) {
     const char *states[] = {"missing", "tampered", "expired"};
-    char text[4096], *end;
+    char text[4096];
     for (size_t i = 0U; i < 3U; i++) {
-        snprintf(text, sizeof(text), "%s", fixture->original); end = strchr(text, '\n');
-        if (!end) { result(false, "revoked fixture header exists"); return; }
-        snprintf(end + 1U, sizeof(text) - (size_t)(end + 1U - text),
+        if (!review_header(fixture, text, sizeof(text))) { result(false, "revoked fixture header fits buffer"); return; }
+        size_t length = strlen(text);
+        int written = snprintf(text + length, sizeof(text) - length,
             "TEXT\treadiness: revoked\nTEXT\taccepted: false\nTEXT\tchecks: state: failed\nTEXT\tartifacts: answer: %s\nEND\t4\t0\t0\n", states[i]);
+        if (written < 0 || (size_t)written >= sizeof(text) - length) { result(false, "revoked fixture fits buffer"); return; }
         result(review_reload(session, fixture, text, "readiness: revoked") &&
             wait_for_markers(session, "checks: state: failed", states[i], 1000), "revoked evidence shows failed checks and exact unavailable artifact state");
     }

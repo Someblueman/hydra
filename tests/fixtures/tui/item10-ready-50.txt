@@ -1,0 +1,40 @@
+ HYDRA MISSION CONTROL
+[Heads]   Details    Coordination    Recovery     Overview    Workflows    Hosts
++- Heads -------------------------------------------------------------------------------------------------------------+
+|    HEAD                                                               | SESSION     | AGENT          | REPORTED     |
+| >  i10-h29                                                            | LIVE        | item10-worker  | -            |
+|    i10-h09                                                            | LIVE        | item10-worker  | -            |
+|    i10-h12                                                            | LIVE        | item10-worker  | -            |
+|    i10-h05                                                            | LIVE        | item10-worker  | -            |
+|    i10-h20                                                            | LIVE        | item10-worker  | -            |
+|    i10-h34                                                            | LIVE        | item10-worker  | -            |
+|    i10-h19                                                            | LIVE        | item10-worker  | -            |
+|    i10-h45                                                            | LIVE        | item10-worker  | -            |
+|    i10-h18                                                            | LIVE        | item10-worker  | -            |
+|    i10-h24                                                            | LIVE        | item10-worker  | -            |
+|    i10-h48                                                            | LIVE        | item10-worker  | -            |
+|    i10-h03                                                            | LIVE        | item10-worker  | -            |
+|    i10-h35                                                            | LIVE        | item10-worker  | -            |
+| 50 heads  |  Row 1 of 50                                                                                            |
+|                                                                                                                     |
++- SELECTED HEAD -----------------------------------------------------------------------------------------------------+
+| i10-h29                                                                                                             |
+| Agent      item10-worker                                 | Session    LIVE                                          |
+| Changes    0 files                                       | Gates      0/0 approved                                  |
+| Enter Details   p Terminal output   : Actions                                                                       |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
++---------------------------------------------------------------------------------------------------------------------+
+Click row/tab | Wheel moves selection | o overview | t theme
+Enter details  : actions  / search  t theme  ? help  q quit
