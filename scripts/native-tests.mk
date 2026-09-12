@@ -10,6 +10,7 @@ $(BUILD_DIR)/native-tests:
 	mkdir -p $@
 $(foreach n,$(PTY_NAMES),$(eval $(BUILD_DIR)/native-tests/pty-$(n): tests/termviz/test_$(subst -,_,$(n)).c))
 $(addprefix $(BUILD_DIR)/native-tests/pty-,attached-pty plan-workspace plan-launch workflow-controls): tests/termviz/hydra_fixture.c
+$(BUILD_DIR)/native-tests/pty-attached-pty: src/tui/fleet_budget.h
 $(BUILD_DIR)/native-tests/pty-fleet-recovery: tests/termviz/fleet_recovery_support.c
 $(addprefix $(BUILD_DIR)/native-tests/pty-,plan-workspace plan-launch fleet-recovery): PTY_JSON_CFLAGS = $(FLEET_JSON_CFLAGS)
 $(addprefix $(BUILD_DIR)/native-tests/pty-,plan-workspace plan-launch fleet-recovery): PTY_JSON_LIB = $(FLEET_JSON_LIB)

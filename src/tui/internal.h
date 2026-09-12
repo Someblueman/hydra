@@ -120,7 +120,7 @@ struct native_workspace {
     char project_label[256];
     char collapsed[MAX_HEADS][TEXT];
     size_t collapsed_count;
-    bool run_selected;
+    bool run_selected, selection_initialized;
     struct { int first; size_t slots[2]; } agents[3];
     struct tv_cell *cells, *previous;
     struct tv_presenter presenter;
