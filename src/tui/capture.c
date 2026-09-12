@@ -3,6 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include <limits.h>
 #ifdef __APPLE__
 #include <libproc.h>
 #elif defined(__linux__)
