@@ -191,20 +191,73 @@ static void hydra(void) {
     tv_close(&s, "q", 0, 0);
     puts("PASS Hydra: adapter rows, selection, pane scroll, divider, resize and restoration");
 }
+static void hydra_startup_open(struct tv_session *s, const char *tui, const char *fake) {
+    const char *argv[] = {tui, "--hydra", fake, NULL};
+    tv_open(s, argv, 140, 40, NULL);
+    tv_until(s, "Loading snapshot...", 3);
+    tv_until(s, "visualization-proof", 3);
+    CHECK(tv_contains(s, "No matching head"), "workflow arrives before delayed heads");
+}
+static void hydra_startup_repopulation(struct tv_session *s, const char *model, const char *data) {
+    tv_send(s, "C");
+    tv_until(s, "Observed: LIVE", 3);
+    CHECK(tv_contains(s, "*  └ feature-live"), "first head selected after mode input");
+    tv_send(s, "Aj");
+    tv_until(s, "Observed: STALE", 3);
+    CHECK(tv_contains(s, ">  └ feature-stale"), "single move selects second head");
+    tv_write(model, "HYDRA_TUI\t2\n");
+    tv_until(s, "No matching head", 3);
+    tv_write(model, data);
+    tv_until(s, "Observed: LIVE", 3);
+    CHECK(tv_contains(s, ">- Current project"), "repopulation does not reseed selection");
+}
+static void hydra_startup_selection(void) {
+    struct tv_session s;
+    char tui[4096], fake[4096], source[4096], model[4096], data[8192], name[64];
+    const char *keys[] = {"k", "j", "\r"};
+    const char *selected[] = {">- Current project", ">  └ visualization-proof", ">+ Current project"};
+    size_t i;
+    tv_format(tui, sizeof(tui), "%s/hydra-tui", build);
+    tv_format(fake, sizeof(fake), "%s/tests/fixtures/tui/fake-hydra.sh", root);
+    tv_format(source, sizeof(source), "%s/tests/fixtures/tui/native-v2.tsv", root);
+    tv_format(model, sizeof(model), "%s/startup-model.tsv", evidence);
+    tv_read(source, data, sizeof(data));
+    CHECK(!setenv("HYDRA_TEST_TUI_DELAY", "1", 1) && !setenv("HYDRA_TUI_FIXTURE", model, 1),
+          "configure delayed startup snapshot");
+    tv_write(model, data);
+    hydra_startup_open(&s, tui, fake);
+    hydra_startup_repopulation(&s, model, data);
+    save(&s, "startup-repopulation.html");
+    tv_close(&s, "q", 0, 0);
+    for (i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
+        hydra_startup_open(&s, tui, fake);
+        tv_send(&s, keys[i]);
+        tv_until(&s, "Observed: LIVE", 3);
+        CHECK(tv_contains(&s, selected[i]), "explicit root/run/collapse retained after heads arrive");
+        tv_format(name, sizeof(name), "startup-selection-%zu.html", i);
+        save(&s, name);
+        tv_close(&s, "q", 0, 0);
+    }
+    CHECK(!unsetenv("HYDRA_TEST_TUI_DELAY") && !unsetenv("HYDRA_TUI_FIXTURE"),
+          "restore startup fixture environment");
+    puts("PASS Hydra startup: first head, single move, explicit root/run/collapse, repopulation");
+}
 int main(int argc, char **argv) {
     tv_init();
     observer_resize();
     tv_paths(root, sizeof(root), build, sizeof(build));
     tv_format(demo, sizeof(demo), "%s/termviz-workspace", build);
     tv_format(child, sizeof(child), "%s/test-workspace-child", build);
-    tv_format(evidence, sizeof(evidence), "%s/build/workspace-evidence", root);
+    tv_format(evidence, sizeof(evidence), "%s/workspace-evidence", build);
     tv_mkdir(evidence);
     CHECK(argc == 1 || (argc == 2 && !strcmp(argv[1], "--standalone")),
           "usage: test-pty [--standalone]");
     workspace();
     shell_test();
     interruption();
-    if (argc == 1)
+    if (argc == 1) {
         hydra();
+        hydra_startup_selection();
+    }
     return 0;
 }

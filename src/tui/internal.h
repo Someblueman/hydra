@@ -30,6 +30,7 @@
 #include "../hydra_statistics.h"
 
 #include "app.h"
+#include "review.h"
 #include "process.h"
 #include "terminal.h"
 extern char **environ;
@@ -41,14 +42,16 @@ extern char **environ;
 #define NATIVE_TERMINALS 4
 #define NATIVE_TERMINAL_CELLS (512U * 256U)
 #define WORKSPACE_CAPACITY (512U * 256U)
+#define NATIVE_ATTENTION_ITEMS 512U
+#define NATIVE_ATTENTION_SEEN 512U
 struct native_capture {
     pid_t pid;
     int fd, status;
     FILE *output;
-    struct timespec started;
+    struct timespec started, stop_started;
     long budget_ms;
     size_t bytes;
-    bool eof, reaped, failed, timed_out;
+    bool eof, reaped, failed, timed_out, stopping;
 };
 enum tone { TONE_BASE, TONE_BORDER, TONE_TITLE, TONE_SELECTED, TONE_WARNING, TONE_STRONG };
 struct statistics_view {
@@ -91,12 +94,13 @@ struct native_links {
     size_t count;
     bool stale;
 };
-struct native_observations { struct native_capture jobs[4]; };
+struct native_observations { struct native_capture jobs[5]; };
 struct native_terminal {
     struct tv_pty client;
     struct tv_terminal_model *screen;
     struct tv_cell *cells, *history;
     char head[TEXT], instance[TEXT], label[TEXT];
+    char remote_host[128], remote_project[SOURCE_TEXT];
     size_t scroll;
     bool scrolling;
 };
@@ -117,7 +121,7 @@ struct native_workspace {
     char project_label[256];
     char collapsed[MAX_HEADS][TEXT];
     size_t collapsed_count;
-    bool run_selected;
+    bool run_selected, selection_initialized;
     struct { int first; size_t slots[2]; } agents[3];
     struct tv_cell *cells, *previous;
     struct tv_presenter presenter;
@@ -173,6 +177,10 @@ void native_terminal_draw(struct app *app, struct native_terminal *t, struct tv_
 void native_observations_cancel(struct app *app, size_t source);
 void native_observations_destroy(struct app *app);
 void native_observations_tick(struct app *app, bool request);
+void native_attention_destroy(struct app *app);
+void native_attention_tick(struct app *app, bool request);
+bool native_attention_key(struct app *app, char key);
+void render_attention(struct app *app);
 void native_links_accept(struct app *app, FILE *input);
 bool native_links_match(struct app *app, size_t run, size_t head);
 void native_controls_tick(struct app *app);
@@ -228,7 +236,7 @@ int output_finish(struct output_child *child, bool failed);
 void group_marked_action(struct app *app);
 void kill_marked_action(struct app *app);
 void execute_palette(struct app *app, const char *query);
-void fleet_action(struct app *app, bool attach);
+void fleet_action(struct app *app);
 bool parse_theme(const char *name, int *theme);
 void style(const struct app *app, enum tone tone);
 const char *theme_name(int theme);
@@ -246,7 +254,6 @@ const struct head *head_for_branch(const struct app *app, const char *branch);
 void record_snapshot(struct app *app, bool valid);
 FILE *capture_adapter(struct app *app, const char *command, const char *option, long budget_ms);
 int accept_model_data(struct app *app, FILE *input);
-int refresh_model(struct app *app);
 void refresh_current_session(struct app *app);
 void capture_preview(struct app *app);
 size_t split_fields(char *line, char **fields, size_t capacity);

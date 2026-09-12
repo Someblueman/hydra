@@ -103,6 +103,9 @@ with host/provider status before another explicit copy.
 
 ```sh
 hydra fleet handshake --json              # this installation
+hydra fleet attention --json               # read-only exact task attention rollup
+hydra fleet review KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256 [REFERENCES_JSON]
+hydra fleet review-data KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256 [REFERENCES_JSON]
 hydra fleet list --json --timeout 5 --jobs 4
 hydra fleet doctor ovh --json
 hydra fleet reconcile --json
@@ -122,11 +125,54 @@ output and never accepts `--fix`. Aggregate results contain `data.hosts`; each r
 has `host`, `ok`, and data or a structured error. Partial failures preserve good
 results and return nonzero. Empty fleets produce a successful empty array.
 
+`fleet attention --json` projects the same bounded observations into deterministic
+read-only items. Approval rows carry the exact host/task/run/step/attempt/spec
+identity and request ID, joined to one unique observed step attempt. Expired
+numeric approval records are emitted as `approval_expired` with no action route;
+zero means no expiry, while missing, null, or malformed expiry values are
+explicit `unknown` observations. Ready result rows carry a `task-result`
+inspection route and remain review candidates until
+Hydra verification accepts them. Cached or stale rows remain visible with
+`route.fresh_action` false; approvals never expose a fresh action route. Missing
+identity, missing or malformed expiry, ambiguous approval bindings, unsupported waiting states,
+offline hosts, and malformed observations produce explicit `unknown` rows. The
+`revision` field is a canonical semantic object string that includes identity,
+request expiry/state, execution/result/verification state, and excludes observation
+timestamps, so repeated polls and reordered or duplicate requests do not create
+new revisions. Provider questions remain unclassified and unsupported observations
+stay `unknown`; this producer does not infer provider semantics. The native client
+adds per-client seen markers and attention/review navigation, while local workflow
+approval remains an explicit shell action and is never implied by seen state.
+
+`fleet review` and `fleet review-data` are read-only exact-subject routes. Pass all
+13 identity fields from `fleet attention-data` (use `-` for absent values); the
+requested revision and identity hashes bind the selected row and are distinct from
+the currently observed revision. `review` emits the versioned JSON envelope;
+`review-data` emits the bounded framed text document used by the native TUI. The
+review includes verified result, diff, artifact, check, provenance, and current
+approval context where available. It never approves, resumes, cancels, pushes,
+merges, or opens a reference as evidence.
+
+References are explicit and bounded: at most 16 `transcript`, `log`, or `pr`
+objects, with local previews capped at 4096 bytes. URLs remain supplied and
+unopened. Diff previews are capped at 128 KiB per head bundle and artifact/evidence
+previews share a 96 KiB budget; truncation and unavailable states remain visible.
+Review has a fixed 45-second overall producer deadline and uses bounded 5-second
+result observations. The native Fleet capture allows 60 seconds for that public
+producer; the local native capture allows 13 seconds. The general Fleet
+`--timeout` (1–300 seconds, default 5 seconds) applies to observation/SSH commands,
+not as a review readiness control. These bounds limit collection time and output;
+they do not establish remote/provider parity.
+
 Timeouts bound each SSH invocation, including command execution. Observation uses
 one handshake and one operation, each with its own deadline. Workers fill available
 slots as hosts finish. Defaults are 4 workers and 5 seconds per observation call;
 `--jobs` accepts 1–16 and `--timeout` accepts 1–300 seconds. Mutation calls default
 to 300 seconds after negotiation. Output is bounded to 8 MiB per stream.
+
+The native fleet TUI gives each remote request a 3-second deadline. Its snapshot
+adapter allows 13 seconds for the four serial request phases (list and overview,
+each with a handshake and action) plus one second of local capture overhead.
 
 Errors distinguish `host_key_failed`, `authentication_failed`, `offline`, `timeout`,
 `version_mismatch`, `capability_unavailable`, malformed responses, command failures,
@@ -166,9 +212,15 @@ Head signal/cancel delivers foreground `INT` (tmux `C-c`) after rechecking the
 observed instance under the existing lifecycle lock. A stale instance is refused.
 The response means delivered, not task completion. It preserves the head,
 worktree, and dirty files. Only `INT` is supported by the direct interrupt command. Use workflow
-cancel for whole-workflow cancellation. Attach resolves that instance's session,
-then runs ordinary interactive `ssh -t ... tmux attach-session`; tmux detach works
-normally. A usable terminal and TERM are required.
+cancel for whole-workflow cancellation. Attach first checks the advertised
+receiver capability, then opens an interactive SSH session with the saved
+`HYDRA_HOME`, project, branch, and instance arguments. The receiver validates the
+current lifecycle and evaluates the exact project/head/instance environment in a
+same-server tmux format-and-attach command. The session ID helps target that
+server command but is never an identity proof; replacement sessions and restarted
+servers are refused. Receivers must support `session_id` and `fleet-local attach`;
+older receivers fail closed and must be upgraded for interactive attachment. A
+usable terminal and TERM are required.
 
 ```sh
 hydra fleet workflow ovh --project /srv/project -- run /srv/plan.yml
@@ -229,11 +281,20 @@ hydra fleet tui
 ```
 
 The native view displays host-qualified heads and recorded desired state. `j/k`,
-search, and views work as usual; recovery shows offline hosts. `a` attaches, `c`
-requests a confirmed interrupt, and `q` restores the terminal and exits. Actions
-carry host, project, and observed instance through the public CLI. Local mutation
-shortcuts and local pane preview are disabled in fleet mode. Paths/identifiers
-that cannot be represented safely within native text bounds require the CLI.
+search, and views work as usual; recovery shows offline hosts. Select a current
+interactive head and press `a` to open its pane in the operator workspace. The
+selection includes host, project, branch, head, and current instance; attachment
+is refused for stale or unreachable hosts, headless heads, missing identities,
+and replaced instances. The remote shell rechecks that composite identity and
+the live tmux session before handing the client to tmux.
+
+Inside an attached pane, `Ctrl-B Tab` changes focus back to Hydra, `Ctrl-B x`
+closes the selected client while leaving the owner session alive, and `Ctrl-B q`
+exits the operator view. `c` requests a confirmed interrupt and `q` restores the
+terminal and exits when no pane is focused. Actions carry host, project, and
+observed instance through the public CLI. Local mutation shortcuts and local
+pane preview are disabled in fleet mode. Paths/identifiers that cannot be
+represented safely within native text bounds require the CLI.
 
 Qualification evidence is host- and provider-specific; local fixtures and controlled
 SSH failures do not establish live-provider or external-host qualification.

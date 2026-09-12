@@ -27,6 +27,7 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
     if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0,
                 "open palette test terminal")) return;
     (void)wait_for_raw(&session);
+    (void)wait_for_model(&session);
     for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); index++) {
         /* Bound this regression to one queued form burst, not idle throughput. */
         session.slow_output = strcmp(cases[index].query, "recovery inspect") == 0;

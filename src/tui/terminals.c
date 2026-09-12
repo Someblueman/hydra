@@ -20,7 +20,8 @@ const char *native_terminal_attention(struct app *app, const struct native_termi
     if (app->snapshot_stale) return "STATE STALE";
     for (i=0;i<app->model.head_count;i++) {
         const struct head *h=&app->model.heads[i];
-        if (strcmp(h->head_id,t->head) || strcmp(h->instance,t->instance)) continue;
+        if (strcmp(h->head_id,t->head) || strcmp(h->instance,t->instance) ||
+            (app->fleet && (strcmp(h->remote_host,t->remote_host) || strcmp(h->remote_project,t->remote_project)))) continue;
         if (!strcmp(h->confidence,"exact")) {
             if (!strcmp(h->observed,"exited")) return "EXIT RECORDED";
             if (!strcmp(h->observed,"failed")) return "FAIL RECORDED";
@@ -46,28 +47,50 @@ void native_terminals_destroy(struct app *app) {
     free(app->terminals); app->terminals=NULL;
 }
 
+static bool fleet_target_ready(const struct app *app, const struct head *h) {
+    size_t i;
+    if (!app->fleet) return true;
+    if (app->snapshot_stale || !h->remote_host[0] || !h->remote_project[0] || !h->remote_branch[0]) return false;
+    for (i = 0; i < app->model.host_count; i++) if (!strcmp(app->model.hosts[i].name, h->remote_host))
+        return !strcmp(app->model.hosts[i].connection, "reachable") && !strcmp(app->model.hosts[i].freshness, "fresh");
+    return false;
+}
+
+static size_t terminal_slot(struct app *app, const struct head *h) {
+    size_t i, available = NATIVE_TERMINALS;
+    for (i = 0; i < NATIVE_TERMINALS; i++) {
+        struct native_terminal *t = &app->terminals->slots[i];
+        if (!t->screen && available == NATIVE_TERMINALS) available = i;
+        if (t->screen && !strcmp(t->head, h->head_id) && !strcmp(t->instance, h->instance) &&
+            (!app->fleet || (!strcmp(t->remote_host, h->remote_host) && !strcmp(t->remote_project, h->remote_project)))) {
+            app->terminals->selected = i;
+            if (!t->client.finished && !t->client.eof) return i;
+            native_terminal_close(t); return i;
+        }
+    }
+    return available;
+}
+
 bool native_terminal_attach(struct app *app) {
     const struct head *h=selected_head(app);
     struct native_terminal *t;
-    size_t i, available=NATIVE_TERMINALS;
-    char *argv[6];
-    if (!h || app->fleet || !h->head_id[0] || !h->instance[0]) {
-        copy_text(app->notice,sizeof(app->notice),"Select a recorded local head to open an interactive pane"); return false;
+    size_t available;
+    char *argv[12];
+    if (!h || !h->head_id[0] || !h->instance[0] || !strcmp(h->instance,"-") ||
+        !strcmp(h->desired,"headless")) {
+        copy_text(app->notice,sizeof(app->notice),app->fleet ? "Select an interactive remote head with a current instance" : "Select a recorded local head to open an interactive pane"); return false;
+    }
+    if (!fleet_target_ready(app, h)) {
+        copy_text(app->notice,sizeof(app->notice),"Remote target is stale or lacks an exact interactive identity; refresh first"); return false;
     }
     if (!app->terminals) {
         app->terminals=calloc(1,sizeof(*app->terminals));
         if (!app->terminals) return false;
         tv_input_init(&app->terminals->input);
     }
-    for (i=0;i<NATIVE_TERMINALS;i++) {
-        t=&app->terminals->slots[i];
-        if (!t->screen && available==NATIVE_TERMINALS) available=i;
-        if (t->screen && !strcmp(t->head,h->head_id) && !strcmp(t->instance,h->instance)) {
-            app->terminals->selected=i;
-            if (!t->client.finished && !t->client.eof) return true;
-            native_terminal_close(t); available=i; break;
-        }
-    }
+    available = terminal_slot(app, h);
+    if (available < NATIVE_TERMINALS && app->terminals->slots[available].screen &&
+        !app->terminals->slots[available].client.finished && !app->terminals->slots[available].client.eof) return true;
     if (available==NATIVE_TERMINALS) {
         copy_text(app->notice,sizeof(app->notice),"Four attached panes open; Ctrl-B x closes only the selected client"); return false;
     }
@@ -80,7 +103,17 @@ bool native_terminal_attach(struct app *app) {
     if (!tv_term_init(t->screen,t->cells,t->cells+NATIVE_TERMINAL_CELLS,512,256,t->history,256,80,24)) goto fail;
     copy_text(t->head,sizeof(t->head),h->head_id); copy_text(t->instance,sizeof(t->instance),h->instance);
     copy_text(t->label,sizeof(t->label),h->branch);
-    argv[0]=(char *)app->hydra; argv[1]="tui"; argv[2]="--attach"; argv[3]=t->head; argv[4]=t->instance; argv[5]=NULL;
+    if (app->fleet) {
+        copy_text(t->remote_host,sizeof(t->remote_host),h->remote_host);
+        copy_text(t->remote_project,sizeof(t->remote_project),h->remote_project);
+    }
+    if (app->fleet) {
+        argv[0]=(char *)app->hydra; argv[1]=(char *)"fleet"; argv[2]=(char *)"attach"; argv[3]=(char *)h->remote_host;
+        argv[4]=(char *)"--project"; argv[5]=(char *)h->remote_project; argv[6]=(char *)"--instance"; argv[7]=t->instance;
+        argv[8]=(char *)"--"; argv[9]=(char *)h->remote_branch; argv[10]=NULL;
+    } else {
+        argv[0]=(char *)app->hydra; argv[1]="tui"; argv[2]="--attach"; argv[3]=t->head; argv[4]=t->instance; argv[5]=NULL;
+    }
     if (!tv_pty_spawn(&t->client,app->hydra,argv,&app->saved,80,24)) goto fail;
     app->terminals->selected=available;
     copy_text(app->notice,sizeof(app->notice),"Attached client / Ctrl-B Tab returns input to Hydra");

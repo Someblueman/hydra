@@ -4,6 +4,8 @@
 #endif
 #include "internal.h"
 
+static void handle_key(struct app *app, char key);
+
 int read_key(int timeout_ms, char *key) {
     fd_set readfds;
     struct timeval timeout;
@@ -142,23 +144,34 @@ static void discard_input(struct app *app, char ch) {
 static void workspace_arrow(struct app *app, char key) {
     if (app->view == 7) (void)native_workspace_key(app, key);
 }
+static void selection_arrow(struct app *app, char key, int direction) {
+    if (app->view == 9) (void)native_attention_key(app, key);
+    else move_selection(app, direction);
+}
+static void discard_legacy_mouse(char *key) {
+    size_t count;
+    for (count = 0U; count < 3U; count++) if (read_key(20, key) <= 0) break;
+}
+static void begin_paste_discard(struct app *app, char *key) {
+    app->input_mode = INPUT_DISCARD_PASTE;
+    app->paste_matched = 0U;
+    copy_text(app->notice, sizeof(app->notice), "bracketed paste ignored");
+    if (read_key(20, key) > 0) discard_input(app, *key);
+}
 
 static void dispatch_escape(struct app *app, const char *sequence) {
     char ch;
     if (sequence[0] == '<') handle_mouse(app, sequence);
-    else if (strcmp(sequence, "A") == 0) move_selection(app, -1);
-    else if (strcmp(sequence, "B") == 0) move_selection(app, 1);
+    else if (strcmp(sequence, "A") == 0) selection_arrow(app, 'A', -1);
+    else if (strcmp(sequence, "B") == 0) selection_arrow(app, 'B', 1);
     else if (strcmp(sequence, "C") == 0) workspace_arrow(app, 'l');
     else if (strcmp(sequence, "D") == 0) workspace_arrow(app, 'h');
     else if (strcmp(sequence, "M") == 0) {
         /* Legacy X10 carries three bytes after CSI M; never treat them as keys. */
-        for (size_t count = 0U; count < 3U; count++) if (read_key(20, &ch) <= 0) break;
+        discard_legacy_mouse(&ch);
     }
     else if (strcmp(sequence, "200~") == 0) {
-        app->input_mode = INPUT_DISCARD_PASTE;
-        app->paste_matched = 0U;
-        copy_text(app->notice, sizeof(app->notice), "bracketed paste ignored");
-        if (read_key(20, &ch) > 0) discard_input(app, ch);
+        begin_paste_discard(app, &ch);
     }
 }
 
@@ -168,12 +181,18 @@ static void handle_escape(struct app *app) {
     struct timespec started;
     bool complete = false;
     if (read_key(20, &ch) <= 0) {
+        if (app->view == 9 && native_attention_key(app, 27)) return;
         if (statistics_back(app)) return;
         app->view = 0; app->help = false; app->diagnostics = false;
         app->search[0] = '\0'; app->notice[0] = '\0';
         return;
     }
-    if (ch != '[') return;
+    if (ch != '[') {
+        /* Attention historically handled a bare Escape immediately. Keep a
+         * following ordinary key (especially q) while still decoding arrows. */
+        if (app->view == 9) { (void)native_attention_key(app, 27); handle_key(app, ch); }
+        return;
+    }
     (void)clock_gettime(CLOCK_MONOTONIC, &started);
     while (consumed++ < 8192U && read_key(20, &ch) > 0) {
         if (count + 1U < sizeof(sequence)) sequence[count++] = ch;
@@ -201,8 +220,12 @@ static bool fleet_key(struct app *app, char key) {
     if (!app->fleet) return false;
     if (app->view == 4 && native_control_key(app, key)) return true;
     switch (key) {
-        case 'a': fleet_action(app, true); return true;
-        case 'c': fleet_action(app, false); return true;
+        case 'a':
+            if (native_workspace_init(app) && native_terminal_attach(app)) {
+                app->view=7; native_workspace_show_terminal(app, true);
+            }
+            return true;
+        case 'c': fleet_action(app); return true;
         case ':': case 'p': case ' ': case 'A': case 'x': case 'G':
             copy_text(app->notice, sizeof(app->notice), "Fleet: a attach, c interrupt, v views, / search, q quit"); return true;
         default: return false;
@@ -228,7 +251,8 @@ static bool workspace_key(struct app *app, char key) {
 
 static bool select_view(struct app *app, char key) {
     switch (key) {
-        case 'v': app->view = (app->view + 1) % 9; break;
+        case 'v': app->view = (app->view + 1) % 10; break;
+        case 'I': app->view = 9; break;
         case 'W': app->view = 7; break;
         case 'o': app->view = 4; break;
         case 'H': app->view = 6; break;
@@ -241,10 +265,13 @@ static bool select_view(struct app *app, char key) {
         if (!app->fleet) (void)refresh_workflows(app, NULL);
     }
     if (app->view == 8) (void)refresh_statistics(app, NULL);
+    if (app->view == 9) native_attention_tick(app, true);
     return true;
 }
 
 static bool view_key(struct app *app, char key) {
+    if (key == 27 && app->view == 9) { handle_escape(app); return true; }
+    if (app->view == 9 && native_attention_key(app, key)) return true;
     if (key == 'D') { statistics_toggle(app); return true; }
     if (app->view == 8 && statistics_key(app, key)) return true;
     if (app->view == 7 && workspace_key(app, key)) return true;
@@ -322,12 +349,11 @@ int interactive_main(struct app *app) {
     char key;
     if (!terminal_ready(app)) return 3;
     terminal_watch(app);
-    if (refresh_model(app) != 0 && app->model.head_count == 0U) return 4;
-    if (app->view == 5 && !app->fleet) (void)refresh_workflows(app, NULL);
-    if (app->view == 8) (void)refresh_statistics(app, NULL);
+    copy_text(app->notice, sizeof(app->notice), "Loading snapshot...");
 
     refresh_current_session(app);
     if (enter_raw(app) != 0) return 4;
+    native_observations_tick(app, true);
     capture_preview(app);
     last_refresh = time(NULL);
     app->running = true;

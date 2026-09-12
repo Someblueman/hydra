@@ -62,7 +62,7 @@ void native_workspace_mode(struct app *app, int mode) {
 static void native_workspace_tree(struct app *app) {
     struct native_workspace *w = app->workspace;
     size_t i, count = 1, chosen = 0;
-    bool root_selected = w->tree.count && !w->tree.selected;
+    bool root_selected = w->selection_initialized && w->tree.count && !w->tree.selected;
     if (w->tree.count) w->root_open = w->nodes[0].expanded;
     bool matched[WF_RUNS]={false};
     size_t r;
@@ -90,7 +90,7 @@ static void native_workspace_tree(struct app *app) {
             copy_text(app->notice,sizeof(app->notice),"Navigation limit reached / filter heads"); break;
         }
         for (k=0;k<w->collapsed_count;k++) if (!strcmp(w->collapsed[k],h->branch)) expanded=false;
-        if (i == app->selected) chosen = count;
+        if (i == app->selected) { chosen = count; w->selection_initialized = true; }
         w->nodes[count++] = (struct tv_tree_node){h->branch, i, 1, expanded, !strcmp(display_status(h), "LIVE") ? TV_BASE : TV_WARNING};
         if (!app->fleet && app->workflows) for (r=0;r<app->workflows->run_count;r++) if (native_links_match(app,r,i)) {
             if (count>=sizeof(w->nodes)/sizeof(w->nodes[0])) break;
@@ -112,6 +112,7 @@ static void native_workspace_select(struct app *app) {
     struct native_workspace *w = app->workspace;
     size_t value,head;
     if (w->tree.selected>=w->tree.count) return;
+    w->selection_initialized = true;
     value=w->nodes[w->tree.selected].value;
     w->run_selected=value!=SIZE_MAX && value>=MAX_HEADS+1;
     if (value==SIZE_MAX) return;
@@ -193,7 +194,10 @@ bool native_workspace_key(struct app *app, char key) {
     }
     if ((key == '\r' || key == '\n' || key == ':' || key == 'a' || key == 'c') &&
         w->layout.focus == 1 && !w->tree.selected) {
-        if (key == '\r' || key == '\n') w->nodes[0].expanded = !w->nodes[0].expanded;
+        if (key == '\r' || key == '\n') {
+            w->selection_initialized = true;
+            w->nodes[0].expanded = !w->nodes[0].expanded;
+        }
         else copy_text(app->notice, sizeof(app->notice), "Select a head in navigation first");
         return true;
     }

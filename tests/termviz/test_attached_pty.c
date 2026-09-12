@@ -1,5 +1,6 @@
 #define _XOPEN_SOURCE 700
 #include "hydra_fixture.h"
+#include "tui/fleet_budget.h"
 #include <errno.h>
 #include <regex.h>
 #include <signal.h>
@@ -76,6 +77,7 @@ int main(void) {
     size_t i;
     const char *observed[] = {"exited exact\n", "exited reported\n", "failed exact\n"};
     const char *labels[] = {"EXIT RECORDED", "AGENT UNKNOWN", "FAIL RECORDED"};
+    const long snapshot_delay = (HYDRA_TUI_LOCAL_CAPTURE_BUDGET_MS + 999L) / 1000L + 2L;
     tv_init();
     hf_init(&f, "hydra-attached", "repo", false, true);
     setenv("NO_COLOR", "1", 1);
@@ -120,20 +122,22 @@ int main(void) {
     setenv("PTY_HYDRA", f.hydra, 1);
     tv_format(script, sizeof(script),
               "#!/bin/sh\nif [ \"$1:$2\" = tui:--data ] && [ -f \"$PTY_FIXTURE/slow\" ]; then\n  "
-              "touch \"$PTY_FIXTURE/started\"\n  sleep 3\nfi\nif [ \"$1:$2\" = tui:--data ] && [ "
+              "touch \"$PTY_FIXTURE/started\"\n  sleep %ld\nfi\nif [ \"$1:$2\" = tui:--data ] && [ "
               "-f \"$PTY_FIXTURE/observation-fixture\" ]; then\n  read -r observed confidence < "
               "\"$PTY_FIXTURE/observation-fixture\"\n  \"$PTY_HYDRA\" \"$@\" | awk -F '\\t' -v "
               "OFS='\\t' -v observed=\"$observed\" -v confidence=\"$confidence\" '$1==\"H\" "
-              "{$10=observed; $11=confidence} {print}'\n  exit\nfi\nexec \"$PTY_HYDRA\" \"$@\"\n");
+              "{$10=observed; $11=confidence} {print}'\n  exit\nfi\nexec \"$PTY_HYDRA\" \"$@\"\n",
+              snapshot_delay);
     tv_write(adapter, script);
     CHECK(!chmod(adapter, 0755), "adapter mode");
-    tv_format(evidence, sizeof(evidence), "%s/build/attached-evidence", f.root);
+    tv_format(evidence, sizeof(evidence), "%s/attached-evidence", f.build);
     tv_mkdir(evidence);
     {
         const char *argv[] = {f.tui, "--hydra", adapter, NULL};
         tv_open(&s, argv, 140, 40, f.repo);
     }
     U("HYDRA WORKSPACE", 3);
+    U("Observed: LIVE", 3);
     S("a");
     U("INPUT TO AGENT", 3);
     U("AGENT UNKNOWN", 3);
@@ -154,7 +158,7 @@ int main(void) {
     S("printf 'responsive' > latency-proof\r");
     tv_pump(&s, .4);
     proof(one, "latency-proof", "responsive");
-    U("STALE: last good", 4);
+    U("STALE: last good", snapshot_delay);
     CHECK(!unlink(slow), "remove delay trigger");
     U("Current snapshot", 6);
     S("(sleep 1; printf 'FORM_LIVE' > form-proof; printf 'FORM_LIVE\\n') &\r");

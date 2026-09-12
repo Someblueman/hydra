@@ -1,7 +1,11 @@
-#define _XOPEN_SOURCE 600
+#define _XOPEN_SOURCE 700
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -10,6 +14,7 @@
 #include <sys/ioctl.h>
 #include <sys/resource.h>
 #include <sys/select.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/times.h>
@@ -27,6 +32,25 @@ struct session {
 
 static int tests;
 static int failures;
+static long long monotonic_ms(void);
+static int open_session(struct session *, const char *, const char *, const char *, unsigned short, unsigned short);
+static bool wait_for_raw(struct session *);
+static bool wait_for_model(struct session *);
+static bool wait_for_marker(struct session *, const char *, long);
+static bool wait_for_marker_capture(struct session *, const char *, long, char *, size_t *);
+static int wait_for_exit(struct session *);
+static void close_session(struct session *);
+static bool terminal_restored(struct session *);
+static bool wait_for_screen_text(struct session *, const char *, int, int, long);
+static ssize_t read_marker_output(struct session *, char *, size_t);
+static void drain_start_output(struct session *);
+static bool measure_unsigned(const char *value, unsigned *result) {
+    char *end; unsigned long parsed;
+    if (!value || !*value) return false;
+    errno=0; parsed=strtoul(value,&end,10);
+    if (errno || *end || parsed>1000000UL) return false;
+    *result=(unsigned)parsed; return true;
+}
 
 static bool result(bool ok, const char *message) {
     tests++;
@@ -40,6 +64,79 @@ static void sleep_ms(long milliseconds) {
     delay.tv_sec = milliseconds / 1000L;
     delay.tv_nsec = (milliseconds % 1000L) * 1000000L;
     while (nanosleep(&delay, &delay) != 0 && errno == EINTR) { }
+}
+
+static bool marker_file_exists(const char *path) {
+    struct stat status;
+    return path != NULL && stat(path, &status) == 0;
+}
+
+static bool write_marker_file(const char *path, const char *contents) {
+    FILE *file;
+    if (!path || !*path || marker_file_exists(path)) return false;
+    file=fopen(path,"w");
+    if (!file) return false;
+    if (contents) fputs(contents,file);
+    fclose(file);
+    return true;
+}
+
+static bool wait_for_file(const char *path, long timeout_ms) {
+    long long deadline=monotonic_ms()+timeout_ms;
+    while (monotonic_ms()<deadline) {
+        if (marker_file_exists(path)) return true;
+        sleep_ms(10);
+    }
+    return marker_file_exists(path);
+}
+
+static bool pids_gone(const char *path) {
+    FILE *file;
+    long pid;
+    unsigned count=0U;
+    int trailing;
+    if (!path || (file=fopen(path,"r")) == NULL) return false;
+    while (fscanf(file,"%ld",&pid) == 1) {
+        if (pid <= 0 || pid > (long)INT_MAX || kill((pid_t)pid,0) == 0 || errno != ESRCH) {
+            fclose(file); return false;
+        }
+        count++;
+    }
+    do trailing=fgetc(file); while (trailing==' ' || trailing=='\t' || trailing=='\n' || trailing=='\r');
+    fclose(file);
+    return count > 0U && trailing == EOF;
+}
+
+static bool wait_for_stop_drain(struct session *session, const char *path, long timeout_ms,
+                                char *captured, size_t *used, long long *stopped_at) {
+    long long deadline=monotonic_ms()+timeout_ms;
+    while (monotonic_ms()<deadline && !marker_file_exists(path)) {
+        char buffer[4096]; ssize_t length=read_marker_output(session,buffer,sizeof(buffer));
+        if (length>0) {
+            size_t available=*used<65535U ? 65535U-*used : 0U;
+            size_t copy=(size_t)length<available ? (size_t)length : available;
+            if (copy>0U) { memcpy(captured+*used,buffer,copy); *used+=copy; captured[*used]='\0'; }
+        } else sleep_ms(10);
+    }
+    *stopped_at=monotonic_ms();
+    return marker_file_exists(path);
+}
+
+static void capture_bytes(char *captured, size_t *used, const char *buffer, size_t length) {
+    const size_t capacity = 65535U;
+    if (length >= capacity) {
+        memcpy(captured, buffer + length - capacity, capacity);
+        *used = capacity;
+    } else {
+        size_t drop = *used + length > capacity ? *used + length - capacity : 0U;
+        if (drop > 0U) {
+            memmove(captured, captured + drop, *used - drop);
+            *used -= drop;
+        }
+        memcpy(captured + *used, buffer, length);
+        *used += length;
+    }
+    captured[*used] = '\0';
 }
 
 static long long monotonic_ms(void) {
@@ -94,6 +191,7 @@ static bool same_terminal(const struct termios *left, const struct termios *righ
 static void child_session(const struct session *session, const char *tui, const char *hydra, const char *fake_bin) {
     char path[4096];
     const char *old_path = getenv("PATH");
+    const char *fixture_repo;
     char *tui_path = strdup(tui), *hydra_path = strdup(hydra);
     if (!tui_path || !hydra_path) _exit(119);
     snprintf(path, sizeof(path), "%s:%s", fake_bin, old_path == NULL ? "" : old_path);
@@ -109,10 +207,127 @@ static void child_session(const struct session *session, const char *tui, const 
     if (getenv("HYDRA_TEST_COLOR") != NULL) unsetenv("NO_COLOR");
     else setenv("NO_COLOR", "1", 1);
     setenv("PATH", path, 1);
-    if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
+    fixture_repo = getenv("HYDRA_FIXTURE_REPO");
+    if (fixture_repo != NULL && chdir(fixture_repo) != 0) _exit(122);
+    if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "heads", (char *)NULL);
+    else if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
     else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
     else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "heads", (char *)NULL);
     _exit(127);
+}
+
+struct i1_measurement {
+    struct session session;
+    char tag[128];
+    char transcript[65536];
+    size_t transcript_used;
+    bool workspace_ready;
+    bool attached;
+    bool handshake;
+};
+
+static bool measure_i1_start(struct i1_measurement *measurement, const char *tui,
+                             const char *hydra) {
+    measurement->transcript[0] = '\0';
+    if (open_session(&measurement->session, tui, hydra, "/usr/bin", 120, 40) != 0) return false;
+    if (!wait_for_raw(&measurement->session)) {
+        close_session(&measurement->session);
+        return false;
+    }
+    write_input(measurement->session.master, "W", 1U);
+    measurement->workspace_ready = wait_for_marker_capture(&measurement->session, "HYDRA WORKSPACE", 3000,
+                                                            measurement->transcript, &measurement->transcript_used);
+    if (!measurement->workspace_ready) return true;
+    write_input(measurement->session.master, "a", 1U);
+    measurement->attached = wait_for_marker_capture(&measurement->session,
+        "INPUT TO AGENT / Ctrl-B Tab Hydra", 5000, measurement->transcript,
+        &measurement->transcript_used);
+    if (measurement->attached && getenv("HYDRA_I1_READY_FILE") != NULL) {
+        char ready[128];
+        (void)snprintf(ready, sizeof(ready), "observer_pid=%ld\ntui_pid=%ld\n",
+                       (long)getpid(), (long)measurement->session.pid);
+        measurement->handshake = write_marker_file(getenv("HYDRA_I1_READY_FILE"), ready) &&
+            wait_for_file(getenv("HYDRA_I1_GO_FILE"), 30000);
+    }
+    return true;
+}
+
+static void measure_i1_command(struct i1_measurement *measurement, const char *seed) {
+    char command[256];
+    if (!measurement->attached || (getenv("HYDRA_I1_READY_FILE") && !measurement->handshake)) return;
+    (void)snprintf(command, sizeof(command), "printf 'I1-INPUT-'; printf '%s'; printf 'TAG'; printf '\\n'; sleep 1\n", seed);
+    write_input(measurement->session.master, command, strlen(command));
+}
+
+static bool measure_i1_response(struct i1_measurement *measurement, const char *seed) {
+    char expected[160];
+    if (!measurement->attached || (getenv("HYDRA_I1_READY_FILE") && !measurement->handshake)) return false;
+    (void)snprintf(expected, sizeof(expected), "I1-INPUT-%sTAG", seed);
+    return wait_for_marker_capture(&measurement->session, expected, 3000,
+                                   measurement->transcript, &measurement->transcript_used);
+}
+
+static void measure_i1_artifact(const struct i1_measurement *measurement, bool complete,
+                                int exit_status, bool restored) {
+    const char *artifact_dir = getenv("HYDRA_I1_ARTIFACT_DIR");
+    char path[4096];
+    FILE *file;
+    if (!artifact_dir || !*artifact_dir) artifact_dir = "/tmp";
+    if (complete && measurement->workspace_ready && measurement->attached && exit_status == 0 && restored) return;
+    if (snprintf(path, sizeof(path), "%s/i1-pty-%ld.raw", artifact_dir, (long)getpid()) >= (int)sizeof(path)) return;
+    file = fopen(path, "w");
+    if (file) { (void)fwrite(measurement->transcript, 1, measurement->transcript_used, file); fclose(file); }
+}
+
+static int measure_i1_prepare(struct i1_measurement *measurement, char *hydra,
+                              size_t hydra_size, char *cwd, size_t cwd_size,
+                              const char *seed) {
+    const char *root = getenv("HYDRA_SOURCE_ROOT");
+    if (!root || !getenv("HYDRA_FIXTURE_REPO") || !getenv("HYDRA_HOME") || !seed || !*seed ||
+        snprintf(hydra, hydra_size, "%s/bin/hydra", root) >= (int)hydra_size) return 2;
+    if (snprintf(measurement->tag, sizeof(measurement->tag), "I1-INPUT-%s", seed) >= (int)sizeof(measurement->tag)) return 2;
+    if (!getcwd(cwd, cwd_size) || chdir(getenv("HYDRA_FIXTURE_REPO")) ||
+        setenv("HYDRA_NO_SWITCH", "1", 1) || setenv("HYDRA_NONINTERACTIVE", "1", 1) || chdir(cwd)) return 1;
+    return 0;
+}
+
+static int measure_i1(const char *tui, unsigned heads, const char *seed) {
+    struct i1_measurement measurement = {0};
+    struct rusage before, after;
+    long long sent, observed;
+    char cwd[4096];
+    bool complete = false, restored = false, stop_received = false;
+    int exit_status = 254;
+    char hydra[4096];
+    int preparation = measure_i1_prepare(&measurement, hydra, sizeof(hydra), cwd, sizeof(cwd), seed);
+    if (preparation != 0) return preparation;
+    (void)getrusage(RUSAGE_SELF, &before);
+    if (!measure_i1_start(&measurement, tui, hydra)) return 1;
+    sent=monotonic_ms();
+    measure_i1_command(&measurement, seed);
+    complete = measure_i1_response(&measurement, seed);
+    observed=monotonic_ms();
+    long long interval_stop=observed;
+    if (measurement.handshake) stop_received=wait_for_stop_drain(&measurement.session,getenv("HYDRA_I1_STOP_FILE"),6000,
+                                                     measurement.transcript,&measurement.transcript_used,&interval_stop);
+    /* Ctrl-B q is Hydra's documented terminal prefix and exits the observer
+     * while closing its attachment clients. */
+    write_input(measurement.session.master,"\002q",2U);
+    exit_status=wait_for_exit(&measurement.session);
+    restored=terminal_restored(&measurement.session);
+    close_session(&measurement.session);
+    (void)getrusage(RUSAGE_SELF, &after);
+    measure_i1_artifact(&measurement, complete, exit_status, restored);
+    printf("{\"schema_version\":1,\"benchmark\":\"native-tui-i1-attached-pty\",\"heads\":%u,\"clients\":1,\"view\":\"workspace-attached-pane\",\"tag\":\"%s\",\"observer_pid\":%ld,\"tui_pid\":%ld,\"measurement_start_ts_ms\":%lld,\"measurement_stop_ts_ms\":%lld,\"stop_received\":%s,\"outer_pty_bytes\":%zu,\"input_sent_ts_ms\":%lld,\"frame_observed_ts_ms\":%lld,\"frame_latency_ms\":%lld,\"pty_frame_completion\":%s,\"workspace_ready\":%s,\"attached\":%s,\"exit_status\":%d,\"terminal_restored\":%s,\"observer_cpu_ms\":%ld,\"tui_subtree_cpu_ms\":null}\n",
+           heads,measurement.tag,(long)getpid(),(long)measurement.session.pid,sent,interval_stop,stop_received ? "true" : "false",measurement.transcript_used,sent,observed,observed-sent,complete ? "true" : "false",
+           measurement.workspace_ready ? "true" : "false", measurement.attached ? "true" : "false", exit_status,
+           restored ? "true" : "false",
+           (long)(((after.ru_utime.tv_sec-before.ru_utime.tv_sec)*1000L +
+                   (after.ru_utime.tv_usec-before.ru_utime.tv_usec)/1000L +
+                   (after.ru_stime.tv_sec-before.ru_stime.tv_sec)*1000L +
+                   (after.ru_stime.tv_usec-before.ru_stime.tv_usec)/1000L)));
+    return complete && measurement.workspace_ready && measurement.attached && exit_status==0 && restored &&
+        (!getenv("HYDRA_I1_READY_FILE") || stop_received) ? 0 : 1;
 }
 
 static int open_session(struct session *session, const char *tui, const char *hydra,
@@ -146,16 +361,46 @@ failed:
 
 static bool wait_for_raw(struct session *session) {
     int attempt;
-    for (attempt = 0; attempt < 100; attempt++) {
+    /* Real repositories with a ten-head inventory can take a few seconds for
+     * the first hydra data refresh; do not confuse that with a failed PTY. */
+    for (attempt = 0; attempt < 300; attempt++) {
         struct termios current;
         int status;
-        drain_output(session->master);
-        if (waitpid(session->pid, &status, WNOHANG) == session->pid) return false;
+        drain_start_output(session);
+        if (waitpid(session->pid, &status, WNOHANG) == session->pid) {
+            if (getenv("HYDRA_I1_ARTIFACT_DIR") != NULL)
+                fprintf(stderr, "i1: TUI exited before raw mode (status=%d)\n", status);
+            return false;
+        }
         if (tcgetattr(session->slave, &current) == 0 &&
             (current.c_lflag & (ICANON | ECHO)) == 0) return true;
         sleep_ms(20);
     }
     return false;
+}
+
+/* Raw mode is the startup responsiveness barrier; model-dependent tests use
+ * this separate barrier so delayed observations remain genuinely asynchronous. */
+static bool wait_for_model(struct session *session) {
+    return wait_for_marker(session, "heads  |  Row", 12000);
+}
+
+static void drain_start_output(struct session *session) {
+    char buffer[4096];
+    ssize_t length;
+    if (getenv("HYDRA_I1_ARTIFACT_DIR") == NULL) { drain_output(session->master); return; }
+    do {
+        length = read(session->master, buffer, sizeof(buffer));
+        if (length > 0) {
+            char path[4096];
+            FILE *file;
+            if (snprintf(path, sizeof(path), "%s/i1-pty-start.raw", getenv("HYDRA_I1_ARTIFACT_DIR")) < (int)sizeof(path) &&
+                (file = fopen(path, "a")) != NULL) {
+                (void)fwrite(buffer, 1, (size_t)length, file);
+                fclose(file);
+            }
+        }
+    } while (length > 0);
 }
 
 static ssize_t read_marker_output(struct session *session, char *buffer, size_t size) {
@@ -195,6 +440,23 @@ static bool wait_for_markers(struct session *session, const char *marker,
 
 static bool wait_for_marker(struct session *session, const char *marker, long timeout_ms) {
     return wait_for_markers(session, marker, NULL, timeout_ms);
+}
+
+static bool wait_for_marker_capture(struct session *session, const char *marker, long timeout_ms,
+                                    char *captured, size_t *used) {
+    long long deadline = monotonic_ms() + timeout_ms;
+    while (monotonic_ms() < deadline) {
+        char buffer[4096];
+        ssize_t length = read_marker_output(session, buffer, sizeof(buffer));
+        if (length > 0) {
+            if ((size_t)length > sizeof(buffer)) return false;
+            capture_bytes(captured, used, buffer, (size_t)length);
+            if (strstr(captured, marker) != NULL) return true;
+        } else {
+            sleep_ms(10);
+        }
+    }
+    return false;
 }
 
 static bool still_running(struct session *session) {
@@ -262,12 +524,24 @@ static void test_session_failure(void) {
     }
     result(pid > 0 && waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0,
            "failed PTY setup leaves no live session handles");
+    pid = fork();
+    if (pid == 0) {
+        struct session session;
+        if (setenv("HYDRA_FIXTURE_REPO", "/dev/null", 1) != 0 ||
+            open_session(&session, "/bin/sh", "/usr/bin/false", "", 80, 24) != 0) _exit(2);
+        bool stopped = wait_for_exit(&session) == 122 && terminal_restored(&session);
+        close_session(&session);
+        _exit(stopped ? 0 : 1);
+    }
+    result(pid > 0 && waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0,
+           "invalid fixture directory fails before launch and preserves the terminal");
 }
 
 static void test_small_list(const char *tui, const char *hydra, const char *fake_bin) {
     struct session session;
     if (!result(open_session(&session, tui, hydra, fake_bin, 40, 10) == 0, "open minimum-size terminal")) return;
     result(wait_for_raw(&session), "small list enters raw mode");
+    (void)wait_for_model(&session);
     write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads:", 1000);
     write_input(session.master, "feature\n", 8U);
@@ -293,6 +567,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     (void)unsetenv("FAKE_TMUX_CURRENT_SESSION");
     if (!opened) return;
     result(wait_for_raw(&session), "interactive TUI enters raw mode");
+    (void)wait_for_model(&session);
     write_input(session.master, "j\r", 2U);
     result(wait_for_marker(&session, "HEAD DETAIL  feature-stale", 1000),
            "keyboard navigation opens the selected head detail");
@@ -399,6 +674,63 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     close_session(&session);
 }
 
+static void test_fleet_attach(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    char argv_path[128], captured[512] = "";
+    FILE *argv_file;
+    size_t length;
+    snprintf(argv_path, sizeof(argv_path), "/tmp/hydra-i1-fleet-attach-%ld", (long)getpid());
+    (void)unlink(argv_path);
+    (void)setenv("HYDRA_TEST_FLEET_ATTACH", "1", 1);
+    (void)setenv("HYDRA_TEST_FLEET_FRESH", "1", 1);
+    (void)setenv("HYDRA_TEST_ATTACH_ARGV", argv_path, 1);
+    if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0,
+                "open fleet attachment terminal")) {
+        (void)unsetenv("HYDRA_TEST_FLEET_ATTACH");
+        (void)unsetenv("HYDRA_TEST_FLEET_FRESH");
+        (void)unsetenv("HYDRA_TEST_ATTACH_ARGV");
+        return;
+    }
+    result(wait_for_raw(&session), "fleet view enters raw mode");
+    (void)wait_for_model(&session);
+    write_input(session.master, "a", 1U);
+    sleep_ms(200);
+    argv_file = fopen(argv_path, "r");
+    if (argv_file != NULL) {
+        length = fread(captured, 1U, sizeof(captured) - 1U, argv_file);
+        captured[length] = '\0';
+        fclose(argv_file);
+    }
+    result(strstr(captured, "fleet\nattach\nbuilder\n--project\n/work/project\n--instance\ninstance_aaaaaaaaaaaaaaaaaaaa\n--\nfeature-build\n") != NULL,
+           "fleet attach uses exact host, project, and instance argv");
+    result(wait_for_screen_text(&session, "FAKE REMOTE ATTACH", 80, 24, 2000), "fleet attachment renders its terminal in the initialized workspace");
+    write_input(session.master, "\002q", 2U);
+    result(wait_for_exit(&session) == 0 && terminal_restored(&session), "fleet attachment exits normally and restores terminal state");
+    close_session(&session);
+    (void)unlink(argv_path);
+    (void)unsetenv("HYDRA_TEST_FLEET_FRESH");
+
+    (void)unlink(argv_path);
+    if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0,
+                "open unknown-freshness fleet attachment terminal")) {
+        (void)unsetenv("HYDRA_TEST_FLEET_ATTACH");
+        (void)unsetenv("HYDRA_TEST_ATTACH_ARGV");
+        return;
+    }
+    result(wait_for_raw(&session), "unknown-freshness fleet view enters raw mode");
+    (void)wait_for_model(&session);
+    result(wait_for_marker(&session, "builder", 1000), "unknown-freshness fleet row is visible");
+    write_input(session.master, "a", 1U);
+    result(wait_for_marker(&session, "Remote target is stale", 3000), "unknown host freshness shows refusal notice");
+    result(still_running(&session), "unknown host freshness refuses a new attachment");
+    result(access(argv_path, F_OK) != 0, "unknown host freshness does not invoke remote attach");
+    write_input(session.master, "q", 1U);
+    result(wait_for_exit(&session) == 0, "unknown-freshness fleet view exits cleanly");
+    close_session(&session);
+    (void)unsetenv("HYDRA_TEST_FLEET_ATTACH");
+    (void)unsetenv("HYDRA_TEST_ATTACH_ARGV");
+}
+
 static void test_signal(const char *tui, const char *hydra, const char *fake_bin,
                         int signal_number, const char *name) {
     struct session session;
@@ -419,14 +751,62 @@ static void test_signal(const char *tui, const char *hydra, const char *fake_bin
 
 static void test_preflight_failure(const char *tui, const char *hydra, const char *fake_bin,
                                    unsigned short cols, unsigned short rows, int expected,
+                                   bool await_failure, const char *failure_marker,
+                                   const char *pid_file, bool quit_while_running,
                                    const char *message) {
     struct session session;
     if (open_session(&session, tui, hydra, fake_bin, cols, rows) != 0) {
         result(false, message); return;
     }
-    result(wait_for_exit(&session) == expected, message);
+    if (expected == 0) {
+        result(wait_for_raw(&session), message);
+        if (quit_while_running) {
+            result(wait_for_file(pid_file, 1000), "early quit observes a live capture owner");
+            write_input(session.master, "q", 1U);
+            result(wait_for_exit(&session) == 0, "early quit stops the active capture");
+            result(pids_gone(pid_file), "early quit removes the capture owner and descendant");
+            result(terminal_restored(&session), "early quit preserves terminal state");
+            close_session(&session);
+            return;
+        }
+        if (await_failure)
+            result(wait_for_marker(&session, failure_marker, 12000),
+                   "failed observation reaches a bounded failure state");
+        if (pid_file) result(wait_for_file(pid_file, 1000) && pids_gone(pid_file),
+                             "timed-out capture owner and descendant are gone before quit");
+        write_input(session.master, "q", 1U);
+        result(wait_for_exit(&session) == 0, await_failure ?
+               "bounded failed observation is reaped before quit" :
+               "bounded failed observation quits cleanly");
+        if (pid_file) result(pids_gone(pid_file), "timed-out capture has no owner after quit");
+    } else result(wait_for_exit(&session) == expected, message);
     result(terminal_restored(&session), "preflight failure preserves terminal state");
     close_session(&session);
+}
+
+static void test_delayed_initial_snapshot(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    char output[65536] = "";
+    size_t used = 0U;
+    if (setenv("HYDRA_TEST_TUI_DELAY", "4", 1) == 0) {
+        if (open_session(&session, tui, hydra, fake_bin, 80, 24) == 0) {
+            result(wait_for_raw(&session), "delayed initial snapshot reaches raw mode before data");
+            result(wait_for_marker_capture(&session, "Loading snapshot...", 1000, output, &used),
+                   "delayed initial snapshot renders loading state");
+            write_input(session.master, "?", 1U);
+            result(wait_for_marker_capture(&session, "HELP", 1000, output, &used),
+                   "delayed initial snapshot accepts input while loading");
+            write_input(session.master, "?", 1U);
+            output[0] = '\0'; used = 0U;
+            result(wait_for_marker_capture(&session, "Row 1 of 3", 15000, output, &used),
+                   "delayed initial snapshot eventually renders model data");
+            write_input(session.master, "q", 1U);
+            result(wait_for_exit(&session) == 0, "delayed initial snapshot quits cleanly");
+            result(terminal_restored(&session), "delayed initial snapshot restores terminal");
+            close_session(&session);
+        } else result(false, "open delayed snapshot pseudo-terminal");
+        (void)unsetenv("HYDRA_TEST_TUI_DELAY");
+    } else result(false, "configure delayed snapshot fixture");
 }
 
 static void test_crash_fallback(const char *dispatch, const char *fake_bin) {
@@ -473,14 +853,71 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 }
 
 #include "test_tui_visualization.inc"
+#include "test_tui_attention.inc"
+#include "test_tui_review.inc"
+#include "test_tui_measure.inc"
 
-int main(int argc, char **argv) {
+static bool screen_has_text(const struct measure_screen *screen, const char *text) {
+    const struct tv_canvas *canvas = screen->terminal.alternate_active ?
+        &screen->terminal.alternate.canvas : &screen->terminal.primary.canvas;
+    for (int y = 0; y < canvas->height; y++) {
+        char line[MEASURE_COLUMNS + 1];
+        for (int x = 0; x < canvas->width; x++) {
+            uint32_t glyph = canvas->cells[(size_t)y * (size_t)canvas->stride + (size_t)x].glyph;
+            line[x] = glyph >= 32 && glyph <= 126 ? (char)glyph : ' ';
+        }
+        line[canvas->width] = '\0';
+        if (strstr(line, text)) return true;
+    }
+    return false;
+}
+
+/* Workspace redraws can place cursor controls between the words of a label. */
+static bool wait_for_screen_text(struct session *session, const char *text, int columns, int rows, long timeout_ms) {
+    struct measure_screen *screen = measure_screen_create(columns, rows);
+    long long deadline = monotonic_ms() + timeout_ms;
+    bool found = false;
+    if (!screen) return false;
+    while (!found && monotonic_ms() < deadline) {
+        char bytes[4096]; ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
+        if (length > 0) tv_term_feed(&screen->terminal, bytes, (size_t)length);
+        else sleep_ms(10);
+        found = screen_has_text(screen, text);
+    }
+    free(screen);
+    return found;
+}
+
+static int special_test_mode(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--item10-semantic-controls")) return measure_semantic_controls();
+    if (argc == 7 && !strcmp(argv[1], "--item10-session")) return measure_session(argv[2], argv[3], argv[4], argv[5], argv[6]);
+    if (argc == 6 && !strcmp(argv[1], "--review-cancel-owner")) return review_cancel_owner(argv[2], argv[3], argv[4], argv[5]);
+    if (argc == 4 && strcmp(argv[1], "--i1-measure") == 0) {
+        unsigned heads;
+        if (!measure_unsigned(argv[2], &heads) || heads == 0U || heads > 10U) return 2;
+        return measure_i1(getenv("HYDRA_TUI_BIN") ? getenv("HYDRA_TUI_BIN") : argv[0], heads, argv[3]);
+    }
     if (argc == 5 && strcmp(argv[1], "--measure") == 0) {
         return measure_interactive(argv[2], argv[3], argv[4]);
     }
+    return -1;
+}
+
+int main(int argc, char **argv) {
+    char timeout_pids[128]; int special;
+    (void)setvbuf(stdout, NULL, _IOLBF, 0U);
+    special = special_test_mode(argc, argv);
+    if (special >= 0) return special;
     if (argc != 4) {
         fprintf(stderr, "usage: test-tui-pty TUI FAKE_HYDRA FAKE_BIN\n");
         return 2;
+    }
+    if (getenv("HYDRA_TEST_REVIEW_ONLY")) return review_tests_only(argv[1], argv[2], argv[0]);
+    if (getenv("HYDRA_TEST_LIFECYCLE_ONLY")) {
+        test_review_cancellation(argv[1], argv[2], argv[0]);
+        test_fleet_attach(argv[1], argv[2], argv[3]);
+        printf("Native lifecycle tests: %d passed, %d failed\n", tests - failures, failures);
+        return failures ? 1 : 0;
     }
     printf("Running native TUI pseudo-terminal tests...\n");
     test_session_failure();
@@ -489,23 +926,46 @@ int main(int argc, char **argv) {
     test_visualization(argv[1], argv[2], argv[3]);
     test_visualization_refresh(argv[1], argv[2], argv[3]);
     test_visualization_hosts(argv[1], argv[2], argv[3]);
+    test_attention(argv[1], argv[2], argv[3]);
+    test_attention_clients(argv[1], argv[2], argv[3]);
+    test_review_navigation(argv[1], argv[2]);
+    test_review_stale(argv[1], argv[2]);
+    test_review_narrow(argv[1], argv[2]);
+    test_review_cancellation(argv[1], argv[2], argv[0]);
+    test_fleet_attach(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
     test_palette(argv[1], argv[2], argv[3]);
     test_signal(argv[1], argv[2], argv[3], SIGINT, "SIGINT");
     test_signal(argv[1], argv[2], argv[3], SIGTERM, "SIGTERM");
     test_signal(argv[1], argv[2], argv[3], SIGHUP, "SIGHUP");
-    test_preflight_failure(argv[1], argv[2], argv[3], 39, 9, 3, "narrow terminal fails before raw mode");
-    test_preflight_failure(argv[1], "/usr/bin/false", argv[3], 80, 24, 4,
-                           "adapter failure exits without entering raw mode");
+    test_preflight_failure(argv[1], argv[2], argv[3], 39, 9, 3, false,
+                           "shell data adapter", NULL, false,
+                           "narrow terminal fails before raw mode");
+    test_preflight_failure(argv[1], "/usr/bin/false", argv[3], 80, 24, 0,
+                           true, "shell data adapter failed",
+                           NULL, false,
+                           "adapter failure remains responsive in raw mode");
+    snprintf(timeout_pids, sizeof(timeout_pids), "/tmp/hydra-timeout-pids-%ld", (long)getpid());
+    (void)unlink(timeout_pids);
+    (void)setenv("HYDRA_TEST_PID_FILE", timeout_pids, 1);
     if (getenv("HYDRA_TEST_SLOW_HYDRA") != NULL) {
-        test_preflight_failure(argv[1], getenv("HYDRA_TEST_SLOW_HYDRA"), argv[3], 80, 24, 4,
-                               "hung adapter is terminated by the bounded refresh timeout");
+        (void)unlink(timeout_pids);
+        test_preflight_failure(argv[1], getenv("HYDRA_TEST_SLOW_HYDRA"), argv[3], 80, 24, 0,
+                               true, "shell data adapter timed out",
+                               timeout_pids, true,
+                               "hung adapter remains responsive in raw mode");
     }
     if (getenv("HYDRA_TEST_EOF_HYDRA") != NULL) {
-        test_preflight_failure(argv[1], getenv("HYDRA_TEST_EOF_HYDRA"), argv[3], 80, 24, 4,
-                               "adapter deadline remains bounded after stdout EOF");
+        (void)unlink(timeout_pids);
+        test_preflight_failure(argv[1], getenv("HYDRA_TEST_EOF_HYDRA"), argv[3], 80, 24, 0,
+                               true, "shell data adapter timed out",
+                               timeout_pids, false,
+                               "adapter EOF remains responsive in raw mode");
     }
+    (void)unsetenv("HYDRA_TEST_PID_FILE");
+    (void)unlink(timeout_pids);
+    test_delayed_initial_snapshot(argv[1], argv[2], argv[3]);
     test_crash_fallback(getenv("HYDRA_TEST_CRASH_DISPATCH"), argv[3]);
     printf("Tests: %d, Failed: %d\n", tests, failures);
     return failures == 0 ? 0 : 1;

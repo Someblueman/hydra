@@ -7,6 +7,10 @@ bool native_terminal_focused(struct app *app) {
     struct native_terminal *t=app->workspace ? native_workspace_terminal(app,app->workspace->layout.focus) : NULL;
     return app->view==7 && t && t->screen;
 }
+static bool terminal_head_matches(const struct app *app, const struct head *h, const struct native_terminal *t) {
+    return !strcmp(h->head_id,t->head) && !strcmp(h->instance,t->instance) &&
+        (!app->fleet || (!strcmp(h->remote_host,t->remote_host) && !strcmp(h->remote_project,t->remote_project)));
+}
 
 static void native_terminal_event(struct app *app, const struct tv_event *e) {
     struct native_terminals *set=app->terminals;
@@ -57,15 +61,14 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
                     set->selected=next; app->view=7;
                     native_workspace_show_terminal(app,true);
                     for (head=0;head<app->model.head_count;head++)
-                        if (!strcmp(app->model.heads[head].head_id,set->slots[next].head) &&
-                            !strcmp(app->model.heads[head].instance,set->slots[next].instance)) { app->selected=head; break; }
+                        if (terminal_head_matches(app,&app->model.heads[head],&set->slots[next])) { app->selected=head; break; }
                     break;
                 }
             }
         } else if (e->key=='r' && t && t->screen) {
             size_t head;
             for (head=0;head<app->model.head_count;head++)
-                if (!strcmp(app->model.heads[head].head_id,t->head) && !strcmp(app->model.heads[head].instance,t->instance)) break;
+                if (terminal_head_matches(app,&app->model.heads[head],t)) break;
             if (head<app->model.head_count) { app->selected=head; (void)native_terminal_attach(app); }
             else copy_text(app->notice,sizeof(app->notice),"Original instance unavailable; select current work explicitly");
         } else if (e->key=='x' && t) { native_terminal_close(t); w->layout.focus=1; }

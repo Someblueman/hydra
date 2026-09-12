@@ -60,7 +60,10 @@ hydra provenance feature-x --json
 hydra workflow validate examples/workflows/local-review.yml
 hydra workflow dry-run examples/workflows/local-review.yml
 hydra workflow run examples/workflows/local-review.yml
+hydra workflow review PROJECT RUN STEP ATTEMPT REVISION [REFERENCES_JSON]
 hydra workflow status run_ID --json
+hydra workflow attention --json
+hydra workflow attention-data
 hydra workflow cancel run_ID
 hydra workflow requests run_ID --json
 hydra workflow decide run_ID step_REQUEST_ID approve --by reviewer
@@ -113,6 +116,33 @@ hydra tui                                          # native mission control; vis
 hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
 ```
+
+Attention results are immutable run/step/attempt evidence. A sealed result remains
+inspectable when its execution head is no longer live; missing recorded head or
+instance identity is reported as `identity_provenance: not_recorded` and never
+grants attachment or action authority.
+
+`hydra workflow review PROJECT RUN STEP ATTEMPT REVISION` returns a read-only
+JSON review of the selected attempt. `REVISION` is the SHA-256 of its attention
+revision. For an exact native selection, both `review` (JSON) and `review-data`
+(framed text) accept `KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE
+REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256`; copy those fields from
+`workflow attention-data`, using `-` for absent fields. The requested identity
+and revision remain separate from the observed revision and computed readiness.
+
+Review checks retained recipe, Git blob data hashes, graph, resource scalars,
+sealed artifacts, and any accepted compiled plan and verification reports.
+Historical inspection does not require the original recipe path or current
+checkout HEAD. A planless base commit is recorded provenance; review does not
+independently verify its source contents. A current approval reports `pending`,
+its request state and evidence path, and explicit approve/reject argv with the
+project working directory. Stale or expired context revokes those decision
+routes. Opening review never records a decision; `accepted` remains false.
+
+An optional final `REFERENCES_JSON` argument contains up to 16 objects with
+`kind` (`transcript`, `log`, or `pr`) and `locator` (an absolute local path or
+HTTP(S) URL). Local regular files get a bounded 4096-byte preview; URLs remain
+supplied and unopened. References do not establish result readiness.
 
 ## Agent profiles and inputs
 
@@ -279,7 +309,14 @@ palette includes the tmux dashboard. Mutations are delegated to the shell CLI wi
 argument-vector execution; native spawn prompts for branch, profile, template, and
 layout, while `Space`/`A` select heads and `G` assigns the selection to a group. `x`
 kills selected heads through the confirming shell command and skips the current tmux
-session. See the native helper behavior in the root README.
+session. Press `I` for the attention view; `j`/`k` or arrows select an item, `Enter`
+opens its detail, `s` marks that revision seen for this client, and `r` opens the
+exact read-only review. In review, `j`/`k` scroll, `i` shows the full identity, `f`
+shows supplied references, `o` follows a selected reference, and `Esc` backs out.
+`l`, `t`, and `p` supply one explicit log, transcript, or PR reference to the
+public review producer. A stale attention snapshot cannot be reviewed until it is
+refreshed. Seen state is client-local and does not approve, accept, or mutate a
+workflow. See the native helper behavior in the root README.
 
 The larger keymap below belongs to the maintained basic shell TUI.
 

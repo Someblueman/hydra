@@ -1,0 +1,40 @@
+ HYDRA MISSION CONTROL
+[Heads]   Details    Coordination    Recovery     Overview    Workflows    Hosts
++- Heads -------------------------------------------------------------------------------------------------------------+
+|    HEAD                                                               | SESSION     | AGENT          | REPORTED     |
+| >  i10-h00                                                            | LIVE        | item10-worker  | -            |
+| 1 heads  |  Row 1 of 1                                                                                              |
+|                                                                                                                     |
++- SELECTED HEAD -----------------------------------------------------------------------------------------------------+
+| i10-h00                                                                                                             |
+| Agent      item10-worker                                 | Session    LIVE                                          |
+| Changes    0 files                                       | Gates      0/0 approved                                  |
+| Enter Details   p Terminal output   : Actions                                                                       |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
+|                                                                                                                     |
++---------------------------------------------------------------------------------------------------------------------+
+Click row/tab | Wheel moves selection | o overview | t theme
+Enter details  : actions  / search  t theme  ? help  q quit

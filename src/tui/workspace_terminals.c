@@ -26,7 +26,9 @@ void native_workspace_sync_terminal(struct app *app) {
     if (!t || !t->screen) return;
     app->terminals->selected=(size_t)(t-app->terminals->slots);
     for (head=0;head<app->model.head_count;head++)
-        if (!strcmp(app->model.heads[head].head_id,t->head) && !strcmp(app->model.heads[head].instance,t->instance)) {
+        if (!strcmp(app->model.heads[head].head_id,t->head) && !strcmp(app->model.heads[head].instance,t->instance) &&
+            (!app->fleet || (!strcmp(app->model.heads[head].remote_host,t->remote_host) &&
+             !strcmp(app->model.heads[head].remote_project,t->remote_project)))) {
             app->selected=head; break;
         }
 }

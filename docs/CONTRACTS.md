@@ -155,8 +155,15 @@ versions fail closed. This adapter is not a general automation API.
 Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. Both
 retain navigation, search, refresh, preview, switch, spawn, group assignment,
 dashboard, regenerate, confirmed kill, and help behavior. Native mutations execute
-the public shell CLI with explicit argv and never write Hydra state directly. See
-Native UI behavior is covered by the public CLI and protocol rules in this guide.
+the public shell CLI with explicit argv and never write Hydra state directly. Native
+attention consumes `workflow attention-data` or `fleet attention-data`; its `I`
+view, `s` seen marker, and `r` exact review route are read-only client interaction.
+Review selection carries the complete attention identity, requested revision, and
+identity hash. `review-data` is a bounded framed projection of the public workflow
+or Fleet review command; opening a review or supplied reference cannot change
+durable state or confer approval. Stale or ambiguous selections remain unavailable
+until a fresh exact identity is established. Native UI behavior is covered by the
+public CLI and protocol rules in this guide.
 
 ## Process, install, and platform contracts
 

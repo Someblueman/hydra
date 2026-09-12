@@ -1,0 +1,268 @@
+{
+    "schema_version": 1,
+    "ok": true,
+    "command": "fleet-overview",
+    "data": {
+        "snapshot_schema_version": 1,
+        "receiver_observed_at": 1,
+        "tasks": [
+            {
+                "task_id": "task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "run_id": "run_parallel",
+                "step_id": "step_a",
+                "attempt_id": "attempt-a",
+                "spec_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "agent_profile": "unavailable",
+                "assigned_host": "build",
+                "workspace": null,
+                "execution_owner": {
+                    "kind": "detached-owner",
+                    "state": "recorded",
+                    "recorded_state": null,
+                    "failure": null
+                },
+                "observation_timestamps": {
+                    "accepted_at": 1,
+                    "started_at": 2,
+                    "resumed_at": null,
+                    "finished_at": null,
+                    "receiver_observed_at": 1
+                },
+                "effective_configuration": {},
+                "contract": {
+                    "availability": "unavailable",
+                    "reason": "none",
+                    "missing_evidence": []
+                },
+                "execution_state": "waiting_approval",
+                "waiting": {
+                    "reason": "approval",
+                    "detail": "approval required",
+                    "next_action": "inspect approval"
+                },
+                "pending_requests": [
+                    {
+                        "request_id": "request_a",
+                        "step_id": "step_a",
+                        "state": "pending",
+                        "message": "approve A",
+                        "expires_at": "4102444800"
+                    },
+                    {
+                        "request_id": "request_a",
+                        "step_id": "step_a",
+                        "state": "pending",
+                        "message": "approve A",
+                        "expires_at": "4102444800"
+                    },
+                    {
+                        "request_id": "request_b",
+                        "step_id": "step_b",
+                        "state": "pending",
+                        "message": "approve B",
+                        "expires_at": "4102444800"
+                    }
+                ],
+                "steps": [
+                    {
+                        "step_id": "step_a",
+                        "attempt_id": "attempt-a",
+                        "state": "waiting-approval",
+                        "agent_profile": "unavailable",
+                        "kind": "exec",
+                        "waiting_reason": "approval"
+                    },
+                    {
+                        "step_id": "step_b",
+                        "attempt_id": "attempt-b",
+                        "state": "waiting-approval",
+                        "agent_profile": "unavailable",
+                        "kind": "exec",
+                        "waiting_reason": "approval"
+                    }
+                ],
+                "result_collection": {
+                    "state": "ready"
+                }
+            },
+            {
+                "task_id": "task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "run_id": null,
+                "step_id": "step_only",
+                "attempt_id": "attempt-only",
+                "spec_sha256": "bad-digest",
+                "agent_profile": "unavailable",
+                "assigned_host": "build",
+                "workspace": null,
+                "execution_owner": {
+                    "kind": "detached-owner",
+                    "state": "recorded",
+                    "recorded_state": null,
+                    "failure": null
+                },
+                "observation_timestamps": {
+                    "accepted_at": 1,
+                    "started_at": 2,
+                    "resumed_at": null,
+                    "finished_at": null,
+                    "receiver_observed_at": 1
+                },
+                "effective_configuration": {},
+                "contract": {
+                    "availability": "unavailable",
+                    "reason": "none",
+                    "missing_evidence": []
+                },
+                "execution_state": "running",
+                "waiting": {
+                    "reason": "none",
+                    "detail": "done",
+                    "next_action": "inspect"
+                },
+                "pending_requests": [],
+                "steps": [],
+                "result_collection": {
+                    "state": "unavailable"
+                }
+            },
+            {
+                "task_id": "task_dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "run_id": "run_ambiguous",
+                "step_id": "step_ambiguous",
+                "attempt_id": "attempt-ambiguous",
+                "spec_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "agent_profile": "unavailable",
+                "assigned_host": "build",
+                "workspace": null,
+                "execution_owner": {
+                    "kind": "detached-owner",
+                    "state": "recorded",
+                    "recorded_state": null,
+                    "failure": null
+                },
+                "observation_timestamps": {
+                    "accepted_at": 1,
+                    "started_at": 2,
+                    "resumed_at": null,
+                    "finished_at": null,
+                    "receiver_observed_at": 1
+                },
+                "effective_configuration": {},
+                "contract": {
+                    "availability": "unavailable",
+                    "reason": "none",
+                    "missing_evidence": []
+                },
+                "execution_state": "waiting_approval",
+                "waiting": {
+                    "reason": "approval",
+                    "detail": "approval required",
+                    "next_action": "inspect approval"
+                },
+                "pending_requests": [
+                    {
+                        "request_id": "request_missing_step",
+                        "step_id": "step_missing",
+                        "state": "pending",
+                        "message": "approve",
+                        "expires_at": "4102444800"
+                    }
+                ],
+                "steps": [
+                    {
+                        "step_id": "step_ambiguous",
+                        "attempt_id": "attempt-ambiguous",
+                        "state": "waiting-approval",
+                        "agent_profile": "unavailable",
+                        "kind": "exec",
+                        "waiting_reason": "approval"
+                    }
+                ],
+                "result_collection": {
+                    "state": "unavailable"
+                }
+            },
+            {
+                "task_id": "task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "run_id": "run_result_unknown",
+                "step_id": null,
+                "attempt_id": null,
+                "spec_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                "agent_profile": "unavailable",
+                "assigned_host": "build",
+                "workspace": null,
+                "execution_owner": {
+                    "kind": "detached-owner",
+                    "state": "recorded",
+                    "recorded_state": null,
+                    "failure": null
+                },
+                "observation_timestamps": {
+                    "accepted_at": 1,
+                    "started_at": 2,
+                    "resumed_at": null,
+                    "finished_at": null,
+                    "receiver_observed_at": 1
+                },
+                "effective_configuration": {},
+                "contract": {
+                    "availability": "unavailable",
+                    "reason": "none",
+                    "missing_evidence": []
+                },
+                "execution_state": "succeeded",
+                "waiting": {
+                    "reason": "none",
+                    "detail": "done",
+                    "next_action": "inspect"
+                },
+                "pending_requests": [],
+                "steps": [],
+                "result_collection": {
+                    "state": "ready"
+                }
+            },
+            {
+                "task_id": "task_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "run_id": "run_quiet",
+                "step_id": "step_quiet",
+                "attempt_id": "attempt-quiet",
+                "spec_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "agent_profile": "unavailable",
+                "assigned_host": "build",
+                "workspace": null,
+                "execution_owner": {
+                    "kind": "detached-owner",
+                    "state": "recorded",
+                    "recorded_state": null,
+                    "failure": null
+                },
+                "observation_timestamps": {
+                    "accepted_at": 1,
+                    "started_at": 2,
+                    "resumed_at": null,
+                    "finished_at": null,
+                    "receiver_observed_at": 1
+                },
+                "effective_configuration": {},
+                "contract": {
+                    "availability": "unavailable",
+                    "reason": "none",
+                    "missing_evidence": []
+                },
+                "execution_state": "succeeded",
+                "waiting": {
+                    "reason": "none",
+                    "detail": "done",
+                    "next_action": "inspect"
+                },
+                "pending_requests": [],
+                "steps": [],
+                "result_collection": {
+                    "state": "unavailable"
+                }
+            }
+        ]
+    }
+}
+

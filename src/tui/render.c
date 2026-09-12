@@ -294,6 +294,7 @@ static void render_help(struct app *app) {
     linef(app, "KEYBOARD HELP");
     if (app->rows < 20) {
         linef(app, "j/k move  Enter detail  Esc back");
+        linef(app, "I attention  s mark seen (attention view)");
         linef(app, "v views  / search  d diagnostics");
         linef(app, app->fleet ? "a attach  c interrupt" : ": actions  p output  Space/A mark");
         linef(app, app->fleet ? "t theme  ? close help  q quit" : "G group x kill t theme ? help q quit");
@@ -305,6 +306,7 @@ static void render_help(struct app *app) {
     linef(app, "v / o / w / H   Next view / overview / workflows / hosts");
     linef(app, "/               Search heads");
     linef(app, "d               Show / hide diagnostics");
+    linef(app, "I               Attention; Enter details; s marks seen locally");
     if (app->fleet) {
         linef(app, "a               Attach to remote terminal");
         linef(app, "c               Interrupt remote head (confirmed)");
@@ -320,7 +322,7 @@ static void render_help(struct app *app) {
     linef(app, "q               Quit");
 }
 
-static const char *view_names[] = {"Heads", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace", "Statistics"};
+static const char *view_names[] = {"Heads", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace", "Statistics", "Attention"};
 
 static void render_header(struct app *app) {
     char tabs[128];
@@ -350,6 +352,7 @@ static void render_content(struct app *app) {
         case 4: render_dashboard(app); break;
         case 5: render_workflow_graph(app); break;
         case 6: render_hosts(app); break;
+        case 9: render_attention(app); break;
         default: linef(app, "Workspace requires at least 20 columns and 6 rows"); break;
     }
 }
@@ -378,8 +381,16 @@ static void render_snapshot_hint(struct app *app, bool headless) {
     else linef(app, "%s / o overview / w graph / H hosts", stale ? "STALE" : "Current");
 }
 
+static bool attention_hint(struct app *app) {
+    if (app->view != 9) return false;
+    if (native_review_active(app)) linef(app, "j/k scroll i IDs f refs r load Esc/q");
+    else linef(app, "j/k select  Enter details  r review  s seen  I refresh  Esc heads  q quit");
+    style(app, TONE_BASE); return true;
+}
+
 static void render_key_hint(struct app *app) {
     style(app, TONE_STRONG);
+    if (attention_hint(app)) return;
     if (app->view == 5) linef(app, app->cols < 60 ? "j/k node [/] run ? help q quit" : "j/k node  [/] run  h/l/J/K pan  ? help  q quit");
     else if (app->view == 6) linef(app, "j/k host  Enter heads  ? help  q quit");
     else if (app->cols < 60) linef(app, app->fleet ? "a attach  c interrupt  ? help  q quit" : "Enter open  : actions  ? help  q quit");
@@ -389,7 +400,8 @@ static void render_key_hint(struct app *app) {
 }
 
 static void render_footer(struct app *app, bool headless) {
-    if (!render_notice(app)) {
+    if (app->view == 9 && native_review_active(app)) linef(app, "l log / t transcript / p PR | g/G ends | [/] rows");
+    else if (!render_notice(app)) {
         if (app->view >= 4) render_snapshot_hint(app, headless);
         else if (!app->help && !app->diagnostics && (app->view == 0 || app->view == 3))
             linef(app, app->hit_tabs ? "Click row/tab | Wheel moves selection | o overview | t theme" : "Click row | Wheel moves selection");

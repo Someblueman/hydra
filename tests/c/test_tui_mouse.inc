@@ -10,6 +10,7 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     char overlong[240];
     if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open mouse terminal")) return;
     result(wait_for_markers(&session, "\033[?1006h", "\033[?2004h", 1000), "raw mode enables mouse and bracketed paste reporting");
+    (void)wait_for_model(&session);
     (void)wait_for_marker(&session, "Click row", 1000);
     mouse_input(&session, "\033[<0;8;6M");
     result(wait_for_marker(&session, ">  feature-stale", 1000), "click selects the painted row");

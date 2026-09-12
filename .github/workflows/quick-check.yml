@@ -27,3 +27,6 @@ jobs:
       run: |
         sudo ln -sf /bin/dash /bin/sh
         make test-fast
+
+    - name: Check native attachment and capture cleanup
+      run: HYDRA_TEST_LIFECYCLE_ONLY=1 make test-tui-pty

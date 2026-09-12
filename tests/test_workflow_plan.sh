@@ -26,6 +26,20 @@ trap 'test_code=$?; cleanup || test_code=1; exit "$test_code"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
+# Parallel plan variants reuse head names; keep every tmux command on this fixture's socket.
+if [ "${HYDRA_TEST_HEADLESS:-0}" != 1 ]; then
+    HYDRA_PLAN_TEST_TMUX="$(command -v tmux)" || exit 1
+    HYDRA_PLAN_TEST_TMUX_SOCKET="$ROOT/tmux.sock"
+    export HYDRA_PLAN_TEST_TMUX HYDRA_PLAN_TEST_TMUX_SOCKET
+    mkdir "$ROOT/bin" || exit 1
+    cat > "$ROOT/bin/tmux" <<'EOF'
+#!/bin/sh
+exec "$HYDRA_PLAN_TEST_TMUX" -S "$HYDRA_PLAN_TEST_TMUX_SOCKET" -f /dev/null "$@"
+EOF
+    chmod +x "$ROOT/bin/tmux" || exit 1
+    PATH="$ROOT/bin:$PATH"
+    export PATH
+fi
 mkdir "$ROOT/repo"
 cp "$REPO/tests/fixtures/plan/repo/"* "$ROOT/repo/"
 if [ "${HYDRA_TEST_REPORT_V2:-0}" = 1 ]; then

@@ -1,0 +1,33 @@
+HYDRA_REVIEW	1	workflow records	/project	-	-	R-1	S-1	attempt-1	head-1	instance-1	-	1111111111111111111111111111111111111111	1111111111111111111111111111111111111111111111111111111111111111	1111111111111111111111111111111111111111111111111111111111111111
+TEXT	readiness: ready
+TEXT	accepted: false
+TEXT	identity: run: R-1
+TEXT	identity: step: S-1
+TEXT	identity: attempt: attempt-1
+TEXT	subjects: answer: sha256: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
+TEXT	checks: state: passed
+TEXT	artifacts: answer: available
+TEXT	provenance: head/instance: not_recorded
+TEXT	diff: unavailable: non-code immutable artifact
+TEXT	Long identifier: BEGIN-12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890-END
+TEXT	evidence detail 12
+TEXT	evidence detail 13
+TEXT	evidence detail 14
+TEXT	evidence detail 15
+TEXT	evidence detail 16
+TEXT	evidence detail 17
+TEXT	evidence detail 18
+TEXT	evidence detail 19
+TEXT	evidence detail 20
+TEXT	evidence detail 21
+TEXT	evidence detail 22
+TEXT	evidence detail 23
+TEXT	evidence detail 24
+TEXT	evidence detail 25
+TEXT	FINAL-REVIEW-EVIDENCE
+REF	log	available	/tmp/explicit-review.log
+PREVIEW	0	EXPLICIT-LOCAL-PREVIEW
+PREVIEW	0	$(touch /tmp/never-execute-review-data)
+REF	transcript	inaccessible	/tmp/missing-review.log
+REF	pr	supplied-unopened	https://example.invalid/review/123
+END	26	3	2

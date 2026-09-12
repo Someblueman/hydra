@@ -19,4 +19,5 @@ int wd_verify_output(json_object *manifest, const char *step, const char *attemp
 int wd_verify(json_object *manifest, const char *run);
 int wd_producer_directory(const char *run, const char *step, char directory[F_PATH]);
 json_object *wd_graph_read(const char *path);
+json_object *wd_attention(const char *project);
 #endif

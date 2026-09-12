@@ -113,7 +113,7 @@ int main(void) {
     tv_read(compiled, snapshot, sizeof(snapshot));
     S("E");
     U("Type exact digest", 3);
-    tv_format(evidence, sizeof(evidence), "%s/build/plan-launch-evidence", f.root);
+    tv_format(evidence, sizeof(evidence), "%s/plan-launch-evidence", f.build);
     tv_mkdir(evidence);
     for (i = 0; i < 3; i++) {
         tv_resize(&s, sizes[i][0], sizes[i][1]);
@@ -217,14 +217,19 @@ int main(void) {
     S("z");
     U("Project: repo line", 3);
     U("plan-fixture / succeeded", 15);
+    U("plan-smoke", 3);
+    /* Head and run snapshots arrive separately; move from the first head
+     * to its associated run only after both are visible. */
     S("j");
     U("Recorded branch reference", 3);
+    U("Enter evidence / h parent / Tab panes", 3);
     S("hh");
     tv_pump(&s, 2.5);
     CHECK(!tv_contains(&s, "plan-fixture / succeeded"), "collapsed historical refs");
     S("l");
     U("plan-fixture / succeeded", 3);
     S("j");
+    U("Enter evidence / h parent / Tab panes", 3);
     for (i = 0; i < 3; i++) {
         tv_resize(&s, sizes[i][0], sizes[i][1]);
         tv_pump(&s, .3);

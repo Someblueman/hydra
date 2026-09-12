@@ -50,6 +50,7 @@ static void capture_partial_input(void) {
     assert(cap.status == 7 && cap.in_bytes == 0 && cap.out_bytes == 0 && !cap.input_complete && cap.measurement_complete);
     f_capture_free(&cap);
 }
+#include "test_fleet_attention.inc"
 int main(void) {
     char dir[] = "/tmp/hydra-fleet-unit.XXXXXX", path[F_PATH]; json_object *obj, *bundle, *files, *file, *result;
     struct f_capture cap = {0}; char *quoted, *text;
@@ -78,6 +79,9 @@ int main(void) {
     result = f_bundle_import(dir, bundle); assert(!json_object_get_boolean(f_field(result, "ok"))); json_object_put(result); json_object_put(bundle);
     obj = f_parse("{\"protocol\":1,\"action\":\"doctor\",\"args\":[\"--fix\"]}");
     result = f_serve(obj); assert(!json_object_get_boolean(f_field(result, "ok"))); json_object_put(result); json_object_put(obj);
+    test_attention();
+    test_attention_unknowns();
+    test_attention_cap();
     obj = f_parse("{\"protocol\":\"1\",\"action\":\"handshake\"}");
     result = f_serve(obj); assert(!json_object_get_boolean(f_field(result, "ok"))); json_object_put(result); json_object_put(obj);
     obj = f_parse("{\"protocol\":1,\"action\":\"doctor\",\"args\":{}}");

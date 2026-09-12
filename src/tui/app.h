@@ -12,6 +12,8 @@ struct native_observations;
 struct native_plan;
 struct native_evidence;
 struct native_links;
+struct native_attention;
+struct native_review;
 
 struct app {
     struct model model;
@@ -22,6 +24,8 @@ struct app {
     struct native_plan *plan;
     struct native_evidence *evidence;
     struct native_links *links;
+    struct native_attention *attention;
+    struct native_review *review;
     pid_t control_pids[4];
     /* Full 127-byte task/run identity plus action and label text. */
     char control_labels[4][160];

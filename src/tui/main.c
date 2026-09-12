@@ -25,7 +25,7 @@ static void usage(FILE *out) {
 }
 
 static int parse_view(const char *name) {
-    static const char *names[] = {"heads", "detail", "coordination", "recovery", "overview", "workflows", "hosts", "workspace", "statistics"};
+    static const char *names[] = {"heads", "detail", "coordination", "recovery", "overview", "workflows", "hosts", "workspace", "statistics", "attention"};
     size_t i;
     for (i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
         if (!strcmp(name, names[i])) return (int)i;
@@ -43,6 +43,7 @@ static int render_fixture(struct app *app, const char *fixture, const char *work
     if (statistics_fixture && refresh_statistics(app, statistics_fixture)) return 2;
     for (frame = 1U; frame <= frames && !terminal_stopped(); frame++) render(app, frame, true);
     free(app->workflows);
+    native_attention_destroy(app);
     native_workspace_destroy(app);
     statistics_destroy(app);
     if (terminal_stopped()) return terminal_exit_status();
@@ -105,6 +106,7 @@ int main(int argc, char **argv) {
     native_workspace_destroy(&app);
     native_terminals_destroy(&app);
     native_observations_destroy(&app);
+    native_attention_destroy(&app);
     native_plan_destroy(&app);
     statistics_destroy(&app);
     return index;

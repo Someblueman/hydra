@@ -7,6 +7,14 @@ cmd_workflow() {
             _load_lib workflow_tui
             workflow_tui_data
             ;;
+        attention)
+            _load_lib workflow_attention
+            workflow_attention "$@"
+            ;;
+        attention-data)
+            _load_lib workflow_attention
+            workflow_attention_data "$@"
+            ;;
         --workspace-links)
             [ "$#" -eq 1 ] || return 2
             _load_lib workflow_links
@@ -47,6 +55,21 @@ cmd_workflow() {
             "$_cw_core" statistics-compare "$@"
             ;;
         plan) shift; cmd_workflow_plan "$@" ;;
+        review)
+            shift
+            _load_lib workflow_review
+            workflow_review "$@"
+            ;;
+        --review-parse)
+            [ "$#" -eq 3 ] || return 2
+            case "$3" in normalized|runtime|data) ;; *) return 2 ;; esac
+            workflow_parse "$2" "$3"
+            ;;
+        review-data)
+            shift
+            [ "$#" -eq 13 ] || [ "$#" -eq 14 ] || return 2
+            cmd_fleet_dispatch workflow-review-data "$@"
+            ;;
         -h|--help|'')
             printf '%s\n' \
                 'Usage: hydra workflow list' \
@@ -54,10 +77,13 @@ cmd_workflow() {
                 '       hydra workflow validate <id|path>' \
                 '       hydra workflow dry-run <id|path>' \
                 '       hydra workflow run <id|path>' \
+                '       hydra workflow review <project> <run> <step> <attempt> <revision> [references-json]' \
+                '       hydra workflow review[-data] KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256 [REFERENCES_JSON]' \
                 '       hydra workflow plan --help' \
                 '       hydra workflow statistics-data' \
                 '       hydra workflow statistics-json' \
                 '       hydra workflow statistics-compare <left.tsv> <right.tsv> [--format json|text]' \
+                '       hydra workflow attention --json' \
                 '       hydra workflow status <run-id> [--json]' \
                 '       hydra workflow cancel <run-id>' \
                 '       hydra workflow resume <run-id>' \

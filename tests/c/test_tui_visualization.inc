@@ -5,6 +5,7 @@ static void test_visualization(const char *tui, const char *hydra, const char *f
     setenv("HYDRA_TEST_OVERVIEW", "1", 1);
     result(open_session(&session, tui, hydra, fake_bin, 140, 40) == 0, "open visualization terminal");
     unsetenv("HYDRA_TEST_OVERVIEW");
+    (void)wait_for_model(&session);
     result(wait_for_marker(&session, "QUEUE DEPTH", 1000), "overview lays out real snapshot statistics");
     mouse_input(&session, "\033[<0;10;13M");
     result(wait_for_marker(&session, "Observed: STALE", 1000), "overview mouse selects the head row");

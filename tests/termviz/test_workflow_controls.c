@@ -89,7 +89,7 @@ int main(void) {
     tv_format(worker, sizeof(worker), "%s", H("path", "operator-worker"));
     hf_trim(worker);
     tv_format(pids, sizeof(pids), "%s", RUN("tmux", "list-panes", "-a", "-F", "#{pane_pid}"));
-    tv_format(evidence, sizeof(evidence), "%s/build/workspace-control-evidence", f.root);
+    tv_format(evidence, sizeof(evidence), "%s/workspace-control-evidence", f.build);
     tv_mkdir(evidence);
     tv_format(effects, sizeof(effects), "%s/effects", f.base);
     tv_format(effect, sizeof(effect), "%s/effect.sh", f.base);
@@ -125,6 +125,7 @@ int main(void) {
         tv_format(decision, sizeof(decision), "%s/approvals/%s/decision/action", run_dir, request);
         hf_open(&f, &s);
         U("A CONVERSATION", 3);
+        U("Observed: LIVE", 3);
         S("Ca");
         U("INPUT TO AGENT", 3);
         tv_pump(&s, .3);

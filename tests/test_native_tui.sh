@@ -278,6 +278,115 @@ contains '"status": "active"' "$test_root/basic-list.json" "basic list reports l
 contains 'H	clean	session-clean	none	-	-	active	live' "$test_root/native-list.tsv" "native list agrees on live clean status"
 contains 'R	malformed-state	malformed' "$test_root/native-list.tsv" "native list preserves malformed-state evidence"
 
+# A branch lookup includes stopped records and returns the first directory in
+# glob order. Do not replace that identity with the active row's directory.
+boundary_home="$test_root/boundary-home"
+boundary_repo="$test_root/boundary-repo"
+boundary_project=project_ffffffffffffffff
+mkdir -p "$boundary_home" "$boundary_repo/.git/hydra"
+git -C "$boundary_repo" init -q
+printf '%s\n' "$boundary_project" > "$boundary_repo/.git/hydra/project-id"
+boundary_heads="$boundary_home/state/v2/projects/$boundary_project/heads"
+duplicate_head="$(seed_state_head "$boundary_home" "$boundary_project" "$boundary_repo" duplicate session-duplicate none)"
+first_head=head_0000000000000000
+cp -R "$boundary_heads/$duplicate_head" "$boundary_heads/$first_head"
+printf '%s\n' "$first_head" > "$boundary_heads/$first_head/head-id"
+printf '%s\n' stopped > "$boundary_heads/$first_head/desired-state"
+first_instance="$(cat "$boundary_heads/$first_head/current-instance")"
+for boundary_dir in "$boundary_heads/$first_head" "$boundary_heads/$first_head/instances/$first_instance"; do
+    printf '%s\n' headless > "$boundary_dir/terminal-mode"
+    printf '%s\n' - > "$boundary_dir/session"
+done
+legacy_head="$(seed_state_head "$boundary_home" "$boundary_project" "$boundary_repo" legacy session-legacy none)"
+legacy_instance="$(cat "$boundary_heads/$legacy_head/current-instance")"
+rm "$boundary_heads/$legacy_head/terminal-mode" "$boundary_heads/$legacy_head/instances/$legacy_instance/terminal-mode"
+invalid_head="$(seed_state_head "$boundary_home" "$boundary_project" "$boundary_repo" invalid-binding session-invalid none)"
+invalid_instance="$(cat "$boundary_heads/$invalid_head/current-instance")"
+printf '%s\n' head_bad > "$boundary_heads/$invalid_head/head-id"
+printf '%s\n' instance_bad > "$boundary_heads/$invalid_head/instances/$invalid_instance/instance-id"
+printf '%s\n' broken > "$boundary_heads/$invalid_head/terminal-mode"
+(cd "$boundary_repo" && PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" \
+    FAKE_TMUX_SESSIONS="session-duplicate
+session-legacy
+session-invalid" HYDRA_HOME="$boundary_home" \
+    "$repo_root/bin/hydra" tui --data) > "$test_root/boundaries.tsv"
+assert_equal "$first_head stopped unavailable" \
+    "$(awk -F '\t' '$1 == "H" && $2 == "duplicate" { print $25, $23, $8 }' "$test_root/boundaries.tsv")" \
+    "native lookup preserves the stopped first-match identity and mode"
+assert_equal 'active live' \
+    "$(awk -F '\t' '$1 == "H" && $2 == "legacy" { print $7, $8 }' "$test_root/boundaries.tsv")" \
+    "missing terminal mode retains legacy interactive observation"
+assert_equal 'active live' \
+    "$(awk -F '\t' '$1 == "H" && $2 == "invalid-binding" { print $7, $8 }' "$test_root/boundaries.tsv")" \
+    "invalid terminal mode retains the observation fallback"
+contains 'R	malformed-state	invalid-binding' "$test_root/boundaries.tsv" \
+    "invalid head and instance bindings retain recovery evidence"
+"$tui" --headless-fixture "$test_root/boundaries.tsv" --size 80x24 > /dev/null
+assert_success $? "native renderer accepts the preserved identity boundary snapshot"
+
+# An invalid first directory must not make lookup fall through to a later valid
+# identity. The malformed name also exercises literal whitespace and backslashes.
+bad_name="head_000 bad\\name"
+bad_later="$(seed_state_head "$boundary_home" "$boundary_project" "$boundary_repo" bad-name session-bad none)"
+cp -R "$boundary_heads/$duplicate_head" "$boundary_heads/$bad_name"
+printf '%s\n' bad-name > "$boundary_heads/$bad_name/branch"
+printf '%s\n' "$bad_name" > "$boundary_heads/$bad_name/head-id"
+(cd "$boundary_repo" && PATH="$repo_root/tests/fixtures/tui/fake-bin:$PATH" \
+    HYDRA_HOME="$boundary_home" "$repo_root/bin/hydra" tui --data) > "$test_root/bad-name.tsv"
+contains 'R	malformed-state	bad-name' "$test_root/bad-name.tsv" "invalid directory identity remains explicit"
+if grep -Fq "$bad_later" "$test_root/bad-name.tsv"; then
+    assert_success 1 "invalid first identity does not select a later valid head"
+else
+    assert_success 0 "invalid first identity does not select a later valid head"
+fi
+
+# Change a later branch after rows are enumerated, when observing the first
+# worktree. A remembered directory must not become a stale identity binding.
+vanish_home="$test_root/vanish-home"
+vanish_repo="$test_root/vanish-repo"
+vanish_project=project_1111111111111111
+mkdir -p "$vanish_home" "$vanish_repo" "$test_root/vanish-bin"
+git -C "$vanish_repo" init -q
+mkdir -p "$vanish_repo/.git/hydra"
+printf '%s\n' "$vanish_project" > "$vanish_repo/.git/hydra/project-id"
+vanish_heads="$vanish_home/state/v2/projects/$vanish_project/heads"
+for vanish_branch in first vanishing; do
+    vanish_old="$(seed_state_head "$vanish_home" "$vanish_project" "$vanish_repo" "$vanish_branch" "session-$vanish_branch" none)"
+    case "$vanish_branch" in first) vanish_id=head_1111 ;; *) vanish_id=head_2222 ;; esac
+    mv "$vanish_heads/$vanish_old" "$vanish_heads/$vanish_id"
+    printf '%s\n' "$vanish_id" > "$vanish_heads/$vanish_id/head-id"
+    printf '%s\n' "$vanish_repo" > "$vanish_heads/$vanish_id/worktree"
+done
+cat > "$test_root/vanish-bin/git" <<'GIT'
+#!/bin/sh
+if [ "${1:-}" = -C ] && [ "${3:-}" = status ] && [ -f "$HYDRA_TEST_CHANGE_MARKER" ]; then
+    rm "$HYDRA_TEST_CHANGE_MARKER"
+    case "$HYDRA_TEST_CHANGE_ACTION" in
+        remove) rm "$HYDRA_TEST_CHANGE_BRANCH" ;;
+        rename) printf '%s\n' renamed > "$HYDRA_TEST_CHANGE_BRANCH" ;;
+    esac
+fi
+exec "$HYDRA_TEST_REAL_GIT" "$@"
+GIT
+chmod +x "$test_root/vanish-bin/git"
+vanish_real_git="$(command -v git)"
+for vanish_action in remove rename; do
+    printf '%s\n' vanishing > "$vanish_heads/head_2222/branch"
+    : > "$test_root/change-marker"
+    (cd "$vanish_repo" && PATH="$test_root/vanish-bin:$repo_root/tests/fixtures/tui/fake-bin:$PATH" \
+        HYDRA_TEST_REAL_GIT="$vanish_real_git" HYDRA_TEST_CHANGE_MARKER="$test_root/change-marker" \
+        HYDRA_TEST_CHANGE_BRANCH="$vanish_heads/head_2222/branch" HYDRA_TEST_CHANGE_ACTION="$vanish_action" \
+        HYDRA_HOME="$vanish_home" "$repo_root/bin/hydra" tui --data) > "$test_root/vanish-$vanish_action.tsv"
+    if [ -f "$test_root/change-marker" ]; then vanish_changed=1; else vanish_changed=0; fi
+    assert_success "$vanish_changed" "$vanish_action fixture changes the record during row observation"
+    awk -F '\t' '$1 == "H" && $2 == "vanishing" {
+        seen++; if ($25 != "" || $12 != "" || $23 != "unavailable") bad=1
+    } END { exit !(seen == 1 && !bad) }' "$test_root/vanish-$vanish_action.tsv"
+    assert_success $? "$vanish_action after enumeration cannot reuse a stale head identity"
+    "$tui" --headless-fixture "$test_root/vanish-$vanish_action.tsv" --size 80x24 > /dev/null
+    assert_success $? "$vanish_action during observation retains a complete native snapshot"
+done
+
 changing_home="$test_root/changing-home"
 changing_repo="$test_root/changing-repo"
 changing_project=project_eeeeeeeeeeeeeeee
