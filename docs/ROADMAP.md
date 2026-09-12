@@ -84,6 +84,10 @@ review and revise its plan, explicitly approve execution, follow work and respon
 to questions, then inspect the changed files and verified result. `hydra tui` must
 also be a usable entry with no existing heads. Users should not need to understand
 initialization, spawn, worktree identities or environment variables to begin.
+Hydra is one control centre for local and remote agentic work. Provider terminals,
+execution location and transport are resources within that experience, not separate
+products the user must assemble. The follow-up installed-build feedback below is
+an acceptance blocker, not optional cosmetic polish.
 
 - [ ] **U1 — Keep ordinary onboarding out of the source tree.** In `dkvm`,
       `hydra init --no-agent --trust` created an untracked `.hydra/` directory.
@@ -117,6 +121,12 @@ initialization, spawn, worktree identities or environment variables to begin.
       without first running `init`, `spawn`, exporting variables, or constructing
       a plan file by hand. Missing providers and authentication have actionable
       states; entering the UI alone does not authorize agent work or repo commands.
+      Interactive task launch should enter or stay in the control centre with the
+      selected agent visible inside it; the reported `spawn --profile codex --prompt`
+      path currently takes the user straight into Codex instead. Make direct terminal
+      attachment an explicit expert choice, preserving documented noninteractive
+      contracts. Acceptance includes starting from both the UI and an interactive
+      CLI task launch without opening another terminal to recover Hydra navigation.
 - [ ] **U4 — Match the reviewed workspace mockups in actual use.** The two user
       references show (1) “HYDRA / PLAN TOGETHER”: narrow project navigation, a
       prominent interactive agent conversation, adjacent plan/dependency review
@@ -143,6 +153,74 @@ initialization, spawn, worktree identities or environment variables to begin.
       does not manually author the implementation or assemble workflow machinery.
       Keep shell-only fixtures and isolated failure probes as engineering checks;
       their success cannot substitute for this product acceptance exercise.
+- [ ] **U6 — Stable rendering without flicker.** The user reports distracting
+      flicker during normal TUI operation. Diagnose the live render/refresh path;
+      avoid visible clearing and repainting of unchanged content, and preserve
+      cursor, input, selection and scroll during updates. Acceptance: observe the
+      installed UI while idle, streaming agent output, polling local/remote state,
+      switching panes and resizing. Retain a terminal recording to assess flicker;
+      static screenshots and passing rendering tests cannot establish this result.
+- [ ] **U7 — Readable details and actionable recovery.** The supplied detail view
+      is an undifferentiated diagnostic dump. Present objective, agent, progress,
+      checks, changes and pending decisions in clearly grouped, wrapped sections;
+      keep raw IDs, source paths and confidence metadata in optional diagnostics.
+      Replace `dead-session / try-hydra / hydra doctor` with a plain-language account
+      of what stopped, what is known about retained work, and an appropriate in-app
+      inspection or recovery action. Do not infer lost work or task failure solely
+      from a missing terminal. Acceptance: the user can explain the problem and
+      choose the next action without decoding an internal status or consulting CLI
+      help; destructive actions remain separate from restoring access to work.
+- [ ] **U8 — Consistent, discoverable navigation.** The user reports that Tab pane
+      switching does not work as expected despite visible hints. Establish one
+      interaction model across workspace, details, overview, coordination and agent
+      panes: Tab/Shift-Tab for pane focus, arrows for selection, Enter to open or
+      activate, and Esc to return, with visible focus and contextual help. Resolve
+      how agent input receives Tab versus how the user exits agent focus; make that
+      boundary discoverable and preserve provider input behavior. Avoid requiring
+      users to memorize unrelated single-letter modes or hidden prefix sequences.
+      Acceptance: exercise forward/backward navigation, dialogs and attached agents
+      with actual key events; displayed hints must match behavior in each context.
+- [ ] **U9 — Useful overview and coordination.** The reported views show sparse
+      counters, empty charts and unexplained `unavailable` labels without explaining
+      the task. Overview should answer what is running, what needs attention, what
+      changed and what finished, with direct routes to conversation and evidence.
+      Coordination should explain assignments, dependencies, blockers and handoffs
+      for the selected objective. For a single agent or no workflow, explain that
+      state and offer a relevant next action instead of an empty dashboard. Identify
+      why information is unavailable and distinguish unknown values from zero;
+      never invent progress or coordination from process liveness. Acceptance:
+      inspect real empty, single-agent and multi-agent work, including a blocked
+      dependency, and find the required decision/result without reading raw counters.
+- [ ] **U10 — Guided remote setup inside Hydra.** Adding a machine should let the
+      user select an SSH destination, inspect connectivity and requirements, review
+      a proposed installation, and authorize Hydra to provision a compatible remote
+      runtime. Do not require manual remote Hydra installation or package building
+      as the normal onboarding journey. Build on the existing qualification and
+      pinned-bootstrap contracts, including platform matching, verified bytes,
+      explicit host-key trust and scoped installation. Guide provider sign-in and
+      remote project selection or explicitly authorized source setup separately;
+      SSH access does not establish provider authentication or repository presence.
+      Acceptance: onboard a supported host with no Hydra installation through the
+      control centre, launch a real agent task and reconnect to it. Also test an
+      existing installation, missing prerequisites, failed sign-in and interrupted
+      setup with clear progress and safe continuation. Preserve unrelated installs,
+      credentials and work; do not silently copy secrets or accept changed keys.
+- [ ] **U11 — One workspace across local and remote execution.** Unify ordinary
+      and Fleet UI navigation, agent interaction, task details, attention and review.
+      Represent local/remote as a visible location and filter within the same control
+      centre; users should not need to discover `fleet tui` to see remote work.
+      Keep host identity and connectivity clear at action time and retain exact
+      instance checks, host-specific capabilities and execution ownership. Existing
+      CLI automation contracts can remain while the interactive experience is unified.
+      Acceptance: follow simultaneous local and remote tasks, converse with either
+      agent, inspect results and handle remote disconnection without switching
+      applications or learning another keymap. Stale remote observations must not
+      authorize actions or make ongoing work appear successfully completed.
+
+The nine follow-up findings map to U3 (control-centre launch), U6 (flicker), U7
+(details and recovery), U8 (keybindings), U9 (coordination and overview), U10 (remote
+onboarding), and U11 (one local/remote UI). Extend U5's real-task acceptance to include
+onboarding a remote machine and following local and remote work in that same UI.
 
 Delivery boundary: these are outstanding roadmap requirements, not implemented
 fixes. Close them with observed first-use, visual and agentic acceptance from the
