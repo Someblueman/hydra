@@ -150,6 +150,50 @@ tui_native_emit_invalid_heads() {
     done
 }
 
+# Attach the first matching head ID to each state row in one directory pass.
+# Include stopped and malformed records, as state_v2_find_head_by_branch does.
+# The index exists only for this observation; row readers recheck the binding.
+tui_native_index_heads() (
+    _tnih_project_dir="$1"
+    set --
+    if cd "$_tnih_project_dir/heads" 2>/dev/null; then
+        for _tnih_dir in head_*; do
+            [ -d "$_tnih_dir" ] || continue
+            set -- "$@" "$_tnih_dir"
+        done
+    fi
+    awk '
+        function escaped(value, result, i, c) {
+            result = ""
+            for (i = 1; i <= length(value); i++) {
+                c = substr(value, i, 1)
+                if (c == "\\") result = result "\\\\"
+                else if (c == " ") result = result "\\040"
+                else if (c == "\t") result = result "\\t"
+                else if (c == "\n") result = result "\\n"
+                else result = result c
+            }
+            return result
+        }
+        BEGIN {
+            for (i = 1; i < ARGC; i++) {
+                file = ARGV[i] "/branch"
+                if ((getline branch < file) > 0 && !("b" branch in heads)) heads["b" branch] = ARGV[i]
+                close(file)
+            }
+            ARGC = 1
+            count = split(ENVIRON["HYDRA_TUI_SESSION_SNAPSHOT"], names, "\n")
+            for (i = 1; i <= count; i++) if (names[i] != "") live[names[i]] = 1
+        }
+        {
+            branch = $0
+            sub(/^ +/, "", branch); sub(/ .*/, "", branch)
+            id = (("b" branch in heads) ? escaped(heads["b" branch]) : "-")
+            print id " " (($2 in live) ? "active" : "dead") " " $0
+        }
+    ' "$@"
+)
+
 # Protocol v2: one H row per head and one R row per recovery finding.
 # Fields never contain tabs or newlines. The first row is the protocol handshake.
 tui_native_emit_data() {
@@ -160,6 +204,7 @@ tui_native_emit_data() {
     if [ -n "$_tned_project_id" ]; then
         _tned_project_dir="$(state_v2_project_dir "$_tned_project_id" 2>/dev/null || true)"
     fi
+    _tned_queue_dir="$HYDRA_HOME/state/v2/projects/$_tned_project_id/queue"
     _tned_notification_source="$(notify_config_file 2>/dev/null || true)"
     _tned_notification_source_safe="$(tui_native_safe_field "$_tned_notification_source")"
     _tned_notification_count=0
@@ -167,18 +212,25 @@ tui_native_emit_data() {
         _tned_notification_count="$(awk 'NF == 3 { n++ } END { print n + 0 }' "$_tned_notification_source" 2>/dev/null || printf '0\n')"
     fi
     _tned_state_source="$(tui_native_safe_field "$_tned_project_dir")"
-    _tned_snapshot_rows="$(state_list_heads | HYDRA_TUI_SESSION_SNAPSHOT="${_TMUX_SNAPSHOT_SESSIONS:-}" awk '
-        BEGIN {
-            sessions = ENVIRON["HYDRA_TUI_SESSION_SNAPSHOT"]
-            count = split(sessions, names, "\n")
-            for (i = 1; i <= count; i++) if (names[i] != "") live[names[i]] = 1
-        }
-        { print (($2 in live) ? "active" : "dead") " " $0 }
-    ')"
+    _tned_snapshot_rows="$(state_list_heads)"
+    _tned_snapshot_rows="$(printf '%s\n' "$_tned_snapshot_rows" |
+        HYDRA_TUI_SESSION_SNAPSHOT="${_TMUX_SNAPSHOT_SESSIONS:-}" tui_native_index_heads "$_tned_project_dir")"
 
-    while IFS=' ' read -r _tned_status _tned_branch _tned_session _tned_ai _tned_group _tned_created _tned_deps _tned_pr _tned_extra; do
+    while IFS=' ' read -r _tned_encoded_id _tned_status _tned_branch _tned_session _tned_ai _tned_group _tned_created _tned_deps _tned_pr _tned_extra; do
         [ -n "$_tned_branch" ] || continue
-        _tned_mode="$(get_terminal_mode_for_branch "$_tned_branch" 2>/dev/null || echo interactive)"
+        _tned_head_id="" _tned_head_dir="" _tned_mode=interactive
+        if [ "$_tned_encoded_id" != - ]; then
+            _tned_head_id="$(printf '%b' "$_tned_encoded_id")"
+            _tned_head_dir="$(state_v2_head_dir "$_tned_project_id" "$_tned_head_id" 2>/dev/null || true)"
+            if [ -n "$_tned_head_dir" ] &&
+               [ "$(sed -n '1p' "$_tned_head_dir/branch" 2>/dev/null || true)" != "$_tned_branch" ]; then
+                _tned_head_id="" _tned_head_dir=""
+            fi
+        fi
+        if [ -n "$_tned_head_dir" ]; then
+            _tned_mode="$(sed -n '1p' "$_tned_head_dir/terminal-mode" 2>/dev/null || true)"
+            case "$_tned_mode" in headless|interactive) ;; *) _tned_mode=interactive ;; esac
+        fi
         _tned_liveness=stopped
         if [ "$_tned_mode" = headless ]; then
             _tned_status=active
@@ -195,14 +247,7 @@ tui_native_emit_data() {
         _tned_queue=0 _tned_resources=0 _tned_diff=0 _tned_gates=0 _tned_approved=0
         _tned_source="$_tned_project_dir"
         _tned_source_safe="$_tned_state_source"
-        _tned_head_id=""
-        _tned_head_dir=""
-
-        if [ -n "$_tned_project_id" ]; then
-            _tned_head_id="$(state_v2_find_head_by_branch "$_tned_project_id" "$_tned_branch" 2>/dev/null || true)"
-        fi
         if [ -n "$_tned_head_id" ]; then
-            _tned_head_dir="$(state_v2_head_dir "$_tned_project_id" "$_tned_head_id" 2>/dev/null || true)"
             _tned_instance="$(sed -n '1p' "$_tned_head_dir/current-instance" 2>/dev/null || true)"
             _tned_desired="$(sed -n '1p' "$_tned_head_dir/desired-state" 2>/dev/null || echo unavailable)"
             _tned_profile="$(sed -n '1p' "$_tned_head_dir/profile" 2>/dev/null || printf '%s' "$_tned_profile")"
@@ -236,7 +281,6 @@ tui_native_emit_data() {
                 [ -z "$(sed -n '1p' "$_tned_project_dir/resources/$_tned_head_id/compose-project" 2>/dev/null || true)" ] || _tned_resources=$((_tned_resources + 1))
                 [ -z "$(sed -n '1p' "$_tned_project_dir/resources/$_tned_head_id/database" 2>/dev/null || true)" ] || _tned_resources=$((_tned_resources + 1))
             fi
-            _tned_queue_dir="$(_get_queue_dir)"
             if [ -d "$_tned_queue_dir" ]; then
                 _tned_queue="$(grep -l -F -x "branch=$_tned_branch" "$_tned_queue_dir"/*.queue 2>/dev/null | awk 'END { print NR + 0 }')"
             fi
