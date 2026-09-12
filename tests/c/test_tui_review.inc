@@ -36,12 +36,14 @@ static bool review_owner_pids(const char *path, pid_t child) {
 }
 
 static int review_cancel_owner(const char *pids, const char *scratch, const char *cleaned, const char *mode) {
-    bool nested = !strcmp(mode, "nested"); pid_t child = -1;
-    signal(SIGTERM, nested ? review_owner_signal : SIG_IGN);
-    signal(SIGINT, nested ? review_owner_signal : SIG_IGN);
-    signal(SIGHUP, nested ? review_owner_signal : SIG_IGN);
+    bool cooperative = !strcmp(mode, "nested"), orphan = !strcmp(mode, "orphan");
+    bool nested = cooperative || orphan || !strcmp(mode, "resistant"); pid_t child = -1;
+    signal(SIGTERM, cooperative ? review_owner_signal : SIG_IGN);
+    signal(SIGINT, cooperative ? review_owner_signal : SIG_IGN);
+    signal(SIGHUP, cooperative ? review_owner_signal : SIG_IGN);
     if (nested && (child = review_owner_child(scratch)) < 0) return 2;
     if (!review_owner_pids(pids, child)) { review_owner_reap(child, false); return 2; }
+    if (orphan) return 0; /* Separate-group child retains stdout after its owner exits. */
     while (!review_owner_stopped) sleep_ms(10);
     review_owner_reap(child, true);
     return rmdir(scratch) || !write_marker_file(cleaned, "nested child reaped; scratch removed\n") ? 2 : 0;
@@ -319,19 +321,38 @@ static bool review_separate_group(const char *path) {
         getpgid((pid_t)child) == (pid_t)child && owner != child;
 }
 
+static void wait_review_cancellation(struct session *session, unsigned i) {
+    if (i == 5U) result(wait_for_marker(session, "Review unavailable", 14500), "orphaned stdout is cleaned up at the review timeout");
+    else if (i == 0U || i == 3U) result(wait_for_marker(session, "Selection or revision changed", 1500), "candidate change completes nested cleanup");
+    else result(wait_for_exit(session) == 0 && terminal_restored(session), "cancelled capture quit restores terminal");
+}
+
 static void cancel_active_review(struct session *session, struct review_fixture *fixture,
                                  const char *scratch, const char *cleaned, unsigned i) {
-    const char *keys[] = {"]", "\033q", "q"};
-    if (i < 2U) result(review_separate_group(fixture->pids), "nested capture child has its own process group");
+    const char *keys[] = {"]", "\033q", "q", "]", "\033q", ""};
+    if (i != 2U && i != 5U) result(review_separate_group(fixture->pids), "nested capture child has its own process group");
     drain_output(session->master); long long started = monotonic_ms();
     write_input(session->master, keys[i], strlen(keys[i]));
-    if (!i) result(wait_for_marker(session, "Selection or revision changed", 1500), "candidate change completes nested cleanup");
-    else result(wait_for_exit(session) == 0 && terminal_restored(session), "cancelled capture quit restores terminal");
+    wait_review_cancellation(session, i);
+    long long gone_deadline = monotonic_ms() + 400;
+    while (!pids_gone(fixture->pids) && monotonic_ms() < gone_deadline) sleep_ms(10);
     long long elapsed = monotonic_ms() - started;
-    result(elapsed < 1500 && pids_gone(fixture->pids), "capture cancellation is bounded and reaps owned processes");
+    result(elapsed < (i == 5U ? 14500 : 1500) && pids_gone(fixture->pids), "capture cancellation is bounded and reaps owned processes");
     if (i < 2U) result(marker_file_exists(cleaned) && !marker_file_exists(scratch), "producer removes scratch after reaping its separate group");
     else result(elapsed >= 650, "TERM-resistant capture reaches bounded KILL escalation");
-    if (!i) review_stop(session); else close_session(session);
+    if (i == 0U || i == 3U || i == 5U) review_stop(session); else close_session(session);
+}
+
+/* Cleanup only this fixture's escaped group even when the regression fails. */
+static void cleanup_review_child(const char *path, pid_t ui_session) {
+    FILE *file = fopen(path, "r"); long owner = 0, child = 0;
+    if (!file) return;
+    bool valid = fscanf(file, "%ld\n%ld", &owner, &child) == 2;
+    fclose(file);
+    if (valid && owner > 1 && owner <= INT_MAX && child > 1 && child <= INT_MAX &&
+        (getsid((pid_t)child) == (pid_t)owner || getsid((pid_t)child) == ui_session) &&
+        getpgid((pid_t)child) == (pid_t)child)
+        (void)kill(-(pid_t)child, SIGKILL);
 }
 
 static void review_cancellation_case(const char *tui, const char *hydra, const char *executable, unsigned i) {
@@ -340,12 +361,14 @@ static void review_cancellation_case(const char *tui, const char *hydra, const c
     snprintf(scratch, sizeof(scratch), "%s/scratch", fixture.directory);
     snprintf(cleaned, sizeof(cleaned), "%s/cleaned", fixture.directory);
     setenv("HYDRA_REVIEW_CANCEL_OWNER", executable, 1); setenv("HYDRA_REVIEW_CANCEL_SCRATCH", scratch, 1);
-    setenv("HYDRA_REVIEW_CANCEL_CLEANED", cleaned, 1); setenv("HYDRA_REVIEW_CANCEL_MODE", i < 2U ? "nested" : "ignore", 1);
+    setenv("HYDRA_REVIEW_CANCEL_CLEANED", cleaned, 1);
+    setenv("HYDRA_REVIEW_CANCEL_MODE", i < 2U ? "nested" : i == 2U ? "ignore" : i == 5U ? "orphan" : "resistant", 1);
     if (!review_start(&session, tui, hydra, &fixture, 80, 24)) { close_session(&session); goto cleanup; }
     write_input(session.master, "r", 1U);
     result(wait_for_marker(&session, "Loading exact review", 1000) && wait_for_file(fixture.pids, 1000), "cancellable producer is live");
     cancel_active_review(&session, &fixture, scratch, cleaned, i);
 cleanup:
+    cleanup_review_child(fixture.pids, session.pid);
     unsetenv("HYDRA_REVIEW_CANCEL_OWNER"); unsetenv("HYDRA_REVIEW_CANCEL_SCRATCH");
     unsetenv("HYDRA_REVIEW_CANCEL_CLEANED"); unsetenv("HYDRA_REVIEW_CANCEL_MODE");
     unlink(cleaned); rmdir(scratch); review_cleanup(&fixture);
@@ -354,7 +377,7 @@ cleanup:
 static void test_review_cancellation(const char *tui, const char *hydra, const char *self) {
     char executable[PATH_MAX];
     if (!result(realpath(self, executable) != NULL, "resolve nested capture fixture")) return;
-    for (unsigned i = 0U; i < 3U; i++) review_cancellation_case(tui, hydra, executable, i);
+    for (unsigned i = 0U; i < 6U; i++) review_cancellation_case(tui, hydra, executable, i);
 }
 
 static int review_tests_only(const char *tui, const char *hydra, const char *self) {

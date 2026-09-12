@@ -220,7 +220,11 @@ static bool fleet_key(struct app *app, char key) {
     if (!app->fleet) return false;
     if (app->view == 4 && native_control_key(app, key)) return true;
     switch (key) {
-        case 'a': if (native_terminal_attach(app)) { app->view=7; native_workspace_show_terminal(app, true); } return true;
+        case 'a':
+            if (native_workspace_init(app) && native_terminal_attach(app)) {
+                app->view=7; native_workspace_show_terminal(app, true);
+            }
+            return true;
         case 'c': fleet_action(app); return true;
         case ':': case 'p': case ' ': case 'A': case 'x': case 'G':
             copy_text(app->notice, sizeof(app->notice), "Fleet: a attach, c interrupt, v views, / search, q quit"); return true;

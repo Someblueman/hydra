@@ -51,7 +51,7 @@ struct native_capture {
     struct timespec started, stop_started;
     long budget_ms;
     size_t bytes;
-    bool eof, reaped, failed, timed_out, stopping, killed;
+    bool eof, reaped, failed, timed_out, stopping;
 };
 enum tone { TONE_BASE, TONE_BORDER, TONE_TITLE, TONE_SELECTED, TONE_WARNING, TONE_STRONG };
 struct statistics_view {

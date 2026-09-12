@@ -41,6 +41,7 @@ static bool wait_for_marker_capture(struct session *, const char *, long, char *
 static int wait_for_exit(struct session *);
 static void close_session(struct session *);
 static bool terminal_restored(struct session *);
+static bool wait_for_screen_text(struct session *, const char *, int, int, long);
 static ssize_t read_marker_output(struct session *, char *, size_t);
 static void drain_start_output(struct session *);
 static bool measure_unsigned(const char *value, unsigned *result) {
@@ -702,8 +703,9 @@ static void test_fleet_attach(const char *tui, const char *hydra, const char *fa
     }
     result(strstr(captured, "fleet\nattach\nbuilder\n--project\n/work/project\n--instance\ninstance_aaaaaaaaaaaaaaaaaaaa\n--\nfeature-build\n") != NULL,
            "fleet attach uses exact host, project, and instance argv");
-    (void)kill(session.pid, SIGTERM);
-    (void)wait_for_exit(&session);
+    result(wait_for_screen_text(&session, "FAKE REMOTE ATTACH", 80, 24, 2000), "fleet attachment renders its terminal in the initialized workspace");
+    write_input(session.master, "\002q", 2U);
+    result(wait_for_exit(&session) == 0 && terminal_restored(&session), "fleet attachment exits normally and restores terminal state");
     close_session(&session);
     (void)unlink(argv_path);
     (void)unsetenv("HYDRA_TEST_FLEET_FRESH");
@@ -855,6 +857,37 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 #include "test_tui_review.inc"
 #include "test_tui_measure.inc"
 
+static bool screen_has_text(const struct measure_screen *screen, const char *text) {
+    const struct tv_canvas *canvas = screen->terminal.alternate_active ?
+        &screen->terminal.alternate.canvas : &screen->terminal.primary.canvas;
+    for (int y = 0; y < canvas->height; y++) {
+        char line[MEASURE_COLUMNS + 1];
+        for (int x = 0; x < canvas->width; x++) {
+            uint32_t glyph = canvas->cells[(size_t)y * (size_t)canvas->stride + (size_t)x].glyph;
+            line[x] = glyph >= 32 && glyph <= 126 ? (char)glyph : ' ';
+        }
+        line[canvas->width] = '\0';
+        if (strstr(line, text)) return true;
+    }
+    return false;
+}
+
+/* Workspace redraws can place cursor controls between the words of a label. */
+static bool wait_for_screen_text(struct session *session, const char *text, int columns, int rows, long timeout_ms) {
+    struct measure_screen *screen = measure_screen_create(columns, rows);
+    long long deadline = monotonic_ms() + timeout_ms;
+    bool found = false;
+    if (!screen) return false;
+    while (!found && monotonic_ms() < deadline) {
+        char bytes[4096]; ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
+        if (length > 0) tv_term_feed(&screen->terminal, bytes, (size_t)length);
+        else sleep_ms(10);
+        found = screen_has_text(screen, text);
+    }
+    free(screen);
+    return found;
+}
+
 static int special_test_mode(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--item10-semantic-controls")) return measure_semantic_controls();
     if (argc == 7 && !strcmp(argv[1], "--item10-session")) return measure_session(argv[2], argv[3], argv[4], argv[5], argv[6]);
@@ -880,6 +913,12 @@ int main(int argc, char **argv) {
         return 2;
     }
     if (getenv("HYDRA_TEST_REVIEW_ONLY")) return review_tests_only(argv[1], argv[2], argv[0]);
+    if (getenv("HYDRA_TEST_LIFECYCLE_ONLY")) {
+        test_review_cancellation(argv[1], argv[2], argv[0]);
+        test_fleet_attach(argv[1], argv[2], argv[3]);
+        printf("Native lifecycle tests: %d passed, %d failed\n", tests - failures, failures);
+        return failures ? 1 : 0;
+    }
     printf("Running native TUI pseudo-terminal tests...\n");
     test_session_failure();
     test_themes(argv[1], argv[2], argv[3]);

@@ -1,10 +1,10 @@
 #!/bin/sh
 # The native helper owns bounded structured-data inspection; shell only routes it.
 workflow_attention() (
-    [ "$#" -eq 2 ] && [ "$2" = --json ] || {
+    if [ "$#" -ne 2 ] || [ "$2" != --json ]; then
         json_error "workflow attention" invalid_arguments "attention requires --json" "run hydra workflow --help"
         exit 1
-    }
+    fi
     _wa_project="$(hydra_get_project_id 2>/dev/null || true)"
     [ -n "$_wa_project" ] || {
         json_error "workflow attention" not_initialized "Hydra project identity is unavailable" "run hydra init"
