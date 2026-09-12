@@ -292,6 +292,16 @@ onboarding a remote machine and following local and remote work in that same UI.
 The subsequent six findings are covered by U13 (statistics), U14 (output), U15
 (coordination and overview), U16 (attachment), and U17 (conversation-to-plan flow).
 
+- [ ] **U18 — Automated usability journeys and discoverability evaluation.**
+      Implement the staged [usability evaluation plan](USABILITY-TESTING.md), reusing
+      existing PTY infrastructure against a prefix-installed product. First automate
+      clean entry, navigation, attachment exit and head removal with retained failure
+      evidence. Add bounded goal-driven screen-only trials and separate real-provider
+      and remote-onboarding qualification. Acceptance: one local command produces
+      a report with reproducible actions, captures and independent outcome checks;
+      known UX defects fail their desired-behavior checks. Human visual review and
+      live qualification remain explicit, not replaced by fixture passes or an AI score.
+
 Delivery boundary: these are outstanding roadmap requirements, not implemented
 fixes. Close them with observed first-use, visual and agentic acceptance from the
 installed build. Update the getting-started and evaluation guides to the delivered
