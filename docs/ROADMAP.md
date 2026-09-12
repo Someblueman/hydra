@@ -232,10 +232,65 @@ an acceptance blocker, not optional cosmetic polish.
       The UI remains the interaction surface, accurately reflects each outcome, and
       never requires a successful-action shell detour or a return-to-UI keypress.
 
+- [ ] **U13 — Shared navigation and meaningful statistics.** Statistics currently
+      drops the other tabs and shows an empty recorded-workflow dashboard while an
+      agent session exists. Retain the common navigation, selected work and a clear
+      return path. Explain which activity is covered: a standalone agent session is
+      not automatically a recorded workflow run. Show relevant available activity,
+      distinguish no history from filters excluding data or unsupported measurements,
+      and avoid large empty charts and unexplained `unavailable` fields. Acceptance:
+      navigate to and from statistics during standalone agent work and a recorded
+      workflow, with both empty and populated history, without losing context.
+- [ ] **U14 — Faithful, readable agent output.** The supplied output capture contains
+      repeated question marks replacing characters, long unwrapped lines and flattened
+      diffs. Preserve supported Unicode, terminal styling, line structure and readable
+      code/diff presentation through capture and rendering. Keep live terminal input
+      distinct from a read-only transcript; provider shortcut hints in captured text
+      must not imply they work in the transcript viewer. Acceptance: compare real
+      provider output with Hydra's view using Unicode, colored diffs, long lines,
+      scrolling and resize. No corrupted glyph runs, raw control sequences or missing
+      content; unsupported terminal behavior has an honest, readable fallback.
+- [ ] **U15 — Clear purposes for heads, overview and coordination.** Heads should
+      help select and manage agent work; overview should summarize objectives,
+      progress, decisions and results across that work; coordination should explain
+      actual assignments, dependencies and handoffs. Consolidate redundant views
+      where no distinct user task justifies them. Empty coordination must explain
+      why there is nothing to coordinate instead of presenting an unexplained blank.
+      The screenshot also shows an agent reporting a committed two-file change while
+      the summary says zero changed files. Inspect this mismatch: label uncommitted
+      changes separately from the task's full diff against its base, so a clean
+      worktree does not imply no delivered change. Acceptance: follow a standalone
+      task through commit, then a multi-agent objective through a blocked handoff;
+      each retained view answers a distinct useful question with current evidence.
+- [ ] **U16 — Attachment that can always be left cleanly.** The user reports being
+      unable to dismiss attachment; the screenshot shows duplicated agent content,
+      large dotted regions and competing terminal/workspace presentation. Diagnose
+      attach, sizing and screen restoration using the real terminal combination;
+      do not treat the screenshot as proof of a particular underlying cause. Provide
+      a visible way to leave agent input and close its view while retaining the task.
+      Keep one coherent workspace, accurate agent identity and predictable focus.
+      Acceptance: repeatedly attach, leave input, close the pane, switch layouts,
+      resize and reattach locally and remotely. No stuck input capture, duplicate
+      views, residual screen regions or lost work; closing a client does not kill
+      its execution owner. Verify leaving attachment with actual user input.
+- [ ] **U17 — Conversation-to-plan integration without manual JSON.** The current
+      plan page asks the user to load draft and policy files. Make agent-authored
+      planning part of the conversation: discuss an objective, generate a structured
+      draft, revise it and display steps, dependencies, checks and execution scope
+      alongside that conversation. Hydra should manage the draft's association with
+      the task and guide policy choices. Keep file import/export as an expert option.
+      Acceptance: create and revise an executable plan from a real conversation
+      without asking the user to write JSON, locate draft files or manually translate
+      agent prose. Validate and show the exact revision before explicit execution
+      approval; changed plans invalidate old approval. A conversational proposal or
+      standalone agent completion must not masquerade as a validated workflow.
+
 The nine follow-up findings map to U3 (control-centre launch), U6 (flicker), U7
 (details and recovery), U8 (keybindings), U9 (coordination and overview), U10 (remote
 onboarding), and U11 (one local/remote UI). Extend U5's real-task acceptance to include
 onboarding a remote machine and following local and remote work in that same UI.
+The subsequent six findings are covered by U13 (statistics), U14 (output), U15
+(coordination and overview), U16 (attachment), and U17 (conversation-to-plan flow).
 
 Delivery boundary: these are outstanding roadmap requirements, not implemented
 fixes. Close them with observed first-use, visual and agentic acceptance from the
