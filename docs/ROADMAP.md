@@ -302,6 +302,28 @@ The subsequent six findings are covered by U13 (statistics), U14 (output), U15
       known UX defects fail their desired-behavior checks. Human visual review and
       live qualification remain explicit, not replaced by fixture passes or an AI score.
 
+- [ ] **U19 — Explain features where users encounter them.** Users cannot be
+      expected to know what a workflow, head, plan, gate, coordination view or Fleet
+      means. Establish consistent user-facing language and explain each feature's
+      purpose, when it helps, and the next action in its entry point and empty state.
+      For example: “A workflow is a saved sequence of steps Hydra runs and tracks
+      for a task. Steps can run agents, execute tests or wait for your approval;
+      independent steps can run in parallel.” Show a concrete example such as
+      implement a change -> run tests -> wait for review, and explain when a single
+      agent conversation is sufficient. Distinguish an agent's proposed plan from
+      an approved executable workflow, and a live session from completed work.
+      Prefer familiar labels where they clarify the concept; preserve expert terms
+      in technical details and CLI documentation as needed. Explain consequences
+      before actions such as approval, interruption or removal. Use concise inline
+      explanations, contextual examples and optional deeper help rather than a
+      mandatory tutorial, jargon glossary as the only explanation, or permanent
+      walls of instructional text. Keep explanations aligned with shipped behavior.
+      Acceptance: a first-time user can explain what a workflow does, decide whether
+      their task needs one, start the appropriate path and understand its states
+      without leaving the control centre. Extend U18 with goal-driven comprehension
+      trials that do not give the evaluator feature names or shortcuts; verify that
+      its chosen action fits the goal, alongside human first-use review.
+
 Delivery boundary: these are outstanding roadmap requirements, not implemented
 fixes. Close them with observed first-use, visual and agentic acceptance from the
 installed build. Update the getting-started and evaluation guides to the delivered
