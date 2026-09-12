@@ -558,6 +558,13 @@ objective, not a claim about the current periodic snapshot implementation.
       and unknown cases, reporting false positives and missed signals separately.
       These measurements do not make an attention hint an accepted outcome.
 
+The I2/I3 local acceptance packet records reproducible behavior and bounded local
+fixture evidence in [attention-review-acceptance.md](attention-review-acceptance.md).
+Its accepted bounded measurements retain denominators, attribution, and
+late/missed observations; item 10's full matrix, idle budgets, and platform/T2/T3
+qualification remain open. These measurements are not a baseline, parity claim,
+or item 10 completion.
+
 Acceptance: publish reproducible baseline evidence for every matrix cell on macOS
 and Linux, with explicit unsupported measurements and separate live-agent coverage.
 The measurement slice completes with recorded budgets and correctness checks;
@@ -737,7 +744,10 @@ operator workflows, not a proposal for a new server, scheduler or provider manag
       Acceptance: annotated event/PTY cases cover stale sessions, duplicate events,
       two independent clients, acknowledgement and reconnect. Seen state never
       approves a gate; quiet output or a provider done badge never accepts a result.
-      Publish attention error measurements through item 10 before parity claims.
+      The current local slice documents exact `attention-data` identities, client
+      seen markers, stale-snapshot handling, and read-only review navigation. Final
+      annotated error/overhead measurements remain item 10 evidence; this item stays
+      open until that corpus and the combined repository checks are accepted.
 
 - [ ] **I3 — Compact review queue and external evidence references.** Navigate
       from a ready-to-review task to its exact diff, artifact inventory, checks,
@@ -747,7 +757,9 @@ operator workflows, not a proposal for a new server, scheduler or provider manag
       Acceptance: changed subjects invalidate readiness; failed checks, missing or
       expired artifacts and inaccessible links remain explicit. CLI/TUI identify
       the same task/attempt/subject. Opening an external reference cannot promote,
-      push, merge or substitute provider status for Hydra verification.
+      push, merge or substitute provider status for Hydra verification. The current
+      local slice records the public exact-field CLI routes and native review
+      bindings; final same-subject parity and combined acceptance remain pending.
 
 I1 builds on V1–V4 and existing interactive attach; tmux-free distributed
 qualification stays in T2/T3. I2/I3 reuse lifecycle, outcome and review contracts.

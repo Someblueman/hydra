@@ -104,6 +104,8 @@ with host/provider status before another explicit copy.
 ```sh
 hydra fleet handshake --json              # this installation
 hydra fleet attention --json               # read-only exact task attention rollup
+hydra fleet review KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256 [REFERENCES_JSON]
+hydra fleet review-data KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256 [REFERENCES_JSON]
 hydra fleet list --json --timeout 5 --jobs 4
 hydra fleet doctor ovh --json
 hydra fleet reconcile --json
@@ -137,8 +139,30 @@ offline hosts, and malformed observations produce explicit `unknown` rows. The
 `revision` field is a canonical semantic object string that includes identity,
 request expiry/state, execution/result/verification state, and excludes observation
 timestamps, so repeated polls and reordered or duplicate requests do not create
-new revisions. This slice does not infer provider questions or provide client-local
-acknowledgement; TUI navigation and local workflow approvals remain later slices.
+new revisions. Provider questions remain unclassified and unsupported observations
+stay `unknown`; this producer does not infer provider semantics. The native client
+adds per-client seen markers and attention/review navigation, while local workflow
+approval remains an explicit shell action and is never implied by seen state.
+
+`fleet review` and `fleet review-data` are read-only exact-subject routes. Pass all
+13 identity fields from `fleet attention-data` (use `-` for absent values); the
+requested revision and identity hashes bind the selected row and are distinct from
+the currently observed revision. `review` emits the versioned JSON envelope;
+`review-data` emits the bounded framed text document used by the native TUI. The
+review includes verified result, diff, artifact, check, provenance, and current
+approval context where available. It never approves, resumes, cancels, pushes,
+merges, or opens a reference as evidence.
+
+References are explicit and bounded: at most 16 `transcript`, `log`, or `pr`
+objects, with local previews capped at 4096 bytes. URLs remain supplied and
+unopened. Diff previews are capped at 128 KiB per head bundle and artifact/evidence
+previews share a 96 KiB budget; truncation and unavailable states remain visible.
+Review has a fixed 45-second overall producer deadline and uses bounded 5-second
+result observations. The native Fleet capture allows 60 seconds for that public
+producer; the local native capture allows 13 seconds. The general Fleet
+`--timeout` (1–300 seconds, default 5 seconds) applies to observation/SSH commands,
+not as a review readiness control. These bounds limit collection time and output;
+they do not establish remote/provider parity.
 
 Timeouts bound each SSH invocation, including command execution. Observation uses
 one handshake and one operation, each with its own deadline. Workers fill available
