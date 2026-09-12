@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-09-12
+
+### Added
+
+- Native attention views for bound workflow approvals, task results and Fleet
+  observations, with explicit freshness and coverage information.
+- Exact workflow and Fleet review routes, with native evidence navigation and
+  identity checks that keep review separate from approval and execution.
+- Remote head attachment in the native workspace, using the existing Fleet
+  transport and preserving terminal input during background observations.
+- Bounded interaction benchmark tools and semantic terminal observers. These
+  tools do not establish the outstanding performance budgets or live-host gates.
+
+### Fixed
+
+- Keep startup responsive during snapshot loading and resolve head directories
+  once per snapshot.
+- Initialize the workspace before attaching from a fresh Fleet view.
+- Cancel read-only captures across nested process groups and wait for actual
+  output closure, including TERM-resistant helpers and orphaned stdout.
+- Validate attention snapshots, preserve attachment client state, and handle
+  Linux path bounds and portability correctly.
+- Include the correct README in standalone termviz source exports.
+
+### Changed
+
+- Run a fixed fast PR lane with attachment and capture-cleanup regressions;
+  retain the full release gate for release qualification.
+- Consolidate documentation and retain explicit provider, remote-host,
+  performance and visual-polish follow-ups in the roadmap.
+
 ## [2.4.0] - 2026-09-11
 
 ### Added
@@ -946,7 +977,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/Someblueman/hydra/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/Someblueman/hydra/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/Someblueman/hydra/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/Someblueman/hydra/compare/v2.2.0...v2.2.1

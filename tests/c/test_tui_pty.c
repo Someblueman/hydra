@@ -42,6 +42,7 @@ static int wait_for_exit(struct session *);
 static void close_session(struct session *);
 static bool terminal_restored(struct session *);
 static bool wait_for_screen_text(struct session *, const char *, int, int, long);
+static bool wait_for_attention_order(struct session *);
 static ssize_t read_marker_output(struct session *, char *, size_t);
 static void drain_start_output(struct session *);
 static bool measure_unsigned(const char *value, unsigned *result) {
@@ -188,6 +189,13 @@ static bool same_terminal(const struct termios *left, const struct termios *righ
            memcmp(left->c_cc, right->c_cc, sizeof(left->c_cc)) == 0;
 }
 
+static void execute_test_tui(const char *tui_path, const char *hydra_path) {
+    if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "heads", (char *)NULL);
+    else if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
+    else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
+    else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "heads", (char *)NULL);
+}
+
 static void child_session(const struct session *session, const char *tui, const char *hydra, const char *fake_bin) {
     char path[4096];
     const char *old_path = getenv("PATH");
@@ -209,10 +217,7 @@ static void child_session(const struct session *session, const char *tui, const 
     setenv("PATH", path, 1);
     fixture_repo = getenv("HYDRA_FIXTURE_REPO");
     if (fixture_repo != NULL && chdir(fixture_repo) != 0) _exit(122);
-    if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "heads", (char *)NULL);
-    else if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
-    else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
-    else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "heads", (char *)NULL);
+    execute_test_tui(tui_path, hydra_path);
     _exit(127);
 }
 
@@ -857,7 +862,7 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 #include "test_tui_review.inc"
 #include "test_tui_measure.inc"
 
-static bool screen_has_text(const struct measure_screen *screen, const char *text) {
+static int screen_text_row(const struct measure_screen *screen, const char *text) {
     const struct tv_canvas *canvas = screen->terminal.alternate_active ?
         &screen->terminal.alternate.canvas : &screen->terminal.primary.canvas;
     for (int y = 0; y < canvas->height; y++) {
@@ -867,9 +872,9 @@ static bool screen_has_text(const struct measure_screen *screen, const char *tex
             line[x] = glyph >= 32 && glyph <= 126 ? (char)glyph : ' ';
         }
         line[canvas->width] = '\0';
-        if (strstr(line, text)) return true;
+        if (strstr(line, text)) return y;
     }
-    return false;
+    return -1;
 }
 
 /* Workspace redraws can place cursor controls between the words of a label. */
@@ -882,7 +887,26 @@ static bool wait_for_screen_text(struct session *session, const char *text, int 
         char bytes[4096]; ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
         if (length > 0) tv_term_feed(&screen->terminal, bytes, (size_t)length);
         else sleep_ms(10);
-        found = screen_has_text(screen, text);
+        found = screen_text_row(screen, text)>=0;
+    }
+    free(screen);
+    return found;
+}
+
+/* Count and selected identity are unchanged by a pure reorder. Wait for the
+ * applied row positions before sending navigation, so an old frame cannot pass. */
+static bool wait_for_attention_order(struct session *session) {
+    struct measure_screen *screen = measure_screen_create(100, 30);
+    long long deadline = monotonic_ms() + 3000;
+    bool found = false;
+    if (!screen) return false;
+    while (!found && monotonic_ms() < deadline) {
+        char bytes[4096]; ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
+        if (length > 0) tv_term_feed(&screen->terminal, bytes, (size_t)length);
+        else sleep_ms(10);
+        int first = screen_text_row(screen, "verification-ready");
+        found = first >= 0 && screen_text_row(screen, "decision-needed") > first &&
+            screen_text_row(screen, "ATTENTION  1 current  0 stale  1 unknown") >= 0;
     }
     free(screen);
     return found;
