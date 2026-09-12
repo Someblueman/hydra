@@ -1,7 +1,7 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 11 September 2026
+> - **Snapshot:** 13 September 2026
 > - **Release:** `v2.5.0` attention, exact review and remote attachment
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
@@ -70,6 +70,84 @@ Items below have no assigned release number. When work is selected, define the
 smallest coherent scope and its acceptance boundaries, then release it when ready.
 Priority may change with observed use. The numbered priorities reuse fleet
 transport and one workflow execution authority as coordination expands across hosts.
+
+### Immediate product priority: first-use and agentic workflow
+
+User feedback from installed v2.5.0 on 13 September reopens product acceptance
+for onboarding, workspace presentation and the real agentic journey. Select this
+work ahead of further feature expansion. Existing implementation and test results
+remain evidence for their recorded scope; they do not close the usability gaps
+below or establish that the current experience meets the reviewed mockups.
+
+The intended entry is `hydra` in a repository: describe an objective to an agent,
+review and revise its plan, explicitly approve execution, follow work and respond
+to questions, then inspect the changed files and verified result. `hydra tui` must
+also be a usable entry with no existing heads. Users should not need to understand
+initialization, spawn, worktree identities or environment variables to begin.
+
+- [ ] **U1 — Keep ordinary onboarding out of the source tree.** In `dkvm`,
+      `hydra init --no-agent --trust` created an untracked `.hydra/` directory.
+      Store local registration, preferences and runtime state outside the repository
+      by default. Make shared repository configuration an explicit opt-in, with a
+      clear purpose and preview. Preserve existing configuration and migrate durable
+      contracts deliberately; hiding generated junk with ignore rules is not the
+      desired solution. The reported `.gmcs/` directory is a separate existing
+      artifact; do not attribute it to Hydra or remove it as part of this work.
+      Acceptance: opening, configuring and reopening Hydra in a clean existing repo
+      leaves its files and `git status` unchanged until the user requests actual
+      project work or explicitly chooses shared configuration. Existing dirty work
+      and ignore rules are preserved. Repository commands still require explicit
+      trust before execution; fewer setup steps must not imply blanket trust.
+- [ ] **U2 — Clean terminal entry and human-readable context.** Spawn currently
+      echoes a long `export HYDRA_PROJECT_ID=... HYDRA_HEAD_ID=...` bootstrap command,
+      with wrapped internal paths and identities dominating the terminal. Deliver
+      the required environment before the interactive prompt without typing setup
+      commands into the user's conversation or shell history. Present concise
+      project/branch context; keep exact identities and paths in inspectable details.
+      Acceptance: a fresh shell or real agent session opens with usable input and
+      clean output at ordinary terminal widths. No bootstrap exports appear in the
+      visible transcript or history; agents and subprocesses still receive the
+      correct environment. Check initial spawn and reconnect with actual terminals.
+- [ ] **U3 — Start the workspace before creating work.** `hydra` and `hydra tui`
+      should discover the current repository and offer an agent conversation or a
+      clear in-app next action when no heads exist. Resolve provider selection and
+      any missing authentication in context; create execution resources when the
+      requested work needs them. Keep explicit CLI commands for expert automation.
+      Acceptance: from an uninitialized repository, reach a working conversation
+      without first running `init`, `spawn`, exporting variables, or constructing
+      a plan file by hand. Missing providers and authentication have actionable
+      states; entering the UI alone does not authorize agent work or repo commands.
+- [ ] **U4 — Match the reviewed workspace mockups in actual use.** The two user
+      references show (1) “HYDRA / PLAN TOGETHER”: narrow project navigation, a
+      prominent interactive agent conversation, adjacent plan/dependency review
+      and contextual revise/validate/approve controls; and (2) a monitoring layout
+      with project navigation, central run graph and test output, and a persistent
+      agent conversation for intervention. Match their hierarchy, spacing, restrained
+      cyan/amber/green status colors, clear borders and focus, readable text, and
+      concise contextual controls. Their illustrative content is a design reference,
+      not real execution evidence or a request to implement every pictured menu.
+      Acceptance: compare live installed-build captures with both references during
+      planning, running, waiting for input and failure. Review at normal narrow/wide
+      terminal sizes, including 80x24 and 140x40, with a usable compact fallback.
+      The objective, agent input destination, progress and next action remain clear;
+      raw IDs, repeated keyboard hints and diagnostic fields do not dominate.
+- [ ] **U5 — Test the agentic product journey.** Replace the manual shell-head lab
+      as the primary user evaluation guide with one small, meaningful agent task
+      in a real repository. Start Hydra, ask for a bounded change with observable
+      acceptance criteria, discuss and revise an agent-authored plan, approve the
+      exact revision, observe execution, answer a real question, inspect a failed
+      check and supported recovery, then review the resulting diff and test evidence.
+      Include leaving and returning without losing the conversation or run context.
+      Acceptance: perform this through the installed application with an authenticated
+      agent and real outputs, recording user friction and remaining gaps. The user
+      does not manually author the implementation or assemble workflow machinery.
+      Keep shell-only fixtures and isolated failure probes as engineering checks;
+      their success cannot substitute for this product acceptance exercise.
+
+Delivery boundary: these are outstanding roadmap requirements, not implemented
+fixes. Close them with observed first-use, visual and agentic acceptance from the
+installed build. Update the getting-started and evaluation guides to the delivered
+flow as part of this work.
 
 ### Candidate features
 
@@ -966,6 +1044,11 @@ the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset.
 
 ### Milestone 3: useful Hydra workspace
 
+Product acceptance reopened on 13 September: the implementation checks below are
+historical. [U1–U5](#immediate-product-priority-first-use-and-agentic-workflow)
+cover the observed first-use and mockup gaps and must pass before this experience
+is described as product-ready.
+
 - [x] Establish a reviewed visual target with clear project -> head -> run navigation,
       prominent selected work, concise status summaries, and contextual actions.
       Keep raw identifiers and detailed provenance available on demand; avoid
@@ -1086,6 +1169,10 @@ remain future work and require explicit protocol and measurement contracts.
 
 ### Milestone 6: interaction and visual polish
 
+Visual acceptance reopened by installed-build user feedback; see
+[U4](#immediate-product-priority-first-use-and-agentic-workflow). The checked work
+below does not establish that the current UI meets the user's visual target.
+
 - [x] Refine spacing, information density, restrained semantic colors, selection and
       focus, pane titles, contextual controls and keyboard discoverability.
 - [x] Add useful search/filtering and deliberate empty, loading, disconnected,
@@ -1100,6 +1187,10 @@ Compare actual terminal captures against the reviewed visual target; component t
 alone do not satisfy visual or interaction acceptance.
 
 ### Milestone 7: real-workflow acceptance
+
+Product acceptance reopened; see
+[U5](#immediate-product-priority-first-use-and-agentic-workflow) for the required
+agentic first-use exercise. Retained historical checks do not replace that journey.
 
 - [x] Run a representative multi-agent task from objective discussion and agent-
       authored plan through revision, explicit approval, execution, intervention,
