@@ -81,6 +81,12 @@ scalar(const char *p)
         }
     } return s;
 }
+static char *
+scalar_at(const char *directory, const char *name)
+{
+    char path[F_PATH];
+    return f_path(path, sizeof(path), directory, name) ? NULL : scalar(path);
+}
 static void
 nullable(json_object * o, const char *k, const char *v)
 {
@@ -371,17 +377,17 @@ static bool
 request_open(struct wa_request *r, struct wa *w, const char *run, const char *rd,
              const char *step, const char *sd, json_object *sem)
 {
-    snprintf(r->p, sizeof(r->p), "%s/request-id", sd); r->rid = scalar(r->p);
+    r->rid = scalar_at(sd, "request-id");
     if (!r->rid || !id(r->rid, "step_")) {
         unknown(w, r->rid ? "malformed_request" : "missing_request", run, step, NULL, NULL, NULL, r->rid, NULL, sem);
         return false;
     }
-    snprintf(r->p, sizeof(r->p), "%s/approvals", rd);
-    if (!directory(r->p) || f_path(r->ap, sizeof(r->ap), r->p, r->rid) || !directory(r->ap)) {
+    if (f_path(r->p, sizeof(r->p), rd, "approvals") || !directory(r->p) ||
+        f_path(r->ap, sizeof(r->ap), r->p, r->rid) || !directory(r->ap)) {
         unknown(w, "missing_request", run, step, NULL, NULL, NULL, r->rid, NULL, sem);
         return false;
     }
-    snprintf(r->p, sizeof(r->p), "%s/step-id", r->ap); r->request_state = scalar(r->p);
+    r->request_state = scalar_at(r->ap, "step-id");
     if (!r->request_state || strcmp(r->request_state, step)) {
         free(r->request_state); r->request_state = NULL;
         unknown(w, "request_step_mismatch", run, step, NULL, NULL, NULL, r->rid, NULL, sem);
@@ -395,17 +401,17 @@ request_collect(struct wa_request *r, struct wa *w, const char *run, const char 
                 const char *step, const char *sd, json_object *sem)
 {
     if (!request_open(r, w, run, rd, step, sd, sem)) return false;
-    snprintf(r->p, sizeof(r->p), "%s/state", sd); r->state = scalar(r->p);
-    snprintf(r->p, sizeof(r->p), "%s/state", r->ap); r->request_state = scalar(r->p);
+    r->state = scalar_at(sd, "state");
+    r->request_state = scalar_at(r->ap, "state");
     if (r->request_state && (!strcmp(r->request_state, "approve") || !strcmp(r->request_state, "reject")) && r->state && strcmp(r->state, "waiting-approval")) {
         free(r->request_state); r->request_state = NULL;
         return false;
     }
-    snprintf(r->p, sizeof(r->p), "%s/head", r->ap); r->head = scalar(r->p);
-    snprintf(r->p, sizeof(r->p), "%s/binding-hash", r->ap); r->binding = scalar(r->p);
-    snprintf(r->p, sizeof(r->p), "%s/expires-at", r->ap); r->expires = scalar(r->p);
-    snprintf(r->p, sizeof(r->p), "%s/message", r->ap); r->message = scalar(r->p);
-    snprintf(r->p, sizeof(r->p), "%s/attempts", sd); r->attempts = scalar(r->p);
+    r->head = scalar_at(r->ap, "head");
+    r->binding = scalar_at(r->ap, "binding-hash");
+    r->expires = scalar_at(r->ap, "expires-at");
+    r->message = scalar_at(r->ap, "message");
+    r->attempts = scalar_at(sd, "attempts");
     return request_attempt(r, w, run, step, sem);
 }
 static void
@@ -425,7 +431,7 @@ request_bind_and_emit(struct wa_request *r, struct wa *w, const char *run, const
         unknown(w, "approval_binding_unknown", run, step, r->aid, r->head, NULL, r->rid, r->binding, sem);
         return;
     }
-    snprintf(r->p, sizeof(r->p), "%s/binding.tsv", r->ap); r->bound_head = pair_value(r->p, "head");
+    r->bound_head = f_path(r->p, sizeof(r->p), r->ap, "binding.tsv") ? NULL : pair_value(r->p, "head");
     if (r->bound_head) r->bound_instance = head_instance(w, r->bound_head);
     if (!request_binding_ok(r->state, r->request_state, resolved_head, r->instance, r->binding, r->bound_head, r->bound_instance, r->p, r->digest)) {
         unknown(w, "approval_binding_unknown", run, step, r->aid, r->head, r->instance, r->rid, r->binding, sem);
@@ -493,10 +499,10 @@ result_files(const char *rd, const char *ap, const char *step, json_object **rec
 {
     char p[F_PATH];
     json_object *declarations;
-    snprintf(p, sizeof(p), "%s/outputs.json", ap);
-    if (!reg(p) || !(*receipt = f_read_json(p, F_LIMIT))) return false;
-    snprintf(p, sizeof(p), "%s/data.json", rd);
-    if (!reg(p) || !(*data = f_read_json(p, F_LIMIT))) return false;
+    if (f_path(p, sizeof(p), ap, "outputs.json") || !reg(p) ||
+        !(*receipt = f_read_json(p, F_LIMIT))) return false;
+    if (f_path(p, sizeof(p), rd, "data.json") || !reg(p) ||
+        !(*data = f_read_json(p, F_LIMIT))) return false;
     declarations = f_field(f_field(*data, "steps"), step);
     declarations = f_field(declarations, "outputs");
     return receipt_ok(*receipt, ap, declarations);
@@ -504,9 +510,7 @@ result_files(const char *rd, const char *ap, const char *step, json_object **rec
 static bool
 result_attempt(const char *sd, char ap[F_PATH], char **attempt, char **aid, int64_t *number_out)
 {
-    char p[F_PATH];
-    snprintf(p, sizeof(p), "%s/authoritative-attempt", sd);
-    *attempt = scalar(p);
+    *attempt = scalar_at(sd, "authoritative-attempt");
     if (!*attempt || !number(*attempt, number_out) || *number_out < 1 || *number_out > 11 ||
         snprintf(ap, F_PATH, "%s/attempt-%s", sd, *attempt) >= F_PATH) return false;
     *aid = ap + strlen(sd) + 1;
@@ -515,11 +519,8 @@ result_attempt(const char *sd, char ap[F_PATH], char **attempt, char **aid, int6
 static void
 result_identity(const char *ap, char **head, char **instance)
 {
-    char path[F_PATH];
-    snprintf(path, sizeof(path), "%s/head", ap);
-    *head = scalar(path);
-    snprintf(path, sizeof(path), "%s/instance", ap);
-    *instance = scalar(path);
+    *head = scalar_at(ap, "head");
+    *instance = scalar_at(ap, "instance");
     if (*head && !id(*head, "head_")) { free(*head); *head = NULL; }
     if (*instance && !id(*instance, "instance_")) { free(*instance); *instance = NULL; }
 }
@@ -539,15 +540,18 @@ result(struct wa *w, const char *run, const char *rd, const char *step, const ch
         unknown(w, "missing_attempt", run, step, aid, NULL, NULL, NULL, NULL, sem);
         goto done;
     }
-    snprintf(p, sizeof(p), "%s/retention.json", rd);
+    if (f_path(p, sizeof(p), rd, "retention.json")) {
+        unknown(w, "path_unavailable", run, step, aid, NULL, NULL, NULL, NULL, sem);
+        goto done;
+    }
     if (reg(p) || access(p, F_OK) == 0) {
         unknown(w, "retention_expired", run, step, aid, NULL, NULL, NULL, NULL, sem);
         goto done;
     } if (!result_files(rd, ap, step, &receipt, &data)) {
         unknown(w, "result_binding_unknown", run, step, aid, NULL, NULL, NULL, NULL, sem);
         goto done;
-    } snprintf(p, sizeof(p), "%s/state", sd);
-    state = scalar(p);
+    }
+    state = scalar_at(sd, "state");
     result_identity(ap, &head, &instance);
     result_retained_bindings(rd, sem);
     result_emit(w, run, step, aid, ap + strlen(rd) + 1, state, head, instance, receipt, sem);
@@ -564,8 +568,12 @@ static void
 run_step(struct wa *w, const char *run, const char *rd, const char *name, const char *sd)
 {
     char p[F_PATH], *s;
-    snprintf(p, sizeof(p), "%s/state", sd); s = scalar(p);
-    snprintf(p, sizeof(p), "%s/request-id", sd);
+    s = scalar_at(sd, "state");
+    if (f_path(p, sizeof(p), sd, "request-id")) {
+        unknown(w, "path_unavailable", run, name, NULL, NULL, NULL, NULL, NULL, NULL);
+        free(s);
+        return;
+    }
     if (reg(p)) request(w, run, rd, name, sd);
     else if (s && !strcmp(s, "waiting-approval")) unknown(w, "missing_request", run, name, NULL, NULL, NULL, NULL, NULL, NULL);
     if (s && !strcmp(s, "succeeded")) result(w, run, rd, name, sd);

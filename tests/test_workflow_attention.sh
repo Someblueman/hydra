@@ -2,10 +2,65 @@
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
-cleanup() { (cd "$fixture/repo" && "$root/bin/hydra" kill attention-worker --force >/dev/null 2>&1) || true; if [ "${KEEP_FIXTURE:-0}" = 1 ]; then printf '%s\n' "$fixture" >&2; else rm -rf "$fixture"; fi; }
+cleanup() {
+    if [ -d "$fixture/repo/.git" ]; then
+        (cd "$fixture/repo" && "$root/bin/hydra" kill attention-worker --force >/dev/null 2>&1) || true
+    fi
+    if [ "${KEEP_FIXTURE:-0}" = 1 ]; then printf '%s\n' "$fixture" >&2; else rm -rf "$fixture"; fi
+}
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
+
+attention_path_bounds() (
+    fleet="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+    suffix=/projects/project_a/workflows/runs/run_a/steps/check
+    state_root="$fixture/path-control"
+    mkdir -p "$state_root$suffix"
+    printf 'waiting-approval\n' > "$state_root$suffix/state"
+    output="$(HYDRA_STATE_V2_ROOT="$state_root" "$fleet" workflow-data attention project_a)"
+    printf '%s\n' "$output" | grep -q '"reason":"missing_request"'
+    # Darwin rejects absolute paths before Hydra's 4096-byte buffer boundary.
+    if [ "$(uname -s)" != Linux ]; then
+        printf '%s\n' 'SKIP workflow attention 4096-byte path boundary: requires Linux pathname limits'
+        return
+    fi
+    state_root="$fixture/path-boundary"
+    mkdir "$state_root"
+    cd "$state_root"
+    remaining=$((4090 - ${#state_root} - ${#suffix}))
+    while [ "$remaining" -gt 1 ]; do
+        size=$((remaining - 1))
+        [ "$size" -le 240 ] || size=240
+        component="$(printf '%*s' "$size" '' | tr ' ' x)"
+        mkdir "$component"
+        cd "$component"
+        state_root="$state_root/$component"
+        remaining=$((remaining - size - 1))
+    done
+    mkdir -p "${suffix#/}"
+    step_dir="$state_root$suffix"
+    [ "${#step_dir}" -ge 4089 ]
+    [ "${#step_dir}" -le 4090 ]
+    cd "$step_dir"
+    printf 'waiting-approval\n' > state
+    # An unchecked snprintf would read this existing prefix of request-id.
+    prefix_length=$((4095 - ${#step_dir} - 1))
+    prefix="$(printf '%s' request-id | cut -c "1-$prefix_length")"
+    printf 'step_b\n' > "$prefix"
+    output="$(HYDRA_STATE_V2_ROOT="$state_root" "$fleet" workflow-data attention project_a)"
+    printf '%s\n' "$output" | grep -q '"reason":"path_unavailable"'
+    printf '%s\n' "$output" | grep -q '"kind":"unknown"'
+    printf '%s\n' "$output" | grep -q '"partial":true'
+    printf '%s\n' "$output" | grep -q '"navigable":false'
+    [ "$(cat "$prefix")" = step_b ]
+    printf '%s\n' 'workflow attention rejects truncated child paths without reading prefix evidence'
+)
+if [ "${HYDRA_TEST_ATTENTION_PATH_ONLY:-0}" = 1 ]; then
+    attention_path_bounds
+    exit
+fi
+
 repo="$fixture/repo"
 mkdir -p "$repo"
 git -C "$repo" init -q
@@ -210,4 +265,5 @@ output="$(cd "$repo" && "$root/bin/hydra" workflow attention --json)"
 printf '%s\n' "$output" | grep -q '"truncated":true'
 printf '%s\n' "$output" | grep -q '"partial":true'
 
+attention_path_bounds
 printf '%s\n' 'workflow attention public CLI checks passed'

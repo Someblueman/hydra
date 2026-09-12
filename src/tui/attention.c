@@ -92,8 +92,9 @@ static void remember_revision(struct native_attention *view, const char *identit
         view->seen_count--;
     }
     slot = view->seen_count++;
-    (void)snprintf(view->seen[slot].identity, sizeof(view->seen[slot].identity), "%s", identity);
-    (void)snprintf(view->seen[slot].revision, sizeof(view->seen[slot].revision), "%s", revision);
+    /* Both inputs are complete validated digest arrays from view->items. */
+    memmove(view->seen[slot].identity, identity, sizeof(view->seen[slot].identity));
+    memmove(view->seen[slot].revision, revision, sizeof(view->seen[slot].revision));
 }
 
 static bool copy_item_fields(char *fields[], struct attention_item *item)
@@ -237,7 +238,8 @@ static void accept_attention(struct app *app, FILE *input)
     if (!next) { if (input) fclose(input); return; }
     retain_state(app->attention, next, selected_id, &detail);
     if (!input || !parse_stream(input, next)) {
-        if (input) fclose(input); free(next);
+        if (input) fclose(input);
+        free(next);
         attention_error(app, app->attention && app->attention->have_good ? "Attention stream invalid; showing last good snapshot" : "Attention unavailable; no valid snapshot yet");
         return;
     }
