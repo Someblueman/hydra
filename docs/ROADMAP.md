@@ -217,6 +217,21 @@ an acceptance blocker, not optional cosmetic polish.
       applications or learning another keymap. Stale remote observations must not
       authorize actions or make ongoing work appear successfully completed.
 
+- [ ] **U12 — Keep action confirmation and results inside the control centre.**
+      Killing a head currently leaves the TUI for a shell confirmation and teardown
+      transcript, then requires “Press Enter to return to Mission Control” even
+      after success. Confirm the selected target and consequences in an in-app
+      dialog, execute through the authoritative CLI, and show progress and a concise
+      result in place. On success, update navigation and move focus predictably to
+      surviving work without an extra acknowledgement. Keep detailed output available
+      on demand; failures should explain what remains and offer a relevant next step.
+      Preserve dirty-work protection, current-session safeguards and exact target
+      validation; an in-app confirmation must not become blanket force authorization.
+      Acceptance: remove a stopped head and an active head, cancel confirmation,
+      encounter dirty work, and exercise a failed or partially successful bulk action.
+      The UI remains the interaction surface, accurately reflects each outcome, and
+      never requires a successful-action shell detour or a return-to-UI keypress.
+
 The nine follow-up findings map to U3 (control-centre launch), U6 (flicker), U7
 (details and recovery), U8 (keybindings), U9 (coordination and overview), U10 (remote
 onboarding), and U11 (one local/remote UI). Extend U5's real-task acceptance to include
