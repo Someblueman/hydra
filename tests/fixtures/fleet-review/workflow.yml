@@ -1,0 +1,42 @@
+version: 1
+id: fleet-review
+parallelism: 1
+resources:
+  disk_mb: 1
+  max_heads: 2
+steps:
+  - id: create-alpha
+    kind: spawn
+    idempotent: false
+    args:
+      branch: review-alpha
+      terminal_mode: headless
+  - id: alpha
+    kind: exec
+    needs: [create-alpha]
+    idempotent: false
+    args:
+      head: review-alpha
+      argv: [sh, task-work.sh, alpha]
+  - id: create-beta
+    kind: spawn
+    needs: [alpha]
+    idempotent: false
+    args:
+      branch: review-beta
+      terminal_mode: headless
+  - id: beta
+    kind: exec
+    needs: [create-beta]
+    idempotent: false
+    args:
+      head: review-beta
+      argv: [sh, task-work.sh, beta]
+  - id: verify
+    kind: gate
+    needs: [beta]
+    idempotent: true
+    args:
+      head: review-beta
+      name: output
+      argv: [test, -s, beta.txt]

@@ -11,6 +11,7 @@
 #include "fleet/discovery/discovery.h"
 #include "fleet/enrollment/enrollment.h"
 #include "fleet/attention_tui.h"
+#include "fleet/review_task.h"
 #include "fleet/retention/retention.h"
 #include "tui/fleet_budget.h"
 #include <stdlib.h>
@@ -140,7 +141,8 @@ static json_object *aggregate_action(const char *action, const struct fleet_opti
 
 /* A handled command may return NULL after writing its raw output. */
 static bool domain_cli(int argc, char **argv, json_object **result) {
-    if (!strcmp(argv[0], "discover") || !strcmp(argv[0], "qualify")) *result = hd_cli(argc, argv);
+    if (!strcmp(argv[0], "review") || !strcmp(argv[0], "review-data")) *result = review_task_cli(argc - 1, argv + 1, !strcmp(argv[0], "review-data"));
+    else if (!strcmp(argv[0], "discover") || !strcmp(argv[0], "qualify")) *result = hd_cli(argc, argv);
     else if (!strcmp(argv[0], "enroll")) *result = enrollment_cli(argc - 1, argv + 1);
     else if (!strcmp(argv[0], "auth")) *result = auth_cli(argc - 1, argv + 1);
     else if (!strcmp(argv[0], "task")) *result = task_cli(argc - 1, argv + 1);

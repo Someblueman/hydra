@@ -55,6 +55,21 @@ cmd_workflow() {
             "$_cw_core" statistics-compare "$@"
             ;;
         plan) shift; cmd_workflow_plan "$@" ;;
+        review)
+            shift
+            _load_lib workflow_review
+            workflow_review "$@"
+            ;;
+        --review-parse)
+            [ "$#" -eq 3 ] || return 2
+            case "$3" in normalized|runtime|data) ;; *) return 2 ;; esac
+            workflow_parse "$2" "$3"
+            ;;
+        review-data)
+            shift
+            [ "$#" -eq 13 ] || [ "$#" -eq 14 ] || return 2
+            cmd_fleet_dispatch workflow-review-data "$@"
+            ;;
         -h|--help|'')
             printf '%s\n' \
                 'Usage: hydra workflow list' \
@@ -62,6 +77,8 @@ cmd_workflow() {
                 '       hydra workflow validate <id|path>' \
                 '       hydra workflow dry-run <id|path>' \
                 '       hydra workflow run <id|path>' \
+                '       hydra workflow review <project> <run> <step> <attempt> <revision> [references-json]' \
+                '       hydra workflow review[-data] KIND PROJECT HOST TASK RUN STEP ATTEMPT HEAD INSTANCE REQUEST BINDING REVISION_SHA256 IDENTITY_SHA256 [REFERENCES_JSON]' \
                 '       hydra workflow plan --help' \
                 '       hydra workflow statistics-data' \
                 '       hydra workflow statistics-json' \

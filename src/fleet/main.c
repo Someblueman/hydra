@@ -10,6 +10,8 @@
 #include "fleet/agent/agent.h"
 #include "fleet/plan/plan.h"
 #include "fleet/workflow/workflow_task.h"
+#include "fleet/review.h"
+#include "fleet/review_task.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -34,6 +36,8 @@ int main(int argc, char **argv) {
     setenv("LC_ALL", "C", 1);
     if (argc == 2 && !strcmp(argv[1], "--version")) { puts("Hydra fleet protocol 1"); return 0; }
     if (argc >= 2 && !strcmp(argv[1], "workflow-plan")) result = plan_cli(argc - 2, argv + 2);
+    else if (argc >= 2 && !strcmp(argv[1], "workflow-review")) result = review_cli(argc - 2, argv + 2);
+    else if (argc >= 2 && !strcmp(argv[1], "workflow-review-data")) return review_workflow_data_cli(argc - 2, argv + 2);
     else if (argc >= 3 && !strcmp(argv[1], "workflow-task") && !strcmp(argv[2], "metrics-tsv") && argc == 4)
         return wt_metrics_tsv(argv[3]);
     else if (argc >= 2 && !strcmp(argv[1], "workflow-task")) result = wt_cli(argc - 2, argv + 2);

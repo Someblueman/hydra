@@ -155,6 +155,20 @@ static bool valid_items(json_object *array, json_object **items, size_t *count)
     }
     return true;
 }
+int f_attention_item_hashes(json_object *item, char revision[65], char identity[65])
+{
+    char dir[] = "/tmp/hydra-attention-item-XXXXXX";
+    char revisions[1][ATTENTION_HASH], identities[1][ATTENTION_HASH];
+    json_object *items[] = {item};
+    int status;
+    if (!valid_item(item) || !mkdtemp(dir)) return 1;
+    status = write_hash_files(dir, items, 1U, revisions, identities);
+    rmdir(dir);
+    if (status) return 1;
+    memcpy(revision, revisions[0], ATTENTION_HASH);
+    memcpy(identity, identities[0], ATTENTION_HASH);
+    return 0;
+}
 static void output_item(json_object *item, const char *revision, const char *identity)
 {
     json_object *route = f_field(item, "route");

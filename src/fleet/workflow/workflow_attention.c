@@ -467,6 +467,27 @@ result_emit(struct wa *w, const char *run, const char *step, const char *aid, co
         f_string_add(item, "identity_provenance", identity ? "recorded" : "not_recorded");
     }
 }
+static void
+retained_scalar(const char *run, const char *name, json_object *sem)
+{
+    char path[F_PATH]; char *value;
+    if (snprintf(path, sizeof(path), "%s/%s", run, name) >= (int)sizeof(path)) return;
+    value = scalar(path); if (value) { f_string_add(sem, name, value); free(value); }
+}
+static void
+result_retained_bindings(const char *run, json_object *sem)
+{
+    static const char *const scalars[] = {"base-commit", "definition-hash", "data-hash",
+        "plan-accepted", "plan-deadline", "parallelism", "disk-mb", "max-heads"};
+    static const char *const files[] = {"resolved.yml", "graph.tsv", "data.json", "compiled.json"};
+    static const char *const fields[] = {"resolved-recipe-sha256", "graph-sha256", "data-sha256", "compiled-sha256"};
+    char path[F_PATH], digest[65]; size_t i;
+    for (i = 0; i < sizeof(scalars) / sizeof(scalars[0]); i++) retained_scalar(run, scalars[i], sem);
+    for (i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
+        if (snprintf(path, sizeof(path), "%s/%s", run, files[i]) < (int)sizeof(path) &&
+            reg(path) && !f_hash(path, digest)) f_string_add(sem, fields[i], digest);
+    }
+}
 static bool
 result_files(const char *rd, const char *ap, const char *step, json_object **receipt, json_object **data)
 {
@@ -528,6 +549,7 @@ result(struct wa *w, const char *run, const char *rd, const char *step, const ch
     } snprintf(p, sizeof(p), "%s/state", sd);
     state = scalar(p);
     result_identity(ap, &head, &instance);
+    result_retained_bindings(rd, sem);
     result_emit(w, run, step, aid, ap + strlen(rd) + 1, state, head, instance, receipt, sem);
 done:free(attempt);
     free(state);

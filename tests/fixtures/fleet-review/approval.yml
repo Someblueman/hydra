@@ -1,0 +1,37 @@
+version: 1
+id: fleet-review-approval
+parallelism: 2
+resources:
+  disk_mb: 1
+  max_heads: 1
+steps:
+  - id: create
+    kind: spawn
+    idempotent: false
+    args:
+      branch: review-approval
+      terminal_mode: headless
+  - id: verify
+    kind: gate
+    needs: [create]
+    idempotent: true
+    args:
+      head: review-approval
+      name: approved-output
+      argv: [true]
+  - id: approval-alpha
+    kind: approval-wait
+    needs: [verify]
+    idempotent: false
+    args:
+      head: review-approval
+      name: approved-output
+      message: Review alpha request
+  - id: approval-beta
+    kind: approval-wait
+    needs: [verify]
+    idempotent: false
+    args:
+      head: review-approval
+      name: approved-output
+      message: Review beta request
