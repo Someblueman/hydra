@@ -4,6 +4,8 @@
 #endif
 #include "internal.h"
 
+static void handle_key(struct app *app, char key);
+
 int read_key(int timeout_ms, char *key) {
     fd_set readfds;
     struct timeval timeout;
@@ -179,12 +181,18 @@ static void handle_escape(struct app *app) {
     struct timespec started;
     bool complete = false;
     if (read_key(20, &ch) <= 0) {
+        if (app->view == 9 && native_attention_key(app, 27)) return;
         if (statistics_back(app)) return;
         app->view = 0; app->help = false; app->diagnostics = false;
         app->search[0] = '\0'; app->notice[0] = '\0';
         return;
     }
-    if (ch != '[') return;
+    if (ch != '[') {
+        /* Attention historically handled a bare Escape immediately. Keep a
+         * following ordinary key (especially q) while still decoding arrows. */
+        if (app->view == 9) { (void)native_attention_key(app, 27); handle_key(app, ch); }
+        return;
+    }
     (void)clock_gettime(CLOCK_MONOTONIC, &started);
     while (consumed++ < 8192U && read_key(20, &ch) > 0) {
         if (count + 1U < sizeof(sequence)) sequence[count++] = ch;
@@ -258,6 +266,7 @@ static bool select_view(struct app *app, char key) {
 }
 
 static bool view_key(struct app *app, char key) {
+    if (key == 27 && app->view == 9) { handle_escape(app); return true; }
     if (app->view == 9 && native_attention_key(app, key)) return true;
     if (key == 'D') { statistics_toggle(app); return true; }
     if (app->view == 8 && statistics_key(app, key)) return true;

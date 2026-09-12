@@ -30,6 +30,7 @@
 #include "../hydra_statistics.h"
 
 #include "app.h"
+#include "review.h"
 #include "process.h"
 #include "terminal.h"
 extern char **environ;
@@ -47,10 +48,10 @@ struct native_capture {
     pid_t pid;
     int fd, status;
     FILE *output;
-    struct timespec started;
+    struct timespec started, stop_started;
     long budget_ms;
     size_t bytes;
-    bool eof, reaped, failed, timed_out;
+    bool eof, reaped, failed, timed_out, stopping, killed;
 };
 enum tone { TONE_BASE, TONE_BORDER, TONE_TITLE, TONE_SELECTED, TONE_WARNING, TONE_STRONG };
 struct statistics_view {

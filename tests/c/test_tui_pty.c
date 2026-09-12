@@ -1,4 +1,7 @@
 #define _XOPEN_SOURCE 600
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
@@ -187,6 +190,7 @@ static bool same_terminal(const struct termios *left, const struct termios *righ
 static void child_session(const struct session *session, const char *tui, const char *hydra, const char *fake_bin) {
     char path[4096];
     const char *old_path = getenv("PATH");
+    const char *fixture_repo;
     char *tui_path = strdup(tui), *hydra_path = strdup(hydra);
     if (!tui_path || !hydra_path) _exit(119);
     snprintf(path, sizeof(path), "%s:%s", fake_bin, old_path == NULL ? "" : old_path);
@@ -202,7 +206,8 @@ static void child_session(const struct session *session, const char *tui, const 
     if (getenv("HYDRA_TEST_COLOR") != NULL) unsetenv("NO_COLOR");
     else setenv("NO_COLOR", "1", 1);
     setenv("PATH", path, 1);
-    if (getenv("HYDRA_FIXTURE_REPO") != NULL) (void)chdir(getenv("HYDRA_FIXTURE_REPO"));
+    fixture_repo = getenv("HYDRA_FIXTURE_REPO");
+    if (fixture_repo != NULL) (void)chdir(fixture_repo);
     if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "heads", (char *)NULL);
     else if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
     else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
@@ -835,9 +840,10 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 
 #include "test_tui_visualization.inc"
 #include "test_tui_attention.inc"
+#include "test_tui_review.inc"
 
-int main(int argc, char **argv) {
-    char timeout_pids[128];
+static int special_test_mode(int argc, char **argv) {
+    if (argc == 6 && !strcmp(argv[1], "--review-cancel-owner")) return review_cancel_owner(argv[2], argv[3], argv[4], argv[5]);
     if (argc == 4 && strcmp(argv[1], "--i1-measure") == 0) {
         unsigned heads;
         if (!measure_unsigned(argv[2], &heads) || heads == 0U || heads > 10U) return 2;
@@ -846,10 +852,19 @@ int main(int argc, char **argv) {
     if (argc == 5 && strcmp(argv[1], "--measure") == 0) {
         return measure_interactive(argv[2], argv[3], argv[4]);
     }
+    return -1;
+}
+
+int main(int argc, char **argv) {
+    char timeout_pids[128]; int special;
+    (void)setvbuf(stdout, NULL, _IOLBF, 0U);
+    special = special_test_mode(argc, argv);
+    if (special >= 0) return special;
     if (argc != 4) {
         fprintf(stderr, "usage: test-tui-pty TUI FAKE_HYDRA FAKE_BIN\n");
         return 2;
     }
+    if (getenv("HYDRA_TEST_REVIEW_ONLY")) return review_tests_only(argv[1], argv[2], argv[0]);
     printf("Running native TUI pseudo-terminal tests...\n");
     test_session_failure();
     test_themes(argv[1], argv[2], argv[3]);
@@ -859,6 +874,10 @@ int main(int argc, char **argv) {
     test_visualization_hosts(argv[1], argv[2], argv[3]);
     test_attention(argv[1], argv[2], argv[3]);
     test_attention_clients(argv[1], argv[2], argv[3]);
+    test_review_navigation(argv[1], argv[2]);
+    test_review_stale(argv[1], argv[2]);
+    test_review_narrow(argv[1], argv[2]);
+    test_review_cancellation(argv[1], argv[2], argv[0]);
     test_fleet_attach(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);

@@ -26,6 +26,34 @@ struct native_attention {
     char error[TEXT];
 };
 
+static void review_identity(const struct attention_item *item, struct native_review_identity *id)
+{
+    memset(id, 0, sizeof(*id));
+    copy_text(id->source, sizeof(id->source), item->source);
+    copy_text(id->kind, sizeof(id->kind), item->kind);
+    copy_text(id->project, sizeof(id->project), item->project);
+    copy_text(id->host, sizeof(id->host), item->host);
+    copy_text(id->task, sizeof(id->task), item->task);
+    copy_text(id->run, sizeof(id->run), item->run);
+    copy_text(id->step, sizeof(id->step), item->step);
+    copy_text(id->attempt, sizeof(id->attempt), item->attempt);
+    copy_text(id->head, sizeof(id->head), item->head);
+    copy_text(id->instance, sizeof(id->instance), item->instance);
+    copy_text(id->request, sizeof(id->request), item->request);
+    copy_text(id->binding, sizeof(id->binding), item->binding);
+    copy_text(id->revision, sizeof(id->revision), item->revision);
+    copy_text(id->identity, sizeof(id->identity), item->identity);
+}
+
+static void sync_review(struct app *app)
+{
+    struct native_attention *view = app->attention;
+    struct native_review_identity id;
+    if (!view || view->selected >= view->count) { native_review_sync(app, NULL, false); return; }
+    review_identity(&view->items[view->selected], &id);
+    native_review_sync(app, &id, view->have_good && !view->stale);
+}
+
 static bool put_field(char *dst, size_t cap, const char *value, size_t maximum)
 {
     size_t length;
@@ -231,6 +259,7 @@ void native_attention_tick(struct app *app, bool request)
         FILE *input = native_capture_take(job);
         if (input) accept_attention(app, input); else capture_failure(app);
     }
+    sync_review(app);
     if (!request || app->view != 9 || job->pid) return;
     argv[0] = (char *)app->hydra; argv[1] = (char *)(app->fleet ? "fleet" : "workflow"); argv[2] = (char *)"attention-data"; argv[3] = NULL;
     app->attention->loading = true;
@@ -271,7 +300,7 @@ static void render_detail(struct app *app, const struct native_attention *view)
     linef(app, "Head: %s  Instance: %s", item->head, item->instance);
     linef(app, "Request: %s  Binding: %s", item->request, item->binding);
     linef(app, "Route: %s  navigable=%s", item->route_kind, item->navigable); linef(app, "Revision SHA256: %s", item->revision); linef(app, "Identity SHA256: %s", item->identity);
-    linef(app, "Enter/Esc back   s acknowledge client-only");
+    linef(app, "r review  Enter/Esc back  s acknowledge client-only");
 }
 static void render_rows(struct app *app, const struct native_attention *view)
 {
@@ -286,25 +315,37 @@ static void render_rows(struct app *app, const struct native_attention *view)
 void render_attention(struct app *app)
 {
     struct native_attention *view = app->attention;
+    if (native_review_render(app)) return;
     if (!view) { linef(app, "ATTENTION / loading"); return; }
     if (view->detail && view->selected < view->count) { render_detail(app, view); return; }
     linef(app, "ATTENTION  %u current  %u stale  %u unknown", view->stale ? 0U : view->current_count, view->stale_count, view->unknown_count);
     if (view->stale) linef(app, "STALE: last good attention snapshot (current count unavailable)");
     if (view->partial || view->truncated) linef(app, "PARTIAL SNAPSHOT: partial=%d truncated=%d", view->partial, view->truncated);
     if (view->error[0]) linef(app, "%s", view->error);
-    render_rows(app, view); linef(app, "j/k or arrows select  Enter details  s acknowledge client-only  I refresh  Esc heads");
+    render_rows(app, view); linef(app, "j/k select  Enter details  r review  s seen  I refresh");
 }
 static bool attention_move(struct native_attention *view, char key)
 {
-    if ((key == 'j' || key == 'B') && view->selected + 1U < view->count) { view->selected++; return true; }
-    if ((key == 'k' || key == 'A') && view->selected) { view->selected--; return true; }
+    if ((key == 'j' || key == 'B' || key == ']') && view->selected + 1U < view->count) { view->selected++; return true; }
+    if ((key == 'k' || key == 'A' || key == '[') && view->selected) { view->selected--; return true; }
     return false;
+}
+static bool open_review(struct app *app, char key)
+{
+    struct native_attention *view = app->attention;
+    struct native_review_identity id;
+    if (key != 'r' || view->selected >= view->count) return false;
+    if (view->stale) { copy_text(app->notice, sizeof(app->notice), "Refresh attention before reviewing a stale selection"); return true; }
+    review_identity(&view->items[view->selected], &id);
+    native_review_open(app, &id);
+    return true;
 }
 bool native_attention_key(struct app *app, char key)
 {
     struct native_attention *view = app->attention; bool handled = true;
     if (!view) return false;
-    if (attention_move(view, key)) { keep_visible(app); return true; }
+    if (native_review_key(app, key) || open_review(app, key)) return true;
+    if (attention_move(view, key)) { keep_visible(app); sync_review(app); return true; }
     if (key == '\r' || key == '\n') { if (view->count) view->detail = !view->detail; }
     else if (key == 's' && view->selected < view->count && view->items[view->selected].unseen) {
         view->items[view->selected].unseen = false; remember_revision(view, view->items[view->selected].identity, view->items[view->selected].revision); classify(view);

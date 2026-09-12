@@ -381,10 +381,17 @@ static void render_snapshot_hint(struct app *app, bool headless) {
     else linef(app, "%s / o overview / w graph / H hosts", stale ? "STALE" : "Current");
 }
 
+static bool attention_hint(struct app *app) {
+    if (app->view != 9) return false;
+    if (native_review_active(app)) linef(app, "j/k scroll i IDs f refs r load Esc/q");
+    else linef(app, "j/k select  Enter details  r review  s seen  I refresh  Esc heads  q quit");
+    style(app, TONE_BASE); return true;
+}
+
 static void render_key_hint(struct app *app) {
     style(app, TONE_STRONG);
-    if (app->view == 9) linef(app, "j/k select  Enter details  s seen  I refresh  Esc heads  q quit");
-    else if (app->view == 5) linef(app, app->cols < 60 ? "j/k node [/] run ? help q quit" : "j/k node  [/] run  h/l/J/K pan  ? help  q quit");
+    if (attention_hint(app)) return;
+    if (app->view == 5) linef(app, app->cols < 60 ? "j/k node [/] run ? help q quit" : "j/k node  [/] run  h/l/J/K pan  ? help  q quit");
     else if (app->view == 6) linef(app, "j/k host  Enter heads  ? help  q quit");
     else if (app->cols < 60) linef(app, app->fleet ? "a attach  c interrupt  ? help  q quit" : "Enter open  : actions  ? help  q quit");
     else if (app->view == 1 && !app->fleet) linef(app, "p output  d diagnostics  Esc back  t theme  ? help  q quit");
@@ -393,7 +400,8 @@ static void render_key_hint(struct app *app) {
 }
 
 static void render_footer(struct app *app, bool headless) {
-    if (!render_notice(app)) {
+    if (app->view == 9 && native_review_active(app)) linef(app, "l log / t transcript / p PR | g/G ends | [/] rows");
+    else if (!render_notice(app)) {
         if (app->view >= 4) render_snapshot_hint(app, headless);
         else if (!app->help && !app->diagnostics && (app->view == 0 || app->view == 3))
             linef(app, app->hit_tabs ? "Click row/tab | Wheel moves selection | o overview | t theme" : "Click row | Wheel moves selection");

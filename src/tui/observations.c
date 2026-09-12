@@ -15,6 +15,7 @@ void native_observations_cancel(struct app *app, size_t source) {
 void native_observations_destroy(struct app *app) {
     size_t i;
     native_evidence_destroy(app);
+    native_review_destroy(app);
     free(app->links); app->links=NULL;
     native_controls_tick(app); /* Reap finished owners; active owners survive UI exit. */
     if (!app->observations) return;
@@ -73,4 +74,5 @@ void native_observations_tick(struct app *app, bool request) {
     }
     native_evidence_tick(app,request);
     native_attention_tick(app,request);
+    native_review_tick(app);
 }

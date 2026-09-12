@@ -5,12 +5,33 @@
 #include "internal.h"
 /* Bounded read-only subprocess capture. The caller owns the stream and process;
  * step never waits for a child, so terminal I/O can continue during observations. */
+#define CAPTURE_STOP_GRACE_MS 750L
 
+static long elapsed_ms(const struct timespec *started) {
+    struct timespec now;
+    (void)clock_gettime(CLOCK_MONOTONIC,&now);
+    return (long)(now.tv_sec-started->tv_sec)*1000L+(long)(now.tv_nsec-started->tv_nsec)/1000000L;
+}
+
+static void stop_capture(struct native_capture *p) {
+    if (!p->stopping) {
+        p->stopping=true; p->failed=true;
+        (void)clock_gettime(CLOCK_MONOTONIC,&p->stop_started);
+        /* The producer owns any nested process groups and temporary files. */
+        (void)kill(-p->pid,SIGTERM); (void)kill(p->pid,SIGTERM);
+    }
+    if (!p->killed && elapsed_ms(&p->stop_started)>=CAPTURE_STOP_GRACE_MS) {
+        (void)kill(-p->pid,SIGKILL); (void)kill(p->pid,SIGKILL);
+        p->killed=true; p->eof=true;
+    }
+}
 
 void native_capture_destroy(struct native_capture *p) {
     if (p->pid>0 && !p->reaped) {
-        (void)kill(-p->pid,SIGKILL); (void)kill(p->pid,SIGKILL);
-        while (waitpid(p->pid,&p->status,0)<0 && errno==EINTR) { }
+        const struct timespec pause={0,10000000L};
+        stop_capture(p);
+        while (!native_capture_step(p) && !p->killed) (void)nanosleep(&pause,NULL);
+        if (!p->reaped) while (waitpid(p->pid,&p->status,0)<0 && errno==EINTR) { }
     }
     if (p->fd>=0) close(p->fd);
     if (p->output) fclose(p->output);
@@ -44,29 +65,29 @@ fail:
     native_capture_destroy(p); return false;
 }
 
-bool native_capture_step(struct native_capture *p) {
-    struct timespec now;
-    size_t chunks;
-    long elapsed;
-    if (!p->pid) return true;
-    (void)clock_gettime(CLOCK_MONOTONIC,&now);
-    elapsed=(long)(now.tv_sec-p->started.tv_sec)*1000L+(long)(now.tv_nsec-p->started.tv_nsec)/1000000L;
-    if (elapsed>=p->budget_ms || terminal_stopped()) { p->timed_out=true; p->failed=true; }
-    for (chunks=0; !p->failed && !p->eof && chunks<32; chunks++) {
+static void drain_capture(struct native_capture *p) {
+    for (size_t chunks=0; chunks<32; chunks++) {
         char bytes[8192];
         ssize_t n=read(p->fd,bytes,sizeof(bytes));
-        if (!n) { p->eof=true; break; }
-        if (n<0) { if (errno!=EAGAIN && errno!=EINTR) p->failed=true; break; }
+        if (n<=0) {
+            if (!n) p->eof=true;
+            else if (errno!=EAGAIN && errno!=EINTR) p->failed=true;
+            return;
+        }
+        /* Drain discarded output while a cancelled producer unwinds. */
+        if (p->failed) continue;
         if ((size_t)n>MAX_DATA_BYTES-p->bytes || fwrite(bytes,1,(size_t)n,p->output)!=(size_t)n) p->failed=true;
         else p->bytes+=(size_t)n;
     }
-    if (p->failed) {
-        /* Group cleanup also stops a descendant that kept stdout open. */
-        (void)kill(-p->pid,SIGKILL);
-        if (!p->reaped) (void)kill(p->pid,SIGKILL);
-        p->eof=true;
-    }
-    if (!p->reaped) {
+}
+
+bool native_capture_step(struct native_capture *p) {
+    if (!p->pid) return true;
+    if (elapsed_ms(&p->started)>=p->budget_ms || terminal_stopped()) { p->timed_out=true; p->failed=true; }
+    if (!p->eof) drain_capture(p);
+    if (p->failed && !p->reaped) stop_capture(p);
+    /* Retain the leader until EOF so its process-group ID cannot be reused. */
+    if (!p->reaped && p->eof) {
         pid_t result=waitpid(p->pid,&p->status,WNOHANG);
         if (result==p->pid) p->reaped=true;
         else if (result<0 && errno!=EINTR) { p->failed=true; p->reaped=true; }

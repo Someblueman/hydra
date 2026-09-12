@@ -1,6 +1,23 @@
 #!/bin/sh
 
+if [ -n "${HYDRA_REVIEW_CALLS:-}" ]; then printf '%s\n' "$@" '---' >> "$HYDRA_REVIEW_CALLS"; fi
+
 case "${1:-}:${2:-}" in
+    workflow:review-data|fleet:review-data)
+        if [ -n "${HYDRA_REVIEW_STARTED:-}" ]; then : > "$HYDRA_REVIEW_STARTED"; fi
+        if [ -n "${HYDRA_REVIEW_FAIL:-}" ] && [ -f "$HYDRA_REVIEW_FAIL" ]; then exit 1; fi
+        if [ -n "${HYDRA_REVIEW_CANCEL_OWNER:-}" ]; then
+            exec "$HYDRA_REVIEW_CANCEL_OWNER" --review-cancel-owner "$HYDRA_REVIEW_PIDS" \
+                "$HYDRA_REVIEW_CANCEL_SCRATCH" "$HYDRA_REVIEW_CANCEL_CLEANED" "$HYDRA_REVIEW_CANCEL_MODE"
+        fi
+        cat "$HYDRA_REVIEW_FIXTURE"
+        if [ -n "${HYDRA_REVIEW_DELAY:-}" ] && [ -f "$HYDRA_REVIEW_DELAY" ]; then
+            sleep "$(cat "$HYDRA_REVIEW_DELAY")" &
+            review_child=$!
+            if [ -n "${HYDRA_REVIEW_PIDS:-}" ]; then printf '%s\n' "$$" "$review_child" > "$HYDRA_REVIEW_PIDS"; fi
+            wait "$review_child"
+        fi
+        ;;
     workflow:statistics-data)
         if [ -n "${HYDRA_TEST_STATS_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_STATS_FAIL_FILE" ]; then exit 1; fi
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
