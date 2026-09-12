@@ -769,6 +769,31 @@ operator workflows below retain those execution and mutation boundaries.
       narrow terminals, references and cancellation cleanup. Combined repository
       checks are complete; see [evidence and limits](attention-review-acceptance.md).
 
+- [ ] **I4 — Visual design and usability of attention and review.** Bring the
+      attention queue/detail, evidence review, identity/reference views and Fleet
+      navigation up to the visual standard of the existing native workspace,
+      planning and operational pages. The I2/I3 functional checks do not establish
+      visual quality; the PR #84 screenshot review identified this as unfinished.
+      Reuse the established typography, spacing, borders, themes, selection and
+      focus treatments so these screens feel like part of the same application.
+      Lead with a readable task name, status, reason for attention and next action.
+      Group checks, artifacts, diffs and references into scannable sections with
+      useful previews; keep full hashes and technical identity fields available
+      in explicit detail views. Balance information density and whitespace, handle
+      long names/paths deliberately, and make keyboard actions easy to discover.
+      Design loading, empty, stale, unavailable and failed states with the same
+      care as populated views. Preserve exact-subject binding, read-only review
+      and clear separation of seen state from approval or acceptance.
+      Acceptance: compare before/after captures from the running native UI with
+      the existing workspace/planning pages, using realistic task names, checks,
+      diffs and artifacts. Cover 80×24 and wider layouts, dark/light themes and
+      no-color mode. Visually review every new view and state for hierarchy,
+      alignment, contrast, wrapping, clipping and focus. Walk through finding an
+      item, understanding why it needs attention, reviewing its evidence and
+      returning to the queue with selection preserved. Completion requires user
+      review of the actual screens as well as relevant interaction checks;
+      passing tests or placeholder-filled screenshots alone are insufficient.
+
 I1 builds on V1–V4 and existing interactive attach; tmux-free distributed
 qualification stays in T2/T3. I2/I3 reuse lifecycle, outcome and review contracts.
 Select independently useful slices, with item 10 measuring their overhead.
