@@ -26,6 +26,8 @@ spawn_parse_options() {
     use_issue_body=""
     completion_policy=declared-done
     scope_rules=""
+    attach=""
+    resume_existing=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -37,6 +39,16 @@ spawn_parse_options() {
             -n|--count)
                 shift
                 count="$1"
+                shift
+                ;;
+            --attach)
+                # Direct terminal attachment is an explicit expert choice; the
+                # interactive default keeps the user in the control centre.
+                attach="1"
+                shift
+                ;;
+            --resume)
+                resume_existing="1"
                 shift
                 ;;
             --ai|--profile)
@@ -132,7 +144,7 @@ $_csp_mode$_csp_tab$2"
                 ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>] [--after <deps>] [-t|--template <name>]" >&2
+                echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--attach] [--resume] [--agents <spec>] [-g|--group <name>] [--after <deps>] [-t|--template <name>]" >&2
                 echo "       hydra spawn --issue <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
                 echo "       hydra spawn --pr <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
                 exit 1
@@ -142,7 +154,7 @@ $_csp_mode$_csp_tab$2"
                     branch="$1"
                 else
                     echo "Error: Too many arguments" >&2
-                    echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>] [--after <deps>] [-t|--template <name>]" >&2
+                    echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--attach] [--resume] [--agents <spec>] [-g|--group <name>] [--after <deps>] [-t|--template <name>]" >&2
                     echo "       hydra spawn --issue <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
                     echo "       hydra spawn --pr <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
                     exit 1
@@ -199,7 +211,7 @@ cmd_spawn() {
 
     if [ -z "$branch" ]; then
         echo "Error: Branch name is required" >&2
-        echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--agents <spec>] [-g|--group <name>]" >&2
+        echo "Usage: hydra spawn <branch> [-l|--layout <layout>] [-n|--count <number>] [--ai <tool>] [--attach] [--resume] [--agents <spec>] [-g|--group <name>]" >&2
         echo "       hydra spawn --issue <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
         echo "       hydra spawn --pr <number> [-l|--layout <layout>] [-g|--group <name>]" >&2
         exit 1
@@ -275,6 +287,18 @@ $_csp_instructions"
         echo "Error: --headless currently requires a single head" >&2
         exit 1
     fi
+    if [ -n "$attach" ] && [ -n "$headless" ]; then
+        echo "Error: --attach cannot be combined with --headless (a headless head has no terminal)" >&2
+        exit 1
+    fi
+    if { [ -n "$attach" ] || [ -n "$resume_existing" ]; } && { [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; }; then
+        echo "Error: --attach and --resume require a single head" >&2
+        exit 1
+    fi
+    if [ -n "$resume_existing" ] && { [ -n "$task_source" ] || [ -n "$scope_rules" ] || [ -n "$template_name" ] || [ -n "$pr_new" ] || [ -n "$after_deps" ]; }; then
+        echo "Error: --resume reuses the head's recorded task and metadata; it cannot be combined with --prompt, --prompt-file, --issue-body, --scope-*, --template, --pr-new, or --after" >&2
+        exit 1
+    fi
 
     if { [ -n "$task_source" ] || [ -n "$dry_run" ]; } && \
        { [ "$count" -gt 1 ] || [ -n "$agents_spec" ]; }; then
@@ -332,6 +356,20 @@ $_csp_instructions"
 
         # Check for circular dependencies
         if ! check_circular_deps "$branch" "$after_deps"; then
+            exit 1
+        fi
+    fi
+
+    # Durable head state outlives `hydra kill`; a branch that already has a
+    # head must be resumed or renamed. Dry-run and the actual spawn share this
+    # check so the plan never claims a spawn that would be refused.
+    if [ "$count" -eq 1 ] && [ -z "$agents_spec" ]; then
+        if spawn_existing_head_status "$branch"; then
+            if [ -n "$resume_existing" ] && [ "$SPAWN_EXISTING_LIVENESS" != live ]; then
+                spawn_resume_existing "$branch" "$dry_run" || return 1
+                return 0
+            fi
+            spawn_report_existing_head "$branch"
             exit 1
         fi
     fi
@@ -444,22 +482,166 @@ $_csp_instructions"
             fi
         fi
 
-        # Optionally skip switching (useful for demos/automation)
-        if [ "$_terminal_mode" = headless ]; then
-            echo "Headless head '$branch' created (no terminal; use hydra exec --branch $branch -- ...)"
-        elif [ -n "${HYDRA_NO_SWITCH:-}" ]; then
-            echo "Session '$session' created (HYDRA_NO_SWITCH set; not attaching)"
-        else
-            # Switch to the new session (only in terminal)
-            if [ -t 0 ] && [ -t 1 ]; then
-                echo "Switching to session '$session'..."
-                switch_to_session "$session"
-            else
-                echo "Session '$session' created successfully (not switching - not in terminal)"
-            fi
-        fi
+        spawn_finish_launch "$branch" "$session" "$ai_tool" "$_terminal_mode" created || return 1
         return 0
     else
         return 1
     fi
+}
+
+# Decide what happens to the user's terminal after a head is launched.
+# Usage: spawn_finish_launch <branch> <session> <profile> <terminal_mode> <verb>
+# Consumes the parser's `attach` variable. Documented noninteractive contracts
+# (HYDRA_NO_SWITCH, non-TTY, headless) keep their exact messages; the
+# interactive default stays in the current terminal and prints a context block
+# so the control centre remains the way back to the head.
+spawn_finish_launch() {
+    _sfl_branch="$1"
+    _sfl_session="$2"
+    _sfl_profile="$3"
+    _sfl_mode="$4"
+    _sfl_verb="${5:-created}"
+    if [ "$_sfl_mode" = headless ]; then
+        echo "Headless head '$_sfl_branch' $_sfl_verb (no terminal; use hydra exec --branch $_sfl_branch -- ...)"
+    elif [ -n "${HYDRA_NO_SWITCH:-}" ]; then
+        echo "Session '$_sfl_session' $_sfl_verb (HYDRA_NO_SWITCH set; not attaching)"
+        [ -z "${attach:-}" ] || echo "Note: --attach ignored because HYDRA_NO_SWITCH is set" >&2
+    elif [ -t 0 ] && [ -t 1 ]; then
+        if [ -n "${attach:-}" ]; then
+            # Explicit expert choice: take over this terminal. A failed
+            # attach keeps its nonzero status but still tells the user where
+            # the running head is.
+            echo "Switching to session '$_sfl_session'..."
+            switch_to_session "$_sfl_session" || {
+                echo "Could not attach to session '$_sfl_session'; the head is still running." >&2
+                spawn_print_context "$_sfl_branch" "$_sfl_session" "$_sfl_profile" "$_sfl_verb"
+                return 1
+            }
+        else
+            spawn_print_context "$_sfl_branch" "$_sfl_session" "$_sfl_profile" "$_sfl_verb"
+        fi
+    else
+        echo "Session '$_sfl_session' $_sfl_verb successfully (not switching - not in terminal)"
+    fi
+}
+
+# Print the concise, human-readable launch context for an interactive head.
+# Usage: spawn_print_context <branch> <session> <profile> <verb>
+spawn_print_context() {
+    _spc_branch="$1"
+    _spc_session="$2"
+    _spc_profile="$3"
+    _spc_verb="${4:-created}"
+    _spc_worktree="$(spawn_worktree_for_branch "$_spc_branch" 2>/dev/null || true)"
+    _spc_agent="$_spc_profile"
+    case "$_spc_agent" in ''|none|-) _spc_agent="none (plain shell)" ;; esac
+    echo "Head '$_spc_branch' $_spc_verb; it keeps running in the background."
+    echo "  branch:   $_spc_branch"
+    echo "  agent:    $_spc_agent"
+    [ -z "$_spc_worktree" ] || echo "  worktree: $(spawn_human_path "$_spc_worktree")"
+    echo "  session:  $_spc_session (tmux)"
+    echo "Next:"
+    echo "  hydra tui                   follow it in the control centre"
+    echo "  hydra switch $_spc_branch   attach to its terminal directly"
+}
+
+# Abbreviate the home directory for display only; stored paths stay absolute.
+# Usage: spawn_human_path <path>
+spawn_human_path() {
+    case "${HOME:-}" in
+        ''|/) printf '%s\n' "$1" ;;
+        *)
+            case "$1" in
+                "$HOME"/*) printf '~%s\n' "${1#"$HOME"}" ;;
+                *) printf '%s\n' "$1" ;;
+            esac
+            ;;
+    esac
+}
+
+# Resolve the worktree Hydra recorded for a branch's head.
+# Usage: spawn_worktree_for_branch <branch>
+spawn_worktree_for_branch() {
+    _swfb_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    _swfb_head="$(state_v2_find_head_by_branch "$_swfb_project" "$1" 2>/dev/null)" || return 1
+    _swfb_dir="$(state_v2_head_dir "$_swfb_project" "$_swfb_head")" || return 1
+    _swfb_stored="$(sed -n '1p' "$_swfb_dir/worktree" 2>/dev/null || true)"
+    if [ -n "$_swfb_stored" ]; then
+        printf '%s\n' "$_swfb_stored"
+    else
+        project_worktree_path "$_swfb_project" "$_swfb_head"
+    fi
+}
+
+# Detect durable head state for a branch without mutating anything.
+# Usage: spawn_existing_head_status <branch>
+# Returns 0 when a head exists and sets SPAWN_EXISTING_HEAD_ID plus
+# SPAWN_EXISTING_LIVENESS (live, stopped, or unavailable); 1 when none exists.
+spawn_existing_head_status() {
+    SPAWN_EXISTING_HEAD_ID=""
+    SPAWN_EXISTING_LIVENESS=""
+    _sehs_project="$(hydra_get_project_id 2>/dev/null)" || return 1
+    SPAWN_EXISTING_HEAD_ID="$(state_v2_find_head_by_branch "$_sehs_project" "$1" 2>/dev/null)" || return 1
+    SPAWN_EXISTING_LIVENESS="$(lifecycle_liveness "$1" 2>/dev/null || true)"
+    case "$SPAWN_EXISTING_LIVENESS" in
+        live|unavailable) ;;
+        *) SPAWN_EXISTING_LIVENESS=stopped ;;
+    esac
+    return 0
+}
+
+# Explain why a branch cannot be spawned again and what to do instead.
+# Usage: spawn_report_existing_head <branch>
+spawn_report_existing_head() {
+    _sreh_branch="$1"
+    case "$SPAWN_EXISTING_LIVENESS" in
+        live)
+            _sreh_session="$(get_session_for_branch "$_sreh_branch" 2>/dev/null || true)"
+            _sreh_where=""
+            [ -z "$_sreh_session" ] || _sreh_where=" in session '$_sreh_session'"
+            echo "Error: $_sreh_branch is already running$_sreh_where. Follow it with 'hydra tui', attach with 'hydra switch $_sreh_branch', or pick a new branch name." >&2
+            ;;
+        unavailable)
+            echo "Error: $_sreh_branch already exists as a headless head without a live owner. Run work with 'hydra exec --branch $_sreh_branch -- <command>', start it again with 'hydra resume $_sreh_branch', or pick a new branch name." >&2
+            ;;
+        *)
+            echo "Error: $_sreh_branch was removed earlier. Start it again with 'hydra resume $_sreh_branch', or pick a new branch name." >&2
+            echo "Next: hydra spawn $_sreh_branch --resume does the same from this command" >&2
+            ;;
+    esac
+}
+
+# Resume a stopped head from `spawn --resume` instead of refusing it. The
+# durable resume path owns admission and instance creation, so this never
+# creates a second execution owner: a live head is rejected before we get here
+# and again inside cmd_resume.
+# Usage: spawn_resume_existing <branch> <dry_run>
+spawn_resume_existing() {
+    _sre_branch="$1"
+    _sre_dry="$2"
+    _sre_worktree="$(spawn_worktree_for_branch "$_sre_branch" 2>/dev/null || true)"
+    _sre_mode="$(get_terminal_mode_for_branch "$_sre_branch" 2>/dev/null || echo interactive)"
+    if [ -n "$_sre_dry" ]; then
+        echo "Hydra spawn plan (no changes will be made)"
+        echo "  branch: $_sre_branch"
+        echo "  head_id: $SPAWN_EXISTING_HEAD_ID"
+        echo "  action: resume existing head (same as 'hydra resume $_sre_branch')"
+        echo "  worktree: ${_sre_worktree:--}"
+        echo "  terminal_mode: $_sre_mode"
+        echo "  state: create a new instance from durable resume metadata, then emit lifecycle.resumed"
+        return 0
+    fi
+    _load_lib cmd_evidence
+    cmd_resume "$_sre_branch" || return 1
+    _sre_session="$(get_session_for_branch "$_sre_branch" 2>/dev/null || true)"
+    _sre_profile="$(spawn_existing_profile "$_sre_branch")"
+    spawn_finish_launch "$_sre_branch" "$_sre_session" "$_sre_profile" "$_sre_mode" resumed
+}
+
+# Usage: spawn_existing_profile <branch>
+spawn_existing_profile() {
+    _sep_project="$(hydra_get_project_id 2>/dev/null)" || return 0
+    _sep_head="$(state_v2_find_head_by_branch "$_sep_project" "$1" 2>/dev/null)" || return 0
+    _sep_dir="$(state_v2_head_dir "$_sep_project" "$_sep_head")" || return 0
+    sed -n '1p' "$_sep_dir/profile" 2>/dev/null || true
 }

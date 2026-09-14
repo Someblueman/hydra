@@ -23,11 +23,13 @@ approval waits, headless adapters, and local objective planning; see the
   `hydra list --json` is unchanged.
 
 ```sh
-# Create a new head for a branch (tmux + worktree)
+# Create a new head for a branch (tmux + worktree); stays in this terminal
 hydra spawn feature-branch [-l default|dev|full]
 hydra spawn feature-branch --dry-run --no-agent
 hydra spawn feature-branch --profile claude --prompt "Implement the task"
 hydra spawn feature-branch --profile codex --prompt-file task.md
+hydra spawn feature-branch --attach          # expert: take over this terminal
+hydra spawn feature-branch --resume          # start again after `hydra kill`
 
 # From a GitHub issue
 hydra spawn --issue 123
@@ -135,6 +137,24 @@ hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
 ```
 
+## Launching heads and attaching
+
+An interactive `hydra spawn` creates the head and leaves you in your current
+terminal. It prints a short context block (branch, agent, worktree location, tmux
+session) with the two next actions: `hydra tui` to follow the head in the control
+centre, or `hydra switch <branch>` to attach to its terminal. Pass `--attach` to
+take over the terminal immediately instead; this is the expert path and is never
+the default. `HYDRA_NO_SWITCH=1` still creates the head without attaching and
+overrides `--attach`. Non-terminal invocations (pipes, automation) and `--headless`
+heads keep their existing messages and never attach.
+
+Durable head state outlives `hydra kill`, so `hydra spawn` and `hydra spawn --dry-run`
+both refuse a branch whose head still exists and name the way forward: `hydra resume
+<branch>` (or `hydra spawn <branch> --resume`, which takes the same resume path and
+ignores spawn-only options such as `--prompt`) or a new branch name. A live head is
+never given a second execution owner; `--resume` on a branch without a head simply
+spawns it.
+
 Attention results are immutable run/step/attempt evidence. A sealed result remains
 inspectable when its execution head is no longer live; missing recorded head or
 instance identity is reported as `identity_provenance: not_recorded` and never
@@ -241,7 +261,7 @@ hydra completion fish > ~/.config/fish/completions/hydra.fish
 
 | Variable | Description |
 |----------|-------------|
-| `HYDRA_NO_SWITCH` | Set to `1` to create a head without attaching |
+| `HYDRA_NO_SWITCH` | Set to `1` to never attach on spawn, even with `--attach` (demos, automation) |
 | `HYDRA_HOME` | Runtime dir (default `~/.hydra`) |
 | `HYDRA_AI_COMMAND` | Default agent override; project profiles are preferred |
 | `HYDRA_ROOT` | Force library discovery when running from source |
