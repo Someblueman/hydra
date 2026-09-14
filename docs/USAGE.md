@@ -281,6 +281,29 @@ Add `.hydra/` scripts to customize lifecycle:
 - `startup`: one command per line; sent to the main pane after spawn.
 - `hooks/post-spawn`: after layout/startup; env: `HYDRA_SESSION`, `HYDRA_WORKTREE`, `HYDRA_BRANCH`.
 
+## Head session bootstrap
+
+An interactive head receives `HYDRA_PROJECT_ID`, `HYDRA_HEAD_ID`,
+`HYDRA_INSTANCE_ID`, `HYDRA_BRANCH`, `HYDRA_WORKTREE`, `HYDRA_STATE_DIR`, and
+`HYDRA_TASK_FILE` without anything being typed into its shell or shell history:
+
+- The values are set in the tmux session environment before the first pane
+  starts (`new-session -e` on tmux 3.2 or newer; `set-environment` on 3.0/3.1),
+  so every window and pane created later inherits them.
+- The first pane runs a generated launcher, recorded at
+  `<state-dir>/instances/<instance>/launcher`, which exports the same values,
+  prints a short banner (`Hydra head <branch> · agent <profile> · repo <name>`
+  plus a `hydra provenance` pointer), starts the agent by the absolute path that
+  `hydra agent list` and `hydra provenance` report, and then execs your login
+  shell so the pane stays usable after the agent exits. While the agent runs it
+  owns the terminal: Ctrl-C reaches only the agent, and Ctrl-Z is ignored.
+- Exact identities and paths stay out of the transcript; `hydra provenance
+  <branch>` prints them, together with the launcher path. `hydra resume` uses
+  the same mechanism with its resume recipe.
+- `startup` lines and YAML `startup`, window, or pane entries are still typed
+  keys. When such entries apply, the agent command is typed after them, exactly
+  as before, so it keeps following those commands.
+
 ## Dashboard
 
 - Shows panes from all heads in one tmux window; exits with `q` and restores everything.

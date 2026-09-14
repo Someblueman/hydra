@@ -135,7 +135,9 @@ spawn_dry_run() {
         [ -z "$_sdr_task" ] || _sdr_task_arg="$_sdr_task_file"
         [ "$(profile_field "$_sdr_profile" resume_mode)" != session-id ] || \
             _sdr_provider="$(profile_new_provider_id "$_sdr_profile" "$_sdr_instance")"
-        _sdr_launch="$(profile_launch_command "$_sdr_profile" "$_sdr_task_arg" "$_sdr_provider")" || return 1
+        # Report the same absolute executable the real launch will run.
+        _sdr_executable="$(profile_executable_path "$_sdr_profile" 2>/dev/null || true)"
+        _sdr_launch="$(profile_launch_command "$_sdr_profile" "$_sdr_task_arg" "$_sdr_provider" "$_sdr_executable")" || return 1
     else
         _sdr_launch="(plain shell; no agent)"
     fi
@@ -256,7 +258,14 @@ spawn_single() {
     if [ "$ai_tool" != none ]; then
         planned_task_arg=""
         [ -z "$task" ] || planned_task_arg="$planned_task_file"
-        launch_command="$(profile_launch_command "$ai_tool" "$planned_task_arg" "$provider_session_id")" || return 1
+        # Launch the executable `hydra agent list` resolved, by absolute path,
+        # so a login shell's PATH cannot substitute a different binary.
+        launch_executable="$(profile_executable_path "$ai_tool" 2>/dev/null)" || {
+            echo "Error: AI command '$ai_tool' is not installed or not on PATH" >&2
+            echo "Next: pass --no-agent to spawn a shell-only head, install '$ai_tool', or set HYDRA_AI_COMMAND" >&2
+            return 1
+        }
+        launch_command="$(profile_launch_command "$ai_tool" "$planned_task_arg" "$provider_session_id" "$launch_executable")" || return 1
     fi
 
     # Check if branch already has a session
@@ -314,19 +323,9 @@ spawn_admitted() {
     # Run pre-spawn hook (best-effort)
     run_hook pre-spawn "$worktree_path" "$repo_root" "" "$branch"
 
-    # Create the optional terminal only for interactive execution.
-    if [ "$terminal_mode" = interactive ]; then
-        echo "Creating tmux session '$session'..." >&2
-        if ! create_session "$session" "$worktree_path"; then
-            release_session_lock "$session" 2>/dev/null || true
-            delete_worktree "$worktree_path" 2>/dev/null || true
-            release_lock "$project_worktree_lock"
-            return 1
-        fi
-        release_session_lock "$session" 2>/dev/null || true
-    fi
-
     # Commit durable identity and task before any agent process sees the task.
+    # The interactive terminal is created afterwards by spawn_start_session so
+    # its first pane can start from the committed head record.
     committed_head="$(state_v2_create_head "$project_id" "$branch" "$session" "$ai_tool" \
         "${group:--}" "$spawn_timestamp" "${deps:--}" "${pr_number:--}" "$repo_root" \
         "$head_id" "$instance_id" "$worktree_path" "$task" "$base_ref" "$provider_session_id" \
@@ -393,18 +392,34 @@ spawn_start_session() {
         return 0
     fi
 
-    tmux set-environment -t "$session" HYDRA_PROJECT_ID "$project_id" 2>/dev/null || true
-    tmux set-environment -t "$session" HYDRA_HEAD_ID "$head_id" 2>/dev/null || true
-    tmux set-environment -t "$session" HYDRA_INSTANCE_ID "$instance_id" 2>/dev/null || true
-    tmux set-environment -t "$session" HYDRA_BRANCH "$branch" 2>/dev/null || true
-    tmux set-environment -t "$session" HYDRA_WORKTREE "$worktree_path" 2>/dev/null || true
-    tmux set-environment -t "$session" HYDRA_STATE_DIR "$head_dir" 2>/dev/null || true
-    tmux set-environment -t "$session" HYDRA_TASK_FILE "$head_dir/task" 2>/dev/null || true
-    identity_export="export HYDRA_PROJECT_ID=$(profile_shell_quote "$project_id") HYDRA_HEAD_ID=$(profile_shell_quote "$head_id") HYDRA_INSTANCE_ID=$(profile_shell_quote "$instance_id") HYDRA_BRANCH=$(profile_shell_quote "$branch") HYDRA_WORKTREE=$(profile_shell_quote "$worktree_path") HYDRA_STATE_DIR=$(profile_shell_quote "$head_dir") HYDRA_TASK_FILE=$(profile_shell_quote "$head_dir/task")"
-    send_keys_to_session "$session" "$identity_export" || {
-        echo "Error: Failed to export head identity into session" >&2
+    # Configured startup commands and YAML pane commands are typed keys, so an
+    # agent must follow them the same way. Otherwise the launcher starts it
+    # directly and nothing is typed into the shell.
+    typed_launch=0
+    if [ -n "$launch_command" ]; then
+        if [ -n "$template" ] && [ -z "${HYDRA_DISABLE_YAML:-}" ]; then
+            typed_launch=1
+        elif [ -z "${HYDRA_DISABLE_YAML:-}" ] && yaml_cfg="$(locate_yaml_config "$worktree_path" "$repo_root" 2>/dev/null || true)" && [ -n "$yaml_cfg" ]; then
+            # A config without windows, panes, or startup entries leaves the
+            # launcher pane in place, so the agent can still start cleanly.
+            [ -z "$(yaml_config_records "$yaml_cfg" 2>/dev/null)" ] || typed_launch=1
+        elif has_startup_commands "$worktree_path" "$repo_root"; then
+            typed_launch=1
+        fi
+    fi
+    launcher_agent="$launch_command"
+    [ "$typed_launch" -eq 0 ] || launcher_agent=""
+
+    # The head environment reaches the session and every pane without being
+    # typed: the session environment plus a launcher that exports it, prints a
+    # short banner, runs the agent, and then execs the interactive shell.
+    echo "Creating tmux session '$session'..." >&2
+    launcher="$head_dir/instances/$instance_id/launcher"
+    if ! create_head_session "$session" "$launcher" "$launcher_agent" "$project_id" "$head_id" \
+        "$instance_id" "$branch" "$worktree_path" "$head_dir" "$ai_tool" "$repo_root"; then
         return 1
-    }
+    fi
+    release_session_lock "$session" 2>/dev/null || true
     event_emit "$project_id" "$head_id" "$instance_id" lifecycle.started hydra local \
         "{\"profile\":\"$(json_escape "$ai_tool")\"}" >/dev/null || {
         echo "Error: Failed to record lifecycle event" >&2
@@ -447,7 +462,7 @@ spawn_start_session() {
     # Start AI tool unless explicitly skipped (e.g., demos/CI)
     if [ "$ai_tool" != none ]; then
         echo "Starting $ai_tool in session '$session'..." >&2
-        if ! send_keys_to_session "$session" "$launch_command"; then
+        if [ "$typed_launch" -eq 1 ] && ! send_keys_to_session "$session" "$launch_command"; then
             return 1
         fi
     fi
