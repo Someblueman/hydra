@@ -96,7 +96,8 @@ hydra switch feature/search
 ```
 
 A *head* is a branch with its own worktree and tmux session. `spawn` normally
-attaches immediately; `HYDRA_NO_SWITCH=1` leaves you in the current terminal.
+prints where the head lives and stays in your terminal; `hydra spawn <branch> --attach`
+attaches immediately and `HYDRA_NO_SWITCH=1` always keeps you where you are.
 `switch` attaches to the named session. Detach with `Ctrl-b`, then `d`, to return to your original terminal.
 `init --trust` accepts the current repository-controlled Hydra configuration;
 review existing configuration before accepting it.

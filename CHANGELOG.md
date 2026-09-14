@@ -25,6 +25,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   report the result in place and show the full output only when a head was
   kept; recovery checks run the same way. Statistics and Workspace keep the
   shared tab bar.
+- A bare `hydra` inside a repository opens the control centre; elsewhere it
+  prints a short usage. `hydra <command> --help` works for every command.
+  `hydra doctor` detects agents correctly and names the no-agent path, and
+  `hydra status` reports tmux even without heads.
+- `hydra init` no longer writes `.hydra/config.yml`, `.hydra/local.yml` or
+  `.git/info/exclude`; registration is host-local and a clean repository stays
+  clean. Shared configuration is an explicit opt-in via
+  `hydra init --write-shared-config`; generated leftovers from earlier releases
+  are migrated once and real or tracked configuration is never removed. Init
+  prints a two-line `Ready:` summary; `init --json` is unchanged.
+- Interactive `hydra spawn` stays in the current terminal and prints where the
+  head lives with `hydra tui` / `hydra switch` as next actions; `--attach`
+  restores direct attachment. `spawn` and `spawn --dry-run` refuse an existing
+  durable head with the same message, and `spawn --resume` resumes a stopped
+  head of the same branch.
+- `hydra kill` says the branch is kept, and `hydra list` prints an aligned
+  BRANCH / AGENT / SESSION / REPORTED / AGE table (`--verbose` restores the
+  previous fields; `--json` is unchanged).
 
 ## [2.5.0] - 2026-09-12
 

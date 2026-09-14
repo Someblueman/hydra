@@ -18,6 +18,8 @@ Commands:
                       --no-agent              Create a first-class plain shell head
                       --headless              Create a terminal-free execution head
                       --dry-run               Print the resolved plan without mutation
+                      --attach                Attach to the new session (default: stay here)
+                      --resume                Resume a stopped head of the same branch
                       --prompt <text>          Record and inject task text at launch
                       --prompt-file <path>     Read task text from a file
                       --issue-body             Use --issue body as task text
