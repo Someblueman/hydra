@@ -40,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   restores direct attachment. `spawn` and `spawn --dry-run` refuse an existing
   durable head with the same message, and `spawn --resume` resumes a stopped
   head of the same branch.
+- Spawn and resume deliver the head environment through the tmux session
+  environment and a per-instance launcher: bootstrap exports and the agent
+  launch are no longer typed into the shell or its history, the pane opens
+  with a short `Hydra head ... / agent ... / repo ...` banner, and the agent runs
+  by the absolute executable path that `hydra agent list` and `hydra provenance`
+  report (tmux 3.2+ uses `new-session -e`; 3.0 and 3.1 fall back to
+  `set-environment`).
 - `hydra kill` says the branch is kept, and `hydra list` prints an aligned
   BRANCH / AGENT / SESSION / REPORTED / AGE table (`--verbose` restores the
   previous fields; `--json` is unchanged).
