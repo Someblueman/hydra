@@ -105,8 +105,9 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
         }
         /* Drain a bounded burst before repainting, without flushing incomplete
          * escape sequences until the ordinary input timeout has elapsed. A
-         * partial sequence waits longer so a fragmented key survives a busy host. */
-        if (read_key(input.length ? 150 : redraw ? 40 : 0,&byte)>0) {
+         * partial sequence beyond a lone Escape waits longer so a fragmented key
+         * survives a busy host while Escape alone still dismisses promptly. */
+        if (read_key(input.length>1 ? 150 : redraw ? 40 : 0,&byte)>0) {
             redraw=++queued>=64;
             if (redraw) queued=0;
             event=tv_input_feed(&input,(unsigned char)byte,&e);
