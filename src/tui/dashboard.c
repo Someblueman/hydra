@@ -25,6 +25,24 @@ void dashboard_card(struct tv_canvas *c, int x, int width, const char *title,
     dashboard_text(c, x + 2, 3, width - 4, TV_BASE, "%s", caption);
 }
 
+static void dashboard_head_hit(struct app *app, struct tv_rect r, int row, size_t i) {
+    if (app->hit_count >= MAX_HEADS) return;
+    app->hit_rows[app->hit_count] = app->line + row + 1;
+    app->hit_bottom[app->hit_count] = app->line + row + 1;
+    app->hit_left[app->hit_count] = app->content_x + r.x + 3;
+    app->hit_right[app->hit_count] = app->content_x + r.x + r.width - 2;
+    app->hit_items[app->hit_count++] = i;
+}
+
+static void dashboard_head_row(struct app *app, struct tv_canvas *c, struct tv_rect r, int row, size_t i, const struct head *h) {
+    bool selected = i == app->selected;
+    enum tv_style status = selected ? TV_SELECTED : app->fleet ? TV_BASE : status_tone(h);
+    dashboard_text(c, r.x + 2, row, r.width - 4, selected ? TV_SELECTED : TV_BASE, "%c %-*.*s", selected ? '>' : ' ',
+                   r.width - 21, r.width - 21, h->branch);
+    dashboard_text(c, r.x + r.width - 18, row, 15, status, "%s", app->fleet ? h->desired : status_label(h));
+    dashboard_head_hit(app, r, row, i);
+}
+
 static void dashboard_heads(struct app *app, struct tv_canvas *c, struct tv_rect r) {
     size_t i, ordinal = 0, selected = 0, count = 0, start;
     int row = r.y + 2, available = r.height - 4;
@@ -38,24 +56,31 @@ static void dashboard_heads(struct app *app, struct tv_canvas *c, struct tv_rect
     start = selected >= (size_t)available ? selected - (size_t)available + 1 : 0;
     for (i = 0; i < app->model.head_count && row < r.y + r.height - 2; i++) {
         const struct head *h = &app->model.heads[i];
-        enum tv_style tone;
         if (!head_matches(h, app->search) || ordinal++ < start) continue;
-        tone = i == app->selected ? TV_SELECTED : TV_BASE;
-        dashboard_text(c, r.x + 2, row, r.width - 4, tone, "%c %-*.*s", i == app->selected ? '>' : ' ',
-                       r.width - 21, r.width - 21, h->branch);
-        dashboard_text(c, r.x + r.width - 18, row, 15, i == app->selected ? TV_SELECTED : app->fleet ? TV_BASE : status_tone(h),
-                       "%s", app->fleet ? h->desired : status_label(h));
-        if (app->hit_count < MAX_HEADS) {
-            app->hit_rows[app->hit_count] = app->line + row + 1;
-            app->hit_bottom[app->hit_count] = app->line + row + 1;
-            app->hit_left[app->hit_count] = app->content_x + r.x + 3;
-            app->hit_right[app->hit_count] = app->content_x + r.x + r.width - 2;
-            app->hit_items[app->hit_count++] = i;
-        }
+        dashboard_head_row(app, c, r, row, i, h);
         row++;
     }
     dashboard_text(c, r.x + 2, r.y + r.height - 2, r.width - 4, TV_BORDER,
                    count ? "%zu heads / Enter opens details" : "No matching heads", count);
+}
+
+static void dashboard_detail_fleet(struct tv_canvas *c, struct tv_rect r, const struct head *h) {
+    dashboard_text(c, r.x + 2, r.y + 6, r.width - 4, TV_BASE, "Desired: %s", h->desired);
+    dashboard_text(c, r.x + 2, r.y + 7, r.width - 4, TV_MUTED, "CPU / memory: not measured");
+    if (r.height > 10) dashboard_text(c, r.x + 2, r.y + 9, r.width - 4, TV_BASE, "%s", h->remote_project);
+}
+
+static void dashboard_detail_local(struct tv_canvas *c, struct tv_rect r, const struct head *h) {
+    unsigned pending;
+    if (!h->head_id[0]) {
+        dashboard_text(c, r.x + 2, r.y + 6, r.width - 4, TV_WARNING, "No head record; counters unknown");
+        dashboard_text(c, r.x + 2, r.y + 7, r.width - 4, TV_MUTED, "Recovery explains what is missing");
+        return;
+    }
+    pending = h->gates > h->approved ? h->gates - h->approved : 0;
+    dashboard_text(c, r.x + 2, r.y + 6, r.width - 4, TV_BASE, "Changed files %u   Reported: %s", h->diff, h->declared[0] ? h->declared : "nothing yet");
+    dashboard_text(c, r.x + 2, r.y + 7, r.width - 4, pending ? TV_WARNING : TV_BASE, pending ? "Approvals %u of %u, %u waiting for you" : "Approvals %u of %u", h->approved, h->gates, pending);
+    if (r.height > 10) tv_bar(c, (struct tv_rect){r.x + 2, r.y + 9, r.width - 4, 1}, h->approved, h->gates ? h->gates : 1, TV_BORDER);
 }
 
 static void dashboard_detail(struct app *app, struct tv_canvas *c, struct tv_rect r) {
@@ -66,19 +91,8 @@ static void dashboard_detail(struct app *app, struct tv_canvas *c, struct tv_rec
     dashboard_text(c, r.x + 2, r.y + 4, r.width - 4, TV_BASE, "%s: %s", app->fleet ? "Host" : "Agent", app->fleet ? h->remote_host : h->profile);
     dashboard_text(c, r.x + 2, r.y + 5, r.width - 4, app->fleet ? TV_BASE : status_tone(h), "Session: %s", app->fleet ? h->desired : status_label(h));
     if (r.height < 9) return;
-    if (app->fleet) {
-        dashboard_text(c, r.x + 2, r.y + 6, r.width - 4, TV_BASE, "Desired: %s", h->desired);
-        dashboard_text(c, r.x + 2, r.y + 7, r.width - 4, TV_MUTED, "CPU / memory: not measured");
-        if (r.height > 10) dashboard_text(c, r.x + 2, r.y + 9, r.width - 4, TV_BASE, "%s", h->remote_project);
-    } else if (!h->head_id[0]) {
-        dashboard_text(c, r.x + 2, r.y + 6, r.width - 4, TV_WARNING, "No head record; counters unknown");
-        dashboard_text(c, r.x + 2, r.y + 7, r.width - 4, TV_MUTED, "Recovery explains what is missing");
-    } else {
-        unsigned pending = h->gates > h->approved ? h->gates - h->approved : 0;
-        dashboard_text(c, r.x + 2, r.y + 6, r.width - 4, TV_BASE, "Changed files %u   Reported: %s", h->diff, h->declared[0] ? h->declared : "nothing yet");
-        dashboard_text(c, r.x + 2, r.y + 7, r.width - 4, pending ? TV_WARNING : TV_BASE, pending ? "Approvals %u of %u, %u waiting for you" : "Approvals %u of %u", h->approved, h->gates, pending);
-        if (r.height > 10) tv_bar(c, (struct tv_rect){r.x + 2, r.y + 9, r.width - 4, 1}, h->approved, h->gates ? h->gates : 1, TV_BORDER);
-    }
+    if (app->fleet) dashboard_detail_fleet(c, r, h);
+    else dashboard_detail_local(c, r, h);
 }
 
 static void fleet_binding_line(struct tv_canvas *c, struct tv_rect r, int *row,
@@ -205,57 +219,78 @@ static void dashboard_empty(struct app *app, struct tv_canvas *c, int width) {
     if (!app->fleet) dashboard_text(c, 1, 4, width - 2, TV_BASE, "Press n to start a task; it appears here as soon as its terminal opens.");
 }
 
+struct dashboard_counts { size_t live, attention, finished, changed; };
+
+static void dashboard_count(const struct app *app, struct dashboard_counts *n) {
+    size_t i;
+    memset(n, 0, sizeof(*n));
+    for (i = 0; i < app->model.head_count; i++) {
+        const struct head *h = &app->model.heads[i];
+        if (strcmp(display_status(h), "LIVE") == 0) n->live++; else n->attention++;
+        if (h->declared[0] && (!strcmp(h->declared, "done") || !strcmp(h->declared, "succeeded") || !strcmp(h->declared, "completed"))) n->finished++;
+        n->changed += h->diff;
+    }
+}
+
+static void dashboard_cards(struct app *app, struct tv_canvas *c, int width, const struct dashboard_counts *n) {
+    int card = width / 4;
+    size_t attention = attention_count(app);
+    dashboard_card(c, 0, card - 1, "RUNNING", app->fleet ? n->attention : n->live, app->fleet ? "remote, liveness unobserved" : "agent sessions active", TV_SUCCESS);
+    dashboard_card(c, card, card - 1, "NEED ATTENTION", app->fleet ? app->model.recovery_count : attention,
+                   app->fleet ? "recovery findings" : app->model.recovery_count ? "not running or awaiting approval; see Recovery too" : "not running or awaiting approval", attention ? TV_WARNING : TV_BASE);
+    dashboard_card(c, card * 2, card - 1, "CHANGED FILES", app->fleet ? SIZE_MAX : n->changed, app->fleet ? "not observed remotely" : "uncommitted, all heads", TV_STRONG);
+    dashboard_card(c, card * 3, width - card * 3, "FINISHED", app->fleet ? SIZE_MAX : n->finished, app->fleet ? "not observed remotely" : "reported done by agents", TV_STRONG);
+}
+
+static void dashboard_wide(struct app *app, struct tv_canvas *c, int width, int height, const struct dashboard_counts *n) {
+    int half = width * 3 / 5, middle = dashboard_middle_height(app, height);
+    dashboard_cards(app, c, width, n);
+    dashboard_heads(app, c, (struct tv_rect){0, 6, half - 1, middle});
+    dashboard_detail(app, c, (struct tv_rect){half, 6, width - half, middle});
+    if (height - middle - 7 < 6) return;
+    {
+        int bottom = middle + 7, remaining = height - bottom, third = width / 3;
+        if (!app->fleet && remaining >= 11 && width >= 120) {
+            dashboard_charts(app, c, (struct tv_rect){0, bottom, third - 1, remaining});
+            dashboard_distribution(app, c, (struct tv_rect){third, bottom, third - 1, remaining}, false);
+            dashboard_distribution(app, c, (struct tv_rect){third * 2, bottom, width - third * 2, remaining}, true);
+        } else dashboard_charts(app, c, (struct tv_rect){0, bottom, width, remaining});
+    }
+}
+
+static void dashboard_medium(struct app *app, struct tv_canvas *c, int width, int height, const struct dashboard_counts *n) {
+    int list_height = height / 2;
+    if (app->model.head_count + 4 < (size_t)list_height) list_height = (int)app->model.head_count + 4;
+    if (list_height < 6) list_height = 6;
+    if (app->fleet) dashboard_text(c, 1, 0, width - 2, TV_STRONG, "%zu remote heads / liveness unobserved / %zu recovery findings",
+                                  app->model.head_count, app->model.recovery_count);
+    else dashboard_text(c, 1, 0, width - 2, TV_STRONG, "%zu running / %zu need attention / %zu to repair / %zu changed files",
+                        n->live, attention_count(app), app->model.recovery_count, n->changed);
+    dashboard_heads(app, c, (struct tv_rect){0, 2, width, list_height});
+    dashboard_charts(app, c, (struct tv_rect){0, list_height + 3, width, height - list_height - 3});
+}
+
+static void dashboard_narrow(struct app *app, struct tv_canvas *c, int width, int height, const struct dashboard_counts *n) {
+    if (app->fleet) dashboard_text(c, 1, 0, width - 2, TV_STRONG, "%zu remote heads / liveness unobserved", app->model.head_count);
+    else dashboard_text(c, 1, 0, width - 2, TV_STRONG, "%zu running / %zu need attention / %zu to repair", n->live, attention_count(app), app->model.recovery_count);
+    dashboard_heads(app, c, (struct tv_rect){0, 2, width, height - 2});
+}
+
 void render_dashboard(struct app *app) {
     struct tv_canvas c;
-    size_t i, live = 0, attention = 0, finished = 0, changed = 0;
-    int width, height, half, middle;
+    struct dashboard_counts n;
+    int width, height;
     if (!frame_content(app, &c)) return;
     width = c.width; height = c.height;
     if (width > 300) width = 300;
     if (height > 120) height = 120;
     if (width < 38 || height < 7) { linef(app, "Overview needs more space"); return; }
-    for (i = 0; i < app->model.head_count; i++) {
-        const struct head *h = &app->model.heads[i];
-        if (strcmp(display_status(h), "LIVE") == 0) live++; else attention++;
-        if (h->declared[0] && (!strcmp(h->declared, "done") || !strcmp(h->declared, "succeeded") || !strcmp(h->declared, "completed"))) finished++;
-        changed += h->diff;
-    }
+    dashboard_count(app, &n);
     if (!app->model.head_count && !(app->fleet && app->model.task_count)) { dashboard_empty(app, &c, width); app->line = app->limit; return; }
-    if (app->fleet && app->model.task_count) {
-        dashboard_fleet_tasks(app, &c, (struct tv_rect){0, 0, width, height});
-    } else if (width >= 90 && height >= 20) {
-        int card = width / 4;
-        dashboard_card(&c, 0, card - 1, "RUNNING", app->fleet ? attention : live, app->fleet ? "remote, liveness unobserved" : "agent sessions active", TV_SUCCESS);
-        dashboard_card(&c, card, card - 1, "NEED ATTENTION", app->fleet ? app->model.recovery_count : attention_count(app),
-                       app->fleet ? "recovery findings" : app->model.recovery_count ? "not running or awaiting approval; see Recovery too" : "not running or awaiting approval", attention_count(app) ? TV_WARNING : TV_BASE);
-        dashboard_card(&c, card * 2, card - 1, "CHANGED FILES", app->fleet ? SIZE_MAX : changed, app->fleet ? "not observed remotely" : "uncommitted, all heads", TV_STRONG);
-        dashboard_card(&c, card * 3, width - card * 3, "FINISHED", app->fleet ? SIZE_MAX : finished, app->fleet ? "not observed remotely" : "reported done by agents", TV_STRONG);
-        half = width * 3 / 5;
-        middle = dashboard_middle_height(app, height);
-        dashboard_heads(app, &c, (struct tv_rect){0, 6, half - 1, middle});
-        dashboard_detail(app, &c, (struct tv_rect){half, 6, width - half, middle});
-        if (height - middle - 7 >= 6) {
-            int bottom = middle + 7, remaining = height - bottom, third = width / 3;
-            if (!app->fleet && remaining >= 11 && width >= 120) {
-                dashboard_charts(app, &c, (struct tv_rect){0, bottom, third - 1, remaining});
-                dashboard_distribution(app, &c, (struct tv_rect){third, bottom, third - 1, remaining}, false);
-                dashboard_distribution(app, &c, (struct tv_rect){third * 2, bottom, width - third * 2, remaining}, true);
-            } else dashboard_charts(app, &c, (struct tv_rect){0, bottom, width, remaining});
-        }
-    } else if (width >= 70 && height >= 16) {
-        int list_height = height / 2;
-        if (app->model.head_count + 4 < (size_t)list_height) list_height = (int)app->model.head_count + 4;
-        if (list_height < 6) list_height = 6;
-        if (app->fleet) dashboard_text(&c, 1, 0, width - 2, TV_STRONG, "%zu remote heads / liveness unobserved / %zu recovery findings",
-                                      app->model.head_count, app->model.recovery_count);
-        else dashboard_text(&c, 1, 0, width - 2, TV_STRONG, "%zu running / %zu need attention / %zu to repair / %zu changed files",
-                            live, attention_count(app), app->model.recovery_count, changed);
-        dashboard_heads(app, &c, (struct tv_rect){0, 2, width, list_height});
-        dashboard_charts(app, &c, (struct tv_rect){0, list_height + 3, width, height - list_height - 3});
-    } else {
-        if (app->fleet) dashboard_text(&c, 1, 0, width - 2, TV_STRONG, "%zu remote heads / liveness unobserved", app->model.head_count);
-        else dashboard_text(&c, 1, 0, width - 2, TV_STRONG, "%zu running / %zu need attention / %zu to repair", live, attention_count(app), app->model.recovery_count);
-        dashboard_heads(app, &c, (struct tv_rect){0, 2, width, height - 2});
-    }
+    if (app->fleet && app->model.task_count) dashboard_fleet_tasks(app, &c, (struct tv_rect){0, 0, width, height});
+    else if (width >= 90 && height >= 20) dashboard_wide(app, &c, width, height, &n);
+    else if (width >= 70 && height >= 16) dashboard_medium(app, &c, width, height, &n);
+    else dashboard_narrow(app, &c, width, height, &n);
     app->line = app->limit;
 }
+

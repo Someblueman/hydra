@@ -91,22 +91,30 @@ void tv_text(struct tv_canvas *c, struct tv_rect r, const char *text, enum tv_st
     }
 }
 
+static uint32_t panel_corner(bool unicode, bool top, bool left) {
+    if (!unicode) return '+';
+    if (top) return left ? 0x256dU : 0x256eU;
+    return left ? 0x2570U : 0x256fU;
+}
+
+static void panel_cell(struct tv_canvas *c, struct tv_rect r, int64_t right, int64_t bottom,
+                       int x, int y, enum tv_style border) {
+    bool horizontal = (y == r.y || y == bottom) && x >= r.x && x <= right;
+    bool vertical = (x == r.x || x == right) && y >= r.y && y <= bottom;
+    uint32_t glyph;
+    if (!horizontal && !vertical) return;
+    if (horizontal && vertical) glyph = panel_corner(c->unicode, y == r.y, x == r.x);
+    else if (horizontal) glyph = c->unicode ? 0x2500U : '-';
+    else glyph = c->unicode ? 0x2502U : '|';
+    tv_put(c, x, y, glyph, border);
+}
+
 void tv_panel_styled(struct tv_canvas *c, struct tv_rect r, const char *title,
                      enum tv_style border, enum tv_style title_style) {
     int x, y;
     int64_t right = (int64_t)r.x + r.width - 1, bottom = (int64_t)r.y + r.height - 1;
     if (r.width < 2 || r.height < 2) return;
-    for (y = 0; y < c->height; y++) for (x = 0; x < c->width; x++) {
-        bool horizontal = (y == r.y || y == bottom) && x >= r.x && x <= right;
-        bool vertical = (x == r.x || x == right) && y >= r.y && y <= bottom;
-        uint32_t glyph;
-        if (!horizontal && !vertical) continue;
-        glyph = horizontal ? (c->unicode ? 0x2500U : '-') : (c->unicode ? 0x2502U : '|');
-        if (horizontal && vertical) {
-            glyph = !c->unicode ? '+' : y == r.y ? (x == r.x ? 0x256dU : 0x256eU) : (x == r.x ? 0x2570U : 0x256fU);
-        }
-        tv_put(c, x, y, glyph, border);
-    }
+    for (y = 0; y < c->height; y++) for (x = 0; x < c->width; x++) panel_cell(c, r, right, bottom, x, y, border);
     if (title && title[0] && r.x <= INT_MAX - 2 && r.width > 5) {
         char padded[512];
         int used = snprintf(padded, sizeof(padded), " %s ", title);

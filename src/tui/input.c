@@ -48,17 +48,8 @@ static void select_tab_index(struct app *app, size_t index) {
     if (index < count) enter_view(app, views[index]);
 }
 
-void go_back(struct app *app) {
+static void go_back_view(struct app *app) {
     struct native_workspace *w = app->workspace;
-    app->notice[0] = '\0';
-    if (app->result_open) { app->result_open = false; return; }
-    if (app->help) { app->help = false; return; }
-    if (app->view == 9) { (void)native_attention_key(app, 27); return; }
-    if (statistics_back(app)) return;
-    /* Recovery keeps the finding explanation as an inner Esc layer; Details
-     * closes diagnostics and returns to the list in one step. */
-    if (app->diagnostics && app->view == 3) { app->diagnostics = false; return; }
-    if (app->preview) { app->preview = false; return; }
     switch (app->view) {
         case 1:
             app->diagnostics = false;
@@ -74,6 +65,19 @@ void go_back(struct app *app) {
             return;
         default: enter_view(app, app->previous_view == 7 ? 7 : 0); return;
     }
+}
+
+void go_back(struct app *app) {
+    app->notice[0] = '\0';
+    if (app->result_open) { app->result_open = false; return; }
+    if (app->help) { app->help = false; return; }
+    if (app->view == 9) { (void)native_attention_key(app, 27); return; }
+    if (statistics_back(app)) return;
+    /* Recovery keeps the finding explanation as an inner Esc layer; Details
+     * closes diagnostics and returns to the list in one step. */
+    if (app->diagnostics && app->view == 3) { app->diagnostics = false; return; }
+    if (app->preview) { app->preview = false; return; }
+    go_back_view(app);
 }
 
 /* SGR mouse reports borrow the last rendered frame's hit map. No mutations. */
@@ -366,6 +370,46 @@ static bool view_key(struct app *app, char key) {
     return false;
 }
 
+static void attach_selected(struct app *app) {
+    if (native_workspace_init(app) && selected_head(app)) {
+        enter_view(app, 7);
+        if (native_terminal_attach(app)) native_workspace_show_terminal(app, true);
+    } else copy_text(app->notice, sizeof(app->notice), "Select a head first");
+}
+
+static void group_key(struct app *app) {
+    if (app->marked_count > 0U) group_marked_action(app);
+    else copy_text(app->notice, sizeof(app->notice), "Mark heads with Space first, then G groups them");
+}
+
+static void cycle_theme(struct app *app) {
+    app->theme = (app->theme + 1) % 3;
+    snprintf(app->notice, sizeof(app->notice), "Theme: %s%s", theme_name(app->theme), app->no_color ? " (NO_COLOR)" : "");
+}
+
+/* Keys that act on the selected or marked heads in the list views. */
+static void head_key(struct app *app, char key) {
+    switch (key) {
+        case 'j': move_selection(app, 1); break;
+        case 'k': move_selection(app, -1); break;
+        case '\r': case '\n': open_selected(app); break;
+        case '/': case ':': interactive_prompt(app, key); break;
+        case 'n': new_task_action(app); break;
+        case 'a': attach_selected(app); break;
+        case 'c': if (app->view == 1 && selected_head(app)) enter_view(app, 2); break;
+        case 'p': if (app->view != 1) enter_view(app, 1); app->preview = !app->preview; capture_preview(app); break;
+        case 'd': if (app->view != 3 && app->view != 1) enter_view(app, 1); app->diagnostics = !app->diagnostics; break;
+        case ' ': toggle_mark(app); break;
+        case 'A': select_all_visible(app); break;
+        case 'x': remove_heads_action(app); break;
+        case 'G': group_key(app); break;
+        case 't': cycle_theme(app); break;
+        case '?': app->help = !app->help; break;
+        case 27: handle_escape(app); break;
+        default: break;
+    }
+}
+
 static void handle_key(struct app *app, char key) {
     if (native_terminal_byte(app, (unsigned char)key)) return;
     if (key == 3) { terminal_request_stop(SIGINT); return; }
@@ -373,33 +417,7 @@ static void handle_key(struct app *app, char key) {
     if (key == 'q') { app->running = false; return; }
     if (view_key(app, key)) return;
     if (fleet_key(app, key)) return;
-    switch (key) {
-        case 'j': move_selection(app, 1); break;
-        case 'k': move_selection(app, -1); break;
-        case '\r': case '\n': open_selected(app); break;
-        case '/': case ':': interactive_prompt(app, key); break;
-        case 'n': new_task_action(app); break;
-        case 'a':
-            if (native_workspace_init(app) && selected_head(app)) {
-                enter_view(app, 7);
-                if (native_terminal_attach(app)) native_workspace_show_terminal(app, true);
-            } else copy_text(app->notice, sizeof(app->notice), "Select a head first");
-            break;
-        case 'c': if (app->view == 1 && selected_head(app)) enter_view(app, 2); break;
-        case 'p': if (app->view != 1) enter_view(app, 1); app->preview = !app->preview; capture_preview(app); break;
-        case 'd': if (app->view != 3 && app->view != 1) enter_view(app, 1); app->diagnostics = !app->diagnostics; break;
-        case ' ': toggle_mark(app); break;
-        case 'A': select_all_visible(app); break;
-        case 'x': remove_heads_action(app); break;
-        case 'G': if (app->marked_count > 0U) group_marked_action(app); else copy_text(app->notice, sizeof(app->notice), "Mark heads with Space first, then G groups them"); break;
-        case 't':
-            app->theme = (app->theme + 1) % 3;
-            snprintf(app->notice, sizeof(app->notice), "Theme: %s%s", theme_name(app->theme), app->no_color ? " (NO_COLOR)" : "");
-            break;
-        case '?': app->help = !app->help; break;
-        case 27: handle_escape(app); break;
-        default: break;
-    }
+    head_key(app, key);
 }
 
 static void handle_input(struct app *app, char key) {

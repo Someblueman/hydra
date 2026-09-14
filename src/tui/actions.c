@@ -34,63 +34,97 @@ static int run_argv(struct app *app, char *const argv[]) {
 
 /* Run a command with stdin closed and both output streams captured. The UI
  * keeps painting while waiting; the budget bounds a hung command. */
-int run_captured(struct app *app, char *const argv[], char *out, size_t size, long budget_ms) {
-    posix_spawn_file_actions_t actions;
-    pid_t pid;
-    int status = 0, pipes[2], result, exit_code = 1;
-    size_t used = 0;
-    struct timespec started, now;
-    char **envp = NULL;
+static char **noninteractive_environment(void) {
     size_t count = 0, i;
-    out[0] = '\0';
+    char **envp;
+    while (environ && environ[count]) count++;
+    envp = calloc(count + 2, sizeof(*envp));
+    if (!envp) return NULL;
+    for (i = 0; i < count; i++) envp[i] = environ[i];
+    envp[count] = (char *)"HYDRA_NONINTERACTIVE=1";
+    return envp;
+}
+
+/* Start argv with stdin closed and stdout/stderr on one non-blocking pipe. */
+static int captured_spawn(char *const argv[], pid_t *pid, int *fd, char *out, size_t size) {
+    posix_spawn_file_actions_t actions;
+    int pipes[2], result;
+    char **envp;
     if (pipe(pipes) != 0) { snprintf(out, size, "could not start %s: %s", argv[1] ? argv[1] : argv[0], strerror(errno)); return 1; }
     (void)fcntl(pipes[0], F_SETFD, FD_CLOEXEC); (void)fcntl(pipes[1], F_SETFD, FD_CLOEXEC);
     (void)fcntl(pipes[0], F_SETFL, O_NONBLOCK);
-    while (environ && environ[count]) count++;
-    envp = calloc(count + 2, sizeof(*envp));
+    envp = noninteractive_environment();
     if (!envp) { close(pipes[0]); close(pipes[1]); snprintf(out, size, "out of memory"); return 1; }
-    for (i = 0; i < count; i++) envp[i] = environ[i];
-    envp[count] = (char *)"HYDRA_NONINTERACTIVE=1";
     posix_spawn_file_actions_init(&actions);
     posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
     posix_spawn_file_actions_adddup2(&actions, pipes[1], STDOUT_FILENO);
     posix_spawn_file_actions_adddup2(&actions, pipes[1], STDERR_FILENO);
-    result = posix_spawnp(&pid, argv[0], &actions, NULL, argv, envp);
+    result = posix_spawnp(pid, argv[0], &actions, NULL, argv, envp);
     posix_spawn_file_actions_destroy(&actions);
     free(envp);
     close(pipes[1]);
     if (result != 0) { close(pipes[0]); snprintf(out, size, "could not start %s: %s", argv[0], strerror(result)); return 1; }
+    *fd = pipes[0];
+    return 0;
+}
+
+static bool captured_expired(const struct timespec *started, long budget_ms) {
+    struct timespec now;
+    long elapsed;
+    (void)clock_gettime(CLOCK_MONOTONIC, &now);
+    elapsed = (long)(now.tv_sec - started->tv_sec) * 1000L + (long)(now.tv_nsec - started->tv_nsec) / 1000000L;
+    return elapsed > budget_ms || terminal_stopped();
+}
+
+static void captured_append(char *out, size_t size, size_t *used, const char *chunk, size_t take) {
+    if (take > size - *used - 1) take = size - *used - 1;
+    memcpy(out + *used, chunk, take); *used += take; out[*used] = '\0';
+}
+
+/* Keep the UI painting between reads while a captured command runs. */
+static void captured_wait(struct app *app) {
+    char key;
+    update_size(app);
+    render(app, 0U, false);
+    (void)read_key(40, &key);
+}
+
+static int captured_exit(pid_t pid) {
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0) if (errno != EINTR) { status = 0; break; }
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+
+/* Run a command with stdin closed and both output streams captured. The UI
+ * keeps painting while waiting; the budget bounds a hung command. */
+static void captured_timeout(pid_t pid, char *out, size_t size, size_t used, long budget_ms) {
+    (void)kill(pid, SIGTERM);
+    snprintf(out + used, size - used, "%s(stopped after %ld s without finishing)\n", used ? "\n" : "", budget_ms / 1000L);
+}
+
+static void captured_drain(struct app *app, pid_t pid, int fd, char *out, size_t size, long budget_ms) {
+    size_t used = 0;
+    struct timespec started;
     (void)clock_gettime(CLOCK_MONOTONIC, &started);
     for (;;) {
         char chunk[4096];
-        ssize_t n = read(pipes[0], chunk, sizeof(chunk));
-        long elapsed;
-        if (n > 0) {
-            size_t take = (size_t)n;
-            if (take > size - used - 1) take = size - used - 1;
-            memcpy(out + used, chunk, take); used += take; out[used] = '\0';
-            continue;
-        }
+        ssize_t n = read(fd, chunk, sizeof(chunk));
+        if (n > 0) { captured_append(out, size, &used, chunk, (size_t)n); continue; }
         if (n == 0) break;
         if (errno != EAGAIN && errno != EINTR) break;
-        (void)clock_gettime(CLOCK_MONOTONIC, &now);
-        elapsed = (long)(now.tv_sec - started.tv_sec) * 1000L + (long)(now.tv_nsec - started.tv_nsec) / 1000000L;
-        if (elapsed > budget_ms || terminal_stopped()) {
-            (void)kill(pid, SIGTERM);
-            snprintf(out + used, size - used, "%s(stopped after %ld s without finishing)\n", used ? "\n" : "", budget_ms / 1000L);
-            break;
-        }
-        {
-            char key;
-            update_size(app);
-            render(app, 0U, false);
-            (void)read_key(40, &key);
-        }
+        if (captured_expired(&started, budget_ms)) { captured_timeout(pid, out, size, used, budget_ms); break; }
+        captured_wait(app);
     }
-    close(pipes[0]);
-    while (waitpid(pid, &status, 0) < 0) if (errno != EINTR) { status = 0; break; }
-    exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
-    return exit_code;
+}
+
+int run_captured(struct app *app, char *const argv[], char *out, size_t size, long budget_ms) {
+    pid_t pid;
+    int fd;
+    out[0] = '\0';
+    if (captured_spawn(argv, &pid, &fd, out, size) != 0) return 1;
+    captured_drain(app, pid, fd, out, size, budget_ms);
+    close(fd);
+    return captured_exit(pid);
 }
 
 void show_result(struct app *app, const char *title, const char *text) {
@@ -157,54 +191,97 @@ static const char *first_line(const char *text, char *out, size_t size) {
     return out;
 }
 
+struct removal {
+    size_t count, removed, skipped, failed, dirty;
+    char output[8192], transcript[8192];
+};
+
+/* Marked heads, or the selected head. Returns false with a notice when there is nothing to remove. */
+static bool removal_targets(struct app *app, char targets[][TEXT], size_t *count) {
+    struct head *selected = selected_head(app);
+    size_t index;
+    *count = 0U;
+    if (app->marked_count) {
+        for (index = 0U; index < app->marked_count && *count < MAX_HEADS; index++) copy_text(targets[(*count)++], TEXT, app->marked[index]);
+        return true;
+    }
+    if (selected) { copy_text(targets[(*count)++], TEXT, selected->branch); return true; }
+    copy_text(app->notice, sizeof(app->notice), "Select a head to remove, or mark several with Space");
+    return false;
+}
+
+static void removal_names(char targets[][TEXT], size_t count, char *names, size_t size) {
+    size_t index;
+    names[0] = '\0';
+    for (index = 0U; index < count && strlen(names) < 400U; index++)
+        text_append(names, size, "%s%.100s", index ? ", " : "", targets[index]);
+    if (index < count) text_append(names, size, ", +%zu more", count - index);
+}
+
+static bool removal_confirmed(struct app *app, size_t count, const char *names) {
+    char question[1024], answer[TEXT] = "";
+    snprintf(question, sizeof(question), "Remove %zu head%s (%s)? This closes the terminal and deletes the worktree; the branch is kept and heads with uncommitted changes are refused. y/N: ",
+             count, count == 1U ? "" : "s", names);
+    if (prompt_text(app, question, answer, sizeof(answer)) == 0 && (!strcasecmp(answer, "y") || !strcasecmp(answer, "yes"))) return true;
+    copy_text(app->notice, sizeof(app->notice), "Removal cancelled; nothing changed");
+    return false;
+}
+
+/* Remove one head through the shell CLI, recording the outcome. */
+static void remove_one(struct app *app, char *target, size_t index, struct removal *r) {
+    const struct head *head = head_for_branch(app, target);
+    char *argv[] = {(char *)app->hydra, (char *)"kill", target, NULL};
+    int status;
+    if (head != NULL && app->current_session[0] != '\0' && strcmp(head->session, app->current_session) == 0) {
+        text_append(r->transcript, sizeof(r->transcript), "== %s\nSkipped: this is the terminal you are using right now.\n\n", target);
+        r->skipped++;
+        return;
+    }
+    snprintf(app->notice, sizeof(app->notice), "Removing %.200s (%zu of %zu)...", target, index + 1U, r->count);
+    status = run_captured(app, argv, r->output, sizeof(r->output), 60000L);
+    text_append(r->transcript, sizeof(r->transcript), "== %s (exit %d)\n%s\n", target, status, r->output);
+    if (status == 0) { r->removed++; return; }
+    r->failed++;
+    if (strstr(r->output, "uncommitted") || strstr(r->output, "Refusing")) r->dirty++;
+}
+
+static void removal_notice(struct app *app, char targets[][TEXT], const struct removal *r) {
+    char line[TEXT];
+    if (r->failed) {
+        snprintf(app->notice, sizeof(app->notice), "Removed %zu of %zu; %zu kept%s", r->removed, r->count, r->failed,
+                 r->dirty ? " because of uncommitted changes (commit or stash them first)" : " (see output)");
+        return;
+    }
+    if (r->count == 1U) {
+        first_line(r->output, line, sizeof(line));
+        snprintf(app->notice, sizeof(app->notice), "Removed %.120s%s%.100s", targets[0], line[0] ? ": " : "", line);
+        return;
+    }
+    snprintf(app->notice, sizeof(app->notice), "Removed %zu head%s%s%s", r->removed, r->removed == 1U ? "" : "s",
+             r->skipped ? "; skipped the current session" : "", r->skipped ? "" : "");
+}
+
+static void removal_report(struct app *app, char targets[][TEXT], const struct removal *r) {
+    removal_notice(app, targets, r);
+    if (r->failed) show_result(app, "REMOVAL OUTPUT", r->transcript);
+    copy_text(app->result_text, sizeof(app->result_text), r->transcript);
+    if (!r->failed) copy_text(app->result_title, sizeof(app->result_title), "REMOVAL OUTPUT");
+}
+
 /* Remove marked heads, or the selected head, after an in-app confirmation.
  * The shell CLI keeps its dirty-worktree refusal; the UI never adds --force. */
 void remove_heads_action(struct app *app) {
-    char targets[MAX_HEADS][TEXT];
-    size_t count = 0U, index, removed = 0U, skipped = 0U, failed = 0U, dirty = 0U;
-    char question[1024], answer[TEXT] = "", names[512] = "", output[8192], transcript[8192] = "", line[TEXT];
-    struct head *selected = selected_head(app);
+    char targets[MAX_HEADS][TEXT], names[512];
+    struct removal r;
+    size_t index;
+    memset(&r, 0, sizeof(r));
     refresh_current_session(app);
-    if (app->marked_count) {
-        for (index = 0U; index < app->marked_count && count < MAX_HEADS; index++) copy_text(targets[count++], TEXT, app->marked[index]);
-    } else if (selected) copy_text(targets[count++], TEXT, selected->branch);
-    else { copy_text(app->notice, sizeof(app->notice), "Select a head to remove, or mark several with Space"); return; }
-    for (index = 0U; index < count && strlen(names) < 400U; index++)
-        text_append(names, sizeof(names), "%s%.100s", index ? ", " : "", targets[index]);
-    if (index < count) text_append(names, sizeof(names), ", +%zu more", count - index);
-    snprintf(question, sizeof(question), "Remove %zu head%s (%s)? This closes the terminal and deletes the worktree; the branch is kept and heads with uncommitted changes are refused. y/N: ",
-             count, count == 1U ? "" : "s", names);
-    if (prompt_text(app, question, answer, sizeof(answer)) != 0 || (strcasecmp(answer, "y") && strcasecmp(answer, "yes"))) {
-        copy_text(app->notice, sizeof(app->notice), "Removal cancelled; nothing changed");
-        return;
-    }
-    for (index = 0U; index < count; index++) {
-        const struct head *head = head_for_branch(app, targets[index]);
-        char *argv[] = {(char *)app->hydra, (char *)"kill", targets[index], NULL};
-        int status;
-        if (head != NULL && app->current_session[0] != '\0' && strcmp(head->session, app->current_session) == 0) {
-            text_append(transcript, sizeof(transcript), "== %s\nSkipped: this is the terminal you are using right now.\n\n", targets[index]);
-            skipped++;
-            continue;
-        }
-        snprintf(app->notice, sizeof(app->notice), "Removing %.200s (%zu of %zu)...", targets[index], index + 1U, count);
-        status = run_captured(app, argv, output, sizeof(output), 60000L);
-        text_append(transcript, sizeof(transcript), "== %s (exit %d)\n%s\n", targets[index], status, output);
-        if (status == 0) removed++;
-        else { failed++; if (strstr(output, "uncommitted") || strstr(output, "Refusing")) dirty++; }
-    }
+    if (!removal_targets(app, targets, &r.count)) return;
+    removal_names(targets, r.count, names, sizeof(names));
+    if (!removal_confirmed(app, r.count, names)) return;
+    for (index = 0U; index < r.count; index++) remove_one(app, targets[index], index, &r);
     app->marked_count = 0U;
-    if (failed) {
-        snprintf(app->notice, sizeof(app->notice), "Removed %zu of %zu; %zu kept%s", removed, count, failed,
-                 dirty ? " because of uncommitted changes (commit or stash them first)" : " (see output)");
-        show_result(app, "REMOVAL OUTPUT", transcript);
-    } else if (count == 1U) {
-        first_line(output, line, sizeof(line));
-        snprintf(app->notice, sizeof(app->notice), "Removed %.120s%s%.100s", targets[0], line[0] ? ": " : "", line);
-    } else snprintf(app->notice, sizeof(app->notice), "Removed %zu head%s%s%s", removed, removed == 1U ? "" : "s",
-                    skipped ? "; skipped the current session" : "", skipped ? "" : "");
-    copy_text(app->result_text, sizeof(app->result_text), transcript);
-    if (!failed) copy_text(app->result_title, sizeof(app->result_title), "REMOVAL OUTPUT");
+    removal_report(app, targets, &r);
     native_observations_tick(app, true);
     retarget_selection(app);
 }

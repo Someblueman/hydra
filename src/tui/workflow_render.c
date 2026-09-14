@@ -3,6 +3,26 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+static void workflow_empty(struct app *app) {
+    style(app, TONE_STRONG); linef(app, "%s", app->workflow_error[0] ? app->workflow_error : "No workflow runs recorded in this project."); style(app, TONE_BASE);
+    linef(app, "");
+    linef(app, "A workflow is a saved sequence of steps Hydra runs and tracks for a task: for example");
+    linef(app, "implement a change, run the tests, then wait for your review. Steps can run agents or");
+    linef(app, "commands, and independent steps run in parallel. A single agent conversation does not");
+    linef(app, "need one. Runs started with hydra workflow run <id> appear here with their dependencies.");
+}
+
+static void workflow_compact(struct app *app, const struct workflow_model *m, const size_t *indices, size_t n) {
+    linef(app, "%s / %s", m->runs[app->workflow_run].name, m->runs[app->workflow_run].state);
+    if (!n) { linef(app, "No recorded steps"); return; }
+    {
+        const struct workflow_node *node = &m->nodes[indices[app->workflow_node]];
+        linef(app, "%zu/%zu %s [%s]", app->workflow_node + 1, n, node->id, node->state);
+        linef(app, "Requires: %s", node->needs);
+        linef(app, "j/k steps / [/] runs / w graph");
+    }
+}
+
 void render_workflow_graph(struct app *app) {
     struct workflow_model *m = app->workflows;
     struct tv_canvas c;
@@ -13,15 +33,7 @@ void render_workflow_graph(struct app *app) {
     int width = app->cols - 1, height = app->limit - app->line;
     struct tv_rect area;
     if (app->fleet) { linef(app, "Workflow graphs show local recorded runs. Remote graphs are unavailable."); return; }
-    if (!m || !m->run_count) {
-        style(app, TONE_STRONG); linef(app, "%s", app->workflow_error[0] ? app->workflow_error : "No workflow runs recorded in this project."); style(app, TONE_BASE);
-        linef(app, "");
-        linef(app, "A workflow is a saved sequence of steps Hydra runs and tracks for a task: for example");
-        linef(app, "implement a change, run the tests, then wait for your review. Steps can run agents or");
-        linef(app, "commands, and independent steps run in parallel. A single agent conversation does not");
-        linef(app, "need one. Runs started with hydra workflow run <id> appear here with their dependencies.");
-        return;
-    }
+    if (!m || !m->run_count) { workflow_empty(app); return; }
     if (width > 300) width = 300;
     if (height > 120) height = 120;
     if (app->workflow_run >= m->run_count) app->workflow_run = 0;
@@ -30,16 +42,7 @@ void render_workflow_graph(struct app *app) {
         linef(app, "Recorded graph is invalid; inspect workflow status"); return;
     }
     if (app->workflow_node >= n) app->workflow_node = 0;
-    if (width < 60 || height < 10) {
-        linef(app, "%s / %s", m->runs[app->workflow_run].name, m->runs[app->workflow_run].state);
-        if (n) {
-            const struct workflow_node *node = &m->nodes[indices[app->workflow_node]];
-            linef(app, "%zu/%zu %s [%s]", app->workflow_node + 1, n, node->id, node->state);
-            linef(app, "Requires: %s", node->needs);
-            linef(app, "j/k steps / [/] runs / w graph");
-        } else linef(app, "No recorded steps");
-        return;
-    }
+    if (width < 60 || height < 10) { workflow_compact(app, m, indices, n); return; }
     if (!frame_content(app, &c)) return;
     width = c.width; height = c.height;
     if (width > 300) width = 300;
