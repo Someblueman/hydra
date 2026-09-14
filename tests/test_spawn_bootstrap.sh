@@ -135,8 +135,10 @@ case "$screen" in
     *"Details: hydra provenance plain"*) assert_success 0 "banner points at provenance for exact details" ;;
     *) assert_success 1 "banner points at provenance for exact details" ;;
 esac
+# The user's own prompt may show the worktree path, whose default layout embeds
+# the head id; only typed bootstrap text and state paths count as leaks.
 case "$screen" in
-    *"export HYDRA_"*|*"$head_id"*|*"$head_dir"*) assert_success 1 "transcript shows no bootstrap exports, ids, or state paths" ;;
+    *"export HYDRA_"*|*"HYDRA_HEAD_ID="*|*"HYDRA_INSTANCE_ID="*|*"$head_dir"*) assert_success 1 "transcript shows no bootstrap exports, ids, or state paths" ;;
     *) assert_success 0 "transcript shows no bootstrap exports, ids, or state paths" ;;
 esac
 grep '^send-keys' "$BOOTSTRAP_LOG" | grep -q 'export HYDRA_'

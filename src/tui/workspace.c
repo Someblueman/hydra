@@ -343,6 +343,7 @@ static void native_workspace_details(struct app *app, struct tv_canvas *c, size_
 
 static enum tv_style activity_host_line(struct app *app, const struct host_observation *host, char *text, size_t size) {
     char count[24]="unknown";
+    if (!host) { text[0]='\0'; return TV_BASE; }
     if (strcmp(host->state,"failed")) snprintf(count,sizeof(count),"%u",host->heads);
     snprintf(text,size,"%s%s%s%s%s heads",host->name,dot(app),host->state,dot(app),count);
     if (!strcmp(host->state,"failed")) return TV_WARNING;
