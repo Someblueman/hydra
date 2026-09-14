@@ -25,7 +25,7 @@ export HYDRA_HOME="$base/home" HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
 export BOOTSTRAP_LOG="$base/tmux.log" BOOTSTRAP_SOCKET="$socket" BOOTSTRAP_REAL_TMUX="$real_tmux"
 export BOOTSTRAP_FAKE_VERSION="" FAKE_AGENT_OUT="$base/agent.out"
 
-# shellcheck disable=SC2329
+# shellcheck disable=SC2329,SC2317
 cleanup() {
     "$real_tmux" -L "$socket" kill-server 2>/dev/null || true
     rm -rf "$base"

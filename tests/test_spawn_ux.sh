@@ -49,7 +49,7 @@ assert_not_contains() {
 test_base_dir="$(mktemp -d)"
 tty_server="hydra-spawn-ux-$$"
 created_sessions=""
-# shellcheck disable=SC2329  # invoked by the EXIT trap
+# shellcheck disable=SC2329,SC2317  # invoked by the EXIT trap
 cleanup() {
     tmux -L "$tty_server" kill-server 2>/dev/null || true
     for cleanup_session in $created_sessions; do
