@@ -425,6 +425,23 @@ static ssize_t read_marker_output(struct session *session, char *buffer, size_t 
 }
 
 /* Keep both observations: one PTY read can contain the entire frame. */
+/* Update both marker flags from the captured stream and the reconstructed
+ * screen; returns true once every requested marker has been seen. */
+static bool markers_seen(struct session *session, const char *captured, const char *marker,
+                         const char *second, bool *found, bool *found_second) {
+    *found = *found || (captured && strstr(captured, marker) != NULL) || session_visible(session, marker);
+    if (second != NULL)
+        *found_second = *found_second || (captured && strstr(captured, second) != NULL) || session_visible(session, second);
+    return *found && *found_second;
+}
+
+static void compact_capture(char *captured, size_t *used, size_t size) {
+    if (*used <= size / 2U) return;
+    memmove(captured, captured + *used / 2U, *used - *used / 2U);
+    *used -= *used / 2U;
+    captured[*used] = '\0';
+}
+
 static bool wait_for_markers(struct session *session, const char *marker,
                              const char *second, long timeout_ms) {
     bool found = false, found_second = second == NULL;
@@ -436,20 +453,12 @@ static bool wait_for_markers(struct session *session, const char *marker,
         if (length > 0) {
             used += (size_t)length;
             captured[used] = '\0';
-            found = found || strstr(captured, marker) != NULL || session_visible(session, marker);
-            found_second = found_second || (second != NULL && (strstr(captured, second) != NULL || session_visible(session, second)));
-            if (found && found_second) return true;
-            if (used > sizeof(captured) / 2U) {
-                memmove(captured, captured + used / 2U, used - used / 2U);
-                used -= used / 2U;
-                captured[used] = '\0';
-            }
+            if (markers_seen(session, captured, marker, second, &found, &found_second)) return true;
+            compact_capture(captured, &used, sizeof(captured));
         } else {
             /* Idle: the incremental presenter emits nothing for content already
              * on screen, so consult the reconstructed screen before sleeping. */
-            found = found || session_visible(session, marker);
-            found_second = found_second || (second != NULL && session_visible(session, second));
-            if (found && found_second) return true;
+            if (markers_seen(session, NULL, marker, second, &found, &found_second)) return true;
             sleep_ms(10);
         }
     }

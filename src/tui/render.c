@@ -176,26 +176,29 @@ static void record_hit(struct app *app, size_t index) {
 
 /* Recovery findings in plain language. Raw kinds stay in diagnostics. */
 void recovery_explain(const struct recovery *item, char *title, size_t title_size, char *detail, size_t detail_size) {
+    /* Detail formats consume the head label exactly once ("%.0s" when unused). */
+    static const struct { const char *kind, *title, *detail; } known[] = {
+        {"dead-session", "Terminal stopped: %s",
+         "The terminal session for %s is no longer running. Its worktree and files are kept; nothing was removed from the repository. Open it from Work to restart the agent, or remove the head once its work is finished."},
+        {"stale-lock", "Leftover lock: %s",
+         "An interrupted command left a state lock behind. No work is affected. The check below clears it safely.%.0s"},
+        {"orphan-worktree", "Worktree without a head: %s",
+         "A git worktree exists that no head refers to. Review its contents before removing it; the check below previews the cleanup without deleting anything.%.0s"},
+        {"teardown-failure", "Removal did not finish: %s",
+         "Removing %s stopped part way. Remaining files and state are kept. The check below shows what is left so you can finish or keep it."},
+        {"malformed-state", "Unreadable head record: %s",
+         "Hydra could not read the saved state for %s. It is listed so nothing is dropped silently. The check below reports the exact problem."}
+    };
     const char *kind = item->kind, *head = item->label;
-    if (!strcmp(kind, "dead-session")) {
-        snprintf(title, title_size, "Terminal stopped: %s", head);
-        snprintf(detail, detail_size, "The terminal session for %s is no longer running. Its worktree and files are kept; nothing was removed from the repository. Open it from Work to restart the agent, or remove the head once its work is finished.", head);
-    } else if (!strcmp(kind, "stale-lock")) {
-        snprintf(title, title_size, "Leftover lock: %s", head);
-        snprintf(detail, detail_size, "An interrupted command left a state lock behind. No work is affected. The check below clears it safely.");
-    } else if (!strcmp(kind, "orphan-worktree")) {
-        snprintf(title, title_size, "Worktree without a head: %s", head);
-        snprintf(detail, detail_size, "A git worktree exists that no head refers to. Review its contents before removing it; the check below previews the cleanup without deleting anything.");
-    } else if (!strcmp(kind, "teardown-failure")) {
-        snprintf(title, title_size, "Removal did not finish: %s", head);
-        snprintf(detail, detail_size, "Removing %s stopped part way. Remaining files and state are kept. The check below shows what is left so you can finish or keep it.", head);
-    } else if (!strcmp(kind, "malformed-state")) {
-        snprintf(title, title_size, "Unreadable head record: %s", head);
-        snprintf(detail, detail_size, "Hydra could not read the saved state for %s. It is listed so nothing is dropped silently. The check below reports the exact problem.", head);
-    } else {
-        snprintf(title, title_size, "%s: %s", kind, head);
-        snprintf(detail, detail_size, "Hydra reported this finding from %s.", item->source[0] ? item->source : "its state");
+    size_t i;
+    for (i = 0; i < sizeof(known) / sizeof(known[0]); i++) {
+        if (strcmp(kind, known[i].kind)) continue;
+        snprintf(title, title_size, known[i].title, head);
+        snprintf(detail, detail_size, known[i].detail, head);
+        return;
     }
+    snprintf(title, title_size, "%s: %s", kind, head);
+    snprintf(detail, detail_size, "Hydra reported this finding from %s.", item->source[0] ? item->source : "its state");
 }
 
 /* Wrap plain text into the content area. */
@@ -255,59 +258,84 @@ size_t tab_order(const struct app *app, int *views) {
     return count;
 }
 
-static void chrome_tabs(struct app *app, struct tv_canvas *c, int row) {
-    int views[12], gap = 2, x = 1, total = 0, width = c->width - 1;
-    size_t count = tab_order(app, views), i, first = 0, active = 0;
-    for (i = 0; i < count; i++) { total += (int)strlen(tab_labels[views[i]]) + (views[i] == app->view ? 2 : 0); if (views[i] == app->view) active = i; }
-    if (total + (int)(count - 1) * gap > width) gap = 1;
-    app->tab_count = 0;
+static int tab_width(int view, bool current) {
+    return (int)strlen(tab_labels[view]) + (current ? 2 : 0);
+}
+
+/* First tab to draw so the active tab stays visible in the available width. */
+static size_t tabs_first_visible(const int *views, size_t active, int gap, int width) {
+    size_t first = 0, i;
     while (first < active) {
         int needed = 0;
-        for (i = first; i <= active; i++) needed += (int)strlen(tab_labels[views[i]]) + (i == active ? 2 : 0) + gap;
+        for (i = first; i <= active; i++) needed += tab_width(views[i], i == active) + gap;
         if (needed <= width) break;
         first++;
     }
+    return first;
+}
+
+static void record_tab(struct app *app, int x, int length, int view) {
+    if (app->tab_count >= 12) return;
+    app->tab_left[app->tab_count] = x; app->tab_right[app->tab_count] = x + length - 1;
+    app->tab_view[app->tab_count++] = view;
+}
+
+static void chrome_tabs(struct app *app, struct tv_canvas *c, int row) {
+    int views[12], gap = 2, x = 1, total = 0, width = c->width - 1;
+    size_t count = tab_order(app, views), i, first, active = 0;
+    for (i = 0; i < count; i++) { total += tab_width(views[i], views[i] == app->view); if (views[i] == app->view) active = i; }
+    if (total + (int)(count - 1) * gap > width) gap = 1;
+    app->tab_count = 0;
+    first = tabs_first_visible(views, active, gap, width);
     for (i = first; i < count; i++) {
         char label[32];
         bool current = views[i] == app->view;
-        int length = (int)strlen(tab_labels[views[i]]) + (current ? 2 : 0);
+        int length = tab_width(views[i], current);
         if (x + length > width) { tv_text(c, (struct tv_rect){x, row, width - x, 1}, "..", TV_MUTED); break; }
         snprintf(label, sizeof(label), current ? "[%s]" : "%s", tab_labels[views[i]]);
         tv_text(c, (struct tv_rect){x, row, length, 1}, label, current ? TV_SELECTED : TV_MUTED);
-        if (app->tab_count < 12) {
-            app->tab_left[app->tab_count] = x; app->tab_right[app->tab_count] = x + length - 1;
-            app->tab_view[app->tab_count++] = views[i];
-        }
+        record_tab(app, x, length, views[i]);
         x += length + gap;
     }
 }
 
+static void header_project(const struct app *app, char *project, size_t size) {
+    const char *name;
+    project[0] = '\0';
+    if (!app->links || !app->links->root[0]) return;
+    name = strrchr(app->links->root, '/');
+    snprintf(project, size, "%.60s%s", name && name[1] ? name + 1 : app->links->root, dot(app));
+}
+
+static void header_summary(const struct app *app, const char *project, char *right, size_t size) {
+    const char *sep = dot(app);
+    size_t i, running = 0;
+    for (i = 0; i < app->model.head_count; i++) if (!strcmp(display_status(&app->model.heads[i]), "LIVE")) running++;
+    if (app->fleet) snprintf(right, size, "%sFleet%s%zu remote heads%s%zu hosts", project, sep, app->model.head_count, sep, app->model.host_count);
+    else if (!app->model.head_count) snprintf(right, size, "%sLocal%sno agent work yet", project, sep);
+    else snprintf(right, size, "%sLocal%s%zu heads%s%zu running%s%zu need attention%s%zu to repair", project, sep,
+                  app->model.head_count, sep, running, sep, attention_count(app), sep, app->model.recovery_count);
+}
+
+/* Display columns of UTF-8 text counting one per scalar (chrome uses narrow glyphs). */
+static int text_columns(const char *text) {
+    int length = 0;
+    const unsigned char *cursor = (const unsigned char *)text;
+    while (*cursor) { if ((*cursor & 0xc0U) != 0x80U) length++; cursor++; }
+    return length;
+}
+
 void chrome_header(struct app *app, struct tv_canvas *c, const char *title) {
-    char left[256], right[256] = "";
-    size_t i, running = 0, attention = 0;
-    int width = c->width;
+    char left[256], right[256] = "", project[128];
+    int width = c->width, length;
     snprintf(left, sizeof(left), "HYDRA / %s", title);
     tv_text(c, (struct tv_rect){1, 0, width - 2, 1}, left, TV_TITLE);
     if (width >= 60) {
-        const char *sep = dot(app);
-        char project[128] = "";
-        if (app->links && app->links->root[0]) {
-            const char *name = strrchr(app->links->root, '/');
-            snprintf(project, sizeof(project), "%.60s%s", name && name[1] ? name + 1 : app->links->root, sep);
-        }
-        for (i = 0; i < app->model.head_count; i++) if (!strcmp(display_status(&app->model.heads[i]), "LIVE")) running++;
-        attention = attention_count(app);
-        if (app->fleet) snprintf(right, sizeof(right), "%sFleet%s%zu remote heads%s%zu hosts", project, sep, app->model.head_count, sep, app->model.host_count);
-        else if (!app->model.head_count) snprintf(right, sizeof(right), "%sLocal%sno agent work yet", project, sep);
-        else snprintf(right, sizeof(right), "%sLocal%s%zu heads%s%zu running%s%zu need attention%s%zu to repair", project, sep,
-                      app->model.head_count, sep, running, sep, attention, sep, app->model.recovery_count);
-        {
-            int length = 0;
-            const char *cursor = right;
-            while (*cursor) { length += (unsigned char)*cursor >= 0x80U && ((unsigned char)*cursor & 0xc0U) == 0x80U ? 0 : 1; cursor++; }
-            if (length + (int)strlen(left) + 4 < width)
-                tv_text(c, (struct tv_rect){width - length - 1, 0, length, 1}, right, TV_MUTED);
-        }
+        header_project(app, project, sizeof(project));
+        header_summary(app, project, right, sizeof(right));
+        length = text_columns(right);
+        if (length + (int)strlen(left) + 4 < width)
+            tv_text(c, (struct tv_rect){width - length - 1, 0, length, 1}, right, TV_MUTED);
     }
     chrome_tabs(app, c, 1);
 }
@@ -319,28 +347,51 @@ void chrome_footer(struct app *app, struct tv_canvas *c, const char *status, enu
     (void)app;
 }
 
+struct head_columns { const char *name, *status, *agent, *reported; int status_x, agent_x, reported_x, name_width; bool wide, medium; };
+
+static void head_row_text(const struct app *app, const struct head *head, struct head_columns *k) {
+    if (head == NULL) {
+        k->name = "HEAD"; k->status = app->fleet ? "DESIRED" : "STATUS";
+        k->agent = app->fleet ? "HOST" : "AGENT"; k->reported = "REPORTED";
+        return;
+    }
+    k->name = app->fleet && head->remote_branch[0] ? head->remote_branch : head->branch;
+    k->status = app->fleet ? head->desired : status_label(head);
+    k->agent = app->fleet ? head->remote_host : agent_label(head);
+    k->reported = head->declared[0] ? head->declared : "-";
+}
+
+static void head_row_layout(int width, struct head_columns *k) {
+    k->wide = width >= 95; k->medium = width >= 65;
+    k->reported_x = width - 12;
+    k->agent_x = k->wide ? k->reported_x - 16 : width - 15;
+    k->status_x = (k->wide || k->medium ? k->agent_x : width) - 15;
+    if (k->status_x < 20) k->status_x = 20;
+    k->name_width = k->status_x - 4;
+}
+
+static enum tv_style head_status_tone(const struct app *app, const struct head *head, bool selected) {
+    if (head == NULL) return TV_MUTED;
+    if (selected) return TV_SELECTED;
+    return app->fleet ? TV_BASE : status_tone(head);
+}
+
 /* Work list: aligned columns, status tone only on the status cell. */
 static void head_row(struct app *app, const struct head *head, bool selected) {
-    int width = app->content_width, name_width, status_x, agent_x, reported_x;
-    bool wide = width >= 95, medium = width >= 65;
+    int width = app->content_width;
+    struct head_columns k;
     char lead[TEXT + 4];
-    enum tv_style row_tone = selected ? TV_SELECTED : TV_BASE;
-    const char *status = head == NULL ? (app->fleet ? "DESIRED" : "STATUS") : app->fleet ? head->desired : status_label(head);
-    const char *agent = head == NULL ? (app->fleet ? "HOST" : "AGENT") : app->fleet ? head->remote_host : agent_label(head);
-    const char *reported = head == NULL ? "REPORTED" : head->declared[0] ? head->declared : "-";
-    const char *name = head == NULL ? "HEAD" : app->fleet && head->remote_branch[0] ? head->remote_branch : head->branch;
+    enum tv_style row_tone = head == NULL ? TV_MUTED : selected ? TV_SELECTED : TV_BASE;
+    bool marked = head != NULL && marked_index(app, head->branch) < app->marked_count;
     if (app->line >= app->limit) return;
-    reported_x = width - 12; agent_x = wide ? reported_x - 16 : width - 15; status_x = (wide || medium ? agent_x : width) - 15;
-    if (status_x < 20) status_x = 20;
-    name_width = status_x - 4;
-    if (head == NULL) row_tone = TV_MUTED;
-    snprintf(lead, sizeof(lead), "%c%c %s", head == NULL ? ' ' : selected ? '>' : ' ',
-             head != NULL && marked_index(app, head->branch) < app->marked_count ? '*' : ' ', name);
+    head_row_text(app, head, &k);
+    head_row_layout(width, &k);
+    snprintf(lead, sizeof(lead), "%c%c %s", head == NULL ? ' ' : selected ? '>' : ' ', marked ? '*' : ' ', k.name);
     if (selected) column(app, 0, width, TV_SELECTED, "");
-    column(app, 0, name_width + 3, row_tone, lead);
-    column(app, status_x, 14, head == NULL ? TV_MUTED : selected ? TV_SELECTED : app->fleet ? TV_BASE : status_tone(head), status);
-    if (medium || wide) column(app, agent_x, wide ? 15 : 14, row_tone, agent);
-    if (wide && !app->fleet) column(app, reported_x, 12, row_tone, reported);
+    column(app, 0, k.name_width + 3, row_tone, lead);
+    column(app, k.status_x, 14, head_status_tone(app, head, selected), k.status);
+    if (k.medium || k.wide) column(app, k.agent_x, k.wide ? 15 : 14, row_tone, k.agent);
+    if (k.wide && !app->fleet) column(app, k.reported_x, 12, row_tone, k.reported);
     app->line++;
 }
 
@@ -355,6 +406,41 @@ static void render_empty_work(struct app *app) {
     paragraph(app, "A head is one piece of work: its own branch and worktree, a terminal, and an agent working inside it. You can follow several heads here at once.", TV_BASE);
     linef(app, "");
     paragraph(app, "Press n to start one: Hydra creates the branch and worktree, opens the terminal and starts your agent in it. Press : for other actions.", TV_BASE);
+}
+
+/* One-panel summary of the selected head under the list. */
+static void summary_line(struct app *app, const struct head *head, char *line, size_t size) {
+    const char *sep = dot(app);
+    if (app->fleet) {
+        snprintf(line, size, "Host %.100s%sdesired %.40s%sproject %.300s", head->remote_host, sep, head->desired, sep, head->remote_project);
+        return;
+    }
+    if (!head->head_id[0]) {
+        snprintf(line, size, "Agent %s%ssession %s%sno head record; counters unknown", agent_label(head), sep, status_label(head), sep);
+        return;
+    }
+    snprintf(line, size, "%s%s%s%s%u changed files%s%u of %u approvals%s", agent_label(head), sep,
+             status_label(head), sep, head->diff, sep, head->approved, head->gates, head->declared[0] ? sep : "");
+    if (head->declared[0]) text_append(line, size, "reported %.63s", head->declared);
+}
+
+static void render_selected_summary(struct app *app, const struct head *head) {
+    char line[512];
+    const char *sep = dot(app);
+    struct tv_rect r = {app->content_x - 1, app->line + 1, app->content_width + 2, app->limit - app->line - 1};
+    if (r.height > 5) r.height = 5;
+    tv_panel_styled(&app->frame, r, head->branch, TV_BORDER, TV_STRONG);
+    app->line = r.y + 1;
+    app->content_x++; app->content_width -= 2;
+    summary_line(app, head, line, sizeof(line));
+    linef(app, "%s", line);
+    style(app, TONE_MUTED);
+    if (app->fleet) linef(app, "Enter details%sa attach to terminal%sc interrupt", sep, sep);
+    else if (!head->head_id[0]) linef(app, "Enter details%sx remove", sep);
+    else linef(app, "Enter details%sa talk to the agent%sx remove%s: more actions", sep, sep, sep);
+    style(app, TONE_BASE);
+    app->content_x--; app->content_width += 2;
+    app->line = r.y + r.height;
 }
 
 static void render_list(struct app *app) {
@@ -384,34 +470,7 @@ static void render_list(struct app *app) {
     style(app, TONE_MUTED);
     linef(app, "%zu heads  |  Row %zu of %zu", count, selected + 1U, count);
     style(app, TONE_BASE);
-    if (summary && selected_head(app) != NULL && app->limit - app->line >= 5) {
-        const struct head *head = selected_head(app);
-        char line[512];
-        const char *sep = dot(app);
-        struct tv_rect r = {app->content_x - 1, app->line + 1, app->content_width + 2, app->limit - app->line - 1};
-        if (r.height > 5) r.height = 5;
-        tv_panel_styled(&app->frame, r, head->branch, TV_BORDER, TV_STRONG);
-        app->line = r.y + 1;
-        app->content_x++; app->content_width -= 2;
-        if (app->fleet) {
-            snprintf(line, sizeof(line), "Host %.100s%sdesired %.40s%sproject %.300s", head->remote_host, sep, head->desired, sep, head->remote_project);
-            linef(app, "%s", line);
-            style(app, TONE_MUTED); linef(app, "Enter details%sa attach to terminal%sc interrupt", sep, sep);
-        } else if (!head->head_id[0]) {
-            snprintf(line, sizeof(line), "Agent %s%ssession %s%sno head record; counters unknown", agent_label(head), sep, status_label(head), sep);
-            linef(app, "%s", line);
-            style(app, TONE_MUTED); linef(app, "Enter details%sx remove", sep);
-        } else {
-            snprintf(line, sizeof(line), "%s%s%s%s%u changed files%s%u of %u approvals%s", agent_label(head), sep,
-                     status_label(head), sep, head->diff, sep, head->approved, head->gates, head->declared[0] ? sep : "");
-            if (head->declared[0]) text_append(line, sizeof(line), "reported %.63s", head->declared);
-            linef(app, "%s", line);
-            style(app, TONE_MUTED); linef(app, "Enter details%sa talk to the agent%sx remove%s: more actions", sep, sep, sep);
-        }
-        style(app, TONE_BASE);
-        app->content_x--; app->content_width += 2;
-        app->line = r.y + r.height;
-    }
+    if (summary && selected_head(app) != NULL && app->limit - app->line >= 5) render_selected_summary(app, selected_head(app));
 }
 
 static void render_diagnostics(struct app *app) {
@@ -445,59 +504,73 @@ static void render_diagnostics(struct app *app) {
     style(app, TONE_MUTED); linef(app, "d closes technical details"); style(app, TONE_BASE);
 }
 
+static void render_detail_fleet(struct app *app, const struct head *head) {
+    pair(app, "Host", head->remote_host, TV_BASE, "Desired", head->desired, TV_BASE);
+    linef(app, "Project     %s", head->remote_project);
+    section(app, "NEXT");
+    linef(app, "a  attach to the remote terminal to see what it is doing");
+    linef(app, "c  interrupt the agent; the worktree and its files are kept");
+}
+
+static void detail_group_label(const struct app *app, const struct head *head, char *group, size_t size) {
+    const char *sep = dot(app);
+    bool has_pr = head->pr[0] && strcmp(head->pr, "-");
+    snprintf(group, size, "%s%s%s", head->group[0] && strcmp(head->group, "-") ? head->group : "none",
+             has_pr ? sep : "", has_pr ? "PR " : "");
+    if (has_pr) text_append(group, size, "%.40s", head->pr);
+}
+
+static void render_detail_changes(struct app *app, const struct head *head) {
+    char changes[64];
+    section(app, "CHANGES");
+    if (!head->head_id[0]) { linef(app, "Changed files   unknown (no head record; see Recovery)"); return; }
+    snprintf(changes, sizeof(changes), "%u", head->diff);
+    linef(app, "Changed files   %-6s in the worktree, not yet committed", changes);
+    linef(app, "Full diff       : git diff shows everything since the branch base");
+}
+
+static void render_detail_checks(struct app *app, const struct head *head) {
+    char approvals[96];
+    const char *sep = dot(app);
+    unsigned pending;
+    section(app, "CHECKS");
+    if (!head->head_id[0]) { linef(app, "Approvals       unknown"); return; }
+    pending = head->gates > head->approved ? head->gates - head->approved : 0;
+    snprintf(approvals, sizeof(approvals), "%u of %u approved%s%s", head->approved, head->gates,
+             pending ? sep : "", pending ? "waiting for your decision" : "");
+    style(app, pending ? TONE_WARNING : TONE_BASE);
+    linef(app, "Approvals       %s", approvals);
+    style(app, TONE_BASE);
+    linef(app, "Messages        %u exchanged with other heads", head->messages);
+}
+
+static void render_detail_preview(struct app *app) {
+    char preview[sizeof(app->preview_text)];
+    char *line, *save = NULL;
+    section(app, "TERMINAL OUTPUT");
+    copy_text(preview, sizeof(preview), app->preview_text[0] ? app->preview_text : "No terminal output available.");
+    line = strtok_r(preview, "\r\n", &save);
+    while (line != NULL && app->line < app->limit) {
+        linef(app, "%s", line);
+        line = strtok_r(NULL, "\r\n", &save);
+    }
+}
+
 static void render_detail(struct app *app) {
     const struct head *head = selected_head(app);
-    char changes[64], approvals[96], group[TEXT + 64];
-    const char *sep = dot(app);
+    char group[TEXT + 64];
     if (head == NULL) { render_empty_work(app); return; }
     if (app->diagnostics) { render_diagnostics(app); return; }
     style(app, TONE_STRONG); linef(app, "%s", head->branch); style(app, TONE_BASE);
-    if (app->fleet) {
-        pair(app, "Host", head->remote_host, TV_BASE, "Desired", head->desired, TV_BASE);
-        linef(app, "Project     %s", head->remote_project);
-        section(app, "NEXT");
-        linef(app, "a  attach to the remote terminal to see what it is doing");
-        linef(app, "c  interrupt the agent; the worktree and its files are kept");
-        return;
-    }
-    snprintf(group, sizeof(group), "%s%s%s", head->group[0] && strcmp(head->group, "-") ? head->group : "none",
-             head->pr[0] && strcmp(head->pr, "-") ? sep : "", head->pr[0] && strcmp(head->pr, "-") ? "PR " : "");
-    if (head->pr[0] && strcmp(head->pr, "-")) text_append(group, sizeof(group), "%.40s", head->pr);
+    if (app->fleet) { render_detail_fleet(app, head); return; }
+    detail_group_label(app, head, group, sizeof(group));
     pair(app, "Agent", agent_label(head), TV_BASE, "Session", status_label(head), status_tone(head));
     pair(app, "Reported", head->declared[0] ? head->declared : "nothing yet", head->declared[0] ? TV_STRONG : TV_MUTED, "Group", group, TV_BASE);
     if (!strcmp(display_status(head), "STALE"))
         paragraph(app, "The terminal is gone but the last observation said the agent was still working. Files in the worktree are kept; check them before removing the head.", TV_WARNING);
-    section(app, "CHANGES");
-    if (!head->head_id[0]) {
-        linef(app, "Changed files   unknown (no head record; see Recovery)");
-    } else {
-        snprintf(changes, sizeof(changes), "%u", head->diff);
-        linef(app, "Changed files   %-6s in the worktree, not yet committed", changes);
-        linef(app, "Full diff       : git diff shows everything since the branch base");
-    }
-    section(app, "CHECKS");
-    if (!head->head_id[0]) linef(app, "Approvals       unknown");
-    else {
-        unsigned pending = head->gates > head->approved ? head->gates - head->approved : 0;
-        snprintf(approvals, sizeof(approvals), "%u of %u approved%s%s", head->approved, head->gates,
-                 pending ? sep : "", pending ? "waiting for your decision" : "");
-        style(app, pending ? TONE_WARNING : TONE_BASE);
-        linef(app, "Approvals       %s", approvals);
-        style(app, TONE_BASE);
-        linef(app, "Messages        %u exchanged with other heads", head->messages);
-    }
-    if (app->preview) {
-        char preview[sizeof(app->preview_text)];
-        char *line, *save = NULL;
-        section(app, "TERMINAL OUTPUT");
-        copy_text(preview, sizeof(preview), app->preview_text[0] ? app->preview_text : "No terminal output available.");
-        line = strtok_r(preview, "\r\n", &save);
-        while (line != NULL && app->line < app->limit) {
-            linef(app, "%s", line);
-            line = strtok_r(NULL, "\r\n", &save);
-        }
-        return;
-    }
+    render_detail_changes(app, head);
+    render_detail_checks(app, head);
+    if (app->preview) { render_detail_preview(app); return; }
     section(app, "NEXT");
     linef(app, "a  talk to the agent in the workspace     p  show recent terminal output");
     linef(app, "c  coordination with other heads          x  remove this head");
@@ -529,6 +602,33 @@ static void render_coordination(struct app *app) {
     else linef(app, "No workflow run is linked to this head. A single conversation does not need one.");
 }
 
+static void render_recovery_detail(struct app *app) {
+    const struct recovery *item = &app->model.recovery[app->recovery_selected];
+    char title[TEXT + 64], detail[1024];
+    recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
+    style(app, TONE_STRONG); linef(app, "%s", title); style(app, TONE_BASE);
+    paragraph(app, detail, TV_BASE);
+    linef(app, "");
+    linef(app, "Check: %s", item->action);
+    style(app, TONE_MUTED);
+    linef(app, "Kind: %s   Source: %s   Confidence: %s", item->kind, item->source, item->confidence);
+    linef(app, "Inspect: %s", item->action);
+    linef(app, "Enter runs the check and shows its output here; d returns to the list");
+    style(app, TONE_BASE);
+}
+
+static void render_recovery_row(struct app *app, size_t index) {
+    const struct recovery *item = &app->model.recovery[index];
+    char title[TEXT + 64], detail[1024];
+    bool selected = index == app->recovery_selected, wide = app->content_width >= 100;
+    recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
+    record_hit(app, index);
+    if (selected) column(app, 0, app->content_width, TV_SELECTED, ">");
+    column(app, 2, wide ? app->content_width - 22 : app->content_width - 2, selected ? TV_SELECTED : TV_WARNING, title);
+    if (wide) column(app, app->content_width - 18, 18, selected ? TV_SELECTED : TV_MUTED, item->kind);
+    app->line++;
+}
+
 static void render_recovery(struct app *app) {
     size_t index, start;
     int available = app->limit - app->line - 2;
@@ -539,34 +639,10 @@ static void render_recovery(struct app *app) {
         return;
     }
     if (app->recovery_selected >= app->model.recovery_count) app->recovery_selected = 0U;
-    if (app->diagnostics) {
-        const struct recovery *item = &app->model.recovery[app->recovery_selected];
-        char title[TEXT + 64], detail[1024];
-        recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
-        style(app, TONE_STRONG); linef(app, "%s", title); style(app, TONE_BASE);
-        paragraph(app, detail, TV_BASE);
-        linef(app, "");
-        linef(app, "Check: %s", item->action);
-        style(app, TONE_MUTED);
-        linef(app, "Kind: %s   Source: %s   Confidence: %s", item->kind, item->source, item->confidence);
-        linef(app, "Inspect: %s", item->action);
-        linef(app, "Enter runs the check and shows its output here; d returns to the list");
-        style(app, TONE_BASE);
-        return;
-    }
+    if (app->diagnostics) { render_recovery_detail(app); return; }
     if (available < 1) available = 1;
     start = app->recovery_selected >= (size_t)available ? app->recovery_selected - (size_t)available + 1U : 0U;
-    for (index = start; index < app->model.recovery_count && available-- > 0; index++) {
-        const struct recovery *item = &app->model.recovery[index];
-        char title[TEXT + 64], detail[1024];
-        bool selected = index == app->recovery_selected;
-        recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
-        record_hit(app, index);
-        if (selected) column(app, 0, app->content_width, TV_SELECTED, ">");
-        column(app, 2, app->content_width >= 100 ? app->content_width - 22 : app->content_width - 2, selected ? TV_SELECTED : TV_WARNING, title);
-        if (app->content_width >= 100) column(app, app->content_width - 18, 18, selected ? TV_SELECTED : TV_MUTED, item->kind);
-        app->line++;
-    }
+    for (index = start; index < app->model.recovery_count && available-- > 0; index++) render_recovery_row(app, index);
     style(app, TONE_MUTED);
     linef(app, "%zu of %zu", app->recovery_selected + 1U, app->model.recovery_count);
     style(app, TONE_BASE);
@@ -639,28 +715,34 @@ static bool render_workspace_view(struct app *app, unsigned frame, bool headless
     return false;
 }
 
-static void status_line(struct app *app, char *out, size_t size, enum tv_style *tone) {
+static long snapshot_age(const struct app *app, bool *stale) {
     time_t observed_at = app->view == 5 ? app->workflow_at : app->snapshot_at;
     long age = !observed_at ? 0L : (long)(time(NULL) - observed_at);
-    bool stale = app->view == 5 ? app->workflow_stale : app->snapshot_stale;
-    const char *sep = dot(app);
-    *tone = TV_MUTED;
-    if (age < 0) age = 0;
-    if (app->marked_count) {
-        snprintf(out, size, "%zu marked%sx remove%sG group%sSpace unmark%s%s", app->marked_count, sep, sep, sep,
-                 app->notice[0] ? sep : "", app->notice);
-        *tone = TV_STRONG;
-    } else if (stale && app->snapshot_error[0]) { snprintf(out, size, "STALE: last good snapshot%s%s", sep, app->snapshot_error); *tone = TV_WARNING; }
-    else if (app->notice[0]) { snprintf(out, size, "%s", app->notice); *tone = TV_BASE; }
-    else if (app->search[0]) { snprintf(out, size, "Search: %s%sEsc clears", app->search, sep); *tone = TV_BASE; }
-    else if (stale) { snprintf(out, size, "STALE: last good snapshot%sage %lds", sep, age); *tone = TV_WARNING; }
-    else snprintf(out, size, "Current snapshot%sage %lds", sep, age);
+    *stale = app->view == 5 ? app->workflow_stale : app->snapshot_stale;
+    return age < 0 ? 0 : age;
 }
 
-static const char *hint_line(struct app *app) {
-    bool narrow = app->cols < 70;
-    if (app->result_open) return "Enter or Esc closes  j/k scroll";
-    if (app->help) return "? or Esc closes help";
+static void status_marked(struct app *app, char *out, size_t size) {
+    const char *sep = dot(app);
+    snprintf(out, size, "%zu marked%sx remove%sG group%sSpace unmark%s%s", app->marked_count, sep, sep, sep,
+             app->notice[0] ? sep : "", app->notice);
+}
+
+static void status_line(struct app *app, char *out, size_t size, enum tv_style *tone) {
+    bool stale;
+    long age = snapshot_age(app, &stale);
+    const char *sep = dot(app);
+    *tone = TV_MUTED;
+    if (app->marked_count) { status_marked(app, out, size); *tone = TV_STRONG; return; }
+    if (stale && app->snapshot_error[0]) { snprintf(out, size, "STALE: last good snapshot%s%s", sep, app->snapshot_error); *tone = TV_WARNING; return; }
+    if (app->notice[0]) { snprintf(out, size, "%s", app->notice); *tone = TV_BASE; return; }
+    if (app->search[0]) { snprintf(out, size, "Search: %s%sEsc clears", app->search, sep); *tone = TV_BASE; return; }
+    if (stale) { snprintf(out, size, "STALE: last good snapshot%sage %lds", sep, age); *tone = TV_WARNING; return; }
+    snprintf(out, size, "Current snapshot%sage %lds", sep, age);
+}
+
+/* Hints for views whose keys do not depend on local versus fleet mode. */
+static const char *view_hints(struct app *app, bool narrow) {
     if (app->view == 9) {
         if (native_review_active(app)) return "j/k scroll  i IDs  f refs  l/t/p log/transcript/PR  Esc back  ? help  q quit";
         return narrow ? "Enter details  r review  ? help  q quit" : "j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit";
@@ -668,10 +750,15 @@ static const char *hint_line(struct app *app) {
     if (app->view == 5) return narrow ? "j/k step  [/] run  ? help  q quit" : "j/k step  [/] run  h/l/J/K pan  Enter recentre  Esc back  ? help  q quit";
     if (app->view == 6) return "j/k host  Enter show its heads  Esc back  ? help  q quit";
     if (app->view == 3) return narrow ? "Enter check  d detail  ? help  q quit" : app->diagnostics ? "Enter run the check  d back to list  Esc back  ? help  q quit" : "j/k select  Enter run the check  d explain  Esc back  ? help  q quit";
-    if (app->fleet) {
-        if (narrow) return "a attach  c interrupt  ? help  q quit";
-        return app->view == 1 ? "a attach  c interrupt  d technical  Esc back  ? help  q quit" : "Enter details  a attach  c interrupt  / search  Tab next tab  ? help  q quit";
-    }
+    return NULL;
+}
+
+static const char *fleet_hints(struct app *app, bool narrow) {
+    if (narrow) return "a attach  c interrupt  ? help  q quit";
+    return app->view == 1 ? "a attach  c interrupt  d technical  Esc back  ? help  q quit" : "Enter details  a attach  c interrupt  / search  Tab next tab  ? help  q quit";
+}
+
+static const char *local_hints(struct app *app, bool narrow) {
     if (app->view == 1) return narrow ? "a agent  p output  Esc back  ? help  q quit" : app->diagnostics ? "d close technical details  Esc back  ? help  q quit" : "a agent  p output  c coordination  x remove  d technical  Esc back  ? help  q quit";
     if (app->view == 2) return "Esc back  : more actions  ? help  q quit";
     if (app->view == 4) return narrow ? "Enter open  Tab next tab  ? help  q quit" : "j/k select  Enter details  Tab next tab  ? help  q quit";
@@ -680,21 +767,30 @@ static const char *hint_line(struct app *app) {
                                  : "n new task  : more actions  Tab next tab  ? help  q quit";
 }
 
+static const char *hint_line(struct app *app) {
+    bool narrow = app->cols < 70;
+    const char *hints;
+    if (app->result_open) return "Enter or Esc closes  j/k scroll";
+    if (app->help) return "? or Esc closes help";
+    hints = view_hints(app, narrow);
+    if (hints) return hints;
+    return app->fleet ? fleet_hints(app, narrow) : local_hints(app, narrow);
+}
+
+static void detail_title(const struct app *app, const struct head *head, char *out, size_t size) {
+    const char *label = app->diagnostics ? "Technical details" : "Details";
+    if (!head) { snprintf(out, size, "%s", label); return; }
+    snprintf(out, size, "%s: %.200s", label, head->branch);
+}
+
 static const char *panel_title(struct app *app, char *out, size_t size) {
+    static const char *names[] = {NULL, NULL, "Coordination", "Recovery", "Overview", "Workflows", "Hosts", NULL, NULL, "Attention"};
     const struct head *head = selected_head(app);
     if (app->result_open) return app->result_title;
     if (app->help) return "HELP";
-    switch (app->view) {
-        case 0: snprintf(out, size, "%s", app->fleet ? "Remote heads" : "Heads in this project"); break;
-        case 1: snprintf(out, size, "%s%s%.200s", app->diagnostics ? "Technical details" : "Details", head ? ": " : "", head ? head->branch : ""); break;
-        case 2: snprintf(out, size, "Coordination"); break;
-        case 3: snprintf(out, size, "Recovery"); break;
-        case 4: snprintf(out, size, "Overview"); break;
-        case 5: snprintf(out, size, "Workflows"); break;
-        case 6: snprintf(out, size, "Hosts"); break;
-        case 9: snprintf(out, size, "Attention"); break;
-        default: snprintf(out, size, "%s", tab_labels[app->view]); break;
-    }
+    if (app->view == 0) snprintf(out, size, "%s", app->fleet ? "Remote heads" : "Heads in this project");
+    else if (app->view == 1) detail_title(app, head, out, size);
+    else snprintf(out, size, "%s", names[app->view] ? names[app->view] : tab_labels[app->view]);
     return out;
 }
 

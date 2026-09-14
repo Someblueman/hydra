@@ -12,6 +12,19 @@ void tv_present_invalidate(struct tv_presenter *p) { if (p) p->valid = false; }
 
 /* Compare fields rather than padding. A failed output leaves the cache invalid,
  * so the next attempt cannot mistake an incomplete paint for a delivered frame. */
+/* End (exclusive) of the changed run starting at x: bridge short spans of
+ * unchanged cells so words stay contiguous in the output stream. */
+static int present_run_end(const struct tv_presenter *p, const struct tv_canvas *c, int y, int x, bool full) {
+    int end = x + 1, probe, gap = 0;
+    for (probe = x; probe < c->width; probe++) {
+        const struct tv_cell *pc = &c->cells[(size_t)y * (size_t)c->stride + (size_t)probe];
+        const struct tv_cell *po = &p->previous[(size_t)y * (size_t)c->width + (size_t)probe];
+        if (full || !tv_cell_equal(pc, po)) { end = probe + 1; gap = 0; }
+        else if (++gap > 16) break;
+    }
+    return end;
+}
+
 bool tv_present(struct tv_presenter *p, const struct tv_canvas *c, FILE *out,
                 void (*style)(void *, enum tv_style), void *context) {
     int x, y;
@@ -28,21 +41,13 @@ bool tv_present(struct tv_presenter *p, const struct tv_canvas *c, FILE *out,
         size_t offset = (size_t)y * (size_t)c->stride + (size_t)x;
         size_t old_offset = (size_t)y * (size_t)c->width + (size_t)x;
         const struct tv_cell *cell = &c->cells[offset], *old = &p->previous[old_offset];
-        int start = x, end, probe, gap = 0;
+        int start = x;
         struct tv_canvas run;
         if (!full && tv_cell_equal(cell, old)) { x++; continue; }
         if (x > 0 && (!cell->width || (!full && !old->width))) start--;
-        /* Coalesce a row's changed cells into one run, bridging short spans of
-         * unchanged cells so words stay contiguous in the output stream. This
-         * repaints only within a row's changed span, never a full screen. */
-        end = x + 1;
-        for (probe = x; probe < c->width; probe++) {
-            const struct tv_cell *pc = &c->cells[(size_t)y * (size_t)c->stride + (size_t)probe];
-            const struct tv_cell *po = &p->previous[(size_t)y * (size_t)c->width + (size_t)probe];
-            if (full || !tv_cell_equal(pc, po)) { end = probe + 1; gap = 0; }
-            else if (++gap > 16) break;
-        }
-        x = end;
+        /* Coalesce a row's changed cells into one run. This repaints only
+         * within a row's changed span, never a full screen. */
+        x = present_run_end(p, c, y, x, full);
         if (x < c->width && c->cells[(size_t)y * (size_t)c->stride + (size_t)x - 1].width == 2) x++;
         if (fprintf(out, "\033[%d;%dH", y + 1, start + 1) < 0) return false;
         run.cells = c->cells + (size_t)y * (size_t)c->stride + (size_t)start;

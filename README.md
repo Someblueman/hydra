@@ -24,8 +24,10 @@ use ordinary shell sessions alongside agents.
 
 [Demo transcript and recording instructions](assets/demos/README.md)
 
-**v2.2.0** adds workflow data, approval waits, headless adapters, and local objective
-planning. Install the [latest release](https://github.com/Someblueman/hydra/releases/latest)
+**v2.6.0** makes the native TUI one control centre with a shared frame, plain
+language and in-app removal, keeps `hydra init` out of the source tree, starts heads
+without typing bootstrap into the shell, and opens the control centre from a bare
+`hydra`. Install the [latest release](https://github.com/Someblueman/hydra/releases/latest)
 and see the [changelog](CHANGELOG.md) for features and upgrade notes.
 
 ## What you can do

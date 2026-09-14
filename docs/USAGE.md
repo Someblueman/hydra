@@ -1,8 +1,9 @@
 # Command and configuration guide
 
 See `hydra help` for complete command syntax. Fleet and remote tasks shipped in
-v2.1.0. Version 2.2.0 adds workflow data,
-approval waits, headless adapters, and local objective planning; see the
+v2.1.0; workflow data, approval waits, headless adapters and local objective
+planning in v2.2.0. Version 2.6.0 changes the interactive `spawn` default, keeps
+`init` out of the source tree and reworks the native TUI; see the
 [changelog](../CHANGELOG.md) for upgrade notes.
 
 ## Starting out

@@ -105,6 +105,8 @@ complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -s n -l count -d 'Nu
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l ai -d 'AI tool to use' -a 'claude aider codex cursor agy opencode copilot gemini'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l profile -d 'Agent profile' -a 'none claude codex cursor agy opencode copilot aider gemini'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l no-agent -d 'Create a plain shell head'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l attach -d 'Attach to the new session instead of staying here'
+complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l resume -d 'Resume a stopped head of the same branch'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l dry-run -d 'Print plan without mutation'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l prompt -d 'Task text'
 complete -c hydra -f -n '__fish_seen_subcommand_from spawn' -l prompt-file -d 'Read task from file'
@@ -125,6 +127,7 @@ complete -c hydra -n '__fish_seen_subcommand_from spawn' -l headless -d 'Create 
 
 # Complete list command
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l json -d 'Output in JSON format'
+complete -c hydra -f -n '__fish_seen_subcommand_from list' -l verbose -d 'Show the detailed session fields'
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l deps -d 'Show dependency tree'
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l git -d 'Show Git evidence from the recorded base'
 complete -c hydra -f -n '__fish_seen_subcommand_from list' -l no-pr-status -d 'Skip fetching PR status'
