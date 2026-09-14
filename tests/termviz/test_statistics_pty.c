@@ -23,23 +23,23 @@ static void local_statistics(void) {
     tv_format(failure, sizeof(failure), "%s/fail", base);
     CHECK(!setenv("HYDRA_TEST_STATS_FAIL_FILE", failure, 1), "stats failure environment");
     tv_open(&s, argv, 140, 40, NULL);
-    U("HYDRA WORKSPACE");
+    U("HYDRA / PLAN TOGETHER");
     S("j\tjj\tjjj");
     tv_pump(&s, .2);
     CHECK(HAS("scroll 2") && HAS("scroll 3"), "workspace scroll setup");
     S("D");
-    U("HYDRA / D STATISTICS");
-    U("Latest attempt mean 95.0s / n=6 / max 120s");
+    U("HYDRA / STATISTICS");
+    U("Latest attempts average 95.0s over 6 timed steps, longest 120s");
     CHECK(HAS("Attempts 8/11"), "attempt coverage");
     save(&s, "statistics", 140, 40);
     S("T");
-    U("Local project / 24 hours");
-    CHECK(HAS("1 date-excluded"), "date exclusion");
+    U("Recorded workflow runs · 24 hours");
+    CHECK(HAS("1 outside range"), "date exclusion");
     U("1/4 / Enter evidence");
     S("0/");
     U("Find workflow, run or project:");
     S("recovery\r");
-    U("Local project / all recorded / recovery");
+    U("Recorded workflow runs · all recorded · recovery");
     U("1/2 / Enter evidence");
     S("\r");
     U("RUN EVIDENCE");
@@ -48,10 +48,10 @@ static void local_statistics(void) {
     S("\033");
     U("RUNS / newest");
     S("D");
-    U("HYDRA WORKSPACE");
+    U("HYDRA / PLAN TOGETHER");
     CHECK(HAS("scroll 2") && HAS("scroll 3"), "preserved workspace scroll");
     S("D");
-    U("Local project / all recorded / recovery");
+    U("Recorded workflow runs · all recorded · recovery");
     S("0/");
     U("Find workflow, run or project:");
     S("visualization\r");
@@ -60,8 +60,8 @@ static void local_statistics(void) {
     U("[Workflows]");
     U("prepare");
     S("\033");
-    U("HYDRA / D STATISTICS");
-    U("Local project / all recorded / visualization");
+    U("HYDRA / STATISTICS");
+    U("Recorded workflow runs · all recorded · visualization");
     S("0");
     U("1/8 / Enter evidence");
     S("\033[<0;40;23M");
@@ -72,15 +72,15 @@ static void local_statistics(void) {
     S("0");
     tv_write(failure, "");
     S("r");
-    U("STATISTICS / STALE");
+    U("STATISTICS (STALE)");
     CHECK(HAS("95.0s"), "last good statistics retained");
     CHECK(!unlink(failure), "remove failure trigger");
     S("r");
     tv_pump(&s, .25);
-    CHECK(!HAS("STATISTICS / STALE"), "refresh recovers");
+    CHECK(!HAS("STATISTICS (STALE)"), "refresh recovers");
     for (i = 0; i < 3; i++) {
         tv_resize(&s, sizes[i][0], sizes[i][1]);
-        U("D STATISTICS");
+        U("HYDRA / STATISTICS");
         U("q quit");
         CHECK(!s.screen.overflow, "statistics resize overflow");
         CHECK(s.screen.clears >= 1, "resize invalidates presentation");
@@ -103,7 +103,7 @@ static void metric_pages(void) {
                            "owner-recoveries"};
     size_t i, j;
     tv_open(&s, argv, 140, 40, NULL);
-    U("Latest attempt mean");
+    U("Latest attempts average");
     for (i = 0; i < 3; i++) {
         if (s.screen.cols != sizes[i][0] || s.screen.rows != sizes[i][1])
             tv_resize(&s, sizes[i][0], sizes[i][1]);
@@ -117,7 +117,7 @@ static void metric_pages(void) {
             save(&s, names[j], sizes[i][0], sizes[i][1]);
         }
         S("M");
-        U("D STATISTICS");
+        U("HYDRA / STATISTICS");
     }
     tv_resize(&s, 140, 40);
     S("MMMM/");
@@ -127,7 +127,7 @@ static void metric_pages(void) {
     S("\r");
     U("failed / 2");
     S("D");
-    U("HYDRA WORKSPACE");
+    U("HYDRA / PLAN TOGETHER");
     S("D");
     U("OWNER RECOVERIES");
     U("known 2/2");
@@ -169,12 +169,12 @@ static void fleet_statistics(void) {
     U("No head evidence");
     tv_resize(&s, 140, 40);
     S("W");
-    U("Host list observations / H details");
+    U("Hosts: 3 observed");
     S("\t\tz");
-    U("offline / failed / unknown heads");
-    CHECK(HAS("empty / responded / 0 heads"), "empty distinct from unknown");
+    U("offline · failed · unknown heads");
+    CHECK(HAS("empty · responded · 0 heads"), "empty distinct from unknown");
     S("H");
-    U("HOSTS / latest bounded list response");
+    U("HOSTS / latest list response");
     tv_close(&s, "q", 0, 0);
     puts("PASS fleet statistics: responded/failed/empty, known counts, filters, drill-down");
 }

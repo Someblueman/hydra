@@ -31,8 +31,8 @@ def late_dispatch_control(client: Observer) -> dict[str, Any]:
     wait_until(deadline + 100_000_000)
     client.expect(
         "late-dispatch",
-        (1, 0, len("HYDRA MISSION CONTROL"), "HYDRA MISSION CONTROL"),
-        (9, 1, 9, "[Details]"),
+        (1, 0, len("HYDRA /"), "HYDRA /"),
+        (7, 1, 9, "[Details]"),
     )
     client.input("late-dispatch", b"\n")
     observed = client.wait("observed", "late-dispatch")
@@ -53,7 +53,7 @@ def view_actions(
     client: Observer, start_ns: int, output: Path, from_attachment: bool = False
 ) -> list[dict[str, Any]]:
     """Start in the 120x40 heads view; deadlines remain four seconds per input."""
-    identity = (1, 0, len("HYDRA MISSION CONTROL"), "HYDRA MISSION CONTROL")
+    identity = (1, 0, len("HYDRA /"), "HYDRA /")
     tag = "I10SEARCH104729"
     view = "Heads" if from_attachment else "Details"
     plan = (
@@ -61,16 +61,16 @@ def view_actions(
             0,
             "navigation",
             b"\x02x\x1b" if from_attachment else b"\n",
-            (0, 1, 7, "[Heads]") if from_attachment else (9, 1, 9, "[Details]"),
+            (1, 1, 6, "[Work]") if from_attachment else (7, 1, 9, "[Details]"),
         ),
         (
             4,
             "search",
             f"/{tag}\n".encode(),
-            (0, 1, len(f"[{view}]  Search: {tag}"), f"[{view}]  Search: {tag}"),
+            (1, 38, len(f"Search: {tag}"), f"Search: {tag}"),
         ),
         (8, "resize", b"", (98, 2, 1, "+")),
-        (12, "cancel", b"\x1b", (0, 1, len("[Heads]   Details"), "[Heads]   Details")),
+        (12, "cancel", b"\x1b", (1, 1, len("[Work]  Details"), "[Work]  Details")),
     )
     actions: list[dict[str, Any]] = []
     for offset, identifier, keys, response in plan:

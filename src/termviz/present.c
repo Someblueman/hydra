@@ -28,15 +28,21 @@ bool tv_present(struct tv_presenter *p, const struct tv_canvas *c, FILE *out,
         size_t offset = (size_t)y * (size_t)c->stride + (size_t)x;
         size_t old_offset = (size_t)y * (size_t)c->width + (size_t)x;
         const struct tv_cell *cell = &c->cells[offset], *old = &p->previous[old_offset];
-        int start = x;
+        int start = x, end, probe, gap = 0;
         struct tv_canvas run;
         if (!full && tv_cell_equal(cell, old)) { x++; continue; }
         if (x > 0 && (!cell->width || (!full && !old->width))) start--;
-        do {
-            x++;
-            if (x == c->width) break;
-            cell++; old++;
-        } while (full || !tv_cell_equal(cell, old));
+        /* Coalesce a row's changed cells into one run, bridging short spans of
+         * unchanged cells so words stay contiguous in the output stream. This
+         * repaints only within a row's changed span, never a full screen. */
+        end = x + 1;
+        for (probe = x; probe < c->width; probe++) {
+            const struct tv_cell *pc = &c->cells[(size_t)y * (size_t)c->stride + (size_t)probe];
+            const struct tv_cell *po = &p->previous[(size_t)y * (size_t)c->width + (size_t)probe];
+            if (full || !tv_cell_equal(pc, po)) { end = probe + 1; gap = 0; }
+            else if (++gap > 16) break;
+        }
+        x = end;
         if (x < c->width && c->cells[(size_t)y * (size_t)c->stride + (size_t)x - 1].width == 2) x++;
         if (fprintf(out, "\033[%d;%dH", y + 1, start + 1) < 0) return false;
         run.cells = c->cells + (size_t)y * (size_t)c->stride + (size_t)start;

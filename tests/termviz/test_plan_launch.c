@@ -96,7 +96,7 @@ int main(void) {
     tv_copy(path, policy, false);
     hf_commit_init(&f);
     hf_open(&f, &s);
-    U("A CONVERSATION", 3);
+    U("PLAN TOGETHER", 3);
     S("P");
     U("Draft JSON path:", 3);
     S(draft);
@@ -192,7 +192,7 @@ int main(void) {
     CHECK(tv_file_equals(artifact, expected), "exact sealed artifact");
     REFUSE(f.hydra, "workflow", "--workspace-evidence", run_id, "../");
     hf_open(&f, &s);
-    U("A CONVERSATION", 3);
+    U("PLAN TOGETHER", 3);
     tv_format(links, sizeof(links), "%s", H("workflow", "--workspace-links"));
     CHECK(!strncmp(links, "HYDRA_WORKSPACE_LINKS\t1\n", 24) && strlen(links) >= 2 &&
               !strcmp(links + strlen(links) - 2, "Z\n"),
@@ -216,7 +216,7 @@ int main(void) {
     }
     S("z");
     U("Project: repo line", 3);
-    U("plan-fixture / succeeded", 15);
+    U("plan-fixture · succeeded", 15);
     U("plan-smoke", 3);
     /* Head and run snapshots arrive separately; move from the first head
      * to its associated run only after both are visible. */
@@ -225,9 +225,9 @@ int main(void) {
     U("Enter evidence / h parent / Tab panes", 3);
     S("hh");
     tv_pump(&s, 2.5);
-    CHECK(!tv_contains(&s, "plan-fixture / succeeded"), "collapsed historical refs");
+    CHECK(!tv_contains(&s, "plan-fixture · succeeded"), "collapsed historical refs");
     S("l");
-    U("plan-fixture / succeeded", 3);
+    U("plan-fixture · succeeded", 3);
     S("j");
     U("Enter evidence / h parent / Tab panes", 3);
     for (i = 0; i < 3; i++) {
@@ -243,7 +243,7 @@ int main(void) {
     save(&s, "verified", 140, 40);
     tv_write(artifact, "tampered\n");
     U("VERIFICATION REFUSED", 15);
-    CHECK(strstr(tv_row(&s, 4, row, sizeof(row)), "ARTIFACTS REFUSED"),
+    CHECK(strstr(tv_row(&s, 3, row, sizeof(row)), "ARTIFACTS REFUSED"),
           "trusted provenance refuses artifact");
     CHECK(!tv_contains(&s, "VERIFIED: result retrieval"), "stale verified claim removed");
     S("\t\t\tj\t");
@@ -251,7 +251,7 @@ int main(void) {
     U("compose-output-proof", 3);
     CHECK(tv_contains(&s, "VERIFIED ARTIFACTS from untrusted output"),
           "untrusted output shown separately");
-    CHECK(strstr(tv_row(&s, 4, row, sizeof(row)), "ARTIFACTS REFUSED"),
+    CHECK(strstr(tv_row(&s, 3, row, sizeof(row)), "ARTIFACTS REFUSED"),
           "untrusted output cannot spoof provenance");
     CHECK(!tv_contains(&s, "Creating worktree for branch"), "selected output provenance");
     for (i = 0; i < 3; i++) {
@@ -275,10 +275,10 @@ int main(void) {
         CHECK(a && b && !strcmp(a, b), "moving path preserves run links");
     }
     hf_open(&f, &s);
-    U("A CONVERSATION", 3);
+    U("PLAN TOGETHER", 3);
     S("z");
     U("Project: repo line break", 3);
-    U("plan-fixture / succeeded", 15);
+    U("plan-fixture · succeeded", 15);
     tv_close(&s, "q", 0, 0);
     CHECK(!rename(new_repo, old_repo), "restore fixture path");
     tv_format(f.repo, sizeof(f.repo), "%s", old_repo);

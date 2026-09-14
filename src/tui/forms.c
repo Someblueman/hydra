@@ -127,7 +127,7 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
             form_insert(buffer,size,&length,&cursor,&e);
         }
     }
-    /* The form temporarily paints over the workspace presenter. */
-    native_workspace_invalidate(app);
+    /* The form temporarily paints over the presented frame. */
+    frame_invalidate(app);
     return result;
 }

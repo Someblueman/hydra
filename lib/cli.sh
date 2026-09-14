@@ -18,6 +18,8 @@ Commands:
                       --no-agent              Create a first-class plain shell head
                       --headless              Create a terminal-free execution head
                       --dry-run               Print the resolved plan without mutation
+                      --attach                Attach to the new session (default: stay here)
+                      --resume                Resume a stopped head of the same branch
                       --prompt <text>          Record and inject task text at launch
                       --prompt-file <path>     Read task text from a file
                       --issue-body             Use --issue body as task text
@@ -31,7 +33,16 @@ Commands:
                       -t, --template <name>    Apply session template
   spawn --issue <#> Create a head from a GitHub issue
   spawn --pr <#>    Create a head from an existing GitHub PR
-  init              Initialize project identity, trust, profile, and worktree root
+  init              Register this repository on this host (identity, profile, worktree root, trust)
+                    Writes nothing into the source tree unless --write-shared-config is given
+                    Options:
+                      --profile <name>         Default agent profile for new heads
+                      --no-agent               Default to plain shell heads
+                      --trust                  Approve the exact current .hydra/ content
+                      --worktree-root <path>   Where this host creates worktrees
+                      --write-shared-config    Preview and write a committed .hydra/config.yml
+                      --force                  Replace an existing .hydra/config.yml
+                      -j, --json               Output in JSON format
   agent             Inspect, probe, or import agent profiles
                     Headless: agy (Antigravity), cursor (Cursor Agent), opencode,
                               claude, codex, pi; inspect with agent contract NAME
@@ -90,11 +101,12 @@ Commands:
   gc                Apply explicit orphaned, stopped, or archive cleanup policies
   worktree doctor   Inspect, lock, unlock, move, repair, or prune Git worktrees
   snapshot          Emit canonical state JSON; --native tries the optional core
-  list              List all active Hydra heads
+  list              List all active Hydra heads (branch, agent, session state, reported outcome, age)
                     Options:
                       -g, --group <name>       Filter by group
                       --groups                 List all groups with session counts
                       -j, --json               Output in JSON format
+                      --verbose                Show session names and full lifecycle fields
                       --deps                   Show dependency tree
                       --git                    Show recorded-base Git evidence
                       --no-pr-status           Skip fetching PR status (faster)
@@ -204,8 +216,75 @@ Environment:
 EOF
 }
 
+# Short first-use usage for a bare 'hydra' outside a repository or without a terminal.
+usage_short() {
+    cat <<EOF
+hydra — run coding agents on isolated branches from one control centre.
+Run 'hydra' inside a repository to start.
+
+Usage: hydra <command> [options]
+
+Common commands:
+  init              Prepare this repository (identity, trust, agent profile)
+  spawn <branch>    Start an agent on a new branch in its own worktree
+  list              Show heads: branch, agent, session state, reported outcome, age
+  status            Show health of every head
+  switch [branch]   Attach to a head's terminal
+  kill <branch>     Remove a head (closes its terminal and worktree; keeps the branch)
+  tui               Open the control centre
+  doctor            Check the install, dependencies, and first-run readiness
+  agent             Inspect or probe coding-agent profiles
+  workflow          Run or inspect finite, recoverable workflows
+
+Run 'hydra help' for the full command list, or 'hydra <command> --help'.
+EOF
+}
+
+# Print the usage block for one command from the full usage text.
+# Usage: usage_command <command>
+# Returns: 0 when a block was printed, 1 when the command has no block
+usage_command() {
+    _uc_block="$(usage | awk -v cmd="$1" '
+        /^Commands:/ { in_commands = 1; next }
+        /^Options:/ { in_commands = 0 }
+        !in_commands { next }
+        /^  [^ ]/ { active = ($1 == cmd) }
+        active { print }
+    ')"
+    [ -n "$_uc_block" ] || return 1
+    printf 'Usage: hydra %s [options]\n\n%s\n\n' "$1" "$_uc_block"
+    printf "Run 'hydra help' for the full command list.\n"
+}
+
+# Commands whose -h/--help is answered from the shared usage text.
+# Commands with their own richer help (workflow, admission, claim, ...) keep it.
+usage_command_handles() {
+    case "$1" in
+        spawn|init|agent|remote|fleet|capabilities|path|lifecycle|outcome|wait|adapter|resume|notify|exec|diff|review|provenance|integrate|list|switch|kill|group|send|recv|pr|tail|broadcast|wait-idle|regenerate|state|events|status|doctor|cleanup|dashboard|tui|cycle-layout|queue|completion)
+            return 0 ;;
+    esac
+    return 1
+}
+
 # Main command dispatcher
 main() {
+    if [ -z "${1:-}" ]; then
+        # A bare 'hydra' in a repository with a terminal opens the control centre.
+        if [ -t 0 ] && [ -t 1 ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            set -- tui
+        else
+            usage_short
+            return 0
+        fi
+    fi
+    case "${2:-}" in
+        -h|--help)
+            if usage_command_handles "$1"; then
+                usage_command "$1"
+                return $?
+            fi
+            ;;
+    esac
     HYDRA_JSON_REQUESTED=0
     case "${1:-}" in
         remote|fleet|init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
@@ -450,13 +529,9 @@ main() {
             usage
             ;;
         *)
-            if [ -z "${1:-}" ]; then
-                usage
-            else
-                echo "Error: Unknown command '$1'" >&2
-                echo "Run 'hydra help' for usage information" >&2
-                exit 1
-            fi
+            echo "Error: Unknown command '$1'" >&2
+            echo "Run 'hydra help' for usage information" >&2
+            exit 1
             ;;
     esac
 }

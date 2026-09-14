@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Redraw the native TUI through one frame canvas and presenter so every view
+  shares the same title, tab bar, panel and footer, and only changed cells are
+  repainted; idle refreshes and view switches no longer clear the screen.
+- Use one interaction model across views: `Tab`/`Shift-Tab` move between tabs
+  or workspace panes, arrows select, `Enter` opens and `Esc` steps back one
+  level; `n` starts a task and `1`-`9` jump to tabs.
+- Restrain the palette to cyan chrome, amber attention, green running and a
+  muted tone for hints; the focused workspace pane is shown by its border.
+- Describe sessions, details, coordination, overview and recovery findings in
+  plain language, with raw identifiers and finding kinds kept under technical
+  details; empty states explain what a head or workflow is and offer the next
+  action.
+- Confirm head removal inside the UI, run `hydra kill` with captured output,
+  report the result in place and show the full output only when a head was
+  kept; recovery checks run the same way. Statistics and Workspace keep the
+  shared tab bar.
+- A bare `hydra` inside a repository opens the control centre; elsewhere it
+  prints a short usage. `hydra <command> --help` works for every command.
+  `hydra doctor` detects agents correctly and names the no-agent path, and
+  `hydra status` reports tmux even without heads.
+- `hydra init` no longer writes `.hydra/config.yml`, `.hydra/local.yml` or
+  `.git/info/exclude`; registration is host-local and a clean repository stays
+  clean. Shared configuration is an explicit opt-in via
+  `hydra init --write-shared-config`; generated leftovers from earlier releases
+  are migrated once and real or tracked configuration is never removed. Init
+  prints a two-line `Ready:` summary; `init --json` is unchanged.
+- Interactive `hydra spawn` stays in the current terminal and prints where the
+  head lives with `hydra tui` / `hydra switch` as next actions; `--attach`
+  restores direct attachment. `spawn` and `spawn --dry-run` refuse an existing
+  durable head with the same message, and `spawn --resume` resumes a stopped
+  head of the same branch.
+- Spawn and resume deliver the head environment through the tmux session
+  environment and a per-instance launcher: bootstrap exports and the agent
+  launch are no longer typed into the shell or its history, the pane opens
+  with a short `Hydra head ... / agent ... / repo ...` banner, and the agent runs
+  by the absolute executable path that `hydra agent list` and `hydra provenance`
+  report (tmux 3.2+ uses `new-session -e`; 3.0 and 3.1 fall back to
+  `set-environment`).
+- `hydra kill` says the branch is kept, and `hydra list` prints an aligned
+  BRANCH / AGENT / SESSION / REPORTED / AGE table (`--verbose` restores the
+  previous fields; `--json` is unchanged).
+
 ## [2.5.0] - 2026-09-12
 
 ### Added

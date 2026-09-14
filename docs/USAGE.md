@@ -5,13 +5,31 @@ v2.1.0. Version 2.2.0 adds workflow data,
 approval waits, headless adapters, and local objective planning; see the
 [changelog](../CHANGELOG.md) for upgrade notes.
 
+## Starting out
+
+- `hydra` with no arguments opens the control centre (`hydra tui`) when you run it
+  from a terminal inside a Git repository. Outside a repository, or without a
+  terminal, it prints a short usage with the most common commands.
+- `hydra help` (or `hydra --help`) prints the full command reference.
+- `hydra <command> --help` (or `-h`) prints that command's usage and exits 0, for
+  example `hydra spawn --help` or `hydra kill --help`.
+- `hydra doctor` reports the coding agents found on PATH. With none installed it
+  suggests Claude Code or Codex, or a plain terminal task with
+  `hydra spawn <branch> --no-agent`.
+- `hydra list` prints one aligned row per head: `BRANCH`, `AGENT`, `SESSION`
+  (`running`, `terminal gone`, `stopped`, or `unknown`), `REPORTED` (the declared
+  outcome or `-`), and `AGE`. The current head is marked with `*`. Add `--verbose`
+  for the session name and the full `[declared]`/`[observed]`/`[live]` fields;
+  `hydra list --json` is unchanged.
 
 ```sh
-# Create a new head for a branch (tmux + worktree)
+# Create a new head for a branch (tmux + worktree); stays in this terminal
 hydra spawn feature-branch [-l default|dev|full]
 hydra spawn feature-branch --dry-run --no-agent
 hydra spawn feature-branch --profile claude --prompt "Implement the task"
 hydra spawn feature-branch --profile codex --prompt-file task.md
+hydra spawn feature-branch --attach          # expert: take over this terminal
+hydra spawn feature-branch --resume          # start again after `hydra kill`
 
 # From a GitHub issue
 hydra spawn --issue 123
@@ -21,8 +39,9 @@ hydra spawn feature -n 3 --profile aider
 hydra spawn exp --agents "claude:2,aider:1"
 
 # Inspect & switch
-hydra list              # list all sessions
-hydra list --json       # JSON output for scripting
+hydra list              # table: BRANCH AGENT SESSION REPORTED AGE
+hydra list --verbose    # session names plus full lifecycle fields
+hydra list --json       # JSON output for scripting (unchanged by --verbose)
 hydra list --git        # add recorded-base Git evidence
 hydra list -g mygroup   # filter by group
 hydra switch feature/ui # enter a named head directly
@@ -99,7 +118,8 @@ hydra gc --policy orphaned --dry-run
 hydra worktree doctor status
 
 # System
-hydra init --profile claude --trust
+hydra init --profile claude --trust      # host-local registration; source tree unchanged
+hydra init --write-shared-config         # opt-in committed .hydra/config.yml
 hydra agent list
 hydra capabilities --json
 hydra state verify
@@ -116,6 +136,24 @@ hydra tui                                          # native mission control; vis
 hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
 ```
+
+## Launching heads and attaching
+
+An interactive `hydra spawn` creates the head and leaves you in your current
+terminal. It prints a short context block (branch, agent, worktree location, tmux
+session) with the two next actions: `hydra tui` to follow the head in the control
+centre, or `hydra switch <branch>` to attach to its terminal. Pass `--attach` to
+take over the terminal immediately instead; this is the expert path and is never
+the default. `HYDRA_NO_SWITCH=1` still creates the head without attaching and
+overrides `--attach`. Non-terminal invocations (pipes, automation) and `--headless`
+heads keep their existing messages and never attach.
+
+Durable head state outlives `hydra kill`, so `hydra spawn` and `hydra spawn --dry-run`
+both refuse a branch whose head still exists and name the way forward: `hydra resume
+<branch>` (or `hydra spawn <branch> --resume`, which takes the same resume path and
+ignores spawn-only options such as `--prompt`) or a new branch name. A live head is
+never given a second execution owner; `--resume` on a branch without a head simply
+spawns it.
 
 Attention results are immutable run/step/attempt evidence. A sealed result remains
 inspectable when its execution head is no longer live; missing recorded head or
@@ -223,7 +261,7 @@ hydra completion fish > ~/.config/fish/completions/hydra.fish
 
 | Variable | Description |
 |----------|-------------|
-| `HYDRA_NO_SWITCH` | Set to `1` to create a head without attaching |
+| `HYDRA_NO_SWITCH` | Set to `1` to never attach on spawn, even with `--attach` (demos, automation) |
 | `HYDRA_HOME` | Runtime dir (default `~/.hydra`) |
 | `HYDRA_AI_COMMAND` | Default agent override; project profiles are preferred |
 | `HYDRA_ROOT` | Force library discovery when running from source |
@@ -248,6 +286,28 @@ the native helpers.
 Supported systems and upgrade policy are in the root README and [Contracts](CONTRACTS.md).
 Existing 1.9 installations should review the state backup and migration guidance
 in [Contracts](CONTRACTS.md) before removing their backup.
+
+## Project registration and shared config
+
+`hydra init` registers the repository on the current host only. Its identity,
+default agent profile, worktree root, and trust decision live under the
+repository's Git common directory (`.git/hydra/`), so the source tree and
+`git status` stay unchanged. Rerunning `hydra init` keeps the stored profile and
+worktree root unless you pass `--profile`, `--no-agent`, or `--worktree-root`.
+
+Shared repository configuration is an explicit opt-in:
+`hydra init --write-shared-config` previews and writes a commented
+`.hydra/config.yml` template meant to be committed; `--force` replaces an
+existing file. The template runs nothing by itself, and every host still has to
+approve the exact content with `hydra init --trust` before setup commands,
+startup commands, or repository workflows execute.
+
+Earlier releases left a generated `.hydra/config.yml` stub and `.hydra/local.yml`
+in the tree and added an `.git/info/exclude` rule for the latter. The next
+`hydra init` removes exactly those generated files and that rule, imports a
+differing `worktree_root` from `local.yml` into the host record, and reports the
+migration once. Tracked files and any `.hydra/config.yml` with real content are
+never removed.
 
 ## YAML Config (optional)
 
@@ -281,6 +341,29 @@ Add `.hydra/` scripts to customize lifecycle:
 - `startup`: one command per line; sent to the main pane after spawn.
 - `hooks/post-spawn`: after layout/startup; env: `HYDRA_SESSION`, `HYDRA_WORKTREE`, `HYDRA_BRANCH`.
 
+## Head session bootstrap
+
+An interactive head receives `HYDRA_PROJECT_ID`, `HYDRA_HEAD_ID`,
+`HYDRA_INSTANCE_ID`, `HYDRA_BRANCH`, `HYDRA_WORKTREE`, `HYDRA_STATE_DIR`, and
+`HYDRA_TASK_FILE` without anything being typed into its shell or shell history:
+
+- The values are set in the tmux session environment before the first pane
+  starts (`new-session -e` on tmux 3.2 or newer; `set-environment` on 3.0/3.1),
+  so every window and pane created later inherits them.
+- The first pane runs a generated launcher, recorded at
+  `<state-dir>/instances/<instance>/launcher`, which exports the same values,
+  prints a short banner (`Hydra head <branch> · agent <profile> · repo <name>`
+  plus a `hydra provenance` pointer), starts the agent by the absolute path that
+  `hydra agent list` and `hydra provenance` report, and then execs your login
+  shell so the pane stays usable after the agent exits. While the agent runs it
+  owns the terminal: Ctrl-C reaches only the agent, and Ctrl-Z is ignored.
+- Exact identities and paths stay out of the transcript; `hydra provenance
+  <branch>` prints them, together with the launcher path. `hydra resume` uses
+  the same mechanism with its resume recipe.
+- `startup` lines and YAML `startup`, window, or pane entries are still typed
+  keys. When such entries apply, the agent command is typed after them, exactly
+  as before, so it keeps following those commands.
+
 ## Dashboard
 
 - Shows panes from all heads in one tmux window; exits with `q` and restores everything.
@@ -301,22 +384,49 @@ hydra tui --basic          # explicit basic mode
 hydra tui --capabilities   # availability and observation diagnostics
 ```
 
-The native keymap is deliberately small: `j`/`k` or arrows navigate, `Enter` opens
-detail, `v` cycles views, `/` searches heads, `:` searches explicit actions, `p`
-opens terminal output, `d` toggles diagnostics, `Esc` returns to heads, `?` opens
-keyboard help, and `q` exits. The action
-palette includes the tmux dashboard. Mutations are delegated to the shell CLI with
-argument-vector execution; native spawn prompts for branch, profile, template, and
-layout, while `Space`/`A` select heads and `G` assigns the selection to a group. `x`
-kills selected heads through the confirming shell command and skips the current tmux
-session. Press `I` for the attention view; `j`/`k` or arrows select an item, `Enter`
-opens its detail, `s` marks that revision seen for this client, and `r` opens the
-exact read-only review. In review, `j`/`k` scroll, `i` shows the full identity, `f`
-shows supplied references, `o` follows a selected reference, and `Esc` backs out.
-`l`, `t`, and `p` supply one explicit log, transcript, or PR reference to the
-public review producer. A stale attention snapshot cannot be reviewed until it is
-refreshed. Seen state is client-local and does not approve, accept, or mutate a
-workflow. See the native helper behavior in the root README.
+Every native screen shares one frame: a title row (`HYDRA / WORK`, `HYDRA / PLAN
+TOGETHER`, ...), a tab bar, one content panel and a two-line footer with the current
+status and the keys that apply. Only changed cells are repainted, so idle refreshes
+do not flicker. Session states use plain words: `running`, `terminal gone`,
+`stopped` and `unknown`; internal tokens stay behind `d` (technical details).
+
+One interaction model applies everywhere:
+
+| Key | Action |
+|-----|--------|
+| `Tab` / `Shift-Tab` | Next / previous tab; inside Workspace, next / previous pane |
+| `Left` / `Right`, `1`-`9` | Previous / next tab, or jump to a tab |
+| `Up` / `Down`, `j` / `k` | Select |
+| `Enter` | Open the selection (details, a host's heads, a recovery check) |
+| `Esc` | One step back: details to the list, close help, clear the search |
+| `n` | Start a new task (branch, worktree, terminal and agent) |
+| `a` | Talk to the selected agent inside Workspace |
+| `x` | Remove the selected or marked heads after an in-app confirmation |
+| `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
+| `/`, `:` | Search heads, search explicit actions |
+| `p`, `d`, `c` | Terminal output, technical details, coordination |
+| `?`, `t`, `q` | Keyboard help, theme, quit |
+
+Removal confirms the exact targets in the UI, runs `hydra kill` per head with output
+captured, reports a concise result in the status line and opens the full output only
+when something was kept (for example uncommitted changes). The current tmux session
+is always skipped. Recovery findings are explained in plain language; `Enter` runs
+the recorded check and shows its output in place, and `d` keeps the raw kind,
+source and confidence available.
+
+Inside Workspace, `A` / `B` / `C` switch between the conversation, plan-overview and
+monitoring layouts, `z` zooms the focused pane and `S` shows two agents side by side.
+While typing to an attached agent, `Ctrl-B Tab` returns to Hydra, `Ctrl-B x` closes
+the pane, `Ctrl-B n` switches agent and `Ctrl-B [` scrolls history. The action
+palette (`:`) still delegates interactive commands such as `switch` and `dashboard`
+to the shell CLI with argument-vector execution. Press `I` for the attention view;
+`j`/`k` or arrows select an item, `Enter` opens its detail, `s` marks that revision
+seen for this client, and `r` opens the exact read-only review. In review, `j`/`k`
+scroll, `i` shows the full identity, `f` shows supplied references, `o` follows a
+selected reference, and `Esc` backs out. `l`, `t`, and `p` supply one explicit log,
+transcript, or PR reference to the public review producer. A stale attention snapshot
+cannot be reviewed until it is refreshed. Seen state is client-local and does not
+approve, accept, or mutate a workflow.
 
 The larger keymap below belongs to the maintained basic shell TUI.
 

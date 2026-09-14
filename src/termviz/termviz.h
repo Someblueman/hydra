@@ -8,7 +8,9 @@
 
 /* Caller owns all storage and strings. No allocation, terminal modes, input,
  * environment, clock, subprocesses, or application state inside this library. */
-enum tv_style { TV_BASE, TV_BORDER, TV_TITLE, TV_SELECTED, TV_WARNING, TV_STRONG };
+/* Semantic styles. SUCCESS, MUTED and FOCUS were added after STRONG; palettes
+ * that map only the first six entries should treat later values as TV_BASE. */
+enum tv_style { TV_BASE, TV_BORDER, TV_TITLE, TV_SELECTED, TV_WARNING, TV_STRONG, TV_SUCCESS, TV_MUTED, TV_FOCUS };
 #define TV_COMBINING_MAX 3
 #define TV_COLOR_DEFAULT UINT32_C(0xffffffff)
 enum tv_attributes {
@@ -45,6 +47,9 @@ size_t tv_utf8_encode(uint32_t cp, char output[4]);
 void tv_put(struct tv_canvas *canvas, int x, int y, uint32_t glyph, enum tv_style style);
 void tv_text(struct tv_canvas *canvas, struct tv_rect area, const char *text, enum tv_style style);
 void tv_panel(struct tv_canvas *canvas, struct tv_rect area, const char *title);
+/* Panel with explicit border and title styles, for focus indication. */
+void tv_panel_styled(struct tv_canvas *canvas, struct tv_rect area, const char *title,
+                     enum tv_style border, enum tv_style title_style);
 void tv_bar(struct tv_canvas *canvas, struct tv_rect area, uint64_t value,
             uint64_t maximum, enum tv_style style);
 /* Samples are equally spaced; invalid samples are gaps, not zeros. Range is

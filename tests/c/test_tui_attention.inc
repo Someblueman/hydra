@@ -13,7 +13,7 @@ static void test_attention(const char *tui, const char *hydra, const char *fake_
     write_input(session.master, "s", 1U);
     result(still_running(&session), "acknowledgement is read-only and keeps TUI alive");
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "attention Escape returns to heads");
+    result(wait_for_marker(&session, "HYDRA / ", 1000), "attention Escape returns to heads");
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "attention exits with terminal restored");
     close_session(&session);

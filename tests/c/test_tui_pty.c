@@ -28,6 +28,9 @@ struct session {
     int slave;
     struct termios original;
     bool slow_output;
+    /* A persistent terminal emulator so markers are found on the reconstructed
+     * screen even when the incremental presenter never re-streams unchanged text. */
+    void *screen;
 };
 
 static int tests;
@@ -45,6 +48,9 @@ static bool wait_for_screen_text(struct session *, const char *, int, int, long)
 static bool wait_for_attention_order(struct session *);
 static ssize_t read_marker_output(struct session *, char *, size_t);
 static void drain_start_output(struct session *);
+static void session_feed(struct session *, const char *, size_t);
+static void session_drain(struct session *);
+static bool session_visible(struct session *, const char *);
 static bool measure_unsigned(const char *value, unsigned *result) {
     char *end; unsigned long parsed;
     if (!value || !*value) return false;
@@ -393,12 +399,13 @@ static bool wait_for_model(struct session *session) {
 static void drain_start_output(struct session *session) {
     char buffer[4096];
     ssize_t length;
-    if (getenv("HYDRA_I1_ARTIFACT_DIR") == NULL) { drain_output(session->master); return; }
+    if (getenv("HYDRA_I1_ARTIFACT_DIR") == NULL) { session_drain(session); return; }
     do {
         length = read(session->master, buffer, sizeof(buffer));
         if (length > 0) {
             char path[4096];
             FILE *file;
+            session_feed(session, buffer, (size_t)length);
             if (snprintf(path, sizeof(path), "%s/i1-pty-start.raw", getenv("HYDRA_I1_ARTIFACT_DIR")) < (int)sizeof(path) &&
                 (file = fopen(path, "a")) != NULL) {
                 (void)fwrite(buffer, 1, (size_t)length, file);
@@ -412,6 +419,7 @@ static ssize_t read_marker_output(struct session *session, char *buffer, size_t 
     ssize_t length;
     if (session->slow_output && size > 64U) size = 64U;
     length = read(session->master, buffer, size);
+    if (length > 0) session_feed(session, buffer, (size_t)length);
     if (session->slow_output && length > 0) sleep_ms(2);
     return length;
 }
@@ -428,8 +436,8 @@ static bool wait_for_markers(struct session *session, const char *marker,
         if (length > 0) {
             used += (size_t)length;
             captured[used] = '\0';
-            found = found || strstr(captured, marker) != NULL;
-            found_second = found_second || (second != NULL && strstr(captured, second) != NULL);
+            found = found || strstr(captured, marker) != NULL || session_visible(session, marker);
+            found_second = found_second || (second != NULL && (strstr(captured, second) != NULL || session_visible(session, second)));
             if (found && found_second) return true;
             if (used > sizeof(captured) / 2U) {
                 memmove(captured, captured + used / 2U, used - used / 2U);
@@ -437,6 +445,11 @@ static bool wait_for_markers(struct session *session, const char *marker,
                 captured[used] = '\0';
             }
         } else {
+            /* Idle: the incremental presenter emits nothing for content already
+             * on screen, so consult the reconstructed screen before sleeping. */
+            found = found || session_visible(session, marker);
+            found_second = found_second || (second != NULL && session_visible(session, second));
+            if (found && found_second) return true;
             sleep_ms(10);
         }
     }
@@ -456,8 +469,9 @@ static bool wait_for_marker_capture(struct session *session, const char *marker,
         if (length > 0) {
             if ((size_t)length > sizeof(buffer)) return false;
             capture_bytes(captured, used, buffer, (size_t)length);
-            if (strstr(captured, marker) != NULL) return true;
+            if (strstr(captured, marker) != NULL || session_visible(session, marker)) return true;
         } else {
+            if (session_visible(session, marker)) return true;
             sleep_ms(10);
         }
     }
@@ -466,7 +480,7 @@ static bool wait_for_marker_capture(struct session *session, const char *marker,
 
 static bool still_running(struct session *session) {
     int status;
-    drain_output(session->master);
+    session_drain(session);
     return waitpid(session->pid, &status, WNOHANG) == 0;
 }
 
@@ -511,6 +525,8 @@ static bool terminal_restored(struct session *session) {
 static void close_session(struct session *session) {
     close(session->master);
     close(session->slave);
+    free(session->screen);
+    session->screen = NULL;
 }
 
 #include "test_tui_mouse.inc"
@@ -574,22 +590,22 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     result(wait_for_raw(&session), "interactive TUI enters raw mode");
     (void)wait_for_model(&session);
     write_input(session.master, "j\r", 2U);
-    result(wait_for_marker(&session, "HEAD DETAIL  feature-stale", 1000),
+    result(wait_for_marker(&session, "Details: feature-stale", 1000),
            "keyboard navigation opens the selected head detail");
     write_input(session.master, "\033[A\r", 4U);
-    result(wait_for_marker(&session, "HEAD DETAIL  feature-live", 1000),
+    result(wait_for_marker(&session, "Details: feature-live", 1000),
            "arrow-key navigation remains bounded and deterministic");
     write_input(session.master, "d", 1U);
     result(wait_for_marker(&session, "lifecycle source:", 1000), "diagnostics are reachable on demand");
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "[Heads]", 1000), "Escape returns to the head list");
+    result(wait_for_marker(&session, "[Work]", 1000), "Escape returns to the head list");
     write_input(session.master, "/", 1U);
     result(wait_for_marker(&session, "Search heads:", 1000), "keyboard search prompt is reachable");
     write_input(session.master, "FEATURE-STALE\n", 14U);
     result(wait_for_marker(&session, "Search: FEATURE-STALE", 1000),
            "keyboard-only search is case-insensitive and returns to raw mode");
     write_input(session.master, "k\r", 2U);
-    result(wait_for_marker(&session, "HEAD DETAIL  feature-stale", 1000),
+    result(wait_for_marker(&session, "Details: feature-stale", 1000),
            "filtered navigation and detail stay on the visible head");
     write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads:", 1000);
@@ -601,7 +617,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "/", 1U);
     (void)wait_for_marker(&session, "Search heads:", 1000);
     write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000),
+    result(wait_for_marker(&session, "HYDRA / ", 1000),
            "keyboard-only search can be cleared");
     write_input(session.master, paste, sizeof(paste) - 1U);
     sleep_ms(150);
@@ -617,7 +633,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "?", 1U);
     result(wait_for_marker(&session, "KEYBOARD HELP", 2000), "oversized paste cannot inject quit and preserves the next key");
     write_input(session.master, "?", 1U);
-    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "keyboard input resumes after oversized paste");
+    result(wait_for_marker(&session, "HYDRA / ", 1000), "keyboard input resumes after oversized paste");
     write_input(session.master, mouse, sizeof(mouse) - 1U);
     sleep_ms(100);
     result(still_running(&session), "mouse over a non-list view is inert");
@@ -627,13 +643,13 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, "?", 1U);
     result(wait_for_marker(&session, "KEYBOARD HELP", 1000), "keyboard help is available in-product");
     write_input(session.master, "?", 1U);
-    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "keyboard help closes in raw mode");
+    result(wait_for_marker(&session, "HYDRA / ", 1000), "keyboard help closes in raw mode");
     write_input(session.master, ":", 1U);
     result(wait_for_marker(&session, "Action search:", 1000), "dashboard action search is reachable");
     write_input(session.master, "dashboard\n", 10U);
     result(wait_for_marker(&session, "FAKE DASHBOARD", 1000), "dashboard delegates to the shell CLI");
     write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "dashboard returns to native raw mode");
+    result(wait_for_marker(&session, "HYDRA / ", 1000), "dashboard returns to native raw mode");
     write_input(session.master, ":", 1U);
     (void)wait_for_marker(&session, "Action search:", 1000);
     write_input(session.master, "spawn\n", 6U);
@@ -648,7 +664,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     result(wait_for_marker(&session, "FAKE SPAWN spawn feature-native --profile codex --template review --layout full", 1000),
            "spawn builds explicit profile, template, and layout argv");
     write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "spawn returns to native raw mode");
+    result(wait_for_marker(&session, "HYDRA / ", 1000), "spawn returns to native raw mode");
     write_input(session.master, "A", 1U);
     result(wait_for_marker(&session, "3 marked", 1000), "select-all marks every visible head");
     write_input(session.master, "G", 1U);
@@ -658,14 +674,17 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
            "FAKE GROUP group create release feature-live feature-stale feature-unavailable", 1000),
            "bulk group assignment delegates explicit selected branches to the shell CLI");
     write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "bulk group returns to native raw mode");
+    result(wait_for_marker(&session, "HYDRA / ", 1000), "bulk group returns to native raw mode");
     write_input(session.master, "A", 1U);
     (void)wait_for_marker(&session, "3 marked", 1000);
     write_input(session.master, "x", 1U);
-    result(wait_for_marker(&session, "Bulk kill complete: 2 command(s), 1 current skipped", 1000),
-           "bulk kill delegates non-current branches and preserves the current session");
+    result(wait_for_marker(&session, "Remove 3 heads (feature-live, feature-stale, feature-unavailable)?", 1000),
+           "bulk removal confirms the exact targets inside the UI");
+    write_input(session.master, "y\n", 2U);
+    result(wait_for_marker(&session, "Removed 2 heads; skipped the current session", 3000),
+           "bulk removal delegates non-current branches, preserves the current session and reports in place");
     write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000), "bulk kill returns to native raw mode");
+    result(wait_for_marker(&session, "HYDRA / ", 1000), "bulk kill returns to native raw mode");
     memset(&size, 0, sizeof(size));
     size.ws_col = 41; size.ws_row = 10;
     (void)ioctl(session.master, TIOCSWINSZ, &size);
@@ -838,12 +857,12 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
     (void)times(&before);
     started = monotonic_ms();
     if (open_session(&session, tui, hydra, fake_bin, 120, 40) != 0) return 1;
-    if (!wait_for_marker(&session, "HYDRA MISSION CONTROL", 5000)) {
+    if (!wait_for_marker(&session, "HYDRA / ", 5000)) {
         kill(session.pid, SIGKILL); (void)waitpid(session.pid, NULL, 0); close_session(&session); return 1;
     }
     ready = monotonic_ms();
     sleep_ms(2200);
-    drain_output(session.master);
+    session_drain(&session);
     write_input(session.master, "q", 1U);
     status = wait_for_exit(&session);
     ended = monotonic_ms();
@@ -861,6 +880,32 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 #include "test_tui_attention.inc"
 #include "test_tui_review.inc"
 #include "test_tui_measure.inc"
+
+/* Feed the raw PTY stream into a persistent emulator so a marker that spans
+ * text the incremental presenter left unchanged is still observable. */
+static void session_feed(struct session *session, const char *bytes, size_t length) {
+    struct measure_screen *screen = session->screen;
+    if (!screen) {
+        screen = measure_screen_create(MEASURE_COLUMNS, MEASURE_ROWS);
+        session->screen = screen;
+        if (!screen) return;
+    }
+    tv_term_feed(&screen->terminal, bytes, length);
+}
+
+/* Drain pending PTY output into the emulator without blocking. */
+static void session_drain(struct session *session) {
+    char buffer[4096];
+    ssize_t length;
+    while ((length = read(session->master, buffer, sizeof(buffer))) > 0)
+        session_feed(session, buffer, (size_t)length);
+}
+
+static int screen_text_row(const struct measure_screen *screen, const char *text);
+
+static bool session_visible(struct session *session, const char *text) {
+    return session->screen && screen_text_row(session->screen, text) >= 0;
+}
 
 static int screen_text_row(const struct measure_screen *screen, const char *text) {
     const struct tv_canvas *canvas = screen->terminal.alternate_active ?
@@ -896,20 +941,19 @@ static bool wait_for_screen_text(struct session *session, const char *text, int 
 /* Count and selected identity are unchanged by a pure reorder. Wait for the
  * applied row positions before sending navigation, so an old frame cannot pass. */
 static bool wait_for_attention_order(struct session *session) {
-    struct measure_screen *screen = measure_screen_create(100, 30);
+    /* Use the session's persistent emulator: a fresh one would only receive the
+     * incremental presenter's changed cells, never the unchanged rows. */
     long long deadline = monotonic_ms() + 3000;
-    bool found = false;
-    if (!screen) return false;
-    while (!found && monotonic_ms() < deadline) {
+    while (monotonic_ms() < deadline) {
         char bytes[4096]; ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
-        if (length > 0) tv_term_feed(&screen->terminal, bytes, (size_t)length);
-        else sleep_ms(10);
-        int first = screen_text_row(screen, "verification-ready");
-        found = first >= 0 && screen_text_row(screen, "decision-needed") > first &&
-            screen_text_row(screen, "ATTENTION  1 current  0 stale  1 unknown") >= 0;
+        if (length <= 0) sleep_ms(10);
+        if (session->screen) {
+            int first = screen_text_row(session->screen, "verification-ready");
+            if (first >= 0 && screen_text_row(session->screen, "decision-needed") > first &&
+                screen_text_row(session->screen, "ATTENTION  1 current  0 stale  1 unknown") >= 0) return true;
+        }
     }
-    free(screen);
-    return found;
+    return false;
 }
 
 static int special_test_mode(int argc, char **argv) {

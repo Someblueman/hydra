@@ -3,9 +3,8 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
-/* Hydra's view owns data interpretation; termviz owns layout, focus and paint. */
-
-
+/* Hydra's view owns data interpretation; termviz owns layout, focus and paint.
+ * The workspace shares the frame, header, tabs and footer with every other view. */
 
 bool native_workspace_monitoring(struct app *app) {
     return app->workspace && app->workspace->mode==2;
@@ -13,12 +12,11 @@ bool native_workspace_monitoring(struct app *app) {
 
 void native_workspace_destroy(struct app *app) {
     if (!app->workspace) return;
-    free(app->workspace->cells); free(app->workspace->previous);
     free(app->workspace); app->workspace = NULL;
 }
 
 void native_workspace_invalidate(struct app *app) {
-    if (app->workspace) tv_present_invalidate(&app->workspace->presenter);
+    frame_invalidate(app);
 }
 
 bool native_workspace_init(struct app *app) {
@@ -27,10 +25,7 @@ bool native_workspace_init(struct app *app) {
     w = calloc(1, sizeof(*w));
     if (!w) return false;
     app->workspace = w;
-    w->cells = calloc(WORKSPACE_CAPACITY, sizeof(*w->cells));
-    w->previous = calloc(WORKSPACE_CAPACITY, sizeof(*w->previous));
-    if (!w->cells || !w->previous) { native_workspace_destroy(app); return false; }
-    (void)tv_present_init(&w->presenter, w->previous, WORKSPACE_CAPACITY);
+    if (!frame_alloc(app)) { native_workspace_destroy(app); return false; }
     tv_workspace_init(&w->layout, 18, 5);
     (void)tv_workspace_split(&w->layout, 0, TV_COLUMNS, 300);
     (void)tv_workspace_split(&w->layout, 2, TV_ROWS, 560);
@@ -44,7 +39,8 @@ void native_workspace_mode(struct app *app, int mode) {
     struct native_workspace *w;
     if (!native_workspace_init(app)) return;
     w=app->workspace;
-    if (mode==1 && w->mode==1) mode=0;
+    /* B toggles the plan overview back to the conversation; A and C are direct. */
+    if (mode==1 && w->mode==1 && app->view==7) mode=0;
     w->saved[w->mode]=w->layout; w->saved_zoom[w->mode]=w->zoom; w->initialized[w->mode]=true;
     if (w->initialized[mode]) { w->layout=w->saved[mode]; w->zoom=w->saved_zoom[mode]; }
     else {
@@ -68,10 +64,10 @@ static void native_workspace_tree(struct app *app) {
     size_t r;
     if (app->links) {
         const char *name=strrchr(app->links->root,'/');
-        snprintf(w->project_label,sizeof(w->project_label),"Project: %.180s%s",name ? name+1 : app->links->root,
-            app->links->stale ? " / LINKS STALE" : "");
+        snprintf(w->project_label,sizeof(w->project_label),"Project: %.180s%s",name && name[1] ? name+1 : app->links->root,
+            app->links->stale ? " (links stale)" : "");
     }
-    w->nodes[0] = (struct tv_tree_node){app->fleet ? "Fleet heads" : app->links ? w->project_label : "Current project", SIZE_MAX, 0, w->root_open, TV_STRONG};
+    w->nodes[0] = (struct tv_tree_node){app->fleet ? "Remote heads" : app->links ? w->project_label : "This project", SIZE_MAX, 0, w->root_open, TV_STRONG};
     for (i=0;i<w->collapsed_count;) {
         size_t h;
         for (h=0;h<app->model.head_count;h++) if (!strcmp(w->collapsed[i],app->model.heads[h].branch)) break;
@@ -79,30 +75,30 @@ static void native_workspace_tree(struct app *app) {
         else { w->collapsed_count--; memcpy(w->collapsed[i],w->collapsed[w->collapsed_count],TEXT); }
     }
     if (!app->fleet && app->workflows) for (r=0;r<app->workflows->run_count;r++)
-        snprintf(w->run_labels[r],sizeof(w->run_labels[r]),"%s / %s / %s",app->workflows->runs[r].name,
-            app->workflows->runs[r].state,app->workflows->runs[r].id);
+        snprintf(w->run_labels[r],sizeof(w->run_labels[r]),"%s%s%s",app->workflows->runs[r].name,dot(app),
+            app->workflows->runs[r].state);
     retarget_selection(app);
     for (i = 0; i < app->model.head_count; i++) if (head_matches(&app->model.heads[i], app->search)) {
         const struct head *h = &app->model.heads[i];
         size_t k;
         bool expanded=true;
         if (count>=sizeof(w->nodes)/sizeof(w->nodes[0])) {
-            copy_text(app->notice,sizeof(app->notice),"Navigation limit reached / filter heads"); break;
+            copy_text(app->notice,sizeof(app->notice),"Navigation limit reached; use / to filter heads"); break;
         }
         for (k=0;k<w->collapsed_count;k++) if (!strcmp(w->collapsed[k],h->branch)) expanded=false;
         if (i == app->selected) { chosen = count; w->selection_initialized = true; }
-        w->nodes[count++] = (struct tv_tree_node){h->branch, i, 1, expanded, !strcmp(display_status(h), "LIVE") ? TV_BASE : TV_WARNING};
+        w->nodes[count++] = (struct tv_tree_node){h->branch, i, 1, expanded, app->fleet ? TV_BASE : status_tone(h)==TV_SUCCESS ? TV_BASE : status_tone(h)};
         if (!app->fleet && app->workflows) for (r=0;r<app->workflows->run_count;r++) if (native_links_match(app,r,i)) {
             if (count>=sizeof(w->nodes)/sizeof(w->nodes[0])) break;
             matched[r]=true;
             if (w->run_selected && r==app->workflow_run && i==app->selected && expanded) chosen=count;
-            w->nodes[count++] = (struct tv_tree_node){w->run_labels[r],(r+1)*(MAX_HEADS+1)+i,2,false,TV_BORDER};
+            w->nodes[count++] = (struct tv_tree_node){w->run_labels[r],(r+1)*(MAX_HEADS+1)+i,2,false,TV_MUTED};
         }
     }
     if (!app->fleet && app->workflows) for (r=0;r<app->workflows->run_count;r++) if (!matched[r]) {
         if (count>=sizeof(w->nodes)/sizeof(w->nodes[0])) break;
         if (w->run_selected && r==app->workflow_run) chosen=count;
-        w->nodes[count++]=(struct tv_tree_node){w->run_labels[r],(r+1)*(MAX_HEADS+1)+MAX_HEADS,1,false,TV_BORDER};
+        w->nodes[count++]=(struct tv_tree_node){w->run_labels[r],(r+1)*(MAX_HEADS+1)+MAX_HEADS,1,false,TV_MUTED};
     }
     (void)tv_tree_init(&w->tree, w->nodes, count);
     w->tree.selected = root_selected ? 0 : chosen;
@@ -123,7 +119,7 @@ static void native_workspace_select(struct app *app) {
         if (app->workflows && run<app->workflows->run_count) {
             if (app->workflow_run!=run) app->workflow_node=0;
             app->workflow_run=run;
-            copy_text(app->notice,sizeof(app->notice),"Recorded branch reference; current instance ownership is not implied");
+            copy_text(app->notice,sizeof(app->notice),"Recorded branch reference; Enter opens its evidence");
         }
     }
 }
@@ -148,7 +144,14 @@ void native_workspace_move(struct app *app, int direction) {
     }
     else if (w->layout.focus == 1) { tv_tree_move(&w->tree, direction); native_workspace_select(app); }
     else tv_workspace_scroll(&w->layout, direction, w->layout.focus==6 ? NATIVE_PLAN_TEXT :
-        app->fleet ? app->model.host_count+2 : app->model.recovery_count+5);
+        app->fleet ? app->model.host_count+2 : app->model.recovery_count+8);
+}
+
+/* Pane focus is the workspace's Tab model; Shift-Tab reverses it. */
+void native_workspace_focus_previous(struct app *app) {
+    if (!app->workspace) return;
+    tv_workspace_focus_next(&app->workspace->layout,-1);
+    native_workspace_sync_terminal(app);
 }
 
 bool native_workspace_key(struct app *app, char key) {
@@ -166,7 +169,7 @@ bool native_workspace_key(struct app *app, char key) {
     if (w->mode==2 && (key=='[' || key==']')) return workflow_key(app,key);
     if (key == 'z') {
         w->zoom = !w->zoom;
-        copy_text(app->notice,sizeof(app->notice),w->zoom ? "Focused pane expanded / z restores splits" : "Pane splits restored");
+        copy_text(app->notice,sizeof(app->notice),w->zoom ? "Focused pane expanded; z restores the splits" : "Pane splits restored");
         return true;
     }
     if (key == 'S') { native_workspace_split_agents(app); return true; }
@@ -198,7 +201,14 @@ bool native_workspace_key(struct app *app, char key) {
             w->selection_initialized = true;
             w->nodes[0].expanded = !w->nodes[0].expanded;
         }
-        else copy_text(app->notice, sizeof(app->notice), "Select a head in navigation first");
+        else copy_text(app->notice, sizeof(app->notice), app->model.head_count ? "Select a head on the left first" : "Nothing selected yet; press n to start a task");
+        return true;
+    }
+    /* Enter on a head keeps the user inside the workspace: focus its pane. */
+    if ((key == '\r' || key == '\n') && w->layout.focus == 1 && selected_head(app)) {
+        int first=w->agents[w->mode].first;
+        w->layout.focus = first ? first : 3;
+        native_workspace_sync_terminal(app);
         return true;
     }
     return false;
@@ -215,81 +225,147 @@ void native_workspace_mouse(struct app *app, unsigned button, int x, int y, bool
         native_workspace_sync_terminal(app);
         if (button == 64 || button == 65) native_workspace_move(app, button == 64 ? -1 : 1);
         else if (w->layout.focus == 1) {
-            (void)tv_tree_click(&w->tree, w->layout.panes[1].scroll, y - w->layout.panes[1].bounds.y - (w->compact ? 1 : 2));
+            (void)tv_tree_click(&w->tree, w->layout.panes[1].scroll, y - w->layout.panes[1].bounds.y - 1);
             native_workspace_select(app);
         }
     }
 }
 
+static const char *agent_name(const struct head *h) {
+    return h->profile[0] == '\0' || !strcmp(h->profile, "none") || !strcmp(h->profile, "-") ? "shell (no agent)" : h->profile;
+}
+
+static void workspace_empty(struct app *app, struct tv_canvas *c) {
+    int y = 0;
+    dashboard_text(c, 0, y++, c->width, TV_STRONG, "%s", app->fleet ? "No remote heads observed" : "No agent work in this project yet");
+    y++;
+    if (app->fleet) {
+        dashboard_text(c, 0, y++, c->width, TV_BASE, "Hosts shows connectivity for each machine.");
+        dashboard_text(c, 0, y++, c->width, TV_BASE, "Recovery lists host problems.");
+        return;
+    }
+    dashboard_text(c, 0, y++, c->width, TV_BASE, "Press n to start a task. Hydra creates a branch and");
+    dashboard_text(c, 0, y++, c->width, TV_BASE, "worktree, opens a terminal and starts your agent in it.");
+    y++;
+    dashboard_text(c, 0, y++, c->width, TV_BASE, "The conversation with that agent appears in this pane;");
+    dashboard_text(c, 0, y++, c->width, TV_BASE, "its plan and progress appear next to it.");
+    y++;
+    dashboard_text(c, 0, y++, c->width, TV_MUTED, "n new task   : more actions   ? help");
+}
+
 static void native_workspace_details(struct app *app, struct tv_canvas *c, size_t scroll) {
     const struct head *h = selected_head(app);
+    const char *sep = dot(app);
     int row;
-    if (!h) { tv_text(c, (struct tv_rect){0,0,c->width,1}, app->fleet ? "No matching head / H host observations" : "No matching head", TV_WARNING); return; }
+    if (!h) { workspace_empty(app, c); return; }
     for (row = 0; row < c->height; row++) {
         char text[1024];
+        enum tv_style tone = TV_BASE;
         switch (scroll + (size_t)row) {
-        case 0: snprintf(text, sizeof(text), "%s", h->branch); break;
-        case 1: snprintf(text, sizeof(text), "Observed: %s", display_status(h)); break;
-        case 2: snprintf(text, sizeof(text), "Agent: %s / %s", h->profile, h->adapter); break;
-        case 3: snprintf(text, sizeof(text), "Group: %s", h->group[0] ? h->group : "none"); break;
-        case 4: snprintf(text, sizeof(text), "Host: %s", app->fleet ? h->remote_host : "local"); break;
-        case 5: snprintf(text, sizeof(text), "Project: %.990s", app->fleet ? h->remote_project : app->links ? app->links->root : "current project"); break;
-        case 6:
-            if (app->fleet || !h->head_id[0]) snprintf(text,sizeof(text),"Activity counters unavailable");
-            else snprintf(text,sizeof(text),"%u changed files / %u queued entries",h->diff,h->queue);
+        case 0: snprintf(text, sizeof(text), "%s", h->branch); tone = TV_STRONG; break;
+        case 1: snprintf(text, sizeof(text), "Session   %s", app->fleet ? h->desired : status_label(h)); tone = app->fleet ? TV_BASE : status_tone(h); break;
+        case 2: snprintf(text, sizeof(text), "Agent     %s", app->fleet ? h->profile : agent_name(h)); break;
+        case 3: snprintf(text, sizeof(text), "Where     %s%s%s", app->fleet ? h->remote_host : "this machine", sep, app->fleet ? h->remote_project : app->links ? app->links->root : "this project"); break;
+        case 4:
+            if (app->fleet || !h->head_id[0]) { snprintf(text,sizeof(text),"Changes   unknown"); tone = TV_MUTED; }
+            else snprintf(text,sizeof(text),"Changes   %u file%s not yet committed%s%u queued",h->diff,h->diff==1 ? "" : "s",sep,h->queue);
             break;
-        case 7: snprintf(text, sizeof(text), "PR: %s", h->pr[0] ? h->pr : "not recorded"); break;
-        case 9: snprintf(text, sizeof(text), "a interact / Enter details / d provenance"); break;
-        case 10: snprintf(text, sizeof(text), ": actions / w workflow graph / D statistics"); break;
+        case 5:
+            if (app->fleet || !h->head_id[0]) { snprintf(text,sizeof(text),"Reported  %s", h->declared[0] ? h->declared : "nothing yet"); break; }
+            snprintf(text, sizeof(text), "Reported  %s%s%u of %u approvals", h->declared[0] ? h->declared : "nothing yet", sep, h->approved, h->gates);
+            if (h->gates > h->approved) tone = TV_WARNING;
+            break;
+        case 6: snprintf(text, sizeof(text), "%s%s%s", h->group[0] && strcmp(h->group,"-") ? "Group     " : "", h->group[0] && strcmp(h->group,"-") ? h->group : "",
+                         h->pr[0] && strcmp(h->pr,"-") ? "" : ""); if (h->pr[0] && strcmp(h->pr,"-")) text_append(text, sizeof(text), "%sPR %.40s", text[0] ? sep : "", h->pr); break;
+        case 8: snprintf(text, sizeof(text), "%s", !strcmp(display_status(h), "STALE") ? "The terminal is gone; files in the worktree are kept." : ""); tone = TV_WARNING; break;
+        case 10: snprintf(text, sizeof(text), "a  talk to the agent here      Enter  full details"); tone = TV_MUTED; break;
+        case 11: snprintf(text, sizeof(text), ":  more actions                d  technical details"); tone = TV_MUTED; break;
         default: text[0]='\0'; break;
         }
-        tv_text(c, (struct tv_rect){0,row,c->width,1}, text, row == 0 ? TV_STRONG : TV_BASE);
+        tv_text(c, (struct tv_rect){0,row,c->width,1}, text, tone);
     }
 }
 
 static void native_workspace_activity(struct app *app, struct tv_canvas *c, size_t scroll) {
     const struct head *h = selected_head(app);
+    size_t attention = attention_count(app);
     int row;
     for (row = 0; row < c->height; row++) {
         char text[1024]; size_t index = scroll + (size_t)row;
+        enum tv_style tone = TV_BASE;
+        text[0] = '\0';
         if (app->fleet) {
-            if (!index) snprintf(text,sizeof(text),"Host list observations / H details");
+            if (!index) { snprintf(text,sizeof(text),"Hosts: %zu observed", app->model.host_count); tone = TV_STRONG; }
             else if (index<=app->model.host_count) {
                 const struct host_observation *host=&app->model.hosts[index-1];
                 char count[24]="unknown";
                 if (strcmp(host->state,"failed")) snprintf(count,sizeof(count),"%u",host->heads);
-                snprintf(text,sizeof(text),"%s / %s / %s heads",host->name,host->state,count);
-            } else snprintf(text,sizeof(text),"%s",index==app->model.host_count+1 ? "Process / CPU / memory unavailable" : "");
+                snprintf(text,sizeof(text),"%s%s%s%s%s heads",host->name,dot(app),host->state,dot(app),count);
+                if (!strcmp(host->state,"failed")) tone = TV_WARNING;
+            } else if (index==app->model.host_count+1) { snprintf(text,sizeof(text),"CPU and memory are not measured"); tone = TV_MUTED; }
         }
-        else if (index == 0) snprintf(text, sizeof(text), "%zu heads / %zu recovery findings", app->model.head_count, app->model.recovery_count);
-        else if (index < 5 && (!h || app->fleet || !h->head_id[0]))
-            snprintf(text, sizeof(text), "%s",index==1 ? "Detailed activity counters unavailable" : "");
-        else if (index == 1) snprintf(text, sizeof(text), "Events %u / Messages %u / Signals %u", h->events, h->messages, h->signals);
-        else if (index == 2) snprintf(text, sizeof(text), "Queue %u / Changed files %u", h->queue, h->diff);
-        else if (index == 3) snprintf(text, sizeof(text), "Gates %u / Approved %u", h->gates, h->approved);
-        else if (index == 4) snprintf(text, sizeof(text), "Claims %u / Scopes %u", h->claims, h->scopes);
-        else if (index - 5 < app->model.recovery_count) {
-            const struct recovery *r = &app->model.recovery[index - 5];
-            snprintf(text, sizeof(text), "%s / %s / %s", r->kind, r->label, r->action);
-        } else text[0]='\0';
-        tv_text(c, (struct tv_rect){0,row,c->width,1}, text,
-            app->fleet ? index && index<=app->model.host_count && !strcmp(app->model.hosts[index-1].state,"failed") ? TV_WARNING : TV_BASE :
-            index>=5 && index-5<app->model.recovery_count ? TV_WARNING : TV_BASE);
+        else if (index == 0) {
+            snprintf(text, sizeof(text), "%zu head%s%s%zu need attention%s%zu recovery finding%s", app->model.head_count, app->model.head_count==1 ? "" : "s",
+                     dot(app), attention, dot(app), app->model.recovery_count, app->model.recovery_count==1 ? "" : "s");
+            tone = TV_STRONG;
+        }
+        else if (!app->model.head_count && index == 2) { snprintf(text, sizeof(text), "Nothing has happened yet."); tone = TV_MUTED; }
+        else if (index < 6 && (!h || !h->head_id[0])) {
+            if (index==2 && h) { snprintf(text, sizeof(text), "No readable head record for %s; counters unknown", h->branch); tone = TV_WARNING; }
+        }
+        else if (index == 2) snprintf(text, sizeof(text), "Selected %s%s%u events%s%u messages%s%u signals", h->branch, dot(app), h->events, dot(app), h->messages, dot(app), h->signals);
+        else if (index == 3) { snprintf(text, sizeof(text), "Approvals %u of %u%s%u queued entries", h->approved, h->gates, dot(app), h->queue); if (h->gates > h->approved) tone = TV_WARNING; }
+        else if (index == 4) { snprintf(text, sizeof(text), "Claims %u%sscopes %u  (coordination with other heads)", h->claims, dot(app), h->scopes); tone = TV_MUTED; }
+        else if (index == 6 && app->model.recovery_count) { snprintf(text, sizeof(text), "NEEDS REPAIR"); tone = TV_BORDER; }
+        else if (index >= 7 && index - 7 < app->model.recovery_count) {
+            const struct recovery *r = &app->model.recovery[index - 7];
+            char detail[1024];
+            recovery_explain(r, text, sizeof(text), detail, sizeof(detail));
+            tone = TV_WARNING;
+        }
+        else if (index == 7 + app->model.recovery_count && app->model.recovery_count) { snprintf(text, sizeof(text), "Recovery explains each finding and runs its check"); tone = TV_MUTED; }
+        tv_text(c, (struct tv_rect){0,row,c->width,1}, text, tone);
     }
+}
+
+static const char *pane_title(struct native_workspace *w, int i, bool agent, bool attached, const char *agent_title) {
+    if (i == 1) return "PROJECT";
+    if (agent) return attached ? agent_title : "SELECTED WORK";
+    if (i == 5) return "DEPENDENCIES";
+    if (i == 6) return w->mode == 2 ? "EVIDENCE" : "PLAN";
+    return "ACTIVITY";
+}
+
+static const char *workspace_hints(struct app *app, struct native_workspace *w, int width) {
+    struct native_terminal *t = native_workspace_terminal(app, w->layout.focus);
+    if (t && t->screen) {
+        if (t->client.finished || t->client.eof) return "Agent client disconnected  Ctrl-B r reconnect  Ctrl-B x close  Ctrl-B Tab Hydra";
+        return width < 100 ? "Typing goes to the agent  Ctrl-B Tab back to Hydra  Ctrl-B x close" :
+            "Typing goes to the agent  Ctrl-B Tab back to Hydra  Ctrl-B x close pane  Ctrl-B n next agent  Ctrl-B [ scroll  Ctrl-B q quit";
+    }
+    if (w->layout.focus == 1 && w->run_selected) return "Enter evidence / h parent / Tab panes / ? help / q quit";
+    if (w->compact) return w->mode == 2 ? "Y approve  N reject  Tab pane  q quit" : "Tab pane  a agent  ? help  q quit";
+    if (w->mode == 2) return width < 100 ? "Y approve  N reject  R resume  X cancel  A conversation  ? help  q quit" :
+        "[/] run  Y approve  N reject  R resume  X cancel  A conversation  B plan  Tab pane  ? help  q quit";
+    if (w->mode == 1) return width < 100 ? "P load  V validate  E approve  A conversation  ? help  q quit" :
+        "P load draft  V validate  E approve exact revision  A conversation  C monitor  Tab pane  ? help  q quit";
+    if (width < 100) return app->fleet ? "Tab pane  a attach  B plan  C monitor  ? help  q quit" : "Tab pane  a agent  n new task  B plan  C monitor  ? help  q quit";
+    return app->fleet ? "Tab pane  Enter select  a attach  H host  B plan  C monitor  z zoom  ? help  q quit" :
+        "Tab pane  Enter select  a talk to agent  n new task  x remove  B plan  C monitor  z zoom  ? help  q quit";
 }
 
 bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
     struct native_workspace *w;
-    struct tv_canvas c;
-    int width = app->cols > 512 ? 511 : app->cols - 1;
-    int height = app->rows > 256 ? 256 : app->rows, i, x, y;
-    bool compact = width < 65 || height < 16;
-    long age = headless || !app->snapshot_at ? 0 : (long)(time(NULL) - app->snapshot_at);
-    if (width < 19 || height < 6 || !native_workspace_init(app)) return false;
+    struct tv_canvas *c;
+    int width, height, i, x, y;
+    bool compact;
+    char status[512];
+    const char *sep = dot(app);
+    if (!native_workspace_init(app) || !frame_begin(app, headless)) return false;
+    c = &app->frame; width = c->width; height = c->height;
+    compact = width < 65 || height < 16;
+    if (width < 19 || height < 6) return false;
     w = app->workspace; w->compact=compact;
-    app->paint = !headless && !app->no_color;
-    if (w->theme != app->theme) { tv_present_invalidate(&w->presenter); w->theme = app->theme; }
-    (void)tv_init(&c, w->cells, WORKSPACE_CAPACITY, width, height, !app->ascii);
     {
         int root=w->layout.root;
         if (w->zoom || compact) w->layout.root=w->layout.focus;
@@ -297,39 +373,41 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
         w->layout.root=root;
     }
     native_workspace_tree(app);
-    dashboard_text(&c, 1, 0, width-2, TV_TITLE, "HYDRA WORKSPACE / %s / %s", w->mode==0 ? "A CONVERSATION" : w->mode==1 ? "B PLAN OVERVIEW" : "C MONITOR", app->snapshot_stale ? "STALE" : app->fleet ? "Fleet" : "Local");
-    if (!compact) dashboard_text(&c, 1, 1, width-2, TV_BORDER,
-        w->mode==2 ? "[ ] runs / Y approve / N reject / R resume / X cancel / A conversation / B plan / D stats / z %s" :
-        "A conversation / B plan / C monitor / P load / V validate / E approve / D stats / z %s", w->zoom ? "restore panes" : "zoom focus");
+    if (compact) {
+        char title[96];
+        snprintf(title, sizeof(title), "HYDRA / %s", w->mode==0 ? "PLAN TOGETHER" : w->mode==1 ? "PLAN OVERVIEW" : "MONITOR");
+        tv_text(c, (struct tv_rect){1,0,width-2,1}, title, TV_TITLE);
+    } else chrome_header(app, c, w->mode==0 ? "PLAN TOGETHER" : w->mode==1 ? "PLAN OVERVIEW" : "MONITOR");
     for (i = 0; i < w->layout.count; i++) {
         struct tv_pane *p = &w->layout.panes[i];
         struct tv_canvas view, content;
         struct native_terminal *t=native_workspace_terminal(app,i);
-        bool agent=native_workspace_agent_index(w,i)>=0, attached=t && t->screen;
+        bool agent=native_workspace_agent_index(w,i)>=0, attached=t && t->screen, focused=i==w->layout.focus;
+        char agent_title[TEXT+64];
         if (p->split != TV_LEAF) {
             for (y = 0; y < p->divider.height; y++) for (x = 0; x < p->divider.width; x++)
-                tv_put(&c, p->divider.x+x, p->divider.y+y, p->split == TV_COLUMNS ? (app->ascii ? '|' : 0x2502) : (app->ascii ? '-' : 0x2500), TV_BORDER);
+                tv_put(c, p->divider.x+x, p->divider.y+y, p->split == TV_COLUMNS ? (app->ascii ? '|' : 0x2502) : (app->ascii ? '-' : 0x2500), TV_BORDER);
             continue;
         }
-        if (!tv_canvas_view(&view, &c, p->bounds)) continue;
-        {
-            char agent_title[TEXT+64];
-            if (attached) snprintf(agent_title,sizeof(agent_title),"%s / %s",t->label,native_terminal_attention(app,t));
-            if (compact) {
-                if (attached) dashboard_text(&view,0,0,view.width,TV_SELECTED,"%s / %.6s / %s",
-                    t->client.finished || t->client.eof ? "DISCONNECTED" : "INPUT TO AGENT",t->label,native_terminal_attention(app,t));
-                else dashboard_text(&view,0,0,view.width,TV_SELECTED,"FOCUS / %s",i==1 ? "NAVIGATION" : agent ? "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
-            } else tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "NAVIGATION" : agent ? attached ? agent_title : "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY / RECOVERY");
-            if (!compact && attached) dashboard_text(&view,1,1,view.width-2,i==w->layout.focus ? TV_SELECTED : TV_BORDER,
-                "%s / %s", t->client.finished || t->client.eof ? "CLIENT DISCONNECTED" : "ATTACHED",
-                t->client.finished || t->client.eof ? "NO INPUT / Ctrl-B r reconnect" :
-                i==w->layout.focus ? "INPUT TO AGENT / Ctrl-B Tab Hydra" : "Tab to interact");
+        if (!tv_canvas_view(&view, c, p->bounds)) continue;
+        if (attached) snprintf(agent_title,sizeof(agent_title),"%s%s%s",t->label,sep,native_terminal_attention(app,t));
+        if (compact) {
+            if (attached) dashboard_text(&view,0,0,view.width,TV_SELECTED,"%s / %.6s / %s",
+                t->client.finished || t->client.eof ? "DISCONNECTED" : "INPUT TO AGENT",t->label,native_terminal_attention(app,t));
+            else dashboard_text(&view,0,0,view.width,TV_SELECTED,"FOCUS / %s",i==1 ? "NAVIGATION" : agent ? "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY");
+        } else {
+            char titled[TEXT+96];
+            const char *base_title = pane_title(w,i,agent,attached,agent_title);
+            if (!attached && p->scroll) snprintf(titled,sizeof(titled),"%s%sscroll %zu",base_title,sep,p->scroll);
+            else snprintf(titled,sizeof(titled),"%s",base_title);
+            tv_panel_styled(&view, (struct tv_rect){0,0,view.width,view.height}, titled,
+                            focused ? TV_FOCUS : TV_BORDER, focused ? TV_SELECTED : TV_STRONG);
+            if (attached) dashboard_text(&view,1,1,view.width-2,focused ? TV_SELECTED : TV_MUTED,
+                "%s", t->client.finished || t->client.eof ? "CLIENT DISCONNECTED / NO INPUT / Ctrl-B r reconnect" :
+                focused ? "ATTACHED / INPUT TO AGENT / Ctrl-B Tab returns to Hydra" : "ATTACHED / Tab here to talk to the agent");
         }
-        if (!compact && !attached)
-            dashboard_text(&view, 1, 1, view.width-2, i == w->layout.focus ? TV_SELECTED : TV_BORDER,
-                           "%s / scroll %zu", i == w->layout.focus ? "FOCUS" : "Tab to focus", p->scroll);
         if (!tv_canvas_view(&content, &view, compact ? (struct tv_rect){0,1,view.width,view.height-1} :
-            (struct tv_rect){1,2,view.width-2,view.height-3})) continue;
+            (struct tv_rect){1,attached ? 2 : 1,view.width-2,view.height-(attached ? 3 : 2)})) continue;
         if (i == 1) tv_tree_draw(&w->tree, &content, &w->layout.panes[1].scroll, w->layout.focus == 1);
         else if (attached) native_terminal_draw(app,t,&content,w->layout.focus==i);
         else if (agent) native_workspace_details(app, &content, p->scroll);
@@ -338,26 +416,22 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
         else if (i==6 || (i==4 && app->plan)) native_workspace_plan_text(app,&content,&p->scroll);
         else native_workspace_activity(app, &content, p->scroll);
     }
-    if (!compact) {
+    {
+        long age = headless || !app->snapshot_at ? 0 : (long)(time(NULL) - app->snapshot_at);
         const char *notice=app->snapshot_stale ? app->snapshot_error : app->notice;
-        dashboard_text(&c, 0, height-2, width, app->snapshot_stale ? TV_WARNING : TV_BORDER, "%s snapshot / age %lds%s%s",
-            app->snapshot_stale ? "STALE: last good" : "Current", age < 0 ? 0 : age, notice[0] ? " / " : "",notice);
+        enum tv_style tone = app->snapshot_stale ? TV_WARNING : app->notice[0] ? TV_BASE : TV_MUTED;
+        if (age < 0) age = 0;
+        if (app->snapshot_stale) snprintf(status, sizeof(status), "STALE: last good snapshot%s%s", notice[0] ? sep : "", notice);
+        else {
+            const char *tail = app->notice[0] ? app->notice : w->zoom ? "z restores the splits" : "";
+            snprintf(status, sizeof(status), "Current snapshot%sage %lds%s%s", sep, age, tail[0] ? sep : "", tail);
+        }
+        if (compact) {
+            if (app->notice[0] && !(native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen))
+                tv_text(c,(struct tv_rect){0,height-1,width,1},app->notice,TV_WARNING);
+            else tv_text(c,(struct tv_rect){0,height-1,width,1},workspace_hints(app,w,width),TV_MUTED);
+        } else chrome_footer(app, c, status, tone, workspace_hints(app, w, width));
     }
-    if (w->layout.focus==1 && w->run_selected)
-        tv_text(&c,(struct tv_rect){0,height-1,width,1},"Enter evidence / h parent / Tab panes",TV_STRONG);
-    else if (compact && app->notice[0] && !(native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen))
-        tv_text(&c,(struct tv_rect){0,height-1,width,1},app->notice,TV_WARNING);
-    else tv_text(&c, (struct tv_rect){0,height-1,width,1},
-            native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen ?
-            (native_terminal_selected(app)->client.finished || native_terminal_selected(app)->client.eof ?
-             "DISCONNECTED / Ctrl-B r reconnect" : width<100 ? "Ctrl-B: Tab Hydra / S split / q quit" :
-             "INPUT TO AGENT / Ctrl-B Tab focus / Ctrl-B S split / Ctrl-B D statistics / Ctrl-B n next / Ctrl-B q quit") : compact && w->mode==2 ? "Y approve N reject R resume X cancel" : width < 60 ? "Tab panes j/k scroll D stats q quit" : width < 100 ? "Tab focus z zoom a interact S split D stats q quit" :
-            "Tab focus / j k scroll / h l tree / drag splits / a interact / S split agents / D statistics / : actions / q quit", TV_STRONG);
-    if (headless) {
-        printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
-        for (y = 0; y < height; y++) { (void)tv_write_row(&c, y, stdout, NULL, NULL); putchar('\n'); }
-    } else if (!tv_present(&w->presenter, &c, stdout, dashboard_style, app)) {
-        copy_text(app->notice, sizeof(app->notice), "Workspace output failed"); app->running = false;
-    }
+    frame_end(app, frame, headless);
     return true;
 }

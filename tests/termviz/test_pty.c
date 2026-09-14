@@ -168,11 +168,11 @@ static void hydra(void) {
         const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
         tv_open(&s, argv, 140, 40, NULL);
     }
-    tv_until(&s, "HYDRA WORKSPACE", 3);
-    tv_until(&s, "Observed: LIVE", 3);
+    tv_until(&s, "HYDRA / PLAN TOGETHER", 3);
+    tv_until(&s, "Session   running", 3);
     before = s.screen.clears;
     tv_send(&s, "j");
-    tv_until(&s, "Observed: STALE", 3);
+    tv_until(&s, "Session   terminal gone", 3);
     tv_send(&s, "\tjjj\tjj");
     tv_pump(&s, .2);
     CHECK(tv_contains(&s, "scroll 3") && tv_contains(&s, "scroll 2"), "Hydra independent scroll");
@@ -181,7 +181,7 @@ static void hydra(void) {
     CHECK(s.screen.clears == before, "Hydra incremental drag");
     save(&s, "hydra-140x40.html");
     tv_resize(&s, 80, 24);
-    tv_until(&s, "NAVIGATION", 3);
+    tv_until(&s, "PROJECT", 3);
     CHECK(!s.screen.overflow, "Hydra medium overflow");
     save(&s, "hydra-80x24.html");
     tv_resize(&s, 40, 10);
@@ -196,26 +196,26 @@ static void hydra_startup_open(struct tv_session *s, const char *tui, const char
     tv_open(s, argv, 140, 40, NULL);
     tv_until(s, "Loading snapshot...", 3);
     tv_until(s, "visualization-proof", 3);
-    CHECK(tv_contains(s, "No matching head"), "workflow arrives before delayed heads");
+    CHECK(tv_contains(s, "No agent work in this project yet"), "workflow arrives before delayed heads");
 }
 static void hydra_startup_repopulation(struct tv_session *s, const char *model, const char *data) {
     tv_send(s, "C");
-    tv_until(s, "Observed: LIVE", 3);
+    tv_until(s, "Session   running", 3);
     CHECK(tv_contains(s, "*  └ feature-live"), "first head selected after mode input");
     tv_send(s, "Aj");
-    tv_until(s, "Observed: STALE", 3);
+    tv_until(s, "Session   terminal gone", 3);
     CHECK(tv_contains(s, ">  └ feature-stale"), "single move selects second head");
     tv_write(model, "HYDRA_TUI\t2\n");
-    tv_until(s, "No matching head", 3);
+    tv_until(s, "No agent work in this project yet", 3);
     tv_write(model, data);
-    tv_until(s, "Observed: LIVE", 3);
-    CHECK(tv_contains(s, ">- Current project"), "repopulation does not reseed selection");
+    tv_until(s, "Session   running", 3);
+    CHECK(tv_contains(s, ">- This project"), "repopulation does not reseed selection");
 }
 static void hydra_startup_selection(void) {
     struct tv_session s;
     char tui[4096], fake[4096], source[4096], model[4096], data[8192], name[64];
     const char *keys[] = {"k", "j", "\r"};
-    const char *selected[] = {">- Current project", ">  └ visualization-proof", ">+ Current project"};
+    const char *selected[] = {">- This project", ">  └ visualization-proof", ">+ This project"};
     size_t i;
     tv_format(tui, sizeof(tui), "%s/hydra-tui", build);
     tv_format(fake, sizeof(fake), "%s/tests/fixtures/tui/fake-hydra.sh", root);
@@ -232,7 +232,7 @@ static void hydra_startup_selection(void) {
     for (i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
         hydra_startup_open(&s, tui, fake);
         tv_send(&s, keys[i]);
-        tv_until(&s, "Observed: LIVE", 3);
+        tv_until(&s, "Session   running", 3);
         CHECK(tv_contains(&s, selected[i]), "explicit root/run/collapse retained after heads arrive");
         tv_format(name, sizeof(name), "startup-selection-%zu.html", i);
         save(&s, name);

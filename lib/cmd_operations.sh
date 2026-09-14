@@ -269,10 +269,20 @@ cmd_provenance() {
         json_success provenance "{\"branch\":\"$(json_escape "$_cpv_branch")\",\"project_id\":\"$LIFECYCLE_PROJECT_ID\",\"head_id\":\"$LIFECYCLE_HEAD_ID\",\"instance_id\":\"$LIFECYCLE_INSTANCE_ID\",\"hydra_version\":\"$(json_escape "$(sed -n '1p' "$_cpv_dir/hydra-version")")\",\"base_ref\":\"$(sed -n '1p' "$_cpv_dir/base-ref")\",\"task_hash\":\"$(sed -n '1p' "$_cpv_dir/task-hash")\",\"task_bytes\":$(sed -n '1p' "$_cpv_dir/task-bytes"),\"trusted_config_hash\":\"$(sed -n '1p' "$_cpv_dir/trusted-config-hash")\",\"profile\":\"$(json_escape "$(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/resolved-profile")")\",\"profile_version\":\"$(json_escape "$(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/profile-version")")\"}"
     else
         echo "Provenance for $_cpv_branch"
+        # Exact identity and paths live here rather than in the session banner.
+        echo "  project-id: $LIFECYCLE_PROJECT_ID"
+        echo "  head-id: $LIFECYCLE_HEAD_ID"
+        echo "  instance-id: $LIFECYCLE_INSTANCE_ID"
+        echo "  worktree: $(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree")"
+        echo "  state-dir: $LIFECYCLE_HEAD_DIR"
         for _cpv_field in hydra-version git-version tmux-version base-ref task-hash task-bytes trusted-config-hash lifecycle-sources; do
             echo "  $_cpv_field: $(sed -n '1p' "$_cpv_dir/$_cpv_field")"
         done
         echo "  profile: $(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/resolved-profile")"
+        echo "  profile-executable: $(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/profile-executable" 2>/dev/null || echo unavailable)"
         echo "  profile-version: $(sed -n '1p' "$LIFECYCLE_INSTANCE_DIR/profile-version")"
+        if [ -f "$LIFECYCLE_INSTANCE_DIR/launcher" ]; then
+            echo "  launcher: $LIFECYCLE_INSTANCE_DIR/launcher"
+        fi
     fi
 }

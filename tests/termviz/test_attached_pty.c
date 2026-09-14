@@ -136,8 +136,8 @@ int main(void) {
         const char *argv[] = {f.tui, "--hydra", adapter, NULL};
         tv_open(&s, argv, 140, 40, f.repo);
     }
-    U("HYDRA WORKSPACE", 3);
-    U("Observed: LIVE", 3);
+    U("HYDRA / PLAN TOGETHER", 3);
+    U("Session   running", 3);
     S("a");
     U("INPUT TO AGENT", 3);
     U("AGENT UNKNOWN", 3);
@@ -195,13 +195,13 @@ int main(void) {
     S("printf 'draft' > draft-proof");
     tv_pump(&s, .2);
     S("\002B");
-    U("B PLAN OVERVIEW", 3);
+    U("PLAN OVERVIEW", 3);
     S("\002C");
-    U("C MONITOR", 3);
+    U("MONITOR", 3);
     S("\002A");
-    U("A CONVERSATION", 3);
+    U("PLAN TOGETHER", 3);
     S("\002D");
-    U("D STATISTICS", 3);
+    U("HYDRA / STATISTICS", 3);
     CHECK(!exists(one, "draft-proof"), "mode switching preserves unsent draft");
     S("D");
     U("INPUT TO AGENT", 3);
@@ -236,7 +236,7 @@ int main(void) {
     tv_pump(&s, .3);
     CHECK(hf_count(tv_text(&s), "ATTACHED") == 2, "two panes in monitor");
     S("\002D");
-    U("D STATISTICS", 3);
+    U("HYDRA / STATISTICS", 3);
     S("D\002A");
     for (i = 0; i < 3; i++) {
         tv_resize(&s, sizes[i][0], sizes[i][1]);
@@ -277,8 +277,8 @@ int main(void) {
                 if (!strcmp(s.screen.cells[y * s.screen.cols + x].text, "─")) {
                     bool matches = true;
                     for (b = 0; branch[1][b]; b++) {
-                        if (x + 1 + (int)b >= s.screen.cols ||
-                            s.screen.cells[y * s.screen.cols + x + 1 + (int)b].text[0] !=
+                        if (x + 2 + (int)b >= s.screen.cols ||
+                            s.screen.cells[y * s.screen.cols + x + 2 + (int)b].text[0] !=
                                 branch[1][b]) {
                             matches = false;
                             break;
@@ -315,14 +315,14 @@ int main(void) {
     S("printf 'zoom-draft' > zoom-proof");
     tv_pump(&s, .1);
     S("\002z");
-    U("z restore panes", 3);
-    CHECK(!tv_contains(&s, "NAVIGATION"), "zoom hides panes");
+    U("z restores the splits", 3);
+    CHECK(!tv_contains(&s, "PROJECT"), "zoom hides panes");
     S("\002D");
-    U("D STATISTICS", 3);
+    U("HYDRA / STATISTICS", 3);
     S("D");
-    U("z restore panes", 3);
+    U("z restores the splits", 3);
     S("\002z");
-    U("NAVIGATION", 3);
+    U("PROJECT", 3);
     CHECK(!exists(one, "zoom-proof"), "zoom retains draft");
     S("\r");
     tv_pump(&s, .4);
@@ -341,7 +341,7 @@ int main(void) {
         CHECK(sscanf(dimensions, "%d %d", &term_rows, &term_cols) == 2, "terminal dimensions");
         if (sizes[i][0] == 40) {
             CHECK(term_rows >= 6 && term_cols >= 35, "compact conversation usable");
-            CHECK(!tv_contains(&s, "NAVIGATION") && tv_contains(&s, "INPUT TO AGENT"),
+            CHECK(!tv_contains(&s, "PROJECT") && tv_contains(&s, "INPUT TO AGENT"),
                   "compact conversation view");
         }
         save(&s, "attached", sizes[i][0], sizes[i][1]);

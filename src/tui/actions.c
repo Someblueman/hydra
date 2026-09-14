@@ -5,7 +5,9 @@
 #include "internal.h"
 extern char **environ;
 
-/* Explicit shell CLI actions exposed by the native palette. */
+/* Explicit shell CLI actions. Read-only inspections and removals run with their
+ * output captured so the control centre stays on screen; interactive commands
+ * such as switch or dashboard still take over the terminal. */
 
 static int run_argv(struct app *app, char *const argv[]) {
     pid_t pid;
@@ -19,7 +21,7 @@ static int run_argv(struct app *app, char *const argv[]) {
     } else if (waitpid(pid, &status, 0) < 0) {
         status = 1;
     }
-    printf("\nPress Enter to return to Mission Control...");
+    printf("\nPress Enter to return to Hydra...");
     fflush(stdout);
     while (getchar() != '\n' && !feof(stdin)) { }
     clearerr(stdin);
@@ -30,20 +32,74 @@ static int run_argv(struct app *app, char *const argv[]) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 
-static int spawn_argv(char *const argv[]) {
+/* Run a command with stdin closed and both output streams captured. The UI
+ * keeps painting while waiting; the budget bounds a hung command. */
+int run_captured(struct app *app, char *const argv[], char *out, size_t size, long budget_ms) {
+    posix_spawn_file_actions_t actions;
     pid_t pid;
-    int status = 0;
-    if (posix_spawnp(&pid, argv[0], NULL, NULL, argv, environ) != 0) {
-        perror("hydra action");
-        return 1;
+    int status = 0, pipes[2], result, exit_code = 1;
+    size_t used = 0;
+    struct timespec started, now;
+    char **envp = NULL;
+    size_t count = 0, i;
+    out[0] = '\0';
+    if (pipe(pipes) != 0) { snprintf(out, size, "could not start %s: %s", argv[1] ? argv[1] : argv[0], strerror(errno)); return 1; }
+    (void)fcntl(pipes[0], F_SETFD, FD_CLOEXEC); (void)fcntl(pipes[1], F_SETFD, FD_CLOEXEC);
+    (void)fcntl(pipes[0], F_SETFL, O_NONBLOCK);
+    while (environ && environ[count]) count++;
+    envp = calloc(count + 2, sizeof(*envp));
+    if (!envp) { close(pipes[0]); close(pipes[1]); snprintf(out, size, "out of memory"); return 1; }
+    for (i = 0; i < count; i++) envp[i] = environ[i];
+    envp[count] = (char *)"HYDRA_NONINTERACTIVE=1";
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_adddup2(&actions, pipes[1], STDOUT_FILENO);
+    posix_spawn_file_actions_adddup2(&actions, pipes[1], STDERR_FILENO);
+    result = posix_spawnp(&pid, argv[0], &actions, NULL, argv, envp);
+    posix_spawn_file_actions_destroy(&actions);
+    free(envp);
+    close(pipes[1]);
+    if (result != 0) { close(pipes[0]); snprintf(out, size, "could not start %s: %s", argv[0], strerror(result)); return 1; }
+    (void)clock_gettime(CLOCK_MONOTONIC, &started);
+    for (;;) {
+        char chunk[4096];
+        ssize_t n = read(pipes[0], chunk, sizeof(chunk));
+        long elapsed;
+        if (n > 0) {
+            size_t take = (size_t)n;
+            if (take > size - used - 1) take = size - used - 1;
+            memcpy(out + used, chunk, take); used += take; out[used] = '\0';
+            continue;
+        }
+        if (n == 0) break;
+        if (errno != EAGAIN && errno != EINTR) break;
+        (void)clock_gettime(CLOCK_MONOTONIC, &now);
+        elapsed = (long)(now.tv_sec - started.tv_sec) * 1000L + (long)(now.tv_nsec - started.tv_nsec) / 1000000L;
+        if (elapsed > budget_ms || terminal_stopped()) {
+            (void)kill(pid, SIGTERM);
+            snprintf(out + used, size - used, "%s(stopped after %ld s without finishing)\n", used ? "\n" : "", budget_ms / 1000L);
+            break;
+        }
+        {
+            char key;
+            update_size(app);
+            render(app, 0U, false);
+            (void)read_key(40, &key);
+        }
     }
-    while (waitpid(pid, &status, 0) < 0) {
-        if (errno != EINTR) return 1;
-    }
-    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+    close(pipes[0]);
+    while (waitpid(pid, &status, 0) < 0) if (errno != EINTR) { status = 0; break; }
+    exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+    return exit_code;
 }
 
-
+void show_result(struct app *app, const char *title, const char *text) {
+    copy_text(app->result_title, sizeof(app->result_title), title);
+    copy_text(app->result_text, sizeof(app->result_text), text);
+    app->result_scroll = 0;
+    app->result_open = true;
+    app->help = false;
+}
 
 static void spawn_action(struct app *app) {
     char branch[TEXT] = "", profile[TEXT] = "", template[TEXT] = "", layout[TEXT] = "";
@@ -74,6 +130,11 @@ static void spawn_action(struct app *app) {
     (void)run_argv(app, argv);
 }
 
+void new_task_action(struct app *app) {
+    if (app->fleet) { copy_text(app->notice, sizeof(app->notice), "Remote tasks start on their host; use hydra fleet task"); return; }
+    spawn_action(app);
+}
+
 void group_marked_action(struct app *app) {
     char group[TEXT] = "";
     char *argv[MAX_HEADS + 5U];
@@ -88,40 +149,92 @@ void group_marked_action(struct app *app) {
     if (run_argv(app, argv) == 0) app->marked_count = 0U;
 }
 
-void kill_marked_action(struct app *app) {
-    size_t index, killed = 0U, skipped = 0U;
-    int failed = 0;
+static const char *first_line(const char *text, char *out, size_t size) {
+    const char *end;
+    while (*text == '\n' || *text == ' ') text++;
+    end = strchr(text, '\n');
+    snprintf(out, size, "%.*s", (int)(end ? end - text : (long)strlen(text)), text);
+    return out;
+}
+
+/* Remove marked heads, or the selected head, after an in-app confirmation.
+ * The shell CLI keeps its dirty-worktree refusal; the UI never adds --force. */
+void remove_heads_action(struct app *app) {
+    char targets[MAX_HEADS][TEXT];
+    size_t count = 0U, index, removed = 0U, skipped = 0U, failed = 0U, dirty = 0U;
+    char question[1024], answer[TEXT] = "", names[512] = "", output[8192], transcript[8192] = "", line[TEXT];
+    struct head *selected = selected_head(app);
     refresh_current_session(app);
-    restore_terminal(app);
-    printf("\033[H\033[2J");
-    fflush(stdout);
-    for (index = 0U; index < app->marked_count; index++) {
-        const struct head *head = head_for_branch(app, app->marked[index]);
-        char *argv[] = {(char *)app->hydra, (char *)"kill", app->marked[index], NULL};
-        if (head != NULL && app->current_session[0] != '\0' &&
-            strcmp(head->session, app->current_session) == 0) {
-            printf("Skipping current session: %s\n", head->branch);
+    if (app->marked_count) {
+        for (index = 0U; index < app->marked_count && count < MAX_HEADS; index++) copy_text(targets[count++], TEXT, app->marked[index]);
+    } else if (selected) copy_text(targets[count++], TEXT, selected->branch);
+    else { copy_text(app->notice, sizeof(app->notice), "Select a head to remove, or mark several with Space"); return; }
+    for (index = 0U; index < count && strlen(names) < 400U; index++)
+        text_append(names, sizeof(names), "%s%.100s", index ? ", " : "", targets[index]);
+    if (index < count) text_append(names, sizeof(names), ", +%zu more", count - index);
+    snprintf(question, sizeof(question), "Remove %zu head%s (%s)? This closes the terminal and deletes the worktree; the branch is kept and heads with uncommitted changes are refused. y/N: ",
+             count, count == 1U ? "" : "s", names);
+    if (prompt_text(app, question, answer, sizeof(answer)) != 0 || (strcasecmp(answer, "y") && strcasecmp(answer, "yes"))) {
+        copy_text(app->notice, sizeof(app->notice), "Removal cancelled; nothing changed");
+        return;
+    }
+    for (index = 0U; index < count; index++) {
+        const struct head *head = head_for_branch(app, targets[index]);
+        char *argv[] = {(char *)app->hydra, (char *)"kill", targets[index], NULL};
+        int status;
+        if (head != NULL && app->current_session[0] != '\0' && strcmp(head->session, app->current_session) == 0) {
+            text_append(transcript, sizeof(transcript), "== %s\nSkipped: this is the terminal you are using right now.\n\n", targets[index]);
             skipped++;
             continue;
         }
-        if (spawn_argv(argv) == 0) killed++;
-        else failed = 1;
+        snprintf(app->notice, sizeof(app->notice), "Removing %.200s (%zu of %zu)...", targets[index], index + 1U, count);
+        status = run_captured(app, argv, output, sizeof(output), 60000L);
+        text_append(transcript, sizeof(transcript), "== %s (exit %d)\n%s\n", targets[index], status, output);
+        if (status == 0) removed++;
+        else { failed++; if (strstr(output, "uncommitted") || strstr(output, "Refusing")) dirty++; }
     }
-    printf("\nBulk kill complete: %zu command(s), %zu current skipped%s\n",
-           killed, skipped, failed ? ", failures reported above" : "");
-    printf("Press Enter to return to Mission Control...");
-    fflush(stdout);
-    while (getchar() != '\n' && !feof(stdin)) { }
-    clearerr(stdin);
     app->marked_count = 0U;
-    if (enter_raw(app) != 0) app->running = false;
+    if (failed) {
+        snprintf(app->notice, sizeof(app->notice), "Removed %zu of %zu; %zu kept%s", removed, count, failed,
+                 dirty ? " because of uncommitted changes (commit or stash them first)" : " (see output)");
+        show_result(app, "REMOVAL OUTPUT", transcript);
+    } else if (count == 1U) {
+        first_line(output, line, sizeof(line));
+        snprintf(app->notice, sizeof(app->notice), "Removed %.120s%s%.100s", targets[0], line[0] ? ": " : "", line);
+    } else snprintf(app->notice, sizeof(app->notice), "Removed %zu head%s%s%s", removed, removed == 1U ? "" : "s",
+                    skipped ? "; skipped the current session" : "", skipped ? "" : "");
+    copy_text(app->result_text, sizeof(app->result_text), transcript);
+    if (!failed) copy_text(app->result_title, sizeof(app->result_title), "REMOVAL OUTPUT");
+    native_observations_tick(app, true);
+    retarget_selection(app);
 }
 
+void kill_marked_action(struct app *app) { remove_heads_action(app); }
 
+/* Run the recorded inspection command for the selected recovery finding. */
+void recovery_check_action(struct app *app) {
+    const struct recovery *item;
+    char command[TEXT], *argv[16], *save = NULL, *word, output[8192], title[TEXT + 64], detail[1024];
+    size_t count = 0U;
+    if (app->recovery_selected >= app->model.recovery_count) return;
+    item = &app->model.recovery[app->recovery_selected];
+    copy_text(command, sizeof(command), item->action);
+    word = strtok_r(command, " ", &save);
+    if (!word) { copy_text(app->notice, sizeof(app->notice), "No check is recorded for this finding"); return; }
+    argv[count++] = (char *)app->hydra;
+    if (strcmp(word, "hydra") != 0) argv[count++] = word;
+    while ((word = strtok_r(NULL, " ", &save)) != NULL && count < 15U) argv[count++] = word;
+    argv[count] = NULL;
+    recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
+    snprintf(app->notice, sizeof(app->notice), "Running %s...", item->action);
+    (void)run_captured(app, argv, output, sizeof(output), 30000L);
+    snprintf(app->notice, sizeof(app->notice), "Check finished: %s", item->action);
+    show_result(app, title, output[0] ? output : "The check produced no output.");
+}
 
-/* Order preserves first-substring-match selection. Arguments are literal argv
- * entries; only the two interactive actions require additional prompting. */
-enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN };
+/* Order preserves first-substring-match selection after exact and prefix
+ * matches. Arguments are literal argv entries. */
+enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE };
 struct palette_action {
     const char *name;
     const char *command;
@@ -131,9 +244,11 @@ struct palette_action {
 
 static const struct palette_action palette[] = {
     {"switch", "switch", NULL, ACTION_HEAD},
-    {"kill", "kill", NULL, ACTION_HEAD},
+    {"kill", "kill", NULL, ACTION_REMOVE},
+    {"remove", "kill", NULL, ACTION_REMOVE},
     {"regenerate", "regenerate", NULL, ACTION_GLOBAL},
     {"spawn", "spawn", NULL, ACTION_SPAWN},
+    {"new task", "spawn", NULL, ACTION_SPAWN},
     {"status", "status", NULL, ACTION_GLOBAL},
     {"claims", "claim", "list", ACTION_GLOBAL},
     {"collisions", "collision", NULL, ACTION_COMPARE},
@@ -146,9 +261,17 @@ static const struct palette_action palette[] = {
     {"dashboard", "dashboard", NULL, ACTION_GLOBAL}
 };
 
+static const struct palette_action *match_palette(const char *query) {
+    size_t index, total = sizeof(palette) / sizeof(palette[0]);
+    for (index = 0U; index < total; index++) if (!strcmp(palette[index].name, query)) return &palette[index];
+    for (index = 0U; index < total; index++) if (!strncmp(palette[index].name, query, strlen(query))) return &palette[index];
+    for (index = 0U; index < total; index++) if (strstr(palette[index].name, query) != NULL) return &palette[index];
+    return NULL;
+}
+
 void execute_palette(struct app *app, const char *query) {
-    size_t index, count = 0U;
-    const struct palette_action *chosen = NULL;
+    size_t count = 0U;
+    const struct palette_action *chosen;
     struct head *head = selected_head(app);
     char other[TEXT] = "";
     char *argv[6]; /* executable, command, subcommand, head, comparison, NULL */
@@ -156,11 +279,10 @@ void execute_palette(struct app *app, const char *query) {
         copy_text(app->notice, sizeof(app->notice), "action search canceled");
         return;
     }
-    for (index = 0U; index < sizeof(palette) / sizeof(palette[0]); index++) {
-        if (strstr(palette[index].name, query) != NULL) { chosen = &palette[index]; break; }
-    }
+    chosen = match_palette(query);
     if (chosen == NULL) { copy_text(app->notice, sizeof(app->notice), "no explicit local action matched"); return; }
     if (chosen->scope == ACTION_SPAWN) { spawn_action(app); return; }
+    if (chosen->scope == ACTION_REMOVE) { remove_heads_action(app); return; }
     argv[count++] = (char *)app->hydra;
     argv[count++] = (char *)chosen->command;
     if (chosen->subcommand != NULL) argv[count++] = (char *)chosen->subcommand;

@@ -1,7 +1,7 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 11 September 2026
+> - **Snapshot:** 13 September 2026
 > - **Release:** `v2.5.0` attention, exact review and remote attachment
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
@@ -70,6 +70,264 @@ Items below have no assigned release number. When work is selected, define the
 smallest coherent scope and its acceptance boundaries, then release it when ready.
 Priority may change with observed use. The numbered priorities reuse fleet
 transport and one workflow execution authority as coordination expands across hosts.
+
+### Immediate product priority: first-use and agentic workflow
+
+User feedback from installed v2.5.0 on 13 September reopens product acceptance
+for onboarding, workspace presentation and the real agentic journey. Select this
+work ahead of further feature expansion. Existing implementation and test results
+remain evidence for their recorded scope; they do not close the usability gaps
+below or establish that the current experience meets the reviewed mockups.
+
+The intended entry is `hydra` in a repository: describe an objective to an agent,
+review and revise its plan, explicitly approve execution, follow work and respond
+to questions, then inspect the changed files and verified result. `hydra tui` must
+also be a usable entry with no existing heads. Users should not need to understand
+initialization, spawn, worktree identities or environment variables to begin.
+Hydra is one control centre for local and remote agentic work. Provider terminals,
+execution location and transport are resources within that experience, not separate
+products the user must assemble. The follow-up installed-build feedback below is
+an acceptance blocker, not optional cosmetic polish.
+
+- [ ] **U1 — Keep ordinary onboarding out of the source tree.** In `dkvm`,
+      `hydra init --no-agent --trust` created an untracked `.hydra/` directory.
+      Store local registration, preferences and runtime state outside the repository
+      by default. Make shared repository configuration an explicit opt-in, with a
+      clear purpose and preview. Preserve existing configuration and migrate durable
+      contracts deliberately; hiding generated junk with ignore rules is not the
+      desired solution. The reported `.gmcs/` directory is a separate existing
+      artifact; do not attribute it to Hydra or remove it as part of this work.
+      Acceptance: opening, configuring and reopening Hydra in a clean existing repo
+      leaves its files and `git status` unchanged until the user requests actual
+      project work or explicitly chooses shared configuration. Existing dirty work
+      and ignore rules are preserved. Repository commands still require explicit
+      trust before execution; fewer setup steps must not imply blanket trust.
+- [ ] **U2 — Clean terminal entry and human-readable context.** Spawn currently
+      echoes a long `export HYDRA_PROJECT_ID=... HYDRA_HEAD_ID=...` bootstrap command,
+      with wrapped internal paths and identities dominating the terminal. Deliver
+      the required environment before the interactive prompt without typing setup
+      commands into the user's conversation or shell history. Present concise
+      project/branch context; keep exact identities and paths in inspectable details.
+      Acceptance: a fresh shell or real agent session opens with usable input and
+      clean output at ordinary terminal widths. No bootstrap exports appear in the
+      visible transcript or history; agents and subprocesses still receive the
+      correct environment. Check initial spawn and reconnect with actual terminals.
+- [ ] **U3 — Start the workspace before creating work.** `hydra` and `hydra tui`
+      should discover the current repository and offer an agent conversation or a
+      clear in-app next action when no heads exist. Resolve provider selection and
+      any missing authentication in context; create execution resources when the
+      requested work needs them. Keep explicit CLI commands for expert automation.
+      Acceptance: from an uninitialized repository, reach a working conversation
+      without first running `init`, `spawn`, exporting variables, or constructing
+      a plan file by hand. Missing providers and authentication have actionable
+      states; entering the UI alone does not authorize agent work or repo commands.
+      Interactive task launch should enter or stay in the control centre with the
+      selected agent visible inside it; the reported `spawn --profile codex --prompt`
+      path currently takes the user straight into Codex instead. Make direct terminal
+      attachment an explicit expert choice, preserving documented noninteractive
+      contracts. Acceptance includes starting from both the UI and an interactive
+      CLI task launch without opening another terminal to recover Hydra navigation.
+- [ ] **U4 — Match the reviewed workspace mockups in actual use.** The two user
+      references show (1) “HYDRA / PLAN TOGETHER”: narrow project navigation, a
+      prominent interactive agent conversation, adjacent plan/dependency review
+      and contextual revise/validate/approve controls; and (2) a monitoring layout
+      with project navigation, central run graph and test output, and a persistent
+      agent conversation for intervention. Match their hierarchy, spacing, restrained
+      cyan/amber/green status colors, clear borders and focus, readable text, and
+      concise contextual controls. Their illustrative content is a design reference,
+      not real execution evidence or a request to implement every pictured menu.
+      Acceptance: compare live installed-build captures with both references during
+      planning, running, waiting for input and failure. Review at normal narrow/wide
+      terminal sizes, including 80x24 and 140x40, with a usable compact fallback.
+      The objective, agent input destination, progress and next action remain clear;
+      raw IDs, repeated keyboard hints and diagnostic fields do not dominate.
+- [ ] **U5 — Test the agentic product journey.** Replace the manual shell-head lab
+      as the primary user evaluation guide with one small, meaningful agent task
+      in a real repository. Start Hydra, ask for a bounded change with observable
+      acceptance criteria, discuss and revise an agent-authored plan, approve the
+      exact revision, observe execution, answer a real question, inspect a failed
+      check and supported recovery, then review the resulting diff and test evidence.
+      Include leaving and returning without losing the conversation or run context.
+      Acceptance: perform this through the installed application with an authenticated
+      agent and real outputs, recording user friction and remaining gaps. The user
+      does not manually author the implementation or assemble workflow machinery.
+      Keep shell-only fixtures and isolated failure probes as engineering checks;
+      their success cannot substitute for this product acceptance exercise.
+- [ ] **U6 — Stable rendering without flicker.** The user reports distracting
+      flicker during normal TUI operation. Diagnose the live render/refresh path;
+      avoid visible clearing and repainting of unchanged content, and preserve
+      cursor, input, selection and scroll during updates. Acceptance: observe the
+      installed UI while idle, streaming agent output, polling local/remote state,
+      switching panes and resizing. Retain a terminal recording to assess flicker;
+      static screenshots and passing rendering tests cannot establish this result.
+- [ ] **U7 — Readable details and actionable recovery.** The supplied detail view
+      is an undifferentiated diagnostic dump. Present objective, agent, progress,
+      checks, changes and pending decisions in clearly grouped, wrapped sections;
+      keep raw IDs, source paths and confidence metadata in optional diagnostics.
+      Replace `dead-session / try-hydra / hydra doctor` with a plain-language account
+      of what stopped, what is known about retained work, and an appropriate in-app
+      inspection or recovery action. Do not infer lost work or task failure solely
+      from a missing terminal. Acceptance: the user can explain the problem and
+      choose the next action without decoding an internal status or consulting CLI
+      help; destructive actions remain separate from restoring access to work.
+- [ ] **U8 — Consistent, discoverable navigation.** The user reports that Tab pane
+      switching does not work as expected despite visible hints. Establish one
+      interaction model across workspace, details, overview, coordination and agent
+      panes: Tab/Shift-Tab for pane focus, arrows for selection, Enter to open or
+      activate, and Esc to return, with visible focus and contextual help. Resolve
+      how agent input receives Tab versus how the user exits agent focus; make that
+      boundary discoverable and preserve provider input behavior. Avoid requiring
+      users to memorize unrelated single-letter modes or hidden prefix sequences.
+      Acceptance: exercise forward/backward navigation, dialogs and attached agents
+      with actual key events; displayed hints must match behavior in each context.
+- [ ] **U9 — Useful overview and coordination.** The reported views show sparse
+      counters, empty charts and unexplained `unavailable` labels without explaining
+      the task. Overview should answer what is running, what needs attention, what
+      changed and what finished, with direct routes to conversation and evidence.
+      Coordination should explain assignments, dependencies, blockers and handoffs
+      for the selected objective. For a single agent or no workflow, explain that
+      state and offer a relevant next action instead of an empty dashboard. Identify
+      why information is unavailable and distinguish unknown values from zero;
+      never invent progress or coordination from process liveness. Acceptance:
+      inspect real empty, single-agent and multi-agent work, including a blocked
+      dependency, and find the required decision/result without reading raw counters.
+- [ ] **U10 — Guided remote setup inside Hydra.** Adding a machine should let the
+      user select an SSH destination, inspect connectivity and requirements, review
+      a proposed installation, and authorize Hydra to provision a compatible remote
+      runtime. Do not require manual remote Hydra installation or package building
+      as the normal onboarding journey. Build on the existing qualification and
+      pinned-bootstrap contracts, including platform matching, verified bytes,
+      explicit host-key trust and scoped installation. Guide provider sign-in and
+      remote project selection or explicitly authorized source setup separately;
+      SSH access does not establish provider authentication or repository presence.
+      Acceptance: onboard a supported host with no Hydra installation through the
+      control centre, launch a real agent task and reconnect to it. Also test an
+      existing installation, missing prerequisites, failed sign-in and interrupted
+      setup with clear progress and safe continuation. Preserve unrelated installs,
+      credentials and work; do not silently copy secrets or accept changed keys.
+- [ ] **U11 — One workspace across local and remote execution.** Unify ordinary
+      and Fleet UI navigation, agent interaction, task details, attention and review.
+      Represent local/remote as a visible location and filter within the same control
+      centre; users should not need to discover `fleet tui` to see remote work.
+      Keep host identity and connectivity clear at action time and retain exact
+      instance checks, host-specific capabilities and execution ownership. Existing
+      CLI automation contracts can remain while the interactive experience is unified.
+      Acceptance: follow simultaneous local and remote tasks, converse with either
+      agent, inspect results and handle remote disconnection without switching
+      applications or learning another keymap. Stale remote observations must not
+      authorize actions or make ongoing work appear successfully completed.
+
+- [ ] **U12 — Keep action confirmation and results inside the control centre.**
+      Killing a head currently leaves the TUI for a shell confirmation and teardown
+      transcript, then requires “Press Enter to return to Mission Control” even
+      after success. Confirm the selected target and consequences in an in-app
+      dialog, execute through the authoritative CLI, and show progress and a concise
+      result in place. On success, update navigation and move focus predictably to
+      surviving work without an extra acknowledgement. Keep detailed output available
+      on demand; failures should explain what remains and offer a relevant next step.
+      Preserve dirty-work protection, current-session safeguards and exact target
+      validation; an in-app confirmation must not become blanket force authorization.
+      Acceptance: remove a stopped head and an active head, cancel confirmation,
+      encounter dirty work, and exercise a failed or partially successful bulk action.
+      The UI remains the interaction surface, accurately reflects each outcome, and
+      never requires a successful-action shell detour or a return-to-UI keypress.
+
+- [ ] **U13 — Shared navigation and meaningful statistics.** Statistics currently
+      drops the other tabs and shows an empty recorded-workflow dashboard while an
+      agent session exists. Retain the common navigation, selected work and a clear
+      return path. Explain which activity is covered: a standalone agent session is
+      not automatically a recorded workflow run. Show relevant available activity,
+      distinguish no history from filters excluding data or unsupported measurements,
+      and avoid large empty charts and unexplained `unavailable` fields. Acceptance:
+      navigate to and from statistics during standalone agent work and a recorded
+      workflow, with both empty and populated history, without losing context.
+- [ ] **U14 — Faithful, readable agent output.** The supplied output capture contains
+      repeated question marks replacing characters, long unwrapped lines and flattened
+      diffs. Preserve supported Unicode, terminal styling, line structure and readable
+      code/diff presentation through capture and rendering. Keep live terminal input
+      distinct from a read-only transcript; provider shortcut hints in captured text
+      must not imply they work in the transcript viewer. Acceptance: compare real
+      provider output with Hydra's view using Unicode, colored diffs, long lines,
+      scrolling and resize. No corrupted glyph runs, raw control sequences or missing
+      content; unsupported terminal behavior has an honest, readable fallback.
+- [ ] **U15 — Clear purposes for heads, overview and coordination.** Heads should
+      help select and manage agent work; overview should summarize objectives,
+      progress, decisions and results across that work; coordination should explain
+      actual assignments, dependencies and handoffs. Consolidate redundant views
+      where no distinct user task justifies them. Empty coordination must explain
+      why there is nothing to coordinate instead of presenting an unexplained blank.
+      The screenshot also shows an agent reporting a committed two-file change while
+      the summary says zero changed files. Inspect this mismatch: label uncommitted
+      changes separately from the task's full diff against its base, so a clean
+      worktree does not imply no delivered change. Acceptance: follow a standalone
+      task through commit, then a multi-agent objective through a blocked handoff;
+      each retained view answers a distinct useful question with current evidence.
+- [ ] **U16 — Attachment that can always be left cleanly.** The user reports being
+      unable to dismiss attachment; the screenshot shows duplicated agent content,
+      large dotted regions and competing terminal/workspace presentation. Diagnose
+      attach, sizing and screen restoration using the real terminal combination;
+      do not treat the screenshot as proof of a particular underlying cause. Provide
+      a visible way to leave agent input and close its view while retaining the task.
+      Keep one coherent workspace, accurate agent identity and predictable focus.
+      Acceptance: repeatedly attach, leave input, close the pane, switch layouts,
+      resize and reattach locally and remotely. No stuck input capture, duplicate
+      views, residual screen regions or lost work; closing a client does not kill
+      its execution owner. Verify leaving attachment with actual user input.
+- [ ] **U17 — Conversation-to-plan integration without manual JSON.** The current
+      plan page asks the user to load draft and policy files. Make agent-authored
+      planning part of the conversation: discuss an objective, generate a structured
+      draft, revise it and display steps, dependencies, checks and execution scope
+      alongside that conversation. Hydra should manage the draft's association with
+      the task and guide policy choices. Keep file import/export as an expert option.
+      Acceptance: create and revise an executable plan from a real conversation
+      without asking the user to write JSON, locate draft files or manually translate
+      agent prose. Validate and show the exact revision before explicit execution
+      approval; changed plans invalidate old approval. A conversational proposal or
+      standalone agent completion must not masquerade as a validated workflow.
+
+The nine follow-up findings map to U3 (control-centre launch), U6 (flicker), U7
+(details and recovery), U8 (keybindings), U9 (coordination and overview), U10 (remote
+onboarding), and U11 (one local/remote UI). Extend U5's real-task acceptance to include
+onboarding a remote machine and following local and remote work in that same UI.
+The subsequent six findings are covered by U13 (statistics), U14 (output), U15
+(coordination and overview), U16 (attachment), and U17 (conversation-to-plan flow).
+
+- [ ] **U18 — Automated usability journeys and discoverability evaluation.**
+      Implement the staged [usability evaluation plan](USABILITY-TESTING.md), reusing
+      existing PTY infrastructure against a prefix-installed product. First automate
+      clean entry, navigation, attachment exit and head removal with retained failure
+      evidence. Add bounded goal-driven screen-only trials and separate real-provider
+      and remote-onboarding qualification. Acceptance: one local command produces
+      a report with reproducible actions, captures and independent outcome checks;
+      known UX defects fail their desired-behavior checks. Human visual review and
+      live qualification remain explicit, not replaced by fixture passes or an AI score.
+
+- [ ] **U19 — Explain features where users encounter them.** Users cannot be
+      expected to know what a workflow, head, plan, gate, coordination view or Fleet
+      means. Establish consistent user-facing language and explain each feature's
+      purpose, when it helps, and the next action in its entry point and empty state.
+      For example: “A workflow is a saved sequence of steps Hydra runs and tracks
+      for a task. Steps can run agents, execute tests or wait for your approval;
+      independent steps can run in parallel.” Show a concrete example such as
+      implement a change -> run tests -> wait for review, and explain when a single
+      agent conversation is sufficient. Distinguish an agent's proposed plan from
+      an approved executable workflow, and a live session from completed work.
+      Prefer familiar labels where they clarify the concept; preserve expert terms
+      in technical details and CLI documentation as needed. Explain consequences
+      before actions such as approval, interruption or removal. Use concise inline
+      explanations, contextual examples and optional deeper help rather than a
+      mandatory tutorial, jargon glossary as the only explanation, or permanent
+      walls of instructional text. Keep explanations aligned with shipped behavior.
+      Acceptance: a first-time user can explain what a workflow does, decide whether
+      their task needs one, start the appropriate path and understand its states
+      without leaving the control centre. Extend U18 with goal-driven comprehension
+      trials that do not give the evaluator feature names or shortcuts; verify that
+      its chosen action fits the goal, alongside human first-use review.
+
+Delivery boundary: these are outstanding roadmap requirements, not implemented
+fixes. Close them with observed first-use, visual and agentic acceptance from the
+installed build. Update the getting-started and evaluation guides to the delivered
+flow as part of this work.
 
 ### Candidate features
 
@@ -966,6 +1224,11 @@ the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset.
 
 ### Milestone 3: useful Hydra workspace
 
+Product acceptance reopened on 13 September: the implementation checks below are
+historical. [U1–U5](#immediate-product-priority-first-use-and-agentic-workflow)
+cover the observed first-use and mockup gaps and must pass before this experience
+is described as product-ready.
+
 - [x] Establish a reviewed visual target with clear project -> head -> run navigation,
       prominent selected work, concise status summaries, and contextual actions.
       Keep raw identifiers and detailed provenance available on demand; avoid
@@ -1086,6 +1349,10 @@ remain future work and require explicit protocol and measurement contracts.
 
 ### Milestone 6: interaction and visual polish
 
+Visual acceptance reopened by installed-build user feedback; see
+[U4](#immediate-product-priority-first-use-and-agentic-workflow). The checked work
+below does not establish that the current UI meets the user's visual target.
+
 - [x] Refine spacing, information density, restrained semantic colors, selection and
       focus, pane titles, contextual controls and keyboard discoverability.
 - [x] Add useful search/filtering and deliberate empty, loading, disconnected,
@@ -1100,6 +1367,10 @@ Compare actual terminal captures against the reviewed visual target; component t
 alone do not satisfy visual or interaction acceptance.
 
 ### Milestone 7: real-workflow acceptance
+
+Product acceptance reopened; see
+[U5](#immediate-product-priority-first-use-and-agentic-workflow) for the required
+agentic first-use exercise. Retained historical checks do not replace that journey.
 
 - [x] Run a representative multi-agent task from objective discussion and agent-
       authored plan through revision, explicit approval, execution, intervention,

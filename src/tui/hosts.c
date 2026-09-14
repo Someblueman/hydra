@@ -19,7 +19,7 @@ static void render_host_row(struct app *app, struct tv_canvas *canvas, const str
     dashboard_text(canvas, 2, row, split - 4, host_tone(host, index == app->host_selected), "%c %-*.*s %-9s %s heads %s",
                    index == app->host_selected ? '>' : ' ', name_width, name_width, host->name, host->state, count, host->freshness);
     app->hit_rows[app->hit_count] = app->line + row + 1; app->hit_bottom[app->hit_count] = app->line + row + 1;
-    app->hit_left[app->hit_count] = 3; app->hit_right[app->hit_count] = split - 2; app->hit_items[app->hit_count++] = index;
+    app->hit_left[app->hit_count] = app->content_x + 3; app->hit_right[app->hit_count] = app->content_x + split - 2; app->hit_items[app->hit_count++] = index;
 }
 
 static void render_host_task(struct app *app, struct tv_canvas *canvas, const struct host_observation *host, int split, int width) {
@@ -53,35 +53,30 @@ static void render_host_detail(struct app *app, struct tv_canvas *canvas, const 
 
 void render_hosts(struct app *app) {
     struct tv_canvas c;
-    struct tv_cell *cells;
-    int width = app->cols - 1, height = app->limit - app->line, row, available, split;
+    int width, height, row, available, split;
     size_t i, start;
-    if (!app->fleet) { linef(app, "Remote host observations are available in hydra fleet tui."); return; }
-    if (!app->model.host_count) { linef(app, "No host observations. Check remote configuration and Recovery."); return; }
+    if (!app->fleet) { linef(app, "Hosts lists remote machines. Run hydra fleet tui to follow remote work."); return; }
+    if (!app->model.host_count) { linef(app, "No host observations yet. Check remote configuration and Recovery."); return; }
+    if (!frame_content(app, &c)) return;
+    width = c.width; height = c.height;
     if (width > 300) width = 300;
     if (height > 120) height = 120;
-    if (width < 38 || height < 6) { linef(app, "More space needed / Esc heads"); return; }
+    if (width < 38 || height < 6) { linef(app, "More space needed"); return; }
     if (app->host_selected >= app->model.host_count) app->host_selected = 0;
-    cells = malloc((size_t)width * (size_t)height * sizeof(*cells));
-    if (!cells) { linef(app, "Host view allocation unavailable"); return; }
-    (void)tv_init(&c, cells, (size_t)width * (size_t)height, width, height, !app->ascii);
     split = width >= 110 ? width * 3 / 5 : width;
-    tv_panel(&c, (struct tv_rect){0, 0, split, height}, "HOSTS / latest bounded list response");
+    tv_panel(&c, (struct tv_rect){0, 0, split, height}, "HOSTS / latest list response");
     available = height - 5;
     start = app->host_selected >= (size_t)available ? app->host_selected - (size_t)available + 1 : 0;
     for (i = start, row = 2; i < app->model.host_count && row < height - 3; i++, row++) {
         const struct host_observation *host = &app->model.hosts[i];
         render_host_row(app, &c, host, i, row, split);
     }
-    dashboard_text(&c, 2, height - 2, split - 4, TV_BORDER, "%zu hosts / Enter filters heads / j k select", app->model.host_count);
+    dashboard_text(&c, 2, height - 2, split - 4, TV_MUTED, "%zu hosts / Enter shows a host's heads", app->model.host_count);
     if (split < width) {
         const struct host_observation *host = &app->model.hosts[app->host_selected];
         render_host_detail(app, &c, host, split, width, height);
     } else {
         dashboard_text(&c, 2, height - 3, split - 4, TV_WARNING, "%s", app->model.hosts[app->host_selected].error);
     }
-    for (row = 0; row < height; row++) {
-        (void)tv_write_row(&c, row, stdout, dashboard_style, app); putchar('\n'); app->line++;
-    }
-    style(app, TONE_BASE); free(cells);
+    app->line = app->limit;
 }

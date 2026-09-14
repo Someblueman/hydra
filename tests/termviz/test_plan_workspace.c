@@ -22,7 +22,7 @@ int main(void) {
     tv_copy(path, policy, false);
     hf_commit_init(&f);
     hf_open(&f, &s);
-    U("A CONVERSATION", 3);
+    U("PLAN TOGETHER", 3);
     tv_send(&s, "P");
     U("Draft JSON path:", 3);
     tv_send(&s, draft);
@@ -37,9 +37,9 @@ int main(void) {
     U("READY / awaiting approval", 3);
     CHECK(tv_contains(&s, "Revision 1"), "first revision");
     tv_send(&s, "jjjjB");
-    U("A CONVERSATION", 3);
+    U("PLAN TOGETHER", 3);
     tv_send(&s, "B");
-    U("B PLAN OVERVIEW", 3);
+    U("PLAN OVERVIEW", 3);
     CHECK(tv_contains(&s, "Revision 1"), "layout retains revision");
     changed = json_object_from_file(draft);
     CHECK(changed, "draft JSON");
@@ -72,7 +72,7 @@ int main(void) {
     tv_send(&s, "V");
     U("INVALID", 30);
     tv_send(&s, "CA");
-    U("A CONVERSATION", 3);
+    U("PLAN TOGETHER", 3);
     tv_close(&s, "q", 0, 0);
     tv_format(text, sizeof(text),
               "PASS plan workspace: compilation, revised scope, invalid JSON, reversible layouts "

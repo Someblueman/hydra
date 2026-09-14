@@ -183,30 +183,34 @@ static void statistics_compact(struct app *app, struct tv_canvas *c, int width, 
 
 bool render_statistics(struct app *app, unsigned frame, bool headless) {
     struct tv_canvas c;
-    struct native_workspace *w;
     struct statistics_view *v;
     struct hs_summary summary;
-    int width=app->cols>512 ? 511 : app->cols-1, height=app->rows>256 ? 256 : app->rows;
-    int y, left, body, cards, chart_height;
-    char updated[40]="unavailable", duration[40]="--", maximum[40]="--", retries[32]="--";
-    if (width<19 || height<6 || !native_workspace_init(app) || !statistics_init(app)) return false;
-    w=app->workspace; v=app->statistics;
-    app->paint=!headless && !app->no_color;
-    if (w->theme!=app->theme) { tv_present_invalidate(&w->presenter); w->theme=app->theme; }
-    (void)tv_init(&c,w->cells,WORKSPACE_CAPACITY,width,height,!app->ascii);
+    int width, height;
+    int left, body, cards, chart_height;
+    char updated[40]="unavailable", duration[40]="--", maximum[40]="--", retries[32]="--", scope[256], status[512];
+    const char *sep=dot(app);
+    if (!native_workspace_init(app) || !statistics_init(app) || !frame_begin(app,headless)) return false;
+    c=app->frame; width=c.width; height=c.height;
+    if (width<19 || height<6) return false;
+    v=app->statistics;
     statistics_visible(app);
     memset(&summary,0,sizeof(summary));
     if (v->model) { hs_summarize(v->model,&v->filter,&summary); statistics_time(v->model->observed,updated,sizeof(updated)); }
     if (summary.attempts_known || !summary.steps) snprintf(retries,sizeof(retries),"%llu",(unsigned long long)summary.retries);
     if (summary.duration_known) snprintf(maximum,sizeof(maximum),"%llus",(unsigned long long)summary.duration_max);
-    dashboard_text(&c,1,0,width-2,TV_TITLE,"HYDRA / D STATISTICS%s",(v->stale || app->snapshot_stale) ? " / STALE" : "");
-    dashboard_text(&c,1,1,width-2,TV_BORDER,"%s / %s / %s%s%s%s",app->fleet ? "Fleet snapshot" : "Local project",app->fleet ? "latest response" : statistics_range(v),
-        v->filter.query[0] ? v->filter.query : "all work", v->filter.attention ? " / attention" : "",
+    chrome_header(app,&c,(v->stale || app->snapshot_stale) ? "STATISTICS (STALE)" : "STATISTICS");
+    snprintf(scope,sizeof(scope),"%s%s%s%s%.60s%s%s%.60s",app->fleet ? "Fleet snapshot" : "Recorded workflow runs",sep,app->fleet ? "latest response" : statistics_range(v),sep,
+        v->filter.query[0] ? v->filter.query : "all work", v->filter.attention ? " / attention only" : "",
         v->filter.workflow[0] ? " / workflow: " : "",v->filter.workflow);
     if (app->fleet) statistics_fleet(app,&c,(struct tv_rect){0,2,width,height-4});
     else if (!v->model || (!v->model->run_count && v->model->warnings)) {
-        dashboard_text(&c,2,4,width-4,TV_WARNING,"Statistics unavailable");
-        if (height>10) dashboard_text(&c,2,6,width-4,TV_BASE,"No valid workflow statistics sample received. r retries.");
+        dashboard_text(&c,2,3,width-4,TV_STRONG,"No workflow statistics yet");
+        if (height>10) {
+            dashboard_text(&c,2,5,width-4,TV_BASE,"Statistics cover workflows that Hydra ran and recorded: their steps, timing,");
+            dashboard_text(&c,2,6,width-4,TV_BASE,"outcomes and retries. A standalone agent conversation is not a recorded run,");
+            dashboard_text(&c,2,7,width-4,TV_BASE,"so it does not appear here until it is part of a workflow.");
+            dashboard_text(&c,2,9,width-4,TV_MUTED,"r retries the sample   Workflows explains what a workflow is");
+        }
     } else if (v->metric_page) {
         statistics_metrics_render(app,&c,(struct tv_rect){0,2,width,height-4});
     } else if (height<18 || width<65) {
@@ -214,32 +218,31 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
     } else {
         left=width>=110 ? 25 : 0; body=width-left; cards=body/4;
         if (left) {
-            tv_panel(&c,(struct tv_rect){0,2,left-1,height-4},"SCOPE & COVERAGE");
+            tv_panel(&c,(struct tv_rect){0,2,left-1,height-4},"SCOPE");
             dashboard_text(&c,2,4,left-5,TV_STRONG,"%s",statistics_range(v));
-            dashboard_text(&c,2,5,left-5,TV_BASE,"T change range");
+            dashboard_text(&c,2,5,left-5,TV_MUTED,"T changes the range");
             dashboard_text(&c,2,7,left-5,TV_BASE,"Workflow: %s",v->filter.workflow[0] ? v->filter.workflow : "all");
-            dashboard_text(&c,2,8,left-5,TV_BORDER,"[ / ] choose");
+            dashboard_text(&c,2,8,left-5,TV_MUTED,"[ ] chooses one");
             dashboard_text(&c,2,10,left-5,TV_BASE,"%zu undated",summary.undated);
-            dashboard_text(&c,2,11,left-5,TV_BASE,"%zu date-excluded",summary.excluded_undated);
+            dashboard_text(&c,2,11,left-5,TV_BASE,"%zu outside range",summary.excluded_undated);
             dashboard_text(&c,2,13,left-5,TV_BASE,"Timing %zu/%zu",summary.duration_known,summary.steps);
             dashboard_text(&c,2,14,left-5,TV_BASE,"Attempts %zu/%zu",summary.attempts_known,summary.steps);
             if (height>23) {
-                dashboard_text(&c,2,17,left-5,TV_WARNING,"CPU / memory: --");
-                dashboard_text(&c,2,18,left-5,TV_WARNING,"Tokens / cost: --");
-                dashboard_text(&c,2,20,left-5,TV_BORDER,"No measurements");
-                dashboard_text(&c,2,21,left-5,TV_BORDER,"0 reset filters");
+                dashboard_text(&c,2,17,left-5,TV_MUTED,"CPU / memory: not measured");
+                dashboard_text(&c,2,18,left-5,TV_MUTED,"Tokens / cost: not measured");
+                dashboard_text(&c,2,20,left-5,TV_MUTED,"0 resets filters");
             }
         }
         {
             struct tv_canvas card_view;
             (void)tv_canvas_view(&card_view,&c,(struct tv_rect){left,2,body,5});
-            dashboard_card(&card_view,0,cards-1,"RUNS",summary.runs,"matched cohort",TV_STRONG);
-            dashboard_card(&card_view,cards,cards-1,"RUNNING",summary.step_states[HS_RUNNING],"recorded steps",TV_STRONG);
-            dashboard_card(&card_view,2*cards,cards-1,"ATTENTION",summary.run_states[HS_FAILED]+summary.run_states[HS_BLOCKED]+summary.run_states[HS_UNKNOWN],"run outcomes",TV_WARNING);
-            dashboard_card(&card_view,3*cards,body-3*cards,"RETRIES",summary.attempts_known || !summary.steps ? (size_t)summary.retries : SIZE_MAX,"known attempts",TV_STRONG);
+            dashboard_card(&card_view,0,cards-1,"RUNS",summary.runs,"in this scope",TV_STRONG);
+            dashboard_card(&card_view,cards,cards-1,"RUNNING",summary.step_states[HS_RUNNING],"steps right now",TV_SUCCESS);
+            dashboard_card(&card_view,2*cards,cards-1,"NEED ATTENTION",summary.run_states[HS_FAILED]+summary.run_states[HS_BLOCKED]+summary.run_states[HS_UNKNOWN],"failed, blocked or unknown",TV_WARNING);
+            dashboard_card(&card_view,3*cards,body-3*cards,"RETRIES",summary.attempts_known || !summary.steps ? (size_t)summary.retries : SIZE_MAX,"repeated attempts",TV_STRONG);
         }
         if (summary.duration_known) snprintf(duration,sizeof(duration),"%.1fs",(double)summary.duration_sum/(double)summary.duration_known);
-        dashboard_text(&c,left+1,7,body-2,TV_BASE,"Latest attempt mean %s / n=%zu / max %s",duration,summary.duration_known,maximum);
+        dashboard_text(&c,left+1,7,body-2,TV_MUTED,"Latest attempts average %s over %zu timed steps, longest %s",duration,summary.duration_known,maximum);
         if (v->detail) statistics_run_detail(app,&c,(struct tv_rect){left,8,body,height-10});
         else {
             chart_height=height>=32 ? 10 : 0;
@@ -250,14 +253,12 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
             statistics_run_table(app,&c,(struct tv_rect){left,8+chart_height,body,height-10-chart_height});
         }
     }
-    dashboard_text(&c,0,height-2,width,(v->stale || (v->model && v->model->warnings)) ? TV_WARNING : TV_BORDER,
-        "%s%s",v->model && v->model->warnings ? "PARTIAL / " : "",v->error[0] ? v->error : app->notice[0] ? app->notice : v->model && v->model->warnings ? v->model->warning : app->fleet ? "Source: latest fleet list / desired state is not process liveness" : "Source: recorded workflow scalars / success is not verified result");
+    snprintf(status,sizeof(status),"%s%s",v->model && v->model->warnings ? "PARTIAL / " : "",v->error[0] ? v->error : app->notice[0] ? app->notice : v->model && v->model->warnings ? v->model->warning : scope);
     if (height>=25 && v->model && !app->fleet && width>=110)
-        dashboard_text(&c,2,height-5,20,TV_BORDER,"%s",updated);
-    tv_text(&c,(struct tv_rect){0,height-1,width,1},width<65 ? "D back M metric / find Enter q quit" : width<100 ? "D back M metric T range / find Enter evidence g graph q quit" : "D back / M metric / T range / ! attention / [ ] workflow / / find / Enter evidence / g graph / q quit",TV_STRONG);
-    if (headless) {
-        printf("FRAME %u %dx%d\n",frame,app->cols,app->rows);
-        for(y=0;y<height;y++) { (void)tv_write_row(&c,y,stdout,NULL,NULL); putchar('\n'); }
-    } else if (!tv_present(&w->presenter,&c,stdout,dashboard_style,app)) app->running=false;
+        dashboard_text(&c,2,height-5,20,TV_MUTED,"%s",updated);
+    chrome_footer(app,&c,status,(v->stale || (v->model && v->model->warnings)) ? TV_WARNING : TV_MUTED,
+        width<48 ? "D back  M metric  ? help  q quit" : width<65 ? "D back  M metric  / find  Enter  ? help  q quit" : width<100 ? "D back  M metric  T range  / find  Enter evidence  g graph  ? help  q quit" :
+        "D or Esc back  M metric  T range  ! attention only  [ ] workflow  / find  Enter evidence  g graph  ? help  q quit");
+    frame_end(app,frame,headless);
     return true;
 }

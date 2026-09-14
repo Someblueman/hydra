@@ -59,7 +59,7 @@ printf 'base\n' > tracked.txt
 git add tracked.txt
 git commit -qm base
 git branch -M main
-"$HYDRA_BIN" init --no-agent --trust >/dev/null
+"$HYDRA_BIN" init --no-agent --trust --write-shared-config >/dev/null
 git add .hydra/config.yml
 git commit -qm config
 
