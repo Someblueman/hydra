@@ -165,7 +165,7 @@ _hydra_completion() {
 
         case "${cur}" in
             -*)
-                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --profile --no-agent --headless --dry-run --prompt --prompt-file --issue-body --completion-policy --scope-read --scope-write --agents -i --issue --pr --pr-new --after -t --template" -- ${cur}))
+                COMPREPLY=($(compgen -W "-l --layout -n --count --ai --profile --no-agent --headless --dry-run --prompt --prompt-file --issue-body --completion-policy --scope-read --scope-write --agents -i --issue --pr --pr-new --after -t --template --attach --resume" -- ${cur}))
                 return 0
                 ;;
         esac
@@ -175,7 +175,7 @@ _hydra_completion() {
     if [[ "${COMP_WORDS[@]}" =~ list ]]; then
         case "${cur}" in
             -*)
-                COMPREPLY=($(compgen -W "--json --deps --git --no-pr-status --refresh-pr-status" -- ${cur}))
+                COMPREPLY=($(compgen -W "--json --verbose --deps --git --no-pr-status --refresh-pr-status" -- ${cur}))
                 return 0
                 ;;
         esac

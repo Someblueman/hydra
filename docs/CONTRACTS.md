@@ -1,9 +1,13 @@
 # Hydra public contracts
 
-Hydra 2.2.0 retains state v2 and the existing local and fleet protocols, and adds
-workflow data, approval, agent, and planning contracts. Interactive Codex restore
-retains cwd-scoped latest-session selection; headless resume binds an exact recorded
-session. See the [2.2.0 compatibility notes](../CHANGELOG.md#220---2026-09-07).
+Hydra 2.6.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
+It keeps `hydra init` out of the source tree (shared configuration is an explicit
+opt-in), delivers the head environment through the tmux session and a per-instance
+launcher instead of typed exports, and changes only the interactive `spawn` default
+(`--attach` restores attachment; `HYDRA_NO_SWITCH`, non-interactive and `--json`
+behavior are unchanged). See the [2.6.0 changelog](../CHANGELOG.md#260---2026-09-14).
+Interactive Codex restore retains cwd-scoped latest-session selection; headless
+resume binds an exact recorded session.
 Internal shell function names,
 module layout, renderer details, caches, and on-disk temporary files are not public
 contracts.

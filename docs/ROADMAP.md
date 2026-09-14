@@ -1,8 +1,8 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 13 September 2026
-> - **Release:** `v2.5.0` attention, exact review and remote attachment
+> - **Snapshot:** 14 September 2026
+> - **Release:** `v2.6.0` control centre and clean first use
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   `Release policy` · [Contracts](CONTRACTS.md) ·
@@ -325,7 +325,10 @@ The subsequent six findings are covered by U13 (statistics), U14 (output), U15
       its chosen action fits the goal, alongside human first-use review.
 
 Delivery boundary: these are outstanding roadmap requirements, not implemented
-fixes. Close them with observed first-use, visual and agentic acceptance from the
+fixes. Release 2.6.0 ships source changes for U1, U2, U4, U6, U7, U8, U9, U12,
+U13 and U19, the CLI half of U3 and the view consolidation in U15; see the
+[2.6.0 changelog](../CHANGELOG.md#260---2026-09-14). They stay open here until
+the installed-build acceptance in U5 and U18 has been observed. Close them with observed first-use, visual and agentic acceptance from the
 installed build. Update the getting-started and evaluation guides to the delivered
 flow as part of this work.
 

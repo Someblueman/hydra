@@ -47,6 +47,8 @@ _hydra() {
                         '--no-agent[Create a plain shell head]' \
                         '--headless[Create a terminal-free execution head]' \
                         '--dry-run[Print plan without mutation]' \
+                        '--attach[Attach to the new session instead of staying here]' \
+                        '--resume[Resume a stopped head of the same branch]' \
                         '--prompt[Task text]:task:' \
                         '--prompt-file[Read task from file]:file:_files' \
                         '--issue-body[Use issue body as task]' \
@@ -63,6 +65,7 @@ _hydra() {
                 list)
                     _arguments \
                         '--json[Output in JSON format]' \
+                        '--verbose[Show the detailed session fields]' \
                         '--deps[Show dependency tree]' \
                         '--git[Show Git evidence from the recorded base]' \
                         '--no-pr-status[Skip fetching PR status]' \

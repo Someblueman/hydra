@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-09-14
+
+### Added
+
+- A bare `hydra` inside a repository opens the control centre; elsewhere it
+  prints a short usage. `hydra <command> --help` works for every command.
+- `hydra spawn --attach` attaches to the new session directly, and
+  `hydra spawn --resume` resumes a stopped head of the same branch.
+- `hydra init --write-shared-config` writes the optional shared repository
+  configuration explicitly; `hydra list --verbose` restores the detailed fields.
+
 ### Changed
 
 - Redraw the native TUI through one frame canvas and presenter so every view
@@ -25,31 +36,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   report the result in place and show the full output only when a head was
   kept; recovery checks run the same way. Statistics and Workspace keep the
   shared tab bar.
-- A bare `hydra` inside a repository opens the control centre; elsewhere it
-  prints a short usage. `hydra <command> --help` works for every command.
-  `hydra doctor` detects agents correctly and names the no-agent path, and
-  `hydra status` reports tmux even without heads.
 - `hydra init` no longer writes `.hydra/config.yml`, `.hydra/local.yml` or
   `.git/info/exclude`; registration is host-local and a clean repository stays
-  clean. Shared configuration is an explicit opt-in via
-  `hydra init --write-shared-config`; generated leftovers from earlier releases
-  are migrated once and real or tracked configuration is never removed. Init
-  prints a two-line `Ready:` summary; `init --json` is unchanged.
+  clean. Generated leftovers from earlier releases are migrated once and real
+  or tracked configuration is never removed. Init prints a two-line `Ready:`
+  summary; `init --json` is unchanged.
 - Interactive `hydra spawn` stays in the current terminal and prints where the
-  head lives with `hydra tui` / `hydra switch` as next actions; `--attach`
-  restores direct attachment. `spawn` and `spawn --dry-run` refuse an existing
-  durable head with the same message, and `spawn --resume` resumes a stopped
-  head of the same branch.
+  head lives with `hydra tui` / `hydra switch` as next actions. `spawn` and
+  `spawn --dry-run` refuse an existing durable head with the same message.
+  `HYDRA_NO_SWITCH`, `--headless`, non-interactive behavior, `--json` and exit
+  codes are unchanged.
 - Spawn and resume deliver the head environment through the tmux session
   environment and a per-instance launcher: bootstrap exports and the agent
   launch are no longer typed into the shell or its history, the pane opens
   with a short `Hydra head ... / agent ... / repo ...` banner, and the agent runs
   by the absolute executable path that `hydra agent list` and `hydra provenance`
   report (tmux 3.2+ uses `new-session -e`; 3.0 and 3.1 fall back to
-  `set-environment`).
+  `set-environment`). While an agent runs in the head pane, Ctrl-Z is ignored;
+  a failed session creation leaves a retired head record.
 - `hydra kill` says the branch is kept, and `hydra list` prints an aligned
-  BRANCH / AGENT / SESSION / REPORTED / AGE table (`--verbose` restores the
-  previous fields; `--json` is unchanged).
+  BRANCH / AGENT / SESSION / REPORTED / AGE table (`--json` is unchanged).
+
+### Fixed
+
+- `hydra doctor` detects installed agents correctly and names the no-agent path.
+- `hydra status` reports the tmux version even when no heads exist.
 
 ## [2.5.0] - 2026-09-12
 
@@ -1021,7 +1032,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.5.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.6.0...HEAD
+[2.6.0]: https://github.com/Someblueman/hydra/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/Someblueman/hydra/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/Someblueman/hydra/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/Someblueman/hydra/compare/v2.2.1...v2.3.0
