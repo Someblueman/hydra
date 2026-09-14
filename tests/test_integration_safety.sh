@@ -41,7 +41,7 @@ git branch -M main
 echo "Running Hydra 1.7 integration-safety tests..."
 echo "============================================"
 
-"$HYDRA_BIN" init --no-agent --trust >/dev/null
+"$HYDRA_BIN" init --no-agent --trust --write-shared-config >/dev/null
 assert_success $? "project initializes"
 git add .hydra/config.yml
 git commit -qm hydra-config

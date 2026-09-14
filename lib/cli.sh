@@ -31,7 +31,16 @@ Commands:
                       -t, --template <name>    Apply session template
   spawn --issue <#> Create a head from a GitHub issue
   spawn --pr <#>    Create a head from an existing GitHub PR
-  init              Initialize project identity, trust, profile, and worktree root
+  init              Register this repository on this host (identity, profile, worktree root, trust)
+                    Writes nothing into the source tree unless --write-shared-config is given
+                    Options:
+                      --profile <name>         Default agent profile for new heads
+                      --no-agent               Default to plain shell heads
+                      --trust                  Approve the exact current .hydra/ content
+                      --worktree-root <path>   Where this host creates worktrees
+                      --write-shared-config    Preview and write a committed .hydra/config.yml
+                      --force                  Replace an existing .hydra/config.yml
+                      -j, --json               Output in JSON format
   agent             Inspect, probe, or import agent profiles
                     Headless: agy (Antigravity), cursor (Cursor Agent), opencode,
                               claude, codex, pi; inspect with agent contract NAME
