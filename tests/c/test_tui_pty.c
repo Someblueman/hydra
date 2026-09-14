@@ -445,6 +445,11 @@ static bool wait_for_markers(struct session *session, const char *marker,
                 captured[used] = '\0';
             }
         } else {
+            /* Idle: the incremental presenter emits nothing for content already
+             * on screen, so consult the reconstructed screen before sleeping. */
+            found = found || session_visible(session, marker);
+            found_second = found_second || (second != NULL && session_visible(session, second));
+            if (found && found_second) return true;
             sleep_ms(10);
         }
     }
@@ -899,14 +904,7 @@ static void session_drain(struct session *session) {
 static int screen_text_row(const struct measure_screen *screen, const char *text);
 
 static bool session_visible(struct session *session, const char *text) {
-    bool v = session->screen && screen_text_row(session->screen, text) >= 0;
-    if (strstr(text,"No heads match")) {
-        const struct measure_screen *sc = session->screen;
-        fprintf(stderr,"[DBG] find(%s)=%d screen=%p\n",text,v,(void*)sc);
-        if (sc){const struct tv_canvas *cc=sc->terminal.alternate_active?&sc->terminal.alternate.canvas:&sc->terminal.primary.canvas;
-          for(int y=2;y<8;y++){fprintf(stderr,"r%d:",y);for(int x=0;x<50;x++){uint32_t g=cc->cells[(size_t)y*(size_t)cc->stride+(size_t)x].glyph;fputc(g>=32&&g<127?(int)g:'.',stderr);}fputc(10,stderr);}}
-    }
-    return v;
+    return session->screen && screen_text_row(session->screen, text) >= 0;
 }
 
 static int screen_text_row(const struct measure_screen *screen, const char *text) {
@@ -943,20 +941,19 @@ static bool wait_for_screen_text(struct session *session, const char *text, int 
 /* Count and selected identity are unchanged by a pure reorder. Wait for the
  * applied row positions before sending navigation, so an old frame cannot pass. */
 static bool wait_for_attention_order(struct session *session) {
-    struct measure_screen *screen = measure_screen_create(100, 30);
+    /* Use the session's persistent emulator: a fresh one would only receive the
+     * incremental presenter's changed cells, never the unchanged rows. */
     long long deadline = monotonic_ms() + 3000;
-    bool found = false;
-    if (!screen) return false;
-    while (!found && monotonic_ms() < deadline) {
+    while (monotonic_ms() < deadline) {
         char bytes[4096]; ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
-        if (length > 0) tv_term_feed(&screen->terminal, bytes, (size_t)length);
-        else sleep_ms(10);
-        int first = screen_text_row(screen, "verification-ready");
-        found = first >= 0 && screen_text_row(screen, "decision-needed") > first &&
-            screen_text_row(screen, "ATTENTION  1 current  0 stale  1 unknown") >= 0;
+        if (length <= 0) sleep_ms(10);
+        if (session->screen) {
+            int first = screen_text_row(session->screen, "verification-ready");
+            if (first >= 0 && screen_text_row(session->screen, "decision-needed") > first &&
+                screen_text_row(session->screen, "ATTENTION  1 current  0 stale  1 unknown") >= 0) return true;
+        }
     }
-    free(screen);
-    return found;
+    return false;
 }
 
 static int special_test_mode(int argc, char **argv) {

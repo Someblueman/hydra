@@ -257,7 +257,7 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
     if (height>=25 && v->model && !app->fleet && width>=110)
         dashboard_text(&c,2,height-5,20,TV_MUTED,"%s",updated);
     chrome_footer(app,&c,status,(v->stale || (v->model && v->model->warnings)) ? TV_WARNING : TV_MUTED,
-        width<65 ? "D back  M metric  / find  Enter  ? help  q quit" : width<100 ? "D back  M metric  T range  / find  Enter evidence  g graph  ? help  q quit" :
+        width<48 ? "D back  M metric  ? help  q quit" : width<65 ? "D back  M metric  / find  Enter  ? help  q quit" : width<100 ? "D back  M metric  T range  / find  Enter evidence  g graph  ? help  q quit" :
         "D or Esc back  M metric  T range  ! attention only  [ ] workflow  / find  Enter evidence  g graph  ? help  q quit");
     frame_end(app,frame,headless);
     return true;

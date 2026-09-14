@@ -124,8 +124,8 @@ int main(void) {
         hf_trim(request);
         tv_format(decision, sizeof(decision), "%s/approvals/%s/decision/action", run_dir, request);
         hf_open(&f, &s);
-        U("A CONVERSATION", 3);
-        U("Observed: LIVE", 3);
+        U("PLAN TOGETHER", 3);
+        U("Session   running", 3);
         S("Ca");
         U("INPUT TO AGENT", 3);
         tv_pump(&s, .3);

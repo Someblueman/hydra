@@ -43,7 +43,7 @@ def live_input_gate(
 ) -> dict[str, Any]:
     deadline_ns = client.started_ns + 15_000_000_000
     client.input("workspace", b"W")
-    client.visible("HYDRA WORKSPACE", deadline_ns=deadline_ns)
+    client.visible("HYDRA / PLAN TOGETHER", deadline_ns=deadline_ns)
     client.input("attach", b"a")
     client.visible("INPUT TO AGENT", deadline_ns=deadline_ns)
     attached_clients = await_attachment_count(fixture, 1, deadline_ns)
@@ -156,7 +156,7 @@ def readiness(
                 report["live_input_gate"] = live_input_gate(client, workers[0], fixture)
                 if args.preview != "open":
                     client.input("close-readiness-terminal", b"\x02x\x1b")
-                    client.visible("HYDRA MISSION CONTROL")
+                    client.visible("HYDRA / WORK")
                     attached = False
                 report["view_action_gate"] = view_actions(
                     client,
@@ -220,7 +220,7 @@ def measure(args: argparse.Namespace, fixture: Fixture, report: dict[str, Any]) 
             if args.preview == "open":
                 deadline_ns = client.started_ns + 15_000_000_000
                 client.input("workspace", b"W")
-                client.visible("HYDRA WORKSPACE", deadline_ns=deadline_ns)
+                client.visible("HYDRA / PLAN TOGETHER", deadline_ns=deadline_ns)
                 client.input("attach", b"a")
                 client.visible("INPUT TO AGENT", deadline_ns=deadline_ns)
                 await_attachment_count(fixture, index + 1, deadline_ns)

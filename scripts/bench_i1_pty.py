@@ -20,7 +20,7 @@ def owned_heads_visible(
     screen: str, parser_complete: bool, owned_branches: set[str]
 ) -> bool:
     """Match an exact model total and owned viewport rows without assuming order."""
-    if not parser_complete or not owned_branches or "[Heads]" not in screen:
+    if not parser_complete or not owned_branches or "[Work]" not in screen:
         return False
     lines = screen.splitlines()
     tables = [

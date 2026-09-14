@@ -250,9 +250,11 @@ static void handle_escape(struct app *app) {
     bool complete = false;
     if (read_key(20, &ch) <= 0) { go_back(app); return; }
     if (ch != '[') {
-        /* Attention historically handled a bare Escape immediately. Keep a
-         * following ordinary key (especially q) while still decoding arrows. */
-        if (app->view == 9) { (void)native_attention_key(app, 27); handle_key(app, ch); }
+        /* A bare Escape acts immediately; a key that follows within the escape
+         * window (Esc then q, or Esc then H) is still handled, never dropped. */
+        if (app->view == 9) (void)native_attention_key(app, 27);
+        else go_back(app);
+        handle_key(app, ch);
         return;
     }
     (void)clock_gettime(CLOCK_MONOTONIC, &started);

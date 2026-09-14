@@ -39,10 +39,8 @@ void native_workspace_mode(struct app *app, int mode) {
     struct native_workspace *w;
     if (!native_workspace_init(app)) return;
     w=app->workspace;
-    if (mode==w->mode && app->view==7) {
-        copy_text(app->notice,sizeof(app->notice),mode==0 ? "Already in the conversation layout" : mode==1 ? "Already in the plan overview; A returns to the conversation" : "Already monitoring; A returns to the conversation");
-        return;
-    }
+    /* B toggles the plan overview back to the conversation; A and C are direct. */
+    if (mode==1 && w->mode==1 && app->view==7) mode=0;
     w->saved[w->mode]=w->layout; w->saved_zoom[w->mode]=w->zoom; w->initialized[w->mode]=true;
     if (w->initialized[mode]) { w->layout=w->saved[mode]; w->zoom=w->saved_zoom[mode]; }
     else {
@@ -66,7 +64,7 @@ static void native_workspace_tree(struct app *app) {
     size_t r;
     if (app->links) {
         const char *name=strrchr(app->links->root,'/');
-        snprintf(w->project_label,sizeof(w->project_label),"%.180s%s",name && name[1] ? name+1 : app->links->root,
+        snprintf(w->project_label,sizeof(w->project_label),"Project: %.180s%s",name && name[1] ? name+1 : app->links->root,
             app->links->stale ? " (links stale)" : "");
     }
     w->nodes[0] = (struct tv_tree_node){app->fleet ? "Remote heads" : app->links ? w->project_label : "This project", SIZE_MAX, 0, w->root_open, TV_STRONG};
@@ -121,7 +119,7 @@ static void native_workspace_select(struct app *app) {
         if (app->workflows && run<app->workflows->run_count) {
             if (app->workflow_run!=run) app->workflow_node=0;
             app->workflow_run=run;
-            copy_text(app->notice,sizeof(app->notice),"Recorded run; Enter opens its evidence");
+            copy_text(app->notice,sizeof(app->notice),"Recorded branch reference; Enter opens its evidence");
         }
     }
 }
@@ -345,8 +343,8 @@ static const char *workspace_hints(struct app *app, struct native_workspace *w, 
         return width < 100 ? "Typing goes to the agent  Ctrl-B Tab back to Hydra  Ctrl-B x close" :
             "Typing goes to the agent  Ctrl-B Tab back to Hydra  Ctrl-B x close pane  Ctrl-B n next agent  Ctrl-B [ scroll  Ctrl-B q quit";
     }
-    if (w->layout.focus == 1 && w->run_selected) return "Enter evidence  h parent  Tab next pane  ? help  q quit";
-    if (w->compact) return w->mode == 2 ? "Y approve  N reject  R resume  X cancel  Tab pane  ? help  q quit" : "Tab pane  j/k move  a agent  n new  ? help  q quit";
+    if (w->layout.focus == 1 && w->run_selected) return "Enter evidence / h parent / Tab panes / ? help / q quit";
+    if (w->compact) return w->mode == 2 ? "Y approve  N reject  Tab pane  q quit" : "Tab pane  a agent  ? help  q quit";
     if (w->mode == 2) return width < 100 ? "Y approve  N reject  R resume  X cancel  A conversation  ? help  q quit" :
         "[/] run  Y approve  N reject  R resume  X cancel  A conversation  B plan  Tab pane  ? help  q quit";
     if (w->mode == 1) return width < 100 ? "P load  V validate  E approve  A conversation  ? help  q quit" :
@@ -392,17 +390,21 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
             continue;
         }
         if (!tv_canvas_view(&view, c, p->bounds)) continue;
-        if (attached) snprintf(agent_title,sizeof(agent_title),"AGENT %s%s%s",t->label,sep,native_terminal_attention(app,t));
+        if (attached) snprintf(agent_title,sizeof(agent_title),"%s%s%s",t->label,sep,native_terminal_attention(app,t));
         if (compact) {
             if (attached) dashboard_text(&view,0,0,view.width,TV_SELECTED,"%s / %.6s / %s",
                 t->client.finished || t->client.eof ? "DISCONNECTED" : "INPUT TO AGENT",t->label,native_terminal_attention(app,t));
             else dashboard_text(&view,0,0,view.width,TV_SELECTED,"FOCUS / %s",i==1 ? "NAVIGATION" : agent ? "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY");
         } else {
-            tv_panel_styled(&view, (struct tv_rect){0,0,view.width,view.height}, pane_title(w,i,agent,attached,agent_title),
+            char titled[TEXT+96];
+            const char *base_title = pane_title(w,i,agent,attached,agent_title);
+            if (!attached && p->scroll) snprintf(titled,sizeof(titled),"%s%sscroll %zu",base_title,sep,p->scroll);
+            else snprintf(titled,sizeof(titled),"%s",base_title);
+            tv_panel_styled(&view, (struct tv_rect){0,0,view.width,view.height}, titled,
                             focused ? TV_FOCUS : TV_BORDER, focused ? TV_SELECTED : TV_STRONG);
             if (attached) dashboard_text(&view,1,1,view.width-2,focused ? TV_SELECTED : TV_MUTED,
-                "%s", t->client.finished || t->client.eof ? "Client disconnected: no input. Ctrl-B r reconnects" :
-                focused ? "Typing goes to the agent. Ctrl-B Tab returns to Hydra" : "Tab here to talk to the agent");
+                "%s", t->client.finished || t->client.eof ? "CLIENT DISCONNECTED / NO INPUT / Ctrl-B r reconnect" :
+                focused ? "ATTACHED / INPUT TO AGENT / Ctrl-B Tab returns to Hydra" : "ATTACHED / Tab here to talk to the agent");
         }
         if (!tv_canvas_view(&content, &view, compact ? (struct tv_rect){0,1,view.width,view.height-1} :
             (struct tv_rect){1,attached ? 2 : 1,view.width-2,view.height-(attached ? 3 : 2)})) continue;
@@ -420,9 +422,10 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
         enum tv_style tone = app->snapshot_stale ? TV_WARNING : app->notice[0] ? TV_BASE : TV_MUTED;
         if (age < 0) age = 0;
         if (app->snapshot_stale) snprintf(status, sizeof(status), "STALE: last good snapshot%s%s", notice[0] ? sep : "", notice);
-        else if (notice[0]) snprintf(status, sizeof(status), "%s", notice);
-        else snprintf(status, sizeof(status), "%s%sage %lds%s%s", w->mode==0 ? "Conversation layout" : w->mode==1 ? "Plan overview" : "Monitoring", sep, age, sep,
-                      w->zoom ? "zoomed" : "A conversation  B plan  C monitor");
+        else {
+            const char *tail = app->notice[0] ? app->notice : w->zoom ? "z restores the splits" : "";
+            snprintf(status, sizeof(status), "Current snapshot%sage %lds%s%s", sep, age, tail[0] ? sep : "", tail);
+        }
         if (compact) {
             if (app->notice[0] && !(native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen))
                 tv_text(c,(struct tv_rect){0,height-1,width,1},app->notice,TV_WARNING);
