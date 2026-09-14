@@ -46,6 +46,7 @@ static int render_fixture(struct app *app, const char *fixture, const char *work
     native_attention_destroy(app);
     native_workspace_destroy(app);
     statistics_destroy(app);
+    frame_free(app);
     if (terminal_stopped()) return terminal_exit_status();
     return ferror(stdout) ? 3 : 0;
 }
@@ -86,7 +87,7 @@ int main(int argc, char **argv) {
             app.view = parse_view(view);
             if (app.view < 0) return 2;
             app.graph_follow = app.view == 5;
-        } else if (strcmp(argv[index], "--diagnostics") == 0) { app.diagnostics = true; app.view = 1; }
+        } else if (strcmp(argv[index], "--diagnostics") == 0) { app.diagnostics = true; if (!explicit_view) app.view = 1; }
         else if (strcmp(argv[index], "--theme") == 0 && index + 1 < argc) theme = argv[++index];
         else if (strcmp(argv[index], "--no-color") == 0) app.no_color = true;
         else if (strcmp(argv[index], "--ascii") == 0) app.ascii = true;
@@ -109,5 +110,6 @@ int main(int argc, char **argv) {
     native_attention_destroy(&app);
     native_plan_destroy(&app);
     statistics_destroy(&app);
+    frame_free(&app);
     return index;
 }

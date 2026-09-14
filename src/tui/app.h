@@ -1,6 +1,7 @@
 #ifndef HYDRA_TUI_APP_H
 #define HYDRA_TUI_APP_H
 #include "model.h"
+#include "../termviz/termviz.h"
 #include <termios.h>
 #include <sys/types.h>
 #include <time.h>
@@ -61,5 +62,19 @@ struct app {
     char snapshot_error[TEXT];
     char preview_text[4096];
     struct termios saved;
+    /* One frame canvas and presenter serve every view, so repaints only touch
+     * changed cells. The frame owner allocates cells before rendering. */
+    struct tv_canvas frame;
+    struct tv_cell *frame_cells, *frame_previous;
+    struct tv_presenter presenter;
+    int frame_theme, tone, previous_view;
+    int content_x, content_width;
+    int tab_left[12], tab_right[12], tab_view[12];
+    size_t tab_count;
+    /* Captured output of the last in-app action; shown on demand or on failure. */
+    char result_title[TEXT];
+    char result_text[8192];
+    size_t result_scroll;
+    bool result_open;
 };
 #endif

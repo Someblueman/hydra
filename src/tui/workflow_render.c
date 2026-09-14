@@ -5,18 +5,22 @@
 #include "internal.h"
 void render_workflow_graph(struct app *app) {
     struct workflow_model *m = app->workflows;
-    struct tv_cell *cells;
     struct tv_canvas c;
     struct tv_graph_layout layout;
     struct tv_node nodes[TV_GRAPH_MAX_NODES];
     struct tv_edge edges[TV_GRAPH_MAX_EDGES];
     size_t indices[TV_GRAPH_MAX_NODES], n, count, i;
-    int width = app->cols - 1, height = app->limit - app->line, row;
+    int width = app->cols - 1, height = app->limit - app->line;
     struct tv_rect area;
     if (app->fleet) { linef(app, "Workflow graphs show local recorded runs. Remote graphs are unavailable."); return; }
     if (!m || !m->run_count) {
-        linef(app, "%s", app->workflow_error[0] ? app->workflow_error : "No recorded workflow runs in this project.");
-        linef(app, "Run a trusted workflow with hydra workflow run <id>."); return;
+        style(app, TONE_STRONG); linef(app, "%s", app->workflow_error[0] ? app->workflow_error : "No workflow runs recorded in this project."); style(app, TONE_BASE);
+        linef(app, "");
+        linef(app, "A workflow is a saved sequence of steps Hydra runs and tracks for a task: for example");
+        linef(app, "implement a change, run the tests, then wait for your review. Steps can run agents or");
+        linef(app, "commands, and independent steps run in parallel. A single agent conversation does not");
+        linef(app, "need one. Runs started with hydra workflow run <id> appear here with their dependencies.");
+        return;
     }
     if (width > 300) width = 300;
     if (height > 120) height = 120;
@@ -36,9 +40,10 @@ void render_workflow_graph(struct app *app) {
         } else linef(app, "No recorded steps");
         return;
     }
-    cells = malloc((size_t)width * (size_t)height * sizeof(*cells));
-    if (!cells) { linef(app, "Graph allocation unavailable"); return; }
-    (void)tv_init(&c, cells, (size_t)width * (size_t)height, width, height, !app->ascii);
+    if (!frame_content(app, &c)) return;
+    width = c.width; height = c.height;
+    if (width > 300) width = 300;
+    if (height > 120) height = 120;
     dashboard_text(&c, 1, 0, width - 2, TV_STRONG, "%s / %s / run %zu of %zu", m->runs[app->workflow_run].name,
                    m->runs[app->workflow_run].state, app->workflow_run + 1, m->run_count);
     dashboard_text(&c, 1, 1, width - 2, app->workflow_stale ? TV_WARNING : TV_BORDER,
@@ -49,7 +54,8 @@ void render_workflow_graph(struct app *app) {
     for (i = 0; i < n; i++) {
         struct workflow_node *node = &m->nodes[indices[i]];
         nodes[i] = (struct tv_node){node->id, node->state,
-            !strcmp(node->state, "failed") || !strcmp(node->state, "recovery-required") ? TV_WARNING : TV_BASE};
+            !strcmp(node->state, "failed") || !strcmp(node->state, "recovery-required") ? TV_WARNING :
+            !strcmp(node->state, "succeeded") ? TV_SUCCESS : TV_BASE};
     }
     if (n && app->graph_follow) {
         app->graph_x = layout.x[app->workflow_node] - (area.width - 22) / 2;
@@ -62,8 +68,8 @@ void render_workflow_graph(struct app *app) {
         int x = area.x + layout.x[i] - app->graph_x, y = area.y + layout.y[i] - app->graph_y;
         size_t hit = app->hit_count;
         if (x + 22 <= area.x || x >= area.x + area.width || y + 4 <= area.y || y >= area.y + area.height) continue;
-        app->hit_left[hit] = (x < area.x ? area.x : x) + 1;
-        app->hit_right[hit] = (x + 21 >= area.x + area.width ? area.x + area.width - 1 : x + 21) + 1;
+        app->hit_left[hit] = app->content_x + (x < area.x ? area.x : x) + 1;
+        app->hit_right[hit] = app->content_x + (x + 21 >= area.x + area.width ? area.x + area.width - 1 : x + 21) + 1;
         app->hit_rows[hit] = app->line + (y < area.y ? area.y : y) + 1;
         app->hit_bottom[hit] = app->line + (y + 3 >= area.y + area.height ? area.y + area.height - 1 : y + 3) + 1;
         app->hit_items[hit] = i; app->hit_count++;
@@ -75,8 +81,5 @@ void render_workflow_graph(struct app *app) {
         dashboard_text(&c, 1, height - 2, width - 2, TV_BASE, "Requires: %s", node->needs);
     }
     dashboard_text(&c, 1, height - 1, width - 2, TV_WARNING, "%s", app->workflow_error[0] ? app->workflow_error : m->warning);
-    for (row = 0; row < height; row++) {
-        (void)tv_write_row(&c, row, stdout, dashboard_style, app); putchar('\n'); app->line++;
-    }
-    style(app, TONE_BASE); free(cells);
+    app->line = app->limit;
 }

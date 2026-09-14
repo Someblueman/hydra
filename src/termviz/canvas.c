@@ -91,7 +91,8 @@ void tv_text(struct tv_canvas *c, struct tv_rect r, const char *text, enum tv_st
     }
 }
 
-void tv_panel(struct tv_canvas *c, struct tv_rect r, const char *title) {
+void tv_panel_styled(struct tv_canvas *c, struct tv_rect r, const char *title,
+                     enum tv_style border, enum tv_style title_style) {
     int x, y;
     int64_t right = (int64_t)r.x + r.width - 1, bottom = (int64_t)r.y + r.height - 1;
     if (r.width < 2 || r.height < 2) return;
@@ -104,10 +105,17 @@ void tv_panel(struct tv_canvas *c, struct tv_rect r, const char *title) {
         if (horizontal && vertical) {
             glyph = !c->unicode ? '+' : y == r.y ? (x == r.x ? 0x256dU : 0x256eU) : (x == r.x ? 0x2570U : 0x256fU);
         }
-        tv_put(c, x, y, glyph, TV_BORDER);
+        tv_put(c, x, y, glyph, border);
     }
-    if (r.x <= INT_MAX - 2 && r.width > 5)
-        tv_text(c, (struct tv_rect){r.x + 2, r.y, r.width - 4, 1}, title, TV_STRONG);
+    if (title && title[0] && r.x <= INT_MAX - 2 && r.width > 5) {
+        char padded[512];
+        int used = snprintf(padded, sizeof(padded), " %s ", title);
+        if (used > 0) tv_text(c, (struct tv_rect){r.x + 2, r.y, r.width - 4, 1}, padded, title_style);
+    }
+}
+
+void tv_panel(struct tv_canvas *c, struct tv_rect r, const char *title) {
+    tv_panel_styled(c, r, title, TV_BORDER, TV_STRONG);
 }
 
 void tv_bar(struct tv_canvas *c, struct tv_rect r, uint64_t value, uint64_t maximum,

@@ -25,7 +25,7 @@ static void write_terminal(const char *data, size_t length) {
 }
 
 void restore_terminal(struct app *app) {
-    if (app) native_workspace_invalidate(app);
+    if (app) frame_invalidate(app);
     if (app != NULL && app->raw) {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &app->saved);
         app->raw = false;

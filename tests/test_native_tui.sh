@@ -76,9 +76,14 @@ contains "invalid numeric field" "$test_root/invalid-number.err" "numeric protoc
 "$tui" --headless-fixture "$fixture" --size 80x24 --frames 2 > "$test_root/heads.out"
 assert_success $? "headless fixture renders deterministically"
 assert_equal "2" "$(grep -c '^FRAME ' "$test_root/heads.out")" "explicit frame bound is honored"
-contains "LIVE" "$test_root/heads.out" "live state is distinct"
-contains "STALE" "$test_root/heads.out" "stale state is distinct"
-contains "UNAVAILABLE" "$test_root/heads.out" "unavailable state is distinct"
+contains "running" "$test_root/heads.out" "live state is distinct"
+contains "terminal gone" "$test_root/heads.out" "stale state is distinct"
+contains "unknown" "$test_root/heads.out" "unavailable state is distinct"
+if grep -Eq 'LIVE|STALE|UNAVAILABLE' "$test_root/heads.out"; then
+    assert_success 1 "default list uses plain-language session states"
+else
+    assert_success 0 "default list uses plain-language session states"
+fi
 if grep -Eq 'instance_|source:|confidence|bounded-polling' "$test_root/heads.out"; then
     assert_success 1 "default list hides internal diagnostics"
 else
@@ -86,8 +91,9 @@ else
 fi
 
 "$tui" --headless-fixture "$fixture" --size 100x28 --frames 1 --view detail > "$test_root/detail.out"
-contains "Changes     4" "$test_root/detail.out" "details summarize actionable work"
-contains "Reported outcome: done" "$test_root/detail.out" "task outcome is distinct from session status"
+contains "Changed files   4" "$test_root/detail.out" "details summarize actionable work"
+contains "Reported    done" "$test_root/detail.out" "task outcome is distinct from session status"
+contains "Session     running" "$test_root/detail.out" "session status is labelled separately from the reported outcome"
 if grep -Eq 'instance_|lifecycle source:|adapter source:' "$test_root/detail.out"; then
     assert_success 1 "default details hide identifiers and source paths"
 else
@@ -97,17 +103,28 @@ fi
 contains "lifecycle source: /tmp/hydra/state/head_live" "$test_root/diagnostics.out" "diagnostics retain inspectable sources"
 contains "confidence: verified-local-help" "$test_root/diagnostics.out" "diagnostics retain evidence confidence"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view coordination > "$test_root/coordination.out"
-contains "Gates       1 of 2 approved" "$test_root/coordination.out" "coordination focuses on selected head"
+contains "Approvals   1 of 2 approved" "$test_root/coordination.out" "coordination focuses on selected head"
+contains "single agent session" "$test_root/coordination.out" "coordination explains what there is to coordinate"
 "$tui" --headless-fixture "$fixture" --size 54x12 --view recovery > "$test_root/recovery.out"
-contains "RECOVERY BOARD" "$test_root/recovery.out" "narrow recovery board renders"
-contains "dead-session" "$test_root/recovery.out" "dead sessions are recoverable findings"
-contains "stale-lock" "$test_root/recovery.out" "stale locks are recoverable findings"
-contains "orphan-worktree" "$test_root/recovery.out" "orphan worktrees are recoverable findings"
-contains "teardown-failure" "$test_root/recovery.out" "teardown failures are recoverable findings"
+contains "RECOVERY  4 findings" "$test_root/recovery.out" "narrow recovery board renders"
+contains "Terminal stopped: feature-stale" "$test_root/recovery.out" "dead sessions are explained as stopped terminals"
+contains "Leftover lock" "$test_root/recovery.out" "stale locks are explained in plain language"
+contains "Worktree without a head" "$test_root/recovery.out" "orphan worktrees are explained in plain language"
+contains "Removal did not finish" "$test_root/recovery.out" "teardown failures are explained in plain language"
+if grep -Eq 'dead-session|stale-lock|orphan-worktree|teardown-failure' "$test_root/recovery.out"; then
+    assert_success 1 "recovery list keeps raw finding kinds out of the primary text"
+else
+    assert_success 0 "recovery list keeps raw finding kinds out of the primary text"
+fi
+"$tui" --headless-fixture "$fixture" --size 100x28 --view recovery --diagnostics > "$test_root/recovery-detail.out"
+contains "Kind: dead-session" "$test_root/recovery-detail.out" "recovery diagnostics retain the raw finding kind"
+contains "Inspect: hydra doctor" "$test_root/recovery-detail.out" "recovery diagnostics retain the inspection command"
+contains "worktree and files are kept" "$test_root/recovery-detail.out" "recovery explains what is retained"
 for view in heads detail coordination recovery; do
     "$tui" --headless-fixture "$fixture" --size 40x10 --view "$view" > "$test_root/bounded.out"
     assert_equal "11" "$(wc -l < "$test_root/bounded.out" | tr -d ' ')" "$view fits ten rows plus frame marker"
-    awk 'length > 39 {exit 1}' "$test_root/bounded.out"
+    "$tui" --ascii --headless-fixture "$fixture" --size 40x10 --view "$view" > "$test_root/bounded-ascii.out"
+    awk 'length > 39 {exit 1}' "$test_root/bounded-ascii.out"
     assert_success $? "$view respects terminal width"
     tail -n 1 "$test_root/bounded.out" > "$test_root/footer.out"
     contains "? help" "$test_root/footer.out" "$view keeps actions visible"
@@ -117,19 +134,44 @@ done
 awk 'BEGIN {FS = OFS = "\t"}
 $1 == "H" && !changed++ {for (i = 0; i < 120; i++) { $2 = $2 "x"; $4 = $4 "y" }}
 {print}' "$fixture" > "$test_root/columns.tsv"
-"$tui" --headless-fixture "$test_root/columns.tsv" --size 100x24 > "$test_root/columns.out"
+"$tui" --ascii --headless-fixture "$test_root/columns.tsv" --size 100x24 > "$test_root/columns.out"
 awk '
-/^\| [ >*][ *] [^ ]/ {
+index($0, "STATUS") && index($0, "AGENT") { status = index($0, "STATUS"); agent = index($0, "AGENT"); next }
+status && /^\| [ >*][ *] [^ ]/ {
     if (length != 99) exit 1
-    positions = ""
-    for (i = 1; i <= length; i++) if (substr($0, i, 1) == "|") positions = positions ":" i
-    if (rows++ && positions != expected) exit 1
-    expected = positions
+    if (substr($0, status - 1, 1) != " " || substr($0, status, 1) == " ") exit 1
+    if (substr($0, agent - 1, 1) != " " || substr($0, agent, 1) == " ") exit 1
+    rows++
 }
-END { if (rows != 4) exit 1 }
+END { if (rows != 3) exit 1 }
 ' "$test_root/columns.out"
-assert_success $? "table headers, cells, and borders have identical fixed columns"
-contains "+- Heads" "$test_root/columns.out" "head list is enclosed in a named panel"
+assert_success $? "table headers and cells share fixed status and agent columns"
+contains "+- Heads in this project" "$test_root/columns.out" "head list is enclosed in a named panel"
+"$tui" --headless-fixture "$fixture" --size 100x24 > "$test_root/unicode.out"
+contains "$(printf '\342\225\255\342\224\200 Heads in this project')" "$test_root/unicode.out" "default output draws rounded Unicode borders"
+"$tui" --headless-fixture "$fixture" --size 80x24 --view heads > "$test_root/tabs.out"
+contains "[Work] Details Overview Attention Recovery Workflows Statistics Workspace" "$test_root/tabs.out" "every view shares one tab bar at 80 columns"
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v2.tsv" --size 80x24 --view statistics > "$test_root/stats-tabs.out"
+contains "[Statistics]" "$test_root/stats-tabs.out" "statistics keeps the shared tab bar"
+contains "Work Details Overview" "$test_root/stats-tabs.out" "statistics keeps the other tabs reachable"
+"$tui" --headless-fixture "$fixture" --size 80x24 --view workspace > "$test_root/workspace-tabs.out"
+contains "[Workspace]" "$test_root/workspace-tabs.out" "workspace keeps the shared tab bar"
+contains "HYDRA / PLAN TOGETHER" "$test_root/workspace-tabs.out" "workspace conversation layout is titled after the reviewed mockup"
+if grep -q "Tab to focus / scroll" "$test_root/workspace-tabs.out"; then
+    assert_success 1 "workspace panes do not repeat focus hints"
+else
+    assert_success 0 "workspace panes do not repeat focus hints"
+fi
+printf 'HYDRA_TUI\t2\n' > "$test_root/empty.tsv"
+"$tui" --headless-fixture "$test_root/empty.tsv" --size 80x24 --view heads > "$test_root/empty-heads.out"
+contains "No agent work in this project yet" "$test_root/empty-heads.out" "empty head list explains the situation"
+contains "Press n to start one" "$test_root/empty-heads.out" "empty head list offers a next action"
+"$tui" --headless-fixture "$test_root/empty.tsv" --size 80x24 --view workspace > "$test_root/empty-workspace.out"
+contains "Press n to start a task" "$test_root/empty-workspace.out" "empty workspace offers a next action"
+"$tui" --headless-fixture "$test_root/empty.tsv" --size 80x24 --view overview > "$test_root/empty-overview.out"
+contains "No agent work in this project yet" "$test_root/empty-overview.out" "empty overview explains instead of showing empty charts"
+"$tui" --headless-fixture "$test_root/empty.tsv" --size 80x24 --view workflows > "$test_root/empty-workflows.out"
+contains "A workflow is a saved sequence of steps" "$test_root/empty-workflows.out" "empty workflows view explains what a workflow is"
 
 printf 'WRONG\t1\n' > "$test_root/bad.tsv"
 "$tui" --headless-fixture "$test_root/bad.tsv" --size 80x24 > /dev/null 2>&1
@@ -148,8 +190,10 @@ printf 'HYDRA_TUI\t2\nH\t%s\ts\t-\t-\t-\tactive\tlive\t\tidle\texact\ti\t0\t0\t0
     "$utf8_branch" > "$test_root/utf8.tsv"
 "$tui" --headless-fixture "$test_root/utf8.tsv" --size 40x10 > "$test_root/utf8.out"
 assert_success $? "UTF-8, combining, wide, and invalid bytes render safely at minimum width"
-"$tui" --headless-fixture "$test_root/utf8.tsv" --size 100x14 --view detail > "$test_root/utf8-detail.out"
-contains "wide-???-combining-e??-invalid-?" "$test_root/utf8-detail.out" "non-ASCII input has a deterministic safe representation"
+"$tui" --ascii --headless-fixture "$test_root/utf8.tsv" --size 100x14 --view detail > "$test_root/utf8-detail.out"
+contains "wide-?-combining-e?-invalid-?" "$test_root/utf8-detail.out" "ASCII mode has a deterministic safe representation"
+"$tui" --headless-fixture "$test_root/utf8.tsv" --size 100x14 --view detail > "$test_root/utf8-detail-unicode.out"
+contains "$(printf 'wide-\344\270\255-combining-e\314\201-invalid-?')" "$test_root/utf8-detail-unicode.out" "Unicode mode preserves wide and combining characters and marks invalid bytes"
 
 NO_COLOR=1 "$tui" --headless-fixture "$fixture" --size 54x12 --view heads > "$test_root/no-color.out"
 "$tui" --no-color --headless-fixture "$fixture" --size 54x12 --view heads > "$test_root/no-color-option.out"

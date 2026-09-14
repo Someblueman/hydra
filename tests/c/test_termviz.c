@@ -61,7 +61,7 @@ int main(void) {
     assert(tv_write_row(&canvas, 0, out, NULL, NULL));
     rewind(out);
     assert(fread(text, 1, 80, out) == 80);
-    assert(text[0] == '+' && text[2] == 'A' && text[79] == '+');
+    assert(text[0] == '+' && text[2] == ' ' && text[3] == 'A' && text[8] == ' ' && text[9] == '-' && text[79] == '+');
     fclose(out);
     assert(storage[0].glyph == 12345 && storage[80 * 24 + 1].glyph == 54321);
     puts("termviz: clipping, unsafe text, numeric bounds, missing samples, DAG layout and cycles passed");

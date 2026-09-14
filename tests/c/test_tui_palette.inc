@@ -32,10 +32,14 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
         /* Bound this regression to one queued form burst, not idle throughput. */
         session.slow_output = strcmp(cases[index].query, "recovery inspect") == 0;
         palette_query(&session, cases[index].query);
-        result(wait_for_marker(&session, cases[index].expected, 1000), cases[index].expected);
+        if (strcmp(cases[index].query, "kill") == 0) {
+            result(wait_for_marker(&session, "Remove 1 head (feature-live)?", 1000), "kill asks for an in-app confirmation");
+            write_input(session.master, "y\n", 2U);
+        }
+        result(wait_for_marker(&session, cases[index].expected, 2000), cases[index].expected);
         session.slow_output = false;
         write_input(session.master, "\n", 1U);
-        (void)wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000);
+        (void)wait_for_marker(&session, "HYDRA / ", 1000);
     }
     write_input(session.master, ":", 1U);
     (void)wait_for_marker(&session, "Action search:", 1000);
@@ -45,14 +49,14 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
     result(wait_for_marker(&session, "FAKE ACTION <status>", 1000),
            "queued form input preserves a fragmented Home key and cursor insertion");
     write_input(session.master, "\n", 1U);
-    (void)wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000);
+    (void)wait_for_marker(&session, "HYDRA / ", 1000);
     palette_query(&session, "collisions");
     (void)wait_for_marker(&session, "Compare with head:", 1000);
     write_input(session.master, "other head;literal\n", 19U);
     result(wait_for_marker(&session, "FAKE ACTION <collision> <feature-live> <other head;literal>", 1000),
            "comparison target remains one literal argument");
     write_input(session.master, "\n", 1U);
-    (void)wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000);
+    (void)wait_for_marker(&session, "HYDRA / ", 1000);
     palette_query(&session, "");
     result(wait_for_marker(&session, "action search canceled", 1000), "empty palette search cancels");
     palette_query(&session, "UNKNOWN");
@@ -68,7 +72,7 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
     palette_query(&session, "status");
     result(wait_for_marker(&session, "FAKE ACTION <status>", 1000), "global actions work without a selected head");
     write_input(session.master, "\n", 1U);
-    (void)wait_for_marker(&session, "HYDRA MISSION CONTROL", 1000);
+    (void)wait_for_marker(&session, "HYDRA / ", 1000);
     write_input(session.master, "q", 1U);
     result(wait_for_exit(&session) == 0, "palette test exits cleanly");
     close_session(&session);

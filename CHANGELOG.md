@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Redraw the native TUI through one frame canvas and presenter so every view
+  shares the same title, tab bar, panel and footer, and only changed cells are
+  repainted; idle refreshes and view switches no longer clear the screen.
+- Use one interaction model across views: `Tab`/`Shift-Tab` move between tabs
+  or workspace panes, arrows select, `Enter` opens and `Esc` steps back one
+  level; `n` starts a task and `1`-`9` jump to tabs.
+- Restrain the palette to cyan chrome, amber attention, green running and a
+  muted tone for hints; the focused workspace pane is shown by its border.
+- Describe sessions, details, coordination, overview and recovery findings in
+  plain language, with raw identifiers and finding kinds kept under technical
+  details; empty states explain what a head or workflow is and offer the next
+  action.
+- Confirm head removal inside the UI, run `hydra kill` with captured output,
+  report the result in place and show the full output only when a head was
+  kept; recovery checks run the same way. Statistics and Workspace keep the
+  shared tab bar.
+
 ## [2.5.0] - 2026-09-12
 
 ### Added

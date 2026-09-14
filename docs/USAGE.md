@@ -301,22 +301,49 @@ hydra tui --basic          # explicit basic mode
 hydra tui --capabilities   # availability and observation diagnostics
 ```
 
-The native keymap is deliberately small: `j`/`k` or arrows navigate, `Enter` opens
-detail, `v` cycles views, `/` searches heads, `:` searches explicit actions, `p`
-opens terminal output, `d` toggles diagnostics, `Esc` returns to heads, `?` opens
-keyboard help, and `q` exits. The action
-palette includes the tmux dashboard. Mutations are delegated to the shell CLI with
-argument-vector execution; native spawn prompts for branch, profile, template, and
-layout, while `Space`/`A` select heads and `G` assigns the selection to a group. `x`
-kills selected heads through the confirming shell command and skips the current tmux
-session. Press `I` for the attention view; `j`/`k` or arrows select an item, `Enter`
-opens its detail, `s` marks that revision seen for this client, and `r` opens the
-exact read-only review. In review, `j`/`k` scroll, `i` shows the full identity, `f`
-shows supplied references, `o` follows a selected reference, and `Esc` backs out.
-`l`, `t`, and `p` supply one explicit log, transcript, or PR reference to the
-public review producer. A stale attention snapshot cannot be reviewed until it is
-refreshed. Seen state is client-local and does not approve, accept, or mutate a
-workflow. See the native helper behavior in the root README.
+Every native screen shares one frame: a title row (`HYDRA / WORK`, `HYDRA / PLAN
+TOGETHER`, ...), a tab bar, one content panel and a two-line footer with the current
+status and the keys that apply. Only changed cells are repainted, so idle refreshes
+do not flicker. Session states use plain words: `running`, `terminal gone`,
+`stopped` and `unknown`; internal tokens stay behind `d` (technical details).
+
+One interaction model applies everywhere:
+
+| Key | Action |
+|-----|--------|
+| `Tab` / `Shift-Tab` | Next / previous tab; inside Workspace, next / previous pane |
+| `Left` / `Right`, `1`-`9` | Previous / next tab, or jump to a tab |
+| `Up` / `Down`, `j` / `k` | Select |
+| `Enter` | Open the selection (details, a host's heads, a recovery check) |
+| `Esc` | One step back: details to the list, close help, clear the search |
+| `n` | Start a new task (branch, worktree, terminal and agent) |
+| `a` | Talk to the selected agent inside Workspace |
+| `x` | Remove the selected or marked heads after an in-app confirmation |
+| `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
+| `/`, `:` | Search heads, search explicit actions |
+| `p`, `d`, `c` | Terminal output, technical details, coordination |
+| `?`, `t`, `q` | Keyboard help, theme, quit |
+
+Removal confirms the exact targets in the UI, runs `hydra kill` per head with output
+captured, reports a concise result in the status line and opens the full output only
+when something was kept (for example uncommitted changes). The current tmux session
+is always skipped. Recovery findings are explained in plain language; `Enter` runs
+the recorded check and shows its output in place, and `d` keeps the raw kind,
+source and confidence available.
+
+Inside Workspace, `A` / `B` / `C` switch between the conversation, plan-overview and
+monitoring layouts, `z` zooms the focused pane and `S` shows two agents side by side.
+While typing to an attached agent, `Ctrl-B Tab` returns to Hydra, `Ctrl-B x` closes
+the pane, `Ctrl-B n` switches agent and `Ctrl-B [` scrolls history. The action
+palette (`:`) still delegates interactive commands such as `switch` and `dashboard`
+to the shell CLI with argument-vector execution. Press `I` for the attention view;
+`j`/`k` or arrows select an item, `Enter` opens its detail, `s` marks that revision
+seen for this client, and `r` opens the exact read-only review. In review, `j`/`k`
+scroll, `i` shows the full identity, `f` shows supplied references, `o` follows a
+selected reference, and `Esc` backs out. `l`, `t`, and `p` supply one explicit log,
+transcript, or PR reference to the public review producer. A stale attention snapshot
+cannot be reviewed until it is refreshed. Seen state is client-local and does not
+approve, accept, or mutate a workflow.
 
 The larger keymap below belongs to the maintained basic shell TUI.
 

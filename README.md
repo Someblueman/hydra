@@ -124,10 +124,10 @@ To steer an agent, queue an inbox message with `hydra send feature/search "Revie
 the failing test"`; read it with `hydra recv --peek` inside that head. A queued
 message is not evidence of consumption or completion.
 
-Use `hydra tui --basic` for the shell interface. In native mission control,
-`j`/`k` navigate, `Enter` opens details, `p` shows terminal output, and `:` opens
-actions. Use `d` for diagnostics, `Esc` to return to heads, `?` for help, and `q`
-to exit.
+Use `hydra tui --basic` for the shell interface. In the native control centre,
+`Tab` moves between tabs (or workspace panes), arrows select, `Enter` opens and
+`Esc` steps back. `n` starts a task, `a` talks to the selected agent, `x` removes
+heads after an in-app confirmation, `:` opens actions, `?` shows help and `q` exits.
 
 After reviewing and preserving the work you need, stop the head from your original
 terminal:

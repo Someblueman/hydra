@@ -8,9 +8,9 @@ static void test_visualization(const char *tui, const char *hydra, const char *f
     (void)wait_for_model(&session);
     result(wait_for_marker(&session, "QUEUE DEPTH", 1000), "overview lays out real snapshot statistics");
     mouse_input(&session, "\033[<0;10;13M");
-    result(wait_for_marker(&session, "Observed: STALE", 1000), "overview mouse selects the head row");
+    result(wait_for_marker(&session, "Session: terminal gone", 1000), "overview mouse selects the head row");
     mouse_input(&session, "\033[<0;110;12M");
-    result(wait_for_marker(&session, "Observed: STALE", 1000), "detail panel click cannot retarget the head table");
+    result(wait_for_marker(&session, "Session: terminal gone", 1000), "detail panel click cannot retarget the head table");
     write_input(session.master, "w", 1);
     result(wait_for_marker(&session, "4 dependency edges", 1500), "workflow view consumes the read adapter");
     write_input(session.master, "j", 1);
@@ -69,9 +69,9 @@ static void test_visualization_hosts(const char *tui, const char *hydra, const c
     result(wait_for_marker(&session, "CPU / memory / load: unavailable", 1000), "host detail distinguishes missing telemetry");
     write_input(session.master, "j\r", 2);
     result(wait_for_marker(&session, "Search: empty", 1000), "Enter filters heads for an empty host");
-    result(wait_for_marker(&session, "No matching heads", 1000), "empty host does not borrow another host's head");
+    result(wait_for_marker(&session, "No heads match the search.", 1000), "empty host does not borrow another host's head");
     write_input(session.master, "\033", 1);
-    (void)wait_for_marker(&session, "[Heads]", 2000);
+    (void)wait_for_marker(&session, "[Work]", 2000);
     write_input(session.master, "H", 1);
     result(wait_for_marker(&session, "HOST DETAIL", 2000), "return to hosts after clearing its head filter");
     mouse_input(&session, "\033[<0;10;8M");
