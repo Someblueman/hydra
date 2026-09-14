@@ -200,11 +200,11 @@ cmd_resume() {
     _cr_provider="$(sed -n '1p' "$_cr_old_dir/provider-session-id" 2>/dev/null || true)"
     _cr_recipe=""
     if [ "$_cr_profile" != none ]; then
-        profile_executable_path "$_cr_profile" >/dev/null || {
+        _cr_executable="$(profile_executable_path "$_cr_profile")" || {
             echo "Error: profile '$_cr_profile' is unavailable; use --no-agent at initial spawn or install it" >&2
             return 1
         }
-        _cr_recipe="$(profile_resume_command "$_cr_profile" "$_cr_provider")" || {
+        _cr_recipe="$(profile_resume_command "$_cr_profile" "$_cr_provider" "$_cr_executable")" || {
             echo "Error: profile '$_cr_profile' has no supported resume recipe" >&2
             return 1
         }
@@ -234,12 +234,12 @@ _cmd_resume_instance() {
     if [ "$_cr_terminal_mode" = headless ]; then
         _cr_session=-
     else
+        # Reserve the name now; the terminal itself is created once the new
+        # instance record exists so its launcher can carry the exact identity.
         _cr_session="$(generate_session_name "$_cr_branch")" || return 1
-        create_session "$_cr_session" "$_cr_worktree" || return 1
-        release_session_lock "$_cr_session" 2>/dev/null || true
     fi
     if ! lifecycle_new_instance "$_cr_branch" "$_cr_session" "$_cr_provider" "$_cr_recipe"; then
-        [ "$_cr_session" = - ] || tmux kill-session -t "$_cr_session" 2>/dev/null || true
+        [ "$_cr_session" = - ] || release_session_lock "$_cr_session" 2>/dev/null || true
         return 1
     fi
     if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/admission-id" "$HEAD_ADMISSION_ID"; then
@@ -264,28 +264,20 @@ _cmd_resume_instance() {
         echo "Resumed $_cr_branch headlessly (instance $LIFECYCLE_INSTANCE_ID)"
         return 0
     fi
-    for _cr_pair in \
-        "HYDRA_PROJECT_ID=$LIFECYCLE_PROJECT_ID" \
-        "HYDRA_HEAD_ID=$LIFECYCLE_HEAD_ID" \
-        "HYDRA_INSTANCE_ID=$LIFECYCLE_INSTANCE_ID" \
-        "HYDRA_BRANCH=$_cr_branch" \
-        "HYDRA_WORKTREE=$_cr_worktree" \
-        "HYDRA_STATE_DIR=$LIFECYCLE_HEAD_DIR" \
-        "HYDRA_TASK_FILE=$LIFECYCLE_HEAD_DIR/task"; do
-        tmux set-environment -t "$_cr_session" "${_cr_pair%%=*}" "${_cr_pair#*=}" 2>/dev/null || true
-    done
-    _cr_export="export HYDRA_PROJECT_ID=$(profile_shell_quote "$LIFECYCLE_PROJECT_ID") HYDRA_HEAD_ID=$(profile_shell_quote "$LIFECYCLE_HEAD_ID") HYDRA_INSTANCE_ID=$(profile_shell_quote "$LIFECYCLE_INSTANCE_ID") HYDRA_BRANCH=$(profile_shell_quote "$_cr_branch") HYDRA_WORKTREE=$(profile_shell_quote "$_cr_worktree") HYDRA_STATE_DIR=$(profile_shell_quote "$LIFECYCLE_HEAD_DIR") HYDRA_TASK_FILE=$(profile_shell_quote "$LIFECYCLE_HEAD_DIR/task")"
-    send_keys_to_session "$_cr_session" "$_cr_export" || {
-        _cmd_resume_abort "$_cr_branch" "$_cr_session"
-        return 1
-    }
-    # Read by admission_head after this callback returns.
-    # shellcheck disable=SC2034
-    HEAD_ADMISSION_EFFECTS=1
-    if [ -n "$_cr_recipe" ] && ! send_keys_to_session "$_cr_session" "$_cr_recipe"; then
+    # The head environment and the resume recipe reach the pane through the
+    # session environment and the generated launcher; nothing is typed.
+    _cr_repo_root="$(sed -n '1p' "$(state_v2_project_dir "$LIFECYCLE_PROJECT_ID")/repo-root" 2>/dev/null || true)"
+    [ -n "$_cr_repo_root" ] || _cr_repo_root="$(get_repo_root 2>/dev/null || printf '%s' "$_cr_worktree")"
+    if ! create_head_session "$_cr_session" "$LIFECYCLE_INSTANCE_DIR/launcher" "$_cr_recipe" \
+        "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" "$_cr_branch" \
+        "$_cr_worktree" "$LIFECYCLE_HEAD_DIR" "$_cr_profile" "$_cr_repo_root"; then
         _cmd_resume_abort "$_cr_branch" "$_cr_session"
         return 1
     fi
+    release_session_lock "$_cr_session" 2>/dev/null || true
+    # Read by admission_head after this callback returns.
+    # shellcheck disable=SC2034
+    HEAD_ADMISSION_EFFECTS=1
     event_emit "$LIFECYCLE_PROJECT_ID" "$LIFECYCLE_HEAD_ID" "$LIFECYCLE_INSTANCE_ID" lifecycle.resumed hydra local \
         "{\"previous_instance_id\":\"$_cr_old_instance\",\"profile\":\"$(json_escape "$_cr_profile")\"}" >/dev/null || {
         _cmd_resume_abort "$_cr_branch" "$_cr_session"

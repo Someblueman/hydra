@@ -143,12 +143,18 @@ profile_shell_quote() {
     printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
+# Usage: profile_launch_command <profile> [task_file] [provider_id] [executable]
+# An explicit executable (normally the absolute path from
+# profile_executable_path) replaces the profile's declared command name so the
+# recipe runs exactly what `hydra agent list` reported, whatever PATH the
+# launching shell ends up with.
 profile_launch_command() {
     _plc_name="$1"
     _plc_task_file="${2:-}"
     _plc_provider_id="${3:-}"
     _plc_executable="$(profile_field "$_plc_name" executable)" || return 1
     [ "$_plc_name" != none ] || return 0
+    [ -z "${4:-}" ] || _plc_executable="$4"
     _plc_command="$(profile_shell_quote "$_plc_executable")"
     if [ "$_plc_name" = claude ] && [ -n "$_plc_provider_id" ]; then
         _plc_command="$_plc_command --session-id $(profile_shell_quote "$_plc_provider_id")"
@@ -171,16 +177,19 @@ profile_launch_command() {
     printf '%s\n' "$_plc_command"
 }
 
+# Usage: profile_resume_command <profile> [provider_id] [executable]
 profile_resume_command() {
     _prc_name="$1"
     _prc_provider_id="${2:-}"
+    _prc_executable="${3:-}"
+    [ -n "$_prc_executable" ] || _prc_executable="$(profile_field "$_prc_name" executable)" || return 1
     case "$(profile_field "$_prc_name" resume_mode)" in
         session-id)
             [ -n "$_prc_provider_id" ] || return 1
-            printf '%s --resume %s\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" \
+            printf '%s --resume %s\n' "$(profile_shell_quote "$_prc_executable")" \
                 "$(profile_shell_quote "$_prc_provider_id")"
             ;;
-        cwd-last) printf '%s resume --last\n' "$(profile_shell_quote "$(profile_field "$_prc_name" executable)")" ;;
+        cwd-last) printf '%s resume --last\n' "$(profile_shell_quote "$_prc_executable")" ;;
         *) return 1 ;;
     esac
 }

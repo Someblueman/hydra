@@ -169,6 +169,15 @@ public CLI and protocol rules in this guide.
 
 Startup and agent launch target `session:0.0`. Broadcast automatically selects only
 a recognized shell pane; `--force` or `--pane` is required to target anything else.
+An interactive head's `HYDRA_PROJECT_ID`, `HYDRA_HEAD_ID`, `HYDRA_INSTANCE_ID`,
+`HYDRA_BRANCH`, `HYDRA_WORKTREE`, `HYDRA_STATE_DIR`, and `HYDRA_TASK_FILE` are
+delivered through the tmux session environment and a per-instance launcher that
+`session:0.0` runs; the launcher starts the agent by the absolute executable path
+recorded in provenance and then hands the pane to the interactive shell. Bootstrap
+exports and the agent launch are never typed into the shell or its history; only
+configured startup and YAML pane commands, and an agent launch that must follow
+them, remain typed keys. `hydra provenance` exposes the exact identity, paths, and
+launcher.
 
 Source and prefix installs provide `bin/hydra`, `lib/hydra/*.sh`, and an optional
 qualified `hydra-tui`. Core shell operation requires POSIX `sh`, Git, and tmux 3.0 or

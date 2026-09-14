@@ -253,6 +253,35 @@ apply_custom_layout_or_default() {
     esac
 }
 
+# Resolve the startup command file that spawn may type into the main pane.
+# Usage: resolve_startup_file <worktree_path> <repo_root>
+# Sets STARTUP_FILE on success. Returns 1 (silently) when there is no file,
+# or (with a warning) when the repository file is not trusted.
+resolve_startup_file() {
+    STARTUP_FILE=""
+    _rsf_confdir="$(locate_config_dir "$1" "$2" 2>/dev/null || true)"
+    [ -n "$_rsf_confdir" ] || return 1
+    _rsf_file="$_rsf_confdir/startup"
+    [ -f "$_rsf_file" ] || return 1
+    case "$_rsf_file" in
+        "$HYDRA_HOME"/*) ;;
+        *)
+            if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$(dirname "$(dirname "$_rsf_file")")"; then
+                echo "Warning: skipped untrusted repository startup commands" >&2
+                return 1
+            fi
+            ;;
+    esac
+    STARTUP_FILE="$_rsf_file"
+}
+
+# Report whether spawn will type startup commands into the main pane.
+# Usage: has_startup_commands <worktree_path> <repo_root>
+has_startup_commands() {
+    resolve_startup_file "$1" "$2" 2>/dev/null || return 1
+    grep -q '^[[:space:]]*[^#[:space:]]' "$STARTUP_FILE" 2>/dev/null
+}
+
 # Send startup commands from config file to the session
 # File name: startup (one command per line; lines starting with # or blank are ignored)
 # Usage: run_startup_commands <session> <worktree_path> <repo_root>
@@ -260,23 +289,8 @@ run_startup_commands() {
     target_session="$1"
     wt="$2"
     repo="$3"
-    confdir="$(locate_config_dir "$wt" "$repo" 2>/dev/null || true)"
-    if [ -z "$confdir" ]; then
-        return 0
-    fi
-    start_file="$confdir/startup"
-    if [ ! -f "$start_file" ]; then
-        return 0
-    fi
-    case "$start_file" in
-        "$HYDRA_HOME"/*) ;;
-        *)
-            if command -v project_is_trusted >/dev/null 2>&1 && ! project_is_trusted "$(dirname "$(dirname "$start_file")")"; then
-                echo "Warning: skipped untrusted repository startup commands" >&2
-                return 0
-            fi
-            ;;
-    esac
+    resolve_startup_file "$wt" "$repo" || return 0
+    start_file="$STARTUP_FILE"
     # Read and send each non-empty, non-comment line
     while IFS= read -r line || [ -n "$line" ]; do
         # Trim leading/trailing whitespace

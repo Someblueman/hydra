@@ -49,8 +49,27 @@ check_tmux_version() {
         echo "Next: upgrade tmux to 3.0 or newer, then run hydra doctor" >&2
         return 1
     fi
-    
+
     return 0
+}
+
+# Compare the running tmux version against a minimum.
+# Usage: tmux_version_at_least <major> <minor>
+# Returns: 0 when tmux -V reports at least major.minor; 1 when older or when
+# the version cannot be parsed (callers then take the conservative path).
+tmux_version_at_least() {
+    _tva_parsed="$(tmux -V 2>/dev/null | sed -n '1s/^[^0-9]*\([0-9][0-9]*\)\.\([0-9][0-9]*\).*$/\1 \2/p')"
+    [ -n "$_tva_parsed" ] || return 1
+    _tva_major="${_tva_parsed% *}"
+    _tva_minor="${_tva_parsed#* }"
+    [ "$_tva_major" -gt "$1" ] && return 0
+    [ "$_tva_major" -eq "$1" ] && [ "$_tva_minor" -ge "$2" ]
+}
+
+# Quote one string as a single POSIX sh word.
+# Usage: tmux_shell_quote <string>
+tmux_shell_quote() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
 # Check if a tmux session exists
@@ -249,29 +268,67 @@ EOF
 }
 
 # Create a new tmux session
-# Usage: create_session <session_name> <start_directory>
+# Usage: create_session <session_name> <start_directory> [pane_command] [NAME=value ...]
+# pane_command, when non-empty, runs in the first pane instead of the login
+# shell. NAME=value pairs become the session environment before that pane
+# starts, so every later window and pane inherits them: tmux 3.2+ receives
+# them through `new-session -e`; tmux 3.0/3.1 receives `set-environment`
+# immediately after creation, and the pane command must export them itself.
 # Returns: 0 on success, 1 on failure
 create_session() {
     session="$1"
     start_dir="$2"
-    
+    _cs_command="${3:-}"
+    if [ $# -gt 3 ]; then
+        shift 3
+    else
+        set --
+    fi
+
     if [ -z "$session" ] || [ -z "$start_dir" ]; then
         echo "Error: Session name and directory are required" >&2
         return 1
     fi
-    
+
     if ! [ -d "$start_dir" ]; then
         echo "Error: Directory does not exist: $start_dir" >&2
         return 1
     fi
-    
+
     if tmux_session_exists "$session"; then
         echo "Error: Session already exists: $session" >&2
         return 1
     fi
-    
+
+    _cs_env_flags=0
+    if [ $# -gt 0 ] && tmux_version_at_least 3 2; then
+        _cs_env_flags=1
+        # Rotate NAME=value into "-e NAME=value" argument pairs.
+        for _cs_pair in "$@"; do
+            set -- "$@" -e "$_cs_pair"
+            shift
+        done
+    fi
     # Create detached session with specified working directory
-    tmux new-session -d -s "$session" -c "$start_dir" || return 1
+    if [ "$_cs_env_flags" -eq 1 ]; then
+        if [ -n "$_cs_command" ]; then
+            tmux new-session -d -s "$session" -c "$start_dir" "$@" "$_cs_command" || return 1
+        else
+            tmux new-session -d -s "$session" -c "$start_dir" "$@" || return 1
+        fi
+    else
+        if [ -n "$_cs_command" ]; then
+            tmux new-session -d -s "$session" -c "$start_dir" "$_cs_command" || return 1
+        else
+            tmux new-session -d -s "$session" -c "$start_dir" || return 1
+        fi
+        for _cs_pair in "$@"; do
+            tmux set-environment -t "$session" "${_cs_pair%%=*}" "${_cs_pair#*=}" || {
+                tmux kill-session -t "$session" 2>/dev/null || true
+                return 1
+            }
+        done
+    fi
 
     # Hydra's public pane-target contract is session:0.0. Normalize indexes even
     # when the user's global tmux configuration starts windows or panes at 1.
@@ -295,6 +352,148 @@ create_session() {
     fi
     tmux_clear_snapshot
     return 0
+}
+
+# Write the POSIX sh launcher that a head session's first pane runs.
+# Usage: write_session_launcher <file> <worktree> <branch> <agent_label> <repo_name> <agent_command> [NAME=value ...]
+# The launcher exports the head environment, prints a short context banner,
+# runs the agent command (if any) as the pane's foreground process group, and
+# finally execs the user's interactive shell so the pane stays usable after the
+# agent exits. Nothing is typed into the shell or recorded in its history;
+# exact identities and paths stay in `hydra provenance` and the launcher file.
+# Returns: 0 on success, 1 on failure
+write_session_launcher() {
+    _wsl_file="$1"
+    _wsl_worktree="$2"
+    _wsl_branch="$3"
+    _wsl_agent_label="$4"
+    _wsl_repo_name="$5"
+    _wsl_agent_command="$6"
+    if [ $# -gt 6 ]; then
+        shift 6
+    else
+        set --
+    fi
+    if [ -z "$_wsl_file" ] || [ -z "$_wsl_worktree" ] || [ -z "$_wsl_branch" ]; then
+        echo "Error: launcher file, worktree, and branch are required" >&2
+        return 1
+    fi
+
+    # Reproduce what tmux would have started in this pane.
+    _wsl_shell="$(tmux show-options -gv default-shell 2>/dev/null | sed -n '1p')"
+    if [ -z "$_wsl_shell" ] || [ ! -x "$_wsl_shell" ]; then
+        _wsl_shell="${SHELL:-/bin/sh}"
+        [ -x "$_wsl_shell" ] || _wsl_shell=/bin/sh
+    fi
+    _wsl_default_command="$(tmux show-options -gqv default-command 2>/dev/null | sed -n '1p')"
+
+    if [ -n "$_wsl_agent_label" ] && [ "$_wsl_agent_label" != none ]; then
+        _wsl_label="agent $_wsl_agent_label"
+    else
+        _wsl_label="no agent"
+    fi
+    _wsl_q_worktree="$(tmux_shell_quote "$_wsl_worktree")"
+    _wsl_q_branch="$(tmux_shell_quote "$_wsl_branch")"
+    _wsl_q_head="$(tmux_shell_quote "Hydra head $_wsl_branch")"
+    _wsl_q_label="$(tmux_shell_quote "$_wsl_label")"
+    _wsl_q_repo="$(tmux_shell_quote "repo $_wsl_repo_name")"
+    _wsl_q_details="$(tmux_shell_quote "Details: hydra provenance $_wsl_branch")"
+    _wsl_q_shell="$(tmux_shell_quote "$_wsl_shell")"
+    _wsl_banner="Hydra head $_wsl_branch | $_wsl_label | repo $_wsl_repo_name"
+
+    _wsl_names=""
+    {
+        printf '#!/bin/sh\n'
+        printf '# Hydra head launcher for %s. Identity and paths: hydra provenance %s\n' \
+            "$_wsl_branch" "$_wsl_branch"
+        for _wsl_pair in "$@"; do
+            _wsl_name="${_wsl_pair%%=*}"
+            printf '%s=%s\n' "$_wsl_name" "$(tmux_shell_quote "${_wsl_pair#*=}")"
+            _wsl_names="$_wsl_names $_wsl_name"
+        done
+        [ -z "$_wsl_names" ] || printf 'export%s\n' "$_wsl_names"
+        cat <<EOF
+cd $_wsl_q_worktree 2>/dev/null || printf 'Hydra: worktree %s is unavailable\\n' $_wsl_q_worktree >&2
+case "\${LC_ALL:-\${LC_CTYPE:-\${LANG:-}}}" in
+    *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) _hydra_sep=' · ' ;;
+    *) _hydra_sep=' | ' ;;
+esac
+EOF
+        # Keep the banner on one line at 80 columns; split it otherwise.
+        if [ "${#_wsl_banner}" -le 78 ]; then
+            cat <<EOF
+printf '%s%s%s%s%s\\n' $_wsl_q_head "\$_hydra_sep" $_wsl_q_label "\$_hydra_sep" $_wsl_q_repo
+EOF
+        else
+            cat <<EOF
+printf '%s\\n' $_wsl_q_head
+printf '%s%s%s\\n' $_wsl_q_label "\$_hydra_sep" $_wsl_q_repo
+EOF
+        fi
+        cat <<EOF
+printf '%s\\n' $_wsl_q_details
+unset _hydra_sep
+EOF
+        if [ -n "$_wsl_agent_command" ]; then
+            cat <<EOF
+# The agent owns the terminal: Ctrl-C reaches only the agent, Ctrl-Z is
+# ignored, and this pane returns to a shell when the agent exits.
+trap '' TSTP
+trap : INT
+set -m 2>/dev/null || :
+$_wsl_agent_command
+_hydra_status=\$?
+trap - INT TSTP
+printf 'Hydra: %s exited with status %s; this pane is now a shell for head %s.\\n' $_wsl_q_label "\$_hydra_status" $_wsl_q_branch
+unset _hydra_status
+EOF
+        fi
+        if [ -n "$_wsl_default_command" ]; then
+            printf 'exec %s -c %s\n' "$_wsl_q_shell" "$(tmux_shell_quote "$_wsl_default_command")"
+        else
+            printf 'exec %s -l\n' "$_wsl_q_shell"
+        fi
+    } > "$_wsl_file" || return 1
+    chmod 700 "$_wsl_file" || return 1
+    return 0
+}
+
+# Pane command that runs a launcher written by write_session_launcher.
+# Usage: session_launcher_command <file>
+session_launcher_command() {
+    printf 'exec /bin/sh %s\n' "$(tmux_shell_quote "$1")"
+}
+
+# Create a head session whose first pane runs the generated launcher and
+# whose session environment carries the documented HYDRA_* identity.
+# Usage: create_head_session <session> <launcher_file> <agent_command> \
+#            <project_id> <head_id> <instance_id> <branch> <worktree> <head_dir> <profile> <repo_root>
+# Returns: 0 on success, 1 on failure (no session is left behind)
+create_head_session() {
+    _chsn_session="$1"
+    _chsn_launcher="$2"
+    _chsn_agent="$3"
+    _chsn_project="$4"
+    _chsn_head="$5"
+    _chsn_instance="$6"
+    _chsn_branch="$7"
+    _chsn_worktree="$8"
+    _chsn_head_dir="$9"
+    _chsn_profile="${10}"
+    _chsn_repo_root="${11}"
+    set -- "HYDRA_PROJECT_ID=$_chsn_project" \
+        "HYDRA_HEAD_ID=$_chsn_head" \
+        "HYDRA_INSTANCE_ID=$_chsn_instance" \
+        "HYDRA_BRANCH=$_chsn_branch" \
+        "HYDRA_WORKTREE=$_chsn_worktree" \
+        "HYDRA_STATE_DIR=$_chsn_head_dir" \
+        "HYDRA_TASK_FILE=$_chsn_head_dir/task"
+    if ! write_session_launcher "$_chsn_launcher" "$_chsn_worktree" "$_chsn_branch" "$_chsn_profile" \
+        "$(basename "$_chsn_repo_root")" "$_chsn_agent" "$@"; then
+        echo "Error: Failed to write head launcher $_chsn_launcher" >&2
+        return 1
+    fi
+    create_session "$_chsn_session" "$_chsn_worktree" "$(session_launcher_command "$_chsn_launcher")" "$@"
 }
 
 # Kill a tmux session
