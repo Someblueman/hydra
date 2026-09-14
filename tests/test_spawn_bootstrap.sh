@@ -233,6 +233,7 @@ else
 fi
 
 # --- typed YAML startup commands keep their order ----------------------------
+mkdir -p .hydra
 printf 'startup:\n  - echo from-startup\n' >> .hydra/config.yml
 "$HYDRA_BIN" init --no-agent --trust >/dev/null 2>&1
 assert_success $? "changed repository config is re-trusted"
