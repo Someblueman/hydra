@@ -63,6 +63,26 @@ assert_contains "$doc_out" "source checkout" "doctor detects source layout"
 assert_contains "$doc_out" "HYDRA_HOME writable" "doctor reports writable home"
 assert_contains "$doc_out" "Agents:" "doctor reports agents"
 
+# Agent detection must load the profile library: a codex on PATH is reported,
+# and an agent-free PATH gets the first-use guidance.
+fake_bin="$base_dir/fake-agent-bin"
+bare_bin="$base_dir/bare-bin"
+mkdir -p "$fake_bin" "$bare_bin"
+printf '#!/bin/sh\necho fake-codex\n' > "$fake_bin/codex"
+chmod +x "$fake_bin/codex"
+ln -s "$(command -v git)" "$bare_bin/git"
+if command -v tmux >/dev/null 2>&1; then ln -s "$(command -v tmux)" "$bare_bin/tmux"; fi
+fake_doc_out="$(PATH="$fake_bin:/usr/bin:/bin" "$HYDRA_BIN" doctor 2>&1)"
+assert_contains "$fake_doc_out" "Detected: codex" "doctor detects an agent that is on PATH"
+bare_doc_out="$(PATH="$bare_bin:/usr/bin:/bin" "$HYDRA_BIN" doctor 2>&1)"
+assert_contains "$bare_doc_out" "No coding agent found on PATH" "doctor names the missing-agent condition"
+assert_contains "$bare_doc_out" "hydra spawn <branch> --no-agent" "doctor offers the plain terminal task path"
+if echo "$bare_doc_out" | grep -q "No agent CLI detected"; then
+    assert_failure 0 "doctor no longer prints the old agent wording"
+else
+    assert_success 0 "doctor no longer prints the old agent wording"
+fi
+
 # Replay the documented run-from-source PATH setup before leaving the checkout.
 export HYDRA_ROOT="$REPO_ROOT"
 export PATH="$HYDRA_ROOT/bin:$PATH"

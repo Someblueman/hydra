@@ -172,8 +172,8 @@ _load_libs_for_cmd() {
             _load_libs notify hooks yaml spawn cmd_queue cmd_evidence
             ;;
         doctor|cleanup)
-            _load_libs paths maintenance tmux state git locks identity state_v2 output messages spawn cmd_queue \
-                cmd_maintenance
+            _load_libs paths maintenance tmux state git locks identity state_v2 output messages profiles spawn \
+                cmd_queue cmd_maintenance
             ;;
         dashboard|dashboard-exit)
             _load_libs locks state tmux identity state_v2 dashboard

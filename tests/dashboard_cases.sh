@@ -157,7 +157,8 @@ test_dashboard_creation() {
     fi
     
     # Count active sessions - we need at least 2 out of 3
-    list_output=$(cd "$TEST_REPO_DIR" && HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" list 2>/dev/null || echo "")
+    # --verbose keeps the "branch -> session" rows this count relies on.
+    list_output=$(cd "$TEST_REPO_DIR" && HYDRA_HOME="$HYDRA_HOME" "$HYDRA_BIN" list --verbose 2>/dev/null || echo "")
     # Count listed heads and coerce an empty result to zero.
     active_count=$(printf '%s' "$list_output" | awk '/ -> /{c++} END{ if(c=="" || c==0){print 0}else{print c} }')
     if [ "$active_count" -lt 2 ]; then

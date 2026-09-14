@@ -125,11 +125,25 @@ test_help_command() {
     assert_success "$exit_code" "hydra -h should succeed"
     assert_contains "$output" "Usage:" "Help output should contain usage information"
     
-    # Test no arguments (should show help)
+    # Test no arguments without a terminal (should show the short first-use usage)
     output="$("$HYDRA_BIN" 2>&1)"
     exit_code=$?
     assert_success "$exit_code" "hydra with no arguments should show help"
     assert_contains "$output" "Usage:" "No arguments should show help"
+    assert_contains "$output" "Run 'hydra' inside a repository to start" "bare hydra explains the control centre entry"
+    assert_contains "$output" "hydra help" "bare hydra points at the full command list"
+    if echo "$output" | grep -q "Environment:"; then
+        assert_failure 0 "bare hydra prints the short usage, not the full reference"
+    else
+        assert_success 0 "bare hydra prints the short usage, not the full reference"
+    fi
+    short_lines="$(printf '%s\n' "$output" | wc -l | tr -d ' ')"
+    if [ "$short_lines" -le 25 ]; then
+        assert_success 0 "short usage fits one screen ($short_lines lines)"
+    else
+        assert_failure 0 "short usage fits one screen ($short_lines lines)"
+    fi
+    assert_contains "$("$HYDRA_BIN" help 2>&1)" "Environment:" "hydra help still prints the full reference"
 
     command_help_status=0
     for command in claim scope collision resource gate context sync land du gc worktree snapshot; do
@@ -137,6 +151,23 @@ test_help_command() {
         case "$command_help" in *Usage:*) ;; *) command_help_status=1 ;; esac
     done
     assert_success "$command_help_status" "all 1.7 commands provide discoverable command help"
+
+    # Per-command --help and -h route to that command's usage with exit 0
+    for command in spawn kill init list status switch tui doctor resume workflow fleet agent; do
+        command_help="$("$HYDRA_BIN" "$command" --help 2>&1)"
+        command_help_code=$?
+        assert_success "$command_help_code" "hydra $command --help exits 0"
+        assert_contains "$command_help" "Usage: hydra $command" "hydra $command --help prints its usage"
+        command_help="$("$HYDRA_BIN" "$command" -h 2>&1)"
+        command_help_code=$?
+        assert_success "$command_help_code" "hydra $command -h exits 0"
+        if echo "$command_help" | grep -q "Unknown option"; then
+            assert_failure 0 "hydra $command -h is not treated as an unknown option"
+        else
+            assert_success 0 "hydra $command -h is not treated as an unknown option"
+        fi
+    done
+    assert_contains "$("$HYDRA_BIN" list --help 2>&1)" "verbose" "list help documents --verbose"
 }
 
 # Test hydra unknown command
@@ -189,6 +220,15 @@ test_status_command() {
     fi
     
     assert_contains "$output" "Hydra Status" "Status output should contain status header"
+
+    # tmux is probed whenever it is on PATH, even with no heads recorded
+    if command -v tmux >/dev/null 2>&1; then
+        setup_test_env
+        test_dir="$TEST_DIR"
+        output="$("$HYDRA_BIN" status 2>&1)"
+        assert_contains "$output" "tmux Version: tmux" "status reports the installed tmux version with no heads"
+        cleanup_test_env "$test_dir"
+    fi
 }
 
 # Test hydra doctor command

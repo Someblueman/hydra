@@ -25,6 +25,47 @@ list_row_details() {
     fi
 }
 
+# Plain-language session state for the default list table.
+# Usage: list_state_word <active|dead>; reads the current lifecycle snapshot.
+# Sets LIST_STATE to running, terminal gone, stopped, or unknown.
+list_state_word() {
+    if [ "$1" = dead ]; then
+        LIST_STATE="terminal gone"
+        return 0
+    fi
+    case "$LIFECYCLE_SNAPSHOT_LIVENESS" in
+        live) LIST_STATE=running; return 0 ;;
+        stopped) LIST_STATE=stopped; return 0 ;;
+    esac
+    case "$LIFECYCLE_SNAPSHOT_OBSERVED" in
+        starting|running|idle) LIST_STATE=running ;;
+        exited|failed) LIST_STATE=stopped ;;
+        *) LIST_STATE=unknown ;;
+    esac
+}
+
+# Print tab-separated rows from stdin as an aligned table.
+# The first field is a one-character marker column ("*" for the current head).
+list_print_table() {
+    awk -F '\t' '
+        {
+            rows[NR] = $0
+            if (NF > nf) nf = NF
+            for (i = 2; i <= NF; i++) if (length($i) > width[i]) width[i] = length($i)
+        }
+        END {
+            for (n = 1; n <= NR; n++) {
+                split(rows[n], field, "\t")
+                line = (field[1] == "" ? " " : field[1]) " "
+                for (i = 2; i <= nf; i++) {
+                    if (i < nf) line = line sprintf("%-" width[i] "s  ", field[i])
+                    else line = line field[i]
+                }
+                print line
+            }
+        }'
+}
+
 cmd_list() {
     # Parse arguments
     filter_group=""
@@ -34,8 +75,14 @@ cmd_list() {
     no_pr_status=""
     refresh_pr_status=""
     show_git=""
+    verbose=""
+    table_rows=""
     while [ $# -gt 0 ]; do
         case "$1" in
+            --verbose)
+                verbose="1"
+                shift
+                ;;
             -g|--group)
                 [ $# -ge 2 ] || { cli_error list invalid_input "--group requires a name" "run hydra list --help"; return 1; }
                 shift
@@ -220,8 +267,8 @@ cmd_list() {
                 "$(json_escape "$LIFECYCLE_SNAPSHOT_LIVENESS")" \
                 "$LIFECYCLE_SNAPSHOT_COMPLETE" \
                 "$LIST_GIT_JSON" >> "$tmpjson"
-        else
-            # Build status line
+        elif [ -n "$verbose" ]; then
+            # Build the full bracketed status line
             status_line=""
             if [ -n "$duration_str" ]; then
                 status_line="($duration_str)"
@@ -280,10 +327,36 @@ cmd_list() {
             else
                 echo "  $branch -> $session $status_line (dead)"
             fi
+        else
+            # Default table row: marker, branch, agent, session state, reported outcome, age
+            list_state_word "$status"
+            row_marker=""
+            [ "$is_current" != true ] || row_marker="*"
+            row_agent="-"
+            if [ -n "$ai" ] && [ "$ai" != "-" ]; then row_agent="$ai"; fi
+            row_git=""
+            if [ -n "$show_git" ]; then
+                if [ "$LIST_GIT_JSON" != null ]; then
+                    row_git="	+$OPERATIONS_AHEAD/-$OPERATIONS_BEHIND dirty=$OPERATIONS_DIRTY"
+                else
+                    row_git="	unavailable"
+                fi
+            fi
+            table_rows="${table_rows}${row_marker}	${branch}	${row_agent}	${LIST_STATE}	${LIFECYCLE_SNAPSHOT_OUTCOME:--}	${duration_str:--}${row_git}
+"
         fi
     done <<EOF
 $state_rows
 EOF
+    if [ -z "$json_output" ] && [ -z "$verbose" ]; then
+        if [ -z "$table_rows" ]; then
+            echo "  (no heads match)"
+        else
+            table_header="	BRANCH	AGENT	SESSION	REPORTED	AGE"
+            [ -z "$show_git" ] || table_header="${table_header}	GIT"
+            printf '%s\n%s' "$table_header" "$table_rows" | list_print_table
+        fi
+    fi
     if [ -n "$json_output" ]; then
         # Output JSON
         printf '{"schema_version":1,"ok":true,"command":"list","data":{"sessions":['
