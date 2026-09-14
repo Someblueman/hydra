@@ -254,6 +254,7 @@ const char *status_label(const struct head *head);
 enum tv_style status_tone(const struct head *head);
 size_t attention_count(const struct app *app);
 const char *dot(const struct app *app);
+void text_append(char *buffer, size_t size, const char *format, ...);
 bool frame_alloc(struct app *app);
 void frame_free(struct app *app);
 bool frame_begin(struct app *app, bool headless);

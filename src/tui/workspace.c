@@ -276,7 +276,7 @@ static void native_workspace_details(struct app *app, struct tv_canvas *c, size_
             if (h->gates > h->approved) tone = TV_WARNING;
             break;
         case 6: snprintf(text, sizeof(text), "%s%s%s", h->group[0] && strcmp(h->group,"-") ? "Group     " : "", h->group[0] && strcmp(h->group,"-") ? h->group : "",
-                         h->pr[0] && strcmp(h->pr,"-") ? "" : ""); if (h->pr[0] && strcmp(h->pr,"-")) snprintf(text + strlen(text), sizeof(text) - strlen(text), "%sPR %s", text[0] ? sep : "", h->pr); break;
+                         h->pr[0] && strcmp(h->pr,"-") ? "" : ""); if (h->pr[0] && strcmp(h->pr,"-")) text_append(text, sizeof(text), "%sPR %.40s", text[0] ? sep : "", h->pr); break;
         case 8: snprintf(text, sizeof(text), "%s", !strcmp(display_status(h), "STALE") ? "The terminal is gone; files in the worktree are kept." : ""); tone = TV_WARNING; break;
         case 10: snprintf(text, sizeof(text), "a  talk to the agent here      Enter  full details"); tone = TV_MUTED; break;
         case 11: snprintf(text, sizeof(text), ":  more actions                d  technical details"); tone = TV_MUTED; break;

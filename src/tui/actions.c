@@ -170,8 +170,8 @@ void remove_heads_action(struct app *app) {
     } else if (selected) copy_text(targets[count++], TEXT, selected->branch);
     else { copy_text(app->notice, sizeof(app->notice), "Select a head to remove, or mark several with Space"); return; }
     for (index = 0U; index < count && strlen(names) < 400U; index++)
-        snprintf(names + strlen(names), sizeof(names) - strlen(names), "%s%s", index ? ", " : "", targets[index]);
-    if (index < count) snprintf(names + strlen(names), sizeof(names) - strlen(names), ", +%zu more", count - index);
+        text_append(names, sizeof(names), "%s%.100s", index ? ", " : "", targets[index]);
+    if (index < count) text_append(names, sizeof(names), ", +%zu more", count - index);
     snprintf(question, sizeof(question), "Remove %zu head%s (%s)? This closes the terminal and deletes the worktree; the branch is kept and heads with uncommitted changes are refused. y/N: ",
              count, count == 1U ? "" : "s", names);
     if (prompt_text(app, question, answer, sizeof(answer)) != 0 || (strcasecmp(answer, "y") && strcasecmp(answer, "yes"))) {
@@ -183,13 +183,13 @@ void remove_heads_action(struct app *app) {
         char *argv[] = {(char *)app->hydra, (char *)"kill", targets[index], NULL};
         int status;
         if (head != NULL && app->current_session[0] != '\0' && strcmp(head->session, app->current_session) == 0) {
-            snprintf(transcript + strlen(transcript), sizeof(transcript) - strlen(transcript), "== %s\nSkipped: this is the terminal you are using right now.\n\n", targets[index]);
+            text_append(transcript, sizeof(transcript), "== %s\nSkipped: this is the terminal you are using right now.\n\n", targets[index]);
             skipped++;
             continue;
         }
-        snprintf(app->notice, sizeof(app->notice), "Removing %s (%zu of %zu)...", targets[index], index + 1U, count);
+        snprintf(app->notice, sizeof(app->notice), "Removing %.200s (%zu of %zu)...", targets[index], index + 1U, count);
         status = run_captured(app, argv, output, sizeof(output), 60000L);
-        snprintf(transcript + strlen(transcript), sizeof(transcript) - strlen(transcript), "== %s (exit %d)\n%s\n", targets[index], status, output);
+        text_append(transcript, sizeof(transcript), "== %s (exit %d)\n%s\n", targets[index], status, output);
         if (status == 0) removed++;
         else { failed++; if (strstr(output, "uncommitted") || strstr(output, "Refusing")) dirty++; }
     }
@@ -200,7 +200,7 @@ void remove_heads_action(struct app *app) {
         show_result(app, "REMOVAL OUTPUT", transcript);
     } else if (count == 1U) {
         first_line(output, line, sizeof(line));
-        snprintf(app->notice, sizeof(app->notice), "Removed %s%s%s", targets[0], line[0] ? ": " : "", line);
+        snprintf(app->notice, sizeof(app->notice), "Removed %.120s%s%.100s", targets[0], line[0] ? ": " : "", line);
     } else snprintf(app->notice, sizeof(app->notice), "Removed %zu head%s%s%s", removed, removed == 1U ? "" : "s",
                     skipped ? "; skipped the current session" : "", skipped ? "" : "");
     copy_text(app->result_text, sizeof(app->result_text), transcript);

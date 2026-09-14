@@ -39,6 +39,16 @@ void style(struct app *app, enum tone tone) { app->tone = (int)tone; }
 const char *theme_name(int theme) { return theme_names[theme]; }
 const char *dot(const struct app *app) { return app->ascii ? " / " : " \xc2\xb7 "; }
 
+/* Append formatted text to a bounded buffer with the remaining size explicit. */
+void text_append(char *buffer, size_t size, const char *format, ...) {
+    size_t used = strlen(buffer);
+    va_list args;
+    if (used + 1U >= size) return;
+    va_start(args, format);
+    (void)vsnprintf(buffer + used, size - used, format, args);
+    va_end(args);
+}
+
 /* Frame lifecycle. The canvas leaves the terminal's last column unused. */
 bool frame_alloc(struct app *app) {
     if (app->frame_cells) return true;
@@ -283,7 +293,7 @@ void chrome_header(struct app *app, struct tv_canvas *c, const char *title) {
         char project[128] = "";
         if (app->links && app->links->root[0]) {
             const char *name = strrchr(app->links->root, '/');
-            snprintf(project, sizeof(project), "%.100s%s", name && name[1] ? name + 1 : app->links->root, sep);
+            snprintf(project, sizeof(project), "%.60s%s", name && name[1] ? name + 1 : app->links->root, sep);
         }
         for (i = 0; i < app->model.head_count; i++) if (!strcmp(display_status(&app->model.heads[i]), "LIVE")) running++;
         attention = attention_count(app);
@@ -384,7 +394,7 @@ static void render_list(struct app *app) {
         app->line = r.y + 1;
         app->content_x++; app->content_width -= 2;
         if (app->fleet) {
-            snprintf(line, sizeof(line), "Host %s%sdesired %s%sproject %s", head->remote_host, sep, head->desired, sep, head->remote_project);
+            snprintf(line, sizeof(line), "Host %.100s%sdesired %.40s%sproject %.300s", head->remote_host, sep, head->desired, sep, head->remote_project);
             linef(app, "%s", line);
             style(app, TONE_MUTED); linef(app, "Enter details%sa attach to terminal%sc interrupt", sep, sep);
         } else if (!head->head_id[0]) {
@@ -394,7 +404,7 @@ static void render_list(struct app *app) {
         } else {
             snprintf(line, sizeof(line), "%s%s%s%s%u changed files%s%u of %u approvals%s", agent_label(head), sep,
                      status_label(head), sep, head->diff, sep, head->approved, head->gates, head->declared[0] ? sep : "");
-            if (head->declared[0]) snprintf(line + strlen(line), sizeof(line) - strlen(line), "reported %s", head->declared);
+            if (head->declared[0]) text_append(line, sizeof(line), "reported %.63s", head->declared);
             linef(app, "%s", line);
             style(app, TONE_MUTED); linef(app, "Enter details%sa talk to the agent%sx remove%s: more actions", sep, sep, sep);
         }
@@ -452,7 +462,7 @@ static void render_detail(struct app *app) {
     }
     snprintf(group, sizeof(group), "%s%s%s", head->group[0] && strcmp(head->group, "-") ? head->group : "none",
              head->pr[0] && strcmp(head->pr, "-") ? sep : "", head->pr[0] && strcmp(head->pr, "-") ? "PR " : "");
-    if (head->pr[0] && strcmp(head->pr, "-")) snprintf(group + strlen(group), sizeof(group) - strlen(group), "%s", head->pr);
+    if (head->pr[0] && strcmp(head->pr, "-")) text_append(group, sizeof(group), "%.40s", head->pr);
     pair(app, "Agent", agent_label(head), TV_BASE, "Session", status_label(head), status_tone(head));
     pair(app, "Reported", head->declared[0] ? head->declared : "nothing yet", head->declared[0] ? TV_STRONG : TV_MUTED, "Group", group, TV_BASE);
     if (!strcmp(display_status(head), "STALE"))
@@ -676,7 +686,7 @@ static const char *panel_title(struct app *app, char *out, size_t size) {
     if (app->help) return "HELP";
     switch (app->view) {
         case 0: snprintf(out, size, "%s", app->fleet ? "Remote heads" : "Heads in this project"); break;
-        case 1: snprintf(out, size, "%s%s%s", app->diagnostics ? "Technical details" : "Details", head ? ": " : "", head ? head->branch : ""); break;
+        case 1: snprintf(out, size, "%s%s%.200s", app->diagnostics ? "Technical details" : "Details", head ? ": " : "", head ? head->branch : ""); break;
         case 2: snprintf(out, size, "Coordination"); break;
         case 3: snprintf(out, size, "Recovery"); break;
         case 4: snprintf(out, size, "Overview"); break;

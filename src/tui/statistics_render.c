@@ -199,7 +199,7 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
     if (summary.attempts_known || !summary.steps) snprintf(retries,sizeof(retries),"%llu",(unsigned long long)summary.retries);
     if (summary.duration_known) snprintf(maximum,sizeof(maximum),"%llus",(unsigned long long)summary.duration_max);
     chrome_header(app,&c,(v->stale || app->snapshot_stale) ? "STATISTICS (STALE)" : "STATISTICS");
-    snprintf(scope,sizeof(scope),"%s%s%s%s%s%s%s%s",app->fleet ? "Fleet snapshot" : "Recorded workflow runs",sep,app->fleet ? "latest response" : statistics_range(v),sep,
+    snprintf(scope,sizeof(scope),"%s%s%s%s%.60s%s%s%.60s",app->fleet ? "Fleet snapshot" : "Recorded workflow runs",sep,app->fleet ? "latest response" : statistics_range(v),sep,
         v->filter.query[0] ? v->filter.query : "all work", v->filter.attention ? " / attention only" : "",
         v->filter.workflow[0] ? " / workflow: " : "",v->filter.workflow);
     if (app->fleet) statistics_fleet(app,&c,(struct tv_rect){0,2,width,height-4});
