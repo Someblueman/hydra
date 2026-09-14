@@ -5,6 +5,22 @@ v2.1.0. Version 2.2.0 adds workflow data,
 approval waits, headless adapters, and local objective planning; see the
 [changelog](../CHANGELOG.md) for upgrade notes.
 
+## Starting out
+
+- `hydra` with no arguments opens the control centre (`hydra tui`) when you run it
+  from a terminal inside a Git repository. Outside a repository, or without a
+  terminal, it prints a short usage with the most common commands.
+- `hydra help` (or `hydra --help`) prints the full command reference.
+- `hydra <command> --help` (or `-h`) prints that command's usage and exits 0, for
+  example `hydra spawn --help` or `hydra kill --help`.
+- `hydra doctor` reports the coding agents found on PATH. With none installed it
+  suggests Claude Code or Codex, or a plain terminal task with
+  `hydra spawn <branch> --no-agent`.
+- `hydra list` prints one aligned row per head: `BRANCH`, `AGENT`, `SESSION`
+  (`running`, `terminal gone`, `stopped`, or `unknown`), `REPORTED` (the declared
+  outcome or `-`), and `AGE`. The current head is marked with `*`. Add `--verbose`
+  for the session name and the full `[declared]`/`[observed]`/`[live]` fields;
+  `hydra list --json` is unchanged.
 
 ```sh
 # Create a new head for a branch (tmux + worktree)
@@ -21,8 +37,9 @@ hydra spawn feature -n 3 --profile aider
 hydra spawn exp --agents "claude:2,aider:1"
 
 # Inspect & switch
-hydra list              # list all sessions
-hydra list --json       # JSON output for scripting
+hydra list              # table: BRANCH AGENT SESSION REPORTED AGE
+hydra list --verbose    # session names plus full lifecycle fields
+hydra list --json       # JSON output for scripting (unchanged by --verbose)
 hydra list --git        # add recorded-base Git evidence
 hydra list -g mygroup   # filter by group
 hydra switch feature/ui # enter a named head directly

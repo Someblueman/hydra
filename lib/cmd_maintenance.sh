@@ -142,8 +142,7 @@ cmd_doctor() {
     if [ -n "$_detected" ]; then
         print_success "Detected: $_detected"
     else
-        doctor_info "No agent CLI detected" \
-            "pass spawn --no-agent for a shell-only head, or install an agent (see README Quick Start)"
+        doctor_info "No coding agent found on PATH. Install Claude Code or Codex, or start a plain terminal task with 'hydra spawn <branch> --no-agent'."
     fi
 
     echo ""

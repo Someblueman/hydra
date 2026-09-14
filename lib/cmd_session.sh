@@ -226,7 +226,7 @@ cmd_kill() {
     # Skip confirmation in non-interactive environments (CI, tests)
     if [ "$force" != true ] && [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
         # Interactive mode - ask for confirmation
-        printf "Kill hydra head '%s' (session: %s)? [y/N] " "$branch" "$session"
+        printf "Remove head %s? This closes its terminal and deletes its worktree; branch %s is kept. [y/N] " "$branch" "$branch"
         read -r response
         case "$response" in
             [yY][eE][sS]|[yY])
@@ -238,14 +238,14 @@ cmd_kill() {
         esac
     else
         # Non-interactive mode - proceed without confirmation
-        echo "Killing hydra head '$branch' (session: $session) [non-interactive mode]"
+        echo "Removing head $branch (session: $session) [non-interactive mode]"
     fi
-    
+
     # Use kill_single_head helper for the actual kill
     if kill_single_head "$branch" "$session"; then
-        echo "Hydra head '$branch' has been killed"
+        echo "Removed $branch. Branch kept; 'hydra lifecycle $branch' shows its history."
     else
-        echo "Failed to kill hydra head '$branch'" >&2
+        echo "Failed to remove head '$branch'; see the messages above for what was left in place" >&2
         return 1
     fi
 }
@@ -271,8 +271,9 @@ cmd_status() {
     done
 
     # Collect system info
+    # Probe tmux whenever it is on PATH; headless-only state must not hide an install.
     tmux_ver="Not installed"
-    if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then
+    if command -v tmux >/dev/null 2>&1; then
         tmux_ver="$(tmux -V 2>/dev/null || echo "Not installed")"
     fi
     git_ver="$(git --version 2>/dev/null | sed 's/git version //' || echo "Not installed")"

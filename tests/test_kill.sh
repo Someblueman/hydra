@@ -45,8 +45,19 @@ echo "================================="
 "$HYDRA_BIN" spawn kill-dead --no-agent >/dev/null
 dead_path="$("$HYDRA_BIN" path kill-dead)"
 tmux kill-session -t kill-dead
-"$HYDRA_BIN" kill kill-dead >/dev/null
+kill_out="$("$HYDRA_BIN" kill kill-dead 2>&1)"
 assert_success $? "dead tmux session can be durably torn down"
+case "$kill_out" in
+    *"Removed kill-dead. Branch kept; 'hydra lifecycle kill-dead' shows its history."*) assert_success 0 "kill explains that the branch is kept and where history lives" ;;
+    *) assert_success 1 "kill explains that the branch is kept and where history lives"; echo "  Actual: $kill_out" ;;
+esac
+case "$kill_out" in
+    *"has been killed"*) assert_success 1 "kill no longer prints the old killed wording" ;;
+    *) assert_success 0 "kill no longer prints the old killed wording" ;;
+esac
+"$HYDRA_BIN" lifecycle kill-dead >/dev/null 2>&1
+assert_success $? "hydra lifecycle still shows a removed head's history"
+if git show-ref --verify --quiet refs/heads/kill-dead; then assert_success 0 "kill keeps the branch"; else assert_success 1 "kill keeps the branch"; fi
 if [ ! -d "$dead_path" ]; then assert_success 0 "dead-session worktree is removed"; else assert_success 1 "dead-session worktree is removed"; fi
 assert_equal stopped "$(sed -n '1p' "$(head_dir kill-dead)/desired-state")" "dead head is marked stopped"
 
