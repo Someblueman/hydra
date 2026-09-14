@@ -81,9 +81,17 @@ git add README.md
 git commit -m "init" >/dev/null 2>&1
 
 branch="first-head"
+exclude_before="$(cat .git/info/exclude)"
 init_out="$(hydra init --no-agent --trust 2>&1)"
 assert_success $? "hydra init should configure a trusted no-agent project"
-assert_contains "$init_out" "Initialized Hydra project" "init reports project identity"
+assert_contains "$init_out" "Ready: repo (agent: none)" "init reports readiness in plain terms"
+assert_contains "$init_out" "Repository config trusted" "init reports the trust decision"
+assert_equal "" "$(git status --porcelain)" "init leaves git status unchanged"
+assert_equal "$exclude_before" "$(cat .git/info/exclude)" "init leaves .git/info/exclude unchanged"
+reopen_out="$(hydra init 2>&1)"
+assert_success $? "reopening the repository succeeds without flags"
+assert_contains "$reopen_out" "Ready: repo (agent: none)" "reopen keeps the stored profile"
+assert_equal "" "$(git status --porcelain)" "reopen leaves git status unchanged"
 
 dry_out="$(hydra spawn dry-head --no-agent --prompt 'dry task' --dry-run 2>&1)"
 assert_success $? "spawn --dry-run should succeed after init"

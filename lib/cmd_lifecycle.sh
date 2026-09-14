@@ -7,12 +7,14 @@ cmd_init() {
     _ci_worktree_root=""
     _ci_force=0
     _ci_json=0
+    _ci_write_shared=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --profile) [ $# -ge 2 ] || { cli_error init invalid_input "--profile requires a name" "run hydra agent list"; return 1; }; _ci_profile="$2"; shift 2 ;;
             --no-agent) _ci_profile=none; shift ;;
             --trust) _ci_trust=1; shift ;;
             --worktree-root) [ $# -ge 2 ] || { cli_error init invalid_input "--worktree-root requires a path" "pass an absolute or project-relative path"; return 1; }; _ci_worktree_root="$2"; shift 2 ;;
+            --write-shared-config) _ci_write_shared=1; shift ;;
             --force) _ci_force=1; shift ;;
             -j|--json) _ci_json=1; shift ;;
             *) cli_error init invalid_input "unknown init option '$1'" "run hydra help"; return 1 ;;
@@ -33,6 +35,18 @@ cmd_init() {
     else
         _ci_profile="$(profile_resolve "$_ci_profile")" || return 1
     fi
+    # Without --worktree-root, reopening keeps the root this host already uses.
+    # A host-local record left by an earlier release is imported before removal.
+    _ci_legacy_root=""
+    if [ -z "$_ci_worktree_root" ]; then
+        _ci_worktree_root="$(project_host_value worktree-root 2>/dev/null || true)"
+        _ci_legacy_root="$(init_legacy_local_worktree_root "$_ci_root")"
+        if [ -n "$_ci_legacy_root" ] && [ "$_ci_legacy_root" != "$_ci_worktree_root" ]; then
+            _ci_worktree_root="$_ci_legacy_root"
+        else
+            _ci_legacy_root=""
+        fi
+    fi
     if [ -z "$_ci_worktree_root" ]; then
         _ci_worktree_root="$(project_default_worktree_root "$_ci_project")" || return 1
     fi
@@ -47,33 +61,18 @@ cmd_init() {
     project_write_host_value default-profile "$_ci_profile" || return 1
     project_write_host_value worktree-root "$_ci_worktree_root" || return 1
 
-    _ci_config_dir="$_ci_root/.hydra"
-    _ci_config="$_ci_config_dir/config.yml"
-    mkdir -p "$_ci_config_dir" || return 1
-    if [ ! -f "$_ci_config" ] || [ "$_ci_force" -eq 1 ]; then
-        _ci_tmp="$(mktemp "$_ci_config_dir/.config.XXXXXX")" || return 1
-        {
-            echo "version: 1"
-            echo "profile: $_ci_profile"
-            echo "setup:"
-        } > "$_ci_tmp"
-        chmod 644 "$_ci_tmp" 2>/dev/null || true
-        mv "$_ci_tmp" "$_ci_config" || { rm -f "$_ci_tmp"; return 1; }
+    # Registration is complete and lives under the Git common directory. Nothing
+    # below writes into the source tree unless the user asks for shared config.
+    if project_is_trusted "$_ci_root" 2>/dev/null; then _ci_was_trusted=1; else _ci_was_trusted=0; fi
+    init_migrate_generated_config "$_ci_root" || return 1
+    if [ -n "$INIT_MIGRATED_FILES" ] && [ "$_ci_was_trusted" -eq 1 ] && [ "$_ci_trust" -eq 0 ]; then
+        # Removing generated, content-free files cannot widen an approval that was
+        # current a moment ago; carry it forward instead of invalidating it.
+        project_set_trusted || return 1
     fi
-
-    _ci_common="$(hydra_git_common_dir)" || return 1
-    _ci_exclude="$_ci_common/info/exclude"
-    mkdir -p "$(dirname "$_ci_exclude")" || return 1
-    [ -f "$_ci_exclude" ] || : > "$_ci_exclude"
-    grep -Fqx '.hydra/local.yml' "$_ci_exclude" 2>/dev/null || printf '%s\n' '.hydra/local.yml' >> "$_ci_exclude"
-    _ci_local="$_ci_config_dir/local.yml"
-    _ci_local_tmp="$(mktemp_adjacent "$_ci_local")" || return 1
-    {
-        echo "version: 1"
-        echo "worktree_root: $_ci_worktree_root"
-    } > "$_ci_local_tmp"
-    chmod 600 "$_ci_local_tmp" 2>/dev/null || true
-    atomic_replace "$_ci_local" "$_ci_local_tmp" || return 1
+    if [ "$_ci_write_shared" -eq 1 ]; then
+        init_write_shared_config "$_ci_root" "$_ci_force" "$_ci_json" || return 1
+    fi
 
     if [ "$_ci_trust" -eq 1 ]; then
         project_set_trusted || {
@@ -86,14 +85,132 @@ cmd_init() {
     fi
 
     if [ "$_ci_json" -eq 1 ]; then
+        [ -z "$INIT_MIGRATED_FILES" ] || echo "Note: removed generated $INIT_MIGRATED_FILES from an earlier Hydra; host-local settings live under the repository's .git directory" >&2
+        [ -z "$_ci_legacy_root" ] || echo "Note: imported worktree root $_ci_legacy_root from the removed .hydra/local.yml" >&2
         json_success init "{\"project_id\":\"$(json_escape "$_ci_project")\",\"profile\":\"$(json_escape "$_ci_profile")\",\"worktree_root\":\"$(json_escape "$_ci_worktree_root")\",\"trusted\":$_ci_trusted}"
-    else
-        echo "Initialized Hydra project $_ci_project"
-        echo "  profile: $_ci_profile"
-        echo "  worktree root: $_ci_worktree_root"
-        echo "  repository config trusted: $_ci_trusted"
-        [ "$_ci_trusted" = true ] || echo "Next: review .hydra/config.yml, then run 'hydra init --trust --profile $_ci_profile'"
+        return 0
     fi
+    [ -z "$INIT_MIGRATED_FILES" ] || echo "Removed generated $INIT_MIGRATED_FILES from an earlier Hydra; host-local settings live under the repository's .git directory."
+    [ -z "$_ci_legacy_root" ] || echo "Imported worktree root $_ci_legacy_root from the removed .hydra/local.yml."
+    # Report the standing approval, not only this invocation's --trust.
+    if [ "$_ci_trusted" = true ] || project_is_trusted "$_ci_root" 2>/dev/null; then
+        _ci_config_state="Repository config trusted."
+    elif [ "$(project_config_hash "$_ci_root" 2>/dev/null || echo none)" = none ]; then
+        _ci_config_state="No repository config."
+    else
+        _ci_config_state="Repository config not trusted."
+    fi
+    echo "Ready: $(basename "$_ci_root") (agent: $_ci_profile). Worktrees go in $_ci_worktree_root. $_ci_config_state"
+    echo "  project id: $_ci_project"
+    [ "$_ci_config_state" != "Repository config not trusted." ] || echo "  Next: review .hydra/, then run 'hydra init --trust'"
+}
+
+# Earlier releases wrote a content-free .hydra/config.yml stub. Match that exact
+# shape only; anything else is user configuration.
+init_config_is_generated_stub() {
+    awk '
+        NR == 1 && $0 != "version: 1" { exit 1 }
+        NR == 2 && $0 !~ /^profile: ?[A-Za-z0-9_-]*$/ { exit 1 }
+        NR == 3 && $0 != "setup:" { exit 1 }
+        NR > 3 { exit 1 }
+        END { exit NR == 3 ? 0 : 1 }
+    ' "$1"
+}
+
+# Earlier releases wrote .hydra/local.yml holding only version and worktree_root.
+init_local_is_generated() {
+    awk '
+        /^[[:space:]]*$/ { next }
+        /^#/ { next }
+        /^version: 1$/ { next }
+        /^worktree_root: / { next }
+        { exit 1 }
+    ' "$1"
+}
+
+init_path_is_tracked() {
+    git -C "$1" ls-files --error-unmatch -- "$2" >/dev/null 2>&1
+}
+
+# Print the worktree_root recorded by a generated .hydra/local.yml, if any.
+init_legacy_local_worktree_root() {
+    _illwr_local="$1/.hydra/local.yml"
+    [ -f "$_illwr_local" ] && [ ! -L "$_illwr_local" ] || return 0
+    init_local_is_generated "$_illwr_local" || return 0
+    sed -n 's/^worktree_root: //p' "$_illwr_local" | sed -n '1p'
+}
+
+# Remove the generated stub files and the exclude rule an earlier init left in
+# the source tree. Sets INIT_MIGRATED_FILES to a description of what was removed.
+init_migrate_generated_config() {
+    _imgc_root="$1"
+    _imgc_dir="$_imgc_root/.hydra"
+    INIT_MIGRATED_FILES=""
+    [ -d "$_imgc_dir" ] && [ ! -L "$_imgc_dir" ] || return 0
+    _imgc_config="$_imgc_dir/config.yml"
+    if [ -f "$_imgc_config" ] && [ ! -L "$_imgc_config" ] &&
+       init_config_is_generated_stub "$_imgc_config" &&
+       ! init_path_is_tracked "$_imgc_root" .hydra/config.yml; then
+        rm -f "$_imgc_config" || return 1
+        INIT_MIGRATED_FILES=".hydra/config.yml"
+    fi
+    _imgc_local="$_imgc_dir/local.yml"
+    if [ -f "$_imgc_local" ] && [ ! -L "$_imgc_local" ] &&
+       init_local_is_generated "$_imgc_local" &&
+       ! init_path_is_tracked "$_imgc_root" .hydra/local.yml; then
+        rm -f "$_imgc_local" || return 1
+        INIT_MIGRATED_FILES="${INIT_MIGRATED_FILES:+$INIT_MIGRATED_FILES and }.hydra/local.yml"
+    fi
+    # The exclude rule only ever covered the generated local.yml.
+    [ -e "$_imgc_local" ] || init_remove_exclude_rule || return 1
+    rmdir "$_imgc_dir" 2>/dev/null || true
+}
+
+init_remove_exclude_rule() {
+    _irer_common="$(hydra_git_common_dir)" || return 1
+    _irer_file="$_irer_common/info/exclude"
+    [ -f "$_irer_file" ] || return 0
+    grep -Fqx '.hydra/local.yml' "$_irer_file" 2>/dev/null || return 0
+    _irer_tmp="$(mktemp_adjacent "$_irer_file")" || return 1
+    grep -Fvx '.hydra/local.yml' "$_irer_file" > "$_irer_tmp" || [ $? -eq 1 ] || { rm -f "$_irer_tmp"; return 1; }
+    chmod 644 "$_irer_tmp" 2>/dev/null || true
+    atomic_replace "$_irer_file" "$_irer_tmp" || { rm -f "$_irer_tmp"; return 1; }
+}
+
+init_shared_config_template() {
+    cat <<'TEMPLATE'
+# Hydra shared repository configuration. Commit this file.
+# Hydra runs nothing from it until each host approves its exact content with:
+#   hydra init --trust
+version: 1
+# Commands run inside every new worktree before its session starts.
+setup:
+#   - npm install
+# Windows, panes, and startup commands are documented under "YAML Config" in
+# docs/USAGE.md.
+TEMPLATE
+}
+
+# Usage: init_write_shared_config <root> <force> <json>
+init_write_shared_config() {
+    _iwsc_root="$1"
+    _iwsc_force="$2"
+    _iwsc_json="$3"
+    _iwsc_dir="$_iwsc_root/.hydra"
+    _iwsc_config="$_iwsc_dir/config.yml"
+    if [ -e "$_iwsc_config" ] && [ "$_iwsc_force" -ne 1 ]; then
+        cli_error init config_exists ".hydra/config.yml already exists" "review it, or rerun with --force to replace it"
+        return 1
+    fi
+    if [ "$_iwsc_json" -ne 1 ]; then
+        echo "Writing .hydra/config.yml (shared repository configuration; commit it):"
+        init_shared_config_template | sed 's/^/  | /'
+    fi
+    mkdir -p "$_iwsc_dir" || return 1
+    _iwsc_tmp="$(mktemp "$_iwsc_dir/.config.XXXXXX")" || return 1
+    init_shared_config_template > "$_iwsc_tmp" || { rm -f "$_iwsc_tmp"; return 1; }
+    chmod 644 "$_iwsc_tmp" 2>/dev/null || true
+    mv "$_iwsc_tmp" "$_iwsc_config" || { rm -f "$_iwsc_tmp"; return 1; }
 }
 
 cmd_agent() {

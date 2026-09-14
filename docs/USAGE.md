@@ -99,7 +99,8 @@ hydra gc --policy orphaned --dry-run
 hydra worktree doctor status
 
 # System
-hydra init --profile claude --trust
+hydra init --profile claude --trust      # host-local registration; source tree unchanged
+hydra init --write-shared-config         # opt-in committed .hydra/config.yml
 hydra agent list
 hydra capabilities --json
 hydra state verify
@@ -248,6 +249,28 @@ the native helpers.
 Supported systems and upgrade policy are in the root README and [Contracts](CONTRACTS.md).
 Existing 1.9 installations should review the state backup and migration guidance
 in [Contracts](CONTRACTS.md) before removing their backup.
+
+## Project registration and shared config
+
+`hydra init` registers the repository on the current host only. Its identity,
+default agent profile, worktree root, and trust decision live under the
+repository's Git common directory (`.git/hydra/`), so the source tree and
+`git status` stay unchanged. Rerunning `hydra init` keeps the stored profile and
+worktree root unless you pass `--profile`, `--no-agent`, or `--worktree-root`.
+
+Shared repository configuration is an explicit opt-in:
+`hydra init --write-shared-config` previews and writes a commented
+`.hydra/config.yml` template meant to be committed; `--force` replaces an
+existing file. The template runs nothing by itself, and every host still has to
+approve the exact content with `hydra init --trust` before setup commands,
+startup commands, or repository workflows execute.
+
+Earlier releases left a generated `.hydra/config.yml` stub and `.hydra/local.yml`
+in the tree and added an `.git/info/exclude` rule for the latter. The next
+`hydra init` removes exactly those generated files and that rule, imports a
+differing `worktree_root` from `local.yml` into the host record, and reports the
+migration once. Tracked files and any `.hydra/config.yml` with real content are
+never removed.
 
 ## YAML Config (optional)
 

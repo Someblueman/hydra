@@ -23,9 +23,18 @@ mv "$fixture/changed.yml" .hydra/workflows/local.yml
 "$root/bin/hydra" workflow validate local > "$fixture/result" 2>&1
 assert_failure $? "nested local.yml change invalidates trust"
 "$root/bin/hydra" init --no-agent --trust >/dev/null || exit 1
-printf '\n# host-local setting\n' >> .hydra/local.yml
+# Leftovers from an earlier init: an untracked stub and host-local record.
+printf 'version: 1\nprofile: none\nsetup:\n' > .hydra/config.yml
+printf 'version: 1\nworktree_root: %s\n' "$fixture/legacy-root" > .hydra/local.yml
+printf '.hydra/local.yml\n' >> "$(git rev-parse --git-common-dir)/info/exclude"
+"$root/bin/hydra" init --no-agent --trust >/dev/null || exit 1
+if [ ! -e .hydra/config.yml ] && [ ! -e .hydra/local.yml ]; then
+    assert_success 0 "generated stub files from an earlier init are removed"
+else
+    assert_success 1 "generated stub files from an earlier init are removed"
+fi
 "$root/bin/hydra" workflow validate local >/dev/null 2>&1
-assert_success $? "root host-local file remains excluded"
+assert_success $? "reviewed workflows stay approved after migration"
 cp .hydra/workflows/local.yml "$fixture/external.yml"
 ln -s "$fixture/external.yml" .hydra/workflows/linked.yml
 "$root/bin/hydra" workflow validate linked > "$fixture/result" 2>&1
@@ -50,11 +59,11 @@ rm .hydra/pipe
 assert_success $? "regular configuration can be approved again"
 mv .hydra "$fixture/config"
 ln -s "$fixture/config" .hydra
-printf '# preserve this destination\n' >> "$fixture/config/local.yml"
-cp "$fixture/config/local.yml" "$fixture/local-before"
+printf '# preserve this destination\n' >> "$fixture/config/workflows/local.yml"
+cp "$fixture/config/workflows/local.yml" "$fixture/local-before"
 "$root/bin/hydra" init --no-agent --trust >/dev/null 2>&1
 assert_failure $? "trust refuses a linked configuration root"
-cmp -s "$fixture/config/local.yml" "$fixture/local-before"
+cmp -s "$fixture/config/workflows/local.yml" "$fixture/local-before"
 assert_success $? "failed initialization preserves the linked destination"
 rm .hydra
 mv "$fixture/config" .hydra
