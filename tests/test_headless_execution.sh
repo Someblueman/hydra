@@ -18,8 +18,11 @@ printf 'headless\n' > "$repo/README"
 git -C "$repo" add README
 git -C "$repo" commit -qm initial
 
+# A version probe (status, doctor) is not terminal use; only real tmux
+# commands must stay absent from a terminal-free flow.
 cat > "$fake/tmux" <<EOF
 #!/bin/sh
+[ "\${1:-}" = -V ] && { printf 'tmux 3.4\n'; exit 0; }
 printf '%s\n' "\$*" >> "$tmux_log"
 exit 99
 EOF
