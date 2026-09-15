@@ -40,7 +40,7 @@ _kill_preflight() {
     _pf_path="$(get_head_worktree_path "$_pf_branch" || true)"
     if [ -n "$_pf_path" ] && [ -d "$_pf_path" ]; then
         _pf_norm="$(normalize_path "$_pf_path")"
-        if ! check_worktree_removable "$_pf_norm"; then
+        if ! check_worktree_removable "$_pf_norm" "${kill_protect_untracked:-false}"; then
             echo "Error: Refusing to kill '$_pf_branch'; session and state left intact" >&2
             return 1
         fi

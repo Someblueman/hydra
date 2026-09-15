@@ -243,7 +243,7 @@ create_worktree() {
 }
 
 # Check whether a worktree is safe to remove (dirty / untracked policy).
-# Usage: check_worktree_removable <path>
+# Usage: check_worktree_removable <path> [protect-untracked: true|false]
 # Returns: 0 if removal may proceed, 1 if dirty or the user aborted
 check_worktree_removable() {
     path="$1"
@@ -259,6 +259,10 @@ check_worktree_removable() {
     fi
 
     if [ -n "$(git -C "$path" ls-files --others --exclude-standard -- 2>/dev/null)" ]; then
+        if [ "${2:-false}" = true ]; then
+            echo "Error: Worktree has untracked files; commit, stash or remove them first" >&2
+            return 1
+        fi
         if [ -z "${HYDRA_NONINTERACTIVE:-}" ] && [ -z "${CI:-}" ]; then
             echo "Warning: Worktree has untracked files" >&2
             printf "Continue anyway? [y/N] "

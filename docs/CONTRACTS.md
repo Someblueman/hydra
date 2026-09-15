@@ -255,3 +255,24 @@ from compatibility impact. Public interfaces remain functional for at least one
 minor-release window before removal, except where a security or integrity fix
 requires immediate removal with migration guidance. Releases are cut only from the
 exact qualified commit; local checks do not publish or grant release-write access.
+
+## Head-associated planning proposals (2.7 development)
+
+`hydra workflow plan propose <draft.json> [--branch <head>]` atomically publishes a
+strict, bounded JSON draft under the selected head's `planning/draft.json`. Without
+`--branch`, the current Git branch identifies the head. Head and instance identity
+from an agent launcher must match the current recorded owner. The head lock
+serializes replacement; malformed input preserves the previous draft. A proposal
+is durable input, not a validation, approval, or execution receipt.
+
+`hydra workflow plan proposal <head>` is read-only and fails if the draft or policy
+is absent. Explicit `--local-policy` writes the local policy preset. Success emits
+`HYDRA_PLAN_PROPOSAL<TAB>1`, followed by
+`P<TAB>absolute-draft-path<TAB>absolute-policy-path`, each newline terminated.
+Paths containing tabs/newlines are refused. Native validation snapshots both files;
+changed bytes invalidate the compiled revision and its exact-digest approval.
+
+The private attachment helper accepts an optional absolute tmux socket after the
+head and instance IDs. Nested native clients carry their observed server selection
+explicitly across the PTY boundary. Session, head and instance checks run against
+that same server before attachment; closing the client preserves the session.

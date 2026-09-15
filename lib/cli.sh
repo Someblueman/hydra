@@ -117,6 +117,7 @@ Commands:
   kill --group <n>  Kill all sessions in a group
                     Options:
                       --force          Skip confirmation prompt
+                      --protect-untracked  Refuse ordinary untracked worktree files
   group <branch>    Show or set group for a session
                     Usage:
                       group <branch>           Show current group

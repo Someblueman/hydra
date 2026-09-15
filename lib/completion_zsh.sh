@@ -160,6 +160,7 @@ _hydra() {
                 kill)
                     _arguments \
                         '--all[Kill all hydra sessions]' \
+                        '--protect-untracked[Refuse untracked worktree files]' \
                         '--force[Skip confirmation prompt]' \
                         '1:branch:_hydra_branches'
                     ;;

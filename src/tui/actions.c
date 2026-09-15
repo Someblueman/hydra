@@ -41,40 +41,6 @@ void show_result(struct app *app, const char *title, const char *text) {
     app->help = false;
 }
 
-static void spawn_action(struct app *app) {
-    char branch[TEXT] = "", profile[TEXT] = "", template[TEXT] = "", layout[TEXT] = "";
-    char *argv[11];
-    size_t count = 0U;
-    if (prompt_text(app, "Branch to spawn: ", branch, sizeof(branch)) != 0 || branch[0] == '\0') return;
-    if (prompt_text(app, "Profile (blank=project default, none=no agent): ", profile, sizeof(profile)) != 0) return;
-    if (prompt_text(app, "Template (optional): ", template, sizeof(template)) != 0) return;
-    if (prompt_text(app, "Layout (blank=default, dev, full): ", layout, sizeof(layout)) != 0) return;
-    argv[count++] = (char *)app->hydra;
-    argv[count++] = (char *)"spawn";
-    argv[count++] = branch;
-    if (strcmp(profile, "none") == 0) {
-        argv[count++] = (char *)"--no-agent";
-    } else if (profile[0] != '\0') {
-        argv[count++] = (char *)"--profile";
-        argv[count++] = profile;
-    }
-    if (template[0] != '\0') {
-        argv[count++] = (char *)"--template";
-        argv[count++] = template;
-    }
-    if (layout[0] != '\0') {
-        argv[count++] = (char *)"--layout";
-        argv[count++] = layout;
-    }
-    argv[count] = NULL;
-    (void)run_argv(app, argv);
-}
-
-void new_task_action(struct app *app) {
-    if (app->fleet) { copy_text(app->notice, sizeof(app->notice), "Remote tasks start on their host; use hydra fleet task"); return; }
-    spawn_action(app);
-}
-
 void group_marked_action(struct app *app) {
     char group[TEXT] = "";
     char *argv[MAX_HEADS + 5U];
@@ -136,7 +102,7 @@ static bool removal_confirmed(struct app *app, size_t count, const char *names) 
 /* Remove one head through the shell CLI, recording the outcome. */
 static void remove_one(struct app *app, char *target, size_t index, struct removal *r) {
     const struct head *head = head_for_branch(app, target);
-    char *argv[] = {(char *)app->hydra, (char *)"kill", target, NULL};
+    char *argv[] = {(char *)app->hydra, (char *)"kill", target, (char *)"--protect-untracked", NULL};
     int status;
     if (head != NULL && app->current_session[0] != '\0' && strcmp(head->session, app->current_session) == 0) {
         text_append(r->transcript, sizeof(r->transcript), "== %s\nSkipped: this is the terminal you are using right now.\n\n", target);
@@ -272,7 +238,7 @@ void execute_palette(struct app *app, const char *query) {
     }
     chosen = match_palette(query);
     if (chosen == NULL) { copy_text(app->notice, sizeof(app->notice), "no explicit local action matched"); return; }
-    if (chosen->scope == ACTION_SPAWN) { spawn_action(app); return; }
+    if (chosen->scope == ACTION_SPAWN) { new_task_action(app); return; }
     if (chosen->scope == ACTION_REMOVE) { remove_heads_action(app); return; }
     argv[count++] = (char *)app->hydra;
     argv[count++] = (char *)chosen->command;

@@ -486,3 +486,8 @@ include scripts/native-tests.mk
 
 include scripts/fleet-tests.mk
 include scripts/shell-tests.mk
+
+.PHONY: test-usability
+USABILITY_OUTPUT ?= $(BUILD_DIR)/usability-$(shell date +%Y%m%d-%H%M%S)
+test-usability: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
+	python3 scripts/usability.py --output "$(USABILITY_OUTPUT)"

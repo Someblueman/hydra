@@ -14,7 +14,8 @@ features are outside the qualification matrix until exercised explicitly.
 | UTF-8 text | Incremental decoding; invalid scalars become `?`; shared wide/combining cell rules |
 | CR, LF, VT, FF, BS, HT | Cursor movement; HT uses eight-column tab stops |
 | ESC D/E/M | Index, next line, reverse index |
-| ESC 7/8, CSI s/u | Save/restore cursor and rendition |
+| ESC 7/8, CSI s/u | Save/restore cursor, rendition and G0/G1 character sets |
+| ESC ( 0/B, ESC ) 0/B, SI/SO | DEC special graphics / ASCII designation and G0/G1 selection |
 | CSI A/B/C/D/E/F/G/H/f/d/a/e | Bounded relative/absolute cursor movement |
 | CSI J/K/X | Erase display/line/characters; J=3 clears retained history |
 | CSI @/P/L/M/S/T | Insert/delete characters or lines; scroll within margins |
@@ -37,8 +38,8 @@ terminal. Only rendered cells and presenter-generated cursor/style sequences rea
 it. Incomplete UTF-8 is resolved at EOF; incomplete escape strings are discarded.
 
 Unsupported operations increment an observation counter where recognized. That
-counter is diagnostic, not a conformance score. Character-set designation is
-consumed but not implemented; DEC graphics, custom tab stops, reflow, emoji joining,
+counter is diagnostic, not a conformance score. Other character-set designations are
+consumed but not implemented; custom tab stops, reflow, emoji joining,
 full keyboard protocols, palette mutation and terminal graphics remain outside
 this milestone. Unsupported SGR attributes are not silently treated as supported.
 

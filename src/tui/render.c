@@ -546,13 +546,19 @@ static void render_detail_checks(struct app *app, const struct head *head) {
 
 static void render_detail_preview(struct app *app) {
     char preview[sizeof(app->preview_text)];
-    char *line, *save = NULL;
+    char *line, *next;
     section(app, "TERMINAL OUTPUT");
+    linef(app, "Read-only, clipped plain-text excerpt; a opens live input.");
     copy_text(preview, sizeof(preview), app->preview_text[0] ? app->preview_text : "No terminal output available.");
-    line = strtok_r(preview, "\r\n", &save);
-    while (line != NULL && app->line < app->limit) {
+    line = preview;
+    while (*line && app->line < app->limit) {
+        next = strchr(line, '\n');
+        if (next) *next++ = '\0';
+        size_t length = strlen(line);
+        if (length && line[length - 1] == '\r') line[length - 1] = '\0';
         linef(app, "%s", line);
-        line = strtok_r(NULL, "\r\n", &save);
+        if (!next) break;
+        line = next;
     }
 }
 

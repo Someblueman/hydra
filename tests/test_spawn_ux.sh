@@ -79,9 +79,18 @@ run_in_tty() {
         "cd '$test_base_dir/repo' && HYDRA_HOME='$HYDRA_HOME' HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_LOCK_RETRIES=1 $_rit_cmd; printf '__HYDRA_RC=%s__\\n' \$?; sleep 300" \
         || return 1
     _rit_i=0
+    tty_workspace=0
     while [ "$_rit_i" -lt 120 ]; do
         tty_output="$(tmux -L "$tty_server" capture-pane -p -t "$_rit_name" -S - 2>/dev/null || true)"
         case "$tty_output" in *__HYDRA_RC=*__*) break ;; esac
+        case "$tty_output" in
+            *"Typing goes to the agent"*)
+                if [ "$tty_workspace" -eq 0 ]; then
+                    tty_workspace=1
+                    tmux -L "$tty_server" send-keys -t "$_rit_name" C-b q
+                fi
+                ;;
+        esac
         sleep 0.5
         _rit_i=$((_rit_i + 1))
     done
@@ -156,6 +165,7 @@ if tmux -L "$tty_server" -V >/dev/null 2>&1; then
     echo "Testing interactive spawn stays in the current terminal by default..."
     if run_in_tty ux-default "'$HYDRA_BIN' spawn tty/default --no-agent"; then
         assert_equal "0" "$tty_rc" "interactive spawn succeeds"
+        assert_equal "1" "$tty_workspace" "interactive spawn opens agent input inside Hydra"
         assert_not_contains "$tty_output" "Switching to session" "interactive spawn does not attach by default"
         assert_not_contains "$tty_output" "not in terminal" "interactive spawn saw a terminal"
         assert_contains "$tty_output" "Head 'tty/default' created" "context block names the head"
@@ -194,6 +204,7 @@ if tmux -L "$tty_server" -V >/dev/null 2>&1; then
     echo "Testing interactive spawn --resume prints the context block..."
     if run_in_tty ux-resume "'$HYDRA_BIN' kill tty/default --force >/dev/null 2>&1; '$HYDRA_BIN' spawn tty/default --no-agent --resume"; then
         assert_equal "0" "$tty_rc" "interactive spawn --resume succeeds"
+        assert_equal "1" "$tty_workspace" "resume opens agent input inside Hydra"
         assert_contains "$tty_output" "Head 'tty/default' resumed" "resumed head prints the context block"
         assert_not_contains "$tty_output" "Switching to session" "resumed head does not attach by default"
     else

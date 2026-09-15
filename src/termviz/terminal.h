@@ -7,6 +7,8 @@ struct tv_screen {
     int x, y, saved_x, saved_y, top, bottom;
     bool wrap_pending;
     struct tv_cell saved_pen;
+    bool saved_graphics[2];
+    unsigned saved_charset;
 };
 /* Caller owns all storage, including primary/alternate screens and history.
  * Arrays must not overlap. Each screen holds max_columns * max_rows cells;
@@ -24,6 +26,8 @@ struct tv_terminal_model {
     unsigned mouse_mode;
     bool mouse_sgr;
     unsigned parser_state, parameter_count, parameters[16];
+    bool graphics[2];
+    unsigned active_charset, charset_target;
     bool parameter_present[16], private_mode, invalid_sequence;
     unsigned char utf8[4];
     size_t utf8_length;

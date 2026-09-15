@@ -51,6 +51,8 @@ void native_workspace_mode(struct app *app, int mode) {
         w->layout.panes[3].min_width=40; w->layout.focus=3; w->zoom=false;
     }
     w->mode=mode; app->view=7;
+    /* Explicit plan/monitor navigation keeps keys in Hydra, not the agent. */
+    if (mode!=0) w->layout.focus=6;
     native_workspace_show_terminal(app,false);
     native_workspace_invalidate(app);
 }
@@ -430,8 +432,8 @@ static const char *layout_hints(const struct native_workspace *w, int width) {
     if (w->compact) return w->mode == 2 ? "Y approve  N reject  Tab pane  q quit" : "Tab pane  a agent  ? help  q quit";
     if (w->mode == 2) return width < 100 ? "Y approve  N reject  R resume  X cancel  A conversation  ? help  q quit" :
         "[/] run  Y approve  N reject  R resume  X cancel  A conversation  B plan  Tab pane  ? help  q quit";
-    if (w->mode == 1) return width < 100 ? "P load  V validate  E approve  A conversation  ? help  q quit" :
-        "P load draft  V validate  E approve exact revision  A conversation  C monitor  Tab pane  ? help  q quit";
+    if (w->mode == 1) return width < 100 ? "P proposal / I import  V validate  E approve  A conversation  ? help  q quit" :
+        "P proposal / I import draft  V validate  E approve exact revision  A conversation  C monitor  Tab pane  ? help  q quit";
     return NULL;
 }
 

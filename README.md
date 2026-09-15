@@ -30,6 +30,10 @@ without typing bootstrap into the shell, and opens the control centre from a bar
 `hydra`. Install the [latest release](https://github.com/Someblueman/hydra/releases/latest)
 and see the [changelog](CHANGELOG.md) for features and upgrade notes.
 
+Development toward 2.7 adds guided conversation-to-plan handoff and installed
+journey checks; see [the roadmap](docs/ROADMAP.md#next-target-270-reliability-baseline)
+and [usability testing](docs/USABILITY-TESTING.md) for completed work and remaining gates.
+
 ## What you can do
 
 - **Lead from native mission control.** Browse heads, inspect activity and changes,

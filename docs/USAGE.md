@@ -8,6 +8,33 @@ planning in v2.2.0. Version 2.6.0 changes the interactive `spawn` default, keeps
 
 ## Starting out
 
+On the 2.7 development branch, open `hydra` in your repository and press `n`.
+Enter a task name, choose an available agent profile (`none` opens a shell), then
+enter an objective or leave it blank to start a conversation. Hydra registers the
+project, creates the head and opens agent input in the same workspace. Opening
+Hydra alone does not start work. Provider sign-in and permission prompts remain
+visible in the agent pane; existing repository trust checks still apply.
+
+For a plan, ask the agent to author a draft using `hydra workflow plan schema` and
+publish it with `hydra workflow plan propose <draft.json>` from its head. Press
+`Ctrl-B Tab` to return input to Hydra, `B` for the plan, and `P` to review the
+proposal with the bounded local policy. `V` validates and compiles it; `E` requires
+the exact displayed digest before execution. Republished drafts invalidate prior
+validation. `I` retains explicit file import for expert use. The local policy
+allows sh/git, one worker, four heads, 300 seconds and 1 MiB of artifacts, with no
+retries or repairs. It governs the compiled workflow, not the agent process's OS
+permissions. Agent proposals alone never authorize execution.
+
+Interactive `spawn` and `spawn --resume` now open agent input inside the control
+centre. `--attach` selects direct tmux attachment; `HYDRA_NO_SWITCH`, headless and
+non-TTY invocations retain their existing behavior. `Ctrl-B Tab` returns input to
+Hydra, `Ctrl-B x` closes only the attached client, and `Ctrl-B q` exits the UI.
+
+UI removal refuses ordinary untracked files as well as tracked changes. The CLI
+exposes the same protection as `hydra kill <branch> --protect-untracked`; existing
+noninteractive CLI cleanup behavior is unchanged when that flag is omitted.
+Ignored files retain the existing Git removal semantics.
+
 - `hydra` with no arguments opens the control centre (`hydra tui`) when you run it
   from a terminal inside a Git repository. Outside a repository, or without a
   terminal, it prints a short usage with the most common commands.
@@ -24,7 +51,7 @@ planning in v2.2.0. Version 2.6.0 changes the interactive `spawn` default, keeps
   `hydra list --json` is unchanged.
 
 ```sh
-# Create a new head for a branch (tmux + worktree); stays in this terminal
+# Create a new head (tmux + worktree); opens agent input inside Hydra
 hydra spawn feature-branch [-l default|dev|full]
 hydra spawn feature-branch --dry-run --no-agent
 hydra spawn feature-branch --profile claude --prompt "Implement the task"

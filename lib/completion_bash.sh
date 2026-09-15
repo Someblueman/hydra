@@ -103,7 +103,7 @@ _hydra_completion() {
             # Complete with git branch names or --all flag
             case "${cur}" in
                 -*)
-                    COMPREPLY=($(compgen -W "--all --force --transcript" -- ${cur}))
+                    COMPREPLY=($(compgen -W "--all --force --protect-untracked --transcript" -- ${cur}))
                     ;;
                 *)
                     local branches=$(git branch 2>/dev/null | sed 's/^[ *]*//' | grep -v '^(')

@@ -196,7 +196,8 @@ static bool same_terminal(const struct termios *left, const struct termios *righ
 }
 
 static void execute_test_tui(const char *tui_path, const char *hydra_path) {
-    if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "heads", (char *)NULL);
+    if (getenv("HYDRA_TEST_PUBLIC_ENTRY")) execl(hydra_path, hydra_path, (char *)NULL);
+    else if (getenv("HYDRA_TEST_FLEET_ATTACH")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "heads", (char *)NULL);
     else if (getenv("HYDRA_TEST_FLEET_VIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--fleet", "--view", "hosts", (char *)NULL);
     else if (getenv("HYDRA_TEST_OVERVIEW")) execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "overview", (char *)NULL);
     else execl(tui_path, tui_path, "--hydra", hydra_path, "--view", "heads", (char *)NULL);
@@ -662,18 +663,14 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     write_input(session.master, ":", 1U);
     (void)wait_for_marker(&session, "Action search:", 1000);
     write_input(session.master, "spawn\n", 6U);
-    (void)wait_for_marker(&session, "Branch to spawn:", 1000);
+    (void)wait_for_marker(&session, "Task name:", 1000);
     write_input(session.master, "feature-native\n", 15U);
-    (void)wait_for_marker(&session, "Profile (blank=project default, none=no agent):", 1000);
+    (void)wait_for_marker(&session, "Agent profile", 1000);
     write_input(session.master, "codex\n", 6U);
-    (void)wait_for_marker(&session, "Template (optional):", 1000);
-    write_input(session.master, "review\n", 7U);
-    (void)wait_for_marker(&session, "Layout (blank=default, dev, full):", 1000);
-    write_input(session.master, "full\n", 5U);
-    result(wait_for_marker(&session, "FAKE SPAWN spawn feature-native --profile codex --template review --layout full", 1000),
-           "spawn builds explicit profile, template, and layout argv");
+    (void)wait_for_marker(&session, "Objective", 1000);
     write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "HYDRA / ", 1000), "spawn returns to native raw mode");
+    result(wait_for_marker(&session, "Task started; opening its agent pane", 2000),
+           "new task launches through captured CLI without a return acknowledgement");
     write_input(session.master, "A", 1U);
     result(wait_for_marker(&session, "3 marked", 1000), "select-all marks every visible head");
     write_input(session.master, "G", 1U);

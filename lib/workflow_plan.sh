@@ -11,6 +11,10 @@ workflow_plan_tool() (
 cmd_workflow_plan() (
     _cwp_action="${1:-}"
     case "$_cwp_action" in
+        propose|proposal)
+            _load_lib workflow_plan_proposal
+            workflow_plan_proposal "$@"
+            ;;
         --workspace-owner|--workspace-status)
             _load_lib workflow_plan_launch
             shift
@@ -86,6 +90,8 @@ cmd_workflow_plan() (
         ''|-h|--help)
             printf '%s\n' \
                 'Usage: hydra workflow plan schema' \
+                '       hydra workflow plan propose <draft.json> [--branch <head>]' \
+                '       hydra workflow plan proposal <head> [--local-policy]'  \
                 '       hydra workflow plan validate <plan.json> <policy.json>' \
                 '       hydra workflow plan compile <plan.json> <policy.json> <new-output.json>' \
                 '       hydra workflow plan show <compiled.json> [--json]' \

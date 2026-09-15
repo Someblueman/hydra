@@ -65,6 +65,12 @@ case "${1:-}:${2:-}" in
     dashboard:)
         printf '%s\n' "FAKE DASHBOARD"
         ;;
+    agent:list)
+        printf "PROFILE AVAILABLE\ncodex yes\nnone yes\n"
+        ;;
+    init:*)
+        printf "Ready: fixture\n"
+        ;;
     spawn:*)
         printf 'FAKE SPAWN %s\n' "$*"
         ;;

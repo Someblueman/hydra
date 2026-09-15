@@ -86,6 +86,11 @@ assert_success $? "local lifecycle notification is configured"
 notify_output="$("$HYDRA_BIN" outcome lifecycle-test "done" --actor agent --summary "tests passed" 2>&1)"
 assert_success $? "current instance declares an outcome"
 case "$notify_output" in *'[notify]'*) assert_success 0 "named lifecycle event reaches the local sink" ;; *) assert_success 1 "named lifecycle event reaches the local sink" ;; esac
+try_lock "state_${project_id}" "test outcome contention"
+HYDRA_LOCK_RETRIES=1 "$HYDRA_BIN" outcome lifecycle-test failed --actor agent >/dev/null 2>&1
+assert_failure $? "explicit short outcome contention policy remains fail closed"
+release_lock "state_${project_id}"
+assert_equal "done" "$(sed -n '1p' "$head_dir/instances/$old_instance/declared-outcome")" "refused outcome preserves the recorded declaration"
 notify_repeat="$("$HYDRA_BIN" outcome lifecycle-test "done" --actor agent 2>&1)"
 case "$notify_repeat" in *'[notify]'*) assert_success 1 "notification sink is rate limited" ;; *) assert_success 0 "notification sink is rate limited" ;; esac
 "$HYDRA_BIN" wait lifecycle-test --for outcome=done --timeout 1 >/dev/null

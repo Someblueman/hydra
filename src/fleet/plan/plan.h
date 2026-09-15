@@ -13,6 +13,7 @@ json_object *plan_cli(int argc, char **argv);
 /* Offline inspections borrow paths and return caller-owned JSON. */
 json_object *plan_inspect_cli(int argc, char **argv);
 json_object *plan_read(const char *path);
+json_object *plan_proposal_copy(const char *input, const char *output);
 /* Borrows NUL-terminated JSON text; checks member uniqueness and exact signed integer tokens. */
 bool plan_json_unique(const char *text);
 json_object *plan_canonical(json_object *value);

@@ -68,6 +68,19 @@ static void history(const char *screen, char *out, size_t cap) {
     out[at] = 0;
     regfree(&r);
 }
+static void styled_output(struct tv_session *s) {
+    bool colored = false;
+    tv_send(s, "printf '\\033[31mCOLORED\\033[0m\\n\\033(0lqqk\\033(B\\ncaf\\303\\251 \\347\\225\\214\\n'\r");
+    tv_until(s, "┌──┐", 5);
+    tv_until(s, "café 界", 5);
+    for (int i = 0; i < s->screen.cols * s->screen.rows; i++) {
+        const struct tv_cell *cell = &s->screen.cells[i];
+        if (!strcmp(cell->text, "C") && cell->fg == 0xcd3131) colored = true;
+    }
+    save(s, "unicode-graphics-color", s->screen.cols, s->screen.rows);
+    CHECK(colored, "ANSI red survives the tmux and native render path");
+}
+
 int main(void) {
     struct tv_session s;
     char path[4096], one[4096], two[4096], pids[8192], branch[2][256], session[256], head[256],
@@ -80,7 +93,7 @@ int main(void) {
     const long snapshot_delay = (HYDRA_TUI_LOCAL_CAPTURE_BUDGET_MS + 999L) / 1000L + 2L;
     tv_init();
     hf_init(&f, "hydra-attached", "repo", false, true);
-    setenv("NO_COLOR", "1", 1);
+    unsetenv("NO_COLOR"); /* This case explicitly verifies terminal color. */
     hf_file(&f, "input", path, sizeof(path));
     tv_write(path, "attachment\n");
     hf_commit_init(&f);
@@ -151,6 +164,7 @@ int main(void) {
     S("printf 'one' > attachment-proof\r");
     tv_pump(&s, .5);
     proof(one, "attachment-proof", "one");
+    styled_output(&s);
     tv_write(slow, "");
     for (i = 0; i < 30 && !tv_exists(started); i++)
         tv_pump(&s, .1);

@@ -7,14 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Start a conversation inside Hydra with task name, available agent profile and
+  optional objective; project registration and agent input stay in the workspace.
+- Publish head-associated agent drafts with `workflow plan propose`. Review with
+  `B` then `P`, choose a bounded local policy, validate with `V`, and approve an exact
+  revision with `E`. Draft replacement invalidates validation; `I` imports files.
+- `make test-usability` installs a fresh prefix and runs five bounded journeys at
+  two terminal widths, retaining HTML, actions, raw output and independent checks.
+
 ### Changed
 
+- Interactive spawn and resume open the task's input inside Hydra. Explicit
+  `--attach`, non-TTY, headless and `HYDRA_NO_SWITCH` behavior is preserved.
+- Label Details output as a read-only, clipped plain-text excerpt and preserve its
+  blank lines; open the attached pane for live terminal styling and input.
 - Run independent shell tests with bounded parallelism and private temporary
   files/tmux sockets, preserving per-case logs and serializing shared fixtures.
   Nested shell and Fleet suites share Make's jobserver to avoid oversubscription.
 
 ### Fixed
 
+- Let simultaneous agent outcome declarations wait through brief project-state
+  lock contention, retaining a bounded wait and explicit retry overrides.
+- Refuse untracked worktree files during UI removal; expose the same opt-in CLI
+  behavior with `kill --protect-untracked`.
+- Keep plan/monitor focus in Hydra and preserve the tmux server when opening an
+  attached client from a nested control centre.
+- Render DEC special graphics in attached terminal output instead of repeated
+  letters, including split sequences, shifts and saved character sets.
 - Preserve real untracked configuration during init's generated-stub migration.
 - Bound captured TUI actions across pipe EOF, continuous output and termination;
   report interrupted actions as unknown instead of success.

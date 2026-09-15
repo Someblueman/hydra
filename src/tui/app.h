@@ -59,6 +59,7 @@ struct app {
     size_t marked_count;
     char current_session[TEXT];
     char search[TEXT];
+    char pending_task[TEXT];
     char notice[TEXT];
     char snapshot_error[TEXT];
     char preview_text[4096];

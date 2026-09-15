@@ -44,9 +44,20 @@ active-head execution selection, and benchmark qualification. Regression tests
 must retain the demonstrated failure boundaries. Improve test runtime through
 measured scheduling and fixture changes without dropping acceptance coverage.
 
-Then complete a bounded local objective-to-result journey (U3/U17), the initial
-installed journeys (U18), and their real-provider/input/review acceptance
-(the local part of U5 plus U14/U16/I4). Existing Fleet behavior retains its gates;
+The second implementation batch adds in-app conversation launch, head-associated
+agent proposals with guided local policy, invalidation on revision and exact-digest
+approval (U3/U17). `make test-usability` covers five installed journeys at 80/140
+columns, including checked delivery (U18). One existing-login Claude planning task
+published and validated a proposal within a five-minute cap. Input/resize/return
+and nested tmux attachment have deterministic acceptance; untracked removal,
+concurrent outcome declaration and DEC graphics defects found by the sweeps are
+fixed. Independent native capture checks Unicode, line drawing and ANSI color.
+These are local qualifications,
+not closure of U3/U17/U18's full acceptance criteria.
+
+Complete the remaining real-provider/output/review acceptance (the local part of
+U5 plus U14/U16/I4), including styled diffs, long-output comparisons, actual-terminal
+human review and goal-only discoverability. Existing Fleet behavior retains its gates;
 one real-host workflow still needs explicit qualification. New scheduling, task
 pools, automatic placement and remote onboarding remain outside this target.
 These priorities do not close the open acceptance items below or establish a
