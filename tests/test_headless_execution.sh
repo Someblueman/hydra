@@ -52,6 +52,8 @@ check test "$(sed -n '1p' "$head_dir/session")" = -
 check test "$(sed -n '1p' "$head_dir/desired-state")" = headless
 check "$root/bin/hydra" state verify >/dev/null 2>&1
 check "$root/bin/hydra" list --json >/dev/null 2>&1
+"$root/bin/hydra" list > "$base/list.txt"
+check grep -Eq 'headless-check[[:space:]]+none[[:space:]]+idle[[:space:]]' "$base/list.txt"
 check "$root/bin/hydra" status --json >/dev/null 2>&1
 
 wt="$(sed -n '1p' "$head_dir/worktree")"

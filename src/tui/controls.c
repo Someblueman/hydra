@@ -12,6 +12,7 @@ static const char *control_outcome(int status, bool fleet) {
 }
 void native_controls_tick(struct app *app) {
     size_t i;
+    action_capture_reap(app);
     for (i=0;i<4;i++) if (app->control_pids[i]>0) {
         int status=0;
         pid_t result=waitpid(app->control_pids[i],&status,WNOHANG);

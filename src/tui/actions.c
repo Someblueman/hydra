@@ -32,100 +32,6 @@ static int run_argv(struct app *app, char *const argv[]) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 
-/* Run a command with stdin closed and both output streams captured. The UI
- * keeps painting while waiting; the budget bounds a hung command. */
-static char **noninteractive_environment(void) {
-    size_t count = 0, i;
-    char **envp;
-    while (environ && environ[count]) count++;
-    envp = calloc(count + 2, sizeof(*envp));
-    if (!envp) return NULL;
-    for (i = 0; i < count; i++) envp[i] = environ[i];
-    envp[count] = (char *)"HYDRA_NONINTERACTIVE=1";
-    return envp;
-}
-
-/* Start argv with stdin closed and stdout/stderr on one non-blocking pipe. */
-static int captured_spawn(char *const argv[], pid_t *pid, int *fd, char *out, size_t size) {
-    posix_spawn_file_actions_t actions;
-    int pipes[2], result;
-    char **envp;
-    if (pipe(pipes) != 0) { snprintf(out, size, "could not start %s: %s", argv[1] ? argv[1] : argv[0], strerror(errno)); return 1; }
-    (void)fcntl(pipes[0], F_SETFD, FD_CLOEXEC); (void)fcntl(pipes[1], F_SETFD, FD_CLOEXEC);
-    (void)fcntl(pipes[0], F_SETFL, O_NONBLOCK);
-    envp = noninteractive_environment();
-    if (!envp) { close(pipes[0]); close(pipes[1]); snprintf(out, size, "out of memory"); return 1; }
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
-    posix_spawn_file_actions_adddup2(&actions, pipes[1], STDOUT_FILENO);
-    posix_spawn_file_actions_adddup2(&actions, pipes[1], STDERR_FILENO);
-    result = posix_spawnp(pid, argv[0], &actions, NULL, argv, envp);
-    posix_spawn_file_actions_destroy(&actions);
-    free(envp);
-    close(pipes[1]);
-    if (result != 0) { close(pipes[0]); snprintf(out, size, "could not start %s: %s", argv[0], strerror(result)); return 1; }
-    *fd = pipes[0];
-    return 0;
-}
-
-static bool captured_expired(const struct timespec *started, long budget_ms) {
-    struct timespec now;
-    long elapsed;
-    (void)clock_gettime(CLOCK_MONOTONIC, &now);
-    elapsed = (long)(now.tv_sec - started->tv_sec) * 1000L + (long)(now.tv_nsec - started->tv_nsec) / 1000000L;
-    return elapsed > budget_ms || terminal_stopped();
-}
-
-static void captured_append(char *out, size_t size, size_t *used, const char *chunk, size_t take) {
-    if (take > size - *used - 1) take = size - *used - 1;
-    memcpy(out + *used, chunk, take); *used += take; out[*used] = '\0';
-}
-
-/* Keep the UI painting between reads while a captured command runs. */
-static void captured_wait(struct app *app) {
-    char key;
-    update_size(app);
-    render(app, 0U, false);
-    (void)read_key(40, &key);
-}
-
-static int captured_exit(pid_t pid) {
-    int status = 0;
-    while (waitpid(pid, &status, 0) < 0) if (errno != EINTR) { status = 0; break; }
-    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
-}
-
-/* Run a command with stdin closed and both output streams captured. The UI
- * keeps painting while waiting; the budget bounds a hung command. */
-static void captured_timeout(pid_t pid, char *out, size_t size, size_t used, long budget_ms) {
-    (void)kill(pid, SIGTERM);
-    snprintf(out + used, size - used, "%s(stopped after %ld s without finishing)\n", used ? "\n" : "", budget_ms / 1000L);
-}
-
-static void captured_drain(struct app *app, pid_t pid, int fd, char *out, size_t size, long budget_ms) {
-    size_t used = 0;
-    struct timespec started;
-    (void)clock_gettime(CLOCK_MONOTONIC, &started);
-    for (;;) {
-        char chunk[4096];
-        ssize_t n = read(fd, chunk, sizeof(chunk));
-        if (n > 0) { captured_append(out, size, &used, chunk, (size_t)n); continue; }
-        if (n == 0) break;
-        if (errno != EAGAIN && errno != EINTR) break;
-        if (captured_expired(&started, budget_ms)) { captured_timeout(pid, out, size, used, budget_ms); break; }
-        captured_wait(app);
-    }
-}
-
-int run_captured(struct app *app, char *const argv[], char *out, size_t size, long budget_ms) {
-    pid_t pid;
-    int fd;
-    out[0] = '\0';
-    if (captured_spawn(argv, &pid, &fd, out, size) != 0) return 1;
-    captured_drain(app, pid, fd, out, size, budget_ms);
-    close(fd);
-    return captured_exit(pid);
-}
 
 void show_result(struct app *app, const char *title, const char *text) {
     copy_text(app->result_title, sizeof(app->result_title), title);
@@ -245,16 +151,24 @@ static void remove_one(struct app *app, char *target, size_t index, struct remov
     if (strstr(r->output, "uncommitted") || strstr(r->output, "Refusing")) r->dirty++;
 }
 
-static void removal_notice(struct app *app, char targets[][TEXT], const struct removal *r) {
+static void removal_single_notice(struct app *app, const char *target, const struct removal *r) {
     char line[TEXT];
+    if (r->skipped) {
+        snprintf(app->notice, sizeof(app->notice), "Skipped %.120s: this is the terminal you are using", target);
+        return;
+    }
+    first_line(r->output, line, sizeof(line));
+    snprintf(app->notice, sizeof(app->notice), "Removed %.120s%s%.100s", target, line[0] ? ": " : "", line);
+}
+
+static void removal_notice(struct app *app, char targets[][TEXT], const struct removal *r) {
     if (r->failed) {
-        snprintf(app->notice, sizeof(app->notice), "Removed %zu of %zu; %zu kept%s", r->removed, r->count, r->failed,
-                 r->dirty ? " because of uncommitted changes (commit or stash them first)" : " (see output)");
+        snprintf(app->notice, sizeof(app->notice), "Removed %zu of %zu; %zu unsuccessful; %zu skipped%s", r->removed, r->count, r->failed, r->skipped,
+                 r->dirty ? " (uncommitted changes; see output)" : " (see output)");
         return;
     }
     if (r->count == 1U) {
-        first_line(r->output, line, sizeof(line));
-        snprintf(app->notice, sizeof(app->notice), "Removed %.120s%s%.100s", targets[0], line[0] ? ": " : "", line);
+        removal_single_notice(app, targets[0], r);
         return;
     }
     snprintf(app->notice, sizeof(app->notice), "Removed %zu head%s%s%s", r->removed, r->removed == 1U ? "" : "s",

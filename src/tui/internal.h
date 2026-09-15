@@ -148,6 +148,7 @@ void enter_view(struct app *app, int view);
 size_t tab_order(const struct app *app, int *views);
 void select_tab(struct app *app, int direction);
 int run_captured(struct app *app, char *const argv[], char *out, size_t size, long budget_ms);
+void action_capture_reap(struct app *app);
 void remove_heads_action(struct app *app);
 void new_task_action(struct app *app);
 void recovery_check_action(struct app *app);

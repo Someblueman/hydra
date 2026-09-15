@@ -44,6 +44,15 @@ instance_id="$(sed -n '1p' "$head_dir/current-instance")"
 worktree="$("$HYDRA_BIN" path operations-test)"
 provenance_dir="$head_dir/provenance"
 
+broadcast_output="$("$HYDRA_BIN" broadcast --pane 99.99 'printf undeliverable' 2> "$test_root/broadcast-error")"
+assert_failure $? "broadcast fails when the real tmux pane rejects delivery"
+case "$broadcast_output" in *'Sent to 0 session(s)'*) assert_success 0 "failed broadcast does not count a send" ;; *) assert_success 1 "failed broadcast does not count a send" ;; esac
+grep -q 'Failed to send' "$test_root/broadcast-error"
+assert_success $? "broadcast identifies failed delivery"
+broadcast_output="$("$HYDRA_BIN" broadcast --pane 0.0 'printf delivered')"
+assert_success $? "broadcast to an existing pane succeeds"
+case "$broadcast_output" in *'Sent to 1 session(s)'*) assert_success 0 "broadcast counts confirmed sends" ;; *) assert_success 1 "broadcast counts confirmed sends" ;; esac
+
 if test -s "$provenance_dir/task-hash" && test "$(sed -n '1p' "$provenance_dir/task-bytes")" -gt 0; then
     assert_success 0 "spawn records task hash and byte count provenance"
 else
@@ -100,6 +109,18 @@ fi
 
 group_json="$("$HYDRA_BIN" exec --group release --jobs 2 --timeout 5 --json -- printf '%s' group-ok)"
 case "$group_json" in *'"branch":"operations-test"'*'"stdout":"group-ok"'*) assert_success 0 "exec selects a named group" ;; *) assert_success 1 "exec selects a named group" ;; esac
+"$HYDRA_BIN" spawn retired-operations --headless --no-agent --group release >/dev/null || exit 1
+"$HYDRA_BIN" kill retired-operations >/dev/null || exit 1
+for selection in --all '--group release'; do
+    # shellcheck disable=SC2086 # Fixed selection flags above, not user input.
+    selected_json="$("$HYDRA_BIN" exec $selection --json -- printf active-only)"
+    assert_success $? "$selection ignores retired heads"
+    case "$selected_json" in
+        *retired-operations*) assert_success 1 "$selection excludes retained history" ;;
+        *'"stdout":"active-only"'*) assert_success 0 "$selection executes the remaining active head" ;;
+        *) assert_success 1 "$selection executes the remaining active head" ;;
+    esac
+done
 "$HYDRA_BIN" group operations-test verification >/dev/null
 assert_success $? "public group mutation succeeds"
 assert_equal verification "$(sed -n '1p' "$head_dir/group")" "group mutation updates authoritative state v2"
@@ -133,6 +154,27 @@ if kill -0 "$child_pid" 2>/dev/null; then
 else
     assert_success 0 "timeout terminates command descendants"
 fi
+
+# A command can exit while its reparented child retains stdout and stderr.
+drain_started="$(date +%s)"
+# shellcheck disable=SC2016 # The child writes its own background process ID.
+drain_json="$("$HYDRA_BIN" exec --branch operations-test --timeout 1 --json -- sh -c 'sleep 20 & echo $! > "$1"' sh "$child_pid_file" 2> "$test_root/drain-error")"
+drain_status=$?
+drain_elapsed=$(($(date +%s) - drain_started))
+assert_failure "$drain_status" "inherited output timeout returns failure after the direct command exits"
+if [ "$drain_elapsed" -lt 6 ]; then drain_bounded=0; else drain_bounded=1; fi
+assert_success "$drain_bounded" "inherited output drain is bounded by deadline and cleanup grace"
+case "$drain_json" in *'"exit_code":124'*) assert_success 0 "incomplete output records timeout, not command success" ;; *) assert_success 1 "incomplete output records timeout, not command success" ;; esac
+grep -q 'descendant termination is unconfirmed' "$test_root/drain-error"
+assert_success $? "incomplete output explains retained ownership"
+incomplete_file="$(find "$HYDRA_HOME/state/v2/projects/$project_id/exec" -name output-incomplete | head -1)"
+if [ -n "$incomplete_file" ] && [ -s "$(dirname "$incomplete_file")/admission-unknown.json" ] && [ ! -e "$(dirname "$incomplete_file")/admission-release.json" ]; then
+    assert_success 0 "incomplete capture retains unknown admission instead of confirming release"
+else
+    assert_success 1 "incomplete capture retains unknown admission instead of confirming release"
+fi
+# Only this fixture knows and owns the escaped child; production must not guess.
+kill "$(cat "$child_pid_file")" 2>/dev/null || true
 
 run_dir="$(find "$HYDRA_HOME/state/v2/projects/$project_id/exec" -type f -name stdout -print | head -1 | xargs dirname)"
 case "$(uname -s)" in

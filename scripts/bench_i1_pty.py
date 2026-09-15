@@ -24,54 +24,45 @@ def owned_heads_visible(
         return False
     lines = screen.splitlines()
     tables = [
-        index
+        (index, match)
         for index, line in enumerate(lines)
-        if line.startswith("|") and line.split("|")[1].strip() == "HEAD"
+        if (match := re.fullmatch(r"\|\s+(HEAD)\s+(STATUS)\s+AGENT\s+REPORTED\s+\|\s*", line))
     ]
     summaries = [
         (index, match)
         for index, line in enumerate(lines)
-        if (
-            match := re.fullmatch(
-                r"\|\s*(\d+) heads\s*\|\s*Row (\d+) of (\d+)\s*\|\s*", line
-            )
-        )
+        if (match := re.fullmatch(r"\|\s*(\d+) heads\s*\|\s*Row (\d+) of (\d+)\s*\|\s*", line))
     ]
     details = [
-        index
+        (index, match.group(1))
         for index, line in enumerate(lines)
-        if line.startswith("+- SELECTED HEAD ")
+        if (match := re.fullmatch(r"\|\+- (\S+) -+\+\|\s*", line))
     ]
     if len(tables) != 1 or len(summaries) != 1 or len(details) != 1:
         return False
+    table_index, header = tables[0]
     summary_index, summary = summaries[0]
     count, position, total = map(int, summary.groups())
     if not (
         count == total == len(owned_branches)
         and 1 <= position <= count
-        and tables[0] < summary_index < details[0] < len(lines) - 1
+        and table_index < summary_index < details[0][0] < len(lines) - 1
     ):
         return False
     rows, selected = [], []
-    for line in lines[tables[0] + 1 : summary_index]:
-        if not line.startswith("|"):
+    for line in lines[table_index + 1 : summary_index]:
+        if not re.fullmatch(r"\| [ >]  .*\|\s*", line):
             return False
-        cells = line.split("|")
-        if len(cells) != 6:
-            return False
-        branch = cells[1].strip()
-        if branch.startswith("> "):
-            branch = branch[1:].strip()
+        branch = line[header.start(1) : header.start(2)].strip()
+        if line[2] == ">":
             selected.append(branch)
         rows.append(branch)
-    selected_cells = lines[details[0] + 1].split("|")
     return (
         bool(rows)
         and len(rows) == len(set(rows))
         and set(rows) <= owned_branches
         and len(selected) == 1
-        and len(selected_cells) == 3
-        and selected_cells[1].strip() == selected[0]
+        and details[0][1] == selected[0]
     )
 
 

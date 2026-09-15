@@ -1,40 +1,40 @@
- HYDRA MISSION CONTROL
-[Heads]   Details    Coordination    Recovery     Overview    Workflows    Hosts
-+- Heads -------------------------------------------------------------------------------------------------------------+
-|    HEAD                                                               | SESSION     | AGENT          | REPORTED     |
-| >  i10-h00                                                            | LIVE        | item10-worker  | -            |
-| 1 heads  |  Row 1 of 1                                                                                              |
-|                                                                                                                     |
-+- SELECTED HEAD -----------------------------------------------------------------------------------------------------+
-| i10-h00                                                                                                             |
-| Agent      item10-worker                                 | Session    LIVE                                          |
-| Changes    0 files                                       | Gates      0/0 approved                                  |
-| Enter Details   p Terminal output   : Actions                                                                       |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-|                                                                                                                     |
-+---------------------------------------------------------------------------------------------------------------------+
-Click row/tab | Wheel moves selection | o overview | t theme
-Enter details  : actions  / search  t theme  ? help  q quit
+ HYDRA / WORK                                             Local / 1 heads / 1 running / 0 need attention / 0 to repair  
+ [Work]  Details  Overview  Attention  Recovery  Workflows  Statistics  Workspace                                       
++- Heads in this project ---------------------------------------------------------------------------------------------+ 
+|    HEAD                                                                 STATUS         AGENT           REPORTED     | 
+| >  i10-h00                                                              running        item10-worker   -            | 
+| 1 heads  |  Row 1 of 1                                                                                              | 
+|                                                                                                                     | 
+|+- i10-h00 ---------------------------------------------------------------------------------------------------------+| 
+|| item10-worker / running / 0 changed files / 0 of 0 approvals                                                      || 
+|| Enter details / a talk to the agent / x remove / : more actions                                                   || 
+||                                                                                                                   || 
+|+-------------------------------------------------------------------------------------------------------------------+| 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
+|                                                                                                                     | 
++---------------------------------------------------------------------------------------------------------------------+ 
+ Current snapshot / age 0s                                                                                              
+ j/k select  Enter details  a agent  n new task  x remove  / search  : more  ? help  q quit                             

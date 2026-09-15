@@ -65,7 +65,10 @@ FLEET_NATIVE_CASE_BINS = $(addprefix $(BUILD_DIR)/native-tests/,test-discovery t
 fleet-test-build: build-fleet build-core build-test-fixture build-plan-example build-plan-precompile $(FLEET_TEST_BINS) $(FLEET_NATIVE_CASE_BINS) $(BUILD_DIR)/test-statistics $(BUILD_DIR)/fixture-lock
 
 test-fleet: fleet-test-build
-	+$(MAKE) -j$(TEST_JOBS) test-fleet-cases
+	+@case "$(MAKEFLAGS)" in \
+		*jobserver*) exec $(MAKE) test-fleet-cases ;; \
+		*) exec $(MAKE) -j$(TEST_JOBS) test-fleet-cases ;; \
+	esac
 
 .PHONY: test-fleet-cases $(addprefix fleet-case-,$(FLEET_CASES))
 # CI divides this same ordered inventory across two runners; local runs keep all cases.
@@ -251,4 +254,3 @@ fleet-case-workflow-metrics:
 
 fleet-case-plan-staged:
 	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" $(MAKE) test-plan-staged
-

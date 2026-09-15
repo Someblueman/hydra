@@ -29,13 +29,9 @@ hydra_valid_id() {
 
 hydra_git_common_dir() {
     _hgcd_value="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
-    case "$_hgcd_value" in
-        /*) (cd "$_hgcd_value" 2>/dev/null && pwd) ;;
-        *)
-            _hgcd_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
-            (cd "$_hgcd_root/$_hgcd_value" 2>/dev/null && pwd)
-            ;;
-    esac
+    # Git reports relative paths against the caller, including ../.git when
+    # invoked from a subdirectory, not against --show-toplevel.
+    (CDPATH='' cd -- "$_hgcd_value" 2>/dev/null && pwd -P)
 }
 
 hydra_project_identity_file() {

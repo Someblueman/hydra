@@ -51,6 +51,11 @@ EOF
             [ -d "$_osh_head_dir" ] || continue
             _osh_head_group="$(sed -n '1p' "$_osh_head_dir/group" 2>/dev/null || true)"
             [ -z "$_osh_group" ] || [ "$_osh_head_group" = "$_osh_group" ] || continue
+            case "$(sed -n '1p' "$_osh_head_dir/desired-state" 2>/dev/null || true)" in
+                stopped) continue ;;
+                running|headless|stopping) ;;
+                *) echo "Error: invalid desired state in $_osh_head_dir" >&2; return 1 ;;
+            esac
             _osh_branch="$(sed -n '1p' "$_osh_head_dir/branch" 2>/dev/null || true)"
             operations_append_head "$_osh_file" "$_osh_branch" || return 1
         done
@@ -80,7 +85,8 @@ operations_capture_stream() (
     if [ "$_ocs_max" -gt 0 ]; then
         head -c "$_ocs_max" <&3 > "$_ocs_output"
     fi
-    cat <&3 >/dev/null
+    cat <&3 >/dev/null || exit 1
+    : > "$4"
 )
 
 operations_exec_worker() {
@@ -110,14 +116,18 @@ operations_exec_worker() {
     _oew_stdout_pipe="$_oew_dir/.stdout.pipe"
     _oew_stderr_pipe="$_oew_dir/.stderr.pipe"
     _oew_timed="$_oew_dir/.timed-out"
+    _oew_exited="$_oew_dir/.command-exited"
+    _oew_stdout_done="$_oew_dir/.stdout-done"
+    _oew_stderr_done="$_oew_dir/.stderr-done"
+    _oew_incomplete="$_oew_dir/output-incomplete"
     if ! mkfifo "$_oew_stdout_pipe" "$_oew_stderr_pipe"; then
         rm -f "$_oew_stdout_pipe" "$_oew_stderr_pipe"
         cmd_admission release "$_oew_admission" --confirmed > "$_oew_dir/admission-release.json" || true
         return 0
     fi
-    operations_capture_stream "$_oew_stdout_pipe" "$_oew_dir/stdout" "$_oew_max" &
+    operations_capture_stream "$_oew_stdout_pipe" "$_oew_dir/stdout" "$_oew_max" "$_oew_stdout_done" &
     _oew_stdout_pid=$!
-    operations_capture_stream "$_oew_stderr_pipe" "$_oew_dir/stderr" "$_oew_max" &
+    operations_capture_stream "$_oew_stderr_pipe" "$_oew_dir/stderr" "$_oew_max" "$_oew_stderr_done" &
     _oew_stderr_pid=$!
     _oew_started="$(date +%s)"
     _oew_instance="$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/heads/$_oew_head/current-instance" 2>/dev/null || true)"
@@ -135,15 +145,25 @@ operations_exec_worker() {
             sleep "$_oew_timeout" &
             _oew_timer=$!
             wait "$_oew_timer" || exit 0
-            if kill -0 "$_oew_pid" 2>/dev/null; then
+            if [ ! -f "$_oew_exited" ] || [ ! -f "$_oew_stdout_done" ] || [ ! -f "$_oew_stderr_done" ]; then
                 : > "$_oew_timed"
-                if [ -n "${_ce_profile:-}" ]; then
-                    kill -TERM "$_oew_pid" 2>/dev/null || true
-                else
-                    operations_signal_tree "$_oew_pid" TERM
+                if [ ! -f "$_oew_exited" ]; then
+                    if [ -n "${_ce_profile:-}" ]; then
+                        kill -TERM "$_oew_pid" 2>/dev/null || true
+                    else
+                        operations_signal_tree "$_oew_pid" TERM
+                    fi
                 fi
                 sleep 1
-                operations_signal_tree "$_oew_pid" KILL
+                [ -f "$_oew_exited" ] || operations_signal_tree "$_oew_pid" KILL
+                # A reparented descendant may keep the pipes open after the
+                # direct command exits. Bound capture without claiming that
+                # an unowned descendant has been terminated.
+                if [ ! -f "$_oew_stdout_done" ] || [ ! -f "$_oew_stderr_done" ]; then
+                    : > "$_oew_incomplete"
+                    [ -f "$_oew_stdout_done" ] || operations_signal_tree "$_oew_stdout_pid" KILL
+                    [ -f "$_oew_stderr_done" ] || operations_signal_tree "$_oew_stderr_pid" KILL
+                fi
             fi
         ) >/dev/null 2>&1 &
         _oew_watchdog=$!
@@ -153,13 +173,14 @@ operations_exec_worker() {
         wait "$_oew_pid" 2>/dev/null || true
         _oew_wait_status=143
     fi
+    : > "$_oew_exited"
     trap - HUP INT TERM
+    wait "$_oew_stdout_pid" 2>/dev/null || true
+    wait "$_oew_stderr_pid" 2>/dev/null || true
     if [ -n "$_oew_watchdog" ]; then
         kill "$_oew_watchdog" 2>/dev/null || true
         wait "$_oew_watchdog" 2>/dev/null || true
     fi
-    wait "$_oew_stdout_pid" 2>/dev/null || true
-    wait "$_oew_stderr_pid" 2>/dev/null || true
     if [ -f "$_oew_timed" ]; then _oew_status=124; else _oew_status="$_oew_wait_status"; fi
     printf '%s\n' "$_oew_status" > "$_oew_dir/status"
     printf '%s\n' "$_oew_branch" > "$_oew_dir/branch"
@@ -171,9 +192,14 @@ operations_exec_worker() {
     : > "$_oew_dir/complete"
     # Command completion and reservation release remain separate evidence.
     # An interrupted owner never reaches this release, retaining its claim.
-    cmd_admission release "$_oew_admission" --confirmed > "$_oew_dir/admission-release.json" || true
+    if [ -f "$_oew_incomplete" ]; then
+        cmd_admission unknown "$_oew_admission" > "$_oew_dir/admission-unknown.json" || true
+        echo "Error: exec output did not finish before the deadline; descendant termination is unconfirmed and admission remains held ($_oew_admission)" >&2
+    else
+        cmd_admission release "$_oew_admission" --confirmed > "$_oew_dir/admission-release.json" || true
+    fi
     chmod 600 "$_oew_dir/complete" 2>/dev/null || true
-    rm -f "$_oew_stdout_pipe" "$_oew_stderr_pipe" "$_oew_timed"
+    rm -f "$_oew_stdout_pipe" "$_oew_stderr_pipe" "$_oew_timed" "$_oew_exited" "$_oew_stdout_done" "$_oew_stderr_done"
     if hydra_valid_id "$_oew_instance"; then
         event_emit "$LIFECYCLE_PROJECT_ID" "$_oew_head" "$_oew_instance" exec.completed hydra local \
             "{\"run_id\":\"$_oew_run\",\"exit_code\":$_oew_status}" >/dev/null 2>&1 || true

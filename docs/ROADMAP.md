@@ -1,7 +1,7 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 14 September 2026
+> - **Snapshot:** 15 September 2026
 > - **Release:** `v2.6.0` control centre and clean first use
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
@@ -34,6 +34,23 @@ related open work; they do not close live-host or provider acceptance.
 2.0.0 is the final version assigned in advance. After 2.0, work is selected from one
 backlog and released when a coherent feature or meaningful change is ready. The
 version number is chosen at release time from compatibility impact.
+
+## Next target: 2.7.0 reliability baseline
+
+The September 2026 audit fixes will ship together in 2.7.0; no separate 2.6.1
+patch is planned. The first implementation batch addresses configuration
+preservation, action deadlines and truthful outcomes, worktree path recovery,
+active-head execution selection, and benchmark qualification. Regression tests
+must retain the demonstrated failure boundaries. Improve test runtime through
+measured scheduling and fixture changes without dropping acceptance coverage.
+
+Then complete a bounded local objective-to-result journey (U3/U17), the initial
+installed journeys (U18), and their real-provider/input/review acceptance
+(the local part of U5 plus U14/U16/I4). Existing Fleet behavior retains its gates;
+one real-host workflow still needs explicit qualification. New scheduling, task
+pools, automatic placement and remote onboarding remain outside this target.
+These priorities do not close the open acceptance items below or establish a
+release date; compatibility impact still determines the final version.
 
 ## Product and engineering guardrails
 

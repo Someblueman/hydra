@@ -33,15 +33,10 @@ lint:
 # Run CLI shell tests with their native structured-data fixture helpers.
 test: build-fleet build-test-fixture $(BUILD_DIR)/native-tests/statistics-evidence $(BUILD_DIR)/test-statistics
 	@echo "Running tests..."
-	@if [ -d tests ] && [ -n "$$(ls -A tests/test_*.sh 2>/dev/null)" ]; then \
-		for test in tests/test_*.sh; do \
-			case "$$test" in tests/test_core.sh|tests/test_visualization.sh|tests/test_native_install.sh|tests/test_native_tui.sh|tests/test_fleet.sh|tests/test_fleet_install.sh|tests/test_task_package.sh|tests/test_task_acceptance.sh|tests/test_workflow_plan_task.sh|tests/test_workflow_plan_v3.sh|tests/test_headless_plan_adapter.sh|tests/test_workflow_task.sh|tests/test_workflow_data.sh|tests/test_workflow_plan.sh|tests/test_workflow_approval.sh|tests/test_agent_execution.sh|tests/test_agent_auth.sh) continue ;; esac; \
-			echo "Running $$test..."; \
-			sh "$$test" || exit 1; \
-		done; \
-	else \
-		echo "No tests found in tests/"; \
-	fi
+	+@case "$(MAKEFLAGS)" in \
+		*jobserver*) exec $(MAKE) shell-tests ;; \
+		*) exec $(MAKE) -j$(TEST_JOBS) shell-tests ;; \
+	esac
 
 # Fixed PR feedback lane. Keep the shell and native selection explicit so this
 # target remains useful for every change and does not depend on changed-file
@@ -185,8 +180,16 @@ test-c: $(BUILD_DIR)/test-libhydra
 $(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c src/tui/input.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/input.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
-test-tui: build-tui $(BUILD_DIR)/test-tui-input
+$(BUILD_DIR)/test-tui-actions: tests/c/test_tui_actions.c src/tui/actions.c src/tui/action_capture.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/actions.o $(BUILD_DIR)/tui/action_capture.o,$(TUI_OBJECTS))
+	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
+
+.PHONY: test-tui-actions
+test-tui-actions: $(BUILD_DIR)/test-tui-actions
+	$(BUILD_DIR)/test-tui-actions
+
+test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-input
+	$(BUILD_DIR)/test-tui-actions
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_native_tui.sh
 
 test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
@@ -216,8 +219,9 @@ sanitize-core:
 
 sanitize-tui:
 	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" build-tui
-	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" build/sanitize/test-tui-input
+	@$(MAKE) BUILD_DIR=build/sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" build/sanitize/test-tui-input build/sanitize/test-tui-actions
 	@build/sanitize/test-tui-input
+	@build/sanitize/test-tui-actions
 	@build/sanitize/hydra-tui --headless-fixture tests/fixtures/tui/native-v2.tsv --size 80x24 --frames 2 >/dev/null
 
 sanitizer: sanitize-core
@@ -481,3 +485,4 @@ test-enrollment-ssh: build-fleet
 include scripts/native-tests.mk
 
 include scripts/fleet-tests.mk
+include scripts/shell-tests.mk

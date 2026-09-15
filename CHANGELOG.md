@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Run independent shell tests with bounded parallelism and private temporary
+  files/tmux sockets, preserving per-case logs and serializing shared fixtures.
+  Nested shell and Fleet suites share Make's jobserver to avoid oversubscription.
+
+### Fixed
+
+- Preserve real untracked configuration during init's generated-stub migration.
+- Bound captured TUI actions across pipe EOF, continuous output and termination;
+  report interrupted actions as unknown instead of success.
+- Report failed broadcast sends and skipped current-head removal accurately.
+- Resolve moved worktrees and project identity consistently from subdirectories;
+  explicit worktree repair normalizes legacy relative move records.
+- Exclude retired heads from bulk execution and label idle headless workspaces
+  accurately in the human-readable session list.
+- Keep the exec deadline active through output completion. Inherited streams that
+  cannot be drained return timeout and retain unknown admission rather than
+  claiming confirmed descendant termination.
+- Refresh benchmark readiness screens and semantic predicates for the control
+  centre, including actual search cancellation rather than an already-visible tab.
+
 ## [2.6.0] - 2026-09-14
 
 ### Added

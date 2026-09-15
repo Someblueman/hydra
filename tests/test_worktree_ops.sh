@@ -99,6 +99,26 @@ if [ -d "$worktree" ] && [ ! -e "$move_target" ]; then assert_success 0 "move dr
 assert_success $? "doctor moves a stopped clean worktree"
 assert_equal "$move_target" "$("$HYDRA_BIN" path storage-head)" "move updates authoritative stored path"
 
+mkdir "$repo/subdir"
+cd "$repo/subdir" || exit 1
+"$HYDRA_BIN" worktree doctor move storage-head relative-move >/dev/null
+assert_success $? "doctor resolves relative destinations from the caller's subdirectory"
+move_target="$(pwd -P)/relative-move"
+assert_equal "$move_target" "$(sed -n '1p' "$head_dir/worktree")" "relative move persists an absolute path"
+cd "$repo" || exit 1
+assert_equal "$move_target" "$("$HYDRA_BIN" path storage-head)" "moved head resolves from a different directory"
+"$HYDRA_BIN" review storage-head --json >/dev/null
+assert_success $? "review uses the moved worktree from the repository root"
+# Simulate a record written by the earlier git -C based relative move.
+printf 'subdir/relative-move\n' > "$head_dir/worktree"
+cd "$repo/subdir" || exit 1
+"$HYDRA_BIN" worktree doctor repair --dry-run >/dev/null
+assert_equal subdir/relative-move "$(sed -n '1p' "$head_dir/worktree")" "repair dry-run preserves the legacy record"
+"$HYDRA_BIN" worktree doctor repair --apply >/dev/null
+assert_success $? "explicit repair normalizes a legacy relative record from any directory"
+assert_equal "$move_target" "$(sed -n '1p' "$head_dir/worktree")" "repair persists the recovered absolute path"
+cd "$repo" || exit 1
+
 repair_dry="$("$HYDRA_BIN" worktree doctor repair --dry-run)"
 case "$repair_dry" in *'would-repair'*"$move_target"*) assert_success 0 "repair defaults to a bounded dry-run" ;; *) assert_success 1 "repair defaults to a bounded dry-run" ;; esac
 "$HYDRA_BIN" worktree doctor repair --apply >/dev/null
