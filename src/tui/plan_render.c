@@ -52,8 +52,8 @@ void native_workspace_plan_text(struct app *app, struct tv_canvas *c, size_t *sc
     const char *text;
     size_t length;
     static const char *states[]={"DRAFT / unvalidated","VALIDATING","INVALID","READY / awaiting approval","VIEW UNAVAILABLE"};
-    if (!p) { tv_text(c,(struct tv_rect){0,0,c->width,c->height},"P load draft + policy / V validate",TV_WARNING); return; }
-    dashboard_text(c,0,0,c->width,TV_STRONG,"Revision %u / %s",p->revision,
+    if (!p) { tv_text(c,(struct tv_rect){0,0,c->width,c->height},"P review agent proposal / I import files / V validate",TV_WARNING); return; }
+    dashboard_text(c,0,0,c->width,TV_STRONG,"%s / Revision %u / %s",p->proposal_head[0] ? p->proposal_head : "Imported plan",p->revision,
         p->state==PLAN_READY && !strcmp(p->digest,p->launched_digest) ?
         (p->launched_run[0] ? "RUN RECORDED / C monitor" : "LAUNCH REQUESTED / awaiting run receipt") : states[p->state]);
     text=p->state==PLAN_DRAFT && p->source_bytes ? p->source_bytes : p->text;

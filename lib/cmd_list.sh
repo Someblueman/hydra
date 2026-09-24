@@ -27,7 +27,7 @@ list_row_details() {
 
 # Plain-language session state for the default list table.
 # Usage: list_state_word <active|dead>; reads the current lifecycle snapshot.
-# Sets LIST_STATE to running, terminal gone, stopped, or unknown.
+# Sets LIST_STATE to running, idle, terminal gone, stopped, or unknown.
 list_state_word() {
     if [ "$1" = dead ]; then
         LIST_STATE="terminal gone"
@@ -38,7 +38,8 @@ list_state_word() {
         stopped) LIST_STATE=stopped; return 0 ;;
     esac
     case "$LIFECYCLE_SNAPSHOT_OBSERVED" in
-        starting|running|idle) LIST_STATE=running ;;
+        starting|running) LIST_STATE=running ;;
+        idle) LIST_STATE=idle ;;
         exited|failed) LIST_STATE=stopped ;;
         *) LIST_STATE=unknown ;;
     esac

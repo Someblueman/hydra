@@ -19,7 +19,7 @@ static int parse_size(const char *value, int *cols, int *rows) {
 static void usage(FILE *out) {
     fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--ascii] [--fleet]\n"
           "  [--view statistics|workspace|overview|heads|detail|coordination|recovery|workflows|hosts]\n"
-          "  [--version|--protocol-version|--diagnostics|--hydra PATH]\n"
+          "  [--version|--protocol-version|--diagnostics|--hydra PATH|--task BRANCH]\n"
           "  [--headless-fixture FILE [--workflow-fixture FILE] [--statistics-fixture FILE]\n"
           "   --size COLSxROWS --frames N]\n", out);
 }
@@ -51,6 +51,37 @@ static int render_fixture(struct app *app, const char *fixture, const char *work
     return ferror(stdout) ? 3 : 0;
 }
 
+static void initialize_app(struct app *app) {
+    memset(app, 0, sizeof(*app));
+    terminal_pipe_signal();
+    setlocale(LC_CTYPE, "");
+    app->hydra = getenv("HYDRA_BIN_CMD") == NULL ? "hydra" : getenv("HYDRA_BIN_CMD");
+    app->cols = 80; app->rows = 24;
+    app->no_color = getenv("NO_COLOR") != NULL;
+    app->ascii = strcasecmp(nl_langinfo(CODESET), "UTF-8") != 0;
+}
+
+static bool task_option(struct app *app, const char *branch) {
+    if (!branch[0] || strlen(branch) >= sizeof(app->pending_task)) return false;
+    copy_text(app->pending_task, sizeof(app->pending_task), branch);
+    return true;
+}
+
+static bool frame_option(const char *value, unsigned *frames) {
+    return parse_unsigned(value, frames) && *frames > 0U && *frames <= 100U;
+}
+
+static void diagnostic_option(struct app *app, bool explicit_view) {
+    app->diagnostics = true;
+    if (!explicit_view) app->view = 1;
+}
+
+static bool theme_option(struct app *app, const char *theme) {
+    if (!theme || parse_theme(theme, &app->theme)) return true;
+    fputs("hydra-tui: theme must be terminal, dark, or light\n", stderr);
+    return false;
+}
+
 int main(int argc, char **argv) {
     struct app app;
     const char *fixture = NULL;
@@ -60,19 +91,16 @@ int main(int argc, char **argv) {
     int index;
     bool explicit_view = false;
     const char *theme = getenv("HYDRA_TUI_THEME");
-    memset(&app, 0, sizeof(app));
-    terminal_pipe_signal();
-    setlocale(LC_CTYPE, "");
-    app.hydra = getenv("HYDRA_BIN_CMD") == NULL ? "hydra" : getenv("HYDRA_BIN_CMD");
-    app.cols = 80; app.rows = 24;
-    app.no_color = getenv("NO_COLOR") != NULL;
-    app.ascii = strcasecmp(nl_langinfo(CODESET), "UTF-8") != 0;
+    initialize_app(&app);
     for (index = 1; index < argc; index++) {
         if (strcmp(argv[index], "--version") == 0) {
             printf("Hydra TUI %s protocol %d\n", HYDRA_TUI_VERSION, HYDRA_TUI_PROTOCOL); return 0;
         } else if (strcmp(argv[index], "--protocol-version") == 0) {
             printf("%d\n", HYDRA_TUI_PROTOCOL); return 0;
         } else if (strcmp(argv[index], "--hydra") == 0 && index + 1 < argc) app.hydra = argv[++index];
+        else if (strcmp(argv[index], "--task") == 0 && index + 1 < argc) {
+            if (!task_option(&app, argv[++index])) return 2;
+        }
         else if (strcmp(argv[index], "--fleet") == 0) app.fleet = true;
         else if (strcmp(argv[index], "--headless-fixture") == 0 && index + 1 < argc) fixture = argv[++index];
         else if (strcmp(argv[index], "--workflow-fixture") == 0 && index + 1 < argc) workflow_fixture = argv[++index];
@@ -80,23 +108,20 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[index], "--size") == 0 && index + 1 < argc) {
             if (parse_size(argv[++index], &app.cols, &app.rows) != 0) { usage(stderr); return 2; }
         } else if (strcmp(argv[index], "--frames") == 0 && index + 1 < argc) {
-            if (!parse_unsigned(argv[++index], &frames) || frames == 0U || frames > 100U) return 2;
+            if (!frame_option(argv[++index], &frames)) return 2;
         } else if (strcmp(argv[index], "--view") == 0 && index + 1 < argc) {
             const char *view = argv[++index];
             explicit_view = true;
             app.view = parse_view(view);
             if (app.view < 0) return 2;
             app.graph_follow = app.view == 5;
-        } else if (strcmp(argv[index], "--diagnostics") == 0) { app.diagnostics = true; if (!explicit_view) app.view = 1; }
+        } else if (strcmp(argv[index], "--diagnostics") == 0) diagnostic_option(&app, explicit_view);
         else if (strcmp(argv[index], "--theme") == 0 && index + 1 < argc) theme = argv[++index];
         else if (strcmp(argv[index], "--no-color") == 0) app.no_color = true;
         else if (strcmp(argv[index], "--ascii") == 0) app.ascii = true;
         else { usage(stderr); return 2; }
     }
-    if (theme != NULL && !parse_theme(theme, &app.theme)) {
-        fputs("hydra-tui: theme must be terminal, dark, or light\n", stderr);
-        return 2;
-    }
+    if (!theme_option(&app, theme)) return 2;
     if (fixture != NULL) {
         return render_fixture(&app, fixture, workflow_fixture, statistics_fixture, frames);
     }

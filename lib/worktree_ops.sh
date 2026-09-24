@@ -167,6 +167,9 @@ worktree_doctor_move() {
     _wdm_dry="$3"
     parallel_head_load "$_wdm_branch" || return 1
     parallel_validate_path_pattern "${_wdm_target#/}" || return 1
+    # Resolve against the caller before git -C changes the command's directory.
+    _wdm_parent="$(CDPATH='' cd -- "$(dirname "$_wdm_target")" && pwd -P)" || return 1
+    _wdm_target="$_wdm_parent/$(basename "$_wdm_target")"
     [ ! -e "$_wdm_target" ] || return 1
     _wdm_lock="head_${PARALLEL_HEAD_ID}"
     acquire_lock "$_wdm_lock" "worktree path move" "$PARALLEL_HEAD_ID" || return 1
@@ -211,12 +214,22 @@ worktree_doctor_repair() {
         [ -d "$_wdr_head" ] || continue
         _wdr_path="$(sed -n '1p' "$_wdr_head/worktree" 2>/dev/null || true)"
         [ -n "$_wdr_path" ] || continue
+        # Older doctor move stored a relative destination passed to git -C.
+        # Explicit repair normalizes those records against the repository root.
+        case "$_wdr_path" in
+            /*) ;;
+            *) _wdr_path="$(CDPATH='' cd -- "$_wdr_repo/$_wdr_path" && pwd -P)" || return 1 ;;
+        esac
         if [ "$_wdr_apply" -eq 0 ]; then
             printf 'would-repair\t%s\n' "$_wdr_path"
         else
             _wdr_lock="head_$(basename "$_wdr_head")"
             acquire_lock "$_wdr_lock" "worktree repair" "$(basename "$_wdr_head")" || return 1
             git -C "$_wdr_repo" worktree repair "$_wdr_path" || {
+                release_lock "$_wdr_lock"
+                return 1
+            }
+            state_v2_write_scalar "$_wdr_head/worktree" "$_wdr_path" || {
                 release_lock "$_wdr_lock"
                 return 1
             }

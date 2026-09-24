@@ -493,8 +493,8 @@ $_csp_instructions"
 # Usage: spawn_finish_launch <branch> <session> <profile> <terminal_mode> <verb>
 # Consumes the parser's `attach` variable. Documented noninteractive contracts
 # (HYDRA_NO_SWITCH, non-TTY, headless) keep their exact messages; the
-# interactive default stays in the current terminal and prints a context block
-# so the control centre remains the way back to the head.
+# interactive default opens the head inside the native control centre, or
+# stays in the current terminal when the optional native TUI is unavailable.
 spawn_finish_launch() {
     _sfl_branch="$1"
     _sfl_session="$2"
@@ -519,6 +519,13 @@ spawn_finish_launch() {
             }
         else
             spawn_print_context "$_sfl_branch" "$_sfl_session" "$_sfl_profile" "$_sfl_verb"
+            # Task input lives in the optional native workspace. Without it,
+            # stay in this terminal: the basic TUI cannot open the new task.
+            _load_libs_for_cmd tui
+            if tui_native_find_binary >/dev/null 2>&1; then
+                cmd_tui --task "$_sfl_branch"
+                return $?
+            fi
         fi
     else
         echo "Session '$_sfl_session' $_sfl_verb successfully (not switching - not in terminal)"

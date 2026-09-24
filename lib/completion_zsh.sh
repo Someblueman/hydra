@@ -115,7 +115,7 @@ _hydra() {
                     ;;
                 workflow)
                     if [[ ${words[2]} == plan ]]; then
-                        _arguments '2:planning action:(schema validate compile show obligations checks explain compare run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '*:file:_files'
+                        _arguments '2:planning action:(schema propose proposal validate compile show obligations checks explain compare run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '--branch[Head that owns the proposal]:branch:' '--local-policy[Write the local policy preset]' '*:file:_files'
                         return
                     fi
                     _arguments '1:subcommand:(list show validate dry-run run status cancel resume replay requests decide statistics-data statistics-json statistics-compare plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
@@ -160,6 +160,7 @@ _hydra() {
                 kill)
                     _arguments \
                         '--all[Kill all hydra sessions]' \
+                        '--protect-untracked[Refuse untracked worktree files]' \
                         '--force[Skip confirmation prompt]' \
                         '1:branch:_hydra_branches'
                     ;;

@@ -1,7 +1,33 @@
 # Automated usability evaluation
 
-Proposed implementation plan, 13 September 2026. This document defines the next
-test capability; it does not claim the runner or current product passes these checks.
+Initial deterministic runner shipped in 2.7.0 (implemented 15 September 2026).
+The broader discoverability and live-provider matrix below remains an acceptance
+plan; passing scripted journeys does not close it.
+
+Run `make test-usability`. It builds and installs a fresh prefix, exercises real
+Git/tmux and public Hydra entry points, then writes an HTML report under
+`build/usability-<timestamp>/`. Set `USABILITY_OUTPUT=/absolute/new/directory` to
+retain a named run. No provider login is used by this command.
+
+The current suite covers clean entry and in-app task creation, navigation,
+attachment/input/resize/return, protected and successful removal, and a complete
+conversation-to-plan revision and checked delivery at 80 and 140 columns. The
+planning fixture authors proposals through an interactive custom profile and the
+public `workflow plan propose` command; it does not fabricate Hydra state. Tests
+independently inspect worktrees, written input markers and verified delivery.
+
+Reports distinguish passed, failed and blocked setup, and retain actions, terminal
+bytes, escaped text snapshots, cleanup receipts, installed file hashes and source
+identity. Text snapshots do not reproduce colors. Live providers, actual terminal
+visual review, goal-only discoverability and remote hosts remain separate gates.
+A single local Claude trial using an existing login published an agent-authored
+proposal and reached native validation without execution in 132 seconds. That
+trial qualifies this bounded planning path only, not provider parity or a full
+live-provider delivery matrix.
+
+The separate attached-PTY test uses an independent Unicode/color observer to
+check line drawing, Unicode text and ANSI red through real tmux and native
+rendering. Styled diffs and long-output comparisons still need qualification.
 
 ## What we need to establish
 
@@ -22,7 +48,7 @@ The existing `test-tui-pty` target also uses canned producers, and the onboardin
 test explicitly initializes a no-agent head. Those remain useful engineering
 checks, but do not represent first-use agentic acceptance.
 
-Add a small journey runner around a fresh prefix installation, real CLI, real
+The initial journey runner uses a fresh prefix installation, real CLI, real
 tmux and disposable Git repositories. The runner owns isolation and cleanup so the
 person iterating runs one command, not a page of environment setup. Do not replace
 the production frontend, mutation path or state producer with a fixture.

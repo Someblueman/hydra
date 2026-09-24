@@ -25,7 +25,8 @@ def retained_screen_controls(root: Path, output: Path) -> None:
     branches = {f"i10-h{index:02d}" for index in range(50)}
     assert "i10-h00" not in screen
     negatives = {
-        "wrong-count": screen.replace("50 heads", "49 heads", 1),
+        "wrong-view": screen.replace("[Work]", "[Details]", 1),
+        "wrong-count": screen.replace("| 50 heads", "| 49 heads", 1),
         "unknown-row": screen.replace("i10-h09", "not-owned", 1),
         "duplicate-row": screen.replace("i10-h09", "i10-h29", 1),
         "selected-unknown": "not-owned".join(screen.rsplit("i10-h29", 1)),
@@ -56,7 +57,7 @@ def main() -> None:
         source / "tests/fixtures/tui/fake-hydra.sh",
         output / "late-readiness",
         root,
-        {**os.environ, "HYDRA_HOME": str(output / "fake-home")},
+        {**os.environ, "HYDRA_HOME": str(output / "fake-home"), "LC_ALL": "C", "LANG": "C"},
     )
     resume: threading.Timer | None = None
     evidence: dict[str, object] = {}

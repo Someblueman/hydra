@@ -71,11 +71,40 @@ static size_t terminal_slot(struct app *app, const struct head *h) {
     return available;
 }
 
+/* PTY children drop nesting variables. Carry the observed server explicitly. */
+static bool attachment_socket(char socket[4096]) {
+    const char *parent = getenv("TMUX");
+    socket[0] = '\0';
+    if (!parent || !parent[0]) return true;
+    if (strlen(parent) >= 4096) return false;
+    copy_text(socket, 4096, parent);
+    for (int i = 0; i < 2; i++) {
+        char *comma = strrchr(socket, ',');
+        if (!comma) return false;
+        *comma = '\0';
+    }
+    return socket[0] == '/';
+}
+
+static bool attachment_argv(const struct app *app, const struct head *h,
+                            struct native_terminal *t, char *argv[12], char socket[4096]) {
+    if (app->fleet) {
+        argv[0]=(char *)app->hydra; argv[1]=(char *)"fleet"; argv[2]=(char *)"attach"; argv[3]=(char *)h->remote_host;
+        argv[4]=(char *)"--project"; argv[5]=(char *)h->remote_project; argv[6]=(char *)"--instance"; argv[7]=t->instance;
+        argv[8]=(char *)"--"; argv[9]=(char *)h->remote_branch; argv[10]=NULL;
+    } else {
+        argv[0]=(char *)app->hydra; argv[1]="tui"; argv[2]="--attach"; argv[3]=t->head; argv[4]=t->instance; argv[5]=NULL;
+        if (!attachment_socket(socket)) return false;
+        if (socket[0]) { argv[5]=socket; argv[6]=NULL; }
+    }
+    return true;
+}
+
 bool native_terminal_attach(struct app *app) {
     const struct head *h=selected_head(app);
     struct native_terminal *t;
     size_t available;
-    char *argv[12];
+    char *argv[12], socket[4096];
     if (!h || !h->head_id[0] || !h->instance[0] || !strcmp(h->instance,"-") ||
         !strcmp(h->desired,"headless")) {
         copy_text(app->notice,sizeof(app->notice),app->fleet ? "Select an interactive remote head with a current instance" : "Select a recorded local head to open an interactive pane"); return false;
@@ -107,13 +136,7 @@ bool native_terminal_attach(struct app *app) {
         copy_text(t->remote_host,sizeof(t->remote_host),h->remote_host);
         copy_text(t->remote_project,sizeof(t->remote_project),h->remote_project);
     }
-    if (app->fleet) {
-        argv[0]=(char *)app->hydra; argv[1]=(char *)"fleet"; argv[2]=(char *)"attach"; argv[3]=(char *)h->remote_host;
-        argv[4]=(char *)"--project"; argv[5]=(char *)h->remote_project; argv[6]=(char *)"--instance"; argv[7]=t->instance;
-        argv[8]=(char *)"--"; argv[9]=(char *)h->remote_branch; argv[10]=NULL;
-    } else {
-        argv[0]=(char *)app->hydra; argv[1]="tui"; argv[2]="--attach"; argv[3]=t->head; argv[4]=t->instance; argv[5]=NULL;
-    }
+    if (!attachment_argv(app, h, t, argv, socket)) goto fail;
     if (!tv_pty_spawn(&t->client,app->hydra,argv,&app->saved,80,24)) goto fail;
     app->terminals->selected=available;
     copy_text(app->notice,sizeof(app->notice),"Attached client / Ctrl-B Tab returns input to Hydra");

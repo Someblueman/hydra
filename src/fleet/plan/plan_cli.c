@@ -268,12 +268,18 @@ static json_object *inspect_command(char **argv, bool *printed) {
     return plan_inspect_cli(argc, argv);
 }
 
+static json_object *proposal_command(char **argv, bool *printed) {
+    (void)printed;
+    return plan_proposal_copy(argv[1], argv[2]);
+}
+
 json_object *plan_cli(int argc, char **argv) {
     static const struct {
         const char *name;
         int argc;
         json_object *(*call)(char **argv, bool *printed);
     } commands[] = {
+        {"proposal-copy", 3, proposal_command},
         {"preview", 2, preview_command},
         {"tui-data", 2, tui_command},
         {"result", 2, result_command},

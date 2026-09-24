@@ -26,6 +26,14 @@ may print errors: use exit codes and failure summaries. Exercise spawn/kill exam
 in a disposable Git repository with isolated `HYDRA_HOME`, preserving real work.
 For the first-run path, use `make smoke-onboarding`.
 
+`make test` and `make test-fleet` use four workers by default. Set `TEST_JOBS=1`
+for serial diagnosis or choose another bounded worker count. Recursive runs
+share an existing Make jobserver rather than starting another worker pool.
+Shell cases have private temporary directories and tmux sockets; the dashboard
+case runs serially because it uses shared fixture paths. Full per-case output
+is retained under `build/test-logs/` (or the selected `BUILD_DIR`), with failures
+also printed to the terminal.
+
 Start with `make test-fast` for the selected fast subset. Use focused targets for
 localized edits and `make test-all`, `make sanitize`, and `make quality-c` for the
 full local qualification set when a change crosses those boundaries. CI runs the

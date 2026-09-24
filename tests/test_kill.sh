@@ -69,6 +69,11 @@ assert_failure $? "dirty worktree teardown is refused"
 if tmux has-session -t kill-dirty 2>/dev/null; then assert_success 0 "dirty refusal preserves tmux"; else assert_success 1 "dirty refusal preserves tmux"; fi
 assert_equal running "$(sed -n '1p' "$(head_dir kill-dirty)/desired-state")" "dirty refusal preserves durable state"
 printf 'clean\n' > "$dirty_path/tracked"
+printf 'keep\n' > "$dirty_path/untracked"
+"$HYDRA_BIN" kill kill-dirty --protect-untracked >/dev/null 2>&1
+assert_failure $? "UI protection refuses untracked files in noninteractive mode"
+assert_equal keep "$(cat "$dirty_path/untracked")" "untracked refusal preserves file contents"
+assert_equal running "$(sed -n '1p' "$(head_dir kill-dirty)/desired-state")" "untracked refusal preserves running state"
 "$HYDRA_BIN" kill kill-dirty >/dev/null
 
 "$HYDRA_BIN" spawn kill-locked --no-agent >/dev/null

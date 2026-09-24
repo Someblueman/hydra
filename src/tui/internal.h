@@ -34,7 +34,7 @@
 #include "process.h"
 #include "terminal.h"
 extern char **environ;
-#define HYDRA_TUI_VERSION "2.6.0"
+#define HYDRA_TUI_VERSION "2.7.0"
 #define HYDRA_TUI_PROTOCOL 2
 #define NATIVE_PLAN_LIMIT (256U*1024U)
 #define NATIVE_PLAN_TEXT (1024U*1024U)
@@ -67,7 +67,7 @@ struct statistics_view {
 enum native_plan_state { PLAN_DRAFT, PLAN_VALIDATING, PLAN_INVALID, PLAN_READY, PLAN_UNAVAILABLE };
 struct native_plan {
     char path[4096], policy[4096], directory[4096], compiled[4096];
-    char digest[65], objective[4096], notice[TEXT];
+    char digest[65], objective[4096], notice[TEXT], proposal_head[TEXT];
     unsigned revision, compilation;
     enum native_plan_state state;
     struct native_capture job;
@@ -148,8 +148,10 @@ void enter_view(struct app *app, int view);
 size_t tab_order(const struct app *app, int *views);
 void select_tab(struct app *app, int direction);
 int run_captured(struct app *app, char *const argv[], char *out, size_t size, long budget_ms);
+void action_capture_reap(struct app *app);
 void remove_heads_action(struct app *app);
 void new_task_action(struct app *app);
+void new_task_attach(struct app *app);
 void recovery_check_action(struct app *app);
 void native_workspace_show_terminal(struct app *app, bool focus);
 void native_workspace_split_agents(struct app *app);

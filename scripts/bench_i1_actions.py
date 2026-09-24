@@ -55,7 +55,6 @@ def view_actions(
     """Start in the 120x40 heads view; deadlines remain four seconds per input."""
     identity = (1, 0, len("HYDRA /"), "HYDRA /")
     tag = "I10SEARCH104729"
-    view = "Heads" if from_attachment else "Details"
     plan = (
         (
             0,
@@ -70,7 +69,7 @@ def view_actions(
             (1, 38, len(f"Search: {tag}"), f"Search: {tag}"),
         ),
         (8, "resize", b"", (98, 2, 1, "+")),
-        (12, "cancel", b"\x1b", (1, 1, len("[Work]  Details"), "[Work]  Details")),
+        (12, "cancel", b"\x1b", (1, 30, len("Current snapshot"), "Current snapshot")),
     )
     actions: list[dict[str, Any]] = []
     for offset, identifier, keys, response in plan:
@@ -95,9 +94,9 @@ def view_actions(
                     "navigation": "close terminal client and return to heads"
                     if from_attachment
                     else "Details tab applied",
-                    "search": "accepted query echoed in view header; result completeness is unmeasured",
+                    "search": "accepted query echoed in status line; result completeness is unmeasured",
                     "resize": "new-width top border applied",
-                    "cancel": "UI query/view cancellation returns Heads; worker cancellation is unmeasured",
+                    "cancel": "query cleared and current snapshot status restored; worker cancellation is unmeasured",
                 }[identifier],
             }
         )

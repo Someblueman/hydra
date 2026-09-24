@@ -24,11 +24,16 @@ use ordinary shell sessions alongside agents.
 
 [Demo transcript and recording instructions](assets/demos/README.md)
 
-**v2.6.0** makes the native TUI one control centre with a shared frame, plain
-language and in-app removal, keeps `hydra init` out of the source tree, starts heads
-without typing bootstrap into the shell, and opens the control centre from a bare
-`hydra`. Install the [latest release](https://github.com/Someblueman/hydra/releases/latest)
-and see the [changelog](CHANGELOG.md) for features and upgrade notes.
+**v2.7.0** hardens the 2.6 control centre and adds guided planning: start an agent
+conversation from inside Hydra, have the agent publish a plan proposal for its
+task, then review, validate and approve that exact revision in the workspace.
+Captured actions are bounded and report interrupted outcomes as unknown, init
+preserves real configuration, in-app removal refuses untracked files, and moved
+worktrees resolve consistently. Install the
+[latest release](https://github.com/Someblueman/hydra/releases/latest) and see the
+[changelog](CHANGELOG.md) for features and upgrade notes. Remaining installed-build
+acceptance is tracked in [the roadmap](docs/ROADMAP.md#next-target-installed-build-acceptance)
+and [usability testing](docs/USABILITY-TESTING.md).
 
 ## What you can do
 

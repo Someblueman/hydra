@@ -23,7 +23,7 @@ int main(void) {
     hf_commit_init(&f);
     hf_open(&f, &s);
     U("PLAN TOGETHER", 3);
-    tv_send(&s, "P");
+    tv_send(&s, "I");
     U("Draft JSON path:", 3);
     tv_send(&s, draft);
     tv_send(&s, "\r");
@@ -31,7 +31,7 @@ int main(void) {
     tv_send(&s, policy);
     tv_send(&s, "\r");
     U("Revision 1 / DRAFT", 3);
-    tv_send(&s, "VB\t\t");
+    tv_send(&s, "VB");
     U("READY / awaiting approval", 30);
     tv_send(&s, "z");
     U("READY / awaiting approval", 3);

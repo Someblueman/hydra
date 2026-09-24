@@ -186,6 +186,20 @@ test_broadcast_session_qualified_pane() {
     fi
     test_count=$((test_count + 1))
 
+    # One rejected delivery must not erase the successful send or return success.
+    # shellcheck disable=SC2317,SC2329
+    tmux() {
+        if [ "$1" = send-keys ] && [ "$3" = hydra-b:0.1 ]; then return 1; fi
+        command tmux "$@"
+    }
+    result="$(cmd_broadcast --pane 0.1 'echo partial' 2>/dev/null)"
+    assert_failure $? "partial broadcast failure returns nonzero"
+    case "$result" in
+        *'Sent to 1 session(s)'*) assert_success 0 "partial broadcast counts only confirmed delivery" ;;
+        *) assert_success 1 "partial broadcast counts only confirmed delivery" ;;
+    esac
+    unset -f tmux
+
     rm -f "$log"
     rm -rf "$TEST_HOME"
 }

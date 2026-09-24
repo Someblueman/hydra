@@ -35,6 +35,21 @@ else
 fi
 "$root/bin/hydra" workflow validate local >/dev/null 2>&1
 assert_success $? "reviewed workflows stay approved after migration"
+# A third-line mismatch must not let awk's END turn rejection into success.
+for third in '# Keep my setup' '' 'setup:'; do
+    printf 'version: 1\nprofile: none\n%s\nsetup:\n  - echo project-setup\n' "$third" > .hydra/config.yml
+    cp .hydra/config.yml "$fixture/config-before"
+    "$root/bin/hydra" init --no-agent >/dev/null || exit 1
+    cmp -s .hydra/config.yml "$fixture/config-before"
+    assert_success $? "init preserves real untracked configuration with third line '$third'"
+done
+printf 'version: 1\nprofile: none\nsetup:\n' > .hydra/config.yml
+git add .hydra/config.yml
+"$root/bin/hydra" init --no-agent >/dev/null || exit 1
+test -f .hydra/config.yml
+assert_success $? "init preserves even a generated-shaped file when tracked"
+git rm --cached -q .hydra/config.yml
+rm .hydra/config.yml
 cp .hydra/workflows/local.yml "$fixture/external.yml"
 ln -s "$fixture/external.yml" .hydra/workflows/linked.yml
 "$root/bin/hydra" workflow validate linked > "$fixture/result" 2>&1

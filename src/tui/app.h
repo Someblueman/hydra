@@ -28,6 +28,7 @@ struct app {
     struct native_attention *attention;
     struct native_review *review;
     pid_t control_pids[4];
+    pid_t action_pid;
     /* Full 127-byte task/run identity plus action and label text. */
     char control_labels[4][160];
     const char *hydra;
@@ -58,6 +59,7 @@ struct app {
     size_t marked_count;
     char current_session[TEXT];
     char search[TEXT];
+    char pending_task[TEXT];
     char notice[TEXT];
     char snapshot_error[TEXT];
     char preview_text[4096];

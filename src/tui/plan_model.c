@@ -84,6 +84,7 @@ bool native_plan_load(struct app *app, const char *path, const char *policy) {
     size_t an=0,bn=0;
     if (strlen(path)>=4096 || strlen(policy)>=4096 || !native_plan_init(app)) return false;
     p=app->plan;
+    if (strcmp(p->path,path) || strcmp(p->policy,policy)) p->proposal_head[0]='\0';
     native_capture_destroy(&p->job); p->state=PLAN_DRAFT; p->digest[0]='\0';
     a=native_plan_read(path,&an); b=native_plan_read(policy,&bn);
     copy_text(p->path,sizeof(p->path),path); copy_text(p->policy,sizeof(p->policy),policy);
@@ -92,7 +93,7 @@ bool native_plan_load(struct app *app, const char *path, const char *policy) {
     p->revision++; p->graph.run_count=0; p->graph.node_count=0; p->selected=0; p->objective[0]='\0';
     if (!a || !b) {
         p->state=PLAN_INVALID;
-        native_plan_message(p,"Draft or policy unavailable. Each must be a regular file of at most 256 KiB. Press P to choose files again.");
+        native_plan_message(p,"Draft or policy unavailable. Each must be a regular file of at most 256 KiB. Press I to choose files again.");
         return false;
     }
     native_plan_message(p,"Conversational proposal loaded. No validation or execution has occurred. Press V to validate and compile the current draft and policy.");

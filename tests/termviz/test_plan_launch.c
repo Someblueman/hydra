@@ -97,7 +97,7 @@ int main(void) {
     hf_commit_init(&f);
     hf_open(&f, &s);
     U("PLAN TOGETHER", 3);
-    S("P");
+    S("I");
     U("Draft JSON path:", 3);
     S(draft);
     S("\r");
@@ -105,7 +105,7 @@ int main(void) {
     S(policy);
     S("\r");
     U("Revision 1 / DRAFT", 3);
-    S("VB\t\tz");
+    S("VBz");
     U("READY / awaiting approval", 30);
     tv_format(pattern, sizeof(pattern), "%s/hydra-ui-plan.*/compiled-1.json", f.base);
     hf_glob_one(pattern, compiled, sizeof(compiled));

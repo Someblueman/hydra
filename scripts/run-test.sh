@@ -7,7 +7,7 @@ shift 2
 # Make executes recursive recipes under -n; forward that dry run without a PASS or log.
 test_make_flags=${MAKEFLAGS:-}
 case ${test_make_flags%% *} in
-    -*) ;;
+    -*|*=*|*[!a-zA-Z]*) ;;
     *n*) exec "$@" ;;
 esac
 mkdir -p "$directory"

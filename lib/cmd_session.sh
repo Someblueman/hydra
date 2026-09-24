@@ -101,6 +101,7 @@ cmd_kill() {
     branch=""
     kill_all=false
     force=false
+    kill_protect_untracked=false
     kill_group=""
     transcript_policy=none
 
@@ -112,6 +113,12 @@ cmd_kill() {
                 ;;
             --force)
                 force=true
+                shift
+                ;;
+            --protect-untracked)
+                # Consumed by the teardown preflight in lib/kill.sh.
+                # shellcheck disable=SC2034
+                kill_protect_untracked=true
                 shift
                 ;;
             --transcript)

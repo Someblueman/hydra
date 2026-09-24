@@ -27,6 +27,7 @@ static void complete_snapshot(struct app *app, FILE *input, bool timed_out) {
     bool complete=input!=NULL;
     int result=accept_model_data(app,input);
     record_snapshot(app,result==0);
+    if (!result) new_task_attach(app);
     if (!strcmp(app->notice,"Loading snapshot...")) app->notice[0]='\0';
     if (result && (timed_out || !complete)) copy_text(app->snapshot_error,sizeof(app->snapshot_error),timed_out ?
         "shell data adapter timed out; showing last good snapshot" : "shell data adapter failed; showing last good snapshot");

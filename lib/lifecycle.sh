@@ -80,7 +80,10 @@ lifecycle_set_outcome() {
     _lso_summary="${5:-}"
     case "$_lso_outcome" in done|failed|blocked|abandoned|canceled) ;; *) return 1 ;; esac
     case "$_lso_actor_kind" in human|agent|adapter|hydra) ;; *) return 1 ;; esac
-    _lifecycle_load_head_locked "$_lso_branch" "declare lifecycle outcome" || return 1
+    # Parallel heads commonly finish together. Allow a bounded two-second
+    # contention window for the shared project state; explicit retry policy wins.
+    HYDRA_LOCK_RETRIES="${HYDRA_LOCK_RETRIES:-40}" \
+        _lifecycle_load_head_locked "$_lso_branch" "declare lifecycle outcome" || return 1
     _lso_now="$(date +%s)"
     if ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/declared-outcome" "$_lso_outcome" || \
        ! state_v2_write_scalar "$LIFECYCLE_INSTANCE_DIR/outcome-actor-kind" "$_lso_actor_kind" || \

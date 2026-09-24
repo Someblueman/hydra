@@ -8,10 +8,23 @@ static struct tv_cell p2[20*8], a2[20*8], h2[20*4];
 static void feed(const char *s) { tv_term_feed(&t, s, strlen(s)); }
 static uint32_t at(int x, int y) { return (t.alternate_active ? alternate : primary)[y*20+x].glyph; }
 
+static void graphics(void) {
+    feed("\033(0lqqk\033(Bq");
+    assert(at(0,0) == 0x250c && at(1,0) == 0x2500 && at(3,0) == 0x2510 && at(4,0) == 'q');
+    feed("\033)0\016x\017x");
+    assert(at(5,0) == 0x2502 && at(6,0) == 'x');
+    feed("\016\0337\017\033)B\0338x");
+    assert(at(7,0) == 0x2502);
+    tv_term_reset(&t);
+    feed("q"); assert(at(0,0) == 'q');
+    tv_term_reset(&t);
+}
+
 int main(void) {
     size_t split, i;
-    const char *stream = "\033[2J\033[2;3Hcaf\xc3\xa9\xe7\x95\x8c\033[31m!\033[0m\r\nnext\033[?1049hALT\033[?1049l\033[6n";
+    const char *stream = "\033[2J\033[2;3Hcaf\xc3\xa9\xe7\x95\x8c\033[31m!\033[0m\r\nnext\033(0lqk\033(B\033)0\016x\017\033[?1049hALT\033[?1049l\033[6n";
     assert(tv_term_init(&t, primary, alternate, 20, 8, history, 4, 10, 4));
+    graphics();
     feed("0123456789");
     assert(t.primary.wrap_pending && t.primary.x == 9);
     feed("X"); assert(at(0,1) == 'X');

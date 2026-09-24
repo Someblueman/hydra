@@ -103,7 +103,7 @@ _hydra_completion() {
             # Complete with git branch names or --all flag
             case "${cur}" in
                 -*)
-                    COMPREPLY=($(compgen -W "--all --force --transcript" -- ${cur}))
+                    COMPREPLY=($(compgen -W "--all --force --protect-untracked --transcript" -- ${cur}))
                     ;;
                 *)
                     local branches=$(git branch 2>/dev/null | sed 's/^[ *]*//' | grep -v '^(')
@@ -213,8 +213,8 @@ _hydra_completion() {
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--into --gate --dry-run --keep-head" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[@]}" =~ workflow ]]; then
-        if [[ "${prev}" == plan ]]; then COMPREPLY=($(compgen -W "schema validate compile show obligations checks explain compare run result" -- "${cur}")); return 0; fi
-        if [[ "${COMP_WORDS[@]}" =~ plan && "${cur}" == -* ]]; then COMPREPLY=($(compgen -W "--accept --json" -- "${cur}")); return 0; fi
+        if [[ "${prev}" == plan ]]; then COMPREPLY=($(compgen -W "schema propose proposal validate compile show obligations checks explain compare run result" -- "${cur}")); return 0; fi
+        if [[ "${COMP_WORDS[@]}" =~ plan && "${cur}" == -* ]]; then COMPREPLY=($(compgen -W "--accept --json --branch --local-policy" -- "${cur}")); return 0; fi
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--json" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[@]}" =~ integrate ]]; then

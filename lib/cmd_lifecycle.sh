@@ -109,11 +109,10 @@ cmd_init() {
 # shape only; anything else is user configuration.
 init_config_is_generated_stub() {
     awk '
-        NR == 1 && $0 != "version: 1" { exit 1 }
-        NR == 2 && $0 !~ /^profile: ?[A-Za-z0-9_-]*$/ { exit 1 }
-        NR == 3 && $0 != "setup:" { exit 1 }
-        NR > 3 { exit 1 }
-        END { exit NR == 3 ? 0 : 1 }
+        NR == 1 && $0 != "version: 1" { invalid = 1 }
+        NR == 2 && $0 !~ /^profile: ?[A-Za-z0-9_-]*$/ { invalid = 1 }
+        NR == 3 && $0 != "setup:" { invalid = 1 }
+        END { exit !invalid && NR == 3 ? 0 : 1 }
     ' "$1"
 }
 

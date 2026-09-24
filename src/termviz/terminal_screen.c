@@ -104,6 +104,7 @@ void tv_term_glyph(struct tv_terminal_model *t, uint32_t cp) {
 void tv_term_save(struct tv_terminal_model *t) {
     struct tv_screen *s = tv_term_screen(t);
     s->saved_x = s->x; s->saved_y = s->y; s->saved_pen = t->pen;
+    memcpy(s->saved_graphics, t->graphics, sizeof(t->graphics)); s->saved_charset = t->active_charset;
 }
 
 void tv_term_restore(struct tv_terminal_model *t) {
@@ -111,6 +112,7 @@ void tv_term_restore(struct tv_terminal_model *t) {
     s->x = s->saved_x < s->canvas.width ? s->saved_x : s->canvas.width - 1;
     s->y = s->saved_y < s->canvas.height ? s->saved_y : s->canvas.height - 1;
     s->wrap_pending = false; t->pen = s->saved_pen;
+    memcpy(t->graphics, s->saved_graphics, sizeof(t->graphics)); t->active_charset = s->saved_charset;
 }
 
 void tv_term_reset(struct tv_terminal_model *t) {
@@ -121,11 +123,13 @@ void tv_term_reset(struct tv_terminal_model *t) {
     t->alternate_active = t->origin = t->insert = t->application_cursor = t->bracketed_paste = t->mouse_sgr = false;
     t->autowrap = t->cursor_visible = true; t->mouse_mode = 0;
     t->history_count = t->history_start = 0;
+    memset(t->graphics, 0, sizeof(t->graphics)); t->active_charset = t->charset_target = 0;
     t->parser_state = 0; t->utf8_length = t->reply_length = 0;
     for (i = 0; i < 2; i++) {
         struct tv_screen *s = i ? &t->alternate : &t->primary;
         size_t j, count = (size_t)t->max_columns * (size_t)t->max_rows;
         s->x = s->y = s->saved_x = s->saved_y = s->top = 0;
+        memset(s->saved_graphics, 0, sizeof(s->saved_graphics)); s->saved_charset = 0;
         s->bottom = s->canvas.height - 1; s->wrap_pending = false; s->saved_pen = t->pen;
         for (j = 0; j < count; j++) s->canvas.cells[j] = t->pen;
     }

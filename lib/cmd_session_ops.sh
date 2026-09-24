@@ -154,11 +154,9 @@ cmd_broadcast() {
         echo "$_cached_tmux_sessions" | grep -qx "$1" 2>/dev/null
     }
 
-    # Use temp file for count to avoid subshell variable loss
-    tmpcount="$(mktemp)"
-    printf "0" > "$tmpcount"
-
-    echo "$mappings" | while IFS=' ' read -r branch session _ai _group; do
+    count=0
+    failed=0
+    while IFS=' ' read -r branch session _ai _group; do
         if [ "$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)" = headless ] || [ "$session" = - ]; then
             echo "  Skipping $branch: headless heads have no terminal pane" >&2
             continue
@@ -190,17 +188,19 @@ cmd_broadcast() {
                 fi
             fi
             echo "  Sending to $branch ($session) via $_target..."
-            tmux send-keys -t "$_target" "$command_text" Enter 2>/dev/null || true
-            # Increment count in file
-            _cnt="$(cat "$tmpcount")"
-            printf "%d" "$((_cnt + 1))" > "$tmpcount"
+            if tmux send-keys -t "$_target" "$command_text" Enter; then
+                count=$((count + 1))
+            else
+                echo "  Failed to send to $branch ($session) via $_target" >&2
+                failed=$((failed + 1))
+            fi
         fi
-    done
-
-    count="$(cat "$tmpcount")"
-    rm -f "$tmpcount"
+    done <<EOF
+$mappings
+EOF
 
     echo "Sent to $count session(s)"
+    [ "$failed" -eq 0 ]
 }
 
 cmd_wait_idle() {
