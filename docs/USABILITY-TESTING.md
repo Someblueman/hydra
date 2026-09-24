@@ -1,8 +1,8 @@
 # Automated usability evaluation
 
-Initial deterministic runner implemented on the 2.7 development branch, 15 September
-2026. The broader discoverability and live-provider matrix below remains an
-acceptance plan; passing scripted journeys does not close it.
+Initial deterministic runner shipped in 2.7.0 (implemented 15 September 2026).
+The broader discoverability and live-provider matrix below remains an acceptance
+plan; passing scripted journeys does not close it.
 
 Run `make test-usability`. It builds and installs a fresh prefix, exercises real
 Git/tmux and public Hydra entry points, then writes an HTML report under

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-09-24
+
 ### Added
 
 - Start a conversation inside Hydra with task name, available agent profile and
@@ -50,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   claiming confirmed descendant termination.
 - Refresh benchmark readiness screens and semantic predicates for the control
   centre, including actual search cancellation rather than an already-visible tab.
+- Complete `workflow plan propose`/`proposal` and their flags in bash, zsh and
+  fish.
 
 ## [2.6.0] - 2026-09-14
 
@@ -1076,7 +1080,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.7.0...HEAD
+[2.7.0]: https://github.com/Someblueman/hydra/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/Someblueman/hydra/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/Someblueman/hydra/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/Someblueman/hydra/compare/v2.3.0...v2.4.0

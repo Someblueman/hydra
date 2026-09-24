@@ -3,12 +3,13 @@
 See `hydra help` for complete command syntax. Fleet and remote tasks shipped in
 v2.1.0; workflow data, approval waits, headless adapters and local objective
 planning in v2.2.0. Version 2.6.0 changes the interactive `spawn` default, keeps
-`init` out of the source tree and reworks the native TUI; see the
-[changelog](../CHANGELOG.md) for upgrade notes.
+`init` out of the source tree and reworks the native TUI; 2.7.0 adds in-app task
+launch and agent plan proposals. See the [changelog](../CHANGELOG.md) for upgrade
+notes.
 
 ## Starting out
 
-On the 2.7 development branch, open `hydra` in your repository and press `n`.
+Open `hydra` in your repository and press `n`.
 Enter a task name, choose an available agent profile (`none` opens a shell), then
 enter an objective or leave it blank to start a conversation. Hydra registers the
 project, creates the head and opens agent input in the same workspace. Opening

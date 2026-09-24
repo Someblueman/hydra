@@ -1,11 +1,13 @@
 # Hydra public contracts
 
-Hydra 2.6.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
-It keeps `hydra init` out of the source tree (shared configuration is an explicit
-opt-in), delivers the head environment through the tmux session and a per-instance
-launcher instead of typed exports, and changes only the interactive `spawn` default
-(`--attach` restores attachment; `HYDRA_NO_SWITCH`, non-interactive and `--json`
-behavior are unchanged). See the [2.6.0 changelog](../CHANGELOG.md#260---2026-09-14).
+Hydra 2.7.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
+It adds [head-associated planning proposals](#head-associated-planning-proposals)
+and the opt-in `kill --protect-untracked`; interactive spawn and resume open the
+task inside Hydra (`--attach`, `HYDRA_NO_SWITCH`, non-interactive and `--json`
+behavior are unchanged). Since 2.6.0, `hydra init` stays out of the source tree
+(shared configuration is an explicit opt-in) and the head environment is delivered
+through the tmux session and a per-instance launcher instead of typed exports. See
+the [2.7.0 changelog](../CHANGELOG.md#270---2026-09-24).
 Interactive Codex restore retains cwd-scoped latest-session selection; headless
 resume binds an exact recorded session.
 Internal shell function names,
@@ -256,7 +258,7 @@ minor-release window before removal, except where a security or integrity fix
 requires immediate removal with migration guidance. Releases are cut only from the
 exact qualified commit; local checks do not publish or grant release-write access.
 
-## Head-associated planning proposals (2.7 development)
+## Head-associated planning proposals
 
 `hydra workflow plan propose <draft.json> [--branch <head>]` atomically publishes a
 strict, bounded JSON draft under the selected head's `planning/draft.json`. Without
