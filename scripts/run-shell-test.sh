@@ -9,7 +9,7 @@ TMUX_TMPDIR="$case_root/tmux"
 export TMPDIR TMUX_TMPDIR
 
 # Only used on interruption, while the owned runner PID is still unreaped.
-# shellcheck disable=SC2329 # Called by the EXIT trap through cleanup.
+# shellcheck disable=SC2329,SC2317 # Called by the EXIT trap through cleanup.
 stop_case_tree() (
     case_parent=$1
     for case_child in $(ps -eo pid=,ppid= | awk -v parent="$case_parent" '$2 == parent { print $1 }'); do
@@ -18,7 +18,7 @@ stop_case_tree() (
     kill -KILL "$case_parent" 2>/dev/null || true
 )
 
-# shellcheck disable=SC2329 # Invoked by the EXIT trap.
+# shellcheck disable=SC2329,SC2317 # Invoked by the EXIT trap.
 cleanup() {
     if [ -n "$case_runner" ]; then
         stop_case_tree "$case_runner"
