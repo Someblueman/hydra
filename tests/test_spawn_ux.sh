@@ -161,11 +161,29 @@ output="$("$HYDRA_BIN" spawn feature/none --headless --attach 2>&1)"
 assert_failure $? "--attach is rejected with --headless"
 assert_contains "$output" "--attach cannot be combined with --headless" "headless attach error is explicit"
 
+# Task input opens in the optional native workspace; shell-only installs keep
+# the context block in the current terminal.
+native_tui=0
+"$HYDRA_BIN" tui --capabilities --json 2>/dev/null | grep -q '"native":true' && native_tui=1
+
 if tmux -L "$tty_server" -V >/dev/null 2>&1; then
+    echo "Testing interactive spawn without the native TUI stays in the terminal..."
+    if run_in_tty ux-basic "HYDRA_TUI_BIN='$test_base_dir/missing-hydra-tui' '$HYDRA_BIN' spawn tty/basic --no-agent"; then
+        assert_equal "0" "$tty_rc" "shell-only interactive spawn succeeds"
+        assert_equal "0" "$tty_workspace" "shell-only spawn does not open the workspace"
+        assert_not_contains "$tty_output" "Session Manager" "shell-only spawn does not open the basic TUI"
+        assert_contains "$tty_output" "Head 'tty/basic' created" "shell-only spawn prints the context block"
+        assert_contains "$tty_output" "hydra switch tty/basic" "shell-only spawn offers direct attach"
+        assert_equal "tty_basic attached=0" "$(tmux -L "$tty_server" list-sessions -F '#{session_name} attached=#{session_attached}' 2>/dev/null | grep '^tty_basic ')" "shell-only head session exists and is not attached"
+    else
+        assert_success 1 "shell-only interactive spawn produced a result"
+    fi
+
     echo "Testing interactive spawn stays in the current terminal by default..."
+    [ "$native_tui" -eq 1 ] || echo "[SKIP] native TUI is unavailable; workspace opening not checked"
     if run_in_tty ux-default "'$HYDRA_BIN' spawn tty/default --no-agent"; then
         assert_equal "0" "$tty_rc" "interactive spawn succeeds"
-        assert_equal "1" "$tty_workspace" "interactive spawn opens agent input inside Hydra"
+        assert_equal "$native_tui" "$tty_workspace" "interactive spawn opens agent input inside Hydra when native"
         assert_not_contains "$tty_output" "Switching to session" "interactive spawn does not attach by default"
         assert_not_contains "$tty_output" "not in terminal" "interactive spawn saw a terminal"
         assert_contains "$tty_output" "Head 'tty/default' created" "context block names the head"
@@ -204,7 +222,7 @@ if tmux -L "$tty_server" -V >/dev/null 2>&1; then
     echo "Testing interactive spawn --resume prints the context block..."
     if run_in_tty ux-resume "'$HYDRA_BIN' kill tty/default --force >/dev/null 2>&1; '$HYDRA_BIN' spawn tty/default --no-agent --resume"; then
         assert_equal "0" "$tty_rc" "interactive spawn --resume succeeds"
-        assert_equal "1" "$tty_workspace" "resume opens agent input inside Hydra"
+        assert_equal "$native_tui" "$tty_workspace" "resume opens agent input inside Hydra when native"
         assert_contains "$tty_output" "Head 'tty/default' resumed" "resumed head prints the context block"
         assert_not_contains "$tty_output" "Switching to session" "resumed head does not attach by default"
     else

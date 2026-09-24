@@ -26,8 +26,9 @@ allows sh/git, one worker, four heads, 300 seconds and 1 MiB of artifacts, with 
 retries or repairs. It governs the compiled workflow, not the agent process's OS
 permissions. Agent proposals alone never authorize execution.
 
-Interactive `spawn` and `spawn --resume` now open agent input inside the control
-centre. `--attach` selects direct tmux attachment; `HYDRA_NO_SWITCH`, headless and
+Interactive `spawn` and `spawn --resume` now open agent input inside the native
+control centre; without the optional native TUI they print the head's context and
+stay in the terminal. `--attach` selects direct tmux attachment; `HYDRA_NO_SWITCH`, headless and
 non-TTY invocations retain their existing behavior. `Ctrl-B Tab` returns input to
 Hydra, `Ctrl-B x` closes only the attached client, and `Ctrl-B q` exits the UI.
 

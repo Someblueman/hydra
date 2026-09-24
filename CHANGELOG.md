@@ -21,8 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Interactive spawn and resume open the task's input inside Hydra. Explicit
-  `--attach`, non-TTY, headless and `HYDRA_NO_SWITCH` behavior is preserved.
+- Interactive spawn and resume open the task's input inside Hydra when the native
+  TUI is available; shell-only installs stay in the terminal with the context
+  block. Explicit `--attach`, non-TTY, headless and `HYDRA_NO_SWITCH` behavior is
+  preserved.
 - Label Details output as a read-only, clipped plain-text excerpt and preserve its
   blank lines; open the attached pane for live terminal styling and input.
 - Run independent shell tests with bounded parallelism and private temporary

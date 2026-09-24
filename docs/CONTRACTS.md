@@ -3,7 +3,7 @@
 Hydra 2.7.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
 It adds [head-associated planning proposals](#head-associated-planning-proposals)
 and the opt-in `kill --protect-untracked`; interactive spawn and resume open the
-task inside Hydra (`--attach`, `HYDRA_NO_SWITCH`, non-interactive and `--json`
+task inside the native control centre when it is available (`--attach`, `HYDRA_NO_SWITCH`, non-interactive and `--json`
 behavior are unchanged). Since 2.6.0, `hydra init` stays out of the source tree
 (shared configuration is an explicit opt-in) and the head environment is delivered
 through the tmux session and a per-instance launcher instead of typed exports. See

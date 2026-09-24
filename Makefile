@@ -31,7 +31,7 @@ lint:
 	@echo "All checks passed!"
 
 # Run CLI shell tests with their native structured-data fixture helpers.
-test: build-fleet build-test-fixture $(BUILD_DIR)/native-tests/statistics-evidence $(BUILD_DIR)/test-statistics
+test: build-fleet build-tui build-test-fixture $(BUILD_DIR)/native-tests/statistics-evidence $(BUILD_DIR)/test-statistics
 	@echo "Running tests..."
 	+@case "$(MAKEFLAGS)" in \
 		*jobserver*) exec $(MAKE) shell-tests ;; \
