@@ -8,7 +8,7 @@ BUILD_DIR="$(dirname "$HYDRA_FLEET_BIN")"
 HYDRA_HOME="$fixture/client"
 HYDRA_REVIEW_FIXTURE="$fixture"
 export HYDRA_FLEET_BIN BUILD_DIR HYDRA_HOME HYDRA_REVIEW_FIXTURE
-(cd "$root" && make -s --no-print-directory quality-c-flags | xargs "${CC:-cc}" "$root/tests/fixtures/fleet-review/projection-cases.c" "$BUILD_DIR/libhydra-fleet.a" "$(pkg-config --variable=libdir json-c)/libjson-c.a" -lm -o "$BUILD_DIR/test-fleet-review-projection")
+(cd "$root" && MAKEFLAGS='' MAKELEVEL='' make -s --no-print-directory quality-c-flags | xargs "${CC:-cc}" "$root/tests/fixtures/fleet-review/projection-cases.c" "$BUILD_DIR/libhydra-fleet.a" "$(pkg-config --variable=libdir json-c)/libjson-c.a" -lm -o "$BUILD_DIR/test-fleet-review-projection")
 # shellcheck source=/dev/null
 . "$root/tests/workflow_task_cleanup.sh"
 # shellcheck source=/dev/null

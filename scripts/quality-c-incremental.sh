@@ -11,7 +11,7 @@ QUALITY_C_LOG=$report
 QUALITY_C_CHECKS='-*,readability-function-cognitive-complexity'
 export QUALITY_C_LOG QUALITY_C_CHECKS
 pkg-config --exists json-c
-flags=$(make -s --no-print-directory quality-c-flags)
+flags=$(MAKEFLAGS='' MAKELEVEL='' make -s --no-print-directory quality-c-flags)
 # Match Makefile compiler argument splitting; preserve selected source arguments.
 # shellcheck disable=SC2086
 set -- "$@" -- $flags
