@@ -7,6 +7,10 @@ does not document token counts. Fixtures intentionally keep Cursor usage absent.
 `tests/agent_builtin_cases.sh` exercises the exact built-in argv and recorded
 resume paths through public `hydra exec`, using synthetic executables. It also
 checks partial streams and failure events from providers that exit zero.
+`cursor-untrusted.txt` is Cursor Agent 2026.09's plain-text workspace-trust
+refusal (exit 1, directory path neutralized). The synthetic `cursor-agent` prints
+it unless `--trust` is passed, and failure cases check its bounded `diagnostic`
+excerpt on stdout and stderr.
 
 Format references: [Antigravity](https://antigravity.google/docs/cli/headless/),
 [Cursor](https://cursor.com/docs/cli/reference/output-format), and

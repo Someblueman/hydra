@@ -140,7 +140,10 @@ OpenCode (`opencode`), Claude Code (`claude`), Codex (`codex`), and Pi (`pi`).
 Imported profiles can add a plain script or another declared worker. Select the
 profile with `args.profile`, deliver a verified `prompt_input` or `prompt_file`,
 and require only capabilities the profile declares. Cursor does not declare usage
-reporting. Use an independent compare or gate step to verify the result.
+reporting; its recipe passes `--trust` so each fresh head worktree is accepted
+without Cursor's interactive workspace prompt. A failed step's agent receipt keeps
+a bounded `diagnostic` excerpt of provider output that was not an event. Use an
+independent compare or gate step to verify the result.
 Inspect built-in declarations with `hydra agent contract NAME`; live provider
 authentication and qualification remain separate from help probes.
 

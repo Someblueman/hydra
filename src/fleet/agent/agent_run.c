@@ -226,6 +226,7 @@ json_object *agent_run_cli(int argc, char **argv) {
     json_object_object_add(record, "events", json_object_get(stream.events));
     json_object_object_add(record, "usage", json_object_get(stream.usage));
     json_object_object_add(record, "observed", observations(&stream, &cap, invoked, *request.resume_run, status, steering_bytes, profile));
+    agent_diagnose(record, &stream, &cap, status);
 
     if (*stream.session) f_string_add(record, "session_id", stream.session);
     json_object_object_add(record, "verification_passed", json_object_new_boolean(false));
