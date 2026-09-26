@@ -3,6 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "plan_diagnostics.h"
 static bool native_plan_accept(struct native_plan *p, FILE *input) {
     struct workflow_model *graph=calloc(1,sizeof(*graph));
     char *preview=calloc(1,NATIVE_PLAN_TEXT+1), *line=NULL;
@@ -62,6 +63,16 @@ static bool native_plan_accept(struct native_plan *p, FILE *input) {
 done:
     free(graph); free(preview); free(line); return valid;
 }
+/* Failed compilation: readable diagnostics first, then the raw response. */
+static void native_plan_failed(struct native_plan *p, FILE *input) {
+    char *text=calloc(1,NATIVE_PLAN_TEXT+1), *summary=calloc(1,NATIVE_PLAN_TEXT+1);
+    size_t n=text ? fread(text,1,NATIVE_PLAN_TEXT,input) : 0;
+    p->state=PLAN_INVALID;
+    if (!text || !n || ferror(input))
+        native_plan_message(p,"Validation failed without a complete diagnostic. Inspect workflow plan validate through the CLI.");
+    else native_plan_message(p,summary && plan_failure_summary(text,summary,NATIVE_PLAN_TEXT+1) ? summary : text);
+    free(text); free(summary);
+}
 void native_plan_tick(struct app *app, bool watch) {
     struct native_plan *p=app->plan;
     if (!p) return;
@@ -76,12 +87,7 @@ void native_plan_tick(struct app *app, bool watch) {
             (void)native_plan_load(app,path,policy);
             native_plan_message(p,"Draft or policy changed during validation. This is a new revision; press V to validate it.");
         } else if (!success) {
-            char *text=calloc(1,NATIVE_PLAN_TEXT+1);
-            size_t n=text ? fread(text,1,NATIVE_PLAN_TEXT,input) : 0;
-            p->state=PLAN_INVALID;
-            if (text && n && !ferror(input)) native_plan_message(p,text);
-            else native_plan_message(p,"Validation failed without a complete diagnostic. Inspect workflow plan validate through the CLI.");
-            free(text);
+            native_plan_failed(p,input);
         } else if (!p->projecting) {
             char *argv[]={(char *)app->hydra,"workflow","plan","tui-data",p->compiled,NULL};
             p->projecting=true;
