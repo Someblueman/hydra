@@ -146,6 +146,12 @@ assert_failure $? 'execution rejects a different accepted digest'
 printf 'changed\n' >> expected.txt
 "$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$digest" >/dev/null 2>&1
 assert_failure $? 'stale source and inputs rejected before execution'
+"$HYDRA_BIN" workflow plan validate "$ROOT/plan.json" "$ROOT/policy.json" > "$ROOT/dirty-source.json"
+assert_failure $? 'tracked source changes block validation'
+grep -q '"condition":"tracked_changes"' "$ROOT/dirty-source.json" &&
+    grep -q '"changed_paths":\["expected.txt"\]' "$ROOT/dirty-source.json" &&
+    grep -q 'has 1 tracked change: expected.txt; .*commit or stash these changes in ' "$ROOT/dirty-source.json"
+assert_success $? 'invalid source names the checkout, changed paths and recovery'
 git checkout -- expected.txt
 "$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$digest" > "$ROOT/run.out" 2> "$ROOT/run.err"
 assert_success $? 'accepted plan completes through the existing workflow runtime'

@@ -72,6 +72,7 @@ case "${1:-}:${2:-}" in
         printf "Ready: fixture\n"
         ;;
     spawn:*)
+        if [ -n "${HYDRA_TEST_SPAWN_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_SPAWN_ARGV"; fi
         printf 'FAKE SPAWN %s\n' "$*"
         ;;
     group:create)

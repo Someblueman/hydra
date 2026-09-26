@@ -28,7 +28,10 @@ cmd_workflow_plan() (
         validate|compile)
             if [ "$_cwp_action" = validate ]; then _cwp_count=3; else _cwp_count=4; fi
             [ "$#" -eq "$_cwp_count" ] || { cli_error 'workflow plan' invalid_arguments 'use validate <plan.json> <policy.json> or compile <plan.json> <policy.json> <new-output.json>' 'run hydra workflow plan --help'; exit 1; }
-            _cwp_root="$(workflow_repo_root)" || exit 1
+            _cwp_root="$(workflow_repo_root)" || {
+                cli_error 'workflow plan' invalid_source "source $(pwd) is not a Git repository" "run validation from the project's main checkout"
+                exit 1
+            }
             if [ "$_cwp_action" = validate ]; then workflow_plan_tool validate "$2" "$3" "$_cwp_root"
             else workflow_plan_tool compile "$2" "$3" "$_cwp_root" "$4"; fi
             ;;

@@ -137,7 +137,7 @@ json_object *plan_compile(json_object *plan, json_object *policy, const char *so
     normalized = plan_canonical(plan); plan = normalized;
     if (plan_lower(plan, scratch) || f_path(data_path, sizeof(data_path), scratch, "data.json") || f_path(graph_path, sizeof(graph_path), scratch, "graph.tsv") ||
         !(manifest = wd_manifest(data_path, graph_path))) { plan_error(errors, "data", "invalid_handoff", "invalid artifact types, bounds, paths or direct producer dependencies"); goto done; }
-    if (!(binding = source_binding(source))) { plan_error(errors, "source", "invalid_source", "source must be a Git repository with no tracked changes and bounded readable content"); goto done; }
+    if (!(binding = source_binding(source))) { plan_source_error(errors, source); goto done; }
     if (!(context = context_files(plan, source, scratch, &context_bytes))) { plan_error(errors, "context", "invalid_context", "context references must be bounded existing repository files; snapshot external sources first"); goto done; }
     if (!(data = bind_inputs(manifest, source, scratch, json_object_get_int64(f_field(f_field(plan, "envelope"), "artifact_bytes")) - context_bytes,
         1 + json_object_get_int64(f_field(f_field(plan, "envelope"), "repair_budget"))))) {

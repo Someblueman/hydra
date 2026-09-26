@@ -48,6 +48,22 @@ assert_failure $? 'an agent cannot publish into another head'
 "$HYDRA_BIN" workflow plan proposal proposal --local-policy > "$root/projection"
 assert_success $? 'explicit local policy produces the versioned path projection'
 assert_equal "$(printf 'HYDRA_PLAN_PROPOSAL\t1')" "$(sed -n '1p' "$root/projection")" 'projection is versioned'
+policy="$(sed -n '2p' "$root/projection" | cut -f3)"
+assert_equal '{"schema_version":1,"envelope":{"hosts":["local"],"tools":["sh","git","make"],"effects":["execute","worktree"],"writes":["@spawned:*"],"parallelism":1,"timeout_seconds":3600,"artifact_bytes":1048576,"max_heads":4,"disk_mb":1024,"retry_budget":0,"repair_budget":0}}' \
+    "$(cat "$policy")" 'a head without a profile gets the guided policy without an agent tool'
+cp "$head/profile" "$root/profile"
+printf 'codex\n' > "$head/profile"
+"$HYDRA_BIN" workflow plan proposal proposal --local-policy >/dev/null
+grep -q '"tools":\["sh","git","make","profile:codex"\],' "$policy"
+assert_success $? 'the guided policy authorizes the head recorded agent profile'
+for profile in 'Bad Name' 'bad"quote' '-lead' 'trail-'; do
+    printf '%s\n' "$profile" > "$head/profile"
+    "$HYDRA_BIN" workflow plan proposal proposal --local-policy >/dev/null
+    grep -q '"tools":\["sh","git","make"\],' "$policy"
+    assert_success $? "an unusable recorded profile is omitted from the policy: $profile"
+done
+cp "$root/profile" "$head/profile"
+"$HYDRA_BIN" workflow plan proposal proposal --local-policy >/dev/null
 "$HYDRA_BIN" workflow plan proposal proposal > "$root/read-only"
 assert_success $? 'subsequent lookup is read-only'
 cmp -s "$root/projection" "$root/read-only"

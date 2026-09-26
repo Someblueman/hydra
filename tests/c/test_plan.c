@@ -54,6 +54,34 @@ static void graph_cases(void) {
     json_object_object_add(f_field(policy, "envelope"), "writes", f_parse_value("[\"other-head:*\"]")); expect(plan, policy, "unauthorized");
     json_object_put(plan); json_object_put(policy);
 }
+/* @spawned:* is a policy-only scope for heads created by the plan's own spawn steps. */
+static void spawned_scope_cases(void) {
+    json_object *plan = fixture(), *policy = plan_read("tests/fixtures/plan/policy.json"), *env, *allowed;
+    assert(plan && policy); env = f_field(plan, "envelope"); allowed = f_field(policy, "envelope");
+    json_object_object_add(json_object_array_get_idx(f_field(plan, "steps"), 1), "writes", f_parse_value("[\"plan-smoke:report.txt\"]"));
+    json_object_object_add(env, "writes", f_parse_value("[\"plan-smoke:*\"]"));
+    expect(plan, policy, "unauthorized");
+    json_object_object_add(allowed, "writes", f_parse_value("[\"@spawned:*\"]"));
+    expect(plan, policy, NULL);
+    json_object_object_add(env, "writes", f_parse_value("[\"plan-smoke:*\",\"existing-head:*\"]"));
+    expect(plan, policy, "unauthorized");
+    json_object_object_add(env, "writes", f_parse_value("[\"@spawned:*\"]"));
+    expect(plan, policy, "invalid_policy");
+    json_object_object_add(env, "writes", f_parse_value("[\"plan-smoke:*\"]"));
+    json_object_object_add(allowed, "writes", f_parse_value("[\"@spawned:src\"]"));
+    expect(plan, policy, "invalid_policy");
+    json_object_object_add(allowed, "writes", f_parse_value("[\"spawned:*\"]"));
+    expect(plan, policy, "unauthorized");
+    json_object_put(plan); json_object_put(policy);
+}
+static void source_case(const char *source, const char *named, const char *condition) {
+    json_object *errors = json_object_new_array(), *entry;
+    plan_source_error(errors, source);
+    assert(json_object_array_length(errors) == 1); entry = json_object_array_get_idx(errors, 0);
+    assert(!strcmp(f_string(entry, "code"), "invalid_source") && !strcmp(f_string(entry, "condition"), condition));
+    assert(strstr(f_string(entry, "message"), named) && f_string(entry, "recovery"));
+    json_object_put(errors);
+}
 static void parse_cases(const char *root) {
     const char *bad[] = {"{\"a\":1,\"a\":2}", "{\"a\":1,\"\\u0061\":2}", "{\"nested\":{\"a\":0,\"a\":0}}", "{", "{\"a\"", "{\"a\":", "{\"a\":[]", "{\"a\":1} trailing", "{\"a\":NaN}", "{\"a\":1e999}", "{\"a\":\"\\u0000\"}", NULL};
     char path[F_PATH], a[65], b[65]; json_object *first, *second; size_t i;
@@ -301,6 +329,10 @@ static void obligation_cases(void) {
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
-    terminal_cases(); graph_cases(); distributed_graph_cases(); repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); structured_report_cases(); assert(!f_remove_tree(root));
+    terminal_cases(); graph_cases(); spawned_scope_cases(); distributed_graph_cases();
+    repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); structured_report_cases();
+    source_case("/nonexistent/hydra-plan-source", "/nonexistent/hydra-plan-source", "missing_directory");
+    { char real[F_PATH]; assert(realpath(root, real)); source_case(root, real, "not_repository"); }
+    assert(!f_remove_tree(root));
     puts("planning graph, policy, canonical JSON and parser checks passed"); return 0;
 }

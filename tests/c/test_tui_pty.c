@@ -591,11 +591,17 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     char large_paste[8300];
     size_t paste_offset;
     const char mouse[] = "\033[<0;12;4M";
+    char spawn_path[128], spawned[16384] = "";
+    FILE *spawn_file;
+    snprintf(spawn_path, sizeof(spawn_path), "/tmp/hydra-pty-spawn-argv-%ld", (long)getpid());
+    (void)unlink(spawn_path);
     (void)setenv("TMUX", "test", 1);
     (void)setenv("FAKE_TMUX_CURRENT_SESSION", "hydra-feature-live", 1);
+    (void)setenv("HYDRA_TEST_SPAWN_ARGV", spawn_path, 1);
     bool opened = result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open real pseudo-terminal");
     (void)unsetenv("TMUX");
     (void)unsetenv("FAKE_TMUX_CURRENT_SESSION");
+    (void)unsetenv("HYDRA_TEST_SPAWN_ARGV");
     if (!opened) return;
     result(wait_for_raw(&session), "interactive TUI enters raw mode");
     (void)wait_for_model(&session);
@@ -664,13 +670,25 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     (void)wait_for_marker(&session, "Action search:", 1000);
     write_input(session.master, "spawn\n", 6U);
     (void)wait_for_marker(&session, "Task name:", 1000);
-    write_input(session.master, "feature-native\n", 15U);
-    (void)wait_for_marker(&session, "Agent profile", 1000);
+    write_input(session.master, "Feature Native\n", 15U);
+    result(wait_for_marker(&session, "Branch feature-native.", 1000), "a task name with spaces shows its derived branch");
     write_input(session.master, "codex\n", 6U);
     (void)wait_for_marker(&session, "Objective", 1000);
     write_input(session.master, "\n", 1U);
-    result(wait_for_marker(&session, "Task started; opening its agent pane", 2000),
+    result(wait_for_marker(&session, "Task \"Feature Native\" started on branch feature-native", 2000),
            "new task launches through captured CLI without a return acknowledgement");
+    spawn_file = fopen(spawn_path, "r");
+    if (spawn_file != NULL) {
+        size_t length = fread(spawned, 1U, sizeof(spawned) - 1U, spawn_file);
+        spawned[length] = '\0';
+        fclose(spawn_file);
+    }
+    (void)unlink(spawn_path);
+    result(strstr(spawned, "spawn\nfeature-native\n--profile\ncodex\n--prompt\nTask: Feature Native\nBranch: feature-native\n") != NULL,
+           "spawn receives the derived branch while the prompt keeps the task name");
+    result(strstr(spawned, "tools sh, git, make and profile:codex;") != NULL &&
+           strstr(spawned, "never tell the user to start Hydra from a .hydra-worktrees directory") != NULL,
+           "planning handoff matches the guided local policy");
     write_input(session.master, "A", 1U);
     result(wait_for_marker(&session, "3 marked", 1000), "select-all marks every visible head");
     write_input(session.master, "G", 1U);
