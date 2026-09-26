@@ -151,3 +151,27 @@ compile and review its source/input/policy bindings, then run the exact accepted
 artifact through this same scheduler. Final success requires artifact-bound
 verification reports for the declared deliverables. This optional native path
 does not change workflow schema 1 or shell-only execution.
+
+A policy's `writes` may contain the exact scope `@spawned:*`. It authorizes a
+plan's declared `<head>:<path>` or `<head>:*` scopes only for heads created by
+that plan's own spawn steps. Plans must still name those heads; admission refuses
+spawn branches that already exist, so the scope never covers the source checkout
+or an existing head.
+
+The guided local policy that Hydra writes when you review an agent proposal with
+`P` allows tools `sh`, `git`, `make` and the head's own `profile:<name>` (omitted
+when the head has no profile), writes `@spawned:*`, one worker, four heads, 3600
+seconds summed over exec timeouts, 1 MiB of artifacts, a plan `disk_mb` of at
+least 1024, and no retries or repairs. A typical implementation plan spawns a
+headless worker head, runs an agent exec step there with `profile`,
+`prompt_input`, `result_file` and `timeout`, and verifies with `make` or `sh`
+recipes that run committed scripts and write an object report. `prompt_input`
+names a step input mapped with `{"input": "<name>"}` to a plan-level
+`data.inputs` file (repository-relative path, `type: file`, `max_bytes`);
+`result_file` equals the name and path of a declared output of that step.
+
+Validation binds the checkout Hydra runs in at its current commit. It must be a
+Git repository with no tracked changes, and inputs, context and scripts must
+exist there. An `invalid_source` diagnostic names that checkout and the failed
+condition; for tracked changes it lists up to ten paths with a count and the
+recovery `commit or stash these changes in <dir>, then validate again`.

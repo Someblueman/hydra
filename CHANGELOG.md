@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Policies accept the write scope `@spawned:*`, authorizing writes only to heads
+  created by the plan's own spawn steps; plans still name concrete heads.
+
+### Changed
+
+- The guided local policy now allows `sh`, `git`, `make` and the head's own agent
+  profile, writes inside plan-spawned heads, 3600 seconds and a 1 GiB free-space
+  floor, so agent-implemented plans can validate. Its approval flow is unchanged.
+- The planning handoff explains how to express a spawned worker, agent step,
+  prompt input and `make`/`sh` verification under that policy.
+
+### Fixed
+
+- New tasks whose names contain spaces or other invalid characters start on a
+  derived branch (`add kill dry run` becomes `add-kill-dry-run`) instead of failing.
+- `invalid_source` names the checkout and the failed condition, lists tracked
+  changes with a commit-or-stash recovery, and the TUI shows readable diagnostics.
+
 ## [2.7.0] - 2026-09-24
 
 ### Added

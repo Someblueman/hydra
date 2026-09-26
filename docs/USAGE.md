@@ -11,7 +11,9 @@ notes.
 
 Open `hydra` in your repository and press `n`.
 Enter a task name, choose an available agent profile (`none` opens a shell), then
-enter an objective or leave it blank to start a conversation. Hydra registers the
+enter an objective or leave it blank to start a conversation. A task name that is
+not already a valid branch, such as `add kill dry run`, starts on a derived branch
+(`add-kill-dry-run`); the agent still sees the task name. Hydra registers the
 project, creates the head and opens agent input in the same workspace. Opening
 Hydra alone does not start work. Provider sign-in and permission prompts remain
 visible in the agent pane; existing repository trust checks still apply.
@@ -21,9 +23,12 @@ publish it with `hydra workflow plan propose <draft.json>` from its head. Press
 `Ctrl-B Tab` to return input to Hydra, `B` for the plan, and `P` to review the
 proposal with the bounded local policy. `V` validates and compiles it; `E` requires
 the exact displayed digest before execution. Republished drafts invalidate prior
-validation. `I` retains explicit file import for expert use. The local policy
-allows sh/git, one worker, four heads, 300 seconds and 1 MiB of artifacts, with no
-retries or repairs. It governs the compiled workflow, not the agent process's OS
+validation. `I` retains explicit file import for expert use. The guided local
+policy allows sh, git, make and the head's own agent profile, writes only inside
+heads the plan spawns, one worker, four heads, 3600 seconds, 1 MiB of artifacts
+and a 1 GiB free-space floor, with no retries or repairs. Validation reads the
+checkout Hydra runs in at its current commit; commit or stash tracked changes
+there first. The policy governs the compiled workflow, not the agent process's OS
 permissions. Agent proposals alone never authorize execution.
 
 Interactive `spawn` and `spawn --resume` now open agent input inside the native

@@ -119,6 +119,17 @@ evaluation joins with field paths and counterexamples. Structural satisfiability
 runtime evidence, and semantic adequacy remain separate; coverage alone is not
 semantic proof.
 See [workflows](workflows.md) for planner limits and report format.
+Policy envelopes additively accept the exact write scope `@spawned:*`. It
+authorizes a plan write scope only when its head is the branch of one of that
+plan's own spawn steps; plans still declare concrete `<head>:<path>` scopes, and
+`@spawned:*` in a plan envelope is invalid. Admission already refuses spawn
+branches that exist, so the form never reaches the source checkout or an
+existing head. Earlier releases reject such a policy as `invalid_policy`.
+`invalid_source` diagnostics name the checkout and add optional `source`,
+`condition` (`missing_directory`, `not_repository`, `no_commit`,
+`tracked_changes` or `unreadable_content`) and `recovery` fields; tracked changes
+also carry `changed_paths` (at most ten) and `changed_count`. The envelope's
+`error.recovery` repeats the first diagnostic's recovery when one is present.
 Structured v3 reports require each obligation's `measurements` evidence to contain
 at least one finite JSON integer or floating-point observation. Narrative strings,
 nulls, objects, arrays, and non-finite numeric values do not satisfy that evidence
@@ -268,7 +279,12 @@ serializes replacement; malformed input preserves the previous draft. A proposal
 is durable input, not a validation, approval, or execution receipt.
 
 `hydra workflow plan proposal <head>` is read-only and fails if the draft or policy
-is absent. Explicit `--local-policy` writes the local policy preset. Success emits
+is absent. Explicit `--local-policy` writes the guided local policy: host
+`local`; tools `sh`, `git`, `make` and `profile:<name>` for the head's recorded
+profile when it is a plan ID other than `none` (otherwise no agent tool, noted on
+a terminal's stderr only); effects `execute` and `worktree`; writes `@spawned:*`;
+parallelism 1; 3600 seconds; 1 MiB of artifacts; four heads; a 1024 MiB free-space
+floor; no retries or repairs. Success emits
 `HYDRA_PLAN_PROPOSAL<TAB>1`, followed by
 `P<TAB>absolute-draft-path<TAB>absolute-policy-path`, each newline terminated.
 Paths containing tabs/newlines are refused. Native validation snapshots both files;
