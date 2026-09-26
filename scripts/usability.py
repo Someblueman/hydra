@@ -271,7 +271,11 @@ def planning(j: Journey) -> None:
         shutil.copy2(file, j.repo / file.name)
     j.command("git", "add", ".")
     j.command("git", "-c", "commit.gpgSign=false", "commit", "-qm", "planning inputs")
-    j.env["UX_PLAN_TEMPLATE"] = str(j.source / "tests/fixtures/plan/plan.json")
+    # The guided local policy requires a plan free-space floor of at least 1 GiB.
+    template = json.loads((j.source / "tests/fixtures/plan/plan.json").read_text())
+    template["envelope"]["disk_mb"] = 1024
+    (j.base / "plan-template.json").write_text(json.dumps(template))
+    j.env["UX_PLAN_TEMPLATE"] = str(j.base / "plan-template.json")
     j.env["PATH"] = str(j.prefix / "bin") + os.pathsep + j.env["PATH"]
     j.cli(
         "agent",

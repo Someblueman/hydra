@@ -1,5 +1,26 @@
 #!/bin/sh
 # Head-associated drafts. Proposal publication never grants execution approval.
+
+# Usage: workflow_plan_local_profile <head-dir>
+# Prints the head's recorded agent profile when a plan can name it as a tool.
+workflow_plan_local_profile() {
+    _wplp_profile="$(sed -n '1p' "$1/profile" 2>/dev/null || true)"
+    case "$_wplp_profile" in
+        ''|-|none|[!a-z]*|*[!a-z0-9_-]*|*[-_]|*[-_][-_]*) return 0 ;;
+    esac
+    [ "${#_wplp_profile}" -le 64 ] || return 0
+    printf '%s\n' "$_wplp_profile"
+}
+
+# Usage: workflow_plan_local_policy [profile]
+# The guided local policy: one worker, writes only inside heads the plan itself
+# spawns (@spawned:*), and the head's own agent profile when it has one.
+workflow_plan_local_policy() {
+    _wplpol_tools='"sh","git","make"'
+    [ -z "${1:-}" ] || _wplpol_tools="$_wplpol_tools,\"profile:$1\""
+    printf '{"schema_version":1,"envelope":{"hosts":["local"],"tools":[%s],"effects":["execute","worktree"],"writes":["@spawned:*"],"parallelism":1,"timeout_seconds":3600,"artifact_bytes":1048576,"max_heads":4,"disk_mb":1024,"retry_budget":0,"repair_budget":0}}' "$_wplpol_tools"
+}
+
 workflow_plan_proposal() (
     _wpp_action="$1"
     shift
@@ -51,7 +72,12 @@ workflow_plan_proposal() (
             printf 'Proposal saved for %s. In Hydra press B, then P to review it. No validation or execution has occurred.\n' "$_wpp_branch"
             exit 0
         fi
-        workflow_atomic_scalar "$_wpp_dir/policy.json" '{"schema_version":1,"envelope":{"hosts":["local"],"tools":["sh","git"],"effects":["execute","worktree"],"writes":[],"parallelism":1,"timeout_seconds":300,"artifact_bytes":1048576,"max_heads":4,"disk_mb":1,"retry_budget":0,"repair_budget":0}}' || exit 1
+        _wpp_local_profile="$(workflow_plan_local_profile "$PARALLEL_HEAD_DIR")"
+        workflow_atomic_scalar "$_wpp_dir/policy.json" "$(workflow_plan_local_policy "$_wpp_local_profile")" || exit 1
+        # The versioned projection below is parsed exactly; notes go only to a terminal.
+        if [ -z "$_wpp_local_profile" ] && [ -t 2 ]; then
+            printf 'Local policy for %s authorizes no agent profile: the head records none. Plans can run sh, git and make only.\n' "$_wpp_branch" >&2
+        fi
     fi
     [ -f "$_wpp_dir/draft.json" ] || {
         echo 'No proposal from this agent yet. Ask it to discuss the objective, use hydra workflow plan schema, and publish with hydra workflow plan propose <draft.json>.' >&2

@@ -52,6 +52,8 @@ int plan_step_check(const char *run, const char *step);
 int plan_validation_write(const char *run, const char *step, const char *directory, const char *name);
 json_object *plan_artifact(json_object *compiled, const char *run, const char *step, const char *name, char path[F_PATH]);
 json_object *plan_compile(json_object *plan, json_object *policy, const char *source, json_object *errors);
+/* Adds an invalid_source diagnostic naming the checkout and failed condition. */
+void plan_source_error(json_object *errors, const char *source);
 int plan_digest(json_object *value, char digest[65]);
 /* Borrowed JSON inputs. Digest is caller-owned; reports retain no references.
  * INVALID is malformed/stale evidence, distinct from a valid negative verdict. */

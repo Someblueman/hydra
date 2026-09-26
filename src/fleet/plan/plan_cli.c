@@ -5,6 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* A diagnostic with its own recovery (such as invalid_source) knows the next
+ * step better than the generic revise-the-plan advice. */
+static const char *diagnostic_recovery(json_object *errors) {
+    const char *recovery = f_string(json_object_array_get_idx(errors, 0), "recovery");
+    return recovery ? recovery : "revise the indicated fields without weakening the objective or policy, then validate again";
+}
 static json_object *diagnostics(json_object *errors, json_object *plan) {
     json_object *data = json_object_new_object(), *result;
     json_object_object_add(data, "diagnostics", json_object_get(errors));
@@ -24,7 +30,7 @@ static json_object *diagnostics(json_object *errors, json_object *plan) {
     if (json_object_array_length(errors)) {
         json_object *error = json_object_new_object(); f_string_add(error, "code", "invalid_plan");
         f_string_add(error, "message", "plan compilation failed; see data.diagnostics");
-        f_string_add(error, "recovery", "revise the indicated fields without weakening the objective or policy, then validate again");
+        f_string_add(error, "recovery", diagnostic_recovery(errors));
         json_object_object_add(result, "error", error);
     }
     return result;
