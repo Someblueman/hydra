@@ -182,8 +182,10 @@ void recovery_explain(const struct recovery *item, char *title, size_t title_siz
          "The terminal session for %s is no longer running. Its worktree and files are kept; nothing was removed from the repository. Open it from Work to restart the agent, or remove the head once its work is finished."},
         {"stale-lock", "Leftover lock: %s",
          "An interrupted command left a state lock behind. No work is affected. The check below clears it safely.%.0s"},
-        {"orphan-worktree", "Worktree without a head: %s",
-         "A git worktree exists that no head refers to. Review its contents before removing it; the check below previews the cleanup without deleting anything.%.0s"},
+        {"orphan-worktree", "Leftover worktree from a removed task: %s; no uncommitted changes",
+         "Hydra created this worktree for a task whose record is gone. The check below previews the cleanup without deleting anything; x removes only this worktree after you confirm. The branch is kept.%.0s"},
+        {"orphan-worktree-dirty", "Leftover worktree from a removed task: %s; has uncommitted changes",
+         "Hydra created this worktree for a task whose record is gone, and it still has uncommitted changes, so Hydra keeps it. Review or commit the work there first; the check below previews the cleanup without deleting anything.%.0s"},
         {"teardown-failure", "Removal did not finish: %s",
          "Removing %s stopped part way. Remaining files and state are kept. The check below shows what is left so you can finish or keep it."},
         {"malformed-state", "Unreadable head record: %s",
@@ -612,7 +614,8 @@ static void render_recovery_detail(struct app *app) {
     const struct recovery *item = &app->model.recovery[app->recovery_selected];
     char title[TEXT + 64], detail[1024];
     recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
-    style(app, TONE_STRONG); linef(app, "%s", title); style(app, TONE_BASE);
+    /* Wrapped so long labels, such as a leftover worktree's path, stay readable. */
+    paragraph(app, title, TV_STRONG);
     paragraph(app, detail, TV_BASE);
     linef(app, "");
     linef(app, "Check: %s", item->action);
@@ -620,6 +623,7 @@ static void render_recovery_detail(struct app *app) {
     linef(app, "Kind: %s   Source: %s   Confidence: %s", item->kind, item->source, item->confidence);
     linef(app, "Inspect: %s", item->action);
     linef(app, "Enter runs the check and shows its output here; d returns to the list");
+    if (!strcmp(item->kind, "orphan-worktree")) linef(app, "x removes this worktree after confirmation; the branch is kept");
     style(app, TONE_BASE);
 }
 
@@ -747,6 +751,17 @@ static void status_line(struct app *app, char *out, size_t size, enum tv_style *
     snprintf(out, size, "Current snapshot%sage %lds", sep, age);
 }
 
+/* Recovery offers x only for a clean leftover worktree the shell gc can remove. */
+static const char *recovery_hints(const struct app *app, bool narrow) {
+    bool removable = app->recovery_selected < app->model.recovery_count &&
+        !strcmp(app->model.recovery[app->recovery_selected].kind, "orphan-worktree");
+    if (narrow) return removable ? "Enter check  x remove  ? help  q quit" : "Enter check  d detail  ? help  q quit";
+    if (app->diagnostics) return removable ? "Enter run the check  x remove  d back to list  Esc back  ? help  q quit"
+                                           : "Enter run the check  d back to list  Esc back  ? help  q quit";
+    return removable ? "j/k select  Enter run the check  x remove  d explain  Esc back  ? help  q quit"
+                     : "j/k select  Enter run the check  d explain  Esc back  ? help  q quit";
+}
+
 /* Hints for views whose keys do not depend on local versus fleet mode. */
 static const char *view_hints(struct app *app, bool narrow) {
     if (app->view == 9) {
@@ -755,7 +770,7 @@ static const char *view_hints(struct app *app, bool narrow) {
     }
     if (app->view == 5) return narrow ? "j/k step  [/] run  ? help  q quit" : "j/k step  [/] run  h/l/J/K pan  Enter recentre  Esc back  ? help  q quit";
     if (app->view == 6) return "j/k host  Enter show its heads  Esc back  ? help  q quit";
-    if (app->view == 3) return narrow ? "Enter check  d detail  ? help  q quit" : app->diagnostics ? "Enter run the check  d back to list  Esc back  ? help  q quit" : "j/k select  Enter run the check  d explain  Esc back  ? help  q quit";
+    if (app->view == 3) return recovery_hints(app, narrow);
     return NULL;
 }
 

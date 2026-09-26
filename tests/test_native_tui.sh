@@ -109,7 +109,7 @@ contains "single agent session" "$test_root/coordination.out" "coordination expl
 contains "RECOVERY  4 findings" "$test_root/recovery.out" "narrow recovery board renders"
 contains "Terminal stopped: feature-stale" "$test_root/recovery.out" "dead sessions are explained as stopped terminals"
 contains "Leftover lock" "$test_root/recovery.out" "stale locks are explained in plain language"
-contains "Worktree without a head" "$test_root/recovery.out" "orphan worktrees are explained in plain language"
+contains "Leftover worktree from a removed" "$test_root/recovery.out" "orphan worktrees are explained in plain language"
 contains "Removal did not finish" "$test_root/recovery.out" "teardown failures are explained in plain language"
 if grep -Eq 'dead-session|stale-lock|orphan-worktree|teardown-failure' "$test_root/recovery.out"; then
     assert_success 1 "recovery list keeps raw finding kinds out of the primary text"
@@ -120,6 +120,22 @@ fi
 contains "Kind: dead-session" "$test_root/recovery-detail.out" "recovery diagnostics retain the raw finding kind"
 contains "Inspect: hydra doctor" "$test_root/recovery-detail.out" "recovery diagnostics retain the inspection command"
 contains "worktree and files are kept" "$test_root/recovery-detail.out" "recovery explains what is retained"
+{ grep -v '^R	' "$fixture"; grep '^R	orphan-worktree	' "$fixture"; } > "$test_root/orphan-first.tsv"
+"$tui" --headless-fixture "$test_root/orphan-first.tsv" --size 140x28 --view recovery --diagnostics > "$test_root/orphan-detail.out"
+contains "Leftover worktree from a removed task: feature-old (/tmp/wt/head_0123456789abcdef), 1.3 GiB; no uncommitted changes" \
+    "$test_root/orphan-detail.out" "leftover worktree finding names branch, path, size and change state"
+contains "Inspect: hydra gc --policy orphaned --dry-run" "$test_root/orphan-detail.out" "leftover worktree check is the read-only gc review"
+contains "x removes this worktree after confirmation; the branch is kept" "$test_root/orphan-detail.out" "leftover worktree offers confirmed removal"
+"$tui" --headless-fixture "$test_root/orphan-first.tsv" --size 100x28 --view recovery > "$test_root/orphan-list.out"
+contains "x remove" "$test_root/orphan-list.out" "recovery footer offers removal for a clean leftover worktree"
+sed 's/^R	orphan-worktree	/R	orphan-worktree-dirty	/' "$test_root/orphan-first.tsv" > "$test_root/orphan-dirty.tsv"
+"$tui" --headless-fixture "$test_root/orphan-dirty.tsv" --size 140x28 --view recovery --diagnostics > "$test_root/orphan-dirty.out"
+contains "has uncommitted changes" "$test_root/orphan-dirty.out" "dirty leftover worktree says it has uncommitted changes"
+if grep -q "x remove" "$test_root/orphan-dirty.out"; then
+    assert_success 1 "dirty leftover worktree is never offered for in-app removal"
+else
+    assert_success 0 "dirty leftover worktree is never offered for in-app removal"
+fi
 for view in heads detail coordination recovery; do
     "$tui" --headless-fixture "$fixture" --size 40x10 --view "$view" > "$test_root/bounded.out"
     assert_equal "11" "$(wc -l < "$test_root/bounded.out" | tr -d ' ')" "$view fits ten rows plus frame marker"

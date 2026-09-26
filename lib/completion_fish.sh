@@ -203,6 +203,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l apply -d 'Apply sele
 complete -c hydra -f -n '__fish_seen_subcommand_from gc worktree' -l dry-run -d 'Report without mutation'
 complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l include-dirty -d 'Allow explicit dirty removal'
 complete -c hydra -f -n '__fish_seen_subcommand_from gc' -l older-than -d 'Archive age in days'
+complete -c hydra -r -n '__fish_seen_subcommand_from gc' -l path -d 'Limit orphaned policy to one worktree'
 complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -l reason -d 'Lock reason'
 complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -l apply -d 'Apply repair or prune'
 complete -c hydra -f -n '__fish_seen_subcommand_from claim scope collision resource gate context du snapshot' -l json -d 'Output versioned JSON'

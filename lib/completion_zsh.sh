@@ -133,7 +133,7 @@ _hydra() {
                     _arguments '--json[Output versioned JSON]'
                     ;;
                 gc)
-                    _arguments '--policy[Cleanup policy]:policy:(orphaned stopped archives)' '--apply[Apply selected policy]' '--dry-run[Report without mutation]' '--include-dirty[Allow explicit dirty removal]' '--older-than[Archive age in days]:days:'
+                    _arguments '--policy[Cleanup policy]:policy:(orphaned stopped archives)' '--apply[Apply selected policy]' '--dry-run[Report without mutation]' '--include-dirty[Allow explicit dirty removal]' '--older-than[Archive age in days]:days:' '--path[One orphaned worktree]:worktree:_files -/'
                     ;;
                 worktree)
                     _arguments '1:subcommand:(doctor)' '2:action:(status lock unlock move repair prune)' '--reason[Lock reason]:text:' '--dry-run[Report without mutation]' '--apply[Apply repair or prune]'

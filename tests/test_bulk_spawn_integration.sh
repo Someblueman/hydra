@@ -42,8 +42,10 @@ setup_test_env() {
     trap 'if [ -n "$test_dir" ] && [ -d "$test_dir" ]; then rm -rf "$test_dir"; fi' EXIT INT TERM
     export HYDRA_HOME="$test_dir/.hydra"
     
-    # Initialize git repo
-    cd "$test_dir" || exit 1
+    # Keep the repository one level down so Hydra's sibling worktree root
+    # (<parent>/.hydra-worktrees) stays inside the directory teardown deletes.
+    mkdir "$test_dir/repo" || exit 1
+    cd "$test_dir/repo" || exit 1
     git init >/dev/null 2>&1
     git config user.email "test@example.com"
     git config user.name "Test User"
@@ -71,7 +73,9 @@ teardown_test_env() {
 # Test bulk spawn argument parsing
 test_bulk_spawn_parsing() {
     echo "Testing bulk spawn argument parsing..."
-    
+    # Even rejected spawns run in a throwaway repo, never the source checkout.
+    setup_test_env
+
     # Test count validation
     output="$("$HYDRA_BIN" spawn test-feature -n 0 2>&1 || true)"
     assert_contains "$output" "Count must be a number between 1 and 10" "Should reject count of 0"
@@ -85,12 +89,14 @@ test_bulk_spawn_parsing() {
     # Test mutually exclusive options
     output="$("$HYDRA_BIN" spawn test-feature --ai claude --agents 'claude:2' 2>&1 || true)"
     assert_contains "$output" "Cannot use both --ai and --agents" "Should reject both --ai and --agents"
+    teardown_test_env
 }
 
 # Test invalid agents specification
 test_invalid_agents_spec() {
     echo "Testing invalid agents specification..."
-    
+    setup_test_env
+
     # Test invalid format
     output="$("$HYDRA_BIN" spawn test-invalid --agents 'claude2' 2>&1 || true)"
     assert_contains "$output" "Invalid agent specification" "Should reject missing colon"
@@ -103,6 +109,7 @@ test_invalid_agents_spec() {
     
     output="$("$HYDRA_BIN" spawn test-invalid --agents 'invalid:2' 2>&1 || true)"
     assert_contains "$output" "Unsupported AI command" "Should reject invalid AI tool"
+    teardown_test_env
 }
 
 # Test confirmation prompts

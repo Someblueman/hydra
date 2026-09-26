@@ -27,7 +27,9 @@ get_hydra_worktree_parent() {
     dirname "$repo_root"
 }
 
-# Get path prefix for hydra worktrees (parent/hydra-)
+# Get the legacy v1 path prefix for hydra worktrees (parent/hydra-).
+# A matching directory name is not evidence that Hydra created a worktree;
+# orphan detection uses worktree_orphan_rows (identity-scoped heads) instead.
 # Usage: get_hydra_worktree_prefix [repo_root]
 # Returns: Prefix path on stdout
 get_hydra_worktree_prefix() {
@@ -81,33 +83,6 @@ branch_from_hydra_worktree_path() {
 # Returns: 0 if hydra worktree path, 1 otherwise
 is_hydra_worktree_path() {
     branch_from_hydra_worktree_path "$1" "${2:-}" >/dev/null 2>&1
-}
-
-# List hydra worktrees from git worktree list
-# Usage: list_hydra_worktrees [repo_root]
-# Returns: Tab-separated branch and path lines on stdout
-list_hydra_worktrees() {
-    repo_root="${1:-}"
-    if [ -z "$repo_root" ]; then
-        repo_root="$(get_repo_root)" || return 1
-    fi
-    prefix="$(get_hydra_worktree_prefix "$repo_root")"
-
-    git worktree list --porcelain 2>/dev/null | while IFS= read -r line; do
-        case "$line" in
-            worktree\ *)
-                _path="${line#worktree }"
-                case "$_path" in
-                    "$prefix"*)
-                        if [ -d "$_path" ]; then
-                            _branch="${_path#"$prefix"}"
-                            printf '%s\t%s\n' "$_branch" "$_path"
-                        fi
-                        ;;
-                esac
-                ;;
-        esac
-    done
 }
 
 # Normalize a path to absolute form

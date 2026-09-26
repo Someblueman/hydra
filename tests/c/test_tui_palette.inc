@@ -77,3 +77,34 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
     result(wait_for_exit(&session) == 0, "palette test exits cleanly");
     close_session(&session);
 }
+
+/* Recovery reviews a leftover worktree read-only and removes only that path
+ * through the shell gc authority after an in-app confirmation. */
+static void test_recovery_actions(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    if (!result(open_session(&session, tui, hydra, fake_bin, 80, 24) == 0, "open recovery action terminal")) return;
+    (void)wait_for_raw(&session);
+    (void)wait_for_model(&session);
+    write_input(session.master, "\033[<0;40;2M", 10U);
+    (void)wait_for_marker(&session, "RECOVERY  4", 1000);
+    write_input(session.master, "x", 1U);
+    result(wait_for_marker(&session, "x removes leftover worktrees only", 1000), "x on a non-worktree finding removes nothing");
+    write_input(session.master, "jj", 2U);
+    result(wait_for_marker(&session, "> Leftover worktree from a removed task", 1000), "leftover worktree finding is selectable");
+    write_input(session.master, "\n", 1U);
+    result(wait_for_marker(&session, "FAKE GC <gc> <--policy> <orphaned> <--dry-run>", 2000), "Enter runs the read-only gc review");
+    write_input(session.master, "\n", 1U);
+    (void)wait_for_marker(&session, "HYDRA / ", 1000);
+    write_input(session.master, "x", 1U);
+    result(wait_for_marker(&session, "Remove leftover worktree feature-old", 1000), "worktree removal asks inside the UI");
+    write_input(session.master, "n\n", 2U);
+    result(wait_for_marker(&session, "Removal cancelled; nothing changed", 1000), "declined worktree removal changes nothing");
+    write_input(session.master, "x", 1U);
+    (void)wait_for_marker(&session, "Remove leftover worktree feature-old", 1000);
+    write_input(session.master, "y\n", 2U);
+    result(wait_for_marker(&session, "Removed leftover worktree /tmp/wt/head_0123456789abcdef; the branch is kept", 3000),
+           "confirmed removal passes only that worktree path to gc --apply");
+    write_input(session.master, "q", 1U);
+    result(wait_for_exit(&session) == 0, "recovery action test exits cleanly");
+    close_session(&session);
+}

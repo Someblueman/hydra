@@ -401,7 +401,7 @@ static void head_key(struct app *app, char key) {
         case 'd': if (app->view != 3 && app->view != 1) enter_view(app, 1); app->diagnostics = !app->diagnostics; break;
         case ' ': toggle_mark(app); break;
         case 'A': select_all_visible(app); break;
-        case 'x': remove_heads_action(app); break;
+        case 'x': remove_key_action(app); break;
         case 'G': group_key(app); break;
         case 't': cycle_theme(app); break;
         case '?': app->help = !app->help; break;

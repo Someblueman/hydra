@@ -67,7 +67,7 @@ assert_success $? "archive GC applies only with explicit policy"
 if [ ! -d "$pack_path" ]; then assert_success 0 "applied archive GC removes only the selected archive"; else assert_success 1 "applied archive GC removes only the selected archive"; fi
 
 worktree_root="$(sed -n '1p' .git/hydra/worktree-root)"
-orphan_path="$worktree_root/orphan-worktree"
+orphan_path="$worktree_root/head_0123456789abcdef0123"
 mkdir -p "$worktree_root"
 git worktree add -q -b orphan-worktree "$orphan_path"
 printf 'untracked\n' > "$orphan_path/untracked.txt"

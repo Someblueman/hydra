@@ -58,6 +58,13 @@ C0 controls and preserves other UTF-8 bytes.
 authority. Projects, heads, instances, workflow runs, integration reports, messages,
 claims, resources, gates, and provenance use validated opaque IDs as path keys.
 Human labels are scalar values, never path identity. See [Durable state v2](#durable-state-v2).
+`$HYDRA_HOME/cache` holds disposable derived data, such as recent leftover-worktree
+sizes for Recovery, and is never an authority.
+
+A leftover (orphaned) worktree is a registered `head_<id>` worktree directly under
+the project's recorded worktree root whose head record is gone. `hydra gc --policy
+orphaned` is the only detector; doctor, cleanup, `du` and Recovery reuse it. Other
+worktrees, including `hydra-<branch>` siblings, are never candidates.
 
 The seven-field global map and project `compat-map` are not 2.0 runtime formats.
 Before migration, finish or stop active mutations, preserve local work, then run

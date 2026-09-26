@@ -61,18 +61,24 @@ assert_contains() {
 
 # Setup test environment
 TEST_DIR=""
+ORIGINAL_DIR="$(pwd)"
 setup_test_env() {
     TEST_DIR="$(mktemp -d)" || {
         echo "Error: Failed to create temporary directory" >&2
-        return 1
+        exit 1
     }
     trap 'if [ -n "$TEST_DIR" ] && [ -d "$TEST_DIR" ]; then rm -rf "$TEST_DIR"; fi' EXIT INT TERM
     HYDRA_HOME="$TEST_DIR/.hydra"
     export HYDRA_HOME
+    # Run from a throwaway repository: a private HYDRA_HOME does not isolate the
+    # worktree root, which the source checkout records beside itself.
+    git init -q "$TEST_DIR/work" || exit 1
+    cd "$TEST_DIR/work" || exit 1
 }
 
 cleanup_test_env() {
     test_dir="$1"
+    cd "$ORIGINAL_DIR" || true
     rm -rf "$test_dir"
     unset HYDRA_HOME
     TEST_DIR=""
