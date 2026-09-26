@@ -406,16 +406,17 @@ and a ready result, and the observed PID was gone. Confirmation arrived 20
 seconds after the request, the declared `cancellation_seconds`, although the
 provider had exited within three seconds.
 
-- [ ] **Fix the built-in Cursor headless profile.** Cursor Agent 2026.09.26 refuses
-      `--print` in an untrusted directory ("Workspace Trust Required", exit 1), and
-      every fleet task uses a fresh worktree, so remote shared task
-      `task_1f049b02…` failed at its first step. The same command with `--trust`
-      succeeded in that worktree. Add `--trust` to both invocation recipes; Hydra's
-      own repository trust decision already governs the worktree. The failure
-      receipt also recorded no events and empty stderr, discarding Cursor's
-      plain-text explanation; surface bounded non-JSON provider output in failed
-      receipts. Then complete Cursor's remote prompt, recall and cancellation
-      checks; host and local sign-in are done.
+Cursor Agent's remote shared task passed on 26 September 2026 after a profile
+fix (branch `fix/cursor-headless-trust`, commit `daf0bba`, VPS pin `29a508db…`).
+Cursor 2026.09.26 refuses `--print` in an untrusted directory, so every fresh
+task worktree failed (`task_1f049b02…`); both recipes now pass `--trust`, and
+failed receipts keep a bounded provider stdout/stderr excerpt. Task
+`task_f6aaf014…` returned and recalled the exact 36-byte nonce with a passing
+gate and matching downloaded digests; cancellation task `task_3756166c…`
+observed the provider, then reported `cancelled`, `confirmed_stopped`, exit 130
+and a ready result with no process left in the task workspace. The
+qualification applies to that fix commit, not to 2.7.0.
+
 - [ ] Qualify Antigravity on the shared remote task. Native sign-in succeeded on
       the VPS on 26 September 2026, but `agy` 1.2.11 there and 1.2.5 locally both
       return `FAILED_PRECONDITION: User location is not supported for the API use`
@@ -454,7 +455,7 @@ to open work:
 | Discovery supplies untrusted coordinates and needs typed, private candidate state ([host discovery][src-host-report]). | [H4](#h-host-discovery-qualification-and-staged-onboarding). Next: select one live source, then implement and qualify bounded acquisition and snapshot diffs. |
 | Onboarding needs provenance, freshness, identity and typed progress ([host discovery][src-host-brief]). | [H5](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify review, filters, detail and interrupted multi-host progress. |
 | Changed keys and source conflicts require explicit revocation and review ([host discovery][src-host-report]). | [H6](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify scoped revocation and reviewed key rotation without cancelling or replaying tasks. |
-| Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 retains Cursor (profile fix) and Antigravity (provider location refusal); Claude's remote task passed on 26 September 2026. The operator-provided Ubuntu VPS runs 2.7.0 with tmux installed; prepare a separate tmux-absent environment for T2. |
+| Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 retains Antigravity (provider location refusal); Claude's and Cursor's (with the `--trust` profile fix) remote tasks passed on 26 September 2026. The operator-provided Ubuntu VPS runs 2.7.0 with tmux installed; prepare a separate tmux-absent environment for T2. |
 | Structural plan inspection and finite comparisons are implemented; broader planning-quality evaluation remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality). Next: define and measure matched held-out work before claiming planning benefit. |
 | Runtime membership/expansion, PTY server replacement, cloud-manager integration and shared inventory remain conditional ([optional tmux][src-tmux], [host discovery][src-host-brief]). | 9F's open expansion item and the conditional extensions below. Next: revisit only with an explicit authority, workload and acceptance decision. |
 
