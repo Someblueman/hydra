@@ -230,6 +230,14 @@ an acceptance blocker, not optional cosmetic polish.
       existing installation, missing prerequisites, failed sign-in and interrupted
       setup with clear progress and safe continuation. Preserve unrelated installs,
       credentials and work; do not silently copy secrets or accept changed keys.
+      Observed 26 September 2026 onboarding the Ubuntu 24.04 x86_64 VPS to 2.7.0:
+      every step was manual. Installing JSON-C headers, building `hydra-fleet` on
+      the host, copying it back, `fleet package` and `bootstrap` with a pasted hash,
+      running each provider's installer and linking `claude`, `cursor-agent` and
+      `agy` from `~/.local/bin` into `/usr/local/bin` because non-interactive SSH
+      `PATH` omits it and agent detection is `PATH`-only. Onboarding should also
+      offer agent installation and detect per-user install locations. Prior
+      bootstrap pins accumulate under `~/.local/share/hydra/fleet` (seven found).
 - [ ] **U11 — One workspace across local and remote execution.** Unify ordinary
       and Fleet UI navigation, agent interaction, task details, attention and review.
       Represent local/remote as a visible location and filter within the same control
@@ -387,18 +395,33 @@ The workflow data, durable approval, retry, adapter-contract, and headless execu
 implementation is documented in [workflows](workflows.md) and [CONTRACTS.md](CONTRACTS.md).
 Live provider qualification remains a separate host-level check.
 
-- [ ] Complete Claude Code's remote shared task after native host sign-in: verify
-      exact prompt delivery, recorded-session recall, and observed-process
-      cancellation. Its local qualification has passed. Remote sign-in and
-      qualification were explicitly deferred on 6 September 2026 until native host
-      sign-in is available; they are not counted as passed.
+Claude Code's remote shared task passed on 26 September 2026 after native host
+sign-in (Claude Code 2.1.283, Ubuntu 24.04 x86_64 VPS, Hydra 2.7.0 pin
+`ac1014c9…`). Task `task_4ed952aa…` returned the exact 36-byte nonce and recalled
+it through the recorded session without receiving it again; the independent gate
+passed and the downloaded result's artifact digests matched the local expected
+bytes. Cancellation task `task_1521df2b…` observed the provider under the task
+owner, then public task cancel reported `cancelled`, `confirmed_stopped`, exit 130
+and a ready result, and the observed PID was gone. Confirmation arrived 20
+seconds after the request, the declared `cancellation_seconds`, although the
+provider had exited within three seconds.
 
-- [ ] Complete Cursor Agent's live prompt, recorded-session recall, and cancellation
-      checks after sign-in; its CLI probe and builtin conformance pass, but the
-      current local CLI is unauthenticated.
-- [ ] Qualify Antigravity and Cursor on the shared remote task once native host
-      authentication is available. Antigravity's local result-byte preservation,
-      recorded recall, and observed-process cancellation have passed.
+- [ ] **Fix the built-in Cursor headless profile.** Cursor Agent 2026.09.26 refuses
+      `--print` in an untrusted directory ("Workspace Trust Required", exit 1), and
+      every fleet task uses a fresh worktree, so remote shared task
+      `task_1f049b02…` failed at its first step. The same command with `--trust`
+      succeeded in that worktree. Add `--trust` to both invocation recipes; Hydra's
+      own repository trust decision already governs the worktree. The failure
+      receipt also recorded no events and empty stderr, discarding Cursor's
+      plain-text explanation; surface bounded non-JSON provider output in failed
+      receipts. Then complete Cursor's remote prompt, recall and cancellation
+      checks; host and local sign-in are done.
+- [ ] Qualify Antigravity on the shared remote task. Native sign-in succeeded on
+      the VPS on 26 September 2026, but `agy` 1.2.11 there and 1.2.5 locally both
+      return `FAILED_PRECONDITION: User location is not supported for the API use`
+      for the signed-in account (GB). Retry after the account or provider changes,
+      or qualify through the Gemini API-key mode. Antigravity's earlier local
+      result-byte preservation, recorded recall and cancellation have passed.
 
 Antigravity (`agy`), Cursor Agent (`cursor`), and OpenCode (`opencode`) now have
 implemented interactive and headless profiles. See [agent profiles and inputs](USAGE.md#agent-profiles-and-inputs)
@@ -408,8 +431,7 @@ Acceptance: retain each unqualified live-provider check until actual execution,
 independent result checks, and observed-process cancellation are recorded on its
 claimed host. The original Codex/Pi/OpenCode/plain remote task remains qualified;
 fixture tests and local authentication do not close another provider's remote
-requirement. Claude remains explicitly deferred rather than blocking the other
-implemented profiles.
+requirement.
 
 ### Research sources and open follow-ups
 
@@ -432,7 +454,7 @@ to open work:
 | Discovery supplies untrusted coordinates and needs typed, private candidate state ([host discovery][src-host-report]). | [H4](#h-host-discovery-qualification-and-staged-onboarding). Next: select one live source, then implement and qualify bounded acquisition and snapshot diffs. |
 | Onboarding needs provenance, freshness, identity and typed progress ([host discovery][src-host-brief]). | [H5](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify review, filters, detail and interrupted multi-host progress. |
 | Changed keys and source conflicts require explicit revocation and review ([host discovery][src-host-report]). | [H6](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify scoped revocation and reviewed key rotation without cancelling or replaying tasks. |
-| Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 retains its open provider matrix. An operator-provided Ubuntu VPS is available; prepare its tmux-absent environment and verify the current package and provider status. |
+| Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 retains Cursor (profile fix) and Antigravity (provider location refusal); Claude's remote task passed on 26 September 2026. The operator-provided Ubuntu VPS runs 2.7.0 with tmux installed; prepare a separate tmux-absent environment for T2. |
 | Structural plan inspection and finite comparisons are implemented; broader planning-quality evaluation remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality). Next: define and measure matched held-out work before claiming planning benefit. |
 | Runtime membership/expansion, PTY server replacement, cloud-manager integration and shared inventory remain conditional ([optional tmux][src-tmux], [host discovery][src-host-brief]). | 9F's open expansion item and the conditional extensions below. Next: revisit only with an explicit authority, workload and acceptance decision. |
 
