@@ -25,6 +25,8 @@ HYDRA_LIB_DIR="$(cd "$(dirname "$0")/../lib" && pwd)"
 # shellcheck disable=SC1091
 . "$HYDRA_LIB_DIR/maintenance.sh"
 # shellcheck disable=SC1091
+. "$HYDRA_LIB_DIR/worktree_ops.sh"
+# shellcheck disable=SC1091
 . "$(dirname "$0")/helpers.sh"
 
 # Stub tmux for maintenance tests
@@ -140,25 +142,28 @@ test_clean_dead_heads_cleans_messages() {
     cleanup_env
 }
 
-test_branch_has_active_head_matches_literal_branch() {
-    echo "Testing branch_has_active_head uses literal branch identity..."
-    setup_env
-
-    add_test_head feature/x alive-session
-
-    branch_has_active_head "feature/x"
-    assert_success $? "Exact branch name is found"
-    branch_has_active_head "feature.x"
-    assert_failure $? "Regex-like branch name does not match a different branch"
-
-    cleanup_env
+test_describe_orphan_worktree_is_plain_language() {
+    echo "Testing leftover worktree descriptions..."
+    assert_equal "feature/x (/w/head_ab); 1.5 MiB; no uncommitted changes" \
+        "$(describe_orphan_worktree clean feature/x 1536 /w/head_ab)" "clean leftover worktree names branch, path and size"
+    assert_equal "detached HEAD (/w/head_cd); size unknown; has uncommitted changes" \
+        "$(describe_orphan_worktree dirty - unknown /w/head_cd)" "dirty detached leftover worktree with an unknown size says so"
+    rows="$(printf 'clean\ta\t1048576\t/w/head_ab\nclean\tb\t314573\t/w/head_cd\n')"
+    assert_equal "2 leftover worktrees from removed tasks, 1.3 GiB; no uncommitted changes in 2" \
+        "$(summarize_orphan_worktrees "$rows")" "summary totals reclaimable size"
+    rows="$(printf 'clean\ta\t512\t/w/head_ab\ndirty\tb\tunknown\t/w/head_cd\n')"
+    assert_equal "2 leftover worktrees from removed tasks, at least 512 KiB (1 size unknown); no uncommitted changes in 1, uncommitted changes in 1" \
+        "$(summarize_orphan_worktrees "$rows")" "summary never counts an unknown size as zero"
+    rows="$(printf 'dirty\ta\tunknown\t/w/head_ab\n')"
+    assert_equal "1 leftover worktree from removed tasks, size unknown; uncommitted changes in 1" \
+        "$(summarize_orphan_worktrees "$rows")" "summary reports an entirely unknown size"
 }
 
 echo "Running maintenance.sh unit tests..."
 echo "================================"
 test_stale_locks_require_owner_evidence
 test_clean_dead_heads_cleans_messages
-test_branch_has_active_head_matches_literal_branch
+test_describe_orphan_worktree_is_plain_language
 echo "================================"
 echo "Test Results:"
 echo "Total:  $test_count"

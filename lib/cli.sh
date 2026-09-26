@@ -160,7 +160,9 @@ Commands:
   doctor            Check install, dependencies, and first-run readiness
                     Options:
                       -f, --fix                Auto-fix detected issues
-  cleanup           Stop dead heads and remove stale locks and orphaned worktrees
+  cleanup           Stop dead heads, remove stale locks, offer to remove leftover worktrees
+                    Options:
+                      --include-dirty          Also remove leftover worktrees with uncommitted changes
   dashboard         View all sessions in a single dashboard
                     Options:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session

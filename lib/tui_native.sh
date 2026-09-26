@@ -333,10 +333,17 @@ EOF
             fi
         done
     fi
-    list_orphan_worktree_paths 2>/dev/null | while IFS= read -r _tned_orphan; do
-        [ -n "$_tned_orphan" ] || continue
-        printf 'R\torphan-worktree\t%s\t%s\texact\thydra gc --dry-run\n' \
-            "$(basename "$_tned_orphan")" "$(tui_native_safe_field "$_tned_orphan")"
+    # Same authority as 'hydra gc --policy orphaned'; the label is
+    # "<branch> (<path>), <size>" with a cached, bounded size, and the source is
+    # the exact path an in-app removal passes to gc --path.
+    list_orphan_worktree_rows cached | while IFS="$(printf '\t')" read -r _tned_state _tned_obranch _tned_okib _tned_opath; do
+        [ -n "$_tned_opath" ] || continue
+        _tned_okind=orphan-worktree
+        [ "$_tned_state" = clean ] || _tned_okind=orphan-worktree-dirty
+        [ "$_tned_obranch" != - ] || _tned_obranch="detached HEAD"
+        printf 'R\t%s\t%s\t%s\texact\thydra gc --policy orphaned --dry-run\n' "$_tned_okind" \
+            "$(tui_native_safe_field "$_tned_obranch ($_tned_opath), $(worktree_format_kib "$_tned_okib")")" \
+            "$(tui_native_safe_field "$_tned_opath")"
     done
 }
 

@@ -173,14 +173,17 @@ cmd_doctor() {
         print_success "No dead sessions"
     fi
 
-    # Check for orphaned worktrees (worktree exists without mapping)
-    orphan_wt="$(count_orphan_worktrees)"
+    # Leftover worktrees: the same authority as 'hydra gc --policy orphaned'.
+    orphan_rows="$(list_orphan_worktree_rows)"
+    orphan_wt="$(printf '%s\n' "$orphan_rows" | grep -c . || true)"
     if [ "$orphan_wt" -gt 0 ]; then
-        print_warning "Orphaned worktrees: $orphan_wt (run 'hydra cleanup' to remove)"
-        echo "         Next: hydra cleanup   or   hydra doctor --fix"
+        print_warning "$(summarize_orphan_worktrees "$orphan_rows")"
+        print_orphan_worktree_rows "$orphan_rows" "         - "
+        echo "         Next: hydra gc --policy orphaned --dry-run   then   hydra gc --policy orphaned --apply"
+        echo "         Branches are kept; worktrees with uncommitted changes need --include-dirty."
         consistency_issues=$((consistency_issues + 1))
     else
-        print_success "No orphaned worktrees"
+        print_success "No leftover worktrees"
     fi
 
     # Check for stale locks
@@ -226,15 +229,21 @@ cmd_doctor() {
     fi
 }
 
-# Cleanup orphaned worktrees, stale locks, and dead mappings
-# Usage: cmd_cleanup [--auto]
-# --auto: Non-interactive mode for doctor --fix (skips orphan removal prompt)
+# Cleanup leftover worktrees, stale locks, and dead mappings
+# Usage: cmd_cleanup [--auto] [--include-dirty]
+# --auto: Non-interactive mode for doctor --fix (reports, never removes worktrees)
+# --include-dirty: also remove leftover worktrees with uncommitted changes
 cmd_cleanup() {
     auto_mode=0
+    include_dirty=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --auto)
                 auto_mode=1
+                shift
+                ;;
+            --include-dirty)
+                include_dirty=1
                 shift
                 ;;
             *)
@@ -265,57 +274,61 @@ cmd_cleanup() {
     print_info "Cleaned $dead_cleaned dead head record(s)"
     cleaned_total=$((cleaned_total + dead_cleaned))
 
-    # Find and offer to clean orphaned worktrees
     echo ""
-    echo "Checking for orphaned worktrees..."
-    orphan_list=""
-    while IFS= read -r wt; do
-        [ -z "$wt" ] && continue
-        orphan_list="${orphan_list}${wt}
-"
-    done <<EOF
-$(list_orphan_worktree_paths)
-EOF
-
-    if [ -n "$orphan_list" ]; then
-        orphan_count="$(echo "$orphan_list" | grep -c . || true)"
-        echo "Found $orphan_count orphaned worktree(s):"
-        echo "$orphan_list" | while IFS= read -r wt; do
-            [ -z "$wt" ] && continue
-            echo "  $wt"
-        done
-
-        # Ask for confirmation in interactive mode (skip in auto mode)
-        if [ "$auto_mode" -eq 1 ]; then
-            print_warning "Orphaned worktrees found but not removed (run 'hydra cleanup' to remove)"
-        elif [ -t 0 ] && [ -z "${CI:-}" ] && [ -z "${HYDRA_NONINTERACTIVE:-}" ]; then
-            printf "\nRemove these orphaned worktrees? [y/N] "
-            read -r response
-            case "$response" in
-                [yY][eE][sS]|[yY])
-                    orphan_cleaned=0
-                    echo "$orphan_list" | while IFS= read -r wt; do
-                        [ -z "$wt" ] && continue
-                        echo "  Removing $wt..."
-                        if git worktree remove "$wt" --force 2>/dev/null; then
-                            orphan_cleaned=$((orphan_cleaned + 1))
-                        else
-                            rm -rf "$wt" 2>/dev/null || true
-                        fi
-                    done
-                    print_info "Removed orphaned worktrees"
-                    ;;
-                *)
-                    echo "Skipped orphan cleanup"
-                    ;;
-            esac
-        else
-            print_warning "Run interactively to remove orphaned worktrees"
-        fi
-    else
-        print_success "No orphaned worktrees found"
-    fi
+    cleanup_orphan_worktrees "$auto_mode" "$include_dirty"
+    cleaned_total=$((cleaned_total + CLEANUP_ORPHANS_REMOVED))
 
     echo ""
     echo "Cleanup complete. Total items cleaned: $cleaned_total"
+}
+
+# Report leftover worktrees and, after interactive confirmation, remove them
+# through 'hydra gc --policy orphaned', which keeps its dirty-work protection.
+# Usage: cleanup_orphan_worktrees <auto 0|1> <include_dirty 0|1>
+# Sets CLEANUP_ORPHANS_REMOVED to the number of worktrees removed.
+cleanup_orphan_worktrees() {
+    CLEANUP_ORPHANS_REMOVED=0
+    echo "Checking for leftover worktrees from removed tasks..."
+    _cow_rows="$(list_orphan_worktree_rows)"
+    _cow_count="$(printf '%s\n' "$_cow_rows" | grep -c . || true)"
+    if [ "$_cow_count" -eq 0 ]; then
+        print_success "No leftover worktrees found"
+        return 0
+    fi
+    _cow_dirty="$(printf '%s\n' "$_cow_rows" | grep -c '^dirty' || true)"
+    echo "Found $(summarize_orphan_worktrees "$_cow_rows")"
+    echo "These are the worktrees 'hydra gc --policy orphaned --dry-run' reports:"
+    print_orphan_worktree_rows "$_cow_rows" "  "
+    echo "Removing a leftover worktree deletes its directory only; branches are kept."
+    _cow_removable="$_cow_count"
+    if [ "$_cow_dirty" -gt 0 ] && [ "$2" -eq 0 ]; then
+        _cow_removable=$((_cow_count - _cow_dirty))
+        echo "Worktrees with uncommitted changes are kept; pass --include-dirty to remove them too."
+    fi
+    if [ "$1" -eq 1 ]; then
+        print_warning "Leftover worktrees were not removed (run 'hydra cleanup' or 'hydra gc --policy orphaned --apply')"
+        return 0
+    fi
+    if [ "$_cow_removable" -eq 0 ]; then
+        return 0
+    fi
+    if ! [ -t 0 ] || [ -n "${CI:-}" ] || [ -n "${HYDRA_NONINTERACTIVE:-}" ]; then
+        print_warning "Run interactively, or run 'hydra gc --policy orphaned --apply', to remove them"
+        return 0
+    fi
+    printf "\nRemove %s leftover worktree(s)? Branches are kept. [y/N] " "$_cow_removable"
+    read -r _cow_response
+    case "$_cow_response" in
+        [yY][eE][sS]|[yY]) ;;
+        *) echo "Skipped leftover worktree cleanup"; return 0 ;;
+    esac
+    _cow_result="$(worktree_gc_orphaned_rows 1 "$2")"
+    _cow_status=$?
+    printf '%s\n' "$_cow_result" | sed '/^$/d; s/^/  /'
+    CLEANUP_ORPHANS_REMOVED="$(printf '%s\n' "$_cow_result" | grep -c '^removed-orphan' || true)"
+    if [ "$_cow_status" -eq 0 ]; then
+        print_info "Removed $CLEANUP_ORPHANS_REMOVED leftover worktree(s); branches are kept"
+    else
+        print_warning "Some leftover worktrees were not removed; see the rows above"
+    fi
 }

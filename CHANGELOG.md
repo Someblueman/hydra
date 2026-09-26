@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Policies accept the write scope `@spawned:*`, authorizing writes only to heads
   created by the plan's own spawn steps; plans still name concrete heads.
+- `hydra gc --policy orphaned --path <worktree>` limits a run to one leftover
+  worktree. Doctor, `hydra du` and Recovery show leftover worktree sizes, measured
+  with a time bound and reported as unknown rather than zero.
 
 ### Changed
 
@@ -26,6 +29,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   derived branch (`add kill dry run` becomes `add-kill-dry-run`) instead of failing.
 - `invalid_source` names the checkout and the failed condition, lists tracked
   changes with a commit-or-stash recovery, and the TUI shows readable diagnostics.
+- Doctor, cleanup, `doctor --fix` and TUI Recovery now use the `hydra gc --policy
+  orphaned` detector: only `head_<id>` worktrees under the recorded worktree root
+  whose head record is gone. User-created sibling worktrees such as
+  `hydra-<branch>` are no longer flagged or offered for removal, and current
+  leftover head worktrees are no longer missed.
+- Cleanup removes leftover worktrees through gc, keeps worktrees with uncommitted
+  changes unless `--include-dirty` is passed, and keeps branches.
+- The Recovery finding runs `hydra gc --policy orphaned --dry-run` instead of an
+  invalid command, reads "Leftover worktree from a removed task", and `x` removes
+  a clean one after confirmation. Failed checks are reported as failed.
+- `hydra gc` explains missing option values; orphan GC no longer treats other
+  worktrees under the root, such as integration worktrees, as orphans.
+- Spawning shell tests run only inside throwaway repositories, so standalone runs
+  no longer leave head worktrees beside the source checkout or in `$TMPDIR`.
 
 ## [2.7.0] - 2026-09-24
 

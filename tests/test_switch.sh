@@ -40,12 +40,13 @@ TEST_DIR=""
 setup_test_env() {
     TEST_DIR="$(mktemp -d)" || {
         echo "Error: Failed to create temporary directory" >&2
-        return 1
+        exit 1
     }
     HYDRA_HOME="$TEST_DIR/.hydra"
     export HYDRA_HOME HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
-    mkdir -p "$HYDRA_HOME" "$TEST_DIR/repo"
-    cd "$TEST_DIR/repo"
+    mkdir -p "$HYDRA_HOME" "$TEST_DIR/repo" || exit 1
+    # Never fall through to spawning in the source checkout.
+    cd "$TEST_DIR/repo" || exit 1
     git init -q
     git config user.name Test
     git config user.email test@example.com

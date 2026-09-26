@@ -153,6 +153,8 @@ void remove_heads_action(struct app *app);
 void new_task_action(struct app *app);
 void new_task_attach(struct app *app);
 void recovery_check_action(struct app *app);
+void recovery_remove_action(struct app *app);
+void remove_key_action(struct app *app);
 void native_workspace_show_terminal(struct app *app, bool focus);
 void native_workspace_split_agents(struct app *app);
 bool native_workspace_monitoring(struct app *app);

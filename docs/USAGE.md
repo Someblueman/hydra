@@ -85,7 +85,7 @@ hydra switch            # interactive (fzf if available)
 # Manage
 hydra kill feature-branch
 hydra kill --all [--force]
-hydra cleanup           # stop dead heads; remove stale locks and orphaned worktrees
+hydra cleanup           # stop dead heads; remove stale locks; offer to remove leftover worktrees (branches kept)
 
 # Group operations
 hydra group feature-x backend    # assign to group
@@ -149,7 +149,8 @@ hydra integrate approve run_ID --by reviewer
 hydra integrate promote run_ID       # local promotion; never pushes
 hydra integrate cleanup run_ID --apply
 hydra du
-hydra gc --policy orphaned --dry-run
+hydra gc --policy orphaned --dry-run   # leftover head_<id> worktrees whose head record is gone
+hydra gc --policy orphaned --apply --path /path/to/head_ID   # remove one; dirty needs --include-dirty
 hydra worktree doctor status
 
 # System
