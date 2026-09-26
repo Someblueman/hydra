@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Pass `--trust` in the built-in Cursor headless run and resume recipes so Cursor
+  Agent accepts fresh head worktrees instead of refusing with a plain-text prompt.
+  The help probe now requires the flag; `--force`/`--yolo` are never passed.
+- Keep a bounded, character-safe excerpt (4096 bytes per stream) of provider stderr
+  and undecoded stdout in failed headless receipts as optional `diagnostic`;
+  completed receipts are unchanged.
+
 ## [2.7.0] - 2026-09-24
 
 ### Added

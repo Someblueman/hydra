@@ -84,6 +84,13 @@ for mode in partial malformed oversized nul escaped-nul; do
     grep -q malformed_output "$fixture/$mode"
     [ ! -e "$worker/rejected.txt" ]
     [ "$(cat "$observed_file")" = "$observed_before" ]
+    mode_run="$(sed -n 's/.*"run_id":"\([^"]*\)".*/\1/p' "$fixture/$mode")"
+    mode_record="$(find "$HYDRA_HOME/state/v2/projects" -path "*/exec/$mode_run/*/agent.json" -print)"
+    case "$mode" in
+        malformed) grep -Fq '"diagnostic":{"stdout":{"text":"not json\n","bytes":9,"truncated":false},"stderr":null}' "$mode_record" ;;
+        partial) grep -Fq '"diagnostic":{"stdout":{"text":"{\"schema_version\":1","bytes":19,"truncated":false}' "$mode_record" ;;
+        nul) grep -Fq '\"status\":\"failed\"}?x\n"' "$mode_record" ;;
+    esac
 done
 printf complete-only > "$fixture/prompt"
 if hydra exec --branch agent-fixture --profile fixture --prompt-file "$fixture/prompt" --result-file absent.txt --exit-code > "$fixture/missing"; then exit 1; fi

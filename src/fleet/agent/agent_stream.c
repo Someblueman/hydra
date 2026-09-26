@@ -24,6 +24,7 @@ void agent_observe(void *context, const char *text, size_t size) {
     stream->received = size;
     if (!strcmp(stream->adapter, "none")) return;
     while (stream->consumed < size) {
+        stream->line_start = stream->consumed;
         const char *start = text + stream->consumed, *end = memchr(start, '\n', size - stream->consumed);
         size_t length = end ? (size_t)(end - start) : size - stream->consumed;
         if (length > AGENT_EVENT_LIMIT || memchr(start, '\0', length)) { stream->malformed = true; return; }

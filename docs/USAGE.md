@@ -228,7 +228,7 @@ and receipt described in [Contracts](CONTRACTS.md).
 | Profile | Headless executable and mode | Interactive launch |
 | --- | --- | --- |
 | `agy` | `agy`, print/stream JSON | `agy` prompt mode |
-| `cursor` | `cursor-agent`, print/stream JSON | `cursor-agent` positional prompt |
+| `cursor` | `cursor-agent --print --trust`, stream JSON | `cursor-agent` positional prompt |
 | `opencode` | `opencode run --format json` | `opencode --prompt` |
 | `claude` | `claude --print`, stream JSON | `claude` positional prompt |
 | `codex` | `codex exec --json`, stdin prompt | `codex` positional prompt; interactive `resume --last` |
@@ -243,6 +243,12 @@ Imports cannot replace reserved built-in names. Headless `exec --resume-run RUN_
 requires the exact successful recorded session, head, instance, worktree, and profile;
 it never selects the provider's latest session. Interactive Codex restore is the
 separate cwd-scoped `resume --last` convenience.
+
+Headless Cursor passes `--trust` so Cursor Agent accepts each fresh head worktree;
+it only skips Cursor's workspace prompt and never auto-approves commands (`--force`).
+A failed headless run keeps a 4096-byte, character-safe excerpt of provider stderr
+and of stdout the adapter could not decode in its receipt's `diagnostic` field; see
+[Contracts](CONTRACTS.md#profiles-tasks-adapters-and-scopes).
 
 A declared `done` outcome is separate from verification: use `exec` or a named
 `gate` to record whether a command passed, then review before integration.

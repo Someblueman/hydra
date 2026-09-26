@@ -82,6 +82,54 @@ static void provider_failures(void) {
     assert(!strcmp(event.status, "failed") && !event.text);
     json_object_put(event.usage); json_object_put(input);
 }
+/* Receipts must reparse under strict UTF-8 validation. */
+static json_object *excerpt_checked(const char *text, size_t size) {
+    json_object *excerpt = agent_excerpt(text, size), *wrapped = json_object_new_object(), *parsed;
+    assert(excerpt);
+    json_object_object_add(wrapped, "excerpt", json_object_get(excerpt));
+    parsed = f_parse(json_object_to_json_string_ext(wrapped, JSON_C_TO_STRING_PLAIN));
+    assert(parsed && strlen(f_string(f_field(parsed, "excerpt"), "text")) <= AGENT_DIAGNOSTIC_LIMIT);
+    json_object_put(parsed); json_object_put(wrapped); return excerpt;
+}
+static void excerpt_bounds(void) {
+    char *large = malloc(AGENT_DIAGNOSTIC_LIMIT + 904); json_object *excerpt;
+    assert(large && !agent_excerpt("", 0) && !agent_excerpt(NULL, 3));
+    excerpt = excerpt_checked("trust required\n", 15);
+    assert(!strcmp(f_string(excerpt, "text"), "trust required\n") && json_object_get_int(f_field(excerpt, "bytes")) == 15);
+    assert(!json_object_get_boolean(f_field(excerpt, "truncated"))); json_object_put(excerpt);
+    memset(large, 'x', AGENT_DIAGNOSTIC_LIMIT + 904);
+    excerpt = excerpt_checked(large, AGENT_DIAGNOSTIC_LIMIT + 904);
+    assert(strlen(f_string(excerpt, "text")) == AGENT_DIAGNOSTIC_LIMIT && json_object_get_boolean(f_field(excerpt, "truncated")));
+    assert(json_object_get_int(f_field(excerpt, "bytes")) == (int)AGENT_DIAGNOSTIC_LIMIT + 904); json_object_put(excerpt);
+    /* A multibyte character straddling the limit is dropped whole, never split. */
+    memcpy(large + AGENT_DIAGNOSTIC_LIMIT - 1, "\xe2\x9a\xa0", 3);
+    excerpt = excerpt_checked(large, AGENT_DIAGNOSTIC_LIMIT + 2);
+    assert(strlen(f_string(excerpt, "text")) == AGENT_DIAGNOSTIC_LIMIT - 1 && json_object_get_boolean(f_field(excerpt, "truncated")));
+    json_object_put(excerpt); free(large);
+}
+static void excerpt_encoding(void) {
+    json_object *excerpt = excerpt_checked("a\xff\0b\xed\xa0\x80\xe2\x9a\xa0\xc3", 11);
+    /* Invalid, surrogate, NUL and cut-off bytes become '?'; valid UTF-8 is kept. */
+    assert(!strcmp(f_string(excerpt, "text"), "a??b???\xe2\x9a\xa0?"));
+    assert(!json_object_get_boolean(f_field(excerpt, "truncated"))); json_object_put(excerpt);
+    /* Overlong and beyond-U+10FFFF forms are replaced; four-byte scalars are kept. */
+    excerpt = excerpt_checked("\xc0\x80" "\xf0\x9f\x98\x80" "\xf4\x90\x80\x80", 10);
+    assert(!strcmp(f_string(excerpt, "text"), "??\xf0\x9f\x98\x80????")); json_object_put(excerpt);
+}
+static void diagnose(void) {
+    const char *stdout_text = "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"s\"}\n\xe2\x9a\xa0 Workspace Trust Required\n";
+    struct agent_stream stream = {0}; struct f_capture cap = {0}; json_object *record = json_object_new_object(), *diagnostic;
+    cap.out = (char *)stdout_text; cap.out_bytes = strlen(stdout_text); cap.err = (char *)"Pass --trust\n"; cap.err_bytes = 13;
+    stream.adapter = "cursor-jsonl"; stream.consumed = cap.out_bytes; stream.line_start = (size_t)(strchr(stdout_text, '\n') - stdout_text) + 1; stream.malformed = true;
+    agent_diagnose(record, &stream, &cap, 0); assert(!f_field(record, "diagnostic"));
+    agent_diagnose(record, &stream, &cap, 125); diagnostic = f_field(record, "diagnostic");
+    assert(!strcmp(f_string(f_field(diagnostic, "stdout"), "text"), "\xe2\x9a\xa0 Workspace Trust Required\n"));
+    assert(!strcmp(f_string(f_field(diagnostic, "stderr"), "text"), "Pass --trust\n"));
+    /* Plain-output adapters keep stdout as their answer, not as a diagnostic. */
+    json_object_put(record); record = json_object_new_object(); stream.adapter = "none"; cap.err_bytes = 0;
+    agent_diagnose(record, &stream, &cap, 1); assert(!f_field(record, "diagnostic"));
+    json_object_put(record);
+}
 int main(void) {
     char root[] = "/tmp/hydra-agent-profile-test.XXXXXX", script[F_PATH], link[F_PATH], definition[F_PATH];
     json_object *profile, *input, *args, *values, *evidence, *response; size_t i;
@@ -92,6 +140,7 @@ int main(void) {
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
     decoders();
     provider_failures();
+    excerpt_bounds(); excerpt_encoding(); diagnose();
     retention(root);
     for (i = 0; names[i]; i++) {
         profile = agent_profile(names[i]); assert(profile);
@@ -147,6 +196,6 @@ int main(void) {
     assert(!f_write(definition, link, strlen(link), false));
     assert(!agent_profile("agy")); /* A legacy launch script is not this provider. */
     json_object_put(input); f_remove_tree(root);
-    puts("Agent profiles: literal argv, transport validation, explicit resume, import isolation and shim-preserving probes passed");
+    puts("Agent profiles: literal argv, transport validation, explicit resume, import isolation, shim-preserving probes and bounded failure diagnostics passed");
     return 0;
 }

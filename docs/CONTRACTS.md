@@ -95,6 +95,22 @@ Lifecycle, event, and message records follow the schemas described in this guide
   schema-versioned literal declarations. Headless prompt transport, provider
   translations, exact recorded-session resume, and capability requirements are
   bounded by the rules in [workflows](workflows.md).
+- The built-in `cursor` recipes pass `--trust` after `--print` for new and resumed
+  runs, and its help probe requires that flag. Cursor Agent otherwise refuses a
+  directory it has not trusted, and every head is a fresh Hydra-created worktree.
+  Selecting the head is the operator's trust decision, and Hydra's repository trust
+  (`hydra init --trust`) still governs repository-controlled configuration. `--trust`
+  only skips Cursor's workspace prompt; Hydra never passes `--force` or `--yolo`.
+- A headless run receipt (`agent-run` data and `exec/RUN/HEAD/agent.json`, schema 1)
+  whose `exit_status` is nonzero adds an optional `diagnostic` object,
+  `{"stdout":EXCERPT|null,"stderr":EXCERPT|null}`. `stdout` is provider output the
+  adapter did not decode, from the first rejected line or the unread tail (never
+  for adapter `none`); `stderr` is provider stderr. `EXCERPT` is
+  `{"text":string,"bytes":integer,"truncated":boolean}`: `text` is at most 4096
+  bytes of the start of that output, cut at a character boundary, with invalid UTF-8
+  and NUL bytes replaced by `?`; `bytes` counts the whole source and `truncated` is
+  true when `text` is shorter. It is absent from completed runs and when both
+  streams are empty. It is diagnostic text, never an answer, event or verification.
 - Task text is resolved before launch, stored privately, and delivered as one quoted
   argument. Events contain only its hash and byte count.
 - Adapter input is bounded canonical JSON schema v1 and must name the current
