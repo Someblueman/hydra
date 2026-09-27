@@ -166,35 +166,20 @@ an acceptance blocker, not optional cosmetic polish.
       terminal sizes, including 80x24 and 140x40, with a usable compact fallback.
       The objective, agent input destination, progress and next action remain clear;
       raw IDs, repeated keyboard hints and diagnostic fields do not dominate.
-- [ ] **U5 — Test the agentic product journey.** Replace the manual shell-head lab
-      as the primary user evaluation guide with one small, meaningful agent task
-      in a real repository. Start Hydra, ask for a bounded change with observable
-      acceptance criteria, discuss and revise an agent-authored plan, approve the
-      exact revision, observe execution, answer a real question, inspect a failed
-      check and supported recovery, then review the resulting diff and test evidence.
-      Include leaving and returning without losing the conversation or run context.
-      Acceptance: perform this through the installed application with an authenticated
-      agent and real outputs, recording user friction and remaining gaps. The user
-      does not manually author the implementation or assemble workflow machinery.
-      Keep shell-only fixtures and isolated failure probes as engineering checks;
-      their success cannot substitute for this product acceptance exercise.
-      First installed-build run, 26–27 September 2026 (Codex, task "add
-      `hydra kill --dry-run`"): the journey completed only with expert help.
-      Plan run `run_2cdf8bbe…` passed its verifier and produced `def3c77` on
-      `feat/kill-dry-run`. Friction, with fixes in progress on local branches:
-      task names with spaces could not start; the guided policy (sh/git, no
-      writes, 300 s) could not authorize agent work, so the first plan was a
-      stub; `invalid_source` did not name the dirty checkout and the agent then
-      misdirected the user; worker prompts and verifiers had to be committed
-      into the user's `main` before validation; execution required typing a
-      64-character digest; there was no way to send a plan back; the planning
-      agent was not told the run started; headless workers showed as "shell",
-      "session unknown", "needs attention" with no output preview; the run,
-      its verification and its diff were not presented; model, effort and
-      recorded token use were not shown; attention/review showed raw or
-      misleading states. Not yet exercised: answering an agent question during
-      execution, a failed check with supported recovery, and leaving and
-      returning mid-run. Rerun U5 after those fixes; it stays open.
+- [x] **U5 — Test the agentic product journey.** Accepted by the user on 27
+      September 2026 after the first installed-build run (Codex, task "add
+      `hydra kill --dry-run`"): the agent discussed and published a plan, the
+      user approved the exact revision in Hydra, run `run_2cdf8bbe…` implemented
+      and independently verified the change, and the result was reviewed and
+      placed on `feat/kill-dry-run` (`def3c77`). The friction found (task names
+      with spaces, a guided policy that could not authorize agent work, a
+      non-actionable `invalid_source`, planning assets committed into `main`,
+      digest typing, no send-back, no launch notice, headless workers shown as
+      terminal heads, missing run/result/verification presentation, hidden model
+      and token use, unreadable attention/review states) is being fixed on local
+      branches as improvements, not acceptance blockers. Follow-ups to observe
+      in a later run: answering an agent question during execution, a failed
+      check with supported recovery, and leaving and returning mid-run.
 - [ ] **U6 — Stable rendering without flicker.** The user reports distracting
       flicker during normal TUI operation. Diagnose the live render/refresh path;
       avoid visible clearing and repainting of unchanged content, and preserve
@@ -375,10 +360,11 @@ The subsequent six findings are covered by U13 (statistics), U14 (output), U15
       its chosen action fits the goal, alongside human first-use review.
 
 Delivery boundary: the items above remain outstanding requirements. Source changes
-have shipped as follows; each item stays open until the installed-build acceptance
-in U5 and U18 has been observed. Close items with observed first-use, visual and
-agentic acceptance from the installed build, and update the getting-started and
-evaluation guides to the delivered flow as part of that work.
+have shipped as follows; each item stays open until its installed-build
+acceptance has been observed (U5 was accepted on 27 September 2026). Close items
+with observed first-use, visual and agentic acceptance from the installed build,
+and update the getting-started and evaluation guides to the delivered flow as
+part of that work.
 
 | Item | Shipped source changes |
 | --- | --- |
@@ -390,7 +376,8 @@ evaluation guides to the delivered flow as part of that work.
 | U16 | nested tmux attachment with deterministic input/resize/return checks in 2.7.0 |
 | U17 | head-associated proposals, guided local policy, invalidation and exact-digest approval in 2.7.0 |
 | U18 | initial deterministic installed-journey runner in 2.7.0 |
-| U5, U10, U11 | none yet |
+| U5 | accepted on 27 September 2026 using 2.7.0 plus unreleased local fixes |
+| U10, U11 | none yet |
 
 ### Candidate features
 
