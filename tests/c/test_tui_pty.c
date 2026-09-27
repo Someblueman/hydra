@@ -975,7 +975,7 @@ static bool wait_for_attention_order(struct session *session) {
         if (session->screen) {
             int first = screen_text_row(session->screen, "verification-ready");
             if (first >= 0 && screen_text_row(session->screen, "decision-needed") > first &&
-                screen_text_row(session->screen, "ATTENTION  1 current  0 stale  1 unknown") >= 0) return true;
+                screen_text_row(session->screen, "ATTENTION  2 need you") >= 0) return true;
         }
     }
     return false;

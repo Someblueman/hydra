@@ -122,7 +122,7 @@ static bool review_start(struct session *session, const char *tui, const char *h
     if (!result(open_session(session, tui, hydra, fixture->directory, width, height) == 0, "open review PTY")) return false;
     result(wait_for_raw(session), "review terminal enters raw mode");
     write_input(session->master, "I", 1U);
-    return result(wait_for_marker(session, "ATTENTION  2 current", 3000), "review candidates load");
+    return result(wait_for_marker(session, "ATTENTION  2 need you", 3000), "review candidates load");
 }
 
 static void review_stop(struct session *session) {
@@ -304,7 +304,7 @@ static void test_review_narrow(const char *tui, const char *hydra) {
     write_input(session.master, "G", 1U);
     result(wait_for_marker(&session, "FINAL-REVIEW-EVIDENCE", 1000), "narrow review can scroll to final evidence");
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "ATTENTION  2 current", 1000), "opening/closing review does not acknowledge candidate");
+    result(wait_for_marker(&session, "ATTENTION  2 need you", 1000), "opening/closing review does not acknowledge candidate");
     write_marker_file(fixture.delay, "4\n"); write_input(session.master, "r", 1U);
     result(wait_for_marker(&session, "Loading exact review", 1000), "narrow slow review stays responsive");
     write_input(session.master, "\033", 1U);
