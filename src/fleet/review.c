@@ -316,8 +316,12 @@ static void refine_readiness(json_object *out, const struct review_context *ctx,
     bool matches = !strcmp(ctx->revision, revision) && !strcmp(value(ctx->retained, "state"), "passed");
     if (strcmp(value(out, "readiness"), "revoked") || !matches || f_string(ctx->selected, "request_id"))
         return;
-    if (!strcmp(value(out, "inventory_state"), "not_applicable"))
-        f_string_add(out, "readiness", "not_applicable");
+    if (!strcmp(value(out, "inventory_state"), "not_applicable")) {
+        /* A genuine unknown stays revoked; only a known item without
+         * deliverables is plainly not applicable. */
+        if (strcmp(value(ctx->selected, "kind"), "unknown"))
+            f_string_add(out, "readiness", "not_applicable");
+    }
     else if (!f_field(out, "inventory_state") && !strcmp(value(checks, "state"), "pending") &&
              !strcmp(value(ctx->selected, "kind"), "result") && !strcmp(value(ctx->selected, "freshness"), "fresh"))
         f_string_add(out, "readiness", "in_progress");

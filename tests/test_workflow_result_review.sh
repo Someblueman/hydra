@@ -116,6 +116,17 @@ cp "$fixture/state.saved" "$run_dir/state"
 cp "$fixture/state.saved" "$run_dir/steps/verify/state"
 [ -n "$implement_row" ]
 
+# A genuine unknown stays explicit, but a step without deliverables is never
+# described as malformed declarations or failed checks.
+printf '12\n' > "$run_dir/steps/spawn-worker/authoritative-attempt"
+hydra workflow attention --json > "$fixture/unknown.json"
+jq -e '.data.partial == true and ([.data.items[] | select(.kind == "unknown" and .step_id == "spawn-worker" and .reason == "missing_authoritative_attempt")] | length) == 1' "$fixture/unknown.json" >/dev/null
+hydra workflow attention-data > "$fixture/unknown.tsv"
+unknown_row="$(awk -F '\t' '$1=="ITEM" && $9=="spawn-worker"' "$fixture/unknown.tsv")"
+review review "$unknown_row" > "$fixture/unknown-review.json"
+jq -e '.ok and .data.inventory_state == "not_applicable" and .data.checks.state != "failed" and .data.identity.kind == "unknown"' "$fixture/unknown-review.json" >/dev/null
+printf '1\n' > "$run_dir/steps/spawn-worker/authoritative-attempt"
+
 # Statistics schema 4 carries the exec receipt evidence for the agent step.
 hydra workflow statistics-data > "$fixture/statistics.tsv"
 [ "$(sed -n '1p' "$fixture/statistics.tsv" | cut -f1-2)" = "HYDRA_STATISTICS${tab}4" ]
