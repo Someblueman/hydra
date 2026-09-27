@@ -32,7 +32,7 @@ workflow_retire_candidates() {
 # on it has sealed its declared outputs in the run record.
 workflow_retire_sealed() {
     while IFS="$(printf '\t')" read -r _wrs_tag _wrs_id _wrs_kind _wrs_needs _wrs_retry _wrs_idem _wrs_head _wrs_rest; do
-        [ "$_wrs_tag" = step ] && [ "$_wrs_kind" != spawn ] && [ "$_wrs_head" = "$2" ] || continue
+        if [ "$_wrs_tag" != step ] || [ "$_wrs_kind" = spawn ] || [ "$_wrs_head" != "$2" ]; then continue; fi
         _wrs_state="$(sed -n '1p' "$1/steps/$_wrs_id/state" 2>/dev/null)" || true
         case "$_wrs_state" in
             succeeded)

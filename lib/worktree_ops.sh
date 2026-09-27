@@ -49,7 +49,7 @@ worktree_orphan_rows() {
     while IFS="$_wor_tab" read -r _wor_branch _wor_path; do
         case "$_wor_path" in "$_wor_root"/head_*) ;; *) continue ;; esac
         _wor_name="${_wor_path#"$_wor_root"/}"
-        hydra_valid_id "$_wor_name" && [ -d "$_wor_path" ] || continue
+        if ! hydra_valid_id "$_wor_name" || [ ! -d "$_wor_path" ]; then continue; fi
         [ ! -d "$PARALLEL_PROJECT_DIR/heads/$_wor_name" ] || continue
         printf '%s\n' "$_wor_known" | grep -Fqx -e "$_wor_path" -e "$(worktree_physical_path "$_wor_path")" && continue
         # A status failure counts as dirty so unreadable work is never discarded.

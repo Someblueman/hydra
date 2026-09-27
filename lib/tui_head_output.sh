@@ -57,7 +57,7 @@ tui_head_output_result() {
     for _thor_kind in artifacts outputs; do
         [ "$_thor_shown" -eq 0 ] || return 0
         for _thor_path in "$1/$_thor_kind"/*; do
-            [ -f "$_thor_path" ] && [ "$_thor_shown" -lt 3 ] || continue
+            if [ ! -f "$_thor_path" ] || [ "$_thor_shown" -ge 3 ]; then continue; fi
             _thor_name="$(basename "$_thor_path")"
             [ "$2" = - ] || [ "$_thor_name" = "$2" ] || continue
             printf 'Result (%s):\n' "$_thor_name"

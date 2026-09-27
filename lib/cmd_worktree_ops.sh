@@ -69,7 +69,7 @@ cmd_gc() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --policy|--older-than|--path)
-                [ $# -ge 2 ] && [ -n "$2" ] || { cli_error gc invalid_input "$1 requires a value" "run hydra gc --help"; return 1; }
+                if [ $# -lt 2 ] || [ -z "$2" ]; then cli_error gc invalid_input "$1 requires a value" "run hydra gc --help"; return 1; fi
                 case "$1" in --policy) _cgc_policy="$2" ;; --older-than) _cgc_days="$2" ;; --path) _cgc_path="$2" ;; esac
                 shift 2 ;;
             --apply) _cgc_apply=1; shift ;;

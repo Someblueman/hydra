@@ -41,8 +41,9 @@ workflow_event() {
     rm -rf "$_we_lock"
     # Runs launched from an agent proposal notify that planning conversation.
     if [ "$_we_status" -eq 0 ] && [ -f "$_we_dir/planning-head" ]; then
-        { command -v workflow_plan_notify >/dev/null 2>&1 || _load_lib workflow_plan_notify; } &&
+        if { command -v workflow_plan_notify >/dev/null 2>&1 || _load_lib workflow_plan_notify; }; then
             workflow_plan_notify "$_we_dir" "$_we_step" "$_we_type" || true
+        fi
     fi
     return "$_we_status"
 }
@@ -511,8 +512,9 @@ workflow_drive() {
             # The result is published first; retiring verifier heads is
             # reported in the run record and never changes it.
             case "$_wd_final" in succeeded|failed|cancelled)
-                { command -v workflow_retire_verifiers >/dev/null 2>&1 || _load_lib workflow_retire; } &&
-                    workflow_retire_verifiers "$_wd_dir" || true ;;
+                if { command -v workflow_retire_verifiers >/dev/null 2>&1 || _load_lib workflow_retire; }; then
+                    workflow_retire_verifiers "$_wd_dir" || true
+                fi ;;
             esac
             trap - HUP INT TERM
             rm -rf "$_wd_drive_lock"
