@@ -99,11 +99,9 @@ static void launch(void) {
     RUN("sh", "-c", "\"$0\" workflow plan --workspace-owner \"$1\" \"$2\" \"$3\" < \"$4\" > \"$5\" 2>&1 &",
         f.hydra, digest, head, instance, compiled, path);
 }
-int main(void) {
-    struct tv_session s;
-    char path[4096], hold[4096], codex_home[4096], text[8192];
-    tv_init();
-    hf_init(&f, "hydra-runs-heads", "repo", true, true);
+/* A repository with a planning head, a synthetic codex and its configuration. */
+static void prepare(char *hold, size_t hold_size) {
+    char path[4096], codex_home[4096];
     tv_format(evidence, sizeof(evidence), "%s/runs-heads-evidence", f.build);
     tv_mkdir(evidence);
     write_fixture_codex();
@@ -112,13 +110,27 @@ int main(void) {
     tv_format(path, sizeof(path), "%s/config.toml", codex_home);
     tv_write(path, "model = \"fixture-model\"\nmodel_reasoning_effort = \"high\"\n");
     CHECK(!setenv("CODEX_HOME", codex_home, 1), "fixture codex configuration");
-    tv_format(hold, sizeof(hold), "%s/hold", f.base);
+    tv_format(hold, hold_size, "%s/hold", f.base);
     CHECK(!setenv("CODEX_FIXTURE_HOLD", hold, 1), "fixture codex hold");
     tv_format(path, sizeof(path), "%s/expected.txt", f.repo);
     tv_write(path, "Delivered report");
     hf_commit_init(&f);
     H("spawn", "planner", "--no-agent");
     write_plan();
+}
+static void wait_for_live_stream(struct tv_session *s) {
+    char path[4096];
+    double deadline = tv_now() + 60;
+    tv_format(path, sizeof(path), "%s/state/v2/projects/*/exec/*/*/.provider-stdout", f.home);
+    while (tv_now() < deadline && !hf_glob_count(path)) tv_pump(s, .2);
+    CHECK(hf_glob_count(path) == 1, "the agent step streams live output");
+}
+int main(void) {
+    struct tv_session s;
+    char hold[4096], text[8192];
+    tv_init();
+    hf_init(&f, "hydra-runs-heads", "repo", true, true);
+    prepare(hold, sizeof(hold));
 
     hf_open(&f, &s);
     U("PLAN TOGETHER", 5);
@@ -129,12 +141,7 @@ int main(void) {
 
     tv_write(hold, "");
     launch();
-    tv_format(path, sizeof(path), "%s/state/v2/projects/*/exec/*/*/.provider-stdout", f.home);
-    {
-        double deadline = tv_now() + 60;
-        while (tv_now() < deadline && !hf_glob_count(path)) tv_pump(&s, .2);
-        CHECK(hf_glob_count(path) == 1, "the agent step streams live output");
-    }
+    wait_for_live_stream(&s);
     S("1");
     U("Heads in this project", 5);
     U("1 head (+1 in runs)", 10);
