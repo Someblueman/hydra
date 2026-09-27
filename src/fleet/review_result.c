@@ -472,6 +472,20 @@ static bool head_for_branch(const char *project, const char *branch, char head[F
     return found;
 }
 
+/* Split one "commit<TAB>time<TAB>author<TAB>subject" log line in place. */
+static bool commit_fields(char *line, char *fields[4])
+{
+    char *cursor = line;
+    size_t i;
+    for (i = 0; i < 4 && cursor; i++) {
+        fields[i] = cursor;
+        cursor = i < 3 ? strchr(cursor, '\t') : NULL;
+        if (cursor)
+            *cursor++ = 0;
+    }
+    return i == 4;
+}
+
 static json_object *commit_rows(const char *repo, const char *range, long long finished)
 {
     char *args[] = {"log", "--no-color", "--format=%h%x09%ct%x09%an%x09%s", "-n", "51", (char *)range, NULL};
@@ -479,16 +493,9 @@ static json_object *commit_rows(const char *repo, const char *range, long long f
     json_object *rows = json_object_new_array();
     for (line = text ? strtok_r(text, "\n", &save) : NULL; line && rr_length(rows) < RR_COMMITS;
          line = strtok_r(NULL, "\n", &save)) {
-        char *fields[4], *cursor = line;
+        char *fields[4];
         json_object *row;
-        size_t i;
-        for (i = 0; i < 4 && cursor; i++) {
-            fields[i] = cursor;
-            cursor = i < 3 ? strchr(cursor, '\t') : NULL;
-            if (cursor)
-                *cursor++ = 0;
-        }
-        if (i < 4)
+        if (!commit_fields(line, fields))
             continue;
         row = json_object_new_object();
         f_string_add(row, "commit", fields[0]);

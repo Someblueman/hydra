@@ -246,7 +246,7 @@ void statistics_tokens(const struct hs_usage *u, char *out, size_t size);
 void statistics_scope_tokens(const struct hs_summary *s, char *out, size_t size);
 int statistics_wrap(struct tv_canvas *c, int x, int y, int width, int rows, enum tv_style tone, const char *text);
 void statistics_scope_notes(struct tv_canvas *c, int x, int y, int width, int rows, const struct hs_summary *s);
-void statistics_step_agent(const struct hs_step *s, char *out, size_t size);
+void statistics_step_agent(const struct hs_step *s, bool compact, char *out, size_t size);
 void statistics_run_tokens(const struct hs_model *m, size_t run, char *out, size_t size);
 void statistics_step_detail(struct tv_canvas *c, struct tv_rect r, const struct hs_model *m, const struct hs_step *s);
 bool workflow_id(const char *s);

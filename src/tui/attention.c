@@ -483,7 +483,8 @@ static void item_subject(const struct app *app, const struct attention_item *ite
 static void attempt_text(const struct attention_item *item, char *out, size_t size)
 {
     const char *number = !strncmp(item->attempt, "attempt-", 8U) ? item->attempt + 8 : item->attempt;
-    if (present(item->attempt)) snprintf(out, size, " (attempt %s)", number); else out[0] = '\0';
+    out[0] = '\0';
+    if (present(item->attempt)) text_append(out, size, " (attempt %s)", number);
 }
 static const char *reason_text(const char *reason)
 {
@@ -540,18 +541,24 @@ struct cursor { size_t line, from, to; };
 static size_t text_width(const struct app *app)
 { return app->content_width > 2 ? (size_t)app->content_width - 1U : 1U; }
 /* Word wrap into the content width; lines outside [from, to) are measured only. */
+/* Bytes of text that fit in room: break at a space in the second half of the
+ * line when there is one, and never inside a UTF-8 sequence. */
+static size_t wrap_take(const char *text, size_t room)
+{
+    size_t take = strlen(text);
+    if (take <= room) return take;
+    take = room;
+    while (take > room / 2U && text[take] != ' ') take--;
+    if (text[take] != ' ') take = room;
+    while (take > 1U && ((unsigned char)text[take] & 0xC0U) == 0x80U) take--;
+    return take;
+}
 static void wrap(struct app *app, struct cursor *at, const char *first, const char *next, const char *text, enum tone tone)
 {
     size_t width = text_width(app);
     const char *prefix = first;
     do {
-        size_t room = width > strlen(prefix) + 8U ? width - strlen(prefix) : 8U, length = strlen(text), take = length;
-        if (take > room) {
-            take = room;
-            while (take > room / 2U && text[take] != ' ') take--;
-            if (text[take] != ' ') take = room;
-            while (take > 1U && ((unsigned char)text[take] & 0xC0U) == 0x80U) take--;
-        }
+        size_t room = width > strlen(prefix) + 8U ? width - strlen(prefix) : 8U, take = wrap_take(text, room);
         if (at->line >= at->from && at->line < at->to) { style(app, tone); linef(app, "%s%.*s", prefix, (int)take, text); style(app, TONE_BASE); }
         at->line++;
         text += take;
@@ -564,7 +571,8 @@ static void render_item(struct app *app, struct cursor *at, const struct attenti
     char title[512], subject[384], why[768];
     enum tone tone = selected ? TONE_SELECTED : item->unseen && eligible(item) ? TONE_STRONG : TONE_BASE;
     item_subject(app, item, subject, sizeof(subject));
-    snprintf(title, sizeof(title), "%s%s%s%s", !strcmp(item->freshness, "stale") ? "(stale) " : "", item_title(item), dot(app), subject);
+    title[0] = '\0';
+    text_append(title, sizeof(title), "%s%s%s%s", !strcmp(item->freshness, "stale") ? "(stale) " : "", item_title(item), dot(app), subject);
     if (item->unseen && eligible(item)) text_append(title, sizeof(title), "  NEW");
     else if (!item->unseen && needs_decision(item)) text_append(title, sizeof(title), "  seen, still needs a decision");
     wrap(app, at, selected ? "> " : "  ", "  ", title, tone);
@@ -574,7 +582,8 @@ static void render_item(struct app *app, struct cursor *at, const struct attenti
 static void render_group(struct app *app, struct cursor *at, const struct native_attention *view, bool selected)
 {
     char text[160];
-    snprintf(text, sizeof(text), "[%s] Seen (%u)  %s", view->seen_open ? "-" : "+", view->seen_group_count,
+    text[0] = '\0';
+    text_append(text, sizeof(text), "[%s] Seen (%u)  %s", view->seen_open ? "-" : "+", view->seen_group_count,
         view->seen_open ? "Enter collapses" : "collapsed; Enter shows them");
     wrap(app, at, selected ? "> " : "  ", "  ", text, selected ? TONE_SELECTED : TONE_MUTED);
 }
@@ -607,7 +616,7 @@ static void snapshot_notes(struct app *app, const struct native_attention *view)
     else if (view->partial) wrap(app, &at, "", "", view->unknown_count ? "Some records could not be read completely; they are listed below as Needs inspection."
         : "Some records could not be read completely; the list may be incomplete.", TONE_WARNING);
     if (view->error[0]) linef(app, "%s", view->error);
-    if (view->feedback[0]) { style(app, TONE_SUCCESS); linef(app, "%s", view->feedback); style(app, TONE_BASE); }
+    if (view->feedback[0]) wrap(app, &at, "", "", view->feedback, TONE_SUCCESS);
 }
 static void detail_value(struct app *app, const char *label, const char *value)
 {
@@ -621,7 +630,8 @@ static void render_detail(struct app *app, const struct native_attention *view)
     char subject[384], text[768];
     item_subject(app, item, subject, sizeof(subject));
     style(app, TONE_MUTED); linef(app, "ATTENTION DETAIL"); style(app, TONE_BASE);
-    snprintf(text, sizeof(text), "%s%s%s", item_title(item), dot(app), subject);
+    text[0] = '\0';
+    text_append(text, sizeof(text), "%s%s%s", item_title(item), dot(app), subject);
     wrap(app, &at, "", "", text, TONE_STRONG);
     item_why(item, text, sizeof(text));
     wrap(app, &at, "", "", text, TONE_BASE);
@@ -691,8 +701,9 @@ static void toggle_seen(const struct app *app, struct native_attention *view)
     if (item->unseen) remember_revision(view, item->identity, item->revision);
     else forget_identity(view, item->identity);
     item_subject(app, item, subject, sizeof(subject));
-    snprintf(title, sizeof(title), "%s%s%s", item_title(item), dot(app), subject);
-    snprintf(view->feedback, sizeof(view->feedback), op.clear ? "Marked new again: %s" : needs_decision(item) ?
+    title[0] = '\0'; view->feedback[0] = '\0';
+    text_append(title, sizeof(title), "%s%s%s", item_title(item), dot(app), subject);
+    text_append(view->feedback, sizeof(view->feedback), op.clear ? "Marked new again: %s" : needs_decision(item) ?
         "Marked seen: %s. It stays listed until someone decides." : "Marked seen: %s. Moved to Seen.", title);
     position = current_row(view, rows, build_rows(view, rows));
     apply_seen(view);

@@ -92,9 +92,16 @@ static void attention_seen_group(struct session *left, struct session *right, co
     drain_output(right->master); unlink(done); write_input(right->master, "I", 1U);
     result(wait_for_markers(right, "ATTENTION  1 need you", "Seen (1)", 3000), "another client of the same user shows the marker after refresh");
 }
+/* Seen markers persist per user: a new client starts with them. */
+static void attention_restart(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session third;
+    if (!result(open_session(&third, tui, hydra, fake_bin, 100, 30) == 0, "open attention client after restart")) return;
+    (void)wait_for_raw(&third); write_input(third.master, "I", 1U);
+    result(wait_for_markers(&third, "ATTENTION  1 need you", "Seen (1)", 3000), "seen markers survive a TUI restart");
+    write_input(third.master, "q", 1U); result(wait_for_exit(&third) == 0 && terminal_restored(&third), "restarted attention client restores terminal"); close_session(&third);
+}
 static void test_attention_clients(const char *tui, const char *hydra, const char *fake_bin) {
     struct session left, right;
-    struct session third;
     char path[256], fail[256], done[256], seen[256]; FILE *file;
     const char *initial = "HYDRA_ATTENTION\t1\nITEM\tworkflow\tapproval\tdecision-needed\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead-1\tinstance-1\trequest-1\tspec-1\t1111111111111111111111111111111111111111111111111111111111111111\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\nITEM\tworkflow\tresult\tverification-ready\t/project\tlocal\tT-2\tR-2\tS-2\t1\thead-2\tinstance-2\t-\tspec-2\t2222222222222222222222222222222222222222222222222222222222222222\t2222222222222222222222222222222222222222222222222222222222222222\tfresh\tworkflow-evidence\t1\nITEM\tfleet\tunknown\tprovider\t/project\tremote\tT-3\tR-3\tS-3\t1\thead-3\tinstance-3\t-\t-\t3333333333333333333333333333333333333333333333333333333333333333\t3333333333333333333333333333333333333333333333333333333333333333\tunknown\tunavailable\t0\nEND\t3\t0\t0\n";
     const char *reordered = "HYDRA_ATTENTION\t1\nITEM\tworkflow\tresult\tverification-ready\t/project\tlocal\tT-2\tR-2\tS-2\t1\thead-2\tinstance-2\t-\tspec-2\t2222222222222222222222222222222222222222222222222222222222222222\t2222222222222222222222222222222222222222222222222222222222222222\tfresh\tworkflow-evidence\t1\nITEM\tworkflow\tapproval\tdecision-needed\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead-1\tinstance-1\trequest-1\tspec-1\t1111111111111111111111111111111111111111111111111111111111111111\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\nITEM\tworkflow\tapproval\tdecision-needed\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead-1\tinstance-1\trequest-1\tspec-1\t1111111111111111111111111111111111111111111111111111111111111111\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\nEND\t3\t0\t0\n";
@@ -128,11 +135,6 @@ static void test_attention_clients(const char *tui, const char *hydra, const cha
     drain_output(left.master); unlink(done); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  2 need you", "verification-ready", 3000), "successful LEFT reconnect keeps the seen approval listed");
     attention_seen_group(&left, &right, done);
     write_input(left.master, "q", 1U); write_input(right.master, "q", 1U); result(wait_for_exit(&left) == 0 && terminal_restored(&left), "first attention client restores terminal"); result(wait_for_exit(&right) == 0 && terminal_restored(&right), "second attention client restores terminal"); close_session(&left); close_session(&right);
-    /* Seen markers persist per user: a new client starts with them. */
-    if (result(open_session(&third, tui, hydra, fake_bin, 100, 30) == 0, "open attention client after restart")) {
-        (void)wait_for_raw(&third); write_input(third.master, "I", 1U);
-        result(wait_for_markers(&third, "ATTENTION  1 need you", "Seen (1)", 3000), "seen markers survive a TUI restart");
-        write_input(third.master, "q", 1U); result(wait_for_exit(&third) == 0 && terminal_restored(&third), "restarted attention client restores terminal"); close_session(&third);
-    }
+    attention_restart(tui, hydra, fake_bin);
 cleanup: unlink(path); unlink(done); unlink(seen); unsetenv("HYDRA_ATTENTION_FIXTURE"); unsetenv("HYDRA_ATTENTION_DONE_FILE"); unsetenv("HYDRA_TEST_ATTENTION_FAIL_FILE"); unsetenv("HYDRA_TEST_SEEN_FILE");
 }

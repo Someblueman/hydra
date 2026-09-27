@@ -502,8 +502,9 @@ static void render_identity(struct app *app, struct native_review *review, size_
 static void render_log(struct app *app, struct native_review *review, size_t *row)
 {
     char heading[4200];
-    snprintf(heading, sizeof(heading), "Full log, %zu bytes%s: %s", review->log_bytes,
-             review->log_tail ? " (the last 1 MiB is shown)" : "", review->log_path);
+    if (snprintf(heading, sizeof(heading), "Full log, %zu bytes%s: %s", review->log_bytes,
+                 review->log_tail ? " (the last 1 MiB is shown)" : "", review->log_path) >= (int)sizeof(heading))
+        heading[sizeof(heading) - 1U] = '\0';
     style(app, TONE_MUTED); wrapped_line(app, heading, strlen(heading), row, review->scroll); style(app, TONE_BASE);
     render_text(app, review, review->log[0] ? review->log : "The log is empty.\n", row);
 }
@@ -523,7 +524,7 @@ bool native_review_render(struct app *app)
     if (review->notice[0]) linef(app, "%s", review->notice);
     if (review->document && !review->stale) {
         style(app, TONE_MUTED);
-        linef(app, "j/k space/b scroll  n/N sections  L full log  f references  i identity  Esc back");
+        linef(app, "n/N section  L log  space/b page  f refs  i IDs  Esc back");
         style(app, TONE_BASE);
     }
     review->heading_count = 0U;

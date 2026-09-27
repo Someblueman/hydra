@@ -38,7 +38,7 @@ void statistics_scope_tokens(const struct hs_summary *s, char *out, size_t size)
     statistics_count(s->usage[HS_TOKENS_IN], s->usage_known[HS_TOKENS_IN] > 0, in, sizeof(in));
     statistics_count(s->usage[HS_TOKENS_CACHED], s->usage_known[HS_TOKENS_CACHED] > 0, cached, sizeof(cached));
     statistics_count(s->usage[HS_TOKENS_OUT], s->usage_known[HS_TOKENS_OUT] > 0, output, sizeof(output));
-    if (snprintf(out, size, "tokens in %s / cached %s / out %s (%zu of %zu agent steps reported)", in, cached, output,
+    if (snprintf(out, size, "tokens in %s / cached %s / out %s from %zu/%zu agent steps", in, cached, output,
                  s->usage_known[HS_TOKENS_IN], s->agent_steps) >= (int)size) out[size - 1] = '\0';
 }
 
@@ -96,15 +96,22 @@ void statistics_run_tokens(const struct hs_model *m, size_t run, char *out, size
     if (snprintf(out, size, "%s in / %s out", in, output) >= (int)size) out[size - 1] = '\0';
 }
 
-/* One line per step in the run detail: agent and tokens, or why there are none. */
-void statistics_step_agent(const struct hs_step *s, char *out, size_t size) {
-    char tokens[96];
+/* One line per step in the run detail: agent and tokens, or why there are
+ * none. Narrow tables use the compact in/cached/out form. */
+void statistics_step_agent(const struct hs_step *s, bool compact, char *out, size_t size) {
+    char tokens[96], in[24], cached[24], output[24];
     const struct hs_usage *u = &s->usage;
     if (!u->recorded) {
         copy_text(out, size, strcmp(s->kind, "exec") ? "" : "no agent receipt");
         return;
     }
     statistics_tokens(u, tokens, sizeof(tokens));
+    if (compact) {
+        statistics_count(u->counts[HS_TOKENS_IN], u->known[HS_TOKENS_IN], in, sizeof(in));
+        statistics_count(u->counts[HS_TOKENS_CACHED], u->known[HS_TOKENS_CACHED], cached, sizeof(cached));
+        statistics_count(u->counts[HS_TOKENS_OUT], u->known[HS_TOKENS_OUT], output, sizeof(output));
+        if (snprintf(tokens, sizeof(tokens), "%s/%s/%s", in, cached, output) >= (int)sizeof(tokens)) tokens[sizeof(tokens) - 1] = '\0';
+    }
     if (snprintf(out, size, "%s  %s", u->profile[0] ? u->profile : "agent unknown", tokens) >= (int)size)
         out[size - 1] = '\0';
 }
@@ -125,9 +132,10 @@ void statistics_step_detail(struct tv_canvas *c, struct tv_rect r, const struct 
     }
     statistics_tokens(u, tokens, sizeof(tokens));
     cost_text(u->counts[HS_COST_MICROUSD], u->known[HS_COST_MICROUSD], cost, sizeof(cost));
-    if (snprintf(text, sizeof(text), "Agent %s, version %s, model %s, effort %s. Tokens %s; %s.",
+    if (snprintf(text, sizeof(text), "Agent %s, version %s, model %s, effort %s.",
                  u->profile[0] ? u->profile : "unknown", u->version[0] ? u->version : "not recorded",
-                 u->model[0] ? u->model : "not recorded", u->effort[0] ? u->effort : "not recorded", tokens, cost) >= (int)sizeof(text))
+                 u->model[0] ? u->model : "not recorded", u->effort[0] ? u->effort : "not recorded") >= (int)sizeof(text))
         text[sizeof(text) - 1] = '\0';
-    statistics_wrap(c, r.x, row, r.width, r.height - 1, TV_BASE, text);
+    row += statistics_wrap(c, r.x, row, r.width, r.height - 2, TV_BASE, text);
+    dashboard_text(c, r.x, row, r.width, TV_BASE, "Tokens %s; %s.", tokens, cost);
 }

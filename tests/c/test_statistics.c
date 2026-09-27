@@ -90,7 +90,10 @@ static void usage_rows(struct hs_model *m) {
     hs_summarize(m, &f, &s);
     assert(s.agent_steps == 1 && s.usage_known[HS_TOKENS_IN] == 1 && s.usage[HS_TOKENS_IN] == 3850000);
     assert(s.usage_known[HS_COST_MICROUSD] == 0 && s.usage[HS_COST_MICROUSD] == 0);
-    /* Unknown steps, duplicates, schema 3 and malformed counts are refused. */
+}
+
+/* Unknown steps, duplicates, schema 3 and malformed counts are refused. */
+static void usage_malformed(struct hs_model *m) {
     assert(!load(USAGE_HEAD "U\trun_a\tmissing\tcodex\t-\t-\t-\t1\t1\t1\t-\nZ\t1\t2\n", m));
     assert(!load(USAGE_HEAD "U\trun_a\timplement\tcodex\t-\t-\t-\t1\t1\t1\t-\nU\trun_a\timplement\tcodex\t-\t-\t-\t1\t1\t1\t-\nZ\t1\t2\n", m));
     assert(!load(USAGE_HEAD "U\trun_a\timplement\tcodex\t-\t-\t-\tmany\t1\t1\t-\nZ\t1\t2\n", m));
@@ -126,6 +129,7 @@ int main(int argc, char **argv) {
     assert(m->runs[0].created==1709164800 && hs_duration(m,&m->steps[0],&duration) && duration==0);
     malformed(m);
     usage_rows(m);
+    usage_malformed(m);
     invalid_metrics(m);
     free(m);
     puts("Statistics: cohort reconciliation, dates, durations, unknowns, filters and malformed framing passed");
