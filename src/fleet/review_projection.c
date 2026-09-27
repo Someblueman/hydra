@@ -1,4 +1,5 @@
 #include "fleet/review_projection.h"
+#include "fleet/review_result.h"
 #include "fleet/attention_tui.h"
 #include "fleet/support/json.h"
 #include "fleet/support/files.h"
@@ -14,6 +15,7 @@
 #define REVIEW_LINE 8192U
 #define REVIEW_CHUNK 4096U
 struct projection { char *text; size_t used, lines, refs, previews; bool failed; };
+static void local_preview(json_object *row, const char *path);
 
 static const char *value(json_object *object, const char *key)
 {
@@ -150,6 +152,27 @@ static bool references(struct projection *out, json_object *rows)
     }
     return true;
 }
+/* Each check's complete output log is offered as a local log reference after
+ * the supplied ones; its bounded preview follows the usual framing. */
+static bool result_logs(struct projection *out, json_object *result)
+{
+    json_object *checks = f_field(result, "checks");
+    if (!json_object_is_type(checks, json_type_array)) return true;
+    for (size_t i = 0; i < json_object_array_length(checks); i++) {
+        const char *log = f_string(json_object_array_get_idx(checks, i), "log");
+        json_object *row;
+        bool ok;
+        if (!log || log[0] != '/' || out->refs >= 16U) continue;
+        row = json_object_new_object();
+        f_string_add(row, "kind", "log");
+        f_string_add(row, "locator", log);
+        local_preview(row, log);
+        ok = reference(out, row, out->refs);
+        json_object_put(row);
+        if (!ok) return false;
+    }
+    return true;
+}
 static bool status_field(const char *parent, const char *key)
 {
     if (!*parent) return !strcmp(key, "readiness") || !strcmp(key, "accepted");
@@ -182,16 +205,24 @@ static void body_field(struct projection *out, const char *key, json_object *fie
         (void)snprintf(label, sizeof(label), "%s: ", key); human_value(out, label, field, 0U);
     }
 }
+static void result_line(void *context, const char *line)
+{
+    human_lines(context, "TEXT", "", line);
+}
 static void body(struct projection *out, json_object *data)
 {
     if (!json_object_is_type(data, json_type_object)) { out->failed = true; return; }
+    if (f_field(data, "result")) {
+        review_result_text(f_field(data, "result"), result_line, out);
+        human_line(out, "TEXT", "", "TECHNICAL DETAILS  (exact identity and retained-contract checks)");
+    }
     /* Present existing computed state before long identities and evidence.
      * Each field is emitted once; the formatter never derives readiness. */
     status_line(out, data, "", "readiness"); status_line(out, data, "", "accepted");
     status_line(out, data, "checks", "state"); status_line(out, data, "request", "state");
     status_line(out, data, "request", "message");
     json_object_object_foreach(data, key, child) {
-        if (!strcmp(key, "references") || !strcmp(key, "attention") || !strcmp(key, "selection")) continue;
+        if (!strcmp(key, "references") || !strcmp(key, "attention") || !strcmp(key, "selection") || !strcmp(key, "result")) continue;
         if (status_field("", key)) continue;
         if (!safe_field(key, 255U)) { out->failed = true; return; }
         body_field(out, key, child);
@@ -208,7 +239,7 @@ int review_projection(json_object *envelope, json_object *selection)
     if (!out.text || !header(&out, selection)) goto cleanup;
     if (!json_object_get_boolean(f_field(envelope, "ok"))) human_value(&out, "error: ", f_field(envelope, "error"), 0U);
     else body(&out, data);
-    if (!references(&out, f_field(data, "references"))) goto cleanup;
+    if (!references(&out, f_field(data, "references")) || !result_logs(&out, f_field(data, "result"))) goto cleanup;
     append(&out, "END\t%zu\t%zu\t%zu\n", out.lines, out.refs, out.previews);
     if (!out.failed && fwrite(out.text, 1U, out.used, stdout) == out.used && !ferror(stdout)) status = 0;
 cleanup:

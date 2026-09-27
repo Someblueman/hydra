@@ -1,4 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
 #include "internal.h"
 
 #define REVIEW_LIMIT (1024U * 1024U)
@@ -18,15 +21,25 @@ struct review_document {
     size_t length, text_count, ref_count, preview_count;
     struct review_reference refs[REVIEW_REFS];
 };
+#define REVIEW_HEADINGS 64U
+#define REVIEW_LOG (1024U * 1024U)
 struct native_review {
     struct native_capture job;
     struct native_review_identity identity;
     struct review_document *document;
     size_t scroll, lines, reference;
-    bool active, references, preview, opening, stale, identity_view;
+    bool active, references, preview, opening, stale, identity_view, log_view;
     char notice[TEXT];
     char supplied_reference[8256];
+    /* Wrapped row of each section heading from the last frame, for n/N. */
+    size_t headings[REVIEW_HEADINGS], heading_count;
+    /* The complete local log opened with L; read-only and bounded. */
+    char *log, log_path[4096];
+    size_t log_bytes;
+    bool log_tail;
 };
+
+static void discard_log(struct native_review *review);
 
 bool native_review_active(const struct app *app)
 { return app->review && app->review->active; }
@@ -35,14 +48,21 @@ void native_review_destroy(struct app *app)
 {
     if (!app->review) return;
     native_capture_destroy(&app->review->job);
+    discard_log(app->review);
     free(app->review->document);
     free(app->review);
     app->review = NULL;
 }
 
+static void discard_log(struct native_review *review)
+{
+    free(review->log); review->log = NULL; review->log_view = false; review->log_bytes = 0U; review->log_tail = false;
+}
+
 static void discard_document(struct native_review *review)
 {
     native_capture_destroy(&review->job);
+    discard_log(review);
     free(review->document); review->document = NULL;
     review->scroll = 0U; review->lines = 0U; review->reference = 0U;
     review->references = false; review->preview = false; review->opening = false; review->identity_view = false;
@@ -302,9 +322,64 @@ static void supply_reference(struct app *app, char key)
     review->references = true;
 }
 
+static void jump_section(struct native_review *review, int direction)
+{
+    size_t i;
+    if (review->references || review->identity_view || review->log_view) return;
+    for (i = 0U; direction > 0 && i < review->heading_count; i++)
+        if (review->headings[i] > review->scroll) { review->scroll = review->headings[i]; return; }
+    for (i = review->heading_count; direction < 0 && i > 0U; i--)
+        if (review->headings[i - 1U] < review->scroll) { review->scroll = review->headings[i - 1U]; return; }
+}
+
+static void page_review(const struct app *app, struct native_review *review, int direction)
+{
+    size_t page = app->rows > 8 ? (size_t)app->rows - 8U : 1U;
+    if (direction > 0) review->scroll = review->scroll + page < review->lines ? review->scroll + page : review->lines ? review->lines - 1U : 0U;
+    else review->scroll = review->scroll > page ? review->scroll - page : 0U;
+}
+
+/* Read the first available local log reference in full (the last 1 MiB of a
+ * larger file). Terminal control bytes are replaced; nothing is executed. */
+static bool read_log(struct native_review *review, const char *path)
+{
+    int fd = open(path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW);
+    struct stat st;
+    ssize_t n = -1;
+    char *text;
+    if (fd < 0) return false;
+    if (fstat(fd, &st) || !S_ISREG(st.st_mode) || !(text = malloc(REVIEW_LOG + 1U))) { close(fd); return false; }
+    review->log_tail = (size_t)st.st_size > REVIEW_LOG;
+    if (!review->log_tail || lseek(fd, st.st_size - (off_t)REVIEW_LOG, SEEK_SET) >= 0) n = read(fd, text, REVIEW_LOG);
+    close(fd);
+    if (n < 0) { free(text); return false; }
+    for (ssize_t i = 0; i < n; i++)
+        if (((unsigned char)text[i] < 32U && text[i] != '\n' && text[i] != '\t') || text[i] == 127) text[i] = '?';
+    text[n] = '\0';
+    review->log = text; review->log_bytes = (size_t)st.st_size;
+    return true;
+}
+
+static void open_log(struct native_review *review)
+{
+    size_t i;
+    if (!review->document || review->stale) return;
+    for (i = 0U; i < review->document->ref_count; i++) {
+        const struct review_reference *ref = &review->document->refs[i];
+        if (strcmp(ref->kind, "log") || strcmp(ref->state, "available") || ref->locator[0] != '/') continue;
+        discard_log(review);
+        if (!read_log(review, ref->locator)) break;
+        copy_text(review->log_path, sizeof(review->log_path), ref->locator);
+        review->log_view = true; review->references = false; review->identity_view = false; review->scroll = 0U;
+        return;
+    }
+    copy_text(review->notice, sizeof(review->notice), "No readable local log is recorded for this review");
+}
+
 static void review_back(struct native_review *review)
 {
-    if (review->preview) { review->preview = false; review->scroll = 0U; }
+    if (review->log_view) { discard_log(review); review->scroll = 0U; }
+    else if (review->preview) { review->preview = false; review->scroll = 0U; }
     else if (review->references) { review->references = false; review->scroll = 0U; }
     else if (review->identity_view) { review->identity_view = false; review->scroll = 0U; }
     else { discard_document(review); review->active = false; }
@@ -323,6 +398,9 @@ bool native_review_key(struct app *app, char key)
         case 'i': review->identity_view = !review->identity_view; review->references = false; review->preview = false; review->scroll = 0U; break;
         case '\r': case '\n': case 'o': if (review->references) open_reference(review); break;
         case 'l': case 't': case 'p': supply_reference(app, key); break;
+        case 'n': case 'N': jump_section(review, key == 'n' ? 1 : -1); break;
+        case ' ': case 'b': page_review(app, review, key == ' ' ? 1 : -1); break;
+        case 'L': open_log(review); break;
         case 27: review_back(review); break;
         case 'r': case 'I': case '[': case ']': return false;
         default: break;
@@ -343,13 +421,52 @@ static void wrapped_line(struct app *app, const char *text, size_t length, size_
     } while (offset < length);
 }
 
+/* A section heading is an upper-case word of three or more letters at the
+ * start of a line, ended by two spaces or the line end (e.g. "DIFF  ..."). */
+static bool heading_line(const char *text, size_t length)
+{
+    size_t i = 0U;
+    while (i < length && text[i] >= 'A' && text[i] <= 'Z') i++;
+    if (i < 3U) return false;
+    while (i < length && ((text[i] >= 'A' && text[i] <= 'Z') || text[i] == ' ')) {
+        if (text[i] == ' ' && i + 1U < length && text[i + 1U] == ' ') return true;
+        i++;
+    }
+    return i == length;
+}
+
+static bool starts(const char *text, size_t length, const char *prefix)
+{ size_t n = strlen(prefix); return length >= n && !memcmp(text, prefix, n); }
+
+/* Styling only; the document text is shown unchanged. */
+static enum tone line_tone(const char *text, size_t length, bool diff)
+{
+    if (heading_line(text, length)) return TONE_STRONG;
+    if (diff && starts(text, length, "    @@")) return TONE_BORDER;
+    if (diff && starts(text, length, "    +") && !starts(text, length, "    +++")) return TONE_SUCCESS;
+    if (diff && starts(text, length, "    -") && !starts(text, length, "    ---")) return TONE_WARNING;
+    if (starts(text, length, "  PASS ")) return TONE_SUCCESS;
+    if (starts(text, length, "  FAIL ") || starts(text, length, "  Note:") || starts(text, length, "  NOT REPORTED") ||
+        starts(text, length, "  UNVERIFIED") || starts(text, length, "readiness: revoked")) return TONE_WARNING;
+    return TONE_BASE;
+}
+
 static void render_text(struct app *app, struct native_review *review, const char *text, size_t *row)
 {
     const char *end;
+    bool diff = false;
     while (*text) {
+        size_t length;
         end = strchr(text, '\n');
         if (!end) end = text + strlen(text);
-        wrapped_line(app, text, (size_t)(end - text), row, review->scroll);
+        length = (size_t)(end - text);
+        if (heading_line(text, length)) {
+            diff = starts(text, length, "DIFF");
+            if (review->heading_count < REVIEW_HEADINGS) review->headings[review->heading_count++] = *row;
+        }
+        style(app, line_tone(text, length, diff));
+        wrapped_line(app, text, length, row, review->scroll);
+        style(app, TONE_BASE);
         text = *end ? end + 1U : end;
     }
 }
@@ -382,15 +499,39 @@ static void render_identity(struct app *app, struct native_review *review, size_
     }
 }
 
+static void render_log(struct app *app, struct native_review *review, size_t *row)
+{
+    char heading[4200];
+    if (snprintf(heading, sizeof(heading), "Full log, %zu bytes%s: %s", review->log_bytes,
+                 review->log_tail ? " (the last 1 MiB is shown)" : "", review->log_path) >= (int)sizeof(heading))
+        heading[sizeof(heading) - 1U] = '\0';
+    style(app, TONE_MUTED); wrapped_line(app, heading, strlen(heading), row, review->scroll); style(app, TONE_BASE);
+    render_text(app, review, review->log[0] ? review->log : "The log is empty.\n", row);
+}
+
+static const char *review_mode(const struct native_review *review)
+{
+    if (review->identity_view) return "selected identity";
+    if (review->log_view) return "full log";
+    return review->references ? "references" : "evidence";
+}
+
 bool native_review_render(struct app *app)
 {
     struct native_review *review = app->review; size_t row = 0U;
     if (!native_review_active(app)) return false;
-    linef(app, "EXACT REVIEW / %s%s", review->identity_view ? "selected identity" : review->references ? "references" : "evidence", review->stale ? " / UNAVAILABLE" : "");
+    linef(app, "EXACT REVIEW / %s%s", review_mode(review), review->stale ? " / UNAVAILABLE" : "");
     if (review->notice[0]) linef(app, "%s", review->notice);
+    if (review->document && !review->stale) {
+        style(app, TONE_MUTED);
+        linef(app, "n/N section  L log  space/b page  f refs  i IDs  Esc back");
+        style(app, TONE_BASE);
+    }
+    review->heading_count = 0U;
     if (review->identity_view) { render_identity(app, review, &row); review->lines = row; return true; }
     if (!review->document) return true;
-    if (review->references) render_references(app, review, &row);
+    if (review->log_view && review->log) render_log(app, review, &row);
+    else if (review->references) render_references(app, review, &row);
     else render_text(app, review, review->document->text, &row);
     review->lines = row;
     return true;

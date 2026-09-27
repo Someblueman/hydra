@@ -383,6 +383,15 @@ static bool inventory_rows(json_object *out, json_object *files, json_object *de
     return inventory_extras(rows, files, decls) && ready;
 }
 
+/* A step that declares no outputs and whose receipt, if any, names no files
+ * has no deliverable: it is not applicable, never a malformed declaration. */
+static bool no_deliverable(json_object *decls, json_object *receipt, json_object *files)
+{
+    if (decls)
+        return false;
+    return !receipt || (json_object_is_type(files, json_type_object) && !json_object_object_length(files));
+}
+
 void review_inventory(json_object *out, json_object *selected, json_object *data, const char *attempt,
                       bool expired)
 {
@@ -404,7 +413,9 @@ void review_inventory(json_object *out, json_object *selected, json_object *data
         receipt = plan_read(path);
     files = f_field(receipt, "files");
     decls = f_field(f_field(f_field(data, "steps"), f_string(selected, "step_id")), "outputs");
-    if (!json_object_is_type(decls, json_type_object) || json_object_object_length(decls) > (int)WD_NAMES)
+    if (no_deliverable(decls, receipt, files))
+        f_string_add(out, "inventory_state", "not_applicable");
+    else if (!json_object_is_type(decls, json_type_object) || json_object_object_length(decls) > (int)WD_NAMES)
         reason = "malformed_declarations";
     else if (!f_number_is(receipt, "schema_version", 1) || !json_object_is_type(files, json_type_object) ||
              json_object_object_length(files) > (int)WD_NAMES)

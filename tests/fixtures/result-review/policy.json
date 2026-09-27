@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "envelope": {
+    "hosts": ["local"],
+    "tools": ["sh", "profile:fixture-codex"],
+    "effects": ["worktree", "execute"],
+    "writes": ["@spawned:*"],
+    "parallelism": 1,
+    "timeout_seconds": 600,
+    "artifact_bytes": 65536,
+    "max_heads": 4,
+    "disk_mb": 1,
+    "retry_budget": 0,
+    "repair_budget": 0
+  }
+}

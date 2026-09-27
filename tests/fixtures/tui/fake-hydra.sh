@@ -63,6 +63,21 @@ case "${1:-}:${2:-}" in
             : > "$HYDRA_ATTENTION_DONE_FILE"
         fi
         ;;
+    workflow:attention-seen)
+        # Shared per-user seen store for PTY tests; absent means unavailable.
+        [ -n "${HYDRA_TEST_SEEN_FILE:-}" ] || exit 1
+        touch "$HYDRA_TEST_SEEN_FILE"
+        case "${3:-}" in
+            mark) { grep -v "^$4	" "$HYDRA_TEST_SEEN_FILE"; printf '%s\t%s\n' "$4" "$5"; } > "$HYDRA_TEST_SEEN_FILE.tmp" ;;
+            clear) grep -v "^$4	" "$HYDRA_TEST_SEEN_FILE" > "$HYDRA_TEST_SEEN_FILE.tmp" ;;
+            list) cp "$HYDRA_TEST_SEEN_FILE" "$HYDRA_TEST_SEEN_FILE.tmp" ;;
+            *) exit 2 ;;
+        esac
+        mv "$HYDRA_TEST_SEEN_FILE.tmp" "$HYDRA_TEST_SEEN_FILE"
+        printf 'HYDRA_ATTENTION_SEEN\t1\n'
+        sed 's/^/SEEN	/' "$HYDRA_TEST_SEEN_FILE"
+        printf 'END\t%s\n' "$(wc -l < "$HYDRA_TEST_SEEN_FILE" | tr -d ' ')"
+        ;;
     tui:--data)
         if [ -n "${HYDRA_TEST_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_FAIL_FILE" ]; then exit 1; fi
         if [ -n "${HYDRA_TEST_TUI_DELAY:-}" ]; then sleep "$HYDRA_TEST_TUI_DELAY"; fi

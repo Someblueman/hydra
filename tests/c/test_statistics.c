@@ -64,7 +64,7 @@ static int probe(const char *path, const char *run_id) {
 }
 
 static void malformed(struct hs_model *m) {
-    assert(!load("HYDRA_STATISTICS\t4\t10\nZ\t0\t0\n",m));
+    assert(!load("HYDRA_STATISTICS\t5\t10\nZ\t0\t0\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t10\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t10\nZ\t1\t0\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t10\nZ\t0\t0\nX\tafter terminator\n",m));
@@ -73,6 +73,31 @@ static void malformed(struct hs_model *m) {
     assert(!load("HYDRA_STATISTICS\t2\t10\nR\trun_a\ttest\tfailed\tp\t-\tcomplete\t-\t-\t-\t-\t0\nR\trun_a\ttest\tfailed\tp\t-\tcomplete\t-\t-\t-\t-\t0\nZ\t2\t0\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t999999999999999999999999\nZ\t0\t0\n",m));
     assert(!load("HYDRA_STATISTICS\t2\t10\nZ\t0\t0",m));
+}
+
+/* Schema 4 U rows attach exec-receipt evidence to a listed step. Unknown
+ * counts stay unknown and never add zero to a total. */
+#define USAGE_HEAD "HYDRA_STATISTICS\t4\t1788789600\nR\trun_a\tplan\tsucceeded\tp\t-\tcomplete\t-\t-\t-\t-\t1\t-\t-\t-\n" \
+    "S\trun_a\timplement\texec\tsucceeded\t1\t1788789000\t1788789600\t-\t-\nS\trun_a\tspawn\tspawn\tsucceeded\t1\t-\t-\t-\t-\n"
+static void usage_rows(struct hs_model *m) {
+    struct hs_filter f = {0}; struct hs_summary s; const struct hs_usage *u;
+    assert(load(USAGE_HEAD "U\trun_a\timplement\tcodex\tcodex-cli 0.99\t-\thigh\t3850000\t3740000\t23000\t-\nZ\t1\t2\n", m));
+    u = &m->steps[0].usage;
+    assert(u->recorded && !strcmp(u->profile, "codex") && !strcmp(u->version, "codex-cli 0.99") && !u->model[0] && !strcmp(u->effort, "high"));
+    assert(u->known[HS_TOKENS_IN] && u->counts[HS_TOKENS_IN] == 3850000 && u->counts[HS_TOKENS_CACHED] == 3740000);
+    assert(u->known[HS_TOKENS_OUT] && u->counts[HS_TOKENS_OUT] == 23000 && !u->known[HS_COST_MICROUSD]);
+    assert(!m->steps[1].usage.recorded);
+    hs_summarize(m, &f, &s);
+    assert(s.agent_steps == 1 && s.usage_known[HS_TOKENS_IN] == 1 && s.usage[HS_TOKENS_IN] == 3850000);
+    assert(s.usage_known[HS_COST_MICROUSD] == 0 && s.usage[HS_COST_MICROUSD] == 0);
+}
+
+/* Unknown steps, duplicates, schema 3 and malformed counts are refused. */
+static void usage_malformed(struct hs_model *m) {
+    assert(!load(USAGE_HEAD "U\trun_a\tmissing\tcodex\t-\t-\t-\t1\t1\t1\t-\nZ\t1\t2\n", m));
+    assert(!load(USAGE_HEAD "U\trun_a\timplement\tcodex\t-\t-\t-\t1\t1\t1\t-\nU\trun_a\timplement\tcodex\t-\t-\t-\t1\t1\t1\t-\nZ\t1\t2\n", m));
+    assert(!load(USAGE_HEAD "U\trun_a\timplement\tcodex\t-\t-\t-\tmany\t1\t1\t-\nZ\t1\t2\n", m));
+    assert(!load("HYDRA_STATISTICS\t3\t10\nR\trun_a\tplan\tsucceeded\tp\t-\tcomplete\t-\t-\t-\t-\t1\t-\t-\t-\nS\trun_a\tx\texec\tsucceeded\t1\t-\t-\t-\t-\nU\trun_a\tx\tcodex\t-\t-\t-\t1\t1\t1\t-\nZ\t1\t1\n", m));
 }
 
 int main(int argc, char **argv) {
@@ -103,6 +128,8 @@ int main(int argc, char **argv) {
     assert(load("HYDRA_STATISTICS\t2\t1788789600\nR\trun_a\ttest\tfailed\tp\t2024-02-29T00:00:00Z\tcomplete\t-\t-\t-\t-\t0\nS\trun_a\tstep\texec\tfailed\t1\t1709164800\t1709164800\t-\t-\nZ\t1\t1\n",m));
     assert(m->runs[0].created==1709164800 && hs_duration(m,&m->steps[0],&duration) && duration==0);
     malformed(m);
+    usage_rows(m);
+    usage_malformed(m);
     invalid_metrics(m);
     free(m);
     puts("Statistics: cohort reconciliation, dates, durations, unknowns, filters and malformed framing passed");

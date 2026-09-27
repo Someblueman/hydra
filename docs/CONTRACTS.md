@@ -244,13 +244,47 @@ retain navigation, search, refresh, preview, switch, spawn, group assignment,
 dashboard, regenerate, confirmed kill, and help behavior. Native mutations execute
 the public shell CLI with explicit argv and never write Hydra state directly. Native
 attention consumes `workflow attention-data` or `fleet attention-data`; its `I`
-view, `s` seen marker, and `r` exact review route are read-only client interaction.
+view and `r` exact review route are read-only client interaction.
 Review selection carries the complete attention identity, requested revision, and
 identity hash. `review-data` is a bounded framed projection of the public workflow
 or Fleet review command; opening a review or supplied reference cannot change
 durable state or confer approval. Stale or ambiguous selections remain unavailable
 until a fresh exact identity is established. Native UI behavior is covered by the
 public CLI and protocol rules in this guide.
+
+Attention data is `HYDRA_ATTENTION<TAB>2`: each `ITEM` keeps the 19 version-1
+fields and appends a presentation `label` (the workflow name, or `-`). The label is
+not part of the identity or revision hashes. Readers accept versions 1 and 2. A
+succeeded step whose data manifest declares no outputs, and whose receipt names no
+files, is not a result and produces no item; declared outputs that do not match
+their receipt stay explicit `unknown` items.
+
+Seen markers are a per-user client preference, not workflow state.
+`hydra workflow attention-seen list | mark IDENTITY REVISION | clear IDENTITY`
+(64-hex digests) keeps them in `$HYDRA_HOME/attention/seen.tsv`, one
+`identity<TAB>revision<TAB>seen-at` row per identity, at most 512 rows (oldest
+dropped), replaced atomically under the `attention-seen` lock. Every call prints
+`HYDRA_ATTENTION_SEEN<TAB>1`, `SEEN<TAB>identity<TAB>revision` rows and
+`END<TAB>count`. A marker matches only its exact revision, so a changed item is
+unseen again. Marking an approval seen never approves, rejects or dismisses it.
+
+A review of an item belonging to a compiled plan run adds a read-only `result`
+object: the plan name and objective, verdict (`pass` only from the verified
+delivery; `pending`, `fail` or `not_verified` otherwise), deliverables with a
+bounded text excerpt, requirements with their check state (`pass`, `fail`,
+`pending`, `unverified` or `not_reported`), checks with the exact argv, head, exit
+code, report evidence and a filtered output summary and log path, steps with
+duration, attempts and exec-receipt agent evidence, the worker branch's commits,
+files and bounded diff as observed at review time (not sealed with the run), and
+the land and cleanup commands. Hydra never runs them. The text projection shows
+this first and offers each check log as a local `REF log`. Plan checks of a run
+that is not terminal are `pending`; a step without deliverables reports
+`inventory_state` and `readiness` `not_applicable`.
+
+`workflow statistics-data` is `HYDRA_STATISTICS<TAB>4`. Schema 4 adds
+`U<TAB>run<TAB>step<TAB>profile<TAB>executable-version<TAB>model<TAB>effort<TAB>tokens-in<TAB>tokens-cached<TAB>tokens-out<TAB>cost-microusd`
+after a run's `S` rows, one per listed step with an exec receipt; `-` is unknown,
+never zero. Readers accept schemas 2 to 4. CPU and memory are not collected.
 
 ## Process, install, and platform contracts
 

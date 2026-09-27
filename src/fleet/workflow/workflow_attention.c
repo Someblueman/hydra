@@ -18,6 +18,7 @@
 struct wa {
     json_object    *items;
     const char     *project;
+    char           *label;
     char            root[F_PATH];
     size_t          runs, steps;
     bool            partial, truncated;
@@ -273,6 +274,9 @@ add(struct wa *w, const char *kind, const char *reason, const char *run, const c
     nullable(o, "binding", binding);
     f_string_add(o, "freshness", fresh);
     json_object_object_add(o, "accepted", json_object_new_boolean(false));
+    /* Presentation only: the label names the workflow and is not part of the
+     * semantic revision or identity, so relabelling never resurfaces an item. */
+    nullable(o, "label", w->label);
     f_string_add(rev, "kind", kind);
     nullable(rev, "project_id", w->project);
     nullable(rev, "run_id", run);
@@ -524,6 +528,43 @@ result_identity(const char *ap, char **head, char **instance)
     if (*head && !id(*head, "head_")) { free(*head); *head = NULL; }
     if (*instance && !id(*instance, "instance_")) { free(*instance); *instance = NULL; }
 }
+/* 1: the step declares outputs, 0: it declares none and its receipt names no
+ * files (a spawn or plain exec step has nothing to review), -1: unreadable or
+ * inconsistent evidence that must stay an explicit unknown. */
+static int
+receipt_files_empty(const char *ap)
+{
+    char p[F_PATH];
+    struct stat st;
+    json_object *receipt, *files;
+    int empty;
+    if (f_path(p, sizeof(p), ap, "outputs.json")) return -1;
+    if (lstat(p, &st)) return errno == ENOENT ? 0 : -1;
+    if (!S_ISREG(st.st_mode) || !(receipt = f_read_json(p, F_LIMIT))) return -1;
+    files = f_field(receipt, "files");
+    empty = f_number_is(receipt, "schema_version", 1) && json_object_is_type(files, json_type_object) &&
+        !json_object_object_length(files) ? 0 : -1;
+    json_object_put(receipt);
+    return empty;
+}
+static int
+result_declared(const char *rd, const char *ap, const char *step)
+{
+    char p[F_PATH];
+    struct stat st;
+    json_object *data = NULL, *outputs;
+    int declared;
+    if (f_path(p, sizeof(p), rd, "data.json")) return -1;
+    if (lstat(p, &st)) {
+        if (errno != ENOENT) return -1;
+    } else if (!S_ISREG(st.st_mode) || !(data = f_read_json(p, F_LIMIT))) return -1;
+    outputs = f_field(f_field(f_field(data, "steps"), step), "outputs");
+    if (json_object_is_type(outputs, json_type_object) && json_object_object_length(outputs)) declared = 1;
+    else if (outputs && !json_object_is_type(outputs, json_type_object)) declared = -1;
+    else declared = receipt_files_empty(ap) ? -1 : 0;
+    json_object_put(data);
+    return declared;
+}
 static void
 result(struct wa *w, const char *run, const char *rd, const char *step, const char *sd)
 {
@@ -540,6 +581,7 @@ result(struct wa *w, const char *run, const char *rd, const char *step, const ch
         unknown(w, "missing_attempt", run, step, aid, NULL, NULL, NULL, NULL, sem);
         goto done;
     }
+    if (!result_declared(rd, ap, step)) goto done;
     if (f_path(p, sizeof(p), rd, "retention.json")) {
         unknown(w, "path_unavailable", run, step, aid, NULL, NULL, NULL, NULL, sem);
         goto done;
@@ -591,6 +633,9 @@ run_one(struct wa *w, const char *run, const char *rd)
         return;
     }
     w->runs++;
+    free(w->label);
+    w->label = scalar_at(rd, "workflow-id");
+    if (w->label && !f_name(w->label)) { free(w->label); w->label = NULL; }
     if (!directory(rd) || f_path(sp, sizeof(sp), rd, "steps") || !directory(sp) || !(d = opendir(sp))) {
         unknown(w, "missing_steps", run, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
         return;
@@ -647,6 +692,7 @@ wd_attention(const char *project)
     { json_object *error = attention_open(&w, project, runs, &d); if (error) return error; }
     w.items = json_object_new_array();
     attention_scan(&w, runs, d); closedir(d);
+    free(w.label);
     data = json_object_new_object();
     json_object_object_add(data, "snapshot_schema_version", json_object_new_int(1));
     json_object_object_add(data, "items", w.items);

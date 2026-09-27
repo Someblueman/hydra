@@ -266,3 +266,23 @@ draft or policy change after validation refuses the launch. Once the run receipt
 arrives, Hydra submits the run ID to the planning conversation, followed by
 approval waits, failed steps and the outcome; the run owner also queues the same
 notices in that head's inbox, so they are recorded even when the TUI is closed.
+
+### Reviewing a finished plan
+
+Attention (`I` in the TUI) lists what needs you as sentences such as "Result
+ready for review · kill-dry-run · verify". Steps that declare no outputs, such as
+spawn steps, are not results and never appear. `r` opens the review of the
+selected item. For a compiled plan run it starts with the result: the verdict,
+the deliverable's text, each requirement and the check that covered it, the
+verify step's exact command with a summary of its output (`L` shows the full
+log), duration, agent, executable version and tokens per step, and the worker
+branch's commits, files and diff as they are now. It ends with the commands that
+would land the worker branch (`git merge --no-ff <branch>` in your checkout) and
+remove the plan's heads; Hydra never runs them. `n`/`N` move between sections.
+Technical identity and retained-contract checks follow the result.
+
+`s` marks an item seen. The marker is kept per user under `$HYDRA_HOME`, moves the
+item to a collapsed Seen group and out of the count, and lasts until the item
+changes. An approval that is marked seen stays listed until someone decides.
+The Statistics view (`D`) shows the same token counts per step and run, with
+totals for the selected range; CPU and memory are not measured.

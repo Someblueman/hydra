@@ -122,7 +122,7 @@ static bool review_start(struct session *session, const char *tui, const char *h
     if (!result(open_session(session, tui, hydra, fixture->directory, width, height) == 0, "open review PTY")) return false;
     result(wait_for_raw(session), "review terminal enters raw mode");
     write_input(session->master, "I", 1U);
-    return result(wait_for_marker(session, "ATTENTION  2 current", 3000), "review candidates load");
+    return result(wait_for_marker(session, "ATTENTION  2 need you", 3000), "review candidates load");
 }
 
 static void review_stop(struct session *session) {
@@ -243,6 +243,39 @@ static void review_revoked_cases(struct session *session, struct review_fixture 
     }
 }
 
+/* A result review: section headings navigate with n, and L opens the complete
+ * local log beyond the bounded producer preview. */
+static bool review_result_log(const char *log) {
+    FILE *file = fopen(log, "w");
+    if (!file) return false;
+    for (size_t i = 0U; i < 200U; i++) fprintf(file, "[PASS] check number %zu of the fixture suite\n", i);
+    fprintf(file, "LOG-TAIL-MARKER Passed: 200 Failed: 0\n");
+    return fclose(file) == 0;
+}
+static void review_result_case(struct session *session, struct review_fixture *fixture) {
+    char header[1024], log[200], *text = malloc(65536U); size_t used, lines = 0U; int written;
+    if (!text || !review_header(fixture, header, sizeof(header)) ||
+        snprintf(log, sizeof(log), "%s/verify.log", fixture->directory) >= (int)sizeof(log) || !review_result_log(log)) { free(text); result(false, "result review fixture"); return; }
+    used = (size_t)snprintf(text, 65536U, "%sTEXT\tRESULT  plan-x  -  verdict PASS (verified)  -  run succeeded\nTEXT\tWHAT WAS PRODUCED\n", header); lines += 2U;
+    for (size_t i = 0U; i < 40U; i++) { used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tproduced filler %zu\n", i); lines++; }
+    used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tHOW IT WAS VERIFIED\nTEXT\t    Full log: press L\n"); lines += 2U;
+    for (size_t i = 0U; i < 40U; i++) { used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tverified filler %zu\n", i); lines++; }
+    written = snprintf(text + used, 65536U - used, "TEXT\tDIFF  (complete)\nTEXT\t    +added line\nREF\tlog\tavailable\t%s\nEND\t%zu\t1\t0\n", log, lines + 2U);
+    if (written < 0 || (size_t)written >= 65536U - used) { free(text); unlink(log); result(false, "result review fits"); return; }
+    result(review_reload(session, fixture, text, "RESULT  plan-x"), "result review loads");
+    write_input(session->master, "n", 1U); write_input(session->master, "n", 1U);
+    result(wait_for_markers(session, "HOW IT WAS VERIFIED", "Full log: press L", 1000), "n jumps to the next section heading");
+    write_input(session->master, "n", 1U);
+    result(wait_for_marker(session, "+added line", 1000), "n reaches the diff section");
+    write_input(session->master, "L", 1U);
+    result(wait_for_markers(session, "EXACT REVIEW / full log", "Full log, ", 1000), "L opens the verify log");
+    write_input(session->master, "G", 1U);
+    result(wait_for_marker(session, "LOG-TAIL-MARKER", 1000), "the full log extends past the bounded preview");
+    write_input(session->master, "\033", 1U);
+    result(wait_for_marker(session, "EXACT REVIEW / evidence", 1000), "Esc returns from the log to the review");
+    free(text); unlink(log);
+}
+
 static void test_review_navigation(const char *tui, const char *hydra) {
     struct review_fixture fixture; struct session session;
     if (!result(review_setup(&fixture, hydra), "prepare review fixtures")) return;
@@ -268,6 +301,7 @@ static void test_review_navigation(const char *tui, const char *hydra) {
     result(review_reload(&session, &fixture, fixture.original, "readiness: ready"), "valid review resumes after byte-bound failures");
     review_references_test(&session, &fixture);
     review_supplied_reference_test(&session, &fixture);
+    review_result_case(&session, &fixture);
     review_stop(&session);
 cleanup: review_cleanup(&fixture);
 }
@@ -304,7 +338,7 @@ static void test_review_narrow(const char *tui, const char *hydra) {
     write_input(session.master, "G", 1U);
     result(wait_for_marker(&session, "FINAL-REVIEW-EVIDENCE", 1000), "narrow review can scroll to final evidence");
     write_input(session.master, "\033", 1U);
-    result(wait_for_marker(&session, "ATTENTION  2 current", 1000), "opening/closing review does not acknowledge candidate");
+    result(wait_for_marker(&session, "ATTENTION  2 need you", 1000), "opening/closing review does not acknowledge candidate");
     write_marker_file(fixture.delay, "4\n"); write_input(session.master, "r", 1U);
     result(wait_for_marker(&session, "Loading exact review", 1000), "narrow slow review stays responsive");
     write_input(session.master, "\033", 1U);

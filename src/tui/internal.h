@@ -293,6 +293,14 @@ void statistics_visible(struct app *app);
 int accept_statistics(struct app *app, FILE *input);
 int refresh_statistics(struct app *app, const char *fixture);
 void statistics_move(struct app *app, int direction);
+void statistics_count(uint64_t value, bool known, char *out, size_t size);
+void statistics_tokens(const struct hs_usage *u, char *out, size_t size);
+void statistics_scope_tokens(const struct hs_summary *s, char *out, size_t size);
+int statistics_wrap(struct tv_canvas *c, int x, int y, int width, int rows, enum tv_style tone, const char *text);
+void statistics_scope_notes(struct tv_canvas *c, int x, int y, int width, int rows, const struct hs_summary *s);
+void statistics_step_agent(const struct hs_step *s, bool compact, char *out, size_t size);
+void statistics_run_tokens(const struct hs_model *m, size_t run, char *out, size_t size);
+void statistics_step_detail(struct tv_canvas *c, struct tv_rect r, const struct hs_model *m, const struct hs_step *s);
 bool workflow_id(const char *s);
 size_t workflow_nodes(const struct workflow_model *m, size_t run, size_t *indices);
 bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_t n,

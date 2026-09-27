@@ -46,6 +46,19 @@ static void statistics_trend(struct tv_canvas *c, struct tv_rect r, const struct
     }
 }
 
+/* One run: name, state, creation date and, when wide, its token total. */
+static void statistics_run_row(const struct statistics_view *v, struct tv_canvas *c, struct tv_rect r, int row, size_t i) {
+    const struct hs_run *run = &v->model->runs[v->visible[i]];
+    char date[40], tokens[64] = "";
+    bool wide = r.width > 90, dated = r.width > 70;
+    int name_width = wide ? r.width-73 : dated ? r.width-47 : r.width-25;
+    enum tv_style tone = i == v->selected ? TV_SELECTED : hs_state(run->state) == HS_FAILED ? TV_WARNING : TV_BASE;
+    statistics_time(run->created, date, sizeof(date));
+    if (wide) statistics_run_tokens(v->model, v->visible[i], tokens, sizeof(tokens));
+    dashboard_text(c, r.x+2, row, r.width-4, tone, "%c %-*.*s %-18.18s%s%-16s  %s",
+        i == v->selected ? '>' : ' ', name_width, name_width, run->name, run->state, dated ? "  " : "", dated ? date : "", tokens);
+}
+
 static void statistics_run_table(struct app *app, struct tv_canvas *c, struct tv_rect r) {
     struct statistics_view *v = app->statistics;
     size_t i, start;
@@ -58,41 +71,57 @@ static void statistics_run_table(struct app *app, struct tv_canvas *c, struct tv
     if (available < 1) return;
     start = v->selected >= (size_t)available ? v->selected - (size_t)available + 1 : 0;
     for (i = start; i < v->count && row < r.y+r.height-2; i++, row++) {
-        const struct hs_run *run = &v->model->runs[v->visible[i]];
-        char date[40];
-        int name_width = r.width > 70 ? r.width-47 : r.width-25;
-        enum tv_style tone = i == v->selected ? TV_SELECTED : hs_state(run->state) == HS_FAILED ? TV_WARNING : TV_BASE;
-        statistics_time(run->created, date, sizeof(date));
-        dashboard_text(c, r.x+2, row, r.width-4, tone, "%c %-*.*s %-18.18s%s%s",
-            i == v->selected ? '>' : ' ', name_width, name_width, run->name, run->state, r.width > 70 ? "  " : "", r.width > 70 ? date : "");
+        statistics_run_row(v, c, r, row, i);
         statistics_hit(app, (struct tv_rect){r.x+1,row,r.width-2,1}, i);
     }
     dashboard_text(c, r.x+2, r.y+r.height-2, r.width-4, TV_BORDER, "%zu/%zu / Enter evidence / g graph", v->selected+1, v->count);
 }
 
+static void statistics_step_row(struct tv_canvas *c, struct tv_rect r, int row, const struct hs_model *m, const struct hs_step *s) {
+    char seconds[24] = "--", attempts[24] = "--", agent[160];
+    uint64_t duration;
+    bool compact = r.width < 100;
+    if (hs_duration(m,s,&duration)) snprintf(seconds,sizeof(seconds),"%llu",(unsigned long long)duration);
+    if (s->attempts_known) snprintf(attempts,sizeof(attempts),"%u",s->attempts);
+    statistics_step_agent(s,compact,agent,sizeof(agent));
+    dashboard_text(c,r.x+2,row,r.width-4,hs_state(s->state)==HS_FAILED ? TV_WARNING : TV_BASE,
+        compact ? "%-16.16s %-10.10s %3s %5s  %s" : "%-20.20s %-15.15s %5s %8s  %s",s->id,s->state,attempts,seconds,agent);
+}
+
+/* The run's totals over its recorded steps, then the first visible step in full. */
+static void statistics_run_totals(struct tv_canvas *c, struct tv_rect r, const struct hs_model *m, size_t run_index) {
+    struct hs_summary totals;
+    char tokens[192];
+    size_t i;
+    memset(&totals,0,sizeof(totals));
+    for (i = 0; i < m->step_count; i++) if (m->steps[i].run == run_index) hs_usage_add(&totals,&m->steps[i]);
+    statistics_scope_tokens(&totals,tokens,sizeof(tokens));
+    dashboard_text(c,r.x+2,r.y+3,r.width-4,TV_BASE,"Run %s",tokens);
+}
+
 static void statistics_run_detail(struct app *app, struct tv_canvas *c, struct tv_rect r) {
     struct statistics_view *v = app->statistics;
     const struct hs_run *run;
+    const struct hs_step *first = NULL;
     size_t i, ordinal = 0, run_index;
-    int row = r.y + 5;
+    int row = r.y + 5, bottom = r.y + r.height - (r.height > 12 ? 6 : 2);
     tv_panel(c, r, "RUN EVIDENCE / latest attempts");
     if (!v->count) { dashboard_text(c,r.x+2,r.y+2,r.width-4,TV_WARNING,"Selected run no longer matches"); return; }
     run_index = v->visible[v->selected]; run = &v->model->runs[run_index];
     dashboard_text(c,r.x+2,r.y+1,r.width-4,TV_STRONG,"%s / %s",run->name,run->state);
     dashboard_text(c,r.x+2,r.y+2,r.width-4,TV_BORDER,"%s",run->id);
-    dashboard_text(c,r.x+2,r.y+3,r.width-4,TV_BORDER,"STEP                 STATE           TRIES  SECONDS");
-    for (i = 0; i < v->model->step_count && row < r.y+r.height-2; i++) {
+    statistics_run_totals(c,r,v->model,run_index);
+    dashboard_text(c,r.x+2,r.y+4,r.width-4,TV_BORDER,r.width < 100 ? "STEP             STATE      TRY  SECS  AGENT TOKENS IN/CACHED/OUT"
+        : "STEP                 STATE           TRIES  SECONDS  AGENT / TOKENS");
+    for (i = 0; i < v->model->step_count && row < bottom; i++) {
         const struct hs_step *s = &v->model->steps[i];
-        char seconds[24] = "--", attempts[24] = "--";
-        uint64_t duration;
         if (s->run != run_index || ordinal++ < v->step_scroll) continue;
-        if (hs_duration(v->model,s,&duration)) snprintf(seconds,sizeof(seconds),"%llu",(unsigned long long)duration);
-        if (s->attempts_known) snprintf(attempts,sizeof(attempts),"%u",s->attempts);
-        dashboard_text(c,r.x+2,row++,r.width-4,hs_state(s->state)==HS_FAILED ? TV_WARNING : TV_BASE,
-            "%-20.20s %-15.15s %5s %8s",s->id,s->state,attempts,seconds);
+        if (!first) first = s;
+        statistics_step_row(c,r,row++,v->model,s);
     }
     if (row == r.y+5) dashboard_text(c,r.x+2,row,r.width-4,TV_WARNING,"No step evidence at this scroll position");
-    dashboard_text(c,r.x+2,r.y+r.height-2,r.width-4,TV_BORDER,"j/k scroll / g graph / Esc statistics");
+    if (first && r.height > 12) statistics_step_detail(c,(struct tv_rect){r.x+2,bottom,r.width-4,4},v->model,first);
+    dashboard_text(c,r.x+2,r.y+r.height-2,r.width-4,TV_BORDER,"j/k scroll (first row is detailed below) / g graph / Esc statistics");
 }
 
 static void statistics_fleet(struct app *app, struct tv_canvas *c, struct tv_rect r) {
@@ -162,8 +191,10 @@ static void statistics_compact_step(struct statistics_view *v, struct tv_canvas 
         const struct hs_step *s=&v->model->steps[i];
         uint64_t seconds;
         if (s->run!=v->visible[v->selected] || ordinal++<v->step_scroll) continue;
+        char agent[160];
         if (hs_duration(v->model,s,&seconds)) snprintf(duration,sizeof(duration),"%llus",(unsigned long long)seconds);
-        dashboard_text(c,1,5,width-2,TV_BASE,"%s / %s / %s",s->id,s->state,duration); shown=true; break;
+        statistics_step_agent(s,true,agent,sizeof(agent));
+        dashboard_text(c,1,5,width-2,TV_BASE,"%s / %s / %s%s%s",s->id,s->state,duration,agent[0] ? " / " : "",agent); shown=true; break;
     }
     if(!shown) dashboard_text(c,1,5,width-2,TV_WARNING,"No step at this offset / k back");
 }
@@ -179,6 +210,21 @@ static void statistics_compact(struct app *app, struct tv_canvas *c, int width, 
         if (v->detail) statistics_compact_step(v,c,width);
     } else dashboard_text(c,1,4,width-2,TV_WARNING,"No matching runs / 0 reset filters");
     if (height>9) dashboard_text(c,1,6,width-2,TV_BORDER,"Timing %zu/%zu / missing stays --",summary->duration_known,summary->steps);
+}
+
+/* Without the side panel, token totals share the timing line in short form. */
+static void statistics_timing_line(struct tv_canvas *c, int x, int width, const struct hs_summary *s,
+                                   const char *duration, const char *maximum, bool tokens) {
+    char in[24], cached[24], out[24];
+    if (!tokens || !s->agent_steps) {
+        dashboard_text(c,x,7,width,TV_MUTED,"Latest attempts average %s over %zu timed steps, longest %s",duration,s->duration_known,maximum);
+        return;
+    }
+    statistics_count(s->usage[HS_TOKENS_IN],s->usage_known[HS_TOKENS_IN] > 0,in,sizeof(in));
+    statistics_count(s->usage[HS_TOKENS_CACHED],s->usage_known[HS_TOKENS_CACHED] > 0,cached,sizeof(cached));
+    statistics_count(s->usage[HS_TOKENS_OUT],s->usage_known[HS_TOKENS_OUT] > 0,out,sizeof(out));
+    dashboard_text(c,x,7,width,TV_MUTED,"Avg %s over %zu steps, max %s; tokens in %s, cached %s, out %s",
+        duration,s->duration_known,maximum,in,cached,out);
 }
 
 bool render_statistics(struct app *app, unsigned frame, bool headless) {
@@ -227,11 +273,7 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
             dashboard_text(&c,2,11,left-5,TV_BASE,"%zu outside range",summary.excluded_undated);
             dashboard_text(&c,2,13,left-5,TV_BASE,"Timing %zu/%zu",summary.duration_known,summary.steps);
             dashboard_text(&c,2,14,left-5,TV_BASE,"Attempts %zu/%zu",summary.attempts_known,summary.steps);
-            if (height>23) {
-                dashboard_text(&c,2,17,left-5,TV_MUTED,"CPU / memory: not measured");
-                dashboard_text(&c,2,18,left-5,TV_MUTED,"Tokens / cost: not measured");
-                dashboard_text(&c,2,20,left-5,TV_MUTED,"0 resets filters");
-            }
+            if (height>23) statistics_scope_notes(&c,2,16,left-4,height-22,&summary);
         }
         {
             struct tv_canvas card_view;
@@ -242,7 +284,7 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
             dashboard_card(&card_view,3*cards,body-3*cards,"RETRIES",summary.attempts_known || !summary.steps ? (size_t)summary.retries : SIZE_MAX,"repeated attempts",TV_STRONG);
         }
         if (summary.duration_known) snprintf(duration,sizeof(duration),"%.1fs",(double)summary.duration_sum/(double)summary.duration_known);
-        dashboard_text(&c,left+1,7,body-2,TV_MUTED,"Latest attempts average %s over %zu timed steps, longest %s",duration,summary.duration_known,maximum);
+        statistics_timing_line(&c,left+1,body-2,&summary,duration,maximum,left==0);
         if (v->detail) statistics_run_detail(app,&c,(struct tv_rect){left,8,body,height-10});
         else {
             chart_height=height>=32 ? 10 : 0;
