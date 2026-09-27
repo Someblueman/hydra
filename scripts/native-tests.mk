@@ -4,12 +4,12 @@ $(BUILD_DIR)/fixture-lock: tests/fixture/lock.c
 	$(CC) -std=c99 -Wall -Wextra -Werror -pedantic $< -o $@
 
 PTY_SUPPORT = tests/termviz/pty_support.c tests/termviz/screen_support.c tests/termviz/fixture_support.c
-PTY_NAMES = pty statistics-pty fleet-controls fleet-recovery attached-pty plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads
+PTY_NAMES = pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads
 PTY_BINS = $(addprefix $(BUILD_DIR)/native-tests/pty-,$(PTY_NAMES))
 $(BUILD_DIR)/native-tests:
 	mkdir -p $@
 $(foreach n,$(PTY_NAMES),$(eval $(BUILD_DIR)/native-tests/pty-$(n): tests/termviz/test_$(subst -,_,$(n)).c))
-$(addprefix $(BUILD_DIR)/native-tests/pty-,attached-pty plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads): tests/termviz/hydra_fixture.c
+$(addprefix $(BUILD_DIR)/native-tests/pty-,attached-pty attach-cycles output-fidelity plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads): tests/termviz/hydra_fixture.c
 $(BUILD_DIR)/native-tests/pty-attached-pty: src/tui/fleet_budget.h
 $(BUILD_DIR)/native-tests/pty-fleet-recovery: tests/termviz/fleet_recovery_support.c
 $(addprefix $(BUILD_DIR)/native-tests/pty-,plan-workspace plan-launch plan-conversation plan-assets fleet-recovery): PTY_JSON_CFLAGS = $(FLEET_JSON_CFLAGS)
@@ -21,6 +21,8 @@ test-statistics: $(BUILD_DIR)/native-tests/pty-statistics-pty
 test-fleet-controls: $(BUILD_DIR)/native-tests/pty-fleet-controls
 test-fleet-recovery: $(BUILD_DIR)/native-tests/pty-fleet-recovery
 test-attached-pty: $(BUILD_DIR)/native-tests/pty-attached-pty
+test-attached-pty: $(BUILD_DIR)/native-tests/pty-attach-cycles
+test-attached-pty: $(BUILD_DIR)/native-tests/pty-output-fidelity
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-workspace
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-launch
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-conversation

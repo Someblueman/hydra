@@ -527,11 +527,58 @@ static const char *pane_title(struct app *app, struct native_workspace *w, int i
     return pane_shows_plan(app, w, i) ? "PLAN REVIEW" : "ACTIVITY";
 }
 
+/* The longest choice that fits; the last one is the shortest fallback. */
+static const char *fitting(const char *const *choices, size_t count, int width) {
+    size_t i;
+    for (i = 0; i + 1 < count; i++) if ((int)strlen(choices[i]) <= width) return choices[i];
+    return choices[count - 1];
+}
+
+/* How to leave agent input and close the view stay visible at every width,
+ * down to the 40-column minimum. A disconnected client takes no input, so its
+ * keys go to Hydra and a reattaches. */
 static const char *attached_hints(const struct native_workspace *w, const struct native_terminal *t, int width) {
-    if (t->client.finished || t->client.eof) return "Agent client disconnected  Ctrl-B r reconnect  Ctrl-B x close  Ctrl-B Tab Hydra";
-    if (workspace_review_hidden(w)) return "Typing goes to the agent  Ctrl-B B plan review  Ctrl-B Tab Hydra  Ctrl-B x close";
-    return width < 100 ? "Typing goes to the agent  Ctrl-B Tab back to Hydra  Ctrl-B x close" :
-        "Typing goes to the agent  Ctrl-B Tab back to Hydra  Ctrl-B x close pane  Ctrl-B n next agent  Ctrl-B [ scroll  Ctrl-B q quit";
+    static const char *const disconnected[] = {
+        "Agent client disconnected; keys go to Hydra  a or Ctrl-B r reconnect  Ctrl-B x close view  Tab next pane",
+        "Client disconnected  a reconnect  Ctrl-B x close view  Tab next pane",
+        "Disconnected  a reconnect  Ctrl-B x close"};
+    static const char *const hidden[] = {
+        "Typing goes to the agent  Ctrl-B Tab leave input  Ctrl-B x close view  Ctrl-B B plan review  Ctrl-B q quit",
+        "Typing goes to the agent  Ctrl-B Tab leave  Ctrl-B x close  Ctrl-B B plan",
+        "Typing goes to the agent  Ctrl-B Tab leave  Ctrl-B x close",
+        "Ctrl-B Tab leave  Ctrl-B x close"};
+    static const char *const live[] = {
+        "Typing goes to the agent  Ctrl-B Tab leave input  Ctrl-B x close view  Ctrl-B n next agent  Ctrl-B [ scroll  Ctrl-B q quit",
+        "Typing goes to the agent  Ctrl-B Tab leave input  Ctrl-B x close view",
+        "Typing goes to the agent  Ctrl-B Tab leave  Ctrl-B x close",
+        "Ctrl-B Tab leave  Ctrl-B x close"};
+    int room = w->compact ? width : width - 2;
+    if (t->client.finished || t->client.eof) return fitting(disconnected, 3, room);
+    if (workspace_review_hidden(w)) return fitting(hidden, 4, room);
+    return fitting(live, 4, room);
+}
+
+/* The attached pane's own first row: whether keys reach the agent and how
+ * to leave input and close the view, fitted to the pane. */
+static const char *attached_label(const struct native_terminal *t, bool focused, int width) {
+    static const char *const input[] = {
+        "ATTACHED / INPUT TO AGENT / Ctrl-B Tab leaves input / Ctrl-B x closes view",
+        "ATTACHED / INPUT TO AGENT / Ctrl-B Tab leave / Ctrl-B x close",
+        "INPUT TO AGENT / Ctrl-B Tab leave / Ctrl-B x close",
+        "ATTACHED / INPUT TO AGENT / Ctrl-B Tab / Ctrl-B x"};
+    static const char *const disconnected[] = {
+        "CLIENT DISCONNECTED / NO INPUT / a or Ctrl-B r reconnect / Ctrl-B x close view",
+        "CLIENT DISCONNECTED / NO INPUT / a reconnect / Ctrl-B x close",
+        "DISCONNECTED / NO INPUT / a reconnect / Ctrl-B x close",
+        "CLIENT DISCONNECTED / NO INPUT / Ctrl-B r reconnect"};
+    static const char *const shared[] = {
+        "ATTACHED / INPUT TO AGENT / another client sets the size (dots lie outside it); typing here resizes",
+        "ATTACHED / INPUT TO AGENT / sized by another client; typing resizes",
+        "INPUT TO AGENT / sized by another client; typing resizes",
+        "ATTACHED / INPUT TO AGENT / SIZED BY ANOTHER CLIENT"};
+    if (t->client.finished || t->client.eof) return fitting(disconnected, 4, width);
+    if (t->foreign_size) return focused ? fitting(shared, 4, width) : "ATTACHED / sized by another client / Tab here and type to resize";
+    return focused ? fitting(input, 4, width) : "ATTACHED / Tab here to talk to the agent";
 }
 
 /* Plan keys follow the plan's state, so each step names the next useful one. */
@@ -626,8 +673,7 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
             tv_panel_styled(&view, (struct tv_rect){0,0,view.width,view.height}, titled,
                             focused ? TV_FOCUS : TV_BORDER, focused ? TV_SELECTED : TV_STRONG);
             if (attached) dashboard_text(&view,1,1,view.width-2,focused ? TV_SELECTED : TV_MUTED,
-                "%s", t->client.finished || t->client.eof ? "CLIENT DISCONNECTED / NO INPUT / Ctrl-B r reconnect" :
-                focused ? "ATTACHED / INPUT TO AGENT / Ctrl-B Tab returns to Hydra" : "ATTACHED / Tab here to talk to the agent");
+                "%s", attached_label(t, focused, view.width-2));
         }
         if (!tv_canvas_view(&content, &view, compact ? (struct tv_rect){0,1,view.width,view.height-1} :
             (struct tv_rect){1,attached ? 2 : 1,view.width-2,view.height-(attached ? 3 : 2)})) continue;

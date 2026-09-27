@@ -113,6 +113,9 @@ struct native_terminal {
     char remote_host[128], remote_project[SOURCE_TEXT];
     size_t scroll;
     bool scrolling;
+    /* tmux sized the window to another, smaller client: the drawn view shows
+     * tmux's dotted fill beyond that window (set while drawing). */
+    bool foreign_size;
     /* Hydra-authored input waiting for the attached client to come up; a
      * submitted entry sends Enter as a separate, later keystroke. */
     char *outbox[4];
@@ -259,6 +262,9 @@ bool native_terminal_attach_head(struct app *app, const struct head *h);
 bool native_terminal_deliver(struct app *app, struct native_terminal *t, const char *text, bool submit);
 const char *native_agent_name(const struct head *h);
 void native_terminal_close(struct native_terminal *t);
+/* Enters (or leaves) the agent's own tmux history for a local attachment;
+ * false when that history is unavailable and the client's model scrolls. */
+bool native_terminal_history(struct app *app, struct native_terminal *t, bool enter);
 void native_terminals_destroy(struct app *app);
 bool native_terminal_attach(struct app *app);
 void native_terminal_send(struct app *app, struct native_terminal *t, const void *bytes, size_t length);

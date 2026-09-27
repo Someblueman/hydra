@@ -173,7 +173,7 @@ static void detail_preview_heading(struct app *app, bool headless) {
     section(app, headless ? "STEP OUTPUT" : "TERMINAL OUTPUT");
     style(app, TONE_MUTED);
     if (headless) linef(app, "Read-only view of the latest step on this head; refreshes every 2 seconds.");
-    else linef(app, "Read-only transcript of the agent's terminal. a opens live input; p or Esc closes.");
+    else linef(app, "Read-only transcript; a opens live input, p or Esc closes it.");
     if (app->ascii) linef(app, "ASCII fallback: the locale is not UTF-8, so other characters are approximated.");
     style(app, TONE_BASE);
 }
@@ -201,7 +201,7 @@ static void detail_preview(struct app *app, const struct head *head) {
     }
     app->line = limit - 1;
     style(app, TONE_MUTED);
-    linef(app, "Key hints above belong to the agent's live input; they do nothing here. Press a to use them.");
+    linef(app, "Key hints above belong to the agent's live input, not this view; a opens it.");
     style(app, TONE_BASE);
 }
 

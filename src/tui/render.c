@@ -629,8 +629,9 @@ static void render_help(struct app *app) {
     }
     section(app, "WORKSPACE");
     linef(app, "A  conversation   B  plan overview   C  monitor   z  zoom the focused pane   S  two agents");
-    linef(app, "While typing to an agent: Ctrl-B Tab returns to Hydra, Ctrl-B x closes the pane,");
-    linef(app, "Ctrl-B n switches agent, Ctrl-B [ scrolls history, Ctrl-B q quits.");
+    linef(app, "While typing to an agent (Esc and Tab go to the agent): Ctrl-B Tab leaves input,");
+    linef(app, "Ctrl-B x closes the view (the agent keeps running; a reopens it), Ctrl-B n switches");
+    linef(app, "agent, Ctrl-B [ scrolls history, Ctrl-B q quits.");
     section(app, "PLANNING");
     linef(app, "P  review the agent's proposal   V  validate   F  request changes (feedback to the agent)");
     linef(app, "E  execute the validated revision (confirm with y)   I  import draft and policy files");

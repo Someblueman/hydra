@@ -66,6 +66,25 @@ static void outbox_clear(struct native_terminal *t) {
     t->outbox_count=0; t->enter_pending=false;
 }
 
+/* A tmux client draws on the alternate screen without scrollback, so the
+ * pane's history lives in tmux: scrolling uses tmux copy mode on the exact
+ * session, and q, Esc or Ctrl-B ] leave it. Fleet clients keep model scroll. */
+bool native_terminal_history(struct app *app, struct native_terminal *t, bool enter) {
+    const struct head *h = terminal_head(app, t);
+    struct output_child child;
+    char target[TEXT + 8U];
+    char *copy[] = {(char *)"tmux", (char *)"copy-mode", (char *)"-u", (char *)"-t", target, NULL};
+    char *cancel[] = {(char *)"tmux", (char *)"send-keys", (char *)"-t", target, (char *)"-X", (char *)"cancel", NULL};
+    char discard[256];
+    if (app->fleet || !h || !h->session[0] || t->client.finished || t->client.eof) return false;
+    snprintf(target, sizeof(target), "=%s:", h->session);
+    if (output_start(&child, enter ? copy : cancel, 1000L)) return false;
+    while (output_read(&child, discard, sizeof(discard)) > 0) {}
+    if (output_finish(&child, false) && enter) return false;
+    copy_text(app->notice, sizeof(app->notice), enter ? "Agent history: PgUp/PgDn or arrows scroll; q leaves" : "Back to live agent output");
+    return true;
+}
+
 void native_terminal_close(struct native_terminal *t) {
     if (!t->screen) return;
     outbox_clear(t);
@@ -184,7 +203,7 @@ static bool terminal_start(struct app *app, const struct head *h, size_t availab
     if (!attachment_argv(app, h, t, argv, socket)) goto fail;
     if (!tv_pty_spawn(&t->client,app->hydra,argv,&app->saved,80,24)) goto fail;
     app->terminals->selected=available;
-    copy_text(app->notice,sizeof(app->notice),"Attached client / Ctrl-B Tab returns input to Hydra");
+    copy_text(app->notice,sizeof(app->notice),"Attached; keys go to the agent");
     return true;
 fail:
     /* screen can be absent when the first allocation failed. */
@@ -286,6 +305,33 @@ void native_terminals_pump(struct app *app) {
     }
 }
 
+static bool fill_glyph(uint32_t glyph) { return glyph == 0xb7U || glyph == '.'; }
+static bool edge_glyph(uint32_t glyph) { return glyph == 0x2502U || glyph == 0x2518U || glyph == '|' || glyph == '+'; }
+
+/* A row ending in tmux's out-of-window fill: a window edge, then dots to the
+ * right margin. tmux draws this when another client set a smaller size. */
+static bool fill_row(const struct tv_canvas *c, int y) {
+    const struct tv_cell *row = c->cells + (size_t)y * (size_t)c->stride;
+    int x = c->width - 1, dots = 0;
+    while (x >= 0 && fill_glyph(row[x].glyph)) { x--; dots++; }
+    return dots >= 4 && x >= 0 && edge_glyph(row[x].glyph);
+}
+
+/* Two such rows identify another client's window size, not agent output. */
+static bool foreign_size(const struct tv_canvas *c) {
+    int y, rows = 0;
+    for (y = 0; y < c->height && rows < 2; y++) rows += fill_row(c, y);
+    return rows >= 2;
+}
+
+static void strip_rendition(struct tv_canvas *c) {
+    int x,y;
+    for (y=0;y<c->height;y++) for (x=0;x<c->width;x++) {
+        struct tv_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
+        cell->attributes=0; cell->style=TV_BASE;
+    }
+}
+
 void native_terminal_draw(struct app *app, struct native_terminal *t, struct tv_canvas *c, bool focused) {
     if (!t || !t->screen) return;
     if (c->width!=t->screen->primary.canvas.width || c->height!=t->screen->primary.canvas.height) {
@@ -294,11 +340,6 @@ void native_terminal_draw(struct app *app, struct native_terminal *t, struct tv_
             copy_text(app->notice,sizeof(app->notice),"Attachment resize unavailable");
     }
     tv_term_draw(t->screen,c,t->scroll,focused && !t->scrolling);
-    if (app->no_color) {
-        int x,y;
-        for (y=0;y<c->height;y++) for (x=0;x<c->width;x++) {
-            struct tv_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
-            cell->attributes=0; cell->style=TV_BASE;
-        }
-    }
+    t->foreign_size = !t->scroll && foreign_size(c);
+    if (app->no_color) strip_rendition(c);
 }
