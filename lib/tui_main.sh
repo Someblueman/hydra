@@ -144,6 +144,14 @@ cmd_tui() {
             tui_native_emit_data
             return $?
             ;;
+        --head-output)
+            shift
+            [ $# -eq 1 ] || return 2
+            _load_lib cmd_fleet
+            _load_lib tui_head_output
+            tui_head_output "$1"
+            return $?
+            ;;
         --headless-fixture)
             shift
             tui_native_exec --headless-fixture "$@"

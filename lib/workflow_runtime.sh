@@ -508,6 +508,12 @@ workflow_drive() {
             esac
             workflow_atomic_scalar "$_wd_dir/state" "$_wd_final"
             workflow_event "$_wd_dir" "" "run.$_wd_final"
+            # The result is published first; retiring verifier heads is
+            # reported in the run record and never changes it.
+            case "$_wd_final" in succeeded|failed|cancelled)
+                { command -v workflow_retire_verifiers >/dev/null 2>&1 || _load_lib workflow_retire; } &&
+                    workflow_retire_verifiers "$_wd_dir" || true ;;
+            esac
             trap - HUP INT TERM
             rm -rf "$_wd_drive_lock"
             [ "$_wd_final" = succeeded ]

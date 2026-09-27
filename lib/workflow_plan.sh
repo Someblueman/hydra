@@ -129,6 +129,9 @@ workflow_plan_initialize() {
     for _wpi_name in planning-head planning-instance planning-branch; do
         [ ! -f "${_workflow_plan_launch:-}/$_wpi_name" ] || cp "$_workflow_plan_launch/$_wpi_name" "$1/$_wpi_name" || return 1
     done
+    # Step roles (work, compose, verify) and heads, for display and for
+    # retiring verifier heads when the run finishes.
+    workflow_plan_tool roles "$1/compiled.json" > "$1/plan-roles.tsv" || return 1
     _wpi_timeout="$(workflow_plan_tool timeout "$1/compiled.json")" || return 1
     workflow_atomic_scalar "$1/plan-deadline" "$(($(date +%s) + _wpi_timeout))" || return 1
     workflow_plan_bindings_match "$1"
