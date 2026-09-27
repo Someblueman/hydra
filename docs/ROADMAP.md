@@ -60,7 +60,8 @@ recovery and terminal restart. The user reviewed the screens on 27 September and
 accepted U14 and U16; I4's visual design pass remains open. Live agent checks:
 Claude and Cursor passed on the operator VPS; Antigravity is closed upstream.
 
-Next, U10 guided remote onboarding: select an SSH destination and let Hydra
+First fix R1 (Hydra state under a group-writable umask), found while qualifying
+2.8.0 on Ubuntu. Then U10 guided remote onboarding: select an SSH destination and let Hydra
 provision a compatible runtime, install and detect agents (including per-user
 installs outside a non-interactive `PATH`) and guide sign-in, replacing the manual
 steps recorded on 26 September. Scheduling, task pools, automatic placement, T2/T3
@@ -393,6 +394,25 @@ part of that work.
 | U18 | initial deterministic installed-journey runner in 2.7.0 |
 | U5 | accepted on 27 September 2026; its fixes ship in 2.8.0 |
 | U10, U11 | none yet |
+
+### Reliability fixes
+
+- [ ] **R1 — Hydra state under a group-writable umask.** Ubuntu gives ordinary users
+      umask `002`. Qualifying 2.8.0 on the operator VPS on 27 September 2026 under
+      that umask, `make test-fast` failed with admission `state_unavailable` ("storage,
+      policy, or lock is unavailable") and the fleet sanitizer cases `dag-crash-2` and
+      `dag-parallelism-1` failed because `workflow-task metrics-tsv` reported transport
+      metrics as unknown: run `steps/` directories were created mode 775 and the
+      metrics reader refuses directories it does not privately own. The same tree
+      passed with umask `022`, which hosted CI and macOS use, so earlier releases
+      were never exercised this way. Create Hydra's own state, lock and run
+      directories and files with explicit private modes independent of the caller's
+      umask, rather than relaxing the ownership checks, and migrate or report
+      existing group-writable state explicitly. Acceptance: run `make test-fast`,
+      `make test`, the fleet suites and `make test-usability` under umask `002` on
+      Linux and macOS; admission, statistics and workflow runs behave as under `022`;
+      shared or foreign-owned directories are still refused. Until then, users can set
+      `umask 022` for Hydra.
 
 ### Candidate features
 
