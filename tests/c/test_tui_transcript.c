@@ -3,6 +3,7 @@
  * rendered through Hydra's transcript at 80x24 and 140x40 and through the
  * attached-pane terminal model, then compared with an independent stripper
  * and with tmux 3.5a's own screen for the same bytes. */
+#define _POSIX_C_SOURCE 200809L
 #include "tui/transcript.h"
 #include <assert.h>
 #include <stdio.h>

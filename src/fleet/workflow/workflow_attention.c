@@ -647,9 +647,10 @@ index_run(struct wa *w, const char *run, const char *rd)
 {
     struct wa_run *r;
     char *state;
-    if (w->indexed >= WA_INDEX || strlen(run) >= sizeof(w->index[0].id)) return;
+    size_t length = strlen(run);
+    if (w->indexed >= WA_INDEX || length >= sizeof(w->index[0].id)) return;
     r = &w->index[w->indexed++];
-    snprintf(r->id, sizeof(r->id), "%s", run);
+    memcpy(r->id, run, length + 1U);
     r->workflow = scalar_at(rd, "workflow-id");
     r->planning = scalar_at(rd, "planning-head");
     r->created = created_at(rd);
