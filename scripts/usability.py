@@ -141,6 +141,17 @@ class Journey:
         )
         return screen
 
+    def see_any(self, *texts: str, timeout: float = 15) -> str:
+        """Wait for a screen showing at least one of several outcomes."""
+        assert self.observer
+        screen, receipt = self.observer._visible(
+            lambda screen, record: record["parser_complete"] and any(t in screen for t in texts),
+            time.monotonic_ns() + int(timeout * 1e9),
+            " or ".join(map(repr, texts)),
+        )
+        self.proof.append({"expect_any": texts, "snapshot": receipt["id"], "at_ns": time.monotonic_ns()})
+        return screen
+
     def screen(self) -> str:
         assert self.observer
         screen, receipt = self.observer.snapshot()
@@ -857,8 +868,11 @@ def recovery_terminal(j: Journey) -> None:
     j.keys(b"\x1b1")
     j.see("[Work]")
     j.keys(b"a")
-    j.see("Typing goes to the agent")
+    # Either an attached pane or its disconnection notice: both are outcomes
+    # of the offered action, judged below by whether a terminal came back.
+    screen = j.see_any("Typing goes to the agent", "CLIENT DISCONNECTED")
     j.attached = True
+    j.expect("CLIENT DISCONNECTED" not in screen, "Opening the head attaches a live terminal")
     deadline = time.monotonic() + 15
     while not sessions_of(j) and time.monotonic() < deadline:
         time.sleep(0.2)
