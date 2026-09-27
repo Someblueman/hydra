@@ -164,15 +164,17 @@ bool head_terminal_gone(const struct app *app, const struct head *h) {
  * what starts in it (its resume recipe, or a shell for none). The pane opens
  * once the next snapshot shows the new instance. */
 static bool terminal_restore(struct app *app, const struct head *h) {
-    char branch[TEXT], output[8192], title[TEXT + 64];
+    char branch[TEXT], output[8192], title[TEXT + 128];
     char *argv[] = {(char *)app->hydra, (char *)"resume", (char *)"--terminal", branch, NULL};
     copy_text(branch, sizeof(branch), h->branch);
     if (run_captured(app, argv, output, sizeof(output), 60000L)) {
-        snprintf(title, sizeof(title), "Terminal for %s not restarted; its worktree and files are unchanged", branch);
+        if (snprintf(title, sizeof(title), "Terminal for %s not restarted; its worktree and files are unchanged", branch) >= (int)sizeof(title))
+            copy_text(title, sizeof(title), "Terminal not restarted; its worktree and files are unchanged");
         show_result(app, title, output);
         return false;
     }
-    snprintf(app->notice, sizeof(app->notice), "Terminal for %s restarted in its worktree; opening it...", branch);
+    if (snprintf(app->notice, sizeof(app->notice), "Terminal for %s restarted in its worktree; opening it...", branch) >= (int)sizeof(app->notice))
+        copy_text(app->notice, sizeof(app->notice), "Terminal restarted in its worktree; opening it...");
     copy_text(app->pending_task, sizeof(app->pending_task), branch);
     native_observations_cancel(app, 0);
     native_observations_tick(app, true);
