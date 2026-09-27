@@ -189,6 +189,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_s
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l accept -r -d 'Accept exact compiled digest'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l branch -r -d 'Head that owns the proposal'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l local-policy -d 'Write the local policy preset'
+complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l return -r -d 'Return the proposal with requested changes'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow' -l json -d 'Output versioned status JSON'
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -l base -d 'Explicit base ref'
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -l target -d 'Local target ref'

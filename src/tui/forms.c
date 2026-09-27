@@ -133,3 +133,77 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
     frame_invalidate(app);
     return result;
 }
+
+/* Wraps one line of a decision panel; returns the next free row. */
+static int confirm_line(struct app *app, struct tv_canvas *c, int y, int bottom, const char *text, enum tv_style tone) {
+    size_t offset=0, length=strlen(text);
+    int x=0;
+    while (offset<length && y<bottom) {
+        uint32_t cp;
+        size_t used=tv_utf8_decode(text+offset,length-offset,&cp);
+        int columns;
+        if (!used) break;
+        offset+=used; columns=tv_codepoint_width(cp);
+        if (columns<0 || (app->ascii && cp>126)) { cp='?'; columns=1; }
+        if (x+columns>c->width) { x=0; y++; }
+        if (y<bottom) tv_put(c,x,y,cp,tone);
+        x+=columns;
+    }
+    return y+1;
+}
+
+static void confirm_draw(struct app *app, const char *title, const char *const lines[], size_t count, const char *footer) {
+    struct tv_cell cells[512U*12U];
+    struct tv_canvas c;
+    int width=app->cols>512 ? 511 : app->cols-1, height=app->rows<12 ? app->rows : 12, y=1, row;
+    size_t i;
+    if (width<5 || height<4) return;
+    (void)tv_init(&c,cells,512U*12U,width,height,!app->ascii);
+    tv_clear(&c,TV_BASE);
+    tv_text(&c,(struct tv_rect){0,0,width,1},title,TV_SELECTED);
+    for (i=0;i<count;i++) y=confirm_line(app,&c,y,height-1,lines[i],i ? TV_BASE : TV_STRONG);
+    tv_text(&c,(struct tv_rect){0,height-1,width,1},footer,TV_BORDER);
+    for (row=0;row<height;row++) {
+        printf("\033[%d;1H",app->rows-height+1+row);
+        (void)tv_write_row(&c,row,stdout,dashboard_style,app);
+    }
+    fflush(stdout);
+}
+
+/* A modal decision with explicit keys. A key in `choices` accepts; n, Esc and
+ * Ctrl-C decline; Enter, paste and every other key are ignored, so an
+ * accidental keystroke cannot approve. Observations and clients keep moving. */
+/* 1 accepts, 0 declines, -1 keeps waiting. */
+static int confirm_key(const struct tv_event *e, const char *choices) {
+    if (e->type!=TV_KEY) return -1;
+    if (e->key==27 || e->key==3 || e->key=='n' || e->key=='N') return 0;
+    return e->key>0 && e->key<128 && strchr(choices,(int)e->key) ? 1 : -1;
+}
+
+static void confirm_refresh(struct app *app, time_t *last_refresh) {
+    time_t now=time(NULL);
+    native_observations_tick(app,now-*last_refresh>=2);
+    if (now-*last_refresh>=2) *last_refresh=now;
+    native_terminals_pump(app);
+    update_size(app);
+    render(app,0,false);
+}
+
+bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices) {
+    struct tv_input input;
+    char footer[128];
+    bool redraw=true;
+    int decision=-1;
+    time_t last_refresh=time(NULL);
+    snprintf(footer,sizeof(footer),"%s confirm   n / Esc cancel",choices);
+    tv_input_init(&input);
+    while (decision<0 && !terminal_stopped() && app->running) {
+        struct tv_event e;
+        char byte;
+        if (redraw) { confirm_refresh(app,&last_refresh); confirm_draw(app,title,lines,count,footer); }
+        redraw=read_key(input.length>1 ? 150 : 40,&byte)<=0;
+        if (redraw ? tv_input_flush(&input,&e) : tv_input_feed(&input,(unsigned char)byte,&e)) decision=confirm_key(&e,choices);
+    }
+    frame_invalidate(app);
+    return decision==1;
+}

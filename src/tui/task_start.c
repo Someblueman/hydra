@@ -67,7 +67,9 @@ static bool planning_prompt(const char *name, const char *branch, const char *pr
         "result_file must equal the name and path of a declared output of that step. "
         "Validation reads the checkout at %s at its current commit: it must have no tracked changes, and input and script files must exist there. "
         "If validation reports invalid_source, relay its message and recovery; never tell the user to start Hydra from a .hydra-worktrees directory. "
-        "The user reviews with B then P, validates with V and approves the exact revision with E. A saved proposal is not approval or completed work.",
+        "The user reviews with B then P, validates with V, requests changes with F and approves the exact revision with E. "
+        "Requested changes and run updates arrive in this conversation as lines starting with Hydra:; after approval, follow and report the run but do not execute or modify it. "
+        "A saved proposal is not approval or completed work.",
         name, branch, objective[0] ? objective : "Ask the user what they want to achieve, then discuss a plan.", tools, step, source);
     return n > 0 && (size_t)n < size;
 }

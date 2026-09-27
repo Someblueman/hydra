@@ -345,8 +345,9 @@ def planning(j: Journey) -> None:
     ]["sha256"]
     assert revised != original
     j.keys(b"E")
-    j.see("Type exact digest")
-    j.keys((revised + "\r").encode())
+    j.see("INPUT TO HYDRA / execution approval")
+    j.see(f"digest {revised[:12]}?")
+    j.keys(b"y")
     deadline = time.monotonic() + 60
     states = []
     while time.monotonic() < deadline:

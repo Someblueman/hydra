@@ -313,6 +313,24 @@ floor; no retries or repairs. Success emits
 Paths containing tabs/newlines are refused. Native validation snapshots both files;
 changed bytes invalidate the compiled revision and its exact-digest approval.
 
+`hydra workflow plan proposal <head> --return <feedback>` records, under the head
+lock, `planning/returned` (the SHA-256 of the current draft) and `planning/feedback`
+(at most 4096 bytes). While the draft still has that digest, `proposal` (with or
+without `--local-policy`) refuses, and so does a launch associated with the head.
+A successful `propose` removes both files. The TUI types the feedback into the
+agent's attached pane without submitting it.
+
+The private launch owner `hydra workflow plan --workspace-owner <sha256>
+[<head-id> <instance-id>]` reads the compiled snapshot on stdin. The optional pair
+binds the launch to the planning head instance; it is refused unless that instance
+is current and its draft is not returned. The run records `planning-head`,
+`planning-instance` and `planning-branch`. Its `run.created`, `approval.requested`,
+`step.failed`, `step.recovery-required` and terminal run events then queue at most
+one inbox note each (keyed by event and step under `planning-notices/`, at most 64
+per run) for that branch only while it still names the same head and instance. A
+queued note is not evidence that the agent read it. While open, the TUI also
+submits the run receipt and those state changes into the attached planning pane.
+
 The private attachment helper accepts an optional absolute tmux socket after the
 head and instance IDs. Nested native clients carry their observed server selection
 explicitly across the PTY boundary. Session, head and instance checks run against

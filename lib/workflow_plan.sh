@@ -94,7 +94,7 @@ cmd_workflow_plan() (
             printf '%s\n' \
                 'Usage: hydra workflow plan schema' \
                 '       hydra workflow plan propose <draft.json> [--branch <head>]' \
-                '       hydra workflow plan proposal <head> [--local-policy]'  \
+                '       hydra workflow plan proposal <head> [--local-policy | --return <feedback>]' \
                 '       hydra workflow plan validate <plan.json> <policy.json>' \
                 '       hydra workflow plan compile <plan.json> <policy.json> <new-output.json>' \
                 '       hydra workflow plan show <compiled.json> [--json]' \
@@ -116,6 +116,10 @@ workflow_plan_initialize() {
     [ -n "${_workflow_plan_stage:-}" ] || return 0
     cp "$_workflow_plan_stage/compiled.json" "$1/compiled.json" || return 1
     workflow_atomic_scalar "$1/plan-accepted" "$_workflow_plan_accepted" || return 1
+    # The launch owner's planning association travels with the run it creates.
+    for _wpi_name in planning-head planning-instance planning-branch; do
+        [ ! -f "${_workflow_plan_launch:-}/$_wpi_name" ] || cp "$_workflow_plan_launch/$_wpi_name" "$1/$_wpi_name" || return 1
+    done
     _wpi_timeout="$(workflow_plan_tool timeout "$1/compiled.json")" || return 1
     workflow_atomic_scalar "$1/plan-deadline" "$(($(date +%s) + _wpi_timeout))" || return 1
     workflow_plan_bindings_match "$1"

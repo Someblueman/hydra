@@ -178,3 +178,15 @@ Git repository with no tracked changes, and inputs, context and scripts must
 exist there. An `invalid_source` diagnostic names that checkout and the failed
 condition; for tracked changes it lists up to ten paths with a count and the
 recovery `commit or stash these changes in <dir>, then validate again`.
+
+In the planning view, `V` validates the reviewed proposal and `F` requests
+changes: Hydra records through `hydra workflow plan proposal <head> --return
+<feedback>` that this exact draft was sent back, so it cannot be validated or
+executed until the agent republishes, and types the feedback (with any validation
+diagnostics) into the agent's pane for you to send with Enter. `E` opens an
+in-app confirmation showing the revision, a 12-hex digest, the policy and what the
+run does; `y` executes that revision, with the full digest passed to the CLI. A
+draft or policy change after validation refuses the launch. Once the run receipt
+arrives, Hydra submits the run ID to the planning conversation, followed by
+approval waits, failed steps and the outcome; the run owner also queues the same
+notices in that head's inbox, so they are recorded even when the TUI is closed.

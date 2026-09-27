@@ -39,6 +39,11 @@ workflow_event() {
         "$(json_escape "$_we_type")" "$(json_escape "$_we_detail")" >> "$_we_file"
     _we_status=$?
     rm -rf "$_we_lock"
+    # Runs launched from an agent proposal notify that planning conversation.
+    if [ "$_we_status" -eq 0 ] && [ -f "$_we_dir/planning-head" ]; then
+        { command -v workflow_plan_notify >/dev/null 2>&1 || _load_lib workflow_plan_notify; } &&
+            workflow_plan_notify "$_we_dir" "$_we_step" "$_we_type" || true
+    fi
     return "$_we_status"
 }
 

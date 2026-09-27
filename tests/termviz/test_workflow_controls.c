@@ -45,6 +45,17 @@ static int run_index(const char *rows, const char *run_id) {
     CHECK(false, "selected run present");
     return -1;
 }
+/* A narrow agent pane wraps a long prompt line; compare the pane text
+ * without line breaks so a wrapped draft is still found. */
+static bool pane_contains(const char *capture, const char *needle) {
+    static char joined[65536];
+    size_t n = 0;
+    for (; *capture && n + 1 < sizeof(joined); capture++)
+        if (*capture != '\n')
+            joined[n++] = *capture;
+    joined[n] = 0;
+    return strstr(joined, needle) != NULL;
+}
 static bool lines_subset(const char *before, const char *after) {
     const char *p = before;
     while (*p) {
@@ -230,7 +241,7 @@ int main(void) {
             char *end = strchr(p, '\n');
             if (end)
                 *end = 0;
-            if (strstr(RUN("tmux", "capture-pane", "-p", "-t", p), "unsent-control-proof"))
+            if (pane_contains(RUN("tmux", "capture-pane", "-p", "-J", "-t", p), "unsent-control-proof"))
                 found = true;
             if (!end)
                 break;
