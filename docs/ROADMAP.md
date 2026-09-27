@@ -52,13 +52,25 @@ and nested tmux attachment have deterministic acceptance; and independent native
 capture checks Unicode, line drawing and ANSI color. These local qualifications
 do not close the full acceptance criteria of U3, U17 or U18.
 
-Next, complete the remaining real-provider, output and review acceptance: the
-local part of U5 plus U14, U16 and I4, including styled diffs, long-output
-comparisons, actual-terminal human review and goal-only discoverability. Existing
-Fleet behavior retains its gates; one real-host workflow still needs explicit
-qualification. New scheduling, task pools, automatic placement and remote
-onboarding remain outside this target. These priorities do not establish a
-release date; compatibility impact still determines the next version.
+Next target: 2.8.0 (additive CLI flags and plan/policy fields, so a minor
+version). U5 was accepted on 27 September 2026 and the live agent checks are
+settled: Claude and Cursor passed, Cursor after its `--trust` profile fix, and
+Antigravity is closed upstream. The release carries the U5 fixes on local
+branches: derived task branches, a guided policy that can authorize agent work,
+actionable `invalid_source`, plans that carry their own prompts and assets,
+send-back and one-key execution approval, run notices to the planning agent, a
+larger agent pane, run/head/worker presentation, result review, attention
+acknowledgement and statistics; the leftover-worktree detection fix; the Cursor
+fix; and `hydra kill --dry-run`. Still to do in this release: U14 output fidelity
+(styled diffs, long lines, Unicode compared with real provider output), U16
+leaving attachment with real key events, a U18 extension to the result/diff and
+recovery journeys, and I4's visual pass. Then run the full release gates and a
+human review of the new screens.
+
+The following release is expected to centre on U10 guided remote onboarding,
+including agent installation and per-user install detection found missing on 26
+September. Scheduling, task pools, automatic placement, T2/T3 and performance
+baselines remain outside 2.8.0.
 
 ## Product and engineering guardrails
 
@@ -421,12 +433,15 @@ observed the provider, then reported `cancelled`, `confirmed_stopped`, exit 130
 and a ready result with no process left in the task workspace. The
 qualification applies to that fix commit, not to 2.7.0.
 
-- [ ] Qualify Antigravity on the shared remote task. Native sign-in succeeded on
-      the VPS on 26 September 2026, but `agy` 1.2.11 there and 1.2.5 locally both
-      return `FAILED_PRECONDITION: User location is not supported for the API use`
-      for the signed-in account (GB). Retry after the account or provider changes,
-      or qualify through the Gemini API-key mode. Antigravity's earlier local
-      result-byte preservation, recorded recall and cancellation have passed.
+Antigravity's remote shared task is closed as an upstream provider issue on 27
+September 2026. Native sign-in succeeded on the VPS, but `agy` 1.2.11 there and
+1.2.5 locally returned `FAILED_PRECONDITION: User location is not supported for
+the API use` for the signed-in GB account, reported upstream as
+[antigravity-cli#219](https://github.com/google-antigravity/antigravity-cli/issues/219).
+No Hydra defect was found. The remote prompt, recall and cancellation checks were
+not observed; Antigravity's earlier local result-byte preservation, recorded
+recall and cancellation qualification stands. Re-run the shared task if the
+upstream issue is resolved.
 
 Antigravity (`agy`), Cursor Agent (`cursor`), and OpenCode (`opencode`) now have
 implemented interactive and headless profiles. See [agent profiles and inputs](USAGE.md#agent-profiles-and-inputs)
@@ -459,7 +474,7 @@ to open work:
 | Discovery supplies untrusted coordinates and needs typed, private candidate state ([host discovery][src-host-report]). | [H4](#h-host-discovery-qualification-and-staged-onboarding). Next: select one live source, then implement and qualify bounded acquisition and snapshot diffs. |
 | Onboarding needs provenance, freshness, identity and typed progress ([host discovery][src-host-brief]). | [H5](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify review, filters, detail and interrupted multi-host progress. |
 | Changed keys and source conflicts require explicit revocation and review ([host discovery][src-host-report]). | [H6](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify scoped revocation and reviewed key rotation without cancelling or replaying tasks. |
-| Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 retains Antigravity (provider location refusal); Claude's and Cursor's (with the `--trust` profile fix) remote tasks passed on 26 September 2026. The operator-provided Ubuntu VPS runs 2.7.0 with tmux installed; prepare a separate tmux-absent environment for T2. |
+| Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 has no open provider checks: Claude's and Cursor's (with the `--trust` profile fix) remote tasks passed on 26 September 2026; Antigravity is closed upstream ([antigravity-cli#219](https://github.com/google-antigravity/antigravity-cli/issues/219)). The operator-provided Ubuntu VPS runs Hydra with tmux installed; prepare a separate tmux-absent environment for T2. |
 | Structural plan inspection and finite comparisons are implemented; broader planning-quality evaluation remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality). Next: define and measure matched held-out work before claiming planning benefit. |
 | Runtime membership/expansion, PTY server replacement, cloud-manager integration and shared inventory remain conditional ([optional tmux][src-tmux], [host discovery][src-host-brief]). | 9F's open expansion item and the conditional extensions below. Next: revisit only with an explicit authority, workload and acceptance decision. |
 
