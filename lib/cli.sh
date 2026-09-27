@@ -116,8 +116,9 @@ Commands:
   switch [branch]   Switch to a head directly, or choose interactively
   kill <branch>     Remove a worktree and its tmux session
   kill --all        Kill all hydra sessions
-  kill --group <n>  Kill all sessions in a group
+  kill -g|--group <name>  Kill all sessions in a group
                     Options:
+                      --dry-run        Preview selected heads without changes
                       --force          Skip confirmation prompt
                       --protect-untracked  Refuse ordinary untracked worktree files
   group <branch>    Show or set group for a session

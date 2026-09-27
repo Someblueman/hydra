@@ -218,6 +218,8 @@ complete -c hydra -f -n '__fish_seen_subcommand_from dashboard' -s p -l panes-pe
 complete -c hydra -f -n '__fish_seen_subcommand_from kill' -a '(git branch 2>/dev/null | sed "s/^[ *]*//" | grep -v "^(")'
 complete -c hydra -f -n '__fish_seen_subcommand_from kill' -l protect-untracked -d 'Refuse untracked worktree files'
 complete -c hydra -f -n '__fish_seen_subcommand_from kill' -l all -d 'Kill all hydra sessions'
+complete -c hydra -f -n '__fish_seen_subcommand_from kill' -l dry-run -d 'Preview selected heads without changes'
+complete -c hydra -f -n '__fish_seen_subcommand_from kill' -s g -l group -r -d 'Select a group'
 complete -c hydra -f -n '__fish_seen_subcommand_from kill' -l force -d 'Skip confirmation prompt'
 complete -c hydra -f -n '__fish_seen_subcommand_from kill' -l transcript -d 'Transcript policy' -a 'none redacted full'
 

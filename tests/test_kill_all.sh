@@ -67,7 +67,10 @@ setup_test_env() {
     
     # Isolate hydra state in this base dir
     export HYDRA_HOME="$test_base_dir/.hydra"
+    export TMUX_TMPDIR="$test_base_dir/tmux"
+    unset TMUX HYDRA_TMUX_SOCKET HYDRA_TMUX_SOCKET_NAME HYDRA_HEAD_ID HYDRA_INSTANCE_ID
     mkdir -p "$HYDRA_HOME"
+    mkdir -p "$TMUX_TMPDIR"
     
     # Initialize a git repository
     git init >/dev/null 2>&1
@@ -113,6 +116,8 @@ test_kill_all_no_sessions() {
     
     output="$("$HYDRA_BIN" kill --all 2>&1)"
     assert_contains "$output" "No active Hydra heads to kill" "Should report no sessions"
+    output="$("$HYDRA_BIN" kill --all --dry-run 2>&1)"
+    assert_contains "$output" "No active Hydra heads selected" "Dry-run with no heads reports empty selection"
 }
 
 # Test: kill --all with multiple sessions (force mode)
@@ -223,16 +228,14 @@ test_kill_all_with_branch_fails() {
 # Main test runner
 main() {
     echo "Running hydra kill --all tests..."
+    setup_test_env
     
-    # Skip if tmux cannot create sessions in this environment
+    # Validate the isolated tmux server used by this fixture.
     if ! command -v tmux >/dev/null 2>&1 || ! tmux new-session -d -s killall-sanity 2>/dev/null; then
-        echo "tmux unavailable or cannot create sessions; skipping kill --all tests"
-        exit 0
+        echo "tmux unavailable or cannot create isolated sessions" >&2
+        exit 1
     fi
     tmux kill-session -t killall-sanity 2>/dev/null || true
-    
-    # Setup test environment
-    setup_test_env
     
     # Run tests
     test_kill_all_no_sessions
@@ -243,7 +246,9 @@ main() {
     
     # Cleanup
     cleanup_test_sessions
+    tmux kill-server 2>/dev/null || true
     cd "$original_dir" || exit 1
+    rm -rf "$test_base_dir"
     if [ -n "${test_dir:-}" ] && [ -d "${test_dir:-}" ]; then
         rm -rf "$test_dir"
     fi
