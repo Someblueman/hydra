@@ -41,14 +41,21 @@ static json_object *receipt_new(void) {
     json_object_object_add(receipt, "schema_version", json_object_new_int(1));
     json_object_object_add(receipt, "files", json_object_new_object()); return receipt;
 }
-static int snapshot(json_object *declarations, const char *source, const char *destination, const char *receipt_name) {
+/* task inputs come from the task receiver; bundle inputs travel with the
+ * definition (a compiled plan's inline prompts and proposal assets). */
+static const char *input_origin(json_object *declaration, const char *source, const char *bundle) {
+    const char *kind = f_string(declaration, "source");
+    if (kind && !strcmp(kind, "task")) return getenv("HYDRA_TASK_INPUT_DIR");
+    if (kind && !strcmp(kind, "bundle")) return bundle;
+    return source;
+}
+static int snapshot(json_object *declarations, const char *source, const char *bundle, const char *destination, const char *receipt_name) {
     char directory[F_PATH], path[F_PATH]; json_object *receipt = receipt_new(); int status = -1;
     if (f_path(directory, sizeof(directory), destination, "artifacts") || mkdir(directory, 0700)) goto done;
     if (declarations) {
         json_object_object_foreach(declarations, name, declaration) {
             json_object *file;
-            const char *origin = source;
-            if (f_string(declaration, "source") && !strcmp(f_string(declaration, "source"), "task")) origin = getenv("HYDRA_TASK_INPUT_DIR");
+            const char *origin = input_origin(declaration, source, bundle);
             if (!origin || !*origin) goto done;
             if (f_path(path, sizeof(path), directory, name) || task_file_copy(origin, f_string(declaration, "path"), path) ||
                 !(file = wd_file(path, declaration))) goto done;
@@ -59,13 +66,13 @@ static int snapshot(json_object *declarations, const char *source, const char *d
 done:
     json_object_put(receipt); return status;
 }
-int wd_initialize(json_object *manifest, const char *source, const char *run) {
-    return snapshot(f_field(manifest, "inputs"), source, run, "inputs.json");
+int wd_initialize(json_object *manifest, const char *source, const char *bundle, const char *run) {
+    return snapshot(f_field(manifest, "inputs"), source, bundle, run, "inputs.json");
 }
 int wd_seal(json_object *manifest, const char *step, const char *attempt) {
     char source[F_PATH]; json_object *declarations = f_field(f_field(f_field(manifest, "steps"), step), "outputs");
     if (f_path(source, sizeof(source), attempt, "outputs")) return -1;
-    if (snapshot(declarations, source, attempt, "outputs.json")) return -1;
+    if (snapshot(declarations, source, NULL, attempt, "outputs.json")) return -1;
     return wc_rules(manifest, step, attempt, true);
 }
 static bool same_file(json_object *a, json_object *b) {

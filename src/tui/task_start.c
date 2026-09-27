@@ -37,13 +37,14 @@ static void planning_agent(const char *profile, char *tools, size_t tools_size, 
     int a, b;
     if (!strcmp(profile, "none")) {
         copy_text(tools, tools_size, " (this head has no agent profile, so no agent step is authorized)");
-        copy_text(step, step_size, "exec steps on that head that run committed sh or make scripts, declare writes <worker>:* "
+        copy_text(step, step_size, "exec steps on that head that run the repository's make or sh commands, declare writes <worker>:* "
             "(also listed in the envelope) and need the spawn step; ");
         return;
     }
     a = snprintf(tools, tools_size, " and profile:%s", profile[0] ? profile : "<your profile>");
-    b = snprintf(step, step_size, "an exec step on that head with profile %s, prompt_input, result_file and timeout, "
-        "needing the spawn step and declaring writes <worker>:* (also listed in the envelope); ",
+    b = snprintf(step, step_size, "an exec step on that head with profile %s, the worker's complete instructions inline in prompt, "
+        "result_file (the name and path of a declared output of that step) and timeout, needing the spawn step and declaring "
+        "writes <worker>:* (also listed in the envelope); ",
         profile[0] ? profile : "set to your own profile (the first line of $HYDRA_STATE_DIR/profile)");
     if (a < 0 || (size_t)a >= tools_size) tools[0] = '\0';
     if (b < 0 || (size_t)b >= step_size) step[0] = '\0';
@@ -56,19 +57,21 @@ static bool planning_prompt(const char *name, const char *branch, const char *pr
     if (!getcwd(source, sizeof(source))) copy_text(source, sizeof(source), "the checkout where Hydra runs");
     n = snprintf(out, size,
         "Task: %s\nBranch: %s\nDiscuss and plan this objective with the user: %s\n\n"
-        "Hydra planning handoff: do not implement or execute the plan before the user approves it in Hydra, and do not commit implementation changes while planning. "
-        "Run hydra workflow plan schema for the draft format, write the draft JSON yourself and publish it from this head with "
-        "hydra workflow plan propose <draft.json>; republish when the user asks for revisions. "
+        "Hydra planning handoff: plan only; do not implement or execute the plan before the user approves it in Hydra. "
+        "Never commit while planning. Never commit to or change the user's checkout at %s or any branch; write only your draft and scratch files in this worktree. "
+        "Run hydra workflow plan schema for the draft format, then publish from this head with "
+        "hydra workflow plan propose <draft.json> [--asset NAME=FILE]...; republish when the user asks for revisions. "
         "The guided local policy allows host local; tools sh, git, make%s; writes only inside heads the plan spawns; parallelism 1; "
         "at most 4 heads; 3600 seconds summed over exec timeouts; 1 MiB of artifacts; envelope disk_mb of at least 1024; no retries or repairs. "
         "Express implementation as a spawn step creating a new worker branch with terminal_mode headless; %s"
-        "then verify exec steps whose argv runs make or sh with scripts already committed in the source and writes an object report output. "
-        "prompt_input names a step input mapped with {\"input\": <name>} to a plan-level data.inputs file (repository-relative path, type file, max_bytes); "
-        "result_file must equal the name and path of a declared output of that step. "
-        "Validation reads the checkout at %s at its current commit: it must have no tracked changes, and input and script files must exist there. "
+        "then verify on the worker head, after that step, with the repository's own checks (for example argv [make, test]). "
+        "A check's report step may run a small custom script: publish it with --asset NAME=FILE, declare data.inputs NAME as "
+        "{\"asset\": NAME, \"type\": \"file\", \"max_bytes\": N}, map it as a step input and run argv [sh, @input/NAME]; "
+        "it writes the schema's object report to $HYDRA_WORKFLOW_OUTPUTS_DIR. Use --asset only for genuinely custom files. "
+        "Validation binds that checkout at its current commit (no tracked changes); the plan carries its prompt and assets, so nothing is committed there. "
         "If validation reports invalid_source, relay its message and recovery; never tell the user to start Hydra from a .hydra-worktrees directory. "
         "The user reviews with B then P, validates with V and approves the exact revision with E. A saved proposal is not approval or completed work.",
-        name, branch, objective[0] ? objective : "Ask the user what they want to achieve, then discuss a plan.", tools, step, source);
+        name, branch, objective[0] ? objective : "Ask the user what they want to achieve, then discuss a plan.", source, tools, step);
     return n > 0 && (size_t)n < size;
 }
 

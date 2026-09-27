@@ -179,7 +179,8 @@ require bound validation, hand off collected Git commits, and support bounded
 candidate repair.
 Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
 Planning does not call a model itself; an ordinary agent authors the proposal
-through the CLI. See the
+through the CLI. Plans carry their own inline agent prompts and proposal assets,
+bound by the acceptance digest, so planning never commits to your checkout. See the
 the [planning examples](examples/planning/README.md).
 
 ## Documentation

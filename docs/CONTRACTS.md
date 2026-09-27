@@ -148,6 +148,20 @@ plan's own spawn steps; plans still declare concrete `<head>:<path>` scopes, and
 `@spawned:*` in a plan envelope is invalid. Admission already refuses spawn
 branches that exist, so the form never reaches the source checkout or an
 existing head. Earlier releases reject such a policy as `invalid_policy`.
+Plan schema 1 additively accepts an inline agent-step `prompt` (1 byte to 32 KiB
+of UTF-8 without NUL; exactly one of `prompt` or `prompt_input`) and asset input
+declarations `{"asset", "type", "max_bytes"}` in `data.inputs`. Earlier releases
+reject both as unknown fields. The compiler lowers them to data inputs with
+`"source": "bundle"` (paths `prompts/<step>` and `assets/<name>`, generated input
+`prompt-<step>`); workflow data manifests accept that source and read it from
+`bundle/` beside the definition. The compiled wrapper stays version 1 and adds an
+optional `assets` object (asset name to text) only when a plan uses assets, so
+existing artifacts and digests are unchanged; prompt and asset bytes are part of
+the acceptance digest. `validate` and `compile` accept an optional trailing
+`--assets-dir <dir>`; diagnostics add `missing_asset`, `invalid_asset`,
+`unsupported_asset` (schema 2), `prompt_conflict` and `invalid_input_reference`.
+In a compiled plan run, an exec argv element `@input/<name>` becomes the path of
+that step's materialized input; plain workflow definitions pass it unchanged.
 `invalid_source` diagnostics name the checkout and add optional `source`,
 `condition` (`missing_directory`, `not_repository`, `no_commit`,
 `tracked_changes` or `unreadable_content`) and `recovery` fields; tracked changes
@@ -300,6 +314,10 @@ strict, bounded JSON draft under the selected head's `planning/draft.json`. With
 from an agent launcher must match the current recorded owner. The head lock
 serializes replacement; malformed input preserves the previous draft. A proposal
 is durable input, not a validation, approval, or execution receipt.
+Repeatable `--asset NAME=FILE` publishes at most 16 private asset copies (regular
+UTF-8 text files of at most 64 KiB, no symlinks) in `planning/assets/` beside the
+draft; each publication replaces the whole set, and a draft whose asset
+references differ from the published files is refused with `asset_mismatch`.
 
 `hydra workflow plan proposal <head>` is read-only and fails if the draft or policy
 is absent. Explicit `--local-policy` writes the guided local policy: host
@@ -310,8 +328,9 @@ parallelism 1; 3600 seconds; 1 MiB of artifacts; four heads; a 1024 MiB free-spa
 floor; no retries or repairs. Success emits
 `HYDRA_PLAN_PROPOSAL<TAB>1`, followed by
 `P<TAB>absolute-draft-path<TAB>absolute-policy-path`, each newline terminated.
-Paths containing tabs/newlines are refused. Native validation snapshots both files;
-changed bytes invalidate the compiled revision and its exact-digest approval.
+Paths containing tabs/newlines are refused. Native validation snapshots both files
+and compiles with the draft's sibling `assets/` directory; changed draft, policy
+or asset bytes invalidate the compiled revision and its exact-digest approval.
 
 The private attachment helper accepts an optional absolute tmux socket after the
 head and instance IDs. Nested native clients carry their observed server selection

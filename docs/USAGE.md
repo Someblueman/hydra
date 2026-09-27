@@ -23,12 +23,17 @@ publish it with `hydra workflow plan propose <draft.json>` from its head. Press
 `Ctrl-B Tab` to return input to Hydra, `B` for the plan, and `P` to review the
 proposal with the bounded local policy. `V` validates and compiles it; `E` requires
 the exact displayed digest before execution. Republished drafts invalidate prior
-validation. `I` retains explicit file import for expert use. The guided local
+validation. The agent writes the worker's instructions inline (`prompt`) and
+publishes any custom file, such as a verifier script, with
+`propose <draft.json> --asset NAME=FILE`; both travel inside the compiled plan,
+so nothing is committed to your checkout while planning. Verification runs the
+repository's own checks on the worker head. `I` retains explicit file import for
+expert use (a draft's sibling `assets/` directory supplies its assets). The guided local
 policy allows sh, git, make and the head's own agent profile, writes only inside
 heads the plan spawns, one worker, four heads, 3600 seconds, 1 MiB of artifacts
 and a 1 GiB free-space floor, with no retries or repairs. Validation reads the
 checkout Hydra runs in at its current commit; commit or stash tracked changes
-there first. The policy governs the compiled workflow, not the agent process's OS
+there first. The plan's own prompt and assets never need to exist there. The policy governs the compiled workflow, not the agent process's OS
 permissions. Agent proposals alone never authorize execution.
 
 Interactive `spawn` and `spawn --resume` now open agent input inside the native
@@ -125,8 +130,8 @@ hydra workflow resume run_ID
 
 # Local objective plans (optional native helper; compile from clean source)
 hydra workflow plan schema
-hydra workflow plan validate ../plan.json ../policy.json
-hydra workflow plan compile ../plan.json ../policy.json ../compiled.json
+hydra workflow plan validate ../plan.json ../policy.json [--assets-dir ../assets]
+hydra workflow plan compile ../plan.json ../policy.json ../compiled.json [--assets-dir ../assets]
 hydra workflow plan show ../compiled.json
 hydra workflow plan run ../compiled.json --accept SHA256_FROM_PREVIEW
 hydra workflow plan result run_ID

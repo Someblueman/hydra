@@ -78,6 +78,7 @@ struct native_plan {
     bool projecting;
     char *source_bytes, *policy_bytes, *text;
     size_t source_length, policy_length, text_length, text_scroll, selected;
+    unsigned long long assets_stamp;
     struct workflow_model graph;
 };
 struct native_evidence {

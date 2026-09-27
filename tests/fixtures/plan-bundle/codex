@@ -1,0 +1,18 @@
+#!/bin/sh
+# Deterministic stand-in for the codex CLI; never a live provider.
+case "$*" in *--help*) printf 'Usage: codex exec [--json] resume\n'; exit 0 ;; esac
+case "${1:-}" in --version|-V) printf 'codex-cli 0.0.0-fixture\n'; exit 0 ;; esac
+if [ "${1:-}" = exec ]; then
+    prompt="$(cat)"
+    printf '%s\n' "$prompt" > received-prompt
+    printf 'Hello from the worker\n' > greeting.txt
+    mkdir -p tests
+    printf 'test -s greeting.txt\n' > tests/greeting.sh
+    printf '{"type":"thread.started","thread_id":"stub-session"}\n'
+    printf '{"type":"turn.started"}\n'
+    printf '{"type":"item.completed","item":{"type":"agent_message","text":"created greeting.txt and tests/greeting.sh"}}\n'
+    printf '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1,"cached_input_tokens":0}}\n'
+    exit 0
+fi
+# Interactive planning conversation: stay idle until the head is removed.
+exec sleep 600

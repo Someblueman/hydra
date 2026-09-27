@@ -27,12 +27,32 @@ workflow_plan_proposal() (
     _wpp_policy=false
     case "$_wpp_action" in
         propose)
-            [ $# -ge 1 ] || { echo 'Usage: hydra workflow plan propose <draft.json> [--branch <head>]' >&2; exit 2; }
+            _wpp_usage='Usage: hydra workflow plan propose <draft.json> [--branch <head>] [--asset NAME=FILE]...'
+            [ $# -ge 1 ] || { echo "$_wpp_usage" >&2; exit 2; }
             _wpp_input="$1"
             shift
-            if [ $# -eq 0 ]; then _wpp_branch="$(git symbolic-ref --quiet --short HEAD)" || exit 1
-            elif [ $# -eq 2 ] && [ "$1" = --branch ]; then _wpp_branch="$2"
-            else exit 2; fi
+            _wpp_branch="" _wpp_assets="" _wpp_asset_count=0
+            while [ $# -gt 0 ]; do
+                [ $# -ge 2 ] || { echo "$_wpp_usage" >&2; exit 2; }
+                case "$1" in
+                    --branch) [ -z "$_wpp_branch" ] || { echo "$_wpp_usage" >&2; exit 2; }; _wpp_branch="$2" ;;
+                    --asset)
+                        case "$2" in
+                            ?*=?*) ;;
+                            *) echo 'Each --asset takes NAME=FILE, where NAME is a plan ID.' >&2; exit 2 ;;
+                        esac
+                        case "$2" in *'
+'*) echo 'Asset paths cannot contain newlines.' >&2; exit 2 ;; esac
+                        _wpp_asset_count=$((_wpp_asset_count + 1))
+                        [ "$_wpp_asset_count" -le 16 ] || { echo 'A proposal carries at most 16 assets.' >&2; exit 2; }
+                        _wpp_assets="$_wpp_assets$2
+"
+                        ;;
+                    *) echo "$_wpp_usage" >&2; exit 2 ;;
+                esac
+                shift 2
+            done
+            [ -n "$_wpp_branch" ] || _wpp_branch="$(git symbolic-ref --quiet --short HEAD)" || exit 1
             ;;
         proposal)
             [ $# -ge 1 ] || exit 2
@@ -67,9 +87,31 @@ workflow_plan_proposal() (
                 exit 1
             fi
             _wpp_tmp="$(mktemp -d "$_wpp_dir/.proposal.XXXXXX")" || exit 1
-            workflow_plan_tool proposal-copy "$_wpp_input" "$_wpp_tmp/draft.json" >/dev/null || exit 1
+            mkdir "$_wpp_tmp/assets" || exit 1
+            # Assets are private copies beside the draft. The source checkout
+            # is never read or written; a republish replaces the whole set.
+            while IFS= read -r _wpp_asset; do
+                [ -n "$_wpp_asset" ] || continue
+                workflow_plan_tool proposal-asset "${_wpp_asset%%=*}" "${_wpp_asset#*=}" "$_wpp_tmp/assets" > "$_wpp_tmp/result.json" || {
+                    printf 'Asset %s refused: ' "${_wpp_asset%%=*}" >&2
+                    cat "$_wpp_tmp/result.json" >&2
+                    exit 1
+                }
+            done <<EOF
+$_wpp_assets
+EOF
+            workflow_plan_tool proposal-copy "$_wpp_input" "$_wpp_tmp/draft.json" "$_wpp_tmp/assets" > "$_wpp_tmp/result.json" || {
+                cat "$_wpp_tmp/result.json" >&2
+                exit 1
+            }
+            rm -rf "$_wpp_dir/.assets.previous" || exit 1
+            if [ -d "$_wpp_dir/assets" ]; then mv "$_wpp_dir/assets" "$_wpp_dir/.assets.previous" || exit 1; fi
+            mv "$_wpp_tmp/assets" "$_wpp_dir/assets" || exit 1
             mv "$_wpp_tmp/draft.json" "$_wpp_dir/draft.json" || exit 1
-            printf 'Proposal saved for %s. In Hydra press B, then P to review it. No validation or execution has occurred.\n' "$_wpp_branch"
+            rm -rf "$_wpp_dir/.assets.previous"
+            _wpp_saved="$_wpp_branch"
+            [ "$_wpp_asset_count" -eq 0 ] || _wpp_saved="$_wpp_branch with $_wpp_asset_count asset(s)"
+            printf 'Proposal saved for %s. In Hydra press B, then P to review it. No validation or execution has occurred.\n' "$_wpp_saved"
             exit 0
         fi
         _wpp_local_profile="$(workflow_plan_local_profile "$PARALLEL_HEAD_DIR")"

@@ -17,7 +17,8 @@ static void plan_policy_prompt(const char *profile, char *prompt, size_t size) {
     if (!task_profile_tool(profile) || snprintf(tools, sizeof(tools), "sh/git/make and profile:%s", profile) >= (int)sizeof(tools))
         copy_text(tools, sizeof(tools), "sh/git/make only (no agent profile on this head)");
     n = snprintf(prompt, size, "Review with local policy: %s, writes only in heads the plan spawns, 1 worker, 4 heads, "
-        "60 minutes, 1 MiB artifacts, 1 GiB free disk, no retries or repairs. No execution yet. y/N: ", tools);
+        "60 minutes, 1 MiB artifacts, 1 GiB free disk, no retries or repairs. The plan carries its prompts and assets; "
+        "nothing is committed to your checkout. No execution yet. y/N: ", tools);
     if (n < 0 || (size_t)n >= size) copy_text(prompt, size, "Review with the guided local policy? No execution yet. y/N: ");
 }
 

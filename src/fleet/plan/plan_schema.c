@@ -76,19 +76,38 @@ static bool envelope(json_object *o, bool policy) {
         !integer(o, "disk_mb", 1, 1048576) || !f_number_is(o, "retry_budget", 0) || !integer(o, "repair_budget", 0, 10)) return false;
     return write_scopes(f_field(o, "writes"), policy);
 }
+/* An agent step names its prompt either as a declared input or inline; the
+ * compiler lowers an inline prompt to a generated, digest-bound input. */
+static bool inline_prompt(json_object *value) {
+    const char *text = f_text(value);
+    return json_object_is_type(value, json_type_string) && text && *text &&
+        strlen(text) == (size_t)json_object_get_string_len(value) && strlen(text) <= PLAN_PROMPT_LIMIT;
+}
+static bool agent_recipe(json_object *args) {
+    json_object *prompt = f_field(args, "prompt");
+    if (!plan_id(f_string(args, "profile")) || !plan_id(f_string(args, "result_file"))) return false;
+    if (prompt) return !f_field(args, "prompt_input") && inline_prompt(prompt);
+    return plan_id(f_string(args, "prompt_input"));
+}
+static bool argv_recipe(json_object *args) {
+    return plan_list(f_field(args, "argv"), 1, 64) && !f_field(args, "profile") && !f_field(args, "prompt_input") &&
+        !f_field(args, "prompt") && !f_field(args, "result_file");
+}
 static bool exec_recipe(json_object *args, json_object *env, json_object *errors, const char *path) {
-    const char *const exec_keys[] = {"head", "argv", "profile", "prompt_input", "result_file", "timeout", NULL};
+    const char *const exec_keys[] = {"head", "argv", "profile", "prompt_input", "prompt", "result_file", "timeout", NULL};
     json_object *argv = f_field(args, "argv");
     size_t i; char tool[128];
     if (!task_keys(args, exec_keys) || !plan_id(f_string(args, "head")) || !integer(args, "timeout", 1, 86400)) goto invalid;
     if (argv) {
-        if (!plan_list(argv, 1, 64) || f_field(args, "profile") || f_field(args, "prompt_input") || f_field(args, "result_file")) goto invalid;
+        if (!argv_recipe(args)) goto invalid;
         for (i = 0; i < json_object_array_length(argv); i++) if (!yaml_text(f_text(json_object_array_get_idx(argv, i)))) {
-            plan_error(errors, path, "unsupported_argument", "argv must fit workflow schema 1 scalar syntax; put complex code in a source-bound script"); return false;
+            plan_error(errors, path, "unsupported_argument", "argv must fit workflow schema 1 scalar syntax; put complex code in a repository script or a proposal asset passed as @input/<name>"); return false;
         }
         if (!plan_has(f_field(env, "tools"), f_text(json_object_array_get_idx(argv, 0)))) goto unauthorized;
     } else {
-        if (!plan_id(f_string(args, "profile")) || !plan_id(f_string(args, "prompt_input")) || !plan_id(f_string(args, "result_file"))) goto invalid;
+        if (!agent_recipe(args)) {
+            plan_error(errors, path, "invalid_step", "an agent step needs profile, result_file and exactly one of prompt (inline text, 1 byte to 32 KiB, no NUL) or prompt_input"); return false;
+        }
         snprintf(tool, sizeof(tool), "profile:%s", f_string(args, "profile"));
         if (!plan_has(f_field(env, "tools"), tool)) goto unauthorized;
     }

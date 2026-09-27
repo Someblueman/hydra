@@ -50,6 +50,19 @@ static json_object *edge_reasons(json_object *plan, json_object *step, json_obje
         json_object_array_add(out, json_object_new_string("declared_order; purpose_not_formalized"));
     return out;
 }
+/* An inline prompt is summarized; the full text stays in the compiled plan. */
+static json_object *prompt_summary(json_object *step) {
+    json_object *prompt = f_field(f_field(step, "args"), "prompt"), *out;
+    const char *text = f_text(prompt); size_t length, shown;
+    if (!text) return NULL;
+    length = strlen(text); shown = length > 240 ? 240 : length;
+    while (shown < length && shown && ((unsigned char)text[shown] & 0xC0) == 0x80) shown--;
+    out = json_object_new_object();
+    json_object_object_add(out, "bytes", json_object_new_int64((int64_t)length));
+    json_object_object_add(out, "preview", json_object_new_string_len(text, (int)shown));
+    json_object_object_add(out, "truncated", json_object_new_boolean(shown < length));
+    return out;
+}
 static json_object *node_explanation(json_object *plan, size_t index,
                                       bool reach[PLAN_STEPS][PLAN_STEPS]) {
     json_object *steps = f_field(plan, "steps"), *step = json_object_array_get_idx(steps, index);
@@ -61,6 +74,7 @@ static json_object *node_explanation(json_object *plan, size_t index,
     json_object_object_add(out, "deliverables", affected(steps, f_field(plan, "deliverables"), index, reach));
     json_object_object_add(out, "checks", affected(steps, f_field(plan, "checks"), index, reach));
     json_object_object_add(out, "inputs", json_object_get(f_field(f_field(f_field(f_field(plan, "data"), "steps"), f_string(step, "id")), "inputs")));
+    if (f_field(f_field(step, "args"), "prompt")) json_object_object_add(out, "prompt", prompt_summary(step));
     for (size_t i = 0; i < json_object_array_length(needs); i++) {
         const char *id = f_text(json_object_array_get_idx(needs, i));
         json_object *edge = json_object_new_object();

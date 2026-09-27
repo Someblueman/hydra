@@ -141,7 +141,18 @@ workflow_step_command() {
                 _wsc_oldflags="$-"
                 IFS=,
                 set -f
-                for _wsc_arg in $_wsc_argv; do set -- "$@" "$_wsc_arg"; done
+                for _wsc_arg in $_wsc_argv; do
+                    # A compiled plan passes one of this step's materialized
+                    # inputs (such as a proposal asset) as @input/<name>.
+                    case "$_wsc_arg" in
+                        @input/?*)
+                            if [ -f "$_wsc_dir/compiled.json" ] && [ -n "${HYDRA_WORKFLOW_INPUTS_DIR:-}" ]; then
+                                _wsc_arg="$HYDRA_WORKFLOW_INPUTS_DIR/${_wsc_arg#@input/}"
+                            fi
+                            ;;
+                    esac
+                    set -- "$@" "$_wsc_arg"
+                done
                 IFS="$_wsc_oldifs"
                 case "$_wsc_oldflags" in *f*) ;; *) set +f ;; esac
             else
