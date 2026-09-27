@@ -169,6 +169,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to half the terminal height instead of being cut after five rows.
 - `n` in a result review stops at "CHANGES ON <branch>" instead of skipping from the
   checks to the diff.
+- The launch owner of a plan run that fails now records that it finished and its
+  exit code; under `set -e` it exited early, so `--workspace-status` and the TUI
+  reported the launch as still starting.
 - The spawn bootstrap and workspace controls tests wait for the pane state, footer
   and run-list state they check, within deadlines, instead of reading after fixed
   delays; both failed under heavy load.

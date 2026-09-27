@@ -167,6 +167,9 @@ contains "$(printf 'W\t%s\tbad\tfailed\t' "$bad_run")" "$data" 'the failed run i
 contains "$(printf 'R\t%s\tbad-check\tspawn-check\tverifier\tretired\t' "$bad_run")" "$data" 'a failed run retires its verifier head'
 head_active bad-worker
 assert_success $? 'a failed run keeps its worker head'
+bad_digest="$("$HYDRA_BIN" workflow plan show "$root/bad.compiled" | sed -n 's/^Acceptance digest: //p')"
+assert_equal "$(printf 'HYDRA_PLAN_LAUNCH\t1\nL\t%s\tfinished\t%s\t1' "$bad_digest" "$bad_run")" \
+    "$("$HYDRA_BIN" workflow plan --workspace-status "$bad_digest")" 'the launch owner of a failed run records that it finished and its exit code'
 
 # --- A verifier that leaves files behind is kept for review.
 write_plan dirty exact_artifact dirty-check.sh "$root/dirty.json"
