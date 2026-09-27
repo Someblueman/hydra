@@ -1,5 +1,6 @@
 #include "fleet/workflow/workflow_attention.h"
 #include "fleet/workflow/workflow_data.h"
+#include "fleet/plan/plan.h"
 #include "fleet/support/files.h"
 #include "fleet/support/json.h"
 #include "fleet/support/process.h"
@@ -15,13 +16,22 @@
 #define WA_RUNS 32U
 #define WA_STEPS 512U
 #define WA_ITEMS 512U
+#define WA_INDEX 256U
+/* What decides whether a failed run still needs the user: a later run of the
+ * same workflow from the same planning head that succeeded resolves it. */
+struct wa_run {
+    char            id[96];
+    char           *workflow, *planning, *created;
+    bool            succeeded;
+};
 struct wa {
     json_object    *items;
     const char     *project;
     char           *label;
     char            root[F_PATH];
-    size_t          runs, steps;
+    size_t          runs, steps, failures, indexed;
     bool            partial, truncated;
+    struct wa_run   index[WA_INDEX];
 };
 static json_object *canonical(json_object *value);
 static int key_order(const void *a, const void *b) { return strcmp(*(const char *const *)a, *(const char *const *)b); }
@@ -295,7 +305,8 @@ add(struct wa *w, const char *kind, const char *reason, const char *run, const c
     }
     f_string_add(o, "revision", json_object_to_json_string_ext(rev, JSON_C_TO_STRING_PLAIN));
     json_object_put(rev);
-    route(o, !strcmp(kind, "result") ? "workflow-evidence" : "workflow-request", run, step, attempt, nav);
+    route(o, !strcmp(kind, "result") || !strcmp(kind, "failure") ? "workflow-evidence" : "workflow-request",
+          run, step, attempt, nav);
     json_object_array_add(w->items, o);
     return o;
 }
@@ -606,11 +617,187 @@ done:free(attempt);
     json_object_put(data);
     json_object_put(sem);
 }
+/* ---- failures ---------------------------------------------------------------
+ * A failed step, or a run that failed or needs recovery without a failed step,
+ * needs the user's decision. It stays listed, even when marked seen, until the
+ * step succeeds or a later run of the same workflow from the same planning head
+ * succeeds. Nothing here infers why it failed beyond the recorded evidence. */
+/* created-at is UTC ISO 8601 (YYYY-MM-DDTHH:MM:SSZ), so later times sort
+ * later as text; anything else is unknown and never resolves a failure. */
+static char *
+created_at(const char *rd)
+{
+    static const char shape[] = "dddd-dd-ddTdd:dd:ddZ";
+    char *text = scalar_at(rd, "created-at");
+    size_t i;
+    if (!text || strlen(text) != sizeof(shape) - 1U) { free(text); return NULL; }
+    for (i = 0; shape[i]; i++) {
+        bool digit = text[i] >= '0' && text[i] <= '9';
+        if (shape[i] == 'd' ? !digit : text[i] != shape[i]) { free(text); return NULL; }
+    }
+    return text;
+}
+static bool
+same_text(const char *a, const char *b)
+{
+    return (!a && !b) || (a && b && !strcmp(a, b));
+}
 static void
-run_step(struct wa *w, const char *run, const char *rd, const char *name, const char *sd)
+index_run(struct wa *w, const char *run, const char *rd)
+{
+    struct wa_run *r;
+    char *state;
+    if (w->indexed >= WA_INDEX || strlen(run) >= sizeof(w->index[0].id)) return;
+    r = &w->index[w->indexed++];
+    snprintf(r->id, sizeof(r->id), "%s", run);
+    r->workflow = scalar_at(rd, "workflow-id");
+    r->planning = scalar_at(rd, "planning-head");
+    r->created = created_at(rd);
+    state = scalar_at(rd, "state");
+    r->succeeded = state && !strcmp(state, "succeeded");
+    free(state);
+}
+static void
+index_release(struct wa *w)
+{
+    for (size_t i = 0; i < w->indexed; i++) {
+        free(w->index[i].workflow); free(w->index[i].planning); free(w->index[i].created);
+    }
+    w->indexed = 0;
+}
+static bool
+superseded(const struct wa *w, const char *run, const char *rd)
+{
+    char *workflow = scalar_at(rd, "workflow-id"), *planning = scalar_at(rd, "planning-head"), *created = created_at(rd);
+    bool found = false;
+    for (size_t i = 0; workflow && created && !found && i < w->indexed; i++) {
+        const struct wa_run *r = &w->index[i];
+        found = r->succeeded && r->created && strcmp(r->id, run) && strcmp(r->created, created) > 0 &&
+            same_text(r->workflow, workflow) && same_text(r->planning, planning);
+    }
+    free(workflow);
+    free(planning);
+    free(created);
+    return found;
+}
+static bool
+listed_id(json_object *array, const char *id)
+{
+    for (size_t i = 0; id && i < json_object_array_length(array); i++) {
+        const char *entry = json_object_get_string(json_object_array_get_idx(array, i));
+        if (entry && !strcmp(entry, id)) return true;
+    }
+    return false;
+}
+static void
+failure_checks(json_object *plan, const char *step, json_object *checks)
+{
+    json_object *items = f_field(plan, "checks");
+    for (size_t i = 0; json_object_is_type(items, json_type_array) && i < json_object_array_length(items); i++) {
+        json_object *check = json_object_array_get_idx(items, i);
+        const char *id = f_string(check, "id"), *owner = f_string(check, "step");
+        if (id && owner && !strcmp(owner, step) && f_name(id)) json_object_array_add(checks, json_object_new_string(id));
+    }
+}
+/* The compiled plan names the checks a step runs and the requirements those
+ * checks decide; a step without checks (or a planless run) lists none. */
+static void
+failure_requirements(const char *rd, const char *step, json_object *checks, json_object *requirements)
+{
+    char path[F_PATH];
+    json_object *compiled, *items;
+    if (f_path(path, sizeof(path), rd, "compiled.json") || !reg(path) || !(compiled = plan_read(path))) return;
+    failure_checks(f_field(compiled, "plan"), step, checks);
+    items = f_field(f_field(compiled, "plan"), "requirements");
+    for (size_t i = 0; json_object_is_type(items, json_type_array) && i < json_object_array_length(items); i++) {
+        json_object *requirement = json_object_array_get_idx(items, i);
+        const char *id = f_string(requirement, "id");
+        if (id && f_name(id) && listed_id(checks, f_string(requirement, "check")))
+            json_object_array_add(requirements, json_object_new_string(id));
+    }
+    json_object_put(compiled);
+}
+static bool
+failure_attempt(const char *sd, char aid[32], char ap[F_PATH])
+{
+    char *attempts = scalar_at(sd, "attempts");
+    int64_t n = 0;
+    bool ok = attempts && number(attempts, &n) && n >= 1 && n <= 11 &&
+        snprintf(aid, 32, "attempt-%s", attempts) < 32 && !f_path(ap, F_PATH, sd, aid) && directory(ap);
+    free(attempts);
+    if (!ok) aid[0] = 0;
+    return ok;
+}
+static void
+failure_evidence(const char *ap, json_object *sem)
+{
+    static const char *const names[] = {"exit-code", "failure-class", "completed-at"};
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        char *text = scalar_at(ap, names[i]);
+        if (text) f_string_add(sem, names[i], text);
+        free(text);
+    }
+}
+static void
+failure_emit(struct wa *w, const char *run, const char *step, const char *aid, const char *reason,
+             char *head, char *instance, json_object *sem, json_object *requirements)
+{
+    json_object *item = add(w, "failure", reason, run, step, aid, head, instance, NULL, NULL, "fresh",
+                            "review the failed evidence, then send the plan back or retry", sem, true);
+    if (!item) return;
+    w->failures++;
+    json_object_object_add(item, "requirements", json_object_get(requirements));
+}
+static const char *
+failure_reason(const char *state, json_object *checks)
+{
+    if (strcmp(state, "failed")) return "step_recovery_required";
+    return json_object_array_length(checks) ? "check_failed" : "step_failed";
+}
+static void
+failure(struct wa *w, const char *run, const char *rd, const char *step, const char *sd, const char *state)
+{
+    char ap[F_PATH], aid[32];
+    char *head = NULL, *instance = NULL, *run_state = scalar_at(rd, "state");
+    json_object *sem = json_object_new_object(), *checks = json_object_new_array(), *requirements = json_object_new_array();
+    if (failure_attempt(sd, aid, ap)) {
+        result_identity(ap, &head, &instance);
+        failure_evidence(ap, sem);
+    }
+    failure_requirements(rd, step, checks, requirements);
+    f_string_add(sem, "state", state);
+    f_string_add(sem, "run_state", run_state ? run_state : "");
+    json_object_object_add(sem, "checks", json_object_get(checks));
+    json_object_object_add(sem, "requirements", json_object_get(requirements));
+    failure_emit(w, run, step, aid[0] ? aid : NULL, failure_reason(state, checks), head, instance, sem, requirements);
+    free(head); free(instance); free(run_state);
+    json_object_put(checks); json_object_put(requirements); json_object_put(sem);
+}
+/* A run that failed (for example its delivery check rejected the result) or
+ * needs recovery, with no failed step to point at, is one run-level item. */
+static void
+run_failure(struct wa *w, const char *run, const char *rd)
+{
+    char *state = scalar_at(rd, "state");
+    json_object *sem, *none;
+    if (!state || (strcmp(state, "failed") && strcmp(state, "recovery-required"))) { free(state); return; }
+    sem = json_object_new_object(); none = json_object_new_array();
+    f_string_add(sem, "run_state", state);
+    failure_emit(w, run, NULL, NULL, strcmp(state, "failed") ? "run_recovery_required" : "run_failed",
+                 NULL, NULL, sem, none);
+    json_object_put(none); json_object_put(sem); free(state);
+}
+static bool
+step_failed(const char *state)
+{
+    return state && (!strcmp(state, "failed") || !strcmp(state, "recovery-required"));
+}
+static void
+run_step(struct wa *w, const char *run, const char *rd, const char *name, const char *sd, bool resolved)
 {
     char p[F_PATH], *s;
     s = scalar_at(sd, "state");
+    if (!resolved && step_failed(s)) failure(w, run, rd, name, sd, s);
     if (f_path(p, sizeof(p), sd, "request-id")) {
         unknown(w, "path_unavailable", run, name, NULL, NULL, NULL, NULL, NULL, NULL);
         free(s);
@@ -622,11 +809,31 @@ run_step(struct wa *w, const char *run, const char *rd, const char *name, const 
     free(s);
 }
 static void
+run_steps(struct wa *w, const char *run, const char *rd, const char *sp, DIR *d, bool resolved)
+{
+    char            sd[F_PATH];
+    struct dirent  *e;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.' || !f_name(e->d_name))
+            continue;
+        if (w->steps >= WA_STEPS) {
+            w->truncated = true;
+            w->partial = true;
+            break;
+        }
+        w->steps++;
+        if (f_path(sd, sizeof(sd), sp, e->d_name) || !directory(sd))
+            continue;
+        run_step(w, run, rd, e->d_name, sd, resolved);
+    }
+}
+static void
 run_one(struct wa *w, const char *run, const char *rd)
 {
-    char            sp[F_PATH], sd[F_PATH];
+    char            sp[F_PATH];
     DIR            *d;
-    struct dirent  *e;
+    size_t          failures = w->failures;
+    bool            resolved;
     if (w->runs >= WA_RUNS) {
         w->truncated = true;
         w->partial = true;
@@ -639,19 +846,11 @@ run_one(struct wa *w, const char *run, const char *rd)
     if (!directory(rd) || f_path(sp, sizeof(sp), rd, "steps") || !directory(sp) || !(d = opendir(sp))) {
         unknown(w, "missing_steps", run, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
         return;
-    } while ((e = readdir(d))) {
-        if (e->d_name[0] == '.' || !f_name(e->d_name))
-            continue;
-        if (w->steps >= WA_STEPS) {
-            w->truncated = true;
-            w->partial = true;
-            break;
-        }
-        w->steps++;
-        if (f_path(sd, sizeof(sd), sp, e->d_name) || !directory(sd))
-            continue;
-        run_step(w, run, rd, e->d_name, sd);
-    } closedir(d);
+    }
+    resolved = superseded(w, run, rd);
+    run_steps(w, run, rd, sp, d, resolved);
+    closedir(d);
+    if (!resolved && failures == w->failures && !w->truncated) run_failure(w, run, rd);
 }
 static json_object    *
 attention_open(struct wa *w, const char *project, char runs[F_PATH], DIR **dir)
@@ -670,9 +869,20 @@ attention_open(struct wa *w, const char *project, char runs[F_PATH], DIR **dir)
     return NULL;
 }
 static void
+attention_index(struct wa *w, const char *runs, DIR *dir)
+{
+    char p[F_PATH]; struct dirent *e;
+    while ((e = readdir(dir))) {
+        if (e->d_name[0] == '.' || !id(e->d_name, "run_")) continue;
+        if (!f_path(p, sizeof(p), runs, e->d_name) && directory(p)) index_run(w, e->d_name, p);
+    }
+    rewinddir(dir);
+}
+static void
 attention_scan(struct wa *w, const char *runs, DIR *dir)
 {
     char p[F_PATH]; struct dirent *e;
+    attention_index(w, runs, dir);
     while ((e = readdir(dir))) {
         if (e->d_name[0] == '.' || !id(e->d_name, "run_")) continue;
         if (f_path(p, sizeof(p), runs, e->d_name) || !directory(p)) continue;
@@ -685,13 +895,14 @@ wd_attention(const char *project)
 {
     struct wa       w = {0};
     char            runs[F_PATH];
-    DIR            *d;
+    DIR            *d = NULL;
     json_object    *data, *counts;
     if (!id(project, "project_")) return f_error("workflow attention", "invalid_project", "project identity is invalid");
     w.project = project;
     { json_object *error = attention_open(&w, project, runs, &d); if (error) return error; }
     w.items = json_object_new_array();
     attention_scan(&w, runs, d); closedir(d);
+    index_release(&w);
     free(w.label);
     data = json_object_new_object();
     json_object_object_add(data, "snapshot_schema_version", json_object_new_int(1));

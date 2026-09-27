@@ -412,7 +412,8 @@ void review_inventory(json_object *out, json_object *selected, json_object *data
     if (!f_path(path, sizeof(path), scratch, "outputs.json") && copy_record(attempt, "outputs.json", scratch))
         receipt = plan_read(path);
     files = f_field(receipt, "files");
-    decls = f_field(f_field(f_field(data, "steps"), f_string(selected, "step_id")), "outputs");
+    /* A run-level item names no step and so declares no deliverable. */
+    decls = f_string(selected, "step_id") ? f_field(f_field(f_field(data, "steps"), f_string(selected, "step_id")), "outputs") : NULL;
     if (no_deliverable(decls, receipt, files))
         f_string_add(out, "inventory_state", "not_applicable");
     else if (!json_object_is_type(decls, json_type_object) || json_object_object_length(decls) > (int)WD_NAMES)

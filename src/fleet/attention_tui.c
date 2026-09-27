@@ -15,6 +15,7 @@
 #define ATTENTION_LIMIT 512U
 #define ATTENTION_MAX_FIELD 127U
 #define ATTENTION_HASH 65U
+#define ATTENTION_DETAIL 256U
 
 static const char *value(json_object *object, const char *key)
 {
@@ -52,7 +53,7 @@ static bool valid_route(json_object *route)
 static bool valid_item(json_object *item)
 {
     static const char *const freshness[] = {"fresh", "stale", "unknown", "expired"};
-    static const char *const kinds[] = {"approval", "result", "permission", "unknown", "approval_expired"};
+    static const char *const kinds[] = {"approval", "result", "permission", "unknown", "approval_expired", "failure"};
     const char *fields[] = {value(item, "source"), value(item, "kind"), value(item, "reason"), value(item, "project_id"), value(item, "host"), value(item, "task_id"), value(item, "run_id"), value(item, "step_id"), value(item, "attempt_id"), value(item, "head_id"), value(item, "current_instance"), value(item, "request_id"), item_binding(item)};
     json_object *route = f_field(item, "route");
     size_t i;
@@ -61,7 +62,7 @@ static bool valid_item(json_object *item)
         if (!bounded(fields[i], maximum)) return false;
     }
     if (!bounded(value(item, "revision"), F_LIMIT) || !bounded(value(item, "freshness"), 32U)) return false;
-    return one_of(value(item, "freshness"), freshness, 4U) && one_of(value(item, "kind"), kinds, 5U) && valid_route(route);
+    return one_of(value(item, "freshness"), freshness, 4U) && one_of(value(item, "kind"), kinds, 6U) && valid_route(route);
 }
 static void output_field(const char *text)
 {
@@ -173,17 +174,38 @@ int f_attention_item_hashes(json_object *item, char revision[65], char identity[
     memcpy(identity, identities[0], ATTENTION_HASH);
     return 0;
 }
-/* Version 2 appends one presentation label (the workflow or task name). It is
+/* Version 2 appended one presentation label (the workflow or task name). It is
  * never part of the identity or revision; an unusable label is sent as "-". */
 static const char *item_label(json_object *item)
 {
     const char *label = f_string(item, "label");
     return label && bounded(label, ATTENTION_MAX_FIELD) ? label : "-";
 }
+/* Version 3 appends one presentation detail: the requirement IDs a failed
+ * check decides, comma separated and bounded, or "-". Like the label it is
+ * outside the identity and the revision hash. */
+static bool detail_append(char detail[ATTENTION_DETAIL], size_t *used, const char *id)
+{
+    size_t length = id ? strlen(id) : 0U;
+    if (!length || !bounded(id, ATTENTION_MAX_FIELD)) return true;
+    if (*used + length + 2U >= ATTENTION_DETAIL) return false;
+    *used += (size_t)snprintf(detail + *used, ATTENTION_DETAIL - *used, "%s%s", *used ? ", " : "", id);
+    return true;
+}
+static void item_detail(json_object *item, char detail[ATTENTION_DETAIL])
+{
+    json_object *requirements = f_field(item, "requirements");
+    size_t i, used = 0U, count = json_object_is_type(requirements, json_type_array) ? json_object_array_length(requirements) : 0U;
+    detail[0] = '\0';
+    for (i = 0U; i < count; i++)
+        if (!detail_append(detail, &used, json_object_get_string(json_object_array_get_idx(requirements, i)))) break;
+    if (!used) (void)snprintf(detail, ATTENTION_DETAIL, "-");
+}
 static void output_item(json_object *item, const char *revision, const char *identity)
 {
+    char detail[ATTENTION_DETAIL];
     json_object *route = f_field(item, "route");
-    printf("ITEM\t"); output_field(value(item, "source")); printf("\t"); output_field(value(item, "kind")); printf("\t"); output_field(value(item, "reason")); printf("\t"); output_field(value(item, "project_id")); printf("\t"); output_field(value(item, "host")); printf("\t"); output_field(value(item, "task_id")); printf("\t"); output_field(value(item, "run_id")); printf("\t"); output_field(value(item, "step_id")); printf("\t"); output_field(value(item, "attempt_id")); printf("\t"); output_field(value(item, "head_id")); printf("\t"); output_field(value(item, "current_instance")); printf("\t"); output_field(value(item, "request_id")); printf("\t"); output_field(item_binding(item)); printf("\t%s\t%s\t", revision, identity); output_field(value(item, "freshness")); printf("\t"); output_field(value(route, "kind")); printf("\t%d\t", json_object_get_boolean(f_field(route, "navigable")) ? 1 : 0); output_field(item_label(item)); putchar('\n');
+    printf("ITEM\t"); output_field(value(item, "source")); printf("\t"); output_field(value(item, "kind")); printf("\t"); output_field(value(item, "reason")); printf("\t"); output_field(value(item, "project_id")); printf("\t"); output_field(value(item, "host")); printf("\t"); output_field(value(item, "task_id")); printf("\t"); output_field(value(item, "run_id")); printf("\t"); output_field(value(item, "step_id")); printf("\t"); output_field(value(item, "attempt_id")); printf("\t"); output_field(value(item, "head_id")); printf("\t"); output_field(value(item, "current_instance")); printf("\t"); output_field(value(item, "request_id")); printf("\t"); output_field(item_binding(item)); printf("\t%s\t%s\t", revision, identity); output_field(value(item, "freshness")); printf("\t"); output_field(value(route, "kind")); printf("\t%d\t", json_object_get_boolean(f_field(route, "navigable")) ? 1 : 0); output_field(item_label(item)); item_detail(item, detail); printf("\t%s\n", detail);
 }
 int f_attention_tui_data(json_object *aggregate)
 {
@@ -204,7 +226,7 @@ int f_attention_tui_data(json_object *aggregate)
     partial = json_object_get_boolean(partial_value) || truncated;
     if (count && !mkdtemp(dir)) return 1;
     if (count && write_hash_files(dir, items, count, revisions, identities)) { rmdir(dir); return 1; }
-    puts("HYDRA_ATTENTION\t2");
+    puts("HYDRA_ATTENTION\t3");
     for (i = 0U; i < count; i++) output_item(items[i], revisions[i], identities[i]);
     printf("END\t%zu\t%d\t%d\n", count, partial ? 1 : 0, truncated ? 1 : 0);
     if (count) rmdir(dir);

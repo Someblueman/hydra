@@ -58,7 +58,8 @@ static bool review_paths(struct review_context *ctx, const char *project, const 
                          const char *attempt, const char *revision)
 {
     const char *root = getenv("HYDRA_STATE_V2_ROOT");
-    if (!f_name(project) || !f_name(run) || !plan_id(step) ||
+    /* A run-level failure has no step: its review reads the run's records. */
+    if (!f_name(project) || !f_name(run) || (!plan_id(step) && strcmp(step, "-")) ||
         !selected_name(attempt, ctx->selected_attempt) || !task_hex(revision, 64))
         return false;
     if (root ? f_copy(ctx->root, sizeof(ctx->root), root)
@@ -300,6 +301,7 @@ static const char *candidate_state(const char *readiness)
     static const char *const map[][2] = {{"ready", "verified_retained"},
                                          {"pending", "current_request"},
                                          {"in_progress", "run_in_progress"},
+                                         {"failed", "failed_needs_decision"},
                                          {"not_applicable", "not_applicable"}};
     for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++)
         if (!strcmp(readiness, map[i][0]))
@@ -316,6 +318,11 @@ static void refine_readiness(json_object *out, const struct review_context *ctx,
     bool matches = !strcmp(ctx->revision, revision) && !strcmp(value(ctx->retained, "state"), "passed");
     if (strcmp(value(out, "readiness"), "revoked") || !matches || f_string(ctx->selected, "request_id"))
         return;
+    /* A failure has nothing to accept: it is failed until a decision resolves it. */
+    if (!strcmp(value(ctx->selected, "kind"), "failure")) {
+        f_string_add(out, "readiness", "failed");
+        return;
+    }
     if (!strcmp(value(out, "inventory_state"), "not_applicable")) {
         /* A genuine unknown stays revoked; only a known item without
          * deliverables is plainly not applicable. */

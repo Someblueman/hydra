@@ -45,9 +45,11 @@ run_dir="$HYDRA_STATE_V2_ROOT/projects/$project/workflows/runs/$run"
 [ "$(cat "$run_dir/state")" = succeeded ]
 
 # Attention: spawn steps declare no outputs, so they are not results and the
-# snapshot is complete. Wire version 2 carries the plan name as a label.
+# snapshot is complete. Wire version 2 carries the plan name as a label and
+# version 3 a detail field ("-" for a result).
 hydra workflow attention-data > "$fixture/attention.tsv"
-[ "$(sed -n '1p' "$fixture/attention.tsv")" = "HYDRA_ATTENTION${tab}2" ]
+[ "$(sed -n '1p' "$fixture/attention.tsv")" = "HYDRA_ATTENTION${tab}3" ]
+[ "$(awk -F '\t' '$1=="ITEM" && (NF!=21 || $21!="-") {n++} END {print n+0}' "$fixture/attention.tsv")" -eq 0 ]
 [ "$(tail -n 1 "$fixture/attention.tsv")" = "END${tab}2${tab}0${tab}0" ]
 [ "$(awk -F '\t' '$1=="ITEM" && ($3!="result" || $4!="result_ready" || $20!="kill-dry-run") {n++} END {print n+0}' "$fixture/attention.tsv")" -eq 0 ]
 [ "$(awk -F '\t' '$1=="ITEM" {print $9}' "$fixture/attention.tsv" | LC_ALL=C sort | tr '\n' ' ')" = "implement verify " ]
@@ -119,9 +121,48 @@ review review "$running_row" > "$fixture/failed.json"
 jq -e '.data.result.verdict == "fail" and ([.data.result.requirements[].state] | unique) == ["fail"]' "$fixture/failed.json" >/dev/null
 review review-data "$running_row" > "$fixture/failed.tsv"
 grep -Fqx "TEXT$tab  FAIL    preview-targets - Dry run lists targets (check: check)" "$fixture/failed.tsv"
+# The failed check is its own attention item: it names the requirements the
+# check decides, and its review shows the failed verdict and requirements.
+hydra workflow attention-data > "$fixture/failure.tsv"
+failure_row="$(awk -F '\t' '$1=="ITEM" && $3=="failure"' "$fixture/failure.tsv")"
+[ "$(printf '%s\n' "$failure_row" | grep -c .)" -eq 1 ]
+[ "$(printf '%s\n' "$failure_row" | cut -f4,9,10,18,19,20,21)" = \
+    "check_failed${tab}verify${tab}attempt-1${tab}workflow-evidence${tab}1${tab}kill-dry-run${tab}preview-targets, no-mutation" ]
+hydra workflow attention --json > "$fixture/failure.json"
+jq -e '[.data.items[] | select(.kind == "failure")] | length == 1 and .[0].requirements == ["preview-targets","no-mutation"]
+    and .[0].route.kind == "workflow-evidence" and .[0].accepted == false' "$fixture/failure.json" >/dev/null
+review review "$failure_row" > "$fixture/failure-review.json"
+jq -e '.ok and .data.identity.kind == "failure" and .data.readiness == "failed" and .data.candidate_state == "failed_needs_decision"
+    and .data.accepted == false and .data.result.verdict == "fail"
+    and ([.data.result.requirements[].state] | unique) == ["fail"]' "$fixture/failure-review.json" >/dev/null
+review review-data "$failure_row" > "$fixture/failure-review.tsv"
+grep -Fqx "TEXT$tab  FAIL    preview-targets - Dry run lists targets (check: check)" "$fixture/failure-review.tsv"
+grep -Fqx "TEXT${tab}readiness: failed" "$fixture/failure-review.tsv"
+# Marking it seen is a client preference: the failure stays listed.
+hydra workflow attention-seen mark "$(printf '%s\n' "$failure_row" | cut -f16)" "$(printf '%s\n' "$failure_row" | cut -f15)" >/dev/null
+[ "$(hydra workflow attention-data | awk -F '\t' '$1=="ITEM" && $3=="failure"' | grep -c .)" -eq 1 ]
+hydra workflow attention-seen clear "$(printf '%s\n' "$failure_row" | cut -f16)" >/dev/null
+# A later run of the same plan that succeeded resolves it.
+later_run="run_$(printf '%032x' 1)"
+cp -R "$run_dir" "$HYDRA_STATE_V2_ROOT/projects/$project/workflows/runs/$later_run"
+printf '2999-01-01T00:00:00Z\n' > "$HYDRA_STATE_V2_ROOT/projects/$project/workflows/runs/$later_run/created-at"
+cp "$fixture/state.saved" "$HYDRA_STATE_V2_ROOT/projects/$project/workflows/runs/$later_run/state"
+cp "$fixture/state.saved" "$HYDRA_STATE_V2_ROOT/projects/$project/workflows/runs/$later_run/steps/verify/state"
+[ "$(hydra workflow attention-data | awk -F '\t' '$1=="ITEM" && $3=="failure"' | grep -c .)" -eq 0 ]
+rm -rf "$HYDRA_STATE_V2_ROOT/projects/$project/workflows/runs/$later_run"
+# A run that failed with every step succeeded (its delivery was rejected) is
+# one run-level failure, reviewable from the run's own records.
+cp "$fixture/state.saved" "$run_dir/steps/verify/state"
 mv "$fixture/check.saved" "$run_dir/steps/verify/attempt-1/artifacts/check"
+hydra workflow attention-data > "$fixture/run-failure.tsv"
+run_failure_row="$(awk -F '\t' '$1=="ITEM" && $3=="failure"' "$fixture/run-failure.tsv")"
+[ "$(printf '%s\n' "$run_failure_row" | cut -f4,9,10)" = "run_failed${tab}-${tab}-" ]
+review review "$run_failure_row" > "$fixture/run-failure-review.json"
+jq -e '.ok and .data.identity.kind == "failure" and .data.identity.step_id == "-" and .data.readiness == "failed"
+    and .data.inventory_state == "not_applicable" and .data.result.run_state == "failed"' "$fixture/run-failure-review.json" >/dev/null
 cp "$fixture/state.saved" "$run_dir/state"
 cp "$fixture/state.saved" "$run_dir/steps/verify/state"
+[ "$(hydra workflow attention-data | awk -F '\t' '$1=="ITEM" && $3=="failure"' | grep -c .)" -eq 0 ]
 [ -n "$implement_row" ]
 
 # A genuine unknown stays explicit, but a step without deliverables is never
