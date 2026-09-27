@@ -52,13 +52,25 @@ and nested tmux attachment have deterministic acceptance; and independent native
 capture checks Unicode, line drawing and ANSI color. These local qualifications
 do not close the full acceptance criteria of U3, U17 or U18.
 
-Next, complete the remaining real-provider, output and review acceptance: the
-local part of U5 plus U14, U16 and I4, including styled diffs, long-output
-comparisons, actual-terminal human review and goal-only discoverability. Existing
-Fleet behavior retains its gates; one real-host workflow still needs explicit
-qualification. New scheduling, task pools, automatic placement and remote
-onboarding remain outside this target. These priorities do not establish a
-release date; compatibility impact still determines the next version.
+Next target: 2.8.0 (additive CLI flags and plan/policy fields, so a minor
+version). U5 was accepted on 27 September 2026 and the live agent checks are
+settled: Claude and Cursor passed, Cursor after its `--trust` profile fix, and
+Antigravity is closed upstream. The release carries the U5 fixes on local
+branches: derived task branches, a guided policy that can authorize agent work,
+actionable `invalid_source`, plans that carry their own prompts and assets,
+send-back and one-key execution approval, run notices to the planning agent, a
+larger agent pane, run/head/worker presentation, result review, attention
+acknowledgement and statistics; the leftover-worktree detection fix; the Cursor
+fix; and `hydra kill --dry-run`. Still to do in this release: U14 output fidelity
+(styled diffs, long lines, Unicode compared with real provider output), U16
+leaving attachment with real key events, a U18 extension to the result/diff and
+recovery journeys, and I4's visual pass. Then run the full release gates and a
+human review of the new screens.
+
+The following release is expected to centre on U10 guided remote onboarding,
+including agent installation and per-user install detection found missing on 26
+September. Scheduling, task pools, automatic placement, T2/T3 and performance
+baselines remain outside 2.8.0.
 
 ## Product and engineering guardrails
 
@@ -166,35 +178,20 @@ an acceptance blocker, not optional cosmetic polish.
       terminal sizes, including 80x24 and 140x40, with a usable compact fallback.
       The objective, agent input destination, progress and next action remain clear;
       raw IDs, repeated keyboard hints and diagnostic fields do not dominate.
-- [ ] **U5 — Test the agentic product journey.** Replace the manual shell-head lab
-      as the primary user evaluation guide with one small, meaningful agent task
-      in a real repository. Start Hydra, ask for a bounded change with observable
-      acceptance criteria, discuss and revise an agent-authored plan, approve the
-      exact revision, observe execution, answer a real question, inspect a failed
-      check and supported recovery, then review the resulting diff and test evidence.
-      Include leaving and returning without losing the conversation or run context.
-      Acceptance: perform this through the installed application with an authenticated
-      agent and real outputs, recording user friction and remaining gaps. The user
-      does not manually author the implementation or assemble workflow machinery.
-      Keep shell-only fixtures and isolated failure probes as engineering checks;
-      their success cannot substitute for this product acceptance exercise.
-      First installed-build run, 26–27 September 2026 (Codex, task "add
-      `hydra kill --dry-run`"): the journey completed only with expert help.
-      Plan run `run_2cdf8bbe…` passed its verifier and produced `def3c77` on
-      `feat/kill-dry-run`. Friction, with fixes in progress on local branches:
-      task names with spaces could not start; the guided policy (sh/git, no
-      writes, 300 s) could not authorize agent work, so the first plan was a
-      stub; `invalid_source` did not name the dirty checkout and the agent then
-      misdirected the user; worker prompts and verifiers had to be committed
-      into the user's `main` before validation; execution required typing a
-      64-character digest; there was no way to send a plan back; the planning
-      agent was not told the run started; headless workers showed as "shell",
-      "session unknown", "needs attention" with no output preview; the run,
-      its verification and its diff were not presented; model, effort and
-      recorded token use were not shown; attention/review showed raw or
-      misleading states. Not yet exercised: answering an agent question during
-      execution, a failed check with supported recovery, and leaving and
-      returning mid-run. Rerun U5 after those fixes; it stays open.
+- [x] **U5 — Test the agentic product journey.** Accepted by the user on 27
+      September 2026 after the first installed-build run (Codex, task "add
+      `hydra kill --dry-run`"): the agent discussed and published a plan, the
+      user approved the exact revision in Hydra, run `run_2cdf8bbe…` implemented
+      and independently verified the change, and the result was reviewed and
+      placed on `feat/kill-dry-run` (`def3c77`). The friction found (task names
+      with spaces, a guided policy that could not authorize agent work, a
+      non-actionable `invalid_source`, planning assets committed into `main`,
+      digest typing, no send-back, no launch notice, headless workers shown as
+      terminal heads, missing run/result/verification presentation, hidden model
+      and token use, unreadable attention/review states) is being fixed on local
+      branches as improvements, not acceptance blockers. Follow-ups to observe
+      in a later run: answering an agent question during execution, a failed
+      check with supported recovery, and leaving and returning mid-run.
 - [ ] **U6 — Stable rendering without flicker.** The user reports distracting
       flicker during normal TUI operation. Diagnose the live render/refresh path;
       avoid visible clearing and repainting of unchanged content, and preserve
@@ -375,10 +372,11 @@ The subsequent six findings are covered by U13 (statistics), U14 (output), U15
       its chosen action fits the goal, alongside human first-use review.
 
 Delivery boundary: the items above remain outstanding requirements. Source changes
-have shipped as follows; each item stays open until the installed-build acceptance
-in U5 and U18 has been observed. Close items with observed first-use, visual and
-agentic acceptance from the installed build, and update the getting-started and
-evaluation guides to the delivered flow as part of that work.
+have shipped as follows; each item stays open until its installed-build
+acceptance has been observed (U5 was accepted on 27 September 2026). Close items
+with observed first-use, visual and agentic acceptance from the installed build,
+and update the getting-started and evaluation guides to the delivered flow as
+part of that work.
 
 | Item | Shipped source changes |
 | --- | --- |
@@ -390,7 +388,8 @@ evaluation guides to the delivered flow as part of that work.
 | U16 | nested tmux attachment with deterministic input/resize/return checks in 2.7.0 |
 | U17 | head-associated proposals, guided local policy, invalidation and exact-digest approval in 2.7.0 |
 | U18 | initial deterministic installed-journey runner in 2.7.0 |
-| U5, U10, U11 | none yet |
+| U5 | accepted on 27 September 2026 using 2.7.0 plus unreleased local fixes |
+| U10, U11 | none yet |
 
 ### Candidate features
 
@@ -434,12 +433,15 @@ observed the provider, then reported `cancelled`, `confirmed_stopped`, exit 130
 and a ready result with no process left in the task workspace. The
 qualification applies to that fix commit, not to 2.7.0.
 
-- [ ] Qualify Antigravity on the shared remote task. Native sign-in succeeded on
-      the VPS on 26 September 2026, but `agy` 1.2.11 there and 1.2.5 locally both
-      return `FAILED_PRECONDITION: User location is not supported for the API use`
-      for the signed-in account (GB). Retry after the account or provider changes,
-      or qualify through the Gemini API-key mode. Antigravity's earlier local
-      result-byte preservation, recorded recall and cancellation have passed.
+Antigravity's remote shared task is closed as an upstream provider issue on 27
+September 2026. Native sign-in succeeded on the VPS, but `agy` 1.2.11 there and
+1.2.5 locally returned `FAILED_PRECONDITION: User location is not supported for
+the API use` for the signed-in GB account, reported upstream as
+[antigravity-cli#219](https://github.com/google-antigravity/antigravity-cli/issues/219).
+No Hydra defect was found. The remote prompt, recall and cancellation checks were
+not observed; Antigravity's earlier local result-byte preservation, recorded
+recall and cancellation qualification stands. Re-run the shared task if the
+upstream issue is resolved.
 
 Antigravity (`agy`), Cursor Agent (`cursor`), and OpenCode (`opencode`) now have
 implemented interactive and headless profiles. See [agent profiles and inputs](USAGE.md#agent-profiles-and-inputs)
@@ -472,7 +474,7 @@ to open work:
 | Discovery supplies untrusted coordinates and needs typed, private candidate state ([host discovery][src-host-report]). | [H4](#h-host-discovery-qualification-and-staged-onboarding). Next: select one live source, then implement and qualify bounded acquisition and snapshot diffs. |
 | Onboarding needs provenance, freshness, identity and typed progress ([host discovery][src-host-brief]). | [H5](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify review, filters, detail and interrupted multi-host progress. |
 | Changed keys and source conflicts require explicit revocation and review ([host discovery][src-host-report]). | [H6](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify scoped revocation and reviewed key rotation without cancelling or replaying tasks. |
-| Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 retains Antigravity (provider location refusal); Claude's and Cursor's (with the `--trust` profile fix) remote tasks passed on 26 September 2026. The operator-provided Ubuntu VPS runs 2.7.0 with tmux installed; prepare a separate tmux-absent environment for T2. |
+| Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 has no open provider checks: Claude's and Cursor's (with the `--trust` profile fix) remote tasks passed on 26 September 2026; Antigravity is closed upstream ([antigravity-cli#219](https://github.com/google-antigravity/antigravity-cli/issues/219)). The operator-provided Ubuntu VPS runs Hydra with tmux installed; prepare a separate tmux-absent environment for T2. |
 | Structural plan inspection and finite comparisons are implemented; broader planning-quality evaluation remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality). Next: define and measure matched held-out work before claiming planning benefit. |
 | Runtime membership/expansion, PTY server replacement, cloud-manager integration and shared inventory remain conditional ([optional tmux][src-tmux], [host discovery][src-host-brief]). | 9F's open expansion item and the conditional extensions below. Next: revisit only with an explicit authority, workload and acceptance decision. |
 
