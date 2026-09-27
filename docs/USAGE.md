@@ -477,8 +477,9 @@ input (keys go to Hydra, the view stays open), `Ctrl-B x` closes the view while 
 agent keeps running in its tmux session (`a` reopens it), `Ctrl-B n` switches agent
 and `Ctrl-B [` opens the agent's tmux history (PgUp/PgDn, `q` returns). A client
 that disconnects never holds input; `a` or `Ctrl-B r` reattaches. `p` shows a
-read-only transcript of the agent's terminal with its colors and wrapped long lines;
-key hints printed by the agent there only work in live input. The action
+read-only transcript of the agent's terminal with its colors and wrapped long lines
+(PgUp/PgDn scroll it); key hints printed by the agent there only work in live
+input. The action
 palette (`:`) still delegates interactive commands such as `switch` and `dashboard`
 to the shell CLI with argument-vector execution. Press `I` for the attention view;
 `j`/`k` or arrows select an item, `Enter` opens its detail, `s` marks that revision

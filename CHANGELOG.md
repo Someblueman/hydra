@@ -117,7 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   continuation marker instead of being clipped, action results and review logs
   wrap the same way, and unified diffs without their own colors get theme tones
   (added, removed, hunk and file header); with `NO_COLOR` or `--no-color` the
-  `+`/`-` markers remain. The excerpt is labelled a read-only transcript, and key
+  `+`/`-` markers remain. The excerpt is labelled a read-only transcript that
+  PgUp/PgDn scroll (result overlays page the same way), and key
   hints printed by the provider ("esc to interrupt", "← for agents") are named as
   belonging to live input.
 - termviz lays out emoji like tmux 3.5: ZWJ sequences, skin-tone modifiers and flag

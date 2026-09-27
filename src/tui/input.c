@@ -231,6 +231,17 @@ static void begin_paste_discard(struct app *app, char *key) {
     if (read_key(20, key) > 0) discard_input(app, *key);
 }
 
+/* PgUp/PgDn page read-only output: the result overlay or the Details
+ * transcript (rows back from its newest output). */
+static void page_output(struct app *app, bool up) {
+    size_t *rows = app->result_open ? &app->result_scroll : app->view == 1 && app->preview ? &app->preview_back : NULL;
+    size_t page = app->rows > 12 ? (size_t)app->rows / 2U : 6U;
+    bool back = app->result_open ? !up : up;
+    if (!rows) return;
+    if (back) *rows += page;
+    else *rows = *rows > page ? *rows - page : 0;
+}
+
 static void dispatch_escape(struct app *app, const char *sequence) {
     char ch;
     if (sequence[0] == '<') handle_mouse(app, sequence);
@@ -242,6 +253,7 @@ static void dispatch_escape(struct app *app, const char *sequence) {
         if (app->view == 7 && !app->help && !app->result_open) native_workspace_focus_previous(app);
         else if (!app->help && !app->result_open) select_tab(app, -1);
     }
+    else if (strcmp(sequence, "5~") == 0 || strcmp(sequence, "6~") == 0) page_output(app, sequence[0] == '5');
     else if (strcmp(sequence, "M") == 0) {
         /* Legacy X10 carries three bytes after CSI M; never treat them as keys. */
         discard_legacy_mouse(&ch);
@@ -406,7 +418,7 @@ static void head_key(struct app *app, char key) {
         case 'n': new_task_action(app); break;
         case 'a': attach_selected(app); break;
         case 'c': if (app->view == 1 && selected_head(app)) enter_view(app, 2); break;
-        case 'p': if (app->view != 1) enter_view(app, 1); app->preview = !app->preview; capture_preview(app); break;
+        case 'p': if (app->view != 1) enter_view(app, 1); app->preview = !app->preview; app->preview_back = 0; capture_preview(app); break;
         case 'd': if (app->view != 3 && app->view != 1) enter_view(app, 1); app->diagnostics = !app->diagnostics; break;
         case ' ': toggle_mark(app); break;
         case 'A': select_all_visible(app); break;

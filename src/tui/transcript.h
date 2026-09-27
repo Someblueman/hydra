@@ -23,8 +23,9 @@ struct transcript {
 };
 
 struct transcript_layout {
-    /* In: first row when not following; follow shows the newest rows. */
-    size_t scroll;
+    /* In: first row when not following; follow shows the newest rows, back
+     * rows before them. Out: both clamped to the document. */
+    size_t scroll, back;
     bool follow, color;
     /* Out: total wrapped rows, clamped scroll, and whether provider key hints
      * (for example "esc to interrupt") appear in the text. */

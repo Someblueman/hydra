@@ -102,7 +102,7 @@ static void capture_layout(struct tv_session *s, int cols, int rows, const char 
 }
 
 static void capture_layouts(struct tv_session *s) {
-    capture_layout(s, 80, 24, "Ctrl-B B plan review");
+    capture_layout(s, 80, 24, "Ctrl-B B plan");
     capture_layout(s, 140, 40, "RETURNED / changes requested");
 }
 

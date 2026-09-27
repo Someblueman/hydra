@@ -294,6 +294,8 @@ void transcript_render(struct transcript *t, struct tv_canvas *c, struct tv_rect
     length = visible_length(t, text, length);
     layout->rows = transcript_walk(t, NULL, area, text, length, 0, layout);
     last = layout->rows > room ? layout->rows - room : 0;
-    if (layout->follow || layout->scroll > last) layout->scroll = last;
+    if (layout->back > last) layout->back = last;
+    if (layout->follow) layout->scroll = last - layout->back;
+    else if (layout->scroll > last) layout->scroll = last;
     (void)transcript_walk(t, c, area, text, length, layout->scroll, layout);
 }

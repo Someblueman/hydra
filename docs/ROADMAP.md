@@ -61,11 +61,14 @@ actionable `invalid_source`, plans that carry their own prompts and assets,
 send-back and one-key execution approval, run notices to the planning agent, a
 larger agent pane, run/head/worker presentation, result review, attention
 acknowledgement and statistics; the leftover-worktree detection fix; the Cursor
-fix; and `hydra kill --dry-run`. Still to do in this release: U14 output fidelity
-(styled diffs, long lines, Unicode compared with real provider output), U16
-leaving attachment with real key events, a U18 extension to the result/diff and
-recovery journeys, and I4's visual pass. Then run the full release gates and a
-human review of the new screens.
+fix; and `hydra kill --dry-run`. U14 output fidelity (read-only transcripts with
+color, wrapped long lines and themed diffs, tmux-compatible emoji layout, compared
+with recorded Claude and Codex output) and U16 attachment exit (visible leave and
+close keys, released input on disconnect, tmux history, repeated PTY
+attach/leave/close/resize cycles) are implemented on local branches and await
+the human review. Still to do in this release: a U18 extension to the
+result/diff and recovery journeys, and I4's visual pass. Then run the full
+release gates and a human review of the new screens.
 
 The following release is expected to centre on U10 guided remote onboarding,
 including agent installation and per-user install detection found missing on 26

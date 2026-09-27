@@ -173,7 +173,8 @@ static void detail_preview_heading(struct app *app, bool headless) {
     section(app, headless ? "STEP OUTPUT" : "TERMINAL OUTPUT");
     style(app, TONE_MUTED);
     if (headless) linef(app, "Read-only view of the latest step on this head; refreshes every 2 seconds.");
-    else linef(app, "Read-only transcript; a opens live input, p or Esc closes it.");
+    else if (app->preview_back) linef(app, "Read-only transcript, %zu rows back; PgDn returns to the newest.", app->preview_back);
+    else linef(app, "Read-only transcript; PgUp scrolls, a opens live input, p or Esc closes.");
     if (app->ascii) linef(app, "ASCII fallback: the locale is not UTF-8, so other characters are approximated.");
     style(app, TONE_BASE);
 }
@@ -188,17 +189,18 @@ static void detail_preview(struct app *app, const struct head *head) {
     int top, limit = app->limit;
     detail_preview_heading(app, headless);
     top = app->line;
-    memset(&layout, 0, sizeof(layout)); layout.follow = true;
+    memset(&layout, 0, sizeof(layout)); layout.follow = true; layout.back = app->preview_back;
     app->limit = limit - 1;
     transcript_view(app, text, strlen(text), &layout);
     app->limit = limit;
     if (!layout.hints) {
         /* Without provider key hints the note row goes back to the output. */
         app->line = top;
-        memset(&layout, 0, sizeof(layout)); layout.follow = true;
+        memset(&layout, 0, sizeof(layout)); layout.follow = true; layout.back = app->preview_back;
         transcript_view(app, text, strlen(text), &layout);
-        return;
     }
+    app->preview_back = layout.back;
+    if (!layout.hints) return;
     app->line = limit - 1;
     style(app, TONE_MUTED);
     linef(app, "Key hints above belong to the agent's live input, not this view; a opens it.");

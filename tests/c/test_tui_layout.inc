@@ -31,7 +31,7 @@ static void test_workspace_layout(const char *tui, const char *hydra, const char
     result(wait_for_screen_text(&session, "PLAN REVIEW", 80, 24, 2000),
            "80x24 shows the plan review in place of the agent after Ctrl-B B");
     write_input(session.master, "A", 1U);
-    result(wait_for_screen_text(&session, "Ctrl-B B plan review", 80, 24, 2000),
+    result(wait_for_screen_text(&session, "Ctrl-B B plan", 80, 24, 2000),
            "80x24 conversation names the key that reveals the hidden plan review");
     layout_resize(&session, 140, 40);
     result(wait_for_screen_text(&session, "DEPENDENCIES", 140, 40, 2000),

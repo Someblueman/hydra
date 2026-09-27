@@ -202,6 +202,14 @@ int main(void) {
     details_claude(true);
     resize(80, 24);
     details_claude(false);
+    /* PgUp scrolls the read-only transcript back; PgDn returns to the newest. */
+    tv_send(&s, "\033[5~");
+    tv_until(&s, "rows back", 3);
+    clean_screen("scrolled transcript");
+    save("details-scrolled");
+    tv_send(&s, "\033[6~\033[6~\033[6~");
+    tv_until(&s, "PgUp scrolls", 3);
+    tv_until(&s, "for agents", 3);
     resize(140, 40);
     attached();
     resize(80, 24);
@@ -209,6 +217,14 @@ int main(void) {
     tv_until(&s, "for agents", 5);
     clean_screen("attached after resize");
     save("attached");
+    {
+        /* The whole PTY byte stream, replayable with cat, for human review. */
+        char path[4096];
+        FILE *out;
+        tv_format(path, sizeof(path), "%s/session.raw", evidence);
+        out = fopen(path, "wb");
+        CHECK(out && fwrite(s.raw, 1, s.raw_size, out) == s.raw_size && !fclose(out), "raw PTY log");
+    }
     tv_close(&s, "\002q", 0, 0);
     hf_cleanup();
     {

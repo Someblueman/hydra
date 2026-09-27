@@ -67,6 +67,8 @@ struct app {
     char notice[TEXT];
     char snapshot_error[TEXT];
     char preview_text[32768];
+    /* Rows the Details transcript is scrolled back from its newest output. */
+    size_t preview_back;
     /* The head whose step output an asynchronous preview read belongs to. */
     char preview_head[TEXT];
     /* Work outline: runs the user expanded, and whether a run row rather
