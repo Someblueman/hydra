@@ -66,6 +66,8 @@ Commands:
   wait <head>       Wait for durable lifecycle evidence
   adapter ingest    Ingest a canonical provider-neutral adapter event
   resume <head>     Create a new instance using durable resume metadata
+                    --terminal: restart only a stopped interactive terminal;
+                    requires the existing worktree and never recreates it
   notify            Configure rate-limited local lifecycle notifications
   exec              Run an out-of-band command in selected worktrees
                     Options:

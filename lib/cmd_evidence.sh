@@ -176,10 +176,29 @@ _cmd_resume_abort() {
     return 1
 }
 
+# --terminal restarts only the terminal of an interactive head whose tmux
+# session is gone: it requires the recorded worktree and never creates, resets
+# or cleans it, so committed and uncommitted work stay exactly as they are.
+_cmd_resume_terminal_check() {
+    if [ "$_cr_terminal_mode" = headless ]; then
+        echo "Error: head '$_cr_branch' is headless and has no terminal to restart" >&2
+        return 1
+    fi
+    if [ -z "$_cr_worktree" ] || [ ! -d "$_cr_worktree" ] || [ ! -e "$_cr_worktree/.git" ]; then
+        echo "Error: the worktree of '$_cr_branch' is missing${_cr_worktree:+ ($_cr_worktree)}; Hydra will not recreate it when restarting a terminal. Inspect it with 'hydra lifecycle $_cr_branch', or remove the head" >&2
+        return 1
+    fi
+}
+
 cmd_resume() {
+    _cr_terminal_only=0
+    if [ "${1:-}" = --terminal ]; then
+        _cr_terminal_only=1
+        shift
+    fi
     _cr_branch="${1:-}"
     if [ -z "$_cr_branch" ] || [ $# -ne 1 ]; then
-        echo "Usage: hydra resume <branch>" >&2
+        echo "Usage: hydra resume [--terminal] <branch>" >&2
         return 1
     fi
     lifecycle_load_head "$_cr_branch" || return 1
@@ -192,6 +211,7 @@ cmd_resume() {
         return 1
     fi
     _cr_worktree="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/worktree" 2>/dev/null || true)"
+    if [ "$_cr_terminal_only" -eq 1 ]; then _cmd_resume_terminal_check || return 1; fi
     [ -n "$_cr_worktree" ] || { echo "Error: head has no stored worktree path" >&2; return 1; }
     _cr_profile="$(sed -n '1p' "$LIFECYCLE_HEAD_DIR/profile" 2>/dev/null || true)"
     if [ -z "$_cr_profile" ] || [ "$_cr_profile" = - ]; then
@@ -228,7 +248,9 @@ _cmd_resume_admitted() {
 }
 
 _cmd_resume_instance() {
-    if [ ! -d "$_cr_worktree" ]; then
+    if [ "$_cr_terminal_only" -eq 1 ]; then
+        _cmd_resume_terminal_check || return 1
+    elif [ ! -d "$_cr_worktree" ]; then
         create_worktree "$_cr_branch" "$_cr_worktree" || return 1
     fi
     if [ "$_cr_terminal_mode" = headless ]; then

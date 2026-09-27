@@ -152,8 +152,38 @@ static bool attachment_argv(const struct app *app, const struct head *h,
     return true;
 }
 
+/* A recorded local interactive head whose tmux session is gone, and that is
+ * not being torn down: opening it restarts its terminal. */
+bool head_terminal_gone(const struct app *app, const struct head *h) {
+    return h && !app->fleet && !head_headless(h) && h->head_id[0] && h->instance[0] && strcmp(h->instance, "-") &&
+        !strcmp(h->liveness, "stopped") && strcmp(h->desired, "stopping") && strcmp(h->desired, "stopped");
+}
+
+/* Restarts the terminal through the public CLI, which requires the existing
+ * worktree and never creates, resets or cleans it; the head's profile decides
+ * what starts in it (its resume recipe, or a shell for none). The pane opens
+ * once the next snapshot shows the new instance. */
+static bool terminal_restore(struct app *app, const struct head *h) {
+    char branch[TEXT], output[8192], title[TEXT + 64];
+    char *argv[] = {(char *)app->hydra, (char *)"resume", (char *)"--terminal", branch, NULL};
+    copy_text(branch, sizeof(branch), h->branch);
+    if (run_captured(app, argv, output, sizeof(output), 60000L)) {
+        snprintf(title, sizeof(title), "Terminal for %s not restarted; its worktree and files are unchanged", branch);
+        show_result(app, title, output);
+        return false;
+    }
+    snprintf(app->notice, sizeof(app->notice), "Terminal for %s restarted in its worktree; opening it...", branch);
+    copy_text(app->pending_task, sizeof(app->pending_task), branch);
+    native_observations_cancel(app, 0);
+    native_observations_tick(app, true);
+    return false;
+}
+
+/* The user opening the selected head: a gone terminal is restarted first. */
 bool native_terminal_attach(struct app *app) {
-    return native_terminal_attach_head(app, selected_head(app));
+    const struct head *h = selected_head(app);
+    if (head_terminal_gone(app, h)) return terminal_restore(app, h);
+    return native_terminal_attach_head(app, h);
 }
 
 static bool terminal_start(struct app *app, const struct head *h, size_t available);
@@ -162,6 +192,9 @@ bool native_terminal_attach_head(struct app *app, const struct head *h) {
     size_t available;
     if (h && !app->fleet && head_headless(h)) {
         copy_text(app->notice,sizeof(app->notice),"Headless head: it has no terminal to attach; p shows its step output in Details"); return false;
+    }
+    if (head_terminal_gone(app, h)) {
+        copy_text(app->notice,sizeof(app->notice),"The terminal is gone; open the head from Work (a) to restart it"); return false;
     }
     if (!h || !h->head_id[0] || !h->instance[0] || !strcmp(h->instance,"-") ||
         !strcmp(h->desired,"headless")) {

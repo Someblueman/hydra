@@ -261,6 +261,7 @@ struct native_terminal *native_terminal_for_head(struct app *app, const struct h
 bool native_terminal_attach_head(struct app *app, const struct head *h);
 bool native_terminal_deliver(struct app *app, struct native_terminal *t, const char *text, bool submit);
 const char *native_agent_name(const struct head *h);
+bool head_terminal_gone(const struct app *app, const struct head *h);
 void native_terminal_close(struct native_terminal *t);
 /* Enters (or leaves) the agent's own tmux history for a local attachment;
  * false when that history is unavailable and the client's model scrolls. */
