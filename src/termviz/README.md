@@ -99,10 +99,17 @@ and agents remain owned by tmux, independently of those clients.
 
 Unicode widths use checked-in Unicode 17.0.0 East Asian Width and General Category
 data. W/F codepoints take two cells; ambiguous characters take one; up to three
-Mn/Me combining marks attach to a base. Invalid UTF-8 and control/format characters
-become `?`. ASCII mode replaces non-ASCII scalars. This is terminal cell layout,
-not general grapheme shaping: joined emoji, bidirectional shaping and font-specific
-ligatures are not implemented. Terminal/font width disagreement remains possible.
+joined scalars attach to a base cell. Joining follows tmux 3.5: Mn/Me marks, a ZWJ
+and the scalar after it, and emoji skin-tone modifiers attach to the preceding
+cell; VS16 after a narrow symbol and a regional-indicator pair make that cell two
+columns wide. Invisible format characters (ZWSP, bidirectional controls) are
+dropped and a soft hyphen shows as `-`. Invalid UTF-8 and C0/C1 controls become
+`?`. ASCII mode replaces non-ASCII scalars with readable approximations (box
+drawing keeps its direction, arrows, bullets, quotes and Latin-1 letters map to
+ASCII, anything else becomes `?`) in the same columns. This is terminal cell
+layout, not general grapheme shaping: sequences longer than three joined scalars
+are truncated, and bidirectional shaping and font-specific ligatures are not
+implemented. Terminal/font width disagreement remains possible.
 See the Unicode data license and provenance in `unicode_tables.inc`.
 
 Canvas dimensions are bounded to 4096x4096 and available caller storage; demos and

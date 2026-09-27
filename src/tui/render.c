@@ -208,6 +208,45 @@ void paragraph(struct app *app, const char *text, enum tv_style tone) {
     app->tone = saved;
 }
 
+static struct transcript *view_transcript(struct app *app) {
+    if (!app->transcript) app->transcript = transcript_new();
+    return app->transcript;
+}
+
+void transcript_view(struct app *app, const char *text, size_t length, struct transcript_layout *layout) {
+    struct tv_rect area = {app->content_x, app->line, app->content_width, app->limit - app->line};
+    struct transcript *t = view_transcript(app);
+    layout->color = !app->no_color;
+    if (!t) { layout->rows = layout->drawn = 0; linef(app, "Output unavailable: out of memory"); return; }
+    transcript_render(t, &app->frame, area, text, length, layout);
+    app->line += (int)layout->drawn;
+}
+
+void transcript_view_reset(struct app *app) {
+    if (view_transcript(app)) transcript_reset(app->transcript);
+}
+
+/* Printable ASCII cannot change rendition, so its rows follow from its length. */
+static size_t plain_rows(const char *text, size_t length, int width) {
+    size_t i, room = width > 2 ? (size_t)width : 2;
+    for (i = 0; i < length; i++) if ((unsigned char)text[i] < 32 || (unsigned char)text[i] > 126) return 0;
+    while (length && text[length - 1] == ' ') length--;
+    return length <= room ? 1 : 1 + (length - room + room - 2) / (room - 1);
+}
+
+size_t transcript_line_view(struct app *app, const char *text, size_t length, enum tv_style tone, size_t row, size_t scroll) {
+    struct transcript *t = view_transcript(app);
+    size_t rows = plain_rows(text, length, app->content_width);
+    if (rows && (row + rows <= scroll || app->line >= app->limit)) return rows;
+    if (!t) { if (row >= scroll) linef(app, "%.*s", (int)(length > 1024 ? 1024 : length), text); return 1; }
+    transcript_parse(t, text, length);
+    rows = transcript_rows(t, app->content_width);
+    if (row + rows > scroll && app->line < app->limit)
+        app->line += transcript_draw(t, &app->frame, (struct tv_rect){app->content_x, app->line, app->content_width,
+            app->limit - app->line}, scroll > row ? scroll - row : 0, tone, !app->no_color);
+    return rows;
+}
+
 void section(struct app *app, const char *label) {
     if (app->line < app->limit) linef(app, "");
     style(app, TONE_BORDER); linef(app, "%s", label); style(app, TONE_BASE);
@@ -599,17 +638,15 @@ static void render_help(struct app *app) {
     linef(app, "t  theme (terminal / dark / light)    D  statistics    I  attention    ?  close help    q  quit");
 }
 
+/* Command output wraps instead of clipping; j/k scroll by wrapped rows. */
 static void render_result(struct app *app) {
-    const char *text = app->result_text;
-    size_t line = 0;
+    struct transcript_layout layout;
     style(app, TONE_BASE);
-    if (!text[0]) { linef(app, "No output."); return; }
-    while (*text && app->line < app->limit) {
-        const char *end = strchr(text, '\n');
-        size_t length = end ? (size_t)(end - text) : strlen(text);
-        if (line++ >= app->result_scroll) linef(app, "%.*s", (int)(length > 1024 ? 1024 : length), text);
-        text += length + (end ? 1 : 0);
-    }
+    if (!app->result_text[0]) { linef(app, "No output."); return; }
+    memset(&layout, 0, sizeof(layout));
+    layout.scroll = app->result_scroll;
+    transcript_view(app, app->result_text, strlen(app->result_text), &layout);
+    app->result_scroll = layout.scroll;
 }
 
 static void render_content(struct app *app) {

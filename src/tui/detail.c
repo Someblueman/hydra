@@ -168,29 +168,41 @@ static void detail_checks(struct app *app, const struct head *head) {
     labelled_at(app, 19, "Messages", approvals, TV_BASE);
 }
 
-static size_t preview_skip(const char *text, int room) {
-    size_t lines = 1;
-    for (; *text; text++) if (*text == '\n') lines++;
-    return room > 0 && lines > (size_t)room ? lines - (size_t)room : 0;
+/* What the transcript is and that keys shown inside it need live input. */
+static void detail_preview_heading(struct app *app, bool headless) {
+    section(app, headless ? "STEP OUTPUT" : "TERMINAL OUTPUT");
+    style(app, TONE_MUTED);
+    if (headless) linef(app, "Read-only view of the latest step on this head; refreshes every 2 seconds.");
+    else linef(app, "Read-only transcript of the agent's terminal. a opens live input; p or Esc closes.");
+    if (app->ascii) linef(app, "ASCII fallback: the locale is not UTF-8, so other characters are approximated.");
+    style(app, TONE_BASE);
 }
 
-/* The newest lines that fit, so a live stream keeps its latest events visible. */
+/* The newest rows that fit, so a live stream keeps its latest events visible.
+ * Long lines wrap with a continuation marker; colors and diffs are kept. */
 static void detail_preview(struct app *app, const struct head *head) {
-    char preview[sizeof(app->preview_text)];
-    char *line, *save = NULL;
-    size_t skip;
+    struct transcript_layout layout;
     bool headless = head_headless(head);
-    section(app, headless ? "STEP OUTPUT" : "TERMINAL OUTPUT");
-    linef(app, headless ? "Read-only view of the latest step on this head; refreshes every 2 seconds." :
-          "Read-only, clipped plain-text excerpt; a opens live input.");
-    copy_text(preview, sizeof(preview), app->preview_text[0] ? app->preview_text :
-              headless ? "Reading the step output..." : "No terminal output available.");
-    skip = preview_skip(preview, app->limit - app->line);
-    for (line = strtok_r(preview, "\n", &save); line && app->line < app->limit; line = strtok_r(NULL, "\n", &save)) {
-        line[strcspn(line, "\r")] = '\0';
-        if (skip) skip--;
-        else linef(app, "%s", line);
+    const char *text = app->preview_text[0] ? app->preview_text :
+        headless ? "Reading the step output..." : "No terminal output available.";
+    int top, limit = app->limit;
+    detail_preview_heading(app, headless);
+    top = app->line;
+    memset(&layout, 0, sizeof(layout)); layout.follow = true;
+    app->limit = limit - 1;
+    transcript_view(app, text, strlen(text), &layout);
+    app->limit = limit;
+    if (!layout.hints) {
+        /* Without provider key hints the note row goes back to the output. */
+        app->line = top;
+        memset(&layout, 0, sizeof(layout)); layout.follow = true;
+        transcript_view(app, text, strlen(text), &layout);
+        return;
     }
+    app->line = limit - 1;
+    style(app, TONE_MUTED);
+    linef(app, "Key hints above belong to the agent's live input; they do nothing here. Press a to use them.");
+    style(app, TONE_BASE);
 }
 
 static void detail_next(struct app *app, const struct head *head) {

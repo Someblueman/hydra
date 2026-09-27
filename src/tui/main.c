@@ -49,6 +49,7 @@ static int render_fixture(struct app *app, const char *fixture, const char *work
     native_attention_destroy(app);
     native_workspace_destroy(app);
     statistics_destroy(app);
+    transcript_free(app->transcript); app->transcript = NULL;
     frame_free(app);
     if (terminal_stopped()) return terminal_exit_status();
     return ferror(stdout) ? 3 : 0;
@@ -138,6 +139,7 @@ int main(int argc, char **argv) {
     native_attention_destroy(&app);
     native_plan_destroy(&app);
     statistics_destroy(&app);
+    transcript_free(app.transcript);
     frame_free(&app);
     return index;
 }

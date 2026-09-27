@@ -1,7 +1,7 @@
 /* Unicode 17.0.0 data, generated from EastAsianWidth.txt and
  * extracted/DerivedGeneralCategory.txt. See UNICODE-LICENSE.txt.
- * W/F => two columns; Mn/Me => combining. Other format controls are
- * rejected by text rendering rather than emitted into the outer terminal. */
+ * W/F => two columns; Mn/Me => combining. Other format characters are
+ * dropped by cell layout rather than emitted into the outer terminal. */
 static const struct interval wide[] = {
     {0x1100U, 0x115fU}, {0x231aU, 0x231bU}, {0x2329U, 0x232aU},
     {0x23e9U, 0x23ecU}, {0x23f0U, 0x23f0U}, {0x23f3U, 0x23f3U},

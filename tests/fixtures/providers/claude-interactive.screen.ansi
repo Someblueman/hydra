@@ -1,0 +1,40 @@
+[48;5;237m  [38;5;231mfenced diff code block):[39m
+
+  [38;5;231mUnicode check: café, naïve, 界面 (CJK), emoji 🚀✅, arrows → ←, box ┌─┐└─┘, combining é.[39m
+
+  [32m--- a/greeting.txt[39m
+  [32m+++ b/greeting.txt[39m
+  [90m@@ -1,3 +1,3 @@[39m
+  [38;5;231m hello[39m
+  [31m-wörld[39m
+  [32m+world ✓[39m
+  [38;5;231m end[39m
+
+  [38;5;231mLONGLINE: alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho[39m
+  [38;5;231m-sigma-tau-upsilon-phi-chi-psi-omega-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lam[39m
+  [38;5;231mbda-mu-nu-xi-omicron-pi-rho-sigma-tau-END[39m
+
+[38;5;231m[49m⏺[39m Unicode check: café, naïve, 界面 (CJK), emoji 🚀✅, arrows → ←, box ┌─┐└─┘, combining é.
+
+  [32m--- a/greeting.txt[39m
+  [32m+++ b/greeting.txt[39m
+  [90m@@ -1,3 +1,3 @@[39m
+   hello
+  [31m-wörld[39m
+  [32m+world ✓[39m
+   end
+
+  LONGLINE: alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho-
+  sigma-tau-upsilon-phi-chi-psi-omega-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambd
+  a-mu-nu-xi-omicron-pi-rho-sigma-tau-END
+
+[38;5;246m✻[39m [38;5;246mBaked for 5s · done 5:07[39m
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────
+[39m❯ 
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────
+[39m  [1m[36m[/tmp/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-/…[0m
+  [38;5;246m⏸[39m [38;5;246mmanual[39m [38;5;246mmode[39m [38;5;246mon[39m [38;5;246m·[39m [38;5;246m←[39m [38;5;246mfor[39m [38;5;246magents[39m
+                                                              [38;5;220mauto mode unavailable for this model[39m
+                                                                                               [38;5;75m]8;id=1rqh595;https://claude.ai/code/session_000000000000000000000000?from=cli\/rc[39m]8;;\
+

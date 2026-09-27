@@ -38,13 +38,31 @@ bool tv_cell_equal(const struct tv_cell *a, const struct tv_cell *b);
 /* Locale-independent Unicode 17.0 widths: ambiguous=1, W/F=2, Mn/Me=0.
  * Control/format codepoints return -1. No emoji/ZWJ grapheme shaping. */
 int tv_codepoint_width(uint32_t cp);
+/* How a scalar lays out after the preceding cell (NULL at a line start):
+ * NONE starts a new cell; ATTACH stores it on the previous cell (combining
+ * marks, ZWJ sequences, emoji modifiers); WIDEN attaches VS16 or a second
+ * regional indicator and makes the narrow base two cells, as tmux 3.5 does; DROP
+ * discards invisible format characters. C0/C1 controls return NONE and are
+ * shown as '?' by the drawing functions. */
+enum tv_join { TV_JOIN_NONE, TV_JOIN_ATTACH, TV_JOIN_WIDEN, TV_JOIN_DROP };
+enum tv_join tv_cell_join(const struct tv_cell *previous, uint32_t cp);
+/* ASCII approximation used by ASCII mode: box drawing keeps line direction,
+ * arrows, bullets, quotes and Latin-1 letters map to readable ASCII, and
+ * anything else becomes '?'. ASCII input is returned unchanged. */
+uint32_t tv_ascii_fallback(uint32_t cp);
 /* Decode consumes one invalid byte as '?'; 0 means incomplete/empty input. */
 size_t tv_utf8_decode(const char *input, size_t size, uint32_t *cp);
 size_t tv_utf8_encode(uint32_t cp, char output[4]);
 /* Drawing clips to the canvas. UTF-8 text is width-aware; invalid/control bytes
- * become '?'. Up to three combining marks attach to the preceding base cell.
- * ASCII mode replaces non-ASCII scalars; it does not emit UTF-8. */
+ * become '?'. Up to three joined scalars attach to the preceding base cell.
+ * ASCII mode replaces non-ASCII scalars with tv_ascii_fallback, keeps a wide
+ * scalar's two columns and drops joined scalars; it does not emit UTF-8. */
 void tv_put(struct tv_canvas *canvas, int x, int y, uint32_t glyph, enum tv_style style);
+/* Lays out one scalar at column x of row area.y, clustering it with the
+ * preceding cell per tv_cell_join (never with cells left of area.x). Returns
+ * the columns advanced (0 when joined or dropped), or -1 without drawing
+ * when the scalar needs more columns than remain before the area's end. */
+int tv_put_scalar(struct tv_canvas *canvas, struct tv_rect area, int x, uint32_t glyph, enum tv_style style);
 void tv_text(struct tv_canvas *canvas, struct tv_rect area, const char *text, enum tv_style style);
 void tv_panel(struct tv_canvas *canvas, struct tv_rect area, const char *title);
 /* Panel with explicit border and title styles, for focus indication. */
