@@ -434,7 +434,8 @@ static void wrapped_line(struct app *app, const char *text, size_t length, size_
 }
 
 /* A section heading is an upper-case word of three or more letters at the
- * start of a line, ended by two spaces or the line end (e.g. "DIFF  ..."). */
+ * start of a line, ended by two spaces or the line end (e.g. "DIFF  ...").
+ * "CHANGES ON <branch>" names its branch, so the renderer matches it by prefix. */
 static bool heading_line(const char *text, size_t length)
 {
     size_t i = 0U;
@@ -472,7 +473,7 @@ static void render_text(struct app *app, struct native_review *review, const cha
         end = strchr(text, '\n');
         if (!end) end = text + strlen(text);
         length = (size_t)(end - text);
-        if (heading_line(text, length)) {
+        if (heading_line(text, length) || starts(text, length, "CHANGES ON ")) {
             diff = starts(text, length, "DIFF");
             if (review->heading_count < REVIEW_HEADINGS) review->headings[review->heading_count++] = *row;
         }

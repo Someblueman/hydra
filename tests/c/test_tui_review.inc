@@ -260,11 +260,16 @@ static void review_result_case(struct session *session, struct review_fixture *f
     for (size_t i = 0U; i < 40U; i++) { used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tproduced filler %zu\n", i); lines++; }
     used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tHOW IT WAS VERIFIED\nTEXT\t    Full log: press L\n"); lines += 2U;
     for (size_t i = 0U; i < 40U; i++) { used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tverified filler %zu\n", i); lines++; }
+    used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tCHANGES ON plan-x-worker  (1 commit, 1 file, +1 -0; the branch as it is now)\n"
+        "TEXT\t  file  +1     -0     CHANGED-FILE-MARKER\n"); lines += 2U;
+    for (size_t i = 0U; i < 40U; i++) { used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tchanges filler %zu\n", i); lines++; }
     written = snprintf(text + used, 65536U - used, "TEXT\tDIFF  (complete)\nTEXT\t    +added line\nREF\tlog\tavailable\t%s\nEND\t%zu\t1\t0\n", log, lines + 2U);
     if (written < 0 || (size_t)written >= 65536U - used) { free(text); unlink(log); result(false, "result review fits"); return; }
     result(review_reload(session, fixture, text, "RESULT  plan-x"), "result review loads");
     write_input(session->master, "n", 1U); write_input(session->master, "n", 1U);
     result(wait_for_markers(session, "HOW IT WAS VERIFIED", "Full log: press L", 1000), "n jumps to the next section heading");
+    write_input(session->master, "n", 1U);
+    result(wait_for_markers(session, "CHANGES ON plan-x-worker", "CHANGED-FILE-MARKER", 1000), "n reaches the worker branch's changes");
     write_input(session->master, "n", 1U);
     result(wait_for_marker(session, "+added line", 1000), "n reaches the diff section");
     write_input(session->master, "L", 1U);
