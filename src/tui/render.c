@@ -108,7 +108,7 @@ static void text_at(struct app *app, int x, int width, enum tv_style tone, const
 }
 
 /* Fixed-width column inside the content area. Text is clipped to width. */
-static void column(struct app *app, int x, int width, enum tv_style tone, const char *text) {
+void column(struct app *app, int x, int width, enum tv_style tone, const char *text) {
     text_at(app, app->content_x + x, width, tone, text);
 }
 
@@ -150,19 +150,6 @@ enum tv_style status_tone(const struct head *head) {
     return TV_WARNING;
 }
 
-/* Heads that need a person: not running, or waiting for an approval. */
-size_t attention_count(const struct app *app) {
-    size_t i, count = 0;
-    for (i = 0; i < app->model.head_count; i++) {
-        const struct head *h = &app->model.heads[i];
-        if (app->fleet) continue;
-        if (strcmp(display_status(h), "LIVE") || h->gates > h->approved) count++;
-    }
-    return count;
-}
-
-/* The same agent name labels lists, details and attached panes. */
-static const char *agent_label(const struct head *head) { return native_agent_name(head); }
 
 static void record_hit(struct app *app, size_t index) {
     if (app->line >= app->limit || app->hit_count >= MAX_HEADS) return;
@@ -203,7 +190,7 @@ void recovery_explain(const struct recovery *item, char *title, size_t title_siz
 }
 
 /* Wrap plain text into the content area. */
-static void paragraph(struct app *app, const char *text, enum tv_style tone) {
+void paragraph(struct app *app, const char *text, enum tv_style tone) {
     size_t length = strlen(text), offset = 0;
     size_t width = (size_t)app->content_width;
     int saved = app->tone;
@@ -221,12 +208,12 @@ static void paragraph(struct app *app, const char *text, enum tv_style tone) {
     app->tone = saved;
 }
 
-static void section(struct app *app, const char *label) {
+void section(struct app *app, const char *label) {
     if (app->line < app->limit) linef(app, "");
     style(app, TONE_BORDER); linef(app, "%s", label); style(app, TONE_BASE);
 }
 
-static void pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
+void pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
                  const char *right_label, const char *right, enum tv_style right_tone) {
     if (app->line >= app->limit) return;
     if (app->content_width < 56) {
@@ -308,14 +295,17 @@ static void header_project(const struct app *app, char *project, size_t size) {
     snprintf(project, size, "%.60s%s", name && name[1] ? name + 1 : app->links->root, dot(app));
 }
 
+/* Counts describe tasks the user started; heads a run created are counted
+ * once, inside their run. */
 static void header_summary(const struct app *app, const char *project, char *right, size_t size) {
     const char *sep = dot(app);
-    size_t i, running = 0;
-    for (i = 0; i < app->model.head_count; i++) if (!strcmp(display_status(&app->model.heads[i]), "LIVE")) running++;
-    if (app->fleet) snprintf(right, size, "%sFleet%s%zu remote heads%s%zu hosts", project, sep, app->model.head_count, sep, app->model.host_count);
-    else if (!app->model.head_count) snprintf(right, size, "%sLocal%sno agent work yet", project, sep);
-    else snprintf(right, size, "%sLocal%s%zu heads%s%zu running%s%zu need attention%s%zu to repair", project, sep,
-                  app->model.head_count, sep, running, sep, attention_count(app), sep, app->model.recovery_count);
+    struct work_counts n;
+    if (app->fleet) { snprintf(right, size, "%sFleet%s%zu remote heads%s%zu hosts", project, sep, app->model.head_count, sep, app->model.host_count); return; }
+    if (!app->model.head_count) { snprintf(right, size, "%sLocal%sno agent work yet", project, sep); return; }
+    work_counts(app, &n);
+    snprintf(right, size, "%sLocal%s%zu head%s", project, sep, n.heads, n.heads == 1 ? "" : "s");
+    if (n.run_heads) text_append(right, size, " (+%zu in runs)", n.run_heads);
+    text_append(right, size, "%s%zu running%s%zu need attention%s%zu to repair", sep, n.running, sep, n.attention, sep, app->model.recovery_count);
 }
 
 /* Display columns of UTF-8 text counting one per scalar (chrome uses narrow glyphs). */
@@ -348,19 +338,7 @@ void chrome_footer(struct app *app, struct tv_canvas *c, const char *status, enu
     (void)app;
 }
 
-struct head_columns { const char *name, *status, *agent, *reported; int status_x, agent_x, reported_x, name_width; bool wide, medium; };
-
-static void head_row_text(const struct app *app, const struct head *head, struct head_columns *k) {
-    if (head == NULL) {
-        k->name = "HEAD"; k->status = app->fleet ? "DESIRED" : "STATUS";
-        k->agent = app->fleet ? "HOST" : "AGENT"; k->reported = "REPORTED";
-        return;
-    }
-    k->name = app->fleet && head->remote_branch[0] ? head->remote_branch : head->branch;
-    k->status = app->fleet ? head->desired : status_label(head);
-    k->agent = app->fleet ? head->remote_host : agent_label(head);
-    k->reported = head->declared[0] ? head->declared : "-";
-}
+struct head_columns { int status_x, agent_x, reported_x, name_width; bool wide, medium; };
 
 static void head_row_layout(int width, struct head_columns *k) {
     k->wide = width >= 95; k->medium = width >= 65;
@@ -371,32 +349,43 @@ static void head_row_layout(int width, struct head_columns *k) {
     k->name_width = k->status_x - 4;
 }
 
-static enum tv_style head_status_tone(const struct app *app, const struct head *head, bool selected) {
-    if (head == NULL) return TV_MUTED;
-    if (selected) return TV_SELECTED;
-    return app->fleet ? TV_BASE : status_tone(head);
+static void outline_heading(const struct app *app, struct outline_text *t) {
+    copy_text(t->name, sizeof(t->name), "HEAD");
+    t->status = app->fleet ? "DESIRED" : "STATUS"; t->agent = app->fleet ? "HOST" : "AGENT";
+    t->reported = "REPORTED"; t->tone = TV_MUTED;
 }
 
-/* Work list: aligned columns, status tone only on the status cell. */
-static void head_row(struct app *app, const struct head *head, bool selected) {
+static bool outline_marked(const struct app *app, const struct outline_row *row) {
+    return row && row->kind == OUTLINE_HEAD && marked_index(app, app->model.heads[row->head].branch) < app->marked_count;
+}
+
+static enum tv_style outline_tone(const struct outline_row *row, bool selected) {
+    if (!row || row->kind == OUTLINE_RETIRED) return TV_MUTED;
+    return selected ? TV_SELECTED : TV_BASE;
+}
+
+/* Work list: aligned columns, status tone only on the status cell. A NULL
+ * row draws the column headings. */
+static void outline_line(struct app *app, const struct outline_row *row, bool selected) {
     int width = app->content_width;
     struct head_columns k;
-    char lead[TEXT + 4];
-    enum tv_style row_tone = head == NULL ? TV_MUTED : selected ? TV_SELECTED : TV_BASE;
-    bool marked = head != NULL && marked_index(app, head->branch) < app->marked_count;
+    struct outline_text t;
+    char cell[TEXT + 96];
+    enum tv_style row_tone = outline_tone(row, selected);
     if (app->line >= app->limit) return;
-    head_row_text(app, head, &k);
     head_row_layout(width, &k);
-    snprintf(lead, sizeof(lead), "%c%c %s", head == NULL ? ' ' : selected ? '>' : ' ', marked ? '*' : ' ', k.name);
+    if (row) outline_row_text(app, row, &t);
+    else outline_heading(app, &t);
+    snprintf(cell, sizeof(cell), "%c%c %s", selected ? '>' : ' ', outline_marked(app, row) ? '*' : ' ', t.name);
     if (selected) column(app, 0, width, TV_SELECTED, "");
-    column(app, 0, k.name_width + 3, row_tone, lead);
-    column(app, k.status_x, 14, head_status_tone(app, head, selected), k.status);
-    if (k.medium || k.wide) column(app, k.agent_x, k.wide ? 15 : 14, row_tone, k.agent);
-    if (k.wide && !app->fleet) column(app, k.reported_x, 12, row_tone, k.reported);
+    column(app, 0, k.name_width + 3, row_tone, cell);
+    column(app, k.status_x, 14, selected ? TV_SELECTED : t.tone, t.status);
+    if (k.medium || k.wide) column(app, k.agent_x, k.wide ? 15 : 14, row_tone, t.agent);
+    if (k.wide && !app->fleet) column(app, k.reported_x, 12, row_tone, t.reported);
     app->line++;
 }
 
-static void render_empty_work(struct app *app) {
+void render_empty_work(struct app *app) {
     linef(app, "");
     style(app, TONE_STRONG);
     linef(app, app->search[0] ? "No heads match the search." : app->fleet ? "No remote heads." : "No agent work in this project yet.");
@@ -412,176 +401,93 @@ static void render_empty_work(struct app *app) {
 /* One-panel summary of the selected head under the list. */
 static void summary_line(struct app *app, const struct head *head, char *line, size_t size) {
     const char *sep = dot(app);
+    char agent[TEXT + 96];
     if (app->fleet) {
         snprintf(line, size, "Host %.100s%sdesired %.40s%sproject %.300s", head->remote_host, sep, head->desired, sep, head->remote_project);
         return;
     }
+    head_agent_text(app, head, agent, sizeof(agent));
     if (!head->head_id[0]) {
-        snprintf(line, size, "Agent %s%ssession %s%sno head record; counters unknown", agent_label(head), sep, status_label(head), sep);
+        snprintf(line, size, "Agent %s%ssession %s%sno head record; counters unknown", agent, sep, status_label(head), sep);
         return;
     }
-    snprintf(line, size, "%s%s%s%s%u changed files%s%u of %u approvals%s", agent_label(head), sep,
-             status_label(head), sep, head->diff, sep, head->approved, head->gates, head->declared[0] ? sep : "");
-    if (head->declared[0]) text_append(line, size, "reported %.63s", head->declared);
+    snprintf(line, size, "%s%s%s%s%u changed file%s", agent, sep,
+             head_headless(head) ? "headless (no terminal)" : status_label(head), sep, head->diff, head->diff == 1 ? "" : "s");
+    if (head->gates) text_append(line, size, "%s%u of %u approval requests approved", sep, head->approved, head->gates);
+    if (head->declared[0]) text_append(line, size, "%sreported %.63s", sep, head->declared);
 }
 
-static void render_selected_summary(struct app *app, const struct head *head) {
-    char line[512];
+static void summary_actions(struct app *app, const struct head *head, char *line, size_t size) {
     const char *sep = dot(app);
+    if (app->fleet) snprintf(line, size, "Enter details%sa attach to terminal%sc interrupt", sep, sep);
+    else if (!head->head_id[0]) snprintf(line, size, "Enter details%sx remove", sep);
+    else if (head_headless(head)) snprintf(line, size, "Enter details%sp step output%sx %s%s: more actions", sep, sep,
+                                           head_run_role(app, head) && !strcmp(head_run_role(app, head), "worker") ? "dismiss (keeps the branch)" : "remove", sep);
+    else snprintf(line, size, "Enter details%sa talk to the agent%sx remove%s: more actions", sep, sep, sep);
+}
+
+static void summary_panel(struct app *app, const char *title, const char *first, const char *second) {
     struct tv_rect r = {app->content_x - 1, app->line + 1, app->content_width + 2, app->limit - app->line - 1};
     if (r.height > 5) r.height = 5;
-    tv_panel_styled(&app->frame, r, head->branch, TV_BORDER, TV_STRONG);
+    tv_panel_styled(&app->frame, r, title, TV_BORDER, TV_STRONG);
     app->line = r.y + 1;
     app->content_x++; app->content_width -= 2;
-    summary_line(app, head, line, sizeof(line));
-    linef(app, "%s", line);
-    style(app, TONE_MUTED);
-    if (app->fleet) linef(app, "Enter details%sa attach to terminal%sc interrupt", sep, sep);
-    else if (!head->head_id[0]) linef(app, "Enter details%sx remove", sep);
-    else linef(app, "Enter details%sa talk to the agent%sx remove%s: more actions", sep, sep, sep);
-    style(app, TONE_BASE);
+    paragraph(app, first, TV_BASE);
+    if (app->line < r.y + r.height - 1) { style(app, TONE_MUTED); linef(app, "%s", second); style(app, TONE_BASE); }
     app->content_x--; app->content_width += 2;
     app->line = r.y + r.height;
 }
 
+static void render_selected_summary(struct app *app) {
+    char first[1024], second[256], title[TEXT + 64];
+    const struct head *head = selected_head(app);
+    if (app->run_row && app->workflows && app->workflow_run < app->workflows->run_count) {
+        run_summary_text(app, app->workflow_run, title, sizeof(title));
+        run_next_text(app, app->workflow_run, first, sizeof(first));
+        snprintf(second, sizeof(second), "Enter %s%sC monitor%sw workflows%so overview",
+                 run_expanded(app, app->workflow_run) ? "collapse" : "expand", dot(app), dot(app), dot(app));
+        summary_panel(app, title, first, second);
+        return;
+    }
+    if (!head) return;
+    summary_line(app, head, first, sizeof(first));
+    summary_actions(app, head, second, sizeof(second));
+    summary_panel(app, head->branch, first, second);
+}
+
+static void list_footer(struct app *app, size_t position, size_t count) {
+    struct work_counts n;
+    work_counts(app, &n);
+    style(app, TONE_MUTED);
+    if (n.run_heads) linef(app, "%zu head%s you started%s%zu in runs  |  Row %zu of %zu", n.heads, n.heads == 1 ? "" : "s", dot(app), n.run_heads, position + 1U, count);
+    else linef(app, "%zu heads  |  Row %zu of %zu", n.heads, position + 1U, count);
+    style(app, TONE_BASE);
+}
+
+static void list_rows(struct app *app, const struct outline_row *rows, size_t count, size_t position, int available) {
+    size_t index, start = position >= (size_t)available ? position - (size_t)available + 1U : 0U;
+    outline_line(app, NULL, false);
+    for (index = start; index < count && available-- > 0; index++) {
+        if (rows[index].kind == OUTLINE_HEAD) record_hit(app, rows[index].head);
+        else if (rows[index].kind == OUTLINE_RUN) record_hit(app, MAX_HEADS + 1U + rows[index].run);
+        outline_line(app, &rows[index], index == position);
+    }
+}
+
 static void render_list(struct app *app) {
-    size_t index, ordinal = 0U, selected = 0U, count = 0U;
+    static struct outline_row rows[OUTLINE_ROWS];
+    size_t count, position;
     int available = app->limit - app->line - 2;
-    size_t start;
     bool summary = app->rows >= 20 && app->cols >= 70;
     if (summary && available > app->rows / 3) available = app->rows / 3;
     retarget_selection(app);
-    for (index = 0U; index < app->model.head_count; index++) {
-        if (!head_matches(&app->model.heads[index], app->search)) continue;
-        if (index == app->selected) selected = count;
-        count++;
-    }
+    count = outline_build(app, rows, OUTLINE_ROWS);
+    position = outline_position(app, rows, count);
+    if (position == count && app->run_row) { app->run_row = false; retarget_selection(app); position = outline_position(app, rows, count); }
     if (count == 0U) { render_empty_work(app); return; }
-    if (available < 1) available = 1;
-    start = selected >= (size_t)available ? selected - (size_t)available + 1U : 0U;
-    head_row(app, NULL, false);
-    for (index = 0U; index < app->model.head_count; index++) {
-        const struct head *head = &app->model.heads[index];
-        if (!head_matches(head, app->search)) continue;
-        if (ordinal++ < start) continue;
-        if (available-- <= 0) break;
-        record_hit(app, index);
-        head_row(app, head, index == app->selected);
-    }
-    style(app, TONE_MUTED);
-    linef(app, "%zu heads  |  Row %zu of %zu", count, selected + 1U, count);
-    style(app, TONE_BASE);
-    if (summary && selected_head(app) != NULL && app->limit - app->line >= 5) render_selected_summary(app, selected_head(app));
-}
-
-static void render_diagnostics(struct app *app) {
-    const struct head *head = selected_head(app);
-    if (head == NULL) { linef(app, "No selected head matching the current search."); return; }
-    style(app, TONE_STRONG); linef(app, "TECHNICAL DETAILS  %s", head->branch); style(app, TONE_BASE);
-    if (app->fleet) {
-        linef(app, "Host: %s", head->remote_host);
-        linef(app, "Branch: %s", head->remote_branch);
-        linef(app, "Project: %s", head->remote_project);
-        linef(app, "Desired state: %s", head->desired);
-        linef(app, "Instance: %s", head->instance);
-        linef(app, "Head: %s", head->head_id);
-        return;
-    }
-    linef(app, "session: %s   profile: %s   group: %s   PR: %s", head->session, head->profile, head->group, head->pr);
-    linef(app, "declared: %s   desired: %s", head->declared[0] == '\0' ? "none" : head->declared, head->desired);
-    linef(app, "observed: %s   confidence: %s   liveness: %s   display: %s",
-          head->observed, head->confidence, head->liveness, display_status(head));
-    linef(app, "events: %u   signals: %u   messages: %u   gates: %u (%u approved)",
-          head->events, head->signals, head->messages, head->gates, head->approved);
-    linef(app, "claims: %u   scopes: %u   queue: %u   resources: %u   changed files: %u",
-          head->claims, head->scopes, head->queue, head->resources, head->diff);
-    linef(app, "adapter: %s   confidence: %s", head->adapter, head->adapter_confidence);
-    linef(app, "adapter source: %s", head->adapter_source);
-    linef(app, "notifications: %u configured; delivery delegated", head->notifications);
-    linef(app, "notification source: %s", head->notification_source[0] == '\0' ? "unavailable" : head->notification_source);
-    linef(app, "lifecycle source: %s", head->source);
-    linef(app, "instance: %s   head: %s", head->instance, head->head_id);
-    linef(app, "");
-    style(app, TONE_MUTED); linef(app, "d closes technical details"); style(app, TONE_BASE);
-}
-
-static void render_detail_fleet(struct app *app, const struct head *head) {
-    pair(app, "Host", head->remote_host, TV_BASE, "Desired", head->desired, TV_BASE);
-    linef(app, "Project     %s", head->remote_project);
-    section(app, "NEXT");
-    linef(app, "a  attach to the remote terminal to see what it is doing");
-    linef(app, "c  interrupt the agent; the worktree and its files are kept");
-}
-
-static void detail_group_label(const struct app *app, const struct head *head, char *group, size_t size) {
-    const char *sep = dot(app);
-    bool has_pr = head->pr[0] && strcmp(head->pr, "-");
-    snprintf(group, size, "%s%s%s", head->group[0] && strcmp(head->group, "-") ? head->group : "none",
-             has_pr ? sep : "", has_pr ? "PR " : "");
-    if (has_pr) text_append(group, size, "%.40s", head->pr);
-}
-
-static void render_detail_changes(struct app *app, const struct head *head) {
-    char changes[64];
-    section(app, "CHANGES");
-    if (!head->head_id[0]) { linef(app, "Changed files   unknown (no head record; see Recovery)"); return; }
-    snprintf(changes, sizeof(changes), "%u", head->diff);
-    linef(app, "Changed files   %-6s in the worktree, not yet committed", changes);
-    linef(app, "Full diff       : git diff shows everything since the branch base");
-}
-
-static void render_detail_checks(struct app *app, const struct head *head) {
-    char approvals[96];
-    const char *sep = dot(app);
-    unsigned pending;
-    section(app, "CHECKS");
-    if (!head->head_id[0]) { linef(app, "Approvals       unknown"); return; }
-    pending = head->gates > head->approved ? head->gates - head->approved : 0;
-    snprintf(approvals, sizeof(approvals), "%u of %u approved%s%s", head->approved, head->gates,
-             pending ? sep : "", pending ? "waiting for your decision" : "");
-    style(app, pending ? TONE_WARNING : TONE_BASE);
-    linef(app, "Approvals       %s", approvals);
-    style(app, TONE_BASE);
-    linef(app, "Messages        %u exchanged with other heads", head->messages);
-}
-
-static void render_detail_preview(struct app *app) {
-    char preview[sizeof(app->preview_text)];
-    char *line, *next;
-    section(app, "TERMINAL OUTPUT");
-    linef(app, "Read-only, clipped plain-text excerpt; a opens live input.");
-    copy_text(preview, sizeof(preview), app->preview_text[0] ? app->preview_text : "No terminal output available.");
-    line = preview;
-    while (*line && app->line < app->limit) {
-        next = strchr(line, '\n');
-        if (next) *next++ = '\0';
-        size_t length = strlen(line);
-        if (length && line[length - 1] == '\r') line[length - 1] = '\0';
-        linef(app, "%s", line);
-        if (!next) break;
-        line = next;
-    }
-}
-
-static void render_detail(struct app *app) {
-    const struct head *head = selected_head(app);
-    char group[TEXT + 64];
-    if (head == NULL) { render_empty_work(app); return; }
-    if (app->diagnostics) { render_diagnostics(app); return; }
-    style(app, TONE_STRONG); linef(app, "%s", head->branch); style(app, TONE_BASE);
-    if (app->fleet) { render_detail_fleet(app, head); return; }
-    detail_group_label(app, head, group, sizeof(group));
-    pair(app, "Agent", agent_label(head), TV_BASE, "Session", status_label(head), status_tone(head));
-    pair(app, "Reported", head->declared[0] ? head->declared : "nothing yet", head->declared[0] ? TV_STRONG : TV_MUTED, "Group", group, TV_BASE);
-    if (!strcmp(display_status(head), "STALE"))
-        paragraph(app, "The terminal is gone but the last observation said the agent was still working. Files in the worktree are kept; check them before removing the head.", TV_WARNING);
-    render_detail_changes(app, head);
-    render_detail_checks(app, head);
-    if (app->preview) { render_detail_preview(app); return; }
-    section(app, "NEXT");
-    linef(app, "a  talk to the agent in the workspace     p  show recent terminal output");
-    linef(app, "c  coordination with other heads          x  remove this head");
-    linef(app, ":  more actions (diff, switch, approvals)  d  technical details");
+    list_rows(app, rows, count, position, available < 1 ? 1 : available);
+    list_footer(app, position < count ? position : 0, count);
+    if (summary && app->limit - app->line >= 5) render_selected_summary(app);
 }
 
 static void render_coordination(struct app *app) {
@@ -680,6 +586,7 @@ static void render_help(struct app *app) {
         linef(app, "x  remove selected or marked heads    Space / A  mark one / all   G  group marked");
         linef(app, "/  search                             :  more actions (diff, switch, approvals...)");
         linef(app, "p  recent terminal output             d  technical details      c  coordination");
+        linef(app, "Enter / l / h  expand or collapse a run; its heads are listed inside it");
     }
     section(app, "WORKSPACE");
     linef(app, "A  conversation   B  plan overview   C  monitor   z  zoom the focused pane   S  two agents");
@@ -710,7 +617,7 @@ static void render_content(struct app *app) {
     if (app->help) { render_help(app); return; }
     switch (app->view) {
         case 0: render_list(app); break;
-        case 1: render_detail(app); break;
+        case 1: render_head_detail(app); break;
         case 2: render_coordination(app); break;
         case 3: render_recovery(app); break;
         case 4: render_dashboard(app); break;
@@ -781,8 +688,18 @@ static const char *fleet_hints(struct app *app, bool narrow) {
     return app->view == 1 ? "a attach  c interrupt  d technical  Esc back  ? help  q quit" : "Enter details  a attach  c interrupt  / search  Tab next tab  ? help  q quit";
 }
 
+/* Details of a headless head: its step output replaces the agent pane. */
+static const char *detail_hints(struct app *app, bool narrow) {
+    const struct head *head = selected_head(app);
+    if (app->diagnostics) return "d close technical details  Esc back  ? help  q quit";
+    if (head && head_headless(head)) return narrow ? "p step output  Esc back  ? help  q quit" : "p step output  x remove  d technical  : more  Esc back  ? help  q quit";
+    return narrow ? "a agent  p output  Esc back  ? help  q quit" : "a agent  p output  c coordination  x remove  d technical  Esc back  ? help  q quit";
+}
+
 static const char *local_hints(struct app *app, bool narrow) {
-    if (app->view == 1) return narrow ? "a agent  p output  Esc back  ? help  q quit" : app->diagnostics ? "d close technical details  Esc back  ? help  q quit" : "a agent  p output  c coordination  x remove  d technical  Esc back  ? help  q quit";
+    if (app->view == 1) return detail_hints(app, narrow);
+    if ((app->view == 0 || app->view == 4) && app->run_row)
+        return narrow ? "Enter expand  j/k select  ? help  q quit" : "j/k select  Enter or l/h expand/collapse the run  C monitor  w workflows  ? help  q quit";
     if (app->view == 2) return "Esc back  : more actions  ? help  q quit";
     if (app->view == 4) return narrow ? "Enter open  Tab next tab  ? help  q quit" : "j/k select  Enter details  Tab next tab  ? help  q quit";
     if (narrow) return "Enter open  n new  x remove  ? help  q quit";

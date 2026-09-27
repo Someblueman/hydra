@@ -124,8 +124,8 @@ static void workspace_run_labels(struct app *app, struct native_workspace *w) {
     size_t r;
     if (app->fleet || !app->workflows) return;
     for (r=0;r<app->workflows->run_count;r++)
-        snprintf(w->run_labels[r],sizeof(w->run_labels[r]),"%s%s%s",app->workflows->runs[r].name,dot(app),
-            app->workflows->runs[r].state);
+        snprintf(w->run_labels[r],sizeof(w->run_labels[r]),"%s %s%s%s",run_label_kind(&app->workflows->runs[r]),
+            app->workflows->runs[r].name,dot(app),app->workflows->runs[r].state);
 }
 
 static bool head_collapsed(const struct native_workspace *w, const char *branch) {
@@ -134,40 +134,73 @@ static bool head_collapsed(const struct native_workspace *w, const char *branch)
     return false;
 }
 
+/* The navigation tree follows the work outline: heads the user started,
+ * the runs they launched, then the heads each run created. */
+struct workspace_tree_build {
+    struct app *app;
+    struct native_workspace *w;
+    size_t count, chosen;
+    size_t owner[MAX_HEADS];
+};
+
+static bool tree_add(struct workspace_tree_build *b, struct tv_tree_node node) {
+    if (b->count>=sizeof(b->w->nodes)/sizeof(b->w->nodes[0])) {
+        copy_text(b->app->notice,sizeof(b->app->notice),"Navigation limit reached; use / to filter heads");
+        return false;
+    }
+    b->w->nodes[b->count++]=node;
+    return true;
+}
+
+static void tree_member(struct workspace_tree_build *b, size_t head, unsigned depth) {
+    struct app *app=b->app;
+    const struct head *h=&app->model.heads[head];
+    const char *role=head_run_role(app,h);
+    snprintf(b->w->member_labels[head],sizeof(b->w->member_labels[head]),"%s%s%s",role ? role : "",role ? " " : "",h->branch);
+    if (head==app->selected && !app->run_row && !b->w->run_selected) b->chosen=b->count;
+    (void)tree_add(b,(struct tv_tree_node){b->w->member_labels[head],head,depth,false,head_list_tone(app,h)==TV_SUCCESS ? TV_BASE : head_list_tone(app,h)});
+}
+
+static void tree_run(struct workspace_tree_build *b, size_t run, size_t owner, unsigned depth) {
+    struct app *app=b->app;
+    size_t i;
+    bool open=run_expanded(app,run) || (!b->w->run_selected && app->selected<app->model.head_count && b->owner[app->selected]==run);
+    if (b->w->run_selected && run==app->workflow_run && (owner==MAX_HEADS || owner==app->selected)) b->chosen=b->count;
+    if (!tree_add(b,(struct tv_tree_node){b->w->run_labels[run],(run+1)*(MAX_HEADS+1)+owner,depth,open,
+        run_needs_attention(app,run) ? TV_WARNING : TV_MUTED})) return;
+    for (i=0;i<app->model.head_count;i++)
+        if (b->owner[i]==run && head_matches(&app->model.heads[i],app->search)) tree_member(b,i,depth+1);
+}
+
+static void tree_user_head(struct workspace_tree_build *b, size_t head) {
+    struct app *app=b->app;
+    const struct head *h=&app->model.heads[head];
+    size_t r;
+    if (head==app->selected && !b->w->run_selected) { b->chosen=b->count; b->w->selection_initialized=true; }
+    if (!tree_add(b,(struct tv_tree_node){h->branch,head,1,!head_collapsed(b->w,h->branch),
+        app->fleet ? TV_BASE : head_list_tone(app,h)==TV_SUCCESS ? TV_BASE : head_list_tone(app,h)})) return;
+    for (r=0;!app->fleet && app->workflows && r<app->workflows->run_count;r++)
+        if (run_owner_head(app,r)==head) tree_run(b,r,head,2);
+}
+
 static void native_workspace_tree(struct app *app) {
     struct native_workspace *w = app->workspace;
-    size_t i, count = 1, chosen = 0;
+    struct workspace_tree_build b = {app, w, 1, 0, {0}};
+    size_t i;
     bool root_selected = w->selection_initialized && w->tree.count && !w->tree.selected;
     if (w->tree.count) w->root_open = w->nodes[0].expanded;
-    bool matched[WF_RUNS]={false};
-    size_t r;
     workspace_project_label(app, w);
     w->nodes[0] = (struct tv_tree_node){app->fleet ? "Remote heads" : app->links ? w->project_label : "This project", SIZE_MAX, 0, w->root_open, TV_STRONG};
     prune_collapsed(app, w);
     workspace_run_labels(app, w);
     retarget_selection(app);
-    for (i = 0; i < app->model.head_count; i++) if (head_matches(&app->model.heads[i], app->search)) {
-        const struct head *h = &app->model.heads[i];
-        bool expanded=!head_collapsed(w, h->branch);
-        if (count>=sizeof(w->nodes)/sizeof(w->nodes[0])) {
-            copy_text(app->notice,sizeof(app->notice),"Navigation limit reached; use / to filter heads"); break;
-        }
-        if (i == app->selected) { chosen = count; w->selection_initialized = true; }
-        w->nodes[count++] = (struct tv_tree_node){h->branch, i, 1, expanded, app->fleet ? TV_BASE : status_tone(h)==TV_SUCCESS ? TV_BASE : status_tone(h)};
-        if (!app->fleet && app->workflows) for (r=0;r<app->workflows->run_count;r++) if (native_links_match(app,r,i)) {
-            if (count>=sizeof(w->nodes)/sizeof(w->nodes[0])) break;
-            matched[r]=true;
-            if (w->run_selected && r==app->workflow_run && i==app->selected && expanded) chosen=count;
-            w->nodes[count++] = (struct tv_tree_node){w->run_labels[r],(r+1)*(MAX_HEADS+1)+i,2,false,TV_MUTED};
-        }
-    }
-    if (!app->fleet && app->workflows) for (r=0;r<app->workflows->run_count;r++) if (!matched[r]) {
-        if (count>=sizeof(w->nodes)/sizeof(w->nodes[0])) break;
-        if (w->run_selected && r==app->workflow_run) chosen=count;
-        w->nodes[count++]=(struct tv_tree_node){w->run_labels[r],(r+1)*(MAX_HEADS+1)+MAX_HEADS,1,false,TV_MUTED};
-    }
-    (void)tv_tree_init(&w->tree, w->nodes, count);
-    w->tree.selected = root_selected ? 0 : chosen;
+    for (i = 0; i < app->model.head_count && i < MAX_HEADS; i++) b.owner[i] = head_owner_run(app, &app->model.heads[i], NULL);
+    for (i = 0; i < app->model.head_count; i++)
+        if (b.owner[i] == SIZE_MAX && head_matches(&app->model.heads[i], app->search)) tree_user_head(&b, i);
+    for (i = 0; !app->fleet && app->workflows && i < app->workflows->run_count; i++)
+        if (run_owner_head(app, i) == SIZE_MAX) tree_run(&b, i, MAX_HEADS, 1);
+    (void)tv_tree_init(&w->tree, w->nodes, b.count);
+    w->tree.selected = root_selected ? 0 : b.chosen;
 }
 
 static void native_workspace_select(struct app *app) {
@@ -229,11 +262,13 @@ static void workspace_host_key(struct app *app) {
     app->view=6;
 }
 
-/* Expand or collapse the selected head and remember collapsed branches. */
+/* Expand or collapse the selected head or run and remember the choice. */
 static void workspace_expand_key(struct app *app, struct native_workspace *w, bool expand) {
     size_t index=w->tree.selected, k;
     tv_tree_expand(&w->tree, expand);
-    if (index<w->tree.count && w->nodes[index].value<app->model.head_count) {
+    if (index<w->tree.count && w->nodes[index].value!=SIZE_MAX && w->nodes[index].value>=MAX_HEADS+1)
+        run_set_expanded(app,w->nodes[index].value/(MAX_HEADS+1)-1,w->nodes[index].expanded);
+    if (index<w->tree.count && w->nodes[index].value<app->model.head_count && w->nodes[index].value<MAX_HEADS) {
         const char *branch=app->model.heads[w->nodes[index].value].branch;
         for (k=0;k<w->collapsed_count;k++) if (!strcmp(w->collapsed[k],branch)) break;
         if (w->nodes[index].expanded && k<w->collapsed_count) {
@@ -326,8 +361,17 @@ static void workspace_empty(struct app *app, struct tv_canvas *c) {
 
 static enum tv_style details_session(struct app *app, const struct head *h, char *text, size_t size) {
     if (app->fleet) { snprintf(text, size, "Session   %s", h->desired); return TV_BASE; }
+    if (head_headless(h)) { snprintf(text, size, "Terminal  headless (no terminal)"); return TV_MUTED; }
     snprintf(text, size, "Session   %s", status_label(h));
     return status_tone(h);
+}
+
+static void details_agent(struct app *app, const struct head *h, char *text, size_t size) {
+    char agent[TEXT + 96];
+    if (app->fleet) { snprintf(text, size, "Agent     %s", h->profile); return; }
+    if (head_headless(h)) head_agent_text(app, h, agent, sizeof(agent));
+    else snprintf(agent, sizeof(agent), "%s", agent_name(h));
+    snprintf(text, size, "Agent     %s", agent);
 }
 
 static void details_stale(const struct head *h, char *text, size_t size) {
@@ -348,7 +392,8 @@ static enum tv_style details_changes(struct app *app, const struct head *h, char
 static enum tv_style details_reported(struct app *app, const struct head *h, char *text, size_t size) {
     const char *reported = h->declared[0] ? h->declared : "nothing yet";
     if (app->fleet || !h->head_id[0]) { snprintf(text,size,"Reported  %s", reported); return TV_BASE; }
-    snprintf(text, size, "Reported  %s%s%u of %u approvals", reported, dot(app), h->approved, h->gates);
+    snprintf(text, size, "Reported  %s", reported);
+    if (h->gates) text_append(text, size, "%s%u of %u approval requests approved", dot(app), h->approved, h->gates);
     return h->gates > h->approved ? TV_WARNING : TV_BASE;
 }
 
@@ -358,19 +403,27 @@ static void details_group(struct app *app, const struct head *h, char *text, siz
     if (h->pr[0] && strcmp(h->pr,"-")) text_append(text, size, "%sPR %.40s", text[0] ? dot(app) : "", h->pr);
 }
 
+static void details_run(struct app *app, const struct head *h, char *text, size_t size) {
+    size_t record, run = head_owner_run(app, h, &record);
+    if (run == SIZE_MAX || app->fleet) return;
+    snprintf(text, size, "Run       %s %s%s%s%s%s", run_label_kind(&app->workflows->runs[run]), app->workflows->runs[run].name,
+             dot(app), app->workflows->runs[run].state, record != SIZE_MAX ? dot(app) : "", record != SIZE_MAX ? app->workflows->heads[record].role : "");
+}
+
 /* One line of the selected-work pane; returns its tone. */
 static enum tv_style details_line(struct app *app, const struct head *h, size_t index, char *text, size_t size) {
     text[0] = '\0';
     switch (index) {
     case 0: snprintf(text, size, "%s", h->branch); return TV_STRONG;
     case 1: return details_session(app, h, text, size);
-    case 2: snprintf(text, size, "Agent     %s", app->fleet ? h->profile : agent_name(h)); return TV_BASE;
+    case 2: details_agent(app, h, text, size); return TV_BASE;
     case 3: details_where(app, h, text, size); return TV_BASE;
     case 4: return details_changes(app, h, text, size);
     case 5: return details_reported(app, h, text, size);
     case 6: details_group(app, h, text, size); return TV_BASE;
-    case 8: details_stale(h, text, size); return TV_WARNING;
-    case 10: snprintf(text, size, "a  talk to the agent here      Enter  full details"); return TV_MUTED;
+    case 7: details_run(app, h, text, size); return TV_BASE;
+    case 8: if (!head_headless(h)) details_stale(h, text, size); return TV_WARNING;
+    case 10: snprintf(text, size, head_headless(h) ? "p  step output in Details      Enter  full details" : "a  talk to the agent here      Enter  full details"); return TV_MUTED;
     case 11: snprintf(text, size, ":  more actions                d  technical details"); return TV_MUTED;
     default: return TV_BASE;
     }
@@ -404,14 +457,18 @@ static enum tv_style activity_fleet_line(struct app *app, size_t index, char *te
 }
 
 static void activity_summary(struct app *app, size_t attention, char *text, size_t size) {
-    snprintf(text, size, "%zu head%s%s%zu need attention%s%zu recovery finding%s", app->model.head_count, app->model.head_count==1 ? "" : "s",
-             dot(app), attention, dot(app), app->model.recovery_count, app->model.recovery_count==1 ? "" : "s");
+    struct work_counts n;
+    work_counts(app, &n);
+    snprintf(text, size, "%zu head%s", n.heads, n.heads==1 ? "" : "s");
+    if (n.run_heads) text_append(text, size, " (+%zu in runs)", n.run_heads);
+    text_append(text, size, "%s%zu need attention%s%zu recovery finding%s", dot(app), attention, dot(app),
+                app->model.recovery_count, app->model.recovery_count==1 ? "" : "s");
 }
 
 /* Rows 2-4: counters for the selected head with a readable record. */
 static enum tv_style activity_head_line(struct app *app, const struct head *h, size_t index, char *text, size_t size) {
     if (index == 2) { snprintf(text, size, "Selected %s%s%u events%s%u messages%s%u signals", h->branch, dot(app), h->events, dot(app), h->messages, dot(app), h->signals); return TV_BASE; }
-    if (index == 3) { snprintf(text, size, "Approvals %u of %u%s%u queued entries", h->approved, h->gates, dot(app), h->queue); return h->gates > h->approved ? TV_WARNING : TV_BASE; }
+    if (index == 3) { snprintf(text, size, "Approval requests %u of %u approved%s%u queued entries", h->approved, h->gates, dot(app), h->queue); return h->gates > h->approved ? TV_WARNING : TV_BASE; }
     if (index == 4) { snprintf(text, size, "Claims %u%sscopes %u  (coordination with other heads)", h->claims, dot(app), h->scopes); return TV_MUTED; }
     return TV_BASE;
 }

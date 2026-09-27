@@ -141,6 +141,9 @@ static bool terminal_start(struct app *app, const struct head *h, size_t availab
 
 bool native_terminal_attach_head(struct app *app, const struct head *h) {
     size_t available;
+    if (h && !app->fleet && head_headless(h)) {
+        copy_text(app->notice,sizeof(app->notice),"Headless head: it has no terminal to attach; p shows its step output in Details"); return false;
+    }
     if (!h || !h->head_id[0] || !h->instance[0] || !strcmp(h->instance,"-") ||
         !strcmp(h->desired,"headless")) {
         copy_text(app->notice,sizeof(app->notice),app->fleet ? "Select an interactive remote head with a current instance" : "Select a recorded local head to open an interactive pane"); return false;

@@ -18,6 +18,8 @@ struct head {
     char instance[TEXT], desired[64], source[SOURCE_TEXT], head_id[TEXT];
     char adapter[64], adapter_confidence[64], adapter_source[SOURCE_TEXT];
     char notification_source[SOURCE_TEXT];
+    /* interactive, headless, or empty when an older row did not say. */
+    char terminal[16];
     unsigned notifications;
     unsigned events, signals, messages, claims, scopes, queue, resources, diff, gates, approved;
 };

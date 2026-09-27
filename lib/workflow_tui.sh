@@ -3,7 +3,7 @@
 #
 # Protocol 2 (internal, versioned with the native TUI; fields never contain
 # tabs or newlines, "-" means unknown or not applicable):
-#   W run name state kind planning-branch created-at completed-at digest12
+#   W run name state kind planning-branch planning-head created-at completed-at digest12
 #   N run step kind state attempts needs role head profile started completed
 #   E run step attempt <agent receipt summary: see agent-view receipt-view>
 #   R run branch spawn-step class retirement detail
@@ -102,7 +102,7 @@ workflow_tui_run_rows() {
                 b = spawned[i]
                 class = !plan ? "run" : (b in works) ? "worker" : (b in verifies) ? "verifier" : "worker"
                 rd = dir "/retirement/" spawn_step[i]
-                print "R", run, b, spawn_step[i], class, first(rd "/state"), first(rd "/detail")
+                print "R", run, b, spawn_step[i], class, first(rd "/state"), substr(first(rd "/detail"), 1, 200)
             }
         }
     ' "$1/graph.tsv"
@@ -127,11 +127,12 @@ workflow_tui_data() (
         _wtd_kind=workflow
         [ ! -f "$_wtd_dir/compiled.json" ] || _wtd_kind=plan
         _wtd_planning="$(sed -n '1p' "$_wtd_dir/planning-branch" 2>/dev/null)" || true
+        _wtd_planning_head="$(sed -n '1p' "$_wtd_dir/planning-head" 2>/dev/null)" || true
         _wtd_created="$(sed -n '1p' "$_wtd_dir/created-at" 2>/dev/null)" || true
         _wtd_completed="$(sed -n '1p' "$_wtd_dir/completed-at" 2>/dev/null)" || true
         _wtd_digest="$(sed -n '1p' "$_wtd_dir/plan-accepted" 2>/dev/null | cut -c1-12)"
-        printf 'W\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_wtd_id" "${_wtd_name:-unavailable}" "${_wtd_state:-unavailable}" \
-            "$_wtd_kind" "${_wtd_planning:--}" "${_wtd_created:--}" "${_wtd_completed:--}" "${_wtd_digest:--}" | tr '\r' ' '
+        printf 'W\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_wtd_id" "${_wtd_name:-unavailable}" "${_wtd_state:-unavailable}" \
+            "$_wtd_kind" "${_wtd_planning:--}" "${_wtd_planning_head:--}" "${_wtd_created:--}" "${_wtd_completed:--}" "${_wtd_digest:--}" | tr '\r' ' '
         if [ ! -f "$_wtd_dir/graph.tsv" ]; then printf 'X\tRecorded workflow graph unavailable\n'; continue; fi
         _wtd_roles="$(workflow_tui_roles "$_wtd_dir" "$_wtd_id")"
         _wtd_budget=$((512 - _wtd_nodes))

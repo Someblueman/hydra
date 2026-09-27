@@ -20,6 +20,7 @@ void native_observations_destroy(struct app *app) {
     native_controls_tick(app); /* Reap finished owners; active owners survive UI exit. */
     if (!app->observations) return;
     for (i=0;i<5;i++) native_capture_destroy(&app->observations->jobs[i]);
+    native_capture_destroy(&app->observations->preview);
     free(app->observations); app->observations=NULL;
 }
 
@@ -49,6 +50,7 @@ void native_observations_tick(struct app *app, bool request) {
         app->observations=calloc(1,sizeof(*app->observations));
         if (!app->observations) return;
         for (i=0;i<5;i++) app->observations->jobs[i].fd=-1;
+        app->observations->preview.fd=-1;
     }
     for (i=0;i<4;i++) {
         struct native_capture *p=&app->observations->jobs[i];
@@ -62,7 +64,10 @@ void native_observations_tick(struct app *app, bool request) {
             else if (i==2) (void)accept_statistics(app,input);
             else native_links_accept(app,input);
         }
-        if (request && !p->pid && (i==0 || (!app->fleet && ((i==1 && (app->view==5 || app->view==7)) || (i==2 && app->view==8) || (i==3 && app->view==7))))) {
+        /* Runs group heads in every local view; outside the graph views the
+         * workflow read waits for a first good head snapshot. */
+        if (request && !p->pid && (i==0 || (!app->fleet && ((i==1 && (app->view==5 || app->view==7 || app->snapshot_at)) ||
+            (i==2 && app->view==8) || (i==3 && app->view==7))))) {
             char *argv[]={(char *)app->hydra,i==0 ? app->fleet ? "fleet" : "tui" : "workflow",
                 i==0 ? app->fleet ? "tui-visual-data" : "--data" : i==1 ? "tui-data" : i==2 ? "statistics-data" : "--workspace-links",NULL};
             if (!native_capture_start(p,argv,observation_budget(app,i))) {
@@ -73,6 +78,7 @@ void native_observations_tick(struct app *app, bool request) {
             }
         }
     }
+    headless_preview_tick(app);
     native_evidence_tick(app,request);
     native_attention_tick(app,request);
     native_review_tick(app);

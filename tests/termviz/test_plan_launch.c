@@ -243,12 +243,15 @@ int main(void) {
     U("Project: repo line", 3);
     U("plan-fixture · succeeded", 15);
     U("plan-smoke", 3);
-    /* Head and run snapshots arrive separately; move from the first head
-     * to its associated run only after both are visible. */
-    S("j");
+    /* Head and run snapshots arrive separately. The imported plan's worker
+     * head belongs to its run: move from the head up to the run only after
+     * both are visible. */
+    U("worker plan-smoke", 15);
+    S("k");
     U("Recorded branch reference", 3);
     U("Enter evidence / h parent / Tab panes", 3);
-    S("hh");
+    CHECK(!tv_contains(&s, "worker plan-smoke"), "a run collapses when its head is no longer selected");
+    S("kh");
     tv_pump(&s, 2.5);
     CHECK(!tv_contains(&s, "plan-fixture · succeeded"), "collapsed historical refs");
     S("l");
