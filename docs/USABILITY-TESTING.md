@@ -9,12 +9,43 @@ Git/tmux and public Hydra entry points, then writes an HTML report under
 `build/usability-<timestamp>/`. Set `USABILITY_OUTPUT=/absolute/new/directory` to
 retain a named run. No provider login is used by this command.
 
-The current suite covers clean entry and in-app task creation, navigation,
-attachment/input/resize/return, protected and successful removal, and a complete
-conversation-to-plan revision and checked delivery at 80 and 140 columns. The
-planning fixture authors proposals through an interactive custom profile and the
-public `workflow plan propose` command; it does not fabricate Hydra state. Tests
-independently inspect worktrees, written input markers and verified delivery.
+The current suite runs these journeys at 80 and 140 columns (`--journey NAME`
+selects one, `--columns` a width):
+
+| Journey | What it drives and checks |
+|---|---|
+| `clean-entry` | Opens a clean repository and starts a task from visible controls; files and status unchanged. |
+| `navigation` | Every view by number, Tab/Shift-Tab and Esc. |
+| `attachment` | Attach, type to the agent (verified on disk), resize and return twice. |
+| `removal` | In-app removal refused for dirty work, then completed; branch kept. |
+| `planning` | Conversation, proposal, guided policy, validation, revision invalidating approval, `y` execution and checked delivery. |
+| `result-review` | A plan's headless worker commits two files, the repository check runs on the worker head and a verifier head checks the summary. Checks Overview's run panel, the worker grouped under its run with land/dismiss next actions, the retired verifier (branch kept), the task diff instead of "0 changed files" (U15), and the review's verdict, per-requirement PASS, verify command, changed files with +/- counts and diff. |
+| `recovery` | The repository check fails. Checks the run panel names the failed step, Attention lists the failure, the review marks the failed requirement FAIL with the failing log line, and the planning agent received the failure; then the agent's corrected revision is validated, executed with `y` and delivered. |
+| `recovery-terminal` | An interactive head's terminal is removed (U7). Details and Recovery must not infer failure or lost work, must say the files are kept, and the offered action ("open it from Work") must restore a terminal while committed and uncommitted work stay intact. |
+
+Failed runs, send-back and resume: `F` returns an unexecuted proposal, and
+`workflow resume` applies only to stale or recovery-required runs, so a failed
+check is recovered through the planning conversation, which Hydra has already
+told which step failed. Each journey is bounded by per-screen deadlines (15 s)
+and run deadlines (90 s); a full run takes about four minutes.
+
+The planning journeys use a labelled deterministic provider fixture
+(`tests/fixtures/usability/provider.py`). `planning` reaches it through a custom
+interactive profile; `result-review` and `recovery` install it as `codex` on a
+private PATH, so Hydra reaches it only through the built-in profile's interactive
+launch and headless `codex exec --json` contracts. It publishes proposals with the
+public `workflow plan propose` command (with `--asset` for the verifier), and as a
+worker follows only `FIXTURE-*` lines in the plan's inline prompt. It never
+fabricates Hydra state and never claims live-provider coverage. Tests
+independently inspect Git, worktrees, tmux sessions, run records, written input
+markers, recompiled digests and verified delivery. A journey stops at the first
+check that blocks its flow; other desired-behaviour checks are recorded and all
+failures are listed in the report.
+
+Known product failures kept red (27 September 2026): Attention does not list a
+failed check (a failed run shows only its sealed steps as "Result ready for
+review"), and opening a head whose terminal is gone from Work shows an empty
+attached pane instead of restoring the terminal that Recovery promises.
 
 Reports distinguish passed, failed and blocked setup, and retain actions, terminal
 bytes, escaped text snapshots, cleanup receipts, installed file hashes and source
