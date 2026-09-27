@@ -144,12 +144,14 @@ int main(void) {
     wait_for_live_stream(&s);
     S("1");
     U("Heads in this project", 5);
-    U("1 head (+1 in runs)", 10);
-    U("plan run runs-demo", 10);
+    /* These wait on a real background plan run; sanitizer builds on shared
+     * CI runners need far longer than the screen itself. */
+    U("1 head (+1 in runs)", 60);
+    U("plan run runs-demo", 60);
     CHECK(!tv_contains(&s, "runs-demo-check"), "run heads start collapsed under their run");
     S("j\r");
-    U("worker   runs-demo-worker", 5);
-    U("Running step implement on runs-demo-worker", 5);
+    U("worker   runs-demo-worker", 30);
+    U("Running step implement on runs-demo-worker", 30);
     both(&s, "work-grouped-running");
     S("1j\r");
     U("Details: runs-demo-worker", 5);
@@ -159,8 +161,8 @@ int main(void) {
     CHECK(!tv_contains(&s, "Session"), "a headless head is not described as a missing terminal session");
     S("p");
     U("STEP OUTPUT", 5);
-    U("sh -c true -> exit 0", 10);
-    U("Reading the kill command before adding a dry run", 10);
+    U("sh -c true -> exit 0", 30);
+    U("Reading the kill command before adding a dry run", 30);
     both(&s, "worker-live-output");
     S("p3");
     U("RUN / plan run runs-demo", 5);

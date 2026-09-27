@@ -313,8 +313,10 @@ static void enqueue(struct native_attention *view, const struct attention_op *op
     struct attention_store *store = store_of(view);
     if (!store) return;
     if (op->list) {
+        /* One listing may wait behind a running one: the running listing may
+         * predate another client's mark. */
         size_t i;
-        for (i = 0U; i < store->op_count; i++) if (store->ops[i].list) return;
+        for (i = store->job.pid ? 1U : 0U; i < store->op_count; i++) if (store->ops[i].list) return;
     }
     if (store->op_count == ATTENTION_OPS) {
         memmove(store->ops, store->ops + 1U, (ATTENTION_OPS - 1U) * sizeof(store->ops[0]));
@@ -468,10 +470,13 @@ void native_attention_tick(struct app *app, bool request)
     }
     store_tick(app);
     sync_review(app);
-    if (!request || app->view != 9 || job->pid) return;
+    if (!request || app->view != 9) return;
+    /* A refresh always rereads the seen store, even while the previous
+     * attention snapshot is still loading. */
+    enqueue(app->attention, &list);
+    if (job->pid) return;
     argv[0] = (char *)app->hydra; argv[1] = (char *)(app->fleet ? "fleet" : "workflow"); argv[2] = (char *)"attention-data"; argv[3] = NULL;
     app->attention->loading = true;
-    enqueue(app->attention, &list);
     if (!native_capture_start(job, argv, app->fleet ? 13000L : 10000L)) capture_failure(app);
 }
 
