@@ -537,8 +537,8 @@ static const char *reason_text(const char *reason)
         {"check_failed", "failed its check. Press r to see the failed requirement and the log summary."},
         {"step_failed", "failed. Press r to see its log and what the run recorded."},
         {"step_recovery_required", "stopped in a state Hydra cannot finish on its own. Press r to see its records."},
-        {"run_failed", "Hydra could not deliver this run: it failed after its steps finished. Press r to see what was checked."},
-        {"run_recovery_required", "Hydra cannot finish this run on its own. Press r to see its records."},
+        {"run_failed", "failed after its steps finished, so its result was not delivered. Press r to see what was checked."},
+        {"run_recovery_required", "stopped in a state Hydra cannot finish on its own. Press r to see its records."},
         {"task_failed", "failed on its host. Press r to see its retained result and logs."},
         {"path_unavailable", "has a record path too long to read safely."}};
     size_t i;
@@ -561,7 +561,8 @@ static void item_why(const struct attention_item *item, char *out, size_t size)
     const char *known = reason_text(item->reason);
     attempt_text(item, attempt, sizeof(attempt));
     out[0] = '\0';
-    text_append(out, size, "%s%s%s ", present(item->step) ? "Step " : "This item", present(item->step) ? item->step : "", attempt);
+    text_append(out, size, "%s%s%s ", present(item->step) ? "Step " : is_failure(item) ? "This run" : "This item",
+                present(item->step) ? item->step : "", attempt);
     if (known) text_append(out, size, "%s", known);
     else text_append(out, size, "%s (%s).%s", kind_text(item), item->reason,
         eligible(item) ? "" : " Inspect its records before acting.");
