@@ -5,9 +5,22 @@
 # finished step shows its receipt summary and declared result instead, since
 # keeping provider output remains the explicit --retain choice.
 
-# Usage: tui_head_output_clean -> stdin as printable single-byte-safe text
+# Usage: tui_head_output_clean -> stdin without NUL and C0 controls other than
+# TAB, LF, CR and ESC. The native view renders SGR color from ESC sequences and
+# neutralizes every other escape sequence; deleting ESC alone would leave
+# fragments such as "[31m" in the text.
 tui_head_output_clean() {
-    LC_ALL=C tr -d '\000-\010\013\014\016-\037\177'
+    LC_ALL=C tr -d '\000-\010\013\014\016-\032\034-\037\177'
+}
+
+# Usage: tui_head_output_tail <bytes> <file> -> the file's last bytes from a
+# line start, so a cut never begins inside a character or escape sequence.
+tui_head_output_tail() {
+    if [ "$(wc -c < "$2")" -gt "$1" ]; then
+        tail -c "$1" "$2" | LC_ALL=C sed '1d'
+    else
+        cat "$2"
+    fi
 }
 
 # Usage: tui_head_output_step <runs-dir> <branch>
@@ -48,7 +61,7 @@ tui_head_output_result() {
             _thor_name="$(basename "$_thor_path")"
             [ "$2" = - ] || [ "$_thor_name" = "$2" ] || continue
             printf 'Result (%s):\n' "$_thor_name"
-            tail -c 1024 "$_thor_path" | tui_head_output_clean | tail -n 12 | awk '{ print }'
+            tui_head_output_tail 1024 "$_thor_path" | tui_head_output_clean | tail -n 12 | awk '{ print }'
             _thor_shown=$((_thor_shown + 1))
         done
     done
@@ -90,7 +103,7 @@ tui_head_output_command() {
     for _thoc_stream in stdout stderr; do
         [ -s "$1/$_thoc_stream" ] || continue
         printf 'Command %s (last lines):\n' "$_thoc_stream"
-        tail -c 3072 "$1/$_thoc_stream" | tui_head_output_clean | tail -n 30
+        tui_head_output_tail 3072 "$1/$_thoc_stream" | tui_head_output_clean | tail -n 30
     done
     [ -s "$1/stdout" ] || [ -s "$1/stderr" ] || printf 'The command printed no output.\n'
 }

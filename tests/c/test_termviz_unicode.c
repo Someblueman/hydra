@@ -2,6 +2,32 @@
 #include <assert.h>
 #include <string.h>
 
+/* Joined emoji and VS16 follow tmux 3.5 clustering; format characters vanish. */
+static void clusters(void) {
+    struct tv_cell cells[24];
+    struct tv_canvas c;
+    assert(tv_init(&c, cells, 24, 8, 3, true));
+    tv_text(&c, (struct tv_rect){0,0,8,1}, "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x92\xbb\xe2\x80\x8b\xe2\x9d\xa4\xef\xb8\x8fZ", TV_BASE);
+    assert(cells[0].glyph == 0x1f468 && cells[0].combining_count == 2 && cells[1].width == 0);
+    assert(cells[2].glyph == 0x2764 && cells[2].width == 2 && cells[3].width == 0 && cells[4].glyph == 'Z');
+    assert(tv_cell_join(NULL, 0x301) == TV_JOIN_DROP && tv_cell_join(NULL, 27) == TV_JOIN_NONE);
+    assert(tv_cell_join(&cells[0], 0x202e) == TV_JOIN_DROP);
+}
+
+/* ASCII mode: readable approximations in the same columns, never UTF-8. */
+static void ascii(void) {
+    struct tv_cell cells[24];
+    struct tv_canvas c;
+    assert(tv_ascii_fallback(0x2500) == '-' && tv_ascii_fallback(0x2502) == '|' && tv_ascii_fallback(0x256d) == '+');
+    assert(tv_ascii_fallback(0x2550) == '=' && tv_ascii_fallback(0x2192) == '>' && tv_ascii_fallback(0x2026) == '.');
+    assert(tv_ascii_fallback(0xc0) == 'A' && tv_ascii_fallback(0xe9) == 'e' && tv_ascii_fallback(0xff) == 'y');
+    assert(tv_ascii_fallback(0xf7) == '/' && tv_ascii_fallback(0x754c) == '?' && tv_ascii_fallback('q') == 'q');
+    assert(tv_init(&c, cells, 24, 8, 3, false));
+    tv_text(&c, (struct tv_rect){0,0,8,1}, "\xe2\x94\x8c\xe7\x95\x8c\xc3\xa9" "e\xcc\x81!", TV_BASE);
+    assert(cells[0].glyph == '+' && cells[1].glyph == '?' && cells[2].glyph == ' ' && cells[2].width == 1);
+    assert(cells[3].glyph == 'e' && cells[4].glyph == 'e' && cells[4].combining_count == 0 && cells[5].glyph == '!');
+}
+
 int main(void) {
     struct tv_cell cells[24], old[24];
     struct tv_canvas c, view;
@@ -37,7 +63,9 @@ int main(void) {
     assert(cells[18].width == 2 && cells[20].glyph == 'X' && cells[21].glyph == ' ');
     tv_clear(&view, TV_BASE);
     assert(cells[10].glyph == ' ' && cells[18].glyph == ' ' && cells[7].glyph == 'e');
+    clusters();
+    ascii();
     fclose(out);
-    puts("unicode: wide/combining, malformed UTF-8, clipped surfaces and overwrite damage passed");
+    puts("unicode: emoji clusters, ASCII approximations, wide/combining, malformed UTF-8, clipped surfaces and overwrite damage passed");
     return 0;
 }

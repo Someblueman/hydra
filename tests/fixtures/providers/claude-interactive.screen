@@ -1,0 +1,40 @@
+  fenced diff code block):
+
+  Unicode check: café, naïve, 界面 (CJK), emoji 🚀✅, arrows → ←, box ┌─┐└─┘, combining é.
+
+  --- a/greeting.txt
+  +++ b/greeting.txt
+  @@ -1,3 +1,3 @@
+   hello
+  -wörld
+  +world ✓
+   end
+
+  LONGLINE: alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho
+  -sigma-tau-upsilon-phi-chi-psi-omega-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lam
+  bda-mu-nu-xi-omicron-pi-rho-sigma-tau-END
+
+⏺ Unicode check: café, naïve, 界面 (CJK), emoji 🚀✅, arrows → ←, box ┌─┐└─┘, combining é.
+
+  --- a/greeting.txt
+  +++ b/greeting.txt
+  @@ -1,3 +1,3 @@
+   hello
+  -wörld
+  +world ✓
+   end
+
+  LONGLINE: alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho-
+  sigma-tau-upsilon-phi-chi-psi-omega-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambd
+  a-mu-nu-xi-omicron-pi-rho-sigma-tau-END
+
+✻ Baked for 5s · done 5:07
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  [/tmp/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-/…
+  ⏸ manual mode on · ← for agents
+                                                              auto mode unavailable for this model
+                                                                                               /rc
+

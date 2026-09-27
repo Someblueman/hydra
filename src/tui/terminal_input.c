@@ -3,13 +3,77 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+/* Keys reach an agent only through a connected client: a disconnected pane
+ * never captures input, so Tab, Esc and a still work in Hydra. */
 bool native_terminal_focused(struct app *app) {
     struct native_terminal *t=app->workspace ? native_workspace_terminal(app,app->workspace->layout.focus) : NULL;
-    return app->view==7 && t && t->screen;
+    return app->view==7 && t && t->screen && !t->client.finished && !t->client.eof;
 }
 static bool terminal_head_matches(const struct app *app, const struct head *h, const struct native_terminal *t) {
     return !strcmp(h->head_id,t->head) && !strcmp(h->instance,t->instance) &&
         (!app->fleet || (!strcmp(h->remote_host,t->remote_host) && !strcmp(h->remote_project,t->remote_project)));
+}
+
+static size_t terminal_head_index(const struct app *app, const struct native_terminal *t) {
+    size_t head;
+    for (head=0;head<app->model.head_count;head++)
+        if (terminal_head_matches(app,&app->model.heads[head],t)) break;
+    return head;
+}
+
+/* Ctrl-B n: the next open agent view, with its head selected. */
+static void next_agent(struct app *app) {
+    struct native_terminals *set=app->terminals;
+    size_t i;
+    for (i=1;i<=NATIVE_TERMINALS;i++) {
+        size_t next=(set->selected+i)%NATIVE_TERMINALS, head;
+        if (!set->slots[next].screen) continue;
+        set->selected=next; app->view=7;
+        native_workspace_show_terminal(app,true);
+        head=terminal_head_index(app,&set->slots[next]);
+        if (head<app->model.head_count) app->selected=head;
+        return;
+    }
+}
+
+static void reconnect(struct app *app, struct native_terminal *t) {
+    size_t head=terminal_head_index(app,t);
+    if (head<app->model.head_count) { app->selected=head; (void)native_terminal_attach(app); }
+    else copy_text(app->notice,sizeof(app->notice),"Original instance unavailable; select current work explicitly");
+}
+
+/* Ctrl-B Tab leaves input; Ctrl-B x closes only this client's view. */
+static void leave_input(struct app *app) {
+    native_workspace_focus_next(app);
+    if (!native_terminal_focused(app))
+        copy_text(app->notice,sizeof(app->notice),"Keys go to Hydra; the agent view stays open");
+}
+
+static void close_view(struct app *app, struct native_terminal *t) {
+    native_terminal_close(t); app->workspace->layout.focus=1;
+    copy_text(app->notice,sizeof(app->notice),"View closed; the agent keeps running (a reopens)");
+}
+
+static void history_key(struct app *app, struct native_terminal *t, bool enter) {
+    if (enter) { t->scrolling=!native_terminal_history(app,t,true); return; }
+    if (!t->scrolling) (void)native_terminal_history(app,t,false);
+    t->scrolling=false; t->scroll=0;
+}
+
+/* Ctrl-B commands: Hydra's own keys while an agent view may hold input. */
+static void prefix_key(struct app *app, struct native_terminal *t, const struct tv_event *e) {
+    if (e->key=='q') app->running=false;
+    else if (e->key=='\t') leave_input(app);
+    else if (e->key=='D') statistics_toggle(app);
+    else if (e->key=='A' || e->key=='B' || e->key=='C') native_workspace_mode(app,(int)e->key-'A');
+    else if (e->key=='z') (void)native_workspace_key(app,'z');
+    else if (e->key=='S') native_workspace_split_agents(app);
+    else if (e->key=='n') next_agent(app);
+    else if (!t) return;
+    else if (e->key=='r' && t->screen) reconnect(app,t);
+    else if (e->key=='x') close_view(app,t);
+    else if (e->key=='[' || e->key==']') history_key(app,t,e->key=='[');
+    else if (e->key==2) native_terminal_send(app,t,e->bytes,e->length);
 }
 
 static void native_terminal_event(struct app *app, const struct tv_event *e) {
@@ -44,39 +108,7 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
             (e->type==TV_PASTE_BEGIN || e->type==TV_PASTE_END)))) native_terminal_send(app,t,e->bytes,e->length);
         return;
     }
-    if (set->prefix) {
-        set->prefix=false;
-        if (e->key=='q') app->running=false;
-        else if (e->key=='\t') native_workspace_focus_next(app);
-        else if (e->key=='D') statistics_toggle(app);
-        else if (e->key=='A' || e->key=='B' || e->key=='C') native_workspace_mode(app,(int)e->key-'A');
-        else if (e->key=='z') (void)native_workspace_key(app,'z');
-        else if (e->key=='S') native_workspace_split_agents(app);
-        else if (e->key=='n') {
-            size_t i;
-            for (i=1;i<=NATIVE_TERMINALS;i++) {
-                size_t next=(set->selected+i)%NATIVE_TERMINALS;
-                if (set->slots[next].screen) {
-                    size_t head;
-                    set->selected=next; app->view=7;
-                    native_workspace_show_terminal(app,true);
-                    for (head=0;head<app->model.head_count;head++)
-                        if (terminal_head_matches(app,&app->model.heads[head],&set->slots[next])) { app->selected=head; break; }
-                    break;
-                }
-            }
-        } else if (e->key=='r' && t && t->screen) {
-            size_t head;
-            for (head=0;head<app->model.head_count;head++)
-                if (terminal_head_matches(app,&app->model.heads[head],t)) break;
-            if (head<app->model.head_count) { app->selected=head; (void)native_terminal_attach(app); }
-            else copy_text(app->notice,sizeof(app->notice),"Original instance unavailable; select current work explicitly");
-        } else if (e->key=='x' && t) { native_terminal_close(t); w->layout.focus=1; }
-        else if (e->key=='[' && t) t->scrolling=true;
-        else if (e->key==']' && t) { t->scrolling=false; t->scroll=0; }
-        else if (e->key==2) native_terminal_send(app,t,e->bytes,e->length);
-        return;
-    }
+    if (set->prefix) { set->prefix=false; prefix_key(app,t,e); return; }
     if (e->key==2) { set->prefix=true; return; }
     if (!native_terminal_focused(app)) return;
     if (t->scrolling) {

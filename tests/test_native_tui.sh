@@ -219,7 +219,7 @@ printf 'HYDRA_TUI\t2\nH\t%s\ts\t-\t-\t-\tactive\tlive\t\tidle\texact\ti\t0\t0\t0
 "$tui" --headless-fixture "$test_root/utf8.tsv" --size 40x10 > "$test_root/utf8.out"
 assert_success $? "UTF-8, combining, wide, and invalid bytes render safely at minimum width"
 "$tui" --ascii --headless-fixture "$test_root/utf8.tsv" --size 100x14 --view detail > "$test_root/utf8-detail.out"
-contains "wide-?-combining-e?-invalid-?" "$test_root/utf8-detail.out" "ASCII mode has a deterministic safe representation"
+contains "wide-? -combining-e-invalid-?" "$test_root/utf8-detail.out" "ASCII mode keeps wide columns, drops joined marks and marks invalid bytes"
 "$tui" --headless-fixture "$test_root/utf8.tsv" --size 100x14 --view detail > "$test_root/utf8-detail-unicode.out"
 contains "$(printf 'wide-\344\270\255-combining-e\314\201-invalid-?')" "$test_root/utf8-detail-unicode.out" "Unicode mode preserves wide and combining characters and marks invalid bytes"
 

@@ -68,6 +68,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   agent, executable version, model and effort per step and per run, with totals for
   the selected scope. Workflow statistics data is schema 4 with one `U` row per agent
   step from its exec receipt; schemas 2 and 3 remain readable.
+- `Ctrl-B [` in a local attached pane opens the agent's own tmux history (copy
+  mode on that exact session): PgUp/PgDn or arrows scroll and `q`, Esc or
+  `Ctrl-B ]` return to live output. The attached client draws on tmux's alternate
+  screen, which keeps no scrollback of its own.
+- When another, smaller client of the same tmux session typed last, tmux sizes the
+  window to it and fills the rest of Hydra's view with dots; the attached pane now
+  says it is "sized by another client" and that typing there takes the size back.
 
 ### Changed
 
@@ -100,6 +107,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still reads version 1.
 - Review navigation styles headings, check results and diff lines, jumps between
   sections with `n`/`N` and pages with space/`b`.
+- Captured agent output reads as a faithful transcript. The Details terminal
+  excerpt captures the pane's colors and joined lines (`capture-pane -e -J`, 40
+  lines of history) and keeps the newest output instead of failing when large;
+  headless step output keeps color. Each line is interpreted by the same termviz
+  terminal model as the attached pane, so Unicode, emoji, colors, tabs and
+  carriage-return progress lines match it, while screen erasure, cursor movement
+  and OSC/DCS payloads are dropped. Long lines wrap at the view width with a `↪`
+  continuation marker instead of being clipped, action results and review logs
+  wrap the same way, and unified diffs without their own colors get theme tones
+  (added, removed, hunk and file header); with `NO_COLOR` or `--no-color` the
+  `+`/`-` markers remain. The excerpt is labelled a read-only transcript that
+  PgUp/PgDn scroll (result overlays page the same way), and key
+  hints printed by the provider ("esc to interrupt", "← for agents") are named as
+  belonging to live input.
+- termviz lays out emoji like tmux 3.5: ZWJ sequences, skin-tone modifiers and flag
+  pairs occupy one two-column cell, VS16 widens a narrow symbol, and invisible
+  format characters (zero-width space, bidirectional controls) are dropped instead
+  of shown as `?`, so attached panes stay aligned with tmux. ASCII mode (a non-UTF-8
+  locale or `--ascii`) approximates box drawing, arrows, bullets, quotes and Latin-1
+  letters in the same columns instead of turning them into runs of `?`, and says so
+  in the Details transcript.
+- Attached panes always name how to leave agent input and close the view, fitted
+  to the width down to 40 columns (`Ctrl-B Tab leave  Ctrl-B x close`); Esc and Tab
+  still go to the agent. Leaving input and closing the view say that the agent keeps
+  running and how to reopen it.
 
 - The guided local policy now allows `sh`, `git`, `make` and the head's own agent
   profile, writes inside plan-spawned heads, 3600 seconds and a 1 GiB free-space
@@ -113,6 +145,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A disconnected attach client no longer captures keys: Tab, Esc and `a` work in
+  Hydra again (previously every key reported "Input not delivered" until `Ctrl-B`
+  was used), and `a` or `Ctrl-B r` reattaches.
+- At 80 columns and in the compact layout the attached footer no longer cuts off
+  `Ctrl-B x close`; the notice after closing a view no longer says input is still
+  attached.
+- Headless step output no longer shows fragments such as `[31m` where escape
+  characters were deleted, and a byte-bounded tail never starts inside a character
+  or escape sequence.
+- Review text wraps by display width instead of bytes, so multi-byte characters
+  are no longer split into `?` at the wrap point.
 - New tasks whose names contain spaces or other invalid characters start on a
   derived branch (`add kill dry run` becomes `add-kill-dry-run`) instead of failing.
 - `invalid_source` names the checkout and the failed condition, lists tracked

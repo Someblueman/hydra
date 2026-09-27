@@ -409,16 +409,11 @@ bool native_review_key(struct app *app, char key)
     return true;
 }
 
+/* Width-aware wrapping with a continuation marker; captured SGR in logs is
+ * rendered and any other control sequence is neutralized. */
 static void wrapped_line(struct app *app, const char *text, size_t length, size_t *row, size_t scroll)
 {
-    size_t width = app->cols > 5 ? (size_t)app->cols - 5U : 1U, offset = 0U;
-    if (width > 2000U) width = 2000U;
-    do {
-        size_t count = length - offset;
-        if (count > width) count = width;
-        if ((*row)++ >= scroll && app->line < app->limit) linef(app, "%.*s", (int)count, text + offset);
-        offset += count;
-    } while (offset < length);
+    *row += transcript_line_view(app, text, length, (enum tv_style)app->tone, *row, scroll);
 }
 
 /* A section heading is an upper-case word of three or more letters at the
@@ -528,6 +523,7 @@ bool native_review_render(struct app *app)
         style(app, TONE_BASE);
     }
     review->heading_count = 0U;
+    transcript_view_reset(app);
     if (review->identity_view) { render_identity(app, review, &row); review->lines = row; return true; }
     if (!review->document) return true;
     if (review->log_view && review->log) render_log(app, review, &row);

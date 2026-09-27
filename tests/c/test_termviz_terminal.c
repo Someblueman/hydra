@@ -20,11 +20,51 @@ static void graphics(void) {
     tv_term_reset(&t);
 }
 
+/* Cursor columns after each sequence match tmux 3.5a measured in a 40-column
+ * pane: ZWJ emoji, skin-tone modifier, flag pair and VS16 symbols take two
+ * cells; ZWSP takes none and a soft hyphen shows as one '-'. */
+static void clusters(void) {
+    static const struct { const char *text; int column; } cases[] = {
+        {"A\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x92\xbb", 3},
+        {"C\xf0\x9f\x91\x8d\xf0\x9f\x8f\xbd", 3},
+        {"E\xf0\x9f\x87\xb8\xf0\x9f\x87\xaa", 3},
+        {"G\xe2\x80\x8bH\xc2\xad", 3},
+        {"J\xe2\x9d\xa4\xef\xb8\x8f", 3},
+        {"x\xcc\x81", 1},
+    };
+    size_t i;
+    for (i = 0; i < sizeof(cases) / sizeof(*cases); i++) {
+        tv_term_reset(&t);
+        feed(cases[i].text);
+        assert(t.primary.x == cases[i].column);
+    }
+    tv_term_reset(&t);
+    feed("J\xe2\x9d\xa4\xef\xb8\x8fK");
+    assert(primary[1].width == 2 && primary[2].width == 0 && at(3,0) == 'K');
+    assert(primary[1].combining_count == 1 && primary[1].combining[0] == 0xfe0f);
+    tv_term_reset(&t);
+    feed("\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x92\xbbZ");
+    assert(primary[0].glyph == 0x1f468 && primary[0].combining_count == 2 && primary[0].combining[1] == 0x1f4bb);
+    assert(at(2,0) == 'Z');
+    {
+        struct tv_cell cells[10*2];
+        struct tv_canvas ascii;
+        tv_term_reset(&t);
+        feed("\xe2\x94\x8c\xe2\x94\x80\xe7\x95\x8c\xe2\x86\x92" "caf\xc3\xa9");
+        assert(tv_init(&ascii, cells, 20, 10, 2, false));
+        tv_term_draw(&t, &ascii, 0, false);
+        assert(cells[0].glyph == '+' && cells[1].glyph == '-' && cells[2].glyph == '?' && cells[3].glyph == ' ');
+        assert(cells[3].width == 1 && cells[4].glyph == '>' && cells[8].glyph == 'e');
+    }
+    tv_term_reset(&t);
+}
+
 int main(void) {
     size_t split, i;
     const char *stream = "\033[2J\033[2;3Hcaf\xc3\xa9\xe7\x95\x8c\033[31m!\033[0m\r\nnext\033(0lqk\033(B\033)0\016x\017\033[?1049hALT\033[?1049l\033[6n";
     assert(tv_term_init(&t, primary, alternate, 20, 8, history, 4, 10, 4));
     graphics();
+    clusters();
     feed("0123456789");
     assert(t.primary.wrap_pending && t.primary.x == 9);
     feed("X"); assert(at(0,1) == 'X');
@@ -80,6 +120,6 @@ int main(void) {
             assert(t.history_count <= 4 && t.reply_length <= sizeof(t.reply));
         }
     }
-    puts("terminal: wrapping, RGB, erase, alternate screen, history, margins, edits, hostile sequences, every stream split and bounds passed");
+    puts("terminal: emoji clusters, ASCII fallback, wrapping, RGB, erase, alternate screen, history, margins, edits, hostile sequences, every stream split and bounds passed");
     return 0;
 }

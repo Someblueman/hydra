@@ -190,10 +190,14 @@ test-tui-actions: $(BUILD_DIR)/test-tui-actions
 $(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c src/tui/task_name.c src/tui/task_name.h src/tui/plan_diagnostics.c src/tui/plan_diagnostics.h src/tui/plan_summary.c src/tui/plan_summary.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(filter %.c,$^) -o $@
 
-test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning
+$(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c src/tui/transcript.c src/tui/transcript.h $(TERMVIZ_OBJECTS)
+	$(CC) $(CORE_CFLAGS) tests/c/test_tui_transcript.c src/tui/transcript.c $(TERMVIZ_OBJECTS) -o $@
+
+test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript
 	$(BUILD_DIR)/test-tui-input
 	$(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-planning
+	$(BUILD_DIR)/test-tui-transcript
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_native_tui.sh
 
 test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
@@ -451,6 +455,8 @@ test-quality-c:
 .PHONY: test-attached-pty sanitize-attached
 test-attached-pty: build-tui
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attached-pty"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attach-cycles"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-output-fidelity"
 sanitize-attached:
 	@$(MAKE) BUILD_DIR=build/attached-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-attached-pty
 

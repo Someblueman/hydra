@@ -288,10 +288,10 @@ is refused for stale or unreachable hosts, headless heads, missing identities,
 and replaced instances. The remote shell rechecks that composite identity and
 the live tmux session before handing the client to tmux.
 
-Inside an attached pane, `Ctrl-B Tab` changes focus back to Hydra, `Ctrl-B x`
-closes the selected client while leaving the owner session alive, and `Ctrl-B q`
-exits the operator view. `c` requests a confirmed interrupt and `q` restores the
-terminal and exits when no pane is focused. Actions carry host, project, and
+Inside an attached pane, `Ctrl-B Tab` leaves input (focus goes back to Hydra),
+`Ctrl-B x` closes the selected client while leaving the owner session alive, and
+`Ctrl-B q` exits the operator view. `c` requests a confirmed interrupt and `q`
+restores the terminal and exits when no pane is focused. Actions carry host, project, and
 observed instance through the public CLI. Local mutation shortcuts and local
 pane preview are disabled in fleet mode. Paths/identifiers that cannot be
 represented safely within native text bounds require the CLI.

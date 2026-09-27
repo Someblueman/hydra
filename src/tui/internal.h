@@ -33,6 +33,7 @@
 #include "review.h"
 #include "process.h"
 #include "terminal.h"
+#include "transcript.h"
 extern char **environ;
 #define HYDRA_TUI_VERSION "2.7.0"
 #define HYDRA_TUI_PROTOCOL 2
@@ -112,6 +113,9 @@ struct native_terminal {
     char remote_host[128], remote_project[SOURCE_TEXT];
     size_t scroll;
     bool scrolling;
+    /* tmux sized the window to another, smaller client: the drawn view shows
+     * tmux's dotted fill beyond that window (set while drawing). */
+    bool foreign_size;
     /* Hydra-authored input waiting for the attached client to come up; a
      * submitted entry sends Enter as a separate, later keystroke. */
     char *outbox[4];
@@ -189,6 +193,12 @@ void plan_approval_text(const struct app *app, size_t run, char *out, size_t siz
 void column(struct app *app, int x, int width, enum tv_style tone, const char *text);
 void paragraph(struct app *app, const char *text, enum tv_style tone);
 void section(struct app *app, const char *label);
+/* Read-only captured output in the remaining content rows; see transcript.h. */
+void transcript_view(struct app *app, const char *text, size_t length, struct transcript_layout *layout);
+/* One logical line of a scrolled document: rows before scroll are counted,
+ * visible rows drawn with tone; returns the line's wrapped rows. */
+size_t transcript_line_view(struct app *app, const char *text, size_t length, enum tv_style tone, size_t row, size_t scroll);
+void transcript_view_reset(struct app *app);
 void pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
           const char *right_label, const char *right, enum tv_style right_tone);
 void render_empty_work(struct app *app);
@@ -252,6 +262,9 @@ bool native_terminal_attach_head(struct app *app, const struct head *h);
 bool native_terminal_deliver(struct app *app, struct native_terminal *t, const char *text, bool submit);
 const char *native_agent_name(const struct head *h);
 void native_terminal_close(struct native_terminal *t);
+/* Enters (or leaves) the agent's own tmux history for a local attachment;
+ * false when that history is unavailable and the client's model scrolls. */
+bool native_terminal_history(struct app *app, struct native_terminal *t, bool enter);
 void native_terminals_destroy(struct app *app);
 bool native_terminal_attach(struct app *app);
 void native_terminal_send(struct app *app, struct native_terminal *t, const void *bytes, size_t length);

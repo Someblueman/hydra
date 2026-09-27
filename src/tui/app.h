@@ -16,6 +16,7 @@ struct native_evidence;
 struct native_links;
 struct native_attention;
 struct native_review;
+struct transcript;
 
 struct app {
     struct model model;
@@ -28,6 +29,8 @@ struct app {
     struct native_links *links;
     struct native_attention *attention;
     struct native_review *review;
+    /* Lazily allocated interpreter for read-only captured output. */
+    struct transcript *transcript;
     pid_t control_pids[4];
     pid_t action_pid;
     /* Full 127-byte task/run identity plus action and label text. */
@@ -63,7 +66,9 @@ struct app {
     char pending_task[TEXT];
     char notice[TEXT];
     char snapshot_error[TEXT];
-    char preview_text[8192];
+    char preview_text[32768];
+    /* Rows the Details transcript is scrolled back from its newest output. */
+    size_t preview_back;
     /* The head whose step output an asynchronous preview read belongs to. */
     char preview_head[TEXT];
     /* Work outline: runs the user expanded, and whether a run row rather

@@ -66,20 +66,46 @@ void tv_term_index(struct tv_terminal_model *t, bool reverse) {
     }
 }
 
+/* The cell before the cursor that a joining scalar attaches to, if any. */
+static struct tv_cell *join_base(struct tv_screen *s, int *x) {
+    struct tv_canvas *c = &s->canvas;
+    struct tv_cell *cell;
+    *x = s->wrap_pending ? s->x : s->x - 1;
+    if (*x < 0) return NULL;
+    cell = &c->cells[(size_t)s->y * (size_t)c->stride + (size_t)*x];
+    if (!cell->width && *x > 0) { cell--; (*x)--; }
+    return cell->width ? cell : NULL;
+}
+
+/* Joins cp to the preceding cell; VS16 widens a narrow symbol like tmux 3.5. */
+static bool join_glyph(struct tv_terminal_model *t, struct tv_screen *s, uint32_t cp) {
+    struct tv_canvas *c = &s->canvas;
+    int x;
+    struct tv_cell *base = join_base(s, &x);
+    enum tv_join join = tv_cell_join(base, cp);
+    if (join == TV_JOIN_NONE) return false;
+    if (join == TV_JOIN_DROP) return true;
+    if (base->combining_count < TV_COMBINING_MAX) base->combining[base->combining_count++] = cp;
+    if (join == TV_JOIN_WIDEN && !s->wrap_pending && x + 1 < c->width && x + 1 == s->x) {
+        struct tv_cell *next = base + 1;
+        if (next->width == 2 && x + 2 < c->width) next[1] = tv_term_blank(t);
+        *next = *base; next->glyph = ' '; next->width = 0; next->combining_count = 0;
+        base->width = 2;
+        s->x = x + 2;
+        if (s->x >= c->width) { s->x = c->width - 1; s->wrap_pending = t->autowrap; }
+    }
+    return true;
+}
+
 void tv_term_glyph(struct tv_terminal_model *t, uint32_t cp) {
     struct tv_screen *s = tv_term_screen(t);
     struct tv_canvas *c = &s->canvas;
     struct tv_cell *cell;
-    int width = tv_codepoint_width(cp), x;
+    int width;
+    if (cp == 0xadU) cp = '-'; /* tmux and wcwidth show a soft hyphen in one column */
+    width = tv_codepoint_width(cp);
+    if (join_glyph(t, s, cp)) return;
     if (width < 0) { cp = '?'; width = 1; }
-    if (!width) {
-        x = s->wrap_pending ? s->x : s->x - 1;
-        if (x < 0) return;
-        cell = &c->cells[(size_t)s->y * (size_t)c->stride + (size_t)x];
-        if (!cell->width && x > 0) cell--;
-        if (cell->combining_count < TV_COMBINING_MAX) cell->combining[cell->combining_count++] = cp;
-        return;
-    }
     if (s->wrap_pending || (width == 2 && s->x == c->width - 1)) {
         if (t->autowrap) { tv_term_index(t, false); s->x = 0; }
         s->wrap_pending = false;
@@ -170,6 +196,20 @@ bool tv_term_resize(struct tv_terminal_model *t, int columns, int rows) {
     return true;
 }
 
+/* A stored cell as painted into out: edge-split wide cells become spaces and
+ * ASCII surfaces get the readable approximation in the same columns. */
+static struct tv_cell drawn_cell(const struct tv_cell *row, int x, const struct tv_canvas *out) {
+    struct tv_cell cell = row[x];
+    if ((!cell.width && !x) || (cell.width == 2 && x + 1 == out->width)) {
+        cell.glyph = ' '; cell.width = 1; cell.combining_count = 0;
+    }
+    if (!out->unicode && (cell.glyph > 126 || !cell.width || cell.combining_count)) {
+        cell.glyph = cell.width ? tv_ascii_fallback(cell.glyph) : ' ';
+        cell.width = 1; cell.combining_count = 0;
+    }
+    return cell;
+}
+
 void tv_term_draw(const struct tv_terminal_model *t, struct tv_canvas *out, size_t scroll, bool cursor) {
     const struct tv_screen *s = t->alternate_active ? &t->alternate : &t->primary;
     size_t history = t->alternate_active ? 0 : t->history_count;
@@ -182,10 +222,7 @@ void tv_term_draw(const struct tv_terminal_model *t, struct tv_canvas *out, size
             t->history + ((t->history_start + logical) % t->history_rows) * (size_t)t->max_columns :
             s->canvas.cells + (logical - history) * (size_t)t->max_columns;
         for (x = 0; x < out->width && x < s->canvas.width; x++) {
-            struct tv_cell cell = row[x];
-            if ((!cell.width && !x) || (cell.width == 2 && x + 1 == out->width)) {
-                cell.glyph = ' '; cell.width = 1; cell.combining_count = 0;
-            }
+            struct tv_cell cell = drawn_cell(row, x, out);
             if (cursor && !scroll && t->cursor_visible && y == s->y &&
                 (x == s->x || (s->x > 0 && x == s->x - 1 && !row[s->x].width))) cell.attributes ^= TV_REVERSE;
             out->cells[(size_t)y * (size_t)out->stride + (size_t)x] = cell;
