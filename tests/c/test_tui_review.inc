@@ -139,12 +139,12 @@ static bool review_reload(struct session *session, struct review_fixture *fixtur
 
 static void review_negative_cases(struct session *session, struct review_fixture *fixture) {
     const char *good = fixture->original; char bad[sizeof(fixture->original) + sizeof("trailing\n")]; char *end;
-    snprintf(bad, sizeof(bad), "%s", good); end = strstr(bad, "END\t26"); if (end) *end = '\0';
+    snprintf(bad, sizeof(bad), "%s", good); end = strstr(bad, "END\t27"); if (end) *end = '\0';
     result(review_reload(session, fixture, bad, "Review unavailable"), "truncated review never displays evidence");
     int written = snprintf(bad, sizeof(bad), "%strailing\n", good);
     if (written < 0 || (size_t)written >= sizeof(bad)) { result(false, "trailing review fixture fits buffer"); return; }
     result(review_reload(session, fixture, bad, "Review unavailable"), "trailing review records rejected");
-    snprintf(bad, sizeof(bad), "%s", good); end = strstr(bad, "END\t26"); if (end) memcpy(end + 4U, "27", 2U);
+    snprintf(bad, sizeof(bad), "%s", good); end = strstr(bad, "END\t27"); if (end) memcpy(end + 4U, "28", 2U);
     result(review_reload(session, fixture, bad, "Review unavailable"), "wrong review counts rejected");
     snprintf(bad, sizeof(bad), "%s", good); end = strstr(bad, "\tR-1\t"); if (end) end[3] = '9';
     result(review_reload(session, fixture, bad, "Review unavailable"), "review for different run rejected");
@@ -283,6 +283,7 @@ static void test_review_navigation(const char *tui, const char *hydra) {
     write_input(session.master, "r", 1U);
     result(wait_for_markers(&session, "readiness: ready", "accepted: false", 3000), "readiness is separate from acceptance");
     result(wait_for_markers(&session, "Long identifier: BEGIN-", "-END", 1000), "long identifier wraps through its exact suffix at 80x24");
+    result(wait_for_marker(&session, "UNSPLITTABLEWORD ends the sentence.", 1000), "review prose wraps between words at 80x24");
     write_input(session.master, "i", 1U);
     result(wait_for_markers(&session, "Source: workflow records", "Project: /project", 1000), "selected identity view exposes exact source and project");
     write_input(session.master, "i", 1U);

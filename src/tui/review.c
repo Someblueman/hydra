@@ -409,15 +409,27 @@ bool native_review_key(struct app *app, char key)
     return true;
 }
 
+/* Bytes of a line that fit one row: a continuing line breaks at the last
+ * space in the row's second half, and never inside a UTF-8 sequence. */
+static size_t row_take(const char *text, size_t length, size_t width)
+{
+    size_t take = width;
+    if (length <= width) return length;
+    while (take > width / 2U && text[take] != ' ') take--;
+    if (text[take] != ' ') take = width;
+    while (take > 1U && ((unsigned char)text[take] & 0xC0U) == 0x80U) take--;
+    return take;
+}
+
 static void wrapped_line(struct app *app, const char *text, size_t length, size_t *row, size_t scroll)
 {
     size_t width = app->cols > 5 ? (size_t)app->cols - 5U : 1U, offset = 0U;
     if (width > 2000U) width = 2000U;
     do {
-        size_t count = length - offset;
-        if (count > width) count = width;
+        size_t count = row_take(text + offset, length - offset, width);
         if ((*row)++ >= scroll && app->line < app->limit) linef(app, "%.*s", (int)count, text + offset);
         offset += count;
+        if (offset < length && text[offset] == ' ') offset++;
     } while (offset < length);
 }
 
