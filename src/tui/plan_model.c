@@ -149,18 +149,20 @@ bool native_plan_load(struct app *app, const char *path, const char *policy) {
         "V validates the current draft and policy; F sends it back to the agent with requested changes.");
     return true;
 }
+/* A returned draft compiles only after the agent republishes changed bytes. */
+static bool native_plan_current(struct app *app, struct native_plan *p) {
+    char path[4096], policy_path[4096];
+    if (!native_plan_changed(p)) return p->state!=PLAN_RETURNED;
+    copy_text(path,sizeof(path),p->path); copy_text(policy_path,sizeof(policy_path),p->policy);
+    return native_plan_load(app,path,policy_path) && p->state!=PLAN_RETURNED;
+}
 bool native_plan_compile(struct app *app) {
     struct native_plan *p=app->plan;
     char draft[4096], policy[4096], assets[4096];
     char *argv[10];
     struct stat info;
     if (!p || !p->path[0] || p->job.pid) return false;
-    if (p->state==PLAN_RETURNED && !native_plan_changed(p)) return false;
-    if (native_plan_changed(p)) {
-        char path[4096], policy_path[4096];
-        copy_text(path,sizeof(path),p->path); copy_text(policy_path,sizeof(policy_path),p->policy);
-        if (!native_plan_load(app,path,policy_path) || p->state==PLAN_RETURNED) return false;
-    }
+    if (!native_plan_current(app,p)) return false;
     if (!p->source_bytes || !p->policy_bytes || p->compilation>=1000) return false;
     p->compilation++;
     if (!native_plan_write(p,"draft.json",p->source_bytes,p->source_length,draft) ||
