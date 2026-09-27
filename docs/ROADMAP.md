@@ -178,6 +178,23 @@ an acceptance blocker, not optional cosmetic polish.
       does not manually author the implementation or assemble workflow machinery.
       Keep shell-only fixtures and isolated failure probes as engineering checks;
       their success cannot substitute for this product acceptance exercise.
+      First installed-build run, 26–27 September 2026 (Codex, task "add
+      `hydra kill --dry-run`"): the journey completed only with expert help.
+      Plan run `run_2cdf8bbe…` passed its verifier and produced `def3c77` on
+      `feat/kill-dry-run`. Friction, with fixes in progress on local branches:
+      task names with spaces could not start; the guided policy (sh/git, no
+      writes, 300 s) could not authorize agent work, so the first plan was a
+      stub; `invalid_source` did not name the dirty checkout and the agent then
+      misdirected the user; worker prompts and verifiers had to be committed
+      into the user's `main` before validation; execution required typing a
+      64-character digest; there was no way to send a plan back; the planning
+      agent was not told the run started; headless workers showed as "shell",
+      "session unknown", "needs attention" with no output preview; the run,
+      its verification and its diff were not presented; model, effort and
+      recorded token use were not shown; attention/review showed raw or
+      misleading states. Not yet exercised: answering an agent question during
+      execution, a failed check with supported recovery, and leaving and
+      returning mid-run. Rerun U5 after those fixes; it stays open.
 - [ ] **U6 — Stable rendering without flicker.** The user reports distracting
       flicker during normal TUI operation. Diagnose the live render/refresh path;
       avoid visible clearing and repainting of unchanged content, and preserve
