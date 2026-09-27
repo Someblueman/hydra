@@ -204,13 +204,39 @@ class Journey:
         self.cli("init", "--no-agent")
         self.cli("spawn", "sample", "--no-agent")
 
+    def settle(self, timeout: float = 30) -> list[str]:
+        """Wait for plan launch owners to record their exit: an owner keeps
+        retiring heads and writing notices after its run reaches a final state."""
+        launches = Path(self.env["HYDRA_HOME"]) / "state/v2/projects"
+
+        def state(directory: Path) -> str:
+            try:
+                return (directory / "state").read_text().strip()
+            except OSError:
+                return "absent"
+
+        deadline = time.monotonic() + timeout
+        while True:
+            pending = [f"{d.name[:12]}={state(d)}" for d in launches.glob("*/workflows/launches/*")
+                       if d.is_dir() and state(d) not in ("finished", "failed")]
+            if not pending or time.monotonic() >= deadline:
+                for d in launches.glob("*/workflows/launches/*"):
+                    if (d / "owner.log").exists():  # retained as evidence
+                        (self.output / f"launch-owner-{d.name[:12]}.log").write_text(
+                            (d / "owner.log").read_text())
+                return pending
+            time.sleep(0.2)
+
     def close(self) -> None:
         cleanup = {}
+        pending = self.settle()
         try:
             if self.observer:
                 cleanup = self.observer.close(attached=self.attached)
                 if not cleanup.get("reaped") or cleanup.get("observer_exit"):
                     raise RuntimeError(f"UI cleanup incomplete: {cleanup}")
+            if pending:
+                raise RuntimeError(f"plan launch owners still running: {pending}")
         finally:
             # This root owns the entire socket namespace; no global tmux cleanup.
             for socket in Path(self.env["TMUX_TMPDIR"]).glob("tmux-*/*"):
