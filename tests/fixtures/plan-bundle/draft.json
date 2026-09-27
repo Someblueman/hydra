@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "id": "add-greeting",
+  "objective": "Add a greeting and its test, verified on the worker head with the repository checks",
+  "context": [],
+  "assumptions": [],
+  "questions": [],
+  "envelope": {
+    "hosts": ["local"],
+    "tools": ["sh", "make", "profile:codex"],
+    "effects": ["execute", "worktree"],
+    "writes": ["bundle-worker:*"],
+    "parallelism": 1,
+    "timeout_seconds": 600,
+    "artifact_bytes": 65536,
+    "max_heads": 1,
+    "disk_mb": 1024,
+    "retry_budget": 0,
+    "repair_budget": 0
+  },
+  "steps": [
+    {
+      "id": "spawn",
+      "role": "work",
+      "kind": "spawn",
+      "needs": [],
+      "writes": [],
+      "args": {"branch": "bundle-worker", "terminal_mode": "headless"}
+    },
+    {
+      "id": "implement",
+      "role": "compose",
+      "kind": "exec",
+      "needs": ["spawn"],
+      "writes": ["bundle-worker:*"],
+      "args": {
+        "head": "bundle-worker",
+        "profile": "codex",
+        "prompt": "Inline worker brief (bundle-marker-1).\nCreate greeting.txt containing a friendly greeting and tests/greeting.sh that fails unless greeting.txt is non-empty.\nDo not commit.",
+        "result_file": "summary",
+        "timeout": 120
+      }
+    },
+    {
+      "id": "repo-checks",
+      "role": "verify",
+      "kind": "exec",
+      "needs": ["implement"],
+      "writes": [],
+      "args": {"head": "bundle-worker", "argv": ["make", "check"], "timeout": 60}
+    },
+    {
+      "id": "verify",
+      "role": "verify",
+      "kind": "exec",
+      "needs": ["implement", "repo-checks"],
+      "writes": [],
+      "args": {"head": "bundle-worker", "argv": ["sh", "@input/verifier"], "timeout": 60}
+    }
+  ],
+  "deliverables": [
+    {"id": "summary", "description": "Worker summary", "step": "implement", "output": "summary", "destination": "run-artifact"}
+  ],
+  "checks": [
+    {"id": "greeting", "method": "executable", "definition": "The worker head has greeting.txt and make check passed there", "step": "verify", "input": "subject", "report": "report", "deliverable": "summary"}
+  ],
+  "requirements": [
+    {"id": "greeting-present", "criterion": "The worker head contains a non-empty greeting.txt", "deliverable": "summary", "check": "greeting"}
+  ],
+  "data": {
+    "schema_version": 1,
+    "inputs": {
+      "verifier": {"asset": "verifier", "type": "file", "max_bytes": 4096}
+    },
+    "steps": {
+      "implement": {
+        "outputs": {"summary": {"type": "file", "path": "summary", "max_bytes": 4096}}
+      },
+      "verify": {
+        "inputs": {
+          "subject": {"step": "implement", "output": "summary"},
+          "verifier": {"input": "verifier"}
+        },
+        "outputs": {"report": {"type": "object", "path": "report.json", "max_bytes": 4096}}
+      }
+    }
+  }
+}

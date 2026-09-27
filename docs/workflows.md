@@ -166,16 +166,64 @@ The guided local policy that Hydra writes when you review an agent proposal with
 when the head has no profile), writes `@spawned:*`, one worker, four heads, 3600
 seconds summed over exec timeouts, 1 MiB of artifacts, a plan `disk_mb` of at
 least 1024, and no retries or repairs. A typical implementation plan spawns a
-headless worker head, runs an agent exec step there with `profile`,
-`prompt_input`, `result_file` and `timeout`, and verifies with `make` or `sh`
-recipes that run committed scripts and write an object report. `prompt_input`
-names a step input mapped with `{"input": "<name>"}` to a plan-level
-`data.inputs` file (repository-relative path, `type: file`, `max_bytes`);
+headless worker head, runs an agent exec step there with `profile`, an inline
+`prompt`, `result_file` and `timeout`, then verifies on that worker head with
+the repository's own checks and a check step that writes an object report.
 `result_file` equals the name and path of a declared output of that step.
 
+### Plans carry their own inputs
+
+Planning never requires committing files to the source. The draft and anything
+it needs travel with the proposal and are embedded in the compiled artifact, so
+the acceptance digest binds their exact bytes:
+
+- An agent exec step gives the worker's instructions inline as `prompt` (UTF-8,
+  1 byte to 32 KiB, no NUL) instead of `prompt_input`; exactly one of the two is
+  required. The compiler lowers it to a generated bundle input named
+  `prompt-<step>` (so step IDs with inline prompts are at most 57 characters and
+  that input name is reserved). `workflow plan show` prints a bounded, single-line
+  excerpt with the prompt's size and digest; `show --json` holds the full text and
+  `explain` adds a `prompt` summary to the step.
+- A schema 1 `data.inputs` entry may name a proposal asset instead of a
+  repository path: `{"asset": "<name>", "type": "file", "max_bytes": N}`. Publish
+  assets with `hydra workflow plan propose <draft.json> --asset <name>=<file>`
+  (repeatable; at most 16, each a regular UTF-8 text file of at most 64 KiB
+  without NUL bytes; symlinks are refused). Hydra keeps private copies in
+  `assets/` beside the head's `planning/draft.json`, replaces the whole set on
+  each publication, and refuses a draft whose asset references and published
+  files differ. Expert CLI use passes `--assets-dir <dir>` to `validate` and
+  `compile`; the native workspace passes the draft's sibling `assets/` directory.
+  The compiled artifact carries the text in its `assets` member (absent when a
+  plan uses none, so earlier artifacts keep their bytes); the whole artifact must
+  still fit 256 KiB.
+- An exec `argv` element `@input/<name>` is replaced at run time by the path of
+  that step's materialized input `<name>` (`$HYDRA_WORKFLOW_INPUTS_DIR/<name>`), so
+  a check can run `argv: [sh, "@input/verify"]` after mapping
+  `"verify": {"input": "verify"}` in `data.steps.<step>.inputs`. Validation
+  rejects a reference to an undeclared input with `invalid_input_reference`.
+  Scripts may also read `$HYDRA_WORKFLOW_INPUTS_DIR` and write
+  `$HYDRA_WORKFLOW_OUTPUTS_DIR` directly.
+
+Changing a prompt or any asset byte changes the compiled digest: a previously
+approved digest no longer admits the changed plan, and the workspace treats a
+republished asset set like a changed draft that must be validated again.
+Admission and every step's binding check recompile from the artifact's own
+embedded inputs, so republishing a proposal never alters a run in progress.
+The runtime materializes these inputs as workflow data declarations with
+`"source": "bundle"`, read from `bundle/` beside the admitted definition.
+
+Exec steps run in their head's worktree. Only `argv[0]` is checked against the
+policy's `tools` at validation; later arguments are not resolved against the
+source. A verify step that runs on a plan-spawned head after the step that
+changes it therefore sees the worker's files, including commands and tests the
+worker added (for example `argv: [make, check]` or `[sh, tests/test_kill.sh]`).
+Such a step should depend on that implementation step. Keep `--asset` for genuinely
+custom files such as a report-writing verifier.
+
 Validation binds the checkout Hydra runs in at its current commit. It must be a
-Git repository with no tracked changes, and inputs, context and scripts must
-exist there. An `invalid_source` diagnostic names that checkout and the failed
+Git repository with no tracked changes, and repository inputs (`path`) and
+`context` files must exist there; inline prompts and assets need not. An
+`invalid_source` diagnostic names that checkout and the failed
 condition; for tracked changes it lists up to ten paths with a count and the
 recovery `commit or stash these changes in <dir>, then validate again`.
 

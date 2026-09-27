@@ -24,6 +24,11 @@ static json_object *attention_data(const char *project)
     json_object_put(result);
     return NULL;
 }
+/* Bundle inputs sit in bundle/ beside the definition, as written by plan admission. */
+static int initialize(json_object *manifest, const char *source, const char *definition, const char *run) {
+    char bundle[F_PATH];
+    return f_path(bundle, sizeof(bundle), definition, "bundle") ? -1 : wd_initialize(manifest, source, bundle, run);
+}
 json_object *wd_cli(int argc, char **argv) {
     json_object *manifest = NULL, *result; char data[F_PATH], graph[F_PATH]; int status = -1;
     if (argc == 2 && !strcmp(argv[0], "fingerprint")) {
@@ -44,7 +49,7 @@ json_object *wd_cli(int argc, char **argv) {
             return f_error("workflow-data", "invalid_data", "cannot snapshot workflow data manifest");
         manifest = wd_manifest(data, graph);
         if (manifest) {
-            if (argc == 5 && !strcmp(argv[0], "init")) status = wd_initialize(manifest, argv[2], argv[1]);
+            if (argc == 5 && !strcmp(argv[0], "init")) status = initialize(manifest, argv[2], argv[3], argv[1]);
             else if (argc == 2 && !strcmp(argv[0], "verify")) status = wd_verify(manifest, argv[1]);
             else if (argc == 4 && wd_name(argv[2])) status = attempt_command(argv[0], manifest, argv[1], argv[2], argv[3]);
         }

@@ -14,6 +14,21 @@ static void items(FILE *out, const char *label, json_object *array) {
     fputc('\n', out);
 }
 static const char *preview_text(const char *value) { return value ? value : "-"; }
+/* A bounded, single-line excerpt that never splits a UTF-8 sequence. */
+#define PLAN_PROMPT_PREVIEW 240U
+static void prompt_preview(json_object *compiled, const char *id, json_object *prompt, FILE *out) {
+    const char *text = f_text(prompt); size_t length = strlen(text), shown = length, i; char name[80];
+    json_object *decl;
+    snprintf(name, sizeof(name), "prompt-%s", id);
+    decl = f_field(f_field(f_field(compiled, "data"), "inputs"), name);
+    if (shown > PLAN_PROMPT_PREVIEW) {
+        shown = PLAN_PROMPT_PREVIEW;
+        while (shown && ((unsigned char)text[shown] & 0xC0) == 0x80) shown--;
+    }
+    fprintf(out, "    prompt: %zu bytes, sha256 %s, input %s\n    prompt text: ", length, preview_text(f_string(decl, "sha256")), name);
+    for (i = 0; i < shown; i++) fputc((unsigned char)text[i] < 32 || text[i] == 127 ? ' ' : text[i], out);
+    fprintf(out, "%s\n", shown < length ? " [...] (full text: workflow plan show <compiled.json> --json)" : "");
+}
 static void step_preview(json_object *compiled, json_object *step, FILE *out) {
     const char *id = f_string(step, "id"), *head = f_string(f_field(step, "args"), "head");
     json_object *binding = f_field(f_field(compiled, "tasks"), id);
@@ -24,9 +39,13 @@ static void step_preview(json_object *compiled, json_object *step, FILE *out) {
         fprintf(out, "    recipe: %s\n", json_object_to_json_string_ext(spec, JSON_C_TO_STRING_PLAIN));
         fprintf(out, "    transport: %s\n", json_object_to_json_string_ext(f_field(binding, "destination"), JSON_C_TO_STRING_PLAIN));
     } else {
-        fprintf(out, "  %s: %s/%s on local:%s; ", id, f_string(step, "role"), f_string(step, "kind"), head ? head : f_string(f_field(step, "args"), "branch"));
+        json_object *args = plan_canonical(f_field(step, "args")), *prompt = json_object_get(f_field(args, "prompt"));
+        json_object_object_del(args, "prompt");
+        fprintf(out, "  %s: %s/%s on local:%s; ", id, f_string(step, "role"), f_string(step, "kind"), head ? head : f_string(args, "branch"));
         items(out, "after", f_field(step, "needs"));
-        fprintf(out, "    recipe: %s\n", json_object_to_json_string_ext(f_field(step, "args"), JSON_C_TO_STRING_PLAIN));
+        fprintf(out, "    recipe: %s\n", json_object_to_json_string_ext(args, JSON_C_TO_STRING_PLAIN));
+        if (prompt) prompt_preview(compiled, id, prompt, out);
+        json_object_put(prompt); json_object_put(args);
     }
 }
 
@@ -89,8 +108,12 @@ static bool preview_inputs(json_object *compiled, FILE *out) {
     if (!inputs) return true;
     if (!json_object_is_type(inputs, json_type_object)) return false;
     json_object_object_foreach(inputs, name, decl) {
+        const char *origin = f_string(decl, "source");
         if (!f_string(decl, "path") || !task_hex(f_string(decl, "sha256"), 64)) return false;
-        fprintf(out, "Input %s: %s (%s)\n", name, f_string(decl, "path"), f_string(decl, "sha256"));
+        if (origin && !strcmp(origin, "bundle"))
+            fprintf(out, "Input %s: carried by this plan as %s, %lld bytes at most (%s)\n", name, f_string(decl, "path"),
+                (long long)json_object_get_int64(f_field(decl, "max_bytes")), f_string(decl, "sha256"));
+        else fprintf(out, "Input %s: %s (%s)\n", name, f_string(decl, "path"), f_string(decl, "sha256"));
     }
     return true;
 }

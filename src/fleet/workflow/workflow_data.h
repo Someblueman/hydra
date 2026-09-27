@@ -12,7 +12,8 @@ json_object *wd_file(const char *path, json_object *declaration);
 json_object *wd_cli(int argc, char **argv);
 int wd_fingerprint(const char *worktree, char digest[65]);
 bool wd_name(const char *name);
-int wd_initialize(json_object *manifest, const char *source, const char *run);
+/* bundle (may be NULL) holds inputs declared with source "bundle". */
+int wd_initialize(json_object *manifest, const char *source, const char *bundle, const char *run);
 int wd_prepare(json_object *manifest, const char *run, const char *step, const char *attempt);
 int wd_seal(json_object *manifest, const char *step, const char *attempt);
 int wd_verify_output(json_object *manifest, const char *step, const char *attempt);

@@ -65,16 +65,24 @@ static json_object *source_binding(const char *source) {
 done:
     f_capture_free(&cap); return out;
 }
+/* A bundle input is carried by the plan artifact itself; every other input is
+ * a repository file of the bound source. */
+static int bind_input(json_object *declaration, const char *source, const char *bundle, const char *path) {
+    const char *origin = f_string(declaration, "source"); json_object *file;
+    if (origin && !strcmp(origin, "bundle")) source = bundle;
+    else if (origin && strcmp(origin, "repository")) return -1;
+    if (task_file_copy(source, f_string(declaration, "path"), path) || !(file = wd_file(path, declaration))) return -1;
+    f_string_add(declaration, "sha256", f_string(file, "sha256")); json_object_put(file); unlink(path);
+    return 0;
+}
 /* Resolve only explicitly declared data and adapter contracts. No model calls,
  * probes, head creation, or recipe execution occur during compilation. */
 static json_object *bind_inputs(json_object *data, const char *source, const char *scratch, int64_t limit, int64_t rounds) {
-    char path[F_PATH]; int64_t total = 0; json_object *bound = plan_canonical(data), *inputs = f_field(bound, "inputs");
-    if (f_path(path, sizeof(path), scratch, "input")) goto bad;
+    char path[F_PATH], bundle[F_PATH]; int64_t total = 0; json_object *bound = plan_canonical(data), *inputs = f_field(bound, "inputs");
+    if (f_path(path, sizeof(path), scratch, "input") || f_path(bundle, sizeof(bundle), scratch, "bundle")) goto bad;
     json_object_object_foreach(inputs, name, declaration) {
-        json_object *file; const char *origin = f_string(declaration, "source"); (void)name;
-        if (origin && strcmp(origin, "repository")) goto bad;
-        if (task_file_copy(source, f_string(declaration, "path"), path) || !(file = wd_file(path, declaration))) goto bad;
-        f_string_add(declaration, "sha256", f_string(file, "sha256")); json_object_put(file); unlink(path);
+        (void)name;
+        if (bind_input(declaration, source, bundle, path)) goto bad;
         total += json_object_get_int64(f_field(declaration, "max_bytes"));
     }
     {
@@ -128,45 +136,82 @@ static bool complete_binding(json_object *plan, const char *source, const char *
     }
     return true;
 }
-json_object *plan_compile(json_object *plan, json_object *policy, const char *source, json_object *errors) {
-    char scratch[] = "/tmp/hydra-plan-compile.XXXXXX", data_path[F_PATH], graph_path[F_PATH], yaml_path[F_PATH];
-    json_object *compiled = NULL, *manifest = NULL, *binding = NULL, *adapters = NULL, *data = NULL, *normalized = NULL, *context = NULL; char *yaml = NULL;
-    int64_t context_bytes = 0;
-    if (plan_validate(plan, policy, errors)) return NULL;
-    if (!mkdtemp(scratch)) { plan_error(errors, "$", "io_error", "cannot create compiler scratch directory"); return NULL; }
-    normalized = plan_canonical(plan); plan = normalized;
-    if (plan_lower(plan, scratch) || f_path(data_path, sizeof(data_path), scratch, "data.json") || f_path(graph_path, sizeof(graph_path), scratch, "graph.tsv") ||
-        !(manifest = wd_manifest(data_path, graph_path))) { plan_error(errors, "data", "invalid_handoff", "invalid artifact types, bounds, paths or direct producer dependencies"); goto done; }
-    if (!(binding = source_binding(source))) { plan_source_error(errors, source); goto done; }
-    if (!(context = context_files(plan, source, scratch, &context_bytes))) { plan_error(errors, "context", "invalid_context", "context references must be bounded existing repository files; snapshot external sources first"); goto done; }
-    if (!(data = bind_inputs(manifest, source, scratch, json_object_get_int64(f_field(f_field(plan, "envelope"), "artifact_bytes")) - context_bytes,
-        1 + json_object_get_int64(f_field(f_field(plan, "envelope"), "repair_budget"))))) {
-        plan_error(errors, "data", "invalid_inputs_or_budget", "repository inputs must exist and match their type/digest; declared inputs and every reserved output round must fit the artifact envelope"); goto done;
+struct compile_parts {
+    json_object *manifest, *binding, *adapters, *data, *context, *files;
+    char *yaml;
+};
+static void compile_parts_free(struct compile_parts *parts) {
+    free(parts->yaml); json_object_put(parts->manifest); json_object_put(parts->binding); json_object_put(parts->adapters);
+    json_object_put(parts->data); json_object_put(parts->context); json_object_put(parts->files);
+}
+static bool compile_lower(json_object *expanded, const char *scratch, struct compile_parts *parts, json_object *errors) {
+    char data_path[F_PATH], graph_path[F_PATH];
+    if (plan_lower(expanded, scratch) || plan_bundle_write(parts->files, scratch) || f_path(data_path, sizeof(data_path), scratch, "data.json") ||
+        f_path(graph_path, sizeof(graph_path), scratch, "graph.tsv") || !(parts->manifest = wd_manifest(data_path, graph_path))) {
+        plan_error(errors, "data", "invalid_handoff", "invalid artifact types, bounds, paths or direct producer dependencies"); return false;
     }
-    if (strlen(json_object_to_json_string_ext(data, JSON_C_TO_STRING_PLAIN)) > WD_LIMIT) { plan_error(errors, "data", "bound_data_limit", "input digests make the resolved data manifest exceed 64 KiB"); goto done; }
-    if (!(adapters = profiles(plan))) { plan_error(errors, "steps.args.profile", "unsupported_profile", "headless prompt profile is unavailable"); goto done; }
-    if (f_path(yaml_path, sizeof(yaml_path), scratch, "workflow.yml") || !(yaml = f_read(yaml_path, PLAN_LIMIT))) goto done;
-    compiled = json_object_new_object(); json_object_object_add(compiled, "schema_version", json_object_new_int(1));
+    return true;
+}
+/* Lowers the expanded plan into scratch and binds its source, context, inputs and profiles. */
+static bool compile_resolve(json_object *plan, json_object *expanded, const char *source, const char *scratch, struct compile_parts *parts, json_object *errors) {
+    char yaml_path[F_PATH]; int64_t context_bytes = 0;
+    json_object *env = f_field(plan, "envelope");
+    if (!compile_lower(expanded, scratch, parts, errors)) return false;
+    if (!(parts->binding = source_binding(source))) { plan_source_error(errors, source); return false; }
+    if (!(parts->context = context_files(plan, source, scratch, &context_bytes))) { plan_error(errors, "context", "invalid_context", "context references must be bounded existing repository files; snapshot external sources first"); return false; }
+    if (!(parts->data = bind_inputs(parts->manifest, source, scratch, json_object_get_int64(f_field(env, "artifact_bytes")) - context_bytes,
+        1 + json_object_get_int64(f_field(env, "repair_budget"))))) {
+        plan_error(errors, "data", "invalid_inputs_or_budget", "repository inputs must exist and match their type/digest; declared inputs and every reserved output round must fit the artifact envelope"); return false;
+    }
+    if (strlen(json_object_to_json_string_ext(parts->data, JSON_C_TO_STRING_PLAIN)) > WD_LIMIT) { plan_error(errors, "data", "bound_data_limit", "input digests make the resolved data manifest exceed 64 KiB"); return false; }
+    if (!(parts->adapters = profiles(plan))) { plan_error(errors, "steps.args.profile", "unsupported_profile", "headless prompt profile is unavailable"); return false; }
+    return !f_path(yaml_path, sizeof(yaml_path), scratch, "workflow.yml") && (parts->yaml = f_read(yaml_path, PLAN_LIMIT));
+}
+static json_object *compile_artifact(json_object *plan, json_object *policy, struct compile_parts *parts) {
+    json_object *compiled = json_object_new_object(), *assets = plan_bundle_assets(parts->files);
+    json_object_object_add(compiled, "schema_version", json_object_new_int(1));
     f_string_add(compiled, "compiler", PLAN_COMPILER);
     json_object_object_add(compiled, "plan", plan_canonical(plan)); json_object_object_add(compiled, "policy", plan_canonical(policy));
-    json_object_object_add(compiled, "source", json_object_get(binding)); json_object_object_add(compiled, "profiles", json_object_get(adapters));
-    json_object_object_add(compiled, "context", json_object_get(context));
-    json_object_object_add(compiled, "data", json_object_get(data)); f_string_add(compiled, "workflow", yaml);
-    if (!complete_binding(plan, source, scratch, compiled, errors)) { json_object_put(compiled); compiled = NULL; }
-done:
-    free(yaml); json_object_put(manifest); json_object_put(binding); json_object_put(adapters); json_object_put(data); json_object_put(normalized); json_object_put(context); f_remove_tree(scratch);
+    json_object_object_add(compiled, "source", json_object_get(parts->binding)); json_object_object_add(compiled, "profiles", json_object_get(parts->adapters));
+    json_object_object_add(compiled, "context", json_object_get(parts->context));
+    json_object_object_add(compiled, "data", json_object_get(parts->data)); f_string_add(compiled, "workflow", parts->yaml);
+    /* Only plans that use assets carry them, so legacy artifacts keep their bytes. */
+    if (assets) json_object_object_add(compiled, "assets", assets);
     return compiled;
+}
+json_object *plan_compile(json_object *plan, json_object *policy, const char *source, json_object *assets, json_object *errors) {
+    char scratch[] = "/tmp/hydra-plan-compile.XXXXXX";
+    struct compile_parts parts = {0}; json_object *compiled = NULL, *normalized = NULL, *expanded = NULL;
+    if (plan_validate(plan, policy, errors)) return NULL;
+    parts.files = json_object_new_object();
+    if (!(expanded = plan_expand(plan, assets, parts.files, errors))) { compile_parts_free(&parts); return NULL; }
+    if (!mkdtemp(scratch)) { plan_error(errors, "$", "io_error", "cannot create compiler scratch directory"); json_object_put(expanded); compile_parts_free(&parts); return NULL; }
+    normalized = plan_canonical(plan);
+    if (compile_resolve(normalized, expanded, source, scratch, &parts, errors)) {
+        compiled = compile_artifact(normalized, policy, &parts);
+        if (!complete_binding(normalized, source, scratch, compiled, errors)) { json_object_put(compiled); compiled = NULL; }
+    }
+    compile_parts_free(&parts); json_object_put(normalized); json_object_put(expanded); f_remove_tree(scratch);
+    return compiled;
+}
+/* Rebuilds the artifact's bundle inputs (inline prompts and assets) for admission. */
+static int materialize_bundle(json_object *compiled, const char *directory) {
+    json_object *files = json_object_new_object(), *errors = json_object_new_array(), *expanded;
+    int status = -1;
+    expanded = plan_expand(f_field(compiled, "plan"), f_field(compiled, "assets"), files, errors);
+    if (expanded && (!json_object_object_length(files) || !plan_bundle_write(files, directory))) status = 0;
+    json_object_put(expanded); json_object_put(files); json_object_put(errors); return status;
 }
 int plan_materialize(json_object *compiled, const char *directory) {
     char path[F_PATH]; const char *yaml = f_string(compiled, "workflow");
     if (!yaml || f_path(path, sizeof(path), directory, "workflow.yml") || f_write(path, yaml, strlen(yaml), false) ||
         task_write_json(directory, "data.json", f_field(compiled, "data"), false) || task_write_json(directory, "compiled.json", compiled, false)) return -1;
-    return 0;
+    return materialize_bundle(compiled, directory);
 }
 int plan_admit(json_object *compiled, const char *source, const char *accepted) {
     char digest[65], expected[65]; json_object *errors = json_object_new_array(), *fresh = NULL; int status = -1;
     if (!task_hex(accepted, 64) || plan_digest(compiled, digest) || strcmp(digest, accepted)) goto done;
-    fresh = plan_compile(f_field(compiled, "plan"), f_field(compiled, "policy"), source, errors);
+    fresh = plan_compile(f_field(compiled, "plan"), f_field(compiled, "policy"), source, f_field(compiled, "assets"), errors);
     if (!fresh || plan_digest(fresh, expected) || strcmp(digest, expected)) goto done;
     status = 0;
 done:

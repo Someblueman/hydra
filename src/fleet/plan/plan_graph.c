@@ -89,6 +89,14 @@ static void write_conflicts(json_object *writes, json_object *other_writes, json
         if (overlap(f_text(json_object_array_get_idx(writes, a)), f_text(json_object_array_get_idx(other_writes, b))))
             plan_error(errors, "steps.writes", "write_conflict", "overlapping mutable targets require dependency ordering");
 }
+/* An inline prompt becomes a generated input during compilation. */
+static void profile_handoff(json_object *plan, json_object *s, json_object *errors) {
+    json_object *args = f_field(s, "args"), *decl = output(plan, f_string(s, "id"), f_string(args, "result_file"));
+    json_object *inputs = f_field(f_field(f_field(f_field(plan, "data"), "steps"), f_string(s, "id")), "inputs");
+    bool prompt = f_field(args, "prompt") || f_field(inputs, f_string(args, "prompt_input"));
+    if (!prompt || !f_string(decl, "path") || strcmp(f_string(decl, "path"), f_string(args, "result_file")))
+        plan_error(errors, "steps.args.profile", "invalid_profile_handoff", "an agent step needs an inline prompt or a prompt_input naming a declared step input; result_file must name a declared output with the same path");
+}
 int plan_graph(json_object *plan, json_object *errors) {
     bool reach[PLAN_STEPS][PLAN_STEPS] = {{false}};
     json_object *steps = f_field(plan, "steps"); size_t n = json_object_array_length(steps), i, j;
@@ -96,12 +104,7 @@ int plan_graph(json_object *plan, json_object *errors) {
     for (i = 0; i < n; i++) {
         json_object *s = json_object_array_get_idx(steps, i), *writes = f_field(s, "writes");
         const char *head = f_string(f_field(s, "args"), "head"); unsigned producers = 0;
-        if (f_string(f_field(s, "args"), "profile")) {
-            json_object *args = f_field(s, "args"), *decl = output(plan, f_string(s, "id"), f_string(args, "result_file"));
-            json_object *inputs = f_field(f_field(f_field(f_field(plan, "data"), "steps"), f_string(s, "id")), "inputs");
-            if (!f_field(inputs, f_string(args, "prompt_input")) || !f_string(decl, "path") || strcmp(f_string(decl, "path"), f_string(args, "result_file")))
-                plan_error(errors, "steps.args.profile", "invalid_profile_handoff", "profile prompt_input must name a declared input; result_file must name a declared output with the same path");
-        }
+        if (f_string(f_field(s, "args"), "profile")) profile_handoff(plan, s, errors);
         if (reach[i][i]) plan_error(errors, "steps.needs", "cycle", "dependency graph contains a cycle");
         for (j = 0; j < n; j++) {
             json_object *t = json_object_array_get_idx(steps, j); const char *branch = f_string(f_field(t, "args"), "branch");

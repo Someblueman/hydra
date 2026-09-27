@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Policies accept the write scope `@spawned:*`, authorizing writes only to heads
   created by the plan's own spawn steps; plans still name concrete heads.
+- Plans carry their own inputs, so planning never requires committing files to
+  your checkout. Agent steps accept an inline `prompt` (up to 32 KiB) instead of
+  `prompt_input`; `workflow plan propose --asset NAME=FILE` publishes up to 16
+  custom files (such as a verifier) that `data.inputs` reference as
+  `{"asset": NAME, ...}`, and `validate`/`compile` accept `--assets-dir`. Prompts
+  and assets are embedded in the compiled plan and bound by its digest, so any
+  change requires fresh approval. `show` and `explain` preview inline prompts.
+- Exec `argv` in a compiled plan can pass a step's materialized input as
+  `@input/<name>`.
 - `hydra gc --policy orphaned --path <worktree>` limits a run to one leftover
   worktree. Doctor, `hydra du` and Recovery show leftover worktree sizes, measured
   with a time bound and reported as unknown rather than zero.
@@ -38,8 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The guided local policy now allows `sh`, `git`, `make` and the head's own agent
   profile, writes inside plan-spawned heads, 3600 seconds and a 1 GiB free-space
   floor, so agent-implemented plans can validate. Its approval flow is unchanged.
-- The planning handoff explains how to express a spawned worker, agent step,
-  prompt input and `make`/`sh` verification under that policy.
+- The planning handoff explains how to express a spawned worker, an agent step
+  with its instructions inline, and verification with the repository's own
+  checks on the worker head under that policy. It tells the planning agent never
+  to commit while planning or change your checkout, and to use `--asset` only for
+  genuinely custom files. The `P` policy prompt notes that the plan carries its
+  own prompts and assets.
 
 ### Fixed
 

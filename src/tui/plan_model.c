@@ -3,7 +3,37 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include <dirent.h>
 /* Planning presentation only. The shell CLI compiles and admits execution. */
+
+/* A draft's assets (published with propose --asset) sit in assets/ beside it. */
+static bool native_plan_assets_dir(const char *draft, char out[4096]) {
+    const char *slash=strrchr(draft,'/');
+    int n=slash ? snprintf(out,4096,"%.*s/assets",(int)(slash-draft),draft) : snprintf(out,4096,"assets");
+    return n>0 && n<4096;
+}
+static unsigned long long native_plan_entry_stamp(const char *name, const struct stat *info) {
+    unsigned long long hash=1469598103934665603ULL;
+    for (; *name; name++) hash=(hash^(unsigned char)*name)*1099511628211ULL;
+    return hash^((unsigned long long)info->st_ino*31ULL+(unsigned long long)info->st_size*131ULL+(unsigned long long)info->st_mtime);
+}
+/* Changes whenever propose replaces the asset set or a file in it changes;
+ * zero when there is no assets directory. Order independent. */
+static unsigned long long native_plan_assets_stamp(const char *draft) {
+    char directory[4096], path[4096];
+    struct stat info;
+    struct dirent *entry;
+    DIR *listing;
+    unsigned long long stamp;
+    if (!native_plan_assets_dir(draft,directory) || lstat(directory,&info) || !S_ISDIR(info.st_mode)) return 0;
+    stamp=native_plan_entry_stamp(".",&info)|1ULL;
+    if (!(listing=opendir(directory))) return stamp;
+    while ((entry=readdir(listing))) {
+        if (entry->d_name[0]=='.' || snprintf(path,sizeof(path),"%s/%s",directory,entry->d_name)>=(int)sizeof(path) || lstat(path,&info)) continue;
+        stamp+=native_plan_entry_stamp(entry->d_name,&info);
+    }
+    closedir(listing); return stamp;
+}
 
 
 
@@ -33,7 +63,7 @@ bool native_plan_changed(struct native_plan *p) {
     char *source=native_plan_read(p->path,&a), *policy=native_plan_read(p->policy,&b);
     bool changed=(source==NULL)!=(p->source_bytes==NULL) || (policy==NULL)!=(p->policy_bytes==NULL) ||
         a!=p->source_length || b!=p->policy_length || (source && memcmp(source,p->source_bytes,a)) ||
-        (policy && memcmp(policy,p->policy_bytes,b));
+        (policy && memcmp(policy,p->policy_bytes,b)) || native_plan_assets_stamp(p->path)!=p->assets_stamp;
     free(source); free(policy); return changed;
 }
 void native_plan_message(struct native_plan *p, const char *text) {
@@ -107,6 +137,7 @@ bool native_plan_load(struct app *app, const char *path, const char *policy) {
     copy_text(p->path,sizeof(p->path),path); copy_text(p->policy,sizeof(p->policy),policy);
     free(p->source_bytes); free(p->policy_bytes);
     p->source_bytes=a; p->policy_bytes=b; p->source_length=an; p->policy_length=bn;
+    p->assets_stamp=native_plan_assets_stamp(path);
     p->revision++; p->graph.run_count=0; p->graph.node_count=0; p->selected=0; p->objective[0]='\0';
     if (!a || !b) {
         p->state=PLAN_INVALID;
@@ -120,8 +151,9 @@ bool native_plan_load(struct app *app, const char *path, const char *policy) {
 }
 bool native_plan_compile(struct app *app) {
     struct native_plan *p=app->plan;
-    char draft[4096], policy[4096];
-    char *argv[8];
+    char draft[4096], policy[4096], assets[4096];
+    char *argv[10];
+    struct stat info;
     if (!p || !p->path[0] || p->job.pid) return false;
     if (p->state==PLAN_RETURNED && !native_plan_changed(p)) return false;
     if (native_plan_changed(p)) {
@@ -136,6 +168,10 @@ bool native_plan_compile(struct app *app) {
         snprintf(p->compiled,sizeof(p->compiled),"%s/compiled-%u.json",p->directory,p->compilation)>=(int)sizeof(p->compiled)) return false;
     argv[0]=(char *)app->hydra; argv[1]="workflow"; argv[2]="plan"; argv[3]="compile";
     argv[4]=draft; argv[5]=policy; argv[6]=p->compiled; argv[7]=NULL;
+    /* The compiled artifact embeds the assets, so approval binds their bytes. */
+    if (native_plan_assets_dir(p->path,assets) && !lstat(assets,&info) && S_ISDIR(info.st_mode)) {
+        argv[7]="--assets-dir"; argv[8]=assets; argv[9]=NULL;
+    }
     p->digest[0]='\0'; p->projecting=false; p->state=PLAN_VALIDATING;
     native_plan_message(p,"Validating the draft and policy, binding source and inputs. Agent terminal input remains available.");
     if (native_capture_start(&p->job,argv,30000)) return true;

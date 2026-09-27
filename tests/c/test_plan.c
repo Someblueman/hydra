@@ -326,11 +326,13 @@ static void obligation_cases(void) {
     json_object_object_add(plan, "obligations", obligations); f_string_add(plan, "objective", "Improve performance while preserving text content");
     obligations = plan_obligations_reviews(plan); assert(json_object_array_length(obligations) == 2); json_object_put(obligations); json_object_put(plan); json_object_put(policy);
 }
+#include "test_plan_bundle.inc"
 int main(void) {
     char root[] = "/tmp/hydra-plan-unit.XXXXXX";
     assert(mkdtemp(root)); f_home = root; f_hydra = "hydra";
     terminal_cases(); graph_cases(); spawned_scope_cases(); distributed_graph_cases();
     repair_policy_cases(); check_ownership_cases(); obligation_cases(); parse_cases(root); report_cases(); structured_report_cases();
+    bundle_cases(root);
     source_case("/nonexistent/hydra-plan-source", "/nonexistent/hydra-plan-source", "missing_directory");
     { char real[F_PATH]; assert(realpath(root, real)); source_case(root, real, "not_repository"); }
     assert(!f_remove_tree(root));
