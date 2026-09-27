@@ -444,15 +444,24 @@ One interaction model applies everywhere:
 | `Tab` / `Shift-Tab` | Next / previous tab; inside Workspace, next / previous pane |
 | `Left` / `Right`, `1`-`9` | Previous / next tab, or jump to a tab |
 | `Up` / `Down`, `j` / `k` | Select |
-| `Enter` | Open the selection (details, a host's heads, a recovery check) |
+| `Enter` | Open the selection (details, a host's heads, a recovery check); expand or collapse a run |
+| `l` / `h` | Expand / collapse the selected run in Work and Overview |
 | `Esc` | One step back: details to the list, close help, clear the search |
 | `n` | Start a new task (branch, worktree, terminal and agent) |
 | `a` | Talk to the selected agent inside Workspace |
 | `x` | Remove the selected or marked heads after an in-app confirmation |
 | `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
 | `/`, `:` | Search heads, search explicit actions |
-| `p`, `d`, `c` | Terminal output, technical details, coordination |
+| `p`, `d`, `c` | Terminal output (a headless head's step output), technical details, coordination |
 | `?`, `t`, `q` | Keyboard help, theme, quit |
+
+Work lists the heads you started. Heads a workflow run created sit inside their
+run, and a run launched from a planning conversation sits inside that planning
+head; runs start collapsed and the header counts their heads separately. A headless
+head is described by the step that runs on it (agent, model and effort, tokens,
+duration) rather than by a terminal, and `p` shows that step's live output.
+Overview centres on the selected or active run: its steps, where each ran, and
+what comes next. See [workflows](workflows.md#heads-a-plan-run-creates).
 
 Removal confirms the exact targets in the UI, runs `hydra kill` per head with output
 captured, reports a concise result in the status line and opens the full output only

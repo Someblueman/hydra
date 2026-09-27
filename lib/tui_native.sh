@@ -196,6 +196,7 @@ tui_native_index_heads() (
 
 # Protocol v2: one H row per head and one R row per recovery finding.
 # Fields never contain tabs or newlines. The first row is the protocol handshake.
+# The trailing H field (terminal mode) is optional for readers of older rows.
 tui_native_emit_data() {
     printf 'HYDRA_TUI\t2\n'
     if state_has_interactive_heads 2>/dev/null && command -v tmux >/dev/null 2>&1; then tmux_load_snapshot; else tmux_clear_snapshot; fi
@@ -293,7 +294,7 @@ tui_native_emit_data() {
         else
             _tned_adapter_source_safe="$(tui_native_safe_field "$_tned_adapter_source")"
         fi
-        printf 'H\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf 'H\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$_tned_branch" "$_tned_session" "$_tned_profile" "$_tned_group" "$_tned_pr" \
             "$_tned_status" "$_tned_liveness" \
             "$_tned_declared" "$_tned_observed" "$_tned_confidence" "$_tned_instance" \
@@ -301,7 +302,7 @@ tui_native_emit_data() {
             "$_tned_queue" "$_tned_resources" "$_tned_diff" "$_tned_gates" "$_tned_approved" \
             "$_tned_desired" "$_tned_source_safe" "$_tned_head_id" \
             "$_tned_adapter" "$_tned_adapter_confidence" "$_tned_adapter_source_safe" \
-            "$_tned_notification_count" "$_tned_notification_source_safe"
+            "$_tned_notification_count" "$_tned_notification_source_safe" "$_tned_mode"
 
         if [ "$_tned_status" = dead ]; then
             printf 'R\tdead-session\t%s\t%s\texact\thydra doctor\n' \

@@ -102,7 +102,8 @@ struct native_links {
     size_t count;
     bool stale;
 };
-struct native_observations { struct native_capture jobs[5]; };
+/* preview reads a headless head's step output (adapter.c). */
+struct native_observations { struct native_capture jobs[5]; struct native_capture preview; };
 struct native_terminal {
     struct tv_pty client;
     struct tv_terminal_model *screen;
@@ -132,6 +133,7 @@ struct native_workspace {
     struct tv_tree tree;
     struct tv_tree_node nodes[MAX_HEADS + 1 + 512 + WF_RUNS];
     char run_labels[WF_RUNS][200];
+    char member_labels[MAX_HEADS][TEXT + 16];
     char project_label[256];
     char collapsed[MAX_HEADS][TEXT];
     size_t collapsed_count;
@@ -140,6 +142,57 @@ struct native_workspace {
     int theme;
     bool root_open, zoom, compact;
 };
+/* Work outline (outline.c): heads the user started, the runs they launched
+ * and the heads each run created. */
+enum outline_kind { OUTLINE_HEAD, OUTLINE_RUN, OUTLINE_RETIRED };
+struct outline_row { enum outline_kind kind; size_t head, run, record; int depth; bool open; };
+#define OUTLINE_ROWS (MAX_HEADS + WF_RUNS + WF_HEADS)
+struct work_counts { size_t heads, run_heads, running, attention, runs, runs_active; };
+bool head_headless(const struct head *h);
+size_t head_owner_run(const struct app *app, const struct head *h, size_t *record);
+size_t run_owner_head(const struct app *app, size_t run);
+const struct workflow_node *head_step(const struct app *app, const struct head *h);
+bool head_needs_attention(const struct app *app, const struct head *h);
+bool run_needs_attention(const struct app *app, size_t run);
+void work_counts(const struct app *app, struct work_counts *n);
+bool run_expanded(const struct app *app, size_t run);
+void run_set_expanded(struct app *app, size_t run, bool expand);
+size_t outline_build(struct app *app, struct outline_row *rows, size_t capacity);
+size_t outline_position(const struct app *app, const struct outline_row *rows, size_t count);
+void outline_select(struct app *app, const struct outline_row *row);
+void outline_move(struct app *app, int direction, bool heads_only);
+bool outline_toggle(struct app *app, int direction);
+void outline_release_run(struct app *app);
+bool text_matches(const char *text, const char *search);
+/* Run and headless-head presentation (run_text.c). Outputs are caller buffers. */
+struct outline_text { char name[TEXT + 64], count[32]; const char *status, *agent, *reported; enum tv_style tone; };
+void outline_row_text(const struct app *app, const struct outline_row *row, struct outline_text *t);
+const char *head_agent_short(const struct app *app, const struct head *head);
+const char *run_head_absence(const struct app *app, const struct workflow_head *r);
+void format_duration(long long seconds, char *out, size_t size);
+void format_tokens(long long value, char *out, size_t size);
+const char *run_label_kind(const struct workflow_run *run);
+void run_summary_text(const struct app *app, size_t run, char *out, size_t size);
+void run_next_text(const struct app *app, size_t run, char *out, size_t size);
+size_t overview_run(struct app *app);
+void head_agent_text(const struct app *app, const struct head *h, char *out, size_t size);
+const char *head_list_status(const struct app *app, const struct head *h);
+enum tv_style head_list_tone(const struct app *app, const struct head *h);
+const char *head_run_role(const struct app *app, const struct head *h);
+void exec_model_text(const struct workflow_exec *e, bool running, char *out, size_t size);
+void exec_effort_text(const struct workflow_exec *e, bool running, char *out, size_t size);
+void exec_tokens_text(const struct workflow_exec *e, char *out, size_t size);
+bool exec_configuration_text(const struct workflow_exec *e, char *out, size_t size);
+void step_duration_text(const struct workflow_node *n, char *out, size_t size);
+void plan_approval_text(const struct app *app, size_t run, char *out, size_t size);
+/* Shared text-view helpers (render.c) and the head details view (detail.c). */
+void column(struct app *app, int x, int width, enum tv_style tone, const char *text);
+void paragraph(struct app *app, const char *text, enum tv_style tone);
+void section(struct app *app, const char *label);
+void pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
+          const char *right_label, const char *right, enum tv_style right_tone);
+void render_empty_work(struct app *app);
+void render_head_detail(struct app *app);
 /* Internal views borrow app; destroy functions release their owned view state. */
 bool native_terminal_focused(struct app *app);
 bool native_terminal_byte(struct app *app, unsigned char byte);
@@ -212,7 +265,6 @@ void native_attention_tick(struct app *app, bool request);
 bool native_attention_key(struct app *app, char key);
 void render_attention(struct app *app);
 void native_links_accept(struct app *app, FILE *input);
-bool native_links_match(struct app *app, size_t run, size_t head);
 void native_controls_tick(struct app *app);
 bool native_control_submit(struct app *app, const char *run, const char *action, const char *request);
 bool native_fleet_control_submit(struct app *app, const struct task_observation *task,
@@ -309,6 +361,7 @@ FILE *capture_adapter(struct app *app, const char *command, const char *option, 
 int accept_model_data(struct app *app, FILE *input);
 void refresh_current_session(struct app *app);
 void capture_preview(struct app *app);
+void headless_preview_tick(struct app *app);
 size_t split_fields(char *line, char **fields, size_t capacity);
 int load_model_stream(FILE *input, struct model *model, char *error, size_t error_size);
 int load_fixture(const char *path, struct model *model, char *error, size_t error_size);

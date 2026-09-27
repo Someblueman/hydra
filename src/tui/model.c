@@ -38,7 +38,7 @@ static int fleet_record(struct model *model, char **fields, char *error, size_t 
     copy_text(head->source, sizeof(head->source), "remote durable state");
     return 0;
 }
-static int head_record(struct model *model, char **fields, char *error, size_t error_size) {
+static int head_record(struct model *model, size_t count, char **fields, char *error, size_t error_size) {
     struct head *head;
     if (model->head_count >= MAX_HEADS) {
         copy_text(error, error_size, "native data exceeds the 512-head safety bound");
@@ -78,6 +78,11 @@ static int head_record(struct model *model, char **fields, char *error, size_t e
     copy_text(head->adapter_confidence, sizeof(head->adapter_confidence), fields[26]);
     copy_text(head->adapter_source, sizeof(head->adapter_source), fields[27]);
     copy_text(head->notification_source, sizeof(head->notification_source), fields[29]);
+    if (count > 30U && strcmp(fields[30], "interactive") && strcmp(fields[30], "headless")) {
+        copy_text(error, error_size, "native data contains an invalid terminal mode");
+        return -1;
+    }
+    if (count > 30U) copy_text(head->terminal, sizeof(head->terminal), fields[30]);
     return 0;
 }
 
@@ -230,7 +235,7 @@ static int fleet_record_line(struct model *model, const struct stream_state *sta
 }
 
 static int local_record_line(struct model *model, size_t count, char **fields, char *error, size_t error_size) {
-    if (count == 30U && !strcmp(fields[0], "H")) return head_record(model, fields, error, error_size);
+    if ((count == 30U || count == 31U) && !strcmp(fields[0], "H")) return head_record(model, count, fields, error, error_size);
     if (count == 6U && !strcmp(fields[0], "R")) { recovery_record(model, fields); return 0; }
     return 1;
 }

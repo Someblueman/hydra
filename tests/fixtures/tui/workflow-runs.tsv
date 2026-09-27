@@ -1,0 +1,9 @@
+HYDRA_WORKFLOW_TUI	2
+W	run_aaaaaaaaaaaaaaaaaaaa	kill-dry-run	succeeded	plan	add-kill	head_aaaaaaaaaaaaaaaa	2026-09-26T10:21:03Z	1790417000	60c5133478a6
+N	run_aaaaaaaaaaaaaaaaaaaa	spawn-worker	spawn	succeeded	1	-	work	kill-dry-run-worker	-	1790416870	1790416875
+N	run_aaaaaaaaaaaaaaaaaaaa	implement	exec	succeeded	1	spawn-worker	compose	kill-dry-run-worker	codex	1790416876	1790416942
+E	run_aaaaaaaaaaaaaaaaaaaa	implement	1	codex	completed	0	1790416878	1790416940	codex-cli 0.46.0	gpt-6-sol	configured	xhigh	configured	24763	24448	1122	-	/home/fixture/.codex/config.toml
+N	run_aaaaaaaaaaaaaaaaaaaa	spawn-check	spawn	succeeded	1	-	work	kill-dry-run-check	-	1790416943	1790416948
+N	run_aaaaaaaaaaaaaaaaaaaa	verify	exec	succeeded	1	implement,spawn-check	verify	kill-dry-run-check	-	1790416950	1790416953
+R	run_aaaaaaaaaaaaaaaaaaaa	kill-dry-run-worker	spawn-worker	worker	-	-
+R	run_aaaaaaaaaaaaaaaaaaaa	kill-dry-run-check	spawn-check	verifier	retired	verifier head kill-dry-run-check retired after the run; its evidence stays in the run record and branch kill-dry-run-check is kept

@@ -26,6 +26,7 @@ void enter_view(struct app *app, int view) {
     if (view == 8) { if (app->view != 8) statistics_toggle(app); return; }
     if (app->view == 8 && app->statistics) app->statistics->detail = false;
     if (view != app->view) app->previous_view = app->view;
+    if (view != 0 && view != 4 && view != 5) outline_release_run(app);
     app->view = view;
     app->diagnostics = false; app->help = false; app->result_open = false;
     if (view == 5) { app->graph_follow = true; if (!app->fleet) (void)refresh_workflows(app, NULL); }
@@ -88,7 +89,10 @@ static bool mouse_hit(const struct app *app, const unsigned values[3], size_t in
 
 static void select_mouse_item(struct app *app, size_t item) {
     switch (app->view) {
-        case 0: case 4: app->selected = item; break;
+        case 0: case 4:
+            if (item > MAX_HEADS) { app->run_row = true; app->workflow_run = item - MAX_HEADS - 1U; }
+            else { app->run_row = false; app->selected = item; }
+            break;
         case 3: app->recovery_selected = item; break;
         case 5: app->workflow_node = item; app->graph_follow = true; break;
         case 6: app->host_selected = item; break;
@@ -312,7 +316,8 @@ static void open_selected(struct app *app) {
         /* Enter in a non-navigation pane has no target; navigation handles its own Enter. */
     } else if (app->view == 1 || app->view == 2) {
         copy_text(app->notice, sizeof(app->notice), "a talks to the agent, Esc goes back");
-    } else if (selected_head(app) != NULL) enter_view(app, 1);
+    } else if (app->run_row && (app->view == 0 || app->view == 4)) (void)outline_toggle(app, 0);
+    else if (selected_head(app) != NULL) enter_view(app, 1);
     else copy_text(app->notice, sizeof(app->notice), "no matching head selected");
 }
 
@@ -392,6 +397,10 @@ static void head_key(struct app *app, char key) {
     switch (key) {
         case 'j': move_selection(app, 1); break;
         case 'k': move_selection(app, -1); break;
+        case 'l': case 'h':
+            if ((app->view == 0 || app->view == 4) && !outline_toggle(app, key == 'l' ? 1 : -1))
+                copy_text(app->notice, sizeof(app->notice), "h and l collapse and expand a run; select a run row first");
+            break;
         case '\r': case '\n': open_selected(app); break;
         case '/': case ':': interactive_prompt(app, key); break;
         case 'n': new_task_action(app); break;

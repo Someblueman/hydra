@@ -118,6 +118,19 @@ Lifecycle, event, and message records follow the schemas described in this guide
   and NUL bytes replaced by `?`; `bytes` counts the whole source and `truncated` is
   true when `text` is shorter. It is absent from completed runs and when both
   streams are empty. It is diagnostic text, never an answer, event or verification.
+- The receipt additively records `configuration` when a provider's own
+  configuration decides the model: `{"model":{"value","source"},
+  "reasoning_effort":{"value","source"},"scope"}` with either member optional.
+  For `codex` it is read at launch from literal `-m`/`--model` or `-c
+  model[_reasoning_effort]=...` recipe arguments, else from
+  `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`, honouring its
+  `profile`). It is configuration, never an observation. Optional
+  `observed_model` and `observed_reasoning_effort` strings hold the first value a
+  provider event names itself (Claude Code's `system/init` carries `model`).
+  Readers keep either absent value unknown.
+- While a provider runs, its stdout is copied (at most 1 MiB, mode 0600) beside
+  the receipt as `.provider-stdout` for a read-only live view, and removed when
+  the step ends; keeping provider output remains the explicit `--retain` choice.
 - Task text is resolved before launch, stored privately, and delivered as one quoted
   argument. Events contain only its hash and byte count.
 - Adapter input is bounded canonical JSON schema v1 and must name the current
@@ -186,6 +199,16 @@ default execution form, and shell strings require both `allow_shell: true` and a
 current repository trust decision. Durable manifests bind resolved definitions,
 inputs, attempts, outputs, events, cancellation, and recovery.
 
+A compiled plan run records its step roles and heads (`plan-roles.tsv`). When it
+reaches `succeeded`, `failed` or `cancelled`, each head its spawn steps created on
+which only verify-role steps ran is retired through `hydra kill
+--protect-untracked` once every succeeded step on it has sealed its outputs; the
+branch is kept. A head with uncommitted or untracked changes is kept. Each outcome
+is recorded as `retirement/<spawn-step>/{state,detail}` (`retired`, `kept` or
+`failed`) and a run event `head.retired`, `head.retire_skipped` or
+`head.retire_failed`, after the terminal run event; retirement never changes the
+run result. Heads of work and compose steps are never retired automatically.
+
 Integration manifests bind the target, initial target ref, ordered immutable
 candidates, gates, merge output, verification result, approval, and recovery action.
 Promotion revalidates those bindings under a project lock, updates only a local ref,
@@ -205,6 +228,16 @@ overview adapter uses `HYDRA_FLEET_TUI<TAB>3`: it retains version-2 `T` host and
 head rows, extends `T` with connection/freshness fields, and adds bounded `O` task
 rows. Version-1 and version-2 fleet fixtures remain readable. Unsupported protocol
 versions fail closed. This adapter is not a general automation API.
+
+Version-2 `H` rows may add a trailing terminal mode (`interactive` or
+`headless`); readers accept rows without it. The workflow projection (`workflow
+tui-data`) is internal protocol `HYDRA_WORKFLOW_TUI<TAB>2`: version 1 `W` and `N`
+fields keep their positions and gain trailing fields (run kind, planning branch,
+created and completed times, accepted digest prefix; step role, head, profile,
+started and completed times), with `E` agent receipt summaries and `R` rows for
+heads a run's spawn steps created (worker or verifier, and retirement). Version-1
+workflow fixtures remain readable. `hydra tui --head-output <branch>` is a private,
+bounded, read-only text view of the step running (or last run) on a headless head.
 
 Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. Both
 retain navigation, search, refresh, preview, switch, spawn, group assignment,

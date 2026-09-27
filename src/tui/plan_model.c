@@ -156,6 +156,12 @@ static bool native_plan_current(struct app *app, struct native_plan *p) {
     copy_text(path,sizeof(path),p->path); copy_text(policy_path,sizeof(policy_path),p->policy);
     return native_plan_load(app,path,policy_path) && p->state!=PLAN_RETURNED;
 }
+/* Private copies of the reviewed draft and policy, and the next artifact path. */
+static bool native_plan_snapshot(struct native_plan *p, char draft[4096], char policy[4096]) {
+    return native_plan_write(p,"draft.json",p->source_bytes,p->source_length,draft) &&
+        native_plan_write(p,"policy.json",p->policy_bytes,p->policy_length,policy) &&
+        snprintf(p->compiled,sizeof(p->compiled),"%s/compiled-%u.json",p->directory,p->compilation)<(int)sizeof(p->compiled);
+}
 bool native_plan_compile(struct app *app) {
     struct native_plan *p=app->plan;
     char draft[4096], policy[4096], assets[4096];
@@ -165,9 +171,7 @@ bool native_plan_compile(struct app *app) {
     if (!native_plan_current(app,p)) return false;
     if (!p->source_bytes || !p->policy_bytes || p->compilation>=1000) return false;
     p->compilation++;
-    if (!native_plan_write(p,"draft.json",p->source_bytes,p->source_length,draft) ||
-        !native_plan_write(p,"policy.json",p->policy_bytes,p->policy_length,policy) ||
-        snprintf(p->compiled,sizeof(p->compiled),"%s/compiled-%u.json",p->directory,p->compilation)>=(int)sizeof(p->compiled)) return false;
+    if (!native_plan_snapshot(p,draft,policy)) return false;
     argv[0]=(char *)app->hydra; argv[1]="workflow"; argv[2]="plan"; argv[3]="compile";
     argv[4]=draft; argv[5]=policy; argv[6]=p->compiled; argv[7]=NULL;
     /* The compiled artifact embeds the assets, so approval binds their bytes. */

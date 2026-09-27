@@ -47,50 +47,158 @@ bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_
     return true;
 }
 
-static int load_workflows(FILE *input, struct workflow_model *m) {
-    char line[2048];
-    size_t bytes = 0, i;
-    bool handshake = false;
-    memset(m, 0, sizeof(*m));
-    while (fgets(line, sizeof(line), input)) {
-        char *fields[8];
-        size_t length = strlen(line), count;
-        if (!length || line[length - 1] != '\n' || (bytes += length) > MAX_DATA_BYTES) return -1;
-        line[length - 1] = '\0';
-        count = split_fields(line, fields, 8);
-        if (!handshake) {
-            if (count != 2 || strcmp(fields[0], "HYDRA_WORKFLOW_TUI") || strcmp(fields[1], "1")) return -1;
-            handshake = true; continue;
-        }
-        if (count == 2 && !strcmp(fields[0], "X")) copy_text(m->warning, sizeof(m->warning), fields[1]);
-        else if (count == 4 && !strcmp(fields[0], "W")) {
-            struct workflow_run *r;
-            if (m->run_count == WF_RUNS || !workflow_id(fields[1]) || strlen(fields[2]) >= 80 || strlen(fields[3]) >= 40) return -1;
-            for (i = 0; i < m->run_count; i++) if (!strcmp(m->runs[i].id, fields[1])) return -1;
-            r = &m->runs[m->run_count++];
-            copy_text(r->id, sizeof(r->id), fields[1]); copy_text(r->name, sizeof(r->name), fields[2]);
-            copy_text(r->state, sizeof(r->state), fields[3]);
-        } else if (count == 7 && !strcmp(fields[0], "N")) {
-            struct workflow_node *n;
-            size_t run;
-            for (run = 0; run < m->run_count; run++) if (!strcmp(m->runs[run].id, fields[1])) break;
-            if (run == m->run_count || m->node_count == WF_NODES || !workflow_id(fields[2]) ||
-                strlen(fields[2]) >= 65 || strlen(fields[3]) >= 32 || strlen(fields[4]) >= 40 ||
-                strlen(fields[6]) >= 1024 || !fields[6][0]) return -1;
-            for (i = 0; i < m->node_count; i++) if (m->nodes[i].run == run && !strcmp(m->nodes[i].id, fields[2])) return -1;
-            n = &m->nodes[m->node_count++]; n->run = run;
-            if (!parse_unsigned(fields[5], &n->attempts)) return -1;
-            copy_text(n->id, sizeof(n->id), fields[2]); copy_text(n->kind, sizeof(n->kind), fields[3]);
-            copy_text(n->state, sizeof(n->state), fields[4]); copy_text(n->needs, sizeof(n->needs), fields[6]);
-        } else return -1;
-    }
+/* "-" is unknown (-1); otherwise a bounded non-negative decimal. */
+static bool workflow_number(const char *text, long long *out) {
+    char *end = NULL;
+    long long value;
+    if (!strcmp(text, "-")) { *out = -1; return true; }
+    if (!text[0] || text[0] == '-' || text[0] == '+') return false;
+    errno = 0; value = strtoll(text, &end, 10);
+    if (errno || *end || value < 0) return false;
+    *out = value;
+    return true;
+}
+
+static bool workflow_text(char *out, size_t size, const char *text) {
+    if (strlen(text) >= size) return false;
+    copy_text(out, size, !strcmp(text, "-") ? "" : text);
+    return true;
+}
+
+static size_t workflow_run_index(const struct workflow_model *m, const char *id) {
+    size_t run;
+    for (run = 0; run < m->run_count; run++) if (!strcmp(m->runs[run].id, id)) break;
+    return run;
+}
+
+/* W id name state [kind planning-branch planning-head created completed digest] */
+static int workflow_run_record(struct workflow_model *m, char **f, size_t count) {
+    struct workflow_run *r;
+    if (m->run_count == WF_RUNS || !workflow_id(f[1]) || strlen(f[2]) >= 80 || strlen(f[3]) >= 40 ||
+        workflow_run_index(m, f[1]) < m->run_count) return -1;
+    r = &m->runs[m->run_count];
+    memset(r, 0, sizeof(*r)); r->completed = -1;
+    copy_text(r->id, sizeof(r->id), f[1]); copy_text(r->name, sizeof(r->name), f[2]);
+    copy_text(r->state, sizeof(r->state), f[3]);
+    if (count == 10 && (!workflow_text(r->kind, sizeof(r->kind), f[4]) || !workflow_text(r->planning, sizeof(r->planning), f[5]) ||
+        !workflow_text(r->planning_head, sizeof(r->planning_head), f[6]) || !workflow_text(r->created, sizeof(r->created), f[7]) ||
+        !workflow_number(f[8], &r->completed) || !workflow_text(r->digest, sizeof(r->digest), f[9]))) return -1;
+    m->run_count++;
+    return 0;
+}
+
+static bool workflow_node_duplicate(const struct workflow_model *m, size_t run, const char *id) {
+    size_t i;
+    for (i = 0; i < m->node_count; i++) if (m->nodes[i].run == run && !strcmp(m->nodes[i].id, id)) return true;
+    return false;
+}
+
+/* N run step kind state attempts needs [role head profile started completed] */
+static int workflow_node_record(struct workflow_model *m, char **f, size_t count) {
+    struct workflow_node *n;
+    size_t run = workflow_run_index(m, f[1]);
+    if (run == m->run_count || m->node_count == WF_NODES || !workflow_id(f[2]) ||
+        strlen(f[2]) >= 65 || strlen(f[3]) >= 32 || strlen(f[4]) >= 40 ||
+        strlen(f[6]) >= 1024 || !f[6][0] || workflow_node_duplicate(m, run, f[2])) return -1;
+    n = &m->nodes[m->node_count];
+    memset(n, 0, sizeof(*n)); n->run = run; n->started = n->completed = -1;
+    if (!parse_unsigned(f[5], &n->attempts)) return -1;
+    copy_text(n->id, sizeof(n->id), f[2]); copy_text(n->kind, sizeof(n->kind), f[3]);
+    copy_text(n->state, sizeof(n->state), f[4]); copy_text(n->needs, sizeof(n->needs), f[6]);
+    if (count == 12 && (!workflow_text(n->role, sizeof(n->role), f[7]) || !workflow_text(n->head, sizeof(n->head), f[8]) ||
+        !workflow_text(n->profile, sizeof(n->profile), f[9]) || !workflow_number(f[10], &n->started) ||
+        !workflow_number(f[11], &n->completed))) return -1;
+    m->node_count++;
+    return 0;
+}
+
+static struct workflow_node *workflow_node_named(struct workflow_model *m, const char *run_id, const char *step) {
+    size_t run = workflow_run_index(m, run_id), i;
+    if (run == m->run_count) return NULL;
+    for (i = 0; i < m->node_count; i++) if (m->nodes[i].run == run && !strcmp(m->nodes[i].id, step)) return &m->nodes[i];
+    return NULL;
+}
+
+static bool workflow_exec_numbers(struct workflow_exec *e, char **f) {
+    return workflow_number(f[6], &e->exit_status) && workflow_number(f[7], &e->started) &&
+        workflow_number(f[8], &e->finished) && workflow_number(f[14], &e->tokens_in) &&
+        workflow_number(f[15], &e->tokens_cached) && workflow_number(f[16], &e->tokens_out);
+}
+
+static bool workflow_exec_texts(struct workflow_exec *e, char **f) {
+    return workflow_text(e->profile, sizeof(e->profile), f[4]) && workflow_text(e->state, sizeof(e->state), f[5]) &&
+        workflow_text(e->version, sizeof(e->version), f[9]) && workflow_text(e->model, sizeof(e->model), f[10]) &&
+        workflow_text(e->model_source, sizeof(e->model_source), f[11]) && workflow_text(e->effort, sizeof(e->effort), f[12]) &&
+        workflow_text(e->effort_source, sizeof(e->effort_source), f[13]) && workflow_text(e->cost, sizeof(e->cost), f[17]) &&
+        workflow_text(e->config_source, sizeof(e->config_source), f[18]);
+}
+
+/* E run step attempt profile state exit started finished version model
+ *   model-source effort effort-source in cached out cost config-source */
+static int workflow_exec_record(struct workflow_model *m, char **f) {
+    struct workflow_node *n = workflow_node_named(m, f[1], f[2]);
+    struct workflow_exec e;
+    memset(&e, 0, sizeof(e));
+    if (!n || n->exec.present || !parse_unsigned(f[3], &e.attempt) || !workflow_exec_numbers(&e, f) || !workflow_exec_texts(&e, f)) return -1;
+    e.present = true;
+    n->exec = e;
+    return 0;
+}
+
+/* R run branch spawn-step class retirement detail */
+static int workflow_head_record(struct workflow_model *m, char **f) {
+    struct workflow_head *h;
+    size_t run = workflow_run_index(m, f[1]);
+    if (run == m->run_count || m->head_count == WF_HEADS || !f[2][0] || !workflow_id(f[3])) return -1;
+    h = &m->heads[m->head_count];
+    memset(h, 0, sizeof(*h)); h->run = run;
+    if (!workflow_text(h->branch, sizeof(h->branch), f[2]) || !workflow_text(h->step, sizeof(h->step), f[3]) ||
+        !workflow_text(h->role, sizeof(h->role), f[4]) || !workflow_text(h->retirement, sizeof(h->retirement), f[5]) ||
+        !workflow_text(h->detail, sizeof(h->detail), f[6])) return -1;
+    m->head_count++;
+    return 0;
+}
+
+static int workflow_record(struct workflow_model *m, char **f, size_t count, bool v2) {
+    if (count == 2 && !strcmp(f[0], "X")) { copy_text(m->warning, sizeof(m->warning), f[1]); return 0; }
+    if (!strcmp(f[0], "W") && count == (v2 ? 10U : 4U)) return workflow_run_record(m, f, count);
+    if (!strcmp(f[0], "N") && count == (v2 ? 12U : 7U)) return workflow_node_record(m, f, count);
+    if (v2 && !strcmp(f[0], "E") && count == 19U) return workflow_exec_record(m, f);
+    if (v2 && !strcmp(f[0], "R") && count == 7U) return workflow_head_record(m, f);
+    return -1;
+}
+
+static bool workflow_graphs_valid(const struct workflow_model *m) {
+    size_t i;
     for (i = 0; i < m->run_count; i++) {
         size_t indices[TV_GRAPH_MAX_NODES], count, n = workflow_nodes(m, i, indices);
         struct tv_edge edges[TV_GRAPH_MAX_EDGES]; struct tv_graph_layout layout;
         if (n > TV_GRAPH_MAX_NODES || !workflow_edges(m, indices, n, edges, &count) ||
-            !tv_graph_layout(edges, count, n, &layout)) return -1;
+            !tv_graph_layout(edges, count, n, &layout)) return false;
     }
-    return handshake && !ferror(input) ? 0 : -1;
+    return true;
+}
+
+/* Protocol 1 carries runs and steps; protocol 2 adds planning ownership,
+ * step roles, heads, agent receipts and spawned-head retirement. */
+static int load_workflows(FILE *input, struct workflow_model *m) {
+    char line[4096];
+    size_t bytes = 0;
+    int version = 0;
+    memset(m, 0, sizeof(*m));
+    while (fgets(line, sizeof(line), input)) {
+        char *fields[20];
+        size_t length = strlen(line), count;
+        if (!length || line[length - 1] != '\n' || (bytes += length) > MAX_DATA_BYTES) return -1;
+        line[length - 1] = '\0';
+        count = split_fields(line, fields, 20);
+        if (!version) {
+            if (count != 2 || strcmp(fields[0], "HYDRA_WORKFLOW_TUI") || (strcmp(fields[1], "1") && strcmp(fields[1], "2"))) return -1;
+            version = fields[1][0] - '0'; continue;
+        }
+        if (count >= 20 || workflow_record(m, fields, count, version == 2)) return -1;
+    }
+    return version && !ferror(input) && workflow_graphs_valid(m) ? 0 : -1;
 }
 
 /* Consumes the completed observation stream. */

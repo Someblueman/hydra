@@ -1,6 +1,7 @@
 #ifndef HYDRA_TUI_APP_H
 #define HYDRA_TUI_APP_H
 #include "model.h"
+#include "../hydra_tui_workflow.h"
 #include "../termviz/termviz.h"
 #include <termios.h>
 #include <sys/types.h>
@@ -62,7 +63,14 @@ struct app {
     char pending_task[TEXT];
     char notice[TEXT];
     char snapshot_error[TEXT];
-    char preview_text[4096];
+    char preview_text[8192];
+    /* The head whose step output an asynchronous preview read belongs to. */
+    char preview_head[TEXT];
+    /* Work outline: runs the user expanded, and whether a run row rather
+     * than a head is selected in Work or Overview (workflow_run names it). */
+    char expanded_runs[WF_RUNS][80];
+    size_t expanded_count;
+    bool run_row;
     struct termios saved;
     /* One frame canvas and presenter serve every view, so repaints only touch
      * changed cells. The frame owner allocates cells before rendering. */

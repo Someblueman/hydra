@@ -1,0 +1,5 @@
+HYDRA_TUI	2
+H	add-kill	hydra-add-kill	codex	-	-	active	live		running	exact	instance_aaaaaaaaaaaaaaaa	3	0	2	0	0	0	0	0	0	0	running	/tmp/hydra/state/head_plan	head_aaaaaaaaaaaaaaaa	none	verified-local-help	hydra capabilities --json	0	/tmp/hydra/state/notifications	interactive
+H	kill-dry-run-worker	-	none	-	-	active	unavailable		idle	reported	instance_bbbbbbbbbbbbbbbb	6	0	0	0	0	0	0	1	0	0	headless	/tmp/hydra/state/head_worker	head_bbbbbbbbbbbbbbbb	none	exact	hydra capabilities --json	0	/tmp/hydra/state/notifications	headless
+H	notes-cleanup	hydra-notes-cleanup	claude	-	-	dead	stopped		running	reported	instance_cccccccccccccccc	4	0	0	0	0	0	0	2	0	0	running	/tmp/hydra/state/head_notes	head_cccccccccccccccc	none	verified-local-help	hydra capabilities --json	0	/tmp/hydra/state/notifications	interactive
+R	dead-session	notes-cleanup	/tmp/hydra/map	exact	hydra doctor

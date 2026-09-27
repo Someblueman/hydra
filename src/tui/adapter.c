@@ -122,17 +122,46 @@ void refresh_current_session(struct app *app) {
         copy_text(app->current_session, sizeof(app->current_session), output);
     }
 }
-void capture_preview(struct app *app) {
-    if (app->fleet) return;
+/* A headless head has no pane: its preview is the bounded, read-only view of
+ * the step that runs (or last ran) on it, read without blocking the UI. */
+static void headless_preview_start(struct app *app, const struct head *h) {
+    struct native_capture *job;
+    char *argv[] = {(char *)app->hydra, (char *)"tui", (char *)"--head-output", (char *)h->branch, NULL};
+    if (!app->observations) return;
+    if (strcmp(app->preview_head, h->branch)) {
+        copy_text(app->preview_head, sizeof(app->preview_head), h->branch);
+        app->preview_text[0] = '\0';
+    }
+    job = &app->observations->preview;
+    if (job->pid) return;
+    if (!native_capture_start(job, argv, 4000L))
+        copy_text(app->preview_text, sizeof(app->preview_text), "Step output unavailable: the reader could not start");
+}
+
+void headless_preview_tick(struct app *app) {
+    struct native_capture *job;
+    FILE *input;
+    size_t used;
+    if (!app->observations) return;
+    job = &app->observations->preview;
+    if (!job->pid || !native_capture_step(job)) return;
+    input = native_capture_take(job);
+    if (!input) {
+        if (!app->preview_text[0]) copy_text(app->preview_text, sizeof(app->preview_text), "Step output unavailable");
+        return;
+    }
+    used = fread(app->preview_text, 1, sizeof(app->preview_text) - 1U, input);
+    app->preview_text[used] = '\0';
+    fclose(input);
+}
+
+static void terminal_preview(struct app *app, const struct head *h) {
     struct output_child child;
     size_t used = 0U;
     bool failed = false;
     char target[TEXT + 8U];
     char *argv[8];
-    if (!app->preview || app->model.head_count == 0U) return;
-    retarget_selection(app);
-    if (selected_head(app) == NULL) return;
-    snprintf(target, sizeof(target), "%s:0.0", selected_head(app)->session);
+    snprintf(target, sizeof(target), "%s:0.0", h->session);
     argv[0] = (char *)"tmux"; argv[1] = (char *)"capture-pane"; argv[2] = (char *)"-p";
     argv[3] = (char *)"-S"; argv[4] = (char *)"-8"; argv[5] = (char *)"-t";
     argv[6] = target; argv[7] = NULL;
@@ -148,4 +177,15 @@ void capture_preview(struct app *app) {
     if (output_finish(&child, failed || used + 1U >= sizeof(app->preview_text))) {
         copy_text(app->preview_text, sizeof(app->preview_text), child.timed_out ? "preview timed out" : "preview unavailable");
     }
+}
+
+void capture_preview(struct app *app) {
+    const struct head *h;
+    if (app->fleet || !app->preview || app->model.head_count == 0U) return;
+    retarget_selection(app);
+    h = selected_head(app);
+    if (h == NULL) return;
+    if (head_headless(h)) { headless_preview_start(app, h); return; }
+    app->preview_head[0] = '\0';
+    terminal_preview(app, h);
 }
