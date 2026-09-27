@@ -56,15 +56,17 @@ tmux-compatible emoji widths, compared with recorded Claude and Codex output) an
 U16 (visible leave and close keys, released input on disconnect, tmux history,
 repeated attach/leave/close/resize cycles) are implemented; U18's runner covers
 eight journeys at 80 and 140 columns, including result review, failed-check
-recovery and terminal restart. These remain open until the human review of the
-installed screens; I4's visual pass likewise needs that review. Live agent checks:
+recovery and terminal restart. The user reviewed the screens on 27 September and
+accepted U14 and U16; I4's visual design pass remains open. Live agent checks:
 Claude and Cursor passed on the operator VPS; Antigravity is closed upstream.
 
 Next, U10 guided remote onboarding: select an SSH destination and let Hydra
 provision a compatible runtime, install and detect agents (including per-user
 installs outside a non-interactive `PATH`) and guide sign-in, replacing the manual
 steps recorded on 26 September. Scheduling, task pools, automatic placement, T2/T3
-and performance baselines remain outside this target. These priorities do not
+and performance baselines remain outside this target. A visual design and
+graphics pass across the control centre (I4, extended) is the next candidate
+after U10. These priorities do not
 establish a release date; compatibility impact still determines the next version.
 
 ## Product and engineering guardrails
@@ -283,7 +285,7 @@ an acceptance blocker, not optional cosmetic polish.
       and avoid large empty charts and unexplained `unavailable` fields. Acceptance:
       navigate to and from statistics during standalone agent work and a recorded
       workflow, with both empty and populated history, without losing context.
-- [ ] **U14 — Faithful, readable agent output.** The supplied output capture contains
+- [x] **U14 — Faithful, readable agent output.** The supplied output capture contains
       repeated question marks replacing characters, long unwrapped lines and flattened
       diffs. Preserve supported Unicode, terminal styling, line structure and readable
       code/diff presentation through capture and rendering. Keep live terminal input
@@ -292,6 +294,9 @@ an acceptance blocker, not optional cosmetic polish.
       provider output with Hydra's view using Unicode, colored diffs, long lines,
       scrolling and resize. No corrupted glyph runs, raw control sequences or missing
       content; unsupported terminal behavior has an honest, readable fallback.
+      Accepted by the user on 27 September 2026 after reviewing the 2.8.0 captures
+      (read-only transcripts compared with recorded Claude and Codex output).
+      Known limit: emoji sequences of more than three joined characters are cut short.
 - [ ] **U15 — Clear purposes for heads, overview and coordination.** Heads should
       help select and manage agent work; overview should summarize objectives,
       progress, decisions and results across that work; coordination should explain
@@ -304,7 +309,7 @@ an acceptance blocker, not optional cosmetic polish.
       worktree does not imply no delivered change. Acceptance: follow a standalone
       task through commit, then a multi-agent objective through a blocked handoff;
       each retained view answers a distinct useful question with current evidence.
-- [ ] **U16 — Attachment that can always be left cleanly.** The user reports being
+- [x] **U16 — Attachment that can always be left cleanly.** The user reports being
       unable to dismiss attachment; the screenshot shows duplicated agent content,
       large dotted regions and competing terminal/workspace presentation. Diagnose
       attach, sizing and screen restoration using the real terminal combination;
@@ -315,6 +320,9 @@ an acceptance blocker, not optional cosmetic polish.
       resize and reattach locally and remotely. No stuck input capture, duplicate
       views, residual screen regions or lost work; closing a client does not kill
       its execution owner. Verify leaving attachment with actual user input.
+      Accepted locally by the user on 27 September 2026 after reviewing the 2.8.0
+      attach/leave/close/resize captures. Remote panes still lack tmux history
+      scrolling; remote attach cycles move to U11.
 - [ ] **U17 — Conversation-to-plan integration without manual JSON.** The current
       plan page asks the user to load draft and policy files. Make agent-authored
       planning part of the conversation: discuss an objective, generate a structured
@@ -378,12 +386,12 @@ part of that work.
 | U1, U2, U4, U6, U7, U8, U9, U13, U19 | [2.6.0](../CHANGELOG.md#260---2026-09-14) |
 | U3 | CLI half in 2.6.0; in-app conversation launch and interactive spawn/resume opening inside Hydra in 2.7.0 |
 | U12 | in-app removal in 2.6.0; untracked-file protection in 2.7.0 |
-| U14 | DEC special graphics and a labelled read-only Details excerpt in 2.7.0 |
+| U14 | DEC special graphics and a labelled read-only Details excerpt in 2.7.0; read-only transcripts in 2.8.0 (accepted) |
 | U15 | view consolidation in 2.6.0 |
-| U16 | nested tmux attachment with deterministic input/resize/return checks in 2.7.0 |
+| U16 | nested tmux attachment with deterministic input/resize/return checks in 2.7.0; leave/close keys, disconnect release and attach cycles in 2.8.0 (accepted locally) |
 | U17 | head-associated proposals, guided local policy, invalidation and exact-digest approval in 2.7.0 |
 | U18 | initial deterministic installed-journey runner in 2.7.0 |
-| U5 | accepted on 27 September 2026 using 2.7.0 plus unreleased local fixes |
+| U5 | accepted on 27 September 2026; its fixes ship in 2.8.0 |
 | U10, U11 | none yet |
 
 ### Candidate features
@@ -876,6 +884,10 @@ provider status for Hydra verification.
       returning to the queue with selection preserved. Completion requires user
       review of the actual screens as well as relevant interaction checks;
       passing tests or placeholder-filled screenshots alone are insufficient.
+      User review of the 2.8.0 screens on 27 September 2026: usability issues are
+      resolved, but visual design and graphics across the control centre need a
+      dedicated pass. Extend this item to the new run, result, failure and
+      statistics screens when it is selected.
 
 I1 builds on V1–V4 and existing interactive attach; tmux-free distributed
 qualification stays in T2/T3. I2/I3 reuse lifecycle, outcome and review contracts.

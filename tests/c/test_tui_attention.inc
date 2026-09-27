@@ -89,8 +89,17 @@ static void attention_seen_group(struct session *left, struct session *right, co
     result(wait_for_markers(left, "ATTENTION  1 need you", "Seen (1)", 1500), "a seen result moves to the collapsed Seen group");
     write_input(left->master, "j", 1U); write_input(left->master, "\r", 1U);
     result(wait_for_marker(left, "Enter collapses", 1000), "Enter expands the Seen group");
-    drain_output(right->master); unlink(done); write_input(right->master, "I", 1U);
-    result(wait_for_markers(right, "ATTENTION  1 need you", "Seen (1)", 3000), "another client of the same user shows the marker after refresh");
+    /* The left client persists the marker asynchronously; refresh the right
+     * client until it reads the stored marker, within one bounded deadline. */
+    unlink(done);
+    {
+        bool shown = false; long long end = monotonic_ms() + 8000;
+        while (!shown && monotonic_ms() < end) {
+            drain_output(right->master); write_input(right->master, "I", 1U);
+            shown = wait_for_markers(right, "ATTENTION  1 need you", "Seen (1)", 1000);
+        }
+        result(shown, "another client of the same user shows the marker after refresh");
+    }
 }
 /* Seen markers persist per user: a new client starts with them. */
 static void attention_restart(const char *tui, const char *hydra, const char *fake_bin) {
