@@ -264,11 +264,7 @@ int main(void) {
     hf_run(
         &f, NULL, -2,
         (const char *[]){f.hydra, "workflow", "--workspace-control", "../", "cancel", "-", NULL});
-    hf_cleanup();
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
+    hf_finish(&f);
     puts("PASS workspace controls: exact decisions, separate resume, detached continuation, "
          "rejection, cancellation, draft and panes preserved");
     return 0;

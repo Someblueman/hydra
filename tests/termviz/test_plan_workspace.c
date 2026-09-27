@@ -78,10 +78,7 @@ int main(void) {
               "PASS plan workspace: compilation, revised scope, invalid JSON, reversible layouts "
               "and termios (%s)",
               f.base);
+    hf_finish(&f);
     puts(text);
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
     return 0;
 }
