@@ -296,8 +296,8 @@ static void changes(struct out *o, json_object *changes)
         return;
     }
     file_totals(files, &added, &deleted);
-    say(o, "CHANGES ON %s  (%zu commits, %zu files, +%lld -%lld; the branch as it is now)", text(changes, "branch", "?"),
-        rr_length(rows), rr_length(files), added, deleted);
+    say(o, "CHANGES ON %s  (%zu commit%s, %zu file%s, +%lld -%lld; the branch as it is now)", text(changes, "branch", "?"),
+        rr_length(rows), rr_length(rows) == 1 ? "" : "s", rr_length(files), rr_length(files) == 1 ? "" : "s", added, deleted);
     say(o, "  Base %.12s -> tip %.12s", text(changes, "base", "?"), text(changes, "tip", "?"));
     commits(o, rows);
     if (json_object_get_boolean(f_field(changes, "uncommitted_changes")))

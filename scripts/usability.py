@@ -8,6 +8,7 @@ import hashlib
 import html
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -65,6 +66,7 @@ class Journey:
         for key in ("HOME", "HYDRA_HOME", "TMUX_TMPDIR"):
             Path(self.env[key]).mkdir()
         self.proof: list[dict] = []
+        self.failures: list[str] = []
         self.observer: Observer | None = None
         self.attached = False
         self.source, self.prefix, self.columns = source, prefix, columns
@@ -112,6 +114,87 @@ class Journey:
         )
         return screen
 
+    def see_all(self, *texts: str, timeout: float = 15) -> str:
+        """Wait for one applied screen that shows every text at once."""
+        assert self.observer
+        screen, receipt = self.observer._visible(
+            lambda screen, record: record["parser_complete"]
+            and all(text in screen for text in texts),
+            time.monotonic_ns() + int(timeout * 1e9),
+            " and ".join(map(repr, texts)),
+        )
+        self.proof.append(
+            {"expect_all": texts, "snapshot": receipt["id"], "at_ns": time.monotonic_ns()}
+        )
+        return screen
+
+    def see_prose(self, text: str, timeout: float = 15) -> str:
+        """Wait for text that may be word-wrapped across rows of the screen."""
+        assert self.observer
+        screen, receipt = self.observer._visible(
+            lambda screen, record: record["parser_complete"] and text in prose(screen),
+            time.monotonic_ns() + int(timeout * 1e9),
+            f"{text!r} (rows rejoined)",
+        )
+        self.proof.append(
+            {"expect_prose": text, "snapshot": receipt["id"], "at_ns": time.monotonic_ns()}
+        )
+        return screen
+
+    def see_any(self, *texts: str, timeout: float = 15) -> str:
+        """Wait for a screen showing at least one of several outcomes."""
+        assert self.observer
+        screen, receipt = self.observer._visible(
+            lambda screen, record: record["parser_complete"] and any(t in screen for t in texts),
+            time.monotonic_ns() + int(timeout * 1e9),
+            " or ".join(map(repr, texts)),
+        )
+        self.proof.append({"expect_any": texts, "snapshot": receipt["id"], "at_ns": time.monotonic_ns()})
+        return screen
+
+    def screen(self) -> str:
+        assert self.observer
+        screen, receipt = self.observer.snapshot()
+        self.proof.append({"snapshot": receipt["id"], "at_ns": time.monotonic_ns()})
+        return screen
+
+    def check(self, condition: bool, message: str) -> None:
+        """An independent outcome check, recorded whether it passes or not."""
+        self.proof.append(
+            {"check": message, "passed": bool(condition), "at_ns": time.monotonic_ns()}
+        )
+        assert condition, message
+
+    def expect(self, condition: bool, message: str) -> bool:
+        """A desired-behaviour check that does not block the rest of the
+        journey: it is recorded, and any failure still fails the journey."""
+        self.proof.append(
+            {"expect_check": message, "passed": bool(condition), "at_ns": time.monotonic_ns()}
+        )
+        if not condition:
+            self.failures.append(message)
+        return bool(condition)
+
+    def expect_see(self, text: str, message: str, timeout: float = 10) -> bool:
+        assert self.observer
+        try:
+            _, receipt = self.observer.visible(text, timeout)
+            self.proof.append({"expect": text, "snapshot": receipt["id"], "at_ns": time.monotonic_ns()})
+            return self.expect(True, message)
+        except TimeoutError:
+            return self.expect(False, f"{message} (not shown: {text!r})")
+
+    def until(self, predicate, timeout: float, message: str):
+        """Poll independent evidence (files, Git, CLI) within a deadline."""
+        deadline = time.monotonic() + timeout
+        while True:
+            value = predicate()
+            if value or time.monotonic() >= deadline:
+                break
+            time.sleep(0.1)
+        self.check(bool(value), message)
+        return value
+
     def keys(self, value: bytes) -> None:
         assert self.observer
         self.observer.input(f"action-{len(self.proof)}", value)
@@ -121,13 +204,39 @@ class Journey:
         self.cli("init", "--no-agent")
         self.cli("spawn", "sample", "--no-agent")
 
+    def settle(self, timeout: float = 30) -> list[str]:
+        """Wait for plan launch owners to record their exit: an owner keeps
+        retiring heads and writing notices after its run reaches a final state."""
+        launches = Path(self.env["HYDRA_HOME"]) / "state/v2/projects"
+
+        def state(directory: Path) -> str:
+            try:
+                return (directory / "state").read_text().strip()
+            except OSError:
+                return "absent"
+
+        deadline = time.monotonic() + timeout
+        while True:
+            pending = [f"{d.name[:12]}={state(d)}" for d in launches.glob("*/workflows/launches/*")
+                       if d.is_dir() and state(d) not in ("finished", "failed")]
+            if not pending or time.monotonic() >= deadline:
+                for d in launches.glob("*/workflows/launches/*"):
+                    if (d / "owner.log").exists():  # retained as evidence
+                        (self.output / f"launch-owner-{d.name[:12]}.log").write_text(
+                            (d / "owner.log").read_text())
+                return pending
+            time.sleep(0.2)
+
     def close(self) -> None:
         cleanup = {}
+        pending = self.settle()
         try:
             if self.observer:
                 cleanup = self.observer.close(attached=self.attached)
                 if not cleanup.get("reaped") or cleanup.get("observer_exit"):
                     raise RuntimeError(f"UI cleanup incomplete: {cleanup}")
+            if pending:
+                raise RuntimeError(f"plan launch owners still running: {pending}")
         finally:
             # This root owns the entire socket namespace; no global tmux cleanup.
             for socket in Path(self.env["TMUX_TMPDIR"]).glob("tmux-*/*"):
@@ -143,7 +252,15 @@ class Journey:
             (self.output / "cleanup.json").write_text(
                 json.dumps(cleanup, indent=2) + "\n"
             )
-            shutil.rmtree(self.base)
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    shutil.rmtree(self.base)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.2)
 
 
 def clean_entry(j: Journey) -> None:
@@ -303,7 +420,7 @@ def planning(j: Journey) -> None:
     j.keys(b"B")
     j.see("PLAN OVERVIEW")
     j.keys(b"P")
-    j.see("No execution yet")
+    j.see_prose("No execution yet. y/N:")
     j.keys(b"y\r")
     assert "malformed" not in j.see("unvalidated")
     j.keys(b"V")
@@ -367,6 +484,477 @@ def planning(j: Journey) -> None:
     j.see("HYDRA /")
 
 
+GREETING = "Hello from Hydra"
+
+
+def greeting_plan(greeting: str, suffix: str = "") -> dict:
+    """An implementation plan in the guided shape: a headless worker commits a
+    change, the repository's own check runs on that worker head, and a
+    separate verifier head checks the agent's summary with a plan asset."""
+    worker, verifier = f"ux-worker{suffix}", f"ux-verifier{suffix}"
+    prompt = "\n".join(
+        [
+            "Add a greeting to the project and commit it.",
+            f"FIXTURE-FILE greeting.txt={greeting}\\n",
+            f"FIXTURE-FILE lib/greet.sh=echo '{greeting}'\\n",
+            "FIXTURE-COMMIT feat: add a greeting",
+            "FIXTURE-SUMMARY Added greeting.txt and lib/greet.sh with the greeting.",
+            "",
+        ]
+    )
+    report = {"type": "object", "path": "check.json", "max_bytes": 2048}
+    subject = {"step": "implement", "output": "summary"}
+
+    def step(identifier, role, kind, needs, args, writes=()):
+        return {
+            "id": identifier,
+            "role": role,
+            "kind": kind,
+            "needs": needs,
+            "writes": list(writes),
+            "args": args,
+        }
+
+    def check(identifier, definition, step_id):
+        return {
+            "id": identifier,
+            "method": "executable",
+            "definition": definition,
+            "step": step_id,
+            "input": "subject",
+            "report": "check",
+            "deliverable": "greeting",
+        }
+
+    return {
+        "schema_version": 1,
+        "id": "ux-greeting",
+        "objective": "Add a committed greeting and verify it",
+        "context": [],
+        "assumptions": [],
+        "questions": [],
+        "envelope": {
+            "hosts": ["local"],
+            "tools": ["sh", "profile:codex"],
+            "effects": ["worktree", "execute"],
+            "writes": [f"{worker}:*"],
+            "parallelism": 1,
+            "timeout_seconds": 600,
+            "artifact_bytes": 65536,
+            "max_heads": 2,
+            "disk_mb": 1024,
+            "retry_budget": 0,
+            "repair_budget": 0,
+        },
+        "steps": [
+            step("spawn-worker", "work", "spawn", [],
+                 {"branch": worker, "terminal_mode": "headless"}),
+            step("implement", "compose", "exec", ["spawn-worker"],
+                 {"head": worker, "profile": "codex", "prompt": prompt,
+                  "result_file": "summary", "timeout": 120}, [f"{worker}:*"]),
+            step("repo-check", "verify", "exec", ["implement"],
+                 {"head": worker, "argv": ["sh", "checks/greeting.sh"], "timeout": 60}),
+            step("spawn-verifier", "work", "spawn", ["implement"],
+                 {"branch": verifier, "terminal_mode": "headless"}),
+            step("verify-summary", "verify", "exec", ["implement", "spawn-verifier"],
+                 {"head": verifier, "argv": ["sh", "@input/verify"], "timeout": 60}),
+        ],
+        "deliverables": [
+            {"id": "greeting", "description": "Greeting change summary",
+             "step": "implement", "output": "summary", "destination": "run-artifact"}
+        ],
+        "checks": [
+            check("repository", "Run the repository greeting check on the worker branch",
+                  "repo-check"),
+            check("summary", "Confirm the summary names both changed files",
+                  "verify-summary"),
+        ],
+        "requirements": [
+            {"id": "greeting-committed", "criterion": "The greeting is committed and printed",
+             "deliverable": "greeting", "check": "repository"},
+            {"id": "summary-names-files", "criterion": "The summary names both changed files",
+             "deliverable": "greeting", "check": "summary"},
+        ],
+        "data": {
+            "schema_version": 1,
+            "inputs": {"verify": {"asset": "verify", "type": "file", "max_bytes": 4096}},
+            "steps": {
+                "implement": {"outputs": {"summary": {
+                    "type": "file", "path": "summary", "max_bytes": 4096}}},
+                "repo-check": {"inputs": {"subject": subject}, "outputs": {"check": report}},
+                "verify-summary": {
+                    "inputs": {"subject": subject, "verify": {"input": "verify"}},
+                    "outputs": {"check": report},
+                },
+            },
+        },
+    }
+
+
+def provider_fixture(j: Journey, greeting: str, fixed: str | None = None) -> None:
+    """Install the labelled fixture as `codex` on this journey's private PATH.
+    Hydra reaches it only through the built-in profile's public launch and
+    headless contracts; the repository carries its own greeting check."""
+    shutil.copytree(j.source / "tests/fixtures/usability/greeting-repo", j.repo,
+                    dirs_exist_ok=True)
+    j.command("git", "add", ".")
+    j.command("git", "-c", "commit.gpgSign=false", "commit", "-qm", "greeting check")
+    tools = j.base / "fixture-bin"
+    tools.mkdir()
+    (tools / "codex").symlink_to(j.source / "tests/fixtures/usability/provider.py")
+    (j.base / "plan-template.json").write_text(json.dumps(greeting_plan(greeting)))
+    j.env["UX_PLAN_TEMPLATE"] = str(j.base / "plan-template.json")
+    if fixed:
+        (j.base / "plan-fixed.json").write_text(json.dumps(greeting_plan(fixed, "-fix")))
+        j.env["UX_PLAN_FIXED"] = str(j.base / "plan-fixed.json")
+    j.env["UX_PLAN_ASSETS"] = "verify=" + str(
+        j.source / "tests/fixtures/usability/verify-summary.sh")
+    j.env["UX_NOTICES"] = str(j.base / "notices.txt")
+    j.env["PATH"] = os.pathsep.join([str(tools), str(j.prefix / "bin"), j.env["PATH"]])
+
+
+def runs(j: Journey) -> dict[str, Path]:
+    records = Path(j.env["HYDRA_HOME"]) / "state/v2/projects"
+    return {p.name: p for p in records.glob("*/workflows/runs/*") if (p / "state").exists()}
+
+
+def finished_run(j: Journey, before: set[str], timeout: float = 90) -> Path:
+    def done():
+        new = [p for name, p in runs(j).items() if name not in before]
+        if len(new) == 1 and (new[0] / "state").read_text().strip() in (
+                "succeeded", "failed", "cancelled", "recovery-required"):
+            return new[0]
+        return None
+    return j.until(done, timeout, "Approved plan reached a terminal run state")
+
+
+def independent_digest(j: Journey, head: str, name: str) -> str:
+    draft, policy = j.cli("workflow", "plan", "proposal", head).splitlines()[1].split("\t")[1:3]
+    assets = Path(draft).parent / "assets"
+    extra = ["--assets-dir", str(assets)] if assets.is_dir() else []
+    compiled = j.output / f"independent-{name}.json"
+    return json.loads(j.cli("workflow", "plan", "compile", draft, policy, str(compiled),
+                            *extra))["data"]["sha256"]
+
+
+def converse_and_validate(j: Journey, task: str) -> None:
+    """Start a planning conversation in-app, publish, review with the guided
+    policy and validate: no JSON, file paths or CLI from the user."""
+    j.keys(b"n")
+    j.see("Task name:")
+    j.keys(task.encode() + b"\r")
+    j.see("Agent profile")
+    j.keys(b"codex\r")
+    j.see("Objective")
+    j.keys(b"Add a committed greeting and verify it\r")
+    j.see("ready to discuss")
+    j.attached = True
+    j.keys(b"draft\r")
+    j.see("PROPOSAL READY")
+    j.keys(b"\x02\t")
+    j.attached = False
+    j.keys(b"B")
+    j.see("PLAN OVERVIEW")
+    j.keys(b"P")
+    j.see("Review with local policy")
+    j.keys(b"y\r")
+    j.see("unvalidated")
+    j.keys(b"V")
+    j.see("awaiting approval")
+
+
+def execute(j: Journey, head: str, name: str) -> Path:
+    digest = independent_digest(j, head, name)
+    before = set(runs(j))
+    j.keys(b"E")
+    j.see_all("INPUT TO HYDRA / execution approval", f"digest {digest[:12]}?")
+    j.keys(b"y")
+    return finished_run(j, before)
+
+
+def worker_diff(j: Journey, branch: str) -> tuple[list[str], str]:
+    base = j.command("git", "merge-base", "HEAD", branch)
+    files = j.command("git", "diff", "--name-only", base, branch).splitlines()
+    return files, j.command("git", "diff", base, branch)
+
+
+def listed_heads(j: Journey) -> set[str]:
+    return {row.split()[0] for row in j.cli("list").splitlines()[1:] if row.split()}
+
+
+def result_review(j: Journey) -> None:
+    provider_fixture(j, GREETING)
+    j.open()
+    converse_and_validate(j, "greeting")
+    run = execute(j, "greeting", "approved")
+    j.check((run / "state").read_text().strip() == "succeeded", "The approved run succeeded")
+    delivery = json.loads(j.cli("workflow", "plan", "result", run.name))
+    j.check(delivery["ok"], "Independent delivery verification passed")
+    files, diff = worker_diff(j, "ux-worker")
+    j.check(sorted(files) == ["greeting.txt", "lib/greet.sh"],
+            "The worker committed exactly the two planned files")
+    j.check(f"+{GREETING}" in diff, "The worker diff adds the greeting")
+    j.check(not j.command("git", "-C", j.cli("path", "ux-worker"), "status", "--porcelain"),
+            "The worker worktree is clean: the change is committed, not pending")
+    j.until(lambda: "ux-verifier" not in listed_heads(j), 30, "The verifier head was retired")
+    j.check("ux-worker" in listed_heads(j), "The worker head stays for review")
+    j.check(bool(j.command("git", "rev-parse", "--verify", "ux-verifier")),
+            "Retiring the verifier kept its branch")
+
+    # Overview's run panel: the finished run, its worker and what to do next.
+    j.keys(b"\x1b\x1b3")
+    j.see_all("RUN / plan run ux-greeting", "succeeded")
+    j.see_all("Worker branch ux-worker holds the result", "hydra land ux-worker")
+    j.see("dismiss")
+    j.see("(retired)")
+    # Work groups the run's heads under the planning conversation that launched it.
+    j.keys(b"1")
+    j.see_all("Heads in this project", "plan run ux-greeting")
+    screen = j.screen()
+    j.check("ux-worker" not in screen.split("plan run ux-greeting")[0],
+            "The worker head is not listed as a separate top-level head")
+    j.keys(b"j\r")
+    j.see_all("worker", "ux-worker")
+    j.see("retired")
+    # U15: a clean worktree holding a two-file commit must not read as no change.
+    screen = j.screen()
+    worker_rows = [line for line in screen.splitlines() if "ux-worker" in line]
+    j.check(not any(" 0 files" in row or "0 changed" in row for row in worker_rows),
+            "The worker's committed two-file change is not summarised as zero files")
+    j.keys(b"j\r")
+    details = j.see("Details: ux-worker")
+    j.expect("x  dismiss" in details or "x remove" in details,
+             "Worker details offer removing the worker head (dismissing the result)")
+    j.check("0 changed files" not in details and "not yet committed" in details,
+            "Worker details label uncommitted changes separately from the task's diff")
+    # U15: the task's full diff is one action away and shows the committed files.
+    j.keys(b":")
+    j.see("INPUT TO HYDRA")
+    j.keys(b"diff\r")
+    j.see_all("+++ b/greeting.txt", "+++ b/lib/greet.sh", f"+{GREETING}")
+    j.see("Press Enter to return to Hydra")
+    j.keys(b"\r")
+    j.see("HYDRA /")
+
+    # Attention: the result, then its review.
+    j.keys(b"I")
+    j.see_all("Result ready for review", "ux-greeting")
+    j.keys(b"r")
+    j.see("verdict PASS")
+    screen = review_section(j, "WHAT WAS CHECKED")
+    for requirement in ("greeting-committed", "summary-names-files"):
+        rows = [line for line in screen.splitlines() if requirement in line and "PASS" in line]
+        j.expect(bool(rows), f"Requirement {requirement} shows PASS")
+    screen = review_section(j, "HOW IT WAS VERIFIED")
+    j.expect("Ran: sh checks/greeting.sh" in screen, "The review shows the verify command")
+    screen = review_section(j, "CHANGES ON ux-worker")
+    j.expect("(1 commit, 2 files," in screen,
+             "The review counts the worker branch's one commit and two files")
+    j.expect("0 changed files" not in screen, "The review does not claim zero changed files")
+    for name in ("greeting.txt", "lib/greet.sh"):
+        j.expect(re.search(rf"file\s+\+1\s+-0\s+{re.escape(name)}", screen) is not None,
+                 f"The review lists {name} with its added and removed lines")
+    screen = review_section(j, "DIFF  (complete)")
+    j.expect("+++ b/greeting.txt" in screen and f"+{GREETING}" in screen,
+             "The review shows the diff lines of the committed change")
+
+
+def review_section(j: Journey, heading: str, presses: int = 16) -> str:
+    """Move through review sections with n until heading is at the top, or
+    as high as the end of the review allows."""
+    screen = j.screen()
+    for _ in range(presses):
+        rows = screen.splitlines()
+        if any(heading in row for row in rows[3:7]):
+            return screen
+        j.keys(b"n")
+        time.sleep(0.3)
+        following = j.screen()
+        if heading in screen and heading not in following:
+            # The review ended before the heading reached the top: step back.
+            for _ in range(presses):
+                j.keys(b"N")
+                time.sleep(0.3)
+                if heading in j.screen():
+                    break
+            return j.see(heading)
+        screen = following
+    return j.see(heading)
+
+
+def recovery(j: Journey) -> None:
+    provider_fixture(j, "Hello from Hydar", fixed=GREETING)
+    j.open()
+    converse_and_validate(j, "greeting")
+    run = execute(j, "greeting", "first")
+    j.check((run / "state").read_text().strip() == "failed", "The first run failed its check")
+    j.check((run / "steps/repo-check/state").read_text().strip() == "failed",
+            "The repository check step is the one that failed")
+    notices = Path(j.env["UX_NOTICES"])
+    j.until(lambda: notices.exists() and "repo-check failed" in notices.read_text(), 30,
+            "The planning agent was told which step failed")
+    j.until(lambda: "finished: failed" in notices.read_text(), 30,
+            "The planning agent was told the run failed")
+
+    # Plain-language failure in the run panel and in Attention.
+    j.keys(b"\x1b\x1b3")
+    j.see_all("RUN / plan run ux-greeting", "failed")
+    j.expect_see("Step repo-check failed on ux-worker",
+                 "The run panel names the failed step and its head")
+    j.keys(b"I")
+    # Wait for the loaded list (an item Attention offers for this run).
+    screen = j.see_all("[Attention]", "ux-greeting")
+    rows = [line.lower() for line in screen.splitlines() if "repo-check" in line]
+    j.expect(any("fail" in row for row in rows),
+             "Attention lists the failed repository check in plain language")
+    # Review whichever item Attention offers for this run; the result is the run's.
+    j.keys(b"r")
+    screen = j.see("RESULT  ux-greeting")
+    j.expect("verdict FAILED" in screen, "The review states the run's verdict as failed")
+    screen = review_section(j, "WHAT WAS CHECKED")
+    rows = [line for line in screen.splitlines() if "greeting-committed" in line]
+    j.expect(any("FAIL" in row for row in rows),
+             "The review marks the requirement whose check failed as FAIL")
+    screen = review_section(j, "HOW IT WAS VERIFIED")
+    j.expect("Ran: sh checks/greeting.sh" in screen, "The review shows the failed check's command")
+    j.expect('committed greeting.txt says "Hello from Hydar"' in prose(screen),
+             "The review summarises the failing log line")
+    j.keys(b"\x1b\x1b")
+
+    # Supported recovery: the agent already has the failure; ask it for a fix,
+    # validate the new revision and execute it with one key.
+    j.keys(b"1")
+    j.see("greeting")
+    j.keys(b"a")
+    j.see("Typing goes to the agent")
+    j.attached = True
+    j.see("FIXTURE RECEIVED HYDRA NOTICE")
+    j.keys(b"fix\r")
+    j.see("PROPOSAL FIX READY")
+    j.keys(b"\x02\t")
+    j.attached = False
+    j.keys(b"B")
+    j.see("unvalidated")
+    j.keys(b"V")
+    j.see("awaiting approval")
+    second = execute(j, "greeting", "fixed")
+    j.check((second / "state").read_text().strip() == "succeeded",
+            "The corrected revision succeeded")
+    j.check(json.loads(j.cli("workflow", "plan", "result", second.name))["ok"],
+            "Independent delivery verification passed after recovery")
+    files, diff = worker_diff(j, "ux-worker-fix")
+    j.check(f"+{GREETING}" in diff and sorted(files) == ["greeting.txt", "lib/greet.sh"],
+            "The recovered worker branch holds the corrected change")
+    j.check((run / "state").read_text().strip() == "failed",
+            "The failed run's record is kept, not rewritten")
+
+
+LOSS_WORDS = ("lost", "failed", "crashed", "deleted", "corrupt")
+INTERNAL_WORDS = ("dead-session", "try-hydra", "hydra doctor")
+
+
+def recovery_terminal(j: Journey) -> None:
+    # U7: an interactive head whose terminal is gone keeps its work; the view
+    # must say what stopped without inferring failure or loss, and offer a way
+    # back to the work.
+    j.seed()
+    worktree = Path(j.cli("path", "sample"))
+    (worktree / "committed.txt").write_text("committed work\n")
+    j.command("git", "-C", str(worktree), "add", "committed.txt")
+    j.command("git", "-C", str(worktree), "-c", "commit.gpgSign=false", "commit", "-qm", "work")
+    (worktree / "draft.txt").write_text("uncommitted work\n")
+    sessions = j.command("tmux", "list-sessions", "-F", "#{session_name}").splitlines()
+    j.check(len(sessions) == 1, "The head has exactly one terminal session")
+    j.command("tmux", "kill-session", "-t", sessions[0])
+    j.open()
+    j.see("sample")
+    j.keys(b"1")
+    j.see("[Work]")
+    j.keys(b"\t")
+    details = j.see_all("Details: sample", "NEXT")
+    j.expect(not any(word in details.lower() for word in LOSS_WORDS),
+             "Details do not infer failure or lost work from a missing terminal")
+    j.expect("kept" in details, "Details say the head's files are kept")
+    j.expect(not any(word in details for word in INTERNAL_WORDS),
+             "Details explain the stopped terminal without internal status names")
+    j.keys(b"5")
+    j.see_all("[Recovery]", "Terminal stopped: sample")
+    # The finding's plain-language account; raw kinds stay in its diagnostics.
+    j.keys(b"d")
+    account = j.see("The terminal session for sample is no longer running")
+    explanation = prose(account).split("Check:")[0]
+    j.expect("files are kept" in explanation, "Recovery says the worktree and files are kept")
+    j.expect(not any(word in explanation.lower() for word in LOSS_WORDS),
+             "Recovery does not infer failure or lost work from a missing terminal")
+    j.expect("Open it from Work" in explanation, "Recovery offers a way back to the work")
+    j.keys(b"d")
+    j.check((worktree / "draft.txt").read_text() == "uncommitted work\n",
+            "Uncommitted work is untouched")
+    # The offered action: open the head from Work, which restores a terminal.
+    j.keys(b"\x1b1")
+    j.see("[Work]")
+    j.keys(b"a")
+    # Either an attached pane or its disconnection notice: both are outcomes
+    # of the offered action, judged below by whether a terminal came back.
+    screen = j.see_any("Typing goes to the agent", "CLIENT DISCONNECTED")
+    j.attached = True
+    j.expect("CLIENT DISCONNECTED" not in screen, "Opening the head attaches a live terminal")
+    deadline = time.monotonic() + 15
+    while not sessions_of(j) and time.monotonic() < deadline:
+        time.sleep(0.2)
+    if j.expect(bool(sessions_of(j)), "Opening the head from Work restored its terminal"):
+        marker = worktree / "restored-proof"
+        j.keys(b"printf restored > restored-proof\r")
+        deadline = time.monotonic() + 10
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        j.expect(marker.exists(), "Input reaches the restored terminal in the head's worktree")
+    j.check((worktree / "draft.txt").read_text() == "uncommitted work\n",
+            "Opening the head kept uncommitted work")
+    j.check("committed.txt" in j.command("git", "-C", str(worktree), "ls-files"),
+            "Opening the head kept committed work")
+
+
+def prose(screen: str) -> str:
+    """Screen text with frame borders removed and word-wrapped lines rejoined."""
+    lines = [line.strip().strip("|│").strip() for line in screen.splitlines()]
+    return " ".join(" ".join(lines).split())
+
+
+def sessions_of(j: Journey) -> list[str]:
+    """Terminal sessions on this journey's private tmux server (none is not an error)."""
+    listing = subprocess.run(["tmux", "list-sessions", "-F", "#{session_name}"],
+                             env=j.env, capture_output=True, text=True, timeout=10, check=False)
+    return listing.stdout.split() if listing.returncode == 0 else []
+
+
+JOURNEYS = {
+    "clean-entry": clean_entry,
+    "navigation": navigation,
+    "attachment": attachment,
+    "removal": removal,
+    "planning": planning,
+    "result-review": result_review,
+    "recovery": recovery,
+    "recovery-terminal": recovery_terminal,
+}
+
+
+PURPOSE = {
+    "clean-entry": "Open a clean repository and start a task from visible controls",
+    "navigation": "Reach every view with number keys, Tab/Shift-Tab and Esc",
+    "attachment": "Attach, type to the agent, resize and return without stopping it",
+    "removal": "Remove a head in-app with dirty-work protection",
+    "planning": "Converse, revise, validate and approve a plan; checked delivery",
+    "result-review": "Find a finished run in Overview, review its verdict, diff, "
+    "requirements and verify command; verifier retired, worker grouped with land/dismiss",
+    "recovery": "A failed repository check is explained in the run panel, Attention and "
+    "review; the planning agent's corrected revision is validated, executed with y and succeeds",
+    "recovery-terminal": "An interactive head's missing terminal is explained without "
+    "inferring failure or loss, and the offered action restores access to the work",
+}
+
+
 def report(output: Path, result: dict) -> None:
     (output / "report.json").write_text(json.dumps(result, indent=2) + "\n")
     rows = []
@@ -380,8 +968,13 @@ def report(output: Path, result: dict) -> None:
             captures.append(
                 f'<a href="{html.escape(str(html_path.relative_to(output)))}">{path.stem}</a>'
             )
+        purpose = PURPOSE.get(case["id"].rsplit("-", 1)[0], "")
+        reasons = "".join(
+            f"<li>{html.escape(reason)}</li>" for reason in case.get("reason", "").split("; ") if reason
+        )
         rows.append(
-            f"<h2>{html.escape(case['id'])}: {case['status']}</h2><p>{html.escape(case.get('reason', ''))}</p>"
+            f"<h2>{html.escape(case['id'])}: {case['status']}</h2><p>{html.escape(purpose)}</p>"
+            + (f"<ul>{reasons}</ul>" if reasons else "")
             + f'<a href="{case["id"]}/proof.json">Actions and independent checks</a> · '
             + f'<a href="{case["id"]}/terminal/terminal.raw">Terminal bytes</a><p>'
             + " · ".join(captures)
@@ -390,7 +983,11 @@ def report(output: Path, result: dict) -> None:
     (output / "index.html").write_text(
         '<!doctype html><meta charset="utf-8"><title>Hydra usability</title>'
         "<style>body{font:16px system-ui;max-width:1100px;margin:32px auto}pre{font:14px monospace}</style>"
-        "<h1>Installed Hydra usability journeys</h1><p>Deterministic local shell fixture. "
+        "<h1>Installed Hydra usability journeys</h1><p>Deterministic local fixtures: a shell "
+        "fixture and a labelled provider fixture reached through the built-in codex profile's public "
+        "launch and headless contracts; it never claims live-model coverage. "
+        "Failed journeys list every failed desired-behaviour check; a journey stops at the first "
+        "check that blocks the rest of its flow. "
         "Captures are escaped text, not a rendering of terminal colors. Raw bytes are retained. "
         "This checks product interaction, not real-provider behavior or novice discoverability.</p>"
         + "".join(rows)
@@ -405,7 +1002,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--journey",
-        choices=("clean-entry", "navigation", "attachment", "removal", "planning"),
+        choices=tuple(JOURNEYS),
     )
     parser.add_argument(
         "--columns", type=int, choices=(80, 140), nargs="+", default=[80, 140]
@@ -420,7 +1017,7 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=False)
     prefix = output / "installed"
     result = {
-        "mode": "installed deterministic shell fixture",
+        "mode": "installed deterministic shell and provider fixtures",
         "journeys": [],
         "unqualified": [
             "Live authenticated provider",
@@ -452,13 +1049,7 @@ def main() -> int:
             for p in (source / root).rglob("*")
             if p.is_file()
         }
-        for name, function in [
-            ("clean-entry", clean_entry),
-            ("navigation", navigation),
-            ("attachment", attachment),
-            ("removal", removal),
-            ("planning", planning),
-        ]:
+        for name, function in JOURNEYS.items():
             if args.journey and args.journey != name:
                 continue
             for columns in args.columns:
@@ -469,6 +1060,8 @@ def main() -> int:
                     j = Journey(source, prefix, output, name, columns)
                     j.initialize()
                     function(j)
+                    if j.failures:
+                        raise AssertionError("; ".join(j.failures))
                 except (
                     AssertionError,
                     OSError,
@@ -476,7 +1069,10 @@ def main() -> int:
                     TimeoutError,
                     subprocess.SubprocessError,
                 ) as error:
-                    case.update(status="failed" if j else "blocked", reason=str(error))
+                    reason = str(error)
+                    if j and j.failures and reason != "; ".join(j.failures):
+                        reason = "; ".join([*j.failures, reason])
+                    case.update(status="failed" if j else "blocked", reason=reason)
                 finally:
                     if j:
                         try:

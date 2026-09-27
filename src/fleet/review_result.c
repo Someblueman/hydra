@@ -278,21 +278,41 @@ static bool listed(json_object *array, const char *value)
     return false;
 }
 
+/* A check step that failed without sealing its report has still decided:
+ * its requirement failed, and nothing about it is pending. */
+static bool check_step_failed(const struct rr *r, json_object *check)
+{
+    char directory[F_PATH], *state;
+    bool failed;
+    if (!check || !plan_id(f_string(check, "step")) ||
+        snprintf(directory, sizeof(directory), "%s/steps/%s", r->run, f_string(check, "step")) >= (int)sizeof(directory))
+        return false;
+    state = review_scalar(directory, "state");
+    failed = state && !strcmp(state, "failed");
+    free(state);
+    return failed;
+}
+
+static json_object *requirement_check(const struct rr *r, json_object *requirement)
+{
+    json_object *checks = f_field(r->plan, "checks");
+    const char *id = f_string(requirement, "check");
+    for (size_t i = 0; id && i < rr_length(checks); i++) {
+        json_object *check = json_object_array_get_idx(checks, i);
+        if (f_string(check, "id") && !strcmp(f_string(check, "id"), id))
+            return check;
+    }
+    return NULL;
+}
+
 static const char *requirement_state(const struct rr *r, json_object *requirement)
 {
-    json_object *checks = f_field(r->plan, "checks"), *report = NULL;
+    json_object *check = requirement_check(r, requirement), *report;
     const char *state = "not_reported";
     bool verified = false;
-    for (size_t i = 0; i < rr_length(checks); i++) {
-        json_object *check = json_object_array_get_idx(checks, i);
-        if (!f_string(check, "id") || !f_string(requirement, "check") ||
-            strcmp(f_string(check, "id"), f_string(requirement, "check")))
-            continue;
-        report = check_report(r, check, &verified);
-        break;
-    }
+    report = check ? check_report(r, check, &verified) : NULL;
     if (!report)
-        return r->delivery ? "not_reported" : "pending";
+        return check_step_failed(r, check) ? "fail" : r->delivery ? "not_reported" : "pending";
     if (verified)
         state = listed(f_field(report, "requirements"), f_string(requirement, "id")) ? "pass" : "not_reported";
     else if (f_string(report, "verdict") && !strcmp(f_string(report, "verdict"), "fail"))

@@ -51,8 +51,12 @@ workflow_plan_launch_owner() (
         workflow_atomic_scalar "$_workflow_plan_launch/state" failed
         exit 1
     fi
-    cmd_workflow_plan run "$_workflow_plan_launch/compiled.json" --accept "$1"
-    _wpl_result=$?
+    # Under `set -e` a failed run must still record the owner's exit.
+    if cmd_workflow_plan run "$_workflow_plan_launch/compiled.json" --accept "$1"; then
+        _wpl_result=0
+    else
+        _wpl_result=$?
+    fi
     workflow_atomic_scalar "$_workflow_plan_launch/exit-code" "$_wpl_result"
     workflow_atomic_scalar "$_workflow_plan_launch/state" finished
     exit "$_wpl_result"

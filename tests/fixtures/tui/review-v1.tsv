@@ -10,6 +10,7 @@ TEXT	artifacts: answer: available
 TEXT	provenance: head/instance: not_recorded
 TEXT	diff: unavailable: non-code immutable artifact
 TEXT	Long identifier: BEGIN-12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890-END
+TEXT	Word wrap: this review line is long enough to continue on a row.... UNSPLITTABLEWORD ends the sentence.
 TEXT	evidence detail 12
 TEXT	evidence detail 13
 TEXT	evidence detail 14
@@ -30,4 +31,4 @@ PREVIEW	0	EXPLICIT-LOCAL-PREVIEW
 PREVIEW	0	$(touch /tmp/never-execute-review-data)
 REF	transcript	inaccessible	/tmp/missing-review.log
 REF	pr	supplied-unopened	https://example.invalid/review/123
-END	26	3	2
+END	27	3	2

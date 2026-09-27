@@ -75,6 +75,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When another, smaller client of the same tmux session typed last, tmux sizes the
   window to it and fills the rest of Hydra's view with dots; the attached pane now
   says it is "sized by another client" and that typing there takes the size back.
+- `make test-usability` adds three installed journeys at 80 and 140 columns.
+  `result-review` drives an in-app plan through a headless worker's two-file commit,
+  a repository check on the worker head and a verifier head, then checks Overview's
+  run panel, the grouped worker with land/dismiss, the retired verifier, the task
+  diff and the result review (verdict, requirements, command, files and diff).
+  `recovery` fails the repository check, checks the run panel, Attention and the
+  review, then recovers through the planning agent's corrected revision, validated
+  and executed with `y`. `recovery-terminal` removes an interactive head's terminal
+  and checks that Hydra neither infers failure nor loss and that the offered action
+  restores access. The provider fixture is installed as `codex` on a private PATH
+  and reached only through the built-in profile's launch and headless contracts.
+  Reports list every failed desired-behaviour check of a journey.
 
 ### Changed
 
@@ -192,6 +204,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pending instead of failed, and a sealed result waiting for them is in progress.
 - Statistics word unmeasured CPU and memory in full instead of truncating
   "not measured", and no longer claim tokens are unmeasured when receipts record them.
+- A result review marks the requirements of a check whose step failed as FAIL
+  instead of PENDING after the run failed, and says "1 commit, 1 file" rather than
+  "1 commits".
+- Text-field prompts, decision panels and result reviews wrap between words instead
+  of splitting them at the row end ("No e / xecution yet"); a long prompt may use up
+  to half the terminal height instead of being cut after five rows.
+- `n` in a result review stops at "CHANGES ON <branch>" instead of skipping from the
+  checks to the diff.
+- The launch owner of a plan run that fails now records that it finished and its
+  exit code; under `set -e` it exited early, so `--workspace-status` and the TUI
+  reported the launch as still starting.
+- The spawn bootstrap and workspace controls tests wait for the pane state, footer
+  and run-list state they check, within deadlines, instead of reading after fixed
+  delays; both failed under heavy load.
 
 ## [2.7.0] - 2026-09-24
 

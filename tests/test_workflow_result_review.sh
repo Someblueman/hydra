@@ -111,6 +111,14 @@ running_row="$(awk -F '\t' '$1=="ITEM" && $9=="implement"' "$fixture/running.tsv
 review review "$running_row" > "$fixture/running.json"
 jq -e '.data.checks.state == "pending" and .data.readiness == "in_progress" and .data.candidate_state == "run_in_progress"
     and .data.result.verdict == "pending" and ([.data.result.requirements[].state] | unique) == ["pending"]' "$fixture/running.json" >/dev/null
+# A check step that failed before sealing a report has decided: its
+# requirements fail rather than stay pending once the run has failed.
+printf 'failed\n' > "$run_dir/state"
+printf 'failed\n' > "$run_dir/steps/verify/state"
+review review "$running_row" > "$fixture/failed.json"
+jq -e '.data.result.verdict == "fail" and ([.data.result.requirements[].state] | unique) == ["fail"]' "$fixture/failed.json" >/dev/null
+review review-data "$running_row" > "$fixture/failed.tsv"
+grep -Fqx "TEXT$tab  FAIL    preview-targets - Dry run lists targets (check: check)" "$fixture/failed.tsv"
 mv "$fixture/check.saved" "$run_dir/steps/verify/attempt-1/artifacts/check"
 cp "$fixture/state.saved" "$run_dir/state"
 cp "$fixture/state.saved" "$run_dir/steps/verify/state"
