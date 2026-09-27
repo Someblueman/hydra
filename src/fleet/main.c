@@ -10,6 +10,7 @@
 #include "fleet/agent/agent.h"
 #include "fleet/plan/plan.h"
 #include "fleet/workflow/workflow_task.h"
+#include "fleet/workflow/workflow_usage.h"
 #include "fleet/review.h"
 #include "fleet/review_task.h"
 #include <stdlib.h>
@@ -40,6 +41,8 @@ int main(int argc, char **argv) {
     else if (argc >= 2 && !strcmp(argv[1], "workflow-review-data")) return review_workflow_data_cli(argc - 2, argv + 2);
     else if (argc >= 3 && !strcmp(argv[1], "workflow-task") && !strcmp(argv[2], "metrics-tsv") && argc == 4)
         return wt_metrics_tsv(argv[3]);
+    else if (argc == 4 && !strcmp(argv[1], "workflow-task") && !strcmp(argv[2], "usage-tsv"))
+        return wu_usage_tsv(argv[3]);
     else if (argc >= 2 && !strcmp(argv[1], "workflow-task")) result = wt_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "workflow-data")) result = wd_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "agent-profile")) result = agent_profile_cli(argc - 2, argv + 2);

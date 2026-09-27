@@ -3,6 +3,7 @@
 #include "fleet/plan/plan.h"
 #include "fleet/review_contract.h"
 #include "fleet/review_projection.h"
+#include "fleet/review_result.h"
 #include "fleet/support/files.h"
 #include "fleet/task/task.h"
 #include "fleet/workflow/workflow_data.h"
@@ -108,6 +109,25 @@ static json_object *identity(json_object *selected, json_object *selection, cons
     return out;
 }
 
+/* A plan's delivery gate runs once the run is terminal. Before that the
+ * checks are pending, not failed. */
+static bool run_finished(const char *run)
+{
+    char *state = review_scalar(run, "state");
+    bool finished = state && (!strcmp(state, "succeeded") || !strcmp(state, "failed") || !strcmp(state, "cancelled"));
+    free(state);
+    return finished;
+}
+
+static const char *checks_state(bool current, bool compiled, bool delivered, bool finished)
+{
+    if (!current || !compiled)
+        return "unavailable";
+    if (delivered)
+        return "passed";
+    return finished ? "failed" : "pending";
+}
+
 static json_object *review_checks(const struct review_context *ctx)
 {
     char *authoritative = review_scalar(ctx->step, "authoritative-attempt"),
@@ -116,17 +136,16 @@ static json_object *review_checks(const struct review_context *ctx)
     bool current = authoritative && latest && strcmp(ctx->selected_attempt, "-") &&
                    !strcmp(authoritative, ctx->selected_attempt + 8) && !strcmp(latest, authoritative);
     bool compiled = json_object_get_boolean(f_field(ctx->retained, "compiled"));
+    bool finished = run_finished(ctx->run);
     json_object_object_add(out, "authoritative", json_object_new_boolean(current));
     if (current && compiled && !strcmp(value(ctx->retained, "state"), "passed"))
         delivery = plan_delivery(ctx->run);
-    f_string_add(out, "state",
-                 !current   ? "unavailable"
-                 : compiled ? (delivery ? "passed" : "failed")
-                            : "unavailable");
+    f_string_add(out, "state", checks_state(current, compiled, delivery != NULL, finished));
     f_string_add(out, "scope", compiled ? "compiled_plan" : "planless");
     f_string_add(out, "reason",
-                 current ? "authoritative attempt plan delivery gate"
-                         : "selected attempt is not the current plan attempt");
+                 !current                     ? "selected attempt is not the current plan attempt"
+                 : compiled && !finished && !delivery ? "plan delivery is checked when the run finishes"
+                                              : "authoritative attempt plan delivery gate");
     if (delivery)
         json_object_object_add(out, "delivery", delivery);
     free(authoritative);
@@ -276,6 +295,51 @@ static bool observation_unchanged(const struct review_context *ctx, const char *
     return same;
 }
 
+static const char *candidate_state(const char *readiness)
+{
+    static const char *const map[][2] = {{"ready", "verified_retained"},
+                                         {"pending", "current_request"},
+                                         {"in_progress", "run_in_progress"},
+                                         {"not_applicable", "not_applicable"}};
+    for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++)
+        if (!strcmp(readiness, map[i][0]))
+            return map[i][1];
+    return "unknown_or_stale";
+}
+
+/* Refine a revoked readiness only where nothing is wrong: a step that declares
+ * no deliverable is not applicable, and a sealed result of a run that has not
+ * finished waits for the delivery gate. Any other revocation stands. */
+static void refine_readiness(json_object *out, const struct review_context *ctx, json_object *checks,
+                             const char *revision)
+{
+    bool matches = !strcmp(ctx->revision, revision) && !strcmp(value(ctx->retained, "state"), "passed");
+    if (strcmp(value(out, "readiness"), "revoked") || !matches || f_string(ctx->selected, "request_id"))
+        return;
+    if (!strcmp(value(out, "inventory_state"), "not_applicable"))
+        f_string_add(out, "readiness", "not_applicable");
+    else if (!f_field(out, "inventory_state") && !strcmp(value(checks, "state"), "pending") &&
+             !strcmp(value(ctx->selected, "kind"), "result") && !strcmp(value(ctx->selected, "freshness"), "fresh"))
+        f_string_add(out, "readiness", "in_progress");
+}
+
+/* A compiled plan run carries a human result review: what was produced and
+ * checked, how, at what cost, and the commands that would land it. */
+static void review_result_section(json_object *out, const struct review_context *ctx, const char *project,
+                                  json_object *checks)
+{
+    char directory[F_PATH];
+    json_object *result = NULL;
+    if (snprintf(directory, sizeof(directory), "%s/projects/%s", ctx->root, project) < (int)sizeof(directory))
+        result = review_result(ctx->run, directory, f_field(checks, "delivery"));
+    if (!result) {
+        f_string_add(out, "diff", "unavailable: selected workflow attempt has no recorded diff projection");
+        return;
+    }
+    f_string_add(out, "diff", "shown in the result review: the worker branch as currently observed");
+    json_object_object_add(out, "result", result);
+}
+
 static json_object *review_body(struct review_context *ctx, const char *project, const char *revision,
                                 json_object *selection, json_object *references)
 {
@@ -299,6 +363,7 @@ static json_object *review_body(struct review_context *ctx, const char *project,
     json_object_object_add(out, "retained_contract", json_object_get(ctx->retained));
     bool expired = !f_path(path, sizeof(path), ctx->run, "retention.json") && !lstat(path, &st);
     review_inventory(out, ctx->selected, ctx->data, ctx->attempt, expired);
+    refine_readiness(out, ctx, checks, revision);
     json_object_object_add(out, "checks", checks);
     if (snprintf(path, sizeof(path), "%s/projects/%s", ctx->root, project) < (int)sizeof(path))
         scalar_add(actions, "cwd", path, "repo-root");
@@ -308,7 +373,7 @@ static json_object *review_body(struct review_context *ctx, const char *project,
     json_object_object_add(out, "actions", actions);
     json_object_object_add(out, "references", json_object_get(references));
     json_object_object_add(out, "attention", json_object_get(ctx->selected));
-    f_string_add(out, "diff", "unavailable: selected workflow attempt has no recorded diff projection");
+    review_result_section(out, ctx, project, checks);
     if (!observation_unchanged(ctx, project)) {
         f_string_add(out, "readiness", "revoked");
         f_string_add(out, "observation_state", "changed_during_review");
@@ -317,11 +382,7 @@ static json_object *review_body(struct review_context *ctx, const char *project,
         if (f_field(out, "request"))
             f_string_add(f_field(out, "request"), "context_state", "changed_during_review");
     }
-    const char *readiness = value(out, "readiness");
-    f_string_add(out, "candidate_state",
-                 !strcmp(readiness, "ready")     ? "verified_retained"
-                 : !strcmp(readiness, "pending") ? "current_request"
-                                                 : "unknown_or_stale");
+    f_string_add(out, "candidate_state", candidate_state(value(out, "readiness")));
     return f_success("workflow-review", out);
 }
 

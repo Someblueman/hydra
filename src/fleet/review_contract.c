@@ -404,7 +404,9 @@ void review_inventory(json_object *out, json_object *selected, json_object *data
         receipt = plan_read(path);
     files = f_field(receipt, "files");
     decls = f_field(f_field(f_field(data, "steps"), f_string(selected, "step_id")), "outputs");
-    if (!json_object_is_type(decls, json_type_object) || json_object_object_length(decls) > (int)WD_NAMES)
+    if (!decls && (!receipt || (json_object_is_type(files, json_type_object) && !json_object_object_length(files))))
+        f_string_add(out, "inventory_state", "not_applicable");
+    else if (!json_object_is_type(decls, json_type_object) || json_object_object_length(decls) > (int)WD_NAMES)
         reason = "malformed_declarations";
     else if (!f_number_is(receipt, "schema_version", 1) || !json_object_is_type(files, json_type_object) ||
              json_object_object_length(files) > (int)WD_NAMES)
