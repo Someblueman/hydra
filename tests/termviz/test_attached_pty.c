@@ -376,11 +376,7 @@ int main(void) {
     RUN("tmux", "list-clients", "-F", "#{client_pid}");
     hf_trim(f.output);
     CHECK(!*f.output, "no leaked attached clients");
-    hf_cleanup();
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
+    hf_finish(&f);
     puts("PASS attached: confidence labels, asynchronous input/output, paste/Unicode/Ctrl-C, "
          "drafts, two clients, history, mouse, reconnect, resize and client-only exit");
     return 0;

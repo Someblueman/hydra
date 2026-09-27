@@ -191,10 +191,7 @@ int main(void) {
     RUN("git", "show-ref", "--verify", "--quiet", "refs/heads/runs-demo-check");
     tv_format(text, sizeof(text), "PASS runs and heads: grouped run heads, headless worker details and live output, "
               "run panel states and verifier retirement (%s; captures in %s)", f.base, evidence);
+    hf_finish(&f);
     puts(text);
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
     return 0;
 }

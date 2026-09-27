@@ -98,7 +98,7 @@ static void detail_identity(struct app *app, const struct head *head) {
     detail_group_label(app, head, group, sizeof(group));
     detail_reported(app, head, group);
     if (!head_headless(head) && !strcmp(display_status(head), "STALE"))
-        paragraph(app, "The terminal is gone but the last observation said the agent was still working. Files in the worktree are kept; check them before removing the head.", TV_WARNING);
+        paragraph(app, "The terminal is gone but the last observation said the agent was still working. Files in the worktree are kept; a restarts the terminal in the same worktree. Check the files before removing the head.", TV_WARNING);
 }
 
 static void detail_step_exec(struct app *app, const struct workflow_node *step) {
@@ -216,7 +216,8 @@ static void detail_next(struct app *app, const struct head *head) {
               "x  remove this head (the branch is kept)    d  technical details");
         return;
     }
-    linef(app, "a  talk to the agent in the workspace     p  show recent terminal output");
+    linef(app, "%s", head_terminal_gone(app, head) ? "a  restart its terminal (files are kept)   p  show recent terminal output" :
+          "a  talk to the agent in the workspace     p  show recent terminal output");
     linef(app, "c  coordination with other heads          x  remove this head");
     linef(app, ":  more actions (diff, switch, approvals)  d  technical details");
 }

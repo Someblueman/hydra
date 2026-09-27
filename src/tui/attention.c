@@ -16,7 +16,7 @@ struct attention_item {
     char head[ATTENTION_TEXT]; char instance[ATTENTION_TEXT]; char request[ATTENTION_TEXT];
     char binding[ATTENTION_TEXT]; char revision[ATTENTION_DIGEST]; char identity[ATTENTION_DIGEST];
     char freshness[ATTENTION_TEXT]; char route_kind[ATTENTION_TEXT]; char navigable[ATTENTION_TEXT];
-    char label[ATTENTION_TEXT];
+    char label[ATTENTION_TEXT]; char detail[ATTENTION_REASON];
     bool unseen;
 };
 struct attention_seen { char identity[ATTENTION_DIGEST]; char revision[ATTENTION_DIGEST]; };
@@ -36,7 +36,7 @@ struct native_attention {
     struct attention_store *store;
     size_t count, seen_count, selected, scroll;
     bool detail, stale, have_good, loading, partial, truncated, on_group, seen_open;
-    unsigned need_count, seen_group_count, stale_count, unknown_count, expired_count;
+    unsigned need_count, seen_group_count, stale_count, unknown_count, expired_count, failure_count;
     char error[TEXT], feedback[TEXT];
 };
 
@@ -126,15 +126,16 @@ static void remember_revision(struct native_attention *view, const char *identit
 
 static bool copy_item_fields(char *fields[], struct attention_item *item, size_t field_count)
 {
-    char *destinations[] = {item->source, item->kind, item->reason, item->project, item->host, item->task, item->run, item->step, item->attempt, item->head, item->instance, item->request, item->binding, item->revision, item->identity, item->freshness, item->route_kind, item->navigable, item->label};
-    const size_t capacities[] = {sizeof(item->source), sizeof(item->kind), sizeof(item->reason), sizeof(item->project), sizeof(item->host), sizeof(item->task), sizeof(item->run), sizeof(item->step), sizeof(item->attempt), sizeof(item->head), sizeof(item->instance), sizeof(item->request), sizeof(item->binding), sizeof(item->revision), sizeof(item->identity), sizeof(item->freshness), sizeof(item->route_kind), sizeof(item->navigable), sizeof(item->label)};
+    char *destinations[] = {item->source, item->kind, item->reason, item->project, item->host, item->task, item->run, item->step, item->attempt, item->head, item->instance, item->request, item->binding, item->revision, item->identity, item->freshness, item->route_kind, item->navigable, item->label, item->detail};
+    const size_t capacities[] = {sizeof(item->source), sizeof(item->kind), sizeof(item->reason), sizeof(item->project), sizeof(item->host), sizeof(item->task), sizeof(item->run), sizeof(item->step), sizeof(item->attempt), sizeof(item->head), sizeof(item->instance), sizeof(item->request), sizeof(item->binding), sizeof(item->revision), sizeof(item->identity), sizeof(item->freshness), sizeof(item->route_kind), sizeof(item->navigable), sizeof(item->label), sizeof(item->detail)};
     size_t i;
+    copy_text(item->label, sizeof(item->label), "-");
+    copy_text(item->detail, sizeof(item->detail), "-");
     for (i = 0U; i + 1U < field_count; i++) {
-        size_t maximum = i == 2U ? 255U : i == 12U ? 64U : 127U;
+        size_t maximum = i == 2U || i == 19U ? 255U : i == 12U ? 64U : 127U;
         if ((i == 13U || i == 14U) && !valid_digest(fields[i + 1U])) return false;
         if (!put_field(destinations[i], capacities[i], fields[i + 1U], maximum)) return false;
     }
-    if (field_count == 19U) copy_text(item->label, sizeof(item->label), "-");
     return true;
 }
 static bool one_of(const char *value, const char *const choices[], size_t count)
@@ -143,14 +144,15 @@ static bool one_of(const char *value, const char *const choices[], size_t count)
     for (i = 0U; i < count; i++) if (!strcmp(value, choices[i])) return true;
     return false;
 }
-/* Version 1 items have 19 fields; version 2 appends a presentation label. */
+/* Version 1 items have 19 fields; version 2 appends a presentation label and
+ * version 3 a presentation detail (the requirements a failed check decides). */
 static bool parse_item(char *line, struct attention_item *item, unsigned version)
 {
     static const char *const freshness[] = {"fresh", "stale", "unknown", "expired"};
     static const char *const routes[] = {"workflow-request", "workflow-evidence", "task-observe", "task-result", "agent-record", "unavailable"};
-    char *fields[21];
-    size_t expected = version == 2U ? 20U : 19U;
-    if (split_fields(line, fields, 21U) != expected || strcmp(fields[0], "ITEM")) return false;
+    char *fields[22];
+    size_t expected = 18U + version;
+    if (split_fields(line, fields, 22U) != expected || strcmp(fields[0], "ITEM")) return false;
     if (!copy_item_fields(fields, item, expected)) return false;
     if (!one_of(item->freshness, freshness, 4U) || !one_of(item->route_kind, routes, 6U)) return false;
     return !strcmp(item->navigable, "0") || !strcmp(item->navigable, "1");
@@ -198,6 +200,7 @@ static bool parse_header(char *line, struct attention_parse *state)
     if (split_fields(line, fields, 3U) != 2U || strcmp(fields[0], "HYDRA_ATTENTION")) return false;
     if (!strcmp(fields[1], "1")) state->version = 1U;
     else if (!strcmp(fields[1], "2")) state->version = 2U;
+    else if (!strcmp(fields[1], "3")) state->version = 3U;
     return state->version != 0U;
 }
 static bool parse_stream_line(char *line, struct native_attention *view, struct attention_parse *state)
@@ -226,9 +229,12 @@ static bool parse_stream(FILE *input, struct native_attention *view)
 }
 
 /* Decisions stay listed until decided: marking an approval seen never moves
- * it out of the list and never counts as approving or rejecting it. */
+ * it out of the list and never counts as approving or rejecting it. A failure
+ * likewise stays until its run is resolved (the step succeeds, or a later run
+ * of the same plan succeeds); marking it seen resolves nothing. */
+static bool is_failure(const struct attention_item *item) { return !strcmp(item->kind, "failure"); }
 static bool needs_decision(const struct attention_item *item)
-{ return !strcmp(item->kind, "approval") || !strcmp(item->kind, "permission"); }
+{ return !strcmp(item->kind, "approval") || !strcmp(item->kind, "permission") || is_failure(item); }
 static bool eligible(const struct attention_item *item)
 { return needs_decision(item) || !strcmp(item->kind, "result"); }
 static bool in_seen_group(const struct attention_item *item)
@@ -237,10 +243,12 @@ static void classify(struct native_attention *view)
 {
     size_t i;
     view->need_count = 0U; view->seen_group_count = 0U; view->stale_count = 0U; view->unknown_count = 0U; view->expired_count = 0U;
+    view->failure_count = 0U;
     for (i = 0U; i < view->count; i++) {
         const struct attention_item *item = &view->items[i];
         bool fresh = !strcmp(item->freshness, "fresh");
         if (in_seen_group(item)) view->seen_group_count++;
+        if (fresh && is_failure(item)) view->failure_count++;
         if (fresh && eligible(item) && (item->unseen || needs_decision(item))) view->need_count++;
         else if (!strcmp(item->freshness, "stale")) view->stale_count++;
         else if (!strcmp(item->freshness, "expired")) view->expired_count++;
@@ -255,11 +263,13 @@ static void apply_seen(struct native_attention *view)
     classify(view);
 }
 
-/* Row order: items needing the user first, then one collapsible Seen group. */
+/* Row order: failures, then the other items needing the user, then one
+ * collapsible Seen group. */
 static size_t build_rows(const struct native_attention *view, size_t *rows)
 {
     size_t i, n = 0U;
-    for (i = 0U; i < view->count; i++) if (!in_seen_group(&view->items[i])) rows[n++] = i;
+    for (i = 0U; i < view->count; i++) if (is_failure(&view->items[i])) rows[n++] = i;
+    for (i = 0U; i < view->count; i++) if (!in_seen_group(&view->items[i]) && !is_failure(&view->items[i])) rows[n++] = i;
     if (view->seen_group_count) rows[n++] = ATTENTION_GROUP;
     for (i = 0U; view->seen_open && i < view->count; i++) if (in_seen_group(&view->items[i])) rows[n++] = i;
     return n;
@@ -419,7 +429,11 @@ static void finalize_attention(struct native_attention *next, const char *select
     next->have_good = true;
     next->stale = false;
     apply_seen(next);
-    if (!found && !next->on_group) next->selected = 0U;
+    if (!found && !next->on_group) {
+        /* Without a retained selection the first row is selected: a failure when there is one. */
+        size_t rows[NATIVE_ATTENTION_ITEMS + 1U];
+        if (build_rows(next, rows)) select_row(next, rows[0]);
+    }
     settle_selection(next);
 }
 static void accept_attention(struct app *app, FILE *input)
@@ -463,15 +477,32 @@ void native_attention_tick(struct app *app, bool request)
 
 /* ---- wording ---------------------------------------------------------------- */
 
+static const char *failure_title(const struct attention_item *item)
+{
+    static const char *const map[][2] = {{"check_failed", "Check failed"}, {"step_failed", "Step failed"},
+        {"step_recovery_required", "Step needs recovery"}, {"run_failed", "Run failed"},
+        {"run_recovery_required", "Run needs recovery"}, {"task_failed", "Task failed"}};
+    size_t i;
+    for (i = 0U; i < sizeof(map) / sizeof(map[0]); i++) if (!strcmp(item->reason, map[i][0])) return map[i][1];
+    return "Failed";
+}
 static const char *item_title(const struct attention_item *item)
 {
     static const char *const map[][2] = {{"approval", "Approval needed"}, {"approval_expired", "Approval expired"},
         {"result", "Result ready for review"}, {"permission", "Permission requested"}};
     size_t i;
+    if (is_failure(item)) return failure_title(item);
     for (i = 0U; i < sizeof(map) / sizeof(map[0]); i++) if (!strcmp(item->kind, map[i][0])) return map[i][1];
     return "Needs inspection";
 }
 static bool present(const char *value) { return value[0] && strcmp(value, "-"); }
+/* "Check failed · plan · step — requirements; review the log and send the plan
+ * back or retry": the failure's one-line account and what the user can do. */
+static void failure_tail(const struct app *app, const struct attention_item *item, char *out, size_t size)
+{
+    if (present(item->detail)) text_append(out, size, "%s%s", app->ascii ? " - " : " \xe2\x80\x94 ", item->detail);
+    text_append(out, size, "; review the log and send the plan back or retry");
+}
 static void item_subject(const struct app *app, const struct attention_item *item, char *out, size_t size)
 {
     const char *name = present(item->label) ? item->label : present(item->task) ? item->task : present(item->run) ? item->run : "unnamed";
@@ -503,6 +534,12 @@ static const char *reason_text(const char *reason)
         {"request_step_mismatch", "has an approval request recorded for a different step."},
         {"malformed_expiry", "has an approval request with an unreadable expiry."},
         {"missing_steps", "has no readable step records."},
+        {"check_failed", "failed its check. Press r to see the failed requirement and the log summary."},
+        {"step_failed", "failed. Press r to see its log and what the run recorded."},
+        {"step_recovery_required", "stopped in a state Hydra cannot finish on its own. Press r to see its records."},
+        {"run_failed", "failed after its steps finished, so its result was not delivered. Press r to see what was checked."},
+        {"run_recovery_required", "stopped in a state Hydra cannot finish on its own. Press r to see its records."},
+        {"task_failed", "failed on its host. Press r to see its retained result and logs."},
         {"path_unavailable", "has a record path too long to read safely."}};
     size_t i;
     for (i = 0U; i < sizeof(map) / sizeof(map[0]); i++) if (!strcmp(reason, map[i][0])) return map[i][1];
@@ -515,6 +552,7 @@ static const char *kind_text(const struct attention_item *item)
     if (!strcmp(item->kind, "approval") || !strcmp(item->kind, "permission")) return "is waiting for your decision";
     if (!strcmp(item->kind, "result")) return "finished and sealed its output";
     if (!strcmp(item->kind, "approval_expired")) return "asked for a decision, but the request expired";
+    if (is_failure(item)) return "failed";
     return "could not be classified by Hydra";
 }
 static void item_why(const struct attention_item *item, char *out, size_t size)
@@ -523,15 +561,18 @@ static void item_why(const struct attention_item *item, char *out, size_t size)
     const char *known = reason_text(item->reason);
     attempt_text(item, attempt, sizeof(attempt));
     out[0] = '\0';
-    text_append(out, size, "%s%s%s ", present(item->step) ? "Step " : "This item", present(item->step) ? item->step : "", attempt);
+    text_append(out, size, "%s%s%s ", present(item->step) ? "Step " : is_failure(item) ? "This run" : "This item",
+                present(item->step) ? item->step : "", attempt);
     if (known) text_append(out, size, "%s", known);
     else text_append(out, size, "%s (%s).%s", kind_text(item), item->reason,
         eligible(item) ? "" : " Inspect its records before acting.");
+    if (is_failure(item)) text_append(out, size, " Marking it seen keeps it listed until the step succeeds or a later run of this plan succeeds.");
     if (!strcmp(item->freshness, "stale")) text_append(out, size, " The source could not be re-read; this is its last observation.");
 }
 static const char *seen_status(const struct attention_item *item)
 {
     if (item->unseen) return "New: not marked seen yet.";
+    if (is_failure(item)) return "Seen, but still needs your decision until the run is resolved.";
     return needs_decision(item) ? "Seen, but still needs your decision." : "Seen at this revision; a new revision shows it again.";
 }
 
@@ -573,6 +614,7 @@ static void render_item(struct app *app, struct cursor *at, const struct attenti
     item_subject(app, item, subject, sizeof(subject));
     title[0] = '\0';
     text_append(title, sizeof(title), "%s%s%s%s", !strcmp(item->freshness, "stale") ? "(stale) " : "", item_title(item), dot(app), subject);
+    if (is_failure(item)) failure_tail(app, item, title, sizeof(title));
     if (item->unseen && eligible(item)) text_append(title, sizeof(title), "  NEW");
     else if (!item->unseen && needs_decision(item)) text_append(title, sizeof(title), "  seen, still needs a decision");
     wrap(app, at, selected ? "> " : "  ", "  ", title, tone);
@@ -632,11 +674,15 @@ static void render_detail(struct app *app, const struct native_attention *view)
     style(app, TONE_MUTED); linef(app, "ATTENTION DETAIL"); style(app, TONE_BASE);
     text[0] = '\0';
     text_append(text, sizeof(text), "%s%s%s", item_title(item), dot(app), subject);
+    if (is_failure(item)) failure_tail(app, item, text, sizeof(text));
     wrap(app, &at, "", "", text, TONE_STRONG);
     item_why(item, text, sizeof(text));
     wrap(app, &at, "", "", text, TONE_BASE);
     linef(app, "Status: %s", seen_status(item));
     snapshot_notes(app, view);
+    if (is_failure(item))
+        wrap(app, &at, "", "", "Next: r reviews the failed requirement and its log. To send the plan back or retry, open its planning "
+             "conversation from Work: F requests changes; once the agent revises the plan, V validates it and E runs it.", TONE_BASE);
     linef(app, "r review  s %s  Enter/Esc back", item->unseen ? "mark seen" : "mark new again");
     linef(app, "");
     style(app, TONE_MUTED); linef(app, "Technical identity  %s", item->identity); style(app, TONE_BASE);
@@ -658,6 +704,8 @@ void render_attention(struct app *app)
     sep = dot(app);
     linef(app, "ATTENTION  %u need you%s%u seen%s%u stale%s%u unknown", view->stale ? 0U : view->need_count, sep,
         view->seen_group_count, sep, view->stale_count, sep, view->unknown_count);
+    if (view->failure_count) linef(app, "%u failed check%s or step%s need%s a decision", view->failure_count,
+        view->failure_count == 1U ? "" : "s", view->failure_count == 1U ? "" : "s", view->failure_count == 1U ? "s" : "");
     if (view->expired_count) linef(app, "%u expired approval request%s", view->expired_count, view->expired_count == 1U ? "" : "s");
     snapshot_notes(app, view);
     render_rows(app, view);

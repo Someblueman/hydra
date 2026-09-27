@@ -1021,6 +1021,7 @@ int main(int argc, char **argv) {
     test_visualization_hosts(argv[1], argv[2], argv[3]);
     test_attention(argv[1], argv[2], argv[3]);
     test_attention_clients(argv[1], argv[2], argv[3]);
+    test_attention_failure(argv[1], argv[2], argv[3]);
     test_review_navigation(argv[1], argv[2]);
     test_review_stale(argv[1], argv[2]);
     test_review_narrow(argv[1], argv[2]);

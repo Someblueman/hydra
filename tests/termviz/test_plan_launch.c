@@ -310,11 +310,7 @@ int main(void) {
     tv_close(&s, "q", 0, 0);
     CHECK(!rename(new_repo, old_repo), "restore fixture path");
     tv_format(f.repo, sizeof(f.repo), "%s", old_repo);
-    hf_cleanup();
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
+    hf_finish(&f);
     puts("PASS plan launch: confirmed exact-revision approval, stale draft/policy refusal, receipt, detached execution, dedup, "
          "artifact/provenance refusal, escaped paths");
     return 0;

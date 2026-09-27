@@ -138,3 +138,42 @@ static void test_attention_clients(const char *tui, const char *hydra, const cha
     attention_restart(tui, hydra, fake_bin);
 cleanup: unlink(path); unlink(done); unlink(seen); unsetenv("HYDRA_ATTENTION_FIXTURE"); unsetenv("HYDRA_ATTENTION_DONE_FILE"); unsetenv("HYDRA_TEST_ATTENTION_FAIL_FILE"); unsetenv("HYDRA_TEST_SEEN_FILE");
 }
+/* A failed check leads the list as a sentence naming the plan, the step and the
+ * requirements it decides; marking it seen keeps it listed and counted until the
+ * run is resolved. Version 3 appends the presentation detail. */
+static void test_attention_failure(const char *tui, const char *hydra, const char *fake_bin) {
+    struct session session;
+    char path[256], fail[256], seen[256];
+    const char *fixture = "HYDRA_ATTENTION\t3\n"
+        "ITEM\tworkflow records\tresult\tresult_ready\tproject_1\t-\t-\trun_1\timplement\tattempt-1\thead_1\tinstance_1\t-\t-\t5555555555555555555555555555555555555555555555555555555555555555\t6666666666666666666666666666666666666666666666666666666666666666\tfresh\tworkflow-evidence\t1\tplan-x\t-\n"
+        "ITEM\tworkflow records\tfailure\tcheck_failed\tproject_1\t-\t-\trun_1\trepo-check\tattempt-1\thead_1\tinstance_1\t-\t-\t7777777777777777777777777777777777777777777777777777777777777777\t8888888888888888888888888888888888888888888888888888888888888888\tfresh\tworkflow-evidence\t1\tplan-x\treq-a, req-b\n"
+        "END\t2\t0\t0\n";
+    if (attention_paths(path, sizeof(path), fail, sizeof(fail))) return;
+    if (snprintf(seen, sizeof(seen), "%s.failure-seen", path) >= (int)sizeof(seen)) return;
+    if (!result(write_attention_fixture(path, fixture), "failure attention fixture writes")) return;
+    unlink(seen);
+    setenv("HYDRA_TEST_SEEN_FILE", seen, 1);
+    setenv("HYDRA_ATTENTION_FIXTURE", path, 1);
+    if (!result(open_session(&session, tui, hydra, fake_bin, 120, 30) == 0, "open failure attention terminal")) goto cleanup;
+    result(wait_for_raw(&session), "failure attention terminal enters raw mode");
+    write_input(session.master, "I", 1U);
+    result(wait_for_markers(&session, "ATTENTION  2 need you", "1 failed check or step needs a decision", 3000),
+           "a failed check counts as needing the user and is counted in the header");
+    result(wait_for_markers(&session, "> Check failed", "repo-check", 1000), "the failed check leads the list and names its step");
+    result(wait_for_markers(&session, "req-a, req-b; review the log", "send the plan back or retry", 1000),
+           "the failure names its requirements and what the user can do");
+    result(wait_for_marker(&session, "failed its check. Press r to see the failed requirement", 1000),
+           "the failure explains itself in plain language");
+    write_input(session.master, "s", 1U);
+    result(wait_for_markers(&session, "Marked seen", "ATTENTION  2 need you", 1500), "a seen failure stays listed and counted");
+    write_input(session.master, "\r", 1U);
+    result(wait_for_markers(&session, "until the run is resolved", "Next: r reviews the failed requirement", 1000),
+           "the detail says a seen failure still needs a decision and names the next actions");
+    result(wait_for_marker(&session, "Route: workflow-evidence  navigable=1", 1000), "a failure routes to its evidence review");
+    write_input(session.master, "\033", 1U);
+    write_input(session.master, "q", 1U);
+    result(wait_for_exit(&session) == 0 && terminal_restored(&session), "failure attention exits with terminal restored");
+    close_session(&session);
+cleanup:
+    unlink(path); unlink(seen); unsetenv("HYDRA_ATTENTION_FIXTURE"); unsetenv("HYDRA_TEST_SEEN_FILE");
+}

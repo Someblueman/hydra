@@ -228,11 +228,7 @@ int main(void) {
     run_reaches_planner(s);
     tv_close(s, "q", 0, 0);
     owner_recorded_notices();
-    hf_cleanup();
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
+    hf_finish(&f);
     puts("PASS plan conversation: request changes returns the exact revision and types feedback for the user to send; "
          "approval types the run receipt and outcome into the planning agent; the owner records inbox notices");
     return 0;

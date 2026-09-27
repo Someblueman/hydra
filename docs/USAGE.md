@@ -189,6 +189,14 @@ the default. `HYDRA_NO_SWITCH=1` still creates the head without attaching and
 overrides `--attach`. Non-terminal invocations (pipes, automation) and `--headless`
 heads keep their existing messages and never attach.
 
+An interactive head whose tmux session is gone (for example after a reboot) keeps
+its worktree and files. `hydra resume --terminal <branch>` restarts only its
+terminal: it requires the recorded worktree, never creates, resets or cleans it,
+and starts what the head's profile resumes (Codex `resume --last`, a shell for
+`none`). It refuses a headless head, a head whose terminal is still live, and a
+head whose worktree is missing. Opening such a head from Work in `hydra tui`
+(`a`) runs exactly this command and then attaches.
+
 Durable head state outlives `hydra kill`, so `hydra spawn` and `hydra spawn --dry-run`
 both refuse a branch whose head still exists and name the way forward: `hydra resume
 <branch>` (or `hydra spawn <branch> --resume`, which takes the same resume path and

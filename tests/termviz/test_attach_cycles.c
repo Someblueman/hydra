@@ -314,11 +314,7 @@ int main(void) {
     tv_close(&s, "\002q", 0, 0);
     owner_alive("closing Hydra killed the agent");
     CHECK(clients() == 0, "no leaked attach clients");
-    hf_cleanup();
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
+    hf_finish(&f);
     printf("PASS attach cycles: %zu cycles of attach/type/leave/close/layout/resize/reattach at 140x40, 100x30, "
            "80x24 and 60x20; disconnected client releases input; shared-size fill named; evidence in %s\n",
            sizeof(cycles) / sizeof(*cycles), evidence);

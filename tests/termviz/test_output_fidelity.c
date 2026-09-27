@@ -226,11 +226,7 @@ int main(void) {
         CHECK(out && fwrite(s.raw, 1, s.raw_size, out) == s.raw_size && !fclose(out), "raw PTY log");
     }
     tv_close(&s, "\002q", 0, 0);
-    hf_cleanup();
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
+    hf_finish(&f);
     printf("PASS output fidelity: real Claude/Codex output in Details and the attached pane at 140x40 and 80x24, "
            "resize, scrollback; evidence in %s\n", evidence);
     return 0;

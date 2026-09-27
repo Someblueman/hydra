@@ -198,6 +198,16 @@ static void add_result_item(json_object *items, const char *host, json_object *h
         append_item(items, unknown_item(host, task, NULL, "result_binding_unknown", host_data), truncated);
     else append_item(items, make_item("result", host, task, NULL, text(task, "step_id"), text(task, "attempt_id"), "result_ready", "inspect the retained result snapshot", host_data), truncated);
 }
+/* A task whose receiver recorded execution_state failed needs the user's
+ * decision, like a failed local step. Other end states (cancelled on request,
+ * outcome_unknown) are not claimed as failures. */
+static void add_failure_item(json_object *items, const char *host, json_object *host_data, json_object *task, bool *truncated) {
+    const char *step = text(task, "step_id"), *attempt = text(task, "attempt_id");
+    if (strcmp(or_empty(text(task, "execution_state")), "failed")) return;
+    if (!valid_name(step, NULL) || !valid_name(attempt, NULL)) step = attempt = NULL;
+    append_item(items, make_item("failure", host, task, NULL, step, attempt, "task_failed",
+                                 "inspect the failed task's retained result and logs", host_data), truncated);
+}
 static void add_task_items(json_object *items, const char *host, json_object *host_data, json_object *task, bool *truncated) {
     json_object *requests = f_field(task, "pending_requests"), *steps = f_field(task, "steps"); size_t i;
     if (!valid_task_identity(task) || !valid_task_state(task)) {
@@ -206,6 +216,7 @@ static void add_task_items(json_object *items, const char *host, json_object *ho
     if (!json_object_is_type(requests, json_type_array)) { append_item(items, unknown_item(host, task, NULL, "malformed_observation", host_data), truncated); return; }
     for (i = 0; i < json_object_array_length(requests); i++) add_request_item(items, host, host_data, task, steps, json_object_array_get_idx(requests, i), truncated);
     add_result_item(items, host, host_data, task, truncated);
+    add_failure_item(items, host, host_data, task, truncated);
 }
 static int item_order(const void *left, const void *right) {
     const char *a = text(*(json_object *const *)left, "revision"), *b = text(*(json_object *const *)right, "revision"); return strcmp(or_empty(a), or_empty(b));

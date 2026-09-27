@@ -63,10 +63,7 @@ int main(void) {
               "PASS plan assets: the draft's sibling assets compile into the revision and a changed asset "
               "requires validation again (%s)",
               f.base);
+    hf_finish(&f);
     puts(text);
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
     return 0;
 }

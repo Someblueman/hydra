@@ -423,7 +423,8 @@ static enum tv_style details_line(struct app *app, const struct head *h, size_t 
     case 6: details_group(app, h, text, size); return TV_BASE;
     case 7: details_run(app, h, text, size); return TV_BASE;
     case 8: if (!head_headless(h)) details_stale(h, text, size); return TV_WARNING;
-    case 10: snprintf(text, size, head_headless(h) ? "p  step output in Details      Enter  full details" : "a  talk to the agent here      Enter  full details"); return TV_MUTED;
+    case 10: snprintf(text, size, "%s", head_headless(h) ? "p  step output in Details      Enter  full details" :
+                      head_terminal_gone(app, h) ? "a  restart its terminal        Enter  full details" : "a  talk to the agent here      Enter  full details"); return TV_MUTED;
     case 11: snprintf(text, size, ":  more actions                d  technical details"); return TV_MUTED;
     default: return TV_BASE;
     }

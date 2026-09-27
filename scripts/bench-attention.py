@@ -173,15 +173,16 @@ def expected_item(
 
 def parse_rows(text: str) -> list[dict]:
     lines = text.splitlines()
-    if not lines or lines[0] not in ("HYDRA_ATTENTION\t1", "HYDRA_ATTENTION\t2"):
+    if not lines or lines[0] not in ("HYDRA_ATTENTION\t1", "HYDRA_ATTENTION\t2", "HYDRA_ATTENTION\t3"):
         raise ValueError("missing attention protocol header")
-    width = 19 if lines[0].endswith("1") else 20
+    width = 18 + int(lines[0][-1])
     rows = []
     for line in lines[1:-1]:
         fields = line.split("\t")
         if len(fields) != width or fields[0] != "ITEM":
             raise ValueError("malformed attention item")
-        # Version 2 appends a presentation label outside identity and revision.
+        # Versions 2 and 3 append a presentation label and detail outside
+        # identity and revision.
         rows.append(dict(zip(WIRE, fields[1:19])))
     ending = lines[-1].split("\t")
     if len(ending) != 4 or ending[0] != "END" or int(ending[1]) != len(rows):

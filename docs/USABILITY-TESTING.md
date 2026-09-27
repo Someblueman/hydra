@@ -42,10 +42,12 @@ markers, recompiled digests and verified delivery. A journey stops at the first
 check that blocks its flow; other desired-behaviour checks are recorded and all
 failures are listed in the report.
 
-Known product failures kept red (27 September 2026): Attention does not list a
-failed check (a failed run shows only its sealed steps as "Result ready for
-review"), and opening a head whose terminal is gone from Work shows an empty
-attached pane instead of restoring the terminal that Recovery promises.
+Formerly red, fixed on 27 September 2026: Attention lists a failed check as
+"Check failed · <plan> · <step> — <requirements>; review the log and send the
+plan back or retry" (it stays listed when seen until the run is resolved), and
+opening a head whose terminal is gone from Work restarts that terminal in the
+same worktree through `hydra resume --terminal` before attaching, as Recovery
+promises. Both journeys pass at 80 and 140 columns.
 
 Reports distinguish passed, failed and blocked setup, and retain actions, terminal
 bytes, escaped text snapshots, cleanup receipts, installed file hashes and source

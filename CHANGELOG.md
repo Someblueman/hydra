@@ -64,6 +64,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identity and revision) through `hydra workflow attention-seen`, survives restarts,
   moves the item to a collapsed Seen group and out of the count; a new revision
   shows it again. A seen approval stays listed until someone decides.
+- Attention lists failures that need your decision: a failed check reads "Check
+  failed · ux-greeting · repo-check — greeting-committed; review the log and send
+  the plan back or retry", and a failed agent step, a step or run needing recovery
+  and a run whose delivery was rejected get their own item (kind `failure`). They
+  lead the list, count as needing you ("1 failed check or step needs a decision"),
+  and stay listed when marked seen until the step succeeds or a later run of the
+  same plan from the same planning head succeeds. `r` opens the run's result
+  review with the failed requirement and the log summary (readiness `failed`).
+  Fleet attention reports a remote task that failed as the same kind; cancelled
+  and unknown outcomes are never claimed as failures.
+- `hydra resume --terminal <branch>` restarts only the terminal of an interactive
+  head whose tmux session is gone. It requires the existing worktree and never
+  creates, resets or cleans it, starts what the head's profile resumes (Codex
+  `resume --last`, a shell for `none`), and refuses clearly when the worktree is
+  missing.
 - The Statistics view shows agent tokens (in, cached, out), cost only when reported,
   agent, executable version, model and effort per step and per run, with totals for
   the selected scope. Workflow statistics data is schema 4 with one `U` row per agent
@@ -115,8 +130,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ready for review · kill-dry-run · verify", followed by why it needs you; long rows
   wrap instead of being cut, and a partial snapshot is explained in plain words only
   when it applies. `workflow attention-data` and `fleet attention-data` are wire
-  version 2, appending the workflow name as a presentation label; the native TUI
-  still reads version 1.
+  version 3: version 2 appended the workflow name as a presentation label and
+  version 3 appends a presentation detail (the requirements a failed check
+  decides). The native TUI reads versions 1 to 3.
 - Review navigation styles headings, check results and diff lines, jumps between
   sections with `n`/`N` and pages with space/`b`.
 - Captured agent output reads as a faithful transcript. The Details terminal
@@ -157,6 +173,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Opening a head whose terminal is gone from Work (`a`, as Details and Recovery
+  offer) restarts its terminal in the same worktree through `hydra resume
+  --terminal` and then attaches, instead of showing an empty pane or "CLIENT
+  DISCONNECTED". Committed and uncommitted work are untouched; when the worktree
+  itself is missing the restart is refused and nothing is recreated. Details,
+  Work and the workspace offer "a restart its terminal" for such a head.
 - A disconnected attach client no longer captures keys: Tab, Esc and `a` work in
   Hydra again (previously every key reported "Input not delivered" until `Ctrl-B`
   was used), and `a` or `Ctrl-B r` reattaches.
@@ -209,7 +231,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "1 commits".
 - Text-field prompts, decision panels and result reviews wrap between words instead
   of splitting them at the row end ("No e / xecution yet"); a long prompt may use up
-  to half the terminal height instead of being cut after five rows.
+  to half the terminal height instead of being cut after five rows. Plain review
+  lines, such as a check's summary output, wrap between words with a hanging indent
+  at 80 columns instead of splitting a word behind a `>` marker.
+- Native PTY drivers no longer leave private tmux servers running: a guardian
+  process kills the fixture's server and removes its directory on every exit path,
+  including failed checks and signals, and a successful driver checks that no
+  server remains. `pty-runs-heads` previously removed its fixture directory, and
+  with it the socket, before stopping the server.
 - `n` in a result review stops at "CHANGES ON <branch>" instead of skipping from the
   checks to the diff.
 - The launch owner of a plan run that fails now records that it finished and its

@@ -165,7 +165,7 @@ void recovery_explain(const struct recovery *item, char *title, size_t title_siz
     /* Detail formats consume the head label exactly once ("%.0s" when unused). */
     static const struct { const char *kind, *title, *detail; } known[] = {
         {"dead-session", "Terminal stopped: %s",
-         "The terminal session for %s is no longer running. Its worktree and files are kept; nothing was removed from the repository. Open it from Work to restart the agent, or remove the head once its work is finished."},
+         "The terminal session for %s is no longer running. Its worktree and files are kept; nothing was removed from the repository. Open it from Work (a) to restart its terminal and agent in the same worktree, or remove the head once its work is finished."},
         {"stale-lock", "Leftover lock: %s",
          "An interrupted command left a state lock behind. No work is affected. The check below clears it safely.%.0s"},
         {"orphan-worktree", "Leftover worktree from a removed task: %s; no uncommitted changes",
@@ -456,13 +456,17 @@ static void summary_line(struct app *app, const struct head *head, char *line, s
     if (head->declared[0]) text_append(line, size, "%sreported %.63s", sep, head->declared);
 }
 
+static const char *open_action(const struct app *app, const struct head *head) {
+    return head_terminal_gone(app, head) ? "restart its terminal" : "talk to the agent";
+}
+
 static void summary_actions(struct app *app, const struct head *head, char *line, size_t size) {
     const char *sep = dot(app);
     if (app->fleet) snprintf(line, size, "Enter details%sa attach to terminal%sc interrupt", sep, sep);
     else if (!head->head_id[0]) snprintf(line, size, "Enter details%sx remove", sep);
     else if (head_headless(head)) snprintf(line, size, "Enter details%sp step output%sx %s%s: more actions", sep, sep,
                                            head_run_role(app, head) && !strcmp(head_run_role(app, head), "worker") ? "dismiss (keeps the branch)" : "remove", sep);
-    else snprintf(line, size, "Enter details%sa talk to the agent%sx remove%s: more actions", sep, sep, sep);
+    else snprintf(line, size, "Enter details%sa %s%sx remove%s: more actions", sep, open_action(app, head), sep, sep);
 }
 
 static void summary_panel(struct app *app, const char *title, const char *first, const char *second) {

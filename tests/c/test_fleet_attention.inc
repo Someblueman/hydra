@@ -163,6 +163,36 @@ static void test_attention_unknowns(void) {
     assert(json_object_array_length(tasks) >= 6); json_object_put(result); json_object_put(aggregate);
 }
 
+/* A failed remote task carries the failure kind with its exact step and
+ * attempt; cancelled and outcome_unknown tasks are never claimed as failures. */
+static void attention_check_failure(json_object *item, const char *failed_id) {
+    assert(!strcmp(f_string(item, "task_id"), failed_id));
+    assert(!strcmp(f_string(item, "reason"), "task_failed"));
+    assert(!strcmp(f_string(item, "step_id"), "step_a") && !strcmp(f_string(item, "attempt_id"), "attempt-a"));
+    assert(strstr(f_string(item, "revision"), "\"kind\":\"failure\""));
+    assert(!strcmp(f_string(f_field(item, "route"), "kind"), "task-observe"));
+}
+static void test_attention_failures(void) {
+    json_object *tasks = json_object_new_array(), *aggregate, *result, *items, *item;
+    char failed_id[70];
+    size_t i, failures = 0;
+    snprintf(failed_id, sizeof(failed_id), "task_%064d", 31);
+    json_object_array_add(tasks, attention_task(0, "waiting_approval", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    json_object_array_add(tasks, attention_task(31, "failed", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    json_object_array_add(tasks, attention_task(32, "cancelled", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    json_object_array_add(tasks, attention_task(33, "outcome_unknown", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    aggregate = attention_aggregate(tasks, false, 0);
+    result = f_attention_aggregate(aggregate); items = attention_items(result);
+    for (i = 0; i < json_object_array_length(items); i++) {
+        item = json_object_array_get_idx(items, i);
+        if (strcmp(f_string(item, "kind"), "failure")) continue;
+        failures++;
+        attention_check_failure(item, failed_id);
+    }
+    assert(failures == 1);
+    json_object_put(result); json_object_put(aggregate);
+}
+
 static void test_attention_cap(void) {
     json_object *tasks = json_object_new_array(), *aggregate, *result, *items; size_t i;
     for (i = 0; i < 512; i++) json_object_array_add(tasks, attention_task(i, "succeeded", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
