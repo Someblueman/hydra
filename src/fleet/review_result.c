@@ -278,9 +278,24 @@ static bool listed(json_object *array, const char *value)
     return false;
 }
 
+/* A check step that failed without sealing its report has still decided:
+ * its requirement failed, and nothing about it is pending. */
+static bool check_step_failed(const struct rr *r, json_object *check)
+{
+    char directory[F_PATH], *state;
+    bool failed;
+    if (!check || !plan_id(f_string(check, "step")) ||
+        snprintf(directory, sizeof(directory), "%s/steps/%s", r->run, f_string(check, "step")) >= (int)sizeof(directory))
+        return false;
+    state = review_scalar(directory, "state");
+    failed = state && !strcmp(state, "failed");
+    free(state);
+    return failed;
+}
+
 static const char *requirement_state(const struct rr *r, json_object *requirement)
 {
-    json_object *checks = f_field(r->plan, "checks"), *report = NULL;
+    json_object *checks = f_field(r->plan, "checks"), *report = NULL, *matched = NULL;
     const char *state = "not_reported";
     bool verified = false;
     for (size_t i = 0; i < rr_length(checks); i++) {
@@ -288,11 +303,12 @@ static const char *requirement_state(const struct rr *r, json_object *requiremen
         if (!f_string(check, "id") || !f_string(requirement, "check") ||
             strcmp(f_string(check, "id"), f_string(requirement, "check")))
             continue;
+        matched = check;
         report = check_report(r, check, &verified);
         break;
     }
     if (!report)
-        return r->delivery ? "not_reported" : "pending";
+        return check_step_failed(r, matched) ? "fail" : r->delivery ? "not_reported" : "pending";
     if (verified)
         state = listed(f_field(report, "requirements"), f_string(requirement, "id")) ? "pass" : "not_reported";
     else if (f_string(report, "verdict") && !strcmp(f_string(report, "verdict"), "fail"))
