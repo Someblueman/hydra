@@ -183,6 +183,25 @@ static json_object *heads_command(char **argv, bool *printed) {
     return result;
 }
 
+/* One "step<TAB>role<TAB>kind<TAB>head" line per step: the head is the branch
+ * a spawn step creates or the branch another step runs on, "-" otherwise. */
+static json_object *roles_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]);
+    json_object *steps = f_field(f_field(compiled, "plan"), "steps");
+    if (plan_list(steps, 1, PLAN_STEPS)) {
+        for (size_t i = 0; i < json_object_array_length(steps); i++) {
+            json_object *step = json_object_array_get_idx(steps, i), *args = f_field(step, "args");
+            const char *id = f_string(step, "id"), *role = f_string(step, "role"), *kind = f_string(step, "kind");
+            const char *head = f_string(args, "head") ? f_string(args, "head") : f_string(args, "branch");
+            if (!plan_id(id) || !role || !kind) continue;
+            printf("%s\t%s\t%s\t%s\n", id, role, kind, head && plan_id(head) ? head : "-");
+        }
+        *printed = true;
+    }
+    json_object_put(compiled);
+    return NULL;
+}
+
 static json_object *timeout_command(char **argv, bool *printed) {
     json_object *result = NULL;
     json_object *compiled = NULL;
@@ -323,6 +342,7 @@ json_object *plan_cli(int argc, char **argv) {
         {"admit", 5, admit_command},
         {"finish", 2, finish_command},
         {"heads", 2, heads_command},
+        {"roles", 2, roles_command},
         {"timeout", 2, timeout_command},
         {"projection", 2, projection_command},
         {"bindings", 4, bindings_command},

@@ -44,6 +44,7 @@ int main(int argc, char **argv) {
     else if (argc >= 2 && !strcmp(argv[1], "workflow-data")) result = wd_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "agent-profile")) result = agent_profile_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "agent-run")) result = agent_run_cli(argc - 2, argv + 2);
+    else if (argc >= 2 && !strcmp(argv[1], "agent-view")) result = agent_view_cli(argc - 2, argv + 2);
     else if (argc >= 2 && !strcmp(argv[1], "remote")) result = f_remote_cli(argc - 2, argv + 2);
     else if (argc >= 2 && (!strcmp(argv[1], "install") || !strcmp(argv[1], "install-check"))) result = f_install_cli(argc - 1, argv + 1);
     else if (argc == 3 && !strcmp(argv[1], "fleet") && !strcmp(argv[2], "serve")) {

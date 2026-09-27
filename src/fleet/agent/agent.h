@@ -36,9 +36,15 @@ struct agent_stream {
     size_t consumed, received, line_start;
     bool malformed, stale, failed, permission, session_seen, observation_failed;
     json_object *events, *usage;
+    /* A model or effort the provider itself reported in its event stream. */
+    char observed_model[97], observed_effort[33];
 };
 void agent_observe(void *context, const char *text, size_t size);
 bool agent_stop(void *context);
+/* Caller-owned provider configuration record, or NULL; see agent_config.c. */
+json_object *agent_configuration(json_object *profile, json_object *args);
+/* Read-only views: one receipt summary row, and readable provider events. */
+json_object *agent_view_cli(int argc, char **argv);
 int agent_retain(const char *head, const char *run, const struct f_capture *capture);
 /* Bounded UTF-8-safe excerpt {text,bytes,truncated} of size bytes, or NULL when empty. */
 json_object *agent_excerpt(const char *text, size_t size);
