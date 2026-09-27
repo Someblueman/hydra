@@ -173,7 +173,8 @@ static void hydra(void) {
     before = s.screen.clears;
     tv_send(&s, "j");
     tv_until(&s, "Session   terminal gone", 3);
-    tv_send(&s, "\tjjj\tjj");
+    /* Tab order: selected work, dependencies, then activity. */
+    tv_send(&s, "\tjjj\t\tjj");
     tv_pump(&s, .2);
     CHECK(tv_contains(&s, "scroll 3") && tv_contains(&s, "scroll 2"), "Hydra independent scroll");
     tv_send(&s, "\033[<0;42;4M\033[<32;50;4M\033[<0;50;4m");
@@ -215,7 +216,7 @@ static void hydra_startup_selection(void) {
     struct tv_session s;
     char tui[4096], fake[4096], source[4096], model[4096], data[8192], name[64];
     const char *keys[] = {"k", "j", "\r"};
-    const char *selected[] = {">- This project", ">  └ visualization-proof", ">+ This project"};
+    const char *selected[] = {">- This project", ">  └ run visualiza", ">+ This project"};
     size_t i;
     tv_format(tui, sizeof(tui), "%s/hydra-tui", build);
     tv_format(fake, sizeof(fake), "%s/tests/fixtures/tui/fake-hydra.sh", root);
