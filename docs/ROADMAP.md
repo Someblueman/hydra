@@ -1,8 +1,8 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 24 September 2026
-> - **Release:** `v2.7.0` reliability baseline and guided planning
+> - **Snapshot:** 27 September 2026
+> - **Release:** `v2.8.0` agentic journey, run review and output fidelity
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   [Contracts](CONTRACTS.md) · [Release definition of done](#release-definition-of-done)
@@ -39,41 +39,33 @@ describe only the revisions they name.
 backlog and released when a coherent feature or meaningful change is ready. The
 version number is chosen at release time from compatibility impact.
 
-## Next target: installed-build acceptance
+## Next target: guided remote onboarding
 
-Release 2.7.0 shipped the September 2026 reliability audit fixes together with
-in-app conversation launch, head-associated agent proposals with guided local
-policy, invalidation on revision and exact-digest approval (U3/U17), and the first
-installed usability runner (U18); see the [2.7.0 changelog](../CHANGELOG.md#270---2026-09-24).
-Its local qualification: `make test-usability` covers five installed journeys at
-80/140 columns, including checked delivery; one existing-login Claude planning task
-published and validated a proposal within a five-minute cap; input/resize/return
-and nested tmux attachment have deterministic acceptance; and independent native
-capture checks Unicode, line drawing and ANSI color. These local qualifications
-do not close the full acceptance criteria of U3, U17 or U18.
+Release 2.8.0 follows the first installed-build agentic journey (U5, accepted on 27
+September 2026); see the [2.8.0 changelog](../CHANGELOG.md#280---2026-09-27). It
+carries the fixes that journey found: derived task branches, a guided policy that
+authorizes the head's own agent and plan-spawned worker writes, actionable
+`invalid_source`, plans that carry their own prompts and assets, send-back and
+one-key execution approval, run notices to the planning agent, run/head/worker
+presentation, result review, failed-check attention with persistent seen markers,
+statistics with recorded tokens and model settings, verifier retirement, terminal
+restart for heads whose session is gone, and leftover-worktree detection that never
+flags user worktrees. It also adds `hydra kill --dry-run` and the Cursor `--trust`
+profile fix. U14 (read-only transcripts with colour, wrapped lines, themed diffs and
+tmux-compatible emoji widths, compared with recorded Claude and Codex output) and
+U16 (visible leave and close keys, released input on disconnect, tmux history,
+repeated attach/leave/close/resize cycles) are implemented; U18's runner covers
+eight journeys at 80 and 140 columns, including result review, failed-check
+recovery and terminal restart. These remain open until the human review of the
+installed screens; I4's visual pass likewise needs that review. Live agent checks:
+Claude and Cursor passed on the operator VPS; Antigravity is closed upstream.
 
-Next target: 2.8.0 (additive CLI flags and plan/policy fields, so a minor
-version). U5 was accepted on 27 September 2026 and the live agent checks are
-settled: Claude and Cursor passed, Cursor after its `--trust` profile fix, and
-Antigravity is closed upstream. The release carries the U5 fixes on local
-branches: derived task branches, a guided policy that can authorize agent work,
-actionable `invalid_source`, plans that carry their own prompts and assets,
-send-back and one-key execution approval, run notices to the planning agent, a
-larger agent pane, run/head/worker presentation, result review, attention
-acknowledgement and statistics; the leftover-worktree detection fix; the Cursor
-fix; and `hydra kill --dry-run`. U14 output fidelity (read-only transcripts with
-color, wrapped long lines and themed diffs, tmux-compatible emoji layout, compared
-with recorded Claude and Codex output) and U16 attachment exit (visible leave and
-close keys, released input on disconnect, tmux history, repeated PTY
-attach/leave/close/resize cycles) are implemented on local branches and await
-the human review. Still to do in this release: a U18 extension to the
-result/diff and recovery journeys, and I4's visual pass. Then run the full
-release gates and a human review of the new screens.
-
-The following release is expected to centre on U10 guided remote onboarding,
-including agent installation and per-user install detection found missing on 26
-September. Scheduling, task pools, automatic placement, T2/T3 and performance
-baselines remain outside 2.8.0.
+Next, U10 guided remote onboarding: select an SSH destination and let Hydra
+provision a compatible runtime, install and detect agents (including per-user
+installs outside a non-interactive `PATH`) and guide sign-in, replacing the manual
+steps recorded on 26 September. Scheduling, task pools, automatic placement, T2/T3
+and performance baselines remain outside this target. These priorities do not
+establish a release date; compatibility impact still determines the next version.
 
 ## Product and engineering guardrails
 

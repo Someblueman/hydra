@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-09-27
+
 ### Added
 
+- `hydra kill --dry-run` previews a branch, `--all` or `-g/--group` selection:
+  each active head's session, worktree, tracked and untracked changes, and that
+  its branch is kept. It never prompts or changes state; `--force` stays a
+  preview. Help and bash, zsh and fish completions include it.
 - Policies accept the write scope `@spawned:*`, authorizing writes only to heads
   created by the plan's own spawn steps; plans still name concrete heads.
 - Plans carry their own inputs, so planning never requires committing files to
@@ -1323,7 +1329,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.7.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/Someblueman/hydra/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/Someblueman/hydra/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/Someblueman/hydra/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/Someblueman/hydra/compare/v2.4.0...v2.5.0
