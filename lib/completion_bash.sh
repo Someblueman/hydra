@@ -19,6 +19,14 @@ _hydra_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
+    if [[ ${COMP_WORDS[1]:-} == kill && $COMP_CWORD -gt 2 ]]; then
+        case "$prev" in -g|--group) return 0 ;; esac
+        if [[ -z $cur || $cur == -* ]]; then
+            COMPREPLY=($(compgen -W "--all --dry-run --force -g --group --protect-untracked --transcript" -- "$cur"))
+            return 0
+        fi
+    fi
+
     commands="remote fleet admission spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
     if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && $COMP_CWORD -ge 5 ]]; then
@@ -100,10 +108,10 @@ _hydra_completion() {
         snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
         tui) COMPREPLY=($(compgen -W "--basic --capabilities" -- ${cur})); return 0 ;;
         kill)
-            # Complete with git branch names or --all flag
+            # Complete with git branch names or kill options
             case "${cur}" in
                 -*)
-                    COMPREPLY=($(compgen -W "--all --force --protect-untracked --transcript" -- ${cur}))
+                    COMPREPLY=($(compgen -W "--all --dry-run --force -g --group --protect-untracked --transcript" -- ${cur}))
                     ;;
                 *)
                     local branches=$(git branch 2>/dev/null | sed 's/^[ *]*//' | grep -v '^(')
@@ -259,16 +267,6 @@ _hydra_completion() {
         return 0
     fi
     
-    # Check if we're completing a flag for kill command
-    if [[ "${COMP_WORDS[@]}" =~ kill ]]; then
-        case "${prev}" in
-            --all)
-                # After --all, only --force is valid
-                COMPREPLY=($(compgen -W "--force" -- ${cur}))
-                return 0
-                ;;
-        esac
-    fi
 }
 
 complete -F _hydra_completion hydra

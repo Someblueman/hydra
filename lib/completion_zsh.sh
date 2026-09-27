@@ -160,6 +160,8 @@ _hydra() {
                 kill)
                     _arguments \
                         '--all[Kill all hydra sessions]' \
+                        '--dry-run[Preview selected heads without changes]' \
+                        '(-g --group)'{-g,--group}'[Select a group]:group:' \
                         '--protect-untracked[Refuse untracked worktree files]' \
                         '--force[Skip confirmation prompt]' \
                         '1:branch:_hydra_branches'

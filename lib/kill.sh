@@ -32,6 +32,51 @@ get_head_worktree_path() {
     printf '%s\n' "$_path"
 }
 
+# Show active-head teardown targets without touching sessions, state, or the index.
+# Usage: kill_preview_heads <state_list_heads rows>
+kill_preview_heads() {
+    _kp_mappings="$1"
+    echo "Dry run: no changes will be made."
+    if [ -z "$_kp_mappings" ]; then
+        echo "No active Hydra heads selected"
+        return 0
+    fi
+
+    while IFS=' ' read -r _kp_branch _kp_session _kp_rest; do
+        [ -n "$_kp_branch" ] || continue
+        _kp_path="$(get_head_worktree_path "$_kp_branch" 2>/dev/null || true)"
+        _kp_tracked=unknown
+        _kp_untracked=unknown
+        _kp_unavailable=""
+        if [ -z "$_kp_path" ] || [ ! -d "$_kp_path" ] || [ ! -r "$_kp_path" ] || [ ! -x "$_kp_path" ]; then
+            _kp_unavailable="Worktree unavailable: recorded path is missing or unreadable."
+        elif ! _kp_top="$(GIT_OPTIONAL_LOCKS=0 git -C "$_kp_path" rev-parse --show-toplevel 2>/dev/null)" ||
+             [ "$_kp_top" != "$_kp_path" ]; then
+            _kp_unavailable="Worktree unavailable: recorded path is not a readable Git worktree."
+        elif ! _kp_status="$(GIT_OPTIONAL_LOCKS=0 git -C "$_kp_path" status --porcelain=v1 --untracked-files=normal 2>/dev/null)"; then
+            _kp_unavailable="Worktree unavailable: Git status could not be read."
+        else
+            _kp_tracked=no
+            _kp_untracked=no
+            while IFS= read -r _kp_line; do
+                case "$_kp_line" in
+                    '?? '*) _kp_untracked=yes ;;
+                    '') ;;
+                    *) _kp_tracked=yes ;;
+                esac
+            done <<EOF
+$_kp_status
+EOF
+        fi
+
+        printf '\nBranch: %s\nSession: %s\nWorktree: %s\n' "$_kp_branch" "$_kp_session" "$_kp_path"
+        [ -z "$_kp_unavailable" ] || printf '%s\n' "$_kp_unavailable"
+        printf 'Uncommitted changes: %s\nUntracked changes: %s\nBranch kept.\n' "$_kp_tracked" "$_kp_untracked"
+    done <<EOF
+$_kp_mappings
+EOF
+}
+
 # Preflight a head before destroying tmux or state.
 # Usage: _kill_preflight <branch>
 # Returns: 0 if teardown may proceed, 1 if the worktree is not removable

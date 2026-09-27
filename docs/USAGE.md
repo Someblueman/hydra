@@ -37,6 +37,13 @@ exposes the same protection as `hydra kill <branch> --protect-untracked`; existi
 noninteractive CLI cleanup behavior is unchanged when that flag is omitted.
 Ignored files retain the existing Git removal semantics.
 
+`hydra kill <branch> --dry-run`, `hydra kill --all --dry-run`, and `hydra kill
+-g <name> --dry-run` preview active heads without confirmation or teardown.
+Each preview shows the recorded session and worktree path, separate tracked
+(staged or unstaged) and ordinary untracked change indicators, and that the
+branch is kept. An unavailable worktree has unknown change indicators.
+`--force` is accepted with `--dry-run` but does not change the preview.
+
 - `hydra` with no arguments opens the control centre (`hydra tui`) when you run it
   from a terminal inside a Git repository. Outside a repository, or without a
   terminal, it prints a short usage with the most common commands.
@@ -79,6 +86,9 @@ hydra switch            # interactive (fzf if available)
 
 # Manage
 hydra kill feature-branch
+hydra kill feature-branch --dry-run       # preview only; never prompts or changes state
+hydra kill --all --dry-run                # preview every active head
+hydra kill -g backend --dry-run           # preview an active group
 hydra kill --all [--force]
 hydra cleanup           # stop dead heads; remove stale locks and orphaned worktrees
 

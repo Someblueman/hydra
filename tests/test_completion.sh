@@ -280,6 +280,30 @@ test_completion_includes_shipped_commands() {
         ' || option_status=1
     done
     assert_success "$option_status" "all completion generators map shipped options to their commands"
+
+    HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
+    cli_status=0
+    for shell in bash zsh fish; do
+        case "$shell" in fish) needle='-l dry-run' ;; *) needle='--dry-run' ;; esac
+        "$HYDRA_BIN" completion "$shell" | grep -Fq -- "$needle" || cli_status=1
+    done
+    assert_success "$cli_status" "real CLI emits kill dry-run completion for every shell"
+
+    kill_option_status=0
+    bash_kill_block="$(printf '%s\n' "$bash_out" | awk '/^        kill\)/ { block = 1; next } block && /^            ;;/ { exit } block { print }')"
+    zsh_kill_block="$(printf '%s\n' "$zsh_out" | awk '/^                kill\)/ { block = 1; next } block && /^                    ;;/ { exit } block { print }')"
+    for option in dry-run all group force; do
+        case "$bash_kill_block" in *"--$option"*) ;; *) kill_option_status=1 ;; esac
+        case "$zsh_kill_block" in *"--$option"*) ;; *) kill_option_status=1 ;; esac
+        printf '%s\n' "$fish_out" | grep '__fish_seen_subcommand_from kill' | grep -Eq -- "-l $option([[:space:]]|$)" || kill_option_status=1
+    done
+    assert_success "$kill_option_status" "kill completion includes selectors and dry-run in every shell"
+
+    short_group_status=0
+    case "$bash_out" in *'--force -g --group'*) ;; *) short_group_status=1 ;; esac
+    case "$zsh_out" in *"'{-g,--group}'"*) ;; *) short_group_status=1 ;; esac
+    case "$fish_out" in *'-s g -l group'*) ;; *) short_group_status=1 ;; esac
+    assert_success "$short_group_status" "kill completions include short -g group selector"
 }
 
 # Run all tests

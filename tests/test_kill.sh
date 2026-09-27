@@ -7,16 +7,17 @@ fail_count=0
 test_root="$(mktemp -d)"
 repo="$test_root/repo"
 HYDRA_HOME="$test_root/home"
+TMUX_TMPDIR="$test_root/tmux"
 HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
-export HYDRA_HOME HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1 HYDRA_LOCK_RETRIES=1
+mkdir -p "$TMUX_TMPDIR"
+unset TMUX HYDRA_TMUX_SOCKET HYDRA_TMUX_SOCKET_NAME HYDRA_HEAD_ID HYDRA_INSTANCE_ID
+export HYDRA_HOME TMUX_TMPDIR HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1 HYDRA_LOCK_RETRIES=1
 
 # shellcheck disable=SC1091
 . "$(dirname "$0")/helpers.sh"
 
 cleanup() {
-    for session in kill-dead kill-dirty kill-locked; do
-        tmux kill-session -t "$session" 2>/dev/null || true
-    done
+    tmux kill-server 2>/dev/null || true
     cd / 2>/dev/null || true
     rm -rf "$test_root"
 }
@@ -27,7 +28,8 @@ git -C "$repo" init -q
 git -C "$repo" config user.name Test
 git -C "$repo" config user.email test@example.com
 printf 'clean\n' > "$repo/tracked"
-git -C "$repo" add tracked
+printf 'ignored\n' > "$repo/.gitignore"
+git -C "$repo" add tracked .gitignore
 git -C "$repo" commit -qm init
 cd "$repo" || exit 1
 "$HYDRA_BIN" init --no-agent --trust >/dev/null
@@ -87,6 +89,125 @@ assert_equal running "$(sed -n '1p' "$(head_dir kill-locked)/desired-state")" "f
 rmdir "$HYDRA_HOME/locks/state_${project_id}.lock"
 "$HYDRA_BIN" kill kill-locked >/dev/null
 assert_success $? "interrupted teardown can be retried"
+
+# Preview fixtures cover the same recorded heads used by destructive kill.
+for branch in preview-clean preview-tracked preview-untracked; do
+    "$HYDRA_BIN" spawn "$branch" --no-agent >/dev/null
+done
+"$HYDRA_BIN" spawn preview-headless --headless --no-agent >/dev/null
+"$HYDRA_BIN" group create preview-group preview-clean preview-tracked >/dev/null
+clean_path="$("$HYDRA_BIN" path preview-clean)"
+tracked_path="$("$HYDRA_BIN" path preview-tracked)"
+untracked_path="$("$HYDRA_BIN" path preview-untracked)"
+headless_path="$("$HYDRA_BIN" path preview-headless)"
+printf 'staged\n' > "$tracked_path/tracked"
+git -C "$tracked_path" add tracked
+printf 'ordinary\n' > "$untracked_path/untracked"
+printf 'ignored\n' > "$clean_path/ignored"
+
+preview_snapshot() {
+    git worktree list --porcelain
+    tmux list-sessions -F '#{session_name} #{session_id} #{session_windows}' 2>/dev/null || true
+    for _ps_path in "$HYDRA_HOME" "$repo" "$clean_path" "$tracked_path" "$untracked_path" "$headless_path"; do
+        if [ -d "$_ps_path" ]; then
+            find "$_ps_path" -type f -exec cksum {} \; | LC_ALL=C sort
+        else
+            printf 'unavailable %s\n' "$_ps_path"
+        fi
+    done
+}
+
+preview_check() {
+    preview_snapshot > "$test_root/before"
+    "$HYDRA_BIN" kill "$@" < /dev/null > "$test_root/preview" 2>&1
+    _pc_status=$?
+    preview_snapshot > "$test_root/after"
+    assert_success "$_pc_status" "preview succeeds: $*"
+    cmp -s "$test_root/before" "$test_root/after"
+    assert_success $? "preview preserves sessions, worktrees, state and Git index: $*"
+    grep -Fq 'Dry run: no changes will be made.' "$test_root/preview"
+    assert_success $? "preview declares no changes: $*"
+    if grep -Eiq 'y/n|yes/no|confirm.*[?:]' "$test_root/preview"; then
+        assert_success 1 "preview does not prompt: $*"
+    else
+        assert_success 0 "preview does not prompt: $*"
+    fi
+}
+
+preview_head() {
+    _ph_branch="$1" _ph_session="$2" _ph_path="$3" _ph_tracked="$4" _ph_untracked="$5"
+    awk -v branch="$_ph_branch" '/^Branch: / { selected = ($0 == "Branch: " branch) } selected { print }' \
+        "$test_root/preview" > "$test_root/head"
+    for _ph_line in "Branch: $_ph_branch" "Session: $_ph_session" "Worktree: $_ph_path" \
+        "Uncommitted changes: $_ph_tracked" "Untracked changes: $_ph_untracked" 'Branch kept.'; do
+        grep -Fxq "$_ph_line" "$test_root/head"
+        assert_success $? "$_ph_branch reports $_ph_line"
+    done
+}
+
+preview_check --dry-run preview-clean
+assert_equal 1 "$(grep -c '^Branch: ' "$test_root/preview")" "branch preview selects one head"
+preview_head preview-clean preview-clean "$clean_path" no no
+preview_check preview-tracked --force --dry-run
+preview_head preview-tracked preview-tracked "$tracked_path" yes no
+printf 'unstaged\n' >> "$tracked_path/tracked"
+preview_check --dry-run preview-tracked
+preview_head preview-tracked preview-tracked "$tracked_path" yes no
+git -C "$tracked_path" restore --staged tracked
+preview_check preview-tracked --dry-run
+preview_head preview-tracked preview-tracked "$tracked_path" yes no
+preview_check --dry-run --all
+assert_equal 4 "$(grep -c '^Branch: ' "$test_root/preview")" "all preview selects every active head"
+preview_head preview-untracked preview-untracked "$untracked_path" no yes
+preview_head preview-headless - "$headless_path" no no
+preview_check --group preview-group --dry-run
+assert_equal 2 "$(grep -c '^Branch: ' "$test_root/preview")" "group preview selects group members"
+preview_check --dry-run -g preview-group --force
+assert_equal 2 "$(grep -c '^Branch: ' "$test_root/preview")" "short group flag selects group members"
+
+mv "$headless_path" "$test_root/moved-headless"
+preview_check --dry-run preview-headless
+preview_head preview-headless - "$headless_path" unknown unknown
+grep -Fqi unavailable "$test_root/preview"
+assert_success $? "missing worktree is explained as unavailable"
+mv "$test_root/moved-headless" "$headless_path"
+
+for args in '--all preview-clean' '--all --group preview-group' '--group preview-group preview-clean' \
+    '--group preview-group -g another-group' '--group' '--unknown'; do
+    preview_snapshot > "$test_root/before"
+    # These fixed argument cases intentionally use shell splitting.
+    # shellcheck disable=SC2086
+    "$HYDRA_BIN" kill --dry-run $args < /dev/null > "$test_root/preview" 2>&1
+    assert_failure $? "invalid kill arguments fail: $args"
+    grep -Fq 'Error:' "$test_root/preview"
+    assert_success $? "invalid kill arguments explain error: $args"
+    preview_snapshot > "$test_root/after"
+    cmp -s "$test_root/before" "$test_root/after"
+    assert_success $? "invalid kill arguments preserve all state: $args"
+done
+preview_check --dry-run --group missing-group
+grep -Fq 'No active Hydra heads selected' "$test_root/preview"
+assert_success $? "empty group preview reports no heads"
+preview_check --dry-run --all --force
+
+for tty_case in branch all group; do
+    case "$tty_case" in
+        branch) set -- preview-clean ;;
+        all) set -- --all ;;
+        group) set -- -g preview-group ;;
+    esac
+    preview_snapshot > "$test_root/before"
+    case "$(uname -s)" in
+        Darwin) printf 'n\n' | (unset HYDRA_NONINTERACTIVE CI; script -q "$test_root/tty" dash "$HYDRA_BIN" kill --dry-run "$@") > "$test_root/preview" 2>&1 ;;
+        *) printf 'n\n' | (unset HYDRA_NONINTERACTIVE CI; script -q -e -c "dash '$HYDRA_BIN' kill --dry-run $*" "$test_root/tty") > "$test_root/preview" 2>&1 ;;
+    esac
+    assert_success $? "TTY preview exits without confirmation: $tty_case"
+    preview_snapshot > "$test_root/after"
+    cmp -s "$test_root/before" "$test_root/after"
+    assert_success $? "TTY preview preserves all state: $tty_case"
+    grep -Fq 'Branch kept.' "$test_root/preview"
+    assert_success $? "TTY preview ran rather than aborting: $tty_case"
+done
 
 echo "================================="
 echo "Test Results:"
