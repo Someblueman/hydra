@@ -31,6 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   submits the run ID into the planning conversation, then approval waits, failed
   steps and the outcome; the run owner also records deduplicated inbox notices for
   that exact instance, including when the TUI is closed.
+- Reviewing a result of a compiled plan run shows what the run produced and how it
+  was checked: the verdict, the deliverable's text, each requirement with its check,
+  the verify step's exact command with a filtered summary of its output (full log
+  with `L`), duration, agent, executable version and token use per step, the worker
+  branch's commits, files and bounded diff as currently observed, and the `git` and
+  `hydra` commands that would land and clean up. Hydra never runs them.
+- Attention items can be marked seen with `s` from the list or detail view. The
+  marker is kept per user in `$HYDRA_HOME/attention/seen.tsv` (512 entries, keyed by
+  identity and revision) through `hydra workflow attention-seen`, survives restarts,
+  moves the item to a collapsed Seen group and out of the count; a new revision
+  shows it again. A seen approval stays listed until someone decides.
+- The Statistics view shows agent tokens (in, cached, out), cost only when reported,
+  agent, executable version, model and effort per step and per run, with totals for
+  the selected scope. Workflow statistics data is schema 4 with one `U` row per agent
+  step from its exec receipt; schemas 2 and 3 remain readable.
 
 ### Changed
 
@@ -43,6 +58,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gets the rest; `B` (Ctrl-B B from the agent) shows the review.
 - Attached panes read "codex · session running" instead of "AGENT UNKNOWN": the
   agent and observable session state, never a claim that the agent awaits input.
+- Attention rows read as sentences with the workflow and step, for example "Result
+  ready for review · kill-dry-run · verify", followed by why it needs you; long rows
+  wrap instead of being cut, and a partial snapshot is explained in plain words only
+  when it applies. `workflow attention-data` and `fleet attention-data` are wire
+  version 2, appending the workflow name as a presentation label; the native TUI
+  still reads version 1.
+- Review navigation styles headings, check results and diff lines, jumps between
+  sections with `n`/`N` and pages with space/`b`.
 
 - The guided local policy now allows `sh`, `git`, `make` and the head's own agent
   profile, writes inside plan-spawned heads, 3600 seconds and a 1 GiB free-space
@@ -80,6 +103,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep a bounded, character-safe excerpt (4096 bytes per stream) of provider stderr
   and undecoded stdout in failed headless receipts as optional `diagnostic`;
   completed receipts are unchanged.
+- Succeeded spawn and plain exec steps no longer appear in attention as unknown
+  `result_binding_unknown` items that also marked the snapshot partial: a step that
+  declares no outputs has nothing to review. Declared outputs that do not match
+  their receipt remain explicit unknowns.
+- Reviews no longer report a step without deliverables as revoked with malformed
+  declarations; it is not applicable. Plan checks of a run that has not finished are
+  pending instead of failed, and a sealed result waiting for them is in progress.
+- Statistics word unmeasured CPU and memory in full instead of truncating
+  "not measured", and no longer claim tokens are unmeasured when receipts record them.
 
 ## [2.7.0] - 2026-09-24
 
