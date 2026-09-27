@@ -50,6 +50,34 @@ static void agent_until(struct tv_session *s, const char *needle, double seconds
     CHECK(strstr(text, needle), "agent conversation received the message");
 }
 
+/* Screen row y without trailing spaces. */
+static const char *trimmed_row(struct tv_session *s, int y, char *row, size_t capacity) {
+    size_t n = strlen(tv_row(s, y, row, capacity));
+    while (n && row[n - 1] == ' ') n--;
+    row[n] = 0;
+    return row;
+}
+
+/* The row of the text field's title. */
+static int form_top(struct tv_session *s) {
+    char row[1024];
+    int y = 0;
+    while (y < s->screen.rows && !strstr(tv_row(s, y, row, sizeof(row)), "INPUT TO HYDRA / text field")) y++;
+    CHECK(y < s->screen.rows, "text field visible");
+    return y;
+}
+
+/* The text field's prompt rows, trimmed and joined with single spaces. */
+static void form_prompt(struct tv_session *s, char *joined, size_t capacity) {
+    char row[1024];
+    size_t used = 0;
+    int y;
+    joined[0] = 0;
+    for (y = form_top(s) + 1; y < s->screen.rows && trimmed_row(s, y, row, sizeof(row))[0] != '_'; y++)
+        used += (size_t)snprintf(joined + used, capacity - used, "%s%s", used ? " " : "", row);
+    CHECK(used < capacity, "prompt rows fit");
+}
+
 /* The text field wraps its prompt at word boundaries: its rows joined with
  * single spaces reproduce the prompt's phrases exactly, which a row broken
  * inside a word ("No e" / "xecution") would not. */
@@ -57,20 +85,9 @@ static bool form_words_whole(struct tv_session *s) {
     static const char *const phrases[] = {"Review with local policy:", "writes only in heads the plan spawns,",
         "1 worker, 4 heads, 60 minutes, 1 MiB artifacts, 1 GiB free disk, no retries or repairs.",
         "The plan carries its prompts and assets; nothing is committed to your checkout.", "No execution yet. y/N:"};
-    char row[1024], joined[4096] = "";
-    int y, top = -1;
+    char joined[4096];
     size_t i;
-    for (y = 0; y < s->screen.rows; y++)
-        if (strstr(tv_row(s, y, row, sizeof(row)), "INPUT TO HYDRA / text field")) top = y;
-    CHECK(top >= 0, "text field visible");
-    for (y = top + 1; y < s->screen.rows && tv_row(s, y, row, sizeof(row))[0] != '_'; y++) {
-        size_t n = strlen(row);
-        while (n && row[n - 1] == ' ') n--;
-        row[n] = 0;
-        CHECK(strlen(joined) + n + 2 < sizeof(joined), "prompt rows fit");
-        if (joined[0]) strcat(joined, " ");
-        strcat(joined, row);
-    }
+    form_prompt(s, joined, sizeof(joined));
     for (i = 0; i < sizeof(phrases) / sizeof(phrases[0]); i++)
         if (!strstr(joined, phrases[i])) {
             fprintf(stderr, "Prompt rows lack '%s':\n%s\n", phrases[i], joined);

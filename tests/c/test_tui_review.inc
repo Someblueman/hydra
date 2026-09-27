@@ -252,17 +252,21 @@ static bool review_result_log(const char *log) {
     fprintf(file, "LOG-TAIL-MARKER Passed: 200 Failed: 0\n");
     return fclose(file) == 0;
 }
+/* Appends a section heading line, a detail line and 40 filler lines. */
+static size_t review_result_section(char *text, size_t used, const char *heading, const char *detail, const char *filler, size_t *lines) {
+    used += (size_t)snprintf(text + used, 65536U - used, "TEXT\t%s\nTEXT\t%s\n", heading, detail); *lines += 2U;
+    for (size_t i = 0U; i < 40U; i++) { used += (size_t)snprintf(text + used, 65536U - used, "TEXT\t%s filler %zu\n", filler, i); (*lines)++; }
+    return used;
+}
 static void review_result_case(struct session *session, struct review_fixture *fixture) {
     char header[1024], log[200], *text = malloc(65536U); size_t used, lines = 0U; int written;
     if (!text || !review_header(fixture, header, sizeof(header)) ||
         snprintf(log, sizeof(log), "%s/verify.log", fixture->directory) >= (int)sizeof(log) || !review_result_log(log)) { free(text); result(false, "result review fixture"); return; }
-    used = (size_t)snprintf(text, 65536U, "%sTEXT\tRESULT  plan-x  -  verdict PASS (verified)  -  run succeeded\nTEXT\tWHAT WAS PRODUCED\n", header); lines += 2U;
-    for (size_t i = 0U; i < 40U; i++) { used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tproduced filler %zu\n", i); lines++; }
-    used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tHOW IT WAS VERIFIED\nTEXT\t    Full log: press L\n"); lines += 2U;
-    for (size_t i = 0U; i < 40U; i++) { used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tverified filler %zu\n", i); lines++; }
-    used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tCHANGES ON plan-x-worker  (1 commit, 1 file, +1 -0; the branch as it is now)\n"
-        "TEXT\t  file  +1     -0     CHANGED-FILE-MARKER\n"); lines += 2U;
-    for (size_t i = 0U; i < 40U; i++) { used += (size_t)snprintf(text + used, 65536U - used, "TEXT\tchanges filler %zu\n", i); lines++; }
+    used = (size_t)snprintf(text, 65536U, "%s", header);
+    used = review_result_section(text, used, "RESULT  plan-x  -  verdict PASS (verified)  -  run succeeded", "WHAT WAS PRODUCED", "produced", &lines);
+    used = review_result_section(text, used, "HOW IT WAS VERIFIED", "    Full log: press L", "verified", &lines);
+    used = review_result_section(text, used, "CHANGES ON plan-x-worker  (1 commit, 1 file, +1 -0; the branch as it is now)",
+        "  file  +1     -0     CHANGED-FILE-MARKER", "changes", &lines);
     written = snprintf(text + used, 65536U - used, "TEXT\tDIFF  (complete)\nTEXT\t    +added line\nREF\tlog\tavailable\t%s\nEND\t%zu\t1\t0\n", log, lines + 2U);
     if (written < 0 || (size_t)written >= 65536U - used) { free(text); unlink(log); result(false, "result review fits"); return; }
     result(review_reload(session, fixture, text, "RESULT  plan-x"), "result review loads");

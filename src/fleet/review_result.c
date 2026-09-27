@@ -293,22 +293,26 @@ static bool check_step_failed(const struct rr *r, json_object *check)
     return failed;
 }
 
+static json_object *requirement_check(const struct rr *r, json_object *requirement)
+{
+    json_object *checks = f_field(r->plan, "checks");
+    const char *id = f_string(requirement, "check");
+    for (size_t i = 0; id && i < rr_length(checks); i++) {
+        json_object *check = json_object_array_get_idx(checks, i);
+        if (f_string(check, "id") && !strcmp(f_string(check, "id"), id))
+            return check;
+    }
+    return NULL;
+}
+
 static const char *requirement_state(const struct rr *r, json_object *requirement)
 {
-    json_object *checks = f_field(r->plan, "checks"), *report = NULL, *matched = NULL;
+    json_object *check = requirement_check(r, requirement), *report;
     const char *state = "not_reported";
     bool verified = false;
-    for (size_t i = 0; i < rr_length(checks); i++) {
-        json_object *check = json_object_array_get_idx(checks, i);
-        if (!f_string(check, "id") || !f_string(requirement, "check") ||
-            strcmp(f_string(check, "id"), f_string(requirement, "check")))
-            continue;
-        matched = check;
-        report = check_report(r, check, &verified);
-        break;
-    }
+    report = check ? check_report(r, check, &verified) : NULL;
     if (!report)
-        return check_step_failed(r, matched) ? "fail" : r->delivery ? "not_reported" : "pending";
+        return check_step_failed(r, check) ? "fail" : r->delivery ? "not_reported" : "pending";
     if (verified)
         state = listed(f_field(report, "requirements"), f_string(requirement, "id")) ? "pass" : "not_reported";
     else if (f_string(report, "verdict") && !strcmp(f_string(report, "verdict"), "fail"))

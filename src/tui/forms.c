@@ -39,25 +39,37 @@ static int form_break(const struct app *app, const char *text, size_t offset, si
     while (n<length && text[n]!=' ') n++;
     return x+form_columns(text+offset,n-offset,app->ascii)>width ? 1 : 0;
 }
+/* Where the next character goes; with no canvas the pen only counts rows. */
+struct form_pen { struct tv_canvas *c; int width, bottom, x, y; enum tv_style tone; };
+/* Places one character, moving to the next row when it does not fit.
+ * Returns the bytes it used, or 0 for an undecodable sequence. */
+static size_t form_place(const struct app *app, struct form_pen *pen, const char *text, size_t length) {
+    uint32_t cp;
+    size_t used=tv_utf8_decode(text,length,&cp);
+    int columns;
+    if (!used) return 0;
+    columns=tv_codepoint_width(cp);
+    if (columns<0 || (app->ascii && cp>126)) { cp='?'; columns=1; }
+    if (pen->x+columns>pen->width) { pen->x=0; pen->y++; }
+    if (pen->c && pen->y<pen->bottom) tv_put(pen->c,pen->x,pen->y,cp,pen->tone);
+    pen->x+=columns;
+    return used;
+}
 /* Word-wraps text into rows [y, bottom) of c; with no canvas it only counts.
  * Returns the row after the last one used. */
 static int form_wrap(const struct app *app, struct tv_canvas *c, int width, int y, int bottom, const char *text, enum tv_style tone) {
+    struct form_pen pen={c,width,bottom,0,y,tone};
     size_t offset=0, length=strlen(text);
-    int x=0;
-    while (offset<length && y<bottom) {
-        uint32_t cp;
+    while (offset<length && pen.y<bottom) {
+        int action=form_break(app,text,offset,length,pen.x,width);
         size_t used;
-        int columns, action=form_break(app,text,offset,length,x,width);
-        if (action) { if (action==1) { x=0; y++; } else offset++; continue; }
-        used=tv_utf8_decode(text+offset,length-offset,&cp);
+        if (action==1) { pen.x=0; pen.y++; continue; }
+        if (action==2) { offset++; continue; }
+        used=form_place(app,&pen,text+offset,length-offset);
         if (!used) break;
-        offset+=used; columns=tv_codepoint_width(cp);
-        if (columns<0 || (app->ascii && cp>126)) { cp='?'; columns=1; }
-        if (x+columns>width) { x=0; y++; }
-        if (c && y<bottom) tv_put(c,x,y,cp,tone);
-        x+=columns;
+        offset+=used;
     }
-    return y+1;
+    return pen.y+1;
 }
 static void form_draw(struct app *app, const char *prompt, const char *text, size_t cursor) {
     struct tv_cell cells[512U*8U];
