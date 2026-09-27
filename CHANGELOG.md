@@ -31,6 +31,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   submits the run ID into the planning conversation, then approval waits, failed
   steps and the outcome; the run owner also records deduplicated inbox notices for
   that exact instance, including when the TUI is closed.
+- Overview centres on the run: a run panel lists each step with its kind and role,
+  state, attempts, duration and the head it ran on, and says what happens next or
+  what the run needs from you ("Worker branch … holds the result: review · land ·
+  dismiss"). With no run it explains how one starts; the queue chart appears only
+  when work has been queued.
+- Headless heads describe their steps: Details and the workspace show
+  `headless (no terminal)` and the agent of the current or last step
+  (`codex · step implement · running`) with its executable version, model and
+  reasoning effort, tokens (in, cached, out), cost and duration. A model or effort
+  the provider reports is shown as reported; one read from the provider's
+  configuration (such as `~/.codex/config.toml`) is labelled "configured default …
+  (not observed)"; anything else stays unknown, never zero.
+- `p` on a headless head shows a bounded, read-only view of its step: the running
+  agent's events (assistant messages, commands, file changes, usage) with a raw
+  fallback, a command's output, or a finished step's declared result. Provider
+  output is copied privately only while the step runs and removed when it ends.
+- When a plan run succeeds, fails or is cancelled, Hydra retires the heads it
+  created for verification steps with `hydra kill --protect-untracked` once their
+  evidence is sealed in the run record; their branches are kept. A verifier head
+  with changes is kept for review, every outcome is recorded as a run event, and
+  a failed retirement never changes the run result. Worker heads stay until you
+  land or dismiss their result.
 
 ### Changed
 
@@ -43,6 +65,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gets the rest; `B` (Ctrl-B B from the agent) shows the review.
 - Attached panes read "codex · session running" instead of "AGENT UNKNOWN": the
   agent and observable session state, never a claim that the agent awaits input.
+- Heads a workflow run creates are grouped under their run, and a run launched
+  from a planning conversation under that planning head, in Work, Overview and the
+  workspace navigation (`add-kill` ▸ `plan run kill-dry-run · succeeded` ▸ `worker
+  …`, `verifier …`). Runs start collapsed; Enter or `l`/`h` expands and collapses
+  them. Header and Overview counts describe the heads you started, with run heads
+  counted inside their run ("1 head (+2 in runs)").
+- A headless head never needs attention merely for having no terminal; attention
+  comes from failed steps, approval waits, runs needing recovery and approval
+  requests. A planning head's details show its plan approval ("plan … approved …
+  · run … · succeeded") instead of `Approvals 0 of 0`; gate counts are labelled
+  "Approval requests".
+- Technical details are grouped into identity, lifecycle, adapter and sources.
 
 - The guided local policy now allows `sh`, `git`, `make` and the head's own agent
   profile, writes inside plan-spawned heads, 3600 seconds and a 1 GiB free-space
@@ -80,6 +114,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep a bounded, character-safe excerpt (4096 bytes per stream) of provider stderr
   and undecoded stdout in failed headless receipts as optional `diagnostic`;
   completed receipts are unchanged.
+- Details no longer shows `Full diff : ...` with a stray colon and no value;
+  headless heads are no longer listed as `Agent shell`, `Session unknown`, or offered
+  a terminal preview that could only report `preview unavailable`.
 
 ## [2.7.0] - 2026-09-24
 

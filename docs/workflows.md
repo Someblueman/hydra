@@ -171,6 +171,34 @@ headless worker head, runs an agent exec step there with `profile`, an inline
 the repository's own checks and a check step that writes an object report.
 `result_file` equals the name and path of a declared output of that step.
 
+### Heads a plan run creates
+
+Each head a plan's spawn steps create belongs to that run. Hydra classifies it by
+the steps that run on it: a **worker** head runs work or compose steps and holds
+the result; a **verifier** head runs only verify steps. The native TUI lists them
+inside their run, and a run launched from a planning conversation inside that
+planning head, so Work shows the task you started rather than every head
+(`add-kill` ▸ `plan run kill-dry-run · succeeded` ▸ `worker …`, `verifier …`).
+Runs start collapsed; Enter, `l` and `h` expand and collapse them, and the header
+counts run heads inside their run.
+
+A headless head has no terminal. Details shows `headless (no terminal)`, the agent
+of its current or last step (`codex · step implement · running`), the executable
+version, the model and reasoning effort, tokens and duration. A model the provider
+reports is shown as reported; one read from its configuration is labelled
+"configured default … (not observed)"; otherwise it is unknown. `p` shows the
+running step's live events (or a command's output, or a finished step's declared
+result) in place of a terminal preview. Overview's run panel lists every step with
+its kind and role, state, attempts, duration and head, and what comes next.
+
+When the run succeeds, fails or is cancelled, verifier heads are retired with
+`hydra kill --protect-untracked` after their evidence is sealed in the run record;
+their branches are kept, and a verifier head with changes is kept for you to
+review. Worker heads stay until you land (`hydra land <worker>`) or dismiss (`x`,
+which removes the head and keeps its branch) the result. Each retirement is a run
+event (`head.retired`, `head.retire_skipped`, `head.retire_failed`); a failed
+retirement is reported and never changes the run result.
+
 ### Plans carry their own inputs
 
 Planning never requires committing files to the source. The draft and anything

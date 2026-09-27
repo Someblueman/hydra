@@ -195,6 +195,13 @@ an acceptance blocker, not optional cosmetic polish.
       misleading states. Not yet exercised: answering an agent question during
       execution, a failed check with supported recovery, and leaving and
       returning mid-run. Rerun U5 after those fixes; it stays open.
+      Follow-up on a local branch: run heads grouped under their run and
+      planning head with counts of the heads the user started; headless workers
+      described by their step (agent, version, model and effort as reported or
+      configured, tokens) with a live, read-only step-output view; an Overview
+      run panel with each step, its head and the next action; verifier heads
+      retired when the run finishes. Fixture and PTY captures only; the
+      installed-build rerun remains the acceptance.
 - [ ] **U6 — Stable rendering without flicker.** The user reports distracting
       flicker during normal TUI operation. Diagnose the live render/refresh path;
       avoid visible clearing and repainting of unchanged content, and preserve
