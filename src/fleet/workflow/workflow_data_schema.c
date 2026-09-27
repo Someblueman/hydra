@@ -26,7 +26,7 @@ static bool declarations(json_object *map, bool input, bool contracts) {
         if (!wd_name(name) || !task_keys(value, keys[contracts]) || !task_path(f_string(value, "path")) || !type ||
             !json_object_is_type(bound, json_type_int) || bytes < 1 || bytes > TASK_FILE_LIMIT ||
             (f_field(value, "sha256") && (!input || !task_hex(digest, 64))) ||
-            (f_field(value, "source") && (!input || !source || (strcmp(source, "repository") && strcmp(source, "task"))))) return false;
+            (f_field(value, "source") && (!input || !source || (strcmp(source, "repository") && strcmp(source, "task") && strcmp(source, "bundle"))))) return false;
         if (strcmp(type, "file")) {
             if (bytes > WD_LIMIT || (strcmp(type, "object") && strcmp(type, "array") && strcmp(type, "string") &&
                 strcmp(type, "number") && strcmp(type, "boolean"))) return false;

@@ -122,30 +122,81 @@ void refresh_current_session(struct app *app) {
         copy_text(app->current_session, sizeof(app->current_session), output);
     }
 }
-void capture_preview(struct app *app) {
-    if (app->fleet) return;
+/* A headless head has no pane: its preview is the bounded, read-only view of
+ * the step that runs (or last ran) on it, read without blocking the UI. */
+static void headless_preview_start(struct app *app, const struct head *h) {
+    struct native_capture *job;
+    char *argv[] = {(char *)app->hydra, (char *)"tui", (char *)"--head-output", (char *)h->branch, NULL};
+    if (!app->observations) return;
+    if (strcmp(app->preview_head, h->branch)) {
+        copy_text(app->preview_head, sizeof(app->preview_head), h->branch);
+        app->preview_text[0] = '\0';
+    }
+    job = &app->observations->preview;
+    if (job->pid) return;
+    if (!native_capture_start(job, argv, 4000L))
+        copy_text(app->preview_text, sizeof(app->preview_text), "Step output unavailable: the reader could not start");
+}
+
+void headless_preview_tick(struct app *app) {
+    struct native_capture *job;
+    FILE *input;
+    size_t used;
+    if (!app->observations) return;
+    job = &app->observations->preview;
+    if (!job->pid || !native_capture_step(job)) return;
+    input = native_capture_take(job);
+    if (!input) {
+        if (!app->preview_text[0]) copy_text(app->preview_text, sizeof(app->preview_text), "Step output unavailable");
+        return;
+    }
+    used = fread(app->preview_text, 1, sizeof(app->preview_text) - 1U, input);
+    app->preview_text[used] = '\0';
+    fclose(input);
+}
+
+/* A full buffer keeps its newest half from a line start, so a large capture
+ * shows its latest lines rather than failing. */
+static size_t preview_keep_tail(char *text, size_t used) {
+    const char *line = memchr(text + used / 2U, '\n', used - used / 2U);
+    size_t start = line ? (size_t)(line - text) + 1U : used / 2U;
+    memmove(text, text + start, used - start);
+    return used - start;
+}
+
+/* Joined lines (-J) with their colors (-e): Hydra wraps them to the view and
+ * renders SGR itself; the pane's history before the screen gives context. */
+static void terminal_preview(struct app *app, const struct head *h) {
     struct output_child child;
     size_t used = 0U;
     bool failed = false;
     char target[TEXT + 8U];
-    char *argv[8];
-    if (!app->preview || app->model.head_count == 0U) return;
-    retarget_selection(app);
-    if (selected_head(app) == NULL) return;
-    snprintf(target, sizeof(target), "%s:0.0", selected_head(app)->session);
-    argv[0] = (char *)"tmux"; argv[1] = (char *)"capture-pane"; argv[2] = (char *)"-p";
-    argv[3] = (char *)"-S"; argv[4] = (char *)"-8"; argv[5] = (char *)"-t";
-    argv[6] = target; argv[7] = NULL;
+    char *argv[] = {(char *)"tmux", (char *)"capture-pane", (char *)"-p", (char *)"-e", (char *)"-J",
+                    (char *)"-S", (char *)"-40", (char *)"-t", target, NULL};
+    snprintf(target, sizeof(target), "%s:0.0", h->session);
     app->preview_text[0] = '\0';
     if (output_start(&child, argv, 1000L)) return;
-    while (used + 1U < sizeof(app->preview_text)) {
-        ssize_t length = output_read(&child, app->preview_text + used, sizeof(app->preview_text) - used - 1U);
+    for (;;) {
+        ssize_t length;
+        if (used + 1U >= sizeof(app->preview_text)) used = preview_keep_tail(app->preview_text, used);
+        length = output_read(&child, app->preview_text + used, sizeof(app->preview_text) - used - 1U);
         if (length == 0) break;
         if (length < 0) { failed = true; break; }
         used += (size_t)length;
     }
     app->preview_text[used] = '\0';
-    if (output_finish(&child, failed || used + 1U >= sizeof(app->preview_text))) {
+    if (output_finish(&child, failed)) {
         copy_text(app->preview_text, sizeof(app->preview_text), child.timed_out ? "preview timed out" : "preview unavailable");
     }
+}
+
+void capture_preview(struct app *app) {
+    const struct head *h;
+    if (app->fleet || !app->preview || app->model.head_count == 0U) return;
+    retarget_selection(app);
+    h = selected_head(app);
+    if (h == NULL) return;
+    if (head_headless(h)) { headless_preview_start(app, h); return; }
+    app->preview_head[0] = '\0';
+    terminal_preview(app, h);
 }

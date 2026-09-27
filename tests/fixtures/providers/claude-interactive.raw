@@ -1,0 +1,195 @@
+7[r8[?25h[?25l[?2004h[?2031h[?1004h[<u[>5u[>4;2m
+[38;5;220m────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[2G[38;5;220m[1mAccessing[12Gworkspace:[22m[39m
+
+[2G[1m/tmp/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-/prov[22m
+[2G[1m/work[22m
+
+[2GQuick[8Gsafety[15Gcheck:[22GIs[25Gthis[30Ga[32Gproject[40Gyou[44Gcreated[52Gor[55Gone[59Gyou[63Gtrust?[70G(Like[76Gyour[81Gown[85Gcode,[91Ga
+[2Gwell-known[13Gopen[18Gsource[25Gproject,[34Gor[37Gwork[42Gfrom[47Gyour[52Gteam).[59GIf[62Gnot,[67Gtake[72Ga[74Gmoment[81Gto[84Greview[91Gwhat's[98Gin
+[2Gthis[7Gfolder[14Gfirst.
+
+[2GClaude[9GCode'll[17Gbe[20Gable[25Gto[28Gread,[34Gedit,[40Gand[44Gexecute[52Gfiles[58Ghere.
+
+[2G]8;id=zaxmda;https://code.claude.com/docs/en/security[38;5;246mSecurity guide[39m]8;;
+
+[2G[38;5;153m❯[4GNo,[8Gexit[39m
+[4GYes,[9GI[11Gtrust[17Gthis[22Gfolder
+
+[2G[38;5;246mEnter[8Gto[11Gconfirm[19G·[21GEsc[25Gto[28Gcancel[39m
+[1C[4A[>0q[?u[c[?2026$p[c(B[?2004h[<u[>5u[>4;2m[1D[4B[1C[4A [4GNo, exit[1C[1B[38;5;153m❯[4GYes, I trust this folder[39m
+
+
+[1C[3A[>4m[<u[?1004l[?2031l[?2004l[1D[3B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[1A[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[18A[?2004h[?2031h[?1004h[<u[>5u[>4;2m[>0q[c[?2026$p[c[>4m[<u[?1004l[?2031l[?2004l[?2004h[?2031h[?1004h[<u[>5u[>4;2m]0;✳ Claude Code[38;5;174m ▐[48;5;16m▛███▛█[12G[39m[49m[1mClaude[19GCode[24G[22m[38;5;246mv2.1.283[39m
+[38;5;174m▝▜[48;5;16m█████[49m█▀[12G[38;5;246mHaiku[18G4.5[22G·[24GClaude[31GMax[39m
+[38;5;174m ▝▝[7G▝▝[12G[38;5;246m/…/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x/prov/work[39m
+
+[38;5;215m▎[3G[38;5;246m※[5GYou've[12Gbeen[17Ggranted[25Ga[27G$000[32Gbonus[38Gcredit[45Gfor[49Gcloud[55Gsessions,[65Gon[68Gtop[72Gof[75Gyour[80Gplan[85Glimits[92G·[39m
+[38;5;215m▎[3G[38;5;246m/claim-credit[39m
+
+[48;5;237m[38;5;239m❯ [38;5;246mDo not use any tools. Reply with exactly this text and nothing else (keep the diff inside a [39m      [49m
+[48;5;237m  [38;5;246mfenced diff code block):[39m                                                                          [49m
+[48;5;237m                                                                                                    [49m
+[48;5;237m  [38;5;246mUnicode check: café, naïve, 界面 (CJK), emoji 🚀✅, arrows → ←, box ┌─┐└─┘, combining é.[39m          [49m
+[48;5;237m                                                                                                    [49m
+[48;5;237m  [38;5;246m--- a/greeting.txt[39m                                                                                [49m
+[48;5;237m  [38;5;246m+++ b/greeting.txt[39m                                                                                [49m
+[48;5;237m  [38;5;246m@@ -1,3 +1,3 @@[39m                                                                                   [49m
+[48;5;237m  [38;5;246m hello[39m                                                                                            [49m
+[48;5;237m  [38;5;246m-wörld[39m                                                                                            [49m
+[48;5;237m  [38;5;246m+world ✓[39m                                                                                          [49m
+[48;5;237m  [38;5;246m end[39m                                                                                              [49m
+[48;5;237m                                                                                                    [49m
+[48;5;237m  [38;5;246mLONGLINE: alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho[39m [49m
+[48;5;237m  [38;5;246m-sigma-tau-upsilon-phi-chi-psi-omega-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lam[39m [49m
+[48;5;237m  [38;5;246mbda-mu-nu-xi-omicron-pi-rho-sigma-tau-END[39m                                                         [49m
+
+[38;5;215m·[3GCogitating…[39m
+
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+❯ 
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[3G[38;5;220m⏵⏵[6Gauto[11Gmode[16Gon[38;5;246m (shift+tab[30Gto[33Gcycle)[40G·[42G←[44Gfor[48Gagents[84G[38;5;220m/rc[88Gconnecting…[39m
+[2C[3A[?25h[?25l[2D[3B[6A[38;5;215m✶[3B[38;5;246m❯ [2C[2B⏸ manual mode on · ← for agents[39m[K
+[3G[38;5;246mtmux[8Gfocus-events[21Goff[25G·[27Gadd[31G'set[36G-g[39Gfocus-events[52Gon'[56Gto[59G~/.tmux.conf[72Gand[76Greattach[85Gfor[89Gfocus[95Gtra…[39m
+[84G[38;5;220m/rc[88Gconnecting…[39m
+[2C[5A[?25h[>0q[c[?25l[2D[5B[8A[38;5;215m·[2C[5B[36m[1m[/tmp/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-/…[2C[1B[22m[38;5;246m⏸ manual mode on · ← for agents[39m[K[2C[1B[38;5;246mtmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tra…[39m
+[84G[38;5;220m/rc[88Gconnecting…[39m
+[2C[6A[?25h]0;✳ Unicode check and greeting diff[?2026$p[c[?25l[2D[6B[9A[38;5;215m✢[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;215m✳[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;215m✻[13G[38;5;222m…[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;215m✽[12G[38;5;222mg[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;215m✶[10G[38;5;222min[13G[38;5;215m…[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;215m✳[9G[38;5;222mt[12G[38;5;215mg[83C[8B[39m            ]8;id=1rqh595;https://claude.ai/code/session_000000000000000000000000?from=cli[38;5;75m/rc[39m]8;;
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;215m✢[8G[38;5;222ma[11G[38;5;215mn[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;215m·[7G[38;5;222mt[10G[38;5;215mi[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[2C[26A[48;5;237m[38;5;231mDo not use any tools. Reply with exactly this text and nothing else (keep the diff inside a [2C[1Bfenced diff code block):[2C[2BUnicode check: café, naïve, 界面 (CJK), emoji 🚀✅, arrows → ←, box ┌─┐└─┘, combining é.[2C[2B[32m--- a/greeting.txt[2C[1B+++ b/greeting.txt[2C[1B[90m@@ -1,3 +1,3 @@[2C[1B[38;5;231m hello[2C[1B[31m-wörld[2C[1B[32m+world ✓[2C[1B[38;5;231m end[2C[2BLONGLINE: alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho[2C[1B-sigma-tau-upsilon-phi-chi-psi-omega-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lam[2C[1Bbda-mu-nu-xi-omicron-pi-rho-sigma-tau-END[2C[2B[49m[38;5;215mEnch[38;5;222man[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;215m✢[5G[38;5;222mch[8G[38;5;215mnt[15G[38;5;246m(4s · ↓[23G88 tokens · thinking)[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;231m⏺[3G[39m[K[2B[38;5;215m✽[39m [38;5;222mEn[38;5;215mchanting… [38;5;246m(4s · ↓[39m [38;5;246m122 tokens · [38;5;247mthinking[38;5;246m)[39m[K[1B[K[2B[38;5;246m❯ [39m[K[1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[2C[1B[36m[1m[/tmp/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-/…[2C[1B[22m[38;5;246m⏸ manual mode on · ← for agents[96G[39m[K
+[3G[38;5;246mtmux[8Gfocus-events[21Goff[25G·[27Gadd[31G'set[36G-g[39Gfocus-events[52Gon'[56Gto[59G~/.tmux.conf[72Gand[76Greattach[85Gfor[89Gfocus[95Gtra…[39m
+[96G]8;id=1rqh595;https://claude.ai/code/session_000000000000000000000000?from=cli[38;5;75m/rc[39m]8;;
+[2C[6A[?25h[?25l[2D[6B[3C[9A[38;5;215mn[25G[38;5;246m6[36G[38;5;248mthinking[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;215m✻[3GE[24G[38;5;246m39[36G[38;5;249mthinking[39m
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[2C[11AUnicode[11Gcheck:[18Gcafé,[24Gnaïve,[31G界面[36G(CJK),[43Gemoji[49G🚀✅,[55Garrows[62G→[64G←,[67Gbox[71G┌─┐└─┘,[79Gcombining[89Gé.[2B [3G[32m--- a/greeting.txt[39m[K[2C[1B[32m+++ b/greeting.txt[1B[39m[K[1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[1B[38;5;246m❯ [39m[K[1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[2C[1B[36m[1m[/tmp/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-/…[2C[1B[22m[38;5;246m⏸ manual mode on · ← for agents[39m[K[2C[1B[38;5;246mtmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tra…[39m
+[96G]8;id=1rqh595;https://claude.ai/code/session_000000000000000000000000?from=cli[38;5;75m/rc[39m]8;;
+[2C[6A[?25h[?25l[2D[6B[2C[8A[90m@@ -1,3 +1,3 @@[1B[39m   hello[K[1B  [31m-wörld[1B[39m  [32m+world ✓[39m[K[2C[1B end[K[2C[1B[K[2C[1B[K[1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[38;5;246m❯ [39m
+[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[3G[36m[1m[/tmp/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-/…[22m[39m
+[3G[38;5;246m⏸[5Gmanual[12Gmode[17Gon[20G·[22G←[24Gfor[28Gagents[39m
+[3G[38;5;246mtmux[8Gfocus-events[21Goff[25G·[27Gadd[31G'set[36G-g[39Gfocus-events[52Gon'[56Gto[59G~/.tmux.conf[72Gand[76Greattach[85Gfor[89Gfocus[95Gtra…[39m
+[96G]8;id=1rqh595;https://claude.ai/code/session_000000000000000000000000?from=cli[38;5;75m/rc[39m]8;;
+[2C[6A[?25h[?25l[2D[6B[2C[8ALONGLINE:[1B[K[1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[1B[38;5;246m❯ [39m[K[1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[2C[1B[36m[1m[/tmp/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-/…[2C[1B[22m[38;5;246m⏸ manual mode on · ← for agents[39m[K[2C[1B[38;5;246mtmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tra…[39m
+[96G]8;id=1rqh595;https://claude.ai/code/session_000000000000000000000000?from=cli[38;5;75m/rc[39m]8;;
+[2C[6A[?25h[?25l[2D[6B[12C[9Aalpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambda-mu-nu-xi-omicron-pi-rho-
+
+
+
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[2C[8Asigma-tau-upsilon-phi-chi-psi-omega-alpha-beta-gamma-delta-epsilon-zeta-eta-theta-iota-kappa-lambd[1B[K[1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[1B[38;5;246m❯ [39m[K[1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[2C[1B[36m[1m[/tmp/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-/…[2C[1B[22m[38;5;246m⏸ manual mode on · ← for agents[39m[K[2C[1B[38;5;246mtmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tra…[39m
+[96G]8;id=1rqh595;https://claude.ai/code/session_000000000000000000000000?from=cli[38;5;75m/rc[39m]8;;
+[2C[6A[?25h[?25l[2D[6B[2C[8Aa-mu-nu-xi-omicron-pi-rho-sigma-tau-END[1B[K[1B[38;5;215m·[39m [38;5;215mEnchanting… [38;5;246m(5s · ↓[23G236 tokens)[1B[39m[K[1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[1B[38;5;246m❯ [39m[K[1B[38;5;244m────────────────────────────────────────────────────────────────────────────────────────────────────[2C[1B[36m[1m[/tmp/hydra-provider-fixture/-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-/…[22m[39m
+[3G[38;5;246m⏸[5Gmanual[12Gmode[17Gon[20G·[22G←[24Gfor[28Gagents[39m
+[3G[38;5;246mtmux[8Gfocus-events[21Goff[25G·[27Gadd[31G'set[36G-g[39Gfocus-events[52Gon'[56Gto[59G~/.tmux.conf[72Gand[76Greattach[85Gfor[89Gfocus[95Gtra…[39m
+[96G]8;id=1rqh595;https://claude.ai/code/session_000000000000000000000000?from=cli[38;5;75m/rc[39m]8;;
+[2C[6A[?25h[?25l[2D[6B[9A[38;5;246m✻[3GBaked for 5s · done 5:07[39m[K[3B❯ 
+
+
+
+
+
+[2C[6A[?25h[?25l[2D[6B[2C[2A                                                            [38;5;220mauto mode unavailable for this model[39m
+
+[2C[6A[?25h

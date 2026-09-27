@@ -12,6 +12,9 @@ static bool contains_folded(const char *text, const char *search) {
     }
     return false;
 }
+bool text_matches(const char *text, const char *search) {
+    return contains_folded(text, search);
+}
 bool head_matches(const struct head *head, const char *search) {
     if (search[0] == '\0') return true;
     return contains_folded(head->branch, search) || contains_folded(head->session, search) ||
@@ -19,7 +22,8 @@ bool head_matches(const struct head *head, const char *search) {
            contains_folded(head->remote_host, search) || contains_folded(head->remote_project, search);
 }
 struct head *selected_head(struct app *app) {
-    if (app->selected >= app->model.head_count) return NULL;
+    /* A selected run row in Work or Overview is not a head. */
+    if (app->run_row || app->selected >= app->model.head_count) return NULL;
     if (!head_matches(&app->model.heads[app->selected], app->search)) return NULL;
     return &app->model.heads[app->selected];
 }
@@ -55,11 +59,8 @@ static bool move_workspace_selection(struct app *app, int direction) {
 void move_selection(struct app *app, int direction) {
     size_t index;
     if (move_workspace_selection(app, direction)) return;
-    if (app->view == 3) {
-        if (direction > 0 && app->recovery_selected + 1U < app->model.recovery_count) app->recovery_selected++;
-        else if (direction < 0 && app->recovery_selected > 0U) app->recovery_selected--;
-        return;
-    }
+    if (app->view == 3) { bounded_selection(&app->recovery_selected, app->model.recovery_count, direction); return; }
+    if (!app->fleet && app->view <= 4 && app->view != 3) { outline_move(app, direction, app->view == 1 || app->view == 2); return; }
     retarget_selection(app);
     if (selected_head(app) == NULL) return;
     if (direction > 0) {

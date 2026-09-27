@@ -23,6 +23,16 @@ static void workflow_compact(struct app *app, const struct workflow_model *m, co
     }
 }
 
+/* The selected step: kind and role, state, attempts and the head it ran on. */
+static void workflow_node_footer(struct tv_canvas *c, int width, int height, const struct workflow_node *node) {
+    char where[TEXT + 96] = "";
+    if (node->head[0]) snprintf(where, sizeof(where), " / on %s%s%s%s", node->head, node->profile[0] ? " (" : "",
+                                node->profile, node->profile[0] ? ")" : "");
+    dashboard_text(c, 1, height - 3, width - 2, TV_STRONG, "%s [%s%s%s] / %s / attempts %u%s",
+                   node->id, node->kind, node->role[0] ? "/" : "", node->role, node->state, node->attempts, where);
+    dashboard_text(c, 1, height - 2, width - 2, TV_BASE, "Requires: %s", node->needs);
+}
+
 void render_workflow_graph(struct app *app) {
     struct workflow_model *m = app->workflows;
     struct tv_canvas c;
@@ -77,12 +87,7 @@ void render_workflow_graph(struct app *app) {
         app->hit_bottom[hit] = app->line + (y + 3 >= area.y + area.height ? area.y + area.height - 1 : y + 3) + 1;
         app->hit_items[hit] = i; app->hit_count++;
     }
-    if (n) {
-        const struct workflow_node *node = &m->nodes[indices[app->workflow_node]];
-        dashboard_text(&c, 1, height - 3, width - 2, TV_STRONG, "%s [%s] / %s / attempts %u",
-                       node->id, node->kind, node->state, node->attempts);
-        dashboard_text(&c, 1, height - 2, width - 2, TV_BASE, "Requires: %s", node->needs);
-    }
+    if (n) workflow_node_footer(&c, width, height, &m->nodes[indices[app->workflow_node]]);
     dashboard_text(&c, 1, height - 1, width - 2, TV_WARNING, "%s", app->workflow_error[0] ? app->workflow_error : m->warning);
     app->line = app->limit;
 }

@@ -42,30 +42,72 @@ static bool permitted_scope(json_object *allowed, const char *s) {
     }
     return false;
 }
-static bool envelope(json_object *o) {
-    const char *const keys[] = {"hosts", "tools", "effects", "writes", "parallelism", "timeout_seconds", "artifact_bytes", "max_heads", "disk_mb", "retry_budget", "repair_budget", NULL};
+/* Policy-only write scope: any head created by a spawn step of the plan being
+ * validated. Plans still declare concrete <head>:<path> scopes. Admission
+ * refuses spawn branches that already exist, so this never names the source
+ * checkout or an existing head. */
+#define PLAN_SPAWNED_SCOPE "@spawned:*"
+static bool spawned_head(json_object *steps, const char *s) {
+    const char *colon = strchr(s, ':'); size_t i;
+    for (i = 0; colon && json_object_is_type(steps, json_type_array) && i < json_object_array_length(steps); i++) {
+        json_object *step = json_object_array_get_idx(steps, i); const char *kind = f_string(step, "kind");
+        const char *branch = f_string(f_field(step, "args"), "branch");
+        if (kind && !strcmp(kind, "spawn") && branch && strlen(branch) == (size_t)(colon - s) && !strncmp(branch, s, (size_t)(colon - s))) return true;
+    }
+    return false;
+}
+static bool policy_write(json_object *allowed, json_object *steps, const char *s) {
+    return permitted_scope(allowed, s) || (plan_has(allowed, PLAN_SPAWNED_SCOPE) && spawned_head(steps, s));
+}
+static bool write_scopes(json_object *writes, bool policy) {
     size_t i;
+    for (i = 0; i < json_object_array_length(writes); i++) {
+        const char *s = f_text(json_object_array_get_idx(writes, i));
+        if (!scope(s) && !(policy && s && !strcmp(s, PLAN_SPAWNED_SCOPE))) return false;
+    }
+    return true;
+}
+static bool envelope(json_object *o, bool policy) {
+    const char *const keys[] = {"hosts", "tools", "effects", "writes", "parallelism", "timeout_seconds", "artifact_bytes", "max_heads", "disk_mb", "retry_budget", "repair_budget", NULL};
     if (!task_keys(o, keys) || !strings(f_field(o, "hosts"), 1, false) || !strings(f_field(o, "tools"), 1, false) ||
         !strings(f_field(o, "effects"), 1, true) || !strings(f_field(o, "writes"), 0, false) ||
         !integer(o, "parallelism", 1, 16) || !integer(o, "timeout_seconds", 1, 86400) ||
         !integer(o, "artifact_bytes", 1, 64 * TASK_FILE_LIMIT) || !integer(o, "max_heads", 1, 64) ||
         !integer(o, "disk_mb", 1, 1048576) || !f_number_is(o, "retry_budget", 0) || !integer(o, "repair_budget", 0, 10)) return false;
-    for (i = 0; i < json_object_array_length(f_field(o, "writes")); i++) if (!scope(f_text(json_object_array_get_idx(f_field(o, "writes"), i)))) return false;
-    return true;
+    return write_scopes(f_field(o, "writes"), policy);
+}
+/* An agent step names its prompt either as a declared input or inline; the
+ * compiler lowers an inline prompt to a generated, digest-bound input. */
+static bool inline_prompt(json_object *value) {
+    const char *text = f_text(value);
+    return json_object_is_type(value, json_type_string) && text && *text &&
+        strlen(text) == (size_t)json_object_get_string_len(value) && strlen(text) <= PLAN_PROMPT_LIMIT;
+}
+static bool agent_recipe(json_object *args) {
+    json_object *prompt = f_field(args, "prompt");
+    if (!plan_id(f_string(args, "profile")) || !plan_id(f_string(args, "result_file"))) return false;
+    if (prompt) return !f_field(args, "prompt_input") && inline_prompt(prompt);
+    return plan_id(f_string(args, "prompt_input"));
+}
+static bool argv_recipe(json_object *args) {
+    return plan_list(f_field(args, "argv"), 1, 64) && !f_field(args, "profile") && !f_field(args, "prompt_input") &&
+        !f_field(args, "prompt") && !f_field(args, "result_file");
 }
 static bool exec_recipe(json_object *args, json_object *env, json_object *errors, const char *path) {
-    const char *const exec_keys[] = {"head", "argv", "profile", "prompt_input", "result_file", "timeout", NULL};
+    const char *const exec_keys[] = {"head", "argv", "profile", "prompt_input", "prompt", "result_file", "timeout", NULL};
     json_object *argv = f_field(args, "argv");
     size_t i; char tool[128];
     if (!task_keys(args, exec_keys) || !plan_id(f_string(args, "head")) || !integer(args, "timeout", 1, 86400)) goto invalid;
     if (argv) {
-        if (!plan_list(argv, 1, 64) || f_field(args, "profile") || f_field(args, "prompt_input") || f_field(args, "result_file")) goto invalid;
+        if (!argv_recipe(args)) goto invalid;
         for (i = 0; i < json_object_array_length(argv); i++) if (!yaml_text(f_text(json_object_array_get_idx(argv, i)))) {
-            plan_error(errors, path, "unsupported_argument", "argv must fit workflow schema 1 scalar syntax; put complex code in a source-bound script"); return false;
+            plan_error(errors, path, "unsupported_argument", "argv must fit workflow schema 1 scalar syntax; put complex code in a repository script or a proposal asset passed as @input/<name>"); return false;
         }
         if (!plan_has(f_field(env, "tools"), f_text(json_object_array_get_idx(argv, 0)))) goto unauthorized;
     } else {
-        if (!plan_id(f_string(args, "profile")) || !plan_id(f_string(args, "prompt_input")) || !plan_id(f_string(args, "result_file"))) goto invalid;
+        if (!agent_recipe(args)) {
+            plan_error(errors, path, "invalid_step", "an agent step needs profile, result_file and exactly one of prompt (inline text, 1 byte to 32 KiB, no NUL) or prompt_input"); return false;
+        }
         snprintf(tool, sizeof(tool), "profile:%s", f_string(args, "profile"));
         if (!plan_has(f_field(env, "tools"), tool)) goto unauthorized;
     }
@@ -148,7 +190,7 @@ static bool records(json_object *array, const char *path, const char *const keys
     }
     return true;
 }
-static void policy_bounds(json_object *env, json_object *allowed, json_object *errors) {
+static void policy_bounds(json_object *env, json_object *allowed, json_object *steps, json_object *errors) {
     size_t i, j;
     const char *sets[] = {"hosts", "tools", "effects", "writes"};
     const char *bounds[] = {"parallelism", "timeout_seconds", "artifact_bytes", "max_heads", "repair_budget"};
@@ -156,7 +198,7 @@ static void policy_bounds(json_object *env, json_object *allowed, json_object *e
         json_object *set = f_field(env, sets[i]);
         for (j = 0; j < json_object_array_length(set); j++) {
             const char *s = f_text(json_object_array_get_idx(set, j));
-            if (!(i == 3 ? permitted_scope(f_field(allowed, sets[i]), s) : plan_has(f_field(allowed, sets[i]), s)))
+            if (!(i == 3 ? policy_write(f_field(allowed, sets[i]), steps, s) : plan_has(f_field(allowed, sets[i]), s)))
                 plan_error(errors, sets[i], "unauthorized", "plan exceeds supplied policy");
             if (i == 2 && strcmp(s, "worktree") && strcmp(s, "execute")) plan_error(errors, "effects", "unsupported_effect", "supported effects are worktree and execute");
         }
@@ -184,13 +226,13 @@ int plan_validate(json_object *plan, json_object *policy, json_object *errors) {
         !strings(f_field(plan, "assumptions"), 0, false) || !strings(f_field(plan, "questions"), 0, false))
         plan_error(errors, "$", "invalid_plan", "expected schema 1 or 2, objective, ID and explicit context, assumptions and questions arrays; unknown fields are rejected");
     if (plan_list(f_field(plan, "questions"), 1, 64)) plan_error(errors, "questions", "unresolved_question", "resolve material questions before compilation");
-    if (!envelope(env) || !task_keys(policy, policy_keys) || !f_number_is(policy, "schema_version", 1) || !envelope(allowed)) {
+    if (!envelope(env, false) || !task_keys(policy, policy_keys) || !f_number_is(policy, "schema_version", 1) || !envelope(allowed, true)) {
         plan_error(errors, "envelope", "invalid_policy", "explicit bounded plan and policy envelopes required; execution retries must be zero and repairs bounded to 0 through 10"); return -1;
     }
     if (!placed_hosts(plan, env))
         plan_error(errors, "envelope.hosts", "unsupported_host", "only local execution is implemented");
     repair_version(plan, errors);
-    policy_bounds(env, allowed, errors);
+    policy_bounds(env, allowed, steps, errors);
     if (!plan_list(steps, 1, PLAN_STEPS)) plan_error(errors, "steps", "invalid_steps", "expected 1 to 64 steps");
     else for (i = 0; i < json_object_array_length(steps); i++) {
         json_object *step = json_object_array_get_idx(steps, i);

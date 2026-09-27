@@ -26,6 +26,7 @@ void enter_view(struct app *app, int view) {
     if (view == 8) { if (app->view != 8) statistics_toggle(app); return; }
     if (app->view == 8 && app->statistics) app->statistics->detail = false;
     if (view != app->view) app->previous_view = app->view;
+    if (view != 0 && view != 4 && view != 5) outline_release_run(app);
     app->view = view;
     app->diagnostics = false; app->help = false; app->result_open = false;
     if (view == 5) { app->graph_follow = true; if (!app->fleet) (void)refresh_workflows(app, NULL); }
@@ -88,7 +89,10 @@ static bool mouse_hit(const struct app *app, const unsigned values[3], size_t in
 
 static void select_mouse_item(struct app *app, size_t item) {
     switch (app->view) {
-        case 0: case 4: app->selected = item; break;
+        case 0: case 4:
+            if (item > MAX_HEADS) { app->run_row = true; app->workflow_run = item - MAX_HEADS - 1U; }
+            else { app->run_row = false; app->selected = item; }
+            break;
         case 3: app->recovery_selected = item; break;
         case 5: app->workflow_node = item; app->graph_follow = true; break;
         case 6: app->host_selected = item; break;
@@ -227,6 +231,17 @@ static void begin_paste_discard(struct app *app, char *key) {
     if (read_key(20, key) > 0) discard_input(app, *key);
 }
 
+/* PgUp/PgDn page read-only output: the result overlay or the Details
+ * transcript (rows back from its newest output). */
+static void page_output(struct app *app, bool up) {
+    size_t *rows = app->result_open ? &app->result_scroll : app->view == 1 && app->preview ? &app->preview_back : NULL;
+    size_t page = app->rows > 12 ? (size_t)app->rows / 2U : 6U;
+    bool back = app->result_open ? !up : up;
+    if (!rows) return;
+    if (back) *rows += page;
+    else *rows = *rows > page ? *rows - page : 0;
+}
+
 static void dispatch_escape(struct app *app, const char *sequence) {
     char ch;
     if (sequence[0] == '<') handle_mouse(app, sequence);
@@ -238,6 +253,7 @@ static void dispatch_escape(struct app *app, const char *sequence) {
         if (app->view == 7 && !app->help && !app->result_open) native_workspace_focus_previous(app);
         else if (!app->help && !app->result_open) select_tab(app, -1);
     }
+    else if (strcmp(sequence, "5~") == 0 || strcmp(sequence, "6~") == 0) page_output(app, sequence[0] == '5');
     else if (strcmp(sequence, "M") == 0) {
         /* Legacy X10 carries three bytes after CSI M; never treat them as keys. */
         discard_legacy_mouse(&ch);
@@ -312,7 +328,8 @@ static void open_selected(struct app *app) {
         /* Enter in a non-navigation pane has no target; navigation handles its own Enter. */
     } else if (app->view == 1 || app->view == 2) {
         copy_text(app->notice, sizeof(app->notice), "a talks to the agent, Esc goes back");
-    } else if (selected_head(app) != NULL) enter_view(app, 1);
+    } else if (app->run_row && (app->view == 0 || app->view == 4)) (void)outline_toggle(app, 0);
+    else if (selected_head(app) != NULL) enter_view(app, 1);
     else copy_text(app->notice, sizeof(app->notice), "no matching head selected");
 }
 
@@ -392,16 +409,20 @@ static void head_key(struct app *app, char key) {
     switch (key) {
         case 'j': move_selection(app, 1); break;
         case 'k': move_selection(app, -1); break;
+        case 'l': case 'h':
+            if ((app->view == 0 || app->view == 4) && !outline_toggle(app, key == 'l' ? 1 : -1))
+                copy_text(app->notice, sizeof(app->notice), "h and l collapse and expand a run; select a run row first");
+            break;
         case '\r': case '\n': open_selected(app); break;
         case '/': case ':': interactive_prompt(app, key); break;
         case 'n': new_task_action(app); break;
         case 'a': attach_selected(app); break;
         case 'c': if (app->view == 1 && selected_head(app)) enter_view(app, 2); break;
-        case 'p': if (app->view != 1) enter_view(app, 1); app->preview = !app->preview; capture_preview(app); break;
+        case 'p': if (app->view != 1) enter_view(app, 1); app->preview = !app->preview; app->preview_back = 0; capture_preview(app); break;
         case 'd': if (app->view != 3 && app->view != 1) enter_view(app, 1); app->diagnostics = !app->diagnostics; break;
         case ' ': toggle_mark(app); break;
         case 'A': select_all_visible(app); break;
-        case 'x': remove_heads_action(app); break;
+        case 'x': remove_key_action(app); break;
         case 'G': group_key(app); break;
         case 't': cycle_theme(app); break;
         case '?': app->help = !app->help; break;

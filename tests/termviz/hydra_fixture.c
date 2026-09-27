@@ -1,7 +1,9 @@
 #define _XOPEN_SOURCE 700
 #include "hydra_fixture.h"
 #include <ctype.h>
+#include <fcntl.h>
 #include <glob.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,14 +35,82 @@ static void quote(const char *value, char *out, size_t cap) {
     out[at++] = '\'';
     out[at] = 0;
 }
-void hf_cleanup(void) {
+/* Every process whose command line names the fixture's private socket is one
+ * of its tmux server or clients; nothing else can name that path. */
+static bool server_running(const struct hf_fixture *f) {
     char output[4096];
-    if (!owned)
-        return;
-    if (owned->socket[0]) {
-        const char *args[] = {owned->tmux, "-S", owned->socket, "kill-server", NULL};
-        (void)tv_command(NULL, NULL, output, sizeof(output), 10, args);
-    } /* Keep failed-run evidence; clean successful fixtures explicitly below. */
+    const char *args[] = {"pgrep", "-f", "--", f->socket, NULL};
+    return f->socket[0] && tv_command(NULL, NULL, output, sizeof(output), 10, args) == 0;
+}
+bool hf_server_gone(const struct hf_fixture *f) {
+    char output[4096];
+    const char *kill_server[] = {f->tmux, "-S", f->socket, "kill-server", NULL};
+    const char *kill_rest[] = {"pkill", "-f", "--", f->socket, NULL};
+    double deadline = tv_now() + 10;
+    if (!f->socket[0])
+        return true;
+    (void)tv_command(NULL, NULL, output, sizeof(output), 10, kill_server);
+    while (server_running(f) && tv_now() < deadline) {
+        (void)tv_command(NULL, NULL, output, sizeof(output), 10, kill_rest);
+        tv_sleep(.1);
+    }
+    return !server_running(f);
+}
+void hf_cleanup(void) {
+    if (owned)
+        (void)hf_server_gone(owned);
+}
+void hf_finish(struct hf_fixture *f) {
+    const char *remove[] = {"rm", "-rf", f->base, NULL};
+    CHECK(hf_server_gone(f), "the fixture's private tmux server is gone");
+    if (!getenv("HYDRA_TEST_KEEP_FIXTURE"))
+        tv_command_ok(NULL, remove);
+}
+/* A guardian outlives every exit path of the driver: success, a failed CHECK,
+ * a signal or even SIGKILL close the driver's end of the pipe, and the guardian
+ * then kills the private tmux server and any process started from the fixture
+ * and removes the fixture directory (kept with HYDRA_TEST_KEEP_FIXTURE=1). It
+ * runs in its own session so terminal signals aimed at the driver miss it. */
+static const char guardian_script[] =
+    "cat >/dev/null\n"
+    "i=0\n"
+    "while [ \"$i\" -lt 50 ]; do\n"
+    "    if [ -n \"$HF_SOCKET\" ]; then \"$HF_TMUX\" -S \"$HF_SOCKET\" kill-server 2>/dev/null; fi\n"
+    "    busy=0\n"
+    "    for name in \"$HF_SOCKET\" \"$HF_BASE\"; do\n"
+    "        [ -n \"$name\" ] || continue\n"
+    "        if pgrep -f -- \"$name\" >/dev/null 2>&1; then busy=1; pkill -f -- \"$name\" 2>/dev/null; fi\n"
+    "    done\n"
+    "    [ \"$busy\" -eq 1 ] || break\n"
+    "    i=$((i + 1))\n"
+    "    sleep 0.2\n"
+    "done\n"
+    "[ -n \"${HYDRA_TEST_KEEP_FIXTURE:-}\" ] || rm -rf -- \"$HF_BASE\"\n";
+static void guardian_child(const struct hf_fixture *f, int input) {
+    int null = open("/dev/null", O_RDWR);
+    if (setsid() < 0 || null < 0 || dup2(input, 0) < 0 || dup2(null, 1) < 0 || dup2(null, 2) < 0)
+        _exit(125);
+    if (setenv("HF_SOCKET", f->socket, 1) || setenv("HF_BASE", f->base, 1) || setenv("HF_TMUX", f->tmux, 1))
+        _exit(125);
+    (void)signal(SIGINT, SIG_IGN);
+    (void)signal(SIGHUP, SIG_IGN);
+    (void)signal(SIGTERM, SIG_IGN);
+    execl("/bin/sh", "sh", "-c", guardian_script, (char *)NULL);
+    _exit(127);
+}
+static void start_guardian(const struct hf_fixture *f) {
+    int fds[2];
+    pid_t pid;
+    CHECK(!pipe(fds), "fixture guardian pipe");
+    pid = fork();
+    CHECK(pid >= 0, "fixture guardian");
+    if (pid == 0) {
+        close(fds[1]);
+        guardian_child(f, fds[0]);
+    }
+    close(fds[0]);
+    /* Only this driver holds the write end: children never inherit it. */
+    CHECK(fcntl(fds[1], F_SETFD, FD_CLOEXEC) == 0, "fixture guardian pipe is private");
 }
 void hf_init(struct hf_fixture *f, const char *name, const char *repo_name, bool copied_plan,
              bool use_tmux) {
@@ -84,6 +154,7 @@ void hf_init(struct hf_fixture *f, const char *name, const char *repo_name, bool
     setenv("HYDRA_NO_SWITCH", "1", 1);
     setenv("TERM", "xterm-256color", 1);
     owned = f;
+    start_guardian(f);
     CHECK(!atexit(hf_cleanup), "fixture cleanup registration");
 }
 const char *hf_run(struct hf_fixture *f, const char *input, int expected,

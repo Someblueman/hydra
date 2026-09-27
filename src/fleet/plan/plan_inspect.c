@@ -37,7 +37,7 @@ static json_object *scope_differences(json_object *left, json_object *right) {
 }
 static json_object *invalidation(json_object *left, json_object *right) {
     json_object *out = json_object_new_object(), *changed = json_object_new_array(), *checks = json_object_new_array();
-    const char *fields[] = {"plan", "policy", "source", "profiles", "context", "data", "workflow", "tasks", NULL};
+    const char *fields[] = {"plan", "policy", "source", "profiles", "context", "data", "workflow", "tasks", "assets", NULL};
     for (size_t i = 0; fields[i]; i++) difference(changed, fields[i], f_field(left, fields[i]), f_field(right, fields[i]));
     json_object *right_checks = f_field(f_field(right, "plan"), "checks");
     for (size_t i = 0; i < json_object_array_length(right_checks); i++) {

@@ -11,7 +11,7 @@ features are outside the qualification matrix until exercised explicitly.
 
 | Input | Behavior |
 | --- | --- |
-| UTF-8 text | Incremental decoding; invalid scalars become `?`; shared wide/combining cell rules |
+| UTF-8 text | Incremental decoding; invalid scalars and C0/C1 controls become `?`; shared wide/combining/joining cell rules (ZWJ sequences, emoji modifiers, flag pairs and VS16 cluster as in tmux 3.5; invisible format characters are dropped) |
 | CR, LF, VT, FF, BS, HT | Cursor movement; HT uses eight-column tab stops |
 | ESC D/E/M | Index, next line, reverse index |
 | ESC 7/8, CSI s/u | Save/restore cursor, rendition and G0/G1 character sets |
@@ -39,9 +39,10 @@ it. Incomplete UTF-8 is resolved at EOF; incomplete escape strings are discarded
 
 Unsupported operations increment an observation counter where recognized. That
 counter is diagnostic, not a conformance score. Other character-set designations are
-consumed but not implemented; custom tab stops, reflow, emoji joining,
-full keyboard protocols, palette mutation and terminal graphics remain outside
-this milestone. Unsupported SGR attributes are not silently treated as supported.
+consumed but not implemented; custom tab stops, reflow, grapheme clusters
+longer than three joined scalars, full keyboard protocols, palette mutation and
+terminal graphics remain outside this milestone. Drawn to an ASCII surface, cells
+use the same readable approximations as ASCII-mode text in their original columns. Unsupported SGR attributes are not silently treated as supported.
 
 ## Storage, resize and transport
 

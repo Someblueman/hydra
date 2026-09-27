@@ -45,6 +45,25 @@ static int run_index(const char *rows, const char *run_id) {
     CHECK(false, "selected run present");
     return -1;
 }
+/* A narrow agent pane wraps a long prompt line; compare the pane text
+ * without line breaks so a wrapped draft is still found. */
+static bool pane_contains(const char *capture, const char *needle) {
+    static char joined[65536];
+    size_t n = 0;
+    for (; *capture && n + 1 < sizeof(joined); capture++)
+        if (*capture != '\n')
+            joined[n++] = *capture;
+    joined[n] = 0;
+    return strstr(joined, needle) != NULL;
+}
+/* A redraw can lag its input under load: wait, within a deadline, for the
+ * marker to leave the screen instead of judging one fixed-delay frame. */
+static bool until_absent(struct tv_session *s, const char *marker, double timeout) {
+    double end = tv_now() + timeout;
+    while (tv_contains(s, marker) && tv_now() < end)
+        tv_pump(s, .05);
+    return !tv_contains(s, marker);
+}
 static bool lines_subset(const char *before, const char *after) {
     const char *p = before;
     while (*p) {
@@ -144,7 +163,7 @@ int main(void) {
                 tv_resize(&s, sizes[j][0], sizes[j][1]);
                 tv_pump(&s, .3);
                 CHECK(!s.screen.overflow, "waiting approval resize");
-                CHECK(tv_contains(&s, "waiting-approval"), "waiting state visible");
+                U("waiting-approval", 10);
                 save(&s, "waiting", sizes[j][0], sizes[j][1]);
             }
             S("Y");
@@ -208,11 +227,15 @@ int main(void) {
                 CHECK(!s.screen.overflow, "terminal workflow resize");
                 save(&s, terminal, sizes[j][0], sizes[j][1]);
             }
+            /* R acts on the run list's recorded state, which can refresh after the
+             * evidence text above; wait until the header (drawn from that list)
+             * shows the terminal state before asking for a control. */
+            tv_format(text, sizeof(text), " / run %s / ", terminal);
+            U(text, 15);
             S("R");
             U("Terminal run: no resume or cancel", 10);
             S("]");
-            tv_pump(&s, .3);
-            CHECK(!tv_contains(&s, "Terminal run: no resume or cancel"),
+            CHECK(until_absent(&s, "Terminal run: no resume or cancel", 10),
                   "changing selection clears footer");
             tv_close(&s, "q", 0, 0);
         }
@@ -230,7 +253,7 @@ int main(void) {
             char *end = strchr(p, '\n');
             if (end)
                 *end = 0;
-            if (strstr(RUN("tmux", "capture-pane", "-p", "-t", p), "unsent-control-proof"))
+            if (pane_contains(RUN("tmux", "capture-pane", "-p", "-J", "-t", p), "unsent-control-proof"))
                 found = true;
             if (!end)
                 break;
@@ -241,11 +264,7 @@ int main(void) {
     hf_run(
         &f, NULL, -2,
         (const char *[]){f.hydra, "workflow", "--workspace-control", "../", "cancel", "-", NULL});
-    hf_cleanup();
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
+    hf_finish(&f);
     puts("PASS workspace controls: exact decisions, separate resume, detached continuation, "
          "rejection, cancellation, draft and panes preserved");
     return 0;

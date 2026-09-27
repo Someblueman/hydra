@@ -137,6 +137,36 @@ reject 's/"sh"/"unauthorized-tool"/' 'tool policy enforced' unauthorized
 reject 's/^        "compose"$/        "absent-producer"/' 'missing dependencies rejected' missing_dependency
 reject 's/"report.txt"/"..\/escape"/' 'unsafe artifact paths rejected' invalid_handoff
 reject 's/"max_bytes": 1024/"max_bytes": 524288/' 'artifact budgets enforced' invalid_inputs_or_budget
+# Plans carry their own inputs: an inline agent prompt needs no source file.
+grep -q '"assets"' "$ROOT/compiled.json"
+assert_failure $? 'plans without assets keep the legacy compiled artifact shape'
+inline="$REPO/tests/fixtures/plan-bundle"
+"$HYDRA_BIN" workflow plan compile "$inline/inline-plan.json" "$inline/inline-policy.json" "$ROOT/inline.json" > "$ROOT/inline-compile.json"
+assert_success $? 'an inline agent prompt compiles without a source prompt file'
+inline_digest="$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$ROOT/inline-compile.json")"
+grep -q '"prompt-compose":{[^}]*"source":"bundle"' "$ROOT/inline.json"
+assert_success $? 'the inline prompt becomes a digest-bound bundle input'
+"$HYDRA_BIN" workflow plan show "$ROOT/inline.json" | grep -q 'prompt text: Write the delivered report. Keep it to one line.'
+assert_success $? 'the approval preview shows a bounded single-line prompt excerpt'
+sed 's/Keep it to one line/Keep it to two lines/' "$inline/inline-plan.json" > "$ROOT/inline-changed.json"
+"$HYDRA_BIN" workflow plan compile "$ROOT/inline-changed.json" "$inline/inline-policy.json" "$ROOT/inline-changed-out.json" > "$ROOT/inline-changed-compile.json"
+changed_digest="$(sed -n 's/.*"sha256":"\([a-f0-9]*\)".*/\1/p' "$ROOT/inline-changed-compile.json")"
+if [ "${#changed_digest}" -eq 64 ] && [ "$changed_digest" != "$inline_digest" ]; then check=0; else check=1; fi
+assert_success "$check" 'changing the inline prompt changes the acceptance digest'
+sed 's/"prompt": "Write/"prompt_input": "expected", "prompt": "Write/' "$inline/inline-plan.json" > "$ROOT/inline-both.json"
+"$HYDRA_BIN" workflow plan validate "$ROOT/inline-both.json" "$inline/inline-policy.json" > "$ROOT/inline-both.out" 2>&1
+assert_failure $? 'prompt and prompt_input together are rejected'
+grep -q '"code":"invalid_step"' "$ROOT/inline-both.out"
+assert_success $? 'the prompt conflict gives a structured diagnostic'
+sed 's/"check.sh"/"@input\/absent"/' "$ROOT/plan.json" > "$ROOT/input-reference.json"
+"$HYDRA_BIN" workflow plan validate "$ROOT/input-reference.json" "$ROOT/policy.json" > "$ROOT/input-reference.out" 2>&1
+assert_failure $? 'argv input references must name a declared step input'
+grep -q '"code":"invalid_input_reference"' "$ROOT/input-reference.out"
+assert_success $? 'undeclared input references give a structured diagnostic'
+"$HYDRA_BIN" workflow plan validate "$ROOT/plan.json" "$ROOT/policy.json" --assets-dir > "$ROOT/assets-usage.out" 2>&1
+assert_failure $? 'an assets directory flag without a directory is rejected'
+"$HYDRA_BIN" workflow plan validate "$ROOT/plan.json" "$ROOT/policy.json" --assets-dir "$ROOT/no-such-assets" > /dev/null
+assert_success $? 'an assets directory is optional for plans without assets'
 printf '{"schema_version":1,"schema_version":1}\n' > "$ROOT/bad.json"
 "$HYDRA_BIN" workflow plan validate "$ROOT/bad.json" "$ROOT/policy.json" > "$ROOT/rejection.json"
 assert_failure $? 'duplicate JSON members rejected'
@@ -146,6 +176,12 @@ assert_failure $? 'execution rejects a different accepted digest'
 printf 'changed\n' >> expected.txt
 "$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$digest" >/dev/null 2>&1
 assert_failure $? 'stale source and inputs rejected before execution'
+"$HYDRA_BIN" workflow plan validate "$ROOT/plan.json" "$ROOT/policy.json" > "$ROOT/dirty-source.json"
+assert_failure $? 'tracked source changes block validation'
+grep -q '"condition":"tracked_changes"' "$ROOT/dirty-source.json" &&
+    grep -q '"changed_paths":\["expected.txt"\]' "$ROOT/dirty-source.json" &&
+    grep -q 'has 1 tracked change: expected.txt; .*commit or stash these changes in ' "$ROOT/dirty-source.json"
+assert_success $? 'invalid source names the checkout, changed paths and recovery'
 git checkout -- expected.txt
 "$HYDRA_BIN" workflow plan run "$ROOT/compiled.json" --accept "$digest" > "$ROOT/run.out" 2> "$ROOT/run.err"
 assert_success $? 'accepted plan completes through the existing workflow runtime'

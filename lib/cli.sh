@@ -66,6 +66,8 @@ Commands:
   wait <head>       Wait for durable lifecycle evidence
   adapter ingest    Ingest a canonical provider-neutral adapter event
   resume <head>     Create a new instance using durable resume metadata
+                    --terminal: restart only a stopped interactive terminal;
+                    requires the existing worktree and never recreates it
   notify            Configure rate-limited local lifecycle notifications
   exec              Run an out-of-band command in selected worktrees
                     Options:
@@ -114,8 +116,9 @@ Commands:
   switch [branch]   Switch to a head directly, or choose interactively
   kill <branch>     Remove a worktree and its tmux session
   kill --all        Kill all hydra sessions
-  kill --group <n>  Kill all sessions in a group
+  kill -g|--group <name>  Kill all sessions in a group
                     Options:
+                      --dry-run        Preview selected heads without changes
                       --force          Skip confirmation prompt
                       --protect-untracked  Refuse ordinary untracked worktree files
   group <branch>    Show or set group for a session
@@ -160,7 +163,9 @@ Commands:
   doctor            Check install, dependencies, and first-run readiness
                     Options:
                       -f, --fix                Auto-fix detected issues
-  cleanup           Stop dead heads and remove stale locks and orphaned worktrees
+  cleanup           Stop dead heads, remove stale locks, offer to remove leftover worktrees
+                    Options:
+                      --include-dirty          Also remove leftover worktrees with uncommitted changes
   dashboard         View all sessions in a single dashboard
                     Options:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session

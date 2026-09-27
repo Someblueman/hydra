@@ -173,14 +173,17 @@ def expected_item(
 
 def parse_rows(text: str) -> list[dict]:
     lines = text.splitlines()
-    if not lines or lines[0] != "HYDRA_ATTENTION\t1":
+    if not lines or lines[0] not in ("HYDRA_ATTENTION\t1", "HYDRA_ATTENTION\t2", "HYDRA_ATTENTION\t3"):
         raise ValueError("missing attention protocol header")
+    width = 18 + int(lines[0][-1])
     rows = []
     for line in lines[1:-1]:
         fields = line.split("\t")
-        if len(fields) != 19 or fields[0] != "ITEM":
+        if len(fields) != width or fields[0] != "ITEM":
             raise ValueError("malformed attention item")
-        rows.append(dict(zip(WIRE, fields[1:])))
+        # Versions 2 and 3 append a presentation label and detail outside
+        # identity and revision.
+        rows.append(dict(zip(WIRE, fields[1:19])))
     ending = lines[-1].split("\t")
     if len(ending) != 4 or ending[0] != "END" or int(ending[1]) != len(rows):
         raise ValueError("incomplete attention snapshot")
@@ -376,7 +379,7 @@ class Run:
             self.args.tui.resolve(), self.hydra, self.env, self.root, self.out / label
         )
         self.sessions.append(client)
-        client.wait(lambda text: "ATTENTION  3 current" in text)
+        client.wait(lambda text: "ATTENTION  3 need you" in text)
         return client
 
     def details(self, client: Session, row: dict, rows: list[dict], label: str) -> dict:
@@ -430,8 +433,9 @@ class Run:
             client.key("\r")
         client.wait(
             lambda text: (
-                f"ATTENTION  {current} current  {stale} stale  {unknown} unknown"
-                in text
+                f"ATTENTION  {current} need you" in text
+                and f"{stale} stale" in text
+                and f"{unknown} unknown" in text
             ),
             after=sent,
         )
@@ -724,7 +728,8 @@ class Run:
         sent = first.key("s")
         first.wait(
             lambda text: (
-                "ATTENTION  2 current" in text and "NEW" not in selected_line(text)
+                # A seen approval still needs a decision and stays counted.
+                "ATTENTION  3 need you" in text and "NEW" not in selected_line(text)
             ),
             after=sent,
         )
@@ -732,9 +737,10 @@ class Run:
         independent_refresh = second.refresh()
         assert independent_refresh["sent_ns"] > ack["observed_ns"]
         independent = second.capture("unacknowledged-client-b")
+        # Seen markers are per user: the other client shows them after refresh.
         assert (
-            "NEW" in selected_line(second.text)
-            and "ATTENTION  3 current" in second.text
+            "NEW" not in selected_line(second.text)
+            and "ATTENTION  3 need you" in second.text
         )
         self.details(
             second, approval, self.public_rows, "independent-post-ack-selection"
@@ -752,7 +758,8 @@ class Run:
                         "action": lambda: marker.touch(),
                         "operation": "local transport outage marker",
                         "matches": lambda text: (
-                            "ATTENTION  0 current  3 stale" in text
+                            "ATTENTION  0 need you" in text
+                            and "3 stale" in text
                             and "NEW" not in selected_line(text)
                         ),
                     },
@@ -762,7 +769,8 @@ class Run:
                         "action": lambda: marker.unlink(),
                         "operation": "remove outage marker; same live acknowledged PID",
                         "matches": lambda text: (
-                            "ATTENTION  2 current  0 stale" in text
+                            "ATTENTION  3 need you" in text
+                            and "0 stale" in text
                             and "NEW" not in selected_line(text)
                         ),
                     },

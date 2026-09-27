@@ -130,7 +130,7 @@ printf '%s\n' "$output" | grep -q '"accepted":false'
 printf '%s\n' "$output" | grep -q '"fresh_action":false'
 printf '%s\n' "$output" | grep -q '"read_only":true'
 data_output="$(cd "$repo" && "$root/bin/hydra" workflow attention-data)"
-printf '%s\n' "$data_output" | grep -q '^HYDRA_ATTENTION[[:space:]]1$'
+printf '%s\n' "$data_output" | grep -q '^HYDRA_ATTENTION[[:space:]]3$'
 printf '%s\n' "$data_output" | grep -q "^ITEM$(printf '\t')workflow records$(printf '\t')"
 printf '%s\n' "$data_output" | grep -q '^END[[:space:]]2[[:space:]]0[[:space:]]0$'
 

@@ -24,7 +24,8 @@ static void local_statistics(void) {
     CHECK(!setenv("HYDRA_TEST_STATS_FAIL_FILE", failure, 1), "stats failure environment");
     tv_open(&s, argv, 140, 40, NULL);
     U("HYDRA / PLAN TOGETHER");
-    S("j\tjj\tjjj");
+    /* Tab order: selected work, dependencies, then activity. */
+    S("j\tjj\t\tjjj");
     tv_pump(&s, .2);
     CHECK(HAS("scroll 2") && HAS("scroll 3"), "workspace scroll setup");
     S("D");

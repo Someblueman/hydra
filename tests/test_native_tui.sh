@@ -64,7 +64,7 @@ echo "Running native TUI tests..."
 echo "==========================="
 
 assert_equal "2" "$("$tui" --protocol-version)" "native TUI protocol handshake"
-assert_equal "Hydra TUI 2.7.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
+assert_equal "Hydra TUI 2.8.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
 
 awk 'BEGIN { FS = OFS = "\t" } $1 == "H" && !changed { $13 = "invalid"; changed = 1 } { print }' \
     "$fixture" > "$test_root/invalid-number.tsv"
@@ -91,7 +91,7 @@ else
 fi
 
 "$tui" --headless-fixture "$fixture" --size 100x28 --frames 1 --view detail > "$test_root/detail.out"
-contains "Changed files   4" "$test_root/detail.out" "details summarize actionable work"
+contains "Changed     4 files in the worktree" "$test_root/detail.out" "details summarize actionable work"
 contains "Reported    done" "$test_root/detail.out" "task outcome is distinct from session status"
 contains "Session     running" "$test_root/detail.out" "session status is labelled separately from the reported outcome"
 if grep -Eq 'instance_|lifecycle source:|adapter source:' "$test_root/detail.out"; then
@@ -109,7 +109,7 @@ contains "single agent session" "$test_root/coordination.out" "coordination expl
 contains "RECOVERY  4 findings" "$test_root/recovery.out" "narrow recovery board renders"
 contains "Terminal stopped: feature-stale" "$test_root/recovery.out" "dead sessions are explained as stopped terminals"
 contains "Leftover lock" "$test_root/recovery.out" "stale locks are explained in plain language"
-contains "Worktree without a head" "$test_root/recovery.out" "orphan worktrees are explained in plain language"
+contains "Leftover worktree from a removed" "$test_root/recovery.out" "orphan worktrees are explained in plain language"
 contains "Removal did not finish" "$test_root/recovery.out" "teardown failures are explained in plain language"
 if grep -Eq 'dead-session|stale-lock|orphan-worktree|teardown-failure' "$test_root/recovery.out"; then
     assert_success 1 "recovery list keeps raw finding kinds out of the primary text"
@@ -120,6 +120,22 @@ fi
 contains "Kind: dead-session" "$test_root/recovery-detail.out" "recovery diagnostics retain the raw finding kind"
 contains "Inspect: hydra doctor" "$test_root/recovery-detail.out" "recovery diagnostics retain the inspection command"
 contains "worktree and files are kept" "$test_root/recovery-detail.out" "recovery explains what is retained"
+{ grep -v '^R	' "$fixture"; grep '^R	orphan-worktree	' "$fixture"; } > "$test_root/orphan-first.tsv"
+"$tui" --headless-fixture "$test_root/orphan-first.tsv" --size 140x28 --view recovery --diagnostics > "$test_root/orphan-detail.out"
+contains "Leftover worktree from a removed task: feature-old (/tmp/wt/head_0123456789abcdef), 1.3 GiB; no uncommitted changes" \
+    "$test_root/orphan-detail.out" "leftover worktree finding names branch, path, size and change state"
+contains "Inspect: hydra gc --policy orphaned --dry-run" "$test_root/orphan-detail.out" "leftover worktree check is the read-only gc review"
+contains "x removes this worktree after confirmation; the branch is kept" "$test_root/orphan-detail.out" "leftover worktree offers confirmed removal"
+"$tui" --headless-fixture "$test_root/orphan-first.tsv" --size 100x28 --view recovery > "$test_root/orphan-list.out"
+contains "x remove" "$test_root/orphan-list.out" "recovery footer offers removal for a clean leftover worktree"
+sed 's/^R	orphan-worktree	/R	orphan-worktree-dirty	/' "$test_root/orphan-first.tsv" > "$test_root/orphan-dirty.tsv"
+"$tui" --headless-fixture "$test_root/orphan-dirty.tsv" --size 140x28 --view recovery --diagnostics > "$test_root/orphan-dirty.out"
+contains "has uncommitted changes" "$test_root/orphan-dirty.out" "dirty leftover worktree says it has uncommitted changes"
+if grep -q "x remove" "$test_root/orphan-dirty.out"; then
+    assert_success 1 "dirty leftover worktree is never offered for in-app removal"
+else
+    assert_success 0 "dirty leftover worktree is never offered for in-app removal"
+fi
 for view in heads detail coordination recovery; do
     "$tui" --headless-fixture "$fixture" --size 40x10 --view "$view" > "$test_root/bounded.out"
     assert_equal "11" "$(wc -l < "$test_root/bounded.out" | tr -d ' ')" "$view fits ten rows plus frame marker"
@@ -154,6 +170,18 @@ contains "[Work] Details Overview Attention Recovery Workflows Statistics Worksp
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v2.tsv" --size 80x24 --view statistics > "$test_root/stats-tabs.out"
 contains "[Statistics]" "$test_root/stats-tabs.out" "statistics keeps the shared tab bar"
 contains "Work Details Overview" "$test_root/stats-tabs.out" "statistics keeps the other tabs reachable"
+# Schema 4 usage rows: token totals, agent evidence and resource metrics said in full.
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 140x40 --view statistics > "$test_root/stats-usage.out"
+contains "Agent tokens" "$test_root/stats-usage.out" "statistics scope panel names agent tokens"
+contains "in      3.85M" "$test_root/stats-usage.out" "input tokens are summed across the scope"
+contains "cached  3.74M" "$test_root/stats-usage.out" "cached input tokens are summed across the scope"
+contains "cost not reported" "$test_root/stats-usage.out" "unreported cost stays unknown instead of zero"
+contains "CPU and memory: not" "$test_root/stats-usage.out" "unmeasured resources are explained, not truncated"
+contains "3.85M in / 23.0k out" "$test_root/stats-usage.out" "the run table shows per-run tokens"
+! grep -Fq "Tokens / cost: not m" "$test_root/stats-usage.out"
+assert_success $? "the old truncated resource note is gone"
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 80x24 --view statistics > "$test_root/stats-usage-narrow.out"
+contains "tokens in 3.85M" "$test_root/stats-usage-narrow.out" "narrow statistics keep the token total on the timing line"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view workspace > "$test_root/workspace-tabs.out"
 contains "[Workspace]" "$test_root/workspace-tabs.out" "workspace keeps the shared tab bar"
 contains "HYDRA / PLAN TOGETHER" "$test_root/workspace-tabs.out" "workspace conversation layout is titled after the reviewed mockup"
@@ -191,7 +219,7 @@ printf 'HYDRA_TUI\t2\nH\t%s\ts\t-\t-\t-\tactive\tlive\t\tidle\texact\ti\t0\t0\t0
 "$tui" --headless-fixture "$test_root/utf8.tsv" --size 40x10 > "$test_root/utf8.out"
 assert_success $? "UTF-8, combining, wide, and invalid bytes render safely at minimum width"
 "$tui" --ascii --headless-fixture "$test_root/utf8.tsv" --size 100x14 --view detail > "$test_root/utf8-detail.out"
-contains "wide-?-combining-e?-invalid-?" "$test_root/utf8-detail.out" "ASCII mode has a deterministic safe representation"
+contains "wide-? -combining-e-invalid-?" "$test_root/utf8-detail.out" "ASCII mode keeps wide columns, drops joined marks and marks invalid bytes"
 "$tui" --headless-fixture "$test_root/utf8.tsv" --size 100x14 --view detail > "$test_root/utf8-detail-unicode.out"
 contains "$(printf 'wide-\344\270\255-combining-e\314\201-invalid-?')" "$test_root/utf8-detail-unicode.out" "Unicode mode preserves wide and combining characters and marks invalid bytes"
 
@@ -227,14 +255,14 @@ assert_failure $? "TERM=dumb fails cleanly"
 assert_failure $? "non-TTY invocation fails cleanly"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.7.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.8.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
 chmod +x "$test_root/native-transient"
 HYDRA_TUI_BIN="$test_root/native-transient" "$repo_root/bin/hydra" tui > /dev/null 2> "$test_root/fallback.err"
 assert_failure $? "non-TTY basic fallback still fails cleanly"
 contains "starting the basic TUI" "$test_root/fallback.err" "transient native failure dispatches to basic fallback"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.7.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.8.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
 chmod +x "$test_root/native-success"
 HYDRA_TUI_BIN="$test_root/native-success" "$repo_root/bin/hydra" tui > "$test_root/default.out"
 contains "NATIVE DEFAULT" "$test_root/default.out" "plain tui dispatches to a qualified native executable"
@@ -478,6 +506,69 @@ contains 'dependency' "$test_root/fleet-v3-hosts.txt" 'fleet v3 renders waiting 
 contains 'REMOTE TASKS' "$test_root/fleet-v3-overview.txt" 'fleet overview reserves a task observation panel'
 contains 'inspect dependency' "$test_root/fleet-v3-overview.txt" 'fleet overview renders the next action'
 contains 'confirmed_stopped' "$test_root/fleet-v3-overview.txt" 'fleet overview renders receiver cancellation acknowledgment'
+
+# Runs group the heads they create; headless heads describe their steps.
+runs_heads="$repo_root/tests/fixtures/tui/native-runs.tsv"
+runs_done="$repo_root/tests/fixtures/tui/workflow-runs.tsv"
+runs_live="$repo_root/tests/fixtures/tui/workflow-runs-running.tsv"
+not_contains() {
+    if grep -Fq "$1" "$2"; then assert_success 1 "$3"; else assert_success 0 "$3"; fi
+}
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 120x30 --view heads > "$test_root/runs-heads.out"
+contains "2 heads (+1 in runs) / 1 running / 1 need attention" "$test_root/runs-heads.out" "header counts the heads the user started and counts run heads within their run"
+contains "+ plan run kill-dry-run" "$test_root/runs-heads.out" "the run is listed under its planning head with an expand affordance"
+not_contains "kill-dry-run-worker" "$test_root/runs-heads.out" "run heads start collapsed under their run"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 120x30 --view heads > "$test_root/runs-expanded.out"
+contains "  - plan run kill-dry-run" "$test_root/runs-expanded.out" "a selected run head opens its run"
+contains "worker   kill-dry-run-worker" "$test_root/runs-expanded.out" "the worker is listed inside its run with its role"
+contains "verifier kill-dry-run-check" "$test_root/runs-expanded.out" "a retired verifier stays visible inside its run"
+contains "retired" "$test_root/runs-expanded.out" "the verifier shows that it was retired"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 120x40 --view detail > "$test_root/runs-worker.out"
+contains "Terminal    headless (no terminal)" "$test_root/runs-worker.out" "a headless head says it has no terminal"
+contains "Agent       codex / step implement / succeeded" "$test_root/runs-worker.out" "a headless head names the agent of its step"
+contains "Model       configured default: gpt-6-sol (not observed)" "$test_root/runs-worker.out" "a configured model is labelled as configuration"
+contains "Effort      configured default: xhigh (not observed)" "$test_root/runs-worker.out" "a configured effort is labelled as configuration"
+contains "Executable  codex-cli 0.46.0" "$test_root/runs-worker.out" "the executable version is shown"
+contains "Tokens      in 24,763  cached 24,448  out 1,122  cost unknown" "$test_root/runs-worker.out" "tokens are shown and an unreported cost stays unknown"
+contains "Role        worker (holds the run's result)" "$test_root/runs-worker.out" "the worker role is explained"
+not_contains "Session" "$test_root/runs-worker.out" "a headless head is not described by a terminal session"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_live" --task kill-dry-run-worker --size 120x40 --view detail > "$test_root/runs-worker-live.out"
+contains "Tokens      reported when the step finishes" "$test_root/runs-worker-live.out" "running tokens are pending, not zero"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 120x40 --view detail > "$test_root/runs-planner.out"
+contains "Plan        plan 60c5133478a6 approved 2026-09-26 10:21 UTC / run run_aaaaaaaaaaaaaaaaaaaa / succeeded" "$test_root/runs-planner.out" "the planning head shows its plan approval and run"
+contains "Worker branch kill-dry-run-worker holds the result" "$test_root/runs-planner.out" "the planning head names what to do with the result"
+contains "Approval requests  none" "$test_root/runs-planner.out" "gate approval requests are named as such"
+not_contains "0 of 0" "$test_root/runs-planner.out" "no misleading zero-of-zero approval count"
+contains "Full diff   everything since the branch base: press : and choose diff" "$test_root/runs-planner.out" "the full diff row has a value"
+not_contains "Full diff       :" "$test_root/runs-planner.out" "the full diff row has no stray colon"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --size 140x40 --view overview > "$test_root/runs-overview.out"
+contains "RUN / plan run kill-dry-run / succeeded / 2 heads / from add-kill" "$test_root/runs-overview.out" "Overview centres on the run"
+contains "implement        exec/compose   succeeded         1     1m06s         kill-dry-run-worker" "$test_root/runs-overview.out" "each step shows kind, role, state, attempts, duration and head"
+contains "kill-dry-run-check (retired)" "$test_root/runs-overview.out" "the run panel shows the retired verifier head"
+not_contains "QUEUE DEPTH" "$test_root/runs-overview.out" "an empty queue chart is not drawn"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_live" --size 140x40 --view overview > "$test_root/runs-overview-live.out"
+contains "Running step implement on kill-dry-run-worker (codex)" "$test_root/runs-overview-live.out" "a running run says what is running and where"
+contains "kill-dry-run-check (pending)" "$test_root/runs-overview-live.out" "a head the run has not created yet is pending"
+"$tui" --ascii --headless-fixture "$runs_heads" --size 140x40 --view overview > "$test_root/runs-overview-empty.out"
+contains "No workflow run yet." "$test_root/runs-overview-empty.out" "the run panel explains when there is no run"
+"$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 120x40 --diagnostics > "$test_root/runs-technical.out"
+for group in IDENTITY LIFECYCLE ADAPTER SOURCES; do
+    contains "$group" "$test_root/runs-technical.out" "technical details group $group"
+done
+contains "Session     - (headless)" "$test_root/runs-technical.out" "technical details name the terminal mode"
+for size in 40x10 80x24 140x40; do
+    for view in heads detail overview workspace; do
+        "$tui" --ascii --headless-fixture "$runs_heads" --workflow-fixture "$runs_live" --task kill-dry-run-worker --size "$size" --view "$view" > "$test_root/runs-bounded.out"
+        awk -v cols="${size%x*}" 'length >= cols { exit 1 }' "$test_root/runs-bounded.out"
+        assert_success $? "run $view view fits $size"
+    done
+done
+awk 'BEGIN { FS = OFS = "\t" } $1 == "E" { NF = 12 } { print }' "$runs_done" > "$test_root/runs-short.tsv"
+"$tui" --headless-fixture "$runs_heads" --workflow-fixture "$test_root/runs-short.tsv" --size 80x24 > /dev/null 2>&1
+assert_failure $? "a malformed agent receipt row fails closed"
+awk 'BEGIN { FS = OFS = "\t" } $1 == "H" { NF = 30 } { print }' "$runs_heads" > "$test_root/runs-v30.tsv"
+"$tui" --ascii --headless-fixture "$test_root/runs-v30.tsv" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 120x30 --view detail > "$test_root/runs-v30.out"
+contains "headless (no terminal)" "$test_root/runs-v30.out" "rows without a terminal-mode field still recognise a headless head"
 
 printf '\nTests: %d, Passed: %d, Failed: %d\n' "$test_count" "$pass_count" "$fail_count"
 [ "$fail_count" -eq 0 ]

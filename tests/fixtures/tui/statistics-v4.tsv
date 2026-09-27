@@ -1,0 +1,7 @@
+HYDRA_STATISTICS	4	1788789600
+R	run_bbbbbbbbbbbbbbbbbbbb	kill-dry-run	succeeded	project_demo	2026-09-07T13:30:00Z	complete	1788787800	1788788500	1788788500	0	1	-	0	-
+S	run_bbbbbbbbbbbbbbbbbbbb	spawn-worker	spawn	succeeded	1	1788787800	1788787810	1788787800	1788787800
+S	run_bbbbbbbbbbbbbbbbbbbb	implement	exec	succeeded	1	1788787810	1788788446	1788787810	1788787810
+S	run_bbbbbbbbbbbbbbbbbbbb	verify	exec	succeeded	1	1788788350	1788788480	1788788350	1788788350
+U	run_bbbbbbbbbbbbbbbbbbbb	implement	codex	codex-cli 0.99.0	gpt-fixture	high	3850000	3740000	23000	-
+Z	1	3

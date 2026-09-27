@@ -7,13 +7,33 @@
 #define PLAN_STEPS 64U
 #define PLAN_OBLIGATIONS 256U
 #define PLAN_COMPILER "hydra-plan-1"
+/* Inline agent prompts and proposal assets travel inside the compiled artifact. */
+#define PLAN_PROMPT_LIMIT (32U * 1024U)
+#define PLAN_ASSET_LIMIT (64U * 1024U)
+#define PLAN_ASSETS 16U
+#define PLAN_INPUT_PREFIX "@input/"
 /* All returned JSON objects are owned by the caller. Diagnostics accumulate in
  * a caller-owned array; no validation function executes proposed operations. */
 json_object *plan_cli(int argc, char **argv);
 /* Offline inspections borrow paths and return caller-owned JSON. */
 json_object *plan_inspect_cli(int argc, char **argv);
 json_object *plan_read(const char *path);
-json_object *plan_proposal_copy(const char *input, const char *output);
+/* assets may be NULL; otherwise the draft's asset references must match its files exactly. */
+json_object *plan_proposal_copy(const char *input, const char *output, const char *assets);
+/* Copies one bounded UTF-8 text asset without following a final symlink. */
+json_object *plan_proposal_asset(const char *name, const char *file, const char *directory);
+/* Well-formed UTF-8 without NUL bytes. */
+bool plan_utf8(const char *text, size_t length);
+/* Loads the assets referenced by plan data inputs from directory (may be NULL)
+ * into a caller-owned {name: text} object; unreadable assets add diagnostics. */
+json_object *plan_assets_load(json_object *plan, const char *directory, json_object *errors);
+/* Returns a caller-owned plan with inline prompts and asset inputs lowered to
+ * digest-bound bundle inputs; files receives {bundle-path: text}. NULL on error. */
+json_object *plan_expand(json_object *plan, json_object *assets, json_object *files, json_object *errors);
+/* Writes {bundle-path: text} below directory/bundle. */
+int plan_bundle_write(json_object *files, const char *directory);
+/* The {name: text} assets carried by files, or NULL when there are none. */
+json_object *plan_bundle_assets(json_object *files);
 /* Borrows NUL-terminated JSON text; checks member uniqueness and exact signed integer tokens. */
 bool plan_json_unique(const char *text);
 json_object *plan_canonical(json_object *value);
@@ -51,7 +71,10 @@ bool plan_repair_fresh(const char *run, json_object *check, const char *subject)
 int plan_step_check(const char *run, const char *step);
 int plan_validation_write(const char *run, const char *step, const char *directory, const char *name);
 json_object *plan_artifact(json_object *compiled, const char *run, const char *step, const char *name, char path[F_PATH]);
-json_object *plan_compile(json_object *plan, json_object *policy, const char *source, json_object *errors);
+/* assets is a borrowed {name: text} object or NULL. */
+json_object *plan_compile(json_object *plan, json_object *policy, const char *source, json_object *assets, json_object *errors);
+/* Adds an invalid_source diagnostic naming the checkout and failed condition. */
+void plan_source_error(json_object *errors, const char *source);
 int plan_digest(json_object *value, char digest[65]);
 /* Borrowed JSON inputs. Digest is caller-owned; reports retain no references.
  * INVALID is malformed/stale evidence, distinct from a valid negative verdict. */

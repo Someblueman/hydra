@@ -1,0 +1,9 @@
+HYDRA_WORKFLOW_TUI	2
+W	run_aaaaaaaaaaaaaaaaaaaa	kill-dry-run	running	plan	add-kill	head_aaaaaaaaaaaaaaaa	2026-09-26T10:21:03Z	-	60c5133478a6
+N	run_aaaaaaaaaaaaaaaaaaaa	spawn-worker	spawn	succeeded	1	-	work	kill-dry-run-worker	-	1790416870	1790416875
+N	run_aaaaaaaaaaaaaaaaaaaa	implement	exec	running	1	spawn-worker	compose	kill-dry-run-worker	codex	1790416876	-
+E	run_aaaaaaaaaaaaaaaaaaaa	implement	1	codex	running	-	1790416878	-	codex-cli 0.46.0	gpt-6-sol	configured	xhigh	configured	-	-	-	-	/home/fixture/.codex/config.toml
+N	run_aaaaaaaaaaaaaaaaaaaa	spawn-check	spawn	ready	0	-	work	kill-dry-run-check	-	-	-
+N	run_aaaaaaaaaaaaaaaaaaaa	verify	exec	queued	0	implement,spawn-check	verify	kill-dry-run-check	-	-	-
+R	run_aaaaaaaaaaaaaaaaaaaa	kill-dry-run-worker	spawn-worker	worker	-	-
+R	run_aaaaaaaaaaaaaaaaaaaa	kill-dry-run-check	spawn-check	verifier	-	-

@@ -11,7 +11,9 @@ notes.
 
 Open `hydra` in your repository and press `n`.
 Enter a task name, choose an available agent profile (`none` opens a shell), then
-enter an objective or leave it blank to start a conversation. Hydra registers the
+enter an objective or leave it blank to start a conversation. A task name that is
+not already a valid branch, such as `add kill dry run`, starts on a derived branch
+(`add-kill-dry-run`); the agent still sees the task name. Hydra registers the
 project, creates the head and opens agent input in the same workspace. Opening
 Hydra alone does not start work. Provider sign-in and permission prompts remain
 visible in the agent pane; existing repository trust checks still apply.
@@ -21,9 +23,17 @@ publish it with `hydra workflow plan propose <draft.json>` from its head. Press
 `Ctrl-B Tab` to return input to Hydra, `B` for the plan, and `P` to review the
 proposal with the bounded local policy. `V` validates and compiles it; `E` requires
 the exact displayed digest before execution. Republished drafts invalidate prior
-validation. `I` retains explicit file import for expert use. The local policy
-allows sh/git, one worker, four heads, 300 seconds and 1 MiB of artifacts, with no
-retries or repairs. It governs the compiled workflow, not the agent process's OS
+validation. The agent writes the worker's instructions inline (`prompt`) and
+publishes any custom file, such as a verifier script, with
+`propose <draft.json> --asset NAME=FILE`; both travel inside the compiled plan,
+so nothing is committed to your checkout while planning. Verification runs the
+repository's own checks on the worker head. `I` retains explicit file import for
+expert use (a draft's sibling `assets/` directory supplies its assets). The guided local
+policy allows sh, git, make and the head's own agent profile, writes only inside
+heads the plan spawns, one worker, four heads, 3600 seconds, 1 MiB of artifacts
+and a 1 GiB free-space floor, with no retries or repairs. Validation reads the
+checkout Hydra runs in at its current commit; commit or stash tracked changes
+there first. The plan's own prompt and assets never need to exist there. The policy governs the compiled workflow, not the agent process's OS
 permissions. Agent proposals alone never authorize execution.
 
 Interactive `spawn` and `spawn --resume` now open agent input inside the native
@@ -36,6 +46,13 @@ UI removal refuses ordinary untracked files as well as tracked changes. The CLI
 exposes the same protection as `hydra kill <branch> --protect-untracked`; existing
 noninteractive CLI cleanup behavior is unchanged when that flag is omitted.
 Ignored files retain the existing Git removal semantics.
+
+`hydra kill <branch> --dry-run`, `hydra kill --all --dry-run`, and `hydra kill
+-g <name> --dry-run` preview active heads without confirmation or teardown.
+Each preview shows the recorded session and worktree path, separate tracked
+(staged or unstaged) and ordinary untracked change indicators, and that the
+branch is kept. An unavailable worktree has unknown change indicators.
+`--force` is accepted with `--dry-run` but does not change the preview.
 
 - `hydra` with no arguments opens the control centre (`hydra tui`) when you run it
   from a terminal inside a Git repository. Outside a repository, or without a
@@ -79,8 +96,11 @@ hydra switch            # interactive (fzf if available)
 
 # Manage
 hydra kill feature-branch
+hydra kill feature-branch --dry-run       # preview only; never prompts or changes state
+hydra kill --all --dry-run                # preview every active head
+hydra kill -g backend --dry-run           # preview an active group
 hydra kill --all [--force]
-hydra cleanup           # stop dead heads; remove stale locks and orphaned worktrees
+hydra cleanup           # stop dead heads; remove stale locks; offer to remove leftover worktrees (branches kept)
 
 # Group operations
 hydra group feature-x backend    # assign to group
@@ -120,8 +140,8 @@ hydra workflow resume run_ID
 
 # Local objective plans (optional native helper; compile from clean source)
 hydra workflow plan schema
-hydra workflow plan validate ../plan.json ../policy.json
-hydra workflow plan compile ../plan.json ../policy.json ../compiled.json
+hydra workflow plan validate ../plan.json ../policy.json [--assets-dir ../assets]
+hydra workflow plan compile ../plan.json ../policy.json ../compiled.json [--assets-dir ../assets]
 hydra workflow plan show ../compiled.json
 hydra workflow plan run ../compiled.json --accept SHA256_FROM_PREVIEW
 hydra workflow plan result run_ID
@@ -144,7 +164,8 @@ hydra integrate approve run_ID --by reviewer
 hydra integrate promote run_ID       # local promotion; never pushes
 hydra integrate cleanup run_ID --apply
 hydra du
-hydra gc --policy orphaned --dry-run
+hydra gc --policy orphaned --dry-run   # leftover head_<id> worktrees whose head record is gone
+hydra gc --policy orphaned --apply --path /path/to/head_ID   # remove one; dirty needs --include-dirty
 hydra worktree doctor status
 
 # System
@@ -177,6 +198,14 @@ take over the terminal immediately instead; this is the expert path and is never
 the default. `HYDRA_NO_SWITCH=1` still creates the head without attaching and
 overrides `--attach`. Non-terminal invocations (pipes, automation) and `--headless`
 heads keep their existing messages and never attach.
+
+An interactive head whose tmux session is gone (for example after a reboot) keeps
+its worktree and files. `hydra resume --terminal <branch>` restarts only its
+terminal: it requires the recorded worktree, never creates, resets or cleans it,
+and starts what the head's profile resumes (Codex `resume --last`, a shell for
+`none`). It refuses a headless head, a head whose terminal is still live, and a
+head whose worktree is missing. Opening such a head from Work in `hydra tui`
+(`a`) runs exactly this command and then attaches.
 
 Durable head state outlives `hydra kill`, so `hydra spawn` and `hydra spawn --dry-run`
 both refuse a branch whose head still exists and name the way forward: `hydra resume
@@ -228,7 +257,7 @@ and receipt described in [Contracts](CONTRACTS.md).
 | Profile | Headless executable and mode | Interactive launch |
 | --- | --- | --- |
 | `agy` | `agy`, print/stream JSON | `agy` prompt mode |
-| `cursor` | `cursor-agent`, print/stream JSON | `cursor-agent` positional prompt |
+| `cursor` | `cursor-agent --print --trust`, stream JSON | `cursor-agent` positional prompt |
 | `opencode` | `opencode run --format json` | `opencode --prompt` |
 | `claude` | `claude --print`, stream JSON | `claude` positional prompt |
 | `codex` | `codex exec --json`, stdin prompt | `codex` positional prompt; interactive `resume --last` |
@@ -243,6 +272,12 @@ Imports cannot replace reserved built-in names. Headless `exec --resume-run RUN_
 requires the exact successful recorded session, head, instance, worktree, and profile;
 it never selects the provider's latest session. Interactive Codex restore is the
 separate cwd-scoped `resume --last` convenience.
+
+Headless Cursor passes `--trust` so Cursor Agent accepts each fresh head worktree;
+it only skips Cursor's workspace prompt and never auto-approves commands (`--force`).
+A failed headless run keeps a 4096-byte, character-safe excerpt of provider stderr
+and of stdout the adapter could not decode in its receipt's `diagnostic` field; see
+[Contracts](CONTRACTS.md#profiles-tasks-adapters-and-scopes).
 
 A declared `done` outcome is separate from verification: use `exec` or a named
 `gate` to record whether a command passed, then review before integration.
@@ -427,15 +462,24 @@ One interaction model applies everywhere:
 | `Tab` / `Shift-Tab` | Next / previous tab; inside Workspace, next / previous pane |
 | `Left` / `Right`, `1`-`9` | Previous / next tab, or jump to a tab |
 | `Up` / `Down`, `j` / `k` | Select |
-| `Enter` | Open the selection (details, a host's heads, a recovery check) |
+| `Enter` | Open the selection (details, a host's heads, a recovery check); expand or collapse a run |
+| `l` / `h` | Expand / collapse the selected run in Work and Overview |
 | `Esc` | One step back: details to the list, close help, clear the search |
 | `n` | Start a new task (branch, worktree, terminal and agent) |
 | `a` | Talk to the selected agent inside Workspace |
 | `x` | Remove the selected or marked heads after an in-app confirmation |
 | `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
 | `/`, `:` | Search heads, search explicit actions |
-| `p`, `d`, `c` | Terminal output, technical details, coordination |
+| `p`, `d`, `c` | Terminal output (a headless head's step output), technical details, coordination |
 | `?`, `t`, `q` | Keyboard help, theme, quit |
+
+Work lists the heads you started. Heads a workflow run created sit inside their
+run, and a run launched from a planning conversation sits inside that planning
+head; runs start collapsed and the header counts their heads separately. A headless
+head is described by the step that runs on it (agent, model and effort, tokens,
+duration) rather than by a terminal, and `p` shows that step's live output.
+Overview centres on the selected or active run: its steps, where each ran, and
+what comes next. See [workflows](workflows.md#heads-a-plan-run-creates).
 
 Removal confirms the exact targets in the UI, runs `hydra kill` per head with output
 captured, reports a concise result in the status line and opens the full output only
@@ -446,8 +490,14 @@ source and confidence available.
 
 Inside Workspace, `A` / `B` / `C` switch between the conversation, plan-overview and
 monitoring layouts, `z` zooms the focused pane and `S` shows two agents side by side.
-While typing to an attached agent, `Ctrl-B Tab` returns to Hydra, `Ctrl-B x` closes
-the pane, `Ctrl-B n` switches agent and `Ctrl-B [` scrolls history. The action
+While typing to an attached agent, Esc and Tab go to the agent; `Ctrl-B Tab` leaves
+input (keys go to Hydra, the view stays open), `Ctrl-B x` closes the view while the
+agent keeps running in its tmux session (`a` reopens it), `Ctrl-B n` switches agent
+and `Ctrl-B [` opens the agent's tmux history (PgUp/PgDn, `q` returns). A client
+that disconnects never holds input; `a` or `Ctrl-B r` reattaches. `p` shows a
+read-only transcript of the agent's terminal with its colors and wrapped long lines
+(PgUp/PgDn scroll it); key hints printed by the agent there only work in live
+input. The action
 palette (`:`) still delegates interactive commands such as `switch` and `dashboard`
 to the shell CLI with argument-vector execution. Press `I` for the attention view;
 `j`/`k` or arrows select an item, `Enter` opens its detail, `s` marks that revision

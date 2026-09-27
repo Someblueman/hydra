@@ -1,13 +1,17 @@
 # Hydra public contracts
 
-Hydra 2.7.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
-It adds [head-associated planning proposals](#head-associated-planning-proposals)
-and the opt-in `kill --protect-untracked`; interactive spawn and resume open the
-task inside the native control centre when it is available (`--attach`, `HYDRA_NO_SWITCH`, non-interactive and `--json`
-behavior are unchanged). Since 2.6.0, `hydra init` stays out of the source tree
-(shared configuration is an explicit opt-in) and the head environment is delivered
-through the tmux session and a per-instance launcher instead of typed exports. See
-the [2.7.0 changelog](../CHANGELOG.md#270---2026-09-24).
+Hydra 2.8.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
+It adds plans that carry their own prompts and assets (`propose --asset`, inline
+`prompt`, `--assets-dir`), the policy write scope `@spawned:*`, a guided local
+policy that authorizes the head's own agent profile, proposal send-back
+(`proposal --return`), `hydra resume --terminal`, `hydra kill --dry-run`, and
+`hydra gc --policy orphaned --path`. Receipts gain optional `diagnostic`,
+`configuration` and observed-model fields; attention data is version 3 and the
+statistics export schema 4, with earlier versions still read. Since 2.7.0,
+head-associated planning proposals and the opt-in `kill --protect-untracked` are
+available; since 2.6.0, `hydra init` stays out of the source tree and the head
+environment is delivered through the tmux session and a per-instance launcher.
+See the [2.8.0 changelog](../CHANGELOG.md#280---2026-09-27).
 Interactive Codex restore retains cwd-scoped latest-session selection; headless
 resume binds an exact recorded session.
 Internal shell function names,
@@ -58,6 +62,13 @@ C0 controls and preserves other UTF-8 bytes.
 authority. Projects, heads, instances, workflow runs, integration reports, messages,
 claims, resources, gates, and provenance use validated opaque IDs as path keys.
 Human labels are scalar values, never path identity. See [Durable state v2](#durable-state-v2).
+`$HYDRA_HOME/cache` holds disposable derived data, such as recent leftover-worktree
+sizes for Recovery, and is never an authority.
+
+A leftover (orphaned) worktree is a registered `head_<id>` worktree directly under
+the project's recorded worktree root whose head record is gone. `hydra gc --policy
+orphaned` is the only detector; doctor, cleanup, `du` and Recovery reuse it. Other
+worktrees, including `hydra-<branch>` siblings, are never candidates.
 
 The seven-field global map and project `compat-map` are not 2.0 runtime formats.
 Before migration, finish or stop active mutations, preserve local work, then run
@@ -95,6 +106,35 @@ Lifecycle, event, and message records follow the schemas described in this guide
   schema-versioned literal declarations. Headless prompt transport, provider
   translations, exact recorded-session resume, and capability requirements are
   bounded by the rules in [workflows](workflows.md).
+- The built-in `cursor` recipes pass `--trust` after `--print` for new and resumed
+  runs, and its help probe requires that flag. Cursor Agent otherwise refuses a
+  directory it has not trusted, and every head is a fresh Hydra-created worktree.
+  Selecting the head is the operator's trust decision, and Hydra's repository trust
+  (`hydra init --trust`) still governs repository-controlled configuration. `--trust`
+  only skips Cursor's workspace prompt; Hydra never passes `--force` or `--yolo`.
+- A headless run receipt (`agent-run` data and `exec/RUN/HEAD/agent.json`, schema 1)
+  whose `exit_status` is nonzero adds an optional `diagnostic` object,
+  `{"stdout":EXCERPT|null,"stderr":EXCERPT|null}`. `stdout` is provider output the
+  adapter did not decode, from the first rejected line or the unread tail (never
+  for adapter `none`); `stderr` is provider stderr. `EXCERPT` is
+  `{"text":string,"bytes":integer,"truncated":boolean}`: `text` is at most 4096
+  bytes of the start of that output, cut at a character boundary, with invalid UTF-8
+  and NUL bytes replaced by `?`; `bytes` counts the whole source and `truncated` is
+  true when `text` is shorter. It is absent from completed runs and when both
+  streams are empty. It is diagnostic text, never an answer, event or verification.
+- The receipt additively records `configuration` when a provider's own
+  configuration decides the model: `{"model":{"value","source"},
+  "reasoning_effort":{"value","source"},"scope"}` with either member optional.
+  For `codex` it is read at launch from literal `-m`/`--model` or `-c
+  model[_reasoning_effort]=...` recipe arguments, else from
+  `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`, honouring its
+  `profile`). It is configuration, never an observation. Optional
+  `observed_model` and `observed_reasoning_effort` strings hold the first value a
+  provider event names itself (Claude Code's `system/init` carries `model`).
+  Readers keep either absent value unknown.
+- While a provider runs, its stdout is copied (at most 1 MiB, mode 0600) beside
+  the receipt as `.provider-stdout` for a read-only live view, and removed when
+  the step ends; keeping provider output remains the explicit `--retain` choice.
 - Task text is resolved before launch, stored privately, and delivered as one quoted
   argument. Events contain only its hash and byte count.
 - Adapter input is bounded canonical JSON schema v1 and must name the current
@@ -119,6 +159,31 @@ evaluation joins with field paths and counterexamples. Structural satisfiability
 runtime evidence, and semantic adequacy remain separate; coverage alone is not
 semantic proof.
 See [workflows](workflows.md) for planner limits and report format.
+Policy envelopes additively accept the exact write scope `@spawned:*`. It
+authorizes a plan write scope only when its head is the branch of one of that
+plan's own spawn steps; plans still declare concrete `<head>:<path>` scopes, and
+`@spawned:*` in a plan envelope is invalid. Admission already refuses spawn
+branches that exist, so the form never reaches the source checkout or an
+existing head. Earlier releases reject such a policy as `invalid_policy`.
+Plan schema 1 additively accepts an inline agent-step `prompt` (1 byte to 32 KiB
+of UTF-8 without NUL; exactly one of `prompt` or `prompt_input`) and asset input
+declarations `{"asset", "type", "max_bytes"}` in `data.inputs`. Earlier releases
+reject both as unknown fields. The compiler lowers them to data inputs with
+`"source": "bundle"` (paths `prompts/<step>` and `assets/<name>`, generated input
+`prompt-<step>`); workflow data manifests accept that source and read it from
+`bundle/` beside the definition. The compiled wrapper stays version 1 and adds an
+optional `assets` object (asset name to text) only when a plan uses assets, so
+existing artifacts and digests are unchanged; prompt and asset bytes are part of
+the acceptance digest. `validate` and `compile` accept an optional trailing
+`--assets-dir <dir>`; diagnostics add `missing_asset`, `invalid_asset`,
+`unsupported_asset` (schema 2), `prompt_conflict` and `invalid_input_reference`.
+In a compiled plan run, an exec argv element `@input/<name>` becomes the path of
+that step's materialized input; plain workflow definitions pass it unchanged.
+`invalid_source` diagnostics name the checkout and add optional `source`,
+`condition` (`missing_directory`, `not_repository`, `no_commit`,
+`tracked_changes` or `unreadable_content`) and `recovery` fields; tracked changes
+also carry `changed_paths` (at most ten) and `changed_count`. The envelope's
+`error.recovery` repeats the first diagnostic's recovery when one is present.
 Structured v3 reports require each obligation's `measurements` evidence to contain
 at least one finite JSON integer or floating-point observation. Narrative strings,
 nulls, objects, arrays, and non-finite numeric values do not satisfy that evidence
@@ -137,6 +202,16 @@ documented restricted YAML subset, every step declares idempotency, argv is the
 default execution form, and shell strings require both `allow_shell: true` and a
 current repository trust decision. Durable manifests bind resolved definitions,
 inputs, attempts, outputs, events, cancellation, and recovery.
+
+A compiled plan run records its step roles and heads (`plan-roles.tsv`). When it
+reaches `succeeded`, `failed` or `cancelled`, each head its spawn steps created on
+which only verify-role steps ran is retired through `hydra kill
+--protect-untracked` once every succeeded step on it has sealed its outputs; the
+branch is kept. A head with uncommitted or untracked changes is kept. Each outcome
+is recorded as `retirement/<spawn-step>/{state,detail}` (`retired`, `kept` or
+`failed`) and a run event `head.retired`, `head.retire_skipped` or
+`head.retire_failed`, after the terminal run event; retirement never changes the
+run result. Heads of work and compose steps are never retired automatically.
 
 Integration manifests bind the target, initial target ref, ordered immutable
 candidates, gates, merge output, verification result, approval, and recovery action.
@@ -158,18 +233,84 @@ head rows, extends `T` with connection/freshness fields, and adds bounded `O` ta
 rows. Version-1 and version-2 fleet fixtures remain readable. Unsupported protocol
 versions fail closed. This adapter is not a general automation API.
 
+Version-2 `H` rows may add a trailing terminal mode (`interactive` or
+`headless`); readers accept rows without it. The workflow projection (`workflow
+tui-data`) is internal protocol `HYDRA_WORKFLOW_TUI<TAB>2`: version 1 `W` and `N`
+fields keep their positions and gain trailing fields (run kind, planning branch,
+created and completed times, accepted digest prefix; step role, head, profile,
+started and completed times), with `E` agent receipt summaries and `R` rows for
+heads a run's spawn steps created (worker or verifier, and retirement). Version-1
+workflow fixtures remain readable. `hydra tui --head-output <branch>` is a private,
+bounded, read-only text view of the step running (or last run) on a headless head.
+
 Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. Both
 retain navigation, search, refresh, preview, switch, spawn, group assignment,
 dashboard, regenerate, confirmed kill, and help behavior. Native mutations execute
 the public shell CLI with explicit argv and never write Hydra state directly. Native
 attention consumes `workflow attention-data` or `fleet attention-data`; its `I`
-view, `s` seen marker, and `r` exact review route are read-only client interaction.
+view and `r` exact review route are read-only client interaction.
 Review selection carries the complete attention identity, requested revision, and
 identity hash. `review-data` is a bounded framed projection of the public workflow
 or Fleet review command; opening a review or supplied reference cannot change
 durable state or confer approval. Stale or ambiguous selections remain unavailable
 until a fresh exact identity is established. Native UI behavior is covered by the
 public CLI and protocol rules in this guide.
+
+Attention data is `HYDRA_ATTENTION<TAB>3`: each `ITEM` keeps the 19 version-1
+fields and appends a presentation `label` (the workflow name, or `-`; version 2)
+and a presentation `detail` (version 3: for a failed check, the IDs of the
+requirements it decides, comma separated and bounded to 255 bytes, otherwise
+`-`). Neither is part of the identity or revision hashes. Readers accept versions
+1 to 3. A succeeded step whose data manifest declares no outputs, and whose
+receipt names no files, is not a result and produces no item; declared outputs
+that do not match their receipt stay explicit `unknown` items.
+
+Kind `failure` (route `workflow-evidence`) is a recorded failure that needs the
+user's decision. Reasons: `check_failed` (a failed step that the compiled plan
+names as a check's step; the JSON item carries `requirements`), `step_failed`,
+`step_recovery_required`, and, for a run in state `failed` or
+`recovery-required` with no failed step (for example a rejected delivery),
+`run_failed` or `run_recovery_required` with step and attempt `-`. The revision
+covers the step and run states, the attempt's exit code, failure class and
+completion time, and the checks and requirements. A failure is resolved, and no
+longer produced, when its step succeeds or when a later run (by `created-at`) of
+the same `workflow-id` from the same planning head succeeds; a run cancelled on
+request is the user's own decision and is not a failure. Fleet attention reports
+a remote task whose receiver recorded `execution_state` `failed` as kind
+`failure`, reason `task_failed`, with its step and attempt when both are valid;
+cancelled and `outcome_unknown` tasks are never claimed as failures. A failure's
+review has readiness `failed` (`candidate_state` `failed_needs_decision`) and
+the plan's result section; a run-level failure is reviewed from the run's own
+records.
+
+Seen markers are a per-user client preference, not workflow state.
+`hydra workflow attention-seen list | mark IDENTITY REVISION | clear IDENTITY`
+(64-hex digests) keeps them in `$HYDRA_HOME/attention/seen.tsv`, one
+`identity<TAB>revision<TAB>seen-at` row per identity, at most 512 rows (oldest
+dropped), replaced atomically under the `attention-seen` lock. Every call prints
+`HYDRA_ATTENTION_SEEN<TAB>1`, `SEEN<TAB>identity<TAB>revision` rows and
+`END<TAB>count`. A marker matches only its exact revision, so a changed item is
+unseen again. Marking an approval seen never approves, rejects or dismisses it;
+marking a failure seen never resolves it, and both stay listed and counted as
+needing the user.
+
+A review of an item belonging to a compiled plan run adds a read-only `result`
+object: the plan name and objective, verdict (`pass` only from the verified
+delivery; `pending`, `fail` or `not_verified` otherwise), deliverables with a
+bounded text excerpt, requirements with their check state (`pass`, `fail`,
+`pending`, `unverified` or `not_reported`), checks with the exact argv, head, exit
+code, report evidence and a filtered output summary and log path, steps with
+duration, attempts and exec-receipt agent evidence, the worker branch's commits,
+files and bounded diff as observed at review time (not sealed with the run), and
+the land and cleanup commands. Hydra never runs them. The text projection shows
+this first and offers each check log as a local `REF log`. Plan checks of a run
+that is not terminal are `pending`; a step without deliverables reports
+`inventory_state` and `readiness` `not_applicable`.
+
+`workflow statistics-data` is `HYDRA_STATISTICS<TAB>4`. Schema 4 adds
+`U<TAB>run<TAB>step<TAB>profile<TAB>executable-version<TAB>model<TAB>effort<TAB>tokens-in<TAB>tokens-cached<TAB>tokens-out<TAB>cost-microusd`
+after a run's `S` rows, one per listed step with an exec receipt; `-` is unknown,
+never zero. Readers accept schemas 2 to 4. CPU and memory are not collected.
 
 ## Process, install, and platform contracts
 
@@ -266,13 +407,41 @@ strict, bounded JSON draft under the selected head's `planning/draft.json`. With
 from an agent launcher must match the current recorded owner. The head lock
 serializes replacement; malformed input preserves the previous draft. A proposal
 is durable input, not a validation, approval, or execution receipt.
+Repeatable `--asset NAME=FILE` publishes at most 16 private asset copies (regular
+UTF-8 text files of at most 64 KiB, no symlinks) in `planning/assets/` beside the
+draft; each publication replaces the whole set, and a draft whose asset
+references differ from the published files is refused with `asset_mismatch`.
 
 `hydra workflow plan proposal <head>` is read-only and fails if the draft or policy
-is absent. Explicit `--local-policy` writes the local policy preset. Success emits
+is absent. Explicit `--local-policy` writes the guided local policy: host
+`local`; tools `sh`, `git`, `make` and `profile:<name>` for the head's recorded
+profile when it is a plan ID other than `none` (otherwise no agent tool, noted on
+a terminal's stderr only); effects `execute` and `worktree`; writes `@spawned:*`;
+parallelism 1; 3600 seconds; 1 MiB of artifacts; four heads; a 1024 MiB free-space
+floor; no retries or repairs. Success emits
 `HYDRA_PLAN_PROPOSAL<TAB>1`, followed by
 `P<TAB>absolute-draft-path<TAB>absolute-policy-path`, each newline terminated.
-Paths containing tabs/newlines are refused. Native validation snapshots both files;
-changed bytes invalidate the compiled revision and its exact-digest approval.
+Paths containing tabs/newlines are refused. Native validation snapshots both files
+and compiles with the draft's sibling `assets/` directory; changed draft, policy
+or asset bytes invalidate the compiled revision and its exact-digest approval.
+
+`hydra workflow plan proposal <head> --return <feedback>` records, under the head
+lock, `planning/returned` (the SHA-256 of the current draft) and `planning/feedback`
+(at most 4096 bytes). While the draft still has that digest, `proposal` (with or
+without `--local-policy`) refuses, and so does a launch associated with the head.
+A successful `propose` removes both files. The TUI types the feedback into the
+agent's attached pane without submitting it.
+
+The private launch owner `hydra workflow plan --workspace-owner <sha256>
+[<head-id> <instance-id>]` reads the compiled snapshot on stdin. The optional pair
+binds the launch to the planning head instance; it is refused unless that instance
+is current and its draft is not returned. The run records `planning-head`,
+`planning-instance` and `planning-branch`. Its `run.created`, `approval.requested`,
+`step.failed`, `step.recovery-required` and terminal run events then queue at most
+one inbox note each (keyed by event and step under `planning-notices/`, at most 64
+per run) for that branch only while it still names the same head and instance. A
+queued note is not evidence that the agent read it. While open, the TUI also
+submits the run receipt and those state changes into the attached planning pane.
 
 The private attachment helper accepts an optional absolute tmux socket after the
 head and instance IDs. Nested native clients carry their observed server selection

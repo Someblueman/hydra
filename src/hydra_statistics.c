@@ -84,7 +84,53 @@ static void step_metrics(struct hs_step *s, char **f, uint64_t observed) {
 }
 
 static bool run_row(char **fields, size_t count, unsigned version) {
-    return count == (version == 3 ? 15U : 12U) && !strcmp(fields[0], "R");
+    return count == (version >= 3 ? 15U : 12U) && !strcmp(fields[0], "R");
+}
+
+static size_t find_run(const struct hs_model *m, const char *id) {
+    size_t run;
+    for (run = 0; run < m->run_count; run++) if (!strcmp(m->runs[run].id, id)) break;
+    return run;
+}
+
+static bool parse_step(struct hs_model *m, char **f) {
+    struct hs_step *s;
+    size_t i, run = find_run(m, f[1]);
+    uint64_t value;
+    if (run == m->run_count || m->step_count == HS_STEPS || !id(f[2])) return false;
+    for (i = 0; i < m->step_count; i++) if (m->steps[i].run == run && !strcmp(m->steps[i].id, f[2])) return false;
+    s = &m->steps[m->step_count++]; s->run = run;
+    if (!copy(s->id, sizeof(s->id), f[2]) || !copy(s->kind, sizeof(s->kind), f[3]) ||
+        !copy(s->state, sizeof(s->state), f[4])) return false;
+    s->attempts_known = number(f[5], 999999, &value);
+    if (s->attempts_known) s->attempts = (unsigned)value;
+    if (number(f[6], m->observed, &value)) s->started = value;
+    if (number(f[7], m->observed, &value)) s->completed = value;
+    step_metrics(s, f, m->observed);
+    return true;
+}
+
+/* Text fields keep "-" as unknown; overlong values are refused, not cut. */
+static bool usage_text(char *out, size_t capacity, const char *value) {
+    if (!strcmp(value, "-")) { out[0] = '\0'; return true; }
+    return copy(out, capacity, value);
+}
+
+/* U rows (schema 4) attach one exec receipt's evidence to an existing step. */
+static bool parse_usage(struct hs_model *m, char **f) {
+    size_t i, run = find_run(m, f[1]);
+    struct hs_usage *u = NULL;
+    for (i = 0; run < m->run_count && i < m->step_count; i++)
+        if (m->steps[i].run == run && !strcmp(m->steps[i].id, f[2])) u = &m->steps[i].usage;
+    if (!u || u->recorded || !usage_text(u->profile, sizeof(u->profile), f[3]) ||
+        !usage_text(u->version, sizeof(u->version), f[4]) || !usage_text(u->model, sizeof(u->model), f[5]) ||
+        !usage_text(u->effort, sizeof(u->effort), f[6])) return false;
+    for (i = 0; i < HS_USAGE_COUNTS; i++) {
+        u->known[i] = number(f[7 + i], UINT64_MAX / 4, &u->counts[i]);
+        if (!u->known[i] && strcmp(f[7 + i], "-")) return false;
+    }
+    u->recorded = true;
+    return true;
 }
 bool hs_load(FILE *input, struct hs_model *m) {
     char line[2048];
@@ -103,7 +149,7 @@ bool hs_load(FILE *input, struct hs_model *m) {
         }
         if (!header) {
             if (count != 3 || strcmp(f[0], "HYDRA_STATISTICS") ||
-                (strcmp(f[1], "2") && strcmp(f[1], "3")) ||
+                (strcmp(f[1], "2") && strcmp(f[1], "3") && strcmp(f[1], "4")) ||
                 !number(f[2], 253402300799ULL, &m->observed) || !m->observed) return false;
             m->schema_version = (unsigned)(f[1][0] - '0');
             header = true; continue;
@@ -123,19 +169,9 @@ bool hs_load(FILE *input, struct hs_model *m) {
             r->partial = !strcmp(f[6], "partial");
             run_metrics(r, f, m->observed);
         } else if (count == 10 && !strcmp(f[0], "S")) {
-            struct hs_step *s;
-            size_t run;
-            for (run = 0; run < m->run_count; run++) if (!strcmp(m->runs[run].id, f[1])) break;
-            if (run == m->run_count || m->step_count == HS_STEPS || !id(f[2])) return false;
-            for (i = 0; i < m->step_count; i++) if (m->steps[i].run == run && !strcmp(m->steps[i].id, f[2])) return false;
-            s = &m->steps[m->step_count++]; s->run = run;
-            if (!copy(s->id, sizeof(s->id), f[2]) || !copy(s->kind, sizeof(s->kind), f[3]) ||
-                !copy(s->state, sizeof(s->state), f[4])) return false;
-            s->attempts_known = number(f[5], 999999, &value);
-            if (s->attempts_known) s->attempts = (unsigned)value;
-            if (number(f[6], m->observed, &value)) s->started = value;
-            if (number(f[7], m->observed, &value)) s->completed = value;
-            step_metrics(s, f, m->observed);
+            if (!parse_step(m, f)) return false;
+        } else if (count == 11 && m->schema_version >= 4 && !strcmp(f[0], "U")) {
+            if (!parse_usage(m, f)) return false;
         } else if (count == 3 && !strcmp(f[0], "Z")) {
             if (!number(f[1], HS_RUNS, &value) || value != m->run_count ||
                 !number(f[2], HS_STEPS, &value) || value != m->step_count) return false;
@@ -199,5 +235,15 @@ void hs_summarize(const struct hs_model *m, const struct hs_filter *f, struct hs
             out->duration_known++; out->duration_sum += duration;
             if (duration > out->duration_max) out->duration_max = duration;
         }
+        hs_usage_add(out, s);
+    }
+}
+
+void hs_usage_add(struct hs_summary *out, const struct hs_step *s) {
+    size_t i;
+    if (!s->usage.recorded) return;
+    out->agent_steps++;
+    for (i = 0; i < HS_USAGE_COUNTS; i++) if (s->usage.known[i]) {
+        out->usage_known[i]++; out->usage[i] += s->usage.counts[i];
     }
 }

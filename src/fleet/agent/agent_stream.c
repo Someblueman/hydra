@@ -18,12 +18,25 @@ static int observation(struct agent_stream *stream, const char *status) {
     int result = length < 0 || length >= (int)sizeof(event) || f_run(argv, event, (size_t)length, 5, &cap) || cap.status;
     f_capture_free(&cap); return result ? -1 : 0;
 }
+static void observed_text(char *out, size_t size, const char *value) {
+    size_t i;
+    if (!value || out[0] || !*value || strlen(value) >= size) return;
+    for (i = 0; value[i]; i++) if ((unsigned char)value[i] < 32 || value[i] == 127) return;
+    memcpy(out, value, strlen(value) + 1);
+}
+/* Records the first model and effort a provider event names; never inferred. */
+static void observe_model(struct agent_stream *stream, json_object *input) {
+    observed_text(stream->observed_model, sizeof(stream->observed_model), f_string(input, "model"));
+    observed_text(stream->observed_model, sizeof(stream->observed_model), f_string(f_field(input, "message"), "model"));
+    observed_text(stream->observed_effort, sizeof(stream->observed_effort), f_string(input, "reasoning_effort"));
+}
 void agent_observe(void *context, const char *text, size_t size) {
     struct agent_stream *stream = context;
     if (stream->malformed || stream->stale || stream->permission || stream->observation_failed || f_stopped) return;
     stream->received = size;
     if (!strcmp(stream->adapter, "none")) return;
     while (stream->consumed < size) {
+        stream->line_start = stream->consumed;
         const char *start = text + stream->consumed, *end = memchr(start, '\n', size - stream->consumed);
         size_t length = end ? (size_t)(end - start) : size - stream->consumed;
         if (length > AGENT_EVENT_LIMIT || memchr(start, '\0', length)) { stream->malformed = true; return; }
@@ -33,6 +46,7 @@ void agent_observe(void *context, const char *text, size_t size) {
         if (!line) { stream->malformed = true; return; }
         memcpy(line, start, length); line[length] = '\0'; input = f_parse(line); free(line);
         int decoded = agent_decode(stream->adapter, input, &event);
+        observe_model(stream, input);
         if (decoded < 0 || json_object_array_length(stream->events) >= 1024) { stream->malformed = true; json_object_put(input); return; }
         if (!decoded) { json_object_put(input); continue; }
         if (event.session) {

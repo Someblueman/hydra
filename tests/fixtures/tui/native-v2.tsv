@@ -4,5 +4,5 @@ H	feature-stale	hydra-feature-stale	claude	beta	-	dead	stopped		running	reported
 H	feature-unavailable	hydra-feature-unavailable	-	-	-	dead	unavailable		unavailable	unavailable		0	0	0	0	0	0	0	0	0	0	unavailable	/tmp/hydra/map		none	exact	hydra capabilities --json	2	/tmp/hydra/state/notifications
 R	dead-session	feature-stale	/tmp/hydra/map	exact	hydra doctor
 R	stale-lock	state_project_0123456789abcdefabcd.lock	/tmp/hydra/locks/state_project_0123456789abcdefabcd.lock	exact	hydra doctor
-R	orphan-worktree	hydra-orphan	/tmp/hydra-orphan	exact	hydra gc --policy orphaned --dry-run
+R	orphan-worktree	feature-old (/tmp/wt/head_0123456789abcdef), 1.3 GiB	/tmp/wt/head_0123456789abcdef	exact	hydra gc --policy orphaned --dry-run
 R	teardown-failure	feature-stale	/tmp/hydra/state/head_stale	exact	hydra worktree doctor status

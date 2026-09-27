@@ -40,12 +40,16 @@ static int render_fixture(struct app *app, const char *fixture, const char *work
     if (load_fixture(fixture, &app->model, error, sizeof(error)) != 0) { fprintf(stderr, "%s\n", error); return 2; }
     record_snapshot(app, true);
     if (workflow_fixture && refresh_workflows(app, workflow_fixture)) return 2;
+    /* --task selects a head, as it does when the interactive view opens. */
+    if (app->pending_task[0] && head_for_branch(app, app->pending_task))
+        app->selected = (size_t)(head_for_branch(app, app->pending_task) - app->model.heads);
     if (statistics_fixture && refresh_statistics(app, statistics_fixture)) return 2;
     for (frame = 1U; frame <= frames && !terminal_stopped(); frame++) render(app, frame, true);
     free(app->workflows);
     native_attention_destroy(app);
     native_workspace_destroy(app);
     statistics_destroy(app);
+    transcript_free(app->transcript); app->transcript = NULL;
     frame_free(app);
     if (terminal_stopped()) return terminal_exit_status();
     return ferror(stdout) ? 3 : 0;
@@ -135,6 +139,7 @@ int main(int argc, char **argv) {
     native_attention_destroy(&app);
     native_plan_destroy(&app);
     statistics_destroy(&app);
+    transcript_free(app.transcript);
     frame_free(&app);
     return index;
 }

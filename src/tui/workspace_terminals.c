@@ -66,7 +66,7 @@ void native_workspace_split_agents(struct app *app) {
     if (first) {
         /* This is always the last split added to this layout. */
         w->layout.panes[3]=w->layout.panes[first];
-        w->layout.panes[3].parent=2;
+        w->layout.panes[3].parent=2; w->layout.panes[3].min_width=50;
         memset(&w->layout.panes[first],0,2*sizeof(w->layout.panes[0]));
         w->layout.count=first;
         if (w->layout.focus>=first) w->layout.focus=3;
@@ -81,6 +81,8 @@ void native_workspace_split_agents(struct app *app) {
     if (other==NATIVE_TERMINALS) goto unavailable;
     first=tv_workspace_split(&w->layout,3,TV_COLUMNS,500);
     if (first<0) return;
+    /* Two conversations share the agent column side by side. */
+    w->layout.panes[first].min_width=w->layout.panes[first+1].min_width=30;
     w->agents[w->mode].first=first;
     w->agents[w->mode].slots[0]=selected; w->agents[w->mode].slots[1]=other;
     w->layout.focus=first;

@@ -1,6 +1,7 @@
 #ifndef HYDRA_TUI_APP_H
 #define HYDRA_TUI_APP_H
 #include "model.h"
+#include "../hydra_tui_workflow.h"
 #include "../termviz/termviz.h"
 #include <termios.h>
 #include <sys/types.h>
@@ -15,6 +16,7 @@ struct native_evidence;
 struct native_links;
 struct native_attention;
 struct native_review;
+struct transcript;
 
 struct app {
     struct model model;
@@ -27,6 +29,8 @@ struct app {
     struct native_links *links;
     struct native_attention *attention;
     struct native_review *review;
+    /* Lazily allocated interpreter for read-only captured output. */
+    struct transcript *transcript;
     pid_t control_pids[4];
     pid_t action_pid;
     /* Full 127-byte task/run identity plus action and label text. */
@@ -62,7 +66,16 @@ struct app {
     char pending_task[TEXT];
     char notice[TEXT];
     char snapshot_error[TEXT];
-    char preview_text[4096];
+    char preview_text[32768];
+    /* Rows the Details transcript is scrolled back from its newest output. */
+    size_t preview_back;
+    /* The head whose step output an asynchronous preview read belongs to. */
+    char preview_head[TEXT];
+    /* Work outline: runs the user expanded, and whether a run row rather
+     * than a head is selected in Work or Overview (workflow_run names it). */
+    char expanded_runs[WF_RUNS][80];
+    size_t expanded_count;
+    bool run_row;
     struct termios saved;
     /* One frame canvas and presenter serve every view, so repaints only touch
      * changed cells. The frame owner allocates cells before rendering. */

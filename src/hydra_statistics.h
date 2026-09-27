@@ -17,12 +17,22 @@ struct hs_run {
     bool unknown_outcomes_known, interventions_known, transfer_bytes_known;
     bool partial;
 };
+/* Agent evidence recorded by a step's exec receipt (schema 4 U rows). Each
+ * count has its own known flag: an unreported count is unknown, never zero. */
+enum hs_usage_count { HS_TOKENS_IN, HS_TOKENS_CACHED, HS_TOKENS_OUT, HS_COST_MICROUSD, HS_USAGE_COUNTS };
+struct hs_usage {
+    char profile[40], version[80], model[64], effort[24];
+    uint64_t counts[HS_USAGE_COUNTS];
+    bool known[HS_USAGE_COUNTS];
+    bool recorded;
+};
 struct hs_step {
     size_t run;
     char id[65], kind[32], state[40];
     uint64_t started, completed, ready, first_started;
     unsigned attempts;
     bool attempts_known;
+    struct hs_usage usage;
 };
 /* Caller owns this bounded value object and its storage. Loading replaces it.
  * Missing numeric evidence stays unknown; malformed framing rejects the stream. */
@@ -40,6 +50,9 @@ struct hs_summary {
     size_t attempts_known, duration_known, undated, excluded_undated, partial_runs;
     uint64_t attempts, retries, duration_sum, duration_max;
     size_t daily[7];
+    /* Agent steps with a receipt, and per count how many reported it. */
+    size_t agent_steps, usage_known[HS_USAGE_COUNTS];
+    uint64_t usage[HS_USAGE_COUNTS];
 };
 bool hs_load(FILE *input, struct hs_model *out);
 enum hs_state hs_state(const char *state);
@@ -48,6 +61,8 @@ bool hs_matches(const struct hs_model *m, size_t run, const struct hs_filter *fi
  * Durations are completed latest attempts, not total run/verification duration. */
 void hs_summarize(const struct hs_model *m, const struct hs_filter *filter, struct hs_summary *out);
 bool hs_duration(const struct hs_model *m, const struct hs_step *step, uint64_t *seconds);
+/* Adds one step's recorded usage to a summary; used for run and scope totals. */
+void hs_usage_add(struct hs_summary *out, const struct hs_step *step);
 enum hs_metric { HS_QUEUE, HS_ELAPSED, HS_VERIFIED, HS_RECOVERIES, HS_METRICS };
 enum hs_evidence { HS_INELIGIBLE, HS_MISSING, HS_KNOWN };
 struct hs_metric_summary {

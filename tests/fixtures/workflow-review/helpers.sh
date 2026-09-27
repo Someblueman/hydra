@@ -52,7 +52,7 @@ review_exact() (
     IFS="$(printf '\t')" read -r _re_tag _re_source _re_kind _re_reason \
         _re_project _re_host _re_task _re_run _re_step _re_attempt _re_head \
         _re_instance _re_request _re_binding _re_revision _re_identity \
-        _re_freshness _re_route _re_navigable < "$_re_row"
+        _re_freshness _re_route _re_navigable _re_label < "$_re_row"
     [ "$_re_tag" = ITEM ] && [ "$_re_source" = 'workflow records' ]
     set -- "$_re_kind" "$_re_project" "$_re_host" "$_re_task" "$_re_run" \
         "$_re_step" "$_re_attempt" "$_re_head" "$_re_instance" "$_re_request" \

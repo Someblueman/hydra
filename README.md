@@ -24,15 +24,17 @@ use ordinary shell sessions alongside agents.
 
 [Demo transcript and recording instructions](assets/demos/README.md)
 
-**v2.7.0** hardens the 2.6 control centre and adds guided planning: start an agent
-conversation from inside Hydra, have the agent publish a plan proposal for its
-task, then review, validate and approve that exact revision in the workspace.
-Captured actions are bounded and report interrupted outcomes as unknown, init
-preserves real configuration, in-app removal refuses untracked files, and moved
-worktrees resolve consistently. Install the
+**v2.8.0** makes the agentic journey work end to end in the installed app: an
+agent plans with you in Hydra, the plan carries its own worker instructions so
+nothing is committed to your checkout, you approve it with one key, and the run
+reports back into the same conversation. Runs, headless workers, results and
+failed checks are presented directly, with the diff, each requirement's check,
+model and token use. Agent output keeps its colours and Unicode, attached agents
+can always be left, and a head whose terminal is gone can be restarted in place.
+Install the
 [latest release](https://github.com/Someblueman/hydra/releases/latest) and see the
-[changelog](CHANGELOG.md) for features and upgrade notes. Remaining installed-build
-acceptance is tracked in [the roadmap](docs/ROADMAP.md#next-target-installed-build-acceptance)
+[changelog](CHANGELOG.md) for features and upgrade notes. Next work is tracked in
+[the roadmap](docs/ROADMAP.md#next-target-guided-remote-onboarding)
 and [usability testing](docs/USABILITY-TESTING.md).
 
 ## What you can do
@@ -179,7 +181,8 @@ require bound validation, hand off collected Git commits, and support bounded
 candidate repair.
 Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
 Planning does not call a model itself; an ordinary agent authors the proposal
-through the CLI. See the
+through the CLI. Plans carry their own inline agent prompts and proposal assets,
+bound by the acceptance digest, so planning never commits to your checkout. See the
 the [planning examples](examples/planning/README.md).
 
 ## Documentation

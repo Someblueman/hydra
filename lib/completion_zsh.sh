@@ -115,7 +115,7 @@ _hydra() {
                     ;;
                 workflow)
                     if [[ ${words[2]} == plan ]]; then
-                        _arguments '2:planning action:(schema propose proposal validate compile show obligations checks explain compare run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '--branch[Head that owns the proposal]:branch:' '--local-policy[Write the local policy preset]' '*:file:_files'
+                        _arguments '2:planning action:(schema propose proposal validate compile show obligations checks explain compare run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '--branch[Head that owns the proposal]:branch:' '--local-policy[Write the local policy preset]' '--return[Return the proposal with requested changes]:feedback:' '*--asset[Publish a proposal asset NAME=FILE]:asset:' '--assets-dir[Directory holding the plan assets]:directory:_files -/' '*:file:_files'
                         return
                     fi
                     _arguments '1:subcommand:(list show validate dry-run run status cancel resume replay requests decide statistics-data statistics-json statistics-compare plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
@@ -133,7 +133,7 @@ _hydra() {
                     _arguments '--json[Output versioned JSON]'
                     ;;
                 gc)
-                    _arguments '--policy[Cleanup policy]:policy:(orphaned stopped archives)' '--apply[Apply selected policy]' '--dry-run[Report without mutation]' '--include-dirty[Allow explicit dirty removal]' '--older-than[Archive age in days]:days:'
+                    _arguments '--policy[Cleanup policy]:policy:(orphaned stopped archives)' '--apply[Apply selected policy]' '--dry-run[Report without mutation]' '--include-dirty[Allow explicit dirty removal]' '--older-than[Archive age in days]:days:' '--path[One orphaned worktree]:worktree:_files -/'
                     ;;
                 worktree)
                     _arguments '1:subcommand:(doctor)' '2:action:(status lock unlock move repair prune)' '--reason[Lock reason]:text:' '--dry-run[Report without mutation]' '--apply[Apply repair or prune]'
@@ -160,6 +160,8 @@ _hydra() {
                 kill)
                     _arguments \
                         '--all[Kill all hydra sessions]' \
+                        '--dry-run[Preview selected heads without changes]' \
+                        '(-g --group)'{-g,--group}'[Select a group]:group:' \
                         '--protect-untracked[Refuse untracked worktree files]' \
                         '--force[Skip confirmation prompt]' \
                         '1:branch:_hydra_branches'

@@ -24,7 +24,7 @@ static bool task_policy(json_object *binding, json_object *env, json_object *sou
 json_object *plan_task_bindings(json_object *plan, json_object *data, json_object *source, const char *scratch, json_object *errors) {
     json_object *steps = f_field(plan, "steps"), *env = f_field(plan, "envelope"), *out = json_object_new_object();
     int64_t seconds = 0;
-    if (wd_initialize(data, f_string(source, "root"), scratch)) goto bad;
+    if (wd_initialize(data, f_string(source, "root"), NULL, scratch)) goto bad;
     for (size_t i = 0; i < json_object_array_length(steps); i++) {
         json_object *step = json_object_array_get_idx(steps, i);
         const char *id = f_string(step, "id"), *descriptor = f_string(f_field(step, "args"), "task_input");

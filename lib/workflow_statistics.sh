@@ -15,7 +15,7 @@ workflow_statistics_scalar() {
 }
 
 workflow_statistics_data() (
-    printf 'HYDRA_STATISTICS\t3\t%s\n' "$(date +%s)"
+    printf 'HYDRA_STATISTICS\t4\t%s\n' "$(date +%s)"
     _wst_root="$(workflow_runs_dir 2>/dev/null)" || { printf 'X\tProject identity unavailable\n'; printf 'Z\t0\t0\n'; return; }
     _wst_runs=0 _wst_steps=0
     for _wst_dir in "$_wst_root"/run_*; do
@@ -39,7 +39,7 @@ workflow_statistics_data() (
         if [ "$_wst_complete" = partial ] || [ -L "$_wst_dir/steps" ]; then
             printf 'X\tRecorded steps unavailable\n'; continue
         fi
-        _wst_per_run=0
+        _wst_per_run=0 _wst_listed=' '
         while IFS="$(printf '\t')" read -r _wst_tag _wst_step _wst_kind _wst_rest; do
             [ "$_wst_tag" = step ] || continue
             case "$_wst_step" in ''|*[!a-z0-9_-]*|[-_0-9]*) printf 'X\tSkipped invalid step ID\n'; continue ;; esac
@@ -63,11 +63,13 @@ workflow_statistics_data() (
             if [ "$_wst_attempts" != "$(workflow_statistics_scalar "$_wst_sd/attempts")" ]; then
                 _wst_attempts=- _wst_start=- _wst_end=-
             fi
+            _wst_listed="$_wst_listed$_wst_step "
             printf 'S\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$_wst_id" "$_wst_step" \
                 "$_wst_kind" "$_wst_status" "$_wst_attempts" "$_wst_start" "$_wst_end" \
                 "$(workflow_statistics_scalar "$_wst_sd/initial-ready-at")" \
                 "$(workflow_statistics_scalar "$_wst_sd/initial-started-at")"
         done < "$_wst_dir/graph.tsv"
+        workflow_statistics_usage "$_wst_dir" "$_wst_id" "$_wst_listed"
     done
     printf 'Z\t%s\t%s\n' "$_wst_runs" "$_wst_steps"
 )
@@ -131,4 +133,15 @@ EOF
         _wsr_start=- _wsr_end=- _wsr_verified=- _wsr_count=-
         _wsr_unknown=- _wsr_interventions=- _wsr_transfer=-
     fi
+}
+
+# Schema 4 U rows: one exec receipt per listed step (agent, version, model,
+# effort, tokens in/cached/out, cost in micro-USD). The native reader bounds
+# every field; "-" stays unknown. Steps outside the sample are not described.
+workflow_statistics_usage() {
+    _load_lib workflow_task
+    workflow_task_tool usage-tsv "$1" 2>/dev/null | while IFS='	' read -r _wsu_tag _wsu_step _wsu_rest; do
+        [ "$_wsu_tag" = usage ] || continue
+        case "$3" in *" $_wsu_step "*) printf 'U\t%s\t%s\t%s\n' "$2" "$_wsu_step" "$_wsu_rest" ;; esac
+    done
 }

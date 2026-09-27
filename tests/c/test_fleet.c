@@ -81,6 +81,7 @@ int main(void) {
     result = f_serve(obj); assert(!json_object_get_boolean(f_field(result, "ok"))); json_object_put(result); json_object_put(obj);
     test_attention();
     test_attention_unknowns();
+    test_attention_failures();
     test_attention_cap();
     obj = f_parse("{\"protocol\":\"1\",\"action\":\"handshake\"}");
     result = f_serve(obj); assert(!json_object_get_boolean(f_field(result, "ok"))); json_object_put(result); json_object_put(obj);

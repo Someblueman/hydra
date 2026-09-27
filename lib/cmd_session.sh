@@ -100,6 +100,7 @@ cmd_kill() {
     # Parse arguments
     branch=""
     kill_all=false
+    dry_run=false
     force=false
     kill_protect_untracked=false
     kill_group=""
@@ -109,6 +110,10 @@ cmd_kill() {
         case "$1" in
             --all)
                 kill_all=true
+                shift
+                ;;
+            --dry-run)
+                dry_run=true
                 shift
                 ;;
             --force)
@@ -128,15 +133,30 @@ cmd_kill() {
                 shift 2
                 ;;
             -g|--group)
+                if [ -n "$kill_group" ]; then
+                    echo "Error: Cannot specify more than one group" >&2
+                    usage_command kill >&2
+                    return 1
+                fi
+                if [ "$#" -lt 2 ]; then
+                    echo "Error: $1 requires a group name" >&2
+                    usage_command kill >&2
+                    return 1
+                fi
                 shift
+                case "$1" in
+                    ''|-*)
+                        echo "Error: --group requires a group name" >&2
+                        usage_command kill >&2
+                        return 1
+                        ;;
+                esac
                 kill_group="$1"
                 shift
                 ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: hydra kill <branch>" >&2
-                echo "       hydra kill --all [--force]" >&2
-                echo "       hydra kill -g|--group <name> [--force]" >&2
+                usage_command kill >&2
                 return 1
                 ;;
             *)
@@ -144,36 +164,50 @@ cmd_kill() {
                     branch="$1"
                 else
                     echo "Error: Too many arguments" >&2
-                    echo "Usage: hydra kill <branch>" >&2
-                    echo "       hydra kill --all [--force]" >&2
-                    echo "       hydra kill -g|--group <name> [--force]" >&2
+                    usage_command kill >&2
                     return 1
                 fi
                 shift
                 ;;
         esac
     done
-    HYDRA_TEARDOWN_TRANSCRIPT_POLICY="$transcript_policy"
-    export HYDRA_TEARDOWN_TRANSCRIPT_POLICY
-
     # Check mutual exclusivity
     if [ "$kill_all" = true ] && [ -n "$branch" ]; then
         echo "Error: Cannot specify both branch name and --all" >&2
-        echo "Usage: hydra kill <branch>" >&2
-        echo "       hydra kill --all [--force]" >&2
-        echo "       hydra kill -g|--group <name> [--force]" >&2
+        usage_command kill >&2
         return 1
     fi
 
     if [ -n "$kill_group" ] && [ -n "$branch" ]; then
         echo "Error: Cannot specify both branch name and --group" >&2
+        usage_command kill >&2
         return 1
     fi
 
     if [ -n "$kill_group" ] && [ "$kill_all" = true ]; then
         echo "Error: Cannot specify both --all and --group" >&2
+        usage_command kill >&2
         return 1
     fi
+
+    if [ "$dry_run" = true ]; then
+        if [ "$kill_all" = true ]; then
+            mappings="$(state_list_heads)"
+        elif [ -n "$kill_group" ]; then
+            mappings="$(state_list_heads_for_group "$kill_group")"
+        elif [ -n "$branch" ]; then
+            mappings="$(state_list_heads | awk -v branch="$branch" '$1 == branch')"
+        else
+            echo "Error: Branch name required" >&2
+            usage_command kill >&2
+            return 1
+        fi
+        kill_preview_heads "$mappings"
+        return $?
+    fi
+
+    HYDRA_TEARDOWN_TRANSCRIPT_POLICY="$transcript_policy"
+    export HYDRA_TEARDOWN_TRANSCRIPT_POLICY
 
     # If --all flag is set, delegate to kill_all_sessions
     if [ "$kill_all" = true ]; then
@@ -216,9 +250,7 @@ cmd_kill() {
     # Original single branch kill logic
     if [ -z "$branch" ]; then
         echo "Error: Branch name required" >&2
-        echo "Usage: hydra kill <branch>" >&2
-        echo "       hydra kill --all [--force]" >&2
-        echo "       hydra kill -g|--group <name> [--force]" >&2
+        usage_command kill >&2
         return 1
     fi
     

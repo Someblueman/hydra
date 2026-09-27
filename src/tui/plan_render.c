@@ -49,13 +49,23 @@ void native_workspace_evidence_text(struct app *app, struct tv_canvas *c, size_t
 
 void native_workspace_plan_text(struct app *app, struct tv_canvas *c, size_t *scroll) {
     struct native_plan *p=app->plan;
-    const char *text;
+    const char *text, *state, *owner;
     size_t length;
-    static const char *states[]={"DRAFT / unvalidated","VALIDATING","INVALID","READY / awaiting approval","VIEW UNAVAILABLE"};
-    if (!p) { tv_text(c,(struct tv_rect){0,0,c->width,c->height},"P review agent proposal / I import files / V validate",TV_WARNING); return; }
-    dashboard_text(c,0,0,c->width,TV_STRONG,"%s / Revision %u / %s",p->proposal_head[0] ? p->proposal_head : "Imported plan",p->revision,
-        p->state==PLAN_READY && !strcmp(p->digest,p->launched_digest) ?
-        (p->launched_run[0] ? "RUN RECORDED / C monitor" : "LAUNCH REQUESTED / awaiting run receipt") : states[p->state]);
+    static const char *states[]={"DRAFT / unvalidated","VALIDATING","INVALID / F request changes","READY / awaiting approval",
+        "VIEW UNAVAILABLE","RETURNED / changes requested"};
+    static const char empty[]="P reviews the agent's proposal; I imports draft and policy files.\n"
+        "Then V validates it, F requests changes from the agent and E executes the validated revision.";
+    if (!p) {
+        tv_text(c,(struct tv_rect){0,0,c->width,1},"No proposal loaded",TV_WARNING);
+        native_workspace_text(c,empty,sizeof(empty)-1,scroll);
+        return;
+    }
+    state=p->state==PLAN_READY && !strcmp(p->digest,p->launched_digest) ?
+        (p->launched_run[0] ? "RUN RECORDED / C monitor" : "LAUNCH REQUESTED / awaiting run receipt") : states[p->state];
+    owner=p->proposal_head[0] ? p->proposal_head : "Imported plan";
+    /* A narrow review keeps the revision and state; the head names the agent pane. */
+    if ((int)(strlen(owner)+strlen(state)+18)>c->width) dashboard_text(c,0,0,c->width,TV_STRONG,"Revision %u / %s",p->revision,state);
+    else dashboard_text(c,0,0,c->width,TV_STRONG,"%s / Revision %u / %s",owner,p->revision,state);
     text=p->state==PLAN_DRAFT && p->source_bytes ? p->source_bytes : p->text;
     length=p->state==PLAN_DRAFT && p->source_bytes ? p->source_length : p->text_length;
     native_workspace_text(c,text,length,scroll);

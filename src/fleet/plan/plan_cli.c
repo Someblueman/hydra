@@ -5,6 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* A diagnostic with its own recovery (such as invalid_source) knows the next
+ * step better than the generic revise-the-plan advice. */
+static const char *diagnostic_recovery(json_object *errors) {
+    const char *recovery = f_string(json_object_array_get_idx(errors, 0), "recovery");
+    return recovery ? recovery : "revise the indicated fields without weakening the objective or policy, then validate again";
+}
 static json_object *diagnostics(json_object *errors, json_object *plan) {
     json_object *data = json_object_new_object(), *result;
     json_object_object_add(data, "diagnostics", json_object_get(errors));
@@ -24,17 +30,23 @@ static json_object *diagnostics(json_object *errors, json_object *plan) {
     if (json_object_array_length(errors)) {
         json_object *error = json_object_new_object(); f_string_add(error, "code", "invalid_plan");
         f_string_add(error, "message", "plan compilation failed; see data.diagnostics");
-        f_string_add(error, "recovery", "revise the indicated fields without weakening the objective or policy, then validate again");
+        f_string_add(error, "recovery", diagnostic_recovery(errors));
         json_object_object_add(result, "error", error);
     }
     return result;
 }
-static json_object *compile_command(const char *plan_path, const char *policy_path, const char *source, const char *output) {
+/* Assets come from an explicit directory: a proposal's assets/ or an expert's own. */
+static json_object *compile_plan(json_object *plan, json_object *policy, const char *source, const char *assets_dir, json_object *errors) {
+    json_object *assets = plan_assets_load(plan, assets_dir, errors), *compiled = NULL;
+    if (!json_object_array_length(errors)) compiled = plan_compile(plan, policy, source, assets, errors);
+    json_object_put(assets); return compiled;
+}
+static json_object *compile_command(const char *plan_path, const char *policy_path, const char *source, const char *output, const char *assets_dir) {
     json_object *plan, *policy, *compiled = NULL, *errors = json_object_new_array(), *result;
     char digest[65];
     plan = plan_read(plan_path); policy = plan_read(policy_path);
     if (!plan || !policy) plan_error(errors, "$", "invalid_json", "expected bounded UTF-8 JSON objects without duplicate members");
-    else compiled = plan_compile(plan, policy, source, errors);
+    else compiled = compile_plan(plan, policy, source, assets_dir, errors);
     if (!compiled && !json_object_array_length(errors)) plan_error(errors, "$", "compile_failed", "compiler could not resolve the plan");
     if (compiled && output) {
         const char *text; json_object *canonical = plan_canonical(compiled);
@@ -171,6 +183,25 @@ static json_object *heads_command(char **argv, bool *printed) {
     return result;
 }
 
+/* One "step<TAB>role<TAB>kind<TAB>head" line per step: the head is the branch
+ * a spawn step creates or the branch another step runs on, "-" otherwise. */
+static json_object *roles_command(char **argv, bool *printed) {
+    json_object *compiled = plan_read(argv[1]);
+    json_object *steps = f_field(f_field(compiled, "plan"), "steps");
+    if (plan_list(steps, 1, PLAN_STEPS)) {
+        for (size_t i = 0; i < json_object_array_length(steps); i++) {
+            json_object *step = json_object_array_get_idx(steps, i), *args = f_field(step, "args");
+            const char *id = f_string(step, "id"), *role = f_string(step, "role"), *kind = f_string(step, "kind");
+            const char *head = f_string(args, "head") ? f_string(args, "head") : f_string(args, "branch");
+            if (!plan_id(id) || !role || !kind) continue;
+            printf("%s\t%s\t%s\t%s\n", id, role, kind, head && plan_id(head) ? head : "-");
+        }
+        *printed = true;
+    }
+    json_object_put(compiled);
+    return NULL;
+}
+
 static json_object *timeout_command(char **argv, bool *printed) {
     json_object *result = NULL;
     json_object *compiled = NULL;
@@ -270,7 +301,22 @@ static json_object *inspect_command(char **argv, bool *printed) {
 
 static json_object *proposal_command(char **argv, bool *printed) {
     (void)printed;
-    return plan_proposal_copy(argv[1], argv[2]);
+    return plan_proposal_copy(argv[1], argv[2], argv[3]);
+}
+static json_object *proposal_asset_command(char **argv, bool *printed) {
+    (void)printed;
+    return plan_proposal_asset(argv[1], argv[2], argv[3]);
+}
+/* validate <plan> <policy> <source> and compile ... <output>, each with an
+ * optional trailing --assets-dir <directory>. */
+static json_object *compile_dispatch(int argc, char **argv, bool *matched) {
+    bool compile = !strcmp(argv[0], "compile"); int base = compile ? 5 : 4;
+    const char *assets = NULL;
+    *matched = compile || !strcmp(argv[0], "validate");
+    if (!*matched) return NULL;
+    if (argc == base + 2 && !strcmp(argv[base], "--assets-dir")) assets = argv[base + 1];
+    else if (argc != base) return NULL;
+    return compile_command(argv[1], argv[2], argv[3], compile ? argv[4] : NULL, assets);
 }
 
 json_object *plan_cli(int argc, char **argv) {
@@ -280,6 +326,8 @@ json_object *plan_cli(int argc, char **argv) {
         json_object *(*call)(char **argv, bool *printed);
     } commands[] = {
         {"proposal-copy", 3, proposal_command},
+        {"proposal-copy", 4, proposal_command},
+        {"proposal-asset", 4, proposal_asset_command},
         {"preview", 2, preview_command},
         {"tui-data", 2, tui_command},
         {"result", 2, result_command},
@@ -294,6 +342,7 @@ json_object *plan_cli(int argc, char **argv) {
         {"admit", 5, admit_command},
         {"finish", 2, finish_command},
         {"heads", 2, heads_command},
+        {"roles", 2, roles_command},
         {"timeout", 2, timeout_command},
         {"projection", 2, projection_command},
         {"bindings", 4, bindings_command},
@@ -306,10 +355,10 @@ json_object *plan_cli(int argc, char **argv) {
         {"repair-resume", 2, repair_command},
     };
     json_object *result = NULL;
-    bool printed = false;
+    bool printed = false, compile = false;
     if (argc == 1 && !strcmp(argv[0], "schema")) return schema_command();
-    if ((argc == 4 && !strcmp(argv[0], "validate")) || (argc == 5 && !strcmp(argv[0], "compile")))
-        return compile_command(argv[1], argv[2], argv[3], argc == 5 ? argv[4] : NULL);
+    if (argc >= 1) result = compile_dispatch(argc, argv, &compile);
+    if (compile) return result ? result : f_error("workflow plan", "invalid_arguments", "use validate or compile with an optional trailing --assets-dir <directory>");
     for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
         if (argc != commands[i].argc || strcmp(argv[0], commands[i].name)) continue;
         result = commands[i].call(argv, &printed);

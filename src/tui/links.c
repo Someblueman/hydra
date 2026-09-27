@@ -39,12 +39,3 @@ void native_links_accept(struct app *app, FILE *input) {
     if (!ok) { free(next); if (app->links) app->links->stale=true; return; }
     free(app->links); app->links=next;
 }
-
-bool native_links_match(struct app *app, size_t run, size_t head) {
-    size_t i;
-    if (!app->links || !app->workflows || app->fleet) return false;
-    for (i=0;i<app->links->count;i++) if (
-        !strcmp(app->links->refs[i].run,app->workflows->runs[run].id) &&
-        !strcmp(app->links->refs[i].branch,app->model.heads[head].branch)) return true;
-    return false;
-}

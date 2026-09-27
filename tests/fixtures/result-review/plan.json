@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "id": "kill-dry-run",
+  "objective": "Add a dry-run preview to hydra kill",
+  "context": [],
+  "assumptions": [],
+  "questions": [],
+  "envelope": {
+    "hosts": ["local"],
+    "tools": ["sh", "profile:fixture-codex"],
+    "effects": ["worktree", "execute"],
+    "writes": ["kill-dry-worker:*"],
+    "parallelism": 1,
+    "timeout_seconds": 600,
+    "artifact_bytes": 65536,
+    "max_heads": 4,
+    "disk_mb": 1,
+    "retry_budget": 0,
+    "repair_budget": 0
+  },
+  "steps": [
+    {"id": "spawn-worker", "role": "work", "kind": "spawn", "needs": [], "writes": [],
+     "args": {"branch": "kill-dry-worker", "terminal_mode": "headless"}},
+    {"id": "implement", "role": "compose", "kind": "exec", "needs": ["spawn-worker"], "writes": ["kill-dry-worker:*"],
+     "args": {"head": "kill-dry-worker", "profile": "fixture-codex", "prompt": "Implement hydra kill --dry-run.", "result_file": "summary", "timeout": 120}},
+    {"id": "spawn-verifier", "role": "work", "kind": "spawn", "needs": ["implement"], "writes": [],
+     "args": {"branch": "kill-dry-verifier", "terminal_mode": "headless"}},
+    {"id": "verify", "role": "verify", "kind": "exec", "needs": ["implement", "spawn-verifier"], "writes": [],
+     "args": {"head": "kill-dry-verifier", "argv": ["sh", "@input/verify"], "timeout": 60}}
+  ],
+  "deliverables": [
+    {"id": "implementation", "description": "Implementation summary", "step": "implement", "output": "summary", "destination": "run-artifact"}
+  ],
+  "checks": [
+    {"id": "check", "method": "executable", "definition": "Run the kill dry-run checks", "step": "verify", "input": "subject", "report": "check", "deliverable": "implementation"}
+  ],
+  "requirements": [
+    {"id": "preview-targets", "criterion": "Dry run lists targets", "deliverable": "implementation", "check": "check"},
+    {"id": "no-mutation", "criterion": "Dry run changes nothing", "deliverable": "implementation", "check": "check"}
+  ],
+  "data": {
+    "schema_version": 1,
+    "inputs": {
+      "verify": {"asset": "verify", "type": "file", "max_bytes": 4096}
+    },
+    "steps": {
+      "implement": {
+        "outputs": {"summary": {"type": "file", "path": "summary", "max_bytes": 4096}}
+      },
+      "verify": {
+        "inputs": {"subject": {"step": "implement", "output": "summary"}, "verify": {"input": "verify"}},
+        "outputs": {"check": {"type": "object", "path": "check.json", "max_bytes": 2048}}
+      }
+    }
+  }
+}

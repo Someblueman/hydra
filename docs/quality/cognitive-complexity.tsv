@@ -152,7 +152,7 @@ src/tui/observations.c	native_observations_tick	79
 src/tui/plan_launch.c	native_plan_launch_tick	61
 src/tui/plan_model.c	native_plan_destroy	19
 src/tui/plan_projection.c	native_plan_accept	56
-src/tui/plan_projection.c	native_plan_tick	27
+src/tui/plan_projection.c	native_plan_tick	19
 src/tui/plan_render.c	native_workspace_evidence_text	27
 src/tui/plan_render.c	native_workspace_graph	21
 src/tui/plan_render.c	native_workspace_text	51

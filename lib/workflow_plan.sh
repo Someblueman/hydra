@@ -27,10 +27,20 @@ cmd_workflow_plan() (
             ;;
         validate|compile)
             if [ "$_cwp_action" = validate ]; then _cwp_count=3; else _cwp_count=4; fi
-            [ "$#" -eq "$_cwp_count" ] || { cli_error 'workflow plan' invalid_arguments 'use validate <plan.json> <policy.json> or compile <plan.json> <policy.json> <new-output.json>' 'run hydra workflow plan --help'; exit 1; }
-            _cwp_root="$(workflow_repo_root)" || exit 1
-            if [ "$_cwp_action" = validate ]; then workflow_plan_tool validate "$2" "$3" "$_cwp_root"
-            else workflow_plan_tool compile "$2" "$3" "$_cwp_root" "$4"; fi
+            _cwp_usage='use validate <plan.json> <policy.json> or compile <plan.json> <policy.json> <new-output.json>, each with an optional --assets-dir <dir>'
+            [ "$#" -ge "$_cwp_count" ] || { cli_error 'workflow plan' invalid_arguments "$_cwp_usage" 'run hydra workflow plan --help'; exit 1; }
+            _cwp_plan="$2" _cwp_policy="$3" _cwp_output="${4:-}"
+            shift "$_cwp_count"
+            # Assets a plan names by data.inputs.<name>.asset come from this
+            # directory, never from the source checkout.
+            if [ "$#" -eq 2 ] && [ "$1" = --assets-dir ]; then set -- --assets-dir "$2"
+            elif [ "$#" -ne 0 ]; then cli_error 'workflow plan' invalid_arguments "$_cwp_usage" 'run hydra workflow plan --help'; exit 1; fi
+            _cwp_root="$(workflow_repo_root)" || {
+                cli_error 'workflow plan' invalid_source "source $(pwd) is not a Git repository" "run validation from the project's main checkout"
+                exit 1
+            }
+            if [ "$_cwp_action" = validate ]; then workflow_plan_tool validate "$_cwp_plan" "$_cwp_policy" "$_cwp_root" "$@"
+            else workflow_plan_tool compile "$_cwp_plan" "$_cwp_policy" "$_cwp_root" "$_cwp_output" "$@"; fi
             ;;
         show)
             if [ "$#" -eq 2 ]; then workflow_plan_tool preview "$2"
@@ -90,10 +100,10 @@ cmd_workflow_plan() (
         ''|-h|--help)
             printf '%s\n' \
                 'Usage: hydra workflow plan schema' \
-                '       hydra workflow plan propose <draft.json> [--branch <head>]' \
-                '       hydra workflow plan proposal <head> [--local-policy]'  \
-                '       hydra workflow plan validate <plan.json> <policy.json>' \
-                '       hydra workflow plan compile <plan.json> <policy.json> <new-output.json>' \
+                '       hydra workflow plan propose <draft.json> [--branch <head>] [--asset NAME=FILE]...' \
+                '       hydra workflow plan proposal <head> [--local-policy | --return <feedback>]' \
+                '       hydra workflow plan validate <plan.json> <policy.json> [--assets-dir <dir>]' \
+                '       hydra workflow plan compile <plan.json> <policy.json> <new-output.json> [--assets-dir <dir>]' \
                 '       hydra workflow plan show <compiled.json> [--json]' \
                 '       hydra workflow plan obligations <compiled.json> [--json]' \
                 '       hydra workflow plan explain <compiled.json> [--estimates <estimates.json>]' \
@@ -103,6 +113,8 @@ cmd_workflow_plan() (
                 '       hydra workflow plan check-definition <compiled.json> <check-id>' \
                 '       hydra workflow plan check-recipe <compiled.json> <check-id>' \
                 'Compile from the source repository. Keep compiled output outside it.' \
+                'Plans carry inline agent prompts and --asset files in the compiled artifact;' \
+                'nothing needs to be committed to the source to plan.' \
                 'Execution uses the existing workflow status, cancel and resume commands.'
             ;;
         *) cli_error 'workflow plan' invalid_arguments 'unknown planning command' 'run hydra workflow plan --help'; exit 1 ;;
@@ -113,6 +125,13 @@ workflow_plan_initialize() {
     [ -n "${_workflow_plan_stage:-}" ] || return 0
     cp "$_workflow_plan_stage/compiled.json" "$1/compiled.json" || return 1
     workflow_atomic_scalar "$1/plan-accepted" "$_workflow_plan_accepted" || return 1
+    # The launch owner's planning association travels with the run it creates.
+    for _wpi_name in planning-head planning-instance planning-branch; do
+        [ ! -f "${_workflow_plan_launch:-}/$_wpi_name" ] || cp "$_workflow_plan_launch/$_wpi_name" "$1/$_wpi_name" || return 1
+    done
+    # Step roles (work, compose, verify) and heads, for display and for
+    # retiring verifier heads when the run finishes.
+    workflow_plan_tool roles "$1/compiled.json" > "$1/plan-roles.tsv" || return 1
     _wpi_timeout="$(workflow_plan_tool timeout "$1/compiled.json")" || return 1
     workflow_atomic_scalar "$1/plan-deadline" "$(($(date +%s) + _wpi_timeout))" || return 1
     workflow_plan_bindings_match "$1"

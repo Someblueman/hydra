@@ -39,6 +39,12 @@ workflow_event() {
         "$(json_escape "$_we_type")" "$(json_escape "$_we_detail")" >> "$_we_file"
     _we_status=$?
     rm -rf "$_we_lock"
+    # Runs launched from an agent proposal notify that planning conversation.
+    if [ "$_we_status" -eq 0 ] && [ -f "$_we_dir/planning-head" ]; then
+        if { command -v workflow_plan_notify >/dev/null 2>&1 || _load_lib workflow_plan_notify; }; then
+            workflow_plan_notify "$_we_dir" "$_we_step" "$_we_type" || true
+        fi
+    fi
     return "$_we_status"
 }
 
@@ -141,7 +147,18 @@ workflow_step_command() {
                 _wsc_oldflags="$-"
                 IFS=,
                 set -f
-                for _wsc_arg in $_wsc_argv; do set -- "$@" "$_wsc_arg"; done
+                for _wsc_arg in $_wsc_argv; do
+                    # A compiled plan passes one of this step's materialized
+                    # inputs (such as a proposal asset) as @input/<name>.
+                    case "$_wsc_arg" in
+                        @input/?*)
+                            if [ -f "$_wsc_dir/compiled.json" ] && [ -n "${HYDRA_WORKFLOW_INPUTS_DIR:-}" ]; then
+                                _wsc_arg="$HYDRA_WORKFLOW_INPUTS_DIR/${_wsc_arg#@input/}"
+                            fi
+                            ;;
+                    esac
+                    set -- "$@" "$_wsc_arg"
+                done
                 IFS="$_wsc_oldifs"
                 case "$_wsc_oldflags" in *f*) ;; *) set +f ;; esac
             else
@@ -492,6 +509,13 @@ workflow_drive() {
             esac
             workflow_atomic_scalar "$_wd_dir/state" "$_wd_final"
             workflow_event "$_wd_dir" "" "run.$_wd_final"
+            # The result is published first; retiring verifier heads is
+            # reported in the run record and never changes it.
+            case "$_wd_final" in succeeded|failed|cancelled)
+                if { command -v workflow_retire_verifiers >/dev/null 2>&1 || _load_lib workflow_retire; }; then
+                    workflow_retire_verifiers "$_wd_dir" || true
+                fi ;;
+            esac
             trap - HUP INT TERM
             rm -rf "$_wd_drive_lock"
             [ "$_wd_final" = succeeded ]

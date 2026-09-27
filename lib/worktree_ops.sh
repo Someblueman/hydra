@@ -17,49 +17,199 @@ worktree_du_rows() {
     done
 }
 
-worktree_path_is_hydra_head() {
-    _wpih_path="$1"
-    parallel_project_load || return 1
-    for _wpih_head in "$PARALLEL_PROJECT_DIR"/heads/head_*; do
-        [ -d "$_wpih_head" ] || continue
-        [ "$(sed -n '1p' "$_wpih_head/worktree" 2>/dev/null || true)" != "$_wpih_path" ] || return 0
-    done
-    return 1
+# Physical form of an existing directory, or the path unchanged.
+worktree_physical_path() {
+    (CDPATH='' cd -- "$1" 2>/dev/null && pwd -P) || printf '%s\n' "$1"
 }
 
+# Recorded head worktree paths, as stored and in physical form, one per line.
+worktree_recorded_head_paths() {
+    for _wrhp_head in "$PARALLEL_PROJECT_DIR"/heads/head_*; do
+        _wrhp_path="$(sed -n '1p' "$_wrhp_head/worktree" 2>/dev/null || true)"
+        [ -n "$_wrhp_path" ] || continue
+        printf '%s\n' "$_wrhp_path"
+        [ ! -d "$_wrhp_path" ] || worktree_physical_path "$_wrhp_path"
+    done
+}
+
+# The single orphaned-worktree authority for gc, doctor, cleanup and the TUI.
+# A worktree is an orphan only when Hydra provably created it: an
+# identity-scoped head_<id> directory directly under this project's recorded
+# worktree root whose head record is gone and that no head record refers to.
+# Sibling worktrees, legacy hydra-<branch> names and other paths under the root
+# (such as integration worktrees) are never candidates. Read-only and lock-free.
+# Output: <clean|dirty>\t<branch, or - when detached>\t<path>
+worktree_orphan_rows() {
+    parallel_project_load || return 1
+    _wor_root="$(project_worktree_root "$PARALLEL_PROJECT_ID")" || return 1
+    _wor_repo="$(get_repo_root)" || return 1
+    _wor_list="$(git -C "$_wor_repo" worktree list --porcelain)" || return 1
+    _wor_known="$(worktree_recorded_head_paths)"
+    _wor_tab="$(printf '\t')"
+    while IFS="$_wor_tab" read -r _wor_branch _wor_path; do
+        case "$_wor_path" in "$_wor_root"/head_*) ;; *) continue ;; esac
+        _wor_name="${_wor_path#"$_wor_root"/}"
+        if ! hydra_valid_id "$_wor_name" || [ ! -d "$_wor_path" ]; then continue; fi
+        [ ! -d "$PARALLEL_PROJECT_DIR/heads/$_wor_name" ] || continue
+        printf '%s\n' "$_wor_known" | grep -Fqx -e "$_wor_path" -e "$(worktree_physical_path "$_wor_path")" && continue
+        # A status failure counts as dirty so unreadable work is never discarded.
+        if _wor_dirty="$(git -C "$_wor_path" status --porcelain=v1 2>/dev/null)" && [ -z "$_wor_dirty" ]; then
+            printf 'clean\t%s\t%s\n' "$_wor_branch" "$_wor_path"
+        else
+            printf 'dirty\t%s\t%s\n' "$_wor_branch" "$_wor_path"
+        fi
+    done <<EOF
+$(printf '%s\n' "$_wor_list" | awk '
+    function flush() { if (path != "") printf "%s\t%s\n", branch, path }
+    /^worktree / { flush(); path = substr($0, 10); branch = "-"; next }
+    /^branch / { branch = substr($0, 8); sub(/^refs\/heads\//, "", branch); next }
+    END { flush() }')
+EOF
+}
+
+# Size of a directory in KiB, or "unknown" when du fails or runs past the
+# budget in whole seconds, so a huge tree cannot stall doctor, du or the TUI.
+# Usage: worktree_size_kib <path> [seconds, default HYDRA_WORKTREE_SIZE_TIMEOUT or 5]
+worktree_size_kib() {
+    _wsk_limit="${2:-${HYDRA_WORKTREE_SIZE_TIMEOUT:-5}}"
+    case "$_wsk_limit" in ''|*[!0-9]*) _wsk_limit=5 ;; esac
+    _wsk_out="$(mktemp "${TMPDIR:-/tmp}/hydra-size.XXXXXX")" || { printf 'unknown\n'; return 0; }
+    du -sk "$1" > "$_wsk_out" 2>/dev/null &
+    _wsk_pid=$!
+    _wsk_ticks=$((_wsk_limit * 10))
+    while [ "$_wsk_ticks" -gt 0 ] && kill -0 "$_wsk_pid" 2>/dev/null; do
+        sleep 0.1
+        _wsk_ticks=$((_wsk_ticks - 1))
+    done
+    _wsk_kib=""
+    if kill -0 "$_wsk_pid" 2>/dev/null; then
+        kill "$_wsk_pid" 2>/dev/null || true
+        wait "$_wsk_pid" 2>/dev/null || true
+    elif wait "$_wsk_pid"; then
+        _wsk_kib="$(awk 'NR == 1 { print $1 }' "$_wsk_out")"
+    fi
+    rm -f "$_wsk_out"
+    case "$_wsk_kib" in ''|*[!0-9]*) printf 'unknown\n' ;; *) printf '%s\n' "$_wsk_kib" ;; esac
+}
+
+# Human-readable size for KiB, or "size unknown".
+worktree_format_kib() {
+    case "${1:-}" in ''|*[!0-9]*) printf 'size unknown\n'; return 0 ;; esac
+    awk -v kib="$1" 'BEGIN {
+        split("KiB MiB GiB TiB", unit, " "); i = 1; v = kib
+        while (v >= 1024 && i < 4) { v /= 1024; i++ }
+        if (i == 1) printf "%d %s\n", v, unit[i]; else printf "%.1f %s\n", v, unit[i]
+    }'
+}
+
+# Cached leftover-worktree size for frequently refreshed views. Leftover
+# worktrees are idle, so a measured size is reused for five minutes and an
+# unknown one for a minute. The cache is disposable derived data.
+# Usage: worktree_cached_size_kib <path> <seconds> <measure 1|0>
+# Returns 0 for a cache hit, 2 after a fresh measurement, 1 when not measured.
+worktree_cached_size_kib() {
+    _wcsk_file="$HYDRA_HOME/cache/worktree-size/$(basename "$1")"
+    _wcsk_now="$(date +%s)"
+    if [ -f "$_wcsk_file" ]; then
+        _wcsk_line="$(sed -n '1p' "$_wcsk_file" 2>/dev/null || true)"
+        _wcsk_at="${_wcsk_line%%	*}"
+        _wcsk_rest="${_wcsk_line#*	}"
+        _wcsk_kib="${_wcsk_rest%%	*}"
+        _wcsk_ttl=300
+        [ "$_wcsk_kib" != unknown ] || _wcsk_ttl=60
+        case "$_wcsk_at" in
+            ''|*[!0-9]*) ;;
+            *) if [ "${_wcsk_rest#*	}" = "$1" ] && [ $((_wcsk_now - _wcsk_at)) -lt "$_wcsk_ttl" ]; then
+                   printf '%s\n' "$_wcsk_kib"
+                   return 0
+               fi ;;
+        esac
+    fi
+    if [ "$3" -ne 1 ]; then
+        printf 'unknown\n'
+        return 1
+    fi
+    _wcsk_kib="$(worktree_size_kib "$1" "$2")"
+    if mkdir -p "$(dirname "$_wcsk_file")" 2>/dev/null &&
+        _wcsk_tmp="$(mktemp "$_wcsk_file.XXXXXX" 2>/dev/null)"; then
+        if ! { printf '%s\t%s\t%s\n' "$_wcsk_now" "$_wcsk_kib" "$1" > "$_wcsk_tmp" && mv -f "$_wcsk_tmp" "$_wcsk_file"; }; then
+            rm -f "$_wcsk_tmp"
+        fi
+    fi
+    printf '%s\n' "$_wcsk_kib"
+    return 2
+}
+
+# Leftover worktrees with a bounded size measurement.
+# Usage: worktree_orphan_sized_rows [fresh|cached]
+# fresh measures every row (doctor, du); cached reuses recent sizes and measures
+# at most three uncached rows per call (the TUI snapshot refreshes every few seconds).
+# Output: <clean|dirty>\t<branch>\t<kib|unknown>\t<path>
+worktree_orphan_sized_rows() {
+    _wosr_mode="${1:-fresh}"
+    _wosr_rows="$(worktree_orphan_rows)" || return 1
+    _wosr_tab="$(printf '\t')"
+    _wosr_budget=3
+    while IFS="$_wosr_tab" read -r _wosr_state _wosr_branch _wosr_path; do
+        [ -n "$_wosr_path" ] || continue
+        if [ "$_wosr_mode" = fresh ]; then
+            _wosr_kib="$(worktree_size_kib "$_wosr_path")"
+        else
+            _wosr_measure=0
+            [ "$_wosr_budget" -le 0 ] || _wosr_measure=1
+            _wosr_kib="$(worktree_cached_size_kib "$_wosr_path" 1 "$_wosr_measure")"
+            [ $? -ne 2 ] || _wosr_budget=$((_wosr_budget - 1))
+        fi
+        printf '%s\t%s\t%s\t%s\n' "$_wosr_state" "$_wosr_branch" "$_wosr_kib" "$_wosr_path"
+    done <<EOF
+$_wosr_rows
+EOF
+}
+
+# Remove (or with apply=0 preview) orphaned worktrees. Dirty worktrees need
+# include_dirty=1. An optional path limits the run to that one worktree.
 worktree_gc_orphaned_rows() {
     _wgor_apply="$1"
     _wgor_include_dirty="$2"
+    _wgor_only="${3:-}"
     parallel_project_load || return 1
-    _wgor_root="$(project_worktree_root "$PARALLEL_PROJECT_ID")" || return 1
     _wgor_repo="$(get_repo_root)" || return 1
+    [ -z "$_wgor_only" ] || _wgor_only="$(worktree_physical_path "$_wgor_only")"
     _wgor_lock="worktree_project_${PARALLEL_PROJECT_ID}"
     acquire_lock "$_wgor_lock" "orphaned worktree GC" || return 1
-    git -C "$_wgor_repo" worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r _wgor_path; do
-        [ "$_wgor_path" != "$_wgor_repo" ] || continue
-        case "$_wgor_path" in "$_wgor_root"/*) ;; *) continue ;; esac
-        worktree_path_is_hydra_head "$_wgor_path" && continue
-        _wgor_dirty="$(git -C "$_wgor_path" status --porcelain=v1 2>/dev/null || true)"
-        if [ -n "$_wgor_dirty" ] && [ "$_wgor_include_dirty" -eq 0 ]; then
-            printf 'preserved-dirty\t%s\n' "$_wgor_path"
+    if ! _wgor_rows="$(worktree_orphan_rows)"; then
+        release_lock "$_wgor_lock"
+        return 1
+    fi
+    _wgor_tab="$(printf '\t')"
+    _wgor_matched=0
+    _wgor_status=0
+    while IFS="$_wgor_tab" read -r _wgor_state _wgor_branch _wgor_path; do
+        [ -n "$_wgor_path" ] || continue
+        if [ -n "$_wgor_only" ] && [ "$(worktree_physical_path "$_wgor_path")" != "$_wgor_only" ]; then
             continue
         fi
-        if [ "$_wgor_apply" -eq 0 ]; then
+        _wgor_matched=1
+        if [ "$_wgor_state" != clean ] && [ "$_wgor_include_dirty" -eq 0 ]; then
+            printf 'preserved-dirty\t%s\n' "$_wgor_path"
+        elif [ "$_wgor_apply" -eq 0 ]; then
             printf 'would-remove-orphan\t%s\n' "$_wgor_path"
-        elif [ -n "$_wgor_dirty" ]; then
-            if git -C "$_wgor_repo" worktree remove --force "$_wgor_path"; then
-                printf 'removed-orphan-dirty\t%s\n' "$_wgor_path"
-            else
-                printf 'failed\t%s\n' "$_wgor_path"
-            fi
-        elif git -C "$_wgor_repo" worktree remove "$_wgor_path"; then
+        elif [ "$_wgor_state" != clean ] && git -C "$_wgor_repo" worktree remove --force "$_wgor_path"; then
+            printf 'removed-orphan-dirty\t%s\n' "$_wgor_path"
+        elif [ "$_wgor_state" = clean ] && git -C "$_wgor_repo" worktree remove "$_wgor_path"; then
             printf 'removed-orphan\t%s\n' "$_wgor_path"
         else
             printf 'failed\t%s\n' "$_wgor_path"
+            _wgor_status=1
         fi
-    done
-    _wgor_status=$?
+    done <<EOF
+$_wgor_rows
+EOF
     release_lock "$_wgor_lock"
+    if [ -n "$_wgor_only" ] && [ "$_wgor_matched" -eq 0 ]; then
+        cli_error gc not_found "'$3' is not a leftover Hydra worktree" "run hydra gc --policy orphaned --dry-run to list them"
+        return 1
+    fi
     return "$_wgor_status"
 }
 

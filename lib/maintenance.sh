@@ -3,7 +3,7 @@
 # POSIX-compliant shell script
 #
 # Shared logic for doctor and cleanup commands.
-# Dependencies: state.sh, tmux.sh, paths.sh, locks.sh
+# Dependencies: state.sh, tmux.sh, paths.sh, locks.sh, worktree_ops.sh (orphans)
 
 # Count active head records whose tmux session no longer exists
 # Usage: count_dead_sessions
@@ -25,67 +25,63 @@ EOF
     printf '%s' "$_dead"
 }
 
-# Check if a branch has an active head record.
-branch_has_active_head() {
-    _branch="$1"
-    if [ -z "$_branch" ]; then
-        return 1
-    fi
-    while IFS=' ' read -r _mapped_branch _rest; do
-        if [ "$_mapped_branch" = "$_branch" ]; then
-            return 0
-        fi
-    done <<EOF
-$(state_list_heads)
-EOF
-    return 1
+# Leftover worktrees from removed tasks, from the same authority as
+# 'hydra gc --policy orphaned' (worktree_orphan_rows in worktree_ops.sh), with a
+# bounded size. A hydra-<branch> sibling directory name is not evidence.
+# Usage: list_orphan_worktree_rows [fresh|cached]
+# Output: <clean|dirty>\t<branch>\t<kib|unknown>\t<path>; empty outside a project.
+list_orphan_worktree_rows() {
+    worktree_orphan_sized_rows "${1:-fresh}" 2>/dev/null || true
 }
 
-# Count hydra worktrees without a state mapping
-# Usage: count_orphan_worktrees [repo_root]
-# Returns: Count on stdout
-count_orphan_worktrees() {
-    _repo_root="${1:-}"
-    if [ -z "$_repo_root" ]; then
-        _repo_root="$(get_repo_root 2>/dev/null || true)"
+# Plain-language description of one list_orphan_worktree_rows row.
+# Usage: describe_orphan_worktree <clean|dirty> <branch> <kib|unknown> <path>
+describe_orphan_worktree() {
+    _dow_branch="$2"
+    [ "$_dow_branch" != - ] || _dow_branch="detached HEAD"
+    if [ "$1" = clean ]; then
+        printf '%s (%s); %s; no uncommitted changes\n' "$_dow_branch" "$4" "$(worktree_format_kib "$3")"
+    else
+        printf '%s (%s); %s; has uncommitted changes\n' "$_dow_branch" "$4" "$(worktree_format_kib "$3")"
     fi
-    if [ -z "$_repo_root" ]; then
-        printf '%s' "0"
-        return 0
-    fi
-
-    _orphan=0
-    while IFS='	' read -r _branch _path; do
-        [ -z "$_branch" ] && continue
-        if ! branch_has_active_head "$_branch"; then
-            _orphan=$((_orphan + 1))
-        fi
-    done <<EOF
-$(list_hydra_worktrees "$_repo_root")
-EOF
-    printf '%s' "$_orphan"
 }
 
-# List paths of orphaned hydra worktrees (no state mapping)
-# Usage: list_orphan_worktree_paths [repo_root]
-# Returns: One path per line on stdout
-list_orphan_worktree_paths() {
-    _repo_root="${1:-}"
-    if [ -z "$_repo_root" ]; then
-        _repo_root="$(get_repo_root 2>/dev/null || true)"
-    fi
-    if [ -z "$_repo_root" ]; then
-        return 0
-    fi
-
-    while IFS='	' read -r _branch _path; do
-        [ -z "$_branch" ] && continue
-        if ! branch_has_active_head "$_branch"; then
-            printf '%s\n' "$_path"
-        fi
+# Print each orphan row as a described line after a prefix.
+# Usage: print_orphan_worktree_rows <rows> <prefix>
+print_orphan_worktree_rows() {
+    _powr_tab="$(printf '\t')"
+    while IFS="$_powr_tab" read -r _powr_state _powr_branch _powr_kib _powr_path; do
+        [ -n "$_powr_path" ] || continue
+        printf '%s%s\n' "$2" "$(describe_orphan_worktree "$_powr_state" "$_powr_branch" "$_powr_kib" "$_powr_path")"
     done <<EOF
-$(list_hydra_worktrees "$_repo_root")
+$1
 EOF
+}
+
+# One-line count, reclaimable size and change state for orphan rows, e.g.
+# "2 leftover worktrees from removed tasks, 1.3 GiB; no uncommitted changes in 2".
+# Unmeasured sizes are reported as unknown, never as zero.
+# Usage: summarize_orphan_worktrees <rows>
+summarize_orphan_worktrees() {
+    printf '%s\n' "$1" | awk -F '\t' '
+        NF < 4 { next }
+        { count++; if ($1 == "clean") clean++; else dirty++ }
+        $3 ~ /^[0-9]+$/ { kib += $3; known++; next }
+        { unknown++ }
+        END {
+            printf "%d leftover worktree%s from removed tasks, ", count, (count == 1 ? "" : "s")
+            if (!known) printf "size unknown"
+            else {
+                split("KiB MiB GiB TiB", unit, " "); i = 1; v = kib
+                while (v >= 1024 && i < 4) { v /= 1024; i++ }
+                if (unknown) printf "at least "
+                if (i == 1) printf "%d %s", v, unit[i]; else printf "%.1f %s", v, unit[i]
+                if (unknown) printf " (%d size%s unknown)", unknown, (unknown == 1 ? "" : "s")
+            }
+            if (clean) printf "; no uncommitted changes in %d", clean
+            if (dirty) printf "%s uncommitted changes in %d", (clean ? "," : ";"), dirty
+            printf "\n"
+        }'
 }
 
 # Count lock directories with dead same-host owner evidence.

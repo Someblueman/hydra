@@ -9,6 +9,7 @@ struct f_capture;
 #define AGENT_PROMPT_LIMIT 65536U
 #define AGENT_EVENT_LIMIT 32768U
 #define AGENT_OUTPUT_LIMIT (1024U * 1024U)
+#define AGENT_DIAGNOSTIC_LIMIT 4096U
 /* All returned JSON objects are owned by the caller. */
 json_object *agent_profile(const char *name);
 json_object *agent_profile_validate(json_object *input);
@@ -32,11 +33,21 @@ struct agent_stream {
     const char *adapter, *branch, *instance, *current_path;
     char session[129];
     char *answer;
-    size_t consumed, received;
+    size_t consumed, received, line_start;
     bool malformed, stale, failed, permission, session_seen, observation_failed;
     json_object *events, *usage;
+    /* A model or effort the provider itself reported in its event stream. */
+    char observed_model[97], observed_effort[33];
 };
 void agent_observe(void *context, const char *text, size_t size);
 bool agent_stop(void *context);
+/* Caller-owned provider configuration record, or NULL; see agent_config.c. */
+json_object *agent_configuration(json_object *profile, json_object *args);
+/* Read-only views: one receipt summary row, and readable provider events. */
+json_object *agent_view_cli(int argc, char **argv);
 int agent_retain(const char *head, const char *run, const struct f_capture *capture);
+/* Bounded UTF-8-safe excerpt {text,bytes,truncated} of size bytes, or NULL when empty. */
+json_object *agent_excerpt(const char *text, size_t size);
+/* Adds "diagnostic" to a failed receipt only: undecoded stdout and stderr excerpts. */
+void agent_diagnose(json_object *record, const struct agent_stream *stream, const struct f_capture *cap, int status);
 #endif

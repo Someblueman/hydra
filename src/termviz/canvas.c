@@ -49,45 +49,79 @@ static void erase_partner(struct tv_canvas *c, int x, int y) {
     if (cell->width == 2 && x + 1 < c->width) cell[1] = blank(cell->style);
 }
 
-void tv_put(struct tv_canvas *c, int x, int y, uint32_t glyph, enum tv_style style) {
+/* The base cell a joining scalar at column x would attach to, if any. */
+static struct tv_cell *join_base(struct tv_canvas *c, struct tv_rect r, int x) {
     struct tv_cell *cell;
-    int width = tv_codepoint_width(glyph);
+    if (x <= r.x || x - 1 >= c->width) return NULL;
+    cell = &c->cells[(size_t)r.y * (size_t)c->stride + (size_t)x - 1];
+    if (cell->width) return cell;
+    return x - 2 >= r.x ? cell - 1 : NULL;
+}
+
+/* ATTACH/WIDEN: ASCII mode drops joined scalars; WIDEN takes the next column. */
+static int join_scalar(struct tv_canvas *c, struct tv_rect r, int x, struct tv_cell *base, uint32_t cp, bool widen) {
+    struct tv_cell *next;
+    if (!c->unicode) return 0;
+    if (base->combining_count < TV_COMBINING_MAX) base->combining[base->combining_count++] = cp;
+    if (!widen || x >= c->width || x >= r.x + r.width) return 0;
+    erase_partner(c, x, r.y);
+    next = &c->cells[(size_t)r.y * (size_t)c->stride + (size_t)x];
+    *next = *base; next->width = 0; next->glyph = ' '; next->combining_count = 0;
+    base->width = 2;
+    return 1;
+}
+
+int tv_put_scalar(struct tv_canvas *c, struct tv_rect r, int x, uint32_t cp, enum tv_style style) {
+    struct tv_cell *cell, *base;
+    enum tv_join join;
+    int width;
+    if (r.y < 0 || r.y >= c->height || x < r.x || x < 0) return -1;
+    if (cp == 0xadU) cp = '-'; /* tmux and wcwidth show a soft hyphen in one column */
+    base = join_base(c, r, x);
+    join = tv_cell_join(base, cp);
+    if (join == TV_JOIN_DROP) return 0;
+    if (join != TV_JOIN_NONE) return join_scalar(c, r, x, base, cp, join == TV_JOIN_WIDEN);
+    width = tv_codepoint_width(cp);
+    if (width < 0) { cp = '?'; width = 1; }
+    if ((int64_t)x + width > (int64_t)r.x + r.width || x + width > c->width) return -1;
+    erase_partner(c, x, r.y);
+    if (width == 2) erase_partner(c, x + 1, r.y);
+    cell = &c->cells[(size_t)r.y * (size_t)c->stride + (size_t)x];
+    *cell = blank(style); cell->glyph = cp; cell->width = (unsigned char)width;
+    if (!c->unicode && cp > 126) {
+        /* The approximation keeps a wide scalar's columns so alignment holds. */
+        cell->glyph = tv_ascii_fallback(cp); cell->width = 1;
+        if (width == 2) cell[1] = blank(style);
+    } else if (width == 2) { cell[1] = blank(style); cell[1].width = 0; }
+    return width;
+}
+
+void tv_put(struct tv_canvas *c, int x, int y, uint32_t glyph, enum tv_style style) {
+    struct tv_rect row = {0, y, c->width, 1};
     if (x < 0 || y < 0 || x > c->width || y >= c->height) return;
-    if (!c->unicode && glyph > 126) { glyph = '?'; width = 1; }
-    if (width < 0) { glyph = '?'; width = 1; }
-    if (width == 0) {
-        if (x < 1) return;
-        cell = &c->cells[(size_t)y * (size_t)c->stride + (size_t)x - 1];
-        if (!cell->width && x > 1) cell--;
-        if (cell->combining_count < TV_COMBINING_MAX)
-            cell->combining[cell->combining_count++] = glyph;
-        return;
-    }
-    if (x == c->width) return;
-    if (width == 2 && x + 1 >= c->width) { glyph = ' '; width = 1; }
-    erase_partner(c, x, y);
-    if (width == 2) erase_partner(c, x + 1, y);
-    cell = &c->cells[(size_t)y * (size_t)c->stride + (size_t)x];
-    *cell = blank(style); cell->glyph = glyph; cell->width = (unsigned char)width;
-    if (width == 2) { cell[1] = blank(style); cell[1].width = 0; }
+    /* A wide scalar at the last column is replaced by a space. */
+    if (tv_put_scalar(c, row, x, glyph, style) < 0 && x < c->width) (void)tv_put_scalar(c, row, x, ' ', style);
 }
 
 void tv_text(struct tv_canvas *c, struct tv_rect r, const char *text, enum tv_style style) {
     int64_t x = r.x, end = (int64_t)r.x + r.width;
+    struct tv_rect area;
     size_t remaining;
-    if (!text || r.width <= 0 || r.height <= 0 || r.y < 0 || r.y >= c->height) return;
+    if (!text || r.width <= 0 || r.height <= 0 || r.y < 0 || r.y >= c->height || end <= 0) return;
+    area.x = r.x < 0 ? 0 : r.x; area.y = r.y;
+    area.width = (int)((end < c->width ? end : c->width) - area.x);
+    if (area.width <= 0) return;
     remaining = strlen(text);
-    while (remaining && x <= end && x <= c->width) {
+    while (remaining && x <= (int64_t)area.x + area.width) {
         uint32_t cp;
         size_t used = tv_utf8_decode(text, remaining, &cp);
-        int width;
+        int advance;
         if (!used) { used = 1; cp = '?'; }
-        width = tv_codepoint_width(cp);
-        if (width < 0 || (!c->unicode && cp > 126)) { cp = '?'; width = 1; }
-        if (width && (x == end || x == c->width)) break;
-        if (x >= 0 && x + width <= end && !(width == 0 && x == r.x))
-            tv_put(c, (int)x, r.y, cp, style);
-        x += width; text += used; remaining -= used;
+        text += used; remaining -= used;
+        if (x < 0) { int width = tv_codepoint_width(cp); x += width < 0 ? 1 : width; continue; }
+        advance = tv_put_scalar(c, area, (int)x, cp, style);
+        if (advance < 0) break;
+        x += advance;
     }
 }
 

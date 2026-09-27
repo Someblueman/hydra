@@ -29,7 +29,10 @@ fleet additionally needs JSON-C development files and pkg-config at build time.
 - `hydra spawn` creates a real tmux session and an identity-scoped git worktree.
   Use `hydra path <branch>` to locate it.
   To avoid creating worktrees/branches inside this repo, run spawn/kill demos inside a
-  throwaway `git init` repo in a temp dir.
+  throwaway `git init` repo in a temp dir. A private `HYDRA_HOME` does not isolate
+  worktrees: the worktree root is recorded in the repository's git common dir (shared
+  by every worktree of this checkout), so a spawn from here lands beside the real repo
+  and is orphaned when that `HYDRA_HOME` is deleted.
 - For non-interactive automation set `HYDRA_NONINTERACTIVE=1` (skips confirm prompts)
   and `HYDRA_SKIP_AI=1` (does not try to launch an AI CLI on spawn). Runtime state
   lives in `$HYDRA_HOME/state/v2` (default `~/.hydra/state/v2`); see `docs/CONTRACTS.md`.

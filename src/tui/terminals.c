@@ -15,26 +15,79 @@ struct native_terminal *native_terminal_selected(struct app *app) {
     return &app->terminals->slots[app->terminals->selected];
 }
 
-const char *native_terminal_attention(struct app *app, const struct native_terminal *t) {
+const char *native_agent_name(const struct head *h) {
+    return !h->profile[0] || !strcmp(h->profile, "none") || !strcmp(h->profile, "-") ? "shell" : h->profile;
+}
+
+static bool terminal_is_head(const struct app *app, const struct head *h, const struct native_terminal *t) {
+    return !strcmp(h->head_id,t->head) && !strcmp(h->instance,t->instance) &&
+        (!app->fleet || (!strcmp(h->remote_host,t->remote_host) && !strcmp(h->remote_project,t->remote_project)));
+}
+
+/* Names the agent and what Hydra observes about its session. Output activity,
+ * a live tmux session and a reported outcome cannot establish whether an
+ * interactive agent is waiting for a decision, so the label never claims one. */
+static const struct head *terminal_head(const struct app *app, const struct native_terminal *t) {
     size_t i;
-    if (app->snapshot_stale) return "STATE STALE";
-    for (i=0;i<app->model.head_count;i++) {
-        const struct head *h=&app->model.heads[i];
-        if (strcmp(h->head_id,t->head) || strcmp(h->instance,t->instance) ||
-            (app->fleet && (strcmp(h->remote_host,t->remote_host) || strcmp(h->remote_project,t->remote_project)))) continue;
-        if (!strcmp(h->confidence,"exact")) {
-            if (!strcmp(h->observed,"exited")) return "EXIT RECORDED";
-            if (!strcmp(h->observed,"failed")) return "FAIL RECORDED";
-        }
-        /* Output activity, a live tmux session and a reported outcome cannot
-         * establish whether an interactive agent is waiting for a decision. */
-        return "AGENT UNKNOWN";
+    for (i=0;i<app->model.head_count;i++) if (terminal_is_head(app,&app->model.heads[i],t)) return &app->model.heads[i];
+    return NULL;
+}
+
+/* Only an exact recorded exit or failure is an outcome worth naming. */
+static const char *recorded_outcome(const struct head *h) {
+    if (strcmp(h->confidence,"exact")) return NULL;
+    if (!strcmp(h->observed,"exited")) return "exit recorded";
+    if (!strcmp(h->observed,"failed")) return "failure recorded";
+    return NULL;
+}
+
+void native_terminal_attention(struct app *app, const struct native_terminal *t, char *out, size_t size) {
+    const struct head *h=terminal_head(app,t);
+    const char *outcome;
+    if (!h) { snprintf(out,size,"%s",app->snapshot_stale ? "snapshot stale" : "old instance"); return; }
+    outcome=app->snapshot_stale ? "snapshot stale" : recorded_outcome(h);
+    if (outcome) snprintf(out,size,"%s%s%s",native_agent_name(h),dot(app),outcome);
+    else snprintf(out,size,"%s%ssession %s",native_agent_name(h),dot(app),app->fleet ? h->desired : status_label(h));
+}
+
+struct native_terminal *native_terminal_for_head(struct app *app, const struct head *h) {
+    size_t i;
+    if (!app->terminals || !h) return NULL;
+    for (i=0;i<NATIVE_TERMINALS;i++) {
+        struct native_terminal *t=&app->terminals->slots[i];
+        if (t->screen && !t->client.finished && !t->client.eof && terminal_is_head(app,h,t)) return t;
     }
-    return "OLD INSTANCE";
+    return NULL;
+}
+
+static void outbox_clear(struct native_terminal *t) {
+    size_t i;
+    for (i=0;i<t->outbox_count;i++) free(t->outbox[i]);
+    t->outbox_count=0; t->enter_pending=false;
+}
+
+/* A tmux client draws on the alternate screen without scrollback, so the
+ * pane's history lives in tmux: scrolling uses tmux copy mode on the exact
+ * session, and q, Esc or Ctrl-B ] leave it. Fleet clients keep model scroll. */
+bool native_terminal_history(struct app *app, struct native_terminal *t, bool enter) {
+    const struct head *h = terminal_head(app, t);
+    struct output_child child;
+    char target[TEXT + 8U];
+    char *copy[] = {(char *)"tmux", (char *)"copy-mode", (char *)"-u", (char *)"-t", target, NULL};
+    char *cancel[] = {(char *)"tmux", (char *)"send-keys", (char *)"-t", target, (char *)"-X", (char *)"cancel", NULL};
+    char discard[256];
+    if (app->fleet || !h || !h->session[0] || t->client.finished || t->client.eof) return false;
+    snprintf(target, sizeof(target), "=%s:", h->session);
+    if (output_start(&child, enter ? copy : cancel, 1000L)) return false;
+    while (output_read(&child, discard, sizeof(discard)) > 0) {}
+    if (output_finish(&child, false) && enter) return false;
+    copy_text(app->notice, sizeof(app->notice), enter ? "Agent history: PgUp/PgDn or arrows scroll; q leaves" : "Back to live agent output");
+    return true;
 }
 
 void native_terminal_close(struct native_terminal *t) {
     if (!t->screen) return;
+    outbox_clear(t);
     tv_pty_close(&t->client);
     free(t->screen); free(t->cells); free(t->history);
     memset(t,0,sizeof(*t)); t->client.fd=-1; t->client.pid=-1;
@@ -61,8 +114,7 @@ static size_t terminal_slot(struct app *app, const struct head *h) {
     for (i = 0; i < NATIVE_TERMINALS; i++) {
         struct native_terminal *t = &app->terminals->slots[i];
         if (!t->screen && available == NATIVE_TERMINALS) available = i;
-        if (t->screen && !strcmp(t->head, h->head_id) && !strcmp(t->instance, h->instance) &&
-            (!app->fleet || (!strcmp(t->remote_host, h->remote_host) && !strcmp(t->remote_project, h->remote_project)))) {
+        if (t->screen && terminal_is_head(app, h, t)) {
             app->terminals->selected = i;
             if (!t->client.finished && !t->client.eof) return i;
             native_terminal_close(t); return i;
@@ -100,11 +152,52 @@ static bool attachment_argv(const struct app *app, const struct head *h,
     return true;
 }
 
+/* A recorded local interactive head whose tmux session is gone, and that is
+ * not being torn down: opening it restarts its terminal. */
+bool head_terminal_gone(const struct app *app, const struct head *h) {
+    return h && !app->fleet && !head_headless(h) && h->head_id[0] && h->instance[0] && strcmp(h->instance, "-") &&
+        !strcmp(h->liveness, "stopped") && strcmp(h->desired, "stopping") && strcmp(h->desired, "stopped");
+}
+
+/* Restarts the terminal through the public CLI, which requires the existing
+ * worktree and never creates, resets or cleans it; the head's profile decides
+ * what starts in it (its resume recipe, or a shell for none). The pane opens
+ * once the next snapshot shows the new instance. */
+static bool terminal_restore(struct app *app, const struct head *h) {
+    char branch[TEXT], output[8192], title[TEXT + 128];
+    char *argv[] = {(char *)app->hydra, (char *)"resume", (char *)"--terminal", branch, NULL};
+    copy_text(branch, sizeof(branch), h->branch);
+    if (run_captured(app, argv, output, sizeof(output), 60000L)) {
+        if (snprintf(title, sizeof(title), "Terminal for %s not restarted; its worktree and files are unchanged", branch) >= (int)sizeof(title))
+            copy_text(title, sizeof(title), "Terminal not restarted; its worktree and files are unchanged");
+        show_result(app, title, output);
+        return false;
+    }
+    if (snprintf(app->notice, sizeof(app->notice), "Terminal for %s restarted in its worktree; opening it...", branch) >= (int)sizeof(app->notice))
+        copy_text(app->notice, sizeof(app->notice), "Terminal restarted in its worktree; opening it...");
+    copy_text(app->pending_task, sizeof(app->pending_task), branch);
+    native_observations_cancel(app, 0);
+    native_observations_tick(app, true);
+    return false;
+}
+
+/* The user opening the selected head: a gone terminal is restarted first. */
 bool native_terminal_attach(struct app *app) {
-    const struct head *h=selected_head(app);
-    struct native_terminal *t;
+    const struct head *h = selected_head(app);
+    if (head_terminal_gone(app, h)) return terminal_restore(app, h);
+    return native_terminal_attach_head(app, h);
+}
+
+static bool terminal_start(struct app *app, const struct head *h, size_t available);
+
+bool native_terminal_attach_head(struct app *app, const struct head *h) {
     size_t available;
-    char *argv[12], socket[4096];
+    if (h && !app->fleet && head_headless(h)) {
+        copy_text(app->notice,sizeof(app->notice),"Headless head: it has no terminal to attach; p shows its step output in Details"); return false;
+    }
+    if (head_terminal_gone(app, h)) {
+        copy_text(app->notice,sizeof(app->notice),"The terminal is gone; open the head from Work (a) to restart it"); return false;
+    }
     if (!h || !h->head_id[0] || !h->instance[0] || !strcmp(h->instance,"-") ||
         !strcmp(h->desired,"headless")) {
         copy_text(app->notice,sizeof(app->notice),app->fleet ? "Select an interactive remote head with a current instance" : "Select a recorded local head to open an interactive pane"); return false;
@@ -123,7 +216,13 @@ bool native_terminal_attach(struct app *app) {
     if (available==NATIVE_TERMINALS) {
         copy_text(app->notice,sizeof(app->notice),"Four attached panes open; Ctrl-B x closes only the selected client"); return false;
     }
-    t=&app->terminals->slots[available];
+    return terminal_start(app, h, available);
+}
+
+/* Starts an attach client for h in the free slot. */
+static bool terminal_start(struct app *app, const struct head *h, size_t available) {
+    struct native_terminal *t=&app->terminals->slots[available];
+    char *argv[12], socket[4096];
     t->client.fd=-1; t->client.pid=-1;
     t->screen=calloc(1,sizeof(*t->screen));
     t->cells=calloc(NATIVE_TERMINAL_CELLS*2,sizeof(*t->cells));
@@ -139,7 +238,7 @@ bool native_terminal_attach(struct app *app) {
     if (!attachment_argv(app, h, t, argv, socket)) goto fail;
     if (!tv_pty_spawn(&t->client,app->hydra,argv,&app->saved,80,24)) goto fail;
     app->terminals->selected=available;
-    copy_text(app->notice,sizeof(app->notice),"Attached client / Ctrl-B Tab returns input to Hydra");
+    copy_text(app->notice,sizeof(app->notice),"Attached; keys go to the agent");
     return true;
 fail:
     /* screen can be absent when the first allocation failed. */
@@ -154,12 +253,72 @@ void native_terminal_send(struct app *app, struct native_terminal *t, const void
         copy_text(app->notice,sizeof(app->notice),"Input not delivered: client disconnected or input queue full");
 }
 
+/* Queues Hydra-authored text for the agent's terminal. Control bytes become
+ * spaces, so the text can neither submit itself nor end its paste framing. */
+bool native_terminal_deliver(struct app *app, struct native_terminal *t, const char *text, bool submit) {
+    char *copy;
+    size_t i;
+    if (!t || !t->screen || t->client.finished || t->client.eof || t->outbox_count>=4 || !(copy=strdup(text))) {
+        copy_text(app->notice,sizeof(app->notice),"Input not delivered: agent client unavailable or busy");
+        return false;
+    }
+    for (i=0;copy[i];i++) if ((unsigned char)copy[i]<32 || copy[i]==127) copy[i]=' ';
+    t->outbox[t->outbox_count]=copy; t->outbox_submit[t->outbox_count++]=submit;
+    return true;
+}
+
+static long outbox_elapsed(const struct timespec *since) {
+    struct timespec now;
+    (void)clock_gettime(CLOCK_MONOTONIC,&now);
+    return (long)(now.tv_sec-since->tv_sec)*1000L+(now.tv_nsec-since->tv_nsec)/1000000L;
+}
+
+static void outbox_shift(struct native_terminal *t) {
+    free(t->outbox[0]);
+    memmove(t->outbox,t->outbox+1,(t->outbox_count-1)*sizeof(t->outbox[0]));
+    memmove(t->outbox_submit,t->outbox_submit+1,(t->outbox_count-1)*sizeof(t->outbox_submit[0]));
+    t->outbox_count--;
+}
+
+/* One entry per step once the client has drawn: the text goes in as a paste,
+ * framed exactly as a user's paste is forwarded, and a submitted entry sends
+ * Enter separately so the agent never mistakes it for pasted text. */
+static void outbox_step(struct app *app, struct native_terminal *t) {
+    if (!t->outbox_count || !t->received || t->client.finished || t->client.eof || outbox_elapsed(&t->outbox_at)<300) return;
+    if (t->enter_pending) {
+        native_terminal_send(app,t,"\r",1);
+        t->enter_pending=false; outbox_shift(t);
+    } else {
+        if (t->screen->bracketed_paste) native_terminal_send(app,t,"\033[200~",6);
+        native_terminal_send(app,t,t->outbox[0],strlen(t->outbox[0]));
+        if (t->screen->bracketed_paste) native_terminal_send(app,t,"\033[201~",6);
+        if (t->outbox_submit[0]) t->enter_pending=true;
+        else outbox_shift(t);
+    }
+    (void)clock_gettime(CLOCK_MONOTONIC,&t->outbox_at);
+}
+
+/* Reads a bounded burst of client output into the terminal model. */
+static void terminal_read(struct native_terminal *t) {
+    size_t chunks;
+    for (chunks=0; !t->client.eof && t->client.fd>=0 && chunks<8; chunks++) {
+        char bytes[4096];
+        ssize_t n=tv_pty_read(&t->client,bytes,sizeof(bytes));
+        if (n<=0) {
+            if (!n) tv_term_finish(t->screen);
+            else if (errno!=EAGAIN && errno!=EINTR) tv_pty_close(&t->client);
+            return;
+        }
+        if (!t->received) { t->received=true; (void)clock_gettime(CLOCK_MONOTONIC,&t->outbox_at); }
+        tv_term_feed(t->screen,bytes,(size_t)n);
+    }
+}
+
 void native_terminals_pump(struct app *app) {
     size_t i;
     if (!app->terminals) return;
     for (i=0;i<NATIVE_TERMINALS;i++) {
         struct native_terminal *t=&app->terminals->slots[i];
-        size_t chunks;
         uint64_t before;
         if (!t->screen) continue;
         before=t->screen->history_serial;
@@ -167,16 +326,7 @@ void native_terminals_pump(struct app *app) {
             copy_text(app->notice,sizeof(app->notice),"Attachment transport failed; recorded agent outcome is unchanged");
             tv_pty_close(&t->client);
         }
-        for (chunks=0; !t->client.eof && t->client.fd>=0 && chunks<8; chunks++) {
-            char bytes[4096];
-            ssize_t n=tv_pty_read(&t->client,bytes,sizeof(bytes));
-            if (n>0) tv_term_feed(t->screen,bytes,(size_t)n);
-            else {
-                if (!n) tv_term_finish(t->screen);
-                else if (errno!=EAGAIN && errno!=EINTR) tv_pty_close(&t->client);
-                break;
-            }
-        }
+        terminal_read(t);
         if (t->scroll>t->screen->history_count) t->scroll=t->screen->history_count;
         if (t->scroll && t->screen->history_serial>before) {
             uint64_t added=t->screen->history_serial-before;
@@ -186,6 +336,34 @@ void native_terminals_pump(struct app *app) {
             char reply[256]; size_t n=tv_term_take_reply(t->screen,reply,sizeof(reply));
             native_terminal_send(app,t,reply,n);
         }
+        outbox_step(app,t);
+    }
+}
+
+static bool fill_glyph(uint32_t glyph) { return glyph == 0xb7U || glyph == '.'; }
+static bool edge_glyph(uint32_t glyph) { return glyph == 0x2502U || glyph == 0x2518U || glyph == '|' || glyph == '+'; }
+
+/* A row ending in tmux's out-of-window fill: a window edge, then dots to the
+ * right margin. tmux draws this when another client set a smaller size. */
+static bool fill_row(const struct tv_canvas *c, int y) {
+    const struct tv_cell *row = c->cells + (size_t)y * (size_t)c->stride;
+    int x = c->width - 1, dots = 0;
+    while (x >= 0 && fill_glyph(row[x].glyph)) { x--; dots++; }
+    return dots >= 4 && x >= 0 && edge_glyph(row[x].glyph);
+}
+
+/* Two such rows identify another client's window size, not agent output. */
+static bool foreign_size(const struct tv_canvas *c) {
+    int y, rows = 0;
+    for (y = 0; y < c->height && rows < 2; y++) rows += fill_row(c, y);
+    return rows >= 2;
+}
+
+static void strip_rendition(struct tv_canvas *c) {
+    int x,y;
+    for (y=0;y<c->height;y++) for (x=0;x<c->width;x++) {
+        struct tv_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
+        cell->attributes=0; cell->style=TV_BASE;
     }
 }
 
@@ -197,11 +375,6 @@ void native_terminal_draw(struct app *app, struct native_terminal *t, struct tv_
             copy_text(app->notice,sizeof(app->notice),"Attachment resize unavailable");
     }
     tv_term_draw(t->screen,c,t->scroll,focused && !t->scrolling);
-    if (app->no_color) {
-        int x,y;
-        for (y=0;y<c->height;y++) for (x=0;x<c->width;x++) {
-            struct tv_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
-            cell->attributes=0; cell->style=TV_BASE;
-        }
-    }
+    t->foreign_size = !t->scroll && foreign_size(c);
+    if (app->no_color) strip_rendition(c);
 }

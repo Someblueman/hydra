@@ -68,10 +68,10 @@ task inspect-result --input "$fixture/result.json" > "$fixture/inspected.json"
 awk -F '\t' '$1=="ITEM" && $3=="result" { print; exit }' "$fixture/attention.tsv" > "$fixture/selected.tsv"
 tab="$(printf '\t')"
 load_selection() {
-    IFS="$tab" read -r tag source kind reason project host task_id run step attempt head instance request binding revision identity freshness route navigable < "$1"
+    IFS="$tab" read -r tag source kind reason project host task_id run step attempt head instance request binding revision identity freshness route navigable label detail < "$1"
 }
 load_selection "$fixture/selected.tsv"
-[ "$tag" = ITEM ] && [ "$source" = 'fleet overview' ] && [ "$route" = task-result ] && [ "$navigable" = 1 ]
+[ "$tag" = ITEM ] && [ "$source" = 'fleet overview' ] && [ "$route" = task-result ] && [ "$navigable" = 1 ] && [ "$label" = - ] && [ "$detail" = - ]
 [ "$reason" = result_ready ] && [ "$freshness" = fresh ]
 [ "$project" = - ] && [ "$head" = - ] && [ "$instance" = - ]
 review() {

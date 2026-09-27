@@ -33,8 +33,9 @@
 #include "review.h"
 #include "process.h"
 #include "terminal.h"
+#include "transcript.h"
 extern char **environ;
-#define HYDRA_TUI_VERSION "2.7.0"
+#define HYDRA_TUI_VERSION "2.8.0"
 #define HYDRA_TUI_PROTOCOL 2
 #define NATIVE_PLAN_LIMIT (256U*1024U)
 #define NATIVE_PLAN_TEXT (1024U*1024U)
@@ -64,7 +65,10 @@ struct statistics_view {
     bool stale, detail, graph_open;
     char error[TEXT], selected_id[128];
 };
-enum native_plan_state { PLAN_DRAFT, PLAN_VALIDATING, PLAN_INVALID, PLAN_READY, PLAN_UNAVAILABLE };
+/* RETURNED: the user requested changes to this exact draft; it cannot be
+ * validated or executed until the agent publishes a different draft. */
+enum native_plan_state { PLAN_DRAFT, PLAN_VALIDATING, PLAN_INVALID, PLAN_READY, PLAN_UNAVAILABLE, PLAN_RETURNED };
+#define NATIVE_PLAN_NOTICES 24
 struct native_plan {
     char path[4096], policy[4096], directory[4096], compiled[4096];
     char digest[65], objective[4096], notice[TEXT], proposal_head[TEXT];
@@ -74,10 +78,15 @@ struct native_plan {
     struct native_capture launch_job;
     pid_t owner_pid;
     char launched_digest[65], launched_run[65], launch_state[32];
+    /* The planning conversation bound at launch, and run notices typed into it. */
+    char planning_head[TEXT], planning_instance[TEXT], notified[NATIVE_PLAN_NOTICES][112];
+    size_t notified_count;
+    unsigned launched_revision;
     bool follow_launched_run;
     bool projecting;
     char *source_bytes, *policy_bytes, *text;
     size_t source_length, policy_length, text_length, text_scroll, selected;
+    unsigned long long assets_stamp;
     struct workflow_model graph;
 };
 struct native_evidence {
@@ -94,7 +103,8 @@ struct native_links {
     size_t count;
     bool stale;
 };
-struct native_observations { struct native_capture jobs[5]; };
+/* preview reads a headless head's step output (adapter.c). */
+struct native_observations { struct native_capture jobs[5]; struct native_capture preview; };
 struct native_terminal {
     struct tv_pty client;
     struct tv_terminal_model *screen;
@@ -103,6 +113,15 @@ struct native_terminal {
     char remote_host[128], remote_project[SOURCE_TEXT];
     size_t scroll;
     bool scrolling;
+    /* tmux sized the window to another, smaller client: the drawn view shows
+     * tmux's dotted fill beyond that window (set while drawing). */
+    bool foreign_size;
+    /* Hydra-authored input waiting for the attached client to come up; a
+     * submitted entry sends Enter as a separate, later keystroke. */
+    char *outbox[4];
+    bool outbox_submit[4], received, enter_pending;
+    size_t outbox_count;
+    struct timespec outbox_at;
 };
 struct native_terminals {
     struct native_terminal slots[NATIVE_TERMINALS];
@@ -118,6 +137,7 @@ struct native_workspace {
     struct tv_tree tree;
     struct tv_tree_node nodes[MAX_HEADS + 1 + 512 + WF_RUNS];
     char run_labels[WF_RUNS][200];
+    char member_labels[MAX_HEADS][TEXT + 16];
     char project_label[256];
     char collapsed[MAX_HEADS][TEXT];
     size_t collapsed_count;
@@ -126,6 +146,63 @@ struct native_workspace {
     int theme;
     bool root_open, zoom, compact;
 };
+/* Work outline (outline.c): heads the user started, the runs they launched
+ * and the heads each run created. */
+enum outline_kind { OUTLINE_HEAD, OUTLINE_RUN, OUTLINE_RETIRED };
+struct outline_row { enum outline_kind kind; size_t head, run, record; int depth; bool open; };
+#define OUTLINE_ROWS (MAX_HEADS + WF_RUNS + WF_HEADS)
+struct work_counts { size_t heads, run_heads, running, attention, runs, runs_active; };
+bool head_headless(const struct head *h);
+size_t head_owner_run(const struct app *app, const struct head *h, size_t *record);
+size_t run_owner_head(const struct app *app, size_t run);
+const struct workflow_node *head_step(const struct app *app, const struct head *h);
+bool head_needs_attention(const struct app *app, const struct head *h);
+bool run_needs_attention(const struct app *app, size_t run);
+void work_counts(const struct app *app, struct work_counts *n);
+bool run_expanded(const struct app *app, size_t run);
+void run_set_expanded(struct app *app, size_t run, bool expand);
+size_t outline_build(struct app *app, struct outline_row *rows, size_t capacity);
+size_t outline_position(const struct app *app, const struct outline_row *rows, size_t count);
+void outline_select(struct app *app, const struct outline_row *row);
+void outline_move(struct app *app, int direction, bool heads_only);
+bool outline_toggle(struct app *app, int direction);
+void outline_release_run(struct app *app);
+bool text_matches(const char *text, const char *search);
+/* Run and headless-head presentation (run_text.c). Outputs are caller buffers. */
+struct outline_text { char name[TEXT + 64], count[32]; const char *status, *agent, *reported; enum tv_style tone; };
+void outline_row_text(const struct app *app, const struct outline_row *row, struct outline_text *t);
+const char *head_agent_short(const struct app *app, const struct head *head);
+const char *run_head_absence(const struct app *app, const struct workflow_head *r);
+void format_duration(long long seconds, char *out, size_t size);
+void format_tokens(long long value, char *out, size_t size);
+const char *run_label_kind(const struct workflow_run *run);
+void run_summary_text(const struct app *app, size_t run, char *out, size_t size);
+void run_next_text(const struct app *app, size_t run, char *out, size_t size);
+size_t overview_run(struct app *app);
+void head_agent_text(const struct app *app, const struct head *h, char *out, size_t size);
+const char *head_list_status(const struct app *app, const struct head *h);
+enum tv_style head_list_tone(const struct app *app, const struct head *h);
+const char *head_run_role(const struct app *app, const struct head *h);
+void exec_model_text(const struct workflow_exec *e, bool running, char *out, size_t size);
+void exec_effort_text(const struct workflow_exec *e, bool running, char *out, size_t size);
+void exec_tokens_text(const struct workflow_exec *e, char *out, size_t size);
+bool exec_configuration_text(const struct workflow_exec *e, char *out, size_t size);
+void step_duration_text(const struct workflow_node *n, char *out, size_t size);
+void plan_approval_text(const struct app *app, size_t run, char *out, size_t size);
+/* Shared text-view helpers (render.c) and the head details view (detail.c). */
+void column(struct app *app, int x, int width, enum tv_style tone, const char *text);
+void paragraph(struct app *app, const char *text, enum tv_style tone);
+void section(struct app *app, const char *label);
+/* Read-only captured output in the remaining content rows; see transcript.h. */
+void transcript_view(struct app *app, const char *text, size_t length, struct transcript_layout *layout);
+/* One logical line of a scrolled document: rows before scroll are counted,
+ * visible rows drawn with tone; returns the line's wrapped rows. */
+size_t transcript_line_view(struct app *app, const char *text, size_t length, enum tv_style tone, size_t row, size_t scroll);
+void transcript_view_reset(struct app *app);
+void pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
+          const char *right_label, const char *right, enum tv_style right_tone);
+void render_empty_work(struct app *app);
+void render_head_detail(struct app *app);
 /* Internal views borrow app; destroy functions release their owned view state. */
 bool native_terminal_focused(struct app *app);
 bool native_terminal_byte(struct app *app, unsigned char byte);
@@ -136,6 +213,7 @@ bool statistics_back(struct app *app);
 bool native_plan_key(struct app *app, char key);
 bool native_control_key(struct app *app, char key);
 int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size);
+bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices);
 bool render_statistics(struct app *app, unsigned frame, bool headless);
 void statistics_metrics_render(struct app *app, struct tv_canvas *c, struct tv_rect r);
 int native_workspace_agent_index(struct native_workspace *w, int pane);
@@ -153,6 +231,8 @@ void remove_heads_action(struct app *app);
 void new_task_action(struct app *app);
 void new_task_attach(struct app *app);
 void recovery_check_action(struct app *app);
+void recovery_remove_action(struct app *app);
+void remove_key_action(struct app *app);
 void native_workspace_show_terminal(struct app *app, bool focus);
 void native_workspace_split_agents(struct app *app);
 bool native_workspace_monitoring(struct app *app);
@@ -176,8 +256,16 @@ void dashboard_card(struct tv_canvas *c, int x, int width, const char *title,
                            size_t count, const char *caption, enum tv_style tone);
 void render_dashboard(struct app *app);
 struct native_terminal *native_terminal_selected(struct app *app);
-const char *native_terminal_attention(struct app *app, const struct native_terminal *t);
+void native_terminal_attention(struct app *app, const struct native_terminal *t, char *out, size_t size);
+struct native_terminal *native_terminal_for_head(struct app *app, const struct head *h);
+bool native_terminal_attach_head(struct app *app, const struct head *h);
+bool native_terminal_deliver(struct app *app, struct native_terminal *t, const char *text, bool submit);
+const char *native_agent_name(const struct head *h);
+bool head_terminal_gone(const struct app *app, const struct head *h);
 void native_terminal_close(struct native_terminal *t);
+/* Enters (or leaves) the agent's own tmux history for a local attachment;
+ * false when that history is unavailable and the client's model scrolls. */
+bool native_terminal_history(struct app *app, struct native_terminal *t, bool enter);
 void native_terminals_destroy(struct app *app);
 bool native_terminal_attach(struct app *app);
 void native_terminal_send(struct app *app, struct native_terminal *t, const void *bytes, size_t length);
@@ -191,7 +279,6 @@ void native_attention_tick(struct app *app, bool request);
 bool native_attention_key(struct app *app, char key);
 void render_attention(struct app *app);
 void native_links_accept(struct app *app, FILE *input);
-bool native_links_match(struct app *app, size_t run, size_t head);
 void native_controls_tick(struct app *app);
 bool native_control_submit(struct app *app, const char *run, const char *action, const char *request);
 bool native_fleet_control_submit(struct app *app, const struct task_observation *task,
@@ -201,18 +288,33 @@ void native_evidence_destroy(struct app *app);
 void native_evidence_tick(struct app *app, bool watch);
 bool native_plan_launch(struct app *app, const char *digest);
 void native_plan_launch_tick(struct app *app, bool watch);
+struct head *native_plan_head(struct app *app, const char *branch);
+bool native_plan_converse(struct app *app, const struct head *h, const char *text, bool submit, bool focus);
+void native_plan_notify_started(struct app *app);
+void native_plan_notices_tick(struct app *app);
 void native_plan_tick(struct app *app, bool watch);
 bool native_plan_changed(struct native_plan *p);
 void native_plan_message(struct native_plan *p, const char *text);
 void native_plan_destroy(struct app *app);
 bool native_plan_load(struct app *app, const char *path, const char *policy);
 bool native_plan_compile(struct app *app);
+void native_plan_returned(struct native_plan *p);
+void native_plan_execute(struct app *app);
+void native_plan_request_changes(struct app *app);
 bool statistics_init(struct app *app);
 void statistics_destroy(struct app *app);
 void statistics_visible(struct app *app);
 int accept_statistics(struct app *app, FILE *input);
 int refresh_statistics(struct app *app, const char *fixture);
 void statistics_move(struct app *app, int direction);
+void statistics_count(uint64_t value, bool known, char *out, size_t size);
+void statistics_tokens(const struct hs_usage *u, char *out, size_t size);
+void statistics_scope_tokens(const struct hs_summary *s, char *out, size_t size);
+int statistics_wrap(struct tv_canvas *c, int x, int y, int width, int rows, enum tv_style tone, const char *text);
+void statistics_scope_notes(struct tv_canvas *c, int x, int y, int width, int rows, const struct hs_summary *s);
+void statistics_step_agent(const struct hs_step *s, bool compact, char *out, size_t size);
+void statistics_run_tokens(const struct hs_model *m, size_t run, char *out, size_t size);
+void statistics_step_detail(struct tv_canvas *c, struct tv_rect r, const struct hs_model *m, const struct hs_step *s);
 bool workflow_id(const char *s);
 size_t workflow_nodes(const struct workflow_model *m, size_t run, size_t *indices);
 bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_t n,
@@ -281,6 +383,7 @@ FILE *capture_adapter(struct app *app, const char *command, const char *option, 
 int accept_model_data(struct app *app, FILE *input);
 void refresh_current_session(struct app *app);
 void capture_preview(struct app *app);
+void headless_preview_tick(struct app *app);
 size_t split_fields(char *line, char **fields, size_t capacity);
 int load_model_stream(FILE *input, struct model *model, char *error, size_t error_size);
 int load_fixture(const char *path, struct model *model, char *error, size_t error_size);

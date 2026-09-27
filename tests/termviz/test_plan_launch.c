@@ -43,9 +43,11 @@ static bool state_is(const char *run_dir, const char *expected) {
     hf_trim(value);
     return !strcmp(value, expected);
 }
+/* The approval shows the revision and a short digest; the CLI still receives
+ * the full digest, which the launch receipt directory name proves. */
 static void check_digest(struct tv_session *s, const char *digest) {
     const char *p = tv_text(s);
-    char compact[131072];
+    char compact[131072], marker[64];
     size_t n = 0;
     for (; *p; p++)
         if (*p != ' ' && *p != '\n' && *p != '\t' && *p != '\r') {
@@ -53,7 +55,44 @@ static void check_digest(struct tv_session *s, const char *digest) {
             compact[n++] = *p;
         }
     compact[n] = 0;
-    CHECK(strstr(compact, digest), "full digest visible at all sizes");
+    tv_format(marker, sizeof(marker), "digest%.12s?", digest);
+    CHECK(strstr(compact, marker), "short digest visible at all sizes");
+}
+/* A draft or policy change while the approval is open invalidates it. */
+static void refuse_changed(struct tv_session *s, const char *changed, const char *runs) {
+    tv_send(s, "E");
+    tv_until(s, "INPUT TO HYDRA / execution approval", 3);
+    tv_append(changed, "\n");
+    tv_pump(s, 2.5);
+    tv_send(s, "y");
+    tv_until(s, "Execution not submitted", 3);
+    CHECK(!hf_glob_count(runs), "changed revision creates no run");
+}
+/* The confirmation names the revision, short digest, policy and consequences
+ * at every size; only an explicit y approves, so Enter, other keys and paste
+ * leave it open, and n declines without a run. */
+static void review_approval(struct tv_session *s, const char *digest) {
+    int sizes[][2] = {{40, 10}, {80, 24}, {140, 40}};
+    size_t i;
+    tv_send(s, "E");
+    tv_until(s, "INPUT TO HYDRA / execution approval", 3);
+    tv_until(s, "Execute imported plan revision 1", 3);
+    for (i = 0; i < 3; i++) {
+        tv_resize(s, sizes[i][0], sizes[i][1]);
+        tv_pump(s, .3);
+        check_digest(s, digest);
+        CHECK(!s->screen.overflow, "approval resize");
+        save(s, "approval", sizes[i][0], sizes[i][1]);
+    }
+    CHECK(tv_contains(s, "Runs 3 steps, spawns 1 head, up to 3 minutes; declares no repository writes."),
+          "approval states the consequences");
+    CHECK(tv_contains(s, "Policy: tools sh; parallelism 1; at most 1 head; 3 min wall time"),
+          "approval summarizes the policy");
+    tv_send(s, "\rx\033[200~y\033[201~");
+    tv_pump(s, .5);
+    CHECK(tv_contains(s, "INPUT TO HYDRA / execution approval"), "Enter, other keys and paste cannot approve");
+    tv_send(s, "n");
+    tv_until(s, "Execution not approved", 3);
 }
 static void sanitize_path(const char *input, char *output, size_t capacity) {
     size_t i;
@@ -111,39 +150,25 @@ int main(void) {
     hf_glob_one(pattern, compiled, sizeof(compiled));
     projection_digest(H("workflow", "plan", "tui-data", compiled), digest, sizeof(digest));
     tv_read(compiled, snapshot, sizeof(snapshot));
-    S("E");
-    U("Type exact digest", 3);
     tv_format(evidence, sizeof(evidence), "%s/plan-launch-evidence", f.build);
     tv_mkdir(evidence);
-    for (i = 0; i < 3; i++) {
-        tv_resize(&s, sizes[i][0], sizes[i][1]);
-        tv_pump(&s, .3);
-        check_digest(&s, digest);
-        CHECK(!s.screen.overflow, "approval resize");
-        save(&s, "approval", sizes[i][0], sizes[i][1]);
-    }
-    S("wrong\r");
-    U("Execution not submitted", 3);
+    review_approval(&s, digest);
     tv_format(pattern, sizeof(pattern), "%s/state/v2/projects/*/workflows/runs/*", f.home);
-    CHECK(!hf_glob_count(pattern), "wrong digest creates no run");
-    S("E");
-    U("Type exact digest", 3);
-    tv_append(draft, "\n");
-    tv_pump(&s, 2.5);
-    S(digest);
-    S("\r");
-    U("Execution not submitted", 3);
-    CHECK(!hf_glob_count(pattern), "changed draft creates no run");
+    CHECK(!hf_glob_count(pattern), "declined approval creates no run");
+    refuse_changed(&s, draft, pattern);
     S("V");
     U("READY / awaiting approval", 30);
-    tv_format(pattern, sizeof(pattern), "%s/hydra-ui-plan.*/compiled-2.json", f.base);
+    refuse_changed(&s, policy, pattern);
+    S("V");
+    U("READY / awaiting approval", 30);
+    tv_format(pattern, sizeof(pattern), "%s/hydra-ui-plan.*/compiled-3.json", f.base);
     hf_glob_one(pattern, compiled, sizeof(compiled));
     tv_read(compiled, snapshot, sizeof(snapshot));
     projection_digest(H("workflow", "plan", "tui-data", compiled), digest, sizeof(digest));
     S("E");
-    U("Type exact digest", 3);
-    S(digest);
-    S("\r");
+    U("INPUT TO HYDRA / execution approval", 3);
+    U("revision 3", 3);
+    S("y");
     tv_format(pattern, sizeof(pattern), "%s/state/v2/projects/*/workflows/launches/%s/run-id",
               f.home, digest);
     deadline = tv_now() + 30;
@@ -166,7 +191,7 @@ int main(void) {
           "receipt observed during execution");
     S("E");
     U("This revision was already submitted", 3);
-    CHECK(!tv_contains(&s, "Type exact digest"), "duplicate launch form refused");
+    CHECK(!tv_contains(&s, "INPUT TO HYDRA / execution approval"), "duplicate launch form refused");
     tv_close(&s, "q", 0, 0);
     CHECK(!tv_exists(compiled), "UI temp snapshot cleaned");
     hf_run(&f, snapshot, -2,
@@ -218,12 +243,15 @@ int main(void) {
     U("Project: repo line", 3);
     U("plan-fixture · succeeded", 15);
     U("plan-smoke", 3);
-    /* Head and run snapshots arrive separately; move from the first head
-     * to its associated run only after both are visible. */
-    S("j");
+    /* Head and run snapshots arrive separately. The imported plan's worker
+     * head belongs to its run: move from the head up to the run only after
+     * both are visible. */
+    U("worker plan-smoke", 15);
+    S("k");
     U("Recorded branch reference", 3);
     U("Enter evidence / h parent / Tab panes", 3);
-    S("hh");
+    CHECK(!tv_contains(&s, "worker plan-smoke"), "a run collapses when its head is no longer selected");
+    S("kh");
     tv_pump(&s, 2.5);
     CHECK(!tv_contains(&s, "plan-fixture · succeeded"), "collapsed historical refs");
     S("l");
@@ -282,12 +310,8 @@ int main(void) {
     tv_close(&s, "q", 0, 0);
     CHECK(!rename(new_repo, old_repo), "restore fixture path");
     tv_format(f.repo, sizeof(f.repo), "%s", old_repo);
-    hf_cleanup();
-    {
-        const char *remove[] = {"rm", "-rf", f.base, NULL};
-        tv_command_ok(NULL, remove);
-    }
-    puts("PASS plan launch: exact/stale approval, receipt, detached execution, dedup, "
+    hf_finish(&f);
+    puts("PASS plan launch: confirmed exact-revision approval, stale draft/policy refusal, receipt, detached execution, dedup, "
          "artifact/provenance refusal, escaped paths");
     return 0;
 }

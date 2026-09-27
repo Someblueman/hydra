@@ -9,7 +9,9 @@ release readiness. Item 10's broader performance matrix and T2/T3 remain open.
 ## Reproduce the public routes
 
 Attention is read-only and emits a 19-field wire record containing exact
-task/attempt identity, source, freshness, route, and semantic revision. Extract
+task/attempt identity, source, freshness, route, and semantic revision. Since
+wire version 2 a 20th presentation label follows; it is outside the identity and
+revision and the accepted measurements below predate it. Extract
 the 13 named selection fields from that record before invoking an exact review:
 
 ```sh
@@ -36,10 +38,14 @@ unopened, while native `o` explicitly passes a selected URL to the operating
 system opener without ingesting its content.
 
 In the native TUI, `I` opens attention, `j`/`k` or arrows select, `Enter` shows
-detail, `s` marks a revision seen for that client, and `r` opens exact review.
-Within review, `i` shows identity, `f` references, `o` follows a selected
-reference, `j`/`k` scroll, and `Esc` backs out. Seen state never approves or
-accepts a workflow. A stale snapshot must be refreshed before review.
+detail, `s` marks a revision seen, and `r` opens exact review. At acceptance
+time the seen marker belonged to one client; it is now kept per user through
+`hydra workflow attention-seen` (see [contracts](CONTRACTS.md#tui-protocols-and-parity)),
+so the measured two-client independence no longer applies to clients sharing a
+`HYDRA_HOME`. Within review, `i` shows identity, `f` references, `o` follows a
+selected reference, `L` opens a check's full log, `n`/`N` move between sections,
+`j`/`k` scroll, and `Esc` backs out. Seen state never approves or accepts a
+workflow. A stale snapshot must be refreshed before review.
 
 ## Accepted bounded measurement
 

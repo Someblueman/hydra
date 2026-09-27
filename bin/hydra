@@ -11,7 +11,7 @@ if [ -z "${HOME:-}" ] || [ ! -d "${HOME:-}" ]; then
 fi
 HYDRA_HOME="${HYDRA_HOME:-$HOME/.hydra}"
 HYDRA_1X_MAP="$HYDRA_HOME/map"
-HYDRA_VERSION="2.7.0"
+HYDRA_VERSION="2.8.0"
 export HYDRA_VERSION HYDRA_1X_MAP
 
 # Source helper libraries
@@ -173,14 +173,14 @@ _load_libs_for_cmd() {
             ;;
         doctor|cleanup)
             _load_libs paths maintenance tmux state git locks identity state_v2 output messages profiles spawn \
-                cmd_queue cmd_maintenance
+                project parallel worktree_ops cmd_queue cmd_maintenance
             ;;
         dashboard|dashboard-exit)
             _load_libs locks state tmux identity state_v2 dashboard
             ;;
         tui)
             _load_libs output paths locks identity git tmux state state_v2 project profiles notify events \
-                lifecycle limits maintenance tui
+                lifecycle limits parallel worktree_ops maintenance tui
             ;;
         queue)
             _load_runtime_libs layout
@@ -192,7 +192,8 @@ _load_libs_for_cmd() {
         *)
             _load_libs output paths locks git tmux layout state completion dashboard github hooks yaml spawn \
                 spawn_bulk kill limits maintenance tui cmd_spawn cmd_queue cmd_list cmd_session cmd_group \
-                cmd_messages cmd_github cmd_session_ops cmd_maintenance cmd_completion
+                cmd_messages cmd_github cmd_session_ops cmd_maintenance cmd_completion identity state_v2 project \
+                parallel worktree_ops
             ;;
     esac
 }

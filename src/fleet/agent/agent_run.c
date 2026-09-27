@@ -138,15 +138,43 @@ static json_object *observations(const struct agent_stream *stream, const struct
     json_object_object_add(observed, "usage", f_field(stream->usage, "input_tokens") || f_field(stream->usage, "output_tokens") || f_field(stream->usage, "cost_usd") ? json_object_new_boolean(true) : NULL);
     return observed;
 }
+/* A private, bounded copy of provider stdout while the provider runs, so a
+ * read-only view can follow the step. It is removed when the step ends:
+ * keeping provider output stays the explicit --retain choice. */
+#define AGENT_LIVE_STREAM ".provider-stdout"
+static int live_stream_open(const char *directory) {
+    char path[F_PATH];
+    int fd;
+    if (f_path(path, sizeof(path), directory, AGENT_LIVE_STREAM)) return -1;
+    (void)unlink(path);
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_APPEND, 0600);
+    if (fd >= 0 && fcntl(fd, F_SETFD, FD_CLOEXEC)) { close(fd); (void)unlink(path); fd = -1; }
+    return fd;
+}
+static void live_stream_close(int fd, const char *directory) {
+    char path[F_PATH];
+    if (fd >= 0) close(fd);
+    if (!f_path(path, sizeof(path), directory, AGENT_LIVE_STREAM)) (void)unlink(path);
+}
+/* Configuration is recorded at launch; observations only from the stream. */
+static void record_model_configuration(json_object *record, json_object *profile, json_object *args) {
+    json_object *configuration = agent_configuration(profile, args);
+    if (configuration) json_object_object_add(record, "configuration", configuration);
+}
+static void record_model_observation(json_object *record, const struct agent_stream *stream) {
+    if (stream->observed_model[0]) f_string_add(record, "observed_model", stream->observed_model);
+    if (stream->observed_effort[0]) f_string_add(record, "observed_reasoning_effort", stream->observed_effort);
+}
 /* Borrow profile, argv storage, prompt, stream and cap. Cap buffers remain caller-owned. */
 static bool invoke_agent(json_object *profile, json_object *args, const char *prompt,
-                         unsigned seconds, struct agent_stream *stream, struct f_capture *cap) {
+                         unsigned seconds, struct agent_stream *stream, struct f_capture *cap, int live_fd) {
     struct f_control control = {0};
     char *command[AGENT_ARGS + 2];
     size_t i;
     for (i = 0; i < json_object_array_length(args); i++) command[i] = (char *)f_text(json_object_array_get_idx(args, i));
     command[i] = NULL;
-    control.log_fd[0] = control.log_fd[1] = -1; control.context = stream; control.stop = agent_stop; control.observe = agent_observe; control.grace_seconds = 1;
+    control.log_fd[0] = live_fd; control.log_fd[1] = -1; control.remaining[0] = AGENT_OUTPUT_LIMIT;
+    control.context = stream; control.stop = agent_stop; control.observe = agent_observe; control.grace_seconds = 1;
     bool stdin_prompt = !strcmp(f_string(profile, "prompt"), "stdin");
     return !f_run_controlled(command, stdin_prompt ? prompt : NULL, stdin_prompt ? strlen(prompt) : 0, seconds ? seconds : 86400, cap, &control) && cap->status != 127;
 }
@@ -157,7 +185,7 @@ json_object *agent_run_cli(int argc, char **argv) {
     char *prompt = NULL, *branch = NULL, root[F_PATH], current[F_PATH], path[F_PATH], worktree[F_PATH], hash[65], prompt_hash[65];
     struct agent_stream stream = {0}; struct f_capture cap = {0};
     struct run_request request;
-    bool invoked = false; int status = 1; size_t steering_bytes = 0;
+    bool invoked = false; int status = 1, live_fd = -1; size_t steering_bytes = 0;
     if (run_request_parse(argc, argv, &request)) goto invalid;
     profile = agent_profile(request.profile);
     if (!profile || !(prompt = prompt_read(request.prompt_path)) || !requires(profile, request.required) || agent_profile_hash(profile, hash)) goto invalid;
@@ -189,8 +217,11 @@ json_object *agent_run_cli(int argc, char **argv) {
     json_object_object_add(record, "probe", json_object_get(probe));
     json_object_object_add(record, "started_at", json_object_new_int64((int64_t)time(NULL)));
     if (*stream.session) f_string_add(record, "session_id", stream.session);
+    record_model_configuration(record, profile, args);
     if (task_write_json(request.directory, "agent.json", record, false)) { unlink(path); goto invalid; }
-    invoked = invoke_agent(profile, args, prompt, (unsigned)strtoul(request.seconds_text, NULL, 10), &stream, &cap);
+    live_fd = live_stream_open(request.directory);
+    invoked = invoke_agent(profile, args, prompt, (unsigned)strtoul(request.seconds_text, NULL, 10), &stream, &cap, live_fd);
+    live_stream_close(live_fd, request.directory);
 
     unlink(path);
     /* The shell watchdog may reach the same deadline before this helper does.
@@ -225,7 +256,9 @@ json_object *agent_run_cli(int argc, char **argv) {
     json_object_object_add(record, "finished_at", json_object_new_int64((int64_t)time(NULL)));
     json_object_object_add(record, "events", json_object_get(stream.events));
     json_object_object_add(record, "usage", json_object_get(stream.usage));
+    record_model_observation(record, &stream);
     json_object_object_add(record, "observed", observations(&stream, &cap, invoked, *request.resume_run, status, steering_bytes, profile));
+    agent_diagnose(record, &stream, &cap, status);
 
     if (*stream.session) f_string_add(record, "session_id", stream.session);
     json_object_object_add(record, "verification_passed", json_object_new_boolean(false));

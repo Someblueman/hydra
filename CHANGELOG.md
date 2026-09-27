@@ -7,6 +7,253 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-09-27
+
+### Added
+
+- `hydra kill --dry-run` previews a branch, `--all` or `-g/--group` selection:
+  each active head's session, worktree, tracked and untracked changes, and that
+  its branch is kept. It never prompts or changes state; `--force` stays a
+  preview. Help and bash, zsh and fish completions include it.
+- Policies accept the write scope `@spawned:*`, authorizing writes only to heads
+  created by the plan's own spawn steps; plans still name concrete heads.
+- Plans carry their own inputs, so planning never requires committing files to
+  your checkout. Agent steps accept an inline `prompt` (up to 32 KiB) instead of
+  `prompt_input`; `workflow plan propose --asset NAME=FILE` publishes up to 16
+  custom files (such as a verifier) that `data.inputs` reference as
+  `{"asset": NAME, ...}`, and `validate`/`compile` accept `--assets-dir`. Prompts
+  and assets are embedded in the compiled plan and bound by its digest, so any
+  change requires fresh approval. `show` and `explain` preview inline prompts.
+- Exec `argv` in a compiled plan can pass a step's materialized input as
+  `@input/<name>`.
+- `hydra gc --policy orphaned --path <worktree>` limits a run to one leftover
+  worktree. Doctor, `hydra du` and Recovery show leftover worktree sizes, measured
+  with a time bound and reported as unknown rather than zero.
+- The plan view's `F` requests changes: `hydra workflow plan proposal <head> --return
+  <feedback>` records that the exact draft was sent back, so it cannot be reviewed,
+  validated or launched until the agent republishes, and the feedback is typed into
+  the agent's pane for the user to send with Enter.
+- Plans launched from an agent proposal are bound to that head instance. The TUI
+  submits the run ID into the planning conversation, then approval waits, failed
+  steps and the outcome; the run owner also records deduplicated inbox notices for
+  that exact instance, including when the TUI is closed.
+- Overview centres on the run: a run panel lists each step with its kind and role,
+  state, attempts, duration and the head it ran on, and says what happens next or
+  what the run needs from you ("Worker branch … holds the result: review · land ·
+  dismiss"). With no run it explains how one starts; the queue chart appears only
+  when work has been queued.
+- Headless heads describe their steps: Details and the workspace show
+  `headless (no terminal)` and the agent of the current or last step
+  (`codex · step implement · running`) with its executable version, model and
+  reasoning effort, tokens (in, cached, out), cost and duration. A model or effort
+  the provider reports is shown as reported; one read from the provider's
+  configuration (such as `~/.codex/config.toml`) is labelled "configured default …
+  (not observed)"; anything else stays unknown, never zero.
+- `p` on a headless head shows a bounded, read-only view of its step: the running
+  agent's events (assistant messages, commands, file changes, usage) with a raw
+  fallback, a command's output, or a finished step's declared result. Provider
+  output is copied privately only while the step runs and removed when it ends.
+- When a plan run succeeds, fails or is cancelled, Hydra retires the heads it
+  created for verification steps with `hydra kill --protect-untracked` once their
+  evidence is sealed in the run record; their branches are kept. A verifier head
+  with changes is kept for review, every outcome is recorded as a run event, and
+  a failed retirement never changes the run result. Worker heads stay until you
+  land or dismiss their result.
+- Reviewing a result of a compiled plan run shows what the run produced and how it
+  was checked: the verdict, the deliverable's text, each requirement with its check,
+  the verify step's exact command with a filtered summary of its output (full log
+  with `L`), duration, agent, executable version and token use per step, the worker
+  branch's commits, files and bounded diff as currently observed, and the `git` and
+  `hydra` commands that would land and clean up. Hydra never runs them.
+- Attention items can be marked seen with `s` from the list or detail view. The
+  marker is kept per user in `$HYDRA_HOME/attention/seen.tsv` (512 entries, keyed by
+  identity and revision) through `hydra workflow attention-seen`, survives restarts,
+  moves the item to a collapsed Seen group and out of the count; a new revision
+  shows it again. A seen approval stays listed until someone decides.
+- Attention lists failures that need your decision: a failed check reads "Check
+  failed · ux-greeting · repo-check — greeting-committed; review the log and send
+  the plan back or retry", and a failed agent step, a step or run needing recovery
+  and a run whose delivery was rejected get their own item (kind `failure`). They
+  lead the list, count as needing you ("1 failed check or step needs a decision"),
+  and stay listed when marked seen until the step succeeds or a later run of the
+  same plan from the same planning head succeeds. `r` opens the run's result
+  review with the failed requirement and the log summary (readiness `failed`).
+  Fleet attention reports a remote task that failed as the same kind; cancelled
+  and unknown outcomes are never claimed as failures.
+- `hydra resume --terminal <branch>` restarts only the terminal of an interactive
+  head whose tmux session is gone. It requires the existing worktree and never
+  creates, resets or cleans it, starts what the head's profile resumes (Codex
+  `resume --last`, a shell for `none`), and refuses clearly when the worktree is
+  missing.
+- The Statistics view shows agent tokens (in, cached, out), cost only when reported,
+  agent, executable version, model and effort per step and per run, with totals for
+  the selected scope. Workflow statistics data is schema 4 with one `U` row per agent
+  step from its exec receipt; schemas 2 and 3 remain readable.
+- `Ctrl-B [` in a local attached pane opens the agent's own tmux history (copy
+  mode on that exact session): PgUp/PgDn or arrows scroll and `q`, Esc or
+  `Ctrl-B ]` return to live output. The attached client draws on tmux's alternate
+  screen, which keeps no scrollback of its own.
+- When another, smaller client of the same tmux session typed last, tmux sizes the
+  window to it and fills the rest of Hydra's view with dots; the attached pane now
+  says it is "sized by another client" and that typing there takes the size back.
+- `make test-usability` adds three installed journeys at 80 and 140 columns.
+  `result-review` drives an in-app plan through a headless worker's two-file commit,
+  a repository check on the worker head and a verifier head, then checks Overview's
+  run panel, the grouped worker with land/dismiss, the retired verifier, the task
+  diff and the result review (verdict, requirements, command, files and diff).
+  `recovery` fails the repository check, checks the run panel, Attention and the
+  review, then recovers through the planning agent's corrected revision, validated
+  and executed with `y`. `recovery-terminal` removes an interactive head's terminal
+  and checks that Hydra neither infers failure nor loss and that the offered action
+  restores access. The provider fixture is installed as `codex` on a private PATH
+  and reached only through the built-in profile's launch and headless contracts.
+  Reports list every failed desired-behaviour check of a journey.
+
+### Changed
+
+- Execution approval is an in-app confirmation (`y`; `n`/Esc cancels) showing the
+  revision, a 12-hex digest, the policy and what the run does, instead of typing the
+  64-hex digest. The TUI still passes the full digest, and a changed draft or policy
+  still refuses launch.
+- The planning workspace gives the agent conversation full height and most of the
+  width beside the plan review. At 80 columns navigation stays and the focused side
+  gets the rest; `B` (Ctrl-B B from the agent) shows the review.
+- Attached panes read "codex · session running" instead of "AGENT UNKNOWN": the
+  agent and observable session state, never a claim that the agent awaits input.
+- Heads a workflow run creates are grouped under their run, and a run launched
+  from a planning conversation under that planning head, in Work, Overview and the
+  workspace navigation (`add-kill` ▸ `plan run kill-dry-run · succeeded` ▸ `worker
+  …`, `verifier …`). Runs start collapsed; Enter or `l`/`h` expands and collapses
+  them. Header and Overview counts describe the heads you started, with run heads
+  counted inside their run ("1 head (+2 in runs)").
+- A headless head never needs attention merely for having no terminal; attention
+  comes from failed steps, approval waits, runs needing recovery and approval
+  requests. A planning head's details show its plan approval ("plan … approved …
+  · run … · succeeded") instead of `Approvals 0 of 0`; gate counts are labelled
+  "Approval requests".
+- Technical details are grouped into identity, lifecycle, adapter and sources.
+- Attention rows read as sentences with the workflow and step, for example "Result
+  ready for review · kill-dry-run · verify", followed by why it needs you; long rows
+  wrap instead of being cut, and a partial snapshot is explained in plain words only
+  when it applies. `workflow attention-data` and `fleet attention-data` are wire
+  version 3: version 2 appended the workflow name as a presentation label and
+  version 3 appends a presentation detail (the requirements a failed check
+  decides). The native TUI reads versions 1 to 3.
+- Review navigation styles headings, check results and diff lines, jumps between
+  sections with `n`/`N` and pages with space/`b`.
+- Captured agent output reads as a faithful transcript. The Details terminal
+  excerpt captures the pane's colors and joined lines (`capture-pane -e -J`, 40
+  lines of history) and keeps the newest output instead of failing when large;
+  headless step output keeps color. Each line is interpreted by the same termviz
+  terminal model as the attached pane, so Unicode, emoji, colors, tabs and
+  carriage-return progress lines match it, while screen erasure, cursor movement
+  and OSC/DCS payloads are dropped. Long lines wrap at the view width with a `↪`
+  continuation marker instead of being clipped, action results and review logs
+  wrap the same way, and unified diffs without their own colors get theme tones
+  (added, removed, hunk and file header); with `NO_COLOR` or `--no-color` the
+  `+`/`-` markers remain. The excerpt is labelled a read-only transcript that
+  PgUp/PgDn scroll (result overlays page the same way), and key
+  hints printed by the provider ("esc to interrupt", "← for agents") are named as
+  belonging to live input.
+- termviz lays out emoji like tmux 3.5: ZWJ sequences, skin-tone modifiers and flag
+  pairs occupy one two-column cell, VS16 widens a narrow symbol, and invisible
+  format characters (zero-width space, bidirectional controls) are dropped instead
+  of shown as `?`, so attached panes stay aligned with tmux. ASCII mode (a non-UTF-8
+  locale or `--ascii`) approximates box drawing, arrows, bullets, quotes and Latin-1
+  letters in the same columns instead of turning them into runs of `?`, and says so
+  in the Details transcript.
+- Attached panes always name how to leave agent input and close the view, fitted
+  to the width down to 40 columns (`Ctrl-B Tab leave  Ctrl-B x close`); Esc and Tab
+  still go to the agent. Leaving input and closing the view say that the agent keeps
+  running and how to reopen it.
+
+- The guided local policy now allows `sh`, `git`, `make` and the head's own agent
+  profile, writes inside plan-spawned heads, 3600 seconds and a 1 GiB free-space
+  floor, so agent-implemented plans can validate. Its approval flow is unchanged.
+- The planning handoff explains how to express a spawned worker, an agent step
+  with its instructions inline, and verification with the repository's own
+  checks on the worker head under that policy. It tells the planning agent never
+  to commit while planning or change your checkout, and to use `--asset` only for
+  genuinely custom files. The `P` policy prompt notes that the plan carries its
+  own prompts and assets.
+
+### Fixed
+
+- Opening a head whose terminal is gone from Work (`a`, as Details and Recovery
+  offer) restarts its terminal in the same worktree through `hydra resume
+  --terminal` and then attaches, instead of showing an empty pane or "CLIENT
+  DISCONNECTED". Committed and uncommitted work are untouched; when the worktree
+  itself is missing the restart is refused and nothing is recreated. Details,
+  Work and the workspace offer "a restart its terminal" for such a head.
+- A disconnected attach client no longer captures keys: Tab, Esc and `a` work in
+  Hydra again (previously every key reported "Input not delivered" until `Ctrl-B`
+  was used), and `a` or `Ctrl-B r` reattaches.
+- At 80 columns and in the compact layout the attached footer no longer cuts off
+  `Ctrl-B x close`; the notice after closing a view no longer says input is still
+  attached.
+- Headless step output no longer shows fragments such as `[31m` where escape
+  characters were deleted, and a byte-bounded tail never starts inside a character
+  or escape sequence.
+- Review text wraps by display width instead of bytes, so multi-byte characters
+  are no longer split into `?` at the wrap point.
+- New tasks whose names contain spaces or other invalid characters start on a
+  derived branch (`add kill dry run` becomes `add-kill-dry-run`) instead of failing.
+- `invalid_source` names the checkout and the failed condition, lists tracked
+  changes with a commit-or-stash recovery, and the TUI shows readable diagnostics.
+- Doctor, cleanup, `doctor --fix` and TUI Recovery now use the `hydra gc --policy
+  orphaned` detector: only `head_<id>` worktrees under the recorded worktree root
+  whose head record is gone. User-created sibling worktrees such as
+  `hydra-<branch>` are no longer flagged or offered for removal, and current
+  leftover head worktrees are no longer missed.
+- Cleanup removes leftover worktrees through gc, keeps worktrees with uncommitted
+  changes unless `--include-dirty` is passed, and keeps branches.
+- The Recovery finding runs `hydra gc --policy orphaned --dry-run` instead of an
+  invalid command, reads "Leftover worktree from a removed task", and `x` removes
+  a clean one after confirmation. Failed checks are reported as failed.
+- `hydra gc` explains missing option values; orphan GC no longer treats other
+  worktrees under the root, such as integration worktrees, as orphans.
+- Spawning shell tests run only inside throwaway repositories, so standalone runs
+  no longer leave head worktrees beside the source checkout or in `$TMPDIR`.
+- Pass `--trust` in the built-in Cursor headless run and resume recipes so Cursor
+  Agent accepts fresh head worktrees instead of refusing with a plain-text prompt.
+  The help probe now requires the flag; `--force`/`--yolo` are never passed.
+- Keep a bounded, character-safe excerpt (4096 bytes per stream) of provider stderr
+  and undecoded stdout in failed headless receipts as optional `diagnostic`;
+  completed receipts are unchanged.
+- Details no longer shows `Full diff : ...` with a stray colon and no value;
+  headless heads are no longer listed as `Agent shell`, `Session unknown`, or offered
+  a terminal preview that could only report `preview unavailable`.
+- Succeeded spawn and plain exec steps no longer appear in attention as unknown
+  `result_binding_unknown` items that also marked the snapshot partial: a step that
+  declares no outputs has nothing to review. Declared outputs that do not match
+  their receipt remain explicit unknowns.
+- Reviews no longer report a step without deliverables as revoked with malformed
+  declarations; it is not applicable. Plan checks of a run that has not finished are
+  pending instead of failed, and a sealed result waiting for them is in progress.
+- Statistics word unmeasured CPU and memory in full instead of truncating
+  "not measured", and no longer claim tokens are unmeasured when receipts record them.
+- A result review marks the requirements of a check whose step failed as FAIL
+  instead of PENDING after the run failed, and says "1 commit, 1 file" rather than
+  "1 commits".
+- Text-field prompts, decision panels and result reviews wrap between words instead
+  of splitting them at the row end ("No e / xecution yet"); a long prompt may use up
+  to half the terminal height instead of being cut after five rows. Plain review
+  lines, such as a check's summary output, wrap between words with a hanging indent
+  at 80 columns instead of splitting a word behind a `>` marker.
+- Native PTY drivers no longer leave private tmux servers running: a guardian
+  process kills the fixture's server and removes its directory on every exit path,
+  including failed checks and signals, and a successful driver checks that no
+  server remains. `pty-runs-heads` previously removed its fixture directory, and
+  with it the socket, before stopping the server.
+- `n` in a result review stops at "CHANGES ON <branch>" instead of skipping from the
+  checks to the diff.
+- The launch owner of a plan run that fails now records that it finished and its
+  exit code; under `set -e` it exited early, so `--workspace-status` and the TUI
+  reported the launch as still starting.
+- The spawn bootstrap and workspace controls tests wait for the pane state, footer
+  and run-list state they check, within deadlines, instead of reading after fixed
+  delays; both failed under heavy load.
+
 ## [2.7.0] - 2026-09-24
 
 ### Added
@@ -1082,7 +1329,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.7.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/Someblueman/hydra/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/Someblueman/hydra/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/Someblueman/hydra/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/Someblueman/hydra/compare/v2.4.0...v2.5.0

@@ -29,33 +29,64 @@ static int form_columns(const char *text, size_t length, bool ascii) {
     }
     return columns;
 }
+/* 1 moves a word that does not fit to the next row, 2 drops a space that
+ * would start a row, 0 places the character. A word wider than a whole row
+ * still breaks where the row ends. */
+static int form_break(const struct app *app, const char *text, size_t offset, size_t length, int x, int width) {
+    size_t n=offset;
+    if (text[offset]==' ') return (x==0 && offset) || x>=width ? 2 : 0;
+    if (!x || text[offset-1]!=' ') return 0;
+    while (n<length && text[n]!=' ') n++;
+    return x+form_columns(text+offset,n-offset,app->ascii)>width ? 1 : 0;
+}
+/* Where the next character goes; with no canvas the pen only counts rows. */
+struct form_pen { struct tv_canvas *c; int width, bottom, x, y; enum tv_style tone; };
+/* Places one character, moving to the next row when it does not fit.
+ * Returns the bytes it used, or 0 for an undecodable sequence. */
+static size_t form_place(const struct app *app, struct form_pen *pen, const char *text, size_t length) {
+    uint32_t cp;
+    size_t used=tv_utf8_decode(text,length,&cp);
+    int columns;
+    if (!used) return 0;
+    columns=tv_codepoint_width(cp);
+    if (columns<0 || (app->ascii && cp>126)) { cp='?'; columns=1; }
+    if (pen->x+columns>pen->width) { pen->x=0; pen->y++; }
+    if (pen->c && pen->y<pen->bottom) tv_put(pen->c,pen->x,pen->y,cp,pen->tone);
+    pen->x+=columns;
+    return used;
+}
+/* Word-wraps text into rows [y, bottom) of c; with no canvas it only counts.
+ * Returns the row after the last one used. */
+static int form_wrap(const struct app *app, struct tv_canvas *c, int width, int y, int bottom, const char *text, enum tv_style tone) {
+    struct form_pen pen={c,width,bottom,0,y,tone};
+    size_t offset=0, length=strlen(text);
+    while (offset<length && pen.y<bottom) {
+        int action=form_break(app,text,offset,length,pen.x,width);
+        size_t used;
+        if (action==1) { pen.x=0; pen.y++; continue; }
+        if (action==2) { offset++; continue; }
+        used=form_place(app,&pen,text+offset,length-offset);
+        if (!used) break;
+        offset+=used;
+    }
+    return pen.y+1;
+}
 static void form_draw(struct app *app, const char *prompt, const char *text, size_t cursor) {
     struct tv_cell cells[512U*8U];
     struct tv_canvas c;
-    int width=app->cols>512 ? 511 : app->cols-1, row, column, height, prompt_rows, x=0,y=1;
-    size_t start=0, offset=0, prompt_length=strlen(prompt);
+    int width=app->cols>512 ? 511 : app->cols-1, row, column, height, prompt_rows, limit=app->rows/2>8 ? app->rows/2 : 8;
+    size_t start=0;
     if (width<5 || app->rows<4) return;
-    prompt_rows=(form_columns(prompt,prompt_length,app->ascii)+width-1)/width;
-    if (prompt_rows<1) prompt_rows=1;
+    prompt_rows=form_wrap(app,NULL,width,0,app->rows,prompt,TV_STRONG);
     height=prompt_rows+3;
-    if (height>8) height=8;
+    if (height>limit) height=limit;
     if (height>app->rows) height=app->rows;
     (void)tv_init(&c,cells,512U*8U,width,height,!app->ascii);
     tv_clear(&c,TV_BASE);
     while (start<cursor && form_columns(text+start,cursor-start,app->ascii)>=width-2) start=form_next(text,start,cursor);
     column=form_columns(text+start,cursor-start,app->ascii);
     tv_text(&c,(struct tv_rect){0,0,width,1},"INPUT TO HYDRA / text field",TV_SELECTED);
-    while (offset<prompt_length && y<height-2) {
-        uint32_t cp;
-        size_t used=tv_utf8_decode(prompt+offset,prompt_length-offset,&cp);
-        int columns;
-        if (!used) break;
-        offset+=used; columns=tv_codepoint_width(cp);
-        if (columns<0 || (app->ascii && cp>126)) { cp='?'; columns=1; }
-        if (x+columns>width) { x=0; y++; }
-        if (y<height-2) tv_put(&c,x,y,cp,TV_STRONG);
-        x+=columns;
-    }
+    (void)form_wrap(app,&c,width,1,height-2,prompt,TV_STRONG);
     tv_text(&c,(struct tv_rect){0,height-2,width,1},text+start,TV_BASE);
     if (cursor<strlen(text)) c.cells[(size_t)c.stride*(size_t)(height-2)+(size_t)column].style=TV_SELECTED;
     else tv_put(&c,column,height-2,'_',TV_SELECTED);
@@ -132,4 +163,65 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
     /* The form temporarily paints over the presented frame. */
     frame_invalidate(app);
     return result;
+}
+
+/* Wraps one line of a decision panel; returns the next free row. */
+static int confirm_line(struct app *app, struct tv_canvas *c, int y, int bottom, const char *text, enum tv_style tone) {
+    return form_wrap(app,c,c->width,y,bottom,text,tone);
+}
+
+static void confirm_draw(struct app *app, const char *title, const char *const lines[], size_t count, const char *footer) {
+    struct tv_cell cells[512U*12U];
+    struct tv_canvas c;
+    int width=app->cols>512 ? 511 : app->cols-1, height=app->rows<12 ? app->rows : 12, y=1, row;
+    size_t i;
+    if (width<5 || height<4) return;
+    (void)tv_init(&c,cells,512U*12U,width,height,!app->ascii);
+    tv_clear(&c,TV_BASE);
+    tv_text(&c,(struct tv_rect){0,0,width,1},title,TV_SELECTED);
+    for (i=0;i<count;i++) y=confirm_line(app,&c,y,height-1,lines[i],i ? TV_BASE : TV_STRONG);
+    tv_text(&c,(struct tv_rect){0,height-1,width,1},footer,TV_BORDER);
+    for (row=0;row<height;row++) {
+        printf("\033[%d;1H",app->rows-height+1+row);
+        (void)tv_write_row(&c,row,stdout,dashboard_style,app);
+    }
+    fflush(stdout);
+}
+
+/* A modal decision with explicit keys. A key in `choices` accepts; n, Esc and
+ * Ctrl-C decline; Enter, paste and every other key are ignored, so an
+ * accidental keystroke cannot approve. Observations and clients keep moving. */
+/* 1 accepts, 0 declines, -1 keeps waiting. */
+static int confirm_key(const struct tv_event *e, const char *choices) {
+    if (e->type!=TV_KEY) return -1;
+    if (e->key==27 || e->key==3 || e->key=='n' || e->key=='N') return 0;
+    return e->key>0 && e->key<128 && strchr(choices,(int)e->key) ? 1 : -1;
+}
+
+static void confirm_refresh(struct app *app, time_t *last_refresh) {
+    time_t now=time(NULL);
+    native_observations_tick(app,now-*last_refresh>=2);
+    if (now-*last_refresh>=2) *last_refresh=now;
+    native_terminals_pump(app);
+    update_size(app);
+    render(app,0,false);
+}
+
+bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices) {
+    struct tv_input input;
+    char footer[128];
+    bool redraw=true;
+    int decision=-1;
+    time_t last_refresh=time(NULL);
+    snprintf(footer,sizeof(footer),"%s confirm   n / Esc cancel",choices);
+    tv_input_init(&input);
+    while (decision<0 && !terminal_stopped() && app->running) {
+        struct tv_event e;
+        char byte;
+        if (redraw) { confirm_refresh(app,&last_refresh); confirm_draw(app,title,lines,count,footer); }
+        redraw=read_key(input.length>1 ? 150 : 40,&byte)<=0;
+        if (redraw ? tv_input_flush(&input,&e) : tv_input_feed(&input,(unsigned char)byte,&e)) decision=confirm_key(&e,choices);
+    }
+    frame_invalidate(app);
+    return decision==1;
 }
