@@ -56,6 +56,14 @@ static bool pane_contains(const char *capture, const char *needle) {
     joined[n] = 0;
     return strstr(joined, needle) != NULL;
 }
+/* A redraw can lag its input under load: wait, within a deadline, for the
+ * marker to leave the screen instead of judging one fixed-delay frame. */
+static bool until_absent(struct tv_session *s, const char *marker, double timeout) {
+    double end = tv_now() + timeout;
+    while (tv_contains(s, marker) && tv_now() < end)
+        tv_pump(s, .05);
+    return !tv_contains(s, marker);
+}
 static bool lines_subset(const char *before, const char *after) {
     const char *p = before;
     while (*p) {
@@ -155,7 +163,7 @@ int main(void) {
                 tv_resize(&s, sizes[j][0], sizes[j][1]);
                 tv_pump(&s, .3);
                 CHECK(!s.screen.overflow, "waiting approval resize");
-                CHECK(tv_contains(&s, "waiting-approval"), "waiting state visible");
+                U("waiting-approval", 10);
                 save(&s, "waiting", sizes[j][0], sizes[j][1]);
             }
             S("Y");
@@ -219,11 +227,15 @@ int main(void) {
                 CHECK(!s.screen.overflow, "terminal workflow resize");
                 save(&s, terminal, sizes[j][0], sizes[j][1]);
             }
+            /* R acts on the run list's recorded state, which can refresh after the
+             * evidence text above; wait until the header (drawn from that list)
+             * shows the terminal state before asking for a control. */
+            tv_format(text, sizeof(text), " / run %s / ", terminal);
+            U(text, 15);
             S("R");
             U("Terminal run: no resume or cancel", 10);
             S("]");
-            tv_pump(&s, .3);
-            CHECK(!tv_contains(&s, "Terminal run: no resume or cancel"),
+            CHECK(until_absent(&s, "Terminal run: no resume or cancel", 10),
                   "changing selection clears footer");
             tv_close(&s, "q", 0, 0);
         }

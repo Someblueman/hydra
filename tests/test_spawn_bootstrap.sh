@@ -24,6 +24,13 @@ real_tmux="$(command -v tmux)"
 export HYDRA_HOME="$base/home" HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
 export BOOTSTRAP_LOG="$base/tmux.log" BOOTSTRAP_SOCKET="$socket" BOOTSTRAP_REAL_TMUX="$real_tmux"
 export BOOTSTRAP_FAKE_VERSION="" FAKE_AGENT_OUT="$base/agent.out"
+# The fake agent runs until the test releases it through this FIFO, so its
+# lifetime never races the checks made while it owns the pane.
+export FAKE_AGENT_RELEASE="$base/agent.release"
+# Panes run a plain POSIX login shell with an empty home: the user's own shell
+# and tmux configuration must not decide how long a pane takes to start.
+mkdir -p "$base/home-user"
+export HOME="$base/home-user" SHELL=/bin/sh ENV=/dev/null
 
 # shellcheck disable=SC2329,SC2317
 cleanup() {
@@ -48,7 +55,9 @@ fi
 exec "$BOOTSTRAP_REAL_TMUX" -L "$BOOTSTRAP_SOCKET" "$@"
 EOF
 chmod +x "$base/bin/tmux"
-# The fake agent records what it saw, then keeps the pane busy as `sleep`.
+# The fake agent records what it saw, then keeps the pane busy as `cat`
+# blocked on the release FIFO; it exits with status 0 once the test opens and
+# closes the FIFO for writing.
 cat > "$base/bin/fakeagent" <<'EOF'
 #!/bin/sh
 {
@@ -56,7 +65,7 @@ cat > "$base/bin/fakeagent" <<'EOF'
         "$HYDRA_HEAD_ID" "$HYDRA_INSTANCE_ID" "$HYDRA_BRANCH" "$HYDRA_TASK_FILE"
     printf 'argc=%s\narg1=%s\ncwd=%s\n' "$#" "${1:-}" "$(pwd)"
 } > "$FAKE_AGENT_OUT"
-exec sleep 4
+exec cat "$FAKE_AGENT_RELEASE"
 EOF
 chmod +x "$base/bin/fakeagent"
 PATH="$base/bin:$PATH"
@@ -71,13 +80,37 @@ git commit -q --allow-empty -m init
 "$HYDRA_BIN" init --no-agent --trust >/dev/null || exit 1
 "$HYDRA_BIN" agent init fake --executable "$base/bin/fakeagent" --prompt-mode task-file >/dev/null || exit 1
 
-wait_for_file() {
-    _wff_tries=0
-    while [ ! -s "$1" ] && [ "$_wff_tries" -lt 60 ]; do
+mkfifo "$FAKE_AGENT_RELEASE" || exit 1
+
+# Poll an observable condition until it holds or a wall-clock deadline passes.
+# Usage: wait_until <seconds> <command...>
+wait_until() {
+    _wu_end=$(($(date +%s) + $1))
+    shift
+    until "$@"; do
+        [ "$(date +%s)" -lt "$_wu_end" ] || { "$@"; return; }
         sleep 0.1 2>/dev/null || sleep 1
-        _wff_tries=$((_wff_tries + 1))
     done
-    [ -s "$1" ]
+}
+
+# shellcheck disable=SC2329,SC2317 # called through wait_until
+file_has_content() { [ -s "$1" ]; }
+
+wait_for_file() { wait_until 30 file_has_content "$1"; }
+
+pane_command() { tmux display-message -p -t "$1" '#{pane_current_command}' 2>/dev/null; }
+
+pane_runs() { [ "$(pane_command "$1")" = "$2" ]; }
+
+# shellcheck disable=SC2329,SC2317 # called through wait_until
+pane_runs_shell() { is_shell_command "$(pane_command "$1")"; }
+
+# shellcheck disable=SC2329,SC2317 # called through wait_until
+pane_shows() {
+    case "$(tmux capture-pane -p -t "$1" 2>/dev/null)" in
+        *"$2"*) return 0 ;;
+    esac
+    return 1
 }
 
 head_dir_for() {
@@ -89,6 +122,7 @@ head_dir_for() {
     return 1
 }
 
+# shellcheck disable=SC2329,SC2317 # called through wait_until
 is_shell_command() {
     case "$1" in sh|bash|dash|zsh|fish|-sh|-bash|-dash|-zsh|-fish) return 0 ;; esac
     return 1
@@ -96,7 +130,9 @@ is_shell_command() {
 
 pane_value() {
     # Ask the interactive shell in session:0.0 for one variable, via a file.
+    # Input typed before the shell is ready waits in the terminal for it.
     rm -f "$base/pane-value"
+    wait_until 30 pane_runs_shell "$1:0.0"
     tmux send-keys -t "$1:0.0" "printf '%s\\n' \"\$$2\" > '$base/pane-value'" Enter
     wait_for_file "$base/pane-value" && sed -n '1p' "$base/pane-value"
 }
@@ -121,9 +157,9 @@ case "$(tmux show-environment -t plain HYDRA_PROJECT_ID 2>/dev/null)" in
     HYDRA_PROJECT_ID=project_*) assert_success 0 "session environment carries the project id" ;;
     *) assert_success 1 "session environment carries the project id" ;;
 esac
-sleep 1
-is_shell_command "$(tmux display-message -p -t plain:0.0 '#{pane_current_command}')"
+wait_until 30 pane_runs_shell plain:0.0
 assert_success $? "shell-only head opens an interactive shell in session:0.0"
+wait_until 30 pane_shows plain:0.0 "Details: hydra provenance plain"
 assert_equal "$head_id" "$(pane_value plain HYDRA_HEAD_ID)" "the interactive shell inherits the head id"
 assert_equal "$worktree" "$(pane_value plain PWD)" "the interactive shell starts in the worktree"
 screen="$(tmux capture-pane -p -t plain:0.0)"
@@ -172,7 +208,9 @@ assert_equal "task_file=$agent_dir/task" "$(sed -n '4p' "$FAKE_AGENT_OUT")" "age
 assert_equal "argc=1" "$(sed -n '5p' "$FAKE_AGENT_OUT")" "task is delivered as one argument"
 assert_equal "arg1=Do the thing" "$(sed -n '6p' "$FAKE_AGENT_OUT")" "task bytes reach the agent"
 assert_equal "cwd=$agent_worktree" "$(sed -n '7p' "$FAKE_AGENT_OUT")" "agent starts inside the worktree"
-assert_equal sleep "$(tmux display-message -p -t agent:0.0 '#{pane_current_command}')" "the agent is the pane's foreground process"
+# The agent writes its record just before exec, so wait for the exec itself.
+wait_until 30 pane_runs agent:0.0 cat
+assert_equal cat "$(pane_command agent:0.0)" "the agent is the pane's foreground process"
 grep '^send-keys' "$BOOTSTRAP_LOG" | grep -q fakeagent
 assert_failure $? "the agent command is not typed with send-keys"
 grep '^send-keys' "$BOOTSTRAP_LOG" | grep -q 'export HYDRA_'
@@ -181,13 +219,15 @@ assert_equal "$base/bin/fakeagent" "$(sed -n '1p' "$agent_dir/instances/$agent_i
 grep -Fq "'$base/bin/fakeagent'" "$agent_dir/instances/$agent_instance/launcher"
 assert_success $? "launcher runs the executable provenance reported, by absolute path"
 tmux split-window -t agent:0.0 -h -c "$agent_worktree" 2>/dev/null
-sleep 1
 rm -f "$base/pane-value"
+wait_until 30 pane_runs_shell agent:0.1
 tmux send-keys -t agent:0.1 "printf '%s\\n' \"\$HYDRA_HEAD_ID\" > '$base/pane-value'" Enter
 wait_for_file "$base/pane-value"
 assert_equal "$agent_head" "$(sed -n '1p' "$base/pane-value")" "panes created after spawn inherit the head environment"
-sleep 4
-is_shell_command "$(tmux display-message -p -t agent:0.0 '#{pane_current_command}')"
+# Release the agent: opening the FIFO for writing ends its blocked read.
+! pane_runs agent:0.0 cat || : > "$FAKE_AGENT_RELEASE"
+wait_until 30 pane_shows agent:0.0 "exited with status"
+wait_until 30 pane_runs_shell agent:0.0
 assert_success $? "session:0.0 returns to a shell after the agent exits"
 case "$(tmux capture-pane -p -t agent:0.0)" in
     *"agent fake exited with status 0"*) assert_success 0 "the pane reports the agent exit before the prompt" ;;
@@ -206,7 +246,6 @@ assert_failure $? "older tmux never receives -e"
 grep -q "^set-environment -t oldtmux HYDRA_HEAD_ID $old_head\$" "$BOOTSTRAP_LOG"
 assert_success $? "older tmux receives set-environment for later panes"
 assert_equal "HYDRA_HEAD_ID=$old_head" "$(tmux show-environment -t oldtmux HYDRA_HEAD_ID 2>/dev/null)" "older tmux session environment carries the head id"
-sleep 1
 assert_equal "$old_head" "$(pane_value oldtmux HYDRA_HEAD_ID)" "older tmux first pane still inherits the head id from the launcher"
 grep '^send-keys' "$BOOTSTRAP_LOG" | grep -q 'export HYDRA_'
 assert_failure $? "older tmux types no HYDRA_ export"
@@ -224,7 +263,6 @@ else
     assert_success 1 "resume creates a new instance"
 fi
 assert_equal "HYDRA_INSTANCE_ID=$resumed_instance" "$(tmux show-environment -t plain HYDRA_INSTANCE_ID 2>/dev/null)" "resumed session environment carries the new instance id"
-sleep 1
 assert_equal "$resumed_instance" "$(pane_value plain HYDRA_INSTANCE_ID)" "resumed shell inherits the new instance id"
 grep '^send-keys' "$BOOTSTRAP_LOG" | grep -q 'export HYDRA_'
 assert_failure $? "resume types no HYDRA_ export"
