@@ -50,6 +50,35 @@ static void agent_until(struct tv_session *s, const char *needle, double seconds
     CHECK(strstr(text, needle), "agent conversation received the message");
 }
 
+/* The text field wraps its prompt at word boundaries: its rows joined with
+ * single spaces reproduce the prompt's phrases exactly, which a row broken
+ * inside a word ("No e" / "xecution") would not. */
+static bool form_words_whole(struct tv_session *s) {
+    static const char *const phrases[] = {"Review with local policy:", "writes only in heads the plan spawns,",
+        "1 worker, 4 heads, 60 minutes, 1 MiB artifacts, 1 GiB free disk, no retries or repairs.",
+        "The plan carries its prompts and assets; nothing is committed to your checkout.", "No execution yet. y/N:"};
+    char row[1024], joined[4096] = "";
+    int y, top = -1;
+    size_t i;
+    for (y = 0; y < s->screen.rows; y++)
+        if (strstr(tv_row(s, y, row, sizeof(row)), "INPUT TO HYDRA / text field")) top = y;
+    CHECK(top >= 0, "text field visible");
+    for (y = top + 1; y < s->screen.rows && tv_row(s, y, row, sizeof(row))[0] != '_'; y++) {
+        size_t n = strlen(row);
+        while (n && row[n - 1] == ' ') n--;
+        row[n] = 0;
+        CHECK(strlen(joined) + n + 2 < sizeof(joined), "prompt rows fit");
+        if (joined[0]) strcat(joined, " ");
+        strcat(joined, row);
+    }
+    for (i = 0; i < sizeof(phrases) / sizeof(phrases[0]); i++)
+        if (!strstr(joined, phrases[i])) {
+            fprintf(stderr, "Prompt rows lack '%s':\n%s\n", phrases[i], joined);
+            return false;
+        }
+    return true;
+}
+
 static void open_conversation(struct tv_session *s) {
     char command[4200];
     hf_open(&f, s);
@@ -65,6 +94,12 @@ static void open_conversation(struct tv_session *s) {
     S("\002\t");
     S("P");
     U("Review with local policy", 3);
+    CHECK(form_words_whole(s), "policy prompt wraps at words (140 columns)");
+    tv_resize(s, 80, 24);
+    U("No execution yet.", 5);
+    CHECK(form_words_whole(s), "policy prompt wraps at words (80 columns)");
+    tv_resize(s, 140, 40);
+    U("Review with local policy", 5);
     S("y\r");
     U("Revision 1 / DRAFT", 5);
 }
