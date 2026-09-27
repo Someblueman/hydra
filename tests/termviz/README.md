@@ -41,7 +41,16 @@ incremental UTF-8 decoding, overflow accounting and HTML cell evidence.
 
 Receiver cleanup uses the existing lock-based fixture quiescence helper. Tmux
 wrappers use a fixture-owned socket; teardown does not enumerate or kill unrelated
-user sessions. Failed receiver runs retain their fixture. Set
+user sessions. Every `hydra_fixture.c` driver starts a guardian process in its own
+session: when the driver exits for any reason (success, a failed check, a signal,
+even `SIGKILL`) the guardian kills the private tmux server and any process whose
+command line names the fixture, then removes the fixture directory. A successful
+driver also checks that no process still names its socket. `test_terminal_restore.c`
+kills an interactive head's tmux session, then checks that opening it from Work
+restarts the terminal in the same worktree with committed and uncommitted work
+intact, and that a missing worktree is refused without recreating anything.
+`HYDRA_TEST_KEEP_FIXTURE=1` keeps a `hydra_fixture.c` directory (never its tmux
+server) for inspection. Failed receiver runs retain their fixture. Set
 `HYDRA_TEST_KEEP_FIXTURE=1` to retain a successful receiver run, including commands,
 observation pages, announcements, result and summary JSON.
 

@@ -252,12 +252,32 @@ durable state or confer approval. Stale or ambiguous selections remain unavailab
 until a fresh exact identity is established. Native UI behavior is covered by the
 public CLI and protocol rules in this guide.
 
-Attention data is `HYDRA_ATTENTION<TAB>2`: each `ITEM` keeps the 19 version-1
-fields and appends a presentation `label` (the workflow name, or `-`). The label is
-not part of the identity or revision hashes. Readers accept versions 1 and 2. A
-succeeded step whose data manifest declares no outputs, and whose receipt names no
-files, is not a result and produces no item; declared outputs that do not match
-their receipt stay explicit `unknown` items.
+Attention data is `HYDRA_ATTENTION<TAB>3`: each `ITEM` keeps the 19 version-1
+fields and appends a presentation `label` (the workflow name, or `-`; version 2)
+and a presentation `detail` (version 3: for a failed check, the IDs of the
+requirements it decides, comma separated and bounded to 255 bytes, otherwise
+`-`). Neither is part of the identity or revision hashes. Readers accept versions
+1 to 3. A succeeded step whose data manifest declares no outputs, and whose
+receipt names no files, is not a result and produces no item; declared outputs
+that do not match their receipt stay explicit `unknown` items.
+
+Kind `failure` (route `workflow-evidence`) is a recorded failure that needs the
+user's decision. Reasons: `check_failed` (a failed step that the compiled plan
+names as a check's step; the JSON item carries `requirements`), `step_failed`,
+`step_recovery_required`, and, for a run in state `failed` or
+`recovery-required` with no failed step (for example a rejected delivery),
+`run_failed` or `run_recovery_required` with step and attempt `-`. The revision
+covers the step and run states, the attempt's exit code, failure class and
+completion time, and the checks and requirements. A failure is resolved, and no
+longer produced, when its step succeeds or when a later run (by `created-at`) of
+the same `workflow-id` from the same planning head succeeds; a run cancelled on
+request is the user's own decision and is not a failure. Fleet attention reports
+a remote task whose receiver recorded `execution_state` `failed` as kind
+`failure`, reason `task_failed`, with its step and attempt when both are valid;
+cancelled and `outcome_unknown` tasks are never claimed as failures. A failure's
+review has readiness `failed` (`candidate_state` `failed_needs_decision`) and
+the plan's result section; a run-level failure is reviewed from the run's own
+records.
 
 Seen markers are a per-user client preference, not workflow state.
 `hydra workflow attention-seen list | mark IDENTITY REVISION | clear IDENTITY`
@@ -266,7 +286,9 @@ Seen markers are a per-user client preference, not workflow state.
 dropped), replaced atomically under the `attention-seen` lock. Every call prints
 `HYDRA_ATTENTION_SEEN<TAB>1`, `SEEN<TAB>identity<TAB>revision` rows and
 `END<TAB>count`. A marker matches only its exact revision, so a changed item is
-unseen again. Marking an approval seen never approves, rejects or dismisses it.
+unseen again. Marking an approval seen never approves, rejects or dismisses it;
+marking a failure seen never resolves it, and both stay listed and counted as
+needing the user.
 
 A review of an item belonging to a compiled plan run adds a read-only `result`
 object: the plan name and objective, verdict (`pass` only from the verified
