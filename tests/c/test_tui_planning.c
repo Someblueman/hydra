@@ -2,6 +2,7 @@
  * named by the guided local policy, and readable validation failures. */
 #include "../../src/tui/task_name.h"
 #include "../../src/tui/plan_diagnostics.h"
+#include "../../src/tui/plan_summary.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -88,9 +89,34 @@ static void summary_cases(void) {
     check(plan_failure_summary(dirty, out, 8U) == 7U && strlen(out) == 7U, "the summary is bounded by its buffer");
 }
 
+static void execution_cases(void) {
+    static const char guided[] = "Plan fixture (hydra-plan-1)\nObjective\n\nContext:\nTools: sh , make , profile:codex\n"
+        "Effects: execute , worktree\nDeclared repository writes: @spawned:*\n"
+        "Budgets: parallelism 1; wall time 3600 seconds; artifacts 1048576 bytes; heads 4; disk floor 1024 MiB; retries 0; repairs 0\n";
+    static const char fixture[] = "Tools: sh\nDeclared repository writes:\n"
+        "Budgets: parallelism 1; wall time 181 seconds; artifacts 4096 bytes; heads 1; disk floor 1 MiB; retries 0; repairs 0\n";
+    struct plan_summary s;
+    char out[512];
+    check(plan_summary_parse(guided, sizeof(guided) - 1U, &s) && s.parallelism == 1U && s.heads == 4U && s.minutes == 60U,
+          "the approval summary reads the guided policy budgets");
+    plan_summary_policy(&s, out, sizeof(out));
+    check(!strcmp(out, "tools sh, make, profile:codex; parallelism 1; at most 4 heads; 60 min wall time"),
+          "the policy summary names tools and budgets");
+    plan_summary_consequences(&s, 3U, 1U, out, sizeof(out));
+    check(!strcmp(out, "Runs 3 steps, spawns 1 head, up to 60 minutes; writes only inside heads it spawns."),
+          "consequences name steps, spawned heads, time and the write boundary");
+    check(plan_summary_parse(fixture, sizeof(fixture) - 1U, &s) && s.minutes == 4U && !s.writes[0],
+          "partial minutes round up and empty writes stay empty");
+    plan_summary_consequences(&s, 1U, 0U, out, sizeof(out));
+    check(!strcmp(out, "Runs 1 step, spawns 0 heads, up to 4 minutes; declares no repository writes."),
+          "a plan without declared writes says so");
+    check(!plan_summary_parse("Tools: sh\n", 10U, &s), "a preview without budgets has no approval summary");
+}
+
 int main(void) {
     branch_cases();
     profile_cases();
     summary_cases();
+    execution_cases();
     return failures ? 1 : 0;
 }

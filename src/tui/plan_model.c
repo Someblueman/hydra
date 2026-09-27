@@ -78,15 +78,32 @@ static bool native_plan_write(struct native_plan *p, const char *name, const cha
     ok=fwrite(bytes,1,length,out)==length;
     return fclose(out)==0 && ok;
 }
+/* The returned revision has no validation, preview or dependency graph. */
+void native_plan_returned(struct native_plan *p) {
+    char text[512];
+    p->state=PLAN_RETURNED; p->digest[0]='\0'; p->graph.run_count=0; p->graph.node_count=0; p->selected=0;
+    snprintf(text,sizeof(text),"Returned for changes at revision %u. This draft cannot be validated or executed. "
+        "Hydra shows the agent's next published revision here; A opens the conversation.",p->revision);
+    native_plan_message(p,text);
+}
+
+/* A returned draft stays returned while its bytes are unchanged. */
+static bool native_plan_still_returned(const struct native_plan *p, const char *path, const char *bytes, size_t length) {
+    return p->state==PLAN_RETURNED && bytes && p->source_bytes && !strcmp(p->path,path) &&
+        length==p->source_length && !memcmp(bytes,p->source_bytes,length);
+}
+
 bool native_plan_load(struct app *app, const char *path, const char *policy) {
     struct native_plan *p;
     char *a,*b;
     size_t an=0,bn=0;
+    bool returned;
     if (strlen(path)>=4096 || strlen(policy)>=4096 || !native_plan_init(app)) return false;
     p=app->plan;
+    a=native_plan_read(path,&an); b=native_plan_read(policy,&bn);
+    returned=native_plan_still_returned(p,path,a,an);
     if (strcmp(p->path,path) || strcmp(p->policy,policy)) p->proposal_head[0]='\0';
     native_capture_destroy(&p->job); p->state=PLAN_DRAFT; p->digest[0]='\0';
-    a=native_plan_read(path,&an); b=native_plan_read(policy,&bn);
     copy_text(p->path,sizeof(p->path),path); copy_text(p->policy,sizeof(p->policy),policy);
     free(p->source_bytes); free(p->policy_bytes);
     p->source_bytes=a; p->policy_bytes=b; p->source_length=an; p->policy_length=bn;
@@ -96,7 +113,9 @@ bool native_plan_load(struct app *app, const char *path, const char *policy) {
         native_plan_message(p,"Draft or policy unavailable. Each must be a regular file of at most 256 KiB. Press I to choose files again.");
         return false;
     }
-    native_plan_message(p,"Conversational proposal loaded. No validation or execution has occurred. Press V to validate and compile the current draft and policy.");
+    if (returned) { native_plan_returned(p); return true; }
+    native_plan_message(p,"Conversational proposal loaded. No validation or execution has occurred. "
+        "V validates the current draft and policy; F sends it back to the agent with requested changes.");
     return true;
 }
 bool native_plan_compile(struct app *app) {
@@ -104,10 +123,11 @@ bool native_plan_compile(struct app *app) {
     char draft[4096], policy[4096];
     char *argv[8];
     if (!p || !p->path[0] || p->job.pid) return false;
+    if (p->state==PLAN_RETURNED && !native_plan_changed(p)) return false;
     if (native_plan_changed(p)) {
         char path[4096], policy_path[4096];
         copy_text(path,sizeof(path),p->path); copy_text(policy_path,sizeof(policy_path),p->policy);
-        if (!native_plan_load(app,path,policy_path)) return false;
+        if (!native_plan_load(app,path,policy_path) || p->state==PLAN_RETURNED) return false;
     }
     if (!p->source_bytes || !p->policy_bytes || p->compilation>=1000) return false;
     p->compilation++;

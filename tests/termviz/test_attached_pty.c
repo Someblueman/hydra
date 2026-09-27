@@ -89,7 +89,7 @@ int main(void) {
     int sizes[][2] = {{80, 24}, {40, 10}, {140, 40}};
     size_t i;
     const char *observed[] = {"exited exact\n", "exited reported\n", "failed exact\n"};
-    const char *labels[] = {"EXIT RECORDED", "AGENT UNKNOWN", "FAIL RECORDED"};
+    const char *labels[] = {"shell · exit recorded", "shell · session running", "shell · failure recorded"};
     const long snapshot_delay = (HYDRA_TUI_LOCAL_CAPTURE_BUDGET_MS + 999L) / 1000L + 2L;
     tv_init();
     hf_init(&f, "hydra-attached", "repo", false, true);
@@ -153,13 +153,13 @@ int main(void) {
     U("Session   running", 3);
     S("a");
     U("INPUT TO AGENT", 3);
-    U("AGENT UNKNOWN", 3);
+    U("shell · session running", 3);
     for (i = 0; i < 3; i++) {
         tv_write(observation, observed[i]);
         U(labels[i], 8);
     }
     CHECK(!unlink(observation), "remove observation fixture");
-    U("AGENT UNKNOWN", 8);
+    U("shell · session running", 8);
     tv_pump(&s, .5);
     S("printf 'one' > attachment-proof\r");
     tv_pump(&s, .5);
@@ -190,7 +190,7 @@ int main(void) {
     S("\033");
     tv_pump(&s, .2);
     CHECK(!tv_contains(&s, "INPUT TO HYDRA / text field"), "form dismiss");
-    S("\t\t");
+    S("\t\t\t"); /* plan review panes, navigation, agent */
     U("INPUT TO AGENT", 3);
     S("sleep 15\r");
     tv_pump(&s, .2);
@@ -222,7 +222,7 @@ int main(void) {
     S("\r");
     tv_pump(&s, .5);
     proof(one, "draft-proof", "draft");
-    S("\002\t\tj");
+    S("\002\t\t\tj");
     tv_pump(&s, .2);
     S("a");
     U("INPUT TO AGENT", 3);

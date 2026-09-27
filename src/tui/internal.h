@@ -64,7 +64,10 @@ struct statistics_view {
     bool stale, detail, graph_open;
     char error[TEXT], selected_id[128];
 };
-enum native_plan_state { PLAN_DRAFT, PLAN_VALIDATING, PLAN_INVALID, PLAN_READY, PLAN_UNAVAILABLE };
+/* RETURNED: the user requested changes to this exact draft; it cannot be
+ * validated or executed until the agent publishes a different draft. */
+enum native_plan_state { PLAN_DRAFT, PLAN_VALIDATING, PLAN_INVALID, PLAN_READY, PLAN_UNAVAILABLE, PLAN_RETURNED };
+#define NATIVE_PLAN_NOTICES 24
 struct native_plan {
     char path[4096], policy[4096], directory[4096], compiled[4096];
     char digest[65], objective[4096], notice[TEXT], proposal_head[TEXT];
@@ -74,6 +77,10 @@ struct native_plan {
     struct native_capture launch_job;
     pid_t owner_pid;
     char launched_digest[65], launched_run[65], launch_state[32];
+    /* The planning conversation bound at launch, and run notices typed into it. */
+    char planning_head[TEXT], planning_instance[TEXT], notified[NATIVE_PLAN_NOTICES][112];
+    size_t notified_count;
+    unsigned launched_revision;
     bool follow_launched_run;
     bool projecting;
     char *source_bytes, *policy_bytes, *text;
@@ -103,6 +110,12 @@ struct native_terminal {
     char remote_host[128], remote_project[SOURCE_TEXT];
     size_t scroll;
     bool scrolling;
+    /* Hydra-authored input waiting for the attached client to come up; a
+     * submitted entry sends Enter as a separate, later keystroke. */
+    char *outbox[4];
+    bool outbox_submit[4], received, enter_pending;
+    size_t outbox_count;
+    struct timespec outbox_at;
 };
 struct native_terminals {
     struct native_terminal slots[NATIVE_TERMINALS];
@@ -136,6 +149,7 @@ bool statistics_back(struct app *app);
 bool native_plan_key(struct app *app, char key);
 bool native_control_key(struct app *app, char key);
 int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size);
+bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices);
 bool render_statistics(struct app *app, unsigned frame, bool headless);
 void statistics_metrics_render(struct app *app, struct tv_canvas *c, struct tv_rect r);
 int native_workspace_agent_index(struct native_workspace *w, int pane);
@@ -178,7 +192,11 @@ void dashboard_card(struct tv_canvas *c, int x, int width, const char *title,
                            size_t count, const char *caption, enum tv_style tone);
 void render_dashboard(struct app *app);
 struct native_terminal *native_terminal_selected(struct app *app);
-const char *native_terminal_attention(struct app *app, const struct native_terminal *t);
+void native_terminal_attention(struct app *app, const struct native_terminal *t, char *out, size_t size);
+struct native_terminal *native_terminal_for_head(struct app *app, const struct head *h);
+bool native_terminal_attach_head(struct app *app, const struct head *h);
+bool native_terminal_deliver(struct app *app, struct native_terminal *t, const char *text, bool submit);
+const char *native_agent_name(const struct head *h);
 void native_terminal_close(struct native_terminal *t);
 void native_terminals_destroy(struct app *app);
 bool native_terminal_attach(struct app *app);
@@ -203,12 +221,19 @@ void native_evidence_destroy(struct app *app);
 void native_evidence_tick(struct app *app, bool watch);
 bool native_plan_launch(struct app *app, const char *digest);
 void native_plan_launch_tick(struct app *app, bool watch);
+struct head *native_plan_head(struct app *app, const char *branch);
+bool native_plan_converse(struct app *app, const struct head *h, const char *text, bool submit, bool focus);
+void native_plan_notify_started(struct app *app);
+void native_plan_notices_tick(struct app *app);
 void native_plan_tick(struct app *app, bool watch);
 bool native_plan_changed(struct native_plan *p);
 void native_plan_message(struct native_plan *p, const char *text);
 void native_plan_destroy(struct app *app);
 bool native_plan_load(struct app *app, const char *path, const char *policy);
 bool native_plan_compile(struct app *app);
+void native_plan_returned(struct native_plan *p);
+void native_plan_execute(struct app *app);
+void native_plan_request_changes(struct app *app);
 bool statistics_init(struct app *app);
 void statistics_destroy(struct app *app);
 void statistics_visible(struct app *app);

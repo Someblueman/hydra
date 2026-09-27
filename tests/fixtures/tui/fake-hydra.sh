@@ -40,6 +40,17 @@ case "${1:-}:${2:-}" in
         printf '\n'
         sleep 1
         ;;
+    tui:--attach)
+        # A fake agent conversation: reports its terminal size whenever the
+        # attached pane is resized, so tests can assert pane geometry.
+        printf 'FAKE AGENT PANE\n'
+        last=''
+        while :; do
+            size="$(stty size 2>/dev/null || true)"
+            if [ "$size" != "$last" ]; then printf 'AGENT SIZE %s\n' "$size"; last="$size"; fi
+            sleep 0.1
+        done
+        ;;
     workflow:tui-data)
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
         cat "$fixture_dir/workflow-v1.tsv"

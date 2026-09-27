@@ -14,8 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hydra gc --policy orphaned --path <worktree>` limits a run to one leftover
   worktree. Doctor, `hydra du` and Recovery show leftover worktree sizes, measured
   with a time bound and reported as unknown rather than zero.
+- The plan view's `F` requests changes: `hydra workflow plan proposal <head> --return
+  <feedback>` records that the exact draft was sent back, so it cannot be reviewed,
+  validated or launched until the agent republishes, and the feedback is typed into
+  the agent's pane for the user to send with Enter.
+- Plans launched from an agent proposal are bound to that head instance. The TUI
+  submits the run ID into the planning conversation, then approval waits, failed
+  steps and the outcome; the run owner also records deduplicated inbox notices for
+  that exact instance, including when the TUI is closed.
 
 ### Changed
+
+- Execution approval is an in-app confirmation (`y`; `n`/Esc cancels) showing the
+  revision, a 12-hex digest, the policy and what the run does, instead of typing the
+  64-hex digest. The TUI still passes the full digest, and a changed draft or policy
+  still refuses launch.
+- The planning workspace gives the agent conversation full height and most of the
+  width beside the plan review. At 80 columns navigation stays and the focused side
+  gets the rest; `B` (Ctrl-B B from the agent) shows the review.
+- Attached panes read "codex · session running" instead of "AGENT UNKNOWN": the
+  agent and observable session state, never a claim that the agent awaits input.
 
 - The guided local policy now allows `sh`, `git`, `make` and the head's own agent
   profile, writes inside plan-spawned heads, 3600 seconds and a 1 GiB free-space

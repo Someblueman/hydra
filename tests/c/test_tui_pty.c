@@ -904,6 +904,7 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 #include "test_tui_attention.inc"
 #include "test_tui_review.inc"
 #include "test_tui_measure.inc"
+#include "test_tui_layout.inc"
 
 /* Feed the raw PTY stream into a persistent emulator so a marker that spans
  * text the incremental presenter left unchanged is still observable. */
@@ -1025,6 +1026,7 @@ int main(int argc, char **argv) {
     test_review_narrow(argv[1], argv[2]);
     test_review_cancellation(argv[1], argv[2], argv[0]);
     test_fleet_attach(argv[1], argv[2], argv[3]);
+    test_workspace_layout(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);
     test_palette(argv[1], argv[2], argv[3]);

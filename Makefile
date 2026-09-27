@@ -171,7 +171,7 @@ $(BUILD_DIR)/hydra-tui: $(TUI_OBJECTS) $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS)
 $(BUILD_DIR)/test-libhydra: tests/c/test_libhydra.c src/libhydra.h $(BUILD_DIR)/libhydra.a
 	$(CC) $(CORE_CFLAGS) tests/c/test_libhydra.c $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tests/c/test_tui_themes.inc tests/c/test_tui_palette.inc tests/c/test_tui_visualization.inc tests/c/test_tui_attention.inc tests/c/test_tui_review.inc tests/c/test_tui_measure.inc tests/c/test_tui_measure_session.inc $(TERMVIZ_OBJECTS) | $(BUILD_DIR)
+$(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tests/c/test_tui_themes.inc tests/c/test_tui_palette.inc tests/c/test_tui_visualization.inc tests/c/test_tui_attention.inc tests/c/test_tui_review.inc tests/c/test_tui_measure.inc tests/c/test_tui_measure_session.inc tests/c/test_tui_layout.inc $(TERMVIZ_OBJECTS) | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_tui_pty.c $(TERMVIZ_OBJECTS) -o $@
 
 test-c: $(BUILD_DIR)/test-libhydra
@@ -187,7 +187,7 @@ $(BUILD_DIR)/test-tui-actions: tests/c/test_tui_actions.c src/tui/actions.c src/
 test-tui-actions: $(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-actions
 
-$(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c src/tui/task_name.c src/tui/task_name.h src/tui/plan_diagnostics.c src/tui/plan_diagnostics.h | $(BUILD_DIR)
+$(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c src/tui/task_name.c src/tui/task_name.h src/tui/plan_diagnostics.c src/tui/plan_diagnostics.h src/tui/plan_summary.c src/tui/plan_summary.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $(filter %.c,$^) -o $@
 
 test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning
@@ -462,6 +462,7 @@ test-termviz-export:
 test-plan-workspace: build-tui build-fleet
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-workspace"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-launch"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-plan-conversation"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-workflow-controls"
 sanitize-plan-workspace:
 	@$(MAKE) BUILD_DIR=build/plan-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-plan-workspace

@@ -161,9 +161,8 @@ size_t attention_count(const struct app *app) {
     return count;
 }
 
-static const char *agent_label(const struct head *head) {
-    return head->profile[0] == '\0' || !strcmp(head->profile, "none") || !strcmp(head->profile, "-") ? "shell" : head->profile;
-}
+/* The same agent name labels lists, details and attached panes. */
+static const char *agent_label(const struct head *head) { return native_agent_name(head); }
 
 static void record_hit(struct app *app, size_t index) {
     if (app->line >= app->limit || app->hit_count >= MAX_HEADS) return;
@@ -686,6 +685,9 @@ static void render_help(struct app *app) {
     linef(app, "A  conversation   B  plan overview   C  monitor   z  zoom the focused pane   S  two agents");
     linef(app, "While typing to an agent: Ctrl-B Tab returns to Hydra, Ctrl-B x closes the pane,");
     linef(app, "Ctrl-B n switches agent, Ctrl-B [ scrolls history, Ctrl-B q quits.");
+    section(app, "PLANNING");
+    linef(app, "P  review the agent's proposal   V  validate   F  request changes (feedback to the agent)");
+    linef(app, "E  execute the validated revision (confirm with y)   I  import draft and policy files");
     section(app, "OTHER");
     linef(app, "t  theme (terminal / dark / light)    D  statistics    I  attention    ?  close help    q  quit");
 }
