@@ -66,17 +66,23 @@ case "${1:-}:${2:-}" in
     workflow:attention-seen)
         # Shared per-user seen store for PTY tests; absent means unavailable.
         [ -n "${HYDRA_TEST_SEEN_FILE:-}" ] || exit 1
-        touch "$HYDRA_TEST_SEEN_FILE"
+        # Clients mark and list concurrently: serialize like the real store
+        # and never share a temporary file between processes.
+        seen_lock="$HYDRA_TEST_SEEN_FILE.lock"; seen_wait=0
+        until mkdir "$seen_lock" 2>/dev/null; do
+            seen_wait=$((seen_wait + 1)); [ "$seen_wait" -lt 200 ] || exit 1; sleep 0.05
+        done
+        touch "$HYDRA_TEST_SEEN_FILE"; seen_tmp="$HYDRA_TEST_SEEN_FILE.tmp.$$"
         case "${3:-}" in
-            mark) { grep -v "^$4	" "$HYDRA_TEST_SEEN_FILE"; printf '%s\t%s\n' "$4" "$5"; } > "$HYDRA_TEST_SEEN_FILE.tmp" ;;
-            clear) grep -v "^$4	" "$HYDRA_TEST_SEEN_FILE" > "$HYDRA_TEST_SEEN_FILE.tmp" ;;
-            list) cp "$HYDRA_TEST_SEEN_FILE" "$HYDRA_TEST_SEEN_FILE.tmp" ;;
-            *) exit 2 ;;
+            mark) { grep -v "^$4	" "$HYDRA_TEST_SEEN_FILE"; printf '%s\t%s\n' "$4" "$5"; } > "$seen_tmp" && mv "$seen_tmp" "$HYDRA_TEST_SEEN_FILE" ;;
+            clear) grep -v "^$4	" "$HYDRA_TEST_SEEN_FILE" > "$seen_tmp"; mv "$seen_tmp" "$HYDRA_TEST_SEEN_FILE" ;;
+            list) : ;;
+            *) rmdir "$seen_lock"; exit 2 ;;
         esac
-        mv "$HYDRA_TEST_SEEN_FILE.tmp" "$HYDRA_TEST_SEEN_FILE"
         printf 'HYDRA_ATTENTION_SEEN\t1\n'
         sed 's/^/SEEN	/' "$HYDRA_TEST_SEEN_FILE"
         printf 'END\t%s\n' "$(wc -l < "$HYDRA_TEST_SEEN_FILE" | tr -d ' ')"
+        rmdir "$seen_lock"
         ;;
     tui:--data)
         if [ -n "${HYDRA_TEST_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_FAIL_FILE" ]; then exit 1; fi
