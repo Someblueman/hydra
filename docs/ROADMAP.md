@@ -1,8 +1,8 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 27 September 2026
-> - **Release:** `v2.8.0` agentic journey, run review and output fidelity
+> - **Snapshot:** 28 September 2026
+> - **Release:** `v2.9.0` guided remote setup, private state and test hardening
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   [Contracts](CONTRACTS.md) · [Release definition of done](#release-definition-of-done)
@@ -41,34 +41,27 @@ version number is chosen at release time from compatibility impact.
 
 ## Next target: guided remote onboarding
 
-Release 2.8.0 follows the first installed-build agentic journey (U5, accepted on 27
-September 2026); see the [2.8.0 changelog](../CHANGELOG.md#280---2026-09-27). It
-carries the fixes that journey found: derived task branches, a guided policy that
-authorizes the head's own agent and plan-spawned worker writes, actionable
-`invalid_source`, plans that carry their own prompts and assets, send-back and
-one-key execution approval, run notices to the planning agent, run/head/worker
-presentation, result review, failed-check attention with persistent seen markers,
-statistics with recorded tokens and model settings, verifier retirement, terminal
-restart for heads whose session is gone, and leftover-worktree detection that never
-flags user worktrees. It also adds `hydra kill --dry-run` and the Cursor `--trust`
-profile fix. U14 (read-only transcripts with colour, wrapped lines, themed diffs and
-tmux-compatible emoji widths, compared with recorded Claude and Codex output) and
-U16 (visible leave and close keys, released input on disconnect, tmux history,
-repeated attach/leave/close/resize cycles) are implemented; U18's runner covers
-eight journeys at 80 and 140 columns, including result review, failed-check
-recovery and terminal restart. The user reviewed the screens on 27 September and
-accepted U14 and U16; I4's visual design pass remains open. Live agent checks:
-Claude and Cursor passed on the operator VPS; Antigravity is closed upstream.
+Release 2.9.0 fixes R1 and ships the U10 source; see the
+[2.9.0 changelog](../CHANGELOG.md#290---2026-09-28). `hydra remote setup` and the
+control centre's Hosts tab take a fresh SSH account to a verified fleet alias:
+host-key trust after a typed confirmation (never a changed key), a read-only
+preflight, provisioning into a pinned prefix from static Linux release helpers that
+CI rebuilds reproducibly and checks against `release/fleet-assets.tsv`, agent
+detection outside a non-interactive `PATH`, and provider installs and sign-in after
+per-provider approval, each resumable from private setup state. The test suite was
+hardened alongside: each case gets private temporary directories and tmux sockets,
+takes native binaries only from `BUILD_DIR` and polls instead of sleeping, and the
+loopback-SSH enrollment and host-key checks run in CI.
 
-First fix R1 (Hydra state under a group-writable umask), found while qualifying
-2.8.0 on Ubuntu. Then U10 guided remote onboarding: select an SSH destination and let Hydra
-provision a compatible runtime, install and detect agents (including per-user
-installs outside a non-interactive `PATH`) and guide sign-in, replacing the manual
-steps recorded on 26 September. Scheduling, task pools, automatic placement, T2/T3
-and performance baselines remain outside this target. A visual design and
-graphics pass across the control centre (I4, extended) is the next candidate
-after U10. These priorities do not
-establish a release date; compatibility impact still determines the next version.
+U10 stays open until its live acceptance: onboard the operator VPS from an
+installed 2.9.0 build through the control centre, launch a real agent task and
+reconnect, and exercise an existing installation, missing prerequisites, failed
+sign-in and interrupted setup. Remote project selection and pruning old bootstrap
+pins may follow. Scheduling, task pools, automatic placement, T2/T3 and performance
+baselines remain outside this target. A visual design and graphics pass across the
+control centre (I4, extended) is the next candidate after U10. These priorities do
+not establish a release date; compatibility impact still determines the next
+version.
 
 ## Product and engineering guardrails
 
@@ -393,11 +386,12 @@ part of that work.
 | U17 | head-associated proposals, guided local policy, invalidation and exact-digest approval in 2.7.0 |
 | U18 | initial deterministic installed-journey runner in 2.7.0 |
 | U5 | accepted on 27 September 2026; its fixes ship in 2.8.0 |
-| U10, U11 | none yet |
+| U10 | guided setup CLI, control-centre flow, static release helpers in 2.9.0 |
+| U11 | none yet |
 
 ### Reliability fixes
 
-- [ ] **R1 — Hydra state under a group-writable umask.** Ubuntu gives ordinary users
+- [x] **R1 — Hydra state under a group-writable umask.** Ubuntu gives ordinary users
       umask `002`. Qualifying 2.8.0 on the operator VPS on 27 September 2026 under
       that umask, `make test-fast` failed with admission `state_unavailable` ("storage,
       policy, or lock is unavailable") and the fleet sanitizer cases `dag-crash-2` and
@@ -413,6 +407,9 @@ part of that work.
       Linux and macOS; admission, statistics and workflow runs behave as under `022`;
       shared or foreign-owned directories are still refused. Until then, users can set
       `umask 022` for Hydra.
+      Fixed in 2.9.0 (private modes, plus `hydra doctor --fix-permissions`); verified
+      by CI's `make test-umask` and the full Linux gate under umask `002` on the
+      operator VPS on 28 September 2026.
 
 ### Candidate features
 

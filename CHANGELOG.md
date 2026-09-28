@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-09-28
+
 ### Added
 
 - `hydra remote setup NAME [USER@]HOST` guides a fresh SSH account to a verified
@@ -1445,7 +1447,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.8.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.9.0...HEAD
+[2.9.0]: https://github.com/Someblueman/hydra/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/Someblueman/hydra/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/Someblueman/hydra/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/Someblueman/hydra/compare/v2.5.0...v2.6.0

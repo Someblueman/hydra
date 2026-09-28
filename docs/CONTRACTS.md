@@ -1,17 +1,19 @@
 # Hydra public contracts
 
-Hydra 2.8.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
-It adds plans that carry their own prompts and assets (`propose --asset`, inline
-`prompt`, `--assets-dir`), the policy write scope `@spawned:*`, a guided local
-policy that authorizes the head's own agent profile, proposal send-back
-(`proposal --return`), `hydra resume --terminal`, `hydra kill --dry-run`, and
-`hydra gc --policy orphaned --path`. Receipts gain optional `diagnostic`,
-`configuration` and observed-model fields; attention data is version 3 and the
-statistics export schema 4, with earlier versions still read. Since 2.7.0,
-head-associated planning proposals and the opt-in `kill --protect-untracked` are
-available; since 2.6.0, `hydra init` stays out of the source tree and the head
-environment is delivered through the tmux session and a per-instance launcher.
-See the [2.8.0 changelog](../CHANGELOG.md#280---2026-09-27).
+Hydra 2.9.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
+It adds guided remote setup (`hydra remote setup`, `provision`, `agents`,
+`install-agent`, `sign-in`) with private per-host setup state, `hydra agent locate`
+with recorded off-PATH agent locations, platform-bound install packages and pinned
+static release helpers, and `hydra doctor --fix-permissions`. Hydra's own state is
+created privately under any umask. Receivers additively advertise `agent-inventory`
+and `agent-locate-record`, and the handshake reports `platform`. Since 2.8.0, plans
+carry their own prompts and assets, with the policy write scope `@spawned:*`,
+proposal send-back, `hydra resume --terminal`, `hydra kill --dry-run`, attention
+data version 3 and statistics export schema 4; since 2.7.0, head-associated
+planning proposals and the opt-in `kill --protect-untracked` are available; since
+2.6.0, `hydra init` stays out of the source tree and the head environment is
+delivered through the tmux session and a per-instance launcher.
+See the [2.9.0 changelog](../CHANGELOG.md#290---2026-09-28).
 Interactive Codex restore retains cwd-scoped latest-session selection; headless
 resume binds an exact recorded session.
 Internal shell function names,

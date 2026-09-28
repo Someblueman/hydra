@@ -24,13 +24,13 @@ use ordinary shell sessions alongside agents.
 
 [Demo transcript and recording instructions](assets/demos/README.md)
 
-**v2.8.0** makes the agentic journey work end to end in the installed app: an
-agent plans with you in Hydra, the plan carries its own worker instructions so
-nothing is committed to your checkout, you approve it with one key, and the run
-reports back into the same conversation. Runs, headless workers, results and
-failed checks are presented directly, with the diff, each requirement's check,
-model and token use. Agent output keeps its colours and Unicode, attached agents
-can always be left, and a head whose terminal is gone can be restarted in place.
+**v2.9.0** adds guided remote setup: give Hydra an SSH destination, from the
+command line (`hydra remote setup`) or the control centre's Hosts tab, and it
+checks the host, installs a pinned Hydra runtime from the release's static
+helpers, finds or installs your agents and guides sign-in, showing a plan for
+every change and never accepting a changed host key. Hydra's own state now stays
+private under a group-writable umask such as Ubuntu's default, and
+`hydra doctor --fix-permissions` repairs older state.
 Install the
 [latest release](https://github.com/Someblueman/hydra/releases/latest) and see the
 [changelog](CHANGELOG.md) for features and upgrade notes. Next work is tracked in
