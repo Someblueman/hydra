@@ -176,6 +176,35 @@ cases() {
     [ "$(installs)" -eq 1 ] || fail "reconciliation installed a second time"
     grep -q 'install-check' "$PROVISION_SSH_LOG" || fail "the rerun did not reconcile"
 
+    # The same, with the local package cache deleted meanwhile: the rerun
+    # rebuilds the identical package from this Hydra and reconciles.
+    seed p11 "$fixture/remote-$mask-g"
+    run 3 "$out" provision p11 --json; hash="$(plan_hash "$out")"
+    : > "$PROVISION_DROP"
+    run 4 "$out" provision p11 --approve "$hash" --json
+    rm -f "$HYDRA_HOME"/fleet/packages/*.json
+    run 0 "$out" provision p11 --json; has "$out" '"id":"provision","status":"done"'
+    [ "$(installs)" -eq 1 ] || fail "reconciling a rebuilt package installed a second time"
+    grep -q 'install-check' "$PROVISION_SSH_LOG" || fail "the rebuilt package was not reconciled"
+
+    # When this Hydra can no longer rebuild it (here the helper's pinned
+    # digest changed) the step stays outcome_unknown and names the prefix;
+    # the documented recovery removes it on the remote, and the next reruns
+    # record install_failed and then plan afresh.
+    seed p12 "$fixture/remote-$mask-h"
+    run 3 "$out" provision p12 --json; hash="$(plan_hash "$out")"
+    : > "$PROVISION_DROP"
+    run 4 "$out" provision p12 --approve "$hash" --json
+    rm -f "$HYDRA_HOME"/fleet/packages/*.json
+    HYDRA_FLEET_ASSETS_FILE="$fixture/bad-assets.tsv" run 4 "$out" provision p12 --json
+    has "$out" '"code":"outcome_unknown"'; has "$out" 'local package is gone'
+    stuck="$(sed -n 's/.*"data":{"prefix":"\([^"]*\)".*/\1/p' "$out" | sed 's#\\/#/#g')"
+    [ -d "$stuck" ] || fail "outcome_unknown did not name the installed prefix"
+    [ "$(installs)" -eq 1 ] || fail "an unconfirmed install was retried"
+    rm -rf "$stuck"
+    HYDRA_FLEET_ASSETS_FILE="$fixture/bad-assets.tsv" run 1 "$out" provision p12 --json; has "$out" '"code":"install_failed"'
+    run 3 "$out" provision p12 --json; has "$out" '"code":"approval_required"'
+
     # A remote whose uname disagrees with the package is refused by the
     # bootstrap guard before the package binary runs; nothing is installed.
     seed p5 "$fixture/remote-$mask-c"

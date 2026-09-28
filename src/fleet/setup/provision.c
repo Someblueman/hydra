@@ -237,6 +237,25 @@ static json_object *plan_and_install(struct setup_ctx *ctx, const char *binary, 
 }
 
 /* ---- Resume ---- */
+static bool package_present(const char *package, const char *digest) {
+    char actual[65];
+    return !f_hash(package, actual) && !strcmp(actual, digest);
+}
+/* The private package cache lost the recorded package: rebuild it from this
+ * Hydra and the recorded helper source. Packaging is deterministic, so only
+ * the same Hydra and helper reproduce the recorded digest; any other result
+ * is ignored and reconciliation stays unconfirmed. package is updated. */
+static void restore_package(struct setup_ctx *ctx, const char *binary, char package[F_PATH], const char *digest) {
+    const char *source = f_string(f_field(setup_state_detail(ctx, "provision"), "binary"), "source");
+    struct provision p; json_object *error;
+    if (package_present(package, digest) || (!binary && source && !strcmp(source, "binary"))) return;
+    memset(&p, 0, sizeof(p));
+    error = read_preflight(ctx, &p);
+    if (!error) error = setup_asset_resolve(ctx, binary, &p.platform, &p.binary);
+    if (!error) error = build_package(ctx, &p);
+    if (!error && !strcmp(p.digest, digest)) (void)f_copy(package, F_PATH, p.package);
+    json_object_put(error);
+}
 /* 1 when the remote definitively has nothing at prefix, 0 otherwise. */
 static int prefix_absent(struct setup_ctx *ctx, const char *prefix) {
     char command[F_PATH + 96], *quoted = f_quote(prefix); struct f_capture cap = {0}; int absent = 0;
@@ -246,13 +265,27 @@ static int prefix_absent(struct setup_ctx *ctx, const char *prefix) {
     free(quoted); f_capture_free(&cap);
     return absent;
 }
-static json_object *reconcile(struct setup_ctx *ctx) {
+static json_object *unconfirmed(struct setup_ctx *ctx, const char *package, const char *digest, const char *prefix) {
+    json_object *data;
+    if (setup_state_step(ctx, "provision", "outcome_unknown", NULL)) return state_error(ctx);
+    if (package_present(package, digest))
+        return setup_error(ctx, "outcome_unknown", "cannot confirm the interrupted install; nothing was retried",
+                           "check connectivity and the recorded prefix on the remote, then rerun hydra remote provision NAME to reconcile again", NULL);
+    data = json_object_new_object();
+    f_string_add(data, "prefix", prefix); f_string_add(data, "package_sha256", digest);
+    return setup_error(ctx, "outcome_unknown",
+                       "cannot confirm the interrupted install: its local package is gone and this Hydra cannot rebuild it; nothing was retried",
+                       "rerun hydra remote provision NAME with the Hydra (and any --binary FILE) that planned it; otherwise remove data.prefix on "
+                       "the remote once no alias uses it and rerun hydra remote provision NAME, which then finds nothing there and plans afresh", data);
+}
+static json_object *reconcile(struct setup_ctx *ctx, const char *binary) {
     json_object *detail = setup_state_detail(ctx, "provision"), *reply;
     const char *package = f_string(detail, "package"), *digest = f_string(detail, "package_sha256"), *prefix = f_string(detail, "prefix");
     char saved[3][F_PATH];
     if (!package || !digest || !prefix || f_copy(saved[0], F_PATH, package) || f_copy(saved[1], F_PATH, digest) || f_copy(saved[2], F_PATH, prefix))
         return setup_error(ctx, "state_invalid", "the interrupted provisioning record lacks its package or prefix",
                            "preserve $HYDRA_HOME/fleet/setup/NAME.json for inspection", NULL);
+    restore_package(ctx, binary, saved[0], saved[1]);
     reply = f_bootstrap_reconcile(&ctx->remote, saved[0], saved[1], saved[2], ctx->seconds);
     if (json_object_get_boolean(f_field(reply, "ok"))) { json_object_put(reply); return complete(ctx); }
     json_object_put(reply);
@@ -261,14 +294,12 @@ static json_object *reconcile(struct setup_ctx *ctx) {
         return setup_error(ctx, "install_failed", "the interrupted install left nothing at the recorded prefix",
                            "rerun hydra remote provision NAME to review and approve a fresh plan", NULL);
     }
-    if (setup_state_step(ctx, "provision", "outcome_unknown", NULL)) return state_error(ctx);
-    return setup_error(ctx, "outcome_unknown", "cannot confirm the interrupted install; nothing was retried",
-                       "check connectivity and the recorded prefix on the remote, then rerun hydra remote provision NAME to reconcile again", NULL);
+    return unconfirmed(ctx, saved[0], saved[1], saved[2]);
 }
 
 json_object *setup_step_provision(struct setup_ctx *ctx, const char *binary, const char *approve) {
     const char *status = setup_state_status(ctx, "provision");
-    if (!strcmp(status, "in_progress") || !strcmp(status, "outcome_unknown")) return reconcile(ctx);
+    if (!strcmp(status, "in_progress") || !strcmp(status, "outcome_unknown")) return reconcile(ctx, binary);
     if (!strcmp(status, "done")) return f_success(ctx->command, copy_detail(ctx));
     return plan_and_install(ctx, binary, approve);
 }

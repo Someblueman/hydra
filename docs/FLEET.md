@@ -132,6 +132,25 @@ before retrying; nothing is replayed), and 128+n when interrupted by signal n.
 Without `--json` the commands print one line per step on stderr followed by the
 next command.
 
+**Unconfirmed provisioning.** If the install response is lost (for example the
+connection drops), the provision step is `outcome_unknown` (exit 4). Rerunning
+`hydra remote provision NAME` never installs again: it checks the recorded prefix
+against the private package in `$HYDRA_HOME/fleet/packages/`. If that package was
+deleted, Hydra rebuilds it from this installation and the recorded helper source
+(pass the same `--binary FILE` if one was used), and uses the result only if its
+digest equals the recorded one. When this Hydra has changed since the plan and
+cannot rebuild it, the step stays `outcome_unknown` with the message "its local
+package is gone and this Hydra cannot rebuild it" and reports the installed
+prefix as `data.prefix`. Either run the rerun with the Hydra version that made
+the plan, or, after checking that no alias in `hydra remote list` uses that
+path, remove the prefix yourself and rerun provisioning twice:
+
+```sh
+ssh ubuntu@build-host "rm -rf -- '/home/ubuntu/.local/share/hydra/fleet/DIGEST'"  # data.prefix
+hydra remote provision ovh    # nothing at the prefix: install_failed
+hydra remote provision ovh    # shows a fresh plan to approve
+```
+
 ## Register and bootstrap a host
 
 ```sh

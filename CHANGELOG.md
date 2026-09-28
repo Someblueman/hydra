@@ -59,7 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `curl -fL`, checked against the digests shipped in `fleet-assets.tsv` and
   cached privately; a mismatching download is discarded. A same-version install
   or an identical pin is reused without changes, and an interrupted install is
-  reconciled on rerun instead of repeated.
+  reconciled on rerun instead of repeated, rebuilding a deleted local package
+  when this Hydra reproduces its recorded digest.
 - Releases carry static Linux `hydra-fleet` helpers for x86_64 and aarch64,
   reproduced by CI (`make build-fleet-static`) and listed in `SHA256SUMS`.
 - `hydra fleet package --platform OS-ARCH` binds a package to a platform and
