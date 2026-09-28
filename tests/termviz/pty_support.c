@@ -223,6 +223,11 @@ void tv_resize(struct tv_session *s, int cols, int rows) {
         tv_pump(s, .05);
     CHECK(!s->screen.awaiting_clear, "resize full redraw acknowledgement");
 }
+static void close_fd(int *fd) {
+    if (*fd >= 0)
+        close(*fd);
+    *fd = -1;
+}
 void tv_abort(struct tv_session *s) {
     size_t i;
     if (s->closed)
@@ -234,16 +239,18 @@ void tv_abort(struct tv_session *s) {
         while (!poll_exit(s) && tv_now() < end)
             tv_sleep(.02);
         if (!s->exited) {
+            /* A child that exits with unread output can block closing its
+             * terminal until the output drains (macOS); close our end so
+             * waiting for it cannot hang. */
+            close_fd(&s->master);
             kill(s->pid, SIGKILL);
             while (waitpid(s->pid, NULL, 0) < 0 && errno == EINTR) {
             }
             s->exited = true;
         }
     }
-    if (s->master >= 0)
-        close(s->master);
-    if (s->slave >= 0)
-        close(s->slave);
+    close_fd(&s->master);
+    close_fd(&s->slave);
     s->closed = true;
     free(s->screen.cells);
     free(s->screen.text);
