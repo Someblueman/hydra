@@ -170,6 +170,7 @@ cases() {
     unset AGENTS_TEST_INSTALL
     has "$out" '"code":"install_failed"'; has "$out" '"exit_status":7'
     [ "$(step_status n1 install_agent:claude)" = failed ] || fail "failed installer not recorded"
+    has "$(state n1)" '"install_agent:claude":{"status":"failed","detail":{[^}]*"error":{"code":"install_failed"'
     [ ! -e "$AGENTS_REMOTE_HOME/.local/bin/claude" ] || fail "failed installer left claude"
     has "$fixture/tty-commands" "exec /bin/sh -c 'umask 022; curl -fsSL https://claude.ai/install.sh | bash'"
 
@@ -219,10 +220,15 @@ cases() {
     unset AGENTS_LOGIN_EXIT
     has "$out" '"code":"sign_in_failed"'
     [ "$(step_status n1 sign_in:claude)" = failed ] || fail "failed sign-in not recorded"
+    # The terminal's envelope is gone; status keeps the recorded failure.
+    run 0 "$out" setup status n1 --json
+    has "$out" '"id":"sign_in:claude","status":"failed","detail":"[^"]*","error":{"code":"sign_in_failed","message":"'
+    lacks "$out" '"id":"install_agent:claude","status":"done","detail":"[^"]*","error"'
     has "$fixture/tty-commands" "exec '$path' 'auth' 'login'"
     in_tty '' "$out" sign-in n1 --agent claude --json
     has "$out" '"verified_by":"provider status command"'; has "$out" 'Hydra copied nothing'
     [ "$(step_status n1 sign_in:claude)" = "done" ] || fail "retried sign-in not done"
+    run 0 "$out" setup status n1 --json; lacks "$out" '"error":{"code":"sign_in_failed"'
     [ "$(lines "$fixture/logins")" = 2 ] || fail "sign-in did not run twice"
 
     # Unverifiable sign-in (agy) needs the user's confirmation.

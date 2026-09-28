@@ -123,6 +123,10 @@ usage_cases() {
     run 1 "$out" install-agent n1 --json; has "$out" '--agent is required'
     run 1 "$out" sign-in n1 --agent 'a b' --json; has "$out" '"code":"invalid_input"'
     run 1 "$out" preflight n1 --json; has "$out" '"code":"setup_not_started"'; has "$out" '"command":"remote-preflight"'
+    run 1 "$out" setup list host --json; has "$out" '"code":"invalid_input"'; has "$out" '"command":"remote-setup-list"'
+    run 1 "$out" preflight list --json; has "$out" 'other than status and list'
+    run 0 "$out" setup list --json; has "$out" '"command":"remote-setup-list"'; has "$out" '"setups":\[\]'
+    run 0 "$out" setup list; [ ! -s "$out" ] || fail "human setup list reached stdout"; has "$out.err" 'no remote setups'
     test ! -e "$HYDRA_HOME/fleet/setup/n1.json" || fail "usage errors created state"
     run 0 "$out" setup --help --json; has "$out" '"command":"remote-setup-help"'; has "$out" 'install-agent'
     ! grep -Eq -- '--remote-build|--project' "$out" || fail "setup help lists removed options"
@@ -189,6 +193,10 @@ preflight_cases() {
     SETUP_REMOTE_PATH="$fixture/remote-bare" run 1 "$out" preflight p1 --json
     has "$out" '"missing":\["git"\]'; has "$out" '"name":"tmux","status":"warning"'
     has "$out" '"name":"curl","status":"warning"'; has "$out" '"git":null'
+    # Rows that are not ok suggest a command (Debian/Ubuntu names) next to the detail.
+    has "$out" '"name":"git","status":"missing","blocking":true,"detail":"install git (for example: sudo apt-get install git)","suggestion":"sudo apt-get install git"'
+    has "$out" '"name":"curl","status":"warning","blocking":false,"detail":"curl is needed only for provider installers","suggestion":"sudo apt-get install curl"'
+    lacks "$out" '"name":"sha256","status":"ok","blocking":false,"detail":"found","suggestion"'
     # A group-writable remote umask is reported for R1.
     SETUP_REMOTE_PATH="$fixture/remote-full" SETUP_REMOTE_UMASK=002 run 0 "$out" preflight p1 --json
     has "$out" '"umask":"0002"'; has "$out" '"name":"umask","status":"warning"'
@@ -227,7 +235,12 @@ state_cases() {
     printf 'not json' > "$(state n1)"; chmod 600 "$(state n1)"
     run 1 "$out" setup n1 --json; has "$out" '"code":"state_invalid"'
     [ "$(cat "$(state n1)")" = 'not json' ] || fail "invalid state was rewritten"
+    # setup list reads every record (read-only, like status) and reports the unreadable one.
+    run 0 "$out" setup list --json
+    has "$out" '"name":"n1","destination":null,"status":"unreadable","complete":false,"next":null,"error":{"code":"state_invalid"'
+    has "$out" '"name":"p1","destination":"fixture-host","status":"pending","complete":false,"next":{"step":"host_key"'
     cp "$fixture/n1.saved" "$(state n1)"; chmod 600 "$(state n1)"
+    run 0 "$out" setup list; has "$out.err" 'n1 *user@host1'; has "$out.err" 'NEXT'
 }
 
 finish_cases() {

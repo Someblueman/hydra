@@ -39,8 +39,8 @@ bool setup_step_id(const char *step) {
     if (!colon) return in_list(step, strlen(step), base_steps);
     return in_list(step, (size_t)(colon - step), agent_steps) && f_name(colon + 1) && strlen(colon + 1) < 64;
 }
-static bool setup_name(const char *name) {
-    return f_name(name) && strlen(name) < 128 && strcmp(name, "status") != 0;
+bool setup_name_valid(const char *name) {
+    return f_name(name) && strlen(name) < 128 && strcmp(name, "status") != 0 && strcmp(name, "list") != 0;
 }
 
 /* Opens $HYDRA_HOME/fleet/setup, creating private directories as needed. */
@@ -204,7 +204,7 @@ static json_object *state_load(struct setup_ctx *ctx, const char *dest, const ch
     return binding_check(ctx, dest, ssh_config);
 }
 static json_object *arguments_error(struct setup_ctx *ctx, const char *name, const char *dest, const char *ssh_config) {
-    if (!setup_name(name)) return open_error(ctx, "invalid_input", "NAME must be an alias name (letters, digits, _ . -) other than status", NULL);
+    if (!setup_name_valid(name)) return open_error(ctx, "invalid_input", "NAME must be an alias name (letters, digits, _ . -) other than status and list", NULL);
     if (dest && !f_target(dest)) return open_error(ctx, "invalid_input", "DEST must be an SSH alias or [USER@]HOST", NULL);
     if (ssh_config && ssh_config[0] != '/') return open_error(ctx, "invalid_input", "--ssh-config requires an absolute path", NULL);
     return NULL;

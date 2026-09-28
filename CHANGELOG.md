@@ -23,10 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `platform_unsupported`. Help and bash, zsh and fish completions include the new
   commands.
 - The control centre adds remote hosts: the Hosts tab (`H`, now also in local
-  work) lists unfinished setups and `A` starts one from an SSH destination. Hydra
-  runs the same `hydra remote setup` commands, shows each step, requirement and
-  plan, needs a typed `yes` for a new host key and `y` for other plans, never offers
-  to accept a changed key, and hands the terminal to agent installers and sign-in.
+  work) lists unfinished setups (from `hydra remote setup list --json`) and `A`
+  starts one from an SSH destination. Hydra runs the same `hydra remote setup`
+  commands, shows each step, requirement (with its suggested fix) and plan, needs
+  a typed `yes` for a new host key and `y` for other plans, and never offers to
+  accept a changed key. After provisioning it shows the agent inventory so you can
+  pick agents to install (after reviewing the installer plan) or sign in to; both
+  run on your terminal, and a failure is explained from the error the CLI recorded.
+- `hydra remote setup list [--json]` lists every setup with its destination,
+  status and next step, read-only. `setup status NAME --json` reports a failed
+  installer or sign-in's recorded `steps[].error{code,message}`, and preflight
+  requirements gain an additive `suggestion` (an example install command on Linux)
+  beside `detail`. `status` and `list` are reserved setup names.
 - `hydra agent locate [--json] [--record EXECUTABLE PATH] [--forget EXECUTABLE]`
   finds agents outside PATH (`~/.local/bin`, `~/.opencode/bin`, nvm, mise, ...)
   as `agent-inventory` schema 1 and records a private per-executable location.

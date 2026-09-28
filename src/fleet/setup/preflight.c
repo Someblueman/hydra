@@ -146,19 +146,22 @@ static json_object *parse_output(char *text) {
 }
 
 /* ---- Requirements ---- */
-struct requirement { const char *name, *status, *detail; bool blocking; };
+/* suggestion: an example command (Debian/Ubuntu packages) the user can run on
+ * the remote to fix a row that is not ok; Hydra never runs it. NULL: none. */
+struct requirement { const char *name, *status, *detail; bool blocking; const char *suggestion; };
 static void require(json_object *rows, const struct requirement *r) {
     json_object *row = json_object_new_object();
     f_string_add(row, "name", r->name); f_string_add(row, "status", r->status);
     json_object_object_add(row, "blocking", json_object_new_boolean(r->blocking && !strcmp(r->status, "missing")));
     f_string_add(row, "detail", r->detail);
+    if (r->suggestion && strcmp(r->status, "ok")) f_string_add(row, "suggestion", r->suggestion);
     json_object_array_add(rows, row);
 }
 static bool has_tool(json_object *snapshot, const char *tool) {
     return f_string(f_field(snapshot, "tools"), tool) != NULL;
 }
-static void require_tool(json_object *rows, const char *name, bool present, const char *missing) {
-    struct requirement r = {name, present ? "ok" : "missing", present ? "found" : missing, true};
+static void require_tool(json_object *rows, const char *name, bool present, const char *missing, const char *suggestion) {
+    struct requirement r = {name, present ? "ok" : "missing", present ? "found" : missing, true, suggestion};
     require(rows, &r);
 }
 /* Linux has pinned release helpers. Another supported platform needs an
@@ -173,7 +176,7 @@ static const char *unpinned_helper(const struct f_platform *platform, bool binar
 }
 static void require_platform(json_object *rows, json_object *snapshot, bool binary) {
     struct f_platform platform; const char *helper;
-    struct requirement r = {"platform", "ok", "Linux release binary available", true};
+    struct requirement r = {"platform", "ok", "Linux release binary available", true, NULL};
     if (f_platform_set(&platform, f_string(snapshot, "os"), f_string(snapshot, "arch"))) {
         r.status = "missing"; r.detail = "only linux and darwin on x86_64 or aarch64 are supported; install Hydra on this host manually";
     } else if (strcmp(platform.os, "linux")) {
@@ -185,7 +188,7 @@ static void require_platform(json_object *rows, json_object *snapshot, bool bina
 }
 static void require_disk(json_object *rows, json_object *snapshot) {
     const char *text = f_string(snapshot, "free_kb"); char *end = NULL; long kb = text ? strtol(text, &end, 10) : -1;
-    struct requirement r = {"disk", "ok", "at least 50 MB free in HOME", true};
+    struct requirement r = {"disk", "ok", "at least 50 MB free in HOME", true, NULL};
     if (!text || !text[0] || (end && *end)) { r.status = "warning"; r.detail = "free space in HOME is unknown"; }
     else if (kb < PREFLIGHT_FREE_KB) { r.status = "missing"; r.detail = "less than 50 MB free in HOME"; }
     require(rows, &r);
@@ -196,28 +199,39 @@ static bool tmux_recent(const char *version) {
 }
 static void require_warnings(json_object *rows, json_object *snapshot) {
     const char *umask_text = f_string(snapshot, "umask"); long mask = umask_text ? strtol(umask_text, NULL, 8) : 022;
-    struct requirement tmux = {"tmux", "ok", "tmux 3.0 or newer", false};
-    struct requirement curl = {"curl", "ok", "found", false};
-    struct requirement umask_row = {"umask", "ok", umask_text ? umask_text : "", false};
+    struct requirement tmux = {"tmux", "ok", "tmux 3.0 or newer", false, "sudo apt-get install tmux"};
+    struct requirement curl = {"curl", "ok", "found", false, "sudo apt-get install curl"};
+    struct requirement umask_row = {"umask", "ok", umask_text ? umask_text : "", false, NULL};
     if (!has_tool(snapshot, "tmux") || !tmux_recent(f_string(snapshot, "tmux_version"))) {
         tmux.status = "warning"; tmux.detail = "tmux 3.0 or newer is needed to run heads (for example: sudo apt-get install tmux)";
     }
     if (!has_tool(snapshot, "curl")) { curl.status = "warning"; curl.detail = "curl is needed only for provider installers"; }
-    if (!(mask & 020)) { umask_row.status = "warning"; umask_row.detail = "group-writable umask; see roadmap R1 before relying on shared state"; }
+    if (!(mask & 020)) {
+        umask_row.status = "warning";
+        umask_row.detail = "group-writable umask: Hydra keeps its own state private, but files agents create in worktrees are group-writable";
+    }
     require(rows, &tmux); require(rows, &curl); require(rows, &umask_row);
+}
+/* The suggestions name Debian/Ubuntu packages; other systems get only the detail. */
+static void drop_suggestions(json_object *rows, json_object *snapshot) {
+    size_t i;
+    if (f_string(snapshot, "os") && !strcmp(f_string(snapshot, "os"), "Linux")) return;
+    for (i = 0; i < json_object_array_length(rows); i++) json_object_object_del(json_object_array_get_idx(rows, i), "suggestion");
 }
 static json_object *requirements(json_object *snapshot, bool binary) {
     json_object *rows = json_object_new_array();
     bool home = f_string(snapshot, "home_writable") && !strcmp(f_string(snapshot, "home_writable"), "yes");
     require_platform(rows, snapshot, binary);
-    require_tool(rows, "git", has_tool(snapshot, "git"), "install git (for example: sudo apt-get install git)");
+    require_tool(rows, "git", has_tool(snapshot, "git"), "install git (for example: sudo apt-get install git)", "sudo apt-get install git");
     require_tool(rows, "sha256", has_tool(snapshot, "sha256sum") || has_tool(snapshot, "shasum"),
-                 "install sha256sum or shasum (coreutils or perl)");
-    require_tool(rows, "mktemp", has_tool(snapshot, "mktemp"), "install mktemp (coreutils)");
-    require_tool(rows, "head_tail", has_tool(snapshot, "head") && has_tool(snapshot, "tail"), "install head and tail (coreutils)");
-    require_tool(rows, "home", home, "HOME must be an existing directory you can write");
+                 "install sha256sum or shasum (coreutils or perl)", "sudo apt-get install coreutils");
+    require_tool(rows, "mktemp", has_tool(snapshot, "mktemp"), "install mktemp (coreutils)", "sudo apt-get install coreutils");
+    require_tool(rows, "head_tail", has_tool(snapshot, "head") && has_tool(snapshot, "tail"), "install head and tail (coreutils)",
+                 "sudo apt-get install coreutils");
+    require_tool(rows, "home", home, "HOME must be an existing directory you can write", NULL);
     require_disk(rows, snapshot);
     require_warnings(rows, snapshot);
+    drop_suggestions(rows, snapshot);
     return rows;
 }
 
@@ -236,7 +250,7 @@ static void handshake_version(const struct setup_ctx *ctx, const char *hydra, co
 static void existing_hydra(const struct setup_ctx *ctx, json_object *snapshot, json_object *rows) {
     json_object *hydra = f_field(snapshot, "hydra");
     const char *path = f_string(hydra, "path"), *version = f_string(hydra, "version");
-    struct requirement r = {"hydra", "ok", "not installed; a private pinned install will be added", false};
+    struct requirement r = {"hydra", "ok", "not installed; a private pinned install will be added", false, NULL};
     char reported[64] = "";
     if (path && version && !strcmp(version, "Hydra version " F_VERSION)) handshake_version(ctx, path, "", reported);
     if (!strcmp(reported, F_VERSION)) r.detail = "a compatible Hydra " F_VERSION " is installed and will be reused";

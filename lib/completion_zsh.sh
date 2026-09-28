@@ -27,7 +27,7 @@ _hydra() {
                 remote)
                     case $words[2] in
                         setup)
-                            _arguments '1:action:(setup)' '2:name or status:' '3:destination:' '--ssh-config[Trusted OpenSSH config]:file:_files' '--binary[Fleet helper built for the remote platform]:file:_files' '--approve[Exact plan_sha256]:SHA256:' '--timeout[SSH connect timeout, 1-300 seconds]:seconds:' '--json[Versioned JSON output]'
+                            _arguments '1:action:(setup)' '2:name, status or list:' '3:destination:' '--ssh-config[Trusted OpenSSH config]:file:_files' '--binary[Fleet helper built for the remote platform]:file:_files' '--approve[Exact plan_sha256]:SHA256:' '--timeout[SSH connect timeout, 1-300 seconds]:seconds:' '--json[Versioned JSON output]'
                             ;;
                         trust-key)
                             _arguments '1:action:(trust-key)' '2:name:' '--fingerprint[Approve exactly this SHA256 host key]:fingerprint:' '--timeout[SSH connect timeout, 1-300 seconds]:seconds:' '--json[Versioned JSON output]'

@@ -121,6 +121,8 @@ int setup_state_set(struct setup_ctx *ctx, const char *key, json_object *value);
 json_object *setup_upgrade(struct setup_ctx *ctx);
 bool setup_step_id(const char *step);
 bool setup_status_valid(const char *status);
+/* NAME rules: f_name, shorter than 128 bytes, not "status" or "list". */
+bool setup_name_valid(const char *name);
 
 /* ---- Envelopes and interaction (setup_plan.c) ---- */
 /* Failure envelope; data: takes ownership (NULL for none). recovery NULL uses
@@ -189,11 +191,23 @@ json_object *setup_step_verify(struct setup_ctx *ctx);
 json_object *setup_step_alias(struct setup_ctx *ctx); /* == ..._approved(ctx, NULL) */
 json_object *setup_step_alias_approved(struct setup_ctx *ctx, const char *approve);
 
+/* ---- Views shared by status and list (setup_cli.c) ---- */
+/* Copies the first step that is neither done nor skipped into step (80
+ * bytes) and returns true, or returns false when setup is complete. */
+bool setup_first_open(struct setup_ctx *ctx, char step[80]);
+/* data.next for an open context: {step, argv, approval_sha256:null}, or NULL
+ * when setup is complete. Caller-owned. */
+json_object *setup_next_json(struct setup_ctx *ctx);
+/* `remote setup list`: every setup record under $HYDRA_HOME/fleet/setup, read
+ * without locks (setup_list.c). Caller-owned envelope "remote-setup-list". */
+json_object *setup_list(bool json);
+
 /* ---- CLI (setup_cli.c) ---- */
 /* True for "setup", "trust-key", "preflight", "provision", "agents",
  * "install-agent" and "sign-in" (the word after "remote"). f_remote_cli
  * dispatches these to setup_cli; "help"/"--help" as the second word prints
- * usage, and "setup status NAME" is the read-only status view. */
+ * usage, "setup status NAME" is the read-only status view and "setup list"
+ * lists every setup record. */
 bool setup_command(const char *word);
 /* argv starts at that word; returned JSON belongs to the caller. */
 json_object *setup_cli(int argc, char **argv);

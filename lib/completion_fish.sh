@@ -23,7 +23,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l retain-raw
 complete -c hydra -f -n '__fish_use_subcommand' -a 'remote' -d 'Manage OpenSSH aliases'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'fleet' -d 'Inspect trusted remote installations'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and not __fish_seen_subcommand_from add remove list setup trust-key preflight provision agents install-agent sign-in' -a 'add remove list setup trust-key preflight provision agents install-agent sign-in'
-complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup' -a 'status'
+complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup' -a 'status list'
 complete -c hydra -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup' -l ssh-config -r -d 'Trusted OpenSSH config'
 complete -c hydra -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup provision' -l binary -r -d 'Fleet helper for the remote platform'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from trust-key' -l fingerprint -r -d 'Approve exactly this SHA256 host key'

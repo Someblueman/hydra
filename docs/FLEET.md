@@ -54,6 +54,7 @@ command runs).
 hydra remote setup ovh ubuntu@build-host      # or an SSH Host alias
 hydra remote setup ovh --ssh-config /abs/config
 hydra remote setup status ovh
+hydra remote setup list                       # every setup: destination, status, next step
 ```
 
 Steps run in order: host key, preflight, provision, agents, then install and
@@ -63,7 +64,15 @@ NAME` and `hydra remote install-agent|sign-in NAME --agent A`. The alias record 
 published last and never overwrites a different alias, so a half-configured host
 never appears in `hydra fleet list`. Rerunning setup with a different destination
 or SSH config for an existing NAME fails with `setup_binding_changed`. Unknown
-options are usage errors. Setup does not prepare a remote project: once the alias
+options are usage errors. `status` and `list` are reserved and cannot be setup
+names. `hydra remote setup list [--json]` (`remote-setup-list`) reads every record
+read-only, like `setup status`: `data.setups[]` holds `name`, `destination`,
+`status` (the first unfinished step's status, `done` when complete, or
+`unreadable` with `error{code,message}` for a record it refuses), `complete` and
+`next`. When an agent installer or sign-in that ran on your terminal fails, the
+step keeps the error code and message, and `setup status NAME --json` reports it
+as `steps[].error{code,message}` while the step is `failed` or
+`outcome_unknown`. Setup does not prepare a remote project: once the alias
 exists, clone or copy the project on the host yourself and initialise it with
 `hydra fleet init NAME --project /abs/project -- --no-agent`, review its `.hydra`
 configuration, then trust it explicitly (see [Operate explicitly](#operate-explicitly)).
@@ -101,7 +110,10 @@ unpinned helper will be used, either `hydra remote setup NAME --binary FILE` or
 this host's own `hydra-fleet` when this host has exactly the remote's platform;
 otherwise, and for any other platform, preflight fails with `platform_unsupported`.
 tmux 3.0, curl (only for agent installers) and a group-writable umask are warnings.
-Hydra never uses sudo; install missing packages yourself. An existing Hydra of the
+Hydra never uses sudo; install missing packages yourself. On Linux, a requirement
+that is not ok may carry a `suggestion`, an example command with Debian/Ubuntu
+package names (for example `sudo apt-get install git`) next to its `detail`; Hydra
+never runs it. An existing Hydra of the
 same version that passes the fleet handshake is reported as reusable; other
 installs are left untouched.
 

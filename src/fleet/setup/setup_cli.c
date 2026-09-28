@@ -6,7 +6,8 @@
 #include <string.h>
 
 #define SETUP_USAGE "remote setup NAME [DEST] [--ssh-config /abs] [--binary FILE] " \
-    "[--approve PLAN_SHA256] [--timeout N] [--json]; remote setup status NAME; remote trust-key NAME [--fingerprint SHA256:...]; " \
+    "[--approve PLAN_SHA256] [--timeout N] [--json]; remote setup status NAME; remote setup list; " \
+    "remote trust-key NAME [--fingerprint SHA256:...]; " \
     "remote preflight NAME; remote provision NAME [--approve PLAN_SHA256] [--binary FILE]; " \
     "remote agents NAME [--record EXECUTABLE=/abs/path]; remote install-agent NAME --agent A [--approve PLAN_SHA256]; " \
     "remote sign-in NAME --agent A (every command accepts --timeout N and --json)"
@@ -17,7 +18,7 @@ static const char *const option_names[OPT_COUNT] = {
     "--ssh-config", "--binary", "--fingerprint", "--approve", "--record", "--agent"
 };
 #define OPT(bit) (1U << (bit))
-enum setup_kind { K_SETUP, K_STATUS, K_TRUST_KEY, K_PREFLIGHT, K_PROVISION, K_AGENTS, K_INSTALL_AGENT, K_SIGN_IN };
+enum setup_kind { K_SETUP, K_STATUS, K_LIST, K_TRUST_KEY, K_PREFLIGHT, K_PROVISION, K_AGENTS, K_INSTALL_AGENT, K_SIGN_IN };
 struct spec { const char *word, *command; enum setup_kind kind; unsigned flags; int positionals; };
 static const struct spec specs[] = {
     {"setup", "remote-setup", K_SETUP, OPT(OPT_SSH_CONFIG) | OPT(OPT_BINARY) | OPT(OPT_APPROVE), 2},
@@ -29,6 +30,7 @@ static const struct spec specs[] = {
     {"sign-in", "remote-sign-in", K_SIGN_IN, OPT(OPT_AGENT), 1},
 };
 static const struct spec status_spec = {"status", "remote-setup-status", K_STATUS, 0, 1};
+static const struct spec list_spec = {"list", "remote-setup-list", K_LIST, 0, 0};
 
 struct setup_options {
     const struct spec *spec;
@@ -91,7 +93,7 @@ static bool parse_arguments(struct setup_options *o, int argc, char **argv, int 
         if (!used) return false;
         i += used;
     }
-    return o->count >= 1;
+    return o->count >= 1 || o->spec->kind == K_LIST;
 }
 static bool hex_digest(const char *value) {
     return strlen(value) == 64 && strspn(value, "0123456789abcdef") == 64;
@@ -136,6 +138,7 @@ static json_object *parse(struct setup_options *o, int argc, char **argv) {
     o->spec = argc >= 1 ? find_spec(argv[0]) : NULL;
     if (!o->spec) return usage_error("remote-setup", "unknown setup command");
     if (o->spec->kind == K_SETUP && argc >= 2 && !strcmp(argv[1], "status")) { o->spec = &status_spec; first = 2; }
+    else if (o->spec->kind == K_SETUP && argc >= 2 && !strcmp(argv[1], "list")) { o->spec = &list_spec; first = 2; }
     if (!parse_arguments(o, argc, argv, first)) return usage_error(o->spec->command, "missing NAME, unexpected argument, or invalid option");
     problem = validate_values(o);
     return problem ? usage_error(o->spec->command, problem) : NULL;
@@ -169,6 +172,10 @@ static const char *first_open_step(struct setup_ctx *ctx, struct step_list *list
     for (i = 0; i < list->count; i++) if (!finished_status(setup_state_status(ctx, list->ids[i]))) return list->ids[i];
     return NULL;
 }
+bool setup_first_open(struct setup_ctx *ctx, char step[80]) {
+    struct step_list list; const char *open = first_open_step(ctx, &list);
+    return open && !f_copy(step, 80, open);
+}
 static void add_words(json_object *argv, const char *const *words) {
     for (; *words; words++) json_object_array_add(argv, json_object_new_string(*words));
 }
@@ -186,7 +193,7 @@ static json_object *step_argv(const struct setup_ctx *ctx, const char *step) {
     if (ctx->json) json_object_array_add(argv, json_object_new_string("--json"));
     return argv;
 }
-static json_object *next_step(struct setup_ctx *ctx) {
+json_object *setup_next_json(struct setup_ctx *ctx) {
     struct step_list list; const char *step = first_open_step(ctx, &list);
     json_object *next;
     if (!step) return NULL;
@@ -195,6 +202,17 @@ static json_object *next_step(struct setup_ctx *ctx) {
     json_object_object_add(next, "argv", step_argv(ctx, step));
     json_object_object_add(next, "approval_sha256", NULL);
     return next;
+}
+/* steps[].error: the recorded failure of an interactive step while it is
+ * failed or outcome_unknown (a later attempt replaces or retires it). */
+static void add_step_error(struct setup_ctx *ctx, json_object *row, const char *step) {
+    json_object *error = f_field(setup_state_detail(ctx, step), "error"), *copy;
+    const char *status = setup_state_status(ctx, step);
+    if (!f_string(error, "code") || (strcmp(status, "failed") && strcmp(status, "outcome_unknown"))) return;
+    copy = json_object_new_object();
+    f_string_add(copy, "code", f_string(error, "code"));
+    f_string_add(copy, "message", f_string(error, "message") ? f_string(error, "message") : "");
+    json_object_object_add(row, "error", copy);
 }
 static json_object *steps_json(struct setup_ctx *ctx) {
     struct step_list list; json_object *rows = json_object_new_array(); size_t i;
@@ -205,6 +223,7 @@ static json_object *steps_json(struct setup_ctx *ctx) {
         f_string_add(row, "id", list.ids[i]);
         f_string_add(row, "status", setup_state_status(ctx, list.ids[i]));
         f_string_add(row, "detail", summary ? summary : "");
+        add_step_error(ctx, row, list.ids[i]);
         json_object_array_add(rows, row);
     }
     return rows;
@@ -224,7 +243,7 @@ static void decorate(struct setup_ctx *ctx, json_object *result) {
     f_string_add(data, "name", ctx->name);
     f_string_add(data, "destination", ctx->remote.target);
     json_object_object_add(data, "steps", steps_json(ctx));
-    if (!f_field(data, "next")) json_object_object_add(data, "next", next_step(ctx));
+    if (!f_field(data, "next")) json_object_object_add(data, "next", setup_next_json(ctx));
 }
 
 /* ---- Execution ---- */
@@ -285,6 +304,7 @@ static json_object *dispatch(struct setup_ctx *ctx, const struct setup_options *
     switch (o->spec->kind) {
     case K_SETUP: return guided(ctx, v[OPT_APPROVE]);
     case K_STATUS: return f_success(ctx->command, json_object_new_object());
+    case K_LIST: break;
     case K_TRUST_KEY: return setup_step_trust_key(ctx, v[OPT_FINGERPRINT]);
     case K_PREFLIGHT: return setup_step_preflight(ctx);
     case K_PROVISION: return setup_step_provision(ctx, v[OPT_BINARY], v[OPT_APPROVE]);
@@ -293,6 +313,32 @@ static json_object *dispatch(struct setup_ctx *ctx, const struct setup_options *
     case K_SIGN_IN: return setup_step_sign_in(ctx, v[OPT_AGENT]);
     }
     return usage_error(ctx->command, "unknown setup command");
+}
+/* ---- Failed interactive steps ----
+ * An installer or sign-in runs on the user's terminal, where its envelope is
+ * not kept; record its error code and message in the step detail so `remote
+ * setup status NAME --json` can explain the failure afterwards. */
+static bool interactive_step(struct setup_ctx *ctx, const struct setup_options *o, char step[80]) {
+    const char *agent = o->values[OPT_AGENT];
+    if (o->spec->kind == K_INSTALL_AGENT || o->spec->kind == K_SIGN_IN)
+        return snprintf(step, 80, "%s:%s", o->spec->kind == K_SIGN_IN ? "sign_in" : "install_agent", agent) < 80;
+    if (o->spec->kind != K_SETUP || !setup_first_open(ctx, step)) return false;
+    return !strncmp(step, "install_agent:", 14) || !strncmp(step, "sign_in:", 8);
+}
+static void record_failure(struct setup_ctx *ctx, const struct setup_options *o, json_object *result) {
+    json_object *error = f_field(result, "error"), *detail = NULL, *record;
+    char step[80], status[32];
+    if (!f_string(error, "code") || !interactive_step(ctx, o, step) ||
+        f_copy(status, sizeof(status), setup_state_status(ctx, step)) ||
+        (strcmp(status, "failed") && strcmp(status, "outcome_unknown")))
+        return;
+    if (setup_state_detail(ctx, step) && json_object_deep_copy(setup_state_detail(ctx, step), &detail, NULL)) return;
+    if (!detail) detail = json_object_new_object();
+    record = json_object_new_object();
+    f_string_add(record, "code", f_string(error, "code"));
+    f_string_add(record, "message", f_string(error, "message") ? f_string(error, "message") : "");
+    json_object_object_add(detail, "error", record);
+    (void)setup_state_step(ctx, step, status, detail);
 }
 static unsigned open_flags(enum setup_kind kind) {
     if (kind == K_SETUP) return SETUP_CREATE;
@@ -347,12 +393,14 @@ json_object *setup_cli(int argc, char **argv) {
     }
     if ((result = parse(&options, argc, argv))) return result;
     if (!options.spec) return usage_error("remote-setup", "unknown setup command");
+    if (options.spec->kind == K_LIST) return setup_list(options.json);
     ctx.command = options.spec->command;
     result = open_context(&ctx, &options);
     if (!result) {
         ctx.json = options.json; ctx.interactive = setup_interactive(options.json); ctx.seconds = options.seconds;
         ctx.binary = options.values[OPT_BINARY];
         result = dispatch(&ctx, &options);
+        record_failure(&ctx, &options, result);
         decorate(&ctx, result);
     }
     setup_state_close(&ctx);
@@ -404,10 +452,26 @@ static void print_error(json_object *error, json_object *data) {
     print_safe(f_string(error, "recovery")); fputc('\n', stderr);
     if (f_string(data, "plan_sha256")) { fputs("plan sha256: ", stderr); print_safe(f_string(data, "plan_sha256")); fputc('\n', stderr); }
 }
+static void print_setups(json_object *setups) {
+    size_t i;
+    if (!json_object_array_length(setups)) { fputs("no remote setups; start one with hydra remote setup NAME [USER@]HOST\n", stderr); return; }
+    fprintf(stderr, "%-20s %-32s %-18s %s\n", "NAME", "DESTINATION", "STATUS", "NEXT");
+    for (i = 0; i < json_object_array_length(setups); i++) {
+        json_object *row = json_object_array_get_idx(setups, i);
+        const char *destination = f_string(row, "destination"), *next = f_string(f_field(row, "next"), "step");
+        char name[128], where[256], status[32];
+        f_copy(name, sizeof(name), f_string(row, "name")); f_copy(where, sizeof(where), destination ? destination : "-");
+        f_copy(status, sizeof(status), f_string(row, "status"));
+        fprintf(stderr, "%-20s %-32s %-18s ", name, where, status);
+        print_safe(next ? next : f_string(f_field(row, "error"), "code") ? f_string(f_field(row, "error"), "code") : "-");
+        fputc('\n', stderr);
+    }
+}
 int setup_emit(json_object *result, bool json) {
     json_object *data = f_field(result, "data"), *error = f_field(result, "error");
     bool ok = json_object_get_boolean(f_field(result, "ok"));
     if (json) return f_emit(result);
+    if (json_object_is_type(f_field(data, "setups"), json_type_array)) print_setups(f_field(data, "setups"));
     if (json_object_is_type(f_field(data, "steps"), json_type_array)) print_steps(f_field(data, "steps"));
     if (!ok) print_error(error, data);
     else if (f_string(data, "usage")) { fputs("usage: ", stderr); print_safe(f_string(data, "usage")); fputc('\n', stderr); }

@@ -371,6 +371,19 @@ reproducibly built, and pinned in `release/fleet-assets.tsv`, installed as
 provisioning downloads. Helpers from `--binary` or the local build are labelled
 unpinned in the reviewed plan.
 
+Guided remote setup (since 2.9.0) keeps private per-NAME state in
+`$HYDRA_HOME/fleet/setup/NAME.json`; `status` and `list` are reserved names.
+Every `remote-setup*`/`remote-*` step envelope adds `data.setup_schema` 1,
+`data.steps[]` (`{id, status, detail}`, plus `error{code,message}` while an
+installer or sign-in that ran on a terminal is `failed` or `outcome_unknown`) and
+`data.next` (`{step, argv, approval_sha256}` or null). `remote-setup-list` returns
+`data.setups[]` of `{name, destination, status, complete, next}` (`status` is the
+first unfinished step's status, `done`, or `unreadable` with `error`), read
+without locks. `remote-preflight` requirements are `{name, status, blocking,
+detail}` with an optional `suggestion` (an example command; Hydra never runs it).
+Plans are `remote-setup-plan` schema 1 approved by their SHA-256; exit statuses
+are 0, 1, 3 (approval required), 4 (outcome unknown) and 128+n.
+
 Task package schema 1 binds an
 exact Git bundle, selected inputs, work, destination, completion policy, and limits
 for local preparation and validation. Task protocol 1 advertises `task-accept`
