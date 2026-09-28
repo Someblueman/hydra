@@ -36,12 +36,15 @@ case "${1:-}" in
     *) printf '%s\n' "${SETUP_REMOTE_OS:-Linux}" ;;
 esac
 UNAME
-# A remote Hydra that answers --version and the fleet handshake.
+# A remote Hydra that answers --version and the fleet handshake. A copy with
+# a sibling "version" file reports that version (an older pinned install).
 cat > "$fixture/remote-hydra" <<'HYDRA'
 #!/bin/sh
-if [ "${1:-}" = --version ]; then printf 'Hydra version %s\n' "$(cat "$SETUP_TEST_VERSION_FILE")"; exit 0; fi
+version_file="${0%/*}/version"
+[ -f "$version_file" ] || version_file=$SETUP_TEST_VERSION_FILE
+if [ "${1:-}" = --version ]; then printf 'Hydra version %s\n' "$(cat "$version_file")"; exit 0; fi
 cat >/dev/null
-printf '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"%s","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":[]}}\n' "$(cat "$SETUP_TEST_VERSION_FILE")"
+printf '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"%s","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":[]}}\n' "$(cat "$version_file")"
 HYDRA
 chmod +x "$fixture/bin/ssh" "$fixture/remote-bin/uname" "$fixture/remote-hydra"
 # find_tool NAME: first executable regular file on PATH (dash's command -v
@@ -224,6 +227,69 @@ finish_cases() {
     lacks "$out" '"id":"verify","status":"done"'
 }
 
+# write_upgrade_state NAME DEST HYDRA ALIAS_HYDRA HOST_KEY STEPS_JSON: an upgrade
+# whose provisioning (another step's work) produced HYDRA.
+write_upgrade_state() {
+    printf '{"schema_version":1,"kind":"remote-setup","name":"%s","destination":"%s","ssh_config":"","steps":%s,"upgrade":{"hydra":"%s","target":"%s"},"remote":{"target":"%s","ssh_config":"","hydra":"%s","home":"","principal":"","project":"","accepted_host_key":"%s","multiplex":false}}' \
+        "$1" "$2" "$6" "$4" "$2" "$2" "$3" "$5" > "$(state "$1")"
+    chmod 600 "$(state "$1")"
+}
+same_alias() { cmp -s "$HYDRA_HOME/fleet/remotes/$1.json" "$2" || fail "alias $1 changed"; }
+
+upgrade_cases() {
+    old="$fixture/old-pin-$mask" new="$fixture/new-pin-$mask"
+    mkdir -p "$old/bin" "$new/bin"
+    cp "$fixture/remote-hydra" "$old/bin/hydra"; printf '2.7.0' > "$old/bin/version"
+    cp "$fixture/remote-hydra" "$new/bin/hydra"
+    cp "$old/bin/hydra" "$fixture/old-pin.bytes"
+    run 0 "$out" add up1 up-host --hydra "$old/bin/hydra" --home /remote/state
+    cp "$HYDRA_HOME/fleet/remotes/up1.json" "$fixture/up1.alias"
+    # An enrolled alias is never re-pointed.
+    run 1 "$out" setup up1 other-host --json; has "$out" '"code":"alias_conflict"'; has "$out" 'never re-points'
+    test ! -e "$(state up1)" || fail "a refused upgrade created state"
+    same_alias up1 "$fixture/up1.alias"
+    # Upgrade mode binds to the alias and checks the install it uses today.
+    SETUP_REMOTE_PATH="$fixture/remote-full" run any "$out" setup up1 --json
+    has "$out" '"destination":"up-host"'; has "$out" '"id":"host_key","status":"done"'; has "$out" '"id":"preflight","status":"done"'
+    has "$(state up1)" '"upgrade":{"hydra":"[^"]*old-pin[^"]*","target":"up-host"}'
+    has "$(state up1)" '"alias_hydra":{"path":"[^"]*old-pin[^"]*","version":"2.7.0","reusable":false}'
+    has "$(state up1)" '"home":"\\/remote\\/state"'
+    lacks "$out" '"id":"provision","status":"skipped"'
+    same_alias up1 "$fixture/up1.alias"
+    # After provisioning a new pin, the alias update needs approval of old -> new.
+    write_upgrade_state up1 up-host "$new/bin/hydra" "$old/bin/hydra" SHA256:fixture \
+        "{\"host_key\":{\"status\":\"done\"},\"preflight\":{\"status\":\"done\",\"detail\":{\"alias_hydra\":{\"path\":\"$old/bin/hydra\",\"version\":\"2.7.0\",\"reusable\":false}}},\"provision\":{\"status\":\"done\"},\"agents\":{\"status\":\"done\"}}"
+    run 3 "$out" setup up1 --json
+    has "$out" '"code":"approval_required"'; has "$out" '"step":"alias"'
+    has "$out" '"old_hydra":"[^"]*old-pin'; has "$out" '"new_hydra":"[^"]*new-pin'; has "$out" '"old_version":"2.7.0"'
+    has "$out" "\"new_version\":\"$version\""; has "$out" '"previous_install":"stays installed'
+    has "$out" '"argv":\["hydra","remote","setup","up1","--approve","[0-9a-f]*","--json"\]'
+    hash="$(sed -n 's/.*"plan_sha256":"\([0-9a-f]*\)".*/\1/p' "$out")"
+    same_alias up1 "$fixture/up1.alias"
+    run 1 "$out" setup up1 --approve 0000000000000000000000000000000000000000000000000000000000000000 --json
+    has "$out" '"code":"approval_mismatch"'
+    same_alias up1 "$fixture/up1.alias"
+    run 0 "$out" setup up1 --approve "$hash" --json
+    has "$out" '"complete":true'; has "$out" '"id":"alias","status":"done","detail":"alias updated'
+    has "$HYDRA_HOME/fleet/remotes/up1.json" '"hydra":"[^"]*new-pin[^"]*"'
+    has "$HYDRA_HOME/fleet/remotes/up1.json" '"target":"up-host"'
+    has "$HYDRA_HOME/fleet/remotes/up1.json" '"home":"\\/remote\\/state"'
+    has "$HYDRA_HOME/fleet/remotes/up1.json" '"accepted_host_key":"SHA256:fixture"'
+    exact_mode "$HYDRA_HOME/fleet/remotes/up1.json" 600 || fail "updated alias is not private"
+    cmp -s "$old/bin/hydra" "$fixture/old-pin.bytes" && [ "$(cat "$old/bin/version")" = 2.7.0 ] || fail "old pin changed"
+    run 0 "$out" setup up1 --json; has "$out" '"complete":true'
+    # A same-version install behind the alias is reused: no provisioning, no alias change.
+    run 0 "$out" add up2 up-host2 --hydra "$new/bin/hydra"
+    cp "$HYDRA_HOME/fleet/remotes/up2.json" "$fixture/up2.alias"
+    SETUP_REMOTE_PATH="$fixture/remote-full" run any "$out" setup up2 --json
+    has "$out" '"id":"provision","status":"skipped","detail":"existing Hydra'
+    write_upgrade_state up2 up-host2 "$new/bin/hydra" "$new/bin/hydra" "" \
+        '{"host_key":{"status":"done"},"preflight":{"status":"done"},"provision":{"status":"skipped"},"agents":{"status":"done"}}'
+    run 0 "$out" setup up2 --json
+    has "$out" '"id":"alias","status":"skipped","detail":"alias already uses this install"'
+    same_alias up2 "$fixture/up2.alias"
+}
+
 for mask in 022 002; do
     (
         umask "$mask"
@@ -234,6 +300,7 @@ for mask in 022 002; do
         preflight_cases
         state_cases
         finish_cases
+        upgrade_cases
     )
 done
 printf 'Remote setup acceptance passed\n'

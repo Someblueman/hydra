@@ -242,6 +242,18 @@ int setup_state_step(struct setup_ctx *ctx, const char *step, const char *status
     json_object_object_add(steps, step, record);
     return state_write(ctx);
 }
+int setup_state_set(struct setup_ctx *ctx, const char *key, json_object *value) {
+    static const char *const reserved[] = {"schema_version", "kind", "name", "destination", "ssh_config", "steps", "remote", NULL};
+    size_t i;
+    for (i = 0; key && reserved[i]; i++) if (!strcmp(key, reserved[i])) key = NULL;
+    if (ctx->readonly || !ctx->state || !key) { json_object_put(value); return -1; }
+    json_object_object_add(ctx->state, key, value);
+    return state_write(ctx);
+}
+json_object *setup_upgrade(struct setup_ctx *ctx) {
+    json_object *upgrade = f_field(ctx->state, "upgrade");
+    return json_object_is_type(upgrade, json_type_object) ? upgrade : NULL;
+}
 const char *setup_state_status(struct setup_ctx *ctx, const char *step) {
     const char *status = f_string(f_field(f_field(ctx->state, "steps"), step), "status");
     return status ? status : "pending";

@@ -280,6 +280,51 @@ static void plan_gate(void) {
     plan_gate_interactive(&ctx);
     setup_state_close(&ctx);
 }
+/* Upgrade alias step: decline and waiting leave the alias byte-identical. */
+static json_object *alias_with_reply(struct setup_ctx *ctx, const char *reply) {
+    int fds[2], saved = dup(STDIN_FILENO); json_object *result;
+    assert(saved >= 0 && !pipe(fds));
+    assert(write(fds[1], reply, strlen(reply)) == (ssize_t)strlen(reply));
+    close(fds[1]); assert(dup2(fds[0], STDIN_FILENO) == STDIN_FILENO); close(fds[0]); clearerr(stdin);
+    result = setup_step_alias(ctx);
+    assert(dup2(saved, STDIN_FILENO) == STDIN_FILENO); close(saved); clearerr(stdin);
+    return result;
+}
+static void upgrade_context(struct setup_ctx *ctx, char alias_path[F_PATH]) {
+    struct f_remote alias; json_object *upgrade = json_object_new_object();
+    memset(&alias, 0, sizeof(alias));
+    assert(!f_copy(alias.name, sizeof(alias.name), "u1") && !f_copy(alias.target, sizeof(alias.target), "host"));
+    assert(!f_copy(alias.hydra, sizeof(alias.hydra), "/old/bin/hydra") && !f_copy(alias.home, sizeof(alias.home), "/state"));
+    assert(!f_remote_save(&alias));
+    assert(!f_path(alias_path, F_PATH, home, "fleet/remotes/u1.json"));
+    ctx->command = NULL;
+    assert(!setup_state_open(ctx, "u1", "host", NULL, SETUP_CREATE));
+    f_string_add(upgrade, "hydra", "/old/bin/hydra"); f_string_add(upgrade, "target", "host");
+    assert(!setup_state_set(ctx, "upgrade", upgrade) && setup_upgrade(ctx));
+    assert(setup_state_set(ctx, "steps", json_object_new_object()) == -1);
+    assert(!f_copy(ctx->remote.hydra, sizeof(ctx->remote.hydra), "/new/bin/hydra"));
+    assert(!setup_state_step(ctx, "provision", "done", NULL));
+}
+static void upgrade_alias_gate(void) {
+    struct setup_ctx ctx; char alias_path[F_PATH], *before, *after; json_object *result, *alias; const char *hash;
+    use_home("upgrade");
+    upgrade_context(&ctx, alias_path);
+    before = read_text(alias_path);
+    ctx.interactive = true;
+    expect_code(alias_with_reply(&ctx, "n\n"), "approval_declined");
+    ctx.interactive = false;
+    result = setup_step_alias(&ctx);
+    hash = f_string(f_field(result, "data"), "plan_sha256");
+    assert(!strcmp(f_string(f_field(result, "error"), "code"), "approval_required") && hash);
+    assert(!strcmp(f_string(f_field(f_field(result, "data"), "plan"), "old_hydra"), "/old/bin/hydra"));
+    after = read_text(alias_path); assert(!strcmp(before, after)); free(after);
+    json_object_put(setup_step_alias_approved(&ctx, hash));
+    alias = f_read_json(alias_path, 1 << 20);
+    assert(!strcmp(f_string(alias, "hydra"), "/new/bin/hydra") && !strcmp(f_string(alias, "home"), "/state") && !strcmp(f_string(alias, "target"), "host"));
+    assert(!strcmp(setup_state_status(&ctx, "alias"), "done"));
+    json_object_put(alias); json_object_put(result); free(before);
+    setup_state_close(&ctx);
+}
 static void exit_statuses(void) {
     json_object *ok = f_success("remote-setup", json_object_new_object());
     json_object *unknown = f_error("remote-provision", "outcome_unknown", "lost");
@@ -345,6 +390,7 @@ int main(void) {
         state_binding_and_arguments();
         state_invalid_content();
         plan_gate();
+        upgrade_alias_gate();
         assert(realpath(temp, base));
     }
     exit_statuses();

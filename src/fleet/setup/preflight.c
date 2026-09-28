@@ -186,23 +186,39 @@ static json_object *requirements(json_object *snapshot, bool binary) {
 }
 
 /* ---- Existing Hydra ---- */
+/* hydra_version reported by a strict handshake with hydra/home, or "". */
+static void handshake_version(const struct setup_ctx *ctx, const char *hydra, const char *home, char version[64]) {
+    struct f_remote remote = ctx->remote; json_object *reply; const char *reported;
+    version[0] = '\0';
+    if (f_copy(remote.hydra, sizeof(remote.hydra), hydra) || f_copy(remote.home, sizeof(remote.home), home)) return;
+    reply = f_observe(&remote, "handshake", ctx->seconds);
+    reported = f_string(f_field(reply, "data"), "hydra_version");
+    if (json_object_get_boolean(f_field(reply, "ok")) && reported) f_copy(version, 64, reported);
+    json_object_put(reply);
+}
 /* A same-version install that passes the strict handshake is reusable. */
 static void existing_hydra(const struct setup_ctx *ctx, json_object *snapshot, json_object *rows) {
-    json_object *hydra = f_field(snapshot, "hydra"), *reply; struct f_remote remote = ctx->remote;
+    json_object *hydra = f_field(snapshot, "hydra");
     const char *path = f_string(hydra, "path"), *version = f_string(hydra, "version");
     struct requirement r = {"hydra", "ok", "not installed; a private pinned install will be added", false};
-    bool reusable = false;
-    if (path && version && !strcmp(version, "Hydra version " F_VERSION) && !f_copy(remote.hydra, sizeof(remote.hydra), path)) {
-        remote.home[0] = '\0';
-        reply = f_observe(&remote, "handshake", ctx->seconds);
-        reusable = json_object_get_boolean(f_field(reply, "ok")) &&
-            f_string(f_field(reply, "data"), "hydra_version") && !strcmp(f_string(f_field(reply, "data"), "hydra_version"), F_VERSION);
-        json_object_put(reply);
-    }
-    if (reusable) r.detail = "a compatible Hydra " F_VERSION " is installed and will be reused";
+    char reported[64] = "";
+    if (path && version && !strcmp(version, "Hydra version " F_VERSION)) handshake_version(ctx, path, "", reported);
+    if (!strcmp(reported, F_VERSION)) r.detail = "a compatible Hydra " F_VERSION " is installed and will be reused";
     else if (path) { r.status = "warning"; r.detail = "an existing Hydra install is kept untouched; a new pinned install will be added"; }
-    json_object_object_add(hydra, "reusable", json_object_new_boolean(reusable));
+    json_object_object_add(hydra, "reusable", json_object_new_boolean(!strcmp(reported, F_VERSION)));
     require(rows, &r);
+}
+/* Upgrade mode: the install the alias uses today, checked with the alias's state directory. */
+static void alias_hydra(const struct setup_ctx *ctx, json_object *upgrade, json_object *snapshot) {
+    const char *path = f_string(upgrade, "hydra"); json_object *found; char reported[64];
+    if (!path) return;
+    handshake_version(ctx, path, ctx->remote.home, reported);
+    found = json_object_new_object();
+    f_string_add(found, "path", path);
+    if (reported[0]) f_string_add(found, "version", reported);
+    else json_object_object_add(found, "version", NULL);
+    json_object_object_add(found, "reusable", json_object_new_boolean(!strcmp(reported, F_VERSION)));
+    json_object_object_add(snapshot, "alias_hydra", found);
 }
 
 /* ---- Step ---- */
@@ -256,5 +272,6 @@ json_object *setup_step_preflight(struct setup_ctx *ctx) {
     if (!snapshot) return setup_error(ctx, "invalid_response", "the remote preflight output was missing, oversized or malformed", NULL, NULL);
     json_object_object_add(snapshot, "requirements", requirements(snapshot, ctx->binary != NULL));
     existing_hydra(ctx, snapshot, f_field(snapshot, "requirements"));
+    alias_hydra(ctx, setup_upgrade(ctx), snapshot);
     return finish(ctx, snapshot);
 }

@@ -249,7 +249,7 @@ static json_object *changed(struct setup_ctx *ctx, const struct hostkey *hk, con
     f_string_add(data, "presented_fingerprint", peer); f_string_add(data, "host", hk->lookup);
     f_string_add(data, "known_hosts", hk->files[0]);
     (void)setup_state_step(ctx, "host_key", "blocked", NULL);
-    return setup_error(ctx, "host_key_changed", "the host presented a different key than known_hosts records", recovery, data);
+    return setup_error(ctx, "host_key_changed", "the host presented a different key than known_hosts or the alias records", recovery, data);
 }
 static json_object *ambiguous(struct setup_ctx *ctx, const struct hostkey *hk, int index) {
     json_object *data = json_object_new_object();
@@ -295,13 +295,19 @@ static json_object *write_and_verify(struct setup_ctx *ctx, const struct hostkey
     }
     return trusted(ctx, hk, peer, "trusted");
 }
+/* Strict SSH already trusts the host. A key recorded earlier (by this setup or
+ * by the alias being upgraded) must still match: a changed key is refused. */
+static json_object *known(struct setup_ctx *ctx, const struct hostkey *hk, const char *peer, const char *fingerprint) {
+    const char *recorded = ctx->remote.accepted_host_key;
+    if (fingerprint && peer[0] && strcmp(fingerprint, peer))
+        return setup_error(ctx, "approval_mismatch", "known_hosts already trusts a different fingerprint for this host", NULL, NULL);
+    if (recorded[0] && peer[0] && strcmp(recorded, peer)) return changed(ctx, hk, peer);
+    return trusted(ctx, hk, peer, "already trusted");
+}
 static json_object *trust(struct setup_ctx *ctx, struct hostkey *hk, const char *fingerprint) {
     char peer[256], type[64]; const char *code; json_object *error; bool same; int index;
     switch (strict_probe(ctx, peer, type, &code)) {
-    case PROBE_KNOWN:
-        if (fingerprint && peer[0] && strcmp(fingerprint, peer))
-            return setup_error(ctx, "approval_mismatch", "known_hosts already trusts a different fingerprint for this host", NULL, NULL);
-        return trusted(ctx, hk, peer, "already trusted");
+    case PROBE_KNOWN: return known(ctx, hk, peer, fingerprint);
     case PROBE_CHANGED:
         /* Only a recorded key of the presented type is a changed key; other
          * types known for this host are an ambiguity Hydra will not resolve. */

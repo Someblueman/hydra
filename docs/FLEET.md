@@ -97,6 +97,21 @@ Hydra never uses sudo; install missing packages yourself. An existing Hydra of t
 same version that passes the fleet handshake is reported as reusable; other
 installs are left untouched.
 
+**Upgrading an enrolled alias.** `hydra remote setup NAME` for an alias that already
+exists (and has no setup state) upgrades it. The destination and SSH config come
+from the alias; giving a different DEST or `--ssh-config` fails with
+`alias_conflict`, because setup never re-points an alias. The host key step accepts
+a host that strict SSH already trusts, but still refuses a key that differs from
+the alias's recorded one. Provisioning installs a new pin next to the old one. The
+final step shows a plan with the old and new Hydra path and version, states that
+the previous install stays installed, and after approval (`hydra remote setup NAME
+--approve PLAN_SHA256` when non-interactive) rewrites only the alias's `hydra`
+path, plus `accepted_host_key` if it was not recorded before; every other alias
+field is preserved and the record is replaced atomically. If the alias already
+uses a compatible install of this version, provisioning and the alias change are
+skipped. A new setup whose NAME is taken by an alias created meanwhile still fails
+with `alias_conflict`.
+
 Exit statuses: 0 done, 1 error, 3 approval required, 4 outcome unknown (reconcile
 before retrying; nothing is replayed), and 128+n when interrupted by signal n.
 Without `--json` the commands print one line per step on stderr followed by the
