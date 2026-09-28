@@ -59,4 +59,26 @@ make -n -f "$fixture/dry.mk" TEST_RUNNER="$root/scripts/run-test.sh" \
 [ ! -f "$fixture/logs/dry.log" ]
 grep -q 'echo real-child' "$fixture/dry.out"
 if grep -q '^PASS' "$fixture/dry.out"; then exit 1; fi
+(
+    # shellcheck source=/dev/null
+    . "$root/tests/helpers.sh"
+    TMPDIR="$fixture/private/"
+    mkdir -p "$TMPDIR"
+    made=$(test_mktemp_dir)
+    case $made in "$fixture/private/hydra-test."??????) ;; *) exit 1 ;; esac
+    [ -d "$made" ]
+    made=$(test_mktemp_file)
+    case $made in "$fixture/private/hydra-test."??????) ;; *) exit 1 ;; esac
+    [ -f "$made" ]
+    ( sleep 0.3; : > "$fixture/ready" ) &
+    WAIT_FOR_INTERVAL=0.05 wait_for 'a delayed marker' test -e "$fixture/ready"
+    wait
+    # shellcheck disable=SC2329,SC2317 # Invoked through wait_for.
+    observe() { printf 'observed-%s\n' pending; return 1; }
+    code=0
+    WAIT_FOR_TIMEOUT=1 WAIT_FOR_INTERVAL=0.1 wait_for 'a condition that never holds' observe 2> "$fixture/wait.err" || code=$?
+    [ "$code" -eq 1 ]
+    grep -q 'timed out after 1s waiting for a condition that never holds' "$fixture/wait.err"
+    grep -qx 'observed-pending' "$fixture/wait.err"
+)
 printf 'PASS test helpers\n'

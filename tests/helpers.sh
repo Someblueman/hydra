@@ -65,3 +65,26 @@ test_mktemp_file() {
     _tmf_base="${TMPDIR:-/tmp}"
     mktemp "${_tmf_base%/}/hydra-test.XXXXXX"
 }
+
+# Poll until a command succeeds instead of sleeping for a fixed time.
+# Usage: wait_for <description> <command> [args...]
+# WAIT_FOR_TIMEOUT (seconds, default 30) and WAIT_FOR_INTERVAL (seconds,
+# default 0.1) tune the loop. The command's last output is kept in
+# WAIT_FOR_OUTPUT and printed on timeout so a failure shows what was observed.
+wait_for() {
+    _wf_description="$1"
+    shift
+    _wf_timeout="${WAIT_FOR_TIMEOUT:-30}"
+    _wf_deadline=$(($(date +%s) + _wf_timeout))
+    while :; do
+        if WAIT_FOR_OUTPUT="$("$@" 2>&1)"; then
+            return 0
+        fi
+        if [ "$(date +%s)" -ge "$_wf_deadline" ]; then
+            printf 'wait_for: timed out after %ss waiting for %s\n' "$_wf_timeout" "$_wf_description" >&2
+            printf 'wait_for: last output of [%s]:\n%s\n' "$*" "$WAIT_FOR_OUTPUT" >&2
+            return 1
+        fi
+        sleep "${WAIT_FOR_INTERVAL:-0.1}"
+    done
+}

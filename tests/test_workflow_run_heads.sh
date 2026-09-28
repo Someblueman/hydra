@@ -192,8 +192,16 @@ while [ "$waited" -lt 100 ]; do
     [ -n "$stop_run" ] && [ -n "$(find "$HYDRA_HOME/state/v2/projects/$project/exec" -name .provider-stdout 2>/dev/null)" ] && break
     sleep 0.2; waited=$((waited + 1))
 done
-sleep 1
-output="$("$HYDRA_BIN" tui --head-output stop-worker)"
+# The provider writes its events asynchronously; poll for the rendered event
+# rather than sleeping a fixed time, then assert on the observed output.
+# shellcheck disable=SC2329,SC2317 # Invoked through wait_for.
+head_output_has_event() {
+    "$HYDRA_BIN" tui --head-output stop-worker > "$root/stop-output" 2>&1 || :
+    cat "$root/stop-output"
+    grep -Fq -- '$ sh -c true -> exit 0' "$root/stop-output"
+}
+wait_for 'the running step to render its live provider event' head_output_has_event || :
+output="$(cat "$root/stop-output")"
 contains 'Step implement (exec, codex) running' "$output" 'a running agent step is named in the headless output'
 contains 'Live output (read-only' "$output" 'the running step offers its live output'
 contains '$ sh -c true -> exit 0' "$output" 'live provider events are rendered readably'
