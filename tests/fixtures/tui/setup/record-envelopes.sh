@@ -122,6 +122,7 @@ normalise() {
     sed -e "s|$escaped_work\\\\/[a-z0-9-]*\\\\/remote|\\\\/home\\\\/deploy|g" \
         -e "s|$escaped_work\\\\/[a-z0-9-]*\\\\/local|\\\\/Users\\\\/you\\\\/.hydra|g" \
         -e "s|$escaped_work\\\\/known_hosts|\\\\/Users\\\\/you\\\\/.ssh\\\\/known_hosts|g" \
+        -e "s|$escaped_work\\\\/ssh_config|\\\\/Users\\\\/you\\\\/.ssh\\\\/config|g" \
         -e "s|$escaped_work\\\\/[a-z-]*bin|\\\\/usr\\\\/local\\\\/bin|g" \
         -e "s|$escaped_work\\\\/linux-git|\\\\/usr\\\\/bin|g"
 }
@@ -199,4 +200,14 @@ record list-progress.json 0 setup list --json
 rm -f "$out_dir/provision-unknown-plan.json"
 host unpinned
 HYDRA_FLEET_ASSETS_FILE="$work/no-assets.tsv" record provision-approval-unpinned.json 3 setup ovh deploy@ovh.example.net --ssh-config "$work/ssh_config" --json
+# An unfinished setup that has not changed the remote (preflight blocked on
+# git), listed, then removed after approving its plan.
+host early
+RECORD_REMOTE_PATH="$work/linux-bin"
+export RECORD_REMOTE_PATH
+record early-setup.json 1 setup ovh deploy@ovh.example.net --json
+record list-early.json 0 setup list --json
+record remove-approval.json 3 setup remove ovh --json
+record removed.json 0 setup remove ovh --approve "$(plan_hash remove-approval.json)" --json
+rm -f "$out_dir/early-setup.json"
 printf 'recorded remote setup envelopes in %s\n' "$out_dir"

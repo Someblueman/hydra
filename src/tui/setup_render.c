@@ -119,8 +119,16 @@ static void field_row(struct app *app, struct native_setup *s, int index, const 
 }
 
 static void render_form(struct app *app, struct native_setup *s) {
-    title(app, TV_STRONG, "ADD A REMOTE HOST");
-    paragraph(app, "Hydra connects with your own SSH setup. It checks the machine and asks before every change; nothing changes on the remote until you approve it.", TV_BASE);
+    char text[400];
+    if (s->editing[0]) {
+        snprintf(text, sizeof(text), "EDIT THE SETUP OF %.120s", s->editing);
+        title(app, TV_STRONG, text);
+        paragraph(app, "Nothing has changed on this remote yet. With the same name, Hydra removes the old setup record "
+                  "(you approve that first) and starts again with these values.", TV_BASE);
+    } else {
+        title(app, TV_STRONG, "ADD A REMOTE HOST");
+        paragraph(app, "Hydra connects with your own SSH setup. It checks the machine and asks before every change; nothing changes on the remote until you approve it.", TV_BASE);
+    }
     linef(app, "");
     field_row(app, s, SETUP_FIELD_DESTINATION, "SSH destination", "user@host, or a Host from ~/.ssh/config");
     field_row(app, s, SETUP_FIELD_NAME, "Name in Hydra", "empty: the host name is used");
@@ -202,6 +210,8 @@ static const char *const plan_labels[][2] = {
     {"source", "Recipe"}, {"docs_url", "Provider docs"}, {"verified_on", "Recipe checked"}, {"recipe_source", "Recipe"},
     {"requires", "Requires"}, {"expected_dirs", "Installs into"}, {"peer_fingerprint", "Host key"},
     {"hashed", "Hashed entry"}, {"change", "Change"}, {"notes", "Notes"}, {"effects", "Effects"},
+    {"record", "Setup record"}, {"remote", "On the remote"}, {"remote_left", "Left on remote"},
+    {"local_left", "Left here"},
 };
 
 static bool plan_skipped(const char *key) { return !strcmp(key, "name") || !strcmp(key, "destination"); }
@@ -226,6 +236,7 @@ static void value_text(const struct setup_row *row, char *out, size_t size, enum
         *tone = plan_values[i][3][0] == 'w' ? TV_WARNING : plan_values[i][3][0] == 's' ? TV_SUCCESS : TV_BASE;
         return;
     }
+    if (!row->value[0] && strstr(row->key, "_left")) { copy_text(out, size, "nothing"); return; }
     copy_text(out, size, !strcmp(row->value, "true") ? "yes" : !strcmp(row->value, "false") ? "no" : row->value);
 }
 
@@ -278,17 +289,23 @@ static void render_trust(struct app *app, struct native_setup *s) {
     footer_answer(app, &p, prompt, "Anything but yes leaves the key untrusted. Esc declines.", TV_MUTED);
 }
 
+static const char *or_text(const char *value, const char *fallback) { return value[0] ? value : fallback; }
+
 static void plan_heading(const struct native_setup *s, char *out, size_t size) {
     const struct setup_envelope *e = s->current;
-    if (!strcmp(e->plan_kind, "provision")) snprintf(out, size, "REVIEW: INSTALL HYDRA ON %.120s", s->name);
-    else if (!strcmp(e->plan_kind, "install_agent")) snprintf(out, size, "REVIEW: INSTALL %.60s ON %.120s", plan_value(e, "agent")[0] ? plan_value(e, "agent") : "AN AGENT", s->name);
-    else snprintf(out, size, "REVIEW: %.60s ON %.120s", e->plan_kind[0] ? e->plan_kind : "CHANGE", s->name);
+    if (!strcmp(e->plan_kind, "remove")) snprintf(out, size, "REMOVE THE SETUP RECORD OF %.120s?", s->name);
+    else if (!strcmp(e->plan_kind, "provision")) snprintf(out, size, "REVIEW: INSTALL HYDRA ON %.120s", s->name);
+    else if (!strcmp(e->plan_kind, "install_agent")) snprintf(out, size, "REVIEW: INSTALL %.60s ON %.120s", or_text(plan_value(e, "agent"), "AN AGENT"), s->name);
+    else snprintf(out, size, "REVIEW: %.60s ON %.120s", or_text(e->plan_kind, "CHANGE"), s->name);
 }
 
 static void plan_guarantees(struct pen *p, const struct setup_envelope *e) {
     if (!strcmp(e->plan_kind, "provision")) {
         pen_text(p, 0, TV_BASE, "Hydra copies a verified runtime to the machine and installs it only in the location above: "
                  "no PATH changes, no sudo, and other Hydra installs there stay untouched.");
+    } else if (!strcmp(e->plan_kind, "remove")) {
+        pen_text(p, 0, TV_BASE, "Only this machine's record of the setup is deleted. Hydra does not connect to the remote, and "
+                 "nothing listed above is removed or undone.");
     } else if (!strcmp(e->plan_kind, "install_agent")) {
         pen_text(p, 0, TV_BASE, "The command runs on the remote as your user, in this terminal so you can answer it; no sudo. "
                  "Hydra returns here as soon as it succeeds; after a failure it waits for Enter so you can read the output.");
@@ -515,6 +532,30 @@ static void render_done(struct app *app, struct native_setup *s) {
     footer(app, &p, "Enter or Esc closes", TV_STRONG);
 }
 
+/* ---- A name that already has an unfinished setup ---- */
+
+static void render_duplicate(struct app *app, struct native_setup *s) {
+    const struct setup_record *r = NULL;
+    struct pen p;
+    char text[1400];
+    size_t i;
+    for (i = 0; i < s->record_count; i++) if (!strcmp(s->records[i].name, s->duplicate)) r = &s->records[i];
+    snprintf(text, sizeof(text), "%.120s ALREADY HAS AN UNFINISHED SETUP", s->duplicate);
+    title(app, TV_WARNING, text);
+    pen_begin(&p, app, 2);
+    pen_text(&p, 0, TV_BASE, "Hydra keeps one setup per name, so this form would fail. Continue that setup, change it, or go back "
+             "and choose another name.");
+    pen_text(&p, 0, TV_BASE, "");
+    pen_pair(&p, "Destination", r ? r->destination : "", TV_BASE);
+    pen_pair(&p, "SSH config", r && r->config[0] ? r->config : "your usual SSH config", TV_BASE);
+    pen_pair(&p, "Progress", r ? r->summary : "", TV_BASE);
+    pen_text(&p, 0, TV_BASE, "");
+    pen_text(&p, 0, TV_BASE, r && r->remote_changed
+             ? "It already changed the remote, so it cannot be edited: x removes its record (the plan lists what stays there)."
+             : "e edits it (nothing changed on the remote yet); x removes its record.");
+    footer(app, &p, "Enter continues that setup   e edit   x remove   Esc back to the form", TV_STRONG);
+}
+
 void native_setup_render(struct app *app) {
     struct native_setup *s = app->setup;
     switch (s->screen) {
@@ -528,12 +569,23 @@ void native_setup_render(struct app *app) {
         case SETUP_SCREEN_HANDOFF: render_handoff(app, s); break;
         case SETUP_SCREEN_ERROR: case SETUP_SCREEN_UNKNOWN: render_problem(app, s); break;
         case SETUP_SCREEN_DONE: render_done(app, s); break;
+        case SETUP_SCREEN_DUPLICATE: render_duplicate(app, s); break;
         default: render_steps(app, s, false); break;
     }
 }
 
 const char *native_setup_title(const struct app *app) {
-    return app->setup->screen == SETUP_SCREEN_FORM ? "Add a host" : "Remote setup";
+    if (app->setup->screen == SETUP_SCREEN_FORM) return app->setup->editing[0] ? "Edit a host" : "Add a host";
+    return "Remote setup";
+}
+
+/* A paused preflight and a removal plan have their own keys. */
+static const char *special_hints(const struct native_setup *s, bool narrow) {
+    if (s->screen == SETUP_SCREEN_PREFLIGHT && s->paused)
+        return narrow ? "Enter continue anyway  Esc back" : "Enter continue anyway  Esc back  Up/Down scroll";
+    if (s->screen == SETUP_SCREEN_PLAN && !strcmp(s->current->plan_kind, "remove"))
+        return narrow ? "y remove  n/Esc keep" : "y remove the record  n or Esc keep it  Up/Down scroll";
+    return NULL;
 }
 
 const char *native_setup_hints(const struct app *app, bool narrow) {
@@ -549,16 +601,17 @@ const char *native_setup_hints(const struct app *app, bool narrow) {
         [SETUP_SCREEN_UNKNOWN] = {"Enter reconcile  Esc back  Up/Down scroll", "Enter reconcile  Esc back"},
         [SETUP_SCREEN_HANDOFF] = {"Enter hand over the terminal  Esc later", "Enter hand over  Esc later"},
         [SETUP_SCREEN_DONE] = {"Enter or Esc close  q quit", "Enter close"},
+        [SETUP_SCREEN_DUPLICATE] = {"Enter continue that setup  e edit  x remove  Esc back", "Enter continue  e/x  Esc back"},
     };
     enum setup_screen screen = app->setup->screen;
     struct setup_explanation x;
+    const char *special;
     if (screen == SETUP_SCREEN_ERROR) {
         setup_explain(app->setup->current->code, &x);
         snprintf(app->setup->hint, sizeof(app->setup->hint), "%s%sEsc back  Up/Down scroll", x.action ? x.action : "", x.action ? "  " : "");
         return app->setup->hint;
     }
-    if (screen == SETUP_SCREEN_PREFLIGHT && app->setup->paused)
-        return narrow ? "Enter continue anyway  Esc back" : "Enter continue anyway  Esc back  Up/Down scroll";
-    if (screen <= SETUP_SCREEN_NONE || screen > SETUP_SCREEN_DONE) screen = SETUP_SCREEN_STEPS;
+    if ((special = special_hints(app->setup, narrow))) return special;
+    if (screen <= SETUP_SCREEN_NONE || screen > SETUP_SCREEN_DUPLICATE) screen = SETUP_SCREEN_STEPS;
     return hints[screen][narrow ? 1 : 0];
 }

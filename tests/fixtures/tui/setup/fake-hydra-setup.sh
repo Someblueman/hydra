@@ -15,6 +15,7 @@ fingerprint='SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8'
 plan_hash() { sed -n 's/.*"plan_sha256":"\([0-9a-f]*\)".*/\1/p' "$here/$1"; }
 provision_hash="$(plan_hash provision-approval.json)"
 install_hash="$(plan_hash install-approval.json)"
+remove_hash="$(plan_hash remove-approval.json)"
 
 [ "${1:-}" = remote ] || exec "$here/../fake-hydra.sh" "$@"
 shift
@@ -41,6 +42,9 @@ status() {
 }
 
 list() {
+    # early: an unfinished setup that has not changed the remote; removed: gone.
+    if has removed && ! has started; then emit list-empty.json 0; fi
+    if has early && ! has removed; then emit list-early.json 0; fi
     if has complete; then emit list-done.json 0; fi
     if has started; then emit list-progress.json 0; fi
     emit list-empty.json 0
@@ -63,6 +67,10 @@ guided() {
 case "${1:-}:${2:-}" in
     setup:status) status ;;
     setup:list) list ;;
+    setup:remove)
+        [ "${3:-}" = ovh ] || exit 1
+        case " $* " in *" --approve $remove_hash "*) mark removed; emit removed.json 0 ;; esac
+        emit remove-approval.json 3 ;;
     setup:*) guided "$2" ;;
     trust-key:ovh)
         [ "$4" = "$fingerprint" ] || emit host-key-approval.json 3

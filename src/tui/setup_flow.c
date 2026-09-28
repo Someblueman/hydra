@@ -249,7 +249,25 @@ static bool preflight_passed(const struct native_setup *s) {
     return now && !strcmp(now->status, "done") && !(before && setup_status_finished(before->status));
 }
 
+/* A removed record: an edit starts setup again with the form's values;
+ * otherwise the flow closes to Hosts. */
+static void removed_result(struct app *app, struct native_setup *s) {
+    bool replacing = s->replacing;
+    s->replacing = false; s->editing[0] = '\0';
+    if (!s->current->ok) { show(s); return; }
+    if (replacing) {
+        memset(s->current, 0, sizeof(*s->current));
+        s->agents_offered = false;
+        guided_run(app, s, true);
+        return;
+    }
+    close_flow(app, s);
+    snprintf(app->notice, sizeof(app->notice), "Removed the setup record for %.100s; nothing on the remote changed", s->name);
+}
+
 static void job_result(struct app *app, struct native_setup *s, enum setup_job kind) {
+    if (kind == SETUP_JOB_REMOVE) { removed_result(app, s); return; }
+    if (kind == SETUP_JOB_REMOVE_PLAN && strcmp(s->current->plan_kind, "remove")) s->replacing = false;
     if (kind == SETUP_JOB_RETURNED) { returned_result(app, s); return; }
     if (kind == SETUP_JOB_PREFLIGHT) { preflight_result(app, s); return; }
     if (kind == SETUP_JOB_GUIDED && preflight_passed(s)) {
@@ -271,7 +289,8 @@ static void cancelled_finish(struct app *app, struct native_setup *s, enum setup
     snprintf(notice, sizeof(notice), "Cancelled: %s. Nothing further runs until you continue.", label);
     free(setup_capture_finish(&s->job, &(size_t){0}, &(int){0}));
     s->job_kind = SETUP_JOB_NONE; s->held_valid = false;
-    if (kind != SETUP_JOB_STATUS && kind != SETUP_JOB_RETURNED && kind != SETUP_JOB_INSPECT) {
+    s->replacing = false;
+    if (kind != SETUP_JOB_STATUS && kind != SETUP_JOB_RETURNED && kind != SETUP_JOB_INSPECT && kind != SETUP_JOB_REMOVE_PLAN) {
         status_start(app, s, SETUP_JOB_STATUS);
         if (s->job.active) { setup_notice(s, notice); return; }
     }
@@ -298,7 +317,7 @@ static void job_finish(struct app *app, struct native_setup *s) {
     swap = s->current; s->current = s->incoming; s->incoming = swap;
     job_result(app, s, kind);
     if (!s->job.active) native_setup_hosts_refresh(app);
-    if (!s->open && !s->job.active)
+    if (!s->open && !s->job.active && kind != SETUP_JOB_REMOVE)
         snprintf(app->notice, sizeof(app->notice), s->screen == SETUP_SCREEN_DONE ? "Remote host %.100s is set up" :
                  "Remote setup for %.100s needs you: open Hosts (H) to continue", s->name);
 }
@@ -318,9 +337,55 @@ void native_setup_open_form(struct app *app) {
     s->open = true;
     if (s->job.active) { s->screen = SETUP_SCREEN_RUNNING; return; }
     memset(s->fields, 0, sizeof(s->fields));
-    s->focus = SETUP_FIELD_DESTINATION; s->problem[0] = s->notice[0] = '\0';
-    s->screen = SETUP_SCREEN_FORM; s->automatic = 0;
+    s->focus = SETUP_FIELD_DESTINATION; s->problem[0] = s->notice[0] = s->editing[0] = '\0';
+    s->screen = SETUP_SCREEN_FORM; s->automatic = 0; s->replacing = false;
     tv_input_init(&s->input);
+}
+
+static void field_set(struct setup_field *f, const char *text) {
+    copy_text(f->text, sizeof(f->text), text);
+    f->cursor = strlen(f->text);
+}
+
+/* Edit reopens the form with the record's binding. It is offered only while
+ * nothing changed the remote; submitting with the same name removes the old
+ * record (after its plan is approved) and starts again. */
+void native_setup_edit(struct app *app, size_t record) {
+    struct native_setup *s = native_setup_state(app);
+    const struct setup_record *r;
+    if (!s || record >= s->record_count) return;
+    r = &s->records[record];
+    if (s->job.active) { copy_text(app->notice, sizeof(app->notice), "A setup step is still running; wait for its result"); return; }
+    if (r->remote_changed) {
+        snprintf(app->notice, sizeof(app->notice), "%.100s already changed the remote, so it cannot be edited; x removes its record "
+                 "and lists what stays there", r->name);
+        setup_notice(s, app->notice);
+        return;
+    }
+    native_setup_open_form(app);
+    field_set(&s->fields[SETUP_FIELD_DESTINATION], r->destination);
+    field_set(&s->fields[SETUP_FIELD_NAME], r->name);
+    field_set(&s->fields[SETUP_FIELD_CONFIG], r->config);
+    copy_text(s->editing, sizeof(s->editing), r->name);
+}
+
+static void remove_plan_start(struct app *app, struct native_setup *s) {
+    struct setup_argv a = {{NULL}, 0};
+    argv_add(&a, app->hydra); argv_add(&a, "remote"); argv_add(&a, "setup"); argv_add(&a, "remove");
+    argv_add(&a, s->name); argv_add(&a, "--json");
+    memset(s->current, 0, sizeof(*s->current));
+    (void)job_start(s, SETUP_JOB_REMOVE_PLAN, &a, "remove_plan");
+}
+
+/* x on Hosts: the CLI's removal plan is shown first; y removes the record. */
+void native_setup_remove(struct app *app, size_t record) {
+    struct native_setup *s = native_setup_state(app);
+    if (!s || record >= s->record_count) return;
+    if (s->job.active) { copy_text(app->notice, sizeof(app->notice), "A setup step is still running; wait for its result"); return; }
+    s->open = true; s->automatic = 0; s->notice[0] = '\0'; s->replacing = false; s->editing[0] = '\0';
+    tv_input_init(&s->input);
+    copy_text(s->name, sizeof(s->name), s->records[record].name);
+    remove_plan_start(app, s);
 }
 
 void native_setup_resume(struct app *app, const char *name) {
@@ -343,6 +408,35 @@ static void close_flow(struct app *app, struct native_setup *s) {
 
 /* ---- Actions ---- */
 
+static const struct setup_record *find_record(const struct native_setup *s, const char *name) {
+    size_t i;
+    for (i = 0; i < s->record_count; i++) if (!strcmp(s->records[i].name, name)) return &s->records[i];
+    return NULL;
+}
+
+/* A validated form: an unchanged edit continues the setup, a changed one
+ * replaces its record, and a new name that already has an unfinished setup
+ * asks what to do instead of failing afterwards. */
+static void form_start(struct app *app, struct native_setup *s) {
+    const struct setup_record *r = find_record(s, s->name);
+    bool edited = s->editing[0] && !strcmp(s->editing, s->name);
+    if (edited && r && !strcmp(r->destination, s->destination) && !strcmp(r->config, s->config)) {
+        s->editing[0] = '\0';
+        native_setup_resume(app, s->name);
+        return;
+    }
+    if (edited) { s->replacing = true; remove_plan_start(app, s); return; }
+    if (r && !r->complete) {
+        copy_text(s->duplicate, sizeof(s->duplicate), r->name);
+        s->screen = SETUP_SCREEN_DUPLICATE; s->notice[0] = '\0';
+        return;
+    }
+    s->editing[0] = '\0';
+    memset(s->current, 0, sizeof(*s->current));
+    s->agents_offered = false;
+    guided_start(app, s, true);
+}
+
 static void submit_form(struct app *app, struct native_setup *s) {
     struct setup_field *f = s->fields;
     const char *problem;
@@ -361,9 +455,7 @@ static void submit_form(struct app *app, struct native_setup *s) {
     copy_text(s->destination, sizeof(s->destination), f[SETUP_FIELD_DESTINATION].text);
     copy_text(s->name, sizeof(s->name), f[SETUP_FIELD_NAME].text);
     copy_text(s->config, sizeof(s->config), config);
-    memset(s->current, 0, sizeof(*s->current));
-    s->agents_offered = false;
-    guided_start(app, s, true);
+    form_start(app, s);
 }
 
 static void approve(struct app *app, struct native_setup *s) {
@@ -374,10 +466,23 @@ static void approve(struct app *app, struct native_setup *s) {
         return;
     }
     if (!next_argv(app, s, &a, true)) { refuse(s); return; }
-    (void)job_start(s, SETUP_JOB_APPROVED, &a, s->current->next_step);
+    if (!strcmp(s->current->plan_kind, "remove")) (void)job_start(s, SETUP_JOB_REMOVE, &a, "remove");
+    else (void)job_start(s, SETUP_JOB_APPROVED, &a, s->current->next_step);
 }
 
-static void decline(struct native_setup *s) {
+/* Declining a removal keeps the record: an edit returns to its form. */
+static void decline_removal(struct app *app, struct native_setup *s) {
+    if (s->replacing) {
+        s->replacing = false; s->screen = SETUP_SCREEN_FORM;
+        snprintf(s->problem, sizeof(s->problem), "Not changed: the setup %.100s keeps its destination and SSH config", s->name);
+        return;
+    }
+    close_flow(app, s);
+    snprintf(app->notice, sizeof(app->notice), "Kept the setup record for %.100s; nothing was changed", s->name);
+}
+
+static void decline(struct app *app, struct native_setup *s) {
+    if (!strcmp(s->current->plan_kind, "remove")) { decline_removal(app, s); return; }
     s->screen = SETUP_SCREEN_STEPS; s->selected = 0; s->typed[0] = '\0';
     snprintf(s->notice, sizeof(s->notice), "Not approved: nothing was changed on %.150s. Continue setup shows the plan again.",
              s->current->destination[0] ? s->current->destination : s->name);
@@ -455,6 +560,7 @@ static void enter(struct app *app, struct native_setup *s) {
         case SETUP_SCREEN_PREFLIGHT: preflight_enter(app, s); break;
         case SETUP_SCREEN_ERROR: error_enter(app, s); break;
         case SETUP_SCREEN_DONE: close_flow(app, s); break;
+        case SETUP_SCREEN_DUPLICATE: native_setup_resume(app, s->duplicate); break;
         case SETUP_SCREEN_RUNNING: break;
         default: guided_start(app, s, false); break;
     }
@@ -473,8 +579,9 @@ static void cancel_job(struct native_setup *s) {
 
 static void back(struct app *app, struct native_setup *s) {
     switch (s->screen) {
-        case SETUP_SCREEN_TRUST_KEY: case SETUP_SCREEN_PLAN: decline(s); return;
+        case SETUP_SCREEN_TRUST_KEY: case SETUP_SCREEN_PLAN: decline(app, s); return;
         case SETUP_SCREEN_RUNNING: cancel_job(s); return;
+        case SETUP_SCREEN_DUPLICATE: s->screen = SETUP_SCREEN_FORM; s->focus = SETUP_FIELD_NAME; return;
         case SETUP_SCREEN_FORM: case SETUP_SCREEN_STEPS: case SETUP_SCREEN_DONE:
             close_flow(app, s); return;
         default: break;
@@ -558,13 +665,22 @@ static void page(struct app *app, struct native_setup *s, int direction) {
     while (rows-- > 0) move(s, direction);
 }
 
+/* e edits or x removes the unfinished setup the form's name belongs to. */
+static void duplicate_key(struct app *app, struct native_setup *s, uint32_t key) {
+    const struct setup_record *r = find_record(s, s->duplicate);
+    if (!r) { s->screen = SETUP_SCREEN_FORM; return; }
+    if (key == 'e') native_setup_edit(app, (size_t)(r - s->records));
+    else native_setup_remove(app, (size_t)(r - s->records));
+}
+
 /* Single-letter commands of screens without a text field. */
 static void letter(struct app *app, struct native_setup *s, uint32_t key) {
     if (key == 'j') move(s, 1);
     else if (key == 'k') move(s, -1);
     else if (key == 'y' && s->screen == SETUP_SCREEN_PLAN) approve(app, s);
-    else if (key == 'n' && s->screen == SETUP_SCREEN_PLAN) decline(s);
+    else if (key == 'n' && s->screen == SETUP_SCREEN_PLAN) decline(app, s);
     else if (key == 'c' && s->screen == SETUP_SCREEN_RUNNING) cancel_job(s);
+    else if ((key == 'e' || key == 'x') && s->screen == SETUP_SCREEN_DUPLICATE) duplicate_key(app, s, key);
     else if (key == 'b' && s->screen == SETUP_SCREEN_RUNNING && !s->job.cancelled) close_flow(app, s);
     else if (key == 'q' && !s->job.active) app->running = false;
 }

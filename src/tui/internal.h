@@ -257,6 +257,11 @@ bool native_setup_active(const struct app *app);
 bool native_setup_running(const struct app *app);
 void native_setup_open_form(struct app *app);
 void native_setup_resume(struct app *app, const char *name);
+/* Hosts tab e / x on an unfinished setup record (index into records). */
+void native_setup_edit(struct app *app, size_t record);
+void native_setup_remove(struct app *app, size_t record);
+/* The selected Hosts row is an unfinished setup record; *record is its index. */
+bool hosts_setup_selected(const struct app *app, size_t *record);
 bool native_setup_byte(struct app *app, unsigned char byte);
 void native_setup_flush_input(struct app *app);
 void native_setup_tick(struct app *app);

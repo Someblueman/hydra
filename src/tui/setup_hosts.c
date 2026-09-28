@@ -24,8 +24,11 @@ static void sweep_finish(struct native_setup *s) {
         struct setup_record *r = &s->records[s->record_count++];
         memset(r, 0, sizeof(*r));
         copy_text(r->name, sizeof(r->name), e->listed[i].name);
+        copy_text(r->destination, sizeof(r->destination), e->listed[i].destination);
+        copy_text(r->config, sizeof(r->config), e->listed[i].ssh_config);
         setup_listed_summary(&e->listed[i], r->summary, sizeof(r->summary));
         r->complete = e->listed[i].complete;
+        r->remote_changed = e->listed[i].remote_changed;
     }
 }
 
@@ -83,6 +86,14 @@ void hosts_open_row(struct app *app) {
     }
 }
 
+bool hosts_setup_selected(const struct app *app, size_t *record) {
+    struct host_row rows[MAX_HEADS];
+    size_t count = hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0]));
+    if (app->host_selected >= count || rows[app->host_selected].kind != HOST_ROW_SETUP) return false;
+    *record = rows[app->host_selected].index;
+    return !app->setup->records[*record].complete;
+}
+
 void setup_row_text(const struct app *app, const struct host_row *row, char *name, size_t name_size, char *state, size_t state_size) {
     const struct setup_record *r;
     if (row->kind == HOST_ROW_ADD) {
@@ -132,6 +143,6 @@ void render_setup_hub(struct app *app) {
     linef(app, "");
     for (i = 0; i < count && app->line < app->limit - 2; i++) hub_row(app, &rows[i], i);
     linef(app, "");
-    paragraph(app, count > 1 ? "Enter continues a host's setup. Follow work on a set-up host with hydra fleet tui."
+    paragraph(app, count > 1 ? "Enter continues a host's setup; e edits and x removes an unfinished one. Follow work on a set-up host with hydra fleet tui."
                              : "Press Enter or A to add a host.", TV_MUTED);
 }

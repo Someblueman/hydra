@@ -38,7 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   host key… 12s`); Esc or `c` cancels it (Hydra stops the step's processes and
   shows the recorded setup status, so continuing later is safe) and `b` keeps it
   running in the background. The form's SSH config file field accepts `~/...`
-  (expanded to your home directory; nothing else is expanded).
+  (expanded to your home directory; nothing else is expanded). On Hosts, `e`
+  edits an unfinished setup that has not changed the remote (the form opens
+  prefilled; the same name replaces the old record after you approve its
+  removal) and `x` removes a setup's record after showing what stays on the
+  remote. A name that already has an unfinished setup is caught in the form,
+  which offers to continue, edit or remove that setup instead.
   Below 100 columns the tab bar uses short labels (`Coord`, `Flows`, `Stats`) so
   every tab, Hosts included, stays visible at 80 columns.
 - `hydra remote setup list [--json]` lists every setup with its destination,

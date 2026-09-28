@@ -101,6 +101,7 @@ static const struct expectation expectations[] = {
     {"status-installed.json", "", SETUP_SCREEN_STEPS, "sign_in:claude", "", true, 0},
     {"done.json", "", SETUP_SCREEN_DONE, "", "", false, 0},
     {"not-started.json", "setup_not_started", SETUP_SCREEN_ERROR, "", "", false, 1},
+    {"remove-approval.json", "approval_required", SETUP_SCREEN_PLAN, "remove", "remove", true, 3},
 };
 
 static bool expected(const struct expectation *x, const struct setup_envelope *e) {
@@ -152,6 +153,10 @@ static void list_cases(struct setup_envelope *e) {
     if (listed) setup_listed_summary(&e->listed[0], summary, sizeof(summary));
     check(listed && !strcmp(summary, "set up"), "a finished setup lists as set up");
     check(load("list-empty.json", e, 0) && e->ok && !e->listed_count, "no setups lists nothing");
+    check(load("list-early.json", e, 0) && e->listed_count == 1 && !e->listed[0].remote_changed && !e->listed[0].ssh_config[0] &&
+          !strcmp(e->listed[0].destination, "deploy@ovh.example.net"), "a setup that changed nothing on the remote can be edited");
+    check(load("list-progress.json", e, 0) && e->listed[0].remote_changed && !strcmp(e->listed[0].ssh_config, "/Users/you/.ssh/config"),
+          "list rows carry the SSH config and whether the remote changed");
 }
 
 /* Every tampered next command is refused; only the CLI's own argv runs. */
@@ -169,6 +174,12 @@ static void argv_cases(struct setup_envelope *e) {
     }
     check(load("host-key-approval.json", e, 3) && (copy_text(e->fingerprint, sizeof(e->fingerprint), "SHA256:other"), !setup_argv_valid(e, "ovh")),
           "only the fingerprint shown to the user");
+    check(load("remove-approval.json", e, 3) && setup_argv_valid(e, "ovh") && !setup_argv_valid(e, "other"),
+          "the removal command runs only for its own host");
+    check(load("remove-approval.json", e, 3) && (copy_text(e->plan_kind, sizeof(e->plan_kind), "provision"), !setup_argv_valid(e, "ovh")),
+          "setup remove runs only for a shown removal plan");
+    check(load("provision-approval.json", e, 3) && (copy_text(e->argv[2], SETUP_ARG_TEXT, "setup"), copy_text(e->argv[3], SETUP_ARG_TEXT, "remove"),
+          !setup_argv_valid(e, "ovh")), "a step's approval never becomes a removal");
     check(setup_step_needs_terminal("install_agent:claude") && setup_step_needs_terminal("sign_in:codex") &&
           !setup_step_needs_terminal("provision"), "installers and sign-in hand over the terminal");
 }
@@ -251,6 +262,7 @@ static const struct screen_case screens[] = {
     {"sign-in-failed.json", "sign-in-failed", 1, {"Sign-in did not finish", "sign-in exited with a nonzero status", "Enter signs in again", NULL}, {NULL, NULL, NULL}},
     {"done.json", "done", 0, {"ovh IS READY", "Sign in to claude", "hydra fleet tui", NULL}, {NULL, NULL, NULL}},
     {"fresh.json", "steps", 0, {"SET UP ovh", "> Continue setup", "Trust the host key", "not started"}, {NULL, NULL, NULL}},
+    {"remove-approval.json", "remove-plan", 3, {"REMOVE THE SETUP RECORD OF ovh", "Left on remote", "Hydra does not connect", "y remove the record"}, {"Type yes", NULL, NULL}},
 };
 
 static bool contains_all(const char *text, const char *const *must, size_t count) {
@@ -386,6 +398,45 @@ static void key_cases(struct app *app) {
     check(s->screen == SETUP_SCREEN_KEY_CHANGED && !s->job.active, "no key accepts a changed host key");
 }
 
+static void type_text(struct app *app, const char *text) {
+    for (; *text; text++) (void)native_setup_byte(app, (unsigned char)*text);
+}
+
+/* A form name that already has an unfinished setup asks what to do; e edits
+ * it only while nothing changed the remote; Hosts offers e and x on it. */
+static void edit_cases(struct app *app) {
+    struct native_setup *s = app->setup;
+    struct setup_record *r = &s->records[0];
+    char frame[65536];
+    size_t record = 99;
+    app->cols = 100; app->rows = 30;
+    memset(r, 0, sizeof(*r));
+    s->record_count = 1;
+    copy_text(r->name, sizeof(r->name), "ovh"); copy_text(r->destination, sizeof(r->destination), "deploy@ovh.example.net");
+    copy_text(r->config, sizeof(r->config), "/Users/you/.ssh/private"); copy_text(r->summary, sizeof(r->summary), "Check requirements: blocked");
+    s->open = false; app->host_selected = 1;
+    check(hosts_setup_selected(app, &record) && record == 0, "the Hosts row of an unfinished setup offers edit and remove");
+    native_setup_open_form(app);
+    type_text(app, "deploy@ovh.example.net\tovh\r");
+    check(s->screen == SETUP_SCREEN_DUPLICATE && !s->job.active && !strcmp(s->duplicate, "ovh"), "a duplicate name is caught before anything runs");
+    check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "ovh ALREADY HAS AN UNFINISHED SETUP") &&
+          strstr(frame, "/Users/you/.ssh/private") && strstr(frame, "Enter continues that setup"), "the duplicate screen offers continue, edit and remove");
+    keep("duplicate", 100, 30, frame);
+    (void)native_setup_byte(app, 27); native_setup_flush_input(app);
+    check(s->screen == SETUP_SCREEN_FORM && s->focus == SETUP_FIELD_NAME, "Esc returns to the form at the name");
+    type_text(app, "\r");
+    (void)native_setup_byte(app, 'e');
+    check(s->screen == SETUP_SCREEN_FORM && !strcmp(s->editing, "ovh") && !strcmp(s->fields[SETUP_FIELD_CONFIG].text, "/Users/you/.ssh/private") &&
+          !strcmp(s->fields[SETUP_FIELD_DESTINATION].text, "deploy@ovh.example.net") && !s->job.active, "e opens the setup prefilled");
+    check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "EDIT THE SETUP OF ovh") && strstr(frame, "removes the old setup record"),
+          "the edit form says the old record is replaced");
+    keep("edit-form", 100, 30, frame);
+    r->remote_changed = true; app->notice[0] = '\0';
+    native_setup_edit(app, 0);
+    check(strstr(app->notice, "cannot be edited") && strstr(app->notice, "x removes"), "a setup that changed the remote is not edited");
+    s->open = false; s->editing[0] = '\0'; s->record_count = 0;
+}
+
 /* A running step names what it does and for how long; c stops the child
  * and returns to the screen the recorded state gives. */
 static void running_cases(struct app *app) {
@@ -480,6 +531,7 @@ int main(int argc, char **argv) {
     screens_at(app, 140, 40);
     key_cases(app);
     running_cases(app);
+    edit_cases(app);
     freshness_cases(app);
     native_setup_destroy(app);
     frame_free(app); transcript_free(app->transcript);

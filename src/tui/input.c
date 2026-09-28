@@ -377,9 +377,16 @@ static bool overlay_key(struct app *app, char key) {
     return false;
 }
 
-/* Hosts: A adds a host; head actions do not apply to host rows. */
+/* Hosts: A adds a host, e / x edit or remove an unfinished setup; head
+ * actions do not apply to host rows. */
 static bool hosts_key(struct app *app, char key) {
+    size_t record;
     if (key == 'A') { native_setup_open_form(app); return true; }
+    if ((key == 'e' || key == 'x') && hosts_setup_selected(app, &record)) {
+        if (key == 'e') native_setup_edit(app, record);
+        else native_setup_remove(app, record);
+        return true;
+    }
     if (!key || !strchr("/:pac xGd", key)) return false;
     copy_text(app->notice, sizeof(app->notice), "Select a row and press Enter; A adds a host");
     return true;

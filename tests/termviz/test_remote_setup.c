@@ -301,6 +301,88 @@ static void cancel_running(int cols, int rows, const char *key) {
     tv_close(&s, "q", 0, 0);
 }
 
+/* Hosts: e edits an unfinished setup that has not changed the remote. The
+ * same name replaces its record, after its removal plan is approved. */
+static void edit_setup(int cols, int rows) {
+    struct tv_session s;
+    const char *flags[] = {"early", NULL};
+    char expected[4096];
+    reset(flags);
+    launch(&s, cols, rows);
+    tv_send(&s, "H");
+    tv_until(&s, "Check requirements: blocked", 6);
+    tv_send(&s, "j");
+    tv_until(&s, "e edit", 3);
+    capture(&s, "40-hosts-unfinished");
+    tv_send(&s, "e");
+    tv_until(&s, "EDIT THE SETUP OF ovh", 4);
+    see(&s, "deploy@ovh.example.net");
+    tv_send(&s, "\t\t~/.ssh/hydra-private");
+    tv_until(&s, "~/.ssh/hydra-private", 3);
+    capture(&s, "41-edit-form");
+    tv_send(&s, "\r");
+    tv_until(&s, "REMOVE THE SETUP RECORD OF ovh?", 6);
+    see(&s, "Hydra does not connect");
+    CHECK(called("setup remove ovh --json"), "an edit asks the CLI for the removal plan");
+    CHECK(!flagged("removed"), "nothing is removed before approval");
+    capture(&s, "42-edit-removal-plan");
+    tv_send(&s, "y");
+    tv_until(&s, "TRUST THE HOST KEY OF ovh", 8);
+    tv_format(expected, sizeof(expected), "setup ovh deploy@ovh.example.net --ssh-config %s/.ssh/hydra-private --json", getenv("HOME"));
+    CHECK(flagged("removed") && called(expected), "the approved removal restarts setup with the edited SSH config");
+    tv_send(&s, "\033");
+    tv_until(&s, "Continue setup", 4);
+    tv_close(&s, "q", 0, 0);
+}
+
+/* Hosts: x removes an unfinished setup's record after its plan; n keeps it. */
+static void remove_setup(int cols, int rows) {
+    struct tv_session s;
+    const char *flags[] = {"early", NULL};
+    reset(flags);
+    launch(&s, cols, rows);
+    tv_send(&s, "H");
+    tv_until(&s, "Check requirements: blocked", 6);
+    tv_send(&s, "jx");
+    tv_until(&s, "REMOVE THE SETUP RECORD OF ovh?", 6);
+    see(&s, "Left on remote");
+    capture(&s, "43-remove-plan");
+    tv_send(&s, "n");
+    tv_until(&s, "Kept the setup record for ovh", 4);
+    CHECK(!flagged("removed") && !called("--approve"), "declining keeps the record");
+    tv_send(&s, "x");
+    tv_until(&s, "REMOVE THE SETUP RECORD OF ovh?", 6);
+    tv_send(&s, "y");
+    tv_until(&s, "Removed the setup record for ovh", 6);
+    CHECK(flagged("removed"), "y removes the record");
+    tv_pump(&s, 1);
+    CHECK(!tv_contains(&s, "Check requirements: blocked"), "the removed setup leaves the Hosts list");
+    capture(&s, "44-removed");
+    tv_close(&s, "q", 0, 0);
+}
+
+/* A new host whose name already has an unfinished setup is caught before
+ * anything runs; Enter continues that setup instead. */
+static void duplicate_name(int cols, int rows) {
+    struct tv_session s;
+    const char *flags[] = {"early", NULL};
+    reset(flags);
+    launch(&s, cols, rows);
+    tv_send(&s, "H");
+    tv_until(&s, "Check requirements: blocked", 6);
+    tv_send(&s, "A");
+    tv_until(&s, "ADD A REMOTE HOST", 4);
+    tv_send(&s, "deploy@ovh.example.net\tovh\r");
+    tv_until(&s, "ovh ALREADY HAS AN UNFINISHED SETUP", 4);
+    see(&s, "Enter continues that setup");
+    CHECK(!called("setup ovh deploy@"), "a duplicate name runs nothing");
+    capture(&s, "45-duplicate");
+    tv_send(&s, "\r");
+    tv_until(&s, "Continue setup", 6);
+    CHECK(called("setup status ovh --json"), "Enter continues the existing setup");
+    tv_close(&s, "q", 0, 0);
+}
+
 int main(void) {
     char fake[4096], fixture[4096];
     tv_init();
@@ -326,12 +408,15 @@ int main(void) {
     known_key(80, 24);
     cancel_running(80, 24, "c");
     cancel_running(140, 40, "\033");
+    edit_setup(80, 24);
+    remove_setup(140, 40);
+    duplicate_name(80, 24);
     {
         const char *remove[] = {"rm", "-rf", base, NULL};
         tv_command_ok(NULL, remove);
     }
     puts("PASS remote setup: add host, typed-yes key trust, blocking requirements, a missing-tmux pause, declined and "
          "approved provision, agent choice, installer and sign-in terminal hand-off (with a failed attempt), done; changed "
-         "key refused; known key checked; a hanging step shown with its time and cancelled; 140x40 and 80x24");
+         "key refused; known key checked; a hanging step shown with its time and cancelled; an unfinished setup edited, removed (and kept), and a duplicate name caught; 140x40 and 80x24");
     return 0;
 }

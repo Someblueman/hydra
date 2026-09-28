@@ -165,7 +165,9 @@ static void parse_listed(struct setup_envelope *e, const struct sj_doc *d, int d
         memset(l, 0, sizeof(*l));
         read_text(d, item, "name", l->name, sizeof(l->name));
         read_text(d, item, "destination", l->destination, sizeof(l->destination));
+        read_text(d, item, "ssh_config", l->ssh_config, sizeof(l->ssh_config));
         read_text(d, item, "status", l->status, sizeof(l->status));
+        l->remote_changed = sj_true(d, sj_find(d, item, "remote_changed"));
         read_text(d, item, "next.step", l->next_step, sizeof(l->next_step));
         read_text(d, item, "error.code", l->error, sizeof(l->error));
         l->complete = sj_true(d, sj_find(d, item, "complete"));
@@ -271,7 +273,8 @@ static const struct { const char *code; struct setup_explanation text; } explana
     {"outcome_unknown", {"Hydra cannot tell whether the last step finished", "The connection dropped or the command was interrupted while the remote was changing. Hydra will not repeat it blindly: continuing first checks the remote and reconciles the earlier attempt.", "Enter reconciles"}},
     {"setup_busy", {"Setup for this host is already running", "Another Hydra process holds this host's setup lock. Wait for it to finish, then continue.", "Enter checks again"}},
     {"setup_not_started", {"Setup has not started for this name", "There is no setup record for this host yet. Add the host to start.", NULL}},
-    {"setup_binding_changed", {"This name is already used for another destination", "A setup record with this name points at a different SSH destination or config. Choose another name, or finish that setup.", NULL}},
+    {"setup_binding_changed", {"This name is already used for another destination", "A setup record with this name points at a different SSH destination or config. On Hosts, e edits that setup (while it has not changed the remote) and x removes its record; or choose another name.", NULL}},
+    {"setup_complete", {"This host is already set up", "Its setup finished and its remote alias is in use, so the setup record is kept. Remove the alias with hydra remote remove NAME first.", NULL}},
     {"state_invalid", {"The setup record is unsafe or unreadable", "Hydra refuses to use a setup record with the wrong owner, mode or content. Inspect $HYDRA_HOME/fleet/setup before continuing.", NULL}},
     {"state_unavailable", {"Hydra cannot save setup progress", "The private setup directory cannot be created or written. Check $HYDRA_HOME.", "Enter tries again"}},
     {"alias_conflict", {"A different remote already uses this name", "Hydra will not overwrite an existing remote alias. Remove the old alias deliberately with hydra remote, or set up the host under another name.", NULL}},
@@ -319,6 +322,7 @@ void setup_running_label(const char *id, char *out, size_t size) {
         {"", "Checking setup status"}, {"setup", "Checking setup status"}, {"host_key", "Checking the host key"},
         {"preflight", "Checking requirements"}, {"provision", "Installing Hydra"}, {"agents", "Looking for agents"},
         {"verify", "Verifying the connection"}, {"alias", "Adding the host to Hydra"},
+        {"remove_plan", "Checking the setup record"}, {"remove", "Removing the setup record"},
     };
     const char *agent = strchr(id, ':');
     size_t i;
@@ -421,10 +425,21 @@ static bool option_valid(const struct setup_envelope *e, size_t *i) {
     return false;
 }
 
+/* `hydra remote setup remove NAME --approve HASH`: only the removal plan on screen. */
+static bool removal_argv(const struct setup_envelope *e, const char *name) {
+    size_t i;
+    if (e->argc < 5 || strcmp(e->argv[2], "setup") || strcmp(e->argv[3], "remove")) return false;
+    for (i = 5; i < e->argc; i++) if (!strcmp(e->argv[i], "--approve")) break;
+    return !strcmp(e->plan_kind, "remove") && !strcmp(e->argv[4], name) && i < e->argc;
+}
+
 bool setup_argv_valid(const struct setup_envelope *e, const char *name) {
     size_t i = 4;
-    if (e->argc < 4 || strcmp(e->argv[0], "hydra") || strcmp(e->argv[1], "remote") ||
-        !setup_word(e->argv[2]) || strcmp(e->argv[3], name)) return false;
+    if (e->argc < 4 || strcmp(e->argv[0], "hydra") || strcmp(e->argv[1], "remote") || !setup_word(e->argv[2])) return false;
+    if (!strcmp(e->argv[2], "setup") && !strcmp(e->argv[3], "remove")) {
+        if (!removal_argv(e, name)) return false;
+        i = 5;
+    } else if (strcmp(e->argv[3], name)) return false;
     while (i < e->argc) if (!option_valid(e, &i)) return false;
     return true;
 }
@@ -438,7 +453,8 @@ bool setup_step_needs_terminal(const char *step) {
 const char *setup_name_problem(const char *name) {
     if (!name[0]) return "Enter a name for this host";
     if (!alias_text(name)) return "Use letters, digits, '-', '_' and '.', starting with a letter or digit";
-    if (!strcmp(name, "status") || !strcmp(name, "list")) return "\"status\" and \"list\" are reserved; choose another name";
+    if (!strcmp(name, "status") || !strcmp(name, "list") || !strcmp(name, "remove"))
+        return "\"status\", \"list\" and \"remove\" are reserved; choose another name";
     return NULL;
 }
 

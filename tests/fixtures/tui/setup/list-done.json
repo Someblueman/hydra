@@ -1,1 +1,1 @@
-{"schema_version":1,"ok":true,"command":"remote-setup-list","data":{"setup_schema":1,"setups":[{"name":"ovh","destination":"deploy@ovh.example.net","status":"done","complete":true,"next":null}]}}
+{"schema_version":1,"ok":true,"command":"remote-setup-list","data":{"setup_schema":1,"setups":[{"name":"ovh","destination":"deploy@ovh.example.net","ssh_config":"\/Users\/you\/.ssh\/config","status":"done","remote_changed":true,"complete":true,"next":null}]}}

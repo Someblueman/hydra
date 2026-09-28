@@ -178,7 +178,15 @@ hydra remote provision ovh    # shows a fresh plan to approve
 tab (`H`). `A`, or Enter on "+ Add a host", asks for the SSH destination, a name
 (the host name by default) and an optional SSH config file, then runs the same
 `hydra remote setup ... --json` commands and shows their steps. Unfinished setups
-are listed there (from `hydra remote setup list --json`); Enter continues one. Each plan is shown before anything changes:
+are listed there (from `hydra remote setup list --json`); Enter continues one, `e`
+edits one that has not changed the remote yet (the form opens with its destination,
+name and SSH config; keeping the name removes the old record, after you approve its
+removal plan, and starts again) and `x` removes one's record after showing what stays
+on the remote. A name that already has an unfinished setup is caught in the form:
+Enter continues that setup instead, `e` edits and `x` removes it. The SSH config field
+takes `~/...`. While a step runs the screen shows it with its elapsed time; Esc or `c`
+cancels it (Hydra then shows the recorded status) and `b` keeps it running in the
+background. Each plan is shown before anything changes:
 a new host key needs `yes` typed and Enter, other plans `y` (Enter alone never
 approves; `n` or Esc declines and runs nothing). Hydra then reruns exactly the
 command the CLI returned, and only if its `--approve` hash or `--fingerprint` is the

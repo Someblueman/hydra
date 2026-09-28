@@ -76,6 +76,8 @@ static void render_setup_detail(struct app *app, struct tv_canvas *canvas, const
                    ? "installs Hydra and helps with agents; you approve" : "Enter shows its steps and continues setup;");
     dashboard_text(canvas, split + 3, 8, width - split - 5, TV_BASE, "%s", row->kind == HOST_ROW_ADD
                    ? "every change first." : "you approve every change first.");
+    if (row->kind == HOST_ROW_SETUP)
+        dashboard_text(canvas, split + 3, 10, width - split - 5, TV_MUTED, "%s", "e edits it, x removes its record.");
 }
 
 void render_hosts(struct app *app) {

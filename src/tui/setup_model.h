@@ -26,8 +26,9 @@ struct setup_agent { char name[64], status[24], path[240], version[64]; };
  * is true when the CLI offers install_argv (the agent is missing). */
 struct setup_choice { char agent[64], status[24]; bool install; };
 /* One row of `remote setup list`: status is the first open step's status
- * ("done" when complete, "unreadable" with error set). */
-struct setup_listed { char name[128], destination[256], status[24], next_step[80], error[48]; bool complete; };
+ * ("done" when complete, "unreadable" with error set); remote_changed: a step
+ * may have changed the remote, so the setup is no longer edited in place. */
+struct setup_listed { char name[128], destination[256], ssh_config[1024], status[24], next_step[80], error[48]; bool complete, remote_changed; };
 
 struct setup_envelope {
     bool parsed, ok, complete;
@@ -59,7 +60,8 @@ struct setup_envelope {
 enum setup_screen {
     SETUP_SCREEN_NONE, SETUP_SCREEN_FORM, SETUP_SCREEN_RUNNING, SETUP_SCREEN_STEPS,
     SETUP_SCREEN_TRUST_KEY, SETUP_SCREEN_PLAN, SETUP_SCREEN_KEY_CHANGED, SETUP_SCREEN_PREFLIGHT,
-    SETUP_SCREEN_AGENTS, SETUP_SCREEN_UNKNOWN, SETUP_SCREEN_HANDOFF, SETUP_SCREEN_ERROR, SETUP_SCREEN_DONE
+    SETUP_SCREEN_AGENTS, SETUP_SCREEN_UNKNOWN, SETUP_SCREEN_HANDOFF, SETUP_SCREEN_ERROR, SETUP_SCREEN_DONE,
+    SETUP_SCREEN_DUPLICATE /* the form's name already has an unfinished setup */
 };
 
 /* Plain-language account of an error code (U7): what happened, and what Enter
@@ -88,7 +90,8 @@ void setup_summary(const struct setup_envelope *e, char *out, size_t size);
 void setup_listed_summary(const struct setup_listed *l, char *out, size_t size);
 /* True when data.next.argv is a `hydra remote <setup command> NAME ...` for
  * this NAME using only known setup options, and any approval token in it is
- * exactly the plan the user was shown. */
+ * exactly the plan the user was shown. `hydra remote setup remove NAME
+ * --approve HASH` is accepted only for a shown removal plan. */
 bool setup_argv_valid(const struct setup_envelope *e, const char *name);
 /* Steps that must own the terminal: agent installers and provider sign-in. */
 bool setup_step_needs_terminal(const char *step);

@@ -742,6 +742,15 @@ static const char *recovery_hints(const struct app *app, bool narrow) {
                      : "j/k select  Enter run the check  d explain  Esc back  ? help  q quit";
 }
 
+/* Hosts: the setup flow's own keys, or e / x on an unfinished setup row. */
+static const char *hosts_hints(struct app *app, bool narrow) {
+    if (native_setup_active(app)) return native_setup_hints(app, narrow);
+    if (hosts_setup_selected(app, &(size_t){0}))
+        return narrow ? "Enter continue  e edit  x remove  q quit"
+                      : "j/k select  Enter continue  e edit  x remove  A add a host  Esc back  ? help  q quit";
+    return narrow ? "Enter open  A add host  ? help  q quit" : "j/k select  Enter open  A add a host  Esc back  ? help  q quit";
+}
+
 /* Hints for views whose keys do not depend on local versus fleet mode. */
 static const char *view_hints(struct app *app, bool narrow) {
     if (app->view == 9) {
@@ -749,9 +758,7 @@ static const char *view_hints(struct app *app, bool narrow) {
         return narrow ? "Enter details  r review  ? help  q quit" : "j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit";
     }
     if (app->view == 5) return narrow ? "j/k step  [/] run  ? help  q quit" : "j/k step  [/] run  h/l/J/K pan  Enter recentre  Esc back  ? help  q quit";
-    if (app->view == 6 && native_setup_active(app)) return native_setup_hints(app, narrow);
-    if (app->view == 6) return narrow ? "Enter open  A add host  ? help  q quit"
-                                      : "j/k select  Enter open  A add a host  Esc back  ? help  q quit";
+    if (app->view == 6) return hosts_hints(app, narrow);
     if (app->view == 3) return recovery_hints(app, narrow);
     return NULL;
 }

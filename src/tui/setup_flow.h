@@ -18,7 +18,9 @@ enum setup_job {
     SETUP_JOB_RETURNED, /* read-only status after a terminal hand-off */
     SETUP_JOB_INSPECT,  /* read-only preflight or agent inventory */
     SETUP_JOB_CHOICE,   /* install-agent chosen on the agents screen (plan only) */
-    SETUP_JOB_PREFLIGHT /* the guided flow's preflight: pauses only when heads cannot run */
+    SETUP_JOB_PREFLIGHT, /* the guided flow's preflight: pauses only when heads cannot run */
+    SETUP_JOB_REMOVE_PLAN, /* hydra remote setup remove NAME --json: the removal plan only */
+    SETUP_JOB_REMOVE     /* its data.next.argv after the user approved that plan */
 };
 
 #define SETUP_FORM_FIELDS 3
@@ -26,7 +28,7 @@ enum { SETUP_FIELD_DESTINATION, SETUP_FIELD_NAME, SETUP_FIELD_CONFIG };
 struct setup_field { char text[1024]; size_t cursor; };
 
 #define SETUP_RECORDS SETUP_LISTED_MAX
-struct setup_record { char name[128], summary[160]; bool complete; };
+struct setup_record { char name[128], summary[160], destination[256], config[1024]; bool complete, remote_changed; };
 
 struct setup_capture {
     pid_t pid;
@@ -55,13 +57,17 @@ struct native_setup {
     unsigned automatic;
     /* agents_offered: this flow already showed the agent inventory.
      * paused: the requirements screen stopped a guided run because heads
-     * cannot run on the host; Enter continues anyway. */
-    bool open, more, sweep_pending, agents_offered, paused, held_valid;
+     * cannot run on the host; Enter continues anyway. replacing: an edited
+     * setup's record is being removed; once it is, setup starts again with
+     * the form's values. */
+    bool open, more, sweep_pending, agents_offered, paused, held_valid, replacing;
     char typed[16];
     /* Running step, and the terminal hand-off step with its exact argv
      * (without --json). */
     char job_step[80], handoff_step[80];
-    char name[128], hint[160], problem[200], destination[256], notice[256], config[1024];
+    /* editing: the record the form edits (empty for a new host);
+     * duplicate: the unfinished record whose name the form entered. */
+    char name[128], editing[128], duplicate[128], hint[160], problem[200], destination[256], notice[256], config[1024];
     /* Hosts tab: setup records from `hydra remote setup list --json`. */
     struct setup_record records[SETUP_RECORDS];
     char handoff[SETUP_ARG_MAX][SETUP_ARG_TEXT];
