@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accept a changed key. After provisioning it shows the agent inventory so you can
   pick agents to install (after reviewing the installer plan) or sign in to; both
   run on your terminal, and a failure is explained from the error the CLI recorded.
+  While a step runs it shows what it is doing and for how long (`Checking the
+  host key… 12s`); Esc or `c` cancels it (Hydra stops the step's processes and
+  shows the recorded setup status, so continuing later is safe) and `b` keeps it
+  running in the background.
   Below 100 columns the tab bar uses short labels (`Coord`, `Flows`, `Stats`) so
   every tab, Hosts included, stays visible at 80 columns.
 - `hydra remote setup list [--json]` lists every setup with its destination,

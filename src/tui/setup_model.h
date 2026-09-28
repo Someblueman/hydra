@@ -73,6 +73,7 @@ enum setup_screen setup_screen_for(const struct setup_envelope *e);
 void setup_explain(const char *code, struct setup_explanation *out);
 /* Short user-facing names for step ids and statuses. */
 void setup_step_label(const char *id, char *out, size_t size);
+void setup_running_label(const char *id, char *out, size_t size);
 const char *setup_status_label(const char *status);
 const char *setup_status_mark(const char *status, bool ascii);
 bool setup_status_finished(const char *status);

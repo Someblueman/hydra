@@ -386,6 +386,38 @@ static void key_cases(struct app *app) {
     check(s->screen == SETUP_SCREEN_KEY_CHANGED && !s->job.active, "no key accepts a changed host key");
 }
 
+/* A running step names what it does and for how long; c stops the child
+ * and returns to the screen the recorded state gives. */
+static void running_cases(struct app *app) {
+    char *const sleeper[] = {"sleep", "30", NULL};
+    char frame[65536], label[96];
+    struct native_setup *s = app->setup;
+    struct timespec pause = {0, 20000000};
+    int waited;
+    setup_running_label("host_key", label, sizeof(label));
+    check(!strcmp(label, "Checking the host key"), "the host-key step runs as Checking the host key");
+    setup_running_label("", label, sizeof(label));
+    check(!strcmp(label, "Checking setup status"), "the status read runs as Checking setup status");
+    setup_running_label("install_agent:claude", label, sizeof(label));
+    check(!strcmp(label, "Preparing to install claude"), "an installer choice names its agent");
+    app->cols = 80; app->rows = 24;
+    check(load("fresh.json", s->current, 0), "fresh fixture loads");
+    copy_text(s->name, sizeof(s->name), "ovh");
+    check(setup_capture_start(&s->job, sleeper, 60000), "a setup child starts");
+    s->job_kind = SETUP_JOB_INSPECT; s->job_started = time(NULL) - 12;
+    copy_text(s->job_step, sizeof(s->job_step), "host_key");
+    s->open = true; s->notice[0] = '\0'; s->scroll = 0; s->screen = SETUP_SCREEN_RUNNING;
+    check(render_capture(app, frame, sizeof(frame)), "running screen renders");
+    keep("running", 80, 24, frame);
+    check(strstr(frame, "Checking the host key\xe2\x80\xa6 12s") && strstr(frame, "Esc or c cancel"),
+          "a running step shows its phrase, elapsed seconds and how to cancel");
+    (void)native_setup_byte(app, 'c');
+    check(s->job.cancelled && s->job.active, "c cancels the running child");
+    for (waited = 0; waited < 250 && s->job.active; waited++) { native_setup_tick(app); nanosleep(&pause, NULL); }
+    check(!s->job.active && s->screen == SETUP_SCREEN_STEPS && strstr(s->notice, "Cancelled: Checking the host key"),
+          "a cancelled read-only check returns to the recorded steps");
+}
+
 int main(int argc, char **argv) {
     struct app *app = calloc(1, sizeof(*app));
     struct setup_envelope *e = calloc(1, sizeof(*e));
@@ -402,6 +434,7 @@ int main(int argc, char **argv) {
     screens_at(app, 80, 24);
     screens_at(app, 140, 40);
     key_cases(app);
+    running_cases(app);
     native_setup_destroy(app);
     frame_free(app); transcript_free(app->transcript);
     free(app); free(e);

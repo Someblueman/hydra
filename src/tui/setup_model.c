@@ -312,6 +312,22 @@ void setup_step_label(const char *id, char *out, size_t size) {
     else copy_field(out, size, id);
 }
 
+/* What a running child is doing, as a present-tense phrase ("" is the
+ * read-only status check). */
+void setup_running_label(const char *id, char *out, size_t size) {
+    static const char *const names[][2] = {
+        {"", "Checking setup status"}, {"setup", "Checking setup status"}, {"host_key", "Checking the host key"},
+        {"preflight", "Checking requirements"}, {"provision", "Installing Hydra"}, {"agents", "Looking for agents"},
+        {"verify", "Verifying the connection"}, {"alias", "Adding the host to Hydra"},
+    };
+    const char *agent = strchr(id, ':');
+    size_t i;
+    for (i = 0; i < sizeof(names) / sizeof(names[0]); i++) if (!strcmp(id, names[i][0])) { copy_field(out, size, names[i][1]); return; }
+    if (agent && !strncmp(id, "install_agent:", 14)) snprintf(out, size, "Preparing to install %s", agent + 1);
+    else if (agent && !strncmp(id, "sign_in:", 8)) snprintf(out, size, "Checking the %s sign-in", agent + 1);
+    else setup_step_label(id, out, size);
+}
+
 static const char *const statuses[][3] = {
     /* status, label, mark (unicode) */
     {"done", "done", "\xe2\x9c\x93"}, {"skipped", "skipped", "-"}, {"failed", "failed", "\xe2\x9c\x97"},

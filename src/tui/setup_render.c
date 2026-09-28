@@ -163,8 +163,8 @@ static void steps_action(struct app *app, const struct native_setup *s, bool run
         app->line++;
         return;
     }
-    setup_step_label(s->job_step[0] ? s->job_step : "setup", label, sizeof(label));
-    snprintf(work, sizeof(work), "Working: %s... %lds", s->job_step[0] ? label : "checking setup status", (long)(time(NULL) - s->job_started));
+    setup_running_label(s->job_step, label, sizeof(label));
+    snprintf(work, sizeof(work), "%s%s %lds", label, app->ascii ? "..." : "\xe2\x80\xa6", (long)(time(NULL) - s->job_started));
     column(app, 0, app->content_width, TV_SUCCESS, work);
     app->line++;
 }
@@ -182,8 +182,9 @@ static void render_steps(struct app *app, struct native_setup *s, bool running) 
     for (i = 0; i < e->step_count; i++)
         step_row(app, &p, &e->steps[i], !running && s->selected == i + 1, running && !strcmp(e->steps[i].id, s->job_step));
     if (!e->step_count) pen_text(&p, 2, TV_MUTED, running ? "Contacting the machine..." : "No steps recorded yet.");
-    footer(app, &p, running ? "Esc keeps this step running in the background."
-                            : "Continue setup runs the next step; changes ask for approval.", TV_MUTED);
+    footer(app, &p, !running ? "Continue setup runs the next step; changes ask for approval."
+                    : s->job.cancelled ? "Stopping the step; Hydra then rereads the recorded setup status."
+                    : "Esc or c cancels (a rerun continues safely); b runs it in the background.", TV_MUTED);
 }
 
 /* ---- Plans ---- */
@@ -538,7 +539,7 @@ const char *native_setup_title(const struct app *app) {
 const char *native_setup_hints(const struct app *app, bool narrow) {
     static const char *const hints[][2] = {
         [SETUP_SCREEN_FORM] = {"Tab or Up/Down field  Enter start setup  Esc cancel", "Tab field  Enter start  Esc cancel"},
-        [SETUP_SCREEN_RUNNING] = {"Esc keep running in the background", "Esc background"},
+        [SETUP_SCREEN_RUNNING] = {"Esc or c cancel the step  b keep it running in the background", "Esc/c cancel  b background"},
         [SETUP_SCREEN_STEPS] = {"Up/Down select  Enter continue or inspect the step  Esc back  q quit", "Enter continue  Esc back"},
         [SETUP_SCREEN_TRUST_KEY] = {"type yes, then Enter to trust  Esc decline", "yes + Enter trust  Esc decline"},
         [SETUP_SCREEN_PLAN] = {"y approve  n or Esc decline  Up/Down scroll", "y approve  n/Esc decline"},

@@ -32,10 +32,10 @@ struct setup_capture {
     pid_t pid;
     int fd, status;
     FILE *output;
-    struct timespec started;
+    struct timespec started, cancel_started;
     long budget_ms;
     size_t bytes;
-    bool active, eof, reaped, failed, timed_out;
+    bool active, eof, reaped, failed, timed_out, cancelled;
 };
 
 /* Members are ordered by alignment; see the comments for their roles. */
@@ -68,8 +68,8 @@ struct native_setup {
 };
 
 /* Child capture (setup_capture.c): stdout only, stdin and stderr /dev/null,
- * private session. A running capture is never killed by the UI except on its
- * deadline, so quitting Hydra leaves a remote mutation to finish. */
+ * private session. A running capture is stopped only on its deadline or when
+ * the user cancels it; quitting Hydra leaves a remote mutation to finish. */
 bool setup_capture_start(struct setup_capture *c, char *const argv[], long budget_ms);
 /* Advances without blocking; true once the child has exited and been reaped. */
 bool setup_capture_step(struct setup_capture *c);
@@ -77,6 +77,10 @@ bool setup_capture_step(struct setup_capture *c);
  * frees; NULL for no usable output) and returns the exit status (128+n for a
  * signal, 124 for the deadline). Releases the capture. */
 char *setup_capture_finish(struct setup_capture *c, size_t *length, int *exit_status);
+/* Stops the child's whole session (SIGTERM, then SIGKILL after a grace
+ * period); its result reports exit status 130. The CLI records progress
+ * before every side effect, so a later status or rerun reconciles it. */
+void setup_capture_cancel(struct setup_capture *c);
 /* Closes descriptors without signalling a still-running child. */
 void setup_capture_release(struct setup_capture *c);
 #endif

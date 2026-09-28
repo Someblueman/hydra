@@ -7,8 +7,10 @@
 /* Setup children change remote machines. Unlike observation captures they are
  * not stopped when the control centre quits or is interrupted: the CLI records
  * progress before every side effect, and a later run reconciles it. Only the
- * deadline stops a child, and that result is reported as an unknown outcome. */
+ * deadline or an explicit cancel stops a child; the controller then rereads
+ * the recorded setup status. */
 #define SETUP_OUTPUT_LIMIT (1024U * 1024U)
+#define SETUP_CANCEL_GRACE_MS 2000L
 
 static long capture_elapsed(const struct timespec *started) {
     struct timespec now;
@@ -60,10 +62,20 @@ static void capture_drain(struct setup_capture *c) {
     }
 }
 
+void setup_capture_cancel(struct setup_capture *c) {
+    if (!c->active || c->reaped || c->cancelled) return;
+    c->cancelled = true; c->failed = true;
+    (void)clock_gettime(CLOCK_MONOTONIC, &c->cancel_started);
+    (void)kill(-c->pid, SIGTERM);
+}
+
 bool setup_capture_step(struct setup_capture *c) {
     if (!c->active) return true;
     if (!c->timed_out && capture_elapsed(&c->started) >= c->budget_ms) {
         c->timed_out = true; c->failed = true;
+        (void)kill(-c->pid, SIGKILL); (void)kill(c->pid, SIGKILL);
+    }
+    if (c->cancelled && !c->reaped && capture_elapsed(&c->cancel_started) >= SETUP_CANCEL_GRACE_MS) {
         (void)kill(-c->pid, SIGKILL); (void)kill(c->pid, SIGKILL);
     }
     if (!c->eof) capture_drain(c);
@@ -85,6 +97,7 @@ void setup_capture_release(struct setup_capture *c) {
 
 static int capture_status(const struct setup_capture *c) {
     if (c->timed_out) return 124;
+    if (c->cancelled) return 130;
     if (WIFSIGNALED(c->status)) return 128 + WTERMSIG(c->status);
     return WIFEXITED(c->status) ? WEXITSTATUS(c->status) : 125;
 }

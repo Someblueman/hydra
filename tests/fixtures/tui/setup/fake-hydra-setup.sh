@@ -48,6 +48,9 @@ list() {
 
 guided() {
     mark started
+    # slow_host_key: the host-key check hangs (as it did behind a user SSH
+    # master) until the control centre cancels it.
+    if has slow_host_key && ! has trusted; then echo $$ > "$state/slow.pid"; sleep 60; exit 1; fi
     if has changed; then emit host-key-changed.json 1; fi
     has trusted || has known_key || emit host-key-approval.json 3
     if has needs_git && ! has git_fixed; then emit preflight-blocked.json 1; fi

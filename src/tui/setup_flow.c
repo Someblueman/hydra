@@ -49,6 +49,7 @@ bool native_setup_active(const struct app *app) { return app->setup && app->setu
 bool native_setup_running(const struct app *app) { return app->setup && app->setup->job.active; }
 
 static void setup_notice(struct native_setup *s, const char *text) { copy_text(s->notice, sizeof(s->notice), text); }
+static void close_flow(struct app *app, struct native_setup *s);
 
 /* ---- Children ---- */
 
@@ -260,12 +261,37 @@ static void job_result(struct app *app, struct native_setup *s, enum setup_job k
     if (kind == SETUP_JOB_APPROVED && s->screen == SETUP_SCREEN_STEPS) setup_notice(s, "Approved step finished");
 }
 
+/* A cancelled child's output is not a result. Steps that may have changed
+ * something are followed by the recorded status (the CLI persists progress
+ * before each side effect, so an in-progress step reconciles on rerun);
+ * cancelled read-only checks keep the screen they started from. */
+static void cancelled_finish(struct app *app, struct native_setup *s, enum setup_job kind) {
+    char label[96], notice[200];
+    setup_running_label(s->job_step, label, sizeof(label));
+    snprintf(notice, sizeof(notice), "Cancelled: %s. Nothing further runs until you continue.", label);
+    free(setup_capture_finish(&s->job, &(size_t){0}, &(int){0}));
+    s->job_kind = SETUP_JOB_NONE; s->held_valid = false;
+    if (kind != SETUP_JOB_STATUS && kind != SETUP_JOB_RETURNED && kind != SETUP_JOB_INSPECT) {
+        status_start(app, s, SETUP_JOB_STATUS);
+        if (s->job.active) { setup_notice(s, notice); return; }
+    }
+    if (!s->current->step_count && !s->current->parsed) {
+        close_flow(app, s);
+        copy_text(app->notice, sizeof(app->notice), notice);
+        return;
+    }
+    show(s);
+    setup_notice(s, notice);
+}
+
 static void job_finish(struct app *app, struct native_setup *s) {
     struct setup_envelope *swap;
     enum setup_job kind = s->job_kind;
     size_t length;
     int exit_status;
-    char *text = setup_capture_finish(&s->job, &length, &exit_status);
+    char *text;
+    if (s->job.cancelled) { cancelled_finish(app, s, kind); return; }
+    text = setup_capture_finish(&s->job, &length, &exit_status);
     if (!text || setup_envelope_parse(s->incoming, text, length, exit_status)) no_result(s, exit_status);
     free(text);
     s->job_kind = SETUP_JOB_NONE;
@@ -431,10 +457,22 @@ static void enter(struct app *app, struct native_setup *s) {
     }
 }
 
+/* Esc or c on a running step: stop it; its result is replaced by the
+ * recorded status (cancelled_finish). */
+static void cancel_job(struct native_setup *s) {
+    char label[96], notice[160];
+    if (!s->job.active) return;
+    setup_capture_cancel(&s->job);
+    setup_running_label(s->job_step, label, sizeof(label));
+    snprintf(notice, sizeof(notice), "Cancelling: %s...", label);
+    setup_notice(s, notice);
+}
+
 static void back(struct app *app, struct native_setup *s) {
     switch (s->screen) {
         case SETUP_SCREEN_TRUST_KEY: case SETUP_SCREEN_PLAN: decline(s); return;
-        case SETUP_SCREEN_FORM: case SETUP_SCREEN_STEPS: case SETUP_SCREEN_DONE: case SETUP_SCREEN_RUNNING:
+        case SETUP_SCREEN_RUNNING: cancel_job(s); return;
+        case SETUP_SCREEN_FORM: case SETUP_SCREEN_STEPS: case SETUP_SCREEN_DONE:
             close_flow(app, s); return;
         default: break;
     }
@@ -523,6 +561,8 @@ static void letter(struct app *app, struct native_setup *s, uint32_t key) {
     else if (key == 'k') move(s, -1);
     else if (key == 'y' && s->screen == SETUP_SCREEN_PLAN) approve(app, s);
     else if (key == 'n' && s->screen == SETUP_SCREEN_PLAN) decline(s);
+    else if (key == 'c' && s->screen == SETUP_SCREEN_RUNNING) cancel_job(s);
+    else if (key == 'b' && s->screen == SETUP_SCREEN_RUNNING && !s->job.cancelled) close_flow(app, s);
     else if (key == 'q' && !s->job.active) app->running = false;
 }
 

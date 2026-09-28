@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/stat.h>
 
 static char root[4096], build[4096], base[4096], tui[4096], state[4096], evidence[4096], label[64];
@@ -257,6 +258,34 @@ static void changed_key(int cols, int rows) {
     tv_close(&s, "q", 0, 0);
 }
 
+/* A hanging step shows what runs and for how long, and Esc or c stops it:
+ * the child is gone and the recorded status is shown instead. */
+static void cancel_running(int cols, int rows, const char *key) {
+    struct tv_session s;
+    const char *flags[] = {"slow_host_key", NULL};
+    char path[4096], text[64];
+    long pid;
+    reset(flags);
+    launch(&s, cols, rows);
+    add_host(&s);
+    tv_until(&s, "Checking the host key", 6);
+    tv_until(&s, "host key\xe2\x80\xa6 2s", 6);
+    see(&s, "c cancel");
+    capture(&s, "30-running");
+    tv_format(path, sizeof(path), "%s/slow.pid", state);
+    tv_read(path, text, sizeof(text));
+    pid = strtol(text, NULL, 10);
+    CHECK(pid > 0 && kill((pid_t)pid, 0) == 0, "the slow step is running");
+    tv_send(&s, key);
+    tv_until(&s, "Cancelled: Checking the host key", 6);
+    see(&s, "> Continue setup");
+    capture(&s, "31-cancelled");
+    CHECK(kill((pid_t)pid, 0) != 0, "cancelling stops the step's process");
+    CHECK(called("setup status ovh --json"), "after a cancel the recorded status is reread");
+    CHECK(!called("trust-key"), "cancelling runs no other step");
+    tv_close(&s, "q", 0, 0);
+}
+
 int main(void) {
     char fake[4096], fixture[4096];
     tv_init();
@@ -280,12 +309,14 @@ int main(void) {
     changed_key(140, 40);
     changed_key(80, 24);
     known_key(80, 24);
+    cancel_running(80, 24, "c");
+    cancel_running(140, 40, "\033");
     {
         const char *remove[] = {"rm", "-rf", base, NULL};
         tv_command_ok(NULL, remove);
     }
     puts("PASS remote setup: add host, typed-yes key trust, blocking requirements, a missing-tmux pause, declined and "
          "approved provision, agent choice, installer and sign-in terminal hand-off (with a failed attempt), done; changed "
-         "key refused; known key checked; 140x40 and 80x24");
+         "key refused; known key checked; a hanging step shown with its time and cancelled; 140x40 and 80x24");
     return 0;
 }
