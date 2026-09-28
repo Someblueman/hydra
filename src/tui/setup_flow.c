@@ -346,18 +346,21 @@ static void close_flow(struct app *app, struct native_setup *s) {
 static void submit_form(struct app *app, struct native_setup *s) {
     struct setup_field *f = s->fields;
     const char *problem;
+    char config[sizeof(s->config)];
     if (!f[SETUP_FIELD_NAME].text[0]) {
         setup_default_name(f[SETUP_FIELD_DESTINATION].text, f[SETUP_FIELD_NAME].text, sizeof(f[0].text));
         f[SETUP_FIELD_NAME].cursor = strlen(f[SETUP_FIELD_NAME].text);
     }
     if ((problem = setup_destination_problem(f[SETUP_FIELD_DESTINATION].text))) s->focus = SETUP_FIELD_DESTINATION;
     else if ((problem = setup_name_problem(f[SETUP_FIELD_NAME].text))) s->focus = SETUP_FIELD_NAME;
-    else if ((problem = setup_config_problem(f[SETUP_FIELD_CONFIG].text))) s->focus = SETUP_FIELD_CONFIG;
+    else if (!setup_config_expand(f[SETUP_FIELD_CONFIG].text, getenv("HOME"), config, sizeof(config))) {
+        problem = "~ needs HOME set to an absolute path; enter the full path instead"; s->focus = SETUP_FIELD_CONFIG;
+    } else if ((problem = setup_config_problem(config))) s->focus = SETUP_FIELD_CONFIG;
     if (problem) { copy_text(s->problem, sizeof(s->problem), problem); return; }
     s->problem[0] = '\0';
     copy_text(s->destination, sizeof(s->destination), f[SETUP_FIELD_DESTINATION].text);
     copy_text(s->name, sizeof(s->name), f[SETUP_FIELD_NAME].text);
-    copy_text(s->config, sizeof(s->config), f[SETUP_FIELD_CONFIG].text);
+    copy_text(s->config, sizeof(s->config), config);
     memset(s->current, 0, sizeof(*s->current));
     s->agents_offered = false;
     guided_start(app, s, true);

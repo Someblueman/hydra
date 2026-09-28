@@ -124,7 +124,7 @@ static void render_form(struct app *app, struct native_setup *s) {
     linef(app, "");
     field_row(app, s, SETUP_FIELD_DESTINATION, "SSH destination", "user@host, or a Host from ~/.ssh/config");
     field_row(app, s, SETUP_FIELD_NAME, "Name in Hydra", "empty: the host name is used");
-    field_row(app, s, SETUP_FIELD_CONFIG, "SSH config file", "optional; empty uses your usual SSH config");
+    field_row(app, s, SETUP_FIELD_CONFIG, "SSH config file", "absolute path or ~/...; empty: your usual SSH config");
     linef(app, "");
     if (s->problem[0]) paragraph(app, s->problem, TV_WARNING);
     else paragraph(app, "Next: Hydra reads the machine's SSH host key and shows it for you to confirm.", TV_MUTED);

@@ -445,6 +445,23 @@ static void freshness_cases(struct app *app) {
     app->fleet = fleet;
 }
 
+/* The SSH config field takes ~/ paths: only a leading ~ is expanded. */
+static void config_path_cases(void) {
+    char out[1024];
+    check(setup_config_expand("~/.ssh/work", "/Users/you", out, sizeof(out)) && !strcmp(out, "/Users/you/.ssh/work") &&
+          !setup_config_problem(out), "~/ expands to HOME and passes validation");
+    check(setup_config_expand("~", "/Users/you", out, sizeof(out)) && !strcmp(out, "/Users/you"), "a bare ~ is HOME");
+    check(setup_config_expand("/etc/ssh/cfg", NULL, out, sizeof(out)) && !strcmp(out, "/etc/ssh/cfg"), "absolute paths are unchanged");
+    check(setup_config_expand("$HOME/.ssh/cfg", "/Users/you", out, sizeof(out)) && !strcmp(out, "$HOME/.ssh/cfg") &&
+          setup_config_problem(out), "$VARS are not expanded and stay refused");
+    check(setup_config_expand("~other/.ssh/cfg", "/Users/you", out, sizeof(out)) && setup_config_problem(out),
+          "~user is not expanded and stays refused");
+    check(!setup_config_expand("~/.ssh/cfg", NULL, out, sizeof(out)) && !setup_config_expand("~/x", "relative", out, sizeof(out)),
+          "~ without an absolute HOME is refused");
+    check(setup_config_expand("", "/Users/you", out, sizeof(out)) && !out[0] && !setup_config_problem(out), "empty stays empty");
+    check(strstr(setup_config_problem("relative/cfg"), "~/"), "the problem text offers ~/");
+}
+
 int main(int argc, char **argv) {
     struct app *app = calloc(1, sizeof(*app));
     struct setup_envelope *e = calloc(1, sizeof(*e));
@@ -456,6 +473,7 @@ int main(int argc, char **argv) {
     list_cases(e);
     argv_cases(e);
     language_cases();
+    config_path_cases();
     app->hydra = "hydra"; app->view = 6; app->no_color = true; app->ascii = false;
     if (!native_setup_state(app)) { free(app); free(e); return 1; }
     screens_at(app, 80, 24);

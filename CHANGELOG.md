@@ -37,7 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   While a step runs it shows what it is doing and for how long (`Checking the
   host key… 12s`); Esc or `c` cancels it (Hydra stops the step's processes and
   shows the recorded setup status, so continuing later is safe) and `b` keeps it
-  running in the background.
+  running in the background. The form's SSH config file field accepts `~/...`
+  (expanded to your home directory; nothing else is expanded).
   Below 100 columns the tab bar uses short labels (`Coord`, `Flows`, `Stats`) so
   every tab, Hosts included, stays visible at 80 columns.
 - `hydra remote setup list [--json]` lists every setup with its destination,

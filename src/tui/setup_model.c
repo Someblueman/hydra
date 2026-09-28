@@ -450,9 +450,20 @@ const char *setup_destination_problem(const char *destination) {
     return NULL;
 }
 
+/* A leading "~" or "~/" becomes home (the CLI takes absolute paths only);
+ * nothing else is expanded, "$VARS" and "~user" included. False when home
+ * is unusable or the result does not fit. */
+bool setup_config_expand(const char *path, const char *home, char *out, size_t size) {
+    int n;
+    if (strcmp(path, "~") && strncmp(path, "~/", 2)) n = snprintf(out, size, "%s", path);
+    else if (!home || home[0] != '/') return false;
+    else n = snprintf(out, size, "%s%s", home, path + 1);
+    return n >= 0 && (size_t)n < size;
+}
+
 const char *setup_config_problem(const char *path) {
     if (!path[0]) return NULL;
-    if (path[0] != '/') return "The SSH config file must be an absolute path (or leave it empty)";
+    if (path[0] != '/') return "The SSH config file must be an absolute path or ~/... (or leave it empty)";
     if (strlen(path) >= 1024) return "The SSH config path is too long";
     return NULL;
 }

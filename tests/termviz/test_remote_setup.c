@@ -260,6 +260,22 @@ static void changed_key(int cols, int rows) {
 
 /* A hanging step shows what runs and for how long, and Esc or c stops it:
  * the child is gone and the recorded status is shown instead. */
+/* Starts setup from the form with a ~/ SSH config, which reaches the CLI
+ * as an absolute path. */
+static void add_host_tilde(struct tv_session *s) {
+    char config[4096];
+    tv_send(s, "H");
+    tv_until(s, "+ Add a host", 4);
+    tv_send(s, "A");
+    tv_until(s, "ADD A REMOTE HOST", 4);
+    tv_send(s, "deploy@ovh.example.net\tovh\t~/.ssh/hydra-test");
+    tv_until(s, "~/.ssh/hydra-test", 3);
+    tv_send(s, "\r");
+    tv_until(s, "Checking the host key", 6);
+    tv_format(config, sizeof(config), "setup ovh deploy@ovh.example.net --ssh-config %s/.ssh/hydra-test --json", getenv("HOME"));
+    CHECK(called(config), "a ~/ SSH config path reaches the CLI as an absolute path");
+}
+
 static void cancel_running(int cols, int rows, const char *key) {
     struct tv_session s;
     const char *flags[] = {"slow_host_key", NULL};
@@ -267,8 +283,7 @@ static void cancel_running(int cols, int rows, const char *key) {
     long pid;
     reset(flags);
     launch(&s, cols, rows);
-    add_host(&s);
-    tv_until(&s, "Checking the host key", 6);
+    add_host_tilde(&s);
     tv_until(&s, "host key\xe2\x80\xa6 2s", 6);
     see(&s, "c cancel");
     capture(&s, "30-running");

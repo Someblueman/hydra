@@ -97,6 +97,7 @@ bool setup_step_needs_terminal(const char *step);
 const char *setup_name_problem(const char *name);
 const char *setup_destination_problem(const char *destination);
 const char *setup_config_problem(const char *path);
+bool setup_config_expand(const char *path, const char *home, char *out, size_t size);
 /* Suggested NAME for a destination: its host part with unusable characters
  * dropped (may be empty). */
 void setup_default_name(const char *destination, char *out, size_t size);
