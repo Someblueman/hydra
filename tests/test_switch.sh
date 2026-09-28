@@ -78,202 +78,47 @@ setup_mock_sessions() {
     done
 }
 
-# Test: Non-numeric input should fail
-test_switch_nonnumeric_input() {
+# The numbered menu (used when fzf is unavailable) must reject every invalid
+# choice through the real CLI. TMUX names this case's private server, so no
+# pane or fixed delay is needed to be "inside tmux".
+test_switch_menu_rejects_invalid_choices() {
     echo ""
-    echo "Testing switch with non-numeric input..."
+    echo "Testing the numbered switch menu rejects invalid choices..."
 
     setup_test_env
     test_dir="$TEST_DIR"
-    setup_mock_sessions "$test_dir"
+    setup_mock_sessions
+    socket="$(tmux list-sessions -F '#{socket_path}' | sed -n '1p')"
 
-    # We need to be inside tmux for this test
-    # Create a wrapper that runs inside tmux
-    test_script="$test_dir/test_script.sh"
-    cat > "$test_script" << 'SCRIPT'
-#!/bin/sh
-HYDRA_HOME="$1"
-HYDRA_BIN="$2"
-export HYDRA_HOME
+    # fzf would replace the numbered menu: drop PATH entries that provide it and
+    # link their other tools into a private directory instead.
+    no_fzf="$test_dir/no-fzf-bin"
+    mkdir -p "$no_fzf"
+    menu_path=""
+    saved_ifs=$IFS
+    IFS=:
+    for dir in $PATH; do
+        if [ -x "$dir/fzf" ]; then
+            for tool in "$dir"/*; do
+                name=${tool##*/}
+                [ "$name" = fzf ] || [ -e "$no_fzf/$name" ] || ln -s "$tool" "$no_fzf/$name"
+            done
+        else
+            menu_path="${menu_path:+$menu_path:}$dir"
+        fi
+    done
+    IFS=$saved_ifs
 
-# Disable fzf for this test
-PATH="/usr/bin:/bin"
-
-# Pipe non-numeric input
-echo "abc" | "$HYDRA_BIN" switch 2>&1
-echo "EXIT_CODE=$?"
-SCRIPT
-    chmod +x "$test_script"
-
-    # Run inside a temporary tmux session
-    output="$(tmux new-session -d -s "test-switch-runner" "$test_script" "$HYDRA_HOME" "$HYDRA_BIN" 2>&1; sleep 0.5; tmux capture-pane -t "test-switch-runner" -p 2>/dev/null || true)"
-    tmux kill-session -t "test-switch-runner" 2>/dev/null || true
-
-    # Check if output contains error message about invalid selection
-    # Note: This test will fail until the fix is applied
-    if echo "$output" | grep -qi "invalid\|error\|must be"; then
-        echo "[PASS] Non-numeric input rejected"
-        pass_count=$((pass_count + 1))
-    else
-        echo "[FAIL] Non-numeric input should be rejected"
-        echo "  Output: $output"
-        fail_count=$((fail_count + 1))
-    fi
-    test_count=$((test_count + 1))
-
-    cleanup_test_env "$test_dir"
-}
-
-# Test: Empty input should fail
-test_switch_empty_input() {
-    echo ""
-    echo "Testing switch with empty input..."
-
-    setup_test_env
-    test_dir="$TEST_DIR"
-    setup_mock_sessions "$test_dir"
-
-    # Run switch with empty input (just Enter)
-    test_script="$test_dir/test_script.sh"
-    cat > "$test_script" << 'SCRIPT'
-#!/bin/sh
-HYDRA_HOME="$1"
-HYDRA_BIN="$2"
-export HYDRA_HOME
-PATH="/usr/bin:/bin"
-
-echo "" | "$HYDRA_BIN" switch 2>&1
-echo "EXIT_CODE=$?"
-SCRIPT
-    chmod +x "$test_script"
-
-    output="$(tmux new-session -d -s "test-switch-runner" "$test_script" "$HYDRA_HOME" "$HYDRA_BIN" 2>&1; sleep 0.5; tmux capture-pane -t "test-switch-runner" -p 2>/dev/null || true)"
-    tmux kill-session -t "test-switch-runner" 2>/dev/null || true
-
-    if echo "$output" | grep -qi "invalid\|error\|must be"; then
-        echo "[PASS] Empty input rejected"
-        pass_count=$((pass_count + 1))
-    else
-        echo "[FAIL] Empty input should be rejected"
-        echo "  Output: $output"
-        fail_count=$((fail_count + 1))
-    fi
-    test_count=$((test_count + 1))
-
-    cleanup_test_env "$test_dir"
-}
-
-# Test: Out of range input (0) should fail
-test_switch_zero_input() {
-    echo ""
-    echo "Testing switch with zero input..."
-
-    setup_test_env
-    test_dir="$TEST_DIR"
-    setup_mock_sessions "$test_dir"
-
-    test_script="$test_dir/test_script.sh"
-    cat > "$test_script" << 'SCRIPT'
-#!/bin/sh
-HYDRA_HOME="$1"
-HYDRA_BIN="$2"
-export HYDRA_HOME
-PATH="/usr/bin:/bin"
-
-echo "0" | "$HYDRA_BIN" switch 2>&1
-echo "EXIT_CODE=$?"
-SCRIPT
-    chmod +x "$test_script"
-
-    output="$(tmux new-session -d -s "test-switch-runner" "$test_script" "$HYDRA_HOME" "$HYDRA_BIN" 2>&1; sleep 0.5; tmux capture-pane -t "test-switch-runner" -p 2>/dev/null || true)"
-    tmux kill-session -t "test-switch-runner" 2>/dev/null || true
-
-    if echo "$output" | grep -qi "invalid\|error\|must be\|between"; then
-        echo "[PASS] Zero input rejected"
-        pass_count=$((pass_count + 1))
-    else
-        echo "[FAIL] Zero input should be rejected"
-        echo "  Output: $output"
-        fail_count=$((fail_count + 1))
-    fi
-    test_count=$((test_count + 1))
-
-    cleanup_test_env "$test_dir"
-}
-
-# Test: Out of range input (too high) should fail
-test_switch_out_of_range_high() {
-    echo ""
-    echo "Testing switch with out-of-range high input..."
-
-    setup_test_env
-    test_dir="$TEST_DIR"
-    setup_mock_sessions "$test_dir"  # Creates 3 sessions
-
-    test_script="$test_dir/test_script.sh"
-    cat > "$test_script" << 'SCRIPT'
-#!/bin/sh
-HYDRA_HOME="$1"
-HYDRA_BIN="$2"
-export HYDRA_HOME
-PATH="/usr/bin:/bin"
-
-# Input 999 when only 3 sessions exist
-echo "999" | "$HYDRA_BIN" switch 2>&1
-echo "EXIT_CODE=$?"
-SCRIPT
-    chmod +x "$test_script"
-
-    output="$(tmux new-session -d -s "test-switch-runner" "$test_script" "$HYDRA_HOME" "$HYDRA_BIN" 2>&1; sleep 0.5; tmux capture-pane -t "test-switch-runner" -p 2>/dev/null || true)"
-    tmux kill-session -t "test-switch-runner" 2>/dev/null || true
-
-    if echo "$output" | grep -qi "invalid\|error\|must be\|between"; then
-        echo "[PASS] Out-of-range high input rejected"
-        pass_count=$((pass_count + 1))
-    else
-        echo "[FAIL] Out-of-range high input should be rejected"
-        echo "  Output: $output"
-        fail_count=$((fail_count + 1))
-    fi
-    test_count=$((test_count + 1))
-
-    cleanup_test_env "$test_dir"
-}
-
-# Test: Negative input should fail
-test_switch_negative_input() {
-    echo ""
-    echo "Testing switch with negative input..."
-
-    setup_test_env
-    test_dir="$TEST_DIR"
-    setup_mock_sessions "$test_dir"
-
-    test_script="$test_dir/test_script.sh"
-    cat > "$test_script" << 'SCRIPT'
-#!/bin/sh
-HYDRA_HOME="$1"
-HYDRA_BIN="$2"
-export HYDRA_HOME
-PATH="/usr/bin:/bin"
-
-echo "-1" | "$HYDRA_BIN" switch 2>&1
-echo "EXIT_CODE=$?"
-SCRIPT
-    chmod +x "$test_script"
-
-    output="$(tmux new-session -d -s "test-switch-runner" "$test_script" "$HYDRA_HOME" "$HYDRA_BIN" 2>&1; sleep 0.5; tmux capture-pane -t "test-switch-runner" -p 2>/dev/null || true)"
-    tmux kill-session -t "test-switch-runner" 2>/dev/null || true
-
-    if echo "$output" | grep -qi "invalid\|error\|must be"; then
-        echo "[PASS] Negative input rejected"
-        pass_count=$((pass_count + 1))
-    else
-        echo "[FAIL] Negative input should be rejected"
-        echo "  Output: $output"
-        fail_count=$((fail_count + 1))
-    fi
-    test_count=$((test_count + 1))
+    for choice_case in 'abc:must be a number' ':must be a number' '-1:must be a number' \
+        '0:must be between 1 and 3' '999:must be between 1 and 3'; do
+        choice=${choice_case%%:*}
+        expected=${choice_case#*:}
+        code=0
+        output="$(printf '%s\n' "$choice" | TMUX="$socket,$$,0" PATH="$no_fzf:$menu_path" \
+            "$HYDRA_BIN" switch 2>&1)" || code=$?
+        assert_failure "$code" "switch menu rejects choice '$choice'"
+        assert_contains "$output" "$expected" "switch menu explains why '$choice' is rejected"
+    done
 
     cleanup_test_env "$test_dir"
 }
@@ -388,21 +233,9 @@ main() {
     test_validate_choice_helper
     test_direct_branch_switch
 
-    # Integration tests (require tmux)
+    # Integration test through the real CLI (requires tmux)
     if command -v tmux >/dev/null 2>&1; then
-        # Note: These integration tests require interactive tmux session simulation
-        # and are flaky due to timing issues. The unit tests above already cover
-        # the validation logic directly. Keeping these disabled for CI stability.
-        echo ""
-        echo "=========================================="
-        echo "Integration tests (require bug fix to pass)"
-        echo "=========================================="
-        # test_switch_nonnumeric_input
-        # test_switch_empty_input
-        # test_switch_zero_input
-        # test_switch_out_of_range_high
-        # test_switch_negative_input
-        echo "[SKIP] Integration tests disabled - validation covered by unit tests above"
+        test_switch_menu_rejects_invalid_choices
     else
         echo ""
         echo "[SKIP] tmux not available, skipping integration tests"
