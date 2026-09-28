@@ -167,15 +167,19 @@ hydra remote provision ovh    # shows a fresh plan to approve
 tab (`H`). `A`, or Enter on "+ Add a host", asks for the SSH destination, a name
 (the host name by default) and an optional SSH config file, then runs the same
 `hydra remote setup ... --json` commands and shows their steps. Unfinished setups
-are listed there; Enter continues one. Each plan is shown before anything changes:
+are listed there (from `hydra remote setup list --json`); Enter continues one. Each plan is shown before anything changes:
 a new host key needs `yes` typed and Enter, other plans `y` (Enter alone never
 approves; `n` or Esc declines and runs nothing). Hydra then reruns exactly the
 command the CLI returned, and only if its `--approve` hash or `--fingerprint` is the
 plan on screen. A changed or ambiguous host key shows the manual `ssh-keygen`
 recovery and has no accept action. Blocking requirements are listed with their
-suggested fixes; Enter checks again once they are installed. Agent installers and
-provider sign-in take over the terminal and return to Hydra when they finish (on
-failure after Enter, so the output can be read). An unknown outcome offers Enter
+suggested fixes; Enter checks again once they are installed. After provisioning
+the agent inventory is shown: choose "Install A" to review that agent's installer
+plan, "Sign in to A" for one already there, or Continue setup without agents
+(Enter on the done "Find agents" step shows the inventory again later). Agent
+installers and provider sign-in take over the terminal and return to Hydra when
+they finish (on failure after Enter, so the output can be read); a failure is
+explained from the error the CLI recorded for that step. An unknown outcome offers Enter
 to reconcile, which never replays the earlier attempt.
 
 ## Register and bootstrap a host
