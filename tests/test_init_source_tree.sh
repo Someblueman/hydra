@@ -18,7 +18,7 @@ export HOME="$fixture"
 export HYDRA_HOME="$fixture/home"
 export HYDRA_NONINTERACTIVE=1
 unset HYDRA_ROOT
-mkdir -p "$HYDRA_HOME"
+(umask 077; mkdir -p "$HYDRA_HOME")
 
 assert_contains() {
     case "$1" in

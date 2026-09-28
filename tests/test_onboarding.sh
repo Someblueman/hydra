@@ -41,7 +41,7 @@ SRC_BEFORE="$(snapshot_source_repo)"
 base_dir="$(mktemp -d)" || exit 1
 repo_dir="$base_dir/repo"
 hydra_home="$base_dir/.hydra"
-mkdir -p "$repo_dir" "$hydra_home"
+mkdir -p "$repo_dir"; (umask 077; mkdir -p "$hydra_home")
 
 trap 'tmux kill-session -t "${branch:-}" 2>/dev/null || true; rm -rf "$base_dir"' EXIT INT TERM
 

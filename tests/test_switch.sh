@@ -44,7 +44,7 @@ setup_test_env() {
     }
     HYDRA_HOME="$TEST_DIR/.hydra"
     export HYDRA_HOME HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
-    mkdir -p "$HYDRA_HOME" "$TEST_DIR/repo" || exit 1
+    (umask 077; mkdir -p "$HYDRA_HOME") && mkdir -p "$TEST_DIR/repo" || exit 1
     # Never fall through to spawning in the source checkout.
     cd "$TEST_DIR/repo" || exit 1
     git init -q
