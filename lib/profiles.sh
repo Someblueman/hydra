@@ -205,7 +205,7 @@ profile_create_custom() {
     case "$_pcc_prompt_mode" in none|task-file) ;; *) return 1 ;; esac
     _pcc_dir="$(profile_custom_dir "$_pcc_name")" || return 1
     [ ! -e "$_pcc_dir/adapter.json" ] || return 1
-    mkdir -p "$_pcc_dir" || return 1
+    hydra_private_mkdir "$_pcc_dir" || return 1
     chmod 700 "$_pcc_dir" 2>/dev/null || true
     state_v2_write_scalar "$_pcc_dir/executable" "$_pcc_executable" || return 1
     state_v2_write_scalar "$_pcc_dir/tier" "1" || return 1

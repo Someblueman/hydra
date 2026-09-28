@@ -32,6 +32,8 @@ admission_wait_cleanup() {
 }
 
 admission_wait() (
+    # Responses are Hydra evidence; this helper starts no user command.
+    umask 077
     _aw_id="$1" _aw_project="$2" _aw_response="$3"
     _aw_seconds="${HYDRA_ADMISSION_QUEUE_SECONDS:-60}"
     _aw_labels="${HYDRA_ADMISSION_LABELS:--}"
@@ -69,7 +71,7 @@ admission_command() (
     shift 3
     admission_wait "$_ac_id" "$_ac_project" "$_ac_evidence/admission.json" || exit 125
     if "$@"; then _ac_status=0; else _ac_status=$?; fi
-    cmd_admission release "$_ac_id" --confirmed > "$_ac_evidence/admission-release.json" || true
+    (umask 077; cmd_admission release "$_ac_id" --confirmed > "$_ac_evidence/admission-release.json") || true
     exit "$_ac_status"
 )
 

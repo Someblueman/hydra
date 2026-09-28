@@ -6,11 +6,19 @@
 #include "fleet/task/task.h"
 #include "fleet/workflow/workflow_data.h"
 #include "fleet/agent/agent.h"
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+/* Lowered plans are Hydra state: private whatever the caller's umask. */
+static FILE *create_private(const char *path) {
+    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    FILE *file = fd < 0 ? NULL : fdopen(fd, "w");
+    if (fd >= 0 && !file) close(fd);
+    return file;
+}
 static void list(FILE *file, json_object *array) {
     size_t i;
     for (i = 0; i < json_object_array_length(array); i++) fprintf(file, "%s%s", i ? "," : "", f_text(json_object_array_get_idx(array, i)));
@@ -28,7 +36,7 @@ int plan_lower(json_object *plan, const char *directory) {
     char path[F_PATH], graph_path[F_PATH]; FILE *yaml = NULL, *graph = NULL; int status = -1; size_t i;
     json_object *steps = f_field(plan, "steps"), *env = f_field(plan, "envelope");
     if (f_path(path, sizeof(path), directory, "workflow.yml") || f_path(graph_path, sizeof(graph_path), directory, "graph.tsv") ||
-        !(yaml = fopen(path, "wx")) || !(graph = fopen(graph_path, "wx"))) goto done;
+        !(yaml = create_private(path)) || !(graph = create_private(graph_path))) goto done;
     fprintf(yaml, "version: 1\nid: %s\ndata: data.json\nparallelism: %d\nresources:\n  disk_mb: %d\n  max_heads: %d\nsteps:\n",
         f_string(plan, "id"), json_object_get_int(f_field(env, "parallelism")), json_object_get_int(f_field(env, "disk_mb")), json_object_get_int(f_field(env, "max_heads")));
     for (i = 0; i < json_object_array_length(steps); i++) {
