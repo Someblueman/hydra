@@ -258,9 +258,9 @@ jobs:
         mkdir -p "$TMUX_TMPDIR"
         make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} test-fleet
 
-    # Real loopback sshd with ephemeral keys. The test prints SKIP and exits 0
-    # without sshd, so require its final pass line rather than the exit code.
-    - name: Run loopback SSH enrollment
+    # Real loopback sshd with ephemeral keys. The tests print SKIP and exit 0
+    # without sshd, so require their final pass lines rather than exit codes.
+    - name: Run loopback SSH enrollment and remote setup host key trust
       if: matrix.os == 'ubuntu-latest' && matrix.mode == 'acceptance' && matrix.shard == 'odd'
       env:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-fleet-ssh
@@ -269,6 +269,8 @@ jobs:
         sudo apt-get install -y openssh-server
         make test-enrollment-ssh | tee "$RUNNER_TEMP/enrollment-ssh.out"
         grep -q '^Strict loopback lost authenticated master' "$RUNNER_TEMP/enrollment-ssh.out"
+        make test-remote-setup-ssh | tee "$RUNNER_TEMP/remote-setup-ssh.out"
+        grep -q '^Remote setup host key trust over loopback SSH passed' "$RUNNER_TEMP/remote-setup-ssh.out"
 
     - name: Run fleet sanitizers
       if: matrix.mode == 'sanitizers'
