@@ -290,6 +290,24 @@ static void shared_session(void) {
     owner_alive("a second client killed the agent");
 }
 
+/* A terminal that stops reading Hydra's output (a slow link, a paused
+ * terminal) stalls Hydra right after it attaches. tmux queries the new client
+ * and, once its 5-second query window has passed, takes any late answer for
+ * typed keys. Nothing Hydra answers may reach the agent as input. */
+static void stalled_terminal(void) {
+    tv_send(&s, "a");
+    tv_sleep(6);
+    tv_until(&s, "INPUT TO AGENT", 10);
+    wait_clients(1);
+    tv_pump(&s, .5);
+    tv_send(&s, "echo STALLED_$((6*7))\r");
+    tv_until(&s, "STALLED_42", 5);
+    if (tv_contains(&s, "not found")) fail_with("a terminal answer was typed into the agent");
+    tv_send(&s, "\002x");
+    wait_clients(0);
+    owner_alive("a stalled terminal killed the agent");
+}
+
 static void write_raw(void) {
     char path[4096];
     FILE *out;
@@ -338,6 +356,7 @@ int main(void) {
     }
     disconnected_client();
     shared_session();
+    stalled_terminal();
     /* Nothing typed in any cycle was lost: the agent session holds it all. */
     for (i = 0; i < sizeof(cycles) / sizeof(*cycles); i++) {
         tv_format(marker, sizeof(marker), "MARK_%zu", i * 1000 + 7);
@@ -349,7 +368,7 @@ int main(void) {
     CHECK(clients() == 0, "no leaked attach clients");
     hf_finish(&f);
     printf("PASS attach cycles: %zu cycles of attach/type/leave/close/layout/resize/reattach at 140x40, 100x30, "
-           "80x24 and 60x20; disconnected client releases input; shared-size fill named; evidence in %s\n",
+           "80x24 and 60x20; disconnected client releases input; shared-size fill named; a stalled terminal types nothing; evidence in %s\n",
            sizeof(cycles) / sizeof(*cycles), evidence);
     return 0;
 }

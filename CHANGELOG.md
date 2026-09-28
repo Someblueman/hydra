@@ -134,6 +134,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PID the lost worker could no longer vouch for. It now leaves as soon as its
   worker is gone and signals only processes that are still that worker's
   unreaped children.
+- An attached agent pane no longer types stray text such as `1;0c` into the
+  agent. Hydra answered tmux's terminal queries through the agent's input; when
+  Hydra was held up (for example by a terminal that stopped reading its output)
+  and an answer reached tmux after its 5-second query window, tmux passed it on
+  as keys. Hydra no longer answers them; tmux learned nothing from the answers.
 
 ## [2.8.0] - 2026-09-27
 

@@ -332,9 +332,16 @@ void native_terminals_pump(struct app *app) {
             uint64_t added=t->screen->history_serial-before;
             t->scroll=added>t->screen->history_count-t->scroll ? t->screen->history_count : t->scroll+(size_t)added;
         }
-        if (t->screen->reply_length && !t->client.finished && !t->client.eof) {
-            char reply[256]; size_t n=tv_term_take_reply(t->screen,reply,sizeof(reply));
-            native_terminal_send(app,t,reply,n);
+        /* The client is always a tmux attach client, and its input is the
+         * agent's input. tmux takes an answer to its terminal queries that
+         * arrives after its 5-second query window for typed keys, and Hydra
+         * cannot bound when its answer arrives (its own terminal can stall
+         * it). The answers the model gives teach tmux nothing: it adds
+         * features only for a level 61+ device-attributes answer and reads
+         * its size from the PTY. So they are dropped, never typed. */
+        if (t->screen->reply_length) {
+            char reply[256];
+            (void)tv_term_take_reply(t->screen,reply,sizeof(reply));
         }
         outbox_step(app,t);
     }
