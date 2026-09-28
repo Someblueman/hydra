@@ -17,8 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or no terminal an `approval_required` result (exit 3) naming the exact approving
   command. `trust-key` never accepts a changed or ambiguous host key and only appends
   the approved line to known_hosts; `preflight` reports platform, tools and existing
-  installs read-only and without sudo. Help and bash, zsh and fish completions
-  include the new commands.
+  installs read-only and without sudo. macOS remotes pass preflight with a
+  warning when an unpinned helper will be installed (`--binary FILE`, or this
+  host's own helper for exactly the same platform); other platforms fail with
+  `platform_unsupported`. Help and bash, zsh and fish completions include the new
+  commands.
 - `hydra agent locate [--json] [--record EXECUTABLE PATH] [--forget EXECUTABLE]`
   finds agents outside PATH (`~/.local/bin`, `~/.opencode/bin`, nvm, mise, ...)
   as `agent-inventory` schema 1 and records a private per-executable location.

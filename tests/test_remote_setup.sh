@@ -16,6 +16,10 @@ version="$(sed -n 's/^#define F_VERSION "\(.*\)"$/\1/p' "$root/src/fleet/fleet.h
 [ -n "$version" ]
 unset CI HYDRA_NONINTERACTIVE
 SETUP_REAL_SSH="$(command -v ssh)"
+# This host's helper is the unpinned source for a remote of the same platform.
+HYDRA_FLEET_BIN="$fleet"; export HYDRA_FLEET_BIN
+local_os="$(uname -s)" local_arch="$(uname -m)"
+case "$local_arch" in arm64|aarch64) darwin_other=x86_64 ;; *) darwin_other=arm64 ;; esac
 
 # Fake SSH: `ssh -G` is answered by OpenSSH itself; anything else runs the
 # remote command locally with an optional remote PATH, HOME and umask.
@@ -160,10 +164,24 @@ preflight_cases() {
     has "$out" '"hydra":{"path":null,"version":null,"reusable":false}'; has "$out" '"pins":\[\]'
     has "$out" '"name":"umask","status":"ok"'
     has "$(state p1)" '"preflight":{"status":"done"'
-    # Unsupported platforms and missing tools block; tmux and curl only warn.
-    SETUP_REMOTE_PATH="$fixture/remote-full" SETUP_REMOTE_OS=Darwin SETUP_REMOTE_ARCH=arm64 run 1 "$out" preflight p1 --json
-    has "$out" '"code":"prerequisite_missing"'; has "$out" '"missing":\["platform"\]'
+    # A Darwin remote without a pinned asset needs this host's helper for the
+    # identical platform (an unpinned warning); any other Darwin platform and
+    # an unknown one block with platform_unsupported and name --binary.
+    SETUP_REMOTE_PATH="$fixture/remote-full" SETUP_REMOTE_OS=Darwin SETUP_REMOTE_ARCH="$darwin_other" run 1 "$out" preflight p1 --json
+    has "$out" '"code":"platform_unsupported"'; has "$out" '"missing":\["platform"\]'; has "$out" '--binary FILE'
     has "$(state p1)" '"preflight":{"status":"blocked"'
+    SETUP_REMOTE_PATH="$fixture/remote-full" SETUP_REMOTE_OS=Linux SETUP_REMOTE_ARCH=riscv64 run 1 "$out" preflight p1 --json
+    has "$out" '"code":"platform_unsupported"'; has "$out" '"name":"platform","status":"missing"'
+    if [ "$local_os" = Darwin ]; then
+        SETUP_REMOTE_PATH="$fixture/remote-full" SETUP_REMOTE_OS=Darwin SETUP_REMOTE_ARCH="$local_arch" run 0 "$out" preflight p1 --json
+        has "$out" '"name":"platform","status":"warning","blocking":false'; has "$out" 'installed unpinned'
+        has "$(state p1)" '"preflight":{"status":"done"'
+        # Without this host's helper the same platform blocks too.
+        HYDRA_FLEET_BIN="$fixture/no-helper" SETUP_REMOTE_PATH="$fixture/remote-full" SETUP_REMOTE_OS=Darwin SETUP_REMOTE_ARCH="$local_arch" \
+            run 1 "$out" preflight p1 --json
+        has "$out" '"code":"platform_unsupported"'
+    fi
+    # Missing tools block; tmux and curl only warn.
     SETUP_REMOTE_PATH="$fixture/remote-bare" run 1 "$out" preflight p1
     has "$out.err" 'git: install git'; lacks "$out.err" 'tmux:'
     SETUP_REMOTE_PATH="$fixture/remote-bare" run 1 "$out" preflight p1 --json

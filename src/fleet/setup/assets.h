@@ -41,6 +41,11 @@ int setup_private_dir(const char *name, char path[F_PATH]);
 /* Stores data as DIR/SHA256SUFFIX (0600) through a private temporary file and
  * reports the digest and final path; 0 or -1. */
 int setup_cache_store(const char *dir, const char *suffix, const char *data, size_t size, char digest[65], char path[F_PATH]);
+/* True when this host has exactly platform. */
+bool setup_local_platform(const struct f_platform *platform);
+/* This host's own hydra-fleet ($HYDRA_FLEET_BIN, else next to HYDRA_BIN_DIR)
+ * when this host and its helper are both for platform: 0 with path, or -1. */
+int setup_local_helper(const struct f_platform *platform, char path[F_PATH]);
 /* Chooses the helper for platform: --binary FILE (unpinned; its ELF/Mach-O
  * header must match), else the pinned release asset for this version, else
  * this host's own helper when the platforms are identical (unpinned). NULL on

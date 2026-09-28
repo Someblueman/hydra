@@ -210,10 +210,10 @@ cases() {
     run 1 "$out" provision p9 --json; has "$out" '"code":"platform_unsupported"'
     [ ! -s "$PROVISION_SSH_LOG" ] || fail "an unavailable asset contacted the remote"
 
-    # On Linux (the only platform preflight accepts without --binary) the real
-    # preflight snapshot feeds provisioning. The remote PATH excludes any
-    # Hydra installed on this host so a fresh pin is planned.
-    if [ "$local_os" = Linux ]; then
+    # The real preflight snapshot feeds provisioning (a macOS remote passes
+    # preflight because this host's helper has its platform). The remote PATH
+    # excludes any Hydra installed on this host so a fresh pin is planned.
+    if [ "$local_os" = Linux ] || [ "$local_os" = Darwin ]; then
         PROVISION_REMOTE_PATH=/usr/bin:/bin; export PROVISION_REMOTE_PATH
         private_dirs
         mkdir -p "$fixture/remote-$mask-f"

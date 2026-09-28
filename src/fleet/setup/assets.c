@@ -172,10 +172,17 @@ static int local_helper(char path[F_PATH]) {
     if (env && env[0]) return f_copy(path, F_PATH, env) || !regular(path) ? -1 : 0;
     return bin_relative(path, candidates);
 }
+bool setup_local_platform(const struct f_platform *platform) {
+    struct f_platform local;
+    return !f_platform_local(&local) && f_platform_equal(&local, platform);
+}
+int setup_local_helper(const struct f_platform *platform, char path[F_PATH]) {
+    return setup_local_platform(platform) && !local_helper(path) && platform_of(path, platform) ? 0 : -1;
+}
 static json_object *use_local(const struct setup_ctx *ctx, const struct f_platform *platform, struct setup_binary *out) {
-    struct f_platform local; char path[F_PATH];
-    if (f_platform_local(&local) || !f_platform_equal(&local, platform)) return unavailable(ctx, platform, "the table has no row and this host's helper is for another platform");
-    if (local_helper(path) || !platform_of(path, platform) || f_hash(path, out->sha256))
+    char path[F_PATH];
+    if (!setup_local_platform(platform)) return unavailable(ctx, platform, "the table has no row and this host's helper is for another platform");
+    if (setup_local_helper(platform, path) || f_hash(path, out->sha256))
         return unavailable(ctx, platform, "the table has no row and this host's hydra-fleet helper was not found");
     describe(out, path, "local-helper", "hydra-fleet", false);
     return NULL;

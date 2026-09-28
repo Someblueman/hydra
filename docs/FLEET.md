@@ -93,9 +93,13 @@ removes existing lines, and every refusal leaves known_hosts byte-identical.
 **Preflight** is read-only and needs no Hydra on the host. A fixed POSIX script
 reports the platform, HOME, PATH, umask, tools, existing Hydra installs and pins,
 and agent executables in common install directories (`remote-preflight` schema 1).
-Blocking requirements are Linux x86_64 or aarch64 (other platforms only with
-`--binary`), git, sha256sum or shasum, mktemp, head and tail, a writable HOME and
-50 MB free; missing ones fail with `prerequisite_missing` and `data.missing[]`.
+Blocking requirements are a supported platform, git, sha256sum or shasum, mktemp,
+head and tail, a writable HOME and 50 MB free; missing ones fail with
+`prerequisite_missing` and `data.missing[]`. Linux x86_64 and aarch64 have pinned
+release helpers. macOS (x86_64 or aarch64) has none, so it is a warning when an
+unpinned helper will be used, either `hydra remote setup NAME --binary FILE` or
+this host's own `hydra-fleet` when this host has exactly the remote's platform;
+otherwise, and for any other platform, preflight fails with `platform_unsupported`.
 tmux 3.0, curl (only for agent installers) and a group-writable umask are warnings.
 Hydra never uses sudo; install missing packages yourself. An existing Hydra of the
 same version that passes the fleet handshake is reported as reusable; other

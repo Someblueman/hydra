@@ -4,6 +4,7 @@
  * `remote-preflight` schema 1: os, arch, home, path, umask, tools{...},
  * hydra{path,version}, pins[], agents[], plus requirements[]. */
 #include "fleet/setup/setup.h"
+#include "fleet/setup/assets.h"
 #include "fleet/support/files.h"
 #include "fleet/support/json.h"
 #include "fleet/support/process.h"
@@ -134,16 +135,25 @@ static void require_tool(json_object *rows, const char *name, bool present, cons
     struct requirement r = {name, present ? "ok" : "missing", present ? "found" : missing, true};
     require(rows, &r);
 }
-static bool supported_platform(const char *os, const char *arch) {
-    return !strcmp(os, "Linux") && (!strcmp(arch, "x86_64") || !strcmp(arch, "amd64") || !strcmp(arch, "aarch64") || !strcmp(arch, "arm64"));
+/* Linux has pinned release helpers. Another supported platform needs an
+ * unpinned helper: --binary, or this host's own helper when this host has
+ * exactly the remote's platform (the rule provisioning applies). NULL: none. */
+static const char *unpinned_helper(const struct f_platform *platform, bool binary) {
+    char helper[F_PATH];
+    if (binary) return "no pinned release binary for this platform; --binary will be installed unpinned";
+    if (!setup_local_helper(platform, helper))
+        return "no pinned release binary for this platform; this host's hydra-fleet (same platform) will be installed unpinned";
+    return NULL;
 }
 static void require_platform(json_object *rows, json_object *snapshot, bool binary) {
-    const char *os = f_string(snapshot, "os"), *arch = f_string(snapshot, "arch");
+    struct f_platform platform; const char *helper;
     struct requirement r = {"platform", "ok", "Linux release binary available", true};
-    if (!supported_platform(os, arch)) {
-        r.status = binary ? "warning" : "missing";
-        r.detail = binary ? "no pinned release binary for this platform; --binary will be installed unpinned"
-                          : "no pinned release binary for this platform; rerun hydra remote setup with --binary FILE built for it";
+    if (f_platform_set(&platform, f_string(snapshot, "os"), f_string(snapshot, "arch"))) {
+        r.status = "missing"; r.detail = "only linux and darwin on x86_64 or aarch64 are supported; install Hydra on this host manually";
+    } else if (strcmp(platform.os, "linux")) {
+        helper = unpinned_helper(&platform, binary);
+        r.status = helper ? "warning" : "missing";
+        r.detail = helper ? helper : "no pinned release binary for this platform; rerun hydra remote setup NAME with --binary FILE built for it";
     }
     require(rows, &r);
 }
@@ -239,6 +249,14 @@ static size_t count_status(json_object *rows, const char *status) {
         if (!strcmp(f_string(json_object_array_get_idx(rows, i), "status"), status)) count++;
     return count;
 }
+static bool listed(json_object *names, const char *name) {
+    size_t i;
+    for (i = 0; i < json_object_array_length(names); i++) {
+        const char *text = f_text(json_object_array_get_idx(names, i));
+        if (text && !strcmp(text, name)) return true;
+    }
+    return false;
+}
 static json_object *finish(struct setup_ctx *ctx, json_object *snapshot) {
     json_object *rows = f_field(snapshot, "requirements"), *missing, *copy = NULL, *data; char message[1024], summary[256];
     snprintf(summary, sizeof(summary), "%s %s; %zu warning(s)", f_string(snapshot, "os"), f_string(snapshot, "arch"), count_status(rows, "warning"));
@@ -252,6 +270,11 @@ static json_object *finish(struct setup_ctx *ctx, json_object *snapshot) {
     if (!json_object_array_length(missing)) { json_object_put(missing); return f_success(ctx->command, copy); }
     data = json_object_new_object();
     json_object_object_add(data, "missing", missing); json_object_object_add(data, "preflight", copy);
+    if (listed(missing, "platform"))
+        return setup_error(ctx, "platform_unsupported", message,
+                           "pass a hydra-fleet helper built for this platform (linux or darwin, x86_64 or aarch64) with "
+                           "hydra remote setup NAME --binary FILE, or install Hydra manually and add it with hydra remote add; "
+                           "fix any other listed prerequisite too (Hydra never uses sudo)", data);
     return setup_error(ctx, "prerequisite_missing", message,
                        "fix the listed prerequisites on the remote host (Hydra never uses sudo), then rerun hydra remote preflight NAME", data);
 }
