@@ -163,7 +163,13 @@ if (cd "$guard_repo" && "$root/bin/hydra" fleet-local attach fleet-guard "$guard
 fi
 grep -Fq 'head instance changed' "$fixture/stale-attach"
 
+guard_server_pid="$(tmux -S "$TMUX_SOCKET" display-message -p '#{pid}')"
 tmux -S "$TMUX_SOCKET" kill-server
+# kill-server returns before the old server exits; a client that connects to
+# it meanwhile fails with "server exited unexpectedly".
+attempt=0
+while kill -0 "$guard_server_pid" 2>/dev/null && [ "$attempt" -lt 100 ]; do sleep 0.05; attempt=$((attempt + 1)); done
+if kill -0 "$guard_server_pid" 2>/dev/null; then echo 'tmux server survived kill-server' >&2; exit 1; fi
 tmux -f /dev/null new-session -d -s "$guard_session" /bin/sh
 [ "$(tmux display-message -p -t "=$guard_session:" '#{session_id}')" = "$guard_session_id" ]
 tmux set-environment -t "$guard_session" HYDRA_PROJECT_ID replacement_project
