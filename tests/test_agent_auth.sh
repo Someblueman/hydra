@@ -16,8 +16,10 @@ cat > "$fixture/bin/ssh" <<'SSH'
 set -eu
 if [ "$1" = -t ]; then
     for arg do printf '%s\n' "$arg"; done > "$AUTH_TEST_ROOT/login-argv"
-    exit 0
+    exit "${AUTH_TEST_LOGIN_EXIT:-0}"
 fi
+# The remote side sees a minimal non-interactive PATH, like sshd's default.
+export PATH="$AUTH_TEST_ROOT/remote-path:/usr/bin:/bin"
 while [ $# -gt 2 ]; do shift; done
 request="$(cat)"
 case "$request" in
@@ -131,4 +133,21 @@ for agent in agy cursor; do
 done
 hydra fleet auth login test --agent codex --executable '/private/with space/codex'
 grep -q "exec '/private/with space/codex' login --device-auth" "$fixture/login-argv"
+# Login returns (fork and wait) and reports the provider's exit status.
+if env AUTH_TEST_LOGIN_EXIT=1 "$root/bin/hydra" fleet auth login test --agent claude > "$fixture/login-failed"; then exit 1; fi
+grep -q '"code":"login_failed"' "$fixture/login-failed"
+if env AUTH_TEST_LOGIN_EXIT=130 "$root/bin/hydra" fleet auth login test --agent claude > "$fixture/login-cancelled"; then exit 1; fi
+grep -q '"code":"cancelled"' "$fixture/login-cancelled"
+# An installer's ~/.local/bin is off the non-interactive PATH: login resolves it.
+mkdir -p "$fixture/remote/.local/bin"
+printf '#!/bin/sh\necho fixture-claude 1.0\n' > "$fixture/remote/.local/bin/claude"
+chmod 755 "$fixture/remote/.local/bin/claude"
+hydra fleet auth login test --agent claude > "$fixture/login-ok"
+grep -q '"command":"fleet-auth-login"' "$fixture/login-ok"
+grep -q "exec '$fixture/remote/.local/bin/claude' auth login" "$fixture/login-argv"
+# A group-writable candidate is never used.
+chmod 775 "$fixture/remote/.local/bin/claude"
+hydra fleet auth login test --agent claude >/dev/null
+grep -q "exec 'claude' auth login" "$fixture/login-argv"
+chmod 755 "$fixture/remote/.local/bin/claude"
 printf 'Agent authentication acceptance passed\n'

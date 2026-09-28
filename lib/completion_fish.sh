@@ -160,7 +160,10 @@ complete -c hydra -f -n '__fish_seen_subcommand_from diff review provenance' -l 
 
 # Complete template command
 complete -c hydra -f -n '__fish_seen_subcommand_from template' -a 'list create show edit delete'
-complete -c hydra -f -n '__fish_seen_subcommand_from agent' -a 'list show doctor init contract probe import'
+complete -c hydra -f -n '__fish_seen_subcommand_from agent' -a 'list show doctor init locate contract probe import'
+complete -c hydra -f -n '__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from locate' -l json -d 'Versioned agent-inventory JSON'
+complete -c hydra -f -n '__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from locate' -l record -r -d 'Record EXECUTABLE at an absolute path'
+complete -c hydra -f -n '__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from locate' -l forget -r -a 'claude codex cursor-agent agy opencode pi copilot aider gemini' -d 'Forget a recorded location'
 complete -c hydra -f -n '__fish_seen_subcommand_from state' -a 'verify backup migrate rollback'
 complete -c hydra -f -n '__fish_seen_subcommand_from events' -a 'verify tail filter retain repair'
 complete -c hydra -f -n '__fish_seen_subcommand_from adapter' -a 'ingest'

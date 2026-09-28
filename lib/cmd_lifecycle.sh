@@ -273,8 +273,214 @@ cmd_agent() {
             }
             echo "Created agent profile '$_ca_name'"
             ;;
-        *) echo "Usage: hydra agent <list|show|doctor|init|contract|probe|import>" >&2; return 1 ;;
+        locate) cmd_agent_locate "$@" ;;
+        *) echo "Usage: hydra agent <list|show|doctor|init|locate|contract|probe|import>" >&2; return 1 ;;
     esac
+}
+
+# Built-in agents as profile:executable, in inventory order.
+agent_locate_agents() {
+    printf '%s\n' claude:claude codex:codex cursor:cursor-agent agy:agy opencode:opencode \
+        pi:pi copilot:copilot aider:aider gemini:gemini
+}
+
+# Directories searched beyond PATH, one per line; a leading ~/ means $HOME.
+# ~/.pi/agent/bin is where the pi installer puts pi when no user bin directory
+# is on PATH. Login shells are never sourced.
+agent_locate_search_dirs() {
+    # shellcheck disable=SC2088
+    printf '%s\n' '~/.local/bin' '~/bin' '~/.claude/local' '~/.opencode/bin' '~/.pi/agent/bin' \
+        '~/.npm-global/bin' '~/.bun/bin' '~/.volta/bin' '~/.local/share/pnpm' '~/.cargo/bin' \
+        '~/.local/share/mise/shims' '~/.asdf/shims' '~/.nvm/versions/node/*/bin' \
+        /usr/local/bin /opt/homebrew/bin /home/linuxbrew/.linuxbrew/bin /snap/bin
+}
+
+# Prints each existing search directory, expanding ~/ and the nvm version glob.
+agent_locate_expand_dirs() {
+    agent_locate_search_dirs | while IFS= read -r _aled_dir; do
+        # shellcheck disable=SC2088 # a literal ~/ prefix, expanded below
+        case "$_aled_dir" in
+            '~/'*)
+                case "${HOME:-}" in /*) ;; *) continue ;; esac
+                _aled_dir="$HOME/${_aled_dir#\~/}"
+                ;;
+        esac
+        case "$_aled_dir" in
+            *'/*/'*)
+                for _aled_match in "${_aled_dir%%/\**}"/*/"${_aled_dir#*/\*/}"; do
+                    [ -d "$_aled_match" ] && printf '%s\n' "$_aled_match"
+                done
+                ;;
+            *) [ -d "$_aled_dir" ] && printf '%s\n' "$_aled_dir" ;;
+        esac
+    done
+}
+
+# First line of `PATH --version`, bounded to five seconds and printable ASCII.
+agent_locate_version() {
+    _alv_out="$(mktemp)" || return 0
+    "$1" --version < /dev/null > "$_alv_out" 2>/dev/null &
+    _alv_pid=$!
+    (sleep 5; kill "$_alv_pid" 2>/dev/null) > /dev/null 2>&1 &
+    _alv_watch=$!
+    if wait "$_alv_pid" 2>/dev/null; then
+        sed -n '1p' "$_alv_out" | LC_ALL=C tr -cd ' -~' | cut -c1-200
+    fi
+    kill "$_alv_watch" 2>/dev/null || :
+    wait "$_alv_watch" 2>/dev/null || :
+    rm -f "$_alv_out"
+}
+
+# Usage: agent_locate_candidates <executable>
+# Prints source<TAB>path lines: the PATH hit, the record, then search hits.
+agent_locate_candidates() {
+    _alc_hit="$(agent_location_on_path "$1" || true)"
+    [ -z "$_alc_hit" ] || printf 'path\t%s\n' "$_alc_hit"
+    _alc_hit="$(agent_location_recorded "$1" 2>/dev/null || true)"
+    [ -z "$_alc_hit" ] || printf 'record\t%s\n' "$_alc_hit"
+    agent_locate_expand_dirs | while IFS= read -r _alc_dir; do
+        printf 'search\t%s/%s\n' "$_alc_dir" "$1"
+    done
+}
+
+# Usage: agent_locate_scan <executable>
+# Sets _alsc_on_path, _alsc_recorded, _alsc_status, _alsc_first (the first
+# search hit) and _alsc_candidates (the body of a JSON array).
+agent_locate_scan() {
+    _alsc_exe="$1" _alsc_on_path="" _alsc_recorded="" _alsc_first="" _alsc_candidates=""
+    _alsc_found=0 _alsc_seen="
+"
+    _alsc_tab="$(printf '\t')"
+    while IFS="$_alsc_tab" read -r _alsc_source _alsc_path; do
+        [ -n "$_alsc_path" ] || continue
+        case "$_alsc_seen" in *"
+$_alsc_path
+"*) continue ;; esac
+        [ -f "$_alsc_path" ] && [ -x "$_alsc_path" ] || continue
+        _alsc_seen="$_alsc_seen$_alsc_path
+"
+        case "$_alsc_source" in
+            path) _alsc_on_path="$_alsc_path" ;;
+            record) _alsc_recorded="$_alsc_path" ;;
+            *) _alsc_found=$((_alsc_found + 1)); [ -n "$_alsc_first" ] || _alsc_first="$_alsc_path" ;;
+        esac
+        _alsc_version="" _alsc_recordable=false
+        # Only entries that could be recorded are executed, and only for --version.
+        if agent_location_check "$_alsc_exe" "$_alsc_path" > /dev/null; then
+            _alsc_recordable=true
+            _alsc_version="$(agent_locate_version "$_alsc_path")"
+        fi
+        [ -z "$_alsc_candidates" ] || _alsc_candidates="$_alsc_candidates,"
+        _alsc_candidates="$_alsc_candidates{\"path\":\"$(json_escape "$_alsc_path")\",\"source\":\"$_alsc_source\",\"version\":$(json_string_or_null "$_alsc_version"),\"recordable\":$_alsc_recordable}"
+    done <<EOF
+$(agent_locate_candidates "$_alsc_exe")
+EOF
+    if [ -n "$_alsc_on_path" ]; then _alsc_status=on_path
+    elif [ -n "$_alsc_recorded" ]; then _alsc_status=recorded
+    elif [ "$_alsc_found" -eq 1 ]; then _alsc_status=found_off_path
+    elif [ "$_alsc_found" -gt 1 ]; then _alsc_status=ambiguous
+    else _alsc_status=missing
+    fi
+}
+
+# Usage: agent_locate_row <profile> <executable>
+# Prints one agent-inventory row as JSON.
+agent_locate_row() {
+    agent_locate_scan "$2"
+    printf '{"profile":"%s","executable":"%s","on_path":%s,"candidates":[%s],"recorded":%s,"status":"%s"}' \
+        "$1" "$2" "$(json_string_or_null "$_alsc_on_path")" "$_alsc_candidates" \
+        "$(json_string_or_null "$_alsc_recorded")" "$_alsc_status"
+}
+
+agent_locate_inventory_json() {
+    _alij_dirs=""
+    while IFS= read -r _alij_dir; do
+        [ -z "$_alij_dirs" ] || _alij_dirs="$_alij_dirs,"
+        _alij_dirs="$_alij_dirs\"$(json_escape "$_alij_dir")\""
+    done <<EOF
+$(agent_locate_search_dirs)
+EOF
+    _alij_rows=""
+    for _alij_pair in $(agent_locate_agents); do
+        [ -z "$_alij_rows" ] || _alij_rows="$_alij_rows,"
+        _alij_rows="$_alij_rows$(agent_locate_row "${_alij_pair%%:*}" "${_alij_pair#*:}")"
+    done
+    printf '{"schema":"agent-inventory","schema_version":1,"home":%s,"path":%s,"search_dirs":[%s],"agents":[%s]}' \
+        "$(json_string_or_null "${HOME:-}")" "$(json_string_or_null "${PATH:-}")" "$_alij_dirs" "$_alij_rows"
+}
+
+# Usage: hydra agent locate [--json] [--record EXECUTABLE PATH] [--forget EXECUTABLE]
+cmd_agent_locate() {
+    _cal_json=0 _cal_action=inventory _cal_exe="" _cal_path=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json|-j) _cal_json=1; shift ;;
+            --record) [ $# -ge 3 ] || { _cal_action=usage; break; }; _cal_action=record; _cal_exe="$2"; _cal_path="$3"; shift 3 ;;
+            --forget) [ $# -ge 2 ] || { _cal_action=usage; break; }; _cal_action=forget; _cal_exe="$2"; shift 2 ;;
+            *) _cal_action=usage; break ;;
+        esac
+    done
+    HYDRA_JSON_REQUESTED="$_cal_json"
+    export HYDRA_JSON_REQUESTED
+    case "$_cal_action" in
+        usage)
+            cli_error agent-locate invalid_input "unknown or incomplete agent locate option" \
+                "use hydra agent locate [--json] [--record EXECUTABLE /absolute/path] [--forget EXECUTABLE]"
+            return 1
+            ;;
+        record) agent_locate_record "$_cal_exe" "$_cal_path" "$_cal_json" ;;
+        forget)
+            agent_location_name_valid "$_cal_exe" || {
+                cli_error agent-locate invalid_input "invalid executable name '$_cal_exe'" "use the executable's file name, such as claude or cursor-agent"
+                return 1
+            }
+            agent_location_forget "$_cal_exe" || { cli_error agent-locate io_failed "cannot remove the record" "inspect $(agent_location_dir)"; return 1; }
+            if [ "$_cal_json" -eq 1 ]; then
+                json_success agent-locate "{\"executable\":\"$_cal_exe\",\"recorded\":null}"
+            else
+                echo "Forgot any recorded location for $_cal_exe"
+            fi
+            ;;
+        *) agent_locate_show "$_cal_json" ;;
+    esac
+}
+
+agent_locate_record() {
+    agent_location_name_valid "$1" || {
+        cli_error agent-locate invalid_input "invalid executable name '$1'" "use the executable's file name, such as claude or cursor-agent"
+        return 1
+    }
+    _alrc_reason="$(agent_location_record "$1" "$2")" || {
+        cli_error agent-locate location_invalid "cannot record $2 for $1: $_alrc_reason" \
+            "choose an absolute path ending in /$1 that you or root own and that is not group- or world-writable (chmod go-w)"
+        return 1
+    }
+    if [ "$3" -eq 1 ]; then
+        json_success agent-locate "{\"executable\":\"$1\",\"recorded\":\"$(json_escape "$2")\"}"
+    else
+        echo "Recorded $1 at $2 (used when $1 is not on PATH)"
+    fi
+}
+
+agent_locate_show() {
+    _als_json="$(agent_locate_inventory_json)" || return 1
+    if [ "$1" -eq 1 ]; then
+        json_success agent-locate "$_als_json"
+        return 0
+    fi
+    printf '%-10s %-14s %-15s %s\n' PROFILE EXECUTABLE STATUS LOCATION
+    for _als_pair in $(agent_locate_agents); do
+        _als_exe="${_als_pair#*:}"
+        agent_locate_scan "$_als_exe"
+        case "$_alsc_status" in
+            on_path) _als_where="$_alsc_on_path" ;;
+            recorded) _als_where="$_alsc_recorded" ;;
+            found_off_path) _als_where="$_alsc_first (record: hydra agent locate --record $_als_exe $_alsc_first)" ;;
+            ambiguous) _als_where="several candidates (first $_alsc_first); record one explicitly" ;;
+            *) _als_where="-" ;;
+        esac
+        printf '%-10s %-14s %-15s %s\n' "${_als_pair%%:*}" "$_als_exe" "$_alsc_status" "$_als_where"
+    done
 }
 
 cmd_capabilities() {

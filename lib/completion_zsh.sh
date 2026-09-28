@@ -40,6 +40,13 @@ _hydra() {
                             ;;
                     esac
                     ;;
+                agent)
+                    if [[ $words[2] == locate ]]; then
+                        _arguments '1:action:(locate)' '--json[Versioned agent-inventory JSON]' '--record[Record EXECUTABLE at an absolute path]:executable:(claude codex cursor-agent agy opencode pi copilot aider gemini):path:_files' '--forget[Forget a recorded location]:executable:(claude codex cursor-agent agy opencode pi copilot aider gemini)'
+                    else
+                        _arguments '1:action:(list show doctor init locate contract probe import)' '*:argument:'
+                    fi
+                    ;;
                 fleet)
                     if [[ $words[2] == discover || $words[2] == qualify ]]; then
                         _arguments '1:action:(discover qualify)' '*--ssh[Select OpenSSH alias]:alias:' '--inventory[Static JSON inventory]:file:_files' '*--select[Select inventory record]:name:' '--ssh-config[Trusted OpenSSH config]:file:_files' '--timeout[Per-process deadline, 1-30 seconds]:seconds:' '--require[Advertised capability, qualify only]:capability:' '--json[Versioned JSON output]'

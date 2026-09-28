@@ -19,6 +19,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the approved line to known_hosts; `preflight` reports platform, tools and existing
   installs read-only and without sudo. Help and bash, zsh and fish completions
   include the new commands.
+- `hydra agent locate [--json] [--record EXECUTABLE PATH] [--forget EXECUTABLE]`
+  finds agents outside PATH (`~/.local/bin`, `~/.opencode/bin`, nvm, mise, ...)
+  as `agent-inventory` schema 1 and records a private per-executable location.
+  Resolution is PATH first, then a valid record, in both the shell and native
+  resolvers, so `spawn`, `agent list`, headless `exec --profile` and `agent
+  probe` find installer-placed agents on hosts whose non-interactive PATH omits
+  them. Records must be absolute, named after the executable, owned by you or
+  root and not group- or world-writable. Help and completions include it.
+- `hydra remote agents NAME [--record EXECUTABLE=/abs/path]` shows each agent's
+  status on the remote (receiver inventory, else the preflight scan), records
+  off-PATH locations and selects agents to install or sign in (interactively, or
+  by running the listed `install-agent`/`sign-in` commands). `hydra remote
+  install-agent NAME --agent A` runs the provider's own official installer
+  (built-in recipes for claude, cursor, opencode, codex, agy and pi, each checked
+  against the provider's docs on 2026-09-28) over `ssh -t` as your user, only after
+  approval of a plan binding the exact command; no sudo, and Hydra adds no symlinks
+  or PATH changes. It checks prerequisites first, verifies the result by `--version`
+  and the help probe, offers to record an off-PATH location, and reconciles an
+  interrupted install by inventory instead of re-running it. A private
+  `$HYDRA_HOME/fleet/agent-recipes.json` can replace recipes (plans say
+  `source: local`); recipes never come from the remote. `hydra remote sign-in NAME
+  --agent A` runs the provider's sign-in with the resolved absolute executable and
+  verifies it by the provider's documented status command or credential file, else
+  asks you to confirm; failures are recorded and can be retried, and credentials
+  are never copied.
+- Fleet receivers advertise `agent-inventory` (read-only; also a headless probe
+  of one candidate) and `agent-locate-record`, and the handshake additively
+  reports `platform: {os, arch}`.
+
+### Fixed
+
+- `hydra fleet auth login` returns after the provider's sign-in instead of
+  replacing Hydra with `ssh`, reports its exit status, and runs the remote
+  agent by its resolved absolute path.
+- Headless runs execute the exact executable the profile probe resolved.
 
 ## [2.8.0] - 2026-09-27
 
