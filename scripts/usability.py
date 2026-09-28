@@ -305,8 +305,9 @@ def navigation(j: Journey) -> None:
         (b"3", "[Overview]"),
         (b"4", "[Attention]"),
         (b"5", "[Recovery]"),
-        (b"6", "[Workflows]"),
-        (b"7", "[Statistics]"),
+        # Below 100 columns the tab bar uses short labels.
+        (b"6", "[Workflows]" if j.columns >= 100 else "[Flows]"),
+        (b"7", "[Statistics]" if j.columns >= 100 else "[Stats]"),
     ):
         j.keys(key)
         j.see(label)

@@ -492,7 +492,8 @@ hydra tui --capabilities   # availability and observation diagnostics
 
 Every native screen shares one frame: a title row (`HYDRA / WORK`, `HYDRA / PLAN
 TOGETHER`, ...), a tab bar, one content panel and a two-line footer with the current
-status and the keys that apply. Only changed cells are repainted, so idle refreshes
+status and the keys that apply. Below 100 columns the tab bar uses short labels
+(`Coord`, `Flows`, `Stats`) so every tab stays visible at 80 columns. Only changed cells are repainted, so idle refreshes
 do not flicker. Session states use plain words: `running`, `terminal gone`,
 `stopped` and `unknown`; internal tokens stay behind `d` (technical details).
 

@@ -272,6 +272,10 @@ void pair(struct app *app, const char *left_label, const char *left, enum tv_sty
 /* Shared chrome: title row, tab row, footer rows. Tab hits are recorded for the mouse. */
 static const char *view_titles[] = {"WORK", "DETAILS", "COORDINATION", "RECOVERY", "OVERVIEW", "WORKFLOWS", "HOSTS", "WORKSPACE", "STATISTICS", "ATTENTION"};
 static const char *tab_labels[] = {"Work", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace", "Statistics", "Attention"};
+/* Below TAB_SHORT_BELOW columns the tab bar uses these so every tab, Hosts
+ * included, fits at 80 columns; keys and view titles are unchanged. */
+static const char *tab_short[] = {"Work", "Details", "Coord", "Recovery", "Overview", "Flows", "Hosts", "Workspace", "Stats", "Attention"};
+#define TAB_SHORT_BELOW 100
 
 size_t tab_order(const struct app *app, int *views) {
     size_t count = 0;
@@ -287,16 +291,16 @@ size_t tab_order(const struct app *app, int *views) {
     return count;
 }
 
-static int tab_width(int view, bool current) {
-    return (int)strlen(tab_labels[view]) + (current ? 2 : 0);
+static int tab_width(const char *const *labels, int view, bool current) {
+    return (int)strlen(labels[view]) + (current ? 2 : 0);
 }
 
 /* First tab to draw so the active tab stays visible in the available width. */
-static size_t tabs_first_visible(const int *views, size_t active, int gap, int width) {
+static size_t tabs_first_visible(const char *const *labels, const int *views, size_t active, int gap, int width) {
     size_t first = 0, i;
     while (first < active) {
         int needed = 0;
-        for (i = first; i <= active; i++) needed += tab_width(views[i], i == active) + gap;
+        for (i = first; i <= active; i++) needed += tab_width(labels, views[i], i == active) + gap;
         if (needed <= width) break;
         first++;
     }
@@ -311,17 +315,19 @@ static void record_tab(struct app *app, int x, int length, int view) {
 
 static void chrome_tabs(struct app *app, struct tv_canvas *c, int row) {
     int views[12], gap = 2, x = 1, total = 0, width = c->width - 1;
+    const char *const *labels = app->cols < TAB_SHORT_BELOW ? tab_short : tab_labels;
     size_t count = tab_order(app, views), i, first, active = 0;
-    for (i = 0; i < count; i++) { total += tab_width(views[i], views[i] == app->view); if (views[i] == app->view) active = i; }
-    if (total + (int)(count - 1) * gap > width) gap = 1;
+    for (i = 0; i < count; i++) { total += tab_width(labels, views[i], views[i] == app->view); if (views[i] == app->view) active = i; }
+    /* Tabs start at column x, so they have width - x columns. */
+    if (total + (int)(count - 1) * gap > width - x) gap = 1;
     app->tab_count = 0;
-    first = tabs_first_visible(views, active, gap, width);
+    first = tabs_first_visible(labels, views, active, gap, width - x);
     for (i = first; i < count; i++) {
         char label[32];
         bool current = views[i] == app->view;
-        int length = tab_width(views[i], current);
+        int length = tab_width(labels, views[i], current);
         if (x + length > width) { tv_text(c, (struct tv_rect){x, row, width - x, 1}, "..", TV_MUTED); break; }
-        snprintf(label, sizeof(label), current ? "[%s]" : "%s", tab_labels[views[i]]);
+        snprintf(label, sizeof(label), current ? "[%s]" : "%s", labels[views[i]]);
         tv_text(c, (struct tv_rect){x, row, length, 1}, label, current ? TV_SELECTED : TV_MUTED);
         record_tab(app, x, length, views[i]);
         x += length + gap;

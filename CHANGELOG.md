@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accept a changed key. After provisioning it shows the agent inventory so you can
   pick agents to install (after reviewing the installer plan) or sign in to; both
   run on your terminal, and a failure is explained from the error the CLI recorded.
+  Below 100 columns the tab bar uses short labels (`Coord`, `Flows`, `Stats`) so
+  every tab, Hosts included, stays visible at 80 columns.
 - `hydra remote setup list [--json]` lists every setup with its destination,
   status and next step, read-only. `setup status NAME --json` reports a failed
   installer or sign-in's recorded `steps[].error{code,message}`, and preflight
