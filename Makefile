@@ -497,6 +497,11 @@ test-enrollment: build-fleet
 test-enrollment-ssh: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-enrollment-ssh" "$(abspath $(BUILD_DIR))/native-tests/enrollment-loopback-fixture" "$(abspath $(BUILD_DIR))/native-tests/enrollment-receiver-fixture"
 
+# Host key trust and preflight against a private loopback sshd (skips without one).
+.PHONY: test-remote-setup-ssh
+test-remote-setup-ssh: build-fleet
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-remote-setup-ssh"
+
 include scripts/native-tests.mk
 
 include scripts/fleet-tests.mk

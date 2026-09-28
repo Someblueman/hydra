@@ -110,6 +110,16 @@ int setup_state_step(struct setup_ctx *ctx, const char *step, const char *status
 const char *setup_state_status(struct setup_ctx *ctx, const char *step);
 /* Borrowed detail object of a step, or NULL. */
 json_object *setup_state_detail(struct setup_ctx *ctx, const char *step);
+/* Core only: sets a top-level state member (value: takes ownership) and
+ * persists like setup_state_step. Used for "upgrade" (see below). */
+int setup_state_set(struct setup_ctx *ctx, const char *key, json_object *value);
+/* Upgrade mode: `remote setup NAME` for an enrolled alias without setup state
+ * binds to the alias target and ssh_config and records state.upgrade =
+ * {"hydra": previous alias hydra, "target": alias target}. Borrowed; NULL for
+ * a normal setup. Provisioning adds a new pin and keeps the old one; the alias
+ * step then updates only the alias's hydra (and a newly recorded
+ * accepted_host_key) after approval. */
+json_object *setup_upgrade(struct setup_ctx *ctx);
 bool setup_step_id(const char *step);
 bool setup_status_valid(const char *status);
 
@@ -164,9 +174,13 @@ json_object *setup_step_agents(struct setup_ctx *ctx, const char *record);      
 json_object *setup_step_install_agent(struct setup_ctx *ctx, const char *agent, const char *approve); /* agents.c */
 json_object *setup_step_sign_in(struct setup_ctx *ctx, const char *agent);                        /* signin.c */
 /* Core-owned final steps (finish.c): handshake + exact version check, then
- * no-overwrite alias publication (alias_conflict when a different alias exists). */
+ * no-overwrite alias publication (alias_conflict when a different alias exists).
+ * In upgrade mode the alias step instead updates the existing alias through
+ * the approval gate, or is skipped when the alias already uses ctx hydra;
+ * approve is `remote setup NAME --approve PLAN_SHA256`. */
 json_object *setup_step_verify(struct setup_ctx *ctx);
-json_object *setup_step_alias(struct setup_ctx *ctx);
+json_object *setup_step_alias(struct setup_ctx *ctx); /* == ..._approved(ctx, NULL) */
+json_object *setup_step_alias_approved(struct setup_ctx *ctx, const char *approve);
 
 /* ---- CLI (setup_cli.c) ---- */
 /* True for "setup", "trust-key", "preflight", "provision", "agents",

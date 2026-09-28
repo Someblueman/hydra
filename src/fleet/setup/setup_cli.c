@@ -6,7 +6,7 @@
 #include <string.h>
 
 #define SETUP_USAGE "remote setup NAME [DEST] [--ssh-config /abs] [--binary FILE] [--remote-build] [--project /abs] " \
-    "[--timeout N] [--json]; remote setup status NAME; remote trust-key NAME [--fingerprint SHA256:...]; " \
+    "[--approve PLAN_SHA256] [--timeout N] [--json]; remote setup status NAME; remote trust-key NAME [--fingerprint SHA256:...]; " \
     "remote preflight NAME; remote provision NAME [--approve PLAN_SHA256] [--binary FILE]; " \
     "remote agents NAME [--record EXECUTABLE=/abs/path]; remote install-agent NAME --agent A [--approve PLAN_SHA256]; " \
     "remote sign-in NAME --agent A (every command accepts --timeout N and --json)"
@@ -21,7 +21,7 @@ static const char *const option_names[OPT_COUNT] = {
 enum setup_kind { K_SETUP, K_STATUS, K_TRUST_KEY, K_PREFLIGHT, K_PROVISION, K_AGENTS, K_INSTALL_AGENT, K_SIGN_IN };
 struct spec { const char *word, *command; enum setup_kind kind; unsigned flags; int positionals; };
 static const struct spec specs[] = {
-    {"setup", "remote-setup", K_SETUP, OPT(OPT_SSH_CONFIG) | OPT(OPT_BINARY) | OPT(OPT_PROJECT) | OPT_REMOTE_BUILD, 2},
+    {"setup", "remote-setup", K_SETUP, OPT(OPT_SSH_CONFIG) | OPT(OPT_BINARY) | OPT(OPT_PROJECT) | OPT(OPT_APPROVE) | OPT_REMOTE_BUILD, 2},
     {"trust-key", "remote-trust-key", K_TRUST_KEY, OPT(OPT_FINGERPRINT), 1},
     {"preflight", "remote-preflight", K_PREFLIGHT, 0, 1},
     {"provision", "remote-provision", K_PROVISION, OPT(OPT_APPROVE) | OPT(OPT_BINARY), 1},
@@ -236,13 +236,29 @@ static json_object *run_agent_step(struct setup_ctx *ctx, const char *step) {
     if (!strncmp(step, "sign_in:", 8)) return setup_step_sign_in(ctx, agent);
     return setup_step_install_agent(ctx, agent, NULL);
 }
-static json_object *run_step(struct setup_ctx *ctx, const char *step) {
+/* Upgrade: the install behind the alias already is this version. */
+static bool reusable_install(struct setup_ctx *ctx) {
+    json_object *found = f_field(setup_state_detail(ctx, "preflight"), "alias_hydra");
+    const char *path = f_string(setup_upgrade(ctx), "hydra"), *checked = f_string(found, "path");
+    return path && checked && !strcmp(path, checked) && json_object_get_boolean(f_field(found, "reusable"));
+}
+static json_object *reuse_install(struct setup_ctx *ctx) {
+    json_object *detail = json_object_new_object();
+    const char *path = f_string(setup_upgrade(ctx), "hydra");
+    f_string_add(detail, "hydra", path);
+    f_string_add(detail, "summary", "existing Hydra " F_VERSION " behind the alias is reused");
+    if (f_copy(ctx->remote.hydra, sizeof(ctx->remote.hydra), path) || setup_state_step(ctx, "provision", "skipped", detail))
+        return setup_error(ctx, "state_unavailable", "cannot record setup progress", NULL, NULL);
+    return f_success(ctx->command, json_object_new_object());
+}
+/* approve applies only to the final alias step of `remote setup --approve`. */
+static json_object *run_step(struct setup_ctx *ctx, const char *step, const char *approve) {
     if (!strcmp(step, "host_key")) return setup_step_trust_key(ctx, NULL);
     if (!strcmp(step, "preflight")) return setup_step_preflight(ctx);
-    if (!strcmp(step, "provision")) return setup_step_provision(ctx, ctx->binary, NULL);
+    if (!strcmp(step, "provision")) return reusable_install(ctx) ? reuse_install(ctx) : setup_step_provision(ctx, ctx->binary, NULL);
     if (!strcmp(step, "agents")) return setup_step_agents(ctx, NULL);
     if (!strcmp(step, "verify")) return setup_step_verify(ctx);
-    if (!strcmp(step, "alias")) return setup_step_alias(ctx);
+    if (!strcmp(step, "alias")) return setup_step_alias_approved(ctx, approve);
     return run_agent_step(ctx, step);
 }
 static json_object *cancelled(struct setup_ctx *ctx) {
@@ -251,13 +267,13 @@ static json_object *cancelled(struct setup_ctx *ctx) {
     return setup_error(ctx, "cancelled", "setup was interrupted", "rerun hydra remote setup NAME to resume", data);
 }
 /* Runs every open step in order; state decides where a rerun resumes. */
-static json_object *guided(struct setup_ctx *ctx) {
+static json_object *guided(struct setup_ctx *ctx, const char *approve) {
     struct step_list list; const char *step; json_object *result, *data;
     char current[80];
     while ((step = first_open_step(ctx, &list))) {
         if (f_stopped) return cancelled(ctx);
         f_copy(current, sizeof(current), step);
-        result = run_step(ctx, current);
+        result = run_step(ctx, current, approve);
         if (!json_object_get_boolean(f_field(result, "ok"))) return result;
         json_object_put(result);
         if (!finished_status(setup_state_status(ctx, current)) && setup_state_step(ctx, current, "done", NULL))
@@ -270,7 +286,7 @@ static json_object *guided(struct setup_ctx *ctx) {
 static json_object *dispatch(struct setup_ctx *ctx, const struct setup_options *o) {
     const char *const *v = o->values;
     switch (o->spec->kind) {
-    case K_SETUP: return guided(ctx);
+    case K_SETUP: return guided(ctx, v[OPT_APPROVE]);
     case K_STATUS: return f_success(ctx->command, json_object_new_object());
     case K_TRUST_KEY: return setup_step_trust_key(ctx, v[OPT_FINGERPRINT]);
     case K_PREFLIGHT: return setup_step_preflight(ctx);
@@ -285,6 +301,46 @@ static unsigned open_flags(enum setup_kind kind) {
     if (kind == K_SETUP) return SETUP_CREATE;
     return kind == K_STATUS ? SETUP_READONLY : 0U;
 }
+/* ---- Upgrade mode: an enrolled alias without setup state ---- */
+static json_object *upgrade_conflict(struct setup_ctx *ctx, const struct f_remote *alias) {
+    char recovery[1024];
+    snprintf(recovery, sizeof(recovery),
+             "alias %s already points at %s and setup never re-points an alias; rerun hydra remote setup %s without DEST or "
+             "--ssh-config to upgrade it, or choose another NAME", alias->name, alias->target, alias->name);
+    return setup_error(ctx, "alias_conflict", "NAME is an existing alias with a different destination or SSH config", recovery, NULL);
+}
+static void seed_from_alias(struct f_remote *remote, const struct f_remote *alias) {
+    f_copy(remote->home, sizeof(remote->home), alias->home);
+    f_copy(remote->principal, sizeof(remote->principal), alias->principal);
+    f_copy(remote->project, sizeof(remote->project), alias->project);
+    f_copy(remote->accepted_host_key, sizeof(remote->accepted_host_key), alias->accepted_host_key);
+    remote->multiplex = alias->multiplex;
+}
+static json_object *open_upgrade(struct setup_ctx *ctx, const struct setup_options *o, const struct f_remote *alias) {
+    const char *dest = o->positional[1], *config = o->values[OPT_SSH_CONFIG];
+    json_object *result, *upgrade;
+    if ((dest && strcmp(dest, alias->target)) || (config && strcmp(config, alias->ssh_config))) return upgrade_conflict(ctx, alias);
+    result = setup_state_open(ctx, alias->name, alias->target, alias->ssh_config[0] ? alias->ssh_config : NULL, SETUP_CREATE);
+    if (result) return result;
+    seed_from_alias(&ctx->remote, alias);
+    upgrade = json_object_new_object();
+    f_string_add(upgrade, "hydra", alias->hydra); f_string_add(upgrade, "target", alias->target);
+    if (setup_state_set(ctx, "upgrade", upgrade))
+        return setup_error(ctx, "state_unavailable", "cannot record the upgrade in setup state", NULL, NULL);
+    return NULL;
+}
+/* Existing setup state always wins; otherwise an enrolled NAME is upgraded. */
+static json_object *open_context(struct setup_ctx *ctx, const struct setup_options *o) {
+    const char *name = o->positional[0], *dest = o->positional[1], *config = o->values[OPT_SSH_CONFIG], *code;
+    struct f_remote alias; json_object *result;
+    if (o->spec->kind != K_SETUP || f_remote_load(name, &alias)) return setup_state_open(ctx, name, dest, config, open_flags(o->spec->kind));
+    result = setup_state_open(ctx, name, dest, config, 0);
+    code = f_string(f_field(result, "error"), "code");
+    if (!code || strcmp(code, "setup_not_started")) return result;
+    json_object_put(result);
+    setup_state_close(ctx);
+    return open_upgrade(ctx, o, &alias);
+}
 json_object *setup_cli(int argc, char **argv) {
     struct setup_options options; struct setup_ctx ctx; json_object *result;
     if (argc >= 2 && (!strcmp(argv[1], "help") || !strcmp(argv[1], "--help"))) {
@@ -295,7 +351,7 @@ json_object *setup_cli(int argc, char **argv) {
     if ((result = parse(&options, argc, argv))) return result;
     if (!options.spec) return usage_error("remote-setup", "unknown setup command");
     ctx.command = options.spec->command;
-    result = setup_state_open(&ctx, options.positional[0], options.positional[1], options.values[OPT_SSH_CONFIG], open_flags(options.spec->kind));
+    result = open_context(&ctx, &options);
     if (!result) {
         ctx.json = options.json; ctx.interactive = setup_interactive(options.json); ctx.seconds = options.seconds;
         ctx.binary = options.values[OPT_BINARY]; ctx.project = options.values[OPT_PROJECT]; ctx.remote_build = options.remote_build;
