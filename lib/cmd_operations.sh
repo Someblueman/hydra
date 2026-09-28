@@ -99,7 +99,7 @@ cmd_exec() {
     _ce_project="$(hydra_get_project_id)" || { cli_error exec not_initialized "Hydra project identity is unavailable" "run hydra init"; return 1; }
     LIFECYCLE_PROJECT_ID="$_ce_project"
     export LIFECYCLE_PROJECT_ID
-    _ce_selection="$(mktemp)" || return 1
+    _ce_selection="$(mktemp "${TMPDIR:-/tmp}/hydra-exec-selection.XXXXXX")" || return 1
     operations_select_heads "$_ce_selection" "$_ce_branches" "$_ce_group" "$_ce_all" || { rm -f "$_ce_selection"; cli_error exec selection_failed "No executable head selection was resolved" "inspect with hydra list"; return 1; }
     if { [ "$_ce_exit_code" -eq 1 ] || [ -n "$_ce_profile" ]; } && [ "$(wc -l < "$_ce_selection" | tr -d ' ')" -ne 1 ]; then
         rm -f "$_ce_selection"
@@ -117,7 +117,7 @@ cmd_exec() {
         _ce_agent_lock="agent_${_ce_project}_$(sed -n '1p' "$_ce_selection")"
         acquire_lock "$_ce_agent_lock" "supervise headless agent" || { rm -f "$_ce_selection"; return 1; }
     fi
-    trap 'cmd_exec_cancel_workers "$_ce_workers" "$_ce_profile"; [ -z "$_ce_agent_lock" ] || release_lock "$_ce_agent_lock"; exit 143' HUP INT TERM
+    trap 'cmd_exec_cancel_workers "$_ce_workers" "$_ce_profile"; [ -z "$_ce_agent_lock" ] || release_lock "$_ce_agent_lock"; rm -f "$_ce_selection"; exit 143' HUP INT TERM
     _ce_max="${HYDRA_EXEC_MAX_BYTES:-1048576}"
     case "$_ce_max" in ''|*[!0-9]*) rm -f "$_ce_selection"; [ -z "$_ce_agent_lock" ] || release_lock "$_ce_agent_lock"; trap - HUP INT TERM; return 1 ;; esac
     # Publish the durable run identity before workers start. The JSON document

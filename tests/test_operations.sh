@@ -186,6 +186,19 @@ fi
 # Only this fixture knows and owns the escaped child; production must not guess.
 kill "$(cat "$child_pid_file")" 2>/dev/null || true
 
+# A terminated exec stops its workers and removes its head-selection file.
+exec_tmp="$test_root/exec-tmp"
+mkdir "$exec_tmp"
+# shellcheck disable=SC2016 # $1 is expanded by the worker shell.
+TMPDIR="$exec_tmp" "$HYDRA_BIN" exec --branch operations-test -- sh -c ': > "$1"; sleep 20' sh "$test_root/exec-started" >/dev/null 2>&1 &
+exec_pid=$!
+wait_for "exec to start its worker" test -f "$test_root/exec-started"
+assert_success $? "terminated exec started its worker"
+kill -TERM "$exec_pid" 2>/dev/null
+wait "$exec_pid"
+assert_equal 143 "$?" "terminated exec exits 143"
+assert_equal "" "$(find "$exec_tmp" -name 'hydra-exec-selection.*' -print)" "terminated exec removes its selection file"
+
 run_dir="$(find "$HYDRA_HOME/state/v2/projects/$project_id/exec" -type f -name stdout -print | head -1 | xargs dirname)"
 case "$(uname -s)" in
     Darwin) output_mode="$(stat -f '%Lp' "$run_dir/stdout")" ;;
