@@ -131,6 +131,7 @@ workflow_plan_initialize() {
     done
     # Step roles (work, compose, verify) and heads, for display and for
     # retiring verifier heads when the run finishes.
+    hydra_private_touch "$1/plan-roles.tsv" || return 1
     workflow_plan_tool roles "$1/compiled.json" > "$1/plan-roles.tsv" || return 1
     _wpi_timeout="$(workflow_plan_tool timeout "$1/compiled.json")" || return 1
     workflow_atomic_scalar "$1/plan-deadline" "$(($(date +%s) + _wpi_timeout))" || return 1
@@ -167,7 +168,8 @@ workflow_plan_expired() {
 
 workflow_plan_finish() {
     [ -f "$1/compiled.json" ] || return 0
-    workflow_plan_bindings_match "$1" && workflow_plan_tool finish "$1" > "$1/plan-verification.json" || return 1
+    workflow_plan_bindings_match "$1" && hydra_private_touch "$1/plan-verification.json" &&
+        workflow_plan_tool finish "$1" > "$1/plan-verification.json" || return 1
     # Historical timing of the independent gate, bound to the accepted revision.
     # Optional telemetry must not change delivery. Invalidate old timing first,
     # and publish the binding last so a partial write remains unknown.

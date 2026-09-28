@@ -79,6 +79,35 @@ jobs:
           test-plan-outcomes test-statistics-export test-task-announce \
           test-plan-reuse
 
+  umask:
+    name: Group-writable umask (002)
+    # Ubuntu's default umask; hosted runners otherwise use 022.
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install test dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git tmux dash shellcheck build-essential libjson-c-dev pkg-config
+
+    - name: Run fast checks, umask state and DAG fleet cases under umask 002
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-umask
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        sudo ln -sf /bin/dash /bin/sh
+        make test-umask
+
+    - name: Run shell tests under umask 002
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-umask
+      run: |
+        umask 002
+        make test
+
   compatibility:
     name: Shell Compatibility
     runs-on: ${{ matrix.os }}
@@ -308,7 +337,7 @@ jobs:
   release-gate:
     name: release-gate
     if: ${{ always() }}
-    needs: [lint, quality-c, test, compatibility, native, sanitize, fleet, fleet-static]
+    needs: [lint, quality-c, test, umask, compatibility, native, sanitize, fleet, fleet-static]
     runs-on: ubuntu-latest
     steps:
     - name: Require every full qualification job
@@ -316,6 +345,7 @@ jobs:
         test "${{ needs.lint.result }}" = success
         test "${{ needs.quality-c.result }}" = success
         test "${{ needs.test.result }}" = success
+        test "${{ needs.umask.result }}" = success
         test "${{ needs.compatibility.result }}" = success
         test "${{ needs.native.result }}" = success
         test "${{ needs.sanitize.result }}" = success

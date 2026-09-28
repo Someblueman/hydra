@@ -70,8 +70,8 @@ event_emit() {
     case "$_ee_type" in ''|*[!a-z0-9._-]*) return 1 ;; esac
     case "$_ee_payload" in \{*\}) ;; *) return 1 ;; esac
     _ee_file="$(event_file_for_head "$_ee_project" "$_ee_head")" || return 1
-    mkdir -p "$(dirname "$_ee_file")" || return 1
-    [ -f "$_ee_file" ] || : > "$_ee_file"
+    hydra_private_mkdir "$(dirname "$_ee_file")" || return 1
+    hydra_private_touch "$_ee_file" || return 1
     _ee_lock="events_${_ee_project}_${_ee_head}"
     acquire_lock "$_ee_lock" "event append" || return 1
     if [ -s "$_ee_file" ] && ! event_line_valid "$(tail -n 1 "$_ee_file")"; then
@@ -257,7 +257,7 @@ _event_retain_file_locked() {
     done
     _ert_count="$(awk 'END { print NR + 0 }' "$_ert_file")"
     [ "$_ert_count" -le "$_ert_max" ] && return 0
-    _ert_archive_dir="$(dirname "$_ert_file")/archive"; mkdir -p "$_ert_archive_dir" || return 1
+    _ert_archive_dir="$(dirname "$_ert_file")/archive"; hydra_private_mkdir "$_ert_archive_dir" || return 1
     _ert_remove=$((_ert_count - _ert_max)) _ert_now="$(date +%s)"
     _ert_expiry=$((_ert_now + _ert_keep_seconds))
     _ert_full_last="$(tail -n 1 "$_ert_file" | _event_sequence)"
@@ -299,6 +299,7 @@ _event_retain_file_locked() {
         rm -f "$_ert_prefix"; printf 'would-archive\t%s\t%s\t%s\n' "$_ert_archive" "$_ert_first-$_ert_last" "$_ert_expiry"; return 0
     fi
     mv "$_ert_prefix" "$_ert_archive" || { rm -f "$_ert_prefix"; return 1; }
+    hydra_private_touch "$_ert_archive.meta" || return 1
     {
         printf 'schema_version=1\nstream_id=%s/%s\nfirst_sequence=%s\nlast_sequence=%s\n' "$_ert_project" "$_ert_head" "$_ert_first" "$_ert_last"
         printf 'created_at=%s\nexpires_at=%s\nbytes=%s\nevent_count=%s\nsha256=%s\n' "$_ert_now" "$_ert_expiry" "$_ert_bytes" "$_ert_event_count" "$_ert_hash"
@@ -314,6 +315,7 @@ _event_expire_archive() {
     _eea_archive="$1" _eea_meta="$2" _eea_dir="$3"
     [ -f "$_eea_archive" ] && [ ! -L "$_eea_archive" ] && [ ! -L "$_eea_dir/expiry-summary.jsonl" ] || return 1
     _eea_summary="$_eea_dir/expiry-summary.jsonl"
+    hydra_private_touch "$_eea_summary" || return 1
     printf '{"schema_version":1,"status":"expired","archive":"%s","first_sequence":%s,"last_sequence":%s,"sha256":"%s","expired_at":%s}\n' \
         "$(basename "$_eea_archive")" "$(sed -n 's/^first_sequence=//p' "$_eea_meta" | head -n 1)" \
         "$(sed -n 's/^last_sequence=//p' "$_eea_meta" | head -n 1)" "$(sed -n 's/^sha256=//p' "$_eea_meta" | head -n 1)" "$(date +%s)" >> "$_eea_summary" || return 1

@@ -130,7 +130,7 @@ worktree_cached_size_kib() {
         return 1
     fi
     _wcsk_kib="$(worktree_size_kib "$1" "$2")"
-    if mkdir -p "$(dirname "$_wcsk_file")" 2>/dev/null &&
+    if hydra_private_mkdir "$(dirname "$_wcsk_file")" 2>/dev/null &&
         _wcsk_tmp="$(mktemp "$_wcsk_file.XXXXXX" 2>/dev/null)"; then
         if ! { printf '%s\t%s\t%s\n' "$_wcsk_now" "$_wcsk_kib" "$1" > "$_wcsk_tmp" && mv -f "$_wcsk_tmp" "$_wcsk_file"; }; then
             rm -f "$_wcsk_tmp"

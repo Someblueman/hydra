@@ -38,6 +38,7 @@ workflow_plan_launch_owner() (
     [ "$#" -eq 1 ] || [ "$#" -eq 3 ] || exit 2
     if [ "$#" -eq 3 ]; then hydra_valid_id "$2" && hydra_valid_id "$3" || exit 2; fi
     _workflow_plan_launch="$(workflow_plan_launch_dir "$1")" || exit $?
+    _wpl_user_umask="$(umask)"
     umask 077
     mkdir -p "$(dirname "$_workflow_plan_launch")" || exit 1
     mkdir "$_workflow_plan_launch" 2>/dev/null || exit 1
@@ -51,6 +52,9 @@ workflow_plan_launch_owner() (
         workflow_atomic_scalar "$_workflow_plan_launch/state" failed
         exit 1
     fi
+    # The run keeps its own records private; its heads, agents and commands
+    # inherit the user's umask like any other workflow run.
+    umask "$_wpl_user_umask"
     # Under `set -e` a failed run must still record the owner's exit.
     if cmd_workflow_plan run "$_workflow_plan_launch/compiled.json" --accept "$1"; then
         _wpl_result=0

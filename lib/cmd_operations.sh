@@ -108,10 +108,10 @@ cmd_exec() {
     fi
     _ce_run="$(hydra_new_id run "$_ce_project|exec")" || { rm -f "$_ce_selection"; return 1; }
     _ce_run_dir="$HYDRA_STATE_V2_ROOT/projects/$_ce_project/exec/$_ce_run"
-    mkdir -p "$_ce_run_dir" || { rm -f "$_ce_selection"; return 1; }
+    hydra_private_mkdir "$_ce_run_dir" || { rm -f "$_ce_selection"; return 1; }
     chmod 700 "$_ce_run_dir" 2>/dev/null || true
     _ce_workers="$_ce_run_dir/worker-pids"
-    : > "$_ce_workers"
+    hydra_private_touch "$_ce_workers" || { rm -f "$_ce_selection"; return 1; }
     _ce_agent_lock=""
     if [ -n "$_ce_profile" ]; then
         _ce_agent_lock="agent_${_ce_project}_$(sed -n '1p' "$_ce_selection")"

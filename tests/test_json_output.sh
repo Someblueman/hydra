@@ -112,7 +112,7 @@ setup_test_env() {
     HYDRA_NONINTERACTIVE=1
     HYDRA_NO_SWITCH=1
     export HYDRA_HOME HYDRA_NONINTERACTIVE HYDRA_NO_SWITCH
-    mkdir -p "$HYDRA_HOME" "$_TEST_DIR/repo"
+    (umask 077; mkdir -p "$HYDRA_HOME"); mkdir -p "$_TEST_DIR/repo"
     git -C "$_TEST_DIR/repo" init -q
     git -C "$_TEST_DIR/repo" config user.name Test
     git -C "$_TEST_DIR/repo" config user.email test@example.com

@@ -20,7 +20,7 @@ setup() {
     cd "$test_base_dir/repo" || exit 1
 
     export HYDRA_HOME="$test_base_dir/.hydra"
-    mkdir -p "$HYDRA_HOME/locks"
+    (umask 077; mkdir -p "$HYDRA_HOME/locks")
 
     git init >/dev/null 2>&1
     git config user.name "Test User"

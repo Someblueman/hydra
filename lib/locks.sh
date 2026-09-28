@@ -10,6 +10,42 @@ if [ -n "${_LOCKS_MODULE_LOADED:-}" ]; then
 fi
 _LOCKS_MODULE_LOADED=1
 
+# Hydra's own state, lock and run entries are private whatever the caller's
+# umask is (Ubuntu defaults to 002). Readers refuse group- or other-writable
+# state, so these helpers scope umask 077 to the creation itself; worktrees,
+# agents, tmux and hooks keep inheriting the user's umask.
+# Usage: hydra_private_mkdir <directory>...
+hydra_private_mkdir() (
+    umask 077
+    mkdir -p -- "$@"
+)
+
+# Remove group and other write from your own regular files and directories
+# under a Hydra-owned directory, such as outputs a step command wrote with the
+# user's umask. Symbolic links are never followed; other owners' entries are
+# left unchanged.
+# Usage: hydra_private_tree <directory>...
+hydra_private_tree() {
+    _hptr_uid="$(id -u)"
+    _hptr_status=0
+    for _hptr_root in "$@"; do
+        [ -d "$_hptr_root" ] && [ ! -L "$_hptr_root" ] || continue
+        find "$_hptr_root" \( -type f -o -type d \) -user "$_hptr_uid" \
+            \( -perm -0020 -o -perm -0002 \) -exec chmod go-w {} + 2>/dev/null || _hptr_status=1
+    done
+    return "$_hptr_status"
+}
+
+# Create missing regular files empty and private; existing files keep their
+# content and mode, so later redirections into them stay private.
+# Usage: hydra_private_touch <file>...
+hydra_private_touch() (
+    umask 077
+    for _hpt_file in "$@"; do
+        [ -e "$_hpt_file" ] || [ -L "$_hpt_file" ] || : > "$_hpt_file" || exit 1
+    done
+)
+
 # Try to acquire a lock for a session name candidate
 # Usage: try_lock <candidate_name>
 # Returns: 0 if lock acquired, 1 if failed
@@ -21,9 +57,9 @@ try_lock() {
         return 0
     fi
     lock_dir="$HYDRA_HOME/locks"
-    mkdir -p "$lock_dir" 2>/dev/null || true
+    hydra_private_mkdir "$lock_dir" 2>/dev/null || true
     lock_path="$lock_dir/$candidate.lock"
-    if ! mkdir "$lock_path" 2>/dev/null; then
+    if ! (umask 077; mkdir "$lock_path") 2>/dev/null; then
         return 1
     fi
 
@@ -108,7 +144,7 @@ mktemp_adjacent() {
     fi
     _ma_dir="$(dirname "$_ma_dest")"
     if [ ! -d "$_ma_dir" ]; then
-        mkdir -p "$_ma_dir" || return 1
+        hydra_private_mkdir "$_ma_dir" || return 1
     fi
     mktemp "$_ma_dir/.hydra-tmp.XXXXXX"
 }

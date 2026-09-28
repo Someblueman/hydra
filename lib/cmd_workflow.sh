@@ -124,13 +124,16 @@ cmd_workflow() {
             workflow_data_validate "$_cw_file" || { cli_error workflow invalid_data "invalid workflow data manifest" "check declared paths, types, bounds, references and dependencies"; return 1; }
             _cw_terminal="$(workflow_parse "$_cw_file" terminal)" || return 1
             [ -z "$_cw_terminal" ] || check_tmux_version || return 1
-            _cw_runs="$(workflow_runs_dir)" || return 1; mkdir -p "$_cw_runs" || return 1
+            _cw_runs="$(workflow_runs_dir)" || return 1; hydra_private_mkdir "$_cw_runs" || return 1
             _cw_project="$(hydra_get_project_id)" _cw_base="$(git rev-parse HEAD)"
             _cw_run="$(hydra_new_id run "$_cw_project|workflow|$_cw_file")" || return 1
             _cw_tmp="$(mktemp -d "$_cw_runs/.run.XXXXXX")" || return 1
             _cw_dir="$_cw_runs/$_cw_run"
-            mkdir -p "$_cw_tmp/steps" || { rm -rf "$_cw_tmp"; return 1; }
+            hydra_private_mkdir "$_cw_tmp/steps" || { rm -rf "$_cw_tmp"; return 1; }
             chmod 700 "$_cw_tmp" 2>/dev/null || true
+            # Run records are private whatever the caller's umask.
+            hydra_private_touch "$_cw_tmp/resolved.yml" "$_cw_tmp/graph.tsv" "$_cw_tmp/manifest.tsv" \
+                "$_cw_tmp/events.jsonl" || { rm -rf "$_cw_tmp"; return 1; }
             workflow_parse "$_cw_file" normalized > "$_cw_tmp/resolved.yml" || { rm -rf "$_cw_tmp"; return 1; }
             workflow_parse "$_cw_file" runtime > "$_cw_tmp/graph.tsv" || { rm -rf "$_cw_tmp"; return 1; }
             workflow_data_initialize "$_cw_file" "$_cw_tmp" || { rm -rf "$_cw_tmp"; return 1; }
@@ -152,7 +155,7 @@ cmd_workflow() {
             workflow_atomic_scalar "$_cw_tmp/max-heads" "$_cw_heads"
             while IFS="$(printf '\t')" read -r _cw_tag _cw_id _cw_rest; do
                 [ "$_cw_tag" = step ] || continue
-                mkdir -p "$_cw_tmp/steps/$_cw_id"
+                hydra_private_mkdir "$_cw_tmp/steps/$_cw_id"
                 workflow_atomic_scalar "$_cw_tmp/steps/$_cw_id/state" queued
                 workflow_atomic_scalar "$_cw_tmp/steps/$_cw_id/attempts" 0
             done < "$_cw_tmp/graph.tsv"

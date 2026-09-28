@@ -35,7 +35,7 @@ setup() {
     git commit -m init >/dev/null 2>&1
     mkdir -p .hydra
     export HYDRA_HOME="$base_dir/.hydra"
-    mkdir -p "$HYDRA_HOME"
+    (umask 077; mkdir -p "$HYDRA_HOME")
 }
 
 teardown() {

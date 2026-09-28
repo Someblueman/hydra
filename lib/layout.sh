@@ -127,8 +127,9 @@ save_layout() {
     fi
     
     layout_file="$HYDRA_HOME/layouts/$session"
-    mkdir -p "$HYDRA_HOME/layouts"
-    
+    # Hydra state is private whatever the caller's umask; tmux runs outside it.
+    (umask 077; mkdir -p "$HYDRA_HOME/layouts" && { [ -e "$layout_file" ] || : > "$layout_file"; }) || return 1
+
     # Save layout string
     tmux list-windows -t "$session" -F '#{window_layout}' > "$layout_file" || return 1
     

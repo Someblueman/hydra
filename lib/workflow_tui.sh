@@ -18,8 +18,8 @@ workflow_tui_roles() {
     # Runs recorded before role tables existed: derive once into the cache.
     _wtr_cache="$HYDRA_HOME/cache/tui-workflow/$2/roles.tsv"
     if [ ! -f "$_wtr_cache" ]; then
-        mkdir -p "$(dirname "$_wtr_cache")" 2>/dev/null &&
-            (workflow_plan_tool roles "$1/compiled.json") > "$_wtr_cache.$$" 2>/dev/null &&
+        (umask 077; mkdir -p "$(dirname "$_wtr_cache")" &&
+            workflow_plan_tool roles "$1/compiled.json" > "$_wtr_cache.$$") 2>/dev/null &&
             mv "$_wtr_cache.$$" "$_wtr_cache" 2>/dev/null
         rm -f "$_wtr_cache.$$" 2>/dev/null
     fi
@@ -53,8 +53,8 @@ workflow_tui_receipt() {
     esac
     _wtx_line="$(printf 'E\t%s\t%s\t%s\t%s' "$3" "$4" "$5" "$_wtx_row")"
     printf '%s\n' "$_wtx_line"
-    if [ -f "$_wtx_attempt_dir/completed-at" ] && mkdir -p "$(dirname "$_wtx_cache")" 2>/dev/null; then
-        printf '%s\n' "$_wtx_line" > "$_wtx_cache.$$" 2>/dev/null && mv "$_wtx_cache.$$" "$_wtx_cache" 2>/dev/null
+    if [ -f "$_wtx_attempt_dir/completed-at" ] && hydra_private_mkdir "$(dirname "$_wtx_cache")" 2>/dev/null; then
+        (umask 077; printf '%s\n' "$_wtx_line" > "$_wtx_cache.$$") 2>/dev/null && mv "$_wtx_cache.$$" "$_wtx_cache" 2>/dev/null
         rm -f "$_wtx_cache.$$" 2>/dev/null
     fi
     return 0

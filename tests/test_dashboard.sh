@@ -80,7 +80,7 @@ setup_test_repo() {
     
     # Set up HYDRA_HOME for test isolation
     export HYDRA_HOME="$TEST_REPO_DIR/.hydra"
-    mkdir -p "$HYDRA_HOME"
+    (umask 077; mkdir -p "$HYDRA_HOME")
     
     # Initialize git repository
     git init >/dev/null 2>&1

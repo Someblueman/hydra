@@ -28,7 +28,7 @@ setup_env() {
     test_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")" || exit 1
     export HYDRA_HOME="$test_dir/.hydra"
     export HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
-    mkdir -p "$HYDRA_HOME" "$test_dir/repo"
+    (umask 077; mkdir -p "$HYDRA_HOME"); mkdir -p "$test_dir/repo"
     git -C "$test_dir/repo" init -q
     git -C "$test_dir/repo" config user.name Test
     git -C "$test_dir/repo" config user.email test@example.com

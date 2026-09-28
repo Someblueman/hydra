@@ -10,8 +10,11 @@ workflow_control() (
     esac
     _wct_dir="$(workflow_runs_dir)/$_wct_run"
     [ -d "$_wct_dir" ] || exit 1
+    _wct_user_umask="$(umask)"
     umask 077
     exec </dev/null >> "$_wct_dir/workspace-controls.log" 2>&1
+    # The log is private; resumed steps keep the user's umask.
+    umask "$_wct_user_umask"
     printf '\n%s: %s run=%s request=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$_wct_action" "$_wct_run" "$_wct_request"
     case "$_wct_action" in
         resume|cancel) cmd_workflow "$_wct_action" "$_wct_run" ;;

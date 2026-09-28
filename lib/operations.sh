@@ -97,6 +97,12 @@ operations_exec_worker() {
     _oew_timeout="$5"
     _oew_max="$6"
     shift 6
+    # Evidence is private whatever the caller's umask; the selected command
+    # still runs with the user's umask in its worktree. The worker always runs
+    # as its own background job (its PID is the recorded owner), so this umask
+    # never reaches the caller.
+    _oew_user_umask="$(umask)"
+    umask 077
     _oew_dir="$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/exec/$_oew_run/$_oew_head"
     mkdir -p "$_oew_dir" || return 0
     chmod 700 "$_oew_dir" 2>/dev/null || true
@@ -131,7 +137,7 @@ operations_exec_worker() {
     _oew_stderr_pid=$!
     _oew_started="$(date +%s)"
     _oew_instance="$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/heads/$_oew_head/current-instance" 2>/dev/null || true)"
-    (cd "$_oew_worktree" && exec "$@") > "$_oew_stdout_pipe" 2> "$_oew_stderr_pipe" &
+    (cd "$_oew_worktree" && umask "$_oew_user_umask" && exec "$@") > "$_oew_stdout_pipe" 2> "$_oew_stderr_pipe" &
     _oew_pid=$!
     _oew_cancelled=0
     if [ -n "${_ce_profile:-}" ]; then
@@ -252,7 +258,7 @@ provenance_capture_head() {
     _pch_trust="$(project_config_hash 2>/dev/null || echo unavailable)"
     _pch_lock="state_${LIFECYCLE_PROJECT_ID}"
     acquire_lock "$_pch_lock" "record head provenance" "$LIFECYCLE_HEAD_ID" || return 1
-    mkdir -p "$_pch_dir" || { release_lock "$_pch_lock"; return 1; }
+    hydra_private_mkdir "$_pch_dir" || { release_lock "$_pch_lock"; return 1; }
     chmod 700 "$_pch_dir" 2>/dev/null || true
     if ! state_v2_write_scalar "$_pch_dir/hydra-version" "$HYDRA_VERSION" || \
        ! state_v2_write_scalar "$_pch_dir/git-version" "$(git --version 2>/dev/null | sed -n '1p')" || \

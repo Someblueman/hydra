@@ -7,6 +7,7 @@ workflow_approval_binding() (
     parallel_head_load "$_wab_head" || exit 1
     parallel_validate_name "$_wab_name" || exit 1
     _wab_fingerprint="$(workflow_data_tool fingerprint "$PARALLEL_WORKTREE")" || exit 1
+    hydra_private_touch "$_wab_out" || exit 1
     {
         printf 'definition\t%s\n' "$(sed -n '1p' "$_wab_dir/definition-hash")"
         printf 'base\t%s\n' "$(sed -n '1p' "$_wab_dir/base-commit")"
@@ -66,7 +67,7 @@ EOF
 workflow_approval_create() (
     _wac_dir="$1" _wac_step="$2" _wac_head="$3" _wac_name="$4" _wac_message="$5" _wac_timeout="$6"
     _wac_sd="$_wac_dir/steps/$_wac_step"
-    mkdir -p "$_wac_dir/approvals" || exit 1
+    hydra_private_mkdir "$_wac_dir/approvals" || exit 1
     _wac_tmp="$(mktemp -d "$_wac_dir/approvals/.request.XXXXXX")" || exit 1
     trap 'rm -rf "$_wac_tmp"' EXIT
     trap 'exit 130' INT

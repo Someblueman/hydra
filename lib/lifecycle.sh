@@ -225,7 +225,7 @@ _lifecycle_backup_scalar() {
     if [ -f "$_lbs_path" ]; then
         cp "$_lbs_path" "$_lbs_dir/$_lbs_name"
     else
-        : > "$_lbs_dir/$_lbs_name.absent"
+        hydra_private_touch "$_lbs_dir/$_lbs_name.absent"
     fi
 }
 
@@ -321,7 +321,7 @@ lifecycle_new_instance() {
        ! _lifecycle_backup_scalar "$LIFECYCLE_HEAD_DIR/desired-state" "$_lni_rollback" head-desired || \
        ! _lifecycle_backup_scalar "$LIFECYCLE_INSTANCE_DIR/superseded-by" "$_lni_rollback" previous-superseded || \
        ! _lifecycle_backup_scalar "$LIFECYCLE_INSTANCE_DIR/ended-at" "$_lni_rollback" previous-ended || \
-       ! mkdir -p "$_lni_new_dir"; then
+       ! hydra_private_mkdir "$_lni_new_dir"; then
         rm -rf "$_lni_rollback"
         release_lock "$_lni_lock"
         return 1
@@ -369,7 +369,7 @@ lifecycle_archive_transcript() {
     _lat_keep="${HYDRA_TRANSCRIPT_KEEP:-10}"
     case "$_lat_max:$_lat_keep" in *[!0-9:]*) return 1 ;; esac
     _lat_dir="$LIFECYCLE_HEAD_DIR/transcripts"
-    mkdir -p "$_lat_dir" || return 1
+    hydra_private_mkdir "$_lat_dir" || return 1
     chmod 700 "$_lat_dir" 2>/dev/null || true
     _lat_tmp="$(mktemp_adjacent "$_lat_dir/$LIFECYCLE_INSTANCE_ID.txt")" || return 1
     if [ "$_lat_policy" = redacted ]; then

@@ -161,6 +161,9 @@ _hydra() {
                 snapshot)
                     _arguments '--native[Try the optional read-only native helper]' '--json[Output canonical JSON]'
                     ;;
+                doctor)
+                    _arguments '--fix[Auto-fix detected issues]' '--fix-permissions[Remove group/other write from your own Hydra state]'
+                    ;;
                 tui)
                     _arguments '--basic[Use the maintained shell TUI]' '--capabilities[Show TUI capability diagnostics]'
                     ;;

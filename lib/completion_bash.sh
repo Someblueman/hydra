@@ -260,6 +260,9 @@ _hydra_completion() {
     if [[ "${COMP_WORDS[@]}" =~ snapshot ]]; then
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;; esac
     fi
+    if [[ "${COMP_WORDS[1]}" == doctor ]]; then
+        case "${cur}" in -*) COMPREPLY=($(compgen -W "--fix --fix-permissions" -- ${cur})); return 0 ;; esac
+    fi
 
     # Check if we're completing template subcommand
     if [[ "${COMP_WORDS[@]}" =~ template ]]; then
