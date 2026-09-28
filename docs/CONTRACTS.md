@@ -106,6 +106,26 @@ Lifecycle, event, and message records follow the schemas described in this guide
   schema-versioned literal declarations. Headless prompt transport, provider
   translations, exact recorded-session resume, and capability requirements are
   bounded by the rules in [workflows](workflows.md).
+- A relative profile executable resolves from PATH first (executable regular
+  files), then from a recorded location `$HYDRA_HOME/agents/locations/EXECUTABLE`
+  (one absolute path; a private file owned by the user). A record is used only when
+  its path ends in `/EXECUTABLE`, is an executable file whose entry and target belong
+  to the user or root, and whose target is not group- or world-writable; shell and
+  native resolvers apply the same rules and headless runs execute the resolved path.
+  `hydra agent locate --json` reports `agent-inventory` schema 1:
+  `{search_dirs, agents:[{profile, executable, on_path, candidates:[{path, source:
+  path|record|search, version, recordable}], recorded, status: on_path|recorded|
+  found_off_path|ambiguous|missing}]}`. Receivers expose it as the read-only
+  `agent-inventory` action (args `[]`, or `["probe", PROFILE, PATH?]` for the
+  profile's help probe of one valid candidate) and `agent-locate-record`
+  (`[EXECUTABLE, PATH]`); the handshake additively reports `platform {os, arch}`.
+- Remote installers come only from local recipes, `agent-recipes` schema 1:
+  `{"schema":"agent-recipes","schema_version":1,"recipes":[{agent, executable,
+  command, requires[], expected_dirs[], login_args[], auth_status_argv[]?, docs_url,
+  verified_on}]}`. Built-in recipes are compiled in; an optional private (0600, owned,
+  not a symlink) `$HYDRA_HOME/fleet/agent-recipes.json` with exactly these members
+  replaces built-in recipes per agent, and an unsafe or invalid file disables
+  installs (`recipe_unavailable`) rather than falling back silently.
 - The built-in `cursor` recipes pass `--trust` after `--print` for new and resumed
   runs, and its help probe requires that flag. Cursor Agent otherwise refuses a
   directory it has not trusted, and every head is a fresh Hydra-created worktree.

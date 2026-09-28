@@ -19,6 +19,7 @@ SHELL_TEST_EXCLUDES = \
 	tests/test_agent_execution.sh \
 	tests/test_agent_auth.sh \
 	tests/test_agent_locate.sh \
+	tests/test_remote_agents.sh \
 	tests/test_remote_setup.sh
 
 SHELL_TEST_FILES = $(filter-out $(SHELL_TEST_EXCLUDES),$(wildcard tests/test_*.sh))

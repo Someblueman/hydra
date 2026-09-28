@@ -46,6 +46,8 @@ FLEET_CASES = shell-task-acceptance \
 	shell-fleet \
 	shell-agent-auth \
 	shell-agent-locate \
+	shell-remote-agents \
+	native-agent-recipes \
 	native-plan \
 	shell-fleet-install \
 	shell-task-package \
@@ -104,6 +106,12 @@ fleet-case-shell-agent-auth:
 
 fleet-case-shell-agent-locate:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_agent_locate.sh
+
+fleet-case-shell-remote-agents:
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_remote_agents.sh
+
+fleet-case-native-agent-recipes:
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-agent-recipes
 
 fleet-case-shell-agent-execution:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_agent_execution.sh
