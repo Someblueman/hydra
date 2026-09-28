@@ -22,7 +22,9 @@ for case_binary in "$HYDRA_SHELL_EXEC" "$HYDRA_FLEET_BIN" "$HYDRA_TUI_BIN"; do
 done
 case_root=$(mktemp -d /tmp/hydra-sh.XXXXXX)
 case_runner=
-mkdir -p "$case_root/tmp" "$case_root/tmux"
+# Private whatever the caller's umask: under 002 a group-writable TMPDIR
+# ancestor makes Hydra's ownership checks refuse fixture stores beneath it.
+(umask 077 && mkdir -p "$case_root/tmp" "$case_root/tmux")
 TMPDIR="$case_root/tmp"
 TMUX_TMPDIR="$case_root/tmux"
 export TMPDIR TMUX_TMPDIR
