@@ -31,6 +31,12 @@ static void unchanged(void) {
   assert(json_object_equal(v, before));
   json_object_put(v);
 }
+/* OpenSSH refuses group-writable configuration (for example under umask
+ * 002), so the fixture files are private like a user's ~/.ssh/config. */
+static void dc_private_config(void) {
+  assert(!chmod(dc_config, 0600) && !chmod(dc_included, 0600));
+}
+
 void dc_setup(void) {
   char tmp[] = "/tmp/hydra-native-discovery-XXXXXX", bin[F_PATH],
        wrapper[F_PATH], path[16384], p[F_PATH];
@@ -56,9 +62,7 @@ void dc_setup(void) {
                  "StrictHostKeyChecking no\n UpdateHostKeys yes\n",
                  dc_included) > 0 &&
          !fclose(f));
-  /* OpenSSH refuses group-writable configuration (for example under umask
-   * 002), so the fixture files are private like a user's ~/.ssh/config. */
-  assert(!chmod(dc_config, 0600) && !chmod(dc_included, 0600));
+  dc_private_config();
   nt_path(bin, dc_root, "bin");
   assert(!f_mkdirs(bin));
   nt_path(wrapper, bin, "ssh");
