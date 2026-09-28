@@ -179,7 +179,7 @@ static void install_agent(struct tv_session *s) {
 static void sign_in(struct tv_session *s, bool fail_once) {
     tv_send(s, "\r");
     tv_until(s, "FAKE SIGN-IN: open", 6);
-    see(s, "Hydra: Sign in to claude");
+    see(s, "Hydra: Sign in to claude"); see(s, "On success you return to Hydra at once");
     capture(s, "11-sign-in-terminal");
     tv_send(s, "\r");
     if (fail_once) {

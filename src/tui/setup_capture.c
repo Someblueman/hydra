@@ -136,8 +136,8 @@ int setup_terminal_handoff(struct app *app, char *const argv[], const char *step
     int status;
     setup_step_label(step, label, sizeof(label));
     restore_terminal(app);
-    printf("\033[H\033[2JHydra: %s. This terminal belongs to the step until it finishes;\n"
-           "then you return to Hydra.\n\n", label);
+    printf("\033[H\033[2JHydra: %s. This terminal belongs to the step until it finishes.\n"
+           "On success you return to Hydra at once; after a failure Hydra waits for Enter.\n\n", label);
     fflush(stdout);
     previous_interrupt = signal(SIGINT, SIG_IGN);
     previous_quit = signal(SIGQUIT, SIG_IGN);

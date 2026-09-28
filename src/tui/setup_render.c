@@ -290,7 +290,7 @@ static void plan_guarantees(struct pen *p, const struct setup_envelope *e) {
                  "no PATH changes, no sudo, and other Hydra installs there stay untouched.");
     } else if (!strcmp(e->plan_kind, "install_agent")) {
         pen_text(p, 0, TV_BASE, "The command runs on the remote as your user, in this terminal so you can answer it; no sudo. "
-                 "Hydra returns here when it finishes.");
+                 "Hydra returns here as soon as it succeeds; after a failure it waits for Enter so you can read the output.");
     }
 }
 
@@ -468,8 +468,10 @@ static void render_handoff(struct app *app, struct native_setup *s) {
     title(app, TV_STRONG, text);
     pen_begin(&p, app, 2);
     pen_text(&p, 0, TV_BASE, sign_in ? "The provider's sign-in asks questions or shows a link to open in your browser. Hydra hands this "
-                                       "terminal to it and comes back when it finishes. Credentials stay on the remote; Hydra copies nothing."
-                                     : "The installer runs in this terminal so you can answer it. Hydra comes back when it finishes.");
+                                       "terminal to it. Credentials stay on the remote; Hydra copies nothing."
+                                     : "The installer runs in this terminal so you can answer it.");
+    pen_text(&p, 0, TV_BASE, "When it succeeds you return here at once; after a failure Hydra waits for Enter so you can read "
+                             "the output.");
     pen_text(&p, 0, TV_BASE, "");
     text[0] = '\0';
     for (i = 0; i < s->handoff_argc; i++) text_append(text, sizeof(text), "%s%s", i ? " " : "", s->handoff[i]);
