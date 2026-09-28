@@ -32,6 +32,7 @@ void enter_view(struct app *app, int view) {
     if (view == 5) { app->graph_follow = true; if (!app->fleet) (void)refresh_workflows(app, NULL); }
     if (view == 9) native_attention_tick(app, true);
     if (view == 7) (void)native_workspace_init(app);
+    if (view == 6) native_setup_hosts_refresh(app);
 }
 
 void select_tab(struct app *app, int direction) {
@@ -319,10 +320,8 @@ static bool fleet_key(struct app *app, char key) {
 }
 
 static void open_selected(struct app *app) {
-    if (app->view == 6 && app->host_selected < app->model.host_count) {
-        copy_text(app->search, sizeof(app->search), app->model.hosts[app->host_selected].name);
-        enter_view(app, 0); retarget_selection(app);
-    } else if (app->view == 3) {
+    if (app->view == 6) hosts_open_row(app);
+    else if (app->view == 3) {
         if (app->model.recovery_count) recovery_check_action(app);
     } else if (app->view == 7) {
         /* Enter in a non-navigation pane has no target; navigation handles its own Enter. */
@@ -380,8 +379,9 @@ static bool view_key(struct app *app, char key) {
     if (app->view == 7 && workspace_key(app, key)) return true;
     if (app->view == 5 && workflow_key(app, key)) return true;
     if (select_view(app, key)) return true;
-    if (app->view == 6 && key && strchr("/:pac AxGd", key)) {
-        copy_text(app->notice, sizeof(app->notice), "Select a host and press Enter to see its heads");
+    if (app->view == 6 && key == 'A') { native_setup_open_form(app); return true; }
+    if (app->view == 6 && key && strchr("/:pac xGd", key)) {
+        copy_text(app->notice, sizeof(app->notice), "Select a row and press Enter; A adds a host");
         return true;
     }
     return false;
@@ -434,6 +434,7 @@ static void head_key(struct app *app, char key) {
 static void handle_key(struct app *app, char key) {
     if (native_terminal_byte(app, (unsigned char)key)) return;
     if (key == 3) { terminal_request_stop(SIGINT); return; }
+    if (native_setup_byte(app, (unsigned char)key)) return;
     if (overlay_key(app, key)) return;
     if (key == 'q') { app->running = false; return; }
     if (view_key(app, key)) return;
@@ -489,10 +490,12 @@ int interactive_main(struct app *app) {
     while (app->running && !terminal_stopped()) {
         refresh_observations(app, &last_refresh);
         native_terminals_pump(app);
+        native_setup_tick(app);
         update_size(app);
         render(app, 0U, false);
-        if (read_key(app->terminals || app->observations ? 40 : 500, &key) <= 0) {
+        if (read_key(app->terminals || app->observations || app->setup ? 40 : 500, &key) <= 0) {
             native_terminal_flush_input(app);
+            native_setup_flush_input(app);
             continue;
         }
         handle_input(app, key);

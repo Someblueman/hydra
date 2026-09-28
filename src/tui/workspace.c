@@ -356,7 +356,10 @@ static void workspace_empty(struct app *app, struct tv_canvas *c) {
     dashboard_text(c, 0, y++, c->width, TV_BASE, "The conversation with that agent appears in this pane;");
     dashboard_text(c, 0, y++, c->width, TV_BASE, "its plan and progress appear next to it.");
     y++;
-    dashboard_text(c, 0, y++, c->width, TV_MUTED, "n new task   : more actions   ? help");
+    dashboard_text(c, 0, y++, c->width, TV_BASE, "To run agents on another machine, press H for Hosts");
+    dashboard_text(c, 0, y++, c->width, TV_BASE, "and add it there.");
+    y++;
+    dashboard_text(c, 0, y++, c->width, TV_MUTED, "n new task   H hosts   : more actions   ? help");
 }
 
 static enum tv_style details_session(struct app *app, const struct head *h, char *text, size_t size) {

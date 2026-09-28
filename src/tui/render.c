@@ -282,6 +282,8 @@ size_t tab_order(const struct app *app, int *views) {
     views[count++] = 9; views[count++] = 3;
     if (!app->fleet) views[count++] = 5;
     views[count++] = 8; views[count++] = 7;
+    /* Local work keeps its tab numbers; Hosts adds and continues remote setup. */
+    if (!app->fleet) views[count++] = 6;
     return count;
 }
 
@@ -431,10 +433,12 @@ void render_empty_work(struct app *app) {
     style(app, TONE_BASE);
     linef(app, "");
     if (app->search[0]) { paragraph(app, "Esc clears the search.", TV_BASE); return; }
-    if (app->fleet) { paragraph(app, "Hosts shows connectivity for each machine; Recovery lists host problems.", TV_BASE); return; }
+    if (app->fleet) { paragraph(app, "Hosts shows connectivity for each machine; Recovery lists host problems. In Hosts, A adds a machine.", TV_BASE); return; }
     paragraph(app, "A head is one piece of work: its own branch and worktree, a terminal, and an agent working inside it. You can follow several heads here at once.", TV_BASE);
     linef(app, "");
     paragraph(app, "Press n to start one: Hydra creates the branch and worktree, opens the terminal and starts your agent in it. Press : for other actions.", TV_BASE);
+    linef(app, "");
+    paragraph(app, "To run agents on another machine, press H for Hosts and add it there.", TV_MUTED);
 }
 
 /* One-panel summary of the selected head under the list. */
@@ -640,6 +644,7 @@ static void render_help(struct app *app) {
     linef(app, "P  review the agent's proposal   V  validate   F  request changes (feedback to the agent)");
     linef(app, "E  execute the validated revision (confirm with y)   I  import draft and policy files");
     section(app, "OTHER");
+    linef(app, "H  hosts: A adds a remote machine over SSH; Enter continues its setup");
     linef(app, "t  theme (terminal / dark / light)    D  statistics    I  attention    ?  close help    q  quit");
 }
 
@@ -655,6 +660,7 @@ static void render_result(struct app *app) {
 }
 
 static void render_content(struct app *app) {
+    if (app->view == 6 && native_setup_active(app)) { native_setup_render(app); return; }
     if (app->result_open) { render_result(app); return; }
     if (app->help) { render_help(app); return; }
     switch (app->view) {
@@ -720,7 +726,9 @@ static const char *view_hints(struct app *app, bool narrow) {
         return narrow ? "Enter details  r review  ? help  q quit" : "j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit";
     }
     if (app->view == 5) return narrow ? "j/k step  [/] run  ? help  q quit" : "j/k step  [/] run  h/l/J/K pan  Enter recentre  Esc back  ? help  q quit";
-    if (app->view == 6) return "j/k host  Enter show its heads  Esc back  ? help  q quit";
+    if (app->view == 6 && native_setup_active(app)) return native_setup_hints(app, narrow);
+    if (app->view == 6) return narrow ? "Enter open  A add host  ? help  q quit"
+                                      : "j/k select  Enter open  A add a host  Esc back  ? help  q quit";
     if (app->view == 3) return recovery_hints(app, narrow);
     return NULL;
 }
@@ -768,6 +776,7 @@ static void detail_title(const struct app *app, const struct head *head, char *o
 static const char *panel_title(struct app *app, char *out, size_t size) {
     static const char *names[] = {NULL, NULL, "Coordination", "Recovery", "Overview", "Workflows", "Hosts", NULL, NULL, "Attention"};
     const struct head *head = selected_head(app);
+    if (app->view == 6 && native_setup_active(app)) return native_setup_title(app);
     if (app->result_open) return app->result_title;
     if (app->help) return "HELP";
     if (app->view == 0) snprintf(out, size, "%s", app->fleet ? "Remote heads" : "Heads in this project");
