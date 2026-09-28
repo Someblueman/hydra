@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the approved line to known_hosts; `preflight` reports platform, tools and existing
   installs read-only and without sudo. Help and bash, zsh and fish completions
   include the new commands.
+- The control centre adds remote hosts: the Hosts tab (`H`, now also in local
+  work) lists unfinished setups and `A` starts one from an SSH destination. Hydra
+  runs the same `hydra remote setup` commands, shows each step, requirement and
+  plan, needs a typed `yes` for a new host key and `y` for other plans, never offers
+  to accept a changed key, and hands the terminal to agent installers and sign-in.
 
 ## [2.8.0] - 2026-09-27
 
