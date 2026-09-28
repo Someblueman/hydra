@@ -62,7 +62,11 @@ command that uses the same state: `hydra remote trust-key|preflight|provision|ag
 NAME` and `hydra remote install-agent|sign-in NAME --agent A`. The alias record is
 published last and never overwrites a different alias, so a half-configured host
 never appears in `hydra fleet list`. Rerunning setup with a different destination
-or SSH config for an existing NAME fails with `setup_binding_changed`.
+or SSH config for an existing NAME fails with `setup_binding_changed`. Unknown
+options are usage errors. Setup does not prepare a remote project: once the alias
+exists, clone or copy the project on the host yourself and initialise it with
+`hydra fleet init NAME --project /abs/project -- --no-agent`, review its `.hydra`
+configuration, then trust it explicitly (see [Operate explicitly](#operate-explicitly)).
 
 Every step that changes something first shows a plan and asks for approval.
 Interactive terminals answer `y`; trusting a host key requires typing `yes`. With

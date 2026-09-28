@@ -311,12 +311,22 @@ test_completion_includes_shipped_commands() {
             case "$generated" in *"$word"*) ;; *) remote_setup_status=1 ;; esac
         done
     done
-    for option in fingerprint approve record agent ssh-config remote-build; do
+    for option in fingerprint approve record agent ssh-config binary; do
         case "$bash_out" in *"--$option"*) ;; *) remote_setup_status=1 ;; esac
         case "$zsh_out" in *"--$option"*) ;; *) remote_setup_status=1 ;; esac
         printf '%s\n' "$fish_out" | grep '__fish_seen_subcommand_from remote' | grep -Eq -- "-l $option([[:space:]]|$)" || remote_setup_status=1
     done
     assert_success "$remote_setup_status" "remote setup commands and options complete in every shell"
+
+    # --project and --remote-build are not remote setup options.
+    removed_setup_status=0
+    for generated in "$bash_out" "$zsh_out" "$fish_out"; do
+        case "$generated" in *remote-build*) removed_setup_status=1 ;; esac
+    done
+    printf '%s\n' "$bash_out" | grep 'setup)' | grep -q -- '--project' && removed_setup_status=1
+    printf '%s\n' "$zsh_out" | grep "'1:action:(setup)'" | grep -q -- '--project' && removed_setup_status=1
+    printf '%s\n' "$fish_out" | grep '__fish_seen_subcommand_from remote' | grep -Eq -- '-l project([[:space:]]|$)' && removed_setup_status=1
+    assert_success "$removed_setup_status" "remote setup completions omit removed options"
 }
 
 # Run all tests

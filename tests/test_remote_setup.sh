@@ -108,6 +108,9 @@ usage_cases() {
     run 1 "$out" setup n1 host --timeout 0 --json; has "$out" '"code":"invalid_input"'
     run 1 "$out" setup n1 host --binary --json; has "$out" '"code":"invalid_input"'
     run 1 "$out" setup n1 host --approve 0000 --json; has "$out" '"code":"invalid_input"'
+    run 1 "$out" setup n1 host --remote-build --json; has "$out" '"code":"invalid_input"'
+    run 1 "$out" setup n1 host --project /srv/p --json; has "$out" '"code":"invalid_input"'
+    run 1 "$out" setup n1 host --unknown --json; has "$out" '"code":"invalid_input"'
     run 1 "$out" trust-key n1 --fingerprint MD5:aa --json; has "$out" 'SHA256'
     run 1 "$out" provision n1 --approve abc --json; has "$out" 'plan_sha256'
     run 1 "$out" agents n1 --record claude=relative --json; has "$out" 'EXECUTABLE='
@@ -116,6 +119,7 @@ usage_cases() {
     run 1 "$out" preflight n1 --json; has "$out" '"code":"setup_not_started"'; has "$out" '"command":"remote-preflight"'
     test ! -e "$HYDRA_HOME/fleet/setup/n1.json" || fail "usage errors created state"
     run 0 "$out" setup --help --json; has "$out" '"command":"remote-setup-help"'; has "$out" 'install-agent'
+    ! grep -Eq -- '--remote-build|--project' "$out" || fail "setup help lists removed options"
 }
 
 guided_cases() {

@@ -5,23 +5,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SETUP_USAGE "remote setup NAME [DEST] [--ssh-config /abs] [--binary FILE] [--remote-build] [--project /abs] " \
+#define SETUP_USAGE "remote setup NAME [DEST] [--ssh-config /abs] [--binary FILE] " \
     "[--approve PLAN_SHA256] [--timeout N] [--json]; remote setup status NAME; remote trust-key NAME [--fingerprint SHA256:...]; " \
     "remote preflight NAME; remote provision NAME [--approve PLAN_SHA256] [--binary FILE]; " \
     "remote agents NAME [--record EXECUTABLE=/abs/path]; remote install-agent NAME --agent A [--approve PLAN_SHA256]; " \
     "remote sign-in NAME --agent A (every command accepts --timeout N and --json)"
 
 /* Value options; the index is the bit in spec.flags and the slot in values[]. */
-enum { OPT_SSH_CONFIG, OPT_BINARY, OPT_PROJECT, OPT_FINGERPRINT, OPT_APPROVE, OPT_RECORD, OPT_AGENT, OPT_COUNT };
+enum { OPT_SSH_CONFIG, OPT_BINARY, OPT_FINGERPRINT, OPT_APPROVE, OPT_RECORD, OPT_AGENT, OPT_COUNT };
 static const char *const option_names[OPT_COUNT] = {
-    "--ssh-config", "--binary", "--project", "--fingerprint", "--approve", "--record", "--agent"
+    "--ssh-config", "--binary", "--fingerprint", "--approve", "--record", "--agent"
 };
 #define OPT(bit) (1U << (bit))
-#define OPT_REMOTE_BUILD OPT(OPT_COUNT)
 enum setup_kind { K_SETUP, K_STATUS, K_TRUST_KEY, K_PREFLIGHT, K_PROVISION, K_AGENTS, K_INSTALL_AGENT, K_SIGN_IN };
 struct spec { const char *word, *command; enum setup_kind kind; unsigned flags; int positionals; };
 static const struct spec specs[] = {
-    {"setup", "remote-setup", K_SETUP, OPT(OPT_SSH_CONFIG) | OPT(OPT_BINARY) | OPT(OPT_PROJECT) | OPT(OPT_APPROVE) | OPT_REMOTE_BUILD, 2},
+    {"setup", "remote-setup", K_SETUP, OPT(OPT_SSH_CONFIG) | OPT(OPT_BINARY) | OPT(OPT_APPROVE), 2},
     {"trust-key", "remote-trust-key", K_TRUST_KEY, OPT(OPT_FINGERPRINT), 1},
     {"preflight", "remote-preflight", K_PREFLIGHT, 0, 1},
     {"provision", "remote-provision", K_PROVISION, OPT(OPT_APPROVE) | OPT(OPT_BINARY), 1},
@@ -36,7 +35,7 @@ struct setup_options {
     const char *positional[2], *values[OPT_COUNT];
     int count;
     unsigned seconds;
-    bool json, remote_build;
+    bool json;
 };
 
 bool setup_command(const char *word) {
@@ -73,7 +72,6 @@ static bool parse_timeout(const char *text, unsigned *seconds) {
 static int parse_flag(struct setup_options *o, int argc, char **argv, int i) {
     const char *value = i + 1 < argc ? argv[i + 1] : NULL; int index;
     if (!strcmp(argv[i], "--json")) { o->json = true; return 1; }
-    if (!strcmp(argv[i], "--remote-build") && (o->spec->flags & OPT_REMOTE_BUILD)) { o->remote_build = true; return 1; }
     if (!value || value[0] == '-') return 0;
     if (!strcmp(argv[i], "--timeout")) return parse_timeout(value, &o->seconds) ? 2 : 0;
     index = option_index(argv[i], o->spec->flags);
@@ -117,7 +115,6 @@ static bool binary_text(const char *value) { return strlen(value) < F_PATH; }
 static const char *validate_values(const struct setup_options *o) {
     static const struct { int option; bool (*valid)(const char *); const char *message; } rules[] = {
         {OPT_SSH_CONFIG, absolute_text, "--ssh-config requires an absolute path"},
-        {OPT_PROJECT, absolute_text, "--project requires an absolute path"},
         {OPT_FINGERPRINT, fingerprint_text, "--fingerprint requires SHA256:BASE64"},
         {OPT_APPROVE, hex_digest, "--approve requires the 64-digit plan_sha256"},
         {OPT_RECORD, record_text, "--record requires EXECUTABLE=/absolute/path"},
@@ -354,7 +351,7 @@ json_object *setup_cli(int argc, char **argv) {
     result = open_context(&ctx, &options);
     if (!result) {
         ctx.json = options.json; ctx.interactive = setup_interactive(options.json); ctx.seconds = options.seconds;
-        ctx.binary = options.values[OPT_BINARY]; ctx.project = options.values[OPT_PROJECT]; ctx.remote_build = options.remote_build;
+        ctx.binary = options.values[OPT_BINARY];
         result = dispatch(&ctx, &options);
         decorate(&ctx, result);
     }

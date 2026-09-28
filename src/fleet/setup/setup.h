@@ -68,8 +68,7 @@ struct setup_ctx {
     bool json;           /* --json given; next.argv then repeats --json */
     unsigned seconds;    /* SSH connect timeout for this command (--timeout) */
     /* Guided options; strings borrow argv and may be NULL. */
-    const char *binary, *project;
-    bool remote_build;
+    const char *binary;
     /* Private to setup_state.c. */
     int lock_fd;
     bool readonly;
