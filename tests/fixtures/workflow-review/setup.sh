@@ -1,7 +1,7 @@
 #!/bin/sh
 # Real local artifact and pending request fixture, created through public CLI.
 : "${root:?}"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo="$fixture/repo"
 native="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
 [ -x "$native" ] || exit 1

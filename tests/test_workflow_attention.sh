@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 cleanup() {
     if [ -d "$fixture/repo/.git" ]; then
         (cd "$fixture/repo" && "$root/bin/hydra" kill attention-worker --force >/dev/null 2>&1) || true
@@ -13,7 +13,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 
 attention_path_bounds() (
-    fleet="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+    fleet="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
     suffix=/projects/project_a/workflows/runs/run_a/steps/check
     state_root="$fixture/path-control"
     mkdir -p "$state_root$suffix"

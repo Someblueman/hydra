@@ -271,7 +271,7 @@ tests/native/test_plan_staged_public.c	choose_manifest	33
 tests/native/test_plan_staged_public.c	main	38
 tests/native/test_plan_staged_public.c	run_id	22
 tests/native/test_plan_staged_public.c	run_plan	19
-tests/native/test_retention_accepted.c	main	69
+tests/native/test_retention_accepted.c	main	44
 tests/native/test_statistics_export.c	main	61
 tests/native/test_statistics_export.c	text_fields	27
 tests/native/test_task_announce.c	main	36

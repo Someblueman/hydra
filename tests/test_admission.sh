@@ -2,7 +2,7 @@
 # Exercise the public shell authority with competing processes and private state.
 set -eu
 ROOT="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-TEST_DIR="$(mktemp -d)"
+TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 trap 'rm -rf "$TEST_DIR"' 0
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -47,9 +47,23 @@ admit configure 1 0 0 30 - >/dev/null
 
 # A stale client observation is never used to grant capacity. Race 12 callers
 # from distinct projects; every accepted request has a unique FIFO sequence.
+# The lock wait is a deliberately short fail-closed budget (about 2s). Under a
+# loaded host a racer can exhaust it and get state_unavailable before it wrote
+# anything; that caller resubmits, which keeps all 12 callers contending while
+# the assertions below still prove single-grant, FIFO serialization.
+race_request() {
+    _race_try=0
+    while :; do
+        admit request "race_$1" "project_$1" 60 - > "$TEST_DIR/race_$1" 2>&1 || :
+        grep -q '"code":"state_unavailable"' "$TEST_DIR/race_$1" || return 0
+        _race_try=$((_race_try + 1))
+        [ "$_race_try" -lt 20 ] || return 0
+        sleep 0.1
+    done
+}
 i=0
 while [ "$i" -lt 12 ]; do
-    admit request "race_$i" "project_$i" 60 - > "$TEST_DIR/race_$i" &
+    race_request "$i" &
     i=$((i + 1))
 done
 wait

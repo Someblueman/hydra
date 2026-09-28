@@ -6,7 +6,7 @@ HYDRA_BIN="$REPO/bin/hydra"
 export HYDRA_TEST_ROOT="$REPO"
 # shellcheck source=/dev/null
 . "$REPO/tests/fixture-tools.sh"
-ROOT="$(mktemp -d)"
+ROOT="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 export HYDRA_HOME="$ROOT/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 # shellcheck disable=SC1091
 . "$REPO/tests/helpers.sh"

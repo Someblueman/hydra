@@ -3,7 +3,7 @@
 
 set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
-base="$(mktemp -d)"
+base="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo="$base/repo"
 home="$base/hydra"
 fake="$base/bin"
@@ -32,7 +32,7 @@ export PATH="$fake:$PATH"
 export HYDRA_HOME="$home"
 export HYDRA_NONINTERACTIVE=1
 export HYDRA_SETUP_CONTINUE=1
-export HYDRA_FLEET_BIN="$root/build/hydra-fleet"
+export HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 cd "$repo" || exit 1
 
 tests=0

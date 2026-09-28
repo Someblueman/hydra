@@ -3,12 +3,12 @@
 set -eu
 umask 077
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 fixture="$(cd "$fixture" && pwd -P)"
 trap 'rm -rf "$fixture"' 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-export HYDRA_HOME="$fixture/hydra" HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+export HYDRA_HOME="$fixture/hydra" HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 export AUTH_TEST_HOME="$fixture/remote" AUTH_TEST_ROOT="$fixture"
 mkdir "$fixture/bin" "$fixture/remote" "$fixture/local"
 cat > "$fixture/bin/ssh" <<'SSH'

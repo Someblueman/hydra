@@ -3,7 +3,7 @@
 set -u
 REPO="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 HYDRA_BIN="$REPO/bin/hydra"
-root="$(mktemp -d)"
+root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 export HYDRA_HOME="$root/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 # shellcheck source=/dev/null
 . "$REPO/tests/helpers.sh"

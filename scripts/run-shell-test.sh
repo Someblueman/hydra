@@ -1,12 +1,33 @@
 #!/bin/sh
 # Isolate each shell case's files and tmux servers, including failed cases.
+# Usage: BUILD_DIR=<dir> run-shell-test.sh <log-dir> <name> <test-file>
 set -eu
+# Tests locate native helpers from BUILD_DIR only; never fall back to ./build,
+# which may hold a stale binary from another configuration.
+: "${BUILD_DIR:?BUILD_DIR is required; run make test, make test-one T=<name>, or set BUILD_DIR}"
+BUILD_DIR=$(CDPATH='' cd -- "$BUILD_DIR" && pwd) || {
+    printf 'run-shell-test: BUILD_DIR does not exist: %s\n' "$BUILD_DIR" >&2
+    exit 2
+}
+HYDRA_FLEET_BIN="$BUILD_DIR/hydra-fleet"
+HYDRA_TUI_BIN="$BUILD_DIR/hydra-tui"
+HYDRA_CORE="$BUILD_DIR/hydra-core"
+HYDRA_SHELL_EXEC="$BUILD_DIR/test-shell-exec"
+export BUILD_DIR HYDRA_FLEET_BIN HYDRA_TUI_BIN HYDRA_CORE HYDRA_SHELL_EXEC
+for case_binary in "$HYDRA_SHELL_EXEC" "$HYDRA_FLEET_BIN" "$HYDRA_TUI_BIN"; do
+    [ -x "$case_binary" ] && continue
+    printf 'run-shell-test: required test binary is missing: %s (build it with make BUILD_DIR=%s test)\n' \
+        "$case_binary" "$BUILD_DIR" >&2
+    exit 2
+done
 case_root=$(mktemp -d /tmp/hydra-sh.XXXXXX)
 case_runner=
 mkdir -p "$case_root/tmp" "$case_root/tmux"
 TMPDIR="$case_root/tmp"
 TMUX_TMPDIR="$case_root/tmux"
 export TMPDIR TMUX_TMPDIR
+# A case started from inside tmux must not see (or act on) the caller's server.
+unset TMUX TMUX_PANE
 
 # Only used on interruption, while the owned runner PID is still unreaped.
 # shellcheck disable=SC2329,SC2317 # Called by the EXIT trap through cleanup.
@@ -34,7 +55,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
-sh "$(dirname "$0")/run-test.sh" "$1" "$2" "${HYDRA_SHELL_EXEC:?test-shell-exec is required}" sh "$3" &
+sh "$(dirname "$0")/run-test.sh" "$1" "$2" "$HYDRA_SHELL_EXEC" sh "$3" &
 case_runner=$!
 case_status=0
 wait "$case_runner" || case_status=$?

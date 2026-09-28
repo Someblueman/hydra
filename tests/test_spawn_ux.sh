@@ -46,7 +46,7 @@ assert_not_contains() {
     fi
 }
 
-test_base_dir="$(mktemp -d)"
+test_base_dir="$(test_mktemp_dir)"
 tty_server="hydra-spawn-ux-$$"
 created_sessions=""
 # shellcheck disable=SC2329,SC2317  # invoked by the EXIT trap

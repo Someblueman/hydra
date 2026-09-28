@@ -69,6 +69,7 @@ jobs:
         sudo ln -sf /bin/dash /bin/sh
         make test
 
+    # make test already runs the install and onboarding shell cases.
     - name: Run extended CLI and recovery acceptance
       env:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-test
@@ -76,7 +77,7 @@ jobs:
         mkdir -p "$TMUX_TMPDIR"
         make test-fleet-controls test-fleet-recovery test-plan-inspection \
           test-plan-outcomes test-statistics-export test-task-announce \
-          test-plan-reuse smoke-onboarding
+          test-plan-reuse
 
   compatibility:
     name: Shell Compatibility
@@ -152,12 +153,15 @@ jobs:
         tui_package_dir="$(make package-tui | tail -n 1)"
         test "$(cat "$tui_package_dir/hydra-tui.source")" = "$(git rev-parse HEAD)"
 
+    # The Ubuntu test job already covers the shell-only install via make test;
+    # macOS has no make test lane, so it qualifies the shell-only install here.
     - name: Qualify shell-only and offline native installs
       env:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-install
       run: |
         mkdir -p "$TMUX_TMPDIR"
-        make test-install test-native-install
+        if [ "$RUNNER_OS" = macOS ]; then make test-install; fi
+        make test-native-install
 
     - name: Inspect release dependencies
       run: |
@@ -224,6 +228,18 @@ jobs:
       run: |
         mkdir -p "$TMUX_TMPDIR"
         make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} test-fleet
+
+    # Real loopback sshd with ephemeral keys. The test prints SKIP and exits 0
+    # without sshd, so require its final pass line rather than the exit code.
+    - name: Run loopback SSH enrollment
+      if: matrix.os == 'ubuntu-latest' && matrix.mode == 'acceptance' && matrix.shard == 'odd'
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-fleet-ssh
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        sudo apt-get install -y openssh-server
+        make test-enrollment-ssh | tee "$RUNNER_TEMP/enrollment-ssh.out"
+        grep -q '^Strict loopback lost authenticated master' "$RUNNER_TEMP/enrollment-ssh.out"
 
     - name: Run fleet sanitizers
       if: matrix.mode == 'sanitizers'

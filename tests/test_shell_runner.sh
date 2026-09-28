@@ -2,7 +2,7 @@
 # The parallel runner must preserve failure and clean only its own resources.
 set -eu
 root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
-HYDRA_SHELL_EXEC=${HYDRA_SHELL_EXEC:-$root/build/test-shell-exec}
+HYDRA_SHELL_EXEC=${HYDRA_SHELL_EXEC:?HYDRA_SHELL_EXEC is required: run via make test or make test-one T=shell_runner}
 export HYDRA_SHELL_EXEC
 for option in --jobserver-fds --jobserver-auth; do
     MAKEFLAGS="$option=8,9" "$HYDRA_SHELL_EXEC" sh -c '
@@ -12,7 +12,7 @@ for option in --jobserver-fds --jobserver-auth; do
     ' 8</dev/null 9>/dev/null 7<&8
 done
 echo 'PASS shell runner: detached cases cannot inherit Make jobserver pipes'
-fixture=$(mktemp -d)
+fixture=$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

@@ -2,7 +2,7 @@
 # Public fleet CLI tests with a controlled SSH transport and real C server.
 set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 TMUX_TMPDIR="$(mktemp -d /tmp/hydra-fleet.XXXXXX)"
 TMUX_SOCKET="$TMUX_TMPDIR/tmux-$(id -u)/default"
 unset TMUX TMUX_PANE
@@ -17,14 +17,14 @@ cleanup() {
         kill "$ssh_pid" 2>/dev/null || true
     fi
     rm -rf "$fixture"
-    rmdir "$TMUX_TMPDIR/tmux-$(id -u)" 2>/dev/null || true
-    rmdir "$TMUX_TMPDIR" 2>/dev/null || true
+    # The server is gone; its socket file is not removed by kill-server.
+    rm -rf "$TMUX_TMPDIR"
 }
 trap cleanup 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 HYDRA_HOME="$fixture/home"
-HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 export HYDRA_HOME TMUX_TMPDIR TMUX_SOCKET HYDRA_FLEET_BIN
 mkdir -p "$fixture/bin"
 cat > "$fixture/bin/ssh" <<'SSH'
@@ -96,8 +96,9 @@ awk -F '\t' '$1=="T" && $2=="good" && $3=="responded" && $4==0 {empty=1}
     END {exit !(empty && delayed && failed)}' "$fixture/tui-v2"
 awk -F '\t' '$1=="F" && $2=="slowgood" && $3=="/srv/slowgood" && $4=="delayed" && $5=="head_delayed" && $6=="instance_delayed" {found=1}
     END {exit !found}' "$fixture/tui-v2"
-if [ -x "$root/build/hydra-tui" ]; then
-    "$root/build/hydra-tui" --fleet --headless-fixture "$fixture/tui-v2" --view hosts --ascii --size 140x30 > "$fixture/hosts.out"
+# The fleet case passes the native TUI it built; a missing binary is a failure.
+if [ -n "${HYDRA_TUI_BIN:-}" ]; then
+    "$HYDRA_TUI_BIN" --fleet --headless-fixture "$fixture/tui-v2" --view hosts --ascii --size 140x30 > "$fixture/hosts.out"
     grep -q 'good.*responded.*0 heads' "$fixture/hosts.out"
     grep -q 'offline.*failed' "$fixture/hosts.out"
     grep -q 'CPU / memory / load: unavailable' "$fixture/hosts.out"

@@ -7,7 +7,7 @@ test_count=0
 pass_count=0
 fail_count=0
 HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 # The cancellation hook compares paths with the CLI's canonical home.
 test_root="$(cd "$test_root" && pwd -P)"
 repo="$test_root/repo"

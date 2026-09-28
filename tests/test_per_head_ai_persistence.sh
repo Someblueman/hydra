@@ -25,7 +25,7 @@ assert_contains() {
 }
 
 setup_env() {
-    test_dir="$(mktemp -d)" || exit 1
+    test_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")" || exit 1
     export HYDRA_HOME="$test_dir/.hydra"
     export HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
     mkdir -p "$HYDRA_HOME" "$test_dir/repo"

@@ -6,9 +6,9 @@ set -u
 test_count=0
 pass_count=0
 fail_count=0
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-tui="${HYDRA_TUI_BIN:-$repo_root/build/hydra-tui}"
+tui="${HYDRA_TUI_BIN:?HYDRA_TUI_BIN is required: run via make test-tui or make test-one T=native_tui}"
 fixture="$repo_root/tests/fixtures/tui/native-v2.tsv"
 
 # shellcheck source=helpers.sh

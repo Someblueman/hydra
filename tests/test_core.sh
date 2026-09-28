@@ -6,12 +6,12 @@ set -u
 test_count=0
 pass_count=0
 fail_count=0
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 HYDRA_BIN="$repo_root/bin/hydra"
 HYDRA_HOME="$test_root/home"
 HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
-core="${HYDRA_CORE:-$repo_root/build/hydra-core}"
+core="${HYDRA_CORE:?HYDRA_CORE is required: run via make test-parity or make test-one T=core}"
 export HYDRA_HOME HYDRA_STATE_V2_ROOT
 
 # shellcheck source=helpers.sh

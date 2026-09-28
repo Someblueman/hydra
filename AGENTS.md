@@ -21,6 +21,19 @@ fleet additionally needs JSON-C development files and pkg-config at build time.
 - Test: `make test` — runs each `tests/test_*.sh` with `sh`. Passing runs still print
   `Error: ...` lines: those are expected error-path assertions, not failures. Judge
   success by the exit code and the `Failed: 0` summaries.
+- One test file: `make test-one T=<name>` runs `tests/test_<name>.sh` (also accepts
+  `T=test_<name>` or `T=tests/test_<name>.sh`) exactly as `make test` does and prints
+  its log. Pass the same `BUILD_DIR` as your other make runs. Do not run
+  `sh tests/test_*.sh` directly: cases need `BUILD_DIR` plus the binaries the runner
+  derives from it (`HYDRA_FLEET_BIN`, `HYDRA_TUI_BIN`, `HYDRA_CORE`,
+  `HYDRA_SHELL_EXEC`) and stop with a "... is required" message without them, rather
+  than falling back to a possibly stale `./build`. The equivalent manual form is
+  `BUILD_DIR="$PWD/build" sh scripts/run-shell-test.sh build/test-logs <name> tests/test_<name>.sh`
+  after building the `make test` prerequisites.
+- `scripts/run-shell-test.sh` gives every case a private `TMPDIR` and `TMUX_TMPDIR`
+  and removes them afterwards (failed cases keep only their log under
+  `$BUILD_DIR/test-logs/`), and unsets `TMUX`/`TMUX_PANE`, so running from inside
+  tmux neither skips checks nor touches your server.
 
 ### Running the app from source (non-obvious caveats)
 - Run it directly as `bin/hydra <command>`; it auto-detects `lib/` relative to the

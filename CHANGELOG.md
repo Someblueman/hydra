@@ -74,6 +74,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The fleet installer requires the packaged `bin/hydra` and its handshake to
   report exactly the helper's own version instead of any 2.x release.
+- Test suite (contributors): `make test-one T=<name>` runs one `tests/test_<name>.sh`
+  the way `make test` does. Shell cases, including Fleet shell cases, take native
+  binaries only from `BUILD_DIR` and fail with a clear message instead of using a
+  stale `./build`. Each case gets private `TMPDIR`/`TMUX_TMPDIR`, runs detached
+  from any caller's tmux (so checks no longer skip inside tmux), and leaves no
+  temporary files or tmux sockets behind. Shell cases start longest-first, the
+  dashboard case runs in parallel, fixed sleeps that raced asynchronous work now
+  poll, and the loopback-SSH enrollment and accepted-run retention tests run in CI.
 
 ### Fixed
 

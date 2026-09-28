@@ -10,7 +10,7 @@ root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 . "$root/tests/fixture-tools.sh"
 fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
 HYDRA_HOME="$fixture/home"
-HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 export HYDRA_HOME HYDRA_FLEET_BIN HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 # shellcheck source=/dev/null
 . "$root/tests/workflow_task_cleanup.sh"
@@ -74,7 +74,7 @@ if [ "${HYDRA_TEST_DAG_LOST_ACK:-0}" = 1 ] || [ "${HYDRA_TEST_DAG_RESULT_LOST:-0
 #!/bin/sh
 set -eu
 while [ "$#" -gt 2 ]; do shift; done
-request="$(mktemp)"
+request="$(mktemp "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 trap 'rm -f "$request"' EXIT
 cat > "$request"
 if [ -f "$HYDRA_TEST_DAG_CONTROL/lose-ack" ] && grep -q '"operation":"submit"' "$request"; then

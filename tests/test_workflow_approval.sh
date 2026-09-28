@@ -2,7 +2,7 @@
 # Durable approval waits through the public CLI, with no live AI or remote host.
 set -u
 HYDRA_BIN="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)/bin/hydra"
-ROOT="$(mktemp -d)"
+ROOT="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 export HYDRA_HOME="$ROOT/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 # shellcheck disable=SC1091
 . "$(dirname "$0")/helpers.sh"

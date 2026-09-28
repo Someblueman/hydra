@@ -5,7 +5,7 @@ test_count=0
 pass_count=0
 fail_count=0
 HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo="$test_root/repo"
 export HYDRA_HOME="$test_root/home"
 export HYDRA_NONINTERACTIVE=1
@@ -97,7 +97,12 @@ case "$notify_repeat" in *'[notify]'*) assert_success 1 "notification sink is ra
 assert_success $? "durable wait observes declared outcome"
 
 tmux send-keys -t lifecycle-test:0.0 'echo API_TOKEN=supersecret' Enter
-sleep 1
+# shellcheck disable=SC2329,SC2317 # Invoked through wait_for.
+pane_echoed_secret() {
+    tmux capture-pane -p -t lifecycle-test:0.0 | grep -x 'API_TOKEN=supersecret'
+}
+wait_for 'the pane to print the secret before teardown' pane_echoed_secret
+assert_success $? "pane output reached the terminal before teardown"
 "$HYDRA_BIN" kill lifecycle-test --transcript redacted >/dev/null
 assert_success $? "head tears down"
 transcript="$head_dir/transcripts/$old_instance.txt"
@@ -117,7 +122,22 @@ wait_code_file="$test_root/wait-instance-change.code"
     printf '%s\n' "$?" > "$wait_code_file"
 ) &
 wait_pid=$!
-sleep 1
+# The waiter records the current instance before its first poll sleep; resume
+# only once it is sleeping, so it is guaranteed to observe the replacement.
+# shellcheck disable=SC2329,SC2317 # Invoked through wait_for.
+waiter_is_polling() {
+    ps -eo pid=,ppid=,comm= | awk -v root="$wait_pid" '
+        { parent[$1] = $2; name[$1] = $3 }
+        END {
+            for (pid in name) {
+                if (name[pid] !~ /(^|\/)sleep$/) continue
+                for (p = parent[pid]; p != "" && p > 1; p = parent[p]) if (p == root) exit 0
+            }
+            exit 1
+        }'
+}
+wait_for 'the instance-change waiter to start polling' waiter_is_polling
+assert_success $? "instance-change waiter started before resume"
 "$HYDRA_BIN" resume lifecycle-test >/dev/null
 assert_success $? "head resumes from durable metadata"
 wait "$wait_pid"

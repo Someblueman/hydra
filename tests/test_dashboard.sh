@@ -2,10 +2,15 @@
 # Test script for Hydra dashboard functionality
 # POSIX-compliant shell script
 
-# Test configuration
-TEST_REPO_DIR="/tmp/hydra_dashboard_test"
+# Test configuration. Everything lives under a private base directory (Hydra
+# puts worktrees beside the repository, in $TEST_BASE_DIR/.hydra-worktrees), so
+# the case can run in parallel with others and leaves nothing behind in /tmp.
+TEST_TMP_ROOT="${TMPDIR:-/tmp}"
+TEST_TMP_ROOT="${TEST_TMP_ROOT%/}"
+TEST_BASE_DIR="$(mktemp -d "$TEST_TMP_ROOT/hydra-dashboard.XXXXXX")" || exit 1
+TEST_REPO_DIR="$TEST_BASE_DIR/repo"
 TEST_BRANCHES="feature/test-1 feature/test-2 feature/test-3"
-UNRELATED_TEST_DIR="/tmp/hydra-unrelated-dashboard-$$"
+UNRELATED_TEST_DIR="$TEST_TMP_ROOT/hydra-unrelated-dashboard-$$"
 UNRELATED_TEST_SESSION="hydra-unrelated-dashboard-$$"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HYDRA_BIN="$SCRIPT_DIR/../bin/hydra"
@@ -42,18 +47,8 @@ print_error() {
 }
 
 cleanup_test_directories() {
-    rm -rf "$TEST_REPO_DIR" /tmp/test_hydra_home 2>/dev/null || true
-
-    for branch in $TEST_BRANCHES; do
-        worktree_path="/tmp/hydra-$branch"
-        rm -rf "$worktree_path" 2>/dev/null || true
-
-        # Slash-containing branch names share a test-owned parent.
-        parent_dir="$(dirname "$worktree_path")"
-        if [ "$parent_dir" != "/tmp" ]; then
-            rmdir "$parent_dir" 2>/dev/null || true
-        fi
-    done
+    # The repository and its worktrees are private to this run.
+    rm -rf "$TEST_REPO_DIR" "$TEST_BASE_DIR/.hydra-worktrees" 2>/dev/null || true
 }
 
 # Comprehensive pre-test cleanup
@@ -143,8 +138,9 @@ cleanup_test_env() {
     fi
     
     # Remove test repository and worktrees
-    cd /tmp || return 0
+    cd "$TEST_TMP_ROOT" || return 0
     cleanup_test_directories
+    rm -rf "$TEST_BASE_DIR"
     
     print_status "Test environment cleaned up"
 }

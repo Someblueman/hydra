@@ -5,7 +5,7 @@ test_count=0
 pass_count=0
 fail_count=0
 HYDRA_BIN="$(cd "$(dirname "$0")/.." && pwd)/bin/hydra"
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo="$test_root/repo"
 export HYDRA_HOME="$test_root/home"
 export HYDRA_NONINTERACTIVE=1
@@ -85,7 +85,17 @@ HYDRA_EXEC_MAX_BYTES=16 "$HYDRA_BIN" exec --branch operations-test --json -- sh 
     'awk '\''BEGIN { for (i = 0; i < 200000; i++) printf "x" }'\''; awk '\''BEGIN { for (i = 0; i < 200000; i++) printf "y" }'\'' >&2; sleep 2' \
     > "$bounded_json_file" &
 bounded_pid=$!
-sleep 1
+# Check the bound once the running command has filled a capture to its 16-byte
+# cap (the earlier exec wrote only 7 bytes), not after a fixed delay that may
+# elapse before the command has written anything.
+# shellcheck disable=SC2329,SC2317 # Invoked through wait_for.
+exec_capture_started() {
+    find "$HYDRA_HOME/state/v2/projects/$project_id/exec" -type f \
+        \( -name stdout -o -name stderr -o -name '.stdout.full' -o -name '.stderr.full' \) \
+        -size +15c -print 2>/dev/null | grep .
+}
+wait_for 'the bounded exec to capture output' exec_capture_started
+assert_success $? "bounded exec captured output while running"
 oversized_capture="$(find "$HYDRA_HOME/state/v2/projects/$project_id/exec" -type f \
     \( -name stdout -o -name stderr -o -name '.stdout.full' -o -name '.stderr.full' \) \
     -size +16c -print -quit)"
