@@ -27,7 +27,7 @@ workflow_plan_reuse_assert() {
     fixture_json reuse-check "$run_dir/repair-2.json" "$run_dir"
     printf 'candidate\ncomposed\n' > "$fixture/expected"
     cmp "$fixture/expected" "$run_dir/steps/compose/attempt-2/artifacts/result"
-    _reuse_build=${BUILD_DIR:-$root/build}
+    _reuse_build=${BUILD_DIR:?BUILD_DIR is required: run via make test or make test-one T=<name>}
     case $_reuse_build in /*) ;; *) _reuse_build=$root/$_reuse_build ;; esac
     make -s -C "$root" BUILD_DIR="$_reuse_build" "$_reuse_build/native-tests/test-plan-reuse-invalidation"
     (cd "$root" && "$_reuse_build/native-tests/test-plan-reuse-invalidation" "$fixture" --fleet-bin "$HYDRA_FLEET_BIN")

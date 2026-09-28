@@ -31,7 +31,10 @@ lint:
 	@echo "All checks passed!"
 
 # Run CLI shell tests with their native structured-data fixture helpers.
-test: build-fleet build-tui build-test-fixture $(BUILD_DIR)/native-tests/statistics-evidence $(BUILD_DIR)/test-statistics
+# Every shell case runs through scripts/run-shell-test.sh, which exports these
+# binaries from BUILD_DIR (never ./build) and gives the case private temp/tmux dirs.
+SHELL_TEST_PREREQS = build-fleet build-tui build-core build-test-fixture $(BUILD_DIR)/native-tests/statistics-evidence $(BUILD_DIR)/test-statistics $(BUILD_DIR)/test-shell-exec
+test: $(SHELL_TEST_PREREQS)
 	@echo "Running tests..."
 	+@case "$(MAKEFLAGS)" in \
 		*jobserver*) exec $(MAKE) shell-tests ;; \
@@ -45,13 +48,11 @@ FAST_SHELL_TESTS = foundation paths state json_output git_simple project_trust d
 FAST_NATIVE_BINS = $(filter-out $(BUILD_DIR)/test-task-result,$(FLEET_TEST_BINS))
 .PHONY: test-fast
 test-fast:
-	+@$(MAKE) -j$(TEST_JOBS) build-fleet build-test-fixture build-core build-tui $(BUILD_DIR)/test-statistics $(FAST_NATIVE_BINS)
+	+@$(MAKE) -j$(TEST_JOBS) $(SHELL_TEST_PREREQS) $(FAST_NATIVE_BINS)
 	@$(MAKE) lint
 	@echo "Running fast shell tests..."
 	@for name in $(FAST_SHELL_TESTS); do \
-		test="tests/test_$${name}.sh"; \
-		echo "Running $$test..."; \
-		sh "$$test" || exit 1; \
+		BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "fast-$$name" "tests/test_$${name}.sh" || exit 1; \
 	done
 	@$(MAKE) -j1 test-c test-tui test-parity test-termviz
 	@$(BUILD_DIR)/test-statistics
@@ -61,6 +62,17 @@ test-fast:
 		"$$binary" || exit 1; \
 	done
 
+# Run one shell test file the way make test does: make test-one T=kill
+# (T may also be test_kill or tests/test_kill.sh). The case log is printed.
+.PHONY: test-one
+test-one: $(SHELL_TEST_PREREQS)
+	@name="$(T)"; name="$${name#tests/}"; name="$${name#test_}"; name="$${name%.sh}"; \
+	if [ -z "$$name" ] || [ ! -f "tests/test_$$name.sh" ]; then \
+		echo "usage: make test-one T=<name>   (runs tests/test_<name>.sh)" >&2; exit 2; \
+	fi; \
+	BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "test-one-$$name" "tests/test_$$name.sh" && \
+		cat "$(BUILD_DIR)/test-logs/test-one-$$name.log"
+
 # Optional read-only native helper. The shell CLI remains the mutation authority.
 build-core: $(BUILD_DIR)/hydra-core
 
@@ -68,7 +80,7 @@ build-tui: $(BUILD_DIR)/hydra-tui
 
 .PHONY: test-termviz example-termviz example-workspace test-workspace-pty test-visualization sanitize-workspace
 test-visualization: build-tui test-termviz $(BUILD_DIR)/test-statistics
-	sh tests/test_visualization.sh
+	BUILD_DIR="$(abspath $(BUILD_DIR))" sh tests/test_visualization.sh
 $(BUILD_DIR)/test-termviz: tests/c/test_termviz.c $(TERMVIZ_SOURCES) src/termviz/termviz.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_termviz.c $(TERMVIZ_SOURCES) -o $@
 
@@ -304,6 +316,7 @@ help:
 	@echo "  make lint      - Run ShellCheck and dash syntax validation"
 	@echo "  make test      - Run the shell-only test suite"
 	@echo "  make test-fast - Run the fixed PR feedback test selection"
+	@echo "  make test-one T=<name> - Run tests/test_<name>.sh like make test does"
 	@echo "  make build-core - Build the optional read-only native helper"
 	@echo "  make build-tui - Build the optional native mission-control TUI"
 	@echo "  make test-c    - Run native library unit tests"
@@ -411,7 +424,7 @@ test-task-announce: build-fleet
 	"$(BUILD_DIR)/native-tests/test-task-announce" "$(abspath $(BUILD_DIR))/hydra-fleet"
 
 test-plan-reuse: build-fleet
-	HYDRA_TEST_PLAN_REPAIR=combine HYDRA_TEST_PLAN_REUSE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
+	HYDRA_TEST_PLAN_REPAIR=combine HYDRA_TEST_PLAN_REUSE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 BUILD_DIR="$(abspath $(BUILD_DIR))" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
 
 test-retention: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-retention"

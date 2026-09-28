@@ -4,7 +4,7 @@ set -eu
 viz_root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 viz_tmp="$(mktemp -d "${TMPDIR:-/tmp}/hydra-visualization.XXXXXX")"
 viz_bin="$viz_root/bin/hydra"
-viz_build="${BUILD_DIR:-$viz_root/build}"
+viz_build="${BUILD_DIR:?BUILD_DIR is required: run via make test or make test-one T=<name>}"
 case "$viz_build" in /*) ;; *) viz_build="$viz_root/$viz_build" ;; esac
 viz_tui="${HYDRA_VISUAL_TEST_BIN:-$viz_build/hydra-tui}"
 export HYDRA_HOME="$viz_tmp/home" HYDRA_SKIP_AI=1 HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
@@ -89,11 +89,11 @@ done
 grep -q '4 dependency edges' "$viz_tmp/graph.out"
 grep -q 'review' "$viz_tmp/graph.out"
 grep -q 'succeeded' "$viz_tmp/graph.out"
-mkdir -p "$viz_root/build/visualization-evidence"
-cp "$viz_tmp/workflows.tsv" "$viz_root/build/visualization-evidence/real-workflow.tsv"
-cp "$viz_tmp/heads.tsv" "$viz_root/build/visualization-evidence/real-heads.tsv"
-cp "$viz_tmp/statistics.tsv" "$viz_root/build/visualization-evidence/real-statistics.tsv"
-cp "$viz_tmp/graph.out" "$viz_root/build/visualization-evidence/real-graph.txt"
+mkdir -p "$viz_build/visualization-evidence"
+cp "$viz_tmp/workflows.tsv" "$viz_build/visualization-evidence/real-workflow.tsv"
+cp "$viz_tmp/heads.tsv" "$viz_build/visualization-evidence/real-heads.tsv"
+cp "$viz_tmp/statistics.tsv" "$viz_build/visualization-evidence/real-statistics.tsv"
+cp "$viz_tmp/graph.out" "$viz_build/visualization-evidence/real-graph.txt"
 # Cycles and missing dependencies must not produce a plausible graph.
 for viz_bad in cycle missing duplicate empty_dependency duplicate_dependency; do
     awk -F '\t' -v OFS='\t' -v mode="$viz_bad" '

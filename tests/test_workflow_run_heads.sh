@@ -6,7 +6,7 @@
 set -u
 REPO="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 HYDRA_BIN="$REPO/bin/hydra"
-FLEET_BIN="${BUILD_DIR:-$REPO/build}/hydra-fleet"
+FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 case "$FLEET_BIN" in /*) ;; *) FLEET_BIN="$REPO/$FLEET_BIN" ;; esac
 export HYDRA_TEST_ROOT="$REPO"
 root="$(mktemp -d)"

@@ -6,7 +6,7 @@ set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
 repo="$fixture/repo"
-native="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+native="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 [ -x "$native" ]
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 export HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2" HYDRA_FLEET_BIN="$native"

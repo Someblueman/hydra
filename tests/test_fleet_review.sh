@@ -3,7 +3,7 @@
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
-HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 BUILD_DIR="$(dirname "$HYDRA_FLEET_BIN")"
 HYDRA_HOME="$fixture/client"
 HYDRA_REVIEW_FIXTURE="$fixture"

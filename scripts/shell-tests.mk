@@ -37,4 +37,4 @@ $(BUILD_DIR)/test-shell-exec: tests/c/test_shell_exec.c | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) $< -o $@
 
 $(addprefix shell-case-,$(SHELL_TEST_NAMES)): shell-case-%: $(BUILD_DIR)/test-shell-exec
-	@HYDRA_SHELL_EXEC="$(abspath $(BUILD_DIR))/test-shell-exec" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" "tests/test_$*.sh"
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" "tests/test_$*.sh"
