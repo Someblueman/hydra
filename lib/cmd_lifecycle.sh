@@ -320,7 +320,7 @@ agent_locate_expand_dirs() {
 
 # First line of `PATH --version`, bounded to five seconds and printable ASCII.
 agent_locate_version() {
-    _alv_out="$(mktemp)" || return 0
+    _alv_out="$(mktemp "${TMPDIR:-/tmp}/hydra-agent-version.XXXXXX")" || return 0
     "$1" --version < /dev/null > "$_alv_out" 2>/dev/null &
     _alv_pid=$!
     (sleep 5; kill "$_alv_pid" 2>/dev/null) > /dev/null 2>&1 &

@@ -318,14 +318,14 @@ agent_location_resolve() {
 
 # Usage: agent_location_record <executable> <path>
 # Writes the scalar record 0600 in a 0700 directory whatever the umask; prints
-# the reason on failure.
+# the reason on failure. Needs locks.sh (hydra_private_mkdir).
 agent_location_record() {
     _alw_reason="$(agent_location_check "$1" "$2")" || { printf '%s\n' "$_alw_reason"; return 1; }
     _alw_dir="$(agent_location_dir)"
     if [ -h "$HYDRA_HOME/agents" ] || [ -h "$_alw_dir" ]; then
         echo "the location directory is a symlink"; return 1
     fi
-    if ! (umask 077; mkdir -p "$_alw_dir") || ! chmod 700 "$HYDRA_HOME/agents" "$_alw_dir"; then
+    if ! hydra_private_mkdir "$_alw_dir" || ! chmod 700 "$HYDRA_HOME/agents" "$_alw_dir"; then
         echo "cannot create $_alw_dir"; return 1
     fi
     _alw_tmp="$(umask 077; mktemp "$_alw_dir/.$1.XXXXXX")" || { echo "cannot write the record"; return 1; }
