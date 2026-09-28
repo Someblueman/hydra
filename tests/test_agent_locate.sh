@@ -6,9 +6,11 @@
 # and agent-locate-record actions. Every case runs under umask 022 and 002.
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+# shellcheck disable=SC1091
+. "$root/tests/helpers.sh"
+fixture="$(test_mktemp_dir)"
 fixture="$(cd "$fixture" && pwd -P)"
-fleet="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+fleet="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test-fleet or make test-one T=agent_locate}"
 export HYDRA_FLEET_BIN="$fleet"
 # A private tmux server: spawn below must never touch the user's sessions.
 mkdir "$fixture/tmux"
@@ -207,8 +209,7 @@ cases() {
         rm -f "$fixture/launched"
         hydra spawn "locate-$1" --profile claude > "$out" 2>&1 || { cat "$out" >&2; exit 1; }
     ) || fail "spawn with a recorded agent failed"
-    tries=0
-    while [ ! -s "$fixture/launched" ] && [ "$tries" -lt 50 ]; do sleep 0.1; tries=$((tries + 1)); done
+    wait_for "the spawned agent to launch" test -s "$fixture/launched" || fail "spawn never launched the agent"
     [ "$(sed -n 1p "$fixture/launched")" = "$local_bin/claude" ] || fail "spawn did not launch the recorded claude"
     (cd "$repo" && HYDRA_NONINTERACTIVE=1 hydra kill "locate-$1" --force > /dev/null 2>&1) || :
 }

@@ -6,12 +6,14 @@
 # under a local umask of 022 and again under 002.
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+# shellcheck disable=SC1091
+. "$root/tests/helpers.sh"
+fixture="$(test_mktemp_dir)"
 fixture="$(cd "$fixture" && pwd -P)"
 trap 'rm -rf "$fixture"' 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-fleet="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+fleet="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test-fleet or make test-one T=remote_setup}"
 version="$(sed -n 's/^#define F_VERSION "\(.*\)"$/\1/p' "$root/src/fleet/fleet.h")"
 [ -n "$version" ]
 unset CI HYDRA_NONINTERACTIVE

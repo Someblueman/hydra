@@ -13,7 +13,7 @@ HYDRA_BIN="$root/bin/hydra"
 # shellcheck disable=SC1091
 . "$root/tests/helpers.sh"
 
-base="$(mktemp -d)"
+base="$(test_mktemp_dir)"
 repo="$base/repo"
 # Hydra creates this home itself; a test must not pre-create it.
 export HYDRA_HOME="$base/home"
@@ -21,7 +21,7 @@ export HYDRA_NONINTERACTIVE=1
 export HYDRA_SKIP_AI=1
 export HYDRA_NO_SWITCH=1
 export HYDRA_SETUP_CONTINUE=1
-[ -n "${HYDRA_FLEET_BIN:-}" ] || [ ! -x "$root/build/hydra-fleet" ] || export HYDRA_FLEET_BIN="$root/build/hydra-fleet"
+export HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test-umask or make test-one T=umask_state}"
 trap 'rm -rf "$base"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

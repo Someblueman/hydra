@@ -109,10 +109,10 @@ fleet-case-shell-agent-auth:
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_agent_auth.sh
 
 fleet-case-shell-agent-locate:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_agent_locate.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_agent_locate.sh
 
 fleet-case-shell-remote-agents:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_remote_agents.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_remote_agents.sh
 
 fleet-case-native-agent-recipes:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-agent-recipes
@@ -277,10 +277,10 @@ fleet-case-native-remote-setup:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-remote-setup
 
 fleet-case-shell-remote-setup:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_remote_setup.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_remote_setup.sh
 
 fleet-case-native-fleet-assets:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-fleet-assets
 
 fleet-case-shell-remote-provision:
-	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_remote_provision.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_remote_provision.sh

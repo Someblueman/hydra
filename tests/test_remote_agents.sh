@@ -8,12 +8,14 @@
 # network: a fake curl serves a fake installer. Runs under umask 022 and 002.
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+# shellcheck disable=SC1091
+. "$root/tests/helpers.sh"
+fixture="$(test_mktemp_dir)"
 fixture="$(cd "$fixture" && pwd -P)"
 trap 'rm -rf "$fixture"' 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-fleet="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+fleet="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test-fleet or make test-one T=remote_agents}"
 AGENTS_REAL_SSH="$(command -v ssh)"
 export HYDRA_FLEET_BIN="$fleet" AGENTS_TEST_ROOT="$fixture" AGENTS_REAL_SSH
 unset CI HYDRA_NONINTERACTIVE AGENTS_TEST_INSTALL AGENTS_LOGIN_EXIT
@@ -89,8 +91,7 @@ run() {
 # would reach the terminal before Hydra asks).
 feed() {
     [ -n "$1" ] || return 0
-    tries=0
-    while ! grep -q 'y/N\]' "$2" 2>/dev/null && [ "$tries" -lt 200 ]; do sleep 0.1; tries=$((tries + 1)); done
+    WAIT_FOR_TIMEOUT=20 wait_for "a y/N prompt" grep -q "y/N\]" "$2" || :
     printf '%s' "$1"
     sleep 1
 }

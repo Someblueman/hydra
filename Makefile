@@ -81,7 +81,7 @@ UMASK_FLEET_CASES = dag-crash-2 dag-parallelism-1
 test-umask: fleet-test-build
 	@umask 002 && $(MAKE) test-fast
 	@umask 002 && $(MAKE) $(addprefix fleet-case-,$(UMASK_FLEET_CASES))
-	@umask 002 && sh tests/test_umask_state.sh
+	@umask 002 && $(MAKE) test-one T=umask_state
 
 # Optional read-only native helper. The shell CLI remains the mutation authority.
 build-core: $(BUILD_DIR)/hydra-core
