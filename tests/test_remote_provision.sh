@@ -16,6 +16,9 @@ trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 fleet="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test-fleet or make test-one T=remote_provision}"
 [ -x "$fleet" ] || { echo 'Build the fleet helper before this test' >&2; exit 1; }
+# Helpers that go into packages: sanitizer builds exceed the package size
+# limit, so make sanitize-fleet passes the deployable build here.
+package_fleet="${HYDRA_TEST_PACKAGE_BINARY:-$fleet}"
 version="$(sed -n 's/^#define F_VERSION "\(.*\)"$/\1/p' "$root/src/fleet/fleet.h")"
 [ -n "$version" ]
 unset CI HYDRA_NONINTERACTIVE HYDRA_ROOT HYDRA_FLEET_ASSETS_FILE HYDRA_FLEET_ASSET_BASE PROVISION_REMOTE_PATH PROVISION_UNAME
@@ -56,8 +59,8 @@ cat > "$fixture/uname/uname" <<'UNAME'
 case "${1:-}" in -m) echo riscv64 ;; *) echo Linux ;; esac
 UNAME
 chmod +x "$fixture/uname/uname"
-cp "$fleet" "$fixture/assets/$asset"
-sha="$(shasum -a 256 "$fleet" 2>/dev/null || sha256sum "$fleet")"
+cp "$package_fleet" "$fixture/assets/$asset"
+sha="$(shasum -a 256 "$package_fleet" 2>/dev/null || sha256sum "$package_fleet")"
 sha="${sha%% *}"
 printf 'version\tplatform\tsha256\tfilename\n%s\t%s\t%s\t%s\n' "$version" "$platform" "$sha" "$asset" > "$fixture/assets.tsv"
 printf 'version\tplatform\tsha256\tfilename\n%s\t%s\t%064d\t%s\n' "$version" "$platform" 0 "$asset" > "$fixture/bad-assets.tsv"
@@ -222,17 +225,17 @@ cases() {
     seed p6 "$fixture/remote-$mask-d"
     printf 'not an executable\n' > "$fixture/not-binary"
     run 1 "$out" provision p6 --binary "$fixture/not-binary" --json; has "$out" '"code":"platform_mismatch"'
-    run 3 "$out" provision p6 --binary "$fleet" --json
+    run 3 "$out" provision p6 --binary "$package_fleet" --json
     has "$out" '"trust":"unpinned"'; has "$out" '"source":"binary"'
     has "$out" '"argv":\["hydra","remote","provision","p6","--binary","[^"]*","--approve","[0-9a-f]\{64\}","--json"\]'
     hash="$(plan_hash "$out")"
-    run 0 "$out" provision p6 --binary "$fleet" --approve "$hash" --json; has "$out" '"id":"provision","status":"done"'
+    run 0 "$out" provision p6 --binary "$package_fleet" --approve "$hash" --json; has "$out" '"id":"provision","status":"done"'
     has "$HYDRA_HOME/fleet/remotes/p6.json" '"target":"other-host"'
 
     # Without a pinned row: the identical local platform uses this host's
     # helper (unpinned); another platform has no asset and names the fix.
     seed p7 "$fixture/remote-$mask-e"
-    HYDRA_FLEET_ASSETS_FILE="$fixture/empty-assets.tsv" run 3 "$out" provision p7 --json
+    HYDRA_FLEET_BIN="$package_fleet" HYDRA_FLEET_ASSETS_FILE="$fixture/empty-assets.tsv" run 3 "$out" provision p7 --json
     has "$out" '"source":"local-helper"'; has "$out" '"trust":"unpinned"'
     seed p8 "$fixture/remote-$mask-e" "${other%%-*}" "${other#*-}"
     HYDRA_FLEET_ASSETS_FILE="$fixture/empty-assets.tsv" run 1 "$out" provision p8 --json
