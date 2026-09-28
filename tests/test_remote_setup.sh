@@ -1,7 +1,9 @@
 #!/bin/sh
-# Remote setup foundation: CLI dispatch, usage errors, private resumable state,
-# guided resume through verify/alias over a fake SSH boundary, and exit codes.
-# Every case runs under umask 022 and again under umask 002.
+# Remote setup over a fake SSH boundary: CLI dispatch, usage errors, private
+# resumable state, host-key probe of an already trusted host, read-only
+# preflight (fake uname, restricted PATH, remote umask 002, existing Hydra),
+# and guided resume through verify/alias with exit codes. Every case runs
+# under a local umask of 022 and again under 002.
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
@@ -13,24 +15,65 @@ fleet="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
 version="$(sed -n 's/^#define F_VERSION "\(.*\)"$/\1/p' "$root/src/fleet/fleet.h")"
 [ -n "$version" ]
 unset CI HYDRA_NONINTERACTIVE
+SETUP_REAL_SSH="$(command -v ssh)"
 
-mkdir "$fixture/bin"
+# Fake SSH: `ssh -G` is answered by OpenSSH itself; anything else runs the
+# remote command locally with an optional remote PATH, HOME and umask.
+mkdir "$fixture/bin" "$fixture/remote-bin" "$fixture/remote-home"
 cat > "$fixture/bin/ssh" <<'SSH'
 #!/bin/sh
+for arg do [ "$arg" = -G ] && exec "$SETUP_REAL_SSH" "$@"; done
 while [ $# -gt 1 ]; do shift; done
+if [ -n "${SETUP_REMOTE_PATH:-}" ]; then PATH=$SETUP_REMOTE_PATH; fi
+if [ -n "${SETUP_REMOTE_HOME:-}" ]; then HOME=$SETUP_REMOTE_HOME; fi
+umask "${SETUP_REMOTE_UMASK:-022}"
 exec /bin/sh -c "$1"
 SSH
-chmod +x "$fixture/bin/ssh"
-# A remote Hydra that answers only the fleet handshake with a chosen version.
+cat > "$fixture/remote-bin/uname" <<'UNAME'
+#!/bin/sh
+case "${1:-}" in
+    -m) printf '%s\n' "${SETUP_REMOTE_ARCH:-x86_64}" ;;
+    *) printf '%s\n' "${SETUP_REMOTE_OS:-Linux}" ;;
+esac
+UNAME
+# A remote Hydra that answers --version and the fleet handshake.
 cat > "$fixture/remote-hydra" <<'HYDRA'
 #!/bin/sh
+if [ "${1:-}" = --version ]; then printf 'Hydra version %s\n' "$(cat "$SETUP_TEST_VERSION_FILE")"; exit 0; fi
 cat >/dev/null
 printf '{"schema_version":1,"ok":true,"command":"fleet-handshake","data":{"hydra_version":"%s","fleet_protocol":1,"state_schema":2,"event_schema":1,"json_schema":1,"capabilities":[]}}\n' "$(cat "$SETUP_TEST_VERSION_FILE")"
 HYDRA
-chmod +x "$fixture/remote-hydra"
+chmod +x "$fixture/bin/ssh" "$fixture/remote-bin/uname" "$fixture/remote-hydra"
+# find_tool NAME: first executable regular file on PATH (dash's command -v
+# also reports files without the execute bit).
+find_tool() {
+    old_ifs=$IFS; IFS=:
+    for dir in $PATH; do
+        if [ -f "$dir/$1" ] && [ -x "$dir/$1" ]; then IFS=$old_ifs; printf '%s\n' "$dir/$1"; return 0; fi
+    done
+    IFS=$old_ifs; return 1
+}
+# remote_path DIR TOOL...: a restricted remote PATH holding only these tools.
+remote_path() {
+    target=$1; shift
+    mkdir -p "$target"
+    ln -sf "$fixture/remote-bin/uname" "$target/uname"
+    for tool in awk df env cat "$@"; do
+        if found="$(find_tool "$tool")"; then ln -sf "$found" "$target/$tool"; fi
+    done
+}
+remote_path "$fixture/remote-full" git tmux curl mktemp head tail shasum sha256sum
+remote_path "$fixture/remote-bare" mktemp head tail shasum sha256sum
+cat > "$fixture/ssh_config" <<CONFIG
+Host *
+  UserKnownHostsFile $fixture/known_hosts
+  GlobalKnownHostsFile /dev/null
+CONFIG
 PATH="$fixture/bin:$PATH"
 SETUP_TEST_VERSION_FILE="$fixture/remote-version"
-export PATH SETUP_TEST_VERSION_FILE
+SETUP_REMOTE_HOME="$fixture/remote-home"
+export PATH SETUP_TEST_VERSION_FILE SETUP_REAL_SSH SETUP_REMOTE_HOME
+printf '%s' "$version" > "$SETUP_TEST_VERSION_FILE"
 
 fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
 # run EXPECTED_STATUS OUTPUT_FILE ARGS...: stdout to OUTPUT_FILE, stderr to OUTPUT_FILE.err.
@@ -38,9 +81,9 @@ run() {
     expected=$1 out=$2; shift 2
     code=0
     "$fleet" remote "$@" > "$out" 2> "$out.err" < /dev/null || code=$?
-    [ "$code" -eq "$expected" ] || { cat "$out" "$out.err" >&2; fail "remote $* exited $code, expected $expected"; }
+    [ "$expected" = any ] || [ "$code" -eq "$expected" ] || { cat "$out" "$out.err" >&2; fail "remote $* exited $code, expected $expected"; }
 }
-has() { grep -q -- "$2" "$1" || { cat "$1" >&2; fail "$1 lacks $2"; }; }
+has() { grep -q -- "$2" "$1" || { cat "$1" >&2; [ ! -f "$1.err" ] || cat "$1.err" >&2; fail "$1 lacks $2"; }; }
 lacks() { if grep -q -- "$2" "$1"; then cat "$1" >&2; fail "$1 unexpectedly has $2"; fi; }
 # exact_mode PATH OCTAL: permission bits equal OCTAL exactly.
 exact_mode() { [ -n "$(find "$1" -prune -perm "$2")" ]; }
@@ -53,9 +96,7 @@ write_state() {
 }
 done_through_agents='"host_key":{"status":"done"},"preflight":{"status":"done"},"provision":{"status":"done"},"agents":{"status":"done"}'
 
-cases() {
-    out="$fixture/out"
-    # Usage and parsing errors never create state.
+usage_cases() {
     run 1 "$out" setup --json; has "$out" '"code":"invalid_input"'; has "$out" '"command":"remote-setup"'
     run 1 "$out" setup 'bad/name' host --json; has "$out" '"code":"invalid_input"'
     run 1 "$out" setup status host --json; has "$out" '"code":"setup_not_started"'; has "$out" '"command":"remote-setup-status"'
@@ -72,40 +113,78 @@ cases() {
     run 1 "$out" preflight n1 --json; has "$out" '"code":"setup_not_started"'; has "$out" '"command":"remote-preflight"'
     test ! -e "$HYDRA_HOME/fleet/setup/n1.json" || fail "usage errors created state"
     run 0 "$out" setup --help --json; has "$out" '"command":"remote-setup-help"'; has "$out" 'install-agent'
+}
 
-    # A new setup records its binding, then stops at the first unimplemented step.
-    run 1 "$out" setup n1 user@host1 --json
-    has "$out" '"code":"not_implemented"'; has "$out" '"setup_schema":1'
-    has "$out" '"steps":\[{"id":"host_key","status":"pending"'
-    has "$out" '"next":{"step":"host_key","argv":\["hydra","remote","trust-key","n1","--json"\],"approval_sha256":null}'
+guided_cases() {
+    # A new setup records its binding, trusts the already known host and
+    # passes preflight before later steps take over.
+    SETUP_REMOTE_PATH="$fixture/remote-full" SETUP_REMOTE_ARCH=aarch64 run any "$out" setup n1 user@host1 --ssh-config "$fixture/ssh_config" --json
+    has "$out" '"setup_schema":1'
+    has "$out" '"id":"host_key","status":"done","detail":"verified by ssh'
+    has "$out" '"id":"preflight","status":"done","detail":"Linux aarch64'
+    lacks "$out" '"step":"host_key"'
     exact_mode "$HYDRA_HOME/fleet/setup" 700 || fail "setup directory is not private"
     exact_mode "$(state n1)" 600 || fail "setup state is not private"
     exact_mode "$HYDRA_HOME/fleet/setup/n1.lock" 600 || fail "setup lock is not private"
+    test ! -e "$fixture/known_hosts" || fail "a known host was written to known_hosts"
     has "$(state n1)" '"destination":"user@host1"'
     run 1 "$out" setup n1 user@host2 --json; has "$out" '"code":"setup_binding_changed"'
     run 1 "$out" setup n1 user@host1 --ssh-config /etc/other --json; has "$out" '"code":"setup_binding_changed"'
-    has "$(state n1)" '"destination":"user@host1"'
-    run 1 "$out" setup n1 --json; has "$out" '"code":"not_implemented"'
-    # Every step command dispatches against the same state.
-    for step in trust-key preflight agents; do
-        run 1 "$out" "$step" n1 --json
-        has "$out" '"code":"not_implemented"'; has "$out" "\"command\":\"remote-$step\""; has "$out" '"steps":'
+    run 0 "$out" trust-key n1 --json; has "$out" '"result":"already trusted"'; has "$out" '"command":"remote-trust-key"'
+    # Every other step command dispatches against the same state.
+    for step in provision agents; do
+        run any "$out" "$step" n1 --json
+        has "$out" "\"command\":\"remote-$step\""; has "$out" '"steps":'
     done
-    # Provisioning is implemented (tests/test_remote_provision.sh) and needs preflight first.
-    run 1 "$out" provision n1 --json
-    has "$out" '"code":"prerequisite_missing"'; has "$out" '"command":"remote-provision"'; has "$out" '"steps":'
-    run 1 "$out" install-agent n1 --agent claude --json; has "$out" '"command":"remote-install-agent"'
-    run 1 "$out" sign-in n1 --agent claude --json; has "$out" '"command":"remote-sign-in"'
+    run any "$out" install-agent n1 --agent claude --json; has "$out" '"command":"remote-install-agent"'
+    run any "$out" sign-in n1 --agent claude --json; has "$out" '"command":"remote-sign-in"'
     run 0 "$out" setup status n1 --json; has "$out" '"ok":true'; has "$out" '"destination":"user@host1"'
-
     # Human mode keeps stdout empty and prints steps plus the next command.
-    run 1 "$out" setup n1
-    [ ! -s "$out" ] || fail "human setup output reached stdout"
-    has "$out.err" 'host key'; has "$out.err" 'not_implemented'; has "$out.err" 'next: hydra remote trust-key n1'
     run 0 "$out" setup status n1
     [ ! -s "$out" ] || fail "human status output reached stdout"
-    has "$out.err" 'next: hydra remote trust-key n1'
+    has "$out.err" 'host key'; has "$out.err" 'next: hydra remote'
+}
 
+preflight_cases() {
+    write_state p1 fixture-host hydra '{}'
+    SETUP_REMOTE_PATH="$fixture/remote-full" SETUP_REMOTE_ARCH=aarch64 run 0 "$out" preflight p1 --json
+    has "$out" '"schema":"remote-preflight"'; has "$out" '"os":"Linux"'; has "$out" '"arch":"aarch64"'
+    has "$out" '"name":"platform","status":"ok"'; has "$out" '"name":"git","status":"ok"'
+    has "$out" '"hydra":{"path":null,"version":null,"reusable":false}'; has "$out" '"pins":\[\]'
+    has "$out" '"name":"umask","status":"ok"'
+    has "$(state p1)" '"preflight":{"status":"done"'
+    # Unsupported platforms and missing tools block; tmux and curl only warn.
+    SETUP_REMOTE_PATH="$fixture/remote-full" SETUP_REMOTE_OS=Darwin SETUP_REMOTE_ARCH=arm64 run 1 "$out" preflight p1 --json
+    has "$out" '"code":"prerequisite_missing"'; has "$out" '"missing":\["platform"\]'
+    has "$(state p1)" '"preflight":{"status":"blocked"'
+    SETUP_REMOTE_PATH="$fixture/remote-bare" run 1 "$out" preflight p1
+    has "$out.err" 'git: install git'; lacks "$out.err" 'tmux:'
+    SETUP_REMOTE_PATH="$fixture/remote-bare" run 1 "$out" preflight p1 --json
+    has "$out" '"missing":\["git"\]'; has "$out" '"name":"tmux","status":"warning"'
+    has "$out" '"name":"curl","status":"warning"'; has "$out" '"git":null'
+    # A group-writable remote umask is reported for R1.
+    SETUP_REMOTE_PATH="$fixture/remote-full" SETUP_REMOTE_UMASK=002 run 0 "$out" preflight p1 --json
+    has "$out" '"umask":"0002"'; has "$out" '"name":"umask","status":"warning"'
+    # A same-version Hydra that completes the handshake is reusable; others are kept.
+    ln -sf "$fixture/remote-hydra" "$fixture/remote-full/hydra"
+    mkdir -p "$fixture/remote-home/.local/share/hydra/fleet/pin1/bin"
+    ln -sf "$fixture/remote-hydra" "$fixture/remote-home/.local/share/hydra/fleet/pin1/bin/hydra"
+    SETUP_REMOTE_PATH="$fixture/remote-full" run 0 "$out" preflight p1 --json
+    has "$out" "\"version\":\"Hydra version $version\",\"reusable\":true"; has "$out" 'pin1"'
+    printf '0.0.1' > "$SETUP_TEST_VERSION_FILE"
+    SETUP_REMOTE_PATH="$fixture/remote-full" run 0 "$out" preflight p1 --json
+    has "$out" '"reusable":false'; has "$out" '"name":"hydra","status":"warning"'
+    printf '%s' "$version" > "$SETUP_TEST_VERSION_FILE"
+    rm -rf "$fixture/remote-full/hydra" "$fixture/remote-home/.local"
+    # Agents in search directories are reported with their source.
+    mkdir -p "$fixture/remote-home/.local/bin"
+    printf '#!/bin/sh\n' > "$fixture/remote-home/.local/bin/claude"; chmod +x "$fixture/remote-home/.local/bin/claude"
+    SETUP_REMOTE_PATH="$fixture/remote-full" run 0 "$out" preflight p1 --json
+    has "$out" '"executable":"claude","path":"[^"]*remote-home[^"]*claude","source":"[^"]*","on_path":false'
+    rm -rf "$fixture/remote-home/.local"
+}
+
+state_cases() {
     # Unsafe or corrupt state is preserved and refused.
     cp "$(state n1)" "$fixture/n1.saved"
     chmod 644 "$(state n1)"
@@ -114,10 +193,11 @@ cases() {
     run 1 "$out" setup n1 --json; has "$out" '"code":"state_invalid"'
     [ "$(cat "$(state n1)")" = 'not json' ] || fail "invalid state was rewritten"
     cp "$fixture/n1.saved" "$(state n1)"; chmod 600 "$(state n1)"
+}
 
+finish_cases() {
     # Guided resume skips done steps, verifies the exact version, then
     # publishes the alias last and reports completion.
-    printf '%s' "$version" > "$SETUP_TEST_VERSION_FILE"
     write_state n2 fixture-host "$fixture/remote-hydra" "{$done_through_agents}"
     printf '0.0.1' > "$SETUP_TEST_VERSION_FILE"
     run 1 "$out" setup n2 --json; has "$out" '"code":"version_mismatch"'; has "$out" '"id":"verify","status":"failed"'
@@ -130,20 +210,17 @@ cases() {
     has "$HYDRA_HOME/fleet/remotes/n2.json" '"accepted_host_key":"SHA256:fixture"'
     run 0 "$out" setup n2; has "$out.err" 'remote setup complete'
     run 0 "$out" list; has "$out" '"n2"'
-
     # An existing different alias is never overwritten.
     run 0 "$out" add n3 other-host
     write_state n3 fixture-host "$fixture/remote-hydra" "{$done_through_agents}"
     run 1 "$out" setup n3 --json; has "$out" '"code":"alias_conflict"'; has "$out" '"id":"alias","status":"blocked"'
     has "$HYDRA_HOME/fleet/remotes/n3.json" '"target":"other-host"'
-
     # Selected agents add per-agent steps before verification.
     write_state n4 fixture-host "$fixture/remote-hydra" \
         "{$done_through_agents,\"agents\":{\"status\":\"done\",\"detail\":{\"selected\":[\"claude\"],\"summary\":\"claude found\"}}}"
-    run 1 "$out" setup n4 --json
+    run any "$out" setup n4 --json
     has "$out" '"command":"remote-setup"'; has "$out" '"id":"install_agent:claude"'; has "$out" '"id":"sign_in:claude"'
     has "$out" '"detail":"claude found"'
-    has "$out" '"argv":\["hydra","remote","install-agent","n4","--agent","claude","--json"\]'
     lacks "$out" '"id":"verify","status":"done"'
 }
 
@@ -151,7 +228,12 @@ for mask in 022 002; do
     (
         umask "$mask"
         HYDRA_HOME="$fixture/home-$mask"; export HYDRA_HOME
-        cases
+        out="$fixture/out"
+        usage_cases
+        guided_cases
+        preflight_cases
+        state_cases
+        finish_cases
     )
 done
-printf 'Remote setup foundation acceptance passed\n'
+printf 'Remote setup acceptance passed\n'

@@ -43,6 +43,65 @@ copies a prebuilt fleet executable when present; `HYDRA_INSTALL_FLEET=never` ski
 it and `required` refuses an absent executable. Uninstall removes it with the
 other native helpers. JSON-C's [license](licenses/json-c.txt) travels with packages.
 
+## Guided remote setup
+
+`hydra remote setup` takes a fresh SSH account to a verified alias one step at a
+time and can be rerun at any point: it resumes from private state in
+`$HYDRA_HOME/fleet/setup/NAME.json` (0600 in a 0700 directory, locked while a
+command runs).
+
+```sh
+hydra remote setup ovh ubuntu@build-host      # or an SSH Host alias
+hydra remote setup ovh --ssh-config /abs/config
+hydra remote setup status ovh
+```
+
+Steps run in order: host key, preflight, provision, agents, then install and
+sign-in for each selected agent, verify, and alias. Each step also has its own
+command that uses the same state: `hydra remote trust-key|preflight|provision|agents
+NAME` and `hydra remote install-agent|sign-in NAME --agent A`. The alias record is
+published last and never overwrites a different alias, so a half-configured host
+never appears in `hydra fleet list`. Rerunning setup with a different destination
+or SSH config for an existing NAME fails with `setup_binding_changed`.
+
+Every step that changes something first shows a plan and asks for approval.
+Interactive terminals answer `y`; trusting a host key requires typing `yes`. With
+`--json`, without a terminal, or when `CI` or `HYDRA_NONINTERACTIVE` is set, Hydra
+never prompts: it stops with `approval_required` (exit 3) and returns the plan,
+`data.plan_sha256`, and `data.next.argv`, the exact command that approves that plan
+(`--approve PLAN_SHA256`, or `--fingerprint SHA256:...` for a host key). A changed
+plan no longer matches and fails with `approval_mismatch`. There is no blanket
+yes flag.
+
+**Host key.** Hydra reads the effective OpenSSH configuration (`ssh -G`, including
+`HostKeyAlias`, port, `UserKnownHostsFile` and `HashKnownHosts`) and probes with
+strict host key checking. It never accepts a changed key: it reports
+`host_key_changed` with the new fingerprint and the `ssh-keygen -R` command to run
+yourself once you have verified the change. Any other entry for the host, including
+a key of a different type, is `host_key_ambiguous`. An unknown key is captured
+without authenticating through your own SSH path (jump hosts included) and shown
+as its SHA256 fingerprint; compare it with one obtained out of band. After
+approval Hydra appends exactly that line to the first `UserKnownHostsFile` (created
+0600 in a 0700 directory if absent; refused if it is a symlink, not yours, or group
+or world writable) and proves it with a second strict probe. It never edits or
+removes existing lines, and every refusal leaves known_hosts byte-identical.
+
+**Preflight** is read-only and needs no Hydra on the host. A fixed POSIX script
+reports the platform, HOME, PATH, umask, tools, existing Hydra installs and pins,
+and agent executables in common install directories (`remote-preflight` schema 1).
+Blocking requirements are Linux x86_64 or aarch64 (other platforms only with
+`--binary`), git, sha256sum or shasum, mktemp, head and tail, a writable HOME and
+50 MB free; missing ones fail with `prerequisite_missing` and `data.missing[]`.
+tmux 3.0, curl (only for agent installers) and a group-writable umask are warnings.
+Hydra never uses sudo; install missing packages yourself. An existing Hydra of the
+same version that passes the fleet handshake is reported as reusable; other
+installs are left untouched.
+
+Exit statuses: 0 done, 1 error, 3 approval required, 4 outcome unknown (reconcile
+before retrying; nothing is replayed), and 128+n when interrupted by signal n.
+Without `--json` the commands print one line per step on stderr followed by the
+next command.
+
 ## Register and bootstrap a host
 
 ```sh

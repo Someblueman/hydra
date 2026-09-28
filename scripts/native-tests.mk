@@ -31,7 +31,7 @@ test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-assets
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-workflow-controls
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-runs-heads
 
-NATIVE_TEST_NAMES = statistics-export task-announce retention workflow-task-metrics plan-inspection plan-reuse-invalidation retention-accepted discovery enrollment enrollment-receiver enrollment-ssh plan-patterns plan-manifest plan-staged research-outcome performance-outcome plan-staged-public
+NATIVE_TEST_NAMES = statistics-export task-announce retention workflow-task-metrics plan-inspection plan-reuse-invalidation retention-accepted discovery enrollment enrollment-receiver enrollment-ssh plan-patterns plan-manifest plan-staged research-outcome performance-outcome plan-staged-public remote-setup-ssh
 NATIVE_TEST_BINS = $(addprefix $(BUILD_DIR)/native-tests/test-,$(NATIVE_TEST_NAMES)) $(BUILD_DIR)/native-tests/workflow-contract-cases
 $(foreach n,$(NATIVE_TEST_NAMES),$(eval $(BUILD_DIR)/native-tests/test-$(n): tests/native/test_$(subst -,_,$(n)).c))
 $(addprefix $(BUILD_DIR)/native-tests/test-,plan-reuse-invalidation retention-accepted): tests/native/accepted_fixture.c
@@ -60,6 +60,7 @@ test-enrollment: $(BUILD_DIR)/native-tests/test-enrollment $(BUILD_DIR)/native-t
 
 $(BUILD_DIR)/native-tests/enrollment-loopback-fixture: tests/native/enrollment_loopback_fixture.c
 test-enrollment-ssh: $(BUILD_DIR)/native-tests/test-enrollment-ssh $(BUILD_DIR)/native-tests/enrollment-loopback-fixture $(BUILD_DIR)/native-tests/enrollment-receiver-fixture
+test-remote-setup-ssh: $(BUILD_DIR)/native-tests/test-remote-setup-ssh
 
 OUTCOME_TEST_BINS = $(addprefix $(BUILD_DIR)/native-tests/test-,plan-patterns plan-manifest plan-staged research-outcome performance-outcome plan-staged-public)
 $(OUTCOME_TEST_BINS): tests/native/outcome_support.c tests/native/outcome_support.h
