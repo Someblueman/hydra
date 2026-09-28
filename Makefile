@@ -61,6 +61,15 @@ test-fast:
 		"$$binary" || exit 1; \
 	done
 
+# Group-writable umask lane (Ubuntu's default 002): Hydra state stays private
+# and readers keep refusing shared state, while worktrees follow the umask.
+UMASK_FLEET_CASES = dag-crash-2 dag-parallelism-1
+.PHONY: test-umask
+test-umask: fleet-test-build
+	@umask 002 && $(MAKE) test-fast
+	@umask 002 && $(MAKE) $(addprefix fleet-case-,$(UMASK_FLEET_CASES))
+	@umask 002 && sh tests/test_umask_state.sh
+
 # Optional read-only native helper. The shell CLI remains the mutation authority.
 build-core: $(BUILD_DIR)/hydra-core
 
@@ -304,6 +313,7 @@ help:
 	@echo "  make lint      - Run ShellCheck and dash syntax validation"
 	@echo "  make test      - Run the shell-only test suite"
 	@echo "  make test-fast - Run the fixed PR feedback test selection"
+	@echo "  make test-umask - Run test-fast, umask state and DAG fleet cases under umask 002"
 	@echo "  make build-core - Build the optional read-only native helper"
 	@echo "  make build-tui - Build the optional native mission-control TUI"
 	@echo "  make test-c    - Run native library unit tests"
