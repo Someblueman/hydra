@@ -512,6 +512,7 @@ One interaction model applies everywhere:
 | `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
 | `/`, `:` | Search heads, search explicit actions |
 | `p`, `d`, `c` | Terminal output (a headless head's step output), technical details, coordination |
+| `H` | Hosts: `A` adds a remote machine over SSH, Enter continues its setup |
 | `?`, `t`, `q` | Keyboard help, theme, quit |
 
 Work lists the heads you started. Heads a workflow run created sit inside their
@@ -521,6 +522,12 @@ head is described by the step that runs on it (agent, model and effort, tokens,
 duration) rather than by a terminal, and `p` shows that step's live output.
 Overview centres on the selected or active run: its steps, where each ran, and
 what comes next. See [workflows](workflows.md#heads-a-plan-run-creates).
+
+Hosts, the last tab of local work, adds a remote machine without leaving the control
+centre: `A` asks for the SSH destination and a name, then walks through the guided
+`hydra remote setup` steps (host key, requirements, installing Hydra, agents and
+sign-in), showing each plan before anything changes. Unfinished setups are listed
+there and Enter continues one. See [guided remote setup](FLEET.md#guided-remote-setup).
 
 Removal confirms the exact targets in the UI, runs `hydra kill` per head with output
 captured, reports a concise result in the status line and opens the full output only

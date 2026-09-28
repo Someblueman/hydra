@@ -48,7 +48,7 @@ static bool move_workspace_selection(struct app *app, int direction) {
         case 8: statistics_move(app, direction); return true;
         case 7: native_workspace_move(app, direction); return true;
         case 5: workflow_move(app, direction); return true;
-        case 6: bounded_selection(&app->host_selected, app->model.host_count, direction); return true;
+        case 6: bounded_selection(&app->host_selected, hosts_row_count(app), direction); return true;
         case 4:
             if (!app->fleet || !app->model.task_count) return false;
             bounded_selection(&app->task_selected, app->model.task_count, direction); return true;

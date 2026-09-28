@@ -1,0 +1,1 @@
+{"schema_version":1,"ok":false,"command":"remote-setup-status","error":{"code":"setup_not_started","message":"no setup state exists for this remote","recovery":"start with hydra remote setup NAME [USER@]HOST"}}
