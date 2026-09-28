@@ -60,18 +60,22 @@ static void join_items(const struct sj_doc *d, int array, char *out, size_t size
     }
 }
 
+/* One displayed plan row: arrays are joined, null reads "none". */
+static void plan_value(struct setup_row *row, const struct sj_doc *d, int value, const char *path) {
+    copy_field(row->key, sizeof(row->key), path);
+    if (sj_type_of(d, value) == SJ_ARRAY) join_items(d, value, row->value, sizeof(row->value));
+    else if (!sj_text(d, value, row->value, sizeof(row->value)) && sj_type_of(d, value) == SJ_NULL)
+        copy_field(row->value, sizeof(row->value), "none");
+}
+
 static void flatten(struct setup_envelope *e, const struct sj_doc *d, int object, const char *prefix, int depth) {
     int key, value, i;
     for (i = 0; (value = sj_member(d, object, i, &key)) >= 0 && e->plan_count < SETUP_ROW_MAX; i++) {
-        char name[64], path[64];
+        char name[64], path[136];
         if (!sj_text(d, key, name, sizeof(name)) || (!depth && hidden_plan_key(name))) continue;
-        snprintf(path, sizeof(path), "%s%s%s", prefix, prefix[0] ? "." : "", name);
-        if (sj_type_of(d, value) == SJ_OBJECT && depth < 3) { flatten(e, d, value, path, depth + 1); continue; }
-        copy_field(e->plan[e->plan_count].key, sizeof(e->plan[0].key), path);
-        if (sj_type_of(d, value) == SJ_ARRAY) join_items(d, value, e->plan[e->plan_count].value, sizeof(e->plan[0].value));
-        else if (!sj_text(d, value, e->plan[e->plan_count].value, sizeof(e->plan[0].value)) && sj_type_of(d, value) == SJ_NULL)
-            copy_field(e->plan[e->plan_count].value, sizeof(e->plan[0].value), "none");
-        e->plan_count++;
+        snprintf(path, sizeof(path), "%.63s%s%s", prefix, prefix[0] ? "." : "", name);
+        if (sj_type_of(d, value) == SJ_OBJECT && depth < 3) flatten(e, d, value, path, depth + 1);
+        else plan_value(&e->plan[e->plan_count++], d, value, path);
     }
 }
 
@@ -104,9 +108,13 @@ static void parse_requirement(struct setup_requirement *r, const struct sj_doc *
     r->blocking = blocking >= 0 ? sj_true(d, blocking) : missing;
 }
 
+/* Preflight rows: data.requirements on success, data.preflight.requirements
+ * with prerequisite_missing, or at least the names in data.missing[]. */
 static void parse_requirements(struct setup_envelope *e, const struct sj_doc *d, int data) {
     int list = sj_find(d, data, "requirements"), item, i;
-    bool missing = list < 0;
+    bool missing;
+    if (list < 0) list = sj_path(d, data, "preflight.requirements");
+    missing = list < 0;
     if (missing) list = sj_find(d, data, "missing");
     for (i = 0; (item = sj_item(d, list, i)) >= 0 && e->requirement_count < SETUP_REQUIREMENT_MAX; i++) {
         struct setup_requirement *r = &e->requirements[e->requirement_count];
@@ -208,7 +216,10 @@ enum setup_screen setup_screen_for(const struct setup_envelope *e) {
 /* ---- Plain language ---- */
 
 static const struct { const char *code; struct setup_explanation text; } explanations[] = {
-    {"host_key_unknown", {"The host key is not trusted yet", "Hydra has not seen this machine's SSH key. Continue to review its fingerprint.", "Enter reviews the key"}},
+    {"host_key_unknown", {"SSH still does not accept the host", "Hydra added the key you approved, but a strict SSH connection still rejects the host. Check known_hosts and your SSH configuration (UserKnownHostsFile, HostKeyAlias), then check again.", "Enter checks again"}},
+    {"ssh_config_invalid", {"SSH cannot read the configuration for this host", "ssh -G could not evaluate the destination and its known_hosts files. Check the destination and the SSH config file, then try again.", "Enter tries again"}},
+    {"io_failed", {"Hydra could not use a private scratch directory", "A local temporary directory could not be created. Nothing was changed on the remote.", "Enter tries again"}},
+    {"invalid_response", {"The remote answered with something Hydra cannot read", "The remote output was missing, too large or malformed, so Hydra did not rely on it.", "Enter tries again"}},
     {"host_key_changed", {"The host key changed: Hydra will not connect", "The machine answered with a different SSH key than the one recorded for it. That happens when a server is reinstalled, but it is also what an intercepted connection looks like. Hydra never accepts a changed key and wrote nothing.", "Enter checks again after you fix known_hosts"}},
     {"host_key_ambiguous", {"known_hosts already has a different entry", "Your known_hosts file has another key for this host (for example of a different type). Hydra does not choose between them and wrote nothing. Check the entry with ssh-keygen -F, remove it deliberately if it is wrong, then check again.", "Enter checks again"}},
     {"known_hosts_unwritable", {"Hydra cannot add the key to known_hosts", "The known_hosts file is not safely writable (wrong owner or permissions). Nothing was written. Fix the file's ownership or mode, then continue.", "Enter tries again"}},

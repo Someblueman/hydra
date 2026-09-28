@@ -56,6 +56,9 @@ static void capture(struct tv_session *s, const char *name) {
     tv_write(path, tv_text(s));
 }
 
+/* Screens repaint incrementally; wait for each marker rather than sample. */
+static void see(struct tv_session *s, const char *text) { tv_until(s, text, 3); }
+
 static void launch(struct tv_session *s, int cols, int rows) {
     const char *argv[] = {tui, NULL};
     tv_format(label, sizeof(label), "%dx%d", cols, rows);
@@ -80,7 +83,7 @@ static void add_host(struct tv_session *s) {
 static void trust_key(struct tv_session *s) {
     char expected[512];
     tv_until(s, "TRUST THE HOST KEY OF ovh", 6);
-    CHECK(tv_contains(s, fingerprint) && tv_contains(s, "known_hosts"), "fingerprint and file shown");
+    see(s, fingerprint); see(s, "known_hosts");
     capture(s, "04-trust-key");
     tv_send(s, "no\r");
     tv_until(s, "Type yes (the whole word)", 3);
@@ -92,12 +95,12 @@ static void trust_key(struct tv_session *s) {
 }
 
 static void requirements(struct tv_session *s) {
-    CHECK(tv_contains(s, "BLOCKS") && tv_contains(s, "fix: sudo apt-get install git"), "blocking prerequisite and its fix");
+    see(s, "BLOCKS"); see(s, "install git (for example");
     capture(s, "05-preflight-blocked");
     flag("git_fixed");
     tv_send(s, "\r");
     tv_until(s, "REVIEW: INSTALL HYDRA ON ovh", 6);
-    CHECK(tv_contains(s, "pinned: its digest is recorded"), "pinned runtime source");
+    see(s, "pinned: its digest is recorded");
     capture(s, "06-provision-plan");
 }
 
@@ -113,7 +116,7 @@ static void provision(struct tv_session *s) {
     tv_until(s, "REVIEW: INSTALL claude ON ovh", 8);
     tv_format(expected, sizeof(expected), "provision ovh --approve %s --json", provision_hash);
     CHECK(called(expected), "approval runs the reviewed plan hash");
-    CHECK(tv_contains(s, "curl -fsSL https://claude.ai/install.sh | bash"), "exact installer command shown");
+    see(s, "curl -fsSL https://claude.ai/install.sh | bash");
     capture(s, "08-install-plan");
 }
 
@@ -130,14 +133,14 @@ static void install_agent(struct tv_session *s) {
 static void sign_in(struct tv_session *s, bool fail_once) {
     tv_send(s, "\r");
     tv_until(s, "FAKE SIGN-IN: open", 6);
-    CHECK(tv_contains(s, "Hydra: Sign in to claude"), "the terminal is handed over with a label");
+    see(s, "Hydra: Sign in to claude");
     capture(s, "10-sign-in-terminal");
     tv_send(s, "\r");
     if (fail_once) {
         tv_until(s, "Press Enter to return to Hydra", 6);
         tv_send(s, "\r");
         tv_until(s, "Sign-in did not finish", 6);
-        CHECK(tv_contains(s, "Enter signs in again"), "a failed sign-in offers another attempt");
+        see(s, "Enter signs in again");
         capture(s, "11-sign-in-failed");
         tv_send(s, "\r");
         tv_until(s, "FAKE SIGN-IN: open", 6);
@@ -175,7 +178,9 @@ static void changed_key(int cols, int rows) {
     launch(&s, cols, rows);
     add_host(&s);
     tv_until(&s, "THE HOST KEY CHANGED", 6);
-    CHECK(tv_contains(&s, "ssh-keygen -R ovh.example.net") && !tv_contains(&s, "Type yes"), "manual recovery only");
+    see(&s, "ssh-keygen -R ovh.example.net -f /Users/you/.ssh/known_hosts");
+    tv_pump(&s, .3);
+    CHECK(!tv_contains(&s, "Type yes") && !tv_contains(&s, "y approve"), "manual recovery only");
     capture(&s, "20-key-changed");
     tv_send(&s, "yes y");
     tv_send(&s, "\r");

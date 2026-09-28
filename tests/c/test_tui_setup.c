@@ -84,6 +84,8 @@ static const struct expectation expectations[] = {
     {"host-key-approval.json", "approval_required", SETUP_SCREEN_TRUST_KEY, "host_key", "host_key", true, 3},
     {"host-key-trusted.json", "", SETUP_SCREEN_STEPS, "preflight", "", true, 0},
     {"host-key-changed.json", "host_key_changed", SETUP_SCREEN_KEY_CHANGED, "host_key", "", true, 1},
+    {"host-key-ambiguous.json", "host_key_ambiguous", SETUP_SCREEN_ERROR, "host_key", "", true, 1},
+    {"status-provision-pending.json", "", SETUP_SCREEN_STEPS, "provision", "", true, 0},
     {"preflight-blocked.json", "prerequisite_missing", SETUP_SCREEN_PREFLIGHT, "preflight", "", true, 1},
     {"preflight-ok.json", "", SETUP_SCREEN_PREFLIGHT, "provision", "", true, 0},
     {"provision-approval.json", "approval_required", SETUP_SCREEN_PLAN, "provision", "provision", true, 3},
@@ -113,14 +115,15 @@ static void envelope_cases(struct setup_envelope *e) {
     }
     check(load("host-key-approval.json", e, 3) && !strcmp(e->fingerprint, "SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8") &&
           e->argc == 7 && !strcmp(e->argv[5], e->fingerprint) && !strcmp(e->argv[6], "--json"), "host key plan exposes the fingerprint it binds");
-    check(load("preflight-blocked.json", e, 1) && e->requirement_count == 8 && e->requirements[1].blocking &&
-          !strcmp(e->requirements[1].command, "sudo apt-get install git") && !e->requirements[5].blocking,
-          "preflight requirements keep status, blocking and the suggested command");
+    check(load("preflight-blocked.json", e, 1) && e->requirement_count == 11 && e->requirements[1].blocking &&
+          !strcmp(e->requirements[1].status, "missing") && strstr(e->requirements[1].detail, "sudo apt-get install git") &&
+          !e->requirements[7].blocking && !strcmp(e->requirements[7].status, "warning"),
+          "recorded preflight rows keep status, blocking and the suggested command");
     check(load("agents.json", e, 0) && e->agent_count == 3 && !strcmp(e->agents[2].name, "cursor-agent") &&
           !strcmp(e->agents[1].path, "/usr/local/bin/codex") && !strcmp(e->agents[2].path, "/home/deploy/.local/bin/cursor-agent"),
           "agent inventory rows keep executable, status and location");
     check(load("host-key-changed.json", e, 1) && !strcmp(e->presented, "SHA256:Q2hhbmdlZEtleUZvclRlc3RpbmdPbmx5MDEyMzQ1Njc4OQ") &&
-          !strcmp(e->key_file, "~/.ssh/known_hosts"), "a changed key reports the presented key and its file");
+          !strcmp(e->key_file, "/Users/you/.ssh/known_hosts"), "a changed key reports the presented key and its file");
     check(setup_envelope_parse(e, "{\"ok\":true}", 11, 0) < 0 && !e->parsed, "an envelope without schema_version 1 is not trusted");
 }
 
@@ -149,7 +152,8 @@ static void language_cases(void) {
         "timeout", "prerequisite_missing", "platform_unsupported", "asset_unavailable", "asset_download_failed", "hash_mismatch",
         "approval_required", "approval_mismatch", "platform_mismatch", "install_failed", "outcome_unknown", "setup_busy",
         "state_invalid", "alias_conflict", "recipe_unavailable", "agent_not_found", "sign_in_failed", "sign_in_unverified",
-        "tty_required", "setup_not_started", "approval_declined", "cancelled", "version_mismatch",
+        "tty_required", "setup_not_started", "approval_declined", "cancelled", "version_mismatch", "ssh_config_invalid",
+        "io_failed", "invalid_response",
     };
     struct setup_explanation x;
     size_t i;
@@ -177,13 +181,17 @@ static bool render_capture(struct app *app, char *out, size_t size) {
     FILE *capture = tmpfile();
     int saved = dup(STDOUT_FILENO);
     size_t n;
-    if (!capture || saved < 0) return false;
+    if (!capture || saved < 0) {
+        if (capture) fclose(capture);
+        if (saved >= 0) close(saved);
+        return false;
+    }
     fflush(stdout);
     dup2(fileno(capture), STDOUT_FILENO);
     render(app, 1, true);
     fflush(stdout);
     dup2(saved, STDOUT_FILENO); close(saved);
-    rewind(capture);
+    if (fseek(capture, 0, SEEK_SET)) { fclose(capture); return false; }
     n = fread(out, 1, size - 1, capture);
     out[n] = '\0';
     fclose(capture);
@@ -201,9 +209,10 @@ struct screen_case { const char *file, *label; int exit_status; const char *must
 
 static const struct screen_case screens[] = {
     {"host-key-approval.json", "trust-key", 3, {"TRUST THE HOST KEY OF ovh", "SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8", "Type yes to trust", "type yes, then Enter"}, {"y approve", NULL, NULL}},
-    {"host-key-changed.json", "key-changed", 1, {"THE HOST KEY CHANGED", "ssh-keygen -R ovh.example.net", "Enter check again", "SHA256:Q2hhbmdl"}, {"Type yes", "y approve", "trust this key"}},
-    {"preflight-blocked.json", "preflight-blocked", 1, {"MISSING REQUIREMENTS ON ovh", "BLOCKS", "fix: sudo apt-get install git", "never uses sudo"}, {NULL, NULL, NULL}},
-    {"preflight-ok.json", "preflight-ok", 0, {"REQUIREMENTS ON ovh", "Nothing blocks setup", "umask", "Enter continues setup"}, {"BLOCKS", NULL, NULL}},
+    {"host-key-changed.json", "key-changed", 1, {"THE HOST KEY CHANGED", "ssh-keygen -R ovh.example.net -f /Users/you/.ssh/known_hosts", "Enter check again", "SHA256:Q2hhbmdl"}, {"Type yes", "y approve", "trust this key"}},
+    {"host-key-ambiguous.json", "key-ambiguous", 1, {"known_hosts already has a different entry", "ssh-keygen -F", "Enter checks again", NULL}, {"Type yes", "y approve", NULL}},
+    {"preflight-blocked.json", "preflight-blocked", 1, {"MISSING REQUIREMENTS ON ovh", "BLOCKS", "install git (for example", "never uses sudo"}, {NULL, NULL, NULL}},
+    {"preflight-ok.json", "preflight-ok", 0, {"REQUIREMENTS ON ovh", "Nothing blocks setup", "group-writable umask", "Enter continues setup"}, {"BLOCKS", NULL, NULL}},
     {"provision-approval.json", "provision-pinned", 3, {"REVIEW: INSTALL HYDRA ON ovh", "pinned: its digest is recorded", "Install location", "y approve"}, {"UNPINNED", NULL, NULL}},
     {"provision-approval-unpinned.json", "provision-unpinned", 3, {"REVIEW: INSTALL HYDRA ON ovh", "UNPINNED", "Binary SHA-256", "y approve"}, {NULL, NULL, NULL}},
     {"install-approval.json", "install-approval", 3, {"REVIEW: INSTALL claude ON ovh", "curl -fsSL https://claude.ai/install.sh | bash", "no sudo", "y approve"}, {NULL, NULL, NULL}},
@@ -306,7 +315,7 @@ static void key_cases(struct app *app) {
 int main(int argc, char **argv) {
     struct app *app = calloc(1, sizeof(*app));
     struct setup_envelope *e = calloc(1, sizeof(*e));
-    if (argc != 3 || !app || !e) { fputs("usage: test-tui-setup FIXTURES EVIDENCE\n", stderr); return 2; }
+    if (argc != 3 || !app || !e) { free(app); free(e); fputs("usage: test-tui-setup FIXTURES EVIDENCE\n", stderr); return 2; }
     fixtures = argv[1]; evidence = argv[2];
     (void)mkdir(evidence, 0700);
     json_cases();
@@ -314,7 +323,7 @@ int main(int argc, char **argv) {
     argv_cases(e);
     language_cases();
     app->hydra = "hydra"; app->view = 6; app->no_color = true; app->ascii = false;
-    if (!native_setup_state(app)) return 1;
+    if (!native_setup_state(app)) { free(app); free(e); return 1; }
     screens_at(app, 80, 24);
     screens_at(app, 140, 40);
     key_cases(app);

@@ -34,31 +34,34 @@ static size_t wrap_length(const char *text, size_t length, int width) {
     return cut > 0 ? cut : i;
 }
 
-static void pen_text(struct pen *p, int indent, enum tv_style tone, const char *text) {
-    size_t length = strlen(text);
-    int width = p->app->content_width - indent;
+/* A label column and a value wrapped with a hanging indent under itself;
+ * an empty label wraps plain text at x. */
+struct hanging { int x, width; const char *label; enum tv_style label_tone; };
+
+static void pen_hanging(struct pen *p, const struct hanging *h, const char *value, enum tv_style tone) {
+    int width = p->app->content_width - h->x - h->width;
+    const char *rest = value;
     if (width < 8) width = 8;
-    if (!length) { pen_emit(p, indent, tone, "", 0); return; }
-    while (length) {
-        size_t take = wrap_length(text, length, width);
-        pen_emit(p, indent, tone, text, take);
-        text += take; length -= take;
-        while (length && *text == ' ') { text++; length--; }
-    }
+    do {
+        size_t take = wrap_length(rest, strlen(rest), width);
+        if (p->row >= p->skip && p->app->line < p->bottom && rest == value && h->label[0])
+            column(p->app, h->x, h->width, h->label_tone, h->label);
+        pen_emit(p, h->x + h->width, tone, rest, take);
+        /* wrap_length never exceeds strlen(rest), so rest stays within the
+         * string and at worst reaches its terminator. */
+        rest += take;
+        while (*rest == ' ') rest++; // NOLINT(clang-analyzer-security.ArrayBound)
+    } while (*rest);
+}
+
+static void pen_text(struct pen *p, int indent, enum tv_style tone, const char *text) {
+    struct hanging h = {indent, 0, "", TV_BASE};
+    pen_hanging(p, &h, text, tone);
 }
 
 static void pen_pair(struct pen *p, const char *label, const char *value, enum tv_style tone) {
-    int label_width = p->app->content_width < 70 ? 14 : 20, width = p->app->content_width - label_width - 2;
-    size_t length = strlen(value);
-    bool first = true;
-    if (width < 8) width = 8;
-    do {
-        size_t take = wrap_length(value, length, width);
-        if (p->row >= p->skip && p->app->line < p->bottom && first) column(p->app, 2, label_width, TV_MUTED, label);
-        pen_emit(p, label_width + 2, tone, value, take);
-        value += take; length -= take; first = false;
-        while (length && *value == ' ') { value++; length--; }
-    } while (length);
+    struct hanging h = {2, p->app->content_width < 70 ? 14 : 20, label, TV_MUTED};
+    pen_hanging(p, &h, value, tone);
 }
 
 static void title(struct app *app, enum tv_style tone, const char *text) {
@@ -142,21 +145,28 @@ static void step_row(struct app *app, struct pen *p, const struct setup_step *st
     if (step->detail[0]) pen_text(p, 6, TV_MUTED, step->detail);
 }
 
+/* The action row: what is running, or the selectable Continue setup. */
+static void steps_action(struct app *app, const struct native_setup *s, bool running) {
+    char work[200], label[96];
+    if (!running) {
+        column(app, 0, app->content_width, s->selected ? TV_STRONG : TV_SELECTED, s->selected ? "  Continue setup" : "> Continue setup");
+        app->line++;
+        return;
+    }
+    setup_step_label(s->job_step[0] ? s->job_step : "setup", label, sizeof(label));
+    snprintf(work, sizeof(work), "Working: %s... %lds", s->job_step[0] ? label : "checking setup status", (long)(time(NULL) - s->job_started));
+    column(app, 0, app->content_width, TV_SUCCESS, work);
+    app->line++;
+}
+
 static void render_steps(struct app *app, struct native_setup *s, bool running) {
     const struct setup_envelope *e = s->current;
     struct pen p;
-    char heading[512], work[200], label[96];
+    char heading[512];
     size_t i;
     snprintf(heading, sizeof(heading), "SET UP %.120s%s%.200s", s->name, dot(app), e->destination[0] ? e->destination : s->destination);
     title(app, TV_STRONG, heading);
-    if (running) {
-        setup_step_label(s->job_step[0] ? s->job_step : "setup", label, sizeof(label));
-        snprintf(work, sizeof(work), "Working: %s... %lds", s->job_step[0] ? label : "checking setup status", (long)(time(NULL) - s->job_started));
-        column(app, 0, app->content_width, TV_SUCCESS, work); app->line++;
-    } else {
-        column(app, 0, app->content_width, s->selected ? TV_STRONG : TV_SELECTED, s->selected ? "  Continue setup" : "> Continue setup");
-        app->line++;
-    }
+    steps_action(app, s, running);
     linef(app, "");
     pen_begin(&p, app, 2);
     for (i = 0; i < e->step_count; i++)
@@ -177,7 +187,7 @@ static const char *const plan_labels[][2] = {
     {"package_sha256", "Package SHA-256"}, {"prefix", "Install location"}, {"agent", "Agent"},
     {"command", "Command"}, {"url", "Installer URL"}, {"docs_url", "Provider docs"}, {"recipe_source", "Recipe"},
     {"requires", "Requires"}, {"expected_dirs", "Installs into"}, {"peer_fingerprint", "Host key"},
-    {"notes", "Notes"}, {"effects", "Effects"},
+    {"hashed", "Hashed entry"}, {"change", "Change"}, {"notes", "Notes"}, {"effects", "Effects"},
 };
 
 static bool plan_skipped(const char *key) { return !strcmp(key, "name") || !strcmp(key, "destination"); }
@@ -192,7 +202,7 @@ static void plan_row(struct pen *p, const struct setup_row *row, const char *lab
     char value[600], generic[64], *c;
     enum tv_style tone = TV_BASE;
     size_t length = strlen(row->key);
-    copy_text(value, sizeof(value), row->value);
+    copy_text(value, sizeof(value), !strcmp(row->value, "true") ? "yes" : !strcmp(row->value, "false") ? "no" : row->value);
     if (length >= 6 && !strcmp(row->key + length - 6, "source")) source_text(row->value, value, sizeof(value), &tone);
     if (!strcmp(row->key, "fingerprint") || !strcmp(row->key, "command")) tone = TV_STRONG;
     if (!label) {
@@ -276,10 +286,17 @@ static void render_plan(struct app *app, struct native_setup *s) {
 
 /* ---- Problems ---- */
 
+/* The CLI's own ssh-keygen -R command from its recovery text, or one built
+ * from the reported host and file. Shown for the user to run; never run. */
 static void removal_command(const struct native_setup *s, char *out, size_t size) {
     const struct setup_envelope *e = s->current;
     const char *host = e->key_host[0] ? e->key_host : strrchr(e->destination, '@') ? strrchr(e->destination, '@') + 1 : e->destination;
-    if (strstr(e->recovery, "ssh-keygen")) { copy_text(out, size, e->recovery); return; }
+    const char *start = strstr(e->recovery, "ssh-keygen -R"), *end;
+    if (start) {
+        end = strstr(start, ", then");
+        snprintf(out, size, "%.*s", (int)(end ? (size_t)(end - start) : strlen(start)), start);
+        return;
+    }
     snprintf(out, size, "ssh-keygen -R %.200s%s%.300s", host, e->key_file[0] ? " -f " : "", e->key_file);
 }
 
@@ -315,12 +332,13 @@ static bool blocking(const struct setup_envelope *e) {
 static void requirement_row(struct app *app, struct pen *p, const struct setup_requirement *r) {
     const char *status = r->blocking && strcmp(r->status, "ok") ? "BLOCKS" : r->status;
     enum tv_style tone = !strcmp(r->status, "ok") ? TV_SUCCESS : TV_WARNING;
-    char line[600], fix[300];
-    snprintf(line, sizeof(line), "%-8s %-14s %s", status, r->name, r->detail);
-    if (app->content_width < 70) snprintf(line, sizeof(line), "%-7s %s", status, r->name);
-    pen_text(p, 2, tone, line);
-    if (app->content_width < 70 && r->detail[0]) pen_text(p, 10, TV_MUTED, r->detail);
-    if (r->command[0]) { snprintf(fix, sizeof(fix), "fix: %s", r->command); pen_text(p, 11, TV_STRONG, fix); }
+    char label[96], fix[300];
+    bool narrow = app->content_width < 70;
+    struct hanging h = {2, narrow ? 8 : 25, label, tone};
+    snprintf(label, sizeof(label), narrow ? "%.7s" : "%-8s %.15s", status, r->name);
+    if (narrow) { pen_text(p, 2, tone, r->name); h.label = status; }
+    pen_hanging(p, &h, r->detail[0] ? r->detail : "-", narrow ? TV_MUTED : TV_BASE);
+    if (r->command[0]) { snprintf(fix, sizeof(fix), "fix: %s", r->command); h.label = ""; pen_hanging(p, &h, fix, TV_STRONG); }
 }
 
 static void render_preflight(struct app *app, struct native_setup *s) {
@@ -336,7 +354,7 @@ static void render_preflight(struct app *app, struct native_setup *s) {
                                        "run the suggested commands on the machine yourself, then check again."
                                      : "Nothing blocks setup. Warnings are worth fixing but do not stop it.");
     pen_text(&p, 0, TV_BASE, "");
-    pen_text(&p, 2, TV_MUTED, app->content_width < 70 ? "STATUS  REQUIREMENT" : "STATUS   REQUIREMENT    DETAIL");
+    pen_text(&p, 2, TV_MUTED, app->content_width < 70 ? "STATUS  REQUIREMENT" : "STATUS   REQUIREMENT     DETAIL");
     for (i = 0; i < e->requirement_count; i++) requirement_row(app, &p, &e->requirements[i]);
     footer(app, &p, blocked ? "Enter checks again after you install them   Esc back" : "Enter continues setup   Esc back", TV_STRONG);
 }

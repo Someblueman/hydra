@@ -20,6 +20,13 @@ int read_key(int timeout_ms, char *key) {
     return read(STDIN_FILENO, key, 1U) == 1 ? 1 : -1;
 }
 
+/* Views that load their own data when opened. */
+static void enter_view_refresh(struct app *app, int view) {
+    if (view == 9) native_attention_tick(app, true);
+    if (view == 7) (void)native_workspace_init(app);
+    if (view == 6) native_setup_hosts_refresh(app);
+}
+
 /* View changes go through here so refreshes and stale flags stay consistent. */
 void enter_view(struct app *app, int view) {
     if (view < 0 || view > 9) return;
@@ -30,9 +37,7 @@ void enter_view(struct app *app, int view) {
     app->view = view;
     app->diagnostics = false; app->help = false; app->result_open = false;
     if (view == 5) { app->graph_follow = true; if (!app->fleet) (void)refresh_workflows(app, NULL); }
-    if (view == 9) native_attention_tick(app, true);
-    if (view == 7) (void)native_workspace_init(app);
-    if (view == 6) native_setup_hosts_refresh(app);
+    enter_view_refresh(app, view);
 }
 
 void select_tab(struct app *app, int direction) {
@@ -371,6 +376,14 @@ static bool overlay_key(struct app *app, char key) {
     return false;
 }
 
+/* Hosts: A adds a host; head actions do not apply to host rows. */
+static bool hosts_key(struct app *app, char key) {
+    if (key == 'A') { native_setup_open_form(app); return true; }
+    if (!key || !strchr("/:pac xGd", key)) return false;
+    copy_text(app->notice, sizeof(app->notice), "Select a row and press Enter; A adds a host");
+    return true;
+}
+
 static bool view_key(struct app *app, char key) {
     if (key == 27 && app->view == 9) { handle_escape(app); return true; }
     if (app->view == 9 && native_attention_key(app, key)) return true;
@@ -379,12 +392,7 @@ static bool view_key(struct app *app, char key) {
     if (app->view == 7 && workspace_key(app, key)) return true;
     if (app->view == 5 && workflow_key(app, key)) return true;
     if (select_view(app, key)) return true;
-    if (app->view == 6 && key == 'A') { native_setup_open_form(app); return true; }
-    if (app->view == 6 && key && strchr("/:pac xGd", key)) {
-        copy_text(app->notice, sizeof(app->notice), "Select a row and press Enter; A adds a host");
-        return true;
-    }
-    return false;
+    return app->view == 6 && hosts_key(app, key);
 }
 
 static void attach_selected(struct app *app) {

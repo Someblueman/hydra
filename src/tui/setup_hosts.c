@@ -28,9 +28,8 @@ static int record_compare(const void *left, const void *right) {
     return strcmp(((const struct setup_record *)left)->name, ((const struct setup_record *)right)->name);
 }
 
-static void keep_summary(const struct native_setup *s, const struct setup_record *old, size_t count, struct setup_record *r) {
+static void keep_summary(const struct setup_record *old, size_t count, struct setup_record *r) {
     size_t i;
-    (void)s;
     for (i = 0; i < count; i++) if (!strcmp(old[i].name, r->name)) { *r = old[i]; r->checked = false; return; }
 }
 
@@ -49,7 +48,7 @@ static void scan_records(struct native_setup *s) {
         r = &s->records[s->record_count++];
         memset(r, 0, sizeof(*r));
         copy_text(r->name, sizeof(r->name), name);
-        keep_summary(s, old, old_count, r);
+        keep_summary(old, old_count, r);
     }
     closedir(directory);
     qsort(s->records, s->record_count, sizeof(s->records[0]), record_compare);
@@ -147,22 +146,27 @@ void setup_row_text(const struct app *app, const struct host_row *row, char *nam
 
 /* ---- Local Hosts tab ---- */
 
+static void hub_hit(struct app *app, size_t index) {
+    if (app->hit_count >= MAX_HEADS) return;
+    app->hit_rows[app->hit_count] = app->hit_bottom[app->hit_count] = app->line + 1;
+    app->hit_left[app->hit_count] = 3; app->hit_right[app->hit_count] = app->cols - 3;
+    app->hit_items[app->hit_count++] = index;
+}
+
+/* Name and setup state side by side, or stacked below 60 columns. */
 static void hub_row(struct app *app, const struct host_row *row, size_t index) {
     char name[160], state[200], line[400];
-    bool selected = index == app->host_selected;
-    int width = app->content_width;
+    bool selected = index == app->host_selected, narrow = app->content_width < 60;
+    int width = app->content_width, state_x = narrow ? 4 : 26;
+    enum tv_style name_tone = row->kind == HOST_ROW_ADD ? TV_STRONG : TV_BASE;
     setup_row_text(app, row, name, sizeof(name), state, sizeof(state));
-    if (app->hit_count < MAX_HEADS) {
-        app->hit_rows[app->hit_count] = app->hit_bottom[app->hit_count] = app->line + 1;
-        app->hit_left[app->hit_count] = 3; app->hit_right[app->hit_count] = app->cols - 3;
-        app->hit_items[app->hit_count++] = index;
-    }
+    hub_hit(app, index);
     snprintf(line, sizeof(line), "%c %s", selected ? '>' : ' ', name);
     if (selected) column(app, 0, width, TV_SELECTED, "");
-    column(app, 0, width < 60 ? width : 24, selected ? TV_SELECTED : row->kind == HOST_ROW_ADD ? TV_STRONG : TV_BASE, line);
-    if (width >= 40) column(app, width < 60 ? 2 : 26, width - (width < 60 ? 2 : 26), selected ? TV_SELECTED : TV_MUTED, state);
+    column(app, 0, narrow ? width : 24, selected ? TV_SELECTED : name_tone, line);
+    if (narrow) app->line++;
+    if (app->line < app->limit) column(app, state_x, width - state_x, selected && !narrow ? TV_SELECTED : TV_MUTED, state);
     app->line++;
-    if (width < 60 && app->line < app->limit) { column(app, 4, width - 4, TV_MUTED, state); app->line++; }
 }
 
 void render_setup_hub(struct app *app) {

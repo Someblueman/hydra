@@ -48,14 +48,13 @@ static void setup_notice(struct native_setup *s, const char *text) { copy_text(s
 
 /* ---- Children ---- */
 
-static bool job_start(struct app *app, struct native_setup *s, enum setup_job kind, const struct setup_argv *a, const char *step) {
+static bool job_start(struct native_setup *s, enum setup_job kind, const struct setup_argv *a, const char *step) {
     long budget = kind == SETUP_JOB_GUIDED || kind == SETUP_JOB_APPROVED ? SETUP_STEP_BUDGET_MS : SETUP_READ_BUDGET_MS;
     if (s->job.active) { setup_notice(s, "A setup step is still running; wait for its result"); return false; }
     if (!setup_capture_start(&s->job, a->argv, budget)) { setup_notice(s, "Hydra could not start the setup command"); return false; }
     s->job_kind = kind; s->job_started = time(NULL);
     copy_text(s->job_step, sizeof(s->job_step), step ? step : "");
     s->screen = SETUP_SCREEN_RUNNING; s->notice[0] = '\0'; s->scroll = 0;
-    (void)app;
     return true;
 }
 
@@ -69,21 +68,21 @@ static void guided_start(struct app *app, struct native_setup *s, bool first) {
         if (s->config[0]) { argv_add(&a, "--ssh-config"); argv_add(&a, s->config); }
     }
     argv_add(&a, "--json");
-    (void)job_start(app, s, SETUP_JOB_GUIDED, &a, first ? "host_key" : open ? open->id : "");
+    (void)job_start(s, SETUP_JOB_GUIDED, &a, first ? "host_key" : open ? open->id : "");
 }
 
 static void status_start(struct app *app, struct native_setup *s, enum setup_job kind) {
     struct setup_argv a = {{NULL}, 0};
     argv_add(&a, app->hydra); argv_add(&a, "remote"); argv_add(&a, "setup"); argv_add(&a, "status");
     argv_add(&a, s->name); argv_add(&a, "--json");
-    (void)job_start(app, s, kind, &a, kind == SETUP_JOB_RETURNED ? s->handoff_step : "");
+    (void)job_start(s, kind, &a, kind == SETUP_JOB_RETURNED ? s->handoff_step : "");
 }
 
 /* Read-only views of one step: hydra remote preflight|agents NAME --json. */
 static void inspect_start(struct app *app, struct native_setup *s, const char *word, const char *step) {
     struct setup_argv a = {{NULL}, 0};
     argv_add(&a, app->hydra); argv_add(&a, "remote"); argv_add(&a, word); argv_add(&a, s->name); argv_add(&a, "--json");
-    (void)job_start(app, s, SETUP_JOB_INSPECT, &a, step);
+    (void)job_start(s, SETUP_JOB_INSPECT, &a, step);
 }
 
 /* The CLI's own next command, with argv[0] replaced by this Hydra. */
@@ -123,7 +122,6 @@ static void handoff_start(struct app *app, struct native_setup *s) {
     argv_add(&a, app->hydra);
     for (i = 1; i < s->handoff_argc; i++) argv_add(&a, s->handoff[i]);
     s->handoff_exit = setup_terminal_handoff(app, a.argv, s->handoff_step);
-    s->handed_off = true;
     status_start(app, s, SETUP_JOB_RETURNED);
 }
 
@@ -270,12 +268,12 @@ static void approve(struct app *app, struct native_setup *s) {
         return;
     }
     if (!next_argv(app, s, &a, true)) { refuse(s); return; }
-    (void)job_start(app, s, SETUP_JOB_APPROVED, &a, s->current->next_step);
+    (void)job_start(s, SETUP_JOB_APPROVED, &a, s->current->next_step);
 }
 
 static void decline(struct native_setup *s) {
     s->screen = SETUP_SCREEN_STEPS; s->selected = 0; s->typed[0] = '\0';
-    snprintf(s->notice, sizeof(s->notice), "Not approved: nothing was changed on %.200s. Continue setup shows the plan again.",
+    snprintf(s->notice, sizeof(s->notice), "Not approved: nothing was changed on %.150s. Continue setup shows the plan again.",
              s->current->destination[0] ? s->current->destination : s->name);
 }
 
@@ -356,6 +354,16 @@ static void text_insert(struct native_setup *s, const struct tv_event *e) {
     }
 }
 
+/* Cursor movement within the focused text; false for other keys. */
+static bool cursor_key(uint32_t key, size_t *cursor, size_t length) {
+    if (key == TV_KEY_LEFT) { if (*cursor) (*cursor)--; }
+    else if (key == TV_KEY_RIGHT) { if (*cursor < length) (*cursor)++; }
+    else if (key == TV_KEY_HOME) *cursor = 0;
+    else if (key == TV_KEY_END) *cursor = length;
+    else return false;
+    return true;
+}
+
 /* Editing keys of the focused text; false for keys the screen handles. */
 static bool text_key(struct native_setup *s, const struct tv_event *e) {
     char *text; size_t size, *cursor, length;
@@ -363,14 +371,11 @@ static bool text_key(struct native_setup *s, const struct tv_event *e) {
     length = strlen(text);
     if (*cursor > length) *cursor = length;
     if (e->key == 127 || e->key == 8) {
-        if (!*cursor) return true;
-        memmove(text + *cursor - 1, text + *cursor, length - *cursor + 1); (*cursor)--;
-    } else if (e->key == TV_KEY_LEFT) { if (*cursor) (*cursor)--; }
-    else if (e->key == TV_KEY_RIGHT) { if (*cursor < length) (*cursor)++; }
-    else if (e->key == TV_KEY_HOME) *cursor = 0;
-    else if (e->key == TV_KEY_END) *cursor = length;
-    else if (e->key >= 32 && e->key < TV_KEY_UP && e->key != 127) text_insert(s, e);
-    else return false;
+        if (*cursor) { memmove(text + *cursor - 1, text + *cursor, length - *cursor + 1); (*cursor)--; }
+    } else if (!cursor_key(e->key, cursor, length)) {
+        if (e->key < 32 || e->key >= TV_KEY_UP) return false;
+        text_insert(s, e);
+    }
     s->problem[0] = '\0';
     return true;
 }
@@ -400,13 +405,21 @@ static void letter(struct app *app, struct native_setup *s, uint32_t key) {
     else if (key == 'q' && !s->job.active) app->running = false;
 }
 
-static void screen_key(struct app *app, struct native_setup *s, const struct tv_event *e) {
+/* Focus and scroll: Tab / Shift-Tab and arrows move, pages scroll. */
+static bool navigation_key(struct app *app, struct native_setup *s, const struct tv_event *e) {
     uint32_t key = e->key;
     if (key == TV_KEY_SEQUENCE && !strcmp(e->bytes, "\033[Z")) move(s, -1);
-    else if (key == '\t') move(s, 1);
-    else if (key == TV_KEY_UP || key == TV_KEY_DOWN) move(s, key == TV_KEY_UP ? -1 : 1);
+    else if (key == '\t' || key == TV_KEY_DOWN) move(s, 1);
+    else if (key == TV_KEY_UP) move(s, -1);
     else if (key == TV_KEY_PAGE_UP || key == TV_KEY_PAGE_DOWN) page(app, s, key == TV_KEY_PAGE_UP ? -1 : 1);
-    else if (key == '\r' || key == '\n') enter(app, s);
+    else return false;
+    return true;
+}
+
+static void screen_key(struct app *app, struct native_setup *s, const struct tv_event *e) {
+    uint32_t key = e->key;
+    if (navigation_key(app, s, e)) return;
+    if (key == '\r' || key == '\n') enter(app, s);
     else if (key == 27) back(app, s);
     else if (!text_screen(s) && key < 128) letter(app, s, key);
 }

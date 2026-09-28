@@ -36,39 +36,29 @@ struct setup_capture {
     bool active, eof, reaped, failed, timed_out;
 };
 
+/* Members are ordered by alignment; see the comments for their roles. */
 struct native_setup {
-    bool open;
-    enum setup_screen screen;
-    struct setup_field fields[SETUP_FORM_FIELDS];
-    int focus;
-    char problem[200];
-    char name[128], destination[256], config[1024];
-    /* What the screen shows, and the buffer the next result is parsed into. */
-    struct setup_envelope *current, *incoming;
-    struct setup_capture job;
-    enum setup_job job_kind;
-    char job_step[80];
+    /* What the screen shows, and the buffer the next result is parsed into;
+     * the sweep result belongs to the Hosts tab status refresh. */
+    struct setup_envelope *current, *incoming, *sweep_result;
     time_t job_started;
-    /* Terminal hand-off: the step and exact argv (without --json). */
-    char handoff_step[80];
-    char handoff[SETUP_ARG_MAX][SETUP_ARG_TEXT];
-    size_t handoff_argc;
-    int handoff_exit;
-    bool handed_off;
-    unsigned automatic;
-    size_t selected, scroll;
-    bool more;
-    char typed[16];
-    size_t typed_cursor;
-    char notice[256], hint[160];
+    size_t handoff_argc, selected, scroll, typed_cursor, record_count, sweep_index;
+    struct setup_capture job, sweep;
     struct tv_input input;
+    struct setup_field fields[SETUP_FORM_FIELDS];
+    enum setup_screen screen;
+    enum setup_job job_kind;
+    int focus, handoff_exit;
+    unsigned automatic;
+    bool open, more, sweep_pending;
+    char typed[16];
+    /* Running step, and the terminal hand-off step with its exact argv
+     * (without --json). */
+    char job_step[80], handoff_step[80];
+    char name[128], sweep_name[128], hint[160], problem[200], destination[256], notice[256], config[1024];
     /* Hosts tab: setup records found in $HYDRA_HOME/fleet/setup. */
     struct setup_record records[SETUP_RECORDS];
-    size_t record_count, sweep_index;
-    struct setup_capture sweep;
-    struct setup_envelope *sweep_result;
-    char sweep_name[128];
-    bool sweep_pending;
+    char handoff[SETUP_ARG_MAX][SETUP_ARG_TEXT];
 };
 
 /* Child capture (setup_capture.c): stdout only, stdin and stderr /dev/null,
