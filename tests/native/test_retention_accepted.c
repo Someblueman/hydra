@@ -76,42 +76,44 @@ static void all_action(json_object *v, const char *action) {
                    action));
   json_object_put(v);
 }
+/* Options: --fleet BIN, --work DIR (copy location), --output FILE. */
+enum { OPT_FLEET, OPT_WORK, OPT_OUTPUT, OPT_COUNT };
+static void options(int argc, char **argv, const char *values[OPT_COUNT]) {
+  for (int i = 2; i < argc; i += 2) {
+    assert(i + 1 < argc);
+    int k = !strcmp(argv[i], "--fleet")  ? OPT_FLEET
+            : !strcmp(argv[i], "--work") ? OPT_WORK
+                                         : OPT_OUTPUT;
+    assert(k != OPT_OUTPUT || !strcmp(argv[i], "--output"));
+    values[k] = argv[i + 1];
+  }
+}
+static void resolve(char out[F_PATH], const char *root, const char *arg,
+                    const char *fallback) {
+  if (!arg)
+    arg = fallback;
+  if (arg[0] == '/')
+    assert(!f_copy(out, F_PATH, arg));
+  else
+    nt_path(out, root, arg);
+}
 int main(int argc, char **argv) {
   char root[F_PATH], fixture[F_PATH], original_home[F_PATH], home[F_PATH],
       run[F_PATH], policy[F_PATH], output[F_PATH], fleet[F_PATH],
       parent[F_PATH], tmp[F_PATH];
-  const char *outarg = NULL, *fleetarg = NULL;
+  const char *values[OPT_COUNT] = {NULL, NULL, NULL};
   assert(argc >= 4);
   assert(getcwd(root, sizeof root));
   nt_path(hydra, root, "bin/hydra");
-  if (argv[1][0] == '/')
-    assert(!f_copy(fixture, sizeof fixture, argv[1]));
-  else
-    nt_path(fixture, root, argv[1]);
-  for (int i = 2; i < argc; i += 2) {
-    assert(i + 1 < argc);
-    if (!strcmp(argv[i], "--fleet"))
-      fleetarg = argv[i + 1];
-    else {
-      assert(!strcmp(argv[i], "--output"));
-      outarg = argv[i + 1];
-    }
-  }
-  assert(outarg);
-  if (outarg[0] == '/')
-    assert(!f_copy(output, sizeof output, outarg));
-  else
-    nt_path(output, root, outarg);
-  if (fleetarg) {
-    if (fleetarg[0] == '/')
-      assert(!f_copy(fleet, sizeof fleet, fleetarg));
-    else
-      nt_path(fleet, root, fleetarg);
-  } else
-    nt_path(fleet, root, "build/hydra-fleet");
+  resolve(fixture, root, argv[1], NULL);
+  options(argc, argv, values);
+  assert(values[OPT_OUTPUT]);
+  resolve(output, root, values[OPT_OUTPUT], NULL);
+  resolve(fleet, root, values[OPT_FLEET], "build/hydra-fleet");
   nt_path(source, fixture, "source");
   nt_path(original_home, fixture, "home");
-  nt_path(parent, root, "build/qualification");
+  /* Automated runs keep the mutated copy inside their own fixture. */
+  resolve(parent, root, values[OPT_WORK], "build/qualification");
   assert(!f_mkdirs(parent));
   nt_path(tmp, parent, "retention-accepted-native-XXXXXX");
   assert(mkdtemp(tmp));

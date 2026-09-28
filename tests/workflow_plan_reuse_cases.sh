@@ -29,10 +29,18 @@ workflow_plan_reuse_assert() {
     cmp "$fixture/expected" "$run_dir/steps/compose/attempt-2/artifacts/result"
     _reuse_build=${BUILD_DIR:?BUILD_DIR is required: run via make test or make test-one T=<name>}
     case $_reuse_build in /*) ;; *) _reuse_build=$root/$_reuse_build ;; esac
-    make -s -C "$root" BUILD_DIR="$_reuse_build" "$_reuse_build/native-tests/test-plan-reuse-invalidation"
+    make -s -C "$root" BUILD_DIR="$_reuse_build" "$_reuse_build/native-tests/test-plan-reuse-invalidation" \
+        "$_reuse_build/native-tests/test-retention-accepted"
     (cd "$root" && "$_reuse_build/native-tests/test-plan-reuse-invalidation" "$fixture" --fleet-bin "$HYDRA_FLEET_BIN")
     # shellcheck source=/dev/null
     . "$root/tests/fixture-tools.sh"
     statistics_evidence "$root/bin/hydra" "$run_dir" "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" verified
+    # Retention expires and pins a copy of this real accepted run; the original
+    # fixture is not mutated and the copy is removed with the fixture.
+    mkdir "$fixture/retention"
+    (cd "$root" && "$_reuse_build/native-tests/test-retention-accepted" "$fixture" --fleet "$HYDRA_FLEET_BIN" \
+        --work "$fixture/retention" --output "$fixture/retention/summary.json") > "$fixture/retention.out"
+    grep -q '"expired_result":"evidence_expired"' "$fixture/retention/summary.json"
+    printf 'Accepted-run retention: pinned evidence preserved, unpinned evidence expired, receivers reused\n'
     printf 'Selective repair retained two original receipts and accepted two fresh affected tasks\n'
 }

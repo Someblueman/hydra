@@ -45,6 +45,7 @@ test-retention: $(BUILD_DIR)/native-tests/test-retention
 test-workflow-metrics: $(BUILD_DIR)/native-tests/test-workflow-task-metrics
 test-workflow-metrics: $(BUILD_DIR)/native-tests/test-statistics-export
 test-plan-inspection: $(BUILD_DIR)/native-tests/test-plan-inspection
+test-plan-reuse: $(BUILD_DIR)/native-tests/test-plan-reuse-invalidation $(BUILD_DIR)/native-tests/test-retention-accepted
 
 $(BUILD_DIR)/native-tests/test-discovery: tests/native/discovery_progress.c
 $(BUILD_DIR)/native-tests/test-enrollment: tests/native/enrollment_batch.c tests/native/enrollment_packages.c
