@@ -61,11 +61,34 @@ static void measure_input(FILE *in, size_t size, bool child_started, struct f_ca
         }
     }
 }
+/* How long output is still read after the direct child exited. A descendant
+ * that left the process group (an OpenSSH ControlPersist master calls
+ * setsid) can hold the pipes for its whole lifetime; the direct child's exit
+ * decides, so reading stops after this grace period. */
+#define EXITED_GRACE_MS 1000L
+/* True once the group leader exited; it stays unreaped so its PID and
+ * process group cannot be reused while run may still signal them. */
+static bool leader_exited(pid_t pid) {
+    siginfo_t info;
+    memset(&info, 0, sizeof(info));
+    return !waitid(P_PID, (id_t)pid, &info, WEXITED | WNOHANG | WNOWAIT) && info.si_pid == pid;
+}
+static void close_streams(struct capture_stream streams[2]) {
+    int i;
+    for (i = 0; i < 2; i++) if (streams[i].pipe[0] >= 0) { close(streams[i].pipe[0]); streams[i].pipe[0] = -1; }
+}
+/* Stops reading EXITED_GRACE_MS after the leader exited with pipes still open. */
+static void exited_grace(pid_t pid, struct capture_stream streams[2], long *exited_at) {
+    bool open = streams[0].pipe[0] >= 0 || streams[1].pipe[0] >= 0;
+    if (!open) return;
+    if (*exited_at < 0 && leader_exited(pid)) *exited_at = milliseconds();
+    if (*exited_at >= 0 && milliseconds() - *exited_at >= EXITED_GRACE_MS) close_streams(streams);
+}
 static int run(char *const argv[], const char *input, size_t size, unsigned seconds, struct f_capture *cap, struct f_control *control) {
     struct capture_stream streams[2] = {{{-1, -1}, NULL, 0}, {{-1, -1}, NULL, 0}};
     int status = 0, result = -1;
     pid_t pid = -1; FILE *in = NULL;
-    long deadline, cancel_grace = control ? (long)control->grace_seconds * 1000L : 0L; bool stopped = false, child_started = false;
+    long deadline, exited_at = -1, cancel_grace = control ? (long)control->grace_seconds * 1000L : 0L; bool stopped = false, child_started = false;
     memset(cap, 0, sizeof(*cap)); cap->status = 1; cap->input_complete = size == 0;
     cap->out = calloc(F_LIMIT + 1, 1); cap->err = calloc(F_LIMIT + 1, 1);
     streams[0].buffer = cap->out; streams[1].buffer = cap->err;
@@ -105,6 +128,7 @@ static int run(char *const argv[], const char *input, size_t size, unsigned seco
                 deadline = 0;
             }
         }
+        exited_grace(pid, streams, &exited_at);
         /* Do not reap the group leader until its pipes close: its PID cannot be reused. */
         if (streams[0].pipe[0] < 0 && streams[1].pipe[0] < 0 && (!cap->cancelled || milliseconds() >= deadline - 200)) {
             pid_t waited = waitpid(pid, &status, WNOHANG);

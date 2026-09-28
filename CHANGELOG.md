@@ -139,6 +139,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Hydra was held up (for example by a terminal that stopped reading its output)
   and an answer reached tmux after its 5-second query window, tmux passed it on
   as keys. Hydra no longer answers them; tmux learned nothing from the answers.
+- Fleet SSH no longer hangs when `~/.ssh/config` enables `ControlMaster auto`
+  with `ControlPersist` (a common `Host *` setup). The first connection started a
+  background master that kept Hydra's captured output open, so `hydra remote
+  setup` (the host-key check), preflight and fleet requests waited until the
+  master exited, up to its whole `ControlPersist` time, even past `--timeout`.
+  Hydra now never starts or reuses your own SSH masters: every Hydra SSH
+  connection passes `ControlMaster=no` and `ControlPath=none` unless the alias
+  uses Hydra's own `--multiplex`, so host-key checks always verify the host
+  itself. A command's own exit now also ends its output capture shortly after,
+  even when a background process still holds the output open.
 
 ## [2.8.0] - 2026-09-27
 

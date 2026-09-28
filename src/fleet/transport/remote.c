@@ -247,7 +247,11 @@ static void ssh_options(const struct f_remote *remote, char **argv, size_t *coun
     }
 }
 /* Builds the strict SSH argv shared by captured and terminal sessions. The
- * option buffers are caller-owned and must outlive argv. */
+ * option buffers are caller-owned and must outlive argv. Hydra either runs
+ * its own master (--multiplex) or none: a user ControlMaster/ControlPersist
+ * from ~/.ssh/config is never started (its daemonized master would hold a
+ * captured pipe) nor reused (a reused master skips host-key verification
+ * and the peer fingerprint Hydra reads from the -vv log). */
 static int ssh_argv(const struct f_remote *remote, const char *command, unsigned seconds, bool tty, bool verbose,
                     char *argv[48], char timeout[64], char socket[F_PATH]) {
     size_t n = 0;
@@ -265,6 +269,9 @@ static int ssh_argv(const struct f_remote *remote, const char *command, unsigned
         argv[n++] = "-o"; argv[n++] = "ControlPersist=60";
         argv[n++] = "-o"; argv[n++] = socket;
         if (remote->require_existing_master) { argv[n++] = "-o"; argv[n++] = "ProxyCommand=false"; }
+    } else {
+        argv[n++] = "-o"; argv[n++] = "ControlMaster=no";
+        argv[n++] = "-o"; argv[n++] = "ControlPath=none";
     }
     argv[n++] = (char *)remote->target; argv[n++] = (char *)command; argv[n] = NULL;
     return 0;

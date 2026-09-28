@@ -3,6 +3,7 @@
  * refusal must leave that known_hosts file byte-identical. */
 #include "support.h"
 #include <arpa/inet.h>
+#include <dirent.h>
 #include <netinet/in.h>
 #include <pwd.h>
 #include <signal.h>
@@ -190,6 +191,104 @@ static void preflight_over_sshd(void) {
   f_capture_free(&c);
   f_capture_free(&u);
 }
+/* ---- A user ~/.ssh/config with ControlPersist masters ---- */
+static double seconds_now(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+/* Names a live user master socket (cm-*) under root, if any. */
+static bool user_master(char found[F_PATH]) {
+  DIR *dir = opendir(root);
+  struct dirent *entry;
+  bool any = false;
+  assert(dir);
+  while (!any && (entry = readdir(dir)))
+    if (!strncmp(entry->d_name, "cm-", 3)) {
+      nt_path(found, root, entry->d_name);
+      any = true;
+    }
+  closedir(dir);
+  return any;
+}
+/* Stops any master a failing build left behind, so the test never leaks one. */
+static void stop_user_masters(const char *config) {
+  char socket_path[F_PATH];
+  size_t i;
+  for (i = 0; i < 8 && user_master(socket_path); i++) {
+    char *args[] = {"ssh", "-F", (char *)config, "-S", socket_path, "-O", "exit", "fixture", NULL};
+    struct f_capture c = {0};
+    (void)f_run(args, NULL, 0, 5, &c);
+    f_capture_free(&c);
+    unlink(socket_path);
+  }
+}
+/* One hydra-fleet command that must finish promptly with any user master
+ * configuration: returns its exit status. */
+static int bounded(const char *config, const char *const extra[]) {
+  char *args[24];
+  struct f_capture c = {0};
+  double started = seconds_now(), took;
+  int status;
+  size_t i;
+  args[0] = fleet;
+  for (i = 0; extra[i]; i++) {
+    assert(i < 22);
+    args[i + 1] = (char *)extra[i];
+  }
+  args[i + 1] = NULL;
+  assert(!f_run(args, NULL, 0, 45, &c));
+  took = seconds_now() - started;
+  status = c.status;
+  if (c.timeout || took > 15.0) {
+    fprintf(stderr, "%s %s took %.1fs (timeout %d)\n%s\n%s\n", extra[0], extra[1], took, c.timeout, c.out, c.err);
+    stop_user_masters(config);
+    stop_server();
+  }
+  assert(!c.timeout && took <= 15.0);
+  f_capture_free(&c);
+  return status;
+}
+static void no_user_master(const char *config, const char *step) {
+  char found[F_PATH];
+  if (user_master(found)) {
+    fprintf(stderr, "%s left a user SSH master running at %s\n", step, found);
+    stop_user_masters(config);
+    stop_server();
+    assert(!"Hydra started a user ControlMaster");
+  }
+}
+/* A very common ~/.ssh/config: Host * with ControlMaster auto and a long
+ * ControlPersist. Hydra must neither start nor reuse such a master: a
+ * daemonized master holding a captured pipe hung setup for its whole
+ * persistence time, and a reused master skips host-key verification. */
+static void control_persist_ignored(const char *known) {
+  char config[F_PATH], extra[F_PATH + 128], remotes[F_PATH], alias[F_PATH], serve_home[F_PATH], record[F_PATH * 4];
+  json_object *v;
+  assert(snprintf(extra, sizeof extra, "Host *\n ControlMaster auto\n ControlPath %s/cm-%%C\n ControlPersist 15m\n", root) <
+         (int)sizeof extra);
+  client_config("config_persist", known, extra, config);
+  stop_user_masters(config);
+  bounded(config, (const char *[]){"remote", "setup", "s7", "fixture", "--ssh-config", config, "--json", NULL});
+  no_user_master(config, "setup");
+  v = REMOTE(0, NULL, "trust-key", "s7", "--json");
+  assert(!strcmp(f_string(f_field(v, "data"), "result"), "already trusted"));
+  json_object_put(v);
+  no_user_master(config, "trust-key");
+  bounded(config, (const char *[]){"remote", "preflight", "s7", "--json", NULL});
+  no_user_master(config, "preflight");
+  /* A fleet request through an alias that does not use --multiplex. */
+  nt_path(remotes, root, "home/fleet/remotes");
+  nt_path(alias, remotes, "persist.json");
+  nt_path(serve_home, root, "serve-home");
+  assert(!f_mkdirs(remotes));
+  assert(snprintf(record, sizeof record, "{\"schema_version\":1,\"target\":\"fixture\",\"hydra\":\"%s\",\"home\":\"%s\",\"ssh_config\":\"%s\",\"multiplex\":false}",
+                  fleet, serve_home, config) < (int)sizeof record);
+  nt_write(alias, record);
+  assert(!bounded(config, (const char *[]){"fleet", "list", "persist", "--json", NULL}));
+  no_user_master(config, "fleet list");
+  assert(!unlink(alias));
+}
 static void changed_key_refused(const char *known) {
   char *old = fingerprint(host_pub), *fp, *before = snapshot(known);
   json_object *v;
@@ -316,6 +415,7 @@ int main(void) {
   approval_required_first(config, known, fp);
   trusted_then_known(config, known, fp);
   preflight_over_sshd();
+  control_persist_ignored(known);
   changed_key_refused(known);
   other_type_ambiguous();
   hashed_line();

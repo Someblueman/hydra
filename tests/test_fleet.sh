@@ -30,6 +30,7 @@ mkdir -p "$fixture/bin"
 cat > "$fixture/bin/ssh" <<'SSH'
 #!/bin/sh
 set -eu
+[ -z "${HYDRA_TEST_SSH_ARGV:-}" ] || printf '%s\n' "$*" >> "$HYDRA_TEST_SSH_ARGV"
 while [ $# -gt 2 ]; do shift; done
 if [ -n "${HYDRA_TEST_OFFLINE_FILE:-}" ] && [ -f "$HYDRA_TEST_OFFLINE_FILE" ] && [ "$1" = good ]; then exit 255; fi
 case "$1" in
@@ -58,8 +59,23 @@ chmod +x "$fixture/bin/ssh"
 PATH="$fixture/bin:$PATH"
 export PATH
 "$root/bin/hydra" remote add good good --hydra "$root/bin/hydra"
+HYDRA_TEST_SSH_ARGV="$fixture/ssh-argv"
+export HYDRA_TEST_SSH_ARGV
 "$root/bin/hydra" fleet list --json > "$fixture/result"
 grep -q '"heads":\[\]' "$fixture/result"
+# Without --multiplex Hydra neither starts nor reuses a ControlMaster from the
+# user's SSH config; with it Hydra uses only its own control path.
+grep -q -- '-o ControlMaster=no -o ControlPath=none good ' "$fixture/ssh-argv"
+if grep -q -- 'ControlMaster=auto' "$fixture/ssh-argv"; then echo 'user SSH master allowed'; exit 1; fi
+"$root/bin/hydra" remote add muxed good --hydra "$root/bin/hydra" --multiplex
+: > "$fixture/ssh-argv"
+"$root/bin/hydra" fleet list muxed --json > "$fixture/muxed-result"
+grep -q '"heads":\[\]' "$fixture/muxed-result"
+grep -q -- "-o ControlMaster=auto -o ControlPersist=60 -o ControlPath=/.*/fleet/sockets/%C good " "$fixture/ssh-argv"
+if grep -q -- 'ControlPath=none' "$fixture/ssh-argv"; then echo 'multiplexed alias lost its control path'; exit 1; fi
+"$root/bin/hydra" remote remove muxed >/dev/null
+unset HYDRA_TEST_SSH_ARGV
+rm -f "$fixture/ssh-argv"
 "$root/bin/hydra" fleet overview --json > "$fixture/overview"
 grep -q '"snapshot_schema_version":1' "$fixture/overview"
 grep -q '"state":"reachable"' "$fixture/overview"

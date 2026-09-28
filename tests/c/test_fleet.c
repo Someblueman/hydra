@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 const char *f_home, *f_hydra;
 static void observe_stdout(void *context, const char *text, size_t size) {
@@ -50,6 +51,17 @@ static void capture_partial_input(void) {
     assert(cap.status == 7 && cap.in_bytes == 0 && cap.out_bytes == 0 && !cap.input_complete && cap.measurement_complete);
     f_capture_free(&cap);
 }
+/* A descendant that outlives the command (an OpenSSH ControlPersist master
+ * does) may keep the pipes open; the command's own exit ends the capture. */
+static void capture_exited_leader(void) {
+    struct f_capture cap = {0};
+    char *command[] = {"sh", "-c", "printf done; printf note >&2; sleep 6 & exit 3", NULL};
+    time_t started = time(NULL);
+    assert(!f_run(command, NULL, 0, 30, &cap));
+    assert(time(NULL) - started <= 4);
+    assert(cap.status == 3 && !cap.timeout && !strcmp(cap.out, "done") && !strcmp(cap.err, "note"));
+    f_capture_free(&cap);
+}
 #include "test_fleet_attention.inc"
 int main(void) {
     char dir[] = "/tmp/hydra-fleet-unit.XXXXXX", path[F_PATH]; json_object *obj, *bundle, *files, *file, *result;
@@ -65,6 +77,7 @@ int main(void) {
     assert(!f_run(echo, "literal input", 13, 2, &cap));
     assert(cap.status == 0 && cap.in_bytes == 13 && cap.input_complete && !strcmp(cap.out, "literal input") && !strcmp(cap.err, "error")); f_capture_free(&cap);
     capture_partial_input();
+    capture_exited_leader();
     assert(!f_run(hang, NULL, 0, 1, &cap) && cap.timeout && cap.status == 124); f_capture_free(&cap);
     bundle = json_object_new_object(); files = json_object_new_array(); file = json_object_new_object();
     json_object_object_add(bundle, "schema_version", json_object_new_int(1)); f_string_add(bundle, "kind", "config");
