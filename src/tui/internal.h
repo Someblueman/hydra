@@ -385,6 +385,8 @@ const char *status_label(const struct head *head);
 enum tv_style status_tone(const struct head *head);
 size_t attention_count(const struct app *app);
 const char *dot(const struct app *app);
+/* Footer freshness of data observed at observed_at. Returns the tone. */
+enum tv_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size);
 void text_append(char *buffer, size_t size, const char *format, ...);
 bool frame_alloc(struct app *app);
 void frame_free(struct app *app);

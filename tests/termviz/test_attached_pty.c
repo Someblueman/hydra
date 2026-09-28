@@ -174,7 +174,7 @@ int main(void) {
     proof(one, "latency-proof", "responsive");
     U("STALE: last good", snapshot_delay);
     CHECK(!unlink(slow), "remove delay trigger");
-    U("Current snapshot", 6);
+    U("Live", 6);
     S("(sleep 1; printf 'FORM_LIVE' > form-proof; printf 'FORM_LIVE\\n') &\r");
     tv_pump(&s, .2);
     S("\002\t/");

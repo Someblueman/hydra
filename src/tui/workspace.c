@@ -690,14 +690,14 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
         else native_workspace_activity(app, &content, p->scroll);
     }
     {
-        long age = headless || !app->snapshot_at ? 0 : (long)(time(NULL) - app->snapshot_at);
+        char fresh[96];
         const char *notice=app->snapshot_stale ? app->snapshot_error : app->notice;
-        enum tv_style tone = app->snapshot_stale ? TV_WARNING : app->notice[0] ? TV_BASE : TV_MUTED;
-        if (age < 0) age = 0;
-        if (app->snapshot_stale) snprintf(status, sizeof(status), "STALE: last good snapshot%s%s", notice[0] ? sep : "", notice);
+        enum tv_style tone = snapshot_freshness(app, app->snapshot_at, app->snapshot_stale, headless, fresh, sizeof(fresh));
+        if (!app->snapshot_stale && app->notice[0]) tone = TV_BASE;
+        if (app->snapshot_stale) snprintf(status, sizeof(status), "%s%s%s", fresh, notice[0] ? sep : "", notice);
         else {
             const char *tail = app->notice[0] ? app->notice : w->zoom ? "z restores the splits" : "";
-            snprintf(status, sizeof(status), "Current snapshot%sage %lds%s%s", sep, age, tail[0] ? sep : "", tail);
+            snprintf(status, sizeof(status), "%s%s%s", fresh, tail[0] ? sep : "", tail);
         }
         if (compact) {
             if (app->notice[0] && !(native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen))

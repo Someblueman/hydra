@@ -3,6 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "fleet_budget.h"
 /* One frame canvas serves every view. Views draw into it; the presenter paints
  * only changed cells, so idle refreshes never clear or flicker the screen.
  * Semantic tones stay restrained: cyan chrome, amber attention, green running. */
@@ -688,11 +689,26 @@ static bool render_workspace_view(struct app *app, unsigned frame, bool headless
     return false;
 }
 
-static long snapshot_age(const struct app *app, bool *stale) {
-    time_t observed_at = app->view == 5 ? app->workflow_at : app->snapshot_at;
-    long age = !observed_at ? 0L : (long)(time(NULL) - observed_at);
-    *stale = app->view == 5 ? app->workflow_stale : app->snapshot_stale;
-    return age < 0 ? 0 : age;
+/* Each successful refresh takes a new snapshot, so while refreshes keep
+ * succeeding an age only restarts every interval and says nothing: a steady
+ * "Live" shows instead. The age counts up once the shown data is older than
+ * two refresh intervals (plus one remote request in fleet mode), or when the
+ * last refresh failed. */
+static long snapshot_age(time_t observed_at, bool headless) {
+    long age = headless || !observed_at ? 0L : (long)(time(NULL) - observed_at);
+    return age < 0 ? 0L : age;
+}
+static long snapshot_limit(const struct app *app) {
+    return 2L * HYDRA_TUI_REFRESH_SECONDS + (app->fleet ? (long)HYDRA_FLEET_TUI_REQUEST_SECONDS : 0L);
+}
+enum tv_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size) {
+    long age = snapshot_age(observed_at, headless), limit = snapshot_limit(app);
+    if (stale && observed_at) { snprintf(out, size, "STALE: last good snapshot, updated %lds ago", age); return TV_WARNING; }
+    if (stale) { snprintf(out, size, "STALE: no snapshot yet"); return TV_WARNING; }
+    if (!observed_at && !headless) { snprintf(out, size, "Waiting for the first snapshot"); return TV_MUTED; }
+    if (age > limit) { snprintf(out, size, "Updated %lds ago", age); return TV_BASE; }
+    snprintf(out, size, "Live");
+    return TV_MUTED;
 }
 
 static void status_marked(struct app *app, char *out, size_t size) {
@@ -701,17 +717,18 @@ static void status_marked(struct app *app, char *out, size_t size) {
              app->notice[0] ? sep : "", app->notice);
 }
 
-static void status_line(struct app *app, char *out, size_t size, enum tv_style *tone) {
-    bool stale;
-    long age = snapshot_age(app, &stale);
+static void status_line(struct app *app, char *out, size_t size, enum tv_style *tone, bool headless) {
+    bool stale = app->view == 5 ? app->workflow_stale : app->snapshot_stale;
     const char *sep = dot(app);
+    char fresh[96];
+    enum tv_style fresh_tone = snapshot_freshness(app, app->view == 5 ? app->workflow_at : app->snapshot_at, stale, headless, fresh, sizeof(fresh));
     *tone = TV_MUTED;
     if (app->marked_count) { status_marked(app, out, size); *tone = TV_STRONG; return; }
-    if (stale && app->snapshot_error[0]) { snprintf(out, size, "STALE: last good snapshot%s%s", sep, app->snapshot_error); *tone = TV_WARNING; return; }
+    if (stale && app->snapshot_error[0]) { snprintf(out, size, "%s%s%s", fresh, sep, app->snapshot_error); *tone = TV_WARNING; return; }
     if (app->notice[0]) { snprintf(out, size, "%s", app->notice); *tone = TV_BASE; return; }
     if (app->search[0]) { snprintf(out, size, "Search: %s%sEsc clears", app->search, sep); *tone = TV_BASE; return; }
-    if (stale) { snprintf(out, size, "STALE: last good snapshot%sage %lds", sep, age); *tone = TV_WARNING; return; }
-    snprintf(out, size, "Current snapshot%sage %lds", sep, age);
+    snprintf(out, size, "%s", fresh);
+    *tone = fresh_tone;
 }
 
 /* Recovery offers x only for a clean leftover worktree the shell gc can remove. */
@@ -811,7 +828,7 @@ void render(struct app *app, unsigned frame, bool headless) {
     render_content(app);
     app->boxed = false;
     app->limit = app->rows;
-    status_line(app, status, sizeof(status), &tone);
+    status_line(app, status, sizeof(status), &tone, headless);
     chrome_footer(app, &app->frame, status, tone, hint_line(app));
     frame_end(app, frame, headless);
 }

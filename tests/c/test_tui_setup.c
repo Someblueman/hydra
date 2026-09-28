@@ -418,6 +418,33 @@ static void running_cases(struct app *app) {
           "a cancelled read-only check returns to the recorded steps");
 }
 
+/* The footer shares this freshness label with every view: a steady "Live"
+ * while refreshes succeed, a counting age only once it means something. */
+static void freshness_cases(struct app *app) {
+    char text[128];
+    time_t now = time(NULL);
+    bool fleet = app->fleet;
+    app->fleet = false;
+    check(snapshot_freshness(app, now - 1, false, false, text, sizeof(text)) == TV_MUTED && !strcmp(text, "Live"),
+          "a current snapshot is Live, without a restarting age");
+    check(snapshot_freshness(app, now - 4, false, false, text, sizeof(text)) == TV_MUTED && !strcmp(text, "Live"),
+          "two refresh intervals are still Live");
+    check(snapshot_freshness(app, now - 9, false, false, text, sizeof(text)) == TV_BASE && !strcmp(text, "Updated 9s ago"),
+          "an overdue refresh shows the age counting up");
+    check(snapshot_freshness(app, now - 12, true, false, text, sizeof(text)) == TV_WARNING &&
+          !strcmp(text, "STALE: last good snapshot, updated 12s ago"), "a failed refresh shows STALE with the age");
+    check(snapshot_freshness(app, 0, false, false, text, sizeof(text)) == TV_MUTED && !strcmp(text, "Waiting for the first snapshot"),
+          "before the first snapshot nothing claims to be live");
+    check(snapshot_freshness(app, now - 60, false, true, text, sizeof(text)) == TV_MUTED && !strcmp(text, "Live"),
+          "headless fixtures render deterministically");
+    app->fleet = true;
+    check(snapshot_freshness(app, now - 6, false, false, text, sizeof(text)) == TV_MUTED && !strcmp(text, "Live"),
+          "fleet mode allows one remote request per refresh");
+    check(snapshot_freshness(app, now - 8, false, false, text, sizeof(text)) == TV_BASE && !strcmp(text, "Updated 8s ago"),
+          "an overdue fleet refresh shows the age");
+    app->fleet = fleet;
+}
+
 int main(int argc, char **argv) {
     struct app *app = calloc(1, sizeof(*app));
     struct setup_envelope *e = calloc(1, sizeof(*e));
@@ -435,6 +462,7 @@ int main(int argc, char **argv) {
     screens_at(app, 140, 40);
     key_cases(app);
     running_cases(app);
+    freshness_cases(app);
     native_setup_destroy(app);
     frame_free(app); transcript_free(app->transcript);
     free(app); free(e);

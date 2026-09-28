@@ -11,6 +11,9 @@
     ((long)HYDRA_FLEET_TUI_PHASES * (long)HYDRA_FLEET_TUI_REQUEST_SECONDS * 1000L + \
      HYDRA_FLEET_TUI_CAPTURE_OVERHEAD_MS)
 
+/* The control centre requests fresh observations this often. */
+#define HYDRA_TUI_REFRESH_SECONDS 2L
+
 /* Local state observation is a single shell transaction. Keep startup and
  * refresh bounded while allowing the measured ten-head snapshot to complete. */
 #define HYDRA_TUI_LOCAL_CAPTURE_BUDGET_MS 10000L

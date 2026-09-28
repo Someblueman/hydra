@@ -55,7 +55,7 @@ static void test_visualization_refresh(const char *tui, const char *hydra, const
     result(wait_for_marker(&session, "shell data adapter failed; showing last good snapshot", 2000),
            "continuous input still refreshes and labels the retained snapshot");
     unlink(marker);
-    result(wait_for_marker(&session, "Current snapshot", 4000), "successful observation clears stale state");
+    result(wait_for_marker(&session, "Live", 4000), "successful observation clears stale state");
     write_input(session.master, "q", 1);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "refresh recovery preserves terminal state");
     close_session(&session);

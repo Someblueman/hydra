@@ -3,6 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "fleet_budget.h"
 /* One interaction model everywhere: Tab / Shift-Tab move between tabs (or
  * panes inside the workspace), arrows select, Enter opens, Esc steps back. */
 
@@ -457,7 +458,7 @@ static void handle_input(struct app *app, char key) {
 
 static void refresh_observations(struct app *app, time_t *last_refresh) {
     time_t now = time(NULL);
-    if (now - *last_refresh >= 2) {
+    if (now - *last_refresh >= HYDRA_TUI_REFRESH_SECONDS) {
         native_observations_tick(app,true);
         if (app->preview && !native_terminal_focused(app)) capture_preview(app);
         *last_refresh = now;

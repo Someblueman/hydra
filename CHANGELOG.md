@@ -153,6 +153,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   uses Hydra's own `--multiplex`, so host-key checks always verify the host
   itself. A command's own exit now also ends its output capture shortly after,
   even when a background process still holds the output open.
+- The control centre footer no longer shows `Current snapshot · age Ns`, whose
+  age restarted with every two-second refresh. It shows `Live` while refreshes
+  succeed and `Updated Ns ago`, counting up, once the data is older than two
+  refresh intervals (plus one remote request in fleet mode); a failed refresh
+  shows `STALE: last good snapshot, updated Ns ago`.
 
 ## [2.8.0] - 2026-09-27
 
