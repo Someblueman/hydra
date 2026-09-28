@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 700
 #include "fleet/setup/assets.h"
 #include "fleet/support/files.h"
 #include "fleet/support/json.h"
