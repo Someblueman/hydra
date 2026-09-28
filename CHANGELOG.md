@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `hydra agent locate [--json] [--record EXECUTABLE PATH] [--forget EXECUTABLE]`
+  finds agents outside PATH (`~/.local/bin`, `~/.opencode/bin`, nvm, mise, ...)
+  as `agent-inventory` schema 1 and records a private per-executable location.
+  Resolution is PATH first, then a valid record, in both the shell and native
+  resolvers, so `spawn`, `agent list`, headless `exec --profile` and `agent
+  probe` find installer-placed agents on hosts whose non-interactive PATH omits
+  them. Records must be absolute, named after the executable, owned by you or
+  root and not group- or world-writable. Help and completions include it.
+- Fleet receivers advertise `agent-inventory` (read-only; also a headless probe
+  of one candidate) and `agent-locate-record`, and the handshake additively
+  reports `platform: {os, arch}`.
+
+### Fixed
+
+- `hydra fleet auth login` returns after the provider's sign-in instead of
+  replacing Hydra with `ssh`, reports its exit status, and runs the remote
+  agent by its resolved absolute path.
+- Headless runs execute the exact executable the profile probe resolved.
+
 ## [2.8.0] - 2026-09-27
 
 ### Added

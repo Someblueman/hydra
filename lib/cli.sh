@@ -46,6 +46,9 @@ Commands:
   agent             Inspect, probe, or import agent profiles
                     Headless: agy (Antigravity), cursor (Cursor Agent), opencode,
                               claude, codex, pi; inspect with agent contract NAME
+                    locate [--json] [--record EXECUTABLE PATH] [--forget EXECUTABLE]
+                              find agents outside PATH (~/.local/bin, ...) and
+                              record where one lives; PATH still wins
   remote            Manage OpenSSH aliases: add NAME [USER@]SSH_ALIAS, remove NAME, list
   admission         Inspect or configure host-wide execution reservations and FIFO admission
                     Usage: hydra admission --help

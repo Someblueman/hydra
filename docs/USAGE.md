@@ -273,6 +273,39 @@ requires the exact successful recorded session, head, instance, worktree, and pr
 it never selects the provider's latest session. Interactive Codex restore is the
 separate cwd-scoped `resume --last` convenience.
 
+### Agents outside PATH
+
+A built-in profile's executable (`claude`, `codex`, `cursor-agent`, `agy`,
+`opencode`, `pi`, ...) resolves from PATH first, then from a location you
+recorded. Provider installers usually write to `~/.local/bin`, which a
+non-interactive SSH session's PATH often omits, so a fleet receiver would
+otherwise report the agent as missing.
+
+```sh
+hydra agent locate                  # status per agent: on_path, recorded, found_off_path, ambiguous, missing
+hydra agent locate --json           # agent-inventory schema 1
+hydra agent locate --record claude ~/.local/bin/claude
+hydra agent locate --forget claude
+```
+
+`locate` searches PATH plus `~/.local/bin`, `~/bin`, `~/.claude/local`,
+`~/.opencode/bin`, `~/.pi/agent/bin`, `~/.npm-global/bin`, `~/.bun/bin`,
+`~/.volta/bin`, `~/.local/share/pnpm`, `~/.cargo/bin`, `~/.local/share/mise/shims`,
+`~/.asdf/shims`, `~/.nvm/versions/node/*/bin` (several versions are `ambiguous`),
+`/usr/local/bin`, `/opt/homebrew/bin`, `/home/linuxbrew/.linuxbrew/bin` and `/snap/bin`.
+It never sources a login shell and runs only `--version` of candidates it could
+record. A record is a private scalar file,
+`$HYDRA_HOME/agents/locations/EXECUTABLE` (0600 in a 0700 directory whatever the
+umask), keyed by executable rather than profile. Hydra accepts and uses a record only
+when the path is absolute, its file name equals the executable, it is an executable
+file (a symlink keeps its invoked name), the entry and its target belong to you or
+root, and the target is not group- or world-writable. A record never shadows PATH
+and cannot create a profile: custom profiles still cannot reuse built-in names.
+`spawn`, `agent list/show/doctor`, headless `exec --profile` and `agent probe` share
+this resolution, and headless runs execute the probed absolute path.
+`hydra fleet auth login HOST --agent A` resolves the remote executable the same way
+and waits for the provider's sign-in to finish.
+
 Headless Cursor passes `--trust` so Cursor Agent accepts each fresh head worktree;
 it only skips Cursor's workspace prompt and never auto-approves commands (`--force`).
 A failed headless run keeps a 4096-byte, character-safe excerpt of provider stderr

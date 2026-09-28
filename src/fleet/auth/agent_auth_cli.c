@@ -3,6 +3,7 @@
 #include "fleet/support/process.h"
 #include "fleet/transport/remote.h"
 #include "fleet/auth/agent_auth.h"
+#include "fleet/agent/agent.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -28,13 +29,28 @@ static json_object *request_safe(const struct f_remote *remote, json_object *req
     } else result = f_error("fleet-auth", "invalid_response", "invalid authentication response");
     json_object_put(raw); return result;
 }
+/* Without --executable, a receiver with agent-inventory resolves the absolute
+ * executable (PATH, then a recorded or single off-PATH location), because the
+ * non-interactive SSH PATH often omits installer directories such as
+ * ~/.local/bin. Older receivers keep the bare name. */
 static json_object *login(const struct f_remote *remote, const char *agent, const char *executable) {
     const char *args = !strcmp(agent, "codex") ? "login --device-auth" : !strcmp(agent, "claude") ? "auth login" : !strcmp(agent, "opencode") ? "auth login" : !strcmp(agent, "cursor") ? "login" : "";
-    const char *program = executable ? executable : !strcmp(agent, "cursor") ? "cursor-agent" : agent;
-    char command[F_PATH * 4]; char *quoted = f_quote(program); struct f_capture cap = {0};
-    if (!quoted || snprintf(command, sizeof(command), "exec %s %s", quoted, args) >= (int)sizeof(command)) { free(quoted); return f_error("fleet-auth", "invalid_input", "invalid login executable"); }
-    free(quoted); (void)f_ssh(remote, command, NULL, 0, 300, true, &cap); f_capture_free(&cap);
-    return f_error("fleet-auth", "login_failed", "cannot start native sign-in over interactive SSH");
+    const char *name = !strcmp(agent, "cursor") ? "cursor-agent" : agent;
+    json_object *inventory = executable ? NULL : agent_remote_inventory(remote, 15), *data;
+    const char *located = agent_inventory_location(agent_inventory_row(inventory, name));
+    const char *program = executable ? executable : located ? located : name;
+    char command[F_PATH * 4]; char *quoted = f_quote(program); int exit_status = -1;
+    if (!quoted || snprintf(command, sizeof(command), "exec %s %s", quoted, args) >= (int)sizeof(command)) {
+        free(quoted); json_object_put(inventory); return f_error("fleet-auth", "invalid_input", "invalid login executable");
+    }
+    free(quoted);
+    data = json_object_new_object(); f_string_add(data, "agent", agent); f_string_add(data, "executable", program);
+    json_object_put(inventory);
+    if (f_ssh_interactive(remote, command, 15, &exit_status)) { json_object_put(data); return f_error("fleet-auth", "login_failed", "cannot start native sign-in over interactive SSH"); }
+    json_object_object_add(data, "exit_status", json_object_new_int(exit_status));
+    if (!exit_status) return f_success("fleet-auth-login", data);
+    json_object_put(data);
+    return f_error("fleet-auth", exit_status > 128 && exit_status != 255 ? "cancelled" : "login_failed", "native sign-in did not complete; inspect its output and retry");
 }
 /* Parsed strings borrow argv; remote is loaded once during validation. */
 enum auth_operation { AUTH_STATUS, AUTH_PREVIEW, AUTH_COPY, AUTH_LOGIN };

@@ -7,13 +7,28 @@
 #include "fleet/task/task.h"
 #include "fleet/auth/agent_auth.h"
 #include "fleet/enrollment/receiver.h"
+#include "fleet/agent/agent.h"
+#include <ctype.h>
 #include <dirent.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
-static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "enrollment-init", "enrollment-preflight", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", "execution-headless", NULL};
+static const char *capabilities[] = {"list", "overview", "doctor", "admission", "init", "enrollment-init", "enrollment-preflight", "spawn", "signal", "cancel", "workflow", "attach", "export", "import", "task-accept", "task-status", "task-observe", "task-start", "task-resume", "task-requests", "task-decide", "task-cancel", "task-logs", "task-result", "agent-headless", "workflow-data", "workflow-approval-wait", "agent-auth", "execution-headless", "agent-inventory", "agent-locate-record", NULL};
+/* Additive handshake member: lower-case uname -s and a normalized uname -m
+ * (arm64 -> aarch64, amd64 -> x86_64), matching release asset names. */
+static json_object *host_platform(void) {
+    struct utsname host; json_object *platform = json_object_new_object(); char os[sizeof(host.sysname)]; size_t i;
+    const char *arch;
+    if (uname(&host)) return platform;
+    for (i = 0; host.sysname[i]; i++) os[i] = (char)tolower((unsigned char)host.sysname[i]);
+    os[i] = '\0';
+    arch = !strcmp(host.machine, "arm64") ? "aarch64" : !strcmp(host.machine, "amd64") ? "x86_64" : host.machine;
+    f_string_add(platform, "os", os); f_string_add(platform, "arch", arch);
+    return platform;
+}
 bool f_terminal_available(void) {
     struct f_capture cap = {0}; char *argv[] = {"tmux", "-V", NULL};
     unsigned major = 0, minor = 0;
@@ -43,6 +58,7 @@ json_object *f_handshake(void) {
         json_object_array_add(signals, json_object_new_string("INT")); json_object_object_add(data, "signals", signals);
     }
     json_object_object_add(data, "capabilities", host_capabilities());
+    json_object_object_add(data, "platform", host_platform());
     if (!f_path(root, sizeof(root), f_home, "state/v2/projects") && (dir = opendir(root))) {
         while ((entry = readdir(dir))) {
             char path[F_PATH], project[F_PATH], *value; json_object *item;
@@ -137,6 +153,48 @@ static json_object *admission_inspect(json_object *args, size_t count) {
     if (!status && !inspect) return f_error("fleet-admission", "invalid_input", "use status [--json|--summary] or inspect ID; configure policy on the receiving host");
     return f_run_hydra(argv, 5);
 }
+/* Headless probe of one built-in or imported profile, optionally of an explicit
+ * candidate that satisfies the recorded-location rules (read-only). */
+static json_object *agent_probe_at(const char *name, const char *path) {
+    json_object *profile = name ? agent_profile(name) : NULL, *data;
+    if (!profile) return f_error("fleet-agent", "invalid_profile", "unknown or invalid agent profile");
+    if (path && !agent_location_valid(f_string(profile, "executable"), path)) {
+        json_object_put(profile);
+        return f_error("fleet-agent", "location_invalid", "the candidate is not a safe location of this agent's executable");
+    }
+    if (path) f_string_add(profile, "executable", path);
+    data = json_object_new_object(); f_string_add(data, "profile", name);
+    json_object_object_add(data, "evidence", agent_probe(profile));
+    json_object_put(profile);
+    return f_success("fleet-agent-probe", data);
+}
+/* args have passed the transport's string validation. agent-inventory is
+ * read-only: [] runs `hydra agent locate --json`, ["probe", PROFILE [, PATH]]
+ * probes one profile. agent-locate-record [EXECUTABLE, PATH] delegates to
+ * `hydra agent locate --record`, which enforces the location rules. */
+static json_object *agent_request(const char *action, json_object *args, size_t count) {
+    const char *first = count ? f_text(json_object_array_get_idx(args, 0)) : NULL;
+    const char *second = count > 1 ? f_text(json_object_array_get_idx(args, 1)) : NULL;
+    if (!strcmp(action, "agent-locate-record")) {
+        char *argv[] = {(char *)f_hydra, "agent", "locate", "--record", (char *)first, (char *)second, "--json", NULL};
+        if (count != 2) return f_error("fleet-agent", "invalid_input", "use EXECUTABLE /absolute/path");
+        return f_run_hydra(argv, 30);
+    }
+    if (!count) {
+        char *argv[] = {(char *)f_hydra, "agent", "locate", "--json", NULL};
+        return f_run_hydra(argv, 120);
+    }
+    if (strcmp(first, "probe") || count > 3) return f_error("fleet-agent", "invalid_input", "use no arguments or probe PROFILE [PATH]");
+    return agent_probe_at(second, count == 3 ? f_text(json_object_array_get_idx(args, 2)) : NULL);
+}
+static json_object *inspect_request(const char *action, json_object *args, size_t count) {
+    if (!strcmp(action, "admission")) return admission_inspect(args, count);
+    if (!strcmp(action, "agent-inventory") || !strcmp(action, "agent-locate-record")) {
+        setenv("HYDRA_NONINTERACTIVE", "1", 1);
+        return agent_request(action, args, count);
+    }
+    return NULL;
+}
 
 static json_object *builtin_request(const char *action, json_object *request) {
     if (!strcmp(action, "handshake")) return f_handshake();
@@ -163,7 +221,7 @@ json_object *f_serve(json_object *request) {
         if (!json_object_is_type(arg, json_type_string) || strlen(json_object_get_string(arg)) != (size_t)json_object_get_string_len(arg))
             return f_error("fleet", "invalid_input", "arguments must be strings without NUL");
     }
-    if (!strcmp(action, "admission")) return admission_inspect(args, count);
+    { json_object *inspected = inspect_request(action, args, count); if (inspected) return inspected; }
     if (strcmp(action, "doctor") && (!project || *project != '/' || chdir(project)))
         return f_error("fleet", "invalid_project", "an existing absolute remote project path is required");
     if (!strcmp(action, "export")) return f_bundle_export(project, args, f_string(request, "run"));

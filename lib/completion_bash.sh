@@ -52,6 +52,14 @@ _hydra_completion() {
             COMPREPLY=($(compgen -W "add remove list" -- "${cur}"))
             return 0
             ;;
+        agent)
+            COMPREPLY=($(compgen -W "list show doctor init locate contract probe import" -- "${cur}"))
+            return 0
+            ;;
+        locate)
+            COMPREPLY=($(compgen -W "--json --record --forget" -- "${cur}"))
+            return 0
+            ;;
         fleet)
             COMPREPLY=($(compgen -W "handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
             return 0

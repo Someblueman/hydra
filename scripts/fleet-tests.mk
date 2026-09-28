@@ -45,6 +45,7 @@ FLEET_CASES = shell-task-acceptance \
 	dag-lost-ack-1-dag-fault-cancel-offline \
 	shell-fleet \
 	shell-agent-auth \
+	shell-agent-locate \
 	native-plan \
 	shell-fleet-install \
 	shell-task-package \
@@ -100,6 +101,9 @@ fleet-case-native-agent-profile:
 
 fleet-case-shell-agent-auth:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_agent_auth.sh
+
+fleet-case-shell-agent-locate:
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_agent_locate.sh
 
 fleet-case-shell-agent-execution:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_agent_execution.sh
