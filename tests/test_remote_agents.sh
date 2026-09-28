@@ -38,14 +38,16 @@ while [ $# -gt 1 ]; do shift; done
 PATH="$AGENTS_TEST_ROOT/remote-bin:/usr/bin:/bin"
 HOME="$AGENTS_REMOTE_HOME"
 export PATH HOME
+[ -z "${AGENTS_REMOTE_UMASK:-}" ] || umask "$AGENTS_REMOTE_UMASK"
 exec /bin/sh -c "$1"
 SSH
-# Fake curl: serves the fixture installer (or a failing one) for any URL.
+# Fake curl: serves the fixture installer (or a failing one) for any URL. The
+# installer's files take the session umask, like a real provider installer.
 cat > "$fixture/remote-bin/curl" <<'CURL'
 #!/bin/sh
 printf '%s\n' "$*" >> "$AGENTS_TEST_ROOT/curl-calls"
 if [ "${AGENTS_TEST_INSTALL:-ok}" = fail ]; then echo 'echo "fixture installer failed" >&2; exit 7'; exit 0; fi
-printf 'mkdir -p "$HOME/.local/bin"\ncp "%s" "$HOME/.local/bin/claude"\nchmod 755 "$HOME/.local/bin/claude"\n' "$AGENTS_TEST_ROOT/claude"
+printf 'mkdir -p "$HOME/.local/bin"\ncat "%s" > "$HOME/.local/bin/claude"\nchmod a+x "$HOME/.local/bin/claude"\n' "$AGENTS_TEST_ROOT/claude"
 CURL
 # Fake agents: help tokens satisfy the built-in probes; claude auth status is
 # 0 when signed in and 1 otherwise, as documented by Claude Code.
@@ -146,7 +148,7 @@ cases() {
     # The plan binds the exact command and effect; nothing runs without approval.
     run 3 "$out" install-agent n1 --agent claude --json
     has "$out" '"code":"approval_required"'
-    has "$out" '"command":"curl -fsSL https:\\/\\/claude.ai\\/install.sh | bash"'
+    has "$out" '"command":"umask 022; curl -fsSL https:\\/\\/claude.ai\\/install.sh | bash"'
     has "$out" '"effect":"runs on the remote as your user over ssh -t; no sudo; Hydra adds no symlinks and no PATH changes"'
     has "$out" '"docs_url":"https:\\/\\/code.claude.com\\/docs\\/en\\/setup"'; has "$out" '"source":"built-in"'
     has "$out" '"id":"install_agent:claude","status":"approval_required"'
@@ -168,7 +170,7 @@ cases() {
     has "$out" '"code":"install_failed"'; has "$out" '"exit_status":7'
     [ "$(step_status n1 install_agent:claude)" = failed ] || fail "failed installer not recorded"
     [ ! -e "$AGENTS_REMOTE_HOME/.local/bin/claude" ] || fail "failed installer left claude"
-    has "$fixture/tty-commands" "exec /bin/sh -c 'curl -fsSL https://claude.ai/install.sh | bash'"
+    has "$fixture/tty-commands" "exec /bin/sh -c 'umask 022; curl -fsSL https://claude.ai/install.sh | bash'"
 
     # An interrupted attempt reconciles by inventory and never re-runs.
     set_step n1 install_agent:claude outcome_unknown
@@ -177,10 +179,14 @@ cases() {
     has "$out" '"code":"install_failed"'; has "$out" 'interrupted installer'
     [ "$(lines "$fixture/tty-commands")" = "$before" ] || fail "reconcile re-ran the installer"
 
-    # Approved install: the fake installer drops claude in ~/.local/bin.
-    run 0 "$out" install-agent n1 --agent claude --approve "$hash" --json
+    # Approved install: the fake installer drops claude in ~/.local/bin. The
+    # remote account's umask is 002 (the Ubuntu default); the approved umask
+    # 022 prefix keeps the new executable from being group-writable, so the
+    # inventory and probe accept it.
+    AGENTS_REMOTE_UMASK=002 run 0 "$out" install-agent n1 --agent claude --approve "$hash" --json
     path="$AGENTS_REMOTE_HOME/.local/bin/claude"
     [ -x "$path" ] || fail "installer did not create claude"
+    [ -n "$(find "$path" -prune -perm 755)" ] || fail "installer under remote umask 002 left claude group-writable"
     has "$out" '"installed_by_hydra":true'; has "$out" '"recorded":false'
     has "$out" "\"next\":{\"step\":\"agents\",\"argv\":\[\"hydra\",\"remote\",\"agents\",\"n1\",\"--record\",\"claude=$(printf '%s' "$path" | sed 's|/|\\\\/|g')\",\"--json\"\]"
     [ "$(step_status n1 install_agent:claude)" = "done" ] || fail "install not done"

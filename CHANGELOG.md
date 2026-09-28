@@ -37,8 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   install-agent NAME --agent A` runs the provider's own official installer
   (built-in recipes for claude, cursor, opencode, codex, agy and pi, each checked
   against the provider's docs on 2026-09-28) over `ssh -t` as your user, only after
-  approval of a plan binding the exact command; no sudo, and Hydra adds no symlinks
-  or PATH changes. It checks prerequisites first, verifies the result by `--version`
+  approval of a plan binding the exact command, which runs the installer under
+  `umask 022` so a group-writable remote umask cannot leave an agent executable
+  that Hydra then refuses; no sudo, and Hydra adds no symlinks or PATH changes. It checks prerequisites first, verifies the result by `--version`
   and the help probe, offers to record an off-PATH location, and reconciles an
   interrupted install by inventory instead of re-running it. A private
   `$HYDRA_HOME/fleet/agent-recipes.json` can replace recipes (plans say

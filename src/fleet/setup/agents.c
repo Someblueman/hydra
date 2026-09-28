@@ -13,6 +13,7 @@ static const struct { const char *profile, *executable; } known_agents[] = {
     {"claude", "claude"}, {"codex", "codex"}, {"cursor", "cursor-agent"}, {"agy", "agy"}, {"opencode", "opencode"},
     {"pi", "pi"}, {"copilot", "copilot"}, {"aider", "aider"}, {"gemini", "gemini"}, {NULL, NULL}
 };
+#define INSTALL_UMASK "umask 022; "
 #define INSTALL_EFFECT "runs on the remote as your user over ssh -t; no sudo; Hydra adds no symlinks and no PATH changes"
 
 /* ---- Small shared helpers ---- */
@@ -300,10 +301,18 @@ static json_object *missing_tools(struct setup_ctx *ctx, json_object *recipe) {
     f_capture_free(&cap);
     return missing;
 }
-static json_object *install_plan(json_object *recipe) {
-    static const char *const fields[] = {"agent", "executable", "command", "source", "docs_url", "verified_on", "requires", "expected_dirs", NULL};
+/* The exact remote command: the recipe under umask 022, so a remote umask of
+ * 002 cannot leave a group-writable executable that records and probes then
+ * refuse. The plan shows and hashes this text, so approval binds the umask. */
+static int installer_command(json_object *recipe, char *out, size_t size) {
+    const char *command = f_string(recipe, "command");
+    return command && snprintf(out, size, "%s%s", INSTALL_UMASK, command) < (int)size ? 0 : -1;
+}
+static json_object *install_plan(json_object *recipe, const char *command) {
+    static const char *const fields[] = {"agent", "executable", "source", "docs_url", "verified_on", "requires", "expected_dirs", NULL};
     json_object *plan = json_object_new_object(); size_t i;
     for (i = 0; fields[i]; i++) json_object_object_add(plan, fields[i], json_object_get(f_field(recipe, fields[i])));
+    f_string_add(plan, "command", command);
     f_string_add(plan, "effect", INSTALL_EFFECT);
     return plan;
 }
@@ -393,10 +402,10 @@ static json_object *installer_exit(struct setup_ctx *ctx, const char *step, int 
     return stopped(ctx, step, "failed", "installer exited with an error", "install_failed", "the installer exited with a nonzero status",
                    "inspect its output; rerun hydra remote install-agent NAME --agent AGENT to try again after review", data);
 }
-static json_object *progress_detail(json_object *recipe, const char *digest) {
+static json_object *progress_detail(const char *command, const char *digest) {
     json_object *detail = json_object_new_object();
     f_string_add(detail, "summary", "installer started");
-    f_string_add(detail, "command", f_string(recipe, "command"));
+    f_string_add(detail, "command", command);
     f_string_add(detail, "plan_sha256", digest);
     return detail;
 }
@@ -411,19 +420,20 @@ static json_object *prerequisites(struct setup_ctx *ctx, const char *step, json_
 static json_object *install_run(struct setup_ctx *ctx, const char *step, json_object *recipe, const char *approve) {
     const char *const argv[] = {"install-agent", ctx->name, "--agent", f_string(recipe, "agent"), NULL};
     json_object *plan, *result = prerequisites(ctx, step, recipe);
-    char digest[65] = "", *quoted, command[4200]; int exit_status = -1;
+    char digest[65] = "", *quoted, run[4200], command[4300]; int exit_status = -1;
     if (result) return result;
-    plan = install_plan(recipe);
+    if (installer_command(recipe, run, sizeof(run))) return setup_error(ctx, "invalid_plan", "the installer command is too long", NULL, NULL);
+    plan = install_plan(recipe, run);
     result = setup_plan_gate(ctx, step, plan, approve, argv);
     if (!result && setup_plan_hash(ctx, "install_agent", plan, NULL, digest)) digest[0] = '\0';
     json_object_put(plan);
     if (result) return result;
-    quoted = f_quote(f_string(recipe, "command"));
+    quoted = f_quote(run);
     if (!quoted || snprintf(command, sizeof(command), "exec /bin/sh -c %s", quoted) >= (int)sizeof(command)) {
         free(quoted); return setup_error(ctx, "invalid_plan", "the installer command is too long", NULL, NULL);
     }
     free(quoted);
-    if (setup_state_step(ctx, step, "in_progress", progress_detail(recipe, digest)))
+    if (setup_state_step(ctx, step, "in_progress", progress_detail(run, digest)))
         return setup_error(ctx, "state_unavailable", "cannot record setup progress; the installer was not started", NULL, NULL);
     if (f_ssh_interactive(&ctx->remote, command, ctx->seconds, &exit_status))
         return stopped(ctx, step, "failed", "ssh did not start", "install_failed", "cannot start SSH for the installer", "check ssh, then rerun", NULL);

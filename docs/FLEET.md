@@ -105,6 +105,13 @@ Hydra never uses sudo; install missing packages yourself. An existing Hydra of t
 same version that passes the fleet handshake is reported as reusable; other
 installs are left untouched.
 
+**Agent installers.** `hydra remote install-agent NAME --agent A` runs the
+provider's official installer over `ssh -t` as your user after you approve a plan
+that shows the exact command. That command is `umask 022; ` followed by the
+recipe, so an account whose umask is 002 (the Ubuntu default) does not end up
+with a group-writable agent executable, which location records and probes
+refuse. The umask applies only to that installer session.
+
 **Upgrading an enrolled alias.** `hydra remote setup NAME` for an alias that already
 exists (and has no setup state) upgrades it. The destination and SSH config come
 from the alias; giving a different DEST or `--ssh-config` fails with
