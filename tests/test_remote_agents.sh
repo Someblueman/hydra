@@ -156,13 +156,13 @@ cases() {
     has "$(state n1)" '"selected":\["claude"\]'
     hash="$(json_value "$out" plan_sha256)"
     [ "${#hash}" -eq 64 ] || fail "no plan hash"
-    [ ! -e "$fixture/curl-calls" ] && [ ! -e "$fixture/tty-commands" ] || fail "an unapproved installer ran"
+    if [ -e "$fixture/curl-calls" ] || [ -e "$fixture/tty-commands" ]; then fail "an unapproved installer ran"; fi
     run 1 "$out" install-agent n1 --agent claude --approve "$(printf '%064d' 0)" --json
     has "$out" '"code":"approval_mismatch"'
     in_tty 'n
 ' "$out" install-agent n1 --agent claude
     has "$out" 'approval_declined'
-    [ ! -e "$fixture/curl-calls" ] && [ ! -e "$fixture/tty-commands" ] || fail "a declined installer ran"
+    if [ -e "$fixture/curl-calls" ] || [ -e "$fixture/tty-commands" ]; then fail "a declined installer ran"; fi
 
     # A failing installer is recorded and changes nothing else.
     export AGENTS_TEST_INSTALL=fail

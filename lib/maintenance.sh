@@ -94,7 +94,7 @@ state_writable_entries() {
     shift
     _swe_uid="$(id -u)"
     for _swe_root in "$@"; do
-        [ -d "$_swe_root" ] && [ ! -L "$_swe_root" ] || continue
+        if [ ! -d "$_swe_root" ] || [ -L "$_swe_root" ]; then continue; fi
         if [ "$_swe_kind" = owned ]; then
             find "$_swe_root" \( -type f -o -type d \) -user "$_swe_uid" \
                 \( -perm -0020 -o -perm -0002 \) -print 2>/dev/null || true

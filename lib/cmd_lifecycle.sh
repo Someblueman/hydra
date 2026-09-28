@@ -358,7 +358,7 @@ agent_locate_scan() {
         case "$_alsc_seen" in *"
 $_alsc_path
 "*) continue ;; esac
-        [ -f "$_alsc_path" ] && [ -x "$_alsc_path" ] || continue
+        if [ ! -f "$_alsc_path" ] || [ ! -x "$_alsc_path" ]; then continue; fi
         _alsc_seen="$_alsc_seen$_alsc_path
 "
         case "$_alsc_source" in

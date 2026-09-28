@@ -222,7 +222,7 @@ preflight_cases() {
     # The native search list (preflight) is exactly the shell's (agent locate).
     native_dirs="$(sed -n 's/.*"search_dirs":\[\([^]]*\)\].*/\1/p' "$out" | sed 's#\\/#/#g')"
     shell_dirs="$(sh -c '. "$1/lib/cmd_lifecycle.sh" && agent_locate_search_dirs' sh "$root" | awk '{ printf "%s\"%s\"", (NR > 1 ? "," : ""), $0 }')"
-    [ -n "$native_dirs" ] && [ "$native_dirs" = "$shell_dirs" ] || fail "search dirs differ: native [$native_dirs] shell [$shell_dirs]"
+    if [ -z "$native_dirs" ] || [ "$native_dirs" != "$shell_dirs" ]; then fail "search dirs differ: native [$native_dirs] shell [$shell_dirs]"; fi
     rm -rf "$fixture/remote-home/.pi"
     rm -rf "$fixture/remote-home/.local"
 }
@@ -321,7 +321,7 @@ upgrade_cases() {
     has "$HYDRA_HOME/fleet/remotes/up1.json" '"home":"\\/remote\\/state"'
     has "$HYDRA_HOME/fleet/remotes/up1.json" '"accepted_host_key":"SHA256:fixture"'
     exact_mode "$HYDRA_HOME/fleet/remotes/up1.json" 600 || fail "updated alias is not private"
-    cmp -s "$old/bin/hydra" "$fixture/old-pin.bytes" && [ "$(cat "$old/bin/version")" = 2.7.0 ] || fail "old pin changed"
+    if ! cmp -s "$old/bin/hydra" "$fixture/old-pin.bytes" || [ "$(cat "$old/bin/version")" != 2.7.0 ]; then fail "old pin changed"; fi
     run 0 "$out" setup up1 --json; has "$out" '"complete":true'
     # A same-version install behind the alias is reused: no provisioning, no alias change.
     run 0 "$out" add up2 up-host2 --hydra "$new/bin/hydra"

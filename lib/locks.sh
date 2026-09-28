@@ -29,7 +29,7 @@ hydra_private_tree() {
     _hptr_uid="$(id -u)"
     _hptr_status=0
     for _hptr_root in "$@"; do
-        [ -d "$_hptr_root" ] && [ ! -L "$_hptr_root" ] || continue
+        if [ ! -d "$_hptr_root" ] || [ -L "$_hptr_root" ]; then continue; fi
         find "$_hptr_root" \( -type f -o -type d \) -user "$_hptr_uid" \
             \( -perm -0020 -o -perm -0002 \) -exec chmod go-w {} + 2>/dev/null || _hptr_status=1
     done

@@ -17,7 +17,7 @@ mkdir "$fixture/tmux"
 export TMUX_TMPDIR="$fixture/tmux"
 cleanup() {
     for socket in "$fixture"/tmux/tmux-*/*; do
-        [ -S "$socket" ] && tmux -S "$socket" kill-server 2>/dev/null || :
+        if [ -S "$socket" ]; then tmux -S "$socket" kill-server 2>/dev/null || :; fi
     done
     rm -rf "$fixture"
 }
