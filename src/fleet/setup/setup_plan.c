@@ -120,12 +120,13 @@ static bool confirmed(bool host_key) {
 }
 static void record_waiting(struct setup_ctx *ctx, const char *step) {
     const char *status = setup_state_status(ctx, step);
-    if (ctx->readonly || !strcmp(status, "in_progress") || !strcmp(status, "outcome_unknown")) return;
+    if (ctx->readonly || !setup_step_id(step) || !strcmp(status, "in_progress") || !strcmp(status, "outcome_unknown")) return;
     (void)setup_state_step(ctx, step, "approval_required", NULL);
 }
 static int gate_prepare(struct setup_ctx *ctx, struct gate *gate, json_object *plan) {
     char kind[32]; size_t length = strcspn(gate->step, ":");
-    if (!setup_step_id(gate->step) || !gate->argv || length >= sizeof(kind)) return -1;
+    /* "remove" gates deleting the setup record itself; it is not a step. */
+    if ((!setup_step_id(gate->step) && strcmp(gate->step, "remove")) || !gate->argv || length >= sizeof(kind)) return -1;
     memcpy(kind, gate->step, length); kind[length] = '\0';
     gate->host_key = !strcmp(kind, "host_key");
     if (setup_plan_hash(ctx, kind, plan, &gate->plan, gate->digest)) return -1;
@@ -150,7 +151,9 @@ json_object *setup_plan_gate(struct setup_ctx *ctx, const char *step, json_objec
             result = setup_error(ctx, "approval_declined", "the plan was not approved; nothing was changed", "rerun when you are ready to review the plan again", NULL);
     } else {
         record_waiting(ctx, step);
-        result = approval_error(ctx, &gate, "approval_required", "this step changes the remote and needs explicit approval");
+        result = approval_error(ctx, &gate, "approval_required", !strcmp(step, "remove")
+                                ? "removing the setup record needs explicit approval; nothing on the remote changes"
+                                : "this step changes the remote and needs explicit approval");
     }
     json_object_put(gate.plan);
     return result;

@@ -56,7 +56,9 @@ static void describe(json_object *row, struct setup_ctx *ctx) {
     char step[80];
     bool open = setup_first_open(ctx, step);
     f_string_add(row, "destination", ctx->remote.target);
+    f_string_add(row, "ssh_config", ctx->remote.ssh_config);
     f_string_add(row, "status", open ? setup_state_status(ctx, step) : "done");
+    json_object_object_add(row, "remote_changed", json_object_new_boolean(setup_remote_changed(ctx)));
     json_object_object_add(row, "complete", json_object_new_boolean(!open));
     json_object_object_add(row, "next", setup_next_json(ctx));
 }

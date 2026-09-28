@@ -41,7 +41,7 @@ bool setup_step_id(const char *step) {
     return in_list(step, (size_t)(colon - step), agent_steps) && f_name(colon + 1) && strlen(colon + 1) < 64;
 }
 bool setup_name_valid(const char *name) {
-    return f_name(name) && strlen(name) < 128 && strcmp(name, "status") != 0 && strcmp(name, "list") != 0;
+    return f_name(name) && strlen(name) < 128 && strcmp(name, "status") != 0 && strcmp(name, "list") != 0 && strcmp(name, "remove") != 0;
 }
 
 /* Opens $HYDRA_HOME/fleet/setup, creating private directories as needed. */
@@ -172,7 +172,8 @@ static json_object *lock_error(struct setup_ctx *ctx, int locked) {
 static json_object *binding_check(struct setup_ctx *ctx, const char *dest, const char *ssh_config) {
     if ((dest && strcmp(dest, ctx->remote.target)) || (ssh_config && strcmp(ssh_config, ctx->remote.ssh_config)))
         return open_error(ctx, "setup_binding_changed", "this setup name is bound to a different destination or SSH config",
-                          "rerun without DEST, choose a new NAME, or remove the setup state deliberately");
+                          "rerun without DEST, choose a new NAME, or remove this setup first with hydra remote setup remove NAME "
+                          "(it changes nothing on the remote)");
     return NULL;
 }
 static json_object *state_new(struct setup_ctx *ctx, const char *dest, const char *ssh_config, unsigned flags) {
@@ -205,7 +206,7 @@ static json_object *state_load(struct setup_ctx *ctx, const char *dest, const ch
     return binding_check(ctx, dest, ssh_config);
 }
 static json_object *arguments_error(struct setup_ctx *ctx, const char *name, const char *dest, const char *ssh_config) {
-    if (!setup_name_valid(name)) return open_error(ctx, "invalid_input", "NAME must be an alias name (letters, digits, _ . -) other than status and list", NULL);
+    if (!setup_name_valid(name)) return open_error(ctx, "invalid_input", "NAME must be an alias name (letters, digits, _ . -) other than status, list and remove", NULL);
     if (dest && !f_target(dest)) return open_error(ctx, "invalid_input", "DEST must be an SSH alias or [USER@]HOST", NULL);
     if (ssh_config && ssh_config[0] != '/') return open_error(ctx, "invalid_input", "--ssh-config requires an absolute path", NULL);
     return NULL;

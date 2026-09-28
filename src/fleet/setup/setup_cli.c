@@ -7,6 +7,7 @@
 
 #define SETUP_USAGE "remote setup NAME [DEST] [--ssh-config /abs] [--binary FILE] " \
     "[--approve PLAN_SHA256] [--timeout N] [--json]; remote setup status NAME; remote setup list; " \
+    "remote setup remove NAME [--approve PLAN_SHA256]; " \
     "remote trust-key NAME [--fingerprint SHA256:...]; " \
     "remote preflight NAME; remote provision NAME [--approve PLAN_SHA256] [--binary FILE]; " \
     "remote agents NAME [--record EXECUTABLE=/abs/path]; remote install-agent NAME --agent A [--approve PLAN_SHA256]; " \
@@ -18,7 +19,7 @@ static const char *const option_names[OPT_COUNT] = {
     "--ssh-config", "--binary", "--fingerprint", "--approve", "--record", "--agent"
 };
 #define OPT(bit) (1U << (bit))
-enum setup_kind { K_SETUP, K_STATUS, K_LIST, K_TRUST_KEY, K_PREFLIGHT, K_PROVISION, K_AGENTS, K_INSTALL_AGENT, K_SIGN_IN };
+enum setup_kind { K_SETUP, K_STATUS, K_LIST, K_REMOVE, K_TRUST_KEY, K_PREFLIGHT, K_PROVISION, K_AGENTS, K_INSTALL_AGENT, K_SIGN_IN };
 struct spec { const char *word, *command; enum setup_kind kind; unsigned flags; int positionals; };
 static const struct spec specs[] = {
     {"setup", "remote-setup", K_SETUP, OPT(OPT_SSH_CONFIG) | OPT(OPT_BINARY) | OPT(OPT_APPROVE), 2},
@@ -31,6 +32,7 @@ static const struct spec specs[] = {
 };
 static const struct spec status_spec = {"status", "remote-setup-status", K_STATUS, 0, 1};
 static const struct spec list_spec = {"list", "remote-setup-list", K_LIST, 0, 0};
+static const struct spec remove_spec = {"remove", "remote-setup-remove", K_REMOVE, OPT(OPT_APPROVE), 1};
 
 struct setup_options {
     const struct spec *spec;
@@ -139,6 +141,7 @@ static json_object *parse(struct setup_options *o, int argc, char **argv) {
     if (!o->spec) return usage_error("remote-setup", "unknown setup command");
     if (o->spec->kind == K_SETUP && argc >= 2 && !strcmp(argv[1], "status")) { o->spec = &status_spec; first = 2; }
     else if (o->spec->kind == K_SETUP && argc >= 2 && !strcmp(argv[1], "list")) { o->spec = &list_spec; first = 2; }
+    else if (o->spec->kind == K_SETUP && argc >= 2 && !strcmp(argv[1], "remove")) { o->spec = &remove_spec; first = 2; }
     if (!parse_arguments(o, argc, argv, first)) return usage_error(o->spec->command, "missing NAME, unexpected argument, or invalid option");
     problem = validate_values(o);
     return problem ? usage_error(o->spec->command, problem) : NULL;
@@ -305,6 +308,7 @@ static json_object *dispatch(struct setup_ctx *ctx, const struct setup_options *
     case K_SETUP: return guided(ctx, v[OPT_APPROVE]);
     case K_STATUS: return f_success(ctx->command, json_object_new_object());
     case K_LIST: break;
+    case K_REMOVE: return setup_remove(ctx, v[OPT_APPROVE]);
     case K_TRUST_KEY: return setup_step_trust_key(ctx, v[OPT_FINGERPRINT]);
     case K_PREFLIGHT: return setup_step_preflight(ctx);
     case K_PROVISION: return setup_step_provision(ctx, v[OPT_BINARY], v[OPT_APPROVE]);
@@ -452,6 +456,13 @@ static void print_error(json_object *error, json_object *data) {
     print_safe(f_string(error, "recovery")); fputc('\n', stderr);
     if (f_string(data, "plan_sha256")) { fputs("plan sha256: ", stderr); print_safe(f_string(data, "plan_sha256")); fputc('\n', stderr); }
 }
+static void print_removed(json_object *data) {
+    json_object *left = f_field(data, "remote_left"); size_t i;
+    print_safe(f_string(data, "summary")); fputc('\n', stderr);
+    for (i = 0; i < json_object_array_length(left); i++) {
+        fputs("  still on the remote: ", stderr); print_safe(f_text(json_object_array_get_idx(left, i))); fputc('\n', stderr);
+    }
+}
 static void print_setups(json_object *setups) {
     size_t i;
     if (!json_object_array_length(setups)) { fputs("no remote setups; start one with hydra remote setup NAME [USER@]HOST\n", stderr); return; }
@@ -472,6 +483,7 @@ int setup_emit(json_object *result, bool json) {
     bool ok = json_object_get_boolean(f_field(result, "ok"));
     if (json) return f_emit(result);
     if (json_object_is_type(f_field(data, "setups"), json_type_array)) print_setups(f_field(data, "setups"));
+    if (ok && json_object_get_boolean(f_field(data, "removed"))) print_removed(data);
     if (json_object_is_type(f_field(data, "steps"), json_type_array)) print_steps(f_field(data, "steps"));
     if (!ok) print_error(error, data);
     else if (f_string(data, "usage")) { fputs("usage: ", stderr); print_safe(f_string(data, "usage")); fputc('\n', stderr); }

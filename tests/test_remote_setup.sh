@@ -29,6 +29,8 @@ mkdir "$fixture/bin" "$fixture/remote-bin" "$fixture/remote-home"
 cat > "$fixture/bin/ssh" <<'SSH'
 #!/bin/sh
 for arg do [ "$arg" = -G ] && exec "$SETUP_REAL_SSH" "$@"; done
+# SETUP_SSH_SLEEP: mark SETUP_SSH_MARK, then hang (a running step holds its lock).
+if [ -n "${SETUP_SSH_SLEEP:-}" ]; then : > "$SETUP_SSH_MARK"; sleep "$SETUP_SSH_SLEEP"; fi
 while [ $# -gt 1 ]; do shift; done
 if [ -n "${SETUP_REMOTE_PATH:-}" ]; then PATH=$SETUP_REMOTE_PATH; fi
 if [ -n "${SETUP_REMOTE_HOME:-}" ]; then HOME=$SETUP_REMOTE_HOME; fi
@@ -124,7 +126,9 @@ usage_cases() {
     run 1 "$out" sign-in n1 --agent 'a b' --json; has "$out" '"code":"invalid_input"'
     run 1 "$out" preflight n1 --json; has "$out" '"code":"setup_not_started"'; has "$out" '"command":"remote-preflight"'
     run 1 "$out" setup list host --json; has "$out" '"code":"invalid_input"'; has "$out" '"command":"remote-setup-list"'
-    run 1 "$out" preflight list --json; has "$out" 'other than status and list'
+    run 1 "$out" preflight list --json; has "$out" 'other than status, list and remove'
+    run 1 "$out" preflight remove --json; has "$out" 'other than status, list and remove'
+    run 1 "$out" setup remove --json; has "$out" '"code":"invalid_input"'; has "$out" '"command":"remote-setup-remove"'
     run 0 "$out" setup list --json; has "$out" '"command":"remote-setup-list"'; has "$out" '"setups":\[\]'
     run 0 "$out" setup list; [ ! -s "$out" ] || fail "human setup list reached stdout"; has "$out.err" 'no remote setups'
     test ! -e "$HYDRA_HOME/fleet/setup/n1.json" || fail "usage errors created state"
@@ -238,7 +242,7 @@ state_cases() {
     # setup list reads every record (read-only, like status) and reports the unreadable one.
     run 0 "$out" setup list --json
     has "$out" '"name":"n1","destination":null,"status":"unreadable","complete":false,"next":null,"error":{"code":"state_invalid"'
-    has "$out" '"name":"p1","destination":"fixture-host","status":"pending","complete":false,"next":{"step":"host_key"'
+    has "$out" '"name":"p1","destination":"fixture-host","ssh_config":"","status":"pending","remote_changed":false,"complete":false,"next":{"step":"host_key"'
     cp "$fixture/n1.saved" "$(state n1)"; chmod 600 "$(state n1)"
     run 0 "$out" setup list; has "$out.err" 'n1 *user@host1'; has "$out.err" 'NEXT'
 }
@@ -270,6 +274,62 @@ finish_cases() {
     has "$out" '"command":"remote-setup"'; has "$out" '"id":"install_agent:claude"'; has "$out" '"id":"sign_in:claude"'
     has "$out" '"detail":"claude found"'
     lacks "$out" '"id":"verify","status":"done"'
+}
+
+plan_hash() { sed -n 's/.*"plan_sha256":"\([0-9a-f]*\)".*/\1/p' "$1"; }
+
+remove_cases() {
+    # A setup bound to the wrong SSH config cannot be rebound; its recovery names setup remove.
+    write_state r1 r1-host hydra '{"host_key":{"status":"failed"}}'
+    run 1 "$out" setup r1 r1-host --ssh-config "$fixture/ssh_config" --json
+    has "$out" '"code":"setup_binding_changed"'; has "$out" 'hydra remote setup remove NAME'
+    # Removing a setup needs approval of a plan and deletes only the local record.
+    run 3 "$out" setup remove r1 --json
+    has "$out" '"command":"remote-setup-remove"'; has "$out" '"code":"approval_required"'; has "$out" '"kind":"remove"'
+    has "$out" 'nothing on the remote changes'; has "$out" '"remote":"no step changed the remote"'
+    has "$out" '"argv":\["hydra","remote","setup","remove","r1","--approve","[0-9a-f]*","--json"\]'
+    hash="$(plan_hash "$out")"
+    test -e "$(state r1)" || fail "an unapproved remove deleted the record"
+    lacks "$(state r1)" '"remove"'
+    run 1 "$out" setup remove r1 --approve 0000000000000000000000000000000000000000000000000000000000000000 --json
+    has "$out" '"code":"approval_mismatch"'; test -e "$(state r1)" || fail "a mismatched approval deleted the record"
+    run 0 "$out" setup remove r1 --approve "$hash" --json
+    has "$out" '"removed":true'; has "$out" '"remote_left":\[\]'; lacks "$out" '"steps"'
+    test ! -e "$(state r1)" || fail "the record survived removal"
+    test ! -e "$HYDRA_HOME/fleet/setup/r1.lock" || fail "the lock survived removal"
+    run 1 "$out" setup remove r1 --json; has "$out" '"code":"setup_not_started"'
+    # The name can be set up again, now with the right SSH config.
+    SETUP_REMOTE_PATH="$fixture/remote-full" run any "$out" setup r1 r1-host --ssh-config "$fixture/ssh_config" --json
+    lacks "$out" 'setup_binding_changed'; has "$(state r1)" '"ssh_config":"[^"]*ssh_config"'
+    # Steps that changed the remote are named as staying there; nothing is undone.
+    write_state r2 r2-host hydra '{"host_key":{"status":"done","detail":{"result":"trusted","known_hosts":"/k/known_hosts"}},"preflight":{"status":"done"},"provision":{"status":"outcome_unknown","detail":{"prefix":"/home/u/.local/share/hydra/fleet/abc"}},"agents":{"status":"done","detail":{"selected":["claude"]}},"install_agent:claude":{"status":"done","detail":{"path":"/home/u/.local/bin/claude"}},"sign_in:claude":{"status":"failed"}}'
+    run 0 "$out" setup list --json
+    has "$out" '"name":"r1","destination":"r1-host","ssh_config":"[^"]*ssh_config","status":"[a-z_]*","remote_changed":false'
+    has "$out" '"name":"r2","destination":"r2-host","ssh_config":"","status":"[a-z_]*","remote_changed":true'
+    run 3 "$out" setup remove r2 --json
+    has "$out" 'a possibly partial Hydra install at \\/home\\/u\\/.local\\/share\\/hydra\\/fleet\\/abc'
+    has "$out" 'the claude agent from its provider'"'"'s installer at \\/home\\/u\\/.local\\/bin\\/claude'
+    has "$out" 'the host key line Hydra appended to \\/k\\/known_hosts'; lacks "$out" 'sign-in (the provider'
+    # Without a terminal a human run also stops at the plan: nothing is deleted silently.
+    HYDRA_NONINTERACTIVE=1 run 3 "$out" setup remove r2
+    has "$out.err" 'next: hydra remote setup remove r2 --approve'; test -e "$(state r2)" || fail "removed without approval"
+    hash="$(sed -n 's/^plan sha256: \([0-9a-f]*\)$/\1/p' "$out.err")"
+    run 0 "$out" setup remove r2 --approve "$hash"
+    [ ! -s "$out" ] || fail "human removal reached stdout"
+    has "$out.err" 'removed the setup record for r2; nothing on r2-host was changed'
+    has "$out.err" 'still on the remote: a possibly partial Hydra install'
+    # A running step holds the lock: removal is refused.
+    write_state r3 r3-host hydra '{}'
+    SETUP_SSH_SLEEP=5 SETUP_SSH_MARK="$fixture/ssh-mark-$mask" "$fleet" remote preflight r3 --json > "$fixture/busy.out" 2>&1 &
+    busy=$!
+    tries=0
+    while [ ! -e "$fixture/ssh-mark-$mask" ] && [ "$tries" -lt 100 ]; do sleep 0.1; tries=$((tries + 1)); done
+    run 1 "$out" setup remove r3 --json; has "$out" '"code":"setup_busy"'
+    wait "$busy" || :
+    test -e "$(state r3)" || fail "a busy setup was removed"
+    # A finished setup whose alias is published is refused; the alias is removed instead.
+    run 1 "$out" setup remove n2 --json; has "$out" '"code":"setup_complete"'; has "$out" 'hydra remote remove n2'
+    test -e "$(state n2)" || fail "a finished setup was removed"
 }
 
 # write_upgrade_state NAME DEST HYDRA ALIAS_HYDRA HOST_KEY STEPS_JSON: an upgrade
@@ -345,6 +405,7 @@ for mask in 022 002; do
         preflight_cases
         state_cases
         finish_cases
+        remove_cases
         upgrade_cases
     )
 done

@@ -374,14 +374,17 @@ provisioning downloads. Helpers from `--binary` or the local build are labelled
 unpinned in the reviewed plan.
 
 Guided remote setup (since 2.9.0) keeps private per-NAME state in
-`$HYDRA_HOME/fleet/setup/NAME.json`; `status` and `list` are reserved names.
+`$HYDRA_HOME/fleet/setup/NAME.json`; `status`, `list` and `remove` are reserved names.
 Every `remote-setup*`/`remote-*` step envelope adds `data.setup_schema` 1,
 `data.steps[]` (`{id, status, detail}`, plus `error{code,message}` while an
 installer or sign-in that ran on a terminal is `failed` or `outcome_unknown`) and
 `data.next` (`{step, argv, approval_sha256}` or null). `remote-setup-list` returns
-`data.setups[]` of `{name, destination, status, complete, next}` (`status` is the
-first unfinished step's status, `done`, or `unreadable` with `error`), read
-without locks. `remote-preflight` requirements are `{name, status, blocking,
+`data.setups[]` of `{name, destination, ssh_config, status, remote_changed,
+complete, next}` (`status` is the first unfinished step's status, `done`, or
+`unreadable` with `error`), read without locks. `remote-setup-remove` deletes the
+local record after a `remove` plan is approved (`{removed, name, destination,
+record, summary, remote_left[], local_left[]}`); it never contacts the remote and
+fails with `setup_busy` or `setup_complete`. `remote-preflight` requirements are `{name, status, blocking,
 detail}` with an optional `suggestion` (an example command; Hydra never runs it).
 Plans are `remote-setup-plan` schema 1 approved by their SHA-256; exit statuses
 are 0, 1, 3 (approval required), 4 (outcome unknown) and 128+n.

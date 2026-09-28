@@ -31,7 +31,7 @@ _hydra_completion() {
     opts="-h --help -v --version"
     if [[ ${COMP_WORDS[1]:-} == remote && $COMP_CWORD -ge 3 && ( -z $cur || $cur == -* ) ]]; then
         case ${COMP_WORDS[2]:-} in
-            setup) COMPREPLY=($(compgen -W "status list --ssh-config --binary --approve --timeout --json" -- "${cur}")); return 0 ;;
+            setup) COMPREPLY=($(compgen -W "status list remove --ssh-config --binary --approve --timeout --json" -- "${cur}")); return 0 ;;
             trust-key) COMPREPLY=($(compgen -W "--fingerprint --timeout --json" -- "${cur}")); return 0 ;;
             preflight) COMPREPLY=($(compgen -W "--timeout --json" -- "${cur}")); return 0 ;;
             provision) COMPREPLY=($(compgen -W "--approve --binary --timeout --json" -- "${cur}")); return 0 ;;

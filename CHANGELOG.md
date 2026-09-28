@@ -45,7 +45,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   status and next step, read-only. `setup status NAME --json` reports a failed
   installer or sign-in's recorded `steps[].error{code,message}`, and preflight
   requirements gain an additive `suggestion` (an example install command on Linux)
-  beside `detail`. `status` and `list` are reserved setup names.
+  beside `detail`. `hydra remote setup remove NAME [--approve PLAN_SHA256]`
+  deletes a setup's local record and lock so a setup bound to the wrong
+  destination or SSH config can start again (`setup_binding_changed` now names
+  it). It never connects to the remote: its plan, approved like any other, lists
+  what earlier steps left there (Hydra install, agents, sign-ins) and in
+  known_hosts, none of which is undone; it fails with `setup_busy` while a step
+  runs and with `setup_complete` for a finished setup whose alias is published.
+  `setup list` rows gain `ssh_config` and `remote_changed`. `status`, `list` and
+  `remove` are reserved setup names.
 - `hydra agent locate [--json] [--record EXECUTABLE PATH] [--forget EXECUTABLE]`
   finds agents outside PATH (`~/.local/bin`, `~/.opencode/bin`, nvm, mise, ...)
   as `agent-inventory` schema 1 and records a private per-executable location.

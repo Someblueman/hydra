@@ -121,7 +121,7 @@ int setup_state_set(struct setup_ctx *ctx, const char *key, json_object *value);
 json_object *setup_upgrade(struct setup_ctx *ctx);
 bool setup_step_id(const char *step);
 bool setup_status_valid(const char *status);
-/* NAME rules: f_name, shorter than 128 bytes, not "status" or "list". */
+/* NAME rules: f_name, shorter than 128 bytes, not "status", "list" or "remove". */
 bool setup_name_valid(const char *name);
 
 /* ---- Envelopes and interaction (setup_plan.c) ---- */
@@ -202,12 +202,21 @@ json_object *setup_next_json(struct setup_ctx *ctx);
  * without locks (setup_list.c). Caller-owned envelope "remote-setup-list". */
 json_object *setup_list(bool json);
 
+/* `remote setup remove NAME [--approve PLAN_SHA256]` (setup_remove.c): after
+ * approval of a plan naming what earlier steps left on the remote (never
+ * undone), deletes NAME.json and NAME.lock. setup_complete for a finished
+ * setup whose alias is published. On success ctx->state is released. */
+json_object *setup_remove(struct setup_ctx *ctx, const char *approve);
+/* True once a step may have changed the remote: provision, an agent
+ * installer or a sign-in that is done, in_progress or outcome_unknown. */
+bool setup_remote_changed(struct setup_ctx *ctx);
+
 /* ---- CLI (setup_cli.c) ---- */
 /* True for "setup", "trust-key", "preflight", "provision", "agents",
  * "install-agent" and "sign-in" (the word after "remote"). f_remote_cli
  * dispatches these to setup_cli; "help"/"--help" as the second word prints
- * usage, "setup status NAME" is the read-only status view and "setup list"
- * lists every setup record. */
+ * usage, "setup status NAME" is the read-only status view, "setup list"
+ * lists every setup record and "setup remove NAME" deletes one. */
 bool setup_command(const char *word);
 /* argv starts at that word; returned JSON belongs to the caller. */
 json_object *setup_cli(int argc, char **argv);

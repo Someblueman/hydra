@@ -51,7 +51,8 @@ Commands:
                               record where one lives; PATH still wins
   remote            Manage OpenSSH aliases: add NAME [USER@]SSH_ALIAS, remove NAME, list
                     Guided setup: setup NAME [USER@]HOST [--ssh-config FILE] [--binary FILE]
-                                  setup status NAME, setup list; resumes from saved state
+                                  setup status NAME, setup list, setup remove NAME;
+                                  resumes from saved state
                     Steps: trust-key NAME [--fingerprint SHA256:...], preflight NAME,
                            provision NAME [--approve SHA256] [--binary FILE],
                            agents NAME [--record EXE=/path], install-agent NAME --agent A

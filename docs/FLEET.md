@@ -55,6 +55,7 @@ hydra remote setup ovh ubuntu@build-host      # or an SSH Host alias
 hydra remote setup ovh --ssh-config /abs/config
 hydra remote setup status ovh
 hydra remote setup list                       # every setup: destination, status, next step
+hydra remote setup remove ovh                 # forget an unfinished setup (asks first)
 ```
 
 Steps run in order: host key, preflight, provision, agents, then install and
@@ -63,13 +64,21 @@ command that uses the same state: `hydra remote trust-key|preflight|provision|ag
 NAME` and `hydra remote install-agent|sign-in NAME --agent A`. The alias record is
 published last and never overwrites a different alias, so a half-configured host
 never appears in `hydra fleet list`. Rerunning setup with a different destination
-or SSH config for an existing NAME fails with `setup_binding_changed`. Unknown
-options are usage errors. `status` and `list` are reserved and cannot be setup
-names. `hydra remote setup list [--json]` (`remote-setup-list`) reads every record
+or SSH config for an existing NAME fails with `setup_binding_changed`; `hydra remote
+setup remove NAME [--approve PLAN_SHA256] [--json]` (`remote-setup-remove`) deletes
+the local record and its lock so the setup can start again. It never connects to the
+remote: its plan lists what earlier steps left there (a Hydra install at its prefix,
+agents, provider sign-ins) and in `known_hosts`, none of which is undone. Like other
+plans it asks `y` on a terminal and otherwise returns `approval_required` (exit 3)
+with the approving command. It fails with `setup_busy` while a step runs and with
+`setup_complete` for a finished setup whose alias is published (remove the alias
+with `hydra remote remove NAME`). Unknown options are usage errors. `status`,
+`list` and `remove` are reserved and cannot be setup names. `hydra remote setup list [--json]` (`remote-setup-list`) reads every record
 read-only, like `setup status`: `data.setups[]` holds `name`, `destination`,
-`status` (the first unfinished step's status, `done` when complete, or
-`unreadable` with `error{code,message}` for a record it refuses), `complete` and
-`next`. When an agent installer or sign-in that ran on your terminal fails, the
+`ssh_config`, `status` (the first unfinished step's status, `done` when complete, or
+`unreadable` with `error{code,message}` for a record it refuses), `remote_changed`
+(a provision, agent installer or sign-in may have changed the remote), `complete`
+and `next`. When an agent installer or sign-in that ran on your terminal fails, the
 step keeps the error code and message, and `setup status NAME --json` reports it
 as `steps[].error{code,message}` while the step is `failed` or
 `outcome_unknown`. Setup does not prepare a remote project: once the alias
