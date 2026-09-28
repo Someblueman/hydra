@@ -317,8 +317,6 @@ workflow_start_step() {
             workflow_event "$_wss_dir" "$_wss_id" step.recovery_required stale_approval
             exit 1
         fi
-        # Attempt evidence is private; the step command keeps the user's umask.
-        hydra_private_touch "$_wss_attempt_dir/stdout" "$_wss_attempt_dir/stderr" || exit 1
         if [ -f "$_wss_dir/data.json" ]; then
             hydra_private_touch "$_wss_attempt_dir/data-preparation.json" || exit 1
             if ! workflow_data_definition_matches "$_wss_dir" ||
@@ -345,6 +343,9 @@ workflow_start_step() {
         else
             unset HYDRA_WORKFLOW_VALIDATION_FILE
         fi
+        # Attempt evidence is private; the step command keeps the user's umask.
+        # Transcripts exist only once the command starts.
+        hydra_private_touch "$_wss_attempt_dir/stdout" "$_wss_attempt_dir/stderr" || exit 1
         workflow_step_command "$_wss_dir" "$_wss_id" "$_wss_kind" "$@" >"$_wss_attempt_dir/stdout" 2>"$_wss_attempt_dir/stderr" &
         _ws_command_pid=$!
         workflow_atomic_scalar "$_wss_sd/command-pid" "$_ws_command_pid"
