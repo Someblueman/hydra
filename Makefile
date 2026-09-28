@@ -279,10 +279,10 @@ bench-tui: build-tui $(BUILD_DIR)/test-tui-pty
 	@sh scripts/bench-tui.sh
 
 package-core: build-core
-	@sh scripts/package-native.sh core
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/package-native.sh core
 
 package-tui: build-tui
-	@sh scripts/package-native.sh tui
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/package-native.sh tui
 
 # Record shell baseline timings (not a CI gate; no speedup claims)
 bench:
@@ -309,7 +309,7 @@ test-install:
 	@HYDRA_INSTALL_CORE=never HYDRA_INSTALL_TUI=never sh tests/test_install.sh
 
 test-native-install: build-core build-tui
-	@sh tests/test_native_install.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh tests/test_native_install.sh
 
 # Throwaway-repository, no-agent first-head path
 smoke-onboarding:

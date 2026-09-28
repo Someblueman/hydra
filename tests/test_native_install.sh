@@ -7,6 +7,11 @@ test_count=0
 pass_count=0
 fail_count=0
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+# Package the helpers make built (BUILD_DIR); the source-build cases below
+# run make in copied trees like a user would, so they must not inherit this
+# build directory, including through the calling make's MAKEFLAGS.
+native_build="${BUILD_DIR:-$repo_root/build}"
+unset BUILD_DIR MAKEFLAGS MFLAGS MAKELEVEL
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 package="$test_root/package"
 
@@ -39,8 +44,8 @@ file_hash() {
 echo "Running native install tests..."
 echo "==============================="
 
-HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_CORE_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" core >/dev/null
-HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_TUI_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" tui >/dev/null
+BUILD_DIR="$native_build" HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_CORE_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" core >/dev/null
+BUILD_DIR="$native_build" HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_TUI_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" tui >/dev/null
 prefix="$test_root/offline-prefix"
 home="$test_root/home"
 mkdir -p "$home"
