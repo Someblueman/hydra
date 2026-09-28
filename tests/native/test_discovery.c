@@ -56,6 +56,9 @@ void dc_setup(void) {
                  "StrictHostKeyChecking no\n UpdateHostKeys yes\n",
                  dc_included) > 0 &&
          !fclose(f));
+  /* OpenSSH refuses group-writable configuration (for example under umask
+   * 002), so the fixture files are private like a user's ~/.ssh/config. */
+  assert(!chmod(dc_config, 0600) && !chmod(dc_included, 0600));
   nt_path(bin, dc_root, "bin");
   assert(!f_mkdirs(bin));
   nt_path(wrapper, bin, "ssh");
