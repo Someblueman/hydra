@@ -13,6 +13,24 @@ struct f_capture;
 int f_ssh(const struct f_remote *remote, const char *command, const char *input, size_t size, unsigned seconds, bool tty, struct f_capture *cap);
 /* Returns the fingerprint reported by the authenticated SSH peer. The value is
  * caller-owned and must be freed; no known_hosts text is treated as identity. */
+/* Terminal variant of the -t path: forks ssh with the same strict options,
+ * waits, restores the local terminal attributes, and stores the child exit
+ * status (128+n when ssh or the local command was ended by signal n) in
+ * *exit_status. seconds bounds the connection only, never the session.
+ * Returns -1 (exit_status -1) when ssh could not be started or waited for;
+ * an exec failure is reported as exit status 127. */
+int f_ssh_interactive(const struct f_remote *remote, const char *command, unsigned seconds, int *exit_status);
+/* Effective client configuration from `ssh -G [-F config] [-l principal] --
+ * target` as a caller-owned object of lowercase keyword -> first value (for
+ * example "hostname", "port", "hostkeyalias", "userknownhostsfile",
+ * "hashknownhosts"). NULL when ssh cannot evaluate the configuration. */
+json_object *f_ssh_query_config(const struct f_remote *remote, unsigned seconds);
+/* Typed transport failure for a completed SSH capture (timeout, offline,
+ * host_key_failed, authentication_failed, ...). Static string. */
+const char *f_transport_code(const struct f_capture *cap);
+/* First "Server host key: ... SHA256:..." fingerprint in an ssh -v log;
+ * caller-owned, NULL when absent. */
+char *f_peer_from_log(const char *text);
 char *f_peer_fingerprint(struct f_remote *remote, unsigned seconds);
 void f_peer_close(struct f_remote *remote);
 bool f_target(const char *value);

@@ -29,6 +29,17 @@ _hydra_completion() {
 
     commands="remote fleet admission spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
     opts="-h --help -v --version"
+    if [[ ${COMP_WORDS[1]:-} == remote && $COMP_CWORD -ge 3 && ( -z $cur || $cur == -* ) ]]; then
+        case ${COMP_WORDS[2]:-} in
+            setup) COMPREPLY=($(compgen -W "status --ssh-config --binary --remote-build --project --timeout --json" -- "${cur}")); return 0 ;;
+            trust-key) COMPREPLY=($(compgen -W "--fingerprint --timeout --json" -- "${cur}")); return 0 ;;
+            preflight) COMPREPLY=($(compgen -W "--timeout --json" -- "${cur}")); return 0 ;;
+            provision) COMPREPLY=($(compgen -W "--approve --binary --timeout --json" -- "${cur}")); return 0 ;;
+            agents) COMPREPLY=($(compgen -W "--record --timeout --json" -- "${cur}")); return 0 ;;
+            install-agent) COMPREPLY=($(compgen -W "--agent --approve --timeout --json" -- "${cur}")); return 0 ;;
+            sign-in) COMPREPLY=($(compgen -W "--agent --timeout --json" -- "${cur}")); return 0 ;;
+        esac
+    fi
     if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && $COMP_CWORD -ge 5 ]]; then
         case ${COMP_WORDS[3]:-} in
             submit) COMPREPLY=($(compgen -W "--input --key --trust-spec" -- "${cur}")); return 0 ;;
@@ -49,7 +60,7 @@ _hydra_completion() {
             return 0
             ;;
         remote)
-            COMPREPLY=($(compgen -W "add remove list" -- "${cur}"))
+            COMPREPLY=($(compgen -W "add remove list setup trust-key preflight provision agents install-agent sign-in" -- "${cur}"))
             return 0
             ;;
         fleet)

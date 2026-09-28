@@ -57,7 +57,9 @@ FLEET_CASES = shell-task-acceptance \
 	retention \
 	workflow-metrics \
 	plan-staged \
-	native-task-package
+	native-task-package \
+	native-remote-setup \
+	shell-remote-setup
 
 # These are also used by the shell cases; none may compile concurrently with a case.
 FLEET_NATIVE_CASE_BINS = $(addprefix $(BUILD_DIR)/native-tests/,test-discovery test-enrollment test-enrollment-receiver test-retention test-workflow-task-metrics test-statistics-export test-plan-staged workflow-contract-cases discovery-ssh-fixture enrollment-ssh-fixture enrollment-receiver-fixture statistics-evidence)
@@ -254,3 +256,9 @@ fleet-case-workflow-metrics:
 
 fleet-case-plan-staged:
 	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" $(MAKE) test-plan-staged
+
+fleet-case-native-remote-setup:
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-remote-setup
+
+fleet-case-shell-remote-setup:
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_remote_setup.sh

@@ -2,6 +2,7 @@
 #include "fleet/support/files.h"
 #include "fleet/support/process.h"
 #include "fleet/transport/remote.h"
+#include "fleet/setup/setup.h"
 #include "fleet/fleet.h"
 #include <dirent.h>
 #include <ctype.h>
@@ -9,6 +10,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <sys/wait.h>
+#include <termios.h>
 
 bool f_target(const char *s) {
     if (!s || !isalnum((unsigned char)*s)) return false;
@@ -93,9 +97,23 @@ json_object *f_remotes(void) {
     }
     closedir(dir); return names;
 }
+/* Parses `remote add` options after NAME and DEST; NULL on success. */
+static json_object *alias_options(struct f_remote *remote, int argc, char **argv) {
+    int i;
+    for (i = 3; i < argc; i++) {
+        if (!strcmp(argv[i], "--multiplex")) remote->multiplex = true;
+        else if ((!strcmp(argv[i], "--hydra") || !strcmp(argv[i], "--home")) && i + 1 < argc && argv[i+1][0] == '/') {
+            char *dst = !strcmp(argv[i], "--home") ? remote->home : remote->hydra;
+            if (f_copy(dst, F_PATH, argv[++i])) return f_error("remote", "invalid_input", "path is too long");
+        } else return f_error("remote", "invalid_input", "unknown or missing alias option");
+    }
+    return NULL;
+}
 json_object *f_remote_cli(int argc, char **argv) {
-    struct f_remote remote; char path[F_PATH]; int i;
+    struct f_remote remote; char path[F_PATH]; json_object *error;
     memset(&remote, 0, sizeof(remote));
+    /* Guided setup and its step commands share one private state machine. */
+    if (argc >= 1 && setup_command(argv[0])) return setup_cli(argc, argv);
     if (argc == 1 && !strcmp(argv[0], "list")) return f_success("remote-list", f_remotes());
     if (argc == 2 && !strcmp(argv[0], "remove") && !remote_path(path, argv[1])) {
         if (unlink(path)) return f_error("remote", "io_failed", "cannot remove remote alias");
@@ -105,17 +123,11 @@ json_object *f_remote_cli(int argc, char **argv) {
         f_copy(remote.name, sizeof(remote.name), argv[1]) || f_copy(remote.target, sizeof(remote.target), argv[2]))
         return f_error("remote", "invalid_input", "remote add NAME [USER@]SSH_ALIAS [--hydra /path] [--home /path] [--multiplex]");
     f_copy(remote.hydra, sizeof(remote.hydra), "hydra");
-    for (i = 3; i < argc; i++) {
-        if (!strcmp(argv[i], "--multiplex")) remote.multiplex = true;
-        else if ((!strcmp(argv[i], "--hydra") || !strcmp(argv[i], "--home")) && i + 1 < argc && argv[i+1][0] == '/') {
-            char *dst = !strcmp(argv[i], "--home") ? remote.home : remote.hydra;
-            if (f_copy(dst, F_PATH, argv[++i])) return f_error("remote", "invalid_input", "path is too long");
-        } else return f_error("remote", "invalid_input", "unknown or missing alias option");
-    }
+    if ((error = alias_options(&remote, argc, argv))) return error;
     if (f_remote_save(&remote)) return f_error("remote", "io_failed", "cannot store alias");
     return f_success("remote-add", json_object_new_object());
 }
-static const char *transport_code(const struct f_capture *cap) {
+const char *f_transport_code(const struct f_capture *cap) {
     if (f_stopped) return "cancelled";
     if (cap->timeout || strstr(cap->err, "Connection timed out") || strstr(cap->err, "Operation timed out")) return "timeout";
     if (strstr(cap->err, "Host key verification failed") || strstr(cap->err, "REMOTE HOST IDENTIFICATION HAS CHANGED")) return "host_key_failed";
@@ -124,7 +136,7 @@ static const char *transport_code(const struct f_capture *cap) {
     if (cap->status == 125) return "output_limit";
     return "remote_failed";
 }
-static char *peer_from_log(const char *text) {
+char *f_peer_from_log(const char *text) {
     const char *start, *end;
     if (!text || !(start = strstr(text, "Server host key: ")) || !(start = strstr(start, "SHA256:"))) return NULL;
     end = start + 7;
@@ -141,7 +153,7 @@ static void response_peer(json_object *result, const struct f_remote *remote, co
     if (remote->require_existing_master && remote->peer_fingerprint[0]) peer = strdup(remote->peer_fingerprint);
     else {
         if (remote->ssh_log[0]) log = f_read(remote->ssh_log, 131072);
-        peer = peer_from_log(remote->ssh_log[0] ? log : stderr_text);
+        peer = f_peer_from_log(remote->ssh_log[0] ? log : stderr_text);
     }
     if (peer) f_string_add(data, "peer_fingerprint", peer);
     free(peer); free(log);
@@ -159,7 +171,7 @@ static json_object *measured_response(const struct f_remote *remote, struct f_ca
     if (result && cap->status && json_object_get_boolean(f_field(result, "ok"))) { json_object_put(result); result = NULL; }
     if (!response_valid(result)) {
         json_object_put(result);
-        result = f_error("fleet", cap->status ? transport_code(cap) : "invalid_response", cap->err[0] ? cap->err : "missing or invalid fleet response");
+        result = f_error("fleet", cap->status ? f_transport_code(cap) : "invalid_response", cap->err[0] ? cap->err : "missing or invalid fleet response");
     } else if (json_object_get_boolean(f_field(result, "ok"))) {
         response_peer(result, remote, cap->err);
     }
@@ -234,12 +246,15 @@ static void ssh_options(const struct f_remote *remote, char **argv, size_t *coun
         argv[(*count)++] = (char *)options[i].flag; argv[(*count)++] = (char *)options[i].value;
     }
 }
-int f_ssh(const struct f_remote *remote, const char *command, const char *input,
-          size_t size, unsigned seconds, bool tty, struct f_capture *cap) {
-    char timeout[64], socket[F_PATH]; char *argv[48]; size_t n = 0;
+/* Builds the strict SSH argv shared by captured and terminal sessions. The
+ * option buffers are caller-owned and must outlive argv. */
+static int ssh_argv(const struct f_remote *remote, const char *command, unsigned seconds, bool tty, bool verbose,
+                    char *argv[48], char timeout[64], char socket[F_PATH]) {
+    size_t n = 0;
     if (remote->require_existing_master && (!remote->control_path[0] || !remote->peer_fingerprint[0])) return -1;
-    snprintf(timeout, sizeof(timeout), "ConnectTimeout=%u", seconds);
-    argv[n++] = "ssh"; argv[n++] = tty ? "-t" : "-T"; argv[n++] = "-vv";
+    snprintf(timeout, 64, "ConnectTimeout=%u", seconds);
+    argv[n++] = "ssh"; argv[n++] = tty ? "-t" : "-T";
+    if (verbose) argv[n++] = "-vv";
     ssh_options(remote, argv, &n);
     argv[n++] = "-o"; argv[n++] = "BatchMode=yes";
     argv[n++] = "-o"; argv[n++] = "StrictHostKeyChecking=yes";
@@ -252,8 +267,45 @@ int f_ssh(const struct f_remote *remote, const char *command, const char *input,
         if (remote->require_existing_master) { argv[n++] = "-o"; argv[n++] = "ProxyCommand=false"; }
     }
     argv[n++] = (char *)remote->target; argv[n++] = (char *)command; argv[n] = NULL;
+    return 0;
+}
+int f_ssh(const struct f_remote *remote, const char *command, const char *input,
+          size_t size, unsigned seconds, bool tty, struct f_capture *cap) {
+    char timeout[64], socket[F_PATH]; char *argv[48];
+    if (ssh_argv(remote, command, seconds, tty, true, argv, timeout, socket)) return -1;
     if (tty) { execvp("ssh", argv); return -1; }
     return f_run(argv, input, size, seconds, cap);
+}
+static void interactive_child(char *const argv[]) {
+    const int signals[] = {SIGINT, SIGTERM, SIGHUP, SIGQUIT, SIGPIPE};
+    size_t i;
+    for (i = 0; i < sizeof(signals) / sizeof(signals[0]); i++) signal(signals[i], SIG_DFL);
+    execvp("ssh", argv);
+    _exit(127);
+}
+static int wait_child(pid_t pid, int *status) {
+    for (;;) {
+        if (waitpid(pid, status, 0) == pid) return 0;
+        if (errno != EINTR) return -1;
+    }
+}
+int f_ssh_interactive(const struct f_remote *remote, const char *command, unsigned seconds, int *exit_status) {
+    char timeout[64], socket[F_PATH]; char *argv[48]; struct termios saved;
+    bool terminal = isatty(STDIN_FILENO) && !tcgetattr(STDIN_FILENO, &saved);
+    pid_t pid; int status = 0, waited;
+    *exit_status = -1;
+    if (ssh_argv(remote, command, seconds, true, remote->ssh_log[0] != '\0', argv, timeout, socket)) return -1;
+    fflush(stdout); fflush(stderr);
+    pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) interactive_child(argv);
+    waited = wait_child(pid, &status);
+    if (terminal) (void)tcsetattr(STDIN_FILENO, TCSADRAIN, &saved);
+    if (waited) return -1;
+    if (WIFSIGNALED(status)) *exit_status = 128 + WTERMSIG(status);
+    else if (WIFEXITED(status)) *exit_status = WEXITSTATUS(status);
+    if (f_stopped && *exit_status != 0) *exit_status = 128 + (int)f_stopped;
+    return 0;
 }
 char *f_peer_fingerprint(struct f_remote *remote, unsigned seconds) {
     char directory[] = "/tmp/hydra-enroll-ssh.XXXXXX"; json_object *request, *response; char *peer = NULL;
@@ -279,4 +331,24 @@ void f_peer_close(struct f_remote *remote) {
         *slash = '\0'; unlink(remote->control_path); unlink(remote->ssh_log); rmdir(directory);
     }
     remote->control_path[0] = '\0'; remote->ssh_log[0] = '\0'; remote->peer_fingerprint[0] = '\0'; remote->require_existing_master = false;
+}
+/* Adds one "key value" line of ssh -G output; the first occurrence wins. */
+static void config_line(json_object *out, char *line) {
+    char *space = strchr(line, ' ');
+    if (!space || space == line) return;
+    *space = '\0';
+    if (!f_field(out, line)) f_string_add(out, line, space + 1);
+}
+json_object *f_ssh_query_config(const struct f_remote *remote, unsigned seconds) {
+    struct f_capture cap = {0}; char *argv[12], *line, *save = NULL; size_t n = 0; json_object *out = NULL;
+    argv[n++] = "ssh"; argv[n++] = "-G";
+    if (remote->ssh_config[0]) { argv[n++] = "-F"; argv[n++] = (char *)remote->ssh_config; }
+    if (remote->principal[0]) { argv[n++] = "-l"; argv[n++] = (char *)remote->principal; }
+    argv[n++] = "--"; argv[n++] = (char *)remote->target; argv[n] = NULL;
+    if (!f_run(argv, NULL, 0, seconds, &cap) && !cap.status && cap.out) {
+        out = json_object_new_object();
+        for (line = strtok_r(cap.out, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) config_line(out, line);
+    }
+    f_capture_free(&cap);
+    return out;
 }
