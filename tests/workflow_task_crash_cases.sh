@@ -7,7 +7,8 @@ run_dir=''
 wait_tick=0
 while [ "$wait_tick" -lt 100 ]; do
     wait_tick=$((wait_tick + 1))
-    run="$(sed -n '1p' "$fixture/run.out")"
+    # The background redirection may not have created run.out yet.
+    run="$(sed -n '1p' "$fixture/run.out" 2>/dev/null || :)"
     if [ -n "$run" ]; then
         run_dir="$workflow_runs/$run"
         if [ -n "$run_dir" ] && [ -s "$run_dir/steps/produce/attempt-1/remote/receipt.json" ]; then break; fi
