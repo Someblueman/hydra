@@ -122,10 +122,15 @@ rm "$fixture/remote/.codex"
 mv "$fixture/remote/real" "$fixture/remote/.codex"
 printf '%s\000' '{"OPENAI_API_KEY":"bad"}' > "$fixture/local/codex.json"
 reject preview codex
+# Login runs the bare executable unless the receiver resolves it off PATH. The
+# search includes system directories, so an agent the host itself has installed
+# there (such as /usr/local/bin/claude) is resolved too; fixture paths never are.
+system_dirs='/usr/local/bin/|/opt/homebrew/bin/|/home/linuxbrew/[.]linuxbrew/bin/|/snap/bin/'
+login_execs() { grep -Eq "exec '($system_dirs)?$1'$2" "$fixture/login-argv"; }
 for agent in codex pi opencode claude agy cursor; do
     hydra fleet auth login test --agent "$agent"
     grep -q -- '-t' "$fixture/login-argv"
-    case "$agent" in cursor) grep -q "exec 'cursor-agent' login" "$fixture/login-argv" ;; *) grep -q "exec '$agent'" "$fixture/login-argv" ;; esac
+    case "$agent" in cursor) login_execs cursor-agent ' login' ;; *) login_execs "$agent" '' ;; esac
 done
 for agent in agy cursor; do
     if hydra fleet auth preview test --agent "$agent" > "$fixture/unsupported-copy"; then exit 1; fi
@@ -139,15 +144,29 @@ grep -q '"code":"login_failed"' "$fixture/login-failed"
 if env AUTH_TEST_LOGIN_EXIT=130 "$root/bin/hydra" fleet auth login test --agent claude > "$fixture/login-cancelled"; then exit 1; fi
 grep -q '"code":"cancelled"' "$fixture/login-cancelled"
 # An installer's ~/.local/bin is off the non-interactive PATH: login resolves it.
-mkdir -p "$fixture/remote/.local/bin"
-printf '#!/bin/sh\necho fixture-claude 1.0\n' > "$fixture/remote/.local/bin/claude"
-chmod 755 "$fixture/remote/.local/bin/claude"
-hydra fleet auth login test --agent claude > "$fixture/login-ok"
-grep -q '"command":"fleet-auth-login"' "$fixture/login-ok"
-grep -q "exec '$fixture/remote/.local/bin/claude' auth login" "$fixture/login-argv"
-# A group-writable candidate is never used.
-chmod 775 "$fixture/remote/.local/bin/claude"
-hydra fleet auth login test --agent claude >/dev/null
-grep -q "exec 'claude' auth login" "$fixture/login-argv"
-chmod 755 "$fixture/remote/.local/bin/claude"
+# Use an agent the host has not installed in a system search directory, where
+# a second candidate would make the resolution ambiguous.
+off_path_agent=''
+for candidate in claude codex opencode pi; do
+    host_copy=0
+    for dir in /usr/local/bin /opt/homebrew/bin /home/linuxbrew/.linuxbrew/bin /snap/bin; do
+        [ ! -e "$dir/$candidate" ] || host_copy=1
+    done
+    if [ "$host_copy" = 0 ]; then off_path_agent=$candidate; break; fi
+done
+if [ -z "$off_path_agent" ]; then
+    printf 'SKIP off-PATH login: this host installs every candidate agent in a system directory\n'
+else
+    mkdir -p "$fixture/remote/.local/bin"
+    printf '#!/bin/sh\necho fixture-%s 1.0\n' "$off_path_agent" > "$fixture/remote/.local/bin/$off_path_agent"
+    chmod 755 "$fixture/remote/.local/bin/$off_path_agent"
+    hydra fleet auth login test --agent "$off_path_agent" > "$fixture/login-ok"
+    grep -q '"command":"fleet-auth-login"' "$fixture/login-ok"
+    grep -q "exec '$fixture/remote/.local/bin/$off_path_agent'" "$fixture/login-argv"
+    # A group-writable candidate is never used.
+    chmod 775 "$fixture/remote/.local/bin/$off_path_agent"
+    hydra fleet auth login test --agent "$off_path_agent" >/dev/null
+    grep -q "exec '$off_path_agent'" "$fixture/login-argv"
+    chmod 755 "$fixture/remote/.local/bin/$off_path_agent"
+fi
 printf 'Agent authentication acceptance passed\n'
