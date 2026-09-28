@@ -163,6 +163,7 @@ Commands:
   doctor            Check install, dependencies, and first-run readiness
                     Options:
                       -f, --fix                Auto-fix detected issues
+                      --fix-permissions        Remove group/other write from your own Hydra state
   cleanup           Stop dead heads, remove stale locks, offer to remove leftover worktrees
                     Options:
                       --include-dirty          Also remove leftover worktrees with uncommitted changes

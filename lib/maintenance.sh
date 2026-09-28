@@ -84,6 +84,35 @@ summarize_orphan_worktrees() {
         }'
 }
 
+# List group- or other-writable entries under Hydra state roots. Readers refuse
+# such state. "owned" lists your own regular files and directories, the only
+# entries a repair may change; "other" lists the rest (foreign-owned entries,
+# FIFOs, sockets). find does not follow symbolic links.
+# Usage: state_writable_entries <owned|other> <root>...
+state_writable_entries() {
+    _swe_kind="$1"
+    shift
+    _swe_uid="$(id -u)"
+    for _swe_root in "$@"; do
+        [ -d "$_swe_root" ] && [ ! -L "$_swe_root" ] || continue
+        if [ "$_swe_kind" = owned ]; then
+            find "$_swe_root" \( -type f -o -type d \) -user "$_swe_uid" \
+                \( -perm -0020 -o -perm -0002 \) -print 2>/dev/null || true
+        else
+            find "$_swe_root" ! -type l \( -perm -0020 -o -perm -0002 \) \
+                ! \( \( -type f -o -type d \) -user "$_swe_uid" \) -print 2>/dev/null || true
+        fi
+    done
+    return 0
+}
+
+# Remove group and other write permission from your own regular files and
+# directories under Hydra state roots (see hydra_private_tree).
+# Usage: state_repair_permissions <root>...
+state_repair_permissions() {
+    hydra_private_tree "$@"
+}
+
 # Count lock directories with dead same-host owner evidence.
 # Usage: count_stale_locks
 # Returns: Count on stdout

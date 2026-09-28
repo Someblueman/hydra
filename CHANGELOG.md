@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Hydra creates its own state, locks, workflow runs, event archives, exec and
+  gate evidence, caches and the repository's `.git/hydra` records without group
+  or other write permission, whatever your umask. Under a group-writable umask
+  such as Ubuntu's default `002`, workflow `steps/` directories, run records and
+  other entries were group-writable, so Hydra's own readers refused them: run
+  statistics and remote transport metrics were reported as unknown, and a
+  pre-created home was refused by admission. The ownership checks are unchanged.
+  Worktrees, agents, hooks, tmux sessions and the commands run by exec, gate and
+  workflow steps keep following your umask; outputs a step writes into its run
+  record are made private when the step ends.
+- Planning launch and workspace workflow controls no longer pass their private
+  umask to the heads, agents and step commands of the runs they start.
+
+### Added
+
+- `hydra doctor` reports group- or other-writable Hydra state in `$HYDRA_HOME`
+  and the repository's `.git/hydra`, and `hydra doctor --fix-permissions` repairs
+  it: it removes group and other write from your own regular files and
+  directories, never follows symbolic links, and only reports entries owned by
+  someone else or that are not files or directories. Help and bash, zsh and fish
+  completions include it.
+- `make test-umask` runs the fast checks, a umask state acceptance test and the
+  DAG fleet cases under umask `002`; CI runs it with the shell suite on Ubuntu.
+
 ## [2.8.0] - 2026-09-27
 
 ### Added

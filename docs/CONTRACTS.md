@@ -369,6 +369,17 @@ on resume and collection. A missing owner, stale observation, timeout, or lost
 transport is an unknown outcome and never authorizes replay. Release or cancellation
 of a reservation requires confirmed termination and is scoped to the owning task.
 
+Hydra creates its own state, lock, run, cache, and evidence entries beneath
+`$HYDRA_HOME` and the repository's `<git-common-dir>/hydra` without group or other
+write permission, whatever the caller's umask (such as Ubuntu's default `002`).
+Readers still refuse group- or other-writable and foreign-owned state; the checks
+are never relaxed. Worktrees, agents, hooks, tmux sessions, and the commands run by
+exec, gate, and workflow steps keep the caller's umask; outputs a step writes into
+its run record are made private when the step ends. `hydra doctor` reports writable
+state. `hydra doctor --fix-permissions` removes group and other write from the
+current user's own regular files and directories only, never follows symbolic
+links, and reports foreign-owned or special entries without changing them.
+
 Repository-controlled configuration is inert until `hydra init --trust` records an
 approval. Trust covers regular files and symlink-safe paths under `.hydra`; linked,
 special, or changed configuration invalidates the approval. Submitted workflows use

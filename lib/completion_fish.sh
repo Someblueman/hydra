@@ -163,6 +163,8 @@ complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and not __fish_se
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -a 'train status report cancel resume approve promote cleanup'
 complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -a 'doctor'
 complete -c hydra -f -n '__fish_seen_subcommand_from snapshot' -l native -d 'Try the optional read-only native helper'
+complete -c hydra -f -n '__fish_seen_subcommand_from doctor; and not __fish_seen_subcommand_from worktree fleet agent' -l fix -d 'Auto-fix detected issues'
+complete -c hydra -f -n '__fish_seen_subcommand_from doctor; and not __fish_seen_subcommand_from worktree fleet agent' -l fix-permissions -d 'Remove group/other write from your own Hydra state'
 complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l path -d 'Path pattern'
 complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l access -d 'Access mode' -a 'read write'
 complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l reason -d 'Claim reason'

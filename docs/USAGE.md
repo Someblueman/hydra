@@ -63,6 +63,13 @@ branch is kept. An unavailable worktree has unknown change indicators.
 - `hydra doctor` reports the coding agents found on PATH. With none installed it
   suggests Claude Code or Codex, or a plain terminal task with
   `hydra spawn <branch> --no-agent`.
+- `hydra doctor` also fails when Hydra's own state (`$HYDRA_HOME` and the
+  repository's `.git/hydra`) is group- or other-writable, because Hydra refuses
+  shared state. Hydra creates its state privately under any umask; entries left by
+  earlier releases run under a group-writable umask such as Ubuntu's `002` are
+  listed. `hydra doctor --fix-permissions` removes group and other write from your
+  own files and directories there, never follows symbolic links, and only reports
+  entries owned by someone else. Your worktrees keep following your umask.
 - `hydra list` prints one aligned row per head: `BRANCH`, `AGENT`, `SESSION`
   (`running`, `terminal gone`, `stopped`, or `unknown`), `REPORTED` (the declared
   outcome or `-`), and `AGE`. The current head is marked with `*`. Add `--verbose`
@@ -179,6 +186,7 @@ hydra regenerate   # restore sessions after restart
 hydra status       # per-head health
 hydra status --json # JSON output
 hydra doctor       # install, dependencies, and first-run readiness
+hydra doctor --fix-permissions # remove group/other write from your own Hydra state
 hydra snapshot --native # explicitly try the optional read-only native helper
 
 # Dashboard & TUI
