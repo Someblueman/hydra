@@ -87,10 +87,13 @@ cases() {
     has "$(state n1)" '"destination":"user@host1"'
     run 1 "$out" setup n1 --json; has "$out" '"code":"not_implemented"'
     # Every step command dispatches against the same state.
-    for step in trust-key preflight provision agents; do
+    for step in trust-key preflight agents; do
         run 1 "$out" "$step" n1 --json
         has "$out" '"code":"not_implemented"'; has "$out" "\"command\":\"remote-$step\""; has "$out" '"steps":'
     done
+    # Provisioning is implemented (tests/test_remote_provision.sh) and needs preflight first.
+    run 1 "$out" provision n1 --json
+    has "$out" '"code":"prerequisite_missing"'; has "$out" '"command":"remote-provision"'; has "$out" '"steps":'
     run 1 "$out" install-agent n1 --agent claude --json; has "$out" '"command":"remote-install-agent"'
     run 1 "$out" sign-in n1 --agent claude --json; has "$out" '"command":"remote-sign-in"'
     run 0 "$out" setup status n1 --json; has "$out" '"ok":true'; has "$out" '"destination":"user@host1"'

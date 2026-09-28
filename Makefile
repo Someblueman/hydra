@@ -364,7 +364,7 @@ $(BUILD_DIR)/native-tests/statistics-evidence: tests/native/statistics_evidence.
 # Compile shared fleet code once. Compiler dependency files track the actual
 # header/.inc closure for each object and test, including sanitizer builds.
 FLEET_OBJECTS = $(patsubst src/fleet/%.c,$(BUILD_DIR)/fleet/%.o,$(filter-out src/fleet/main.c,$(FLEET_SOURCES)))
-FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data workflow-schedule agent-profile agent-auth plan remote-setup)
+FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data workflow-schedule agent-profile agent-auth plan remote-setup fleet-assets)
 
 $(BUILD_DIR)/fleet/%.o: src/fleet/%.c
 	@mkdir -p "$(@D)"
@@ -400,6 +400,7 @@ $(BUILD_DIR)/test-agent-auth: tests/c/test_agent_auth.c
 $(BUILD_DIR)/test-plan: tests/c/test_plan.c
 $(BUILD_DIR)/test-workflow-schedule: tests/c/test_workflow_schedule.c
 $(BUILD_DIR)/test-remote-setup: tests/c/test_remote_setup.c
+$(BUILD_DIR)/test-fleet-assets: tests/c/test_fleet_assets.c
 
 $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) -MMD -MP -MF $@.d -MT $@ $(filter %.c,$^) $(BUILD_DIR)/libhydra-fleet.a $(FLEET_JSON_LIB) -lm -o $@
