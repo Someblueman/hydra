@@ -18,7 +18,7 @@ HYDRA_LIB_DIR="$(cd "$SCRIPT_DIR/../lib" && pwd)"
 test_send_keys_uses_primary_pane() {
     echo "Testing send_keys_to_session targets :0.0..."
 
-    log="$(mktemp)"
+    log="$(test_mktemp_file)"
     HYDRA_TEST_TMUX_LOG="$log"
     HYDRA_TEST_TMUX_SESSIONS="hydra-feat"
     export HYDRA_TEST_TMUX_LOG HYDRA_TEST_TMUX_SESSIONS
@@ -116,7 +116,7 @@ test_find_broadcast_pane_refuses_non_shell() {
 test_send_keys_ignores_stale_snapshot() {
     echo "Testing send_keys_to_session live-probes after snapshot..."
 
-    log="$(mktemp)"
+    log="$(test_mktemp_file)"
     HYDRA_TEST_TMUX_LOG="$log"
     HYDRA_TEST_TMUX_SESSIONS="hydra-old"
     export HYDRA_TEST_TMUX_LOG HYDRA_TEST_TMUX_SESSIONS
@@ -143,7 +143,7 @@ test_send_keys_ignores_stale_snapshot() {
 test_broadcast_session_qualified_pane() {
     echo "Testing broadcast --pane session:target stays on that session..."
 
-    TEST_HOME="$(mktemp -d)"
+    TEST_HOME="$(test_mktemp_dir)"
     HYDRA_HOME="$TEST_HOME"
     HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
     export HYDRA_HOME HYDRA_STATE_V2_ROOT
@@ -168,7 +168,7 @@ test_broadcast_session_qualified_pane() {
     state_v2_create_head "$TEST_PROJECT_ID" b1 hydra-a - - 100 - - "$TEST_HOME/repo" >/dev/null
     state_v2_create_head "$TEST_PROJECT_ID" b2 hydra-b - - 100 - - "$TEST_HOME/repo" >/dev/null
 
-    log="$(mktemp)"
+    log="$(test_mktemp_file)"
     HYDRA_TEST_TMUX_LOG="$log"
     HYDRA_TEST_TMUX_SESSIONS="$(printf '%s\n%s\n' hydra-a hydra-b)"
     export HYDRA_TEST_TMUX_LOG HYDRA_TEST_TMUX_SESSIONS

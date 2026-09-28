@@ -2,7 +2,7 @@
 # Exercise the public shell authority with competing processes and private state.
 set -eu
 ROOT="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-TEST_DIR="$(mktemp -d)"
+TEST_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 trap 'rm -rf "$TEST_DIR"' 0
 trap 'exit 130' INT
 trap 'exit 143' TERM

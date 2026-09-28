@@ -3,7 +3,7 @@
 
 set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
-base="$(mktemp -d)"
+base="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo="$base/repo"
 home="$base/hydra"
 fake="$base/bin"

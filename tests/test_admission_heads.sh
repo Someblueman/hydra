@@ -2,7 +2,7 @@
 # Head creation/resume and verification gates share the receiving host's slots.
 set -eu
 ROOT="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 CLI="$ROOT/bin/hydra"
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
 cleanup() {

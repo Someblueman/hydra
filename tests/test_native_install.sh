@@ -7,7 +7,7 @@ test_count=0
 pass_count=0
 fail_count=0
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 package="$test_root/package"
 
 # shellcheck source=helpers.sh

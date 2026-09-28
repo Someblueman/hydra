@@ -104,7 +104,7 @@ validate_json() {
 _TEST_DIR=""
 
 setup_test_env() {
-    _TEST_DIR="$(mktemp -d)" || {
+    _TEST_DIR="$(test_mktemp_dir)" || {
         echo "Error: Failed to create temporary directory" >&2
         return 1
     }

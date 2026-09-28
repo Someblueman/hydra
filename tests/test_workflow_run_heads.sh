@@ -9,7 +9,7 @@ HYDRA_BIN="$REPO/bin/hydra"
 FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 case "$FLEET_BIN" in /*) ;; *) FLEET_BIN="$REPO/$FLEET_BIN" ;; esac
 export HYDRA_TEST_ROOT="$REPO"
-root="$(mktemp -d)"
+root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 export HYDRA_HOME="$root/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 export CODEX_HOME="$root/codex-home"
 # shellcheck source=/dev/null

@@ -2,7 +2,7 @@
 # Actual Git bundles and public CLI; preparation must preserve the source checkout.
 set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 trap 'rm -rf "$fixture"' 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP

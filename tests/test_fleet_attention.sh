@@ -2,7 +2,7 @@
 # Public fleet attention projection checks over controlled SSH responses.
 set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 cleanup() { rm -rf "$fixture"; }
 trap cleanup 0
 trap 'exit 130' INT

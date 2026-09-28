@@ -5,7 +5,7 @@ test_count=0
 pass_count=0
 fail_count=0
 root="$(cd "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 binary="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 package_binary="${HYDRA_TEST_PACKAGE_BINARY:-$binary}"
 trap 'rm -rf "$fixture"' 0

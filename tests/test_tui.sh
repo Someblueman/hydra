@@ -142,7 +142,7 @@ test_tui_build_list() {
     TESTS_RUN=$((TESTS_RUN + 1))
 
     # Create temporary test environment
-    TEST_HOME="$(mktemp -d)"
+    TEST_HOME="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     HYDRA_HOME="$TEST_HOME"
     mkdir -p "$HYDRA_HOME"
 
@@ -151,7 +151,7 @@ test_tui_build_list() {
     tui_add_test_head test-branch-2 test_session_2 claude
 
     # Create temp file for list
-    TUI_TEMP_LIST="$(mktemp)"
+    TUI_TEMP_LIST="$(mktemp "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     TUI_ITEM_COUNT=0
     TUI_SELECTED=0
 
@@ -173,13 +173,13 @@ test_tui_build_list() {
 test_tui_row_contract() {
     TESTS_RUN=$((TESTS_RUN + 1))
 
-    TEST_HOME="$(mktemp -d)"
+    TEST_HOME="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     HYDRA_HOME="$TEST_HOME"
     mkdir -p "$HYDRA_HOME"
 
     source_libs
     tui_add_test_head b1 s1 claude grp 111 d1 9
-    TUI_TEMP_LIST="$(mktemp)"
+    TUI_TEMP_LIST="$(mktemp "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     TUI_ITEM_COUNT=0
     TUI_SELECTED=0
     TUI_OFFSET=0
@@ -206,7 +206,7 @@ test_tui_selection_bounds() {
     TESTS_RUN=$((TESTS_RUN + 1))
 
     # Create temporary test environment
-    TEST_HOME="$(mktemp -d)"
+    TEST_HOME="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     HYDRA_HOME="$TEST_HOME"
     mkdir -p "$HYDRA_HOME"
 
@@ -215,7 +215,7 @@ test_tui_selection_bounds() {
     tui_add_test_head branch-2 session_2
 
     # Initialize state (TUI_OFFSET and TUI_ROWS used by tui_build_list)
-    TUI_TEMP_LIST="$(mktemp)"
+    TUI_TEMP_LIST="$(mktemp "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     TUI_ITEM_COUNT=0
     TUI_SELECTED=5  # Start out of bounds
     # shellcheck disable=SC2034
@@ -243,14 +243,14 @@ test_tui_empty_list() {
     TESTS_RUN=$((TESTS_RUN + 1))
 
     # Create temporary test environment with no active heads
-    TEST_HOME="$(mktemp -d)"
+    TEST_HOME="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     HYDRA_HOME="$TEST_HOME"
     mkdir -p "$HYDRA_HOME"
 
     source_libs
 
     # Initialize state
-    TUI_TEMP_LIST="$(mktemp)"
+    TUI_TEMP_LIST="$(mktemp "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     TUI_ITEM_COUNT=0
     TUI_SELECTED=0
 
@@ -296,7 +296,7 @@ test_tui_key_navigation() {
     TESTS_RUN=$((TESTS_RUN + 1))
 
     # Create temporary test environment
-    TEST_HOME="$(mktemp -d)"
+    TEST_HOME="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     HYDRA_HOME="$TEST_HOME"
     mkdir -p "$HYDRA_HOME"
 
@@ -306,7 +306,7 @@ test_tui_key_navigation() {
     tui_add_test_head branch-3 session_3
 
     # Initialize state (variables used by tui_build_list and tui_handle_key)
-    TUI_TEMP_LIST="$(mktemp)"
+    TUI_TEMP_LIST="$(mktemp "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     TUI_ITEM_COUNT=0
     TUI_SELECTED=0
     # shellcheck disable=SC2034
@@ -389,7 +389,7 @@ test_tui_stty_pattern() {
 test_tui_select_all() {
     TESTS_RUN=$((TESTS_RUN + 1))
 
-    TEST_HOME="$(mktemp -d)"
+    TEST_HOME="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     HYDRA_HOME="$TEST_HOME"
     mkdir -p "$TEST_HOME"
     source_libs
@@ -398,7 +398,7 @@ test_tui_select_all() {
 
     # shellcheck disable=SC2034
     tui_init_colors
-  TUI_TEMP_LIST="$(mktemp)"
+  TUI_TEMP_LIST="$(mktemp "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
   TUI_ITEM_COUNT=2
   printf 'b1\ts1\t-\tALIVE\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"
   printf 'b2\ts2\t-\tALIVE\tIDLE\t-\t-\n' >> "$TUI_TEMP_LIST"

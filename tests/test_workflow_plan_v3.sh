@@ -6,7 +6,7 @@ root=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 make -s -C "$root" BUILD_DIR="${BUILD_DIR:?BUILD_DIR is required: run via make test or make test-one T=<name>}" build-test-fixture
 fixture_native="$BUILD_DIR/native-tests/fixture-json"
 case "$fixture_native" in /*) ;; *) fixture_native="$root/$fixture_native" ;; esac
-fixture=$(mktemp -d)
+fixture=$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 active_branch=
 cleanup() {

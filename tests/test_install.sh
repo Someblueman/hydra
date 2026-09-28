@@ -71,8 +71,8 @@ SRC_BEFORE="$(snapshot_source_repo)"
 
 # --- install.sh to a writable prefix ---
 echo "Testing install.sh to a writable PREFIX..."
-home1="$(mktemp -d)"
-prefix1="$(mktemp -d)"
+home1="$(test_mktemp_dir)"
+prefix1="$(test_mktemp_dir)"
 export HOME="$home1"
 unset HYDRA_ROOT
 unset HYDRA_HOME
@@ -128,8 +128,8 @@ rm -rf "$home1" "$prefix1"
 
 # --- make install / make uninstall ---
 echo "Testing make install to a writable PREFIX..."
-home2="$(mktemp -d)"
-prefix2="$(mktemp -d)"
+home2="$(test_mktemp_dir)"
+prefix2="$(test_mktemp_dir)"
 export HOME="$home2"
 unset HYDRA_ROOT
 unset HYDRA_HOME
@@ -162,8 +162,8 @@ rm -rf "$home2" "$prefix2"
 
 # --- DESTDIR staging ---
 echo "Testing make install DESTDIR staging..."
-stage="$(mktemp -d)"
-home3="$(mktemp -d)"
+stage="$(test_mktemp_dir)"
+home3="$(test_mktemp_dir)"
 output="$(cd "$REPO_ROOT" && HOME="$home3" HYDRA_HOME='' HYDRA_ROOT='' make install PREFIX=/usr/local DESTDIR="$stage" 2>&1)"
 assert_success $? "make install DESTDIR should succeed"
 assert_file "$stage/usr/local/bin/hydra" "DESTDIR stages the binary"

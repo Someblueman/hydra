@@ -2,6 +2,10 @@
 # Unit tests for lib/tmux.sh
 # POSIX-compliant test framework
 
+# These checks describe behaviour outside tmux. Detach from any caller's tmux
+# server so running the file inside tmux neither skips them nor touches it.
+unset TMUX TMUX_PANE
+
 # Test framework setup
 test_count=0
 pass_count=0
@@ -170,14 +174,8 @@ test_get_current_session() {
     echo "Testing get_current_session..."
     
     # Outside tmux, this should fail
-    if [ -z "$TMUX" ]; then
-        get_current_session >/dev/null 2>&1
-        assert_failure $? "get_current_session should fail when not in tmux"
-    else
-        echo "[WARN] Skipping get_current_session test - already inside tmux"
-        pass_count=$((pass_count + 1))
-        test_count=$((test_count + 1))
-    fi
+    get_current_session >/dev/null 2>&1
+    assert_failure $? "get_current_session should fail when not in tmux"
 }
 
 # Test validate_ai_command function
@@ -224,7 +222,7 @@ test_validate_ai_command() {
 test_tmux_version_at_least() {
     echo "Testing tmux_version_at_least parses tmux -V..."
 
-    _tva_dir="$(mktemp -d)"
+    _tva_dir="$(test_mktemp_dir)"
     mkdir -p "$_tva_dir/bin"
     cat > "$_tva_dir/bin/tmux" <<'EOF'
 #!/bin/sh
@@ -249,7 +247,7 @@ EOF
 test_write_session_launcher() {
     echo "Testing write_session_launcher output..."
 
-    _wsl_dir="$(mktemp -d)"
+    _wsl_dir="$(test_mktemp_dir)"
     mkdir -p "$_wsl_dir/worktree" "$_wsl_dir/bin"
     # No tmux server: the launcher falls back to $SHELL for the hand-off.
     printf '#!/bin/sh\nexit 1\n' > "$_wsl_dir/bin/tmux"
@@ -336,15 +334,16 @@ test_create_session_environment() {
         test_count=$((test_count + 1))
         return
     fi
-    _cse_dir="$(mktemp -d)"
+    _cse_dir="$(test_mktemp_dir)"
     mkdir -p "$_cse_dir/bin"
     _cse_real="$(command -v tmux)"
     _cse_socket="hydra-env-$$"
     cat > "$_cse_dir/bin/tmux" <<EOF
 #!/bin/sh
-exec '$_cse_real' -L '$_cse_socket' "\$@"
+TMUX_TMPDIR='$_cse_dir/sockets' exec '$_cse_real' -L '$_cse_socket' "\$@"
 EOF
     chmod +x "$_cse_dir/bin/tmux"
+    mkdir -p "$_cse_dir/sockets"
     _cse_path="$PATH"
     PATH="$_cse_dir/bin:$PATH"
     export PATH

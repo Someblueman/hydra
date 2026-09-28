@@ -38,7 +38,7 @@ assert_contains() {
 # Setup test environment
 TEST_DIR=""
 setup_test_env() {
-    TEST_DIR="$(mktemp -d)" || {
+    TEST_DIR="$(test_mktemp_dir)" || {
         echo "Error: Failed to create temporary directory" >&2
         exit 1
     }

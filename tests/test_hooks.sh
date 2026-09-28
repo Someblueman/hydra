@@ -36,7 +36,7 @@ project_is_trusted() {
 
 # Setup test environment
 setup_test_env() {
-    TEST_DIR="$(mktemp -d)"
+    TEST_DIR="$(test_mktemp_dir)"
     HYDRA_HOME="$TEST_DIR/hydra_home"
     export TEST_DIR HYDRA_HOME
     mkdir -p "$HYDRA_HOME"

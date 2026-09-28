@@ -6,7 +6,7 @@ umask 002
 root="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=/dev/null
 . "$root/tests/fixture-tools.sh"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 # shellcheck source=/dev/null
 . "$root/tests/workflow_task_cleanup.sh"
 cleanup() {

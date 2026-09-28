@@ -26,7 +26,7 @@ assert_contains() {
 }
 
 setup() {
-    base_dir="$(mktemp -d)" || exit 1
+    base_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")" || exit 1
     repo_dir="$base_dir/repo"
     mkdir -p "$repo_dir"
     cd "$repo_dir" || exit 1

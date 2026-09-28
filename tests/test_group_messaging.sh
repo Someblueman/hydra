@@ -17,7 +17,7 @@ NC='\033[0m'
 
 # Setup test environment
 setup_test_env() {
-    TEST_HOME="$(mktemp -d)"
+    TEST_HOME="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     export TEST_HOME
     export HYDRA_HOME="$TEST_HOME/.hydra"
     export HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"

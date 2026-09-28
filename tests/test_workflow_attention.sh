@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 cleanup() {
     if [ -d "$fixture/repo/.git" ]; then
         (cd "$fixture/repo" && "$root/bin/hydra" kill attention-worker --force >/dev/null 2>&1) || true

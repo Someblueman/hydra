@@ -2,7 +2,7 @@
 # Public fleet CLI tests with a controlled SSH transport and real C server.
 set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 TMUX_TMPDIR="$(mktemp -d /tmp/hydra-fleet.XXXXXX)"
 TMUX_SOCKET="$TMUX_TMPDIR/tmux-$(id -u)/default"
 unset TMUX TMUX_PANE
@@ -17,8 +17,8 @@ cleanup() {
         kill "$ssh_pid" 2>/dev/null || true
     fi
     rm -rf "$fixture"
-    rmdir "$TMUX_TMPDIR/tmux-$(id -u)" 2>/dev/null || true
-    rmdir "$TMUX_TMPDIR" 2>/dev/null || true
+    # The server is gone; its socket file is not removed by kill-server.
+    rm -rf "$TMUX_TMPDIR"
 }
 trap cleanup 0
 trap 'exit 130' INT

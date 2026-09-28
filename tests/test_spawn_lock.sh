@@ -15,7 +15,7 @@ export HYDRA_LOCK_RETRIES=1
 . "$(dirname "$0")/helpers.sh"
 
 setup() {
-    test_base_dir="$(mktemp -d)"
+    test_base_dir="$(test_mktemp_dir)"
     mkdir -p "$test_base_dir/repo"
     cd "$test_base_dir/repo" || exit 1
 

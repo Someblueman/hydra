@@ -53,3 +53,15 @@ assert_failure() {
     fi
 }
 
+# Private temporary paths. A bare `mktemp -d` ignores TMPDIR on macOS; the test
+# runner points TMPDIR at a per-case directory that it removes after the case,
+# including after a failure.
+test_mktemp_dir() {
+    _tmd_base="${TMPDIR:-/tmp}"
+    mktemp -d "${_tmd_base%/}/hydra-test.XXXXXX"
+}
+
+test_mktemp_file() {
+    _tmf_base="${TMPDIR:-/tmp}"
+    mktemp "${_tmf_base%/}/hydra-test.XXXXXX"
+}

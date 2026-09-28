@@ -74,7 +74,7 @@ if [ "${HYDRA_TEST_DAG_LOST_ACK:-0}" = 1 ] || [ "${HYDRA_TEST_DAG_RESULT_LOST:-0
 #!/bin/sh
 set -eu
 while [ "$#" -gt 2 ]; do shift; done
-request="$(mktemp)"
+request="$(mktemp "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 trap 'rm -f "$request"' EXIT
 cat > "$request"
 if [ -f "$HYDRA_TEST_DAG_CONTROL/lose-ack" ] && grep -q '"operation":"submit"' "$request"; then

@@ -6,7 +6,7 @@ set -u
 test_count=0
 pass_count=0
 fail_count=0
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 HYDRA_BIN="$repo_root/bin/hydra"
 HYDRA_HOME="$test_root/home"

@@ -61,7 +61,7 @@ assert_contains() {
 # Setup test environment
 setup_test_env() {
     # Create a unique parent directory to avoid worktree collisions
-    test_base_dir="$(mktemp -d)"
+    test_base_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     mkdir -p "$test_base_dir/repo"
     cd "$test_base_dir/repo" || exit 1
     
