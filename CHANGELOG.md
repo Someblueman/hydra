@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `hydra remote setup NAME [USER@]HOST` guides a fresh SSH account to a verified
+  fleet alias and resumes from private state when rerun; `hydra remote setup status
+  NAME` shows progress, and each step has its own command (`trust-key`, `preflight`,
+  `provision`, `agents`, `install-agent`, `sign-in`). Every change shows a plan and
+  needs approval: interactive `y` (typed `yes` for a host key), or with `--json`, CI
+  or no terminal an `approval_required` result (exit 3) naming the exact approving
+  command. `trust-key` never accepts a changed or ambiguous host key and only appends
+  the approved line to known_hosts; `preflight` reports platform, tools and existing
+  installs read-only and without sudo. Help and bash, zsh and fish completions
+  include the new commands.
+
 ## [2.8.0] - 2026-09-27
 
 ### Added

@@ -127,7 +127,7 @@ json_object *f_remote_cli(int argc, char **argv) {
     if (f_remote_save(&remote)) return f_error("remote", "io_failed", "cannot store alias");
     return f_success("remote-add", json_object_new_object());
 }
-static const char *transport_code(const struct f_capture *cap) {
+const char *f_transport_code(const struct f_capture *cap) {
     if (f_stopped) return "cancelled";
     if (cap->timeout || strstr(cap->err, "Connection timed out") || strstr(cap->err, "Operation timed out")) return "timeout";
     if (strstr(cap->err, "Host key verification failed") || strstr(cap->err, "REMOTE HOST IDENTIFICATION HAS CHANGED")) return "host_key_failed";
@@ -136,7 +136,7 @@ static const char *transport_code(const struct f_capture *cap) {
     if (cap->status == 125) return "output_limit";
     return "remote_failed";
 }
-static char *peer_from_log(const char *text) {
+char *f_peer_from_log(const char *text) {
     const char *start, *end;
     if (!text || !(start = strstr(text, "Server host key: ")) || !(start = strstr(start, "SHA256:"))) return NULL;
     end = start + 7;
@@ -153,7 +153,7 @@ static void response_peer(json_object *result, const struct f_remote *remote, co
     if (remote->require_existing_master && remote->peer_fingerprint[0]) peer = strdup(remote->peer_fingerprint);
     else {
         if (remote->ssh_log[0]) log = f_read(remote->ssh_log, 131072);
-        peer = peer_from_log(remote->ssh_log[0] ? log : stderr_text);
+        peer = f_peer_from_log(remote->ssh_log[0] ? log : stderr_text);
     }
     if (peer) f_string_add(data, "peer_fingerprint", peer);
     free(peer); free(log);
@@ -171,7 +171,7 @@ static json_object *measured_response(const struct f_remote *remote, struct f_ca
     if (result && cap->status && json_object_get_boolean(f_field(result, "ok"))) { json_object_put(result); result = NULL; }
     if (!response_valid(result)) {
         json_object_put(result);
-        result = f_error("fleet", cap->status ? transport_code(cap) : "invalid_response", cap->err[0] ? cap->err : "missing or invalid fleet response");
+        result = f_error("fleet", cap->status ? f_transport_code(cap) : "invalid_response", cap->err[0] ? cap->err : "missing or invalid fleet response");
     } else if (json_object_get_boolean(f_field(result, "ok"))) {
         response_peer(result, remote, cap->err);
     }
@@ -331,4 +331,24 @@ void f_peer_close(struct f_remote *remote) {
         *slash = '\0'; unlink(remote->control_path); unlink(remote->ssh_log); rmdir(directory);
     }
     remote->control_path[0] = '\0'; remote->ssh_log[0] = '\0'; remote->peer_fingerprint[0] = '\0'; remote->require_existing_master = false;
+}
+/* Adds one "key value" line of ssh -G output; the first occurrence wins. */
+static void config_line(json_object *out, char *line) {
+    char *space = strchr(line, ' ');
+    if (!space || space == line) return;
+    *space = '\0';
+    if (!f_field(out, line)) f_string_add(out, line, space + 1);
+}
+json_object *f_ssh_query_config(const struct f_remote *remote, unsigned seconds) {
+    struct f_capture cap = {0}; char *argv[12], *line, *save = NULL; size_t n = 0; json_object *out = NULL;
+    argv[n++] = "ssh"; argv[n++] = "-G";
+    if (remote->ssh_config[0]) { argv[n++] = "-F"; argv[n++] = (char *)remote->ssh_config; }
+    if (remote->principal[0]) { argv[n++] = "-l"; argv[n++] = (char *)remote->principal; }
+    argv[n++] = "--"; argv[n++] = (char *)remote->target; argv[n] = NULL;
+    if (!f_run(argv, NULL, 0, seconds, &cap) && !cap.status && cap.out) {
+        out = json_object_new_object();
+        for (line = strtok_r(cap.out, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) config_line(out, line);
+    }
+    f_capture_free(&cap);
+    return out;
 }

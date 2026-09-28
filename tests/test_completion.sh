@@ -304,6 +304,19 @@ test_completion_includes_shipped_commands() {
     case "$zsh_out" in *"'{-g,--group}'"*) ;; *) short_group_status=1 ;; esac
     case "$fish_out" in *'-s g -l group'*) ;; *) short_group_status=1 ;; esac
     assert_success "$short_group_status" "kill completions include short -g group selector"
+
+    remote_setup_status=0
+    for word in setup trust-key preflight provision agents install-agent sign-in; do
+        for generated in "$bash_out" "$zsh_out" "$fish_out"; do
+            case "$generated" in *"$word"*) ;; *) remote_setup_status=1 ;; esac
+        done
+    done
+    for option in fingerprint approve record agent ssh-config remote-build; do
+        case "$bash_out" in *"--$option"*) ;; *) remote_setup_status=1 ;; esac
+        case "$zsh_out" in *"--$option"*) ;; *) remote_setup_status=1 ;; esac
+        printf '%s\n' "$fish_out" | grep '__fish_seen_subcommand_from remote' | grep -Eq -- "-l $option([[:space:]]|$)" || remote_setup_status=1
+    done
+    assert_success "$remote_setup_status" "remote setup commands and options complete in every shell"
 }
 
 # Run all tests
