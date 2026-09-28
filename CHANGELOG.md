@@ -167,6 +167,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   succeed and `Updated Ns ago`, counting up, once the data is older than two
   refresh intervals (plus one remote request in fleet mode); a failed refresh
   shows `STALE: last good snapshot, updated Ns ago`.
+- A failed SSH connection during remote setup says why: the error message ends
+  with OpenSSH's own reason (also in `data.ssh_error`), such as `ssh: Could not
+  resolve hostname ...`, `Permission denied (publickey)` or `Connection timed
+  out`, and the recovery names the likely fix (for an unresolvable name: check
+  the destination or pass the SSH config file that defines it). The control
+  centre shows it on the error screen.
 
 ## [2.8.0] - 2026-09-27
 

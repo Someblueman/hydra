@@ -384,7 +384,8 @@ complete, next}` (`status` is the first unfinished step's status, `done`, or
 `unreadable` with `error`), read without locks. `remote-setup-remove` deletes the
 local record after a `remove` plan is approved (`{removed, name, destination,
 record, summary, remote_left[], local_left[]}`); it never contacts the remote and
-fails with `setup_busy` or `setup_complete`. `remote-preflight` requirements are `{name, status, blocking,
+fails with `setup_busy` or `setup_complete`. A step whose SSH connection failed
+adds OpenSSH's own reason as `data.ssh_error`. `remote-preflight` requirements are `{name, status, blocking,
 detail}` with an optional `suggestion` (an example command; Hydra never runs it).
 Plans are `remote-setup-plan` schema 1 approved by their SHA-256; exit statuses
 are 0, 1, 3 (approval required), 4 (outcome unknown) and 128+n.

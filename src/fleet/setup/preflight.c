@@ -325,8 +325,8 @@ json_object *setup_step_preflight(struct setup_ctx *ctx) {
         return setup_error(ctx, "transport_failed", "cannot start SSH", NULL, NULL);
     }
     if (cap.status) {
-        json_object *error = setup_error(ctx, f_transport_code(&cap), "the preflight script did not complete over strict SSH",
-                                         "trust the host key first (hydra remote trust-key NAME) and check SSH authentication", NULL);
+        json_object *error = setup_transport_error(ctx, f_transport_code(&cap), "the preflight script did not complete over strict SSH",
+                                                   cap.err, "trust the host key first (hydra remote trust-key NAME) and check SSH authentication");
         f_capture_free(&cap);
         return error;
     }

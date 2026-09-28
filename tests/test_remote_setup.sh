@@ -29,6 +29,8 @@ mkdir "$fixture/bin" "$fixture/remote-bin" "$fixture/remote-home"
 cat > "$fixture/bin/ssh" <<'SSH'
 #!/bin/sh
 for arg do [ "$arg" = -G ] && exec "$SETUP_REAL_SSH" "$@"; done
+# SETUP_SSH_FAIL: fail like OpenSSH with this reason after -v chatter.
+if [ -n "${SETUP_SSH_FAIL:-}" ]; then printf 'debug1: Reading configuration data\n%s\n' "$SETUP_SSH_FAIL" >&2; exit 255; fi
 # SETUP_SSH_SLEEP: mark SETUP_SSH_MARK, then hang (a running step holds its lock).
 if [ -n "${SETUP_SSH_SLEEP:-}" ]; then : > "$SETUP_SSH_MARK"; sleep "$SETUP_SSH_SLEEP"; fi
 while [ $# -gt 1 ]; do shift; done
@@ -278,6 +280,18 @@ finish_cases() {
 
 plan_hash() { sed -n 's/.*"plan_sha256":"\([0-9a-f]*\)".*/\1/p' "$1"; }
 
+ssh_error_cases() {
+    # A failed connection carries SSH's own reason and a matching recovery.
+    SETUP_SSH_FAIL='ssh: Could not resolve hostname r1-host: nodename nor servname provided, or not known' run 1 "$out" setup r1 r1-host --json
+    has "$out" '"code":"offline"'; has "$out" 'with strict SSH: ssh: Could not resolve hostname r1-host'
+    has "$out" '"ssh_error":"ssh: Could not resolve hostname r1-host'; has "$out" 'SSH config file that defines this Host'
+    lacks "$out" 'debug1'
+    SETUP_SSH_FAIL='user@r1-host: Permission denied (publickey).' run 1 "$out" preflight r1 --json
+    has "$out" '"code":"authentication_failed"'; has "$out" 'Permission denied (publickey)'; has "$out" 'rejected your SSH credentials'
+    SETUP_SSH_FAIL='ssh: connect to host r1-host port 22: Connection refused' run 1 "$out" setup r1 --json
+    has "$out" '"code":"offline"'; has "$out" 'nothing accepts SSH at that address'
+}
+
 remove_cases() {
     # A setup bound to the wrong SSH config cannot be rebound; its recovery names setup remove.
     write_state r1 r1-host hydra '{"host_key":{"status":"failed"}}'
@@ -405,6 +419,7 @@ for mask in 022 002; do
         preflight_cases
         state_cases
         finish_cases
+        ssh_error_cases
         remove_cases
         upgrade_cases
     )

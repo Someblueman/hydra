@@ -129,6 +129,13 @@ bool setup_name_valid(const char *name);
  * a generic "inspect ... then rerun" recovery. */
 json_object *setup_error(const struct setup_ctx *ctx, const char *code, const char *message,
                          const char *recovery, json_object *data);
+/* A failed SSH step: code (normally f_transport_code), the message what
+ * followed by OpenSSH's own reason from the captured stderr err (also in
+ * data.ssh_error), and a recovery naming the obvious cause (unresolvable
+ * name, rejected credentials, refused or timed-out connection), else
+ * recovery. err is borrowed and may be NULL. */
+json_object *setup_transport_error(const struct setup_ctx *ctx, const char *code, const char *what,
+                                   const char *err, const char *recovery);
 /* False with --json, when stdin or stderr is not a terminal, or when CI or
  * HYDRA_NONINTERACTIVE is set to a non-empty value. */
 bool setup_interactive(bool json);

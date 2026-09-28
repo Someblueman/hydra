@@ -136,6 +136,36 @@ const char *f_transport_code(const struct f_capture *cap) {
     if (cap->status == 125) return "output_limit";
     return "remote_failed";
 }
+/* ssh -v/-vv chatter and success banners that never explain a failure. */
+static bool ssh_noise(const char *line, size_t length) {
+    static const char *const prefixes[] = {
+        "debug", "OpenSSH_", "Authenticated to ", "Transferred: ", "Bytes per second", "Warning: Permanently added",
+        "Pseudo-terminal will not", "Shared connection to ", "Exit status "
+    };
+    size_t i;
+    if (!length) return true;
+    /* "Connection to HOST closed." ends a normal session; "... closed by
+     * remote host." does not. */
+    if (!strncmp(line, "Connection to ", 14) && length > 8 && !strncmp(line + length - 8, " closed.", 8)) return true;
+    for (i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++)
+        if (length >= strlen(prefixes[i]) && !strncmp(line, prefixes[i], strlen(prefixes[i]))) return true;
+    return false;
+}
+void f_ssh_reason(const char *err, char *out, size_t size) {
+    const char *line = err, *best = NULL; size_t best_length = 0, i, n;
+    if (!size) return;
+    out[0] = '\0';
+    while (line && *line) {
+        size_t length = strcspn(line, "\r\n");
+        if (!ssh_noise(line, length)) { best = line; best_length = length; }
+        line += length;
+        line += strspn(line, "\r\n");
+    }
+    if (!best) return;
+    for (i = 0, n = 0; i < best_length && n + 1 < size; i++)
+        out[n++] = (unsigned char)best[i] < 0x20 || best[i] == 0x7f ? '?' : best[i];
+    out[n] = '\0';
+}
 char *f_peer_from_log(const char *text) {
     const char *start, *end;
     if (!text || !(start = strstr(text, "Server host key: ")) || !(start = strstr(start, "SHA256:"))) return NULL;

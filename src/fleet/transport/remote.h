@@ -28,6 +28,11 @@ json_object *f_ssh_query_config(const struct f_remote *remote, unsigned seconds)
 /* Typed transport failure for a completed SSH capture (timeout, offline,
  * host_key_failed, authentication_failed, ...). Static string. */
 const char *f_transport_code(const struct f_capture *cap);
+/* OpenSSH's own reason for a failure: the last stderr line that is not -v
+ * debug output or a success banner ("ssh: Could not resolve hostname h: ...",
+ * "Permission denied (publickey).", "Connection timed out ..."), with control
+ * characters replaced by '?'. Empty when there is none. */
+void f_ssh_reason(const char *err, char *out, size_t size);
 /* First "Server host key: ... SHA256:..." fingerprint in an ssh -v log;
  * caller-owned, NULL when absent. */
 char *f_peer_from_log(const char *text);

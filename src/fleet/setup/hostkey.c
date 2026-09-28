@@ -76,13 +76,16 @@ static void presented_type(const char *log, char type[64]) {
     length = strcspn(start, " \r\n");
     if (length && length < 64) { memcpy(type, start, length); type[length] = '\0'; }
 }
-static enum probe strict_probe(const struct setup_ctx *ctx, char peer[256], char type[64], const char **code) {
+/* reason (optional) receives OpenSSH's own explanation of a failure. */
+static enum probe strict_probe(const struct setup_ctx *ctx, char peer[256], char type[64], const char **code, char reason[512]) {
     struct f_remote remote = ctx->remote; struct f_capture cap = {0}; char *found; enum probe result;
     remote.multiplex = false; /* never trust an existing master for identity */
     peer[0] = '\0'; type[0] = '\0'; *code = "transport_failed";
+    if (reason) reason[0] = '\0';
     if (f_ssh(&remote, "exit 0", NULL, 0, ctx->seconds, false, &cap)) { f_capture_free(&cap); return PROBE_FAILED; }
     if ((found = f_peer_from_log(cap.err))) { f_copy(peer, 256, found); free(found); }
     presented_type(cap.err, type);
+    if (reason) f_ssh_reason(cap.err, reason, 512);
     *code = f_transport_code(&cap);
     if (strstr(cap.err, "REMOTE HOST IDENTIFICATION HAS CHANGED")) result = PROBE_CHANGED;
     else if (strstr(cap.err, "Host key verification failed")) result = PROBE_UNKNOWN;
@@ -215,8 +218,8 @@ static json_object *capture_key(const struct setup_ctx *ctx, struct hostkey *hk)
     capture_argv(ctx, argv, option, timeout);
     (void)f_run(argv, NULL, 0, ctx->seconds + 5, &cap);
     if (access(scratch, F_OK))
-        error = setup_error(ctx, cap.timeout ? "timeout" : "offline", "the host did not present a host key",
-                            "check the destination, network and SSH configuration, then rerun", NULL);
+        error = setup_transport_error(ctx, cap.timeout ? "timeout" : "offline", "the host did not present a host key", cap.err,
+                                      "check the destination, network and SSH configuration, then rerun");
     else if (captured_line(hk, scratch) || fingerprint_of(hk, scratch))
         error = setup_error(ctx, "host_key_ambiguous", "the host presented an unexpected set of host keys",
                             "add the host key to known_hosts yourself after verifying it out of band", NULL);
@@ -264,8 +267,9 @@ static json_object *unwritable(struct setup_ctx *ctx, const char *path) {
     return setup_error(ctx, "known_hosts_unwritable", "known_hosts is not a private writable file owned by you",
                        "fix its owner and mode (0600, not group or world writable, not a symlink) or add the key yourself", data);
 }
-static json_object *probe_failed(const struct setup_ctx *ctx, const char *code) {
-    return setup_error(ctx, code, "cannot reach the host with strict SSH", "check the destination, network and SSH configuration", NULL);
+static json_object *probe_failed(const struct setup_ctx *ctx, const char *code, const char *reason) {
+    return setup_transport_error(ctx, code, "cannot reach the host with strict SSH", reason,
+                                 "check the destination, network and SSH configuration");
 }
 static json_object *approval(struct setup_ctx *ctx, const struct hostkey *hk, const char *fingerprint) {
     const char *const argv[] = {"trust-key", ctx->name, NULL};
@@ -288,7 +292,7 @@ static json_object *write_and_verify(struct setup_ctx *ctx, const struct hostkey
         (void)setup_state_step(ctx, "host_key", "failed", NULL);
         return unwritable(ctx, hk->files[0]);
     }
-    if (strict_probe(ctx, peer, type, &code) != PROBE_KNOWN || (peer[0] && strcmp(peer, hk->fingerprint))) {
+    if (strict_probe(ctx, peer, type, &code, NULL) != PROBE_KNOWN || (peer[0] && strcmp(peer, hk->fingerprint))) {
         (void)setup_state_step(ctx, "host_key", "failed", NULL);
         return setup_error(ctx, "host_key_unknown", "the approved key was appended but strict SSH still rejects the host",
                            "inspect known_hosts and the SSH configuration (UserKnownHostsFile, HostKeyAlias)", NULL);
@@ -305,15 +309,15 @@ static json_object *known(struct setup_ctx *ctx, const struct hostkey *hk, const
     return trusted(ctx, hk, peer, "already trusted");
 }
 static json_object *trust(struct setup_ctx *ctx, struct hostkey *hk, const char *fingerprint) {
-    char peer[256], type[64]; const char *code; json_object *error; bool same; int index;
-    switch (strict_probe(ctx, peer, type, &code)) {
+    char peer[256], type[64], reason[512]; const char *code; json_object *error; bool same; int index;
+    switch (strict_probe(ctx, peer, type, &code, reason)) {
     case PROBE_KNOWN: return known(ctx, hk, peer, fingerprint);
     case PROBE_CHANGED:
         /* Only a recorded key of the presented type is a changed key; other
          * types known for this host are an ambiguity Hydra will not resolve. */
         index = existing_entry(hk, type, &same);
         return same || index < 0 ? changed(ctx, hk, peer) : ambiguous(ctx, hk, index);
-    case PROBE_FAILED: return probe_failed(ctx, code);
+    case PROBE_FAILED: return probe_failed(ctx, code, reason);
     case PROBE_UNKNOWN: break;
     }
     if ((index = existing_entry(hk, NULL, &same)) >= 0) return ambiguous(ctx, hk, index);

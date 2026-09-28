@@ -14,6 +14,34 @@ json_object *setup_error(const struct setup_ctx *ctx, const char *code, const ch
     if (data) json_object_object_add(result, "data", data);
     return result;
 }
+static const char *reason_recovery(const char *reason, const char *fallback) {
+    static const struct { const char *text, *recovery; } causes[] = {
+        {"Could not resolve hostname", "the destination's host name does not resolve: check its spelling, or give the SSH config file "
+                                       "that defines this Host with --ssh-config (a setup bound to the wrong destination or config "
+                                       "must be removed first: hydra remote setup remove NAME)"},
+        {"Permission denied", "the host rejected your SSH credentials: check that ssh to this destination works in a terminal "
+                              "(key, agent, user name)"},
+        {"Connection refused", "nothing accepts SSH at that address and port: check the port and that the SSH server runs"},
+        {"timed out", "the host did not answer: check your network or VPN and that the machine is running"},
+        {"No route to host", "the host is unreachable: check your network or VPN and that the machine is running"},
+        {"Network is unreachable", "the network is unreachable: check your connection or VPN"},
+    };
+    size_t i;
+    for (i = 0; reason && i < sizeof(causes) / sizeof(causes[0]); i++)
+        if (strstr(reason, causes[i].text)) return causes[i].recovery;
+    return fallback;
+}
+json_object *setup_transport_error(const struct setup_ctx *ctx, const char *code, const char *what,
+                                   const char *err, const char *recovery) {
+    char reason[512], message[800]; json_object *data = NULL;
+    f_ssh_reason(err ? err : "", reason, sizeof(reason));
+    if (reason[0]) {
+        snprintf(message, sizeof(message), "%s: %s", what, reason);
+        data = json_object_new_object();
+        f_string_add(data, "ssh_error", reason);
+    } else snprintf(message, sizeof(message), "%s", what);
+    return setup_error(ctx, code, message, reason_recovery(reason, recovery), data);
+}
 static bool env_set(const char *name) {
     const char *value = getenv(name);
     return value && value[0];

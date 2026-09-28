@@ -73,7 +73,9 @@ plans it asks `y` on a terminal and otherwise returns `approval_required` (exit 
 with the approving command. It fails with `setup_busy` while a step runs and with
 `setup_complete` for a finished setup whose alias is published (remove the alias
 with `hydra remote remove NAME`). Unknown options are usage errors. `status`,
-`list` and `remove` are reserved and cannot be setup names. `hydra remote setup list [--json]` (`remote-setup-list`) reads every record
+`list` and `remove` are reserved and cannot be setup names. When SSH fails, the
+error message ends with OpenSSH's own reason (also `data.ssh_error`), for example
+`ssh: Could not resolve hostname ...`, and the recovery names the likely fix. `hydra remote setup list [--json]` (`remote-setup-list`) reads every record
 read-only, like `setup status`: `data.setups[]` holds `name`, `destination`,
 `ssh_config`, `status` (the first unfinished step's status, `done` when complete, or
 `unreadable` with `error{code,message}` for a record it refuses), `remote_changed`
