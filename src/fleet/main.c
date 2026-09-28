@@ -13,12 +13,27 @@
 #include "fleet/workflow/workflow_usage.h"
 #include "fleet/review.h"
 #include "fleet/review_task.h"
+#include "fleet/setup/setup.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 const char *f_home, *f_hydra;
 static void stopped(int signal_number) { f_stopped = signal_number; }
+/* Guided remote setup commands own their human output and exit statuses. */
+static bool setup_invocation(int argc, char **argv) {
+    return argc >= 3 && !strcmp(argv[1], "remote") && setup_command(argv[2]);
+}
+static bool json_requested(int argc, char **argv) {
+    int i;
+    for (i = 3; i < argc; i++) if (!strcmp(argv[i], "--json")) return true;
+    return false;
+}
+static int emit(int argc, char **argv, json_object *result) {
+    if (setup_invocation(argc, argv)) return setup_emit(result, json_requested(argc, argv));
+    return f_emit(result);
+}
 static int command_status(int argc, char **argv, json_object *result, int status) {
+    if (setup_invocation(argc, argv)) return setup_exit_status(result, status);
     if (argc >= 3 && !strcmp(argv[1], "agent-run") && !strcmp(argv[2], "run") && json_object_get_boolean(f_field(result, "ok")))
         status = json_object_get_int(f_field(f_field(result, "data"), "exit_status"));
     if (argc >= 2 && !strcmp(argv[1], "workflow-task")) {
@@ -62,7 +77,7 @@ int main(int argc, char **argv) {
     } else if (argc >= 2 && !strcmp(argv[1], "fleet")) result = f_cli(argc - 2, argv + 2);
     else result = f_error("fleet", "invalid_input", "invoke through hydra fleet or hydra remote");
     if (!result) return f_stopped ? 128 + f_stopped : 0;
-    status = f_emit(result);
+    status = emit(argc, argv, result);
     status = command_status(argc, argv, result, status);
     json_object_put(result); return status;
 }
