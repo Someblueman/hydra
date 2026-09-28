@@ -1,0 +1,106 @@
+name: Release
+
+# A pushed vX.Y.Z tag rebuilds the static fleet helpers, requires them to match
+# the digests pinned in release/fleet-assets.tsv, and creates a DRAFT GitHub
+# release with the source archives, both helpers and SHA256SUMS. Publishing
+# the draft stays a manual, reviewed step.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  fleet-static:
+    name: Rebuild static fleet helper (linux-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Require the tag to name this source version
+      run: |
+        version="${GITHUB_REF_NAME#v}"
+        test "$version" = "$(sed -n 's/^#define F_VERSION "\(.*\)"$/\1/p' src/fleet/fleet.h)"
+        test "$version" = "$(sed -n 's/^HYDRA_VERSION="\(.*\)"$/\1/p' bin/hydra)"
+
+    - name: Rebuild and verify against the pinned table
+      run: |
+        version="${GITHUB_REF_NAME#v}"
+        binary="$(sh scripts/build-fleet-static.sh ${{ matrix.arch }} "$RUNNER_TEMP/static" | tail -n 1)"
+        if readelf -lW "$binary" | grep INTERP; then echo 'dynamic interpreter present' >&2; exit 1; fi
+        if readelf -dW "$binary" | grep NEEDED; then echo 'shared libraries needed' >&2; exit 1; fi
+        test "$("$binary" --version)" = 'Hydra fleet protocol 1'
+        sh scripts/check-fleet-assets.sh --verify release/fleet-assets.tsv "$version" linux-${{ matrix.arch }} "$binary"
+        mkdir -p dist
+        cp "$binary" "dist/hydra-fleet-$version-linux-${{ matrix.arch }}"
+
+    - name: Upload the verified helper
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-fleet-linux-${{ matrix.arch }}
+        path: dist/
+        if-no-files-found: error
+
+  draft-release:
+    name: Draft GitHub release
+    needs: fleet-static
+    runs-on: ubuntu-24.04
+    # The only job in this repository with write access to contents.
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Collect the verified helpers
+      uses: actions/download-artifact@v4
+      with:
+        pattern: release-fleet-linux-*
+        path: dist
+        merge-multiple: true
+
+    - name: Build source archives and SHA256SUMS
+      run: |
+        tag="$GITHUB_REF_NAME"
+        version="${tag#v}"
+        git archive --format=tar --prefix="hydra-$version/" "$tag" | gzip -n > "dist/hydra-$version.tar.gz"
+        git archive --format=zip --prefix="hydra-$version/" "$tag" > "dist/hydra-$version.zip"
+        cd dist
+        sha256sum "hydra-$version.tar.gz" "hydra-$version.zip" \
+          "hydra-fleet-$version-linux-x86_64" "hydra-fleet-$version-linux-aarch64" > SHA256SUMS
+        sha256sum -c SHA256SUMS
+        cat SHA256SUMS
+
+    - name: Extract release notes from the changelog
+      run: |
+        version="${GITHUB_REF_NAME#v}"
+        awk -v heading="## [$version]" '
+          index($0, heading) == 1 { found = 1; next }
+          found && /^## \[/ { exit }
+          found { print }
+        ' CHANGELOG.md > dist/NOTES.md
+        test -s dist/NOTES.md
+
+    - name: Create the draft release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        tag="$GITHUB_REF_NAME"
+        version="${tag#v}"
+        gh release create "$tag" --draft --verify-tag --title "$tag" --notes-file dist/NOTES.md \
+          "dist/hydra-$version.tar.gz" "dist/hydra-$version.zip" \
+          "dist/hydra-fleet-$version-linux-x86_64" "dist/hydra-fleet-$version-linux-aarch64" \
+          dist/SHA256SUMS

@@ -233,10 +233,66 @@ jobs:
         mkdir -p "$TMUX_TMPDIR"
         make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} sanitize-fleet
 
+  fleet-static:
+    name: Static fleet helper (linux-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build twice in the pinned image and compare
+      run: |
+        first="$(sh scripts/build-fleet-static.sh ${{ matrix.arch }} "$RUNNER_TEMP/static-1" | tail -n 1)"
+        second="$(sh scripts/build-fleet-static.sh ${{ matrix.arch }} "$RUNNER_TEMP/static-2" | tail -n 1)"
+        cmp "$first" "$second"
+        mkdir -p dist
+        cp "$first" "$first.sha256" "$first.buildinfo" dist/
+        cat dist/hydra-fleet-linux-${{ matrix.arch }}.sha256
+
+    - name: Inspect the static executable
+      run: |
+        binary=dist/hydra-fleet-linux-${{ matrix.arch }}
+        file "$binary"
+        if readelf -lW "$binary" | grep INTERP; then echo 'dynamic interpreter present' >&2; exit 1; fi
+        if readelf -dW "$binary" | grep NEEDED; then echo 'shared libraries needed' >&2; exit 1; fi
+        test "$("$binary" --version)" = 'Hydra fleet protocol 1'
+
+    - name: Install, bootstrap and provision with the static helper
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-static
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        binary="$PWD/dist/hydra-fleet-linux-${{ matrix.arch }}"
+        HYDRA_FLEET_BIN="$binary" HYDRA_TEST_PACKAGE_BINARY="$binary" sh tests/test_fleet_install.sh
+        HYDRA_FLEET_BIN="$binary" sh tests/test_remote_provision.sh
+
+    - name: Upload the static helper and digest
+      uses: actions/upload-artifact@v4
+      with:
+        name: hydra-fleet-linux-${{ matrix.arch }}
+        path: dist/
+        if-no-files-found: error
+
+    - name: Match the pinned release digest (release branches)
+      if: startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')
+      run: |
+        version="$(sed -n 's/^#define F_VERSION "\(.*\)"$/\1/p' src/fleet/fleet.h)"
+        sh scripts/check-fleet-assets.sh --verify release/fleet-assets.tsv "$version" \
+          linux-${{ matrix.arch }} dist/hydra-fleet-linux-${{ matrix.arch }}
+
   release-gate:
     name: release-gate
     if: ${{ always() }}
-    needs: [lint, quality-c, test, compatibility, native, sanitize, fleet]
+    needs: [lint, quality-c, test, compatibility, native, sanitize, fleet, fleet-static]
     runs-on: ubuntu-latest
     steps:
     - name: Require every full qualification job
@@ -248,3 +304,4 @@ jobs:
         test "${{ needs.native.result }}" = success
         test "${{ needs.sanitize.result }}" = success
         test "${{ needs.fleet.result }}" = success
+        test "${{ needs.fleet-static.result }}" = success
