@@ -9,7 +9,11 @@
  * and a verifier head. The Work list groups them under the run, the worker's
  * details describe its agent step (not a missing terminal), the live step
  * output is readable, Overview centres on the run, and the verifier head is
- * retired when the run finishes. Synthetic codex; private tmux socket. */
+ * retired when the run finishes. Synthetic codex; private tmux socket.
+ * The verifier head is spawned only after the held agent step, so exactly one
+ * run head exists while the worker runs: with both spawns ready at the start,
+ * the owner could otherwise pick spawn-check before implement whenever the
+ * worker's spawn finished between its state refresh and its slot count. */
 static struct hf_fixture f;
 static char evidence[4096];
 #define RUN(...) hf_run(&f, NULL, 0, (const char *[]){__VA_ARGS__, NULL})
@@ -64,7 +68,7 @@ static void write_plan(void) {
               "{\"id\":\"spawn-worker\",\"role\":\"work\",\"kind\":\"spawn\",\"needs\":[],\"writes\":[],\"args\":{\"branch\":\"runs-demo-worker\",\"terminal_mode\":\"headless\"}},"
               "{\"id\":\"implement\",\"role\":\"compose\",\"kind\":\"exec\",\"needs\":[\"spawn-worker\"],\"writes\":[],\"args\":{\"head\":\"runs-demo-worker\",\"profile\":\"codex\","
               "\"prompt\":\"Write the report.\\nARTIFACT=Delivered report\\n\",\"result_file\":\"report\",\"timeout\":120}},"
-              "{\"id\":\"spawn-check\",\"role\":\"work\",\"kind\":\"spawn\",\"needs\":[],\"writes\":[],\"args\":{\"branch\":\"runs-demo-check\",\"terminal_mode\":\"headless\"}},"
+              "{\"id\":\"spawn-check\",\"role\":\"work\",\"kind\":\"spawn\",\"needs\":[\"implement\"],\"writes\":[],\"args\":{\"branch\":\"runs-demo-check\",\"terminal_mode\":\"headless\"}},"
               "{\"id\":\"verify\",\"role\":\"verify\",\"kind\":\"exec\",\"needs\":[\"implement\",\"spawn-check\"],\"writes\":[],\"args\":{\"head\":\"runs-demo-check\",\"argv\":[\"sh\",\"check.sh\"],\"timeout\":60}}],"
               "\"deliverables\":[{\"id\":\"report\",\"description\":\"Report\",\"step\":\"implement\",\"output\":\"report\",\"destination\":\"run-artifact\"}],"
               "\"checks\":[{\"id\":\"check\",\"method\":\"executable\",\"definition\":\"Compare expected text\",\"step\":\"verify\",\"input\":\"subject\",\"report\":\"check\",\"deliverable\":\"report\"}],"
@@ -148,7 +152,7 @@ int main(void) {
      * CI runners need far longer than the screen itself. */
     U("1 head (+1 in runs)", 60);
     U("plan run runs-demo", 60);
-    CHECK(!tv_contains(&s, "runs-demo-check"), "run heads start collapsed under their run");
+    CHECK(!tv_contains(&s, "worker   runs-demo-worker"), "run heads start collapsed under their run");
     S("j\r");
     U("worker   runs-demo-worker", 30);
     U("Running step implement on runs-demo-worker", 30);
