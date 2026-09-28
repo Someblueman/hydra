@@ -5,6 +5,8 @@ ROOT="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1
 CLI="$ROOT/bin/hydra"
+# shellcheck disable=SC1091
+. "$ROOT/tests/helpers.sh"
 cleanup() {
     _test_status=$?
     if [ "$_test_status" -ne 0 ]; then
@@ -15,6 +17,7 @@ cleanup() {
         [ -d "$repo/.git" ] || continue
         (cd "$repo" && "$CLI" kill --all --force) >/dev/null 2>&1 || true
     done
+    test_stop_processes_naming "$fixture"
     rm -rf "$fixture"
 }
 trap cleanup 0
@@ -108,6 +111,10 @@ while [ ! -f "$fixture/ended" ]; do
 done
 "$CLI" admission status --json > "$fixture/status"
 grep -q '"reserved":1,"queued":0' "$fixture/status"
+# The lost worker's timeout watchdog must not outlive it: no process of this
+# exec (every one carries its argv) keeps running once the command finished.
+no_lost_owner_processes() { test_processes_naming "$fixture/started" | sed 's/^/still running: /'; [ -z "$(test_processes_naming "$fixture/started")" ]; }
+WAIT_FOR_TIMEOUT=5 wait_for "the lost owner's watchdog and command to exit" no_lost_owner_processes
 for record in "$HYDRA_HOME/admission/$run"-*.request; do
     request="${record##*/}"; request="${request%.request}"
     "$CLI" admission unknown "$request" >/dev/null

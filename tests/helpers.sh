@@ -88,3 +88,27 @@ wait_for() {
         sleep "${WAIT_FOR_INTERVAL:-0.1}"
     done
 }
+
+# PIDs of processes whose arguments name a fixture path. The path travels in
+# the environment so neither ps nor awk lists it in its own arguments.
+test_processes_naming() {
+    ps -eo pid=,args= 2>/dev/null | TEST_PROCESS_PATH="$1" awk 'index($0, ENVIRON["TEST_PROCESS_PATH"]) { print $1 }'
+}
+
+# Signal a process and its descendants, deepest first (default KILL).
+test_signal_tree() (
+    _tst_pid="$1"
+    _tst_signal="${2:-KILL}"
+    for _tst_child in $(ps -eo pid=,ppid= 2>/dev/null | awk -v parent="$_tst_pid" '$2 == parent { print $1 }'); do
+        test_signal_tree "$_tst_child" "$_tst_signal"
+    done
+    kill "-$_tst_signal" "$_tst_pid" 2>/dev/null || true
+)
+
+# Cleanup for every exit path: stop whatever a fixture started (background
+# CLI owners, exec workers, watchdogs and commands), descendants first.
+test_stop_processes_naming() {
+    for _tsp_pid in $(test_processes_naming "$1"); do
+        test_signal_tree "$_tsp_pid" KILL
+    done
+}

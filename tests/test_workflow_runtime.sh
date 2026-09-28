@@ -19,6 +19,7 @@ export HYDRA_NO_SWITCH=1
 . "$(dirname "$0")/helpers.sh"
 
 cleanup() {
+    test_stop_processes_naming "$test_root"
     for _twr_session in workflow-a workflow-b; do
         tmux kill-session -t "$_twr_session" 2>/dev/null || true
     done
@@ -454,12 +455,17 @@ resume_dir="$(run_dir_for "$resume_run")"
 kill -KILL "$resume_runner" 2>/dev/null || true
 resume_worker="$(sed -n '1p' "$resume_dir/steps/resumable/worker-pid")"
 resume_command="$(sed -n '1p' "$resume_dir/steps/resumable/command-pid")"
-kill -TERM "$resume_command" "$resume_worker" 2>/dev/null || true
+# Interrupt the whole step, descendants first. Signalling only the recorded
+# command and worker would orphan the nested hydra exec, its exec worker and
+# its timeout watchdog, which then outlive this test.
+test_signal_tree "$resume_worker" TERM
 resume_wait=0
-while { kill -0 "$resume_command" 2>/dev/null || kill -0 "$resume_worker" 2>/dev/null; } && [ "$resume_wait" -lt 50 ]; do
+while { kill -0 "$resume_command" 2>/dev/null || kill -0 "$resume_worker" 2>/dev/null ||
+        [ -n "$(test_processes_naming "$test_root/resumable.sh")" ]; } && [ "$resume_wait" -lt 50 ]; do
     sleep 0.1
     resume_wait=$((resume_wait + 1))
 done
+assert_equal "" "$(test_processes_naming "$test_root/resumable.sh")" "interrupted step leaves no exec owner, worker, or watchdog"
 resume_base="$(git rev-parse HEAD)"
 git commit --allow-empty -qm advanced-after-interruption
 "$HYDRA_BIN" workflow resume "$resume_run" >/dev/null 2>&1

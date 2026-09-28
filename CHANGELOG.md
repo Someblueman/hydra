@@ -124,6 +124,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replacing Hydra with `ssh`, reports its exit status, and runs the remote
   agent by its resolved absolute path.
 - Headless runs execute the exact executable the profile probe resolved.
+- An `exec` worker's timeout watchdog no longer outlives a worker that was
+  killed: it stopped only with the worker, so after a `SIGKILL` it kept running
+  (with a `sleep` for the whole timeout) and at the deadline signalled a command
+  PID the lost worker could no longer vouch for. It now leaves as soon as its
+  worker is gone and signals only processes that are still that worker's
+  unreaped children.
 
 ## [2.8.0] - 2026-09-27
 

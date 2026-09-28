@@ -33,7 +33,10 @@ fleet additionally needs JSON-C development files and pkg-config at build time.
 - `scripts/run-shell-test.sh` gives every case a private `TMPDIR` and `TMUX_TMPDIR`
   and removes them afterwards (failed cases keep only their log under
   `$BUILD_DIR/test-logs/`), and unsets `TMUX`/`TMUX_PANE`, so running from inside
-  tmux neither skips checks nor touches your server.
+  tmux neither skips checks nor touches your server. A case that leaves processes
+  running whose arguments name its private `TMPDIR` fails with a `LEAK` report
+  (the processes are then stopped); stop what a case starts on every exit path,
+  for example with `test_stop_processes_naming` from `tests/helpers.sh`.
 
 ### Running the app from source (non-obvious caveats)
 - Run it directly as `bin/hydra <command>`; it auto-detects `lib/` relative to the
