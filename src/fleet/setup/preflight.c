@@ -2,7 +2,8 @@
  * strict SSH as `exec /bin/sh -s`; it needs no Hydra, never uses sudo and only
  * prints bounded key<TAB>value lines that are parsed into the frozen
  * `remote-preflight` schema 1: os, arch, home, path, umask, tools{...},
- * hydra{path,version}, pins[], agents[], plus requirements[]. */
+ * hydra{path,version}, pins[], agents[], plus requirements[] and the
+ * search_dirs[] the agent scan used. */
 #include "fleet/setup/setup.h"
 #include "fleet/setup/assets.h"
 #include "fleet/support/files.h"
@@ -14,7 +15,13 @@
 #define PREFLIGHT_LIMIT 65536U
 #define PREFLIGHT_FREE_KB 51200L
 
-static const char script[] =
+const char *const setup_agent_search_dirs[] = {
+    "~/.local/bin", "~/bin", "~/.claude/local", "~/.opencode/bin", "~/.pi/agent/bin", "~/.npm-global/bin", "~/.bun/bin",
+    "~/.volta/bin", "~/.local/share/pnpm", "~/.cargo/bin", "~/.local/share/mise/shims", "~/.asdf/shims",
+    "~/.nvm/versions/node/*/bin", "/usr/local/bin", "/opt/homebrew/bin", "/home/linuxbrew/.linuxbrew/bin", "/snap/bin", NULL
+};
+
+static const char script_head[] =
     "LC_ALL=C; export LC_ALL\n"
     "kv() { printf '%s\\t%s\\n' \"$1\" \"$2\"; }\n"
     "# Executable regular files only: dash's command -v ignores the file mode.\n"
@@ -46,14 +53,27 @@ static const char script[] =
     "for name in claude codex opencode cursor-agent agy pi; do\n"
     "  found=$(tool_path \"$name\")\n"
     "  case \"$found\" in /*) kv agent \"$name\t$found\tPATH\" ;; esac\n"
-    "  for dir in \"$HOME/.local/bin\" \"$HOME/bin\" \"$HOME/.claude/local\" \"$HOME/.opencode/bin\" \"$HOME/.npm-global/bin\" \\\n"
-    "      \"$HOME/.bun/bin\" \"$HOME/.volta/bin\" \"$HOME/.local/share/pnpm\" \"$HOME/.cargo/bin\" \"$HOME/.local/share/mise/shims\" \\\n"
-    "      \"$HOME/.asdf/shims\" \"$HOME\"/.nvm/versions/node/*/bin /usr/local/bin /opt/homebrew/bin \\\n"
-    "      /home/linuxbrew/.linuxbrew/bin /snap/bin; do\n"
+    "  for dir in";
+static const char script_tail[] =
+    "; do\n"
     "    if [ -x \"$dir/$name\" ] && [ ! -d \"$dir/$name\" ]; then kv agent \"$name\t$dir/$name\t$dir\"; fi\n"
     "  done\n"
     "done\n"
     "exit 0\n";
+
+/* The fixed script with the search directories as shell words: "~/" becomes
+ * "$HOME"/ and the rest stays unquoted so the nvm "*" expands (the entries
+ * are constants without spaces or other shell syntax). */
+static int build_script(char *out, size_t size) {
+    size_t used = (size_t)snprintf(out, size, "%s", script_head), i;
+    for (i = 0; setup_agent_search_dirs[i] && used < size; i++) {
+        const char *dir = setup_agent_search_dirs[i];
+        bool home = !strncmp(dir, "~/", 2);
+        used += (size_t)snprintf(out + used, size - used, " %s%s", home ? "\"$HOME\"/" : "", home ? dir + 2 : dir);
+    }
+    if (used < size) used += (size_t)snprintf(out + used, size - used, "%s", script_tail);
+    return used < size ? 0 : -1;
+}
 
 static const char *const tool_names[] = {"git", "tmux", "curl", "wget", "sha256sum", "shasum", "mktemp", "head", "tail", "node", "npm", NULL};
 
@@ -92,6 +112,11 @@ static void add_value(json_object *snapshot, const char *key, char *value) {
     } else if (!strcmp(key, "agent")) add_agent(f_field(snapshot, "agents"), value);
     else if (!f_field(snapshot, key)) f_string_add(snapshot, key, value);
 }
+json_object *setup_search_dirs_json(void) {
+    json_object *dirs = json_object_new_array(); size_t i;
+    for (i = 0; setup_agent_search_dirs[i]; i++) json_object_array_add(dirs, json_object_new_string(setup_agent_search_dirs[i]));
+    return dirs;
+}
 static json_object *snapshot_new(void) {
     json_object *snapshot = json_object_new_object(), *tools = json_object_new_object(), *hydra = json_object_new_object();
     size_t i;
@@ -102,6 +127,7 @@ static json_object *snapshot_new(void) {
     json_object_object_add(snapshot, "tools", tools); json_object_object_add(snapshot, "hydra", hydra);
     json_object_object_add(snapshot, "pins", json_object_new_array());
     json_object_object_add(snapshot, "agents", json_object_new_array());
+    json_object_object_add(snapshot, "search_dirs", setup_search_dirs_json());
     return snapshot;
 }
 /* Parses bounded key<TAB>value output; NULL when it is not preflight output. */
@@ -279,8 +305,8 @@ static json_object *finish(struct setup_ctx *ctx, json_object *snapshot) {
                        "fix the listed prerequisites on the remote host (Hydra never uses sudo), then rerun hydra remote preflight NAME", data);
 }
 json_object *setup_step_preflight(struct setup_ctx *ctx) {
-    struct f_capture cap = {0}; json_object *snapshot;
-    if (f_ssh(&ctx->remote, "exec /bin/sh -s", script, strlen(script), ctx->seconds + 30, false, &cap)) {
+    struct f_capture cap = {0}; json_object *snapshot; char script[4096];
+    if (build_script(script, sizeof(script)) || f_ssh(&ctx->remote, "exec /bin/sh -s", script, strlen(script), ctx->seconds + 30, false, &cap)) {
         f_capture_free(&cap);
         return setup_error(ctx, "transport_failed", "cannot start SSH", NULL, NULL);
     }

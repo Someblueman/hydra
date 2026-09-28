@@ -286,7 +286,9 @@ agent_locate_agents() {
 
 # Directories searched beyond PATH, one per line; a leading ~/ means $HOME.
 # ~/.pi/agent/bin is where the pi installer puts pi when no user bin directory
-# is on PATH. Login shells are never sourced.
+# is on PATH. Login shells are never sourced. Keep this list identical to
+# setup_agent_search_dirs in src/fleet/setup/preflight.c (the remote setup
+# preflight scan); tests/test_remote_setup.sh compares the two.
 agent_locate_search_dirs() {
     # shellcheck disable=SC2088
     printf '%s\n' '~/.local/bin' '~/bin' '~/.claude/local' '~/.opencode/bin' '~/.pi/agent/bin' \

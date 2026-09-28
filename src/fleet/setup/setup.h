@@ -167,6 +167,14 @@ json_object *setup_plan_gate(struct setup_ctx *ctx, const char *step, json_objec
  * f_name. On success a step records done/skipped itself; if it returns ok
  * without doing so the orchestrator records done. */
 json_object *setup_step_trust_key(struct setup_ctx *ctx, const char *fingerprint);                /* hostkey.c */
+/* Directories searched for agents beyond PATH (design §6), NULL-terminated,
+ * in order; a leading "~/" means the remote HOME and "*" matches every nvm
+ * Node version. The single native list: the preflight scan and its fallback
+ * inventory use it, and it must equal the shell's agent_locate_search_dirs
+ * (tests/test_remote_setup.sh compares them). */
+extern const char *const setup_agent_search_dirs[];
+/* setup_agent_search_dirs as a caller-owned JSON array of strings. */
+json_object *setup_search_dirs_json(void);
 json_object *setup_step_preflight(struct setup_ctx *ctx);                                         /* preflight.c */
 json_object *setup_step_provision(struct setup_ctx *ctx, const char *binary, const char *approve); /* provision.c */
 json_object *setup_step_agents(struct setup_ctx *ctx, const char *record);                        /* agents.c */

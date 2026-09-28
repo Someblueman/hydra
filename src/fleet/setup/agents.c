@@ -125,6 +125,7 @@ static json_object *snapshot_inventory(json_object *snapshot) {
     f_string_add(inventory, "schema", "agent-inventory");
     json_object_object_add(inventory, "schema_version", json_object_new_int(1));
     f_string_add(inventory, "source", "preflight");
+    json_object_object_add(inventory, "search_dirs", setup_search_dirs_json());
     for (i = 0; known_agents[i].profile; i++)
         json_object_array_add(agents, snapshot_row(snapshot, known_agents[i].profile, known_agents[i].executable));
     json_object_object_add(inventory, "agents", agents);

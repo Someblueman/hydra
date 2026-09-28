@@ -201,11 +201,19 @@ preflight_cases() {
     has "$out" '"reusable":false'; has "$out" '"name":"hydra","status":"warning"'
     printf '%s' "$version" > "$SETUP_TEST_VERSION_FILE"
     rm -rf "$fixture/remote-full/hydra" "$fixture/remote-home/.local"
-    # Agents in search directories are reported with their source.
-    mkdir -p "$fixture/remote-home/.local/bin"
+    # Agents in search directories are reported with their source, including
+    # the pi installer's ~/.pi/agent/bin.
+    mkdir -p "$fixture/remote-home/.local/bin" "$fixture/remote-home/.pi/agent/bin"
     printf '#!/bin/sh\n' > "$fixture/remote-home/.local/bin/claude"; chmod +x "$fixture/remote-home/.local/bin/claude"
+    printf '#!/bin/sh\n' > "$fixture/remote-home/.pi/agent/bin/pi"; chmod +x "$fixture/remote-home/.pi/agent/bin/pi"
     SETUP_REMOTE_PATH="$fixture/remote-full" run 0 "$out" preflight p1 --json
     has "$out" '"executable":"claude","path":"[^"]*remote-home[^"]*claude","source":"[^"]*","on_path":false'
+    has "$out" '"executable":"pi","path":"[^"]*remote-home\\/.pi\\/agent\\/bin\\/pi"'
+    # The native search list (preflight) is exactly the shell's (agent locate).
+    native_dirs="$(sed -n 's/.*"search_dirs":\[\([^]]*\)\].*/\1/p' "$out" | sed 's#\\/#/#g')"
+    shell_dirs="$(sh -c '. "$1/lib/cmd_lifecycle.sh" && agent_locate_search_dirs' sh "$root" | awk '{ printf "%s\"%s\"", (NR > 1 ? "," : ""), $0 }')"
+    [ -n "$native_dirs" ] && [ "$native_dirs" = "$shell_dirs" ] || fail "search dirs differ: native [$native_dirs] shell [$shell_dirs]"
+    rm -rf "$fixture/remote-home/.pi"
     rm -rf "$fixture/remote-home/.local"
 }
 
