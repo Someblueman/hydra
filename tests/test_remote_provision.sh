@@ -16,7 +16,7 @@ fleet="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
 [ -x "$fleet" ] || { echo 'Build the fleet helper before this test' >&2; exit 1; }
 version="$(sed -n 's/^#define F_VERSION "\(.*\)"$/\1/p' "$root/src/fleet/fleet.h")"
 [ -n "$version" ]
-unset CI HYDRA_NONINTERACTIVE HYDRA_ROOT HYDRA_FLEET_ASSETS_FILE HYDRA_FLEET_ASSET_BASE
+unset CI HYDRA_NONINTERACTIVE HYDRA_ROOT HYDRA_FLEET_ASSETS_FILE HYDRA_FLEET_ASSET_BASE PROVISION_REMOTE_PATH PROVISION_UNAME
 local_os="$(uname -s)" local_arch="$(uname -m)"
 platform="$(printf '%s' "$local_os" | tr '[:upper:]' '[:lower:]')"
 case "$local_arch" in arm64|aarch64) platform="$platform-aarch64" other="linux-x86_64" ;; *) platform="$platform-x86_64" other="linux-aarch64" ;; esac
@@ -35,6 +35,7 @@ while [ $# -gt 1 ]; do shift; done
 printf '%s\n' "$1" >> "$PROVISION_SSH_LOG"
 unset HYDRA_HOME HYDRA_FLEET_BIN HYDRA_ROOT HYDRA_BIN_DIR HYDRA_LIB_DIR HYDRA_BIN_CMD HYDRA_FLEET_ASSETS_FILE HYDRA_FLEET_ASSET_BASE
 HOME="$PROVISION_REMOTE_HOME"; export HOME
+if [ -n "${PROVISION_REMOTE_PATH:-}" ]; then PATH="$PROVISION_REMOTE_PATH"; export PATH; fi
 if [ -n "${PROVISION_UNAME:-}" ]; then PATH="$PROVISION_UNAME:$PATH"; export PATH; fi
 case "$1" in
     *"install '"*)
@@ -208,6 +209,22 @@ cases() {
     seed p9 "$fixture/remote-$mask-e" Linux riscv64
     run 1 "$out" provision p9 --json; has "$out" '"code":"platform_unsupported"'
     [ ! -s "$PROVISION_SSH_LOG" ] || fail "an unavailable asset contacted the remote"
+
+    # On Linux (the only platform preflight accepts without --binary) the real
+    # preflight snapshot feeds provisioning. The remote PATH excludes any
+    # Hydra installed on this host so a fresh pin is planned.
+    if [ "$local_os" = Linux ]; then
+        PROVISION_REMOTE_PATH=/usr/bin:/bin; export PROVISION_REMOTE_PATH
+        private_dirs
+        mkdir -p "$fixture/remote-$mask-f"
+        printf '{"schema_version":1,"kind":"remote-setup","name":"p10","destination":"p10-host","ssh_config":"","steps":{"host_key":{"status":"done"}},"remote":{"target":"p10-host","ssh_config":"","hydra":"hydra","home":"","principal":"","project":"","accepted_host_key":"SHA256:fixture","multiplex":false}}' > "$(state p10)"
+        chmod 600 "$(state p10)"
+        PROVISION_REMOTE_HOME="$fixture/remote-$mask-f"; export PROVISION_REMOTE_HOME
+        run 0 "$out" preflight p10 --json
+        run 3 "$out" provision p10 --json; hash="$(plan_hash "$out")"
+        has "$out" "\"platform\":\"$platform\""
+        run 0 "$out" provision p10 --approve "$hash" --json; has "$out" '"id":"provision","status":"done"'
+    fi
 }
 
 for mask in 022 002; do

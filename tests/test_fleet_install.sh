@@ -62,6 +62,7 @@ while [ "$#" -gt 2 ]; do shift; done
 exec /bin/sh -c "$2"
 SSH
 chmod +x "$fixture/transport/ssh"
+transport_path="$fixture/transport:$PATH"
 (
     unset HYDRA_ROOT HYDRA_FLEET_BIN
     export HOME="$test_home" HYDRA_HOME="$test_home/state" PATH="$fixture/transport:$PATH"
@@ -96,11 +97,11 @@ grep -q '"code":"platform_mismatch"' "$fixture/other-package.json"
 assert_success $? "the refusal names the platform mismatch"
 package_cli --platform solaris-sparc --output "$fixture/bad-package" > "$fixture/bad-package.json"
 assert_failure $? "an unsupported platform name is refused"
+platform_digest="$(sed -n 's/.*"sha256":"\([^"]*\)".*/\1/p' "$fixture/platform-package.json")"
 (
     unset HYDRA_ROOT HYDRA_FLEET_BIN
-    export HOME="$test_home" HYDRA_HOME="$test_home/state" PATH="$fixture/transport:$PATH"
-    digest="$(sed -n 's/.*"sha256":"\([^"]*\)".*/\1/p' "$fixture/platform-package.json")"
-    "$prefix/bin/hydra" fleet bootstrap bootstrap --input "$fixture/platform-package" --sha256 "$digest" > "$fixture/platform-bootstrap.json"
+    HOME="$test_home" HYDRA_HOME="$test_home/state" PATH="$transport_path" \
+        "$prefix/bin/hydra" fleet bootstrap bootstrap --input "$fixture/platform-package" --sha256 "$platform_digest" > "$fixture/platform-bootstrap.json"
 )
 assert_success $? "a platform-bound package bootstraps on its own platform"
 
