@@ -75,18 +75,28 @@ static void pen_begin(struct pen *p, struct app *app, int footer) {
     p->bottom = app->limit - footer;
 }
 
-/* Footer rows: the scroll marker, then the screen's notice or prompt. */
-static void footer(struct app *app, struct pen *p, const char *prompt, enum tv_style tone) {
+/* Footer rows: the scroll marker, an optional typed answer, then the
+ * screen's notice or prompt. The answer sits directly above that notice, so
+ * pen_begin reserves three footer rows for a screen that has one. */
+static void footer_answer(struct app *app, struct pen *p, const char *answer, const char *prompt, enum tv_style tone) {
     struct native_setup *s = app->setup;
     s->more = p->more;
-    app->line = app->limit - 2;
+    app->line = app->limit - (answer ? 3 : 2);
     if (p->more || p->skip) {
         column(app, 0, app->content_width, TV_MUTED, p->more ? (app->ascii ? "v more below: Down or PgDn scrolls" : "\xe2\x86\x93 more below: Down or PgDn scrolls")
                                                                : "Up or PgUp scrolls back");
     }
     app->line++;
+    if (answer) {
+        column(app, 0, app->content_width, TV_SELECTED, answer);
+        app->line++;
+    }
     column(app, 0, app->content_width, s->notice[0] ? TV_WARNING : tone, s->notice[0] ? s->notice : prompt);
     app->line++;
+}
+
+static void footer(struct app *app, struct pen *p, const char *prompt, enum tv_style tone) {
+    footer_answer(app, p, NULL, prompt, tone);
 }
 
 /* ---- Form ---- */
@@ -254,19 +264,17 @@ static void render_trust(struct app *app, struct native_setup *s) {
     snprintf(text, sizeof(text), "TRUST THE HOST KEY OF %.120s?", s->name);
     title(app, TV_STRONG, text);
     pen_begin(&p, app, 3);
-    snprintf(text, sizeof(text), "Hydra has not connected to %.200s before. Compare this fingerprint with one you got from the machine itself, "
-             "for example from its console or your provider's dashboard.", e->destination[0] ? e->destination : s->name);
+    /* Sized so the whole explanation fits above the prompt at 80x24. */
+    snprintf(text, sizeof(text), "Hydra has not connected to %.200s before. Compare this fingerprint with one read on the "
+             "machine itself.", e->destination[0] ? e->destination : s->name);
     pen_text(&p, 0, TV_BASE, text);
     pen_text(&p, 0, TV_BASE, "");
     plan_rows(&p, e);
     pen_text(&p, 0, TV_BASE, "");
-    pen_text(&p, 0, TV_BASE, "If it matches, type yes and press Enter: Hydra appends exactly this key to the file above. "
-             "If this key ever changes, Hydra refuses to connect instead of replacing it.");
-    app->line = app->limit - 3;
+    pen_text(&p, 0, TV_BASE, "If they match, type yes: Hydra appends exactly one line to the file above.");
+    pen_text(&p, 0, TV_BASE, "If this key ever changes, Hydra refuses to connect rather than replace it.");
     snprintf(prompt, sizeof(prompt), "Type yes to trust this key: %s%s", s->typed, "_");
-    column(app, 0, app->content_width, TV_SELECTED, prompt);
-    app->line++;
-    footer(app, &p, "Anything but yes leaves the key untrusted. Esc declines.", TV_MUTED);
+    footer_answer(app, &p, prompt, "Anything but yes leaves the key untrusted. Esc declines.", TV_MUTED);
 }
 
 static void plan_heading(const struct native_setup *s, char *out, size_t size) {

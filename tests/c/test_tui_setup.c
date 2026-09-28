@@ -308,10 +308,30 @@ static void hub_case(struct app *app, int cols, int rows) {
     check(strstr(frame, "> + Add a host") && strstr(frame, "Install Hydra: needs your approval") && strstr(frame, "A add a host"), name);
 }
 
+/* The host-key screen explains itself in full without scrolling, and the
+ * typed answer sits on the row directly above its notice. */
+static void trust_fit_case(struct app *app, int cols, int rows) {
+    char frame[65536], name[128];
+    const char *prompt, *next;
+    struct native_setup *s = app->setup;
+    app->cols = cols; app->rows = rows;
+    check(load("host-key-approval.json", s->current, 3), "host-key fixture loads");
+    s->open = true; s->notice[0] = '\0'; s->scroll = 0; s->typed[0] = '\0';
+    s->screen = SETUP_SCREEN_TRUST_KEY;
+    check(render_capture(app, frame, sizeof(frame)), "host-key screen renders");
+    prompt = strstr(frame, "Type yes to trust this key: _");
+    next = prompt ? strchr(prompt, '\n') : NULL;
+    snprintf(name, sizeof(name), "host-key screen at %dx%d fits its explanation above an adjacent prompt", cols, rows);
+    check(!s->more && !strstr(frame, "more below") && strstr(frame, "machine itself") &&
+          strstr(frame, "appends exactly one line") && strstr(frame, "refuses to connect rather than replace it.") &&
+          next && strstr(next + 1, "Anything but yes") && strchr(next + 1, '\n') > strstr(next + 1, "Anything but yes"), name);
+}
+
 static void screens_at(struct app *app, int cols, int rows) {
     size_t i;
     for (i = 0; i < sizeof(screens) / sizeof(screens[0]); i++) screen_case(app, &screens[i], cols, rows);
     hub_case(app, cols, rows);
+    trust_fit_case(app, cols, rows);
 }
 
 /* Keys that must never run anything: declining, wrong confirmation text and
