@@ -63,8 +63,10 @@ class Journey:
             LANG="C",
             TERM="xterm-256color",
         )
+        # Private like a real user's home and Hydra state: under a
+        # group-writable umask (Ubuntu's 002) Hydra refuses shared state.
         for key in ("HOME", "HYDRA_HOME", "TMUX_TMPDIR"):
-            Path(self.env[key]).mkdir()
+            Path(self.env[key]).mkdir(mode=0o700)
         self.proof: list[dict] = []
         self.failures: list[str] = []
         self.observer: Observer | None = None
