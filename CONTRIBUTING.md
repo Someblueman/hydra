@@ -29,10 +29,13 @@ For the first-run path, use `make smoke-onboarding`.
 `make test` and `make test-fleet` use four workers by default. Set `TEST_JOBS=1`
 for serial diagnosis or choose another bounded worker count. Recursive runs
 share an existing Make jobserver rather than starting another worker pool.
-Shell cases have private temporary directories and tmux sockets; the dashboard
-case runs serially because it uses shared fixture paths. Full per-case output
-is retained under `build/test-logs/` (or the selected `BUILD_DIR`), with failures
-also printed to the terminal.
+Shell cases have private temporary directories and tmux sockets and start
+slowest first. Full per-case output is retained under `build/test-logs/` (or the
+selected `BUILD_DIR`), with failures also printed to the terminal. Run one file
+with `make test-one T=<name>` (for `tests/test_<name>.sh`); see `AGENTS.md`.
+Tests create temporary paths with `test_mktemp_dir`/`test_mktemp_file` (or
+`mktemp -d "${TMPDIR:-/tmp}/..."`) and wait for asynchronous state with
+`wait_for` from `tests/helpers.sh`, never a fixed `sleep`.
 
 Start with `make test-fast` for the selected fast subset. Use focused targets for
 localized edits and `make test-all`, `make sanitize`, and `make quality-c` for the
