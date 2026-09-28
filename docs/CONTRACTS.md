@@ -358,6 +358,19 @@ without shell interpolation, and delegates head/workflow mutations to the local
 shell CLI. Fleet's alias, package, and inert bundle stores are distinct from live
 state v2. Lost mutation responses never cause automatic replay.
 
+Install package schema 1 carries `bin/hydra`, `lib/hydra/*.sh`, the fleet helper
+and licenses, bound by the package SHA-256, and installs only into one exact prefix
+(default `~/.local/share/hydra/fleet/DIGEST`); an existing prefix is verified, never
+overwritten, and the staged shell and handshake must report exactly the helper's
+version. Since 2.9.0 an optional `platform` (`{"os":"linux"|"darwin","arch":
+"x86_64"|"aarch64"}`) makes bootstrap refuse a different remote `uname` before the
+package helper runs, and the installer refuses it again; packages without it still
+install. Release helpers `hydra-fleet-X.Y.Z-linux-{x86_64,aarch64}` are static,
+reproducibly built, and pinned in `release/fleet-assets.tsv`, installed as
+`share/hydra/fleet-assets.tsv`; that local table is the only trust anchor for
+provisioning downloads. Helpers from `--binary` or the local build are labelled
+unpinned in the reviewed plan.
+
 Task package schema 1 binds an
 exact Git bundle, selected inputs, work, destination, completion policy, and limits
 for local preparation and validation. Task protocol 1 advertises `task-accept`

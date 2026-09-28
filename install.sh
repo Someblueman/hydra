@@ -52,6 +52,7 @@ esac
 BIN_DIR="${DESTDIR}${PREFIX}/bin"
 LIB_DIR="${DESTDIR}${PREFIX}/lib/hydra"
 CORE_DIR="${DESTDIR}${PREFIX}/libexec/hydra"
+SHARE_DIR="${DESTDIR}${PREFIX}/share"
 CORE_MODE="${HYDRA_INSTALL_CORE:-auto}"
 TUI_MODE="${HYDRA_INSTALL_TUI:-auto}"
 
@@ -124,6 +125,21 @@ for lib_file in "$SRC_LIB"/*.sh; do
         cp "$lib_file" "$LIB_DIR/$filename"
     fi
 done
+
+# Licenses and the pinned fleet release digests (the local trust anchor for
+# remote provisioning) ship with the installed prefix.
+install_shared() {
+    source_file="$1" destination="$2"
+    [ -f "$source_file" ] || return 0
+    mkdir -p "$(dirname "$destination")"
+    cp "$source_file" "$destination.tmp"
+    chmod 644 "$destination.tmp"
+    mv -f "$destination.tmp" "$destination"
+}
+echo "Installing licenses and fleet asset digests..."
+install_shared "$SCRIPT_DIR/LICENSE" "$SHARE_DIR/licenses/hydra/LICENSE"
+install_shared "$SCRIPT_DIR/docs/licenses/json-c.txt" "$SHARE_DIR/licenses/hydra/json-c.txt"
+install_shared "$SCRIPT_DIR/release/fleet-assets.tsv" "$SHARE_DIR/hydra/fleet-assets.tsv"
 
 core_hash() {
     if command -v sha256sum >/dev/null 2>&1; then
