@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the approved line to known_hosts; `preflight` reports platform, tools and existing
   installs read-only and without sudo. Help and bash, zsh and fish completions
   include the new commands.
+- `hydra remote provision NAME` installs Hydra into a private pinned prefix
+  (`~/.local/share/hydra/fleet/DIGEST`) on the remote, never changing PATH or
+  other installs. The plan names the platform, exact version, helper digest and
+  whether it is pinned (release asset) or unpinned (`--binary FILE`, or this
+  host's helper for an identical platform). Release assets are downloaded with
+  `curl -fL`, checked against the digests shipped in `fleet-assets.tsv` and
+  cached privately; a mismatching download is discarded. A same-version install
+  or an identical pin is reused without changes, and an interrupted install is
+  reconciled on rerun instead of repeated.
+- Releases carry static Linux `hydra-fleet` helpers for x86_64 and aarch64,
+  reproduced by CI (`make build-fleet-static`) and listed in `SHA256SUMS`.
+- `hydra fleet package --platform OS-ARCH` binds a package to a platform and
+  checks the helper's executable header; packages can also be built from an
+  installed prefix. Bootstrap refuses a remote with a different `uname` before
+  running the package helper (`platform_mismatch`).
+- `install.sh` installs `share/licenses/hydra/` and
+  `share/hydra/fleet-assets.tsv`; `uninstall.sh` removes them.
+
+### Changed
+
+- The fleet installer requires the packaged `bin/hydra` and its handshake to
+  report exactly the helper's own version instead of any 2.x release.
 
 ## [2.8.0] - 2026-09-27
 
