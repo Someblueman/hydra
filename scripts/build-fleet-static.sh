@@ -10,6 +10,8 @@
 # INTERP or NEEDED entries) and built with -ffile-prefix-map,
 # -Wl,--build-id=none and SOURCE_DATE_EPOCH from the source commit, so two
 # builds of the same tree in the same image produce identical bytes.
+# On success the helper's path is the only line on stdout (build output and
+# its digest go to stderr); any failure exits non-zero with the error shown.
 #
 # The same script runs inside the container as:
 #   build-fleet-static.sh --inside [--dry-run] ARCH OUTDIR
@@ -64,8 +66,10 @@ host_build() {
     docker run --rm --platform "$platform" \
         -e SOURCE_DATE_EPOCH="$epoch" -e HOST_OWNER="$(id -u):$(id -g)" \
         -v "$root:/src:ro" -v "$out:/out" \
-        "$ALPINE_IMAGE" sh /src/scripts/build-fleet-static.sh --inside "$arch" /out
-    printf '%s\n' "$out/hydra-fleet-linux-$arch"
+        "$ALPINE_IMAGE" sh /src/scripts/build-fleet-static.sh --inside "$arch" /out >&2
+    binary="$out/hydra-fleet-linux-$arch"
+    [ -f "$binary" ] || die "the build produced no $binary"
+    printf '%s\n' "$binary"
 }
 
 # ---- Inside: fetch and verify JSON-C, then build with the Makefile ----

@@ -298,8 +298,8 @@ jobs:
 
     - name: Build twice in the pinned image and compare
       run: |
-        first="$(sh scripts/build-fleet-static.sh ${{ matrix.arch }} "$RUNNER_TEMP/static-1" | tail -n 1)"
-        second="$(sh scripts/build-fleet-static.sh ${{ matrix.arch }} "$RUNNER_TEMP/static-2" | tail -n 1)"
+        first="$(sh scripts/build-fleet-static.sh ${{ matrix.arch }} "$RUNNER_TEMP/static-1")"
+        second="$(sh scripts/build-fleet-static.sh ${{ matrix.arch }} "$RUNNER_TEMP/static-2")"
         cmp "$first" "$second"
         mkdir -p dist
         cp "$first" "$first.sha256" "$first.buildinfo" dist/

@@ -37,7 +37,7 @@ jobs:
     - name: Rebuild and verify against the pinned table
       run: |
         version="${GITHUB_REF_NAME#v}"
-        binary="$(sh scripts/build-fleet-static.sh ${{ matrix.arch }} "$RUNNER_TEMP/static" | tail -n 1)"
+        binary="$(sh scripts/build-fleet-static.sh ${{ matrix.arch }} "$RUNNER_TEMP/static")"
         if readelf -lW "$binary" | grep INTERP; then echo 'dynamic interpreter present' >&2; exit 1; fi
         if readelf -dW "$binary" | grep NEEDED; then echo 'shared libraries needed' >&2; exit 1; fi
         test "$("$binary" --version)" = 'Hydra fleet protocol 1'
