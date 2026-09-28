@@ -61,6 +61,18 @@ static bool called(const char *text) {
     return strstr(log, text) != NULL;
 }
 
+/* Calls whose line starts with prefix. */
+static int calls(const char *prefix) {
+    char path[4096], log[65536];
+    const char *line;
+    int count = 0;
+    tv_format(path, sizeof(path), "%s/calls.log", state);
+    tv_read(path, log, sizeof(log));
+    for (line = log; line && *line; line = strchr(line, '\n') ? strchr(line, '\n') + 1 : NULL)
+        if (!strncmp(line, prefix, strlen(prefix))) count++;
+    return count;
+}
+
 static void capture(struct tv_session *s, const char *name) {
     char path[4096];
     /* Let an incremental repaint finish so the evidence is a whole frame. */
@@ -107,14 +119,25 @@ static void trust_key(struct tv_session *s) {
     tv_until(s, "MISSING REQUIREMENTS ON ovh", 6);
     tv_format(expected, sizeof(expected), "trust-key ovh --fingerprint %s --json", fingerprint);
     CHECK(called(expected), "typed yes trusts exactly the shown fingerprint");
+    CHECK(called("preflight ovh --json"), "the guided flow checks requirements as their own step");
 }
 
-static void requirements(struct tv_session *s) {
+/* Missing tmux stops the guided run (heads cannot run there) until Enter;
+ * other warnings, such as a group-writable umask, do not. */
+static void requirements(struct tv_session *s, bool no_tmux) {
     see(s, "BLOCKS"); see(s, "install git (for example");
     capture(s, "05-preflight-blocked");
     flag("git_fixed");
     tv_send(s, "\r");
+    if (no_tmux) {
+        tv_until(s, "HEADS CANNOT RUN ON ovh YET", 6);
+        see(s, "fix: sudo apt-get install tmux"); see(s, "Enter continues setup anyway");
+        CHECK(!called("setup ovh --json"), "the pause runs nothing further");
+        capture(s, "05b-heads-paused");
+        tv_send(s, "\r");
+    }
     tv_until(s, "REVIEW: INSTALL HYDRA ON ovh", 6);
+    CHECK(no_tmux || !tv_contains(s, "HEADS CANNOT RUN"), "other warnings do not pause setup");
     see(s, "pinned: its digest is recorded");
     capture(s, "06-provision-plan");
 }
@@ -177,12 +200,12 @@ static void sign_in(struct tv_session *s, bool fail_once) {
 
 static void journey(int cols, int rows, bool fail_once) {
     struct tv_session s;
-    const char *flags[] = {"needs_git", fail_once ? "fail_sign_in" : NULL, NULL};
+    const char *flags[] = {"needs_git", fail_once ? "fail_sign_in" : "no_tmux", NULL};
     reset(flags);
     launch(&s, cols, rows);
     add_host(&s);
     trust_key(&s);
-    requirements(&s);
+    requirements(&s, !fail_once);
     provision(&s);
     install_agent(&s);
     sign_in(&s, fail_once);
@@ -190,6 +213,24 @@ static void journey(int cols, int rows, bool fail_once) {
     tv_until(&s, "+ Add a host", 4);
     tv_until(&s, "set up", 6);
     capture(&s, "14-hosts-after");
+    tv_close(&s, "q", 0, 0);
+}
+
+/* A host key that is already known lets the guided run pass preflight on its
+ * own; the requirements are still checked and missing tmux still pauses,
+ * then Enter shows the plan the guided run returned without rerunning it. */
+static void known_key(int cols, int rows) {
+    struct tv_session s;
+    const char *flags[] = {"known_key", "no_tmux", NULL};
+    reset(flags);
+    launch(&s, cols, rows);
+    add_host(&s);
+    tv_until(&s, "HEADS CANNOT RUN ON ovh YET", 6);
+    CHECK(called("preflight ovh --json"), "a preflight passed inside the guided run is checked");
+    capture(&s, "21-known-key-paused");
+    tv_send(&s, "\r");
+    tv_until(&s, "REVIEW: INSTALL HYDRA ON ovh", 6);
+    CHECK(calls("setup ovh ") == 1, "continuing shows the kept plan without rerunning setup");
     tv_close(&s, "q", 0, 0);
 }
 
@@ -238,11 +279,13 @@ int main(void) {
     journey(80, 24, false);
     changed_key(140, 40);
     changed_key(80, 24);
+    known_key(80, 24);
     {
         const char *remove[] = {"rm", "-rf", base, NULL};
         tv_command_ok(NULL, remove);
     }
-    puts("PASS remote setup: add host, typed-yes key trust, blocking requirements, declined and approved provision, "
-         "agent choice, installer and sign-in terminal hand-off (with a failed attempt), done; changed key refused; 140x40 and 80x24");
+    puts("PASS remote setup: add host, typed-yes key trust, blocking requirements, a missing-tmux pause, declined and "
+         "approved provision, agent choice, installer and sign-in terminal hand-off (with a failed attempt), done; changed "
+         "key refused; known key checked; 140x40 and 80x24");
     return 0;
 }

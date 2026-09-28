@@ -28,7 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   work) lists unfinished setups (from `hydra remote setup list --json`) and `A`
   starts one from an SSH destination. Hydra runs the same `hydra remote setup`
   commands, shows each step, requirement (with its suggested fix) and plan, needs
-  a typed `yes` for a new host key and `y` for other plans, and never offers to
+  a typed `yes` for a new host key and `y` for other plans, pauses on a missing or
+  pre-3.0 tmux (heads cannot run there; Enter continues anyway) while other
+  preflight warnings only show in the step list, and never offers to
   accept a changed key. After provisioning it shows the agent inventory so you can
   pick agents to install (after reviewing the installer plan) or sign in to; both
   run on your terminal, and a failure is explained from the error the CLI recorded.

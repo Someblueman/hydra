@@ -173,7 +173,11 @@ approves; `n` or Esc declines and runs nothing). Hydra then reruns exactly the
 command the CLI returned, and only if its `--approve` hash or `--fingerprint` is the
 plan on screen. A changed or ambiguous host key shows the manual `ssh-keygen`
 recovery and has no accept action. Blocking requirements are listed with their
-suggested fixes; Enter checks again once they are installed. After provisioning
+suggested fixes; Enter checks again once they are installed. Of the warnings only a
+missing or older tmux pauses setup, because heads cannot run on the host without
+tmux 3.0: the requirements are shown with the suggested fix and Enter continues
+anyway. Other warnings (curl, a group-writable umask, ...) do not stop setup and
+stay visible in the step list. After provisioning
 the agent inventory is shown: choose "Install A" to review that agent's installer
 plan, "Sign in to A" for one already there, or Continue setup without agents
 (Enter on the done "Find agents" step shows the inventory again later). Agent

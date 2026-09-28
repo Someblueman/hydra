@@ -343,6 +343,15 @@ bool setup_status_finished(const char *status) {
     return !strcmp(status, "done") || !strcmp(status, "skipped");
 }
 
+const struct setup_requirement *setup_heads_requirement(const struct setup_envelope *e) {
+    size_t i;
+    for (i = 0; i < e->requirement_count; i++) {
+        const struct setup_requirement *r = &e->requirements[i];
+        if (!strcmp(r->name, "tmux") && strcmp(r->status, "ok")) return r;
+    }
+    return NULL;
+}
+
 const struct setup_step *setup_open_step(const struct setup_envelope *e) {
     size_t i;
     for (i = 0; i < e->step_count; i++) if (!setup_status_finished(e->steps[i].status)) return &e->steps[i];

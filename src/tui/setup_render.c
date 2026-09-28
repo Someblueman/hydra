@@ -367,12 +367,32 @@ static void requirement_row(struct app *app, struct pen *p, const struct setup_r
     if (r->command[0]) { snprintf(fix, sizeof(fix), "fix: %s", r->command); h.label = ""; pen_hanging(p, &h, fix, TV_STRONG); }
 }
 
+/* A guided run stopped here because heads cannot run on the host: say so,
+ * list the rows that are not ok first, and let Enter continue anyway. */
+static void render_paused(struct app *app, struct native_setup *s) {
+    const struct setup_envelope *e = s->current;
+    struct pen p;
+    char text[300];
+    size_t i;
+    snprintf(text, sizeof(text), "HEADS CANNOT RUN ON %.120s YET", s->name);
+    title(app, TV_WARNING, text);
+    pen_begin(&p, app, 2);
+    pen_text(&p, 0, TV_BASE, "This machine has no tmux 3.0 or newer, so Hydra cannot run heads there. Setup can still "
+                             "finish; install tmux yourself (Hydra never uses sudo) before starting work on it.");
+    pen_text(&p, 0, TV_BASE, "");
+    pen_text(&p, 2, TV_MUTED, app->content_width < 70 ? "STATUS  REQUIREMENT" : "STATUS   REQUIREMENT     DETAIL");
+    for (i = 0; i < e->requirement_count; i++) if (strcmp(e->requirements[i].status, "ok")) requirement_row(app, &p, &e->requirements[i]);
+    for (i = 0; i < e->requirement_count; i++) if (!strcmp(e->requirements[i].status, "ok")) requirement_row(app, &p, &e->requirements[i]);
+    footer(app, &p, "Enter continues setup anyway   Esc back", TV_STRONG);
+}
+
 static void render_preflight(struct app *app, struct native_setup *s) {
     const struct setup_envelope *e = s->current;
     struct pen p;
     char text[300];
     size_t i;
     bool blocked = blocking(e) || !strcmp(e->code, "prerequisite_missing");
+    if (s->paused) { render_paused(app, s); return; }
     snprintf(text, sizeof(text), "%s ON %.120s", blocked ? "MISSING REQUIREMENTS" : "REQUIREMENTS", s->name);
     title(app, blocked ? TV_WARNING : TV_STRONG, text);
     pen_begin(&p, app, 2);
@@ -534,6 +554,8 @@ const char *native_setup_hints(const struct app *app, bool narrow) {
         snprintf(app->setup->hint, sizeof(app->setup->hint), "%s%sEsc back  Up/Down scroll", x.action ? x.action : "", x.action ? "  " : "");
         return app->setup->hint;
     }
+    if (screen == SETUP_SCREEN_PREFLIGHT && app->setup->paused)
+        return narrow ? "Enter continue anyway  Esc back" : "Enter continue anyway  Esc back  Up/Down scroll";
     if (screen <= SETUP_SCREEN_NONE || screen > SETUP_SCREEN_DONE) screen = SETUP_SCREEN_STEPS;
     return hints[screen][narrow ? 1 : 0];
 }

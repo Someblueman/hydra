@@ -25,8 +25,12 @@ struct native_setup *native_setup_state(struct app *app) {
     app->setup->current = calloc(1, sizeof(struct setup_envelope));
     app->setup->incoming = calloc(1, sizeof(struct setup_envelope));
     app->setup->sweep_result = calloc(1, sizeof(struct setup_envelope));
+    app->setup->held = calloc(1, sizeof(struct setup_envelope));
     app->setup->job.fd = app->setup->sweep.fd = -1;
-    if (!app->setup->current || !app->setup->incoming || !app->setup->sweep_result) { native_setup_destroy(app); return NULL; }
+    if (!app->setup->current || !app->setup->incoming || !app->setup->sweep_result || !app->setup->held) {
+        native_setup_destroy(app);
+        return NULL;
+    }
     tv_input_init(&app->setup->input);
     return app->setup;
 }
@@ -37,7 +41,7 @@ void native_setup_destroy(struct app *app) {
     /* Never interrupt a remote change: the child finishes and records it. */
     setup_capture_release(&s->job);
     setup_capture_release(&s->sweep);
-    free(s->current); free(s->incoming); free(s->sweep_result);
+    free(s->current); free(s->incoming); free(s->sweep_result); free(s->held);
     free(s); app->setup = NULL;
 }
 
@@ -59,7 +63,7 @@ static bool job_start(struct native_setup *s, enum setup_job kind, const struct 
 }
 
 /* hydra remote setup NAME [DEST [--ssh-config FILE]] --json */
-static void guided_start(struct app *app, struct native_setup *s, bool first) {
+static void guided_run(struct app *app, struct native_setup *s, bool first) {
     struct setup_argv a = {{NULL}, 0};
     const struct setup_step *open = setup_open_step(s->current);
     argv_add(&a, app->hydra); argv_add(&a, "remote"); argv_add(&a, "setup"); argv_add(&a, s->name);
@@ -78,11 +82,31 @@ static void status_start(struct app *app, struct native_setup *s, enum setup_job
     (void)job_start(s, kind, &a, kind == SETUP_JOB_RETURNED ? s->handoff_step : "");
 }
 
-/* Read-only views of one step: hydra remote preflight|agents NAME --json. */
-static void inspect_start(struct app *app, struct native_setup *s, const char *word, const char *step) {
+/* One step's own command: hydra remote preflight|agents NAME --json. */
+static bool step_start(struct app *app, struct native_setup *s, enum setup_job kind, const char *word) {
     struct setup_argv a = {{NULL}, 0};
     argv_add(&a, app->hydra); argv_add(&a, "remote"); argv_add(&a, word); argv_add(&a, s->name); argv_add(&a, "--json");
-    (void)job_start(s, SETUP_JOB_INSPECT, &a, step);
+    return job_start(s, kind, &a, word);
+}
+
+/* Read-only views of one step. */
+static void inspect_start(struct app *app, struct native_setup *s, const char *word) {
+    (void)step_start(app, s, SETUP_JOB_INSPECT, word);
+}
+
+/* The guided preflight runs as its own command so its requirements are
+ * known before setup continues. hold keeps a guided result that already
+ * passed preflight, shown again once the requirements allow it. */
+static void preflight_start(struct app *app, struct native_setup *s, bool hold) {
+    if (hold) memcpy(s->held, s->current, sizeof(*s->held));
+    s->held_valid = step_start(app, s, SETUP_JOB_PREFLIGHT, "preflight") && hold;
+}
+
+/* Continues the guided flow; an open preflight runs as its own step. */
+static void guided_start(struct app *app, struct native_setup *s, bool first) {
+    const struct setup_step *open = first ? NULL : setup_open_step(s->current);
+    if (open && !strcmp(open->id, "preflight")) preflight_start(app, s, false);
+    else guided_run(app, s, first);
 }
 
 /* The CLI's own next command, with argv[0] replaced by this Hydra. */
@@ -140,7 +164,7 @@ static void no_result(struct native_setup *s, int exit_status) {
 
 static void show(struct native_setup *s) {
     s->screen = setup_screen_for(s->current);
-    s->scroll = 0; s->selected = 0; s->typed[0] = '\0'; s->typed_cursor = 0;
+    s->scroll = 0; s->selected = 0; s->typed[0] = '\0'; s->typed_cursor = 0; s->paused = false;
     if (s->screen == SETUP_SCREEN_HANDOFF && !handoff_prepare(s)) refuse(s);
 }
 
@@ -152,7 +176,7 @@ static bool automatic_continue(struct app *app, struct native_setup *s) {
          * inventory once and let the user choose installers and sign-ins. */
         if (!strcmp(s->current->next_step, "agents") && !s->agents_offered) {
             s->agents_offered = true;
-            inspect_start(app, s, "agents", "agents");
+            inspect_start(app, s, "agents");
         } else guided_start(app, s, false);
         if (s->job.active) return true;
     } else setup_notice(s, "Setup paused; Continue setup resumes it");
@@ -195,8 +219,42 @@ static void returned_result(struct app *app, struct native_setup *s) {
     returned_failure(s, step);
 }
 
+/* Shows the guided result kept while its preflight was checked. */
+static void show_held(struct native_setup *s) {
+    struct setup_envelope *swap = s->current;
+    s->current = s->held; s->held = swap; s->held_valid = false;
+    show(s);
+}
+
+/* The guided preflight: continue unless heads could not run on the host.
+ * Other warnings (curl, umask, ...) stay visible in the step list. */
+static void preflight_result(struct app *app, struct native_setup *s) {
+    bool held = s->held_valid;
+    s->held_valid = false;
+    if (s->current->ok && !setup_heads_requirement(s->current)) {
+        if (held) show_held(s);
+        else guided_run(app, s, false);
+        return;
+    }
+    show(s);
+    s->paused = s->current->ok;
+    s->held_valid = held && s->paused;
+}
+
+/* A guided run that passed preflight itself (a host key that was already
+ * trusted) has not shown the requirements yet. */
+static bool preflight_passed(const struct native_setup *s) {
+    const struct setup_step *now = find_step(s->current, "preflight"), *before = find_step(s->incoming, "preflight");
+    return now && !strcmp(now->status, "done") && !(before && setup_status_finished(before->status));
+}
+
 static void job_result(struct app *app, struct native_setup *s, enum setup_job kind) {
     if (kind == SETUP_JOB_RETURNED) { returned_result(app, s); return; }
+    if (kind == SETUP_JOB_PREFLIGHT) { preflight_result(app, s); return; }
+    if (kind == SETUP_JOB_GUIDED && preflight_passed(s)) {
+        preflight_start(app, s, true);
+        if (s->job.active) return;
+    }
     if (kind == SETUP_JOB_APPROVED && s->current->ok && automatic_continue(app, s)) return;
     show(s);
     if (kind == SETUP_JOB_APPROVED && s->screen == SETUP_SCREEN_STEPS) setup_notice(s, "Approved step finished");
@@ -300,8 +358,8 @@ static void step_enter(struct app *app, struct native_setup *s) {
     const struct setup_step *step;
     if (!s->selected || s->selected > s->current->step_count) { guided_start(app, s, false); return; }
     step = &s->current->steps[s->selected - 1];
-    if (!strcmp(step->id, "preflight")) inspect_start(app, s, "preflight", "preflight");
-    else if (!strcmp(step->id, "agents") && setup_status_finished(step->status)) inspect_start(app, s, "agents", "agents");
+    if (!strcmp(step->id, "preflight")) inspect_start(app, s, "preflight");
+    else if (!strcmp(step->id, "agents") && setup_status_finished(step->status)) inspect_start(app, s, "agents");
     else setup_notice(s, "Continue setup (the first row) runs the next step");
 }
 
@@ -345,6 +403,13 @@ static void error_enter(struct app *app, struct native_setup *s) {
     guided_start(app, s, false);
 }
 
+/* Enter on requirements: after a pause, continue anyway (showing the kept
+ * result when there is one); otherwise check again or continue. */
+static void preflight_enter(struct app *app, struct native_setup *s) {
+    if (s->paused && s->held_valid) { show_held(s); return; }
+    guided_start(app, s, false);
+}
+
 static void trust_enter(struct app *app, struct native_setup *s) {
     if (!strcmp(s->typed, "yes")) approve(app, s);
     else setup_notice(s, "Type yes (the whole word) to trust this key, or press Esc to decline");
@@ -358,6 +423,7 @@ static void enter(struct app *app, struct native_setup *s) {
         case SETUP_SCREEN_TRUST_KEY: trust_enter(app, s); break;
         case SETUP_SCREEN_PLAN: setup_notice(s, "Press y to approve this exact plan, or n / Esc to decline"); break;
         case SETUP_SCREEN_HANDOFF: handoff_start(app, s); break;
+        case SETUP_SCREEN_PREFLIGHT: preflight_enter(app, s); break;
         case SETUP_SCREEN_ERROR: error_enter(app, s); break;
         case SETUP_SCREEN_DONE: close_flow(app, s); break;
         case SETUP_SCREEN_RUNNING: break;

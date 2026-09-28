@@ -76,6 +76,10 @@ void setup_step_label(const char *id, char *out, size_t size);
 const char *setup_status_label(const char *status);
 const char *setup_status_mark(const char *status, bool ascii);
 bool setup_status_finished(const char *status);
+/* The requirement that decides whether heads can run on the host (tmux 3.0
+ * or newer) when preflight reported it as not ok; NULL otherwise. Keyed on
+ * the requirement name, never on its detail text. */
+const struct setup_requirement *setup_heads_requirement(const struct setup_envelope *e);
 /* First step that is neither done nor skipped, or NULL. */
 const struct setup_step *setup_open_step(const struct setup_envelope *e);
 /* One-line summary for a host list row. */

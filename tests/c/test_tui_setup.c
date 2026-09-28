@@ -88,6 +88,7 @@ static const struct expectation expectations[] = {
     {"status-provision-pending.json", "", SETUP_SCREEN_STEPS, "provision", "", true, 0},
     {"preflight-blocked.json", "prerequisite_missing", SETUP_SCREEN_PREFLIGHT, "preflight", "", true, 1},
     {"preflight-ok.json", "", SETUP_SCREEN_PREFLIGHT, "provision", "", true, 0},
+    {"preflight-tmux.json", "", SETUP_SCREEN_PREFLIGHT, "provision", "", true, 0},
     {"provision-approval.json", "approval_required", SETUP_SCREEN_PLAN, "provision", "provision", true, 3},
     {"provision-approval-unpinned.json", "approval_required", SETUP_SCREEN_PLAN, "provision", "provision", true, 3},
     {"provision-done.json", "", SETUP_SCREEN_STEPS, "agents", "", true, 0},
@@ -122,6 +123,10 @@ static void envelope_cases(struct setup_envelope *e) {
           !strcmp(e->requirements[1].command, "sudo apt-get install git") && !e->requirements[0].command[0] &&
           !e->requirements[7].blocking && !strcmp(e->requirements[7].status, "warning"),
           "recorded preflight rows keep status, blocking and the suggestion field");
+    check(load("preflight-tmux.json", e, 0) && setup_heads_requirement(e) &&
+          !strcmp(setup_heads_requirement(e)->command, "sudo apt-get install tmux") &&
+          load("preflight-ok.json", e, 0) && !setup_heads_requirement(e),
+          "only a tmux requirement that is not ok means heads cannot run on the host");
     check(load("agents.json", e, 0) && e->agent_count == 9 && !strcmp(e->agents[2].name, "cursor-agent") &&
           !strcmp(e->agents[1].path, "/usr/local/bin/codex") && !strcmp(e->agents[2].path, "/home/deploy/.local/bin/cursor-agent") &&
           !strcmp(e->agents[2].status, "recorded") && !strcmp(e->agents[1].version, "codex-cli 0.46.0"),
@@ -235,6 +240,7 @@ static const struct screen_case screens[] = {
     {"host-key-ambiguous.json", "key-ambiguous", 1, {"known_hosts already has a different entry", "ssh-keygen -F", "Enter checks again", NULL}, {"Type yes", "y approve", NULL}},
     {"preflight-blocked.json", "preflight-blocked", 1, {"MISSING REQUIREMENTS ON ovh", "BLOCKS", "fix: sudo apt-get install git", "never uses sudo"}, {NULL, NULL, NULL}},
     {"preflight-ok.json", "preflight-ok", 0, {"REQUIREMENTS ON ovh", "Nothing blocks setup", "group-writable umask", "Enter continues setup"}, {"BLOCKS", NULL, NULL}},
+    {"preflight-tmux.json", "preflight-tmux", 0, {"REQUIREMENTS ON ovh", "Nothing blocks setup", "fix: sudo apt-get install tmux", "Enter continues setup"}, {"BLOCKS", "HEADS CANNOT RUN", NULL}},
     {"provision-approval.json", "provision-pinned", 3, {"REVIEW: INSTALL HYDRA ON ovh", "pinned: its digest is recorded", "Install location", "Hydra release download"}, {"UNPINNED", NULL, NULL}},
     {"provision-approval-unpinned.json", "provision-unpinned", 3, {"REVIEW: INSTALL HYDRA ON ovh", "UNPINNED", "Binary SHA-256", "own hydra-fleet helper"}, {NULL, NULL, NULL}},
     {"install-approval.json", "install-approval", 3, {"REVIEW: INSTALL claude ON ovh", "umask 022; curl -fsSL https://claude.ai/install.sh", "no sudo", "y approve"}, {NULL, NULL, NULL}},
@@ -280,7 +286,7 @@ static void screen_case(struct app *app, const struct screen_case *c, int cols, 
     app->cols = cols; app->rows = rows;
     check(load(c->file, s->current, c->exit_status), c->file);
     copy_text(s->name, sizeof(s->name), "ovh");
-    s->open = true; s->notice[0] = '\0';
+    s->open = true; s->notice[0] = '\0'; s->paused = false;
     s->screen = setup_screen_for(s->current);
     if (s->screen == SETUP_SCREEN_HANDOFF) {
         size_t i;
@@ -327,11 +333,33 @@ static void trust_fit_case(struct app *app, int cols, int rows) {
           next && strstr(next + 1, "Anything but yes") && strchr(next + 1, '\n') > strstr(next + 1, "Anything but yes"), name);
 }
 
+/* A guided run paused because tmux is missing: the first frame explains why
+ * and shows the tmux row with its suggested fix, above other warnings. */
+static void paused_case(struct app *app, int cols, int rows) {
+    static const char *const must[] = {"HEADS CANNOT RUN ON ovh YET", "cannot run heads there", "install tmux yourself",
+                                       "fix: sudo apt-get install tmux", "Enter continues setup anyway"};
+    char frame[65536], name[128];
+    const char *tmux, *umask;
+    struct native_setup *s = app->setup;
+    app->cols = cols; app->rows = rows;
+    check(load("preflight-tmux.json", s->current, 0), "tmux preflight fixture loads");
+    s->open = true; s->notice[0] = '\0'; s->scroll = 0;
+    s->screen = SETUP_SCREEN_PREFLIGHT; s->paused = true;
+    check(render_capture(app, frame, sizeof(frame)), "paused requirements render");
+    keep("preflight-paused", cols, rows, frame);
+    tmux = strstr(frame, "warning  tmux"); umask = strstr(frame, "warning  umask");
+    snprintf(name, sizeof(name), "paused requirements at %dx%d explain the pause and list tmux first", cols, rows);
+    check(contains_all(frame, must, 5) && !strstr(frame, "BLOCKS") && tmux && umask && tmux < umask &&
+          strstr(frame, "Enter continue anyway"), name);
+    s->paused = false;
+}
+
 static void screens_at(struct app *app, int cols, int rows) {
     size_t i;
     for (i = 0; i < sizeof(screens) / sizeof(screens[0]); i++) screen_case(app, &screens[i], cols, rows);
     hub_case(app, cols, rows);
     trust_fit_case(app, cols, rows);
+    paused_case(app, cols, rows);
 }
 
 /* Keys that must never run anything: declining, wrong confirmation text and

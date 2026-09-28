@@ -2,7 +2,9 @@
 # Scripted `hydra remote ...` for native setup journeys. It replays the
 # envelopes in this directory (recorded from the real CLI by
 # record-envelopes.sh) with the CLI's exit codes (0 done, 1 error, 3
-# approval_required) and follows the real CLI's order: the guided flow selects
+# approval_required) and follows the real CLI's order: a host key that is
+# already known (known_key) passes the guided flow straight into preflight,
+# a remote without tmux (no_tmux) passes preflight with a warning, the guided flow selects
 # no agents without a terminal, `install-agent --json` selects one and returns
 # its plan, and installers and sign-in run only on a terminal. Progress is
 # kept as marker files in $HYDRA_SETUP_FAKE. Every other command goes to the
@@ -47,7 +49,7 @@ list() {
 guided() {
     mark started
     if has changed; then emit host-key-changed.json 1; fi
-    has trusted || emit host-key-approval.json 3
+    has trusted || has known_key || emit host-key-approval.json 3
     if has needs_git && ! has git_fixed; then emit preflight-blocked.json 1; fi
     has provisioned || emit provision-approval.json 3
     if has selected && ! has installed; then emit install-approval.json 3; fi
@@ -80,7 +82,10 @@ case "${1:-}:${2:-}" in
         read -r _ || exit 1
         if has fail_sign_in && ! has sign_failed; then mark sign_failed; printf 'FAKE SIGN-IN FAILED\n'; exit 1; fi
         mark signed ;;
-    preflight:ovh) emit preflight-ok.json 0 ;;
+    preflight:ovh)
+        if has needs_git && ! has git_fixed; then emit preflight-blocked.json 1; fi
+        if has no_tmux; then emit preflight-tmux.json 0; fi
+        emit preflight-ok.json 0 ;;
     agents:ovh) emit agents.json 0 ;;
     *) exit 1 ;;
 esac

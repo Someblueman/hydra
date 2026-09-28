@@ -17,7 +17,8 @@ enum setup_job {
     SETUP_JOB_STATUS,   /* read-only status for "Continue setup" */
     SETUP_JOB_RETURNED, /* read-only status after a terminal hand-off */
     SETUP_JOB_INSPECT,  /* read-only preflight or agent inventory */
-    SETUP_JOB_CHOICE    /* install-agent chosen on the agents screen (plan only) */
+    SETUP_JOB_CHOICE,   /* install-agent chosen on the agents screen (plan only) */
+    SETUP_JOB_PREFLIGHT /* the guided flow's preflight: pauses only when heads cannot run */
 };
 
 #define SETUP_FORM_FIELDS 3
@@ -40,8 +41,9 @@ struct setup_capture {
 /* Members are ordered by alignment; see the comments for their roles. */
 struct native_setup {
     /* What the screen shows, and the buffer the next result is parsed into;
-     * the sweep result belongs to the Hosts tab status refresh. */
-    struct setup_envelope *current, *incoming, *sweep_result;
+     * the sweep result belongs to the Hosts tab status refresh. held keeps a
+     * guided result while its preflight is checked (held_valid). */
+    struct setup_envelope *current, *incoming, *sweep_result, *held;
     time_t job_started;
     size_t handoff_argc, selected, scroll, typed_cursor, record_count;
     struct setup_capture job, sweep;
@@ -51,8 +53,10 @@ struct native_setup {
     enum setup_job job_kind;
     int focus, handoff_exit;
     unsigned automatic;
-    /* agents_offered: this flow already showed the agent inventory. */
-    bool open, more, sweep_pending, agents_offered;
+    /* agents_offered: this flow already showed the agent inventory.
+     * paused: the requirements screen stopped a guided run because heads
+     * cannot run on the host; Enter continues anyway. */
+    bool open, more, sweep_pending, agents_offered, paused, held_valid;
     char typed[16];
     /* Running step, and the terminal hand-off step with its exact argv
      * (without --json). */

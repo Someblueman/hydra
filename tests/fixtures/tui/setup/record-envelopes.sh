@@ -160,6 +160,11 @@ record preflight-blocked.json 1 setup ovh deploy@ovh.example.net --ssh-config "$
 RECORD_REMOTE_PATH="$work/linux-git:$work/linux-bin"
 record preflight-ok.json 0 preflight ovh --json
 record status-provision-pending.json 0 setup status ovh --json
+# The same remote without tmux: a warning that means heads cannot run there.
+mkdir -p "$work/git-bin"
+link "$work/git-bin" git
+RECORD_REMOTE_PATH="$work/git-bin:$work/linux-bin"
+record preflight-tmux.json 0 preflight ovh --json
 
 # The guided flow: pinned provisioning, the agent inventory, an approved
 # installer, a failed then successful sign-in on a terminal, and completion.
