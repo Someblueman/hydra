@@ -209,7 +209,7 @@ static bool plan_skipped(const char *key) { return !strcmp(key, "name") || !strc
 static const char *const plan_values[][4] = {
     /* key, value, text, tone ("w" warning, "s" success) */
     {"binary.trust", "pinned", "pinned: its digest is recorded in this Hydra release", "s"},
-    {"binary.trust", "unpinned", "UNPINNED: not a Hydra release binary; approve only if you trust where it came from", "w"},
+    {"binary.trust", "unpinned", "Not a release build: this helper is not a Hydra release binary; approve only if you trust where it came from", "w"},
     {"binary.source", "release-asset", "Hydra release download, checked against the pinned digest", ""},
     {"binary.source", "local-helper", "this machine's own hydra-fleet helper (a development build)", "w"},
     {"binary.source", "binary", "the file you passed with --binary", "w"},
