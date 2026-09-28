@@ -1,6 +1,6 @@
 /* Interaction tests share the PTY harness, not the implementation's hit map. */
 static void mouse_input(struct session *session, const char *report) {
-    drain_output(session->master);
+    drain_output(session);
     write_input(session->master, report, strlen(report));
 }
 

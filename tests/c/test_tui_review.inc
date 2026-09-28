@@ -133,7 +133,7 @@ static void review_stop(struct session *session) {
 
 static bool review_reload(struct session *session, struct review_fixture *fixture, const char *document, const char *marker) {
     if (!write_attention_fixture(fixture->document, document)) return false;
-    drain_output(session->master); write_input(session->master, "r", 1U);
+    drain_output(session); write_input(session->master, "r", 1U);
     return wait_for_marker(session, marker, 3000);
 }
 
@@ -161,10 +161,10 @@ static void review_references_test(struct session *session, struct review_fixtur
     char opened[4096], calls[32768];
     write_input(session->master, "f\r", 2U);
     result(wait_for_marker(session, "EXPLICIT-LOCAL-PREVIEW", 1000), "selected local reference opens bounded data preview");
-    drain_output(session->master); write_input(session->master, "\033", 1U);
+    drain_output(session); write_input(session->master, "\033", 1U);
     (void)wait_for_marker(session, "j/k selects; Enter follows reference", 1000); write_input(session->master, "j\r", 2U);
     result(wait_for_marker(session, "Reference inaccessible", 1000), "missing reference has explicit inaccessible state");
-    drain_output(session->master); write_input(session->master, "\033", 1U);
+    drain_output(session); write_input(session->master, "\033", 1U);
     (void)wait_for_marker(session, "j/k selects; Enter follows reference", 1000); write_input(session->master, "j\r", 2U);
     result(wait_for_marker(session, "Opened in browser; content not verified", 2000), "explicit http reference dispatches read-only opener");
     result(review_read(fixture->opened, opened, sizeof(opened)) && !strcmp(opened, "https://example.invalid/review/123\n"), "opener receives only exact supplied URL as one argument");
@@ -193,21 +193,21 @@ static void review_bound_cases(struct session *session, struct review_fixture *f
     file = fopen(fixture->document, "wb");
     if (!file) { result(false, "binary review fixture opens"); return; }
     fputs(text, file); fputs("TEXT\tready", file); fputc(0, file); fputs("\nEND\t1\t0\t0\n", file); fclose(file);
-    drain_output(session->master); write_input(session->master, "r", 1U);
+    drain_output(session); write_input(session->master, "r", 1U);
     result(wait_for_marker(session, "Review unavailable", 3000), "embedded NUL cannot hide malformed evidence");
     file = fopen(fixture->document, "wb");
     if (!file) { result(false, "oversized review fixture opens"); return; }
     fputs(text, file); fputs("TEXT\t", file);
     for (i = 0U; i < 8192U; i++) fputc('x', file);
     fputs("\nEND\t1\t0\t0\n", file); fclose(file);
-    drain_output(session->master); write_input(session->master, "r", 1U);
+    drain_output(session); write_input(session->master, "r", 1U);
     result(wait_for_marker(session, "Review unavailable", 3000), "overlong review line refused before display");
     file = fopen(fixture->document, "wb");
     if (!file) { result(false, "document cap fixture opens"); return; }
     fputs(text, file); memset(text, 'x', 1024U); text[1024] = '\0';
     for (i = 0U; i < 1024U; i++) fprintf(file, "TEXT\t%s\n", text);
     fputs("END\t1024\t0\t0\n", file); fclose(file);
-    drain_output(session->master); write_input(session->master, "r", 1U);
+    drain_output(session); write_input(session->master, "r", 1U);
     result(wait_for_marker(session, "Review unavailable", 3000), "whole review byte cap enforced independently of line cap");
 }
 
@@ -302,7 +302,7 @@ static void test_review_navigation(const char *tui, const char *hydra) {
     review_negative_cases(&session, &fixture);
     review_bound_cases(&session, &fixture);
     if (result(review_exact_cap(&fixture), "construct exact 1MiB valid document")) {
-        drain_output(session.master); write_input(session.master, "r", 1U);
+        drain_output(&session); write_input(session.master, "r", 1U);
         result(wait_for_marker(&session, "CAP-FIRST", 3000), "exact 1MiB review is accepted");
         write_input(session.master, "G", 1U);
         result(wait_for_marker(&session, "CAP-LAST", 1000), "exact byte-cap review remains scrollable");
@@ -330,7 +330,7 @@ static void test_review_stale(const char *tui, const char *hydra) {
     result(review_reload(&session, &fixture, fixture.original, "Review unavailable"), "previous candidate response cannot satisfy new selection");
     write_input(session.master, "[", 1U);
     result(review_reload(&session, &fixture, fixture.original, "readiness: ready"), "return to original candidate loads exact evidence");
-    review_attention(&fixture, '2', "attempt-2"); drain_output(session.master); write_input(session.master, "I", 1U);
+    review_attention(&fixture, '2', "attempt-2"); drain_output(&session); write_input(session.master, "I", 1U);
     result(wait_for_marker(&session, "Selection or revision changed", 3000), "attempt/revision refresh invalidates displayed review");
     result(review_reload(&session, &fixture, fixture.original, "Review unavailable"), "old attempt/revision response rejected");
     review_stop(&session);
@@ -375,7 +375,7 @@ static void cancel_active_review(struct session *session, struct review_fixture 
                                  const char *scratch, const char *cleaned, unsigned i) {
     const char *keys[] = {"]", "\033q", "q", "]", "\033q", ""};
     if (i != 2U && i != 5U) result(review_separate_group(fixture->pids), "nested capture child has its own process group");
-    drain_output(session->master); long long started = monotonic_ms();
+    drain_output(session); long long started = monotonic_ms();
     write_input(session->master, keys[i], strlen(keys[i]));
     wait_review_cancellation(session, i);
     long long gone_deadline = monotonic_ms() + 400;

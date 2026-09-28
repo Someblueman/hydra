@@ -52,10 +52,10 @@ static bool write_reordered_fixture(const char *path, const char *contents) {
 }
 static void attention_expect_stale(struct session *session, const char *path, const char *contents, const char *label) {
     const char *good = "HYDRA_ATTENTION\t1\nITEM\tworkflow\tapproval\tknown-good\t/project\tlocal\tGOOD\tR\tS\t1\thead\tinstance\trequest\tbinding\t1111111111111111111111111111111111111111111111111111111111111111\t9999999999999999999999999999999999999999999999999999999999999999\tfresh\tworkflow-request\t1\nEND\t1\t0\t0\n";
-    (void)write_attention_fixture(path, good); drain_output(session->master); write_input(session->master, "I", 1U);
+    (void)write_attention_fixture(path, good); drain_output(session); write_input(session->master, "I", 1U);
     if (!result(wait_for_markers(session, "ATTENTION  1 need you", "known-good", 3000), "valid snapshot accepted before negative case")) return;
     if (!write_attention_fixture(path, contents)) { result(false, label); return; }
-    drain_output(session->master); write_input(session->master, "I", 1U);
+    drain_output(session); write_input(session->master, "I", 1U);
     result(wait_for_markers(session, "STALE: last good", "known-good", 3000), label);
 }
 static bool write_attention_many_item(FILE *file, size_t i, bool unique) {
@@ -77,29 +77,34 @@ static bool write_attention_many(const char *path, size_t count, bool unique) {
 }
 static void attention_capacity_cases(struct session *session, const char *path) {
     bool wrote;
-    wrote = write_attention_many(path, 512U, true); if (wrote) { drain_output(session->master); write_input(session->master, "I", 1U); result(wait_for_marker(session, "ATTENTION  512 need you", 3000), "512 unique items are accepted"); } else result(false, "512 unique items fixture writes atomically");
-    wrote = write_attention_many(path, 513U, true); if (wrote) { drain_output(session->master); write_input(session->master, "I", 1U); result(wait_for_marker(session, "STALE: last good", 3000), "513 unique items reject atomically"); } else result(false, "513 unique items fixture writes atomically");
-    wrote = write_attention_many(path, 1024U, false); if (wrote) { drain_output(session->master); write_input(session->master, "I", 1U); result(wait_for_marker(session, "ATTENTION  1 need you", 3000), "1024 duplicate wire items are accepted"); } else result(false, "1024 duplicate wire fixture writes atomically");
-    wrote = write_attention_many(path, 1025U, false); if (wrote) { drain_output(session->master); write_input(session->master, "I", 1U); result(wait_for_markers(session, "STALE: last good", "cap", 3000), "1025 wire items reject atomically"); } else result(false, "1025 wire fixture writes atomically");
+    wrote = write_attention_many(path, 512U, true); if (wrote) { drain_output(session); write_input(session->master, "I", 1U); result(wait_for_marker(session, "ATTENTION  512 need you", 3000), "512 unique items are accepted"); } else result(false, "512 unique items fixture writes atomically");
+    wrote = write_attention_many(path, 513U, true); if (wrote) { drain_output(session); write_input(session->master, "I", 1U); result(wait_for_marker(session, "STALE: last good", 3000), "513 unique items reject atomically"); } else result(false, "513 unique items fixture writes atomically");
+    wrote = write_attention_many(path, 1024U, false); if (wrote) { drain_output(session); write_input(session->master, "I", 1U); result(wait_for_marker(session, "ATTENTION  1 need you", 3000), "1024 duplicate wire items are accepted"); } else result(false, "1024 duplicate wire fixture writes atomically");
+    wrote = write_attention_many(path, 1025U, false); if (wrote) { drain_output(session); write_input(session->master, "I", 1U); result(wait_for_markers(session, "STALE: last good", "cap", 3000), "1025 wire items reject atomically"); } else result(false, "1025 wire fixture writes atomically");
+}
+/* Every client also refreshes on its own every two seconds from the same
+ * fixture and seen store, and a refresh requested while a load is in flight
+ * joins that load, which may predate the latest change. Refresh until the
+ * expected screen appears, within one bounded deadline. */
+static bool refresh_until(struct session *session, const char *marker, const char *second, long timeout_ms) {
+    bool shown = false; long long end = monotonic_ms() + timeout_ms;
+    while (!shown && monotonic_ms() < end) {
+        drain_output(session); write_input(session->master, "I", 1U);
+        shown = wait_for_markers(session, marker, second, 1000);
+    }
+    return shown;
 }
 /* A seen result collapses into the Seen group and leaves the count; another
  * client of the same user shows it after its next refresh. */
 static void attention_seen_group(struct session *left, struct session *right, const char *done) {
-    drain_output(left->master); write_input(left->master, "j", 1U); write_input(left->master, "s", 1U);
+    drain_output(left); write_input(left->master, "j", 1U); write_input(left->master, "s", 1U);
     result(wait_for_markers(left, "ATTENTION  1 need you", "Seen (1)", 1500), "a seen result moves to the collapsed Seen group");
     write_input(left->master, "j", 1U); write_input(left->master, "\r", 1U);
     result(wait_for_marker(left, "Enter collapses", 1000), "Enter expands the Seen group");
-    /* The left client persists the marker asynchronously; refresh the right
-     * client until it reads the stored marker, within one bounded deadline. */
+    /* The left client persists the marker asynchronously. */
     unlink(done);
-    {
-        bool shown = false; long long end = monotonic_ms() + 8000;
-        while (!shown && monotonic_ms() < end) {
-            drain_output(right->master); write_input(right->master, "I", 1U);
-            shown = wait_for_markers(right, "ATTENTION  1 need you", "Seen (1)", 1000);
-        }
-        result(shown, "another client of the same user shows the marker after refresh");
-    }
+    result(refresh_until(right, "ATTENTION  1 need you", "Seen (1)", 8000),
+           "another client of the same user shows the marker after refresh");
 }
 /* Seen markers persist per user: a new client starts with them. */
 static void attention_restart(const char *tui, const char *hydra, const char *fake_bin) {
@@ -129,19 +134,19 @@ static void test_attention_clients(const char *tui, const char *hydra, const cha
     result(wait_for_raw(&left) && wait_for_raw(&right), "both attention clients enter raw mode"); write_input(left.master, "I", 1U); write_input(right.master, "I", 1U);
     result(wait_for_marker(&left, "ATTENTION  2 need you", 3000) && wait_for_marker(&right, "ATTENTION  2 need you", 3000), "both clients see two items that need the user");
     write_input(left.master, "s", 1U); result(wait_for_markers(&left, "seen, still needs a decision", "ATTENTION  2 need you", 1500), "a seen approval stays listed and counted until decided"); result(wait_for_marker(&right, "ATTENTION  2 need you", 1500), "second client is unchanged until it refreshes");
-    drain_output(left.master); unlink(done); write_reordered_fixture(path, reordered); write_input(left.master, "I", 1U); result(wait_for_attention_order(&left), "pure reorder applies with unchanged count"); write_input(left.master, "\r", 1U); result(wait_for_marker(&left, "Task: T-1", 1000), "pure reorder retains selected LEFT identity"); write_input(left.master, "k", 1U); result(wait_for_marker(&left, "Task: T-2", 1000), "pure reorder applies new row order"); write_input(left.master, "\r", 1U);
-    drain_output(left.master); unlink(done); write_attention_fixture(path, mutated); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  2 need you", "revision-mutated", 3000) && wait_for_marker(&left, "NEW", 1000), "semantic revision mutation is unseen in applied refresh");
-    write_attention_fixture(path, "HYDRA_ATTENTION\t1\nITEM\tbroken\n"); drain_output(left.master); unlink(done); write_input(left.master, "I", 1U); result(wait_for_marker(&left, "STALE: last good", 3000), "malformed refresh preserves last good snapshot");
+    drain_output(&left); unlink(done); write_reordered_fixture(path, reordered); write_input(left.master, "I", 1U); result(wait_for_attention_order(&left), "pure reorder applies with unchanged count"); write_input(left.master, "\r", 1U); result(wait_for_marker(&left, "Task: T-1", 1000), "pure reorder retains selected LEFT identity"); write_input(left.master, "k", 1U); result(wait_for_marker(&left, "Task: T-2", 1000), "pure reorder applies new row order"); write_input(left.master, "\r", 1U);
+    drain_output(&left); unlink(done); write_attention_fixture(path, mutated); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  2 need you", "revision-mutated", 3000) && wait_for_marker(&left, "NEW", 1000), "semantic revision mutation is unseen in applied refresh");
+    write_attention_fixture(path, "HYDRA_ATTENTION\t1\nITEM\tbroken\n"); drain_output(&left); unlink(done); write_input(left.master, "I", 1U); result(wait_for_marker(&left, "STALE: last good", 3000), "malformed refresh preserves last good snapshot");
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nITEM\tworkflow\tapproval\tbad\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead\tinstance\trequest\tbinding\t1111111111111111111111111111111111111111111111111111111111111111\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\n", "missing END rejects atomically");
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t0\ntrailing\n", "trailing bytes reject atomically");
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nITEM\tworkflow\tapproval\tbad\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead\tinstance\trequest\tbinding\tZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\nEND\t1\t0\t0\n", "bad digest rejects atomically");
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nITEM\tworkflow\tapproval\tbad\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead\tinstance\trequest\tbinding\t1111111111111111111111111111111111111111111111111111111111111111\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\nITEM\tworkflow\tapproval\tother\t/project\tlocal\tT-1\tR-1\tS-1\t1\thead\tinstance\trequest\tbinding\t1111111111111111111111111111111111111111111111111111111111111111\t1111111111111111111111111111111111111111111111111111111111111111\tfresh\tworkflow-request\t1\nEND\t2\t0\t0\n", "conflicting duplicate rejects atomically");
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t1\n", "contradictory END flags reject atomically");
     attention_capacity_cases(&left, path);
-    drain_output(left.master); write_attention_fixture(path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t0\n"); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  0 need you", "Nothing needs your attention", 3000), "empty complete snapshot is accepted");
-    write_attention_fixture(path, initial); file = fopen(fail, "w"); if (file) fclose(file); drain_output(left.master); unlink(done); write_input(left.master, "I", 1U); result(wait_for_marker(&left, "STALE: last good", 3000), "failed reconnect is explicit unavailable"); unlink(fail);
-    drain_output(right.master); result(wait_for_marker(&right, "ATTENTION  2 need you", 1000), "untouched RIGHT client remains at count two");
-    drain_output(left.master); unlink(done); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  2 need you", "verification-ready", 3000), "successful LEFT reconnect keeps the seen approval listed");
+    drain_output(&left); write_attention_fixture(path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t0\n"); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  0 need you", "Nothing needs your attention", 3000), "empty complete snapshot is accepted");
+    write_attention_fixture(path, initial); file = fopen(fail, "w"); if (file) fclose(file); drain_output(&left); unlink(done); write_input(left.master, "I", 1U); result(wait_for_marker(&left, "STALE: last good", 3000), "failed reconnect is explicit unavailable"); unlink(fail);
+    result(refresh_until(&right, "ATTENTION  2 need you", NULL, 8000), "second client recovers the restored snapshot at count two");
+    drain_output(&left); unlink(done); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  2 need you", "verification-ready", 3000), "successful LEFT reconnect keeps the seen approval listed");
     attention_seen_group(&left, &right, done);
     write_input(left.master, "q", 1U); write_input(right.master, "q", 1U); result(wait_for_exit(&left) == 0 && terminal_restored(&left), "first attention client restores terminal"); result(wait_for_exit(&right) == 0 && terminal_restored(&right), "second attention client restores terminal"); close_session(&left); close_session(&right);
     attention_restart(tui, hydra, fake_bin);
