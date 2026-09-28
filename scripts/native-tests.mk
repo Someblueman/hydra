@@ -4,7 +4,7 @@ $(BUILD_DIR)/fixture-lock: tests/fixture/lock.c
 	$(CC) -std=c99 -Wall -Wextra -Werror -pedantic $< -o $@
 
 PTY_SUPPORT = tests/termviz/pty_support.c tests/termviz/screen_support.c tests/termviz/fixture_support.c
-PTY_NAMES = pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads
+PTY_NAMES = pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads remote-setup
 PTY_BINS = $(addprefix $(BUILD_DIR)/native-tests/pty-,$(PTY_NAMES))
 $(BUILD_DIR)/native-tests:
 	mkdir -p $@
@@ -30,6 +30,7 @@ test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-conversation
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-assets
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-workflow-controls
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-runs-heads
+test-tui-pty: $(BUILD_DIR)/native-tests/pty-remote-setup
 
 NATIVE_TEST_NAMES = statistics-export task-announce retention workflow-task-metrics plan-inspection plan-reuse-invalidation retention-accepted discovery enrollment enrollment-receiver enrollment-ssh plan-patterns plan-manifest plan-staged research-outcome performance-outcome plan-staged-public
 NATIVE_TEST_BINS = $(addprefix $(BUILD_DIR)/native-tests/test-,$(NATIVE_TEST_NAMES)) $(BUILD_DIR)/native-tests/workflow-contract-cases
