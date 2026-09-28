@@ -1,13 +1,18 @@
 #!/bin/sh
 # Scripted `hydra remote ...` for native setup journeys. It replays the
-# recorded envelopes in this directory with the CLI's exit codes (0 done,
-# 1 error, 3 approval_required) and keeps progress as marker files in
-# $HYDRA_SETUP_FAKE. Every other command goes to the ordinary TUI fixture.
+# envelopes in this directory (recorded from the real CLI by
+# record-envelopes.sh) with the CLI's exit codes (0 done, 1 error, 3
+# approval_required) and follows the real CLI's order: the guided flow selects
+# no agents without a terminal, `install-agent --json` selects one and returns
+# its plan, and installers and sign-in run only on a terminal. Progress is
+# kept as marker files in $HYDRA_SETUP_FAKE. Every other command goes to the
+# ordinary TUI fixture.
 here="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
 state="${HYDRA_SETUP_FAKE:?HYDRA_SETUP_FAKE names the journey state directory}"
 fingerprint='SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8'
-provision_hash='3f6c2a9e1b7d4c8a0e5f2b9d6c3a1e8f7b4d0c2a9e6f3b1d8c5a2e0f7b4d9c1a'
-install_hash='5e8a1c4f7b2d9e6a3c0f5b8d1e4a7c2f9b6d3e0a5c8f1b4d7e2a9c6f3b0d5e8a'
+plan_hash() { sed -n 's/.*"plan_sha256":"\([0-9a-f]*\)".*/\1/p' "$here/$1"; }
+provision_hash="$(plan_hash provision-approval.json)"
+install_hash="$(plan_hash install-approval.json)"
 
 [ "${1:-}" = remote ] || exec "$here/../fake-hydra.sh" "$@"
 shift
@@ -33,20 +38,26 @@ status() {
     emit fresh.json 0
 }
 
+list() {
+    if has complete; then emit list-done.json 0; fi
+    if has started; then emit list-progress.json 0; fi
+    emit list-empty.json 0
+}
+
 guided() {
-    mkdir -p "$HYDRA_HOME/fleet/setup"
-    printf '{}\n' > "$HYDRA_HOME/fleet/setup/$1.json"
+    mark started
     if has changed; then emit host-key-changed.json 1; fi
     has trusted || emit host-key-approval.json 3
     if has needs_git && ! has git_fixed; then emit preflight-blocked.json 1; fi
     has provisioned || emit provision-approval.json 3
-    has installed || emit install-approval.json 3
-    if has signed; then mark complete; emit done.json 0; fi
-    emit sign-in-tty.json 1
+    if has selected && ! has installed; then emit install-approval.json 3; fi
+    if has installed && ! has signed; then emit sign-in-tty.json 1; fi
+    mark complete; emit done.json 0
 }
 
 case "${1:-}:${2:-}" in
     setup:status) status ;;
+    setup:list) list ;;
     setup:*) guided "$2" ;;
     trust-key:ovh)
         [ "$4" = "$fingerprint" ] || emit host-key-approval.json 3
@@ -55,8 +66,12 @@ case "${1:-}:${2:-}" in
         [ "$4" = "$provision_hash" ] || emit provision-approval.json 3
         mark provisioned; emit provision-done.json 0 ;;
     install-agent:ovh)
+        case " $* " in
+            *" --approve $install_hash "*) ;;
+            *" --json "*) mark selected; emit install-approval.json 3 ;;
+            *) exit 3 ;;
+        esac
         terminal_step install "$@"
-        case "$*" in *"--approve $install_hash"*) ;; *) exit 3 ;; esac
         printf 'FAKE INSTALLER: installing claude for deploy on ovh\n'
         mark installed ;;
     sign-in:ovh)

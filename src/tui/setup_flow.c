@@ -148,7 +148,12 @@ static void show(struct native_setup *s) {
  * of automatic runs keeps a misbehaving result from looping. */
 static bool automatic_continue(struct app *app, struct native_setup *s) {
     if (++s->automatic <= SETUP_AUTOMATIC_LIMIT) {
-        guided_start(app, s, false);
+        /* The guided CLI selects no agents without a terminal, so show the
+         * inventory once and let the user choose installers and sign-ins. */
+        if (!strcmp(s->current->next_step, "agents") && !s->agents_offered) {
+            s->agents_offered = true;
+            inspect_start(app, s, "agents", "agents");
+        } else guided_start(app, s, false);
         if (s->job.active) return true;
     } else setup_notice(s, "Setup paused; Continue setup resumes it");
     show(s);
@@ -163,19 +168,31 @@ static const struct setup_step *find_step(const struct setup_envelope *e, const 
 
 /* After the terminal came back: continue only when the CLI recorded the step
  * as finished; otherwise explain what is known and offer the step again. */
-static void returned_result(struct app *app, struct native_setup *s) {
+/* The failure the CLI recorded for the step (steps[].error), or a code
+ * inferred from how the terminal command ended. */
+static void returned_failure(struct native_setup *s, const struct setup_step *step) {
     struct setup_envelope *e = s->current;
-    const struct setup_step *step = find_step(e, s->handoff_step);
     const char *code = s->handoff_exit >= 128 ? "cancelled" : !strncmp(s->handoff_step, "sign_in:", 8) ? "sign_in_failed" : "install_failed";
-    if (!e->ok) { show(s); return; }
-    if (step && setup_status_finished(step->status) && automatic_continue(app, s)) return;
-    if (step && setup_status_finished(step->status)) return;
     e->ok = false; e->exit_status = s->handoff_exit;
+    e->recovery[0] = '\0';
+    s->screen = SETUP_SCREEN_ERROR; s->scroll = 0;
+    if (step && step->error_code[0]) {
+        copy_text(e->code, sizeof(e->code), step->error_code);
+        copy_text(e->message, sizeof(e->message), step->error_message);
+        return;
+    }
     copy_text(e->code, sizeof(e->code), code);
     snprintf(e->message, sizeof(e->message), "The command ended with exit status %d; the step is now %s.",
              s->handoff_exit, step ? setup_status_label(step->status) : "unrecorded");
-    copy_text(e->recovery, sizeof(e->recovery), step ? step->detail : "");
-    s->screen = SETUP_SCREEN_ERROR; s->scroll = 0;
+    if (step) copy_text(e->recovery, sizeof(e->recovery), step->detail);
+}
+
+static void returned_result(struct app *app, struct native_setup *s) {
+    const struct setup_step *step = find_step(s->current, s->handoff_step);
+    if (!s->current->ok) { show(s); return; }
+    if (step && setup_status_finished(step->status) && automatic_continue(app, s)) return;
+    if (step && setup_status_finished(step->status)) return;
+    returned_failure(s, step);
 }
 
 static void job_result(struct app *app, struct native_setup *s, enum setup_job kind) {
@@ -228,6 +245,7 @@ void native_setup_resume(struct app *app, const char *name) {
     s->open = true; s->automatic = 0; s->notice[0] = '\0';
     tv_input_init(&s->input);
     if (s->job.active) { s->screen = SETUP_SCREEN_RUNNING; return; }
+    s->agents_offered = false;
     copy_text(s->name, sizeof(s->name), name);
     memset(s->current, 0, sizeof(*s->current));
     status_start(app, s, SETUP_JOB_STATUS);
@@ -257,6 +275,7 @@ static void submit_form(struct app *app, struct native_setup *s) {
     copy_text(s->name, sizeof(s->name), f[SETUP_FIELD_NAME].text);
     copy_text(s->config, sizeof(s->config), f[SETUP_FIELD_CONFIG].text);
     memset(s->current, 0, sizeof(*s->current));
+    s->agents_offered = false;
     guided_start(app, s, true);
 }
 
@@ -286,6 +305,32 @@ static void step_enter(struct app *app, struct native_setup *s) {
     else setup_notice(s, "Continue setup (the first row) runs the next step");
 }
 
+/* Agents screen: row 0 continues setup; row n is data.choices[n - 1]. A
+ * missing agent runs `install-agent NAME --agent A --json`, which only
+ * selects it and returns the installer plan for review; an installed one
+ * hands the terminal to `remote sign-in NAME --agent A`. */
+static void choice_sign_in(struct app *app, struct native_setup *s, const char *agent) {
+    const char *const words[] = {"hydra", "remote", "sign-in", s->name, "--agent", agent};
+    size_t i;
+    for (i = 0; i < sizeof(words) / sizeof(words[0]); i++) copy_text(s->handoff[i], SETUP_ARG_TEXT, words[i]);
+    s->handoff_argc = sizeof(words) / sizeof(words[0]);
+    snprintf(s->handoff_step, sizeof(s->handoff_step), "sign_in:%.63s", agent);
+    handoff_start(app, s);
+}
+
+static void agents_enter(struct app *app, struct native_setup *s) {
+    struct setup_argv a = {{NULL}, 0};
+    char step[80];
+    const struct setup_choice *c;
+    if (!s->selected || s->selected > s->current->choice_count) { guided_start(app, s, false); return; }
+    c = &s->current->choices[s->selected - 1];
+    if (!c->install) { choice_sign_in(app, s, c->agent); return; }
+    argv_add(&a, app->hydra); argv_add(&a, "remote"); argv_add(&a, "install-agent"); argv_add(&a, s->name);
+    argv_add(&a, "--agent"); argv_add(&a, c->agent); argv_add(&a, "--json");
+    snprintf(step, sizeof(step), "install_agent:%.63s", c->agent);
+    (void)job_start(s, SETUP_JOB_CHOICE, &a, step);
+}
+
 static bool retry_sign_in(struct native_setup *s) {
     if (!strncmp(s->current->next_step, "sign_in:", 8) && handoff_prepare(s)) return true;
     return !strncmp(s->handoff_step, "sign_in:", 8) && s->handoff_argc;
@@ -309,6 +354,7 @@ static void enter(struct app *app, struct native_setup *s) {
     switch (s->screen) {
         case SETUP_SCREEN_FORM: submit_form(app, s); break;
         case SETUP_SCREEN_STEPS: step_enter(app, s); break;
+        case SETUP_SCREEN_AGENTS: agents_enter(app, s); break;
         case SETUP_SCREEN_TRUST_KEY: trust_enter(app, s); break;
         case SETUP_SCREEN_PLAN: setup_notice(s, "Press y to approve this exact plan, or n / Esc to decline"); break;
         case SETUP_SCREEN_HANDOFF: handoff_start(app, s); break;
@@ -382,9 +428,10 @@ static bool text_key(struct native_setup *s, const struct tv_event *e) {
 
 static void move(struct native_setup *s, int direction) {
     if (s->screen == SETUP_SCREEN_FORM) { s->focus = (s->focus + SETUP_FORM_FIELDS + direction) % SETUP_FORM_FIELDS; return; }
-    if (s->screen == SETUP_SCREEN_STEPS) {
+    if (s->screen == SETUP_SCREEN_STEPS || s->screen == SETUP_SCREEN_AGENTS) {
+        size_t last = s->screen == SETUP_SCREEN_STEPS ? s->current->step_count : s->current->choice_count;
         if (direction < 0 && s->selected) s->selected--;
-        else if (direction > 0 && s->selected < s->current->step_count) s->selected++;
+        else if (direction > 0 && s->selected < last) s->selected++;
         return;
     }
     if (direction < 0 && s->scroll) s->scroll--;
@@ -393,6 +440,14 @@ static void move(struct native_setup *s, int direction) {
 
 static void page(struct app *app, struct native_setup *s, int direction) {
     int rows = app->rows > 12 ? app->rows / 2 : 6;
+    if (s->screen == SETUP_SCREEN_AGENTS) {
+        /* Arrows choose an action here; pages scroll the inventory below. */
+        while (rows-- > 0) {
+            if (direction < 0 && s->scroll) s->scroll--;
+            else if (direction > 0 && s->more) s->scroll++;
+        }
+        return;
+    }
     while (rows-- > 0) move(s, direction);
 }
 

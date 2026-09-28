@@ -1,0 +1,1 @@
+{"schema_version":1,"ok":true,"command":"remote-setup-list","data":{"setup_schema":1,"setups":[{"name":"ovh","destination":"deploy@ovh.example.net","status":"outcome_unknown","complete":false,"next":{"step":"provision","argv":["hydra","remote","provision","ovh","--json"],"approval_sha256":null}}]}}

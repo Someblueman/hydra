@@ -12,8 +12,23 @@
 
 static char root[4096], build[4096], base[4096], tui[4096], state[4096], evidence[4096], label[64];
 static const char *fingerprint = "SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8";
-static const char *provision_hash = "3f6c2a9e1b7d4c8a0e5f2b9d6c3a1e8f7b4d0c2a9e6f3b1d8c5a2e0f7b4d9c1a";
-static const char *install_hash = "5e8a1c4f7b2d9e6a3c0f5b8d1e4a7c2f9b6d3e0a5c8f1b4d7e2a9c6f3b0d5e8a";
+/* Plan hashes of the recorded provision and installer plans. */
+static char provision_hash[80], install_hash[80];
+
+static void plan_hash(const char *file, char *out, size_t size) {
+    char path[4096], text[65536];
+    const char *start;
+    size_t length;
+    tv_format(path, sizeof(path), "%s/tests/fixtures/tui/setup/%s", root, file);
+    tv_read(path, text, sizeof(text));
+    start = strstr(text, "\"plan_sha256\":\"");
+    CHECK(start != NULL, "a recorded plan has its hash");
+    start += strlen("\"plan_sha256\":\"");
+    length = strcspn(start, "\"");
+    CHECK(length == 64 && length < size, "a recorded plan hash is a SHA-256");
+    memcpy(out, start, length);
+    out[length] = '\0';
+}
 
 static void flag(const char *name) {
     char path[4096];
@@ -113,11 +128,19 @@ static void provision(struct tv_session *s) {
     tv_send(s, "\r");
     tv_until(s, "REVIEW: INSTALL HYDRA ON ovh", 6);
     tv_send(s, "y");
-    tv_until(s, "REVIEW: INSTALL claude ON ovh", 8);
+    tv_until(s, "AGENTS ON ovh", 8);
     tv_format(expected, sizeof(expected), "provision ovh --approve %s --json", provision_hash);
     CHECK(called(expected), "approval runs the reviewed plan hash");
-    see(s, "curl -fsSL https://claude.ai/install.sh | bash");
-    capture(s, "08-install-plan");
+    CHECK(called("agents ovh --json"), "the agent inventory is shown after provisioning");
+    see(s, "Install claude");
+    capture(s, "08-agents");
+    tv_send(s, "j");
+    tv_until(s, "> Install claude", 3);
+    tv_send(s, "\r");
+    tv_until(s, "REVIEW: INSTALL claude ON ovh", 8);
+    CHECK(called("install-agent ovh --agent claude --json"), "choosing an agent asks the CLI for its installer plan");
+    see(s, "curl -fsSL https://claude.ai/install.sh");
+    capture(s, "09-install-plan");
 }
 
 static void install_agent(struct tv_session *s) {
@@ -127,28 +150,29 @@ static void install_agent(struct tv_session *s) {
     tv_format(expected, sizeof(expected), "install-agent ovh --agent claude --approve %s\n", install_hash);
     CHECK(called(expected) && flagged("tty-install"), "the approved installer ran in the terminal without --json");
     CHECK(flagged("installed"), "installer completed");
-    capture(s, "09-sign-in-handoff");
+    capture(s, "10-sign-in-handoff");
 }
 
 static void sign_in(struct tv_session *s, bool fail_once) {
     tv_send(s, "\r");
     tv_until(s, "FAKE SIGN-IN: open", 6);
     see(s, "Hydra: Sign in to claude");
-    capture(s, "10-sign-in-terminal");
+    capture(s, "11-sign-in-terminal");
     tv_send(s, "\r");
     if (fail_once) {
         tv_until(s, "Press Enter to return to Hydra", 6);
         tv_send(s, "\r");
         tv_until(s, "Sign-in did not finish", 6);
         see(s, "Enter signs in again");
-        capture(s, "11-sign-in-failed");
+        see(s, "exited with a nonzero status");
+        capture(s, "12-sign-in-failed");
         tv_send(s, "\r");
         tv_until(s, "FAKE SIGN-IN: open", 6);
         tv_send(s, "\r");
     }
     tv_until(s, "ovh IS READY", 10);
     CHECK(flagged("tty-sign-in") && flagged("signed"), "sign-in ran in the terminal");
-    capture(s, "12-done");
+    capture(s, "13-done");
 }
 
 static void journey(int cols, int rows, bool fail_once) {
@@ -165,7 +189,7 @@ static void journey(int cols, int rows, bool fail_once) {
     tv_send(&s, "\r");
     tv_until(&s, "+ Add a host", 4);
     tv_until(&s, "set up", 6);
-    capture(&s, "13-hosts-after");
+    capture(&s, "14-hosts-after");
     tv_close(&s, "q", 0, 0);
 }
 
@@ -203,6 +227,8 @@ int main(void) {
     tv_mkdir(evidence);
     tv_format(fake, sizeof(fake), "%s/tests/fixtures/tui/setup/fake-hydra-setup.sh", root);
     tv_format(fixture, sizeof(fixture), "%s/tests/fixtures/tui/setup/empty.tsv", root);
+    plan_hash("provision-approval.json", provision_hash, sizeof(provision_hash));
+    plan_hash("install-approval.json", install_hash, sizeof(install_hash));
     setenv("HYDRA_BIN_CMD", fake, 1);
     setenv("HYDRA_SETUP_FAKE", state, 1);
     setenv("HYDRA_TUI_FIXTURE", fixture, 1);
@@ -217,6 +243,6 @@ int main(void) {
         tv_command_ok(NULL, remove);
     }
     puts("PASS remote setup: add host, typed-yes key trust, blocking requirements, declined and approved provision, "
-         "installer and sign-in terminal hand-off (with a failed attempt), done; changed key refused; 140x40 and 80x24");
+         "agent choice, installer and sign-in terminal hand-off (with a failed attempt), done; changed key refused; 140x40 and 80x24");
     return 0;
 }

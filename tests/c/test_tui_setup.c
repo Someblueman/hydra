@@ -92,10 +92,12 @@ static const struct expectation expectations[] = {
     {"provision-approval-unpinned.json", "approval_required", SETUP_SCREEN_PLAN, "provision", "provision", true, 3},
     {"provision-done.json", "", SETUP_SCREEN_STEPS, "agents", "", true, 0},
     {"outcome-unknown.json", "outcome_unknown", SETUP_SCREEN_UNKNOWN, "provision", "", true, 4},
-    {"agents.json", "", SETUP_SCREEN_AGENTS, "install_agent:claude", "", true, 0},
+    {"agents.json", "", SETUP_SCREEN_AGENTS, "verify", "", true, 0},
     {"install-approval.json", "approval_required", SETUP_SCREEN_PLAN, "install_agent:claude", "install_agent", true, 3},
     {"sign-in-tty.json", "tty_required", SETUP_SCREEN_HANDOFF, "sign_in:claude", "", true, 1},
     {"sign-in-failed.json", "sign_in_failed", SETUP_SCREEN_ERROR, "sign_in:claude", "", true, 1},
+    {"status-sign-failed.json", "", SETUP_SCREEN_STEPS, "sign_in:claude", "", true, 0},
+    {"status-installed.json", "", SETUP_SCREEN_STEPS, "sign_in:claude", "", true, 0},
     {"done.json", "", SETUP_SCREEN_DONE, "", "", false, 0},
     {"not-started.json", "setup_not_started", SETUP_SCREEN_ERROR, "", "", false, 1},
 };
@@ -117,14 +119,34 @@ static void envelope_cases(struct setup_envelope *e) {
           e->argc == 7 && !strcmp(e->argv[5], e->fingerprint) && !strcmp(e->argv[6], "--json"), "host key plan exposes the fingerprint it binds");
     check(load("preflight-blocked.json", e, 1) && e->requirement_count == 11 && e->requirements[1].blocking &&
           !strcmp(e->requirements[1].status, "missing") && strstr(e->requirements[1].detail, "sudo apt-get install git") &&
+          !strcmp(e->requirements[1].command, "sudo apt-get install git") && !e->requirements[0].command[0] &&
           !e->requirements[7].blocking && !strcmp(e->requirements[7].status, "warning"),
-          "recorded preflight rows keep status, blocking and the suggested command");
-    check(load("agents.json", e, 0) && e->agent_count == 3 && !strcmp(e->agents[2].name, "cursor-agent") &&
-          !strcmp(e->agents[1].path, "/usr/local/bin/codex") && !strcmp(e->agents[2].path, "/home/deploy/.local/bin/cursor-agent"),
-          "agent inventory rows keep executable, status and location");
+          "recorded preflight rows keep status, blocking and the suggestion field");
+    check(load("agents.json", e, 0) && e->agent_count == 9 && !strcmp(e->agents[2].name, "cursor-agent") &&
+          !strcmp(e->agents[1].path, "/usr/local/bin/codex") && !strcmp(e->agents[2].path, "/home/deploy/.local/bin/cursor-agent") &&
+          !strcmp(e->agents[2].status, "recorded") && !strcmp(e->agents[1].version, "codex-cli 0.46.0"),
+          "agent inventory rows keep executable, status, location and version");
+    check(load("agents.json", e, 0) && e->choice_count == 6 && !strcmp(e->choices[0].agent, "claude") && e->choices[0].install &&
+          !strcmp(e->choices[1].agent, "codex") && !e->choices[1].install, "installer choices say whether to install or sign in");
+    check(load("status-sign-failed.json", e, 0) && e->step_count == 8 && !strcmp(e->steps[5].id, "sign_in:claude") &&
+          !strcmp(e->steps[5].error_code, "sign_in_failed") && strstr(e->steps[5].error_message, "nonzero status") &&
+          !e->steps[4].error_code[0], "a failed terminal step keeps the error the CLI recorded");
     check(load("host-key-changed.json", e, 1) && !strcmp(e->presented, "SHA256:Q2hhbmdlZEtleUZvclRlc3RpbmdPbmx5MDEyMzQ1Njc4OQ") &&
           !strcmp(e->key_file, "/Users/you/.ssh/known_hosts"), "a changed key reports the presented key and its file");
     check(setup_envelope_parse(e, "{\"ok\":true}", 11, 0) < 0 && !e->parsed, "an envelope without schema_version 1 is not trusted");
+}
+
+/* `remote setup list` rows as the Hosts tab summarises them. */
+static void list_cases(struct setup_envelope *e) {
+    char summary[160] = "";
+    bool listed = load("list-progress.json", e, 0) && e->listed_count == 1 && !strcmp(e->listed[0].name, "ovh") &&
+        !strcmp(e->listed[0].status, "outcome_unknown") && !e->listed[0].complete;
+    if (listed) setup_listed_summary(&e->listed[0], summary, sizeof(summary));
+    check(listed && !strcmp(summary, "Install Hydra: outcome unknown"), "setup list rows summarise the next step");
+    listed = load("list-done.json", e, 0) && e->listed_count == 1 && e->listed[0].complete;
+    if (listed) setup_listed_summary(&e->listed[0], summary, sizeof(summary));
+    check(listed && !strcmp(summary, "set up"), "a finished setup lists as set up");
+    check(load("list-empty.json", e, 0) && e->ok && !e->listed_count, "no setups lists nothing");
 }
 
 /* Every tampered next command is refused; only the CLI's own argv runs. */
@@ -211,15 +233,16 @@ static const struct screen_case screens[] = {
     {"host-key-approval.json", "trust-key", 3, {"TRUST THE HOST KEY OF ovh", "SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8", "Type yes to trust", "type yes, then Enter"}, {"y approve", NULL, NULL}},
     {"host-key-changed.json", "key-changed", 1, {"THE HOST KEY CHANGED", "ssh-keygen -R ovh.example.net -f /Users/you/.ssh/known_hosts", "Enter check again", "SHA256:Q2hhbmdl"}, {"Type yes", "y approve", "trust this key"}},
     {"host-key-ambiguous.json", "key-ambiguous", 1, {"known_hosts already has a different entry", "ssh-keygen -F", "Enter checks again", NULL}, {"Type yes", "y approve", NULL}},
-    {"preflight-blocked.json", "preflight-blocked", 1, {"MISSING REQUIREMENTS ON ovh", "BLOCKS", "install git (for example", "never uses sudo"}, {NULL, NULL, NULL}},
+    {"preflight-blocked.json", "preflight-blocked", 1, {"MISSING REQUIREMENTS ON ovh", "BLOCKS", "fix: sudo apt-get install git", "never uses sudo"}, {NULL, NULL, NULL}},
     {"preflight-ok.json", "preflight-ok", 0, {"REQUIREMENTS ON ovh", "Nothing blocks setup", "group-writable umask", "Enter continues setup"}, {"BLOCKS", NULL, NULL}},
-    {"provision-approval.json", "provision-pinned", 3, {"REVIEW: INSTALL HYDRA ON ovh", "pinned: its digest is recorded", "Install location", "y approve"}, {"UNPINNED", NULL, NULL}},
-    {"provision-approval-unpinned.json", "provision-unpinned", 3, {"REVIEW: INSTALL HYDRA ON ovh", "UNPINNED", "Binary SHA-256", "y approve"}, {NULL, NULL, NULL}},
-    {"install-approval.json", "install-approval", 3, {"REVIEW: INSTALL claude ON ovh", "curl -fsSL https://claude.ai/install.sh | bash", "no sudo", "y approve"}, {NULL, NULL, NULL}},
-    {"agents.json", "agents", 0, {"AGENTS ON ovh", "cursor-agent", "recorded location", "not installed"}, {NULL, NULL, NULL}},
+    {"provision-approval.json", "provision-pinned", 3, {"REVIEW: INSTALL HYDRA ON ovh", "pinned: its digest is recorded", "Install location", "Hydra release download"}, {"UNPINNED", NULL, NULL}},
+    {"provision-approval-unpinned.json", "provision-unpinned", 3, {"REVIEW: INSTALL HYDRA ON ovh", "UNPINNED", "Binary SHA-256", "own hydra-fleet helper"}, {NULL, NULL, NULL}},
+    {"install-approval.json", "install-approval", 3, {"REVIEW: INSTALL claude ON ovh", "umask 022; curl -fsSL https://claude.ai/install.sh", "no sudo", "y approve"}, {NULL, NULL, NULL}},
+    {"agents.json", "agents", 0, {"AGENTS ON ovh", "> Continue setup", "Install claude", "Sign in to codex"}, {NULL, NULL, NULL}},
+    {"agents.json", "agents-inventory", 0, {"cursor-agent", "recorded location", "not installed", "codex-cli 0.46.0"}, {NULL, NULL, NULL}},
     {"outcome-unknown.json", "outcome-unknown", 4, {"cannot tell whether", "never installs twice", "Enter reconciles", "exit 4"}, {NULL, NULL, NULL}},
     {"sign-in-tty.json", "sign-in-handoff", 1, {"SIGN IN TO CLAUDE ON OVH", "hydra remote sign-in ovh --agent claude", "Enter hands over", "copies nothing"}, {"--json", NULL, NULL}},
-    {"sign-in-failed.json", "sign-in-failed", 1, {"Sign-in did not finish", "claude login exited with status 1", "Enter signs in again", NULL}, {NULL, NULL, NULL}},
+    {"sign-in-failed.json", "sign-in-failed", 1, {"Sign-in did not finish", "sign-in exited with a nonzero status", "Enter signs in again", NULL}, {NULL, NULL, NULL}},
     {"done.json", "done", 0, {"ovh IS READY", "Sign in to claude", "hydra fleet tui", NULL}, {NULL, NULL, NULL}},
     {"fresh.json", "steps", 0, {"SET UP ovh", "> Continue setup", "Trust the host key", "not started"}, {NULL, NULL, NULL}},
 };
@@ -307,6 +330,9 @@ static void key_cases(struct app *app) {
     check(s->screen == SETUP_SCREEN_TRUST_KEY && !s->job.active && strstr(s->notice, "Type yes"), "a partial yes does not trust the key");
     (void)native_setup_byte(app, 27); native_setup_flush_input(app);
     check(s->screen == SETUP_SCREEN_STEPS && !s->job.active, "Esc declines the host key");
+    load("agents.json", s->current, 0); s->screen = SETUP_SCREEN_AGENTS; s->selected = 0;
+    (void)native_setup_byte(app, 'j'); (void)native_setup_byte(app, 'j');
+    check(s->screen == SETUP_SCREEN_AGENTS && s->selected == 2 && !s->job.active, "arrows choose an agent without running anything");
     load("host-key-changed.json", s->current, 1); s->screen = SETUP_SCREEN_KEY_CHANGED;
     for (keys = "yes"; *keys; keys++) (void)native_setup_byte(app, (unsigned char)*keys);
     check(s->screen == SETUP_SCREEN_KEY_CHANGED && !s->job.active, "no key accepts a changed host key");
@@ -320,6 +346,7 @@ int main(int argc, char **argv) {
     (void)mkdir(evidence, 0700);
     json_cases();
     envelope_cases(e);
+    list_cases(e);
     argv_cases(e);
     language_cases();
     app->hydra = "hydra"; app->view = 6; app->no_color = true; app->ascii = false;

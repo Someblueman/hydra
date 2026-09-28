@@ -29,6 +29,8 @@ static void parse_steps(struct setup_envelope *e, const struct sj_doc *d, int da
         if (!s->id[0]) continue;
         read_text(d, row, "status", s->status, sizeof(s->status));
         read_text(d, row, "detail", s->detail, sizeof(s->detail));
+        read_text(d, row, "error.code", s->error_code, sizeof(s->error_code));
+        read_text(d, row, "error.message", s->error_message, sizeof(s->error_message));
         if (!s->status[0]) copy_field(s->status, sizeof(s->status), "pending");
         e->step_count++;
     }
@@ -125,7 +127,7 @@ static void parse_requirements(struct setup_envelope *e, const struct sj_doc *d,
 
 static void parse_agent(struct setup_agent *a, const struct sj_doc *d, int item) {
     static const char *const names[] = {"executable", "profile", "agent", "name", NULL};
-    static const char *const paths[] = {"recorded", "path", NULL};
+    static const char *const paths[] = {"recorded", "on_path", "path", NULL};
     int candidates = sj_find(d, item, "candidates");
     (void)first_text(d, item, names, a->name, sizeof(a->name));
     read_text(d, item, "status", a->status, sizeof(a->status));
@@ -140,6 +142,34 @@ static void parse_agents(struct setup_envelope *e, const struct sj_doc *d, int d
     for (i = 0; (item = sj_item(d, list, i)) >= 0 && e->agent_count < SETUP_AGENT_MAX; i++) {
         parse_agent(&e->agents[e->agent_count], d, item);
         if (e->agents[e->agent_count].name[0]) e->agent_count++;
+    }
+}
+
+/* data.choices: the agents `remote agents` offers to install or sign in to. */
+static void parse_choices(struct setup_envelope *e, const struct sj_doc *d, int data) {
+    int list = sj_find(d, data, "choices"), item, i;
+    for (i = 0; (item = sj_item(d, list, i)) >= 0 && e->choice_count < SETUP_CHOICE_MAX; i++) {
+        struct setup_choice *c = &e->choices[e->choice_count];
+        read_text(d, item, "agent", c->agent, sizeof(c->agent));
+        read_text(d, item, "status", c->status, sizeof(c->status));
+        c->install = sj_type_of(d, sj_find(d, item, "install_argv")) == SJ_ARRAY;
+        if (c->agent[0] && !setup_name_problem(c->agent)) e->choice_count++;
+    }
+}
+
+/* data.setups of `remote setup list`. */
+static void parse_listed(struct setup_envelope *e, const struct sj_doc *d, int data) {
+    int list = sj_find(d, data, "setups"), item, i;
+    for (i = 0; (item = sj_item(d, list, i)) >= 0 && e->listed_count < SETUP_LISTED_MAX; i++) {
+        struct setup_listed *l = &e->listed[e->listed_count];
+        memset(l, 0, sizeof(*l));
+        read_text(d, item, "name", l->name, sizeof(l->name));
+        read_text(d, item, "destination", l->destination, sizeof(l->destination));
+        read_text(d, item, "status", l->status, sizeof(l->status));
+        read_text(d, item, "next.step", l->next_step, sizeof(l->next_step));
+        read_text(d, item, "error.code", l->error, sizeof(l->error));
+        l->complete = sj_true(d, sj_find(d, item, "complete"));
+        if (!setup_name_problem(l->name)) e->listed_count++;
     }
 }
 
@@ -184,6 +214,8 @@ int setup_envelope_parse(struct setup_envelope *e, const char *text, size_t leng
     parse_plan(e, &d, data);
     parse_requirements(e, &d, data);
     parse_agents(e, &d, data);
+    parse_choices(e, &d, data);
+    parse_listed(e, &d, data);
     if (!strcmp(e->code, "host_key_changed")) parse_key_change(e, &d, data);
     free(tokens);
     return 0;
@@ -329,6 +361,15 @@ void setup_summary(const struct setup_envelope *e, char *out, size_t size) {
     else snprintf(out, size, "%s: %s", label, setup_status_label(open->status));
 }
 
+void setup_listed_summary(const struct setup_listed *l, char *out, size_t size) {
+    char label[96];
+    if (l->error[0]) { snprintf(out, size, "status unavailable: %s", l->error); return; }
+    if (l->complete) { copy_field(out, size, "set up"); return; }
+    setup_step_label(l->next_step[0] ? l->next_step : "setup", label, sizeof(label));
+    if (!strcmp(l->status, "pending")) snprintf(out, size, "next: %s", label);
+    else snprintf(out, size, "%s: %s", label, setup_status_label(l->status));
+}
+
 /* ---- Next command validation ---- */
 
 static bool setup_word(const char *word) {
@@ -372,7 +413,7 @@ bool setup_step_needs_terminal(const char *step) {
 const char *setup_name_problem(const char *name) {
     if (!name[0]) return "Enter a name for this host";
     if (!alias_text(name)) return "Use letters, digits, '-', '_' and '.', starting with a letter or digit";
-    if (!strcmp(name, "status")) return "\"status\" is reserved; choose another name";
+    if (!strcmp(name, "status") || !strcmp(name, "list")) return "\"status\" and \"list\" are reserved; choose another name";
     return NULL;
 }
 

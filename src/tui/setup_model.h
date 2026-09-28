@@ -11,12 +11,23 @@
 #define SETUP_ROW_MAX 40
 #define SETUP_REQUIREMENT_MAX 32
 #define SETUP_AGENT_MAX 24
+#define SETUP_CHOICE_MAX 16
+#define SETUP_LISTED_MAX 16
 
-struct setup_step { char id[80], status[24], detail[240]; };
+/* error_code/error_message: steps[].error, the recorded failure of an
+ * installer or sign-in that ran on the terminal (empty when none). */
+struct setup_step { char id[80], status[24], detail[240], error_code[48], error_message[240]; };
 /* One displayed plan member; nested members are flattened as "a.b". */
 struct setup_row { char key[64], value[512]; };
+/* command: the requirement's suggestion (an example fix; Hydra never runs it). */
 struct setup_requirement { char name[64], status[16], detail[240], command[240]; bool blocking; };
 struct setup_agent { char name[64], status[24], path[240], version[64]; };
+/* data.choices of `remote agents`: agents with an installer recipe; install
+ * is true when the CLI offers install_argv (the agent is missing). */
+struct setup_choice { char agent[64], status[24]; bool install; };
+/* One row of `remote setup list`: status is the first open step's status
+ * ("done" when complete, "unreadable" with error set). */
+struct setup_listed { char name[128], destination[256], status[24], next_step[80], error[48]; bool complete; };
 
 struct setup_envelope {
     bool parsed, ok, complete;
@@ -37,6 +48,10 @@ struct setup_envelope {
     size_t requirement_count;
     struct setup_agent agents[SETUP_AGENT_MAX];
     size_t agent_count;
+    struct setup_choice choices[SETUP_CHOICE_MAX];
+    size_t choice_count;
+    struct setup_listed listed[SETUP_LISTED_MAX];
+    size_t listed_count;
     /* host_key_changed: the presented key and the file holding the old one. */
     char presented[160], key_file[320], key_host[256];
 };
@@ -65,6 +80,7 @@ bool setup_status_finished(const char *status);
 const struct setup_step *setup_open_step(const struct setup_envelope *e);
 /* One-line summary for a host list row. */
 void setup_summary(const struct setup_envelope *e, char *out, size_t size);
+void setup_listed_summary(const struct setup_listed *l, char *out, size_t size);
 /* True when data.next.argv is a `hydra remote <setup command> NAME ...` for
  * this NAME using only known setup options, and any approval token in it is
  * exactly the plan the user was shown. */

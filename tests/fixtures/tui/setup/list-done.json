@@ -1,0 +1,1 @@
+{"schema_version":1,"ok":true,"command":"remote-setup-list","data":{"setup_schema":1,"setups":[{"name":"ovh","destination":"deploy@ovh.example.net","status":"done","complete":true,"next":null}]}}

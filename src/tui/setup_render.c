@@ -178,32 +178,50 @@ static void render_steps(struct app *app, struct native_setup *s, bool running) 
 
 /* ---- Plans ---- */
 
+/* Plan members in display order with their labels (provision: binary.*,
+ * platform, prefix, changes; installer: command, effect, source, docs). */
 static const char *const plan_labels[][2] = {
     {"fingerprint", "Fingerprint"}, {"key_type", "Key type"}, {"host", "Host"}, {"hostname", "Host"}, {"port", "Port"},
     {"host_key_alias", "Host key alias"}, {"known_hosts", "Will be added to"}, {"platform", "Platform"},
     {"platform.os", "Operating system"}, {"platform.arch", "CPU"}, {"version", "Hydra version"},
-    {"hydra_version", "Hydra version"}, {"binary.source", "Binary source"}, {"source", "Source"},
-    {"binary.sha256", "Binary SHA-256"}, {"binary_sha256", "Binary SHA-256"}, {"binary.path", "Binary file"},
-    {"package_sha256", "Package SHA-256"}, {"prefix", "Install location"}, {"agent", "Agent"},
-    {"command", "Command"}, {"url", "Installer URL"}, {"docs_url", "Provider docs"}, {"recipe_source", "Recipe"},
+    {"hydra_version", "Hydra version"}, {"binary.trust", "Trust"}, {"binary.source", "Binary source"},
+    {"binary.name", "Binary"}, {"binary.sha256", "Binary SHA-256"}, {"binary_sha256", "Binary SHA-256"},
+    {"package_sha256", "Package SHA-256"}, {"prefix", "Install location"}, {"changes", "Changes"}, {"agent", "Agent"},
+    {"executable", "Executable"}, {"command", "Command"}, {"effect", "Runs"}, {"url", "Installer URL"},
+    {"source", "Recipe"}, {"docs_url", "Provider docs"}, {"verified_on", "Recipe checked"}, {"recipe_source", "Recipe"},
     {"requires", "Requires"}, {"expected_dirs", "Installs into"}, {"peer_fingerprint", "Host key"},
     {"hashed", "Hashed entry"}, {"change", "Change"}, {"notes", "Notes"}, {"effects", "Effects"},
 };
 
 static bool plan_skipped(const char *key) { return !strcmp(key, "name") || !strcmp(key, "destination"); }
 
-static void source_text(const char *value, char *out, size_t size, enum tv_style *tone) {
-    if (!strcmp(value, "pinned")) { snprintf(out, size, "pinned: its digest is recorded in this Hydra release"); *tone = TV_SUCCESS; }
-    else if (!strcmp(value, "unpinned")) { snprintf(out, size, "UNPINNED: not a Hydra release binary; approve only if you trust where it came from"); *tone = TV_WARNING; }
-    else copy_text(out, size, value);
+/* Plain-language values for trust and origin members; others are shown as is. */
+static const char *const plan_values[][4] = {
+    /* key, value, text, tone ("w" warning, "s" success) */
+    {"binary.trust", "pinned", "pinned: its digest is recorded in this Hydra release", "s"},
+    {"binary.trust", "unpinned", "UNPINNED: not a Hydra release binary; approve only if you trust where it came from", "w"},
+    {"binary.source", "release-asset", "Hydra release download, checked against the pinned digest", ""},
+    {"binary.source", "local-helper", "this machine's own hydra-fleet helper (a development build)", "w"},
+    {"binary.source", "binary", "the file you passed with --binary", "w"},
+    {"source", "built-in", "built into this Hydra release", ""},
+    {"source", "local", "LOCAL recipe from your $HYDRA_HOME/fleet/agent-recipes.json", "w"},
+};
+
+static void value_text(const struct setup_row *row, char *out, size_t size, enum tv_style *tone) {
+    size_t i;
+    for (i = 0; i < sizeof(plan_values) / sizeof(plan_values[0]); i++) {
+        if (strcmp(row->key, plan_values[i][0]) || strcmp(row->value, plan_values[i][1])) continue;
+        copy_text(out, size, plan_values[i][2]);
+        *tone = plan_values[i][3][0] == 'w' ? TV_WARNING : plan_values[i][3][0] == 's' ? TV_SUCCESS : TV_BASE;
+        return;
+    }
+    copy_text(out, size, !strcmp(row->value, "true") ? "yes" : !strcmp(row->value, "false") ? "no" : row->value);
 }
 
 static void plan_row(struct pen *p, const struct setup_row *row, const char *label) {
     char value[600], generic[64], *c;
     enum tv_style tone = TV_BASE;
-    size_t length = strlen(row->key);
-    copy_text(value, sizeof(value), !strcmp(row->value, "true") ? "yes" : !strcmp(row->value, "false") ? "no" : row->value);
-    if (length >= 6 && !strcmp(row->key + length - 6, "source")) source_text(row->value, value, sizeof(value), &tone);
+    value_text(row, value, sizeof(value), &tone);
     if (!strcmp(row->key, "fingerprint") || !strcmp(row->key, "command")) tone = TV_STRONG;
     if (!label) {
         copy_text(generic, sizeof(generic), row->key);
@@ -369,6 +387,26 @@ static const char *agent_status(const char *status) {
     return status;
 }
 
+/* Fixed action rows: Continue setup, then one row per installer choice. */
+static void choice_text(const struct setup_choice *c, bool selected, char *out, size_t size) {
+    const char *mark = selected ? ">" : " ";
+    if (!c) snprintf(out, size, "%s Continue setup", mark);
+    else if (c->install) snprintf(out, size, "%s Install %.60s (you review the installer first)", mark, c->agent);
+    else snprintf(out, size, "%s Sign in to %.60s", mark, c->agent);
+}
+
+static void agent_actions(struct app *app, const struct native_setup *s) {
+    const struct setup_envelope *e = s->current;
+    char line[200];
+    size_t i;
+    for (i = 0; i <= e->choice_count && app->line < app->limit - 4; i++) {
+        enum tv_style tone = s->selected == i ? TV_SELECTED : i ? TV_BASE : TV_STRONG;
+        choice_text(i ? &e->choices[i - 1] : NULL, s->selected == i, line, sizeof(line));
+        column(app, 0, app->content_width, tone, line);
+        app->line++;
+    }
+}
+
 static void render_agents(struct app *app, struct native_setup *s) {
     const struct setup_envelope *e = s->current;
     struct pen p;
@@ -376,18 +414,19 @@ static void render_agents(struct app *app, struct native_setup *s) {
     size_t i;
     snprintf(text, sizeof(text), "AGENTS ON %.120s", s->name);
     title(app, TV_STRONG, text);
+    paragraph(app, "Choose an agent to install or sign in to, or continue setup without one. Installers ask for your approval; "
+              "sign-in runs in this terminal.", TV_BASE);
+    agent_actions(app, s);
+    linef(app, "");
     pen_begin(&p, app, 2);
-    pen_text(&p, 0, TV_BASE, "Hydra looked for agent programs on the remote PATH and in common per-user install directories.");
-    pen_text(&p, 0, TV_BASE, "");
+    pen_text(&p, 0, TV_MUTED, "Found on the remote PATH and in common per-user install directories:");
     for (i = 0; i < e->agent_count; i++) {
         const struct setup_agent *a = &e->agents[i];
         snprintf(text, sizeof(text), "%-12s %-20s %s%s%s", a->name, agent_status(a->status), a->path, a->version[0] ? "  " : "", a->version);
         pen_text(&p, 2, !strcmp(a->status, "missing") || !strcmp(a->status, "ambiguous") ? TV_WARNING : TV_BASE, text);
     }
     if (!e->agent_count) pen_text(&p, 2, TV_MUTED, "No agent programs were reported.");
-    pen_text(&p, 0, TV_BASE, "");
-    pen_text(&p, 0, TV_MUTED, "Setup then installs and signs in to the selected agents; you approve each installer command.");
-    footer(app, &p, "Enter continues setup   Esc back", TV_STRONG);
+    footer(app, &p, "Up/Down choose   Enter run   PgDn more agents   Esc back", TV_STRONG);
 }
 
 static void render_handoff(struct app *app, struct native_setup *s) {
@@ -475,7 +514,7 @@ const char *native_setup_hints(const struct app *app, bool narrow) {
         [SETUP_SCREEN_PLAN] = {"y approve  n or Esc decline  Up/Down scroll", "y approve  n/Esc decline"},
         [SETUP_SCREEN_KEY_CHANGED] = {"Enter check again  Esc back  Up/Down scroll", "Enter check again  Esc back"},
         [SETUP_SCREEN_PREFLIGHT] = {"Enter check again or continue  Esc back  Up/Down scroll", "Enter continue  Esc back"},
-        [SETUP_SCREEN_AGENTS] = {"Enter continue setup  Esc back  Up/Down scroll", "Enter continue  Esc back"},
+        [SETUP_SCREEN_AGENTS] = {"Up/Down choose  Enter install, sign in or continue  PgUp/PgDn scroll  Esc back", "Enter run  Esc back"},
         [SETUP_SCREEN_UNKNOWN] = {"Enter reconcile  Esc back  Up/Down scroll", "Enter reconcile  Esc back"},
         [SETUP_SCREEN_HANDOFF] = {"Enter hand over the terminal  Esc later", "Enter hand over  Esc later"},
         [SETUP_SCREEN_DONE] = {"Enter or Esc close  q quit", "Enter close"},
