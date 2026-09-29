@@ -105,7 +105,8 @@ static void add_host(struct tv_session *s) {
     tv_send(s, "deploy@ovh.example.net\tovh");
     tv_until(s, "deploy@ovh.example.net", 3);
     capture(s, "03-form");
-    tv_send(s, "\r");
+    tv_send(s, "\r");                      /* Enter on the name moves to the SSH config field */
+    tv_send(s, "\r");                      /* Enter on the last field starts setup */
 }
 
 static void trust_key(struct tv_session *s) {
@@ -372,7 +373,7 @@ static void duplicate_name(int cols, int rows) {
     tv_until(&s, "Check requirements: blocked", 6);
     tv_send(&s, "A");
     tv_until(&s, "ADD A REMOTE HOST", 4);
-    tv_send(&s, "deploy@ovh.example.net\tovh\r");
+    tv_send(&s, "deploy@ovh.example.net\tovh\r\r");     /* Enter on the name moves on; Enter on the last field submits */
     tv_until(&s, "ovh ALREADY HAS AN UNFINISHED SETUP", 4);
     see(&s, "Enter continues that setup");
     CHECK(!called("setup ovh deploy@"), "a duplicate name runs nothing");

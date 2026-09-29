@@ -417,14 +417,20 @@ static void edit_cases(struct app *app) {
     s->open = false; app->host_selected = 1;
     check(hosts_setup_selected(app, &record) && record == 0, "the Hosts row of an unfinished setup offers edit and remove");
     native_setup_open_form(app);
-    type_text(app, "deploy@ovh.example.net\tovh\r");
+    type_text(app, "deploy@ovh.example.net\r");
+    check(s->screen == SETUP_SCREEN_FORM && s->focus == SETUP_FIELD_NAME && !s->job.active,
+          "Enter in the destination moves to the name and runs nothing");
+    type_text(app, "ovh\r");
+    check(s->screen == SETUP_SCREEN_FORM && s->focus == SETUP_FIELD_CONFIG && !s->job.active,
+          "Enter in the name moves to the SSH config file and runs nothing");
+    type_text(app, "\r");
     check(s->screen == SETUP_SCREEN_DUPLICATE && !s->job.active && !strcmp(s->duplicate, "ovh"), "a duplicate name is caught before anything runs");
     check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "ovh ALREADY HAS AN UNFINISHED SETUP") &&
           strstr(frame, "/Users/you/.ssh/private") && strstr(frame, "Enter continues that setup"), "the duplicate screen offers continue, edit and remove");
     keep("duplicate", 100, 30, frame);
     (void)native_setup_byte(app, 27); native_setup_flush_input(app);
     check(s->screen == SETUP_SCREEN_FORM && s->focus == SETUP_FIELD_NAME, "Esc returns to the form at the name");
-    type_text(app, "\r");
+    type_text(app, "\r\r");
     (void)native_setup_byte(app, 'e');
     check(s->screen == SETUP_SCREEN_FORM && !strcmp(s->editing, "ovh") && !strcmp(s->fields[SETUP_FIELD_CONFIG].text, "/Users/you/.ssh/private") &&
           !strcmp(s->fields[SETUP_FIELD_DESTINATION].text, "deploy@ovh.example.net") && !s->job.active, "e opens the setup prefilled");

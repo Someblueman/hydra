@@ -590,7 +590,7 @@ static const char *special_hints(const struct native_setup *s, bool narrow) {
 
 const char *native_setup_hints(const struct app *app, bool narrow) {
     static const char *const hints[][2] = {
-        [SETUP_SCREEN_FORM] = {"Tab or Up/Down field  Enter start setup  Esc cancel", "Tab field  Enter start  Esc cancel"},
+        [SETUP_SCREEN_FORM] = {"Tab, Enter or Up/Down next field  Enter on the last field starts setup  Esc cancel", "Enter next field, then start  Esc cancel"},
         [SETUP_SCREEN_RUNNING] = {"Esc or c cancel the step  b keep it running in the background", "Esc/c cancel  b background"},
         [SETUP_SCREEN_STEPS] = {"Up/Down select  Enter continue or inspect the step  Esc back  q quit", "Enter continue  Esc back"},
         [SETUP_SCREEN_TRUST_KEY] = {"type yes, then Enter to trust  Esc decline", "yes + Enter trust  Esc decline"},

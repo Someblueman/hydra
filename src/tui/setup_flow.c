@@ -551,7 +551,11 @@ static void trust_enter(struct app *app, struct native_setup *s) {
 
 static void enter(struct app *app, struct native_setup *s) {
     switch (s->screen) {
-        case SETUP_SCREEN_FORM: submit_form(app, s); break;
+        case SETUP_SCREEN_FORM:
+            /* Enter moves through the fields like Tab; only the last field starts setup. */
+            if (s->focus + 1 < SETUP_FORM_FIELDS) s->focus++;
+            else submit_form(app, s);
+            break;
         case SETUP_SCREEN_STEPS: step_enter(app, s); break;
         case SETUP_SCREEN_AGENTS: agents_enter(app, s); break;
         case SETUP_SCREEN_TRUST_KEY: trust_enter(app, s); break;
