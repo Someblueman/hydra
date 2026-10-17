@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `make test-usability` runs goal-driven screen-only trials beside the scripted
+  journeys: a deterministic rule-based evaluator (`scripts/usability/policy.py`,
+  no model) is given only a goal in plain words and each screen, reads the
+  controls the screen offers (footer and inline key hints, "Press n to ..."
+  sentences, prompts, the tab bar once the screen says how tabs are reached) and
+  presses the one whose label matches the goal's vocabulary, within a step bound.
+  Six goals (`start-task`, `why-stopped`, `find-attention`, `leave-return`,
+  `remove-stopped`, `approve-plan`) are verified independently against Git, tmux
+  and Hydra state, and each gets a discoverability score (steps, dead ends, help
+  opened, controls read, fit, completed). A control whose label matched the goal
+  but did nothing fails its check; nothing is special-cased.
+- Comprehension trials (`--trial comprehension`) reach each concept's entry point
+  or empty state (head, shell TUI head, workflow, plan versus approved workflow,
+  workflow run, gate and check, coordination, Fleet and host, statistics, live
+  session versus completed work, interruption, removal) and assert that the
+  visible text states purpose, when it helps, a concrete example and the next
+  action in plain language within 80x24 and 140x40, that consequences precede
+  approval, interruption and removal, and that mentioned commands exist in
+  `hydra help`. `--trial NAME` selects one trial; `USABILITY_ARGS` passes options
+  through make. The runner is now the package `scripts/usability/`; the report
+  lists the live-provider, visual, human first-use and remote-onboarding gates
+  as explicitly unexecuted.
+
+### Changed
+
+- Explanations where users meet each feature: Work's empty state gives an example
+  of two heads; Workflows wraps its explanation at 80 columns and names the plan
+  review (E) as the usual way a run starts; Overview's run panel and the
+  statistics empty state wrap instead of clipping; Attention's empty state says
+  what the view lists (approval requests, failed checks, results to review,
+  stopped terminals) and what Enter and r do; the plan pane says a proposal runs
+  nothing until validated and its exact revision approved; Coordination says when
+  it matters with an example and no longer clips its last line; Hosts says when a
+  remote machine helps; Details says `Session` is the live terminal and `Reported`
+  the outcome the agent declares; the attached status row says leaving or closing
+  the view keeps the agent running. The shell TUI's empty list explains a head the
+  same way.
+
 ## [2.9.0] - 2026-09-28
 
 ### Added

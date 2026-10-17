@@ -1,16 +1,92 @@
 # Automated usability evaluation
 
-Initial deterministic runner shipped in 2.7.0 (implemented 15 September 2026).
-The broader discoverability and live-provider matrix below remains an acceptance
-plan; passing scripted journeys does not close it.
+Initial deterministic runner shipped in 2.7.0 (implemented 15 September 2026);
+goal-driven screen-only trials and comprehension trials were added for 3.0.0.
+Human first-use review and the live-provider and remote-onboarding gates below
+remain an acceptance plan; passing automated runs does not close them.
 
 Run `make test-usability`. It builds and installs a fresh prefix, exercises real
 Git/tmux and public Hydra entry points, then writes an HTML report under
 `build/usability-<timestamp>/`. Set `USABILITY_OUTPUT=/absolute/new/directory` to
-retain a named run. No provider login is used by this command.
+retain a named run. No provider login is used by this command. The runner is the
+package `scripts/usability/` (`PYTHONPATH=scripts python3 -m usability`); pass
+extra options with `USABILITY_ARGS`, for example
+`make test-usability USABILITY_ARGS="--trial approve-plan --columns 80"`.
 
-The current suite runs these journeys at 80 and 140 columns (`--journey NAME`
-selects one, `--columns` a width):
+One run has three parts, each at 80x24 and 140x40 (`--columns` selects a width):
+the scripted journeys (`--journey NAME` selects one), the goal-driven trials
+(`--trial NAME`) and the comprehension trials (`--trial comprehension`). Selecting
+a journey runs no trials and selecting a trial runs no journeys. `--prefix DIR`
+reuses an installed prefix while iterating; a report made that way says so and
+is not a release report.
+
+## Goal-driven screen-only trials
+
+Each trial gives a deterministic evaluator (`scripts/usability/policy.py`) one
+goal in plain words and, at every step, the visible screen text. It never gets a
+feature name, a key sequence, Hydra source or private state. It reads the
+controls the screen offers: the footer key hints (`x remove`), inline pairs and
+rows such as `a  talk to the agent`, sentences such as `Press n to start one`,
+`Ctrl-B Tab leave`, open prompts, and the tab bar once the screen has said how
+tabs are reached (a footer `Tab next tab`, or help's `1-9 jump to a tab` or
+`Left / Right`). It then presses the control whose label shares the most
+vocabulary with the goal (prefix matching on the goal's words; `quit` is always
+avoided). A prompt is answered from the goal's own words (the task name it was
+asked to create) and a `y/N` question is confirmed only when the goal is to go
+ahead. When nothing on the screen matches, it opens help once or twice, reads it
+and closes it before acting, then steps back with Esc. Steps are bounded (14).
+There is no model, so the same build gives the same path.
+
+| Trial | Goal given to the evaluator | Independent outcome check |
+|---|---|---|
+| `start-task` | Start work on a new task called first-task using a plain shell | `hydra list --json` names the head, its worktree exists, typed input lands in it |
+| `why-stopped` | Find out why the task sample stopped and what happened to its files; then open its full details | The explanation names the head, says the files are kept and infers no loss; uncommitted work untouched |
+| `find-attention` | Find out whether anything needs a decision from you | `hydra gate status` agrees nothing is pending |
+| `leave-return` | Stop typing to the agent and return to Hydra's controls; then go back to the agent | The tmux session is still running; typed input reaches it afterwards |
+| `remove-stopped` | Remove the head called sample, whose terminal has stopped; keep its branch | Worktree gone, branch kept, head unlisted; the prompt explained the consequences before `y` |
+| `approve-plan` | Approve the plan the agent proposed so Hydra runs it | The run record reaches `succeeded` and `workflow plan result` verifies delivery; the approval showed policy, digest and the effect of `y` |
+
+The proof of each trial lists every screen it read (as a digest with its capture),
+the controls it found, the ranked candidates, the choice and why, prompts it
+answered, and the score:
+
+- `steps`: controls pressed and prompts answered;
+- `dead_ends`: a cancelled prompt, a repeated choice on the same screen, a
+  backtrack with Esc, or a control that changed nothing when pressed;
+- `help_opened`: how often it had to read help because nothing visible matched;
+- `controls_read`: how many labelled controls it parsed in total;
+- `fit`: the share of steps chosen from a label that matched the goal, rather
+  than a fallback such as help or Esc;
+- `completed`: whether the goal state was reached, as the checker verified.
+
+Read it as a measurement, not a grade: a goal reached with `fit` 1.0 and no help
+was reachable from what the screen said; one that needed help, or that failed,
+is a discoverability finding. A control whose label matched the goal but did
+nothing fails a desired-behaviour check (`The visible control ... responds`),
+and a goal the evaluator cannot reach fails the trial; the runner is not taught
+workarounds. On the 3.0 build, `find-attention` and `remove-stopped` need one
+help read from the initial Workspace view because its footer offers neither the
+Attention tab nor removal, and `why-stopped` records that the Workspace pane's
+`Enter  full details` hint does not open Details while the project pane is
+focused; both stay red or scored until the view changes.
+
+## Comprehension trials
+
+`--trial comprehension` runs two sessions per size (an empty project and one with
+a head) and visits each concept's entry point or empty state: head (Work, and the
+shell TUI's empty list), workflow (Workflows), plan versus approved workflow (the
+plan pane), workflow run (Overview's run panel), gate and check (Attention),
+coordination view, Fleet and host (Hosts), statistics, live session versus
+completed work (Details), interruption (attached input) and removal (the
+confirmation). For each it rejoins the wrapped rows and asserts that the visible
+text states the purpose, when it helps, a concrete example and the next action,
+with no internal terms, that consequences are stated before approval,
+interruption and removal, and that every `hydra <command> [<sub>]` it mentions
+exists in `hydra help`. A phrase cut by the panel edge or pushed below the panel
+fails, so the same checks run at 80x24 and 140x40. These trials reach entry
+points by script; they measure the copy, not discoverability.
+
+The current suite runs these journeys at 80 and 140 columns:
 
 | Journey | What it drives and checks |
 |---|---|
@@ -51,8 +127,10 @@ promises. Both journeys pass at 80 and 140 columns.
 
 Reports distinguish passed, failed and blocked setup, and retain actions, terminal
 bytes, escaped text snapshots, cleanup receipts, installed file hashes and source
-identity. Text snapshots do not reproduce colors. Live providers, actual terminal
-visual review, goal-only discoverability and remote hosts remain separate gates.
+identity. Text snapshots do not reproduce colors. The report lists the gates a
+run does not qualify: a live authenticated provider, actual terminal visual
+review, human first-use review (the rule-based evaluator is not a novice) and an
+authorized remote host with real onboarding. Those stay explicitly unexecuted.
 A single local Claude trial using an existing login published an agent-authored
 proposal and reached native validation without execution in 132 seconds. That
 trial qualifies this bounded planning path only, not provider parity or a full
@@ -151,16 +229,14 @@ after a failure or use the production renderer as the sole independent oracle.
 
 ## Small first delivery and iteration loop
 
-Start with four regression journeys: clean entry, navigation through statistics,
-attach/leave/resize, and in-app head removal. These directly reproduce reported
-problems without needing a paid provider or remote host. Add one goal-driven trial
-for finding and leaving agent input. Then extend to conversation-to-plan and remote
-onboarding with real-provider qualification alongside repeatable fixture checks.
-
-Proposed interface, to be implemented: `make test-usability` runs the bounded local
-journeys and writes an HTML report with pass/fail/blocked results and linked captures.
-Keep live provider/SSH runs explicitly selected and configured. Existing quality
-checks remain independent; an open usability gate must be visible in release review.
+The four regression journeys (clean entry, navigation through statistics,
+attach/leave/resize, in-app head removal), the conversation-to-plan journeys and
+the goal-driven and comprehension trials above are implemented; `make
+test-usability` runs them and writes the HTML report with pass/fail/blocked
+results, linked captures, scores and the unexecuted gates. Remote onboarding and
+real-provider qualification stay explicitly selected and configured outside this
+command. Existing quality checks remain independent; an open usability gate must
+be visible in release review.
 
 For each fix: reproduce the failure, retain a failing journey, implement the change,
 rerun that journey, inspect the evidence, then run the small core set. Use a fresh
