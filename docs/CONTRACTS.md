@@ -349,8 +349,14 @@ them, remain typed keys. `hydra provenance` exposes the exact identity, paths, a
 launcher.
 
 Source and prefix installs provide `bin/hydra`, `lib/hydra/*.sh`, and an optional
-qualified `hydra-tui`. Core shell operation requires POSIX `sh`, Git, and tmux 3.0 or
-newer on supported macOS and Linux systems. The root README lists supported tools.
+qualified `hydra-tui`. Core shell operation requires POSIX `sh` and Git on supported
+macOS and Linux systems. tmux 3.0 or newer is required only for interactive
+terminal operations (interactive spawn and resume, attach, switch, broadcast,
+dashboard, TUI, and workflow steps that request a terminal); headless heads, exec,
+workflows, remote tasks, bootstrap, install, and doctor run without it. A tmux on
+PATH that cannot report a version is unusable, never "old enough". The root README
+lists supported tools; [T2/T3 qualification](T2_T3_QUALIFICATION.md) records the
+reproducible execution-without-tmux cases.
 
 ## Fleet coordination (since v2.1.0)
 
@@ -404,6 +410,17 @@ confirmation is scoped to managed commands; missing owner evidence stays unknown
 `task-result` returns an immutable receiver-completion snapshot with checksummed
 artifacts/evidence and an exact source/result Git bundle. Both endpoints validate
 the result envelope before use; downloads never recapture changed worktrees.
+A receiver advertises `tmux` only when a working tmux 3.x answers `tmux -V` and
+always advertises `execution-headless`; a task requiring `tmux` on a receiver
+without it is refused before acceptance with `capability_unavailable`, and a
+compiled plan admits only `exec` plus `execution-headless` recipes
+(`invalid_task_policy`). A workflow task step whose first submission is refused
+with a final receiver code (`capability_unavailable`, `unmapped_project`,
+`submission_conflict`, `missing_dependency`, `placement_mismatch`) records that
+code in its `remote-response.json` and fails instead of waiting for
+reconciliation; transport failures still wait. Alias records may bind an OpenSSH
+client configuration (`remote add --ssh-config`, or a finished guided setup), and
+recorded workflow destinations carry `ssh_config` and `principal` when bound.
 Collection installs verified snapshots beneath the common Git directory and uses
 compare-and-set direct refs under `refs/hydra/tasks/collection_ID/`. Repeated
 collection preserves checkout/index/ordinary refs; changed private bindings fail.

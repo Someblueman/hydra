@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Reproducible T2/T3 qualification with tmux absent on the execution hosts:
+  `make test-t2-headless` (remote command and headless-adapter tasks, reconnect,
+  exact collection and dependent consumption, the local compiled plan, duplicate
+  submission, lost start, owner death, cancellation, bounded logs and retained
+  reservations) and `make test-t3-distributed` (the two-host fan-out, cross-host
+  validation, join, composition and final check over two tmux-less loopback
+  receivers, with lost acknowledgment, coordinator restart and stale results over
+  the controlled transport and the same scenario over two private loopback OpenSSH
+  daemons; `make test-t3-distributed-ssh` prints SKIP without sshd). The receiver
+  side runs with a private PATH without tmux and a tmux stand-in that refuses
+  terminal operations loudly (`headless_receiver_path` in `tests/headless_path.sh`);
+  the coordinator keeps its own PATH. Both controlled cases run in `make test-fleet`,
+  and CI requires the loopback SSH pass line next to `test-remote-setup-ssh`.
+  `docs/T2_T3_QUALIFICATION.md` records the commands, evidence, the tmux
+  dependency audit and the remaining operator step on a real host.
+- `hydra remote add NAME DEST --ssh-config /absolute/file` binds an alias to one
+  OpenSSH client configuration, as a finished guided setup records.
+
+### Changed
+
+- tmux is documented as required only for interactive terminal operations; headless
+  heads, exec, workflows, remote tasks, bootstrap, install and doctor run without it.
+- A workflow task step whose first submission a receiver refuses before acceptance
+  (`capability_unavailable`, `unmapped_project`, `submission_conflict`,
+  `missing_dependency`, `placement_mismatch`) now records that code in
+  `remote-response.json` and fails, instead of reporting `waiting-remote` for a
+  dispatch that can never be reconciled; transport failures still wait.
+
+### Fixed
+
+- `check_tmux_version` accepted a tmux on PATH whose `tmux -V` failed or printed no
+  parsable version, because the numeric comparison error was taken as "new enough";
+  such a tmux is now reported as unusable.
+- Workflow task dispatch ignored an alias's recorded `ssh_config` and `principal`
+  (honoured by `hydra fleet task` and `fleet list`), so a setup-created alias could
+  not reach its host through its own client configuration; recorded destinations
+  now carry both when bound, and existing records without them stay valid.
+
 ## [2.9.0] - 2026-09-28
 
 ### Added
