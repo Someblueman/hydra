@@ -278,6 +278,18 @@ test-bench-i1: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 bench-tui: build-tui $(BUILD_DIR)/test-tui-pty
 	@sh scripts/bench-tui.sh
 
+# Item 10 matrix over the I1 fixture: measurement only, never a gate.
+# Example: make perf-matrix PERF_MATRIX_ARGS="--output /tmp/hydra-perf --heads 1 10"
+.PHONY: perf-matrix perf-attention test-perf-matrix
+perf-matrix: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
+	@LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 python3 scripts/perf-matrix.py --build "$(abspath $(BUILD_DIR))" $(PERF_MATRIX_ARGS)
+
+perf-attention: build-fleet
+	@LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 python3 scripts/perf_matrix_attention.py --build "$(abspath $(BUILD_DIR))" $(PERF_ATTENTION_ARGS)
+
+test-perf-matrix: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
+	@HYDRA_PERF_BUILD="$(abspath $(BUILD_DIR))" sh tests/test_perf_matrix.sh
+
 package-core: build-core
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/package-native.sh core
 
@@ -345,6 +357,8 @@ help:
 	@echo "  make bench-core - Compare shell and native snapshot timings"
 	@echo "  make bench-tui - Measure bounded native adapter/render at 5, 20, and 100 heads"
 	@echo "  make bench     - Record list/status/doctor/TUI timings at 5 and 20 heads"
+	@echo "  make perf-matrix - Run the item 10 matrix (PERF_MATRIX_ARGS=\"--output DIR ...\")"
+	@echo "  make test-perf-matrix - Smallest matrix cells, attention corpus and schema checks"
 	@echo "  make clean     - Remove temporary files"
 	@echo "  make install   - Install hydra to \$$PREFIX/bin (default /usr/local)"
 	@echo "  make uninstall - Remove hydra from \$$PREFIX"

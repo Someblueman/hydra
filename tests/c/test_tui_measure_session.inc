@@ -102,7 +102,9 @@ static bool measure_open(struct measure_live *m, const char *tui, const char *hy
     if (fcntl(raw_fd,F_SETFD,FD_CLOEXEC)<0) { close(raw_fd); return false; }
     m->raw=fdopen(raw_fd,"wb");
     if (!m->raw) { close(raw_fd); return false; }
-    return !open_session(&m->session,tui,hydra,"/usr/bin",(unsigned short)columns,(unsigned short)rows) &&
+    /* The perf matrix prepends its exec-counting PATH shims; otherwise /usr/bin. */
+    const char *prefix=getenv("HYDRA_ITEM10_PATH_PREFIX");
+    return !open_session(&m->session,tui,hydra,prefix && prefix[0] ? prefix : "/usr/bin",(unsigned short)columns,(unsigned short)rows) &&
         m->session.master<FD_SETSIZE;
 }
 

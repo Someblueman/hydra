@@ -156,10 +156,20 @@ class ProcessCounters:
             fds: int | None = len(list((root / "fd").iterdir()))
         except OSError:
             fds = None
+        switches = {
+            key: int(status[key].split()[0]) if key in status else None
+            for key in ("voluntary_ctxt_switches", "nonvoluntary_ctxt_switches")
+        }
         return {
             "available": True,
             "identity_start": int(values[19]),
             "cpu_ticks": int(values[11]) + int(values[12]),
+            # Children already waited for, including their own waited-for
+            # descendants; a lower bound on helper CPU (unreaped work is absent).
+            "reaped_children_cpu_ticks": int(values[13]) + int(values[14]),
+            "threads": int(values[17]),
+            "voluntary_ctxt_switches": switches["voluntary_ctxt_switches"],
+            "nonvoluntary_ctxt_switches": switches["nonvoluntary_ctxt_switches"],
             "cpu_tick_ns_numer": 1_000_000_000,
             "cpu_tick_ns_denom": os.sysconf("SC_CLK_TCK"),
             "resident_bytes": int(values[21]) * os.sysconf("SC_PAGE_SIZE"),
