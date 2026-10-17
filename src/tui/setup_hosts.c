@@ -52,17 +52,20 @@ void native_setup_sweep_tick(struct app *app) {
 
 /* ---- Rows ---- */
 
+/* Observed hosts first, then unfinished setups, then "Add a host"; without
+ * any observed host the add row leads. */
 size_t hosts_rows(const struct app *app, struct host_row *rows, size_t capacity) {
     const struct native_setup *s = app->setup;
     size_t count = 0, i;
-    if (!app->fleet && count < capacity) rows[count++] = (struct host_row){HOST_ROW_ADD, 0};
-    for (i = 0; app->fleet && i < app->model.host_count && count < capacity; i++) rows[count++] = (struct host_row){HOST_ROW_HOST, i};
+    bool observed = app->model.host_count > 0;
+    if (!observed && count < capacity) rows[count++] = (struct host_row){HOST_ROW_ADD, 0};
+    for (i = 0; i < app->model.host_count && count < capacity; i++) rows[count++] = (struct host_row){HOST_ROW_HOST, i};
     for (i = 0; s && i < s->record_count && count < capacity; i++) {
         /* A finished setup is an ordinary fleet host; list it once. */
-        if (app->fleet && s->records[i].complete) continue;
+        if (s->records[i].complete && host_for_name(app, s->records[i].name)) continue;
         rows[count++] = (struct host_row){HOST_ROW_SETUP, i};
     }
-    if (app->fleet && count < capacity) rows[count++] = (struct host_row){HOST_ROW_ADD, 0};
+    if (observed && count < capacity) rows[count++] = (struct host_row){HOST_ROW_ADD, 0};
     return count;
 }
 
@@ -81,9 +84,18 @@ void hosts_open_row(struct app *app) {
     if (row->kind == HOST_ROW_ADD) native_setup_open_form(app);
     else if (row->kind == HOST_ROW_SETUP) native_setup_resume(app, app->setup->records[row->index].name);
     else {
-        copy_text(app->search, sizeof(app->search), app->model.hosts[row->index].name);
-        enter_view(app, 0); retarget_selection(app);
+        /* Follow this host's work beside everything else, filtered to it. */
+        location_set(app, app->model.hosts[row->index].name);
+        enter_view(app, 0);
     }
+}
+
+/* r on a host row: a fresh observation of the fleet, named for that host. */
+void hosts_retry_row(struct app *app) {
+    struct host_row rows[MAX_HEADS];
+    size_t count = hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0]));
+    if (app->host_selected < count && rows[app->host_selected].kind == HOST_ROW_HOST) remote_retry(app, app->model.hosts[rows[app->host_selected].index].name);
+    else remote_retry(app, NULL);
 }
 
 bool hosts_setup_selected(const struct app *app, size_t *record) {
@@ -98,7 +110,7 @@ void setup_row_text(const struct app *app, const struct host_row *row, char *nam
     const struct setup_record *r;
     if (row->kind == HOST_ROW_ADD) {
         copy_text(name, name_size, "+ Add a host");
-        copy_text(state, state_size, app->fleet ? "A: set up another machine over SSH" : "set up a machine over SSH");
+        copy_text(state, state_size, app->model.host_count ? "A: set up another machine over SSH" : "set up a machine over SSH");
         return;
     }
     r = &app->setup->records[row->index];
@@ -137,12 +149,14 @@ void render_setup_hub(struct app *app) {
     size_t count = hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0])), i;
     if (app->host_selected >= count) app->host_selected = 0;
     style(app, TONE_STRONG); linef(app, "REMOTE HOSTS"); style(app, TONE_BASE);
-    paragraph(app, "Hydra can run agents on other machines over SSH. Adding a host checks its SSH host key and "
-              "requirements, installs a matching Hydra there and helps you install and sign in to agents. "
-              "Nothing changes on the remote until you approve it.", TV_BASE);
+    paragraph(app, "Hydra can run agents on other machines over SSH, for example a build box with more cores or a "
+              "machine that already has the right toolchain, when a task needs more than this machine offers. Adding a "
+              "host checks its SSH host key and requirements, installs a matching Hydra there and helps you install "
+              "and sign in to agents. Nothing changes on the remote until you approve it.", TV_BASE);
     linef(app, "");
     for (i = 0; i < count && app->line < app->limit - 2; i++) hub_row(app, &rows[i], i);
     linef(app, "");
-    paragraph(app, count > 1 ? "Enter continues a host's setup; e edits and x removes an unfinished one. Follow work on a set-up host with hydra fleet tui."
-                             : "Press Enter or A to add a host.", TV_MUTED);
+    if (app->remote_stale) paragraph(app, app->remote_error, TV_WARNING);
+    paragraph(app, count > 1 ? "Enter continues a host's setup; e edits and x removes an unfinished one. A set-up host's work appears in Work beside local heads; L filters by location."
+                             : "Press Enter or A to add a host. Its work then appears in Work beside local heads; L filters by location.", TV_MUTED);
 }

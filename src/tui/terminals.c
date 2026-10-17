@@ -19,9 +19,11 @@ const char *native_agent_name(const struct head *h) {
     return !h->profile[0] || !strcmp(h->profile, "none") || !strcmp(h->profile, "-") ? "shell" : h->profile;
 }
 
+/* The exact instance on the exact host and project; local rows have no host. */
 static bool terminal_is_head(const struct app *app, const struct head *h, const struct native_terminal *t) {
+    (void)app;
     return !strcmp(h->head_id,t->head) && !strcmp(h->instance,t->instance) &&
-        (!app->fleet || (!strcmp(h->remote_host,t->remote_host) && !strcmp(h->remote_project,t->remote_project)));
+        !strcmp(h->remote_host,t->remote_host) && !strcmp(h->remote_project,t->remote_project);
 }
 
 /* Names the agent and what Hydra observes about its session. Output activity,
@@ -45,9 +47,10 @@ void native_terminal_attention(struct app *app, const struct native_terminal *t,
     const struct head *h=terminal_head(app,t);
     const char *outcome;
     if (!h) { snprintf(out,size,"%s",app->snapshot_stale ? "snapshot stale" : "old instance"); return; }
-    outcome=app->snapshot_stale ? "snapshot stale" : recorded_outcome(h);
+    outcome=head_stale(app,h) ? "snapshot stale" : recorded_outcome(h);
     if (outcome) snprintf(out,size,"%s%s%s",native_agent_name(h),dot(app),outcome);
-    else snprintf(out,size,"%s%ssession %s",native_agent_name(h),dot(app),app->fleet ? h->desired : status_label(h));
+    else if (head_remote(h)) snprintf(out,size,"%s%son %s%s%s",remote_agent_name(h),dot(app),h->remote_host,dot(app),remote_head_status(app,h));
+    else snprintf(out,size,"%s%ssession %s",native_agent_name(h),dot(app),status_label(h));
 }
 
 struct native_terminal *native_terminal_for_head(struct app *app, const struct head *h) {
@@ -66,9 +69,27 @@ static void outbox_clear(struct native_terminal *t) {
     t->outbox_count=0; t->enter_pending=false;
 }
 
+/* A remote client is the host's own tmux client over SSH: its history lives
+ * in that tmux, so Ctrl-B [ forwards the host's prefix and [ to enter copy
+ * mode there (the host's tmux must use the default Ctrl-B prefix; Hydra
+ * cannot verify it), and Ctrl-B ] sends q only while Hydra put it there. */
+static bool remote_history(struct app *app, struct native_terminal *t, bool enter) {
+    if (t->client.finished || t->client.eof) return false;
+    if (enter) {
+        native_terminal_send(app, t, "\002[", 2);
+        t->remote_history = true;
+        copy_text(app->notice, sizeof(app->notice), "Remote agent history: the host's tmux copy mode; PgUp/PgDn or arrows scroll, q leaves");
+    } else {
+        if (t->remote_history) native_terminal_send(app, t, "q", 1);
+        t->remote_history = false;
+        copy_text(app->notice, sizeof(app->notice), "Back to live agent output");
+    }
+    return true;
+}
+
 /* A tmux client draws on the alternate screen without scrollback, so the
  * pane's history lives in tmux: scrolling uses tmux copy mode on the exact
- * session, and q, Esc or Ctrl-B ] leave it. Fleet clients keep model scroll. */
+ * session, and q, Esc or Ctrl-B ] leave it. */
 bool native_terminal_history(struct app *app, struct native_terminal *t, bool enter) {
     const struct head *h = terminal_head(app, t);
     struct output_child child;
@@ -76,7 +97,8 @@ bool native_terminal_history(struct app *app, struct native_terminal *t, bool en
     char *copy[] = {(char *)"tmux", (char *)"copy-mode", (char *)"-u", (char *)"-t", target, NULL};
     char *cancel[] = {(char *)"tmux", (char *)"send-keys", (char *)"-t", target, (char *)"-X", (char *)"cancel", NULL};
     char discard[256];
-    if (app->fleet || !h || !h->session[0] || t->client.finished || t->client.eof) return false;
+    if (t->remote_host[0]) return remote_history(app, t, enter);
+    if (!h || !h->session[0] || t->client.finished || t->client.eof) return false;
     snprintf(target, sizeof(target), "=%s:", h->session);
     if (output_start(&child, enter ? copy : cancel, 1000L)) return false;
     while (output_read(&child, discard, sizeof(discard)) > 0) {}
@@ -98,15 +120,6 @@ void native_terminals_destroy(struct app *app) {
     if (!app->terminals) return;
     for (i=0;i<NATIVE_TERMINALS;i++) native_terminal_close(&app->terminals->slots[i]);
     free(app->terminals); app->terminals=NULL;
-}
-
-static bool fleet_target_ready(const struct app *app, const struct head *h) {
-    size_t i;
-    if (!app->fleet) return true;
-    if (app->snapshot_stale || !h->remote_host[0] || !h->remote_project[0] || !h->remote_branch[0]) return false;
-    for (i = 0; i < app->model.host_count; i++) if (!strcmp(app->model.hosts[i].name, h->remote_host))
-        return !strcmp(app->model.hosts[i].connection, "reachable") && !strcmp(app->model.hosts[i].freshness, "fresh");
-    return false;
 }
 
 static size_t terminal_slot(struct app *app, const struct head *h) {
@@ -140,7 +153,7 @@ static bool attachment_socket(char socket[4096]) {
 
 static bool attachment_argv(const struct app *app, const struct head *h,
                             struct native_terminal *t, char *argv[12], char socket[4096]) {
-    if (app->fleet) {
+    if (head_remote(h)) {
         argv[0]=(char *)app->hydra; argv[1]=(char *)"fleet"; argv[2]=(char *)"attach"; argv[3]=(char *)h->remote_host;
         argv[4]=(char *)"--project"; argv[5]=(char *)h->remote_project; argv[6]=(char *)"--instance"; argv[7]=t->instance;
         argv[8]=(char *)"--"; argv[9]=(char *)h->remote_branch; argv[10]=NULL;
@@ -155,7 +168,8 @@ static bool attachment_argv(const struct app *app, const struct head *h,
 /* A recorded local interactive head whose tmux session is gone, and that is
  * not being torn down: opening it restarts its terminal. */
 bool head_terminal_gone(const struct app *app, const struct head *h) {
-    return h && !app->fleet && !head_headless(h) && h->head_id[0] && h->instance[0] && strcmp(h->instance, "-") &&
+    (void)app;
+    return h && !head_remote(h) && !head_headless(h) && h->head_id[0] && h->instance[0] && strcmp(h->instance, "-") &&
         !strcmp(h->liveness, "stopped") && strcmp(h->desired, "stopping") && strcmp(h->desired, "stopped");
 }
 
@@ -192,7 +206,8 @@ static bool terminal_start(struct app *app, const struct head *h, size_t availab
 
 bool native_terminal_attach_head(struct app *app, const struct head *h) {
     size_t available;
-    if (h && !app->fleet && head_headless(h)) {
+    char refusal[TEXT];
+    if (h && head_headless(h)) {
         copy_text(app->notice,sizeof(app->notice),"Headless head: it has no terminal to attach; p shows its step output in Details"); return false;
     }
     if (head_terminal_gone(app, h)) {
@@ -200,10 +215,10 @@ bool native_terminal_attach_head(struct app *app, const struct head *h) {
     }
     if (!h || !h->head_id[0] || !h->instance[0] || !strcmp(h->instance,"-") ||
         !strcmp(h->desired,"headless")) {
-        copy_text(app->notice,sizeof(app->notice),app->fleet ? "Select an interactive remote head with a current instance" : "Select a recorded local head to open an interactive pane"); return false;
+        copy_text(app->notice,sizeof(app->notice),h && head_remote(h) ? "Select an interactive remote head with a current instance" : "Select a recorded local head to open an interactive pane"); return false;
     }
-    if (!fleet_target_ready(app, h)) {
-        copy_text(app->notice,sizeof(app->notice),"Remote target is stale or lacks an exact interactive identity; refresh first"); return false;
+    if (remote_action_refusal(app, h, refusal, sizeof(refusal))) {
+        copy_text(app->notice,sizeof(app->notice),refusal); return false;
     }
     if (!app->terminals) {
         app->terminals=calloc(1,sizeof(*app->terminals));
@@ -231,14 +246,14 @@ static bool terminal_start(struct app *app, const struct head *h, size_t availab
     if (!tv_term_init(t->screen,t->cells,t->cells+NATIVE_TERMINAL_CELLS,512,256,t->history,256,80,24)) goto fail;
     copy_text(t->head,sizeof(t->head),h->head_id); copy_text(t->instance,sizeof(t->instance),h->instance);
     copy_text(t->label,sizeof(t->label),h->branch);
-    if (app->fleet) {
+    if (head_remote(h)) {
         copy_text(t->remote_host,sizeof(t->remote_host),h->remote_host);
         copy_text(t->remote_project,sizeof(t->remote_project),h->remote_project);
     }
     if (!attachment_argv(app, h, t, argv, socket)) goto fail;
     if (!tv_pty_spawn(&t->client,app->hydra,argv,&app->saved,80,24)) goto fail;
     app->terminals->selected=available;
-    copy_text(app->notice,sizeof(app->notice),"Attached; keys go to the agent");
+    copy_text(app->notice,sizeof(app->notice),"Attached; keys go to the agent; leaving or closing keeps it running");
     return true;
 fail:
     /* screen can be absent when the first allocation failed. */

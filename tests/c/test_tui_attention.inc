@@ -144,6 +144,7 @@ static void test_attention_clients(const char *tui, const char *hydra, const cha
     attention_expect_stale(&left, path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t1\n", "contradictory END flags reject atomically");
     attention_capacity_cases(&left, path);
     drain_output(&left); write_attention_fixture(path, "HYDRA_ATTENTION\t1\nEND\t0\t0\t0\n"); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  0 need you", "Nothing needs your attention", 3000), "empty complete snapshot is accepted");
+    result(wait_for_markers(&left, "what needs a decision", "approval request", 2000), "empty attention explains what the view lists and when it helps");
     write_attention_fixture(path, initial); file = fopen(fail, "w"); if (file) fclose(file); drain_output(&left); unlink(done); write_input(left.master, "I", 1U); result(wait_for_marker(&left, "STALE: last good", 3000), "failed reconnect is explicit unavailable"); unlink(fail);
     result(refresh_until(&right, "ATTENTION  2 need you", NULL, 8000), "second client recovers the restored snapshot at count two");
     drain_output(&left); unlink(done); write_input(left.master, "I", 1U); result(wait_for_markers(&left, "ATTENTION  2 need you", "verification-ready", 3000), "successful LEFT reconnect keeps the seen approval listed");

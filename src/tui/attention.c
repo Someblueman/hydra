@@ -475,9 +475,12 @@ void native_attention_tick(struct app *app, bool request)
      * attention snapshot is still loading. */
     enqueue(app->attention, &list);
     if (job->pid) return;
-    argv[0] = (char *)app->hydra; argv[1] = (char *)(app->fleet ? "fleet" : "workflow"); argv[2] = (char *)"attention-data"; argv[3] = NULL;
+    /* One stream for local and remote items; the compatibility entry keeps
+     * the fleet helper's own stream. */
+    argv[0] = (char *)app->hydra; argv[1] = (char *)(app->fleet ? "fleet" : "tui");
+    argv[2] = (char *)(app->fleet ? "attention-data" : "--attention-data"); argv[3] = NULL;
     app->attention->loading = true;
-    if (!native_capture_start(job, argv, app->fleet ? 13000L : 10000L)) capture_failure(app);
+    if (!native_capture_start(job, argv, app->fleet ? 13000L : 25000L)) capture_failure(app);
 }
 
 /* ---- wording ---------------------------------------------------------------- */
@@ -644,7 +647,14 @@ static void render_rows(struct app *app, struct native_attention *view)
     size_t rows[NATIVE_ATTENTION_ITEMS + 1U], n = build_rows(view, rows), selected = current_row(view, rows, n), i;
     size_t available = app->limit > app->line ? (size_t)(app->limit - app->line) : 1U, start = 0U, end = 0U;
     struct cursor measure = {0U, 0U, 0U}, draw;
-    if (!n) { linef(app, "Nothing needs your attention."); return; }
+    if (!n) {
+        linef(app, "Nothing needs your attention.");
+        linef(app, "");
+        paragraph(app, "Attention lists what needs a decision or a look from you: an approval request a step is waiting on, a failed check, a result ready for review, or a terminal that stopped. For example, a plan step asks you to approve before it merges.", TV_BASE);
+        linef(app, "");
+        paragraph(app, "Items stay listed until the request is resolved; Enter shows what an item asks and r reviews a result.", TV_MUTED);
+        return;
+    }
     for (i = 0U; i < n; i++) {
         if (i == selected) start = measure.line;
         render_row(app, &measure, view, rows[i], false);

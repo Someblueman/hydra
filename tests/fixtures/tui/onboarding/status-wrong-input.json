@@ -1,0 +1,1 @@
+{"schema_version":1,"ok":false,"command":"fleet-enrollment-status","error":{"code":"invalid_intent","message":"the input is not a complete reviewed enrollment intent; create a fresh review","recovery":"inspect remote state and the reported error before retrying; mutations are never replayed automatically"}}

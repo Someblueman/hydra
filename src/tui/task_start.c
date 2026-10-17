@@ -93,10 +93,6 @@ void new_task_action(struct app *app) {
     char *init[] = {(char *)app->hydra, "init", NULL, NULL, NULL};
     char *argv[10];
     size_t count = 0;
-    if (app->fleet) {
-        copy_text(app->notice, sizeof(app->notice), "Remote tasks start on their host; use hydra fleet task");
-        return;
-    }
     if (prompt_text(app, "Task name: ", name, sizeof(name)) || !name[0]) return;
     if (!task_branch_name(name, branch, sizeof(branch))) {
         copy_text(app->notice, sizeof(app->notice), "Task name needs a letter or digit to name its branch; nothing started");

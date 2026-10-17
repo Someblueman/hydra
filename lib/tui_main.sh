@@ -144,6 +144,24 @@ cmd_tui() {
             tui_native_emit_data
             return $?
             ;;
+        --remote-data)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_emit_remote_data
+            return $?
+            ;;
+        --attention-data)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_emit_attention_data
+            return $?
+            ;;
+        --onboarding-home)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_onboarding_home
+            return $?
+            ;;
         --head-output)
             shift
             [ $# -eq 1 ] || return 2
@@ -161,13 +179,13 @@ cmd_tui() {
             tui_native_run
             return $?
             ;;
-        --task|--view|--theme|--ascii|--no-color)
+        --task|--view|--theme|--ascii|--no-color|--location)
             tui_native_run "$@"
             return $?
             ;;
         *)
             echo "Error: unknown TUI option '$1'" >&2
-            echo "Usage: hydra tui [--basic|--capabilities [--json]|--task BRANCH|--view NAME|--theme NAME|--ascii|--no-color|--headless-fixture FILE ...]" >&2
+            echo "Usage: hydra tui [--basic|--capabilities [--json]|--task BRANCH|--view NAME|--location all|local|remote|HOST|--theme NAME|--ascii|--no-color|--headless-fixture FILE ...]" >&2
             return 2
             ;;
     esac

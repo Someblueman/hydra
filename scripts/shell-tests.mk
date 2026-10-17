@@ -9,6 +9,7 @@ SHELL_TEST_EXCLUDES = \
 	tests/test_fleet_install.sh \
 	tests/test_task_package.sh \
 	tests/test_task_acceptance.sh \
+	tests/test_placement.sh \
 	tests/test_workflow_plan_task.sh \
 	tests/test_workflow_plan_v3.sh \
 	tests/test_headless_plan_adapter.sh \
@@ -22,7 +23,10 @@ SHELL_TEST_EXCLUDES = \
 	tests/test_remote_agents.sh \
 	tests/test_remote_setup.sh \
 	tests/test_remote_provision.sh \
-	tests/test_bench_i1.sh
+	tests/test_t2_headless.sh \
+	tests/test_t3_distributed.sh \
+	tests/test_bench_i1.sh \
+	tests/test_u10_loopback.sh
 
 SHELL_TEST_FILES = $(filter-out $(SHELL_TEST_EXCLUDES),$(wildcard tests/test_*.sh))
 SHELL_TEST_NAMES = $(patsubst tests/test_%.sh,%,$(SHELL_TEST_FILES))
