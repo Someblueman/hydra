@@ -84,6 +84,17 @@ static void test_remote_side_by_side(const char *tui, const char *hydra, const c
     remote_env_clear();
 }
 
+/* The dispatch notice is replaced by the control's completion notice as soon
+ * as the detached child is reaped; a fast child can finish before a frame
+ * shows the first one, so either notice proves this dispatch. */
+static bool wait_for_dispatch(struct session *session, const char *dispatched, const char *finished, long timeout_ms) {
+    long long deadline = monotonic_ms() + timeout_ms;
+    do {
+        if (wait_for_marker(session, dispatched, 50) || wait_for_marker(session, finished, 50)) return true;
+    } while (monotonic_ms() < deadline);
+    return false;
+}
+
 /* Acting on remote work: attach through fleet attach, interrupt through
  * fleet cancel and a task decision through fleet task, each with the exact
  * host, project, instance and task identity. */
@@ -119,7 +130,8 @@ static void test_remote_actions(const char *tui, const char *hydra, const char *
     write_input(session.master, "Y", 1U);
     result(wait_for_marker(&session, "Type approve to dispatch", 2000), "Y on a remote task asks for a typed confirmation");
     write_input(session.master, "approve\n", 8U);
-    result(wait_for_marker(&session, "approve dispatched for task_build", 2000), "a confirmed decision is dispatched");
+    result(wait_for_dispatch(&session, "approve dispatched for task_build", "dispatch finished; outcome unconfirmed / refresh task evidence: task:approve task_build", 4000),
+           "a confirmed decision is dispatched");
     sleep_ms(500);
     result(read_small_file(task_path, captured, sizeof(captured)) &&
            strstr(captured, "fleet\ntask\ndecide\nbuilder\n--id\ntask_build\n--request\nreq-1\n--decision\napprove\n--trust-spec\n0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n") != NULL,
