@@ -63,7 +63,7 @@ static json_object *superseded(const char *scope, const char *id, const char *ca
     if (!strcmp(scope, "project")) return superseded_project(canonical);
     json_object *out = json_object_new_object(); f_string_add(out, "sha256", canonical); return out;
 }
-static json_object *revoke(const char *scope, const char *id, const char *reason) {
+static json_object *revoke_identity(const char *scope, const char *id, const char *reason) {
     char canonical[REVOCATION_ID]; json_object *binding, *result;
     if (!revocation_normalize(scope, id, canonical) || !hd_text(reason, REVOCATION_REASON))
         return f_error("fleet-revoke", "invalid_input", "revoke candidate|source|transport|package|project ID --reason TEXT; the identity must be valid for its scope");
@@ -101,5 +101,5 @@ json_object *revocation_cli(int argc, char **argv) {
         return f_error("fleet-revoke", "invalid_input", "revoke SCOPE ID --reason TEXT takes one reason and no other options");
     }
     if (!reason) return f_error("fleet-revoke", "invalid_input", "--reason TEXT is required; the reason is retained with the decision");
-    return revoke(argv[0], argv[1], reason);
+    return revoke_identity(argv[0], argv[1], reason);
 }

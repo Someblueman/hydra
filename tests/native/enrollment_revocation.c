@@ -13,7 +13,7 @@ static json_object *run(char *const argv[]) {
   f_capture_free(&c);
   return v;
 }
-static void revoke(const char *scope, const char *id) {
+static void revoke_identity(const char *scope, const char *id) {
   json_object *v = EC(false, true, "revoke", scope, id, "--reason",
                       "operator decision");
   assert(!strcmp(f_string(f_field(v, "data"), "scope"), scope));
@@ -57,7 +57,7 @@ static json_object *review(const char *q, const struct ec_package *package,
 static void candidate_refused(void) {
   char q[F_PATH];
   ec_qualify(q, NULL, NULL, NULL);
-  revoke("candidate", "good");
+  revoke_identity("candidate", "good");
   refused(review(q, NULL, NULL), "candidate");
   ec_count("mutations", "init\n", 0);
 }
@@ -66,7 +66,7 @@ static void package_refused(void) {
   struct ec_package package;
   ec_package_make(&package);
   ec_qualify(q, NULL, NULL, NULL);
-  revoke("package", package.digest);
+  revoke_identity("package", package.digest);
   refused(review(q, &package, NULL), "package");
   json_object *v = EC(false, false, "bootstrap", "cand_676f6f64", "--input",
                       package.path, "--sha256", package.digest);
@@ -77,7 +77,7 @@ static void package_refused(void) {
 static void project_refused(void) {
   char q[F_PATH];
   ec_qualify(q, NULL, NULL, NULL);
-  revoke("project", ec_project);
+  revoke_identity("project", ec_project);
   refused(review(q, NULL, NULL), "project");
   json_object *v = EC(false, false, "list", "cand_676f6f64", "--project",
                       ec_project);
@@ -87,7 +87,7 @@ static void project_refused(void) {
 static void apply_invalidated(void) {
   char intent[F_PATH], digest[65];
   ec_one_review(intent, digest, NULL);
-  revoke("candidate", "cand_676f6f64");
+  revoke_identity("candidate", "cand_676f6f64");
   json_object *v = ec_apply(intent, digest),
               *row = json_object_array_get_idx(f_field(v, "hosts"), 0);
   assert(!strcmp(f_string(row, "status"), "revoked") &&
@@ -107,7 +107,7 @@ static void transport_block(void) {
   nt_path(alias, ec_home, "fleet/remotes/cand_676f6f64.json");
   char *before = f_read(alias, 100000);
   assert(before);
-  revoke("transport", "cand_676f6f64");
+  revoke_identity("transport", "cand_676f6f64");
   char *after = f_read(alias, 100000);
   assert(after && !strcmp(before, after));
   free(after);
