@@ -40,19 +40,21 @@ static void mark_targets(json_object *steps, json_object *records, struct graph 
         for (size_t j = 0; j < g->count; j++) if (g->reach[target][j]) g->required[j] = true;
     }
 }
+/* 1 + the highest level among a step's dependencies, or 0 while one is unresolved. */
+static unsigned level_of(json_object *steps, size_t i, const unsigned *level) {
+    json_object *needs = f_field(json_object_array_get_idx(steps, i), "needs"); unsigned best = 0;
+    for (size_t j = 0; j < json_object_array_length(needs); j++) {
+        int d = plan_index(steps, f_text(json_object_array_get_idx(needs, j)));
+        if (d < 0 || !level[d]) return 0;
+        if (level[d] > best) best = level[d];
+    }
+    return best + 1;
+}
 static void levels(json_object *steps, struct graph *g) {
     size_t done = 0;
     for (size_t pass = 0; pass < g->count && done < g->count; pass++)
-        for (size_t i = 0; i < g->count; i++) {
-            json_object *needs = f_field(json_object_array_get_idx(steps, i), "needs"); unsigned before = 0;
-            if (g->level[i]) continue;
-            for (size_t j = 0; j < json_object_array_length(needs); j++) {
-                int d = plan_index(steps, f_text(json_object_array_get_idx(needs, j)));
-                if (d < 0 || !g->level[d]) { before = 0; break; }
-                if (g->level[d] > before) before = g->level[d];
-            }
-            if (before || !json_object_array_length(needs)) { g->level[i] = before + 1; done++; }
-        }
+        for (size_t i = 0; i < g->count; i++)
+            if (!g->level[i] && (g->level[i] = level_of(steps, i, g->level))) done++;
 }
 static void analyse(json_object *plan, struct graph *g) {
     json_object *steps = f_field(plan, "steps");
@@ -62,24 +64,34 @@ static void analyse(json_object *plan, struct graph *g) {
     mark_targets(steps, f_field(plan, "deliverables"), g, false);
     levels(steps, g);
 }
+/* Longest estimated path into step i over its dependencies' totals. */
+static void longest_before(json_object *steps, size_t i, int64_t longest[][2], int64_t out[2]) {
+    json_object *needs = f_field(json_object_array_get_idx(steps, i), "needs");
+    out[0] = out[1] = 0;
+    for (size_t j = 0; j < json_object_array_length(needs); j++) {
+        int d = plan_index(steps, f_text(json_object_array_get_idx(needs, j)));
+        for (size_t k = 0; d >= 0 && k < 2; k++) if (longest[d][k] > out[k]) out[k] = longest[d][k];
+    }
+}
+/* Accumulates step i's longest path; false when its estimate is unknown. */
+static bool visit(json_object *steps, json_object *estimates, const struct graph *g, size_t i, int64_t longest[][2], int64_t best[2]) {
+    json_object *duration = step_range(estimates, f_string(json_object_array_get_idx(steps, i), "id"), "milliseconds");
+    if (!duration) return false;
+    longest_before(steps, i, longest, longest[i]);
+    for (size_t k = 0; k < 2; k++) {
+        longest[i][k] += json_object_get_int64(json_object_array_get_idx(duration, k));
+        if (g->check[i] && longest[i][k] > best[k]) best[k] = longest[i][k];
+    }
+    return true;
+}
 /* Longest estimated path ending at a check step, over required nodes only. */
 static json_object *verified_path(json_object *steps, json_object *estimates, const struct graph *g) {
     int64_t longest[PLAN_STEPS][2] = {{0}}, best[2] = {0, 0}; bool any = false;
     if (!estimates) return NULL;
     for (unsigned level = 1; level <= g->count; level++)
         for (size_t i = 0; i < g->count; i++) {
-            json_object *step = json_object_array_get_idx(steps, i), *needs = f_field(step, "needs"), *duration;
             if (g->level[i] != level || !g->required[i]) continue;
-            duration = step_range(estimates, f_string(step, "id"), "milliseconds");
-            if (!duration) return NULL;
-            for (size_t j = 0; j < json_object_array_length(needs); j++) {
-                int d = plan_index(steps, f_text(json_object_array_get_idx(needs, j)));
-                for (size_t k = 0; k < 2; k++) if (d >= 0 && longest[d][k] > longest[i][k]) longest[i][k] = longest[d][k];
-            }
-            for (size_t k = 0; k < 2; k++) {
-                longest[i][k] += json_object_get_int64(json_object_array_get_idx(duration, k));
-                if (g->check[i] && longest[i][k] > best[k]) best[k] = longest[i][k];
-            }
+            if (!visit(steps, estimates, g, i, longest, best)) return NULL;
             any = any || g->check[i];
         }
     return any ? range(best[0], best[1]) : NULL;

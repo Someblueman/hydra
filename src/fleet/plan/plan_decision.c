@@ -96,33 +96,53 @@ static json_object *decision_id(const char *directory, char id[17]) {
 static json_object *refuse(const char *code, const char *message) {
     return f_error("workflow plan decision", code, message);
 }
+/* Reads the selected and rejected alternatives from argv pairs; NULL when all are usable. */
+static json_object *load_alternatives(int argc, char **argv, struct alternative *alternatives, size_t *count) {
+    for (int i = 4; i + 1 < argc; i += 2) {
+        struct alternative *a = &alternatives[*count];
+        if (!(a->compiled = pi_read_compiled(argv[i], a->digest))) return refuse("invalid_alternative", "every alternative must be a supported, structurally valid compiled artifact");
+        a->reason = argv[i + 1]; (*count)++;
+        if (!reason_valid(a->reason)) return refuse("invalid_reason", "each reason is one line of 1 to 4096 UTF-8 bytes");
+        for (size_t j = 0; j + 1 < *count; j++) if (!strcmp(alternatives[j].digest, a->digest)) return refuse("duplicate_alternative", "the same compiled digest cannot be both selected and rejected or rejected twice");
+    }
+    return NULL;
+}
+/* Optional estimates ("-" for none) must bind the recorded alternatives and
+ * must not place the selected plan outside its own hard budgets. */
+static json_object *load_estimates(const char *path, const struct alternative *alternatives, size_t count, json_object **estimates, char digest[65]) {
+    if (!strcmp(path, "-")) return NULL;
+    if (!(*estimates = plan_read(path)) || !estimates_valid(*estimates, alternatives, count) || plan_digest(*estimates, digest))
+        return refuse("invalid_estimates", "estimates must use the closed schema and name only the exact digests of the recorded alternatives");
+    if (budget_conflict(&alternatives[0], *estimates))
+        return refuse("estimate_budget_conflict", "an estimate lower bound exceeds a hard budget of the selected plan; estimates cannot relax budgets, so revise the plan or its estimates");
+    return NULL;
+}
+static json_object *write_inputs(const char *directory, const struct alternative *alternatives, size_t count, json_object *estimates) {
+    char inputs[F_PATH], name[80];
+    if (f_path(inputs, sizeof(inputs), directory, "inputs")) return refuse("record_write_failed", "could not address the analysis inputs directory");
+    for (size_t i = 0; i < count; i++) {
+        snprintf(name, sizeof(name), "%s.json", alternatives[i].digest);
+        if (write_canonical(inputs, name, alternatives[i].compiled)) return refuse("record_write_failed", "could not write the analysis inputs into a new private directory");
+    }
+    if (estimates && write_canonical(inputs, "estimates.json", estimates)) return refuse("record_write_failed", "could not write the estimates input");
+    return NULL;
+}
 static json_object *record_command(int argc, char **argv) {
     struct alternative alternatives[DECISION_ALTERNATIVES] = {{0}}; size_t count = 0;
-    json_object *estimates = NULL, *data = NULL, *result = NULL; char estimates_id[65], id[17], *end; long recorded_at;
+    json_object *estimates = NULL, *data = NULL, *result; char estimates_id[65], id[17], *end; long recorded_at;
     if (argc < 6 || (argc - 6) % 2 || (size_t)(argc - 4) / 2 > DECISION_ALTERNATIVES) return refuse("invalid_arguments", "expected a directory, time, estimates file or -, a selected artifact with its reason and up to eight rejected artifacts with reasons");
     errno = 0; recorded_at = strtol(argv[2], &end, 10);
     if (errno || *end || recorded_at < 0) return refuse("invalid_arguments", "recorded time must be a nonnegative integer");
-    for (int i = 4; i + 1 < argc; i += 2, count++) {
-        if (!(alternatives[count].compiled = pi_read_compiled(argv[i], alternatives[count].digest))) { result = refuse("invalid_alternative", "every alternative must be a supported, structurally valid compiled artifact"); goto done; }
-        alternatives[count].reason = argv[i + 1];
-        if (!reason_valid(argv[i + 1])) { result = refuse("invalid_reason", "each reason is one line of 1 to 4096 UTF-8 bytes"); goto done; }
-        for (size_t j = 0; j < count; j++) if (!strcmp(alternatives[j].digest, alternatives[count].digest)) { result = refuse("duplicate_alternative", "the same compiled digest cannot be both selected and rejected or rejected twice"); goto done; }
+    result = load_alternatives(argc, argv, alternatives, &count);
+    if (!result) result = load_estimates(argv[3], alternatives, count, &estimates, estimates_id);
+    if (!result && !(data = record_data(alternatives, count, recorded_at, estimates, estimates_id))) result = refuse("analysis_failed", "the deterministic comparison could not be computed");
+    if (!result) result = write_inputs(argv[1], alternatives, count, estimates);
+    if (!result && (write_canonical(argv[1], "decision.json", data) || !(result = decision_id(argv[1], id)))) result = refuse("record_write_failed", "could not write the decision record");
+    if (!f_field(result, "error")) {
+        f_string_add(result, "selected_sha256", alternatives[0].digest);
+        json_object_object_add(result, "rejected", json_object_new_int64((int64_t)count - 1));
+        result = f_success("workflow plan decision record", result);
     }
-    if (strcmp(argv[3], "-")) {
-        if (!(estimates = plan_read(argv[3])) || !estimates_valid(estimates, alternatives, count) || plan_digest(estimates, estimates_id)) { result = refuse("invalid_estimates", "estimates must use the closed schema and name only the exact digests of the recorded alternatives"); goto done; }
-    }
-    if (estimates && budget_conflict(&alternatives[0], estimates)) { result = refuse("estimate_budget_conflict", "an estimate lower bound exceeds a hard budget of the selected plan; estimates cannot relax budgets, so revise the plan or its estimates"); goto done; }
-    if (!(data = record_data(alternatives, count, recorded_at, estimates, estimates_id))) { result = refuse("analysis_failed", "the deterministic comparison could not be computed"); goto done; }
-    for (size_t i = 0; i < count; i++) {
-        char name[80]; snprintf(name, sizeof(name), "%s.json", alternatives[i].digest);
-        char inputs[F_PATH]; if (f_path(inputs, sizeof(inputs), argv[1], "inputs") || write_canonical(inputs, name, alternatives[i].compiled)) { result = refuse("record_write_failed", "could not write the analysis inputs into a new private directory"); goto done; }
-        if (estimates && !i && write_canonical(inputs, "estimates.json", estimates)) { result = refuse("record_write_failed", "could not write the estimates input"); goto done; }
-    }
-    if (write_canonical(argv[1], "decision.json", data) || !(result = decision_id(argv[1], id))) { result = refuse("record_write_failed", "could not write the decision record"); goto done; }
-    f_string_add(result, "selected_sha256", alternatives[0].digest);
-    json_object_object_add(result, "rejected", json_object_new_int64((int64_t)count - 1));
-    result = f_success("workflow plan decision record", result);
-done:
     for (size_t i = 0; i < count; i++) json_object_put(alternatives[i].compiled);
     json_object_put(estimates); json_object_put(data); return result;
 }

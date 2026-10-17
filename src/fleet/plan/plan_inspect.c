@@ -15,17 +15,23 @@ static bool same(json_object *left, json_object *right) {
 }
 /* compare needs every inspected digest; evaluate accepts a partial file so one
  * recorded alternative can be compared with an unknown one. */
+/* The inspected artifact an estimates entry names, or NULL for a foreign digest. */
+static json_object *plan_for(const char *id, json_object *left, const char *left_id, json_object *right, const char *right_id) {
+    if (!strcmp(id, left_id)) return left;
+    return right && !strcmp(id, right_id) ? right : NULL;
+}
+static bool estimates_document(json_object *file, int minimum, int maximum) {
+    json_object *plans = f_field(file, "plans");
+    return f_number_is(file, "schema_version", 1) && json_object_object_length(file) == 2 &&
+        json_object_is_type(plans, json_type_object) && json_object_object_length(plans) >= minimum && json_object_object_length(plans) <= maximum;
+}
 static bool estimate_file_valid(json_object *file, json_object *left, const char *left_id,
                                   json_object *right, const char *right_id, bool partial) {
-    json_object *plans = f_field(file, "plans");
     int count = right && strcmp(left_id, right_id) ? 2 : 1;
-    if (!f_number_is(file, "schema_version", 1) || json_object_object_length(file) != 2 ||
-        !json_object_is_type(plans, json_type_object) || json_object_object_length(plans) < 1 || json_object_object_length(plans) > count) return false;
-    if (!partial && json_object_object_length(plans) != count) return false;
-    json_object_object_foreach(plans, id, entry) {
-        if (!strcmp(id, left_id)) { if (!pi_estimates_valid(entry, left)) return false; }
-        else if (right && !strcmp(id, right_id)) { if (!pi_estimates_valid(entry, right)) return false; }
-        else return false;
+    if (!estimates_document(file, partial ? 1 : count, count)) return false;
+    json_object_object_foreach(f_field(file, "plans"), id, entry) {
+        json_object *plan = plan_for(id, left, left_id, right, right_id);
+        if (!plan || !pi_estimates_valid(entry, plan)) return false;
     }
     return true;
 }
@@ -93,24 +99,31 @@ static json_object *comparison(json_object *left, const char *left_id, json_obje
     pi_preference(data, matched, lm, rm);
     return data;
 }
+static json_object *explanation(json_object *left, const char *left_id, json_object *estimates) {
+    json_object *data = pi_explain(left, left_id);
+    json_object_object_add(data, "metrics", pi_metrics(left, f_field(f_field(estimates, "plans"), left_id)));
+    return data;
+}
+/* explain, compare and evaluate share argument handling; name selects the analysis. */
+static json_object *inspection(const char *name, json_object *left, const char *left_id, json_object *right, const char *right_id, json_object *estimates) {
+    if (!strcmp(name, "evaluate")) return pe_evaluate(left, left_id, right, right_id, estimates);
+    if (!strcmp(name, "compare")) return comparison(left, left_id, right, right_id, estimates);
+    return explanation(left, left_id, estimates);
+}
 json_object *plan_inspect_cli(int argc, char **argv) {
     bool evaluate = !strcmp(argv[0], "evaluate"), compare = evaluate || !strcmp(argv[0], "compare"); int base = compare ? 3 : 2;
     json_object *left = NULL, *right = NULL, *estimates = NULL, *data = NULL, *result = NULL;
-    char left_id[65], right_id[65], estimates_id[65];
+    char left_id[65], right_id[65], estimates_id[65], command[40];
     if (argc != base && argc != base + 2) goto done;
     if (!(left = pi_read_compiled(argv[1], left_id))) goto done;
     if (compare && !(right = pi_read_compiled(argv[2], right_id))) goto done;
     if (argc == base + 2 && (strcmp(argv[base], "--estimates") || !(estimates = plan_read(argv[base + 1])) ||
         !estimate_file_valid(estimates, left, left_id, right, right_id, evaluate) || plan_digest(estimates, estimates_id))) goto done;
-    if (evaluate) data = pe_evaluate(left, left_id, right, right_id, estimates);
-    else if (compare) data = comparison(left, left_id, right, right_id, estimates);
-    else {
-        data = pi_explain(left, left_id);
-        json_object_object_add(data, "metrics", pi_metrics(left, f_field(f_field(estimates, "plans"), left_id)));
-    }
+    data = inspection(argv[0], left, left_id, right, right_id, estimates);
     if (estimates) f_string_add(data, "estimates_sha256", estimates_id);
     else json_object_object_add(data, "estimates_sha256", NULL);
-    result = f_success(evaluate ? "workflow plan evaluate" : compare ? "workflow plan compare" : "workflow plan explain", data);
+    snprintf(command, sizeof(command), "workflow plan %s", argv[0]);
+    result = f_success(command, data);
 done:
     json_object_put(estimates); json_object_put(right); json_object_put(left);
     return result ? result : f_error("workflow plan inspect", "invalid_inspection_input", "expected a supported compiled plan and optional closed-schema estimates bound to its exact digest");

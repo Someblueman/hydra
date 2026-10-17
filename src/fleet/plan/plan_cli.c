@@ -327,6 +327,13 @@ static json_object *compile_dispatch(int argc, char **argv, bool *matched) {
     return compile_command(argv[1], argv[2], argv[3], compile ? argv[4] : NULL, assets);
 }
 
+/* Failed operations without their own data carry the generic recovery advice. */
+static json_object *with_recovery(json_object *result) {
+    if (!result) result = f_error("workflow plan", "invalid_or_stale_plan", "plan is malformed, unaccepted, changed, unsupported, or lacks passing artifact-bound verification");
+    if (f_field(result, "error") && !f_field(result, "data"))
+        f_string_add(f_field(result, "error"), "recovery", "inspect the compiled artifact, source, inputs, head availability and verification; compile and accept fresh scope when bindings change");
+    return result;
+}
 json_object *plan_cli(int argc, char **argv) {
     static const struct {
         const char *name;
@@ -376,9 +383,5 @@ json_object *plan_cli(int argc, char **argv) {
         result = commands[i].call(argv, &printed);
         break;
     }
-    if (printed) return NULL;
-    if (!result) result = f_error("workflow plan", "invalid_or_stale_plan", "plan is malformed, unaccepted, changed, unsupported, or lacks passing artifact-bound verification");
-    if (f_field(result, "error") && !f_field(result, "data"))
-        f_string_add(f_field(result, "error"), "recovery", "inspect the compiled artifact, source, inputs, head availability and verification; compile and accept fresh scope when bindings change");
-    return result;
+    return printed ? NULL : with_recovery(result);
 }
