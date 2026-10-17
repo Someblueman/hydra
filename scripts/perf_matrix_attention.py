@@ -122,6 +122,12 @@ class Harness:
             aside = runs.with_name("runs.perf-aside")
             runs.rename(aside)
             self.aside.append((aside, runs))
+        elif op == "runs-not-directory":
+            runs = self.run_dir.parent
+            aside = runs.with_name("runs.perf-aside")
+            runs.rename(aside)
+            runs.write_text("not a run directory\n")
+            self.aside.append((aside, runs))
         else:
             raise ValueError(f"unknown mutation {op}")
 
@@ -129,6 +135,8 @@ class Harness:
         for source, target in reversed(self.aside):
             if target.is_dir() and not target.is_symlink() and source.name.endswith("perf-aside"):
                 shutil.rmtree(target)
+            elif target.is_file() and source.name.endswith("perf-aside") and source.is_dir():
+                target.unlink()
             if source.name.endswith("perf-backup"):
                 shutil.copy2(source, target)
                 source.unlink()

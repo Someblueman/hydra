@@ -51,7 +51,7 @@ for cell in cells:
 budgets = bundle["proposed_budgets"]
 assert budgets["status"].startswith("provisional")
 assert bundle["attention"]["complete"] and bundle["attention"]["false_positives_total"] == 0
-assert bundle["attention"]["missed_signals_total"] == 0 and bundle["attention"]["cases_total"] == 13
+assert bundle["attention"]["missed_signals_total"] == 0 and bundle["attention"]["cases_total"] == 14
 published = bundle["raw_samples_published"]
 assert published["used_bytes"] <= published["budget_bytes"]
 for row in published["files"]:

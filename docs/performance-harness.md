@@ -130,8 +130,9 @@ public workflow (exec step succeeded, approval-wait pending) and mutates it into
 the annotated cases in `tests/fixtures/perf/attention-cases.json`: blocked on
 approval (pending and expired), question (with and without a request record),
 working, done-but-unseen and done-but-seen, idle (empty runs and no workflow
-storage), unknown (tampered binding, missing request, tampered result) and a
-failed step. `hydra workflow attention --json` and the `attention-data` wire are
+storage, both an exact empty list), unknown (tampered binding, missing request,
+tampered result, and run storage that is not a directory, which must fail
+explicitly) and a failed step. `hydra workflow attention --json` and the `attention-data` wire are
 scored per case; false positives and missed signals are totalled separately,
 unknown items are matched by count, and cases the local route cannot classify
 are reported as silent by design rather than as misses. Marking an item seen is

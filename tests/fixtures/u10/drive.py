@@ -14,7 +14,8 @@ them as evidence. Journeys (one per invocation):
              install plan and decline it
   again      set the same account up under a second name: the plan is
              reviewed again and the identical pin is reused, no agents
-  reconnect  open the Fleet view and find the launched task and the host
+  reconnect  open the control centre on remote work (--fleet) and find the
+             launched task on its host, then the host connected in Hosts
 
 Environment: HYDRA_TUI_BIN, HYDRA_CELLS_BIN, U10_EVIDENCE (directory),
 U10_SSH_CONFIG, U10_FINGERPRINT, U10_HOLD (the fixture's hold file),
@@ -28,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -229,12 +231,21 @@ def again() -> int:
 
 
 def reconnect() -> int:
+    # `hydra tui --fleet` opens the unified control centre filtered to remote
+    # work: the Heads list is titled "Heads: remote work" and a remote head's
+    # row is named host/branch, so the row names both the task and its host.
     j = Journey("reconnect", ["--fleet"])
     j.see("fleet-entry", "HYDRA /", timeout=60)
     j.keys("1")
-    j.see("remote-heads", "Remote heads", "u10-task", timeout=90)
+    screen = j.see("remote-work", "Heads: remote work", "u10/u10-task", timeout=90)
+    j.check(re.search(r"u10/u10-task\s+\S.*\bu10\b", screen) is not None,
+            "the u10-task row names u10 as where it runs")
     j.keys("H")
-    j.see("hosts", "HOSTS / latest list response", "u10", timeout=60)
+    screen = j.see("hosts", "HOSTS / latest list response", "u10", timeout=60)
+    # The host answered this client's list request (handshake accepted):
+    # connected, not disconnected, with the task's head counted.
+    j.check(re.search(r"\bu10\s+connected\s+1 heads\s+reachable\b", screen) is not None,
+            "u10 is connected after reconnecting and reports the task's head")
     return j.quit()
 
 
