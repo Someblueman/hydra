@@ -120,6 +120,37 @@ hydra_core_tree_settle() {
     return 0
 }
 
+# Runs the command in a new session, replacing the calling process so its pid
+# stays the command's: setsid(1) where it exists (not on macOS), else the
+# setsid(2) call through perl, else python3. The background child of a script
+# never leads its process group, so each one execs in place rather than forking.
+# Without any of them the command runs in this shell's group and a timeout falls
+# back to signalling the subtree found from the process table, which cannot reach
+# a descendant whose parent has already exited.
+# shellcheck disable=SC2016 # Perl and Python code, not shell expansions.
+hydra_core_isolated() {
+    if command -v setsid >/dev/null 2>&1; then
+        exec setsid "$@"
+    elif command -v perl >/dev/null 2>&1; then
+        exec perl -e 'eval { require POSIX; POSIX::setsid() } or setpgrp(0, 0);
+            exec { $ARGV[0] } @ARGV;
+            print STDERR "hydra: cannot run $ARGV[0]: $!\n";
+            exit 127;' -- "$@"
+    elif command -v python3 >/dev/null 2>&1; then
+        exec python3 -I -c 'import os, sys
+try:
+    os.setsid()
+except OSError:
+    pass
+try:
+    os.execvp(sys.argv[1], sys.argv[1:])
+except OSError as error:
+    sys.stderr.write("hydra: cannot run %s: %s\n" % (sys.argv[1], error.strerror))
+    sys.exit(127)' "$@"
+    fi
+    exec "$@"
+}
+
 # Terminates the helper subtree after a timeout: TERM, up to a second for it to
 # stop, then KILL, then a bounded wait until nothing of it still runs.
 hydra_core_stop_tree() {
@@ -134,8 +165,8 @@ hydra_core_stop_tree() {
 
 # Runs the helper with stdout and stderr captured into the supplied directory and
 # returns 124 when it exceeds HYDRA_CORE_TIMEOUT_SECONDS. The helper runs in its
-# own session where setsid exists, so a timeout signals its whole subtree as one
-# process group; elsewhere the subtree is found from a process table snapshot.
+# own session (see hydra_core_isolated), so a timeout signals its whole subtree as
+# one process group; without one the subtree is found from a process table snapshot.
 # A watchdog subshell applies the timeout. Once it has fired, the parent waits
 # for the TERM, then KILL pass to finish instead of stopping the watchdog mid-way,
 # so no descendant outlives the call; after a normal exit the watchdog is stopped
@@ -147,13 +178,7 @@ hydra_core_run_bounded() {
     case "$HYDRA_CORE_TIMEOUT_SECONDS" in
         ''|*[!0-9]*|0) HYDRA_CORE_TIMEOUT_SECONDS=2 ;;
     esac
-    if command -v setsid >/dev/null 2>&1; then
-        # The background child of a script never leads its process group, so
-        # setsid replaces it in place and $! stays the helper's pid.
-        setsid "$@" > "$_hcr_dir/stdout" 2> "$_hcr_dir/stderr" &
-    else
-        "$@" > "$_hcr_dir/stdout" 2> "$_hcr_dir/stderr" &
-    fi
+    hydra_core_isolated "$@" > "$_hcr_dir/stdout" 2> "$_hcr_dir/stderr" &
     _hcr_pid=$!
     (
         _hcr_sleep=""
