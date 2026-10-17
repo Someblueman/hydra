@@ -475,6 +475,7 @@ test-plan-staged-public: build-fleet build-plan-precompile
 .PHONY: test-plan-inspection
 test-plan-inspection: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-inspection"
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-evaluate"
 
 
 .PHONY: sanitize-fleet
