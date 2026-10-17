@@ -21,7 +21,7 @@ fleet="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN names the hydra-fleet helper to record
 ssh_fixture="${HYDRA_ENROLL_SSH:-$root/build/native-tests/enrollment-ssh-fixture}"
 receiver="${HYDRA_ENROLL_RECEIVER:-$root/build/native-tests/enrollment-receiver-fixture}"
 out_dir="${RECORD_OUT:-$here}"
-[ -x "$ssh_fixture" ] && [ -x "$receiver" ] || { echo "build the enrollment fixtures first (make test-enrollment)" >&2; exit 1; }
+if [ ! -x "$ssh_fixture" ] || [ ! -x "$receiver" ]; then echo "build the enrollment fixtures first (make test-enrollment)" >&2; exit 1; fi
 work="$(mktemp -d "${TMPDIR:-/tmp}/hydra-record.XXXXXX")"
 work="$(cd "$work" && pwd -P)"
 fixed=/tmp/hydra-onboarding-fixture
@@ -110,7 +110,10 @@ record discover-ansible.json 0 discover --source "ansible-inventory:$work/hosts.
 # A mixed ten-host run: seven compatible, one offline, one without the
 # required capability, one revoked; apply loses one init response.
 inventory "$work/mixed.json" 10 mixed
+# The policy is literal JSON read by the SSH fixture, not shell words.
+# shellcheck disable=SC2089
 ENROLL_HOST_POLICY='{"mixed03":{"offline":true},"mixed04":{"missing_capability":true}}'
+# shellcheck disable=SC2090
 export ENROLL_HOST_POLICY
 "$root/bin/hydra" fleet revoke candidate mixed05 --reason "decommissioned" --json > /dev/null
 # shellcheck disable=SC2046
@@ -133,7 +136,7 @@ record status-mixed.json 0 enroll status --input "$fixed/intent-2.json"
 inventory "$work/fifty.json" 50 fifty
 # shellcheck disable=SC2046
 record qualify-50.json 0 qualify --inventory "$work/fifty.json" $(selects fifty 50) --require list --progress "$work/qualification-4.json"
-for pass in 2 3 4; do
+for _ in 2 3 4; do
     # shellcheck disable=SC2046
     "$root/bin/hydra" fleet qualify --inventory "$work/fifty.json" $(selects fifty 50) --require list --progress "$work/qualification-4.json" --json > /dev/null || :
 done
