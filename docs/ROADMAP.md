@@ -571,6 +571,16 @@ flow as part of that work.
       Fixed in 2.9.0 (private modes, plus `hydra doctor --fix-permissions`); verified
       by CI's `make test-umask` and the full Linux gate under umask `002` on the
       operator VPS on 28 September 2026.
+      Follow-up after 3.0.0: the umask is not the only input. Below a directory
+      with a default POSIX ACL the kernel ignores it, and `make test-u10-loopback`
+      on hosted CI (run 39064615689) failed the same way, admission
+      `state_unavailable` on the remote spawn while every other step passed. The
+      identical 5 failures were reproduced here by giving the throwaway home a
+      default ACL; Hydra now also sets the directories it creates to 0700, and
+      `tests/test_acl_state.sh` covers it. That the hosted image's homes carry a
+      default ACL is inferred from that match, not observed: the next hosted run
+      must pass, and on a failed launch the test records the remote modes and
+      ACLs in its evidence.
 
 ### Candidate features
 

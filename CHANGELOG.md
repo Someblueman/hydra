@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Hydra state stays private below a directory that carries a default POSIX
+  ACL. There the kernel ignores the umask, so `umask 077` alone created
+  `HYDRA_HOME`, `admission/`, `locks/` and `state/` group-writable, and
+  admission then refused its own storage: every `hydra spawn` failed with
+  `state_unavailable`. A new `HYDRA_HOME`, the admission directory and every
+  directory `hydra_private_mkdir` creates are now also set to 0700 explicitly;
+  existing directories keep their mode, and a shared home Hydra did not create
+  is still refused. Covered by `tests/test_acl_state.sh`, which skips where
+  default ACLs cannot be set.
+- The admission `state_unavailable` message names the precondition that
+  failed (home or admission directory ownership and mode, the lock, the
+  policy, or free disk space); the error code is unchanged.
+- `make test-u10-loopback` hands its evidence directory to the invoking sudo
+  user, so the CI upload can read the copied 0600 setup record, and records the
+  remote home's modes, ACLs, umask and free space when the task launch fails.
+
 ## [3.0.0] - 2026-10-17
 
 Hydra 3.0.0 makes the control centre one workspace for local and remote work:
