@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The bounded native-helper runner (`hydra snapshot --native` and the protocol
+  and version probes before it) no longer lets part of a timed-out helper's
+  subtree outlive the call. It signalled the helper's descendants from one
+  process-table walk, so a descendant that had already been reparented, or was
+  forked after the walk, was never signalled, and the parent stopped the
+  watchdog as soon as the helper itself exited, before its KILL pass. The helper
+  now runs in its own session (`setsid` where available) so a timeout signals
+  the whole subtree as one process group, with the process-table walk kept as the
+  fallback; after a timeout the call waits for the TERM, then KILL pass to finish
+  and until nothing of the subtree still runs. Exit codes, the `124` timeout
+  status and the named fallback reasons are unchanged.
+- `make test-parity` and `make test-tui-pty` no longer fail on a host whose init
+  reaps orphans on a schedule instead of at once (such as a container's PID 1):
+  the cases that check a terminated owner's descendants are gone treated an
+  already-dead descendant that still awaited init as alive. They now allow a
+  bounded reaping grace, and the parity case also covers a helper whose
+  descendant was orphaned before the timeout.
+
 ## [2.9.0] - 2026-09-28
 
 ### Added
