@@ -495,7 +495,7 @@ to open work:
 | Onboarding needs provenance, freshness, identity and typed progress ([host discovery][src-host-brief]). | [H5](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify review, filters, detail and interrupted multi-host progress. |
 | Changed keys and source conflicts require explicit revocation and review ([host discovery][src-host-report]). | [H6](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify scoped revocation and reviewed key rotation without cancelling or replaying tasks. |
 | Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 has no open provider checks: Claude's and Cursor's (with the `--trust` profile fix) remote tasks passed on 26 September 2026; Antigravity is closed upstream ([antigravity-cli#219](https://github.com/google-antigravity/antigravity-cli/issues/219)). The operator-provided Ubuntu VPS runs Hydra with tmux installed; prepare a separate tmux-absent environment for T2. |
-| Structural plan inspection and finite comparisons are implemented; broader planning-quality evaluation remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality). Next: define and measure matched held-out work before claiming planning benefit. |
+| Structural plan inspection, three-concern evaluation, replayable decision records and a held-out deterministic evaluation are implemented; semantic planning benefit over overhead on a real workload with live agents remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality). Next: run `make test-plan-eval`'s matched protocol on a live-agent workload with recorded human corrections and supplied estimates before claiming planning benefit. |
 | Runtime membership/expansion, PTY server replacement, cloud-manager integration and shared inventory remain conditional ([optional tmux][src-tmux], [host discovery][src-host-brief]). | 9F's open expansion item and the conditional extensions below. Next: revisit only with an explicit authority, workload and acceptance decision. |
 
 [hist]: https://github.com/Someblueman/hydra/tree/66a5baad011d50b17949f981b807f31627c59250/docs
@@ -621,26 +621,50 @@ Start the baseline with 9A; use 9B–9D contracts and pilots to qualify the tool
 
 Delivered: reusable bounded decomposition patterns with node/dependency
 explanations, and CLI inspection, explanation, comparison and invalidation tools.
+Structural and deterministic measurement is delivered (3.0): `hydra workflow plan
+evaluate` separates decomposition, fixed-graph scheduling and placement; `plan
+observed` turns recorded step durations into estimate ranges; `plan decision`
+records and replays selection reasons with their exact inputs; and
+`make test-plan-eval` measures held-out outcome errors at the current source.
 
-- [ ] Separate decomposition quality, fixed-graph scheduling, and host placement.
+- [x] Separate decomposition quality, fixed-graph scheduling, and host placement.
       Compare admissible alternatives by time/cost to a verified result, critical
       path, resource/transfer requirements, validation effort, and rework risk.
       Preserve ranges and unknown estimates; do not invent calibrated probabilities
       from an agent's confidence or claim globally optimal arbitrary work plans.
-- [ ] Keep the planning agent a candidate generator and external checks explicit.
+      *Delivered as `plan evaluate` (3.0): ranges from supplied or recorded
+      durations, `null` for everything unobserved, rework risk as declared budgets
+      only, placement `not_assessed`, hard budgets copied from the envelope.*
+- [x] Keep the planning agent a candidate generator and external checks explicit.
       Record the reason for selected/rejected alternatives, compiler/policy versions,
       and the inputs to deterministic analysis. Estimates do not relax hard budgets.
+      *Delivered as `plan decision record|list|show` (3.0): private per-head
+      records with canonical inputs; `show --json` replays byte for byte; an
+      estimate above a hard budget refuses the selection and never changes it.*
 - [ ] Maintain independently specified and held-out task cases plus known incorrect
       artifacts. Compare current and contract-aware planning under matched scope,
       tools, and budgets; separate effects of planning, validation, and scheduling.
       Measure false acceptance/rejection, verified outcomes, time/cost, human
       correction, repeated work, and estimate calibration by task class.
+      *Partly delivered (3.0): seventeen held-out cases with thirty-four
+      corruptions, archived cases revived unchanged from Git history, the six
+      frozen candidates compared per interface, executed verified outcomes,
+      elapsed time, repeated work and a one-run scheduling calibration. Human
+      corrections and provider cost are recorded as unknown (never observed);
+      per-class estimate calibration is unknown because the frozen candidates
+      supplied no estimates; the only measured difference between the arms is
+      interface conformance.*
 
 Acceptance: explain every required node and reproduce deterministic comparisons from
 recorded inputs. Report stochastic variability and held-out outcome errors, not only
 plan validity or throughput. Reject every declared deterministic corruption case;
 qualify semantic improvements with observed results and explicit limits. Planning
 benefit must exceed its overhead on the workload where improvement is claimed.
+Status: node explanation, byte-for-byte replay, held-out outcome errors and
+corruption rejection (34/34) are met by deterministic fixtures, which exercise no
+stochastic variability (reported as such, n = 1 per run, 2 invocations per case).
+A semantic planning benefit over its overhead on a real workload with live agents
+has not been observed and remains open; nothing here claims it.
 
 Local implementation: [plan inspection][h-inspect] *(historical)* and
 [finite patterns][h-patterns] *(historical)* provide complete structural explanations,
@@ -651,7 +675,16 @@ estimate calibration or a planning benefit that exceeds overhead. The
 frozen candidates, nine independently specified cases and eighteen incorrect artifacts
 at its exact historical source commit. Its superseded active runner has been retired.
 Its interface-conformance difference disappears in a separate post hoc protocol
-diagnostic. Broader planning-benefit, human-correction and calibration measurements
+diagnostic. The current [planning evaluation](../examples/planning/evaluation/README.md)
+(3.0, `make test-plan-eval`) revives those nine cases unchanged from Git history,
+adds eight held-out cases with sixteen corruptions and an independent oracle, and
+reports planning, validation and scheduling effects separately at the current
+source: contract-aware candidates 17/17 and current candidates 0/17 under the
+declared interface, the reverse pattern under the archived interface adaptation
+(13/17 and 17/17), 34/34 corruptions rejected with no false rejection, one
+executed verified outcome per arm as expected, and a one-run scheduling
+calibration whose fixed-graph prediction under-predicted the observed elapsed
+time. Broader planning-benefit, human-correction and calibration measurements
 remain open; these results do not justify a more elaborate planner.
 
 A [real Python cleanup workload][h-cleanup] *(historical)*

@@ -268,6 +268,7 @@ tests/native/test_enrollment_ssh.c	setup	54
 tests/native/test_performance_outcome.c	invalid_rows	23
 tests/native/test_performance_outcome.c	manifest_faults	17
 tests/native/test_performance_outcome.c	subject_faults	22
+tests/native/test_plan_evaluate.c	decisions	20
 tests/native/test_plan_inspection.c	main	38
 tests/native/test_plan_manifest.c	checker_cases	39
 tests/native/test_plan_manifest.c	invalid_checker_manifest	29

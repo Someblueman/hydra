@@ -152,6 +152,11 @@ hydra workflow plan compile ../plan.json ../policy.json ../compiled.json [--asse
 hydra workflow plan show ../compiled.json
 hydra workflow plan run ../compiled.json --accept SHA256_FROM_PREVIEW
 hydra workflow plan result run_ID
+hydra workflow plan explain ../compiled.json [--estimates ../estimates.json]
+hydra workflow plan evaluate ../left.json ../right.json [--estimates ../estimates.json]
+hydra workflow plan observed run_ID > ../estimates.json
+hydra workflow plan decision record HEAD --select ../left.json 'reason' --reject ../right.json 'reason'
+hydra workflow plan decision show HEAD DECISION_ID --json
 
 # Parallel safety and guarded integration
 hydra claim add feature-x --path 'lib/*' --access write --reason refactor --expires-at 1790000000

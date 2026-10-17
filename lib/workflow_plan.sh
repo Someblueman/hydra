@@ -52,8 +52,17 @@ cmd_workflow_plan() (
             elif [ "$#" -eq 3 ] && [ "$3" = --json ]; then workflow_plan_tool obligations "$2" --json
             else exit 1; fi
             ;;
-        explain|compare)
+        explain|compare|evaluate)
             workflow_plan_tool "$@"
+            ;;
+        observed)
+            if [ "$#" -ne 2 ] || ! hydra_valid_id "$2"; then cli_error 'workflow plan' invalid_arguments 'observed takes one run ID' 'run hydra workflow plan --help'; exit 1; fi
+            workflow_plan_tool observed "$(workflow_runs_dir)/$2"
+            ;;
+        decision)
+            _load_lib workflow_plan_decision
+            shift
+            workflow_plan_decision "$@"
             ;;
         tui-data)
             [ "$#" -eq 2 ] || exit 1
@@ -108,6 +117,11 @@ cmd_workflow_plan() (
                 '       hydra workflow plan obligations <compiled.json> [--json]' \
                 '       hydra workflow plan explain <compiled.json> [--estimates <estimates.json>]' \
                 '       hydra workflow plan compare <left.json> <right.json> [--estimates <estimates.json>]' \
+                '       hydra workflow plan evaluate <left.json> <right.json> [--estimates <estimates.json>]' \
+                '       hydra workflow plan observed <run-id>' \
+                '       hydra workflow plan decision record <head> --select <compiled.json> <reason> [--reject <compiled.json> <reason>]... [--estimates <estimates.json>] [--json]' \
+                '       hydra workflow plan decision list <head> [--json]' \
+                '       hydra workflow plan decision show <head> <decision-id> [--json]' \
                 '       hydra workflow plan run <compiled.json> --accept <sha256>' \
                 '       hydra workflow plan result <run-id>' \
                 '       hydra workflow plan check-definition <compiled.json> <check-id>' \
@@ -115,7 +129,9 @@ cmd_workflow_plan() (
                 'Compile from the source repository. Keep compiled output outside it.' \
                 'Plans carry inline agent prompts and --asset files in the compiled artifact;' \
                 'nothing needs to be committed to the source to plan.' \
-                'Execution uses the existing workflow status, cancel and resume commands.'
+                'Execution uses the existing workflow status, cancel and resume commands.' \
+                'evaluate separates decomposition, fixed-graph scheduling and placement; observed turns' \
+                'a run'"'"'s recorded step durations into an estimates file; decisions replay their comparison.'
             ;;
         *) cli_error 'workflow plan' invalid_arguments 'unknown planning command' 'run hydra workflow plan --help'; exit 1 ;;
     esac

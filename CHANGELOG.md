@@ -66,6 +66,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Spec capabilities `role.producer`/`role.validator` (placement class) and
   `platform.OS-ARCH` (checked by the receiver against its own platform).
   Help and bash, zsh and fish completions cover the new commands and options.
+- `hydra workflow plan evaluate <left> <right> [--estimates FILE]` compares two
+  compiled alternatives in three separate concerns: decomposition quality
+  (required and unconnected nodes, validation effort, declared transfers, declared
+  rework budgets), fixed-graph scheduling (depth, width, critical path, time and
+  cost to a verified result, hard budgets copied from the envelope) and host
+  placement (declared only, never assessed). Estimate-derived figures are ranges
+  or `null`; an estimate above a hard budget marks a conflict and never relaxes
+  the budget; no preference claims semantic adequacy or global optimality.
+- `hydra workflow plan observed <run-id>` prints an estimates document from a
+  run's recorded step durations (one-second resolution ranges, no cost rows).
+- `hydra workflow plan decision record|list|show` keeps, under the head's private
+  planning state, which compiled alternative was selected and which were
+  rejected, each reason, the compiler, analysis and policy versions and the exact
+  analysis inputs; `show --json` replays every comparison from the recorded
+  inputs and reports whether it matches byte for byte. Selecting a plan whose
+  estimate exceeds its own hard budget is refused.
+- `make test-plan-eval` (`scripts/plan-eval.py`) revives the archived finite
+  planner pilot from Git history without editing it, adds eight held-out cases
+  with sixteen incorrect artifacts, and reports planning, validation and
+  scheduling effects separately: candidate acceptance per arm and interface,
+  false acceptances and rejections, executed verified outcomes, elapsed times,
+  repeated work, unknown cost and human corrections, a one-run scheduling
+  calibration and the determinism check. Every declared corruption must be
+  rejected for the target to pass. Help text and completions cover the new
+  planning commands.
 
 ## [2.9.0] - 2026-09-28
 
