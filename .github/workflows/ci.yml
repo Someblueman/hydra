@@ -280,6 +280,42 @@ jobs:
         mkdir -p "$TMUX_TMPDIR"
         make TEST_JOBS=2 FLEET_SHARD=${{ matrix.shard }} sanitize-fleet
 
+  # U10 loopback acceptance: a throwaway account behind a private sshd is
+  # onboarded through the control centre over a PTY (tests/test_u10_loopback.sh
+  # re-executes itself under passwordless sudo). The case prints SKIP and exits
+  # 0 without sshd or root, so the final pass line is required, as for the
+  # other loopback SSH tests.
+  u10-loopback:
+    name: U10 loopback onboarding through the control centre
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install test dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git tmux dash build-essential libjson-c-dev pkg-config openssh-server python3
+
+    - name: Onboard a throwaway account over loopback SSH from the Hosts tab
+      env:
+        TMUX_TMPDIR: ${{ runner.temp }}/hydra-u10
+      run: |
+        mkdir -p "$TMUX_TMPDIR"
+        sudo ln -sf /bin/dash /bin/sh
+        make build-fleet build-tui build-core build/termviz-cells
+        LANG=C.UTF-8 LC_ALL=C.UTF-8 make test-u10-loopback | tee "$RUNNER_TEMP/u10-loopback.out"
+        grep -q '^U10 loopback acceptance passed' "$RUNNER_TEMP/u10-loopback.out"
+
+    - name: Keep the screens and logs of the run
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: u10-loopback-evidence
+        path: build/u10-loopback-evidence/
+        if-no-files-found: ignore
+
   fleet-static:
     name: Static fleet helper (linux-${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
@@ -339,12 +375,13 @@ jobs:
   release-gate:
     name: release-gate
     if: ${{ always() }}
-    needs: [lint, quality-c, test, umask, compatibility, native, sanitize, fleet, fleet-static]
+    needs: [lint, quality-c, test, umask, compatibility, native, sanitize, fleet, fleet-static, u10-loopback]
     runs-on: ubuntu-latest
     steps:
     - name: Require every full qualification job
       run: |
         test "${{ needs.lint.result }}" = success
+        test "${{ needs.u10-loopback.result }}" = success
         test "${{ needs.quality-c.result }}" = success
         test "${{ needs.test.result }}" = success
         test "${{ needs.umask.result }}" = success

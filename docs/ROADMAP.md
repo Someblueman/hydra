@@ -169,6 +169,16 @@ an acceptance blocker, not optional cosmetic polish.
       terminal sizes, including 80x24 and 140x40, with a usable compact fallback.
       The objective, agent input destination, progress and next action remain clear;
       raw IDs, repeated keyboard hints and diagnostic fields do not dominate.
+      Captures and lint are automated: `make visual-review` drives the installed
+      native TUI through planning, running, finished and failed runs, waiting for
+      input, details, recovery, workflows and statistics at 80x24 and 140x40 in the
+      dark, light and no-colour themes and renders every screen with its exact
+      colours onto one contact sheet (`build/visual-review/index.html`, before/after
+      columns with `VISUAL_BASELINE=dir`); `make test-visual-lint` fails on clipping,
+      overlap, missing focus, foreign or contradicting status colours, raw
+      identifiers, repeated hints and low contrast, with the open findings listed
+      in `scripts/visual_review/lint-known.tsv`. Only the human aesthetic judgement
+      remains, with the contact sheet as its input ([VISUAL-REVIEW.md](VISUAL-REVIEW.md)).
 - [x] **U5 — Test the agentic product journey.** Accepted by the user on 27
       September 2026 after the first installed-build run (Codex, task "add
       `hydra kill --dry-run`"): the agent discussed and published a plan, the
@@ -243,6 +253,26 @@ an acceptance blocker, not optional cosmetic polish.
       `PATH` omits it and agent detection is `PATH`-only. Onboarding should also
       offer agent installation and detect per-user install locations. Prior
       bootstrap pins accumulate under `~/.local/share/hydra/fleet` (seven found).
+      Loopback acceptance is automated: `make test-u10-loopback` (gated in CI)
+      onboards a fresh throwaway account behind a private loopback sshd through
+      the control centre's Hosts tab over a PTY: typed-`yes` host-key trust,
+      preflight, provisioning from this checkout's helper through the documented
+      `--binary` path, the deterministic agent fixture installed as `codex` by the
+      real recipe machinery and recorded off `PATH`, a sign-in killed mid-way and
+      resumed without being repeated, a sign-in whose verification fails and is
+      retried, a real fixture-agent task launched on the host (`hydra fleet
+      spawn`; the control centre has no remote launch until U11) and found again
+      in the Fleet view after the client reconnects, a second setup of the same
+      account reusing the pin, a host whose sshd hides `git` (the explained
+      requirement with its suggestion, continuing once `git` is back), unrelated
+      files byte-identical and no local credential copied
+      ([FLEET.md](FLEET.md#guided-remote-setup)). The operator VPS run remains the
+      only thing a human need do: from an installed build, `hydra tui`, `H`, `A`,
+      enter `ubuntu@<vps>`, type `yes` for the fingerprint read on the VPS,
+      approve the plans and sign in to a real provider on the VPS, then
+      `hydra fleet spawn <name> --project /abs/project -- task --profile <agent>`
+      and `hydra tui --fleet` to find it; a pinned release build needs no
+      `HYDRA_REMOTE_SETUP_BINARY`.
 - [ ] **U11 — One workspace across local and remote execution.** Unify ordinary
       and Fleet UI navigation, agent interaction, task details, attention and review.
       Represent local/remote as a visible location and filter within the same control
@@ -905,6 +935,16 @@ provider status for Hydra verification.
       resolved, but visual design and graphics across the control centre need a
       dedicated pass. Extend this item to the new run, result, failure and
       statistics screens when it is selected.
+      The before/after captures are automated: `make visual-review` records the
+      attention queue and detail, a failed check, the result and evidence reviews,
+      the selected identity, Fleet navigation (remote heads, overview, hosts,
+      recovery, attention), the run, result, failure and statistics screens and
+      the 2.9.0 Hosts screens at 80x24 and 140x40, dark, light and no-colour, on
+      one contact sheet with exact colours, and `make test-visual-lint` checks
+      alignment, wrapping, clipping, focus, palette and contrast on every one
+      ([VISUAL-REVIEW.md](VISUAL-REVIEW.md)). What remains is the user's review of
+      that page for hierarchy and visual quality, plus the walk-through of finding
+      an item, reviewing its evidence and returning with the selection preserved.
 
 I1 builds on V1–V4 and existing interactive attach; tmux-free distributed
 qualification stays in T2/T3. I2/I3 reuse lifecycle, outcome and review contracts.

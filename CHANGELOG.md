@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `make visual-review` installs this checkout into a private prefix, drives the
+  installed native TUI over a pseudo-terminal through the planning, running,
+  finished and failed, waiting-for-input, details, recovery, workflows,
+  statistics, attention, review, identity, Fleet and 2.9.0 Hosts screens at
+  80x24 and 140x40 in the dark, light and no-colour themes, keeps every state's
+  raw bytes, renders each through the product's own terminal interpreter
+  (`build/termviz-cells`, from `src/termviz/tools/cells.c`) with exact colours
+  to HTML and SVG, and writes one contact sheet, `build/visual-review/index.html`,
+  with before/after columns when `VISUAL_BASELINE=dir` names an earlier output.
+  `make test-visual-lint` fails on text clipped at the edge or cut at the end of
+  its area, overlapping panels, a missing focus indicator, colours outside the
+  theme's declared palette or a status word in a contradicting tone, raw
+  identifiers in headings or more than three outside detail and diagnostic
+  screens, repeated keyboard hints and contrast below 4.5 (3.0 for muted text
+  and borders); findings in `scripts/visual_review/lint-known.tsv` are reported
+  as known. See `docs/VISUAL-REVIEW.md`.
+- `make test-u10-loopback` (gated in CI) onboards a fresh throwaway account
+  behind a private loopback sshd through the control centre's Hosts tab over a
+  PTY: typed-`yes` host-key trust, preflight, provisioning from this checkout's
+  helper, the deterministic agent fixture installed as `codex` by the real
+  recipe machinery from a private `agent-recipes.json`, a sign-in killed
+  mid-way and resumed without being repeated, a sign-in whose verification
+  fails and is retried, a real fixture-agent task launched on the host and found
+  again after reconnecting, a second setup of the same account reusing the pin,
+  a host whose sshd hides `git`, unrelated files byte-identical and no local
+  credential copied. The case prints SKIP without root (or passwordless sudo)
+  and sshd. Evidence lands in `build/u10-loopback-evidence/`.
+- The control centre passes `--binary FILE` to `hydra remote setup` when
+  `HYDRA_REMOTE_SETUP_BINARY` names a helper, so a development build can
+  provision from the Hosts tab with the unpinned helper the CLI's
+  `asset_unavailable` recovery asks for; the plan shows it as not a release
+  build, and only the provisioning command naming that same file is rerun.
+
 ## [2.9.0] - 2026-09-28
 
 ### Added
