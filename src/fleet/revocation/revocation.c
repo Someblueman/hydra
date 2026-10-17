@@ -32,7 +32,8 @@ bool revocation_normalize(const char *scope, const char *id, char out[REVOCATION
     if (!revocation_scope(scope) || !hd_text(id, REVOCATION_ID)) return false;
     if (!strcmp(scope, "candidate")) {
         if (candidate_id(id)) return !f_copy(out, REVOCATION_ID, id);
-        if (!hd_text(id, 256) || !f_target(id)) return false;
+        /* A cand_ prefix is reserved for IDs; a malformed one is never a target. */
+        if (!strncmp(id, "cand_", 5) || !hd_text(id, 256) || !f_target(id)) return false;
         hd_id(out, id); return true;
     }
     if (!strcmp(scope, "source") && !source_id(id)) return false;
@@ -54,9 +55,16 @@ static bool record_valid(json_object *record, const char *scope, const char *id)
         f_string(record, "id") && !strcmp(f_string(record, "id"), id) &&
         hd_text(f_string(record, "reason"), REVOCATION_REASON) && json_object_is_type(f_field(record, "revoked_at"), json_type_int);
 }
+static bool scope_present(const char *scope) {
+    char directory[F_PATH], scoped[F_PATH]; struct stat st;
+    return !f_path(directory, sizeof(directory), f_home, "fleet/revocations") && !f_path(scoped, sizeof(scoped), directory, scope) &&
+        !stat(scoped, &st) && S_ISDIR(st.st_mode);
+}
 json_object *revocation_find(const char *scope, const char *id) {
     char canonical[REVOCATION_ID], path[F_PATH], directory[F_PATH]; struct stat st; json_object *record;
-    if (!revocation_normalize(scope, id, canonical) || record_path(scope, canonical, path, directory)) return NULL;
+    /* Hashing the identity runs a digest process; skip it while no decision
+     * of this scope exists, which is the common case on every alias load. */
+    if (!revocation_normalize(scope, id, canonical) || !scope_present(scope) || record_path(scope, canonical, path, directory)) return NULL;
     if (lstat(path, &st) || !S_ISREG(st.st_mode) || st.st_uid != geteuid() || (st.st_mode & 0077)) return NULL;
     record = f_read_json(path, 65536);
     if (record_valid(record, scope, canonical)) return record;
