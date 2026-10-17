@@ -8,6 +8,9 @@ struct native_review_identity {
     char run[128], step[128], attempt[128];
     char head[128], instance[128], request[128];
     char revision[65], identity[65], binding[65];
+    /* The presentation label (the task or plan name), outside the identity
+     * the public review binds to but part of what the screen leads with. */
+    char label[128];
 };
 
 /* These functions borrow app and identity. app owns the review and capture;
@@ -15,6 +18,7 @@ struct native_review_identity {
 void native_review_destroy(struct app *app);
 void native_review_sync(struct app *app, const struct native_review_identity *identity, bool current);
 void native_review_open(struct app *app, const struct native_review_identity *identity);
+bool native_review_load(struct app *app, const struct native_review_identity *identity, const char *path);
 void native_review_tick(struct app *app);
 bool native_review_key(struct app *app, char key);
 bool native_review_render(struct app *app);

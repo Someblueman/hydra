@@ -234,11 +234,16 @@ def main() -> int:
                                 "phase exceeds the declared 30-second bound"
                             )
                         phase = command
-                        phase["interval_ns"] = (
-                            31_250_000
-                            if command["case"] in ("sustained-output", "result-output")
-                            else 2_000_000_000
+                        phase["interval_ns"] = int(
+                            command.get("interval_ns")
+                            or (
+                                31_250_000
+                                if command["case"] in ("sustained-output", "result-output")
+                                else 2_000_000_000
+                            )
                         )
+                        if not 1_000_000 <= phase["interval_ns"] <= 10_000_000_000:
+                            raise ValueError("phase interval outside 1ms..10s")
                         next_event = int(command["start_ns"])
                         generated = written = count = blocked = queue_nonempty_ns = (
                             max_pending
@@ -258,16 +263,22 @@ def main() -> int:
                         Path("item10-result.txt").write_text(token)
                         enqueue(canonical("result", text=token))
                         enqueue(canonical("observation", status="idle"))
+                        # A supervised sink may still be consuming earlier
+                        # output; wait a bounded time and report how long.
+                        final_wait_started = time.monotonic_ns()
                         while pending:
                             _, writable, _ = select.select(
                                 [], [sys.stdout.fileno()], [], 2
                             )
                             if not writable:
-                                raise TimeoutError("final result output blocked")
+                                if time.monotonic_ns() - final_wait_started > 120_000_000_000:
+                                    raise TimeoutError("final result output blocked")
+                                continue
                             del pending[: os.write(sys.stdout.fileno(), pending)]
                         record(
                             "completed",
                             artifact=str(Path("item10-result.txt").resolve()),
+                            final_drain_wait_ns=time.monotonic_ns() - final_wait_started,
                         )
                         finished = True
                     else:

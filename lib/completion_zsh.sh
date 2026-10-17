@@ -49,13 +49,19 @@ _hydra() {
                     ;;
                 fleet)
                     if [[ $words[2] == discover || $words[2] == qualify ]]; then
-                        _arguments '1:action:(discover qualify)' '*--ssh[Select OpenSSH alias]:alias:' '--inventory[Static JSON inventory]:file:_files' '*--select[Select inventory record]:name:' '--ssh-config[Trusted OpenSSH config]:file:_files' '--timeout[Per-process deadline, 1-30 seconds]:seconds:' '--require[Advertised capability, qualify only]:capability:' '--json[Versioned JSON output]'
+                        _arguments '1:action:(discover qualify)' '*--ssh[Select OpenSSH alias]:alias:' '--inventory[Static JSON inventory]:file:_files' '*--select[Select inventory or source record]:name:' '*--source[Live source: ssh-config\[:FILE\], ansible-inventory:FILE, dns-sd\[:DOMAIN\]]:selector:' '--diff[List added, removed and changed records against the previous snapshot]' '--ssh-config[Trusted OpenSSH config]:file:_files' '--timeout[Per-process deadline, 1-30 seconds]:seconds:' '--require[Advertised capability, qualify only]:capability:' '--progress[Absolute progress export, qualify only]:file:_files' '--json[Versioned JSON output]'
+                    elif [[ $words[2] == enroll ]]; then
+                        _arguments '1:action:(enroll)' '2:enroll action:(review apply status)' '--input[Qualification result or reviewed intent]:file:_files' '--output[New intent file]:file:_files' '*--candidate[Candidate ID]:candidate:' '--project[Absolute remote project]:path:_files -/' '--package[Pinned package]:file:_files' '--sha256[Package digest]:SHA256:' '--prefix[Exact install prefix]:path:' '--alias[Alias for one candidate]:alias:' '--confirm[Intent digest]:SHA256:' '--timeout[Transport deadline]:seconds:' '--json[Versioned JSON output]'
+                    elif [[ $words[2] == revoke ]]; then
+                        _arguments '1:action:(revoke)' '2:scope:(candidate source transport package project list)' '3:identity:' '--reason[Retained reason, required]:text:' '--scope[Filter list by scope]:scope:(candidate source transport package project)' '--json[Versioned JSON output]'
                     elif [[ $words[2] == auth ]]; then
                         _arguments '1:action:(auth)' '2:auth action:(status preview copy login help)' '--agent[Agent]:agent:(codex pi opencode claude agy cursor)' '--provider[Credential provider]:provider:' '--source[Private credential file]:file:_files' '--approve[Exact preview hash]:SHA256:' '--executable[Remote login executable]:path:'
+                    elif [[ $words[2] == placement ]]; then
+                        _arguments '1:action:(placement)' '2:placement action:(explain replay withdraw drain undrain policy help)' '3:subject:' '--timeout[Withdrawal transport deadline]:seconds:' '--json[Versioned JSON output]'
                     elif [[ $words[2] == task ]]; then
-                        _arguments '1:action:(task)' '2:task action:(prepare inspect announce submit start resume requests decide status observe cancel logs result inspect-result collect collected help)' '--source[Repository for prepare or owner/work for logs]:source:' '--spec[Task specification]:file:_files' '--input[Prepared package]:file:_files' '--output[New package file]:file:_files' '--key[Stable submission key]:key:' '--id[Accepted task ID]:task ID:' '--request[Approval request ID]:request:' '--decision[Decision]:decision:(approve reject)' '--by[Actor label]:label:' '--trust-spec[Authorize exact task digest]:SHA256:' '--stream[Log stream]:stream:(stdout stderr)' '--offset[Byte offset]:offset:' '--limit[Page bytes]:limit:' '--step[Workflow log step]:step:' '--attempt[Workflow attempt]:attempt:' '--timeout[Result or cancellation transport deadline]:seconds:' '--into[Collection repository]:directory:_files -/' '--format[Collection output]:format:(candidates)'
+                        _arguments '1:action:(task)' '2:task action:(prepare inspect announce submit start resume requests decide status observe cancel withdraw logs result inspect-result collect collected help)' '--placement[Automatic or pinned host placement]:placement:(auto)' '*--separate-from[Keep away from this task'"'"'s host]:task ID:' '--source[Repository for prepare or owner/work for logs]:source:' '--spec[Task specification]:file:_files' '--input[Prepared package]:file:_files' '--output[New package file]:file:_files' '--key[Stable submission key]:key:' '--id[Accepted task ID]:task ID:' '--request[Approval request ID]:request:' '--decision[Decision]:decision:(approve reject)' '--by[Actor label]:label:' '--trust-spec[Authorize exact task digest]:SHA256:' '--stream[Log stream]:stream:(stdout stderr)' '--offset[Byte offset]:offset:' '--limit[Page bytes]:limit:' '--step[Workflow log step]:step:' '--attempt[Workflow attempt]:attempt:' '--timeout[Result or cancellation transport deadline]:seconds:' '--into[Collection repository]:directory:_files -/' '--format[Collection output]:format:(candidates)'
                     else
-                        _arguments '1:action:(handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui)' '*:argument:'
+                        _arguments '1:action:(handshake discover qualify enroll revoke list overview doctor admission bootstrap package task auth placement init spawn signal cancel workflow attach export import reconcile watch tui)' '*:argument:'
                     fi
                     ;;
                 spawn)
@@ -135,10 +141,16 @@ _hydra() {
                     ;;
                 workflow)
                     if [[ ${words[2]} == plan ]]; then
-                        _arguments '2:planning action:(schema propose proposal validate compile show obligations checks explain compare run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '--branch[Head that owns the proposal]:branch:' '--local-policy[Write the local policy preset]' '--return[Return the proposal with requested changes]:feedback:' '*--asset[Publish a proposal asset NAME=FILE]:asset:' '--assets-dir[Directory holding the plan assets]:directory:_files -/' '*:file:_files'
+                        _arguments '2:planning action:(schema propose proposal validate compile show obligations checks explain compare evaluate observed decision expand run result)' '--accept[Accept exact compiled digest]:sha256:' '--run[Base run to expand]:run ID:' '--proposal[Expansion proposal]:file:_files' '--json[Output resolved JSON]' '--branch[Head that owns the proposal]:branch:' '--local-policy[Write the local policy preset]' '--return[Return the proposal with requested changes]:feedback:' '*--asset[Publish a proposal asset NAME=FILE]:asset:' '--assets-dir[Directory holding the plan assets]:directory:_files -/' '*:file:_files'
                         return
                     fi
                     _arguments '1:subcommand:(list show validate dry-run run status cancel resume replay requests decide statistics-data statistics-json statistics-compare plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
+                    ;;
+                pool)
+                    _arguments '1:subcommand:(create add seal claim complete cancel status list run)' '2:pool:' '--max-tasks[Sealed task bound]:count:' '--max-outstanding[Claimed tasks at once]:count:' '--max-expansions[Sealed expansion bound]:count:' '--max-artifact-bytes[Task definition byte bound]:bytes:' '--max-repair-rounds[Operator retry bound]:count:' '--lease[Claim lease seconds]:seconds:' '--retry[Retries for idempotent tasks]:count:' '--workflow[Workflow ID or path]:workflow:' '--exec[Head that runs the argv]:head:_hydra_sessions' '--id[Task ID]:task:' '--idempotent[Task may retry]' '--seal[Seal the expansion after adding]' '--worker[Worker label]:label:' '--owner-pid[Worker process ID]:pid:' '--token[Claim token]:token:' '--by[Operator label]:label:' '--outcome[Reported outcome]:outcome:(succeeded failed retry)' '--run[Workflow run ID]:run:' '--max[Tasks to execute]:count:' '--json[Output versioned JSON]'
+                    ;;
+                schedule)
+                    _arguments '1:subcommand:(add list remove run-now status)' '2:schedule:' '--every[Cadence: Nm, Nh or Nd]:every:' '--workflow[Workflow ID or path]:workflow:' '--pool[Pool to add to or run]:pool:' '--missed[Missed-run policy]:policy:(skip catch-up)' '--catch-up-limit[Missed slots to catch up]:count:' '--reboot-recovery[Opt into reboot entries]' '--format[Timer entry format]:format:(crontab systemd launchd all)' '--token[Explicit dedup token]:token:' '--json[Output versioned JSON]'
                     ;;
                 sync)
                     _arguments '--from[Source ref]:ref:' '--gate[Approved gate]:name:' '--dry-run[Simulate without mutation]' '1:head:_hydra_sessions'
@@ -259,6 +271,8 @@ _hydra_commands() {
         'broadcast:Send a command to sessions'
         'wait-idle:Wait for sessions to become idle'
         'queue:Inspect or process the spawn queue'
+        'pool:File-backed task pools with sealed bounded expansions'
+        'schedule:Host-timer schedules that submit work with a dedup token'
     )
     _describe 'command' commands
 }

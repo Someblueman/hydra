@@ -4,7 +4,7 @@ $(BUILD_DIR)/fixture-lock: tests/fixture/lock.c
 	$(CC) -std=c99 -Wall -Wextra -Werror -pedantic $< -o $@
 
 PTY_SUPPORT = tests/termviz/pty_support.c tests/termviz/screen_support.c tests/termviz/fixture_support.c
-PTY_NAMES = pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads remote-setup
+PTY_NAMES = pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads remote-setup onboarding
 PTY_BINS = $(addprefix $(BUILD_DIR)/native-tests/pty-,$(PTY_NAMES))
 $(BUILD_DIR)/native-tests:
 	mkdir -p $@
@@ -30,9 +30,9 @@ test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-conversation
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-assets
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-workflow-controls
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-runs-heads
-test-tui-pty: $(BUILD_DIR)/native-tests/pty-remote-setup
+test-tui-pty: $(BUILD_DIR)/native-tests/pty-remote-setup $(BUILD_DIR)/native-tests/pty-onboarding
 
-NATIVE_TEST_NAMES = statistics-export task-announce retention workflow-task-metrics plan-inspection plan-reuse-invalidation retention-accepted discovery enrollment enrollment-receiver enrollment-ssh plan-patterns plan-manifest plan-staged research-outcome performance-outcome plan-staged-public remote-setup-ssh
+NATIVE_TEST_NAMES = statistics-export task-announce retention workflow-task-metrics workflow-task-cohorts plan-inspection plan-evaluate plan-reuse-invalidation retention-accepted discovery enrollment enrollment-receiver enrollment-ssh plan-patterns plan-manifest plan-staged research-outcome performance-outcome plan-staged-public remote-setup-ssh
 NATIVE_TEST_BINS = $(addprefix $(BUILD_DIR)/native-tests/test-,$(NATIVE_TEST_NAMES)) $(BUILD_DIR)/native-tests/workflow-contract-cases
 $(foreach n,$(NATIVE_TEST_NAMES),$(eval $(BUILD_DIR)/native-tests/test-$(n): tests/native/test_$(subst -,_,$(n)).c))
 $(addprefix $(BUILD_DIR)/native-tests/test-,plan-reuse-invalidation retention-accepted): tests/native/accepted_fixture.c
@@ -44,12 +44,13 @@ test-workflow-contracts: $(BUILD_DIR)/native-tests/workflow-contract-cases
 test-task-announce: $(BUILD_DIR)/native-tests/test-task-announce
 test-retention: $(BUILD_DIR)/native-tests/test-retention
 test-workflow-metrics: $(BUILD_DIR)/native-tests/test-workflow-task-metrics
+test-workflow-metrics: $(BUILD_DIR)/native-tests/test-workflow-task-cohorts
 test-workflow-metrics: $(BUILD_DIR)/native-tests/test-statistics-export
-test-plan-inspection: $(BUILD_DIR)/native-tests/test-plan-inspection
+test-plan-inspection: $(BUILD_DIR)/native-tests/test-plan-inspection $(BUILD_DIR)/native-tests/test-plan-evaluate
 test-plan-reuse: $(BUILD_DIR)/native-tests/test-plan-reuse-invalidation $(BUILD_DIR)/native-tests/test-retention-accepted
 
-$(BUILD_DIR)/native-tests/test-discovery: tests/native/discovery_progress.c
-$(BUILD_DIR)/native-tests/test-enrollment: tests/native/enrollment_batch.c tests/native/enrollment_packages.c
+$(BUILD_DIR)/native-tests/test-discovery: tests/native/discovery_progress.c tests/native/discovery_live.c
+$(BUILD_DIR)/native-tests/test-enrollment: tests/native/enrollment_batch.c tests/native/enrollment_packages.c tests/native/enrollment_revocation.c
 NATIVE_FIXTURES = $(addprefix $(BUILD_DIR)/native-tests/,discovery-ssh-fixture enrollment-ssh-fixture enrollment-loopback-fixture)
 $(BUILD_DIR)/native-tests/discovery-ssh-fixture: tests/native/discovery_ssh_fixture.c
 $(BUILD_DIR)/native-tests/enrollment-ssh-fixture: tests/native/enrollment_ssh_fixture.c

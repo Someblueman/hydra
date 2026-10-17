@@ -19,9 +19,13 @@ static int parse_size(const char *value, int *cols, int *rows) {
 static void usage(FILE *out) {
     fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--ascii] [--fleet]\n"
           "  [--view statistics|workspace|overview|heads|detail|coordination|recovery|workflows|hosts]\n"
+          "  [--location all|local|remote|HOST]\n"
           "  [--version|--protocol-version|--diagnostics|--hydra PATH|--task BRANCH]\n"
-          "  [--headless-fixture FILE [--workflow-fixture FILE] [--statistics-fixture FILE]\n"
-          "   --size COLSxROWS --frames N]\n", out);
+          "  [--headless-fixture FILE [--remote-fixture FILE] [--workflow-fixture FILE]\n"
+          "   [--statistics-fixture FILE] [--attention-fixture FILE]... [--review-fixture FILE]\n"
+          "   [--onboarding-fixture FILE [--onboarding-intent FILE]\n"
+          "   [--onboarding-screen list|detail|changes|intent|select|review] [--onboarding-dump]]\n"
+          "   [--keys KEYS]... --size COLSxROWS --frames N]\n", out);
 }
 
 static int parse_view(const char *name) {
@@ -33,24 +37,81 @@ static int parse_view(const char *name) {
     return -1;
 }
 
-static int render_fixture(struct app *app, const char *fixture, const char *workflow_fixture,
-                      const char *statistics_fixture, unsigned frames) {
+/* A fixture is one observation; a local and a remote one compose like the
+ * live adapters do. */
+static int accept_fixture(struct app *app, const char *fixture) {
     char error[TEXT] = "";
+    struct model *next = malloc(sizeof(*next));
+    if (!next) { fputs("native model allocation failed\n", stderr); return 2; }
+    if (load_fixture(fixture, next, error, sizeof(error)) != 0) { free(next); fprintf(stderr, "%s\n", error); return 2; }
+    model_accept(app, next);
+    return 0;
+}
+
+/* Onboarding fixtures (H5): recorded fleet envelopes shown in the Hosts tab. */
+struct onboarding_fixtures { const char *export_file, *intent_file, *screen; bool dump; };
+
+
+/* Headless attention, review and key fixtures: attention streams load in
+ * order (an unreadable later one is a failed refresh), the review document
+ * binds to the selected attention item, and keys replay before the first
+ * frame so a fixture screen is the one those keys reach interactively. */
+struct screen_fixtures {
+    const char *attention[2], *review, *keys[2];
+    size_t attention_count, key_count;
+};
+
+static bool prepare_screen(struct app *app, const struct screen_fixtures *f) {
+    size_t i;
+    /* An unreadable stream is a screen too: unavailable, or stale after a good one. */
+    for (i = 0; i < f->attention_count; i++) (void)native_attention_load(app, f->attention[i]);
+    if (app->view == 7 && f->key_count) native_workspace_prepare(app);
+    /* The first key string selects the item the review binds to; the second
+     * navigates inside the review. */
+    for (i = 0; f->key_count && f->keys[0][i]; i++) headless_key(app, f->keys[0][i]);
+    if (f->review && !native_attention_review_load(app, f->review) && !app->review) {
+        fprintf(stderr, "review fixture needs a selected attention item: %s\n", f->review); return false;
+    }
+    for (i = 0; f->key_count > 1U && f->keys[1][i]; i++) headless_key(app, f->keys[1][i]);
+    return true;
+}
+
+
+static int render_fixture(struct app *app, const char *fixture, const char *remote_fixture, const char *workflow_fixture,
+                      const char *statistics_fixture, const struct onboarding_fixtures *onboarding,
+                      const struct screen_fixtures *screen, unsigned frames) {
     unsigned frame;
-    if (load_fixture(fixture, &app->model, error, sizeof(error)) != 0) { fprintf(stderr, "%s\n", error); return 2; }
+    int status = accept_fixture(app, fixture);
+    if (!status && remote_fixture) status = accept_fixture(app, remote_fixture);
+    if (!status && (onboarding->export_file || onboarding->intent_file)) {
+        app->view = 6;
+        status = native_onboarding_fixture(app, onboarding->export_file, onboarding->intent_file, onboarding->screen);
+        if (!status && onboarding->dump) { native_onboarding_dump(app, stdout); native_onboarding_destroy(app); model_release(app); return ferror(stdout) ? 3 : 0; }
+    }
+    if (status) return status;
     record_snapshot(app, true);
     if (workflow_fixture && refresh_workflows(app, workflow_fixture)) return 2;
-    /* --task selects a head, as it does when the interactive view opens. */
+    /* --task selects a head, as it does when the interactive view opens; a
+     * remote task is selected by its task id. */
     if (app->pending_task[0] && head_for_branch(app, app->pending_task))
         app->selected = (size_t)(head_for_branch(app, app->pending_task) - app->model.heads);
+    else if (app->pending_task[0]) {
+        size_t i;
+        for (i = 0; i < app->model.task_count; i++)
+            if (!strcmp(app->model.tasks[i].task_id, app->pending_task)) { app->task_row = true; app->task_selected = i; }
+    }
     if (statistics_fixture && refresh_statistics(app, statistics_fixture)) return 2;
+    if (!prepare_screen(app, screen)) return 2;
     for (frame = 1U; frame <= frames && !terminal_stopped(); frame++) render(app, frame, true);
     free(app->workflows);
+    native_review_destroy(app);
     native_attention_destroy(app);
     native_workspace_destroy(app);
+    native_onboarding_destroy(app);
     statistics_destroy(app);
     transcript_free(app->transcript); app->transcript = NULL;
     frame_free(app);
+    model_release(app);
     if (terminal_stopped()) return terminal_exit_status();
     return ferror(stdout) ? 3 : 0;
 }
@@ -63,6 +124,12 @@ static void initialize_app(struct app *app) {
     app->cols = 80; app->rows = 24;
     app->no_color = getenv("NO_COLOR") != NULL;
     app->ascii = strcasecmp(nl_langinfo(CODESET), "UTF-8") != 0;
+}
+
+static bool location_option(struct app *app, const char *value) {
+    if (!value[0] || strlen(value) >= sizeof(app->location)) return false;
+    copy_text(app->location, sizeof(app->location), strcmp(value, "all") ? value : "");
+    return true;
 }
 
 static bool task_option(struct app *app, const char *branch) {
@@ -88,9 +155,11 @@ static bool theme_option(struct app *app, const char *theme) {
 
 int main(int argc, char **argv) {
     struct app app;
-    const char *fixture = NULL;
+    const char *fixture = NULL, *remote_fixture = NULL;
     const char *workflow_fixture = NULL;
     const char *statistics_fixture = NULL;
+    struct onboarding_fixtures onboarding = {NULL, NULL, NULL, false};
+    struct screen_fixtures screen = {{NULL, NULL}, NULL, {NULL, NULL}, 0, 0};
     unsigned frames = 1U;
     int index;
     bool explicit_view = false;
@@ -105,10 +174,27 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[index], "--task") == 0 && index + 1 < argc) {
             if (!task_option(&app, argv[++index])) return 2;
         }
-        else if (strcmp(argv[index], "--fleet") == 0) app.fleet = true;
+        else if (strcmp(argv[index], "--fleet") == 0) { app.fleet = true; copy_text(app.location, sizeof(app.location), "remote"); }
+        else if (strcmp(argv[index], "--location") == 0 && index + 1 < argc) {
+            if (!location_option(&app, argv[++index])) { usage(stderr); return 2; }
+        }
         else if (strcmp(argv[index], "--headless-fixture") == 0 && index + 1 < argc) fixture = argv[++index];
+        else if (strcmp(argv[index], "--remote-fixture") == 0 && index + 1 < argc) remote_fixture = argv[++index];
         else if (strcmp(argv[index], "--workflow-fixture") == 0 && index + 1 < argc) workflow_fixture = argv[++index];
         else if (strcmp(argv[index], "--statistics-fixture") == 0 && index + 1 < argc) statistics_fixture = argv[++index];
+        else if (strcmp(argv[index], "--onboarding-fixture") == 0 && index + 1 < argc) onboarding.export_file = argv[++index];
+        else if (strcmp(argv[index], "--onboarding-intent") == 0 && index + 1 < argc) onboarding.intent_file = argv[++index];
+        else if (strcmp(argv[index], "--onboarding-screen") == 0 && index + 1 < argc) onboarding.screen = argv[++index];
+        else if (strcmp(argv[index], "--onboarding-dump") == 0) onboarding.dump = true;
+        else if (strcmp(argv[index], "--attention-fixture") == 0 && index + 1 < argc) {
+            if (screen.attention_count == 2U) { usage(stderr); return 2; }
+            screen.attention[screen.attention_count++] = argv[++index];
+        }
+        else if (strcmp(argv[index], "--review-fixture") == 0 && index + 1 < argc) screen.review = argv[++index];
+        else if (strcmp(argv[index], "--keys") == 0 && index + 1 < argc) {
+            if (screen.key_count == 2U) { usage(stderr); return 2; }
+            screen.keys[screen.key_count++] = argv[++index];
+        }
         else if (strcmp(argv[index], "--size") == 0 && index + 1 < argc) {
             if (parse_size(argv[++index], &app.cols, &app.rows) != 0) { usage(stderr); return 2; }
         } else if (strcmp(argv[index], "--frames") == 0 && index + 1 < argc) {
@@ -127,9 +213,10 @@ int main(int argc, char **argv) {
     }
     if (!theme_option(&app, theme)) return 2;
     if (fixture != NULL) {
-        return render_fixture(&app, fixture, workflow_fixture, statistics_fixture, frames);
+        return render_fixture(&app, fixture, remote_fixture, workflow_fixture, statistics_fixture, &onboarding, &screen, frames);
     }
-    if (workflow_fixture || statistics_fixture) { usage(stderr); return 2; }
+    if (remote_fixture || workflow_fixture || statistics_fixture || onboarding.export_file || onboarding.intent_file ||
+        screen.attention_count || screen.review || screen.key_count) { usage(stderr); return 2; }
     if (!explicit_view && !app.diagnostics) app.view = 7;
     index = interactive_main(&app);
     free(app.workflows);
@@ -139,8 +226,10 @@ int main(int argc, char **argv) {
     native_attention_destroy(&app);
     native_plan_destroy(&app);
     native_setup_destroy(&app);
+    native_onboarding_destroy(&app);
     statistics_destroy(&app);
     transcript_free(app.transcript);
     frame_free(&app);
+    model_release(&app);
     return index;
 }

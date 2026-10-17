@@ -1,0 +1,50 @@
+HYDRA_REVIEW	1	workflow records	project_7f3a	-	-	run_2cdf8bbe1a4e	repo-check	attempt-1	head_b2c4d6e8	instance_b2c4d6e8	-	-	7777777777777777777777777777777777777777777777777777777777777777	8888888888888888888888888888888888888888888888888888888888888888
+TEXT	RESULT  kill-dry-run  -  verdict FAILED  -  run failed
+TEXT	Objective: add hydra kill --dry-run so a removal can be previewed without removing anything
+TEXT	
+TEXT	WHAT WAS PRODUCED
+TEXT	  answer - the implementation summary (step implement, available)
+TEXT	    388 bytes
+TEXT	    | Added --dry-run to hydra kill; the worktree listing is printed before
+TEXT	    | the sessions are closed.
+TEXT	
+TEXT	WHAT WAS CHECKED
+TEXT	  FAIL    req-dry-run-flag - kill accepts --dry-run and lists what it would remove (check: repo-check)
+TEXT	  FAIL    req-no-removal - a dry run removes nothing (check: repo-check)
+TEXT	
+TEXT	HOW IT WAS VERIFIED
+TEXT	  Check repo-check (command): the repository test suite
+TEXT	    Ran: make test-one T=kill
+TEXT	    On head kill-dry-run-check in step repo-check, exit code 1
+TEXT	    Report: fail (verified) - 2 of 12 cases failed
+TEXT	    Summary lines from the output:
+TEXT	      FAIL: a dry run removes nothing (worktree kill-dry-run-worker is gone)
+TEXT	      Tests: 12, Passed: 10, Failed: 2
+TEXT	    Full log (22144 bytes): press L - /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/repo-check/attempt-1/output.log
+TEXT	
+TEXT	STEPS  (state, duration, attempts)
+TEXT	  spawn-worker       spawn  succeeded  5s           attempts 1, head kill-dry-run-worker
+TEXT	  implement          exec   succeeded  58s          attempts 1, head kill-dry-run-worker
+TEXT	      agent codex, version codex-cli 0.46.0, model gpt-6-sol, effort xhigh
+TEXT	      tokens in 21.3k, cached 20.9k, out 980; cost not reported
+TEXT	  repo-check         exec   failed     41s          attempts 1, head kill-dry-run-check
+TEXT	
+TEXT	CHANGES ON kill-dry-run-worker  (1 commit, 2 files, +52 -6; the branch as it is now)
+TEXT	  Base 3f9c1e2a7b40 -> tip 91c0ffee4d2a
+TEXT	  commit 91c0ffe  feat(kill): add --dry-run preview  (Usability fixture)
+TEXT	  file  +48    -2     lib/cmd_kill.sh
+TEXT	  file  +4     -4     docs/USAGE.md
+TEXT	
+TEXT	DIFF  (complete)
+TEXT	    diff --git a/lib/cmd_kill.sh b/lib/cmd_kill.sh
+TEXT	    @@ -12,6 +12,12 @@ cmd_kill() {
+TEXT	    +            --dry-run) dry_run=1 ;;
+TEXT	    -            *) break ;;
+TEXT	
+TEXT	NEXT
+TEXT	  Send the plan back (F in its planning conversation) or retry the step: hydra workflow resume run_2cdf8bbe1a4e
+TEXT	  Dismiss: Esc returns to the attention list, where s marks the item seen.
+REF	log	available	/tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/repo-check/attempt-1/output.log
+PREVIEW	0	FAIL: a dry run removes nothing (worktree kill-dry-run-worker is gone)
+PREVIEW	0	Tests: 12, Passed: 10, Failed: 2
+END	45	1	2

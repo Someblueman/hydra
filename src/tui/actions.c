@@ -65,6 +65,7 @@ static const char *first_line(const char *text, char *out, size_t size) {
 
 struct removal {
     size_t count, removed, skipped, failed, dirty;
+    bool gone[MAX_HEADS];
     char output[8192], transcript[8192];
 };
 
@@ -76,6 +77,10 @@ static bool removal_targets(struct app *app, char targets[][TEXT], size_t *count
     if (app->marked_count) {
         for (index = 0U; index < app->marked_count && *count < MAX_HEADS; index++) copy_text(targets[(*count)++], TEXT, app->marked[index]);
         return true;
+    }
+    if (selected && head_remote(selected)) {
+        copy_text(app->notice, sizeof(app->notice), "Remote heads are removed on their host; x interrupts the agent instead");
+        return false;
     }
     if (selected) { copy_text(targets[(*count)++], TEXT, selected->branch); return true; }
     copy_text(app->notice, sizeof(app->notice), "Select a head to remove, or mark several with Space");
@@ -112,7 +117,7 @@ static void remove_one(struct app *app, char *target, size_t index, struct remov
     snprintf(app->notice, sizeof(app->notice), "Removing %.200s (%zu of %zu)...", target, index + 1U, r->count);
     status = run_captured(app, argv, r->output, sizeof(r->output), 60000L);
     text_append(r->transcript, sizeof(r->transcript), "== %s (exit %d)\n%s\n", target, status, r->output);
-    if (status == 0) { r->removed++; return; }
+    if (status == 0) { r->removed++; r->gone[index] = true; return; }
     r->failed++;
     if (strstr(r->output, "uncommitted") || strstr(r->output, "Refusing")) r->dirty++;
 }
@@ -148,6 +153,25 @@ static void removal_report(struct app *app, char targets[][TEXT], const struct r
     if (!r->failed) copy_text(app->result_title, sizeof(app->result_title), "REMOVAL OUTPUT");
 }
 
+/* When the selected head was removed, focus lands on the nearest head that
+ * survives (after it, else before it) at once; the next snapshot drops the
+ * removed rows. A refused or skipped head keeps its selection. */
+static bool removed_target(const char *branch, char targets[][TEXT], const struct removal *r) {
+    size_t i;
+    for (i = 0U; i < r->count; i++) if (r->gone[i] && !strcmp(targets[i], branch)) return true;
+    return false;
+}
+
+static void select_survivor(struct app *app, char targets[][TEXT], const struct removal *r) {
+    size_t i, from = app->selected;
+    if (app->run_row || app->task_row || from >= app->model.head_count ||
+        !removed_target(app->model.heads[from].branch, targets, r)) return;
+    for (i = from; i < app->model.head_count; i++)
+        if (!removed_target(app->model.heads[i].branch, targets, r) && head_visible(app, &app->model.heads[i])) { app->selected = i; return; }
+    for (i = from; i-- > 0U;)
+        if (!removed_target(app->model.heads[i].branch, targets, r) && head_visible(app, &app->model.heads[i])) { app->selected = i; return; }
+}
+
 /* Remove marked heads, or the selected head, after an in-app confirmation.
  * The shell CLI keeps its dirty-worktree refusal; the UI never adds --force. */
 void remove_heads_action(struct app *app) {
@@ -163,6 +187,7 @@ void remove_heads_action(struct app *app) {
     app->marked_count = 0U;
     removal_report(app, targets, &r);
     native_observations_tick(app, true);
+    select_survivor(app, targets, &r);
     retarget_selection(app);
 }
 
@@ -236,7 +261,7 @@ void remove_key_action(struct app *app) {
 
 /* Order preserves first-substring-match selection after exact and prefix
  * matches. Arguments are literal argv entries. */
-enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE };
+enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE, ACTION_INTERRUPT };
 struct palette_action {
     const char *name;
     const char *command;
@@ -260,7 +285,8 @@ static const struct palette_action palette[] = {
     {"git diff", "diff", NULL, ACTION_HEAD},
     {"approvals", "gate", "status", ACTION_HEAD},
     {"recovery inspect", "doctor", NULL, ACTION_GLOBAL},
-    {"dashboard", "dashboard", NULL, ACTION_GLOBAL}
+    {"dashboard", "dashboard", NULL, ACTION_GLOBAL},
+    {"interrupt remote head", "fleet", "cancel", ACTION_INTERRUPT}
 };
 
 static const struct palette_action *match_palette(const char *query) {
@@ -284,7 +310,16 @@ void execute_palette(struct app *app, const char *query) {
     chosen = match_palette(query);
     if (chosen == NULL) { copy_text(app->notice, sizeof(app->notice), "no explicit local action matched"); return; }
     if (chosen->scope == ACTION_SPAWN) { new_task_action(app); return; }
+    if (chosen->scope == ACTION_INTERRUPT || (chosen->scope == ACTION_REMOVE && head && head_remote(head))) {
+        if (head && head_remote(head)) fleet_action(app);
+        else copy_text(app->notice, sizeof(app->notice), "select a remote head to interrupt");
+        return;
+    }
     if (chosen->scope == ACTION_REMOVE) { remove_heads_action(app); return; }
+    if ((chosen->scope == ACTION_HEAD || chosen->scope == ACTION_COMPARE) && head && head_remote(head)) {
+        copy_text(app->notice, sizeof(app->notice), "that action runs on the head's host; a attaches, x interrupts");
+        return;
+    }
     argv[count++] = (char *)app->hydra;
     argv[count++] = (char *)chosen->command;
     if (chosen->subcommand != NULL) argv[count++] = (char *)chosen->subcommand;
@@ -300,13 +335,20 @@ void execute_palette(struct app *app, const char *query) {
     (void)run_argv(app, argv);
 }
 
-/* Fleet cancellation carries host, project and observed instance to the public CLI. */
+/* Fleet interruption carries host, project and observed instance to the
+ * public CLI; only a fresh observation of an answering host authorizes it. */
 void fleet_action(struct app *app) {
     struct head *head = selected_head(app);
-    char confirm[TEXT] = "";
+    char confirm[TEXT] = "", refusal[TEXT], question[TEXT + 200];
     char *argv[12];
     if (head == NULL || head->remote_host[0] == '\0') return;
-    if (prompt_text(app, "Interrupt remote head? Type yes: ", confirm, sizeof(confirm)) != 0 || strcmp(confirm, "yes") != 0) return;
+    if (remote_action_refusal(app, head, refusal, sizeof(refusal))) { copy_text(app->notice, sizeof(app->notice), refusal); return; }
+    snprintf(question, sizeof(question), "Interrupt %.100s on %.60s? This sends Ctrl-C to its agent; the worktree and files stay on the host. Type yes: ",
+             head->remote_branch[0] ? head->remote_branch : head->branch, head->remote_host);
+    if (prompt_text(app, question, confirm, sizeof(confirm)) != 0 || strcmp(confirm, "yes") != 0) {
+        copy_text(app->notice, sizeof(app->notice), "Interrupt cancelled; nothing was sent");
+        return;
+    }
     argv[0] = (char *)app->hydra; argv[1] = (char *)"fleet";
     argv[2] = (char *)"cancel"; argv[3] = head->remote_host;
     argv[4] = (char *)"--project"; argv[5] = head->remote_project;

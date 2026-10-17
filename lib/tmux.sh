@@ -37,13 +37,25 @@ check_tmux_version() {
         return 1
     fi
     
-    # Get tmux version
-    version="$(tmux -V | cut -d' ' -f2)"
-    major="$(echo "$version" | cut -d'.' -f1)"
-    
+    # A tmux that is on PATH but cannot report a version is not usable. An
+    # unparsable version must fail here: a numeric test against an empty
+    # string is an error, not "old enough".
+    if ! version="$(tmux -V 2>/dev/null)" || [ -z "$version" ]; then
+        echo "Error: tmux is on PATH but 'tmux -V' failed" >&2
+        echo "Next: install a working tmux 3.0 or newer, then run hydra doctor" >&2
+        return 1
+    fi
+    version="$(printf '%s\n' "$version" | sed -n '1s/^[^ ]* //p')"
+    major="$(printf '%s\n' "$version" | cut -d'.' -f1)"
+
     # Convert to number for comparison (handle versions like "3.2a")
-    major_num="$(echo "$major" | sed 's/[^0-9]//g')"
-    
+    major_num="$(printf '%s\n' "$major" | sed 's/[^0-9]//g')"
+
+    if [ -z "$major_num" ]; then
+        echo "Error: cannot determine the tmux version from '$version'" >&2
+        echo "Next: install tmux 3.0 or newer, then run hydra doctor" >&2
+        return 1
+    fi
     if [ "$major_num" -lt 3 ]; then
         echo "Error: tmux version $version is too old (need >= 3.0)" >&2
         echo "Next: upgrade tmux to 3.0 or newer, then run hydra doctor" >&2

@@ -1,8 +1,14 @@
 #include "fleet/support/json.h"
 #include "fleet/task/task.h"
+#include "fleet/placement/placement.h"
 #include <stdlib.h>
 #include <string.h>
 
+/* Result admission: a placed task admits only its current generation and host. */
+static json_object *admit_and_collect(const char *project, json_object *envelope, const char *host) {
+    json_object *fenced = placement_result_fence(f_field(f_field(envelope, "result"), "receipt"), host);
+    return fenced ? fenced : task_collect(project, envelope);
+}
 json_object *task_collection_cli(int argc, char **argv) {
     const char *project = NULL, *input = NULL, *host = NULL, *id = NULL, *timeout = NULL, *format = NULL;
     bool read = !strcmp(argv[0], "collected"); int i; json_object *response = NULL, *envelope = NULL, *out;
@@ -42,7 +48,8 @@ json_object *task_collection_cli(int argc, char **argv) {
         if (!json_object_get_boolean(f_field(response, "ok"))) return response;
         envelope = json_object_get(f_field(f_field(response, "data"), "collection"));
     }
-    out = task_collect(project, envelope); json_object_put(envelope); json_object_put(response); return out;
+    out = admit_and_collect(project, envelope, host);
+    json_object_put(envelope); json_object_put(response); return out;
 ineligible:
     json_object_put(out); return f_error("fleet-task-collected", "integration_ineligible", "integration requires a successful task snapshot with clean committed result heads");
 }

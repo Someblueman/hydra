@@ -170,6 +170,7 @@ static void parse_listed(struct setup_envelope *e, const struct sj_doc *d, int d
         l->remote_changed = sj_true(d, sj_find(d, item, "remote_changed"));
         read_text(d, item, "next.step", l->next_step, sizeof(l->next_step));
         read_text(d, item, "error.code", l->error, sizeof(l->error));
+        read_text(d, item, "upgrade.summary", l->upgrade, sizeof(l->upgrade));
         l->complete = sj_true(d, sj_find(d, item, "complete"));
         if (!setup_name_problem(l->name)) e->listed_count++;
     }
@@ -337,7 +338,7 @@ static const char *const statuses[][3] = {
     {"done", "done", "\xe2\x9c\x93"}, {"skipped", "skipped", "-"}, {"failed", "failed", "\xe2\x9c\x97"},
     {"outcome_unknown", "outcome unknown", "?"}, {"approval_required", "needs your approval", "!"},
     {"blocked", "blocked", "!"}, {"in_progress", "in progress", "~"}, {"running", "running", ">"},
-    {"pending", "not started", " "},
+    {"pending", "not started", " "}, {"upgrade_available", "upgrade available", "^"},
 };
 
 static int status_index(const char *status) {
@@ -393,7 +394,7 @@ void setup_summary(const struct setup_envelope *e, char *out, size_t size) {
 void setup_listed_summary(const struct setup_listed *l, char *out, size_t size) {
     char label[96];
     if (l->error[0]) { snprintf(out, size, "status unavailable: %s", l->error); return; }
-    if (l->complete) { copy_field(out, size, "set up"); return; }
+    if (l->complete || l->upgrade[0]) { copy_field(out, size, l->complete ? "set up" : l->upgrade); return; }
     setup_step_label(l->next_step[0] ? l->next_step : "setup", label, sizeof(label));
     if (!strcmp(l->status, "pending")) snprintf(out, size, "next: %s", label);
     else snprintf(out, size, "%s: %s", label, setup_status_label(l->status));
@@ -422,6 +423,8 @@ static bool option_valid(const struct setup_envelope *e, size_t *i) {
     if (!strcmp(flag, "--agent")) return alias_text(value) && strlen(value) < 64;
     if (!strcmp(flag, "--approve")) return e->plan_sha256[0] && !strcmp(value, e->plan_sha256) && strlen(value) == 64;
     if (!strcmp(flag, "--fingerprint")) return e->fingerprint[0] && !strcmp(value, e->fingerprint) && !strncmp(value, "SHA256:", 7);
+    /* Only the helper this control centre asked the CLI to provision with. */
+    if (!strcmp(flag, "--binary")) return getenv("HYDRA_REMOTE_SETUP_BINARY") && !strcmp(value, getenv("HYDRA_REMOTE_SETUP_BINARY"));
     return false;
 }
 

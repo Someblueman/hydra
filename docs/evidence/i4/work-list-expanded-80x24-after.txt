@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / WORK                                                                  
+ [Work] Details Overview Attention Recovery Flows Stats Workspace Hosts        
+╭─ Heads in this project ─────────────────────────────────────────────────────╮
+│    HEAD                                      STATUS         AGENT           │
+│    add-kill                                  running        codex           │
+│      ▾ plan run kill-dry-run                 succeeded      2 heads         │
+│ >      worker   kill-dry-run-worker          done           codex           │
+│        verifier kill-dry-run-check           retired                        │
+│    notes-cleanup                             terminal gone  claude          │
+│ 2 heads you started · 1 in runs  |  Row 3 of 5                              │
+│                                                                             │
+│╭─ kill-dry-run-worker ─────────────────────────────────────────────────────╮│
+││ codex · step implement · succeeded · headless (no terminal) · 1           ││
+││ changed file                                                              ││
+││ Enter details · p step output · x dismiss (keeps the branch) · : more act ││
+│╰───────────────────────────────────────────────────────────────────────────╯│
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k select  Enter details  a agent  n new  x remove  L where  ? help  q quit  

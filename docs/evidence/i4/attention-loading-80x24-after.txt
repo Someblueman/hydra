@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / ATTENTION                                                             
+ Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
+╭─ Attention ─────────────────────────────────────────────────────────────────╮
+│ ATTENTION                                                                   │
+│ Loading what needs you...                                                   │
+│                                                                             │
+│ Hydra is reading the approval requests, failed checks and sealed results of │
+│ this project's runs and, when hosts are registered, of remote work. The     │
+│ list appears when the read completes; nothing is decided or acknowledged by │
+│ looking.                                                                    │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ I refresh  Esc back  ? help  q quit                                           

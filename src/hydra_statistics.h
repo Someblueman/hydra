@@ -26,6 +26,20 @@ struct hs_usage {
     bool known[HS_USAGE_COUNTS];
     bool recorded;
 };
+/* Remote execution evidence of a step's latest attempt (schema 5 T rows):
+ * the dispatch binding and placement record name host, transport, placement
+ * mode and assignment generation; the receipt runtime's telemetry block 1
+ * carries owner-measured wall, CPU and peak RSS; transport metrics carry
+ * calls and bytes. Each count has its own known flag and reason names why
+ * telemetry is absent: unmeasured is unknown, never zero. */
+enum hs_remote_count { HS_WALL_SECONDS, HS_CPU_MICROSECONDS, HS_PEAK_RSS_BYTES, HS_TRANSPORT_CALLS, HS_TRANSPORT_BYTES, HS_REMOTE_COUNTS };
+struct hs_remote {
+    bool recorded, generation_known;
+    char host[80], transport[12], placement[8], state[24], reason[80];
+    unsigned generation;
+    uint64_t counts[HS_REMOTE_COUNTS];
+    bool known[HS_REMOTE_COUNTS];
+};
 struct hs_step {
     size_t run;
     char id[65], kind[32], state[40];
@@ -33,6 +47,7 @@ struct hs_step {
     unsigned attempts;
     bool attempts_known;
     struct hs_usage usage;
+    struct hs_remote remote;
 };
 /* Caller owns this bounded value object and its storage. Loading replaces it.
  * Missing numeric evidence stays unknown; malformed framing rejects the stream. */
@@ -44,7 +59,9 @@ struct hs_model {
     unsigned schema_version;
     char warning[256];
 };
-struct hs_filter { unsigned days; bool attention; char query[80], workflow[80]; };
+/* location: "" (all), "local", "remote", or one host alias; a run is remote
+ * when any of its recorded steps ran as a remote task. */
+struct hs_filter { unsigned days; bool attention; char query[80], workflow[80], location[80]; };
 struct hs_summary {
     size_t runs, steps, run_states[HS_STATES], step_states[HS_STATES];
     size_t attempts_known, duration_known, undated, excluded_undated, partial_runs;
@@ -53,7 +70,33 @@ struct hs_summary {
     /* Agent steps with a receipt, and per count how many reported it. */
     size_t agent_steps, usage_known[HS_USAGE_COUNTS];
     uint64_t usage[HS_USAGE_COUNTS];
+    /* Remote task steps, those whose receipt carries a telemetry block, and
+     * per count how many reported it. Sums, except peak RSS which is the
+     * maximum over the steps that reported it. */
+    size_t remote_steps, remote_telemetry, remote_known[HS_REMOTE_COUNTS];
+    uint64_t remote[HS_REMOTE_COUNTS];
 };
+bool hs_run_remote(const struct hs_model *m, size_t run, const char *host);
+bool hs_remote_telemetry(const struct hs_remote *r);
+void hs_remote_add(struct hs_summary *out, const struct hs_step *step);
+/* Cohorts over the matched runs' steps: by location, host, placement mode,
+ * assignment generation and agent provider. Measurements follow the same
+ * known/unknown rule; `unmeasured` counts steps without telemetry and
+ * `reason` names the first recorded reason. */
+enum hs_cohort_kind { HS_BY_LOCATION, HS_BY_HOST, HS_BY_PLACEMENT, HS_BY_GENERATION, HS_BY_PROVIDER, HS_COHORT_KINDS };
+#define HS_COHORTS 32
+struct hs_cohort {
+    char key[80], reason[80];
+    size_t runs, steps, step_states[HS_STATES], duration_known, unmeasured;
+    uint64_t duration_sum;
+    size_t agent_steps, usage_known[HS_USAGE_COUNTS];
+    uint64_t usage[HS_USAGE_COUNTS];
+    size_t remote_steps, remote_telemetry, remote_known[HS_REMOTE_COUNTS];
+    uint64_t remote[HS_REMOTE_COUNTS];
+};
+const char *hs_cohort_kind_name(enum hs_cohort_kind kind);
+size_t hs_cohorts(const struct hs_model *m, const struct hs_filter *filter, enum hs_cohort_kind kind,
+                  struct hs_cohort *out, size_t capacity);
 bool hs_load(FILE *input, struct hs_model *out);
 enum hs_state hs_state(const char *state);
 bool hs_matches(const struct hs_model *m, size_t run, const struct hs_filter *filter);
@@ -76,6 +119,10 @@ void hs_metric_summarize(const struct hs_model *m, const struct hs_filter *filte
 /* Stable machine projection over the validated, bounded model. */
 bool hs_write_metrics_json(FILE *out, const struct hs_model *m,
                            const struct hs_filter *filter);
+void hs_json_string(FILE *out, const char *value);
+void hs_write_cohorts_json(FILE *out, const struct hs_model *m, const struct hs_filter *filter);
+void hs_write_telemetry_json(FILE *out, const struct hs_summary *summary);
+void hs_write_remote_json(FILE *out, const struct hs_summary *summary);
 bool hs_write_metrics_compare_json(FILE *out, const struct hs_model *left,
                                    const struct hs_model *right,
                                    const struct hs_filter *filter);

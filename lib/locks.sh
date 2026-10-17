@@ -13,12 +13,39 @@ _LOCKS_MODULE_LOADED=1
 # Hydra's own state, lock and run entries are private whatever the caller's
 # umask is (Ubuntu defaults to 002). Readers refuse group- or other-writable
 # state, so these helpers scope umask 077 to the creation itself; worktrees,
-# agents, tmux and hooks keep inheriting the user's umask.
+# agents, tmux and hooks keep inheriting the user's umask. The umask alone is
+# not enough: below a directory that carries a default POSIX ACL the kernel
+# ignores it and a new directory takes its group bits from that ACL, so each
+# directory created here is also set to 0700 explicitly.
 # Usage: hydra_private_mkdir <directory>...
 hydra_private_mkdir() (
     umask 077
-    mkdir -p -- "$@"
+    for _hpm_dir in "$@"; do
+        hydra_private_mkdir_one "$_hpm_dir" || exit 1
+    done
 )
+
+# Creates a directory and its missing parents like mkdir -p; only the
+# components it creates are set to 0700, existing ones keep their mode.
+# Usage: hydra_private_mkdir_one <directory>
+hydra_private_mkdir_one() {
+    # macOS chmod takes no "--" (a mode may start with "-"), so a relative
+    # name that starts with "-" is passed as ./NAME instead.
+    case "$1" in -*) set -- "./$1" ;; esac
+    [ -d "$1" ] && return 0
+    case "$1" in
+        */*) set -- "$1" "${1%/*}" ;;
+        *) set -- "$1" . ;;
+    esac
+    [ -n "$2" ] || set -- "$1" /
+    [ "$2" = "$1" ] || hydra_private_mkdir_one "$2" || return 1
+    if mkdir "$1" 2>/dev/null; then
+        chmod 700 "$1"
+    elif [ ! -d "$1" ]; then
+        # Repeat the attempt so mkdir reports why it failed.
+        mkdir "$1"
+    fi
+}
 
 # Remove group and other write from your own regular files and directories
 # under a Hydra-owned directory, such as outputs a step command wrote with the

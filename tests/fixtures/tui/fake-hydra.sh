@@ -21,7 +21,7 @@ case "${1:-}:${2:-}" in
     workflow:statistics-data)
         if [ -n "${HYDRA_TEST_STATS_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_STATS_FAIL_FILE" ]; then exit 1; fi
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
-        cat "$fixture_dir/statistics-v2.tsv"
+        cat "$fixture_dir/${HYDRA_TEST_STATS_FIXTURE:-statistics-v2.tsv}"
         ;;
     fleet:tui-visual-data)
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
@@ -30,6 +30,15 @@ case "${1:-}:${2:-}" in
         else
             cat "$fixture_dir/fleet-v2.tsv"
         fi
+        ;;
+    fleet:cancel)
+        if [ -n "${HYDRA_TEST_CANCEL_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_CANCEL_ARGV"; fi
+        printf 'FAKE REMOTE CANCEL'
+        printf ' <%s>' "$@"
+        printf '\n'
+        ;;
+    fleet:task)
+        if [ -n "${HYDRA_TEST_TASK_ARGV:-}" ]; then printf '%s\n' "$@" > "$HYDRA_TEST_TASK_ARGV"; fi
         ;;
     fleet:attach)
         if [ -n "${HYDRA_TEST_ATTACH_ARGV:-}" ]; then
@@ -55,7 +64,18 @@ case "${1:-}:${2:-}" in
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
         cat "$fixture_dir/workflow-v1.tsv"
         ;;
-    workflow:attention-data|fleet:attention-data)
+    tui:--remote-data)
+        # The remote observation beside the local one; absent unless a test
+        # supplies one, and failing on request to simulate a lost connection.
+        [ -n "${HYDRA_TEST_REMOTE_FIXTURE:-}" ] || exit 1
+        if [ -n "${HYDRA_TEST_REMOTE_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_REMOTE_FAIL_FILE" ]; then exit 1; fi
+        if [ -n "${HYDRA_TEST_REMOTE_SWITCH_FILE:-}" ] && [ -f "$HYDRA_TEST_REMOTE_SWITCH_FILE" ]; then
+            cat "$HYDRA_TEST_REMOTE_SWITCH_FILE"
+        else
+            cat "$HYDRA_TEST_REMOTE_FIXTURE"
+        fi
+        ;;
+    workflow:attention-data|fleet:attention-data|tui:--attention-data)
         if [ -n "${HYDRA_TEST_ATTENTION_FAIL_FILE:-}" ] && [ -f "$HYDRA_TEST_ATTENTION_FAIL_FILE" ]; then exit 1; fi
         fixture_dir="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
         cat "${HYDRA_ATTENTION_FIXTURE:-$fixture_dir/attention-v1.tsv}"

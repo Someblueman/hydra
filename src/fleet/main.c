@@ -48,6 +48,7 @@ static bool raw_workflow_task(int argc, char **argv, int *status) {
     if (argc != 4 || strcmp(argv[1], "workflow-task")) return false;
     if (!strcmp(argv[2], "metrics-tsv")) *status = wt_metrics_tsv(argv[3]);
     else if (!strcmp(argv[2], "usage-tsv")) *status = wu_usage_tsv(argv[3]);
+    else if (!strcmp(argv[2], "remote-tsv")) *status = wt_remote_tsv(argv[3]);
     else return false;
     return true;
 }

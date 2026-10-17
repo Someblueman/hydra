@@ -140,9 +140,12 @@ printf '%s\n' \
     '#!/bin/sh' \
     'case "${1:-}" in' \
     '  --protocol-version)' \
-    '    case "${FAKE_CORE_MODE:-}" in skew) echo 99 ;; hang) sleep 3 ;; descendant) sleep 20 & echo $! > "$FAKE_CORE_CHILD_PID"; wait ;; crash) exit 9 ;; *) echo 1 ;; esac ;;' \
+    '    case "${FAKE_CORE_MODE:-}" in skew) echo 99 ;; hang) sleep 3 ;; descendant) sleep 20 & echo $! > "$FAKE_CORE_CHILD_PID"; wait ;; crash) exit 9 ;;' \
+    '    tree) echo $$ > "$FAKE_CORE_CHILD_PID"; sh -c '\''sleep 20 & echo $$ >> "$FAKE_CORE_CHILD_PID"; echo $! >> "$FAKE_CORE_CHILD_PID"; wait'\'' & wait ;;' \
+    '    orphan) (sleep 20 & echo $! > "$FAKE_CORE_CHILD_PID"); sleep 20 ;;' \
+    '    *) echo 1 ;; esac ;;' \
     '  --version)' \
-    '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 2.9.0 protocol 1" ;; esac ;;' \
+    '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 3.0.0 protocol 1" ;; esac ;;' \
     '  snapshot)' \
     '    case "${FAKE_CORE_MODE:-}" in malformed) echo not-json ;; shape) echo '\''{"schema_version":1,"ok":true,"command":"snapshot","data":{"state_schema":2,"projects":1,"heads":[{"project_id":false}]}}'\'' ;; crash) exit 9 ;; *) echo not-json ;; esac ;;' \
     'esac' > "$fake_core"
@@ -156,16 +159,103 @@ assert_fallback skew protocol-skew "$fake_core"
 assert_fallback version-skew version-skew "$fake_core"
 assert_fallback crash protocol-failure "$fake_core"
 assert_fallback hang protocol-timeout "$fake_core"
-descendant_pid_file="$test_root/descendant.pid"
-FAKE_CORE_CHILD_PID="$descendant_pid_file"
-export FAKE_CORE_CHILD_PID
-assert_fallback descendant protocol-timeout "$fake_core"
-descendant_pid="$(sed -n '1p' "$descendant_pid_file")"
-if kill -0 "$descendant_pid" 2>/dev/null; then
-    assert_success 1 "native timeout terminates helper descendants"
-else
-    assert_success 0 "native timeout terminates helper descendants"
-fi
+
+# Succeeds once no pid listed in the file exists any more, polling for up to the
+# given seconds. A terminated descendant that was orphaned stays visible until
+# init reaps it, which some inits do on a schedule rather than at once.
+wait_pids_gone() {
+    _wpg_file="$1"
+    _wpg_polls=$(( $2 * 10 ))
+    while :; do
+        _wpg_left=""
+        while read -r _wpg_pid; do
+            [ -n "$_wpg_pid" ] || continue
+            kill -0 "$_wpg_pid" 2>/dev/null && _wpg_left="$_wpg_left $_wpg_pid"
+        done < "$_wpg_file"
+        [ -n "$_wpg_left" ] || return 0
+        if [ "$_wpg_polls" -le 0 ]; then
+            echo "still present after the bound:$_wpg_left" >&2
+            return 1
+        fi
+        _wpg_polls=$((_wpg_polls - 1))
+        sleep 0.1
+    done
+}
+
+# Runs a timing-out helper that records PIDs of its subtree into the file and
+# asserts the fallback is bounded and every recorded level is gone. An optional
+# third argument names the variant in each message.
+assert_tree_terminated() {
+    _att_mode="$1"
+    _att_levels="$2"
+    _att_label="${3:+ ($3)}"
+    _att_file="$test_root/$_att_mode.pid"
+    : > "$_att_file"
+    FAKE_CORE_CHILD_PID="$_att_file"
+    export FAKE_CORE_CHILD_PID
+    _att_started="$(date +%s)"
+    assert_fallback "$_att_mode" protocol-timeout "$fake_core"
+    _att_elapsed=$(( $(date +%s) - _att_started ))
+    assert_equal "$_att_levels" "$(wc -l < "$_att_file" | tr -d ' ')" "$_att_mode helper recorded every level of its tree$_att_label"
+    echo "$_att_mode timeout returned after ${_att_elapsed}s$_att_label"
+    if [ "$_att_elapsed" -le 10 ]; then
+        assert_success 0 "$_att_mode timeout returns within a bound$_att_label"
+    else
+        assert_success 1 "$_att_mode timeout returns within a bound$_att_label"
+    fi
+    if wait_pids_gone "$_att_file" 10; then
+        assert_success 0 "native timeout terminates every level of the $_att_mode helper tree$_att_label"
+    else
+        assert_success 1 "native timeout terminates every level of the $_att_mode helper tree$_att_label"
+    fi
+    unset FAKE_CORE_CHILD_PID
+}
+
+# Prints a directory holding links to every command on PATH except the named
+# ones, to run the CLI as on a host without them (macOS has no setsid(1)).
+path_without() {
+    _pw_dir="$test_root/path-without"
+    for _pw_tool in "$@"; do _pw_dir="$_pw_dir-$_pw_tool"; done
+    mkdir -p "$_pw_dir"
+    _pw_ifs="$IFS"
+    IFS=:
+    for _pw_entry in $PATH; do
+        [ -d "$_pw_entry" ] || continue
+        ln -s "$_pw_entry"/* "$_pw_dir"/ 2>/dev/null || true
+    done
+    IFS="$_pw_ifs"
+    for _pw_tool in "$@"; do rm -f "$_pw_dir/$_pw_tool"; done
+    printf '%s\n' "$_pw_dir"
+}
+
+# The orphan's parent has exited before the timeout fires, so no parent chain
+# leads to it; only the helper's own process group still does. That group needs
+# setsid(1), perl or python3 (see hydra_core_isolated).
+assert_orphan_terminated() {
+    if command -v setsid >/dev/null 2>&1 || command -v perl >/dev/null 2>&1 ||
+        command -v python3 >/dev/null 2>&1; then
+        assert_tree_terminated orphan 1 "${1:-}"
+    else
+        echo "SKIP: orphan helper tree${1:+ ($1)}: no setsid(1), perl or python3 to give the helper its own process group"
+    fi
+}
+
+assert_tree_terminated descendant 1
+assert_tree_terminated tree 3
+assert_orphan_terminated
+
+# The same cases on the paths a host without setsid(1) takes: perl, then
+# python3, then the process-table walk alone, which still reaches a tree whose
+# parent chain is intact.
+full_path="$PATH"
+PATH="$(path_without setsid)"
+assert_tree_terminated tree 3 "without setsid"
+assert_orphan_terminated "without setsid"
+PATH="$(PATH="$full_path" path_without setsid perl)"
+assert_orphan_terminated "without setsid and perl"
+PATH="$(PATH="$full_path" path_without setsid perl python3)"
+assert_tree_terminated tree 3 "without any session tool"
+PATH="$full_path"
 assert_fallback malformed malformed-output "$fake_core"
 assert_fallback shape malformed-output "$fake_core"
 

@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / MONITOR                                                 Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
+ Work  Details  Overview  Attention  Recovery  Workflows  Statistics  [Workspace]  Hosts                                                   
+╭─ PROJECT ────────╮│╭─ SELECTED WORK ────────────────────────────────╮│╭─ DEPENDENCIES ──────────────────────────────────────────────────╮
+│ - This project   │││add-kill                                        │││kill-dry-run / succeeded                                         │
+│*  - add-kill     │││Session   running                               │││╭────────────────────╮     ╭────────────────────╮     ╭──────────│
+│     + plan run ki│││Agent     codex                                 ││││ spawn-worker       │──┬─>│ implement          │────>│ verify   │
+│   └ notes-cleanup│││Where     this machine · this project           ││││ succeeded          │  │  │ succeeded          │     │ succeeded│
+│                  │││Changes   0 files not yet committed · 0 queued  │││╰────────────────────╯  │  ╰────────────────────╯     ╰──────────│
+│                  │││Reported  nothing yet                           │││                        │                                        │
+│                  │││                                                │││╭────────────────────╮  │                                        │
+│                  │││                                                ││││ spawn-check        │──┘                                        │
+│                  │││                                                ││││ succeeded          │                                           │
+│                  │││                                                │││╰────────────────────╯                                           │
+│                  │││a  talk to the agent here      Enter  full detai││╰─────────────────────────────────────────────────────────────────╯
+│                  │││:  more actions                d  technical deta││───────────────────────────────────────────────────────────────────
+│                  │││                                                ││╭─ EVIDENCE ──────────────────────────────────────────────────────╮
+│                  │││                                                │││No selected recorded run                                         │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+│                  │││                                                │││                                                                 │
+╰──────────────────╯│╰────────────────────────────────────────────────╯│╰─────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ [/] run  Y approve  N reject  R resume  X cancel  A conversation  B plan  Tab pane  ? help  q quit                                        

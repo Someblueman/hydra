@@ -150,17 +150,48 @@ cmd_adapter() {
         echo "Error: malformed adapter event; use canonical adapter JSON v1" >&2
         return 1
     fi
+    case "$_ca_kind:$_ca_status" in
+        observed:starting|observed:running|observed:idle|observed:exited|observed:failed|observed:unavailable) ;;
+        outcome:done|outcome:failed|outcome:blocked|outcome:abandoned|outcome:canceled) ;;
+        observed:*|outcome:*) echo "Error: unsupported adapter status '$_ca_status'" >&2; return 1 ;;
+        *) echo "Error: adapter kind must be observed or outcome" >&2; return 1 ;;
+    esac
     lifecycle_load_head "$_ca_branch" || return 1
     [ "$_ca_instance" = "$LIFECYCLE_INSTANCE_ID" ] || {
         echo "Error: stale adapter event for non-current instance" >&2
         return 1
     }
+    # A supervisor stops an ingest that misses its deadline: release the
+    # project state and event locks this process holds rather than leave them
+    # to block every later state change.
+    trap '_cmd_adapter_release; exit 143' TERM
+    trap '_cmd_adapter_release; exit 130' INT
+    trap '_cmd_adapter_release; exit 129' HUP
+    LIFECYCLE_STATE_LOCK_BUSY=0
+    _ca_result=0
     case "$_ca_kind" in
-        observed) lifecycle_set_observed "$_ca_branch" "$_ca_status" adapter reported "" "$_ca_instance" ;;
-        outcome) lifecycle_set_outcome "$_ca_branch" "$_ca_status" adapter generic-ingest ;;
-        *) echo "Error: adapter kind must be observed or outcome" >&2; return 1 ;;
-    esac || { echo "Error: unsupported adapter status '$_ca_status'" >&2; return 1; }
+        observed) lifecycle_set_observed "$_ca_branch" "$_ca_status" adapter reported "" "$_ca_instance" || _ca_result=1 ;;
+        *) lifecycle_set_outcome "$_ca_branch" "$_ca_status" adapter generic-ingest || _ca_result=1 ;;
+    esac
+    trap - TERM INT HUP
+    if [ "$_ca_result" -ne 0 ]; then
+        if [ "$LIFECYCLE_STATE_LOCK_BUSY" -eq 1 ]; then
+            echo "Error: project state lock is busy; adapter event for $_ca_branch was not recorded" >&2
+        else
+            echo "Error: failed to record adapter event for $_ca_branch (state or event store unavailable, or the instance changed)" >&2
+        fi
+        return 1
+    fi
     echo "Accepted adapter event for $_ca_branch instance $_ca_instance"
+}
+
+# Releases only a lock whose recorded owner is this process: a lock another
+# process has just created may not have its owner record yet.
+_cmd_adapter_release() {
+    for _car_lock in "state_${LIFECYCLE_PROJECT_ID}" "events_${LIFECYCLE_PROJECT_ID}_${LIFECYCLE_HEAD_ID}"; do
+        [ "$(sed -n '1p' "$HYDRA_HOME/locks/$_car_lock.lock/pid" 2>/dev/null || true)" != "$$" ] ||
+            release_lock "$_car_lock"
+    done
 }
 
 _cmd_resume_abort() {

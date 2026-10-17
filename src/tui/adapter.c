@@ -17,7 +17,7 @@ void record_snapshot(struct app *app, bool valid) {
         queue += app->model.heads[i].queue; known = true;
     }
     app->queue_history[app->history_count] = queue;
-    app->history_valid[app->history_count++] = valid && known && !app->fleet;
+    app->history_valid[app->history_count++] = valid && known;
     app->snapshot_stale = !valid;
     if (valid) app->snapshot_at = time(NULL);
 }
@@ -34,13 +34,6 @@ FILE *capture_adapter(struct app *app, const char *command, const char *option, 
     input=native_capture_take(&capture);
     if (!input && !app->notice[0]) copy_text(app->notice,sizeof(app->notice),"shell data adapter failed; showing last good snapshot");
     return input;
-}
-static size_t refreshed_task_selection(const struct app *app, const struct model *next) {
-    if (app->task_selected >= app->model.task_count) return app->model.task_count ? next->task_count : 0;
-    const struct task_observation *previous = &app->model.tasks[app->task_selected];
-    for (size_t index = 0; index < next->task_count; index++)
-        if (!strcmp(previous->host, next->tasks[index].host) && !strcmp(previous->task_id, next->tasks[index].task_id)) return index;
-    return next->task_count;
 }
 int accept_model_data(struct app *app, FILE *input) {
     struct model *next;
@@ -59,25 +52,13 @@ int accept_model_data(struct app *app, FILE *input) {
         return -1;
     }
     fclose(input);
-    if (app->selected < app->model.head_count) {
-        const struct head *previous = &app->model.heads[app->selected]; size_t index;
-        for (index = 0; index < next->head_count; index++) {
-            if ((previous->head_id[0] ? !strcmp(previous->head_id,next->heads[index].head_id) :
-                !strcmp(previous->branch,next->heads[index].branch)) &&
-                !strcmp(previous->remote_host,next->heads[index].remote_host) &&
-                !strcmp(previous->remote_project,next->heads[index].remote_project)) {
-                app->selected=index; break;
-            }
-        }
-    }
-    app->task_selected = refreshed_task_selection(app, next);
-    app->model = *next;
-    free(next);
-    if (app->selected >= app->model.head_count && app->model.head_count > 0U) {
-        app->selected = app->model.head_count - 1U;
-    }
+    model_accept(app, next);
     app->snapshot_error[0] = '\0';
     return 0;
+}
+/* Whether the observation a head comes from is stale. */
+bool head_stale(const struct app *app, const struct head *h) {
+    return head_remote(h) ? app->remote_stale : app->snapshot_stale;
 }
 void refresh_current_session(struct app *app) {
     int pipefd[2], status = 0, ready, attempt;
@@ -192,10 +173,10 @@ static void terminal_preview(struct app *app, const struct head *h) {
 
 void capture_preview(struct app *app) {
     const struct head *h;
-    if (app->fleet || !app->preview || app->model.head_count == 0U) return;
+    if (!app->preview || app->model.head_count == 0U) return;
     retarget_selection(app);
     h = selected_head(app);
-    if (h == NULL) return;
+    if (h == NULL || head_remote(h)) return;
     if (head_headless(h)) { headless_preview_start(app, h); return; }
     app->preview_head[0] = '\0';
     terminal_preview(app, h);

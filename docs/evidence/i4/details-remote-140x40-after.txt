@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / DETAILS       Local · 3 heads · 1 running · 3 need attention · 5 to repair · Remote · 2 heads, 1 task on 3 hosts (1 disconnected) 
+ Work  [Details]  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Details: feature-index on archive ─────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ archive/feature-index                                                                                                                   │
+│ This is the host's last observation, not its current state. Its agent may still be working; nothing here completes or stops it. r       │
+│ retries the host.                                                                                                                       │
+│ Where        archive                                                                                                                    │
+│ Project      /srv/archive                                                                                                               │
+│ Status       stale · desired running                                                                                                    │
+│ Observation  stale, 300s old                                                                                                            │
+│ Connection   reachable · stale · 300s old                                                                                               │
+│ Confirmed    2026-10-17T09:55:00Z                                                                                                       │
+│ Agent        not observed                                                                                                               │
+│ Liveness     unobserved: a remote head reports desired state, not a live process                                                        │
+│                                                                                                                                         │
+│ NEXT                                                                                                                                    │
+│ a  talk to the agent in its terminal on archive                                                                                         │
+│ x  interrupt the agent (confirmed); the worktree and files stay on the host                                                             │
+│ r  retry the host    d  technical details    c  coordination                                                                            │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live · Remote live                                                                                                                        
+ a agent  x interrupt  r retry host  c coordination  d technical  Esc back  ? help  q quit                                                 

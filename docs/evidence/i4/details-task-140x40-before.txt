@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / DETAILS       Local · 3 heads · 1 running · 3 need attention · 5 to repair · Remote · 2 heads, 1 task on 3 hosts (1 disconnected) 
+ Work  [Details]  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Details: feature-live ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ feature-live                                                                                                                            │
+│ Agent       codex                                                  Session     running (the live terminal)                              │
+│ Reported    done                                                   Group       alpha · PR 42                                            │
+│                                                                                                                                         │
+│ CHANGES                                                                                                                                 │
+│ Changed     4 files in the worktree, not yet committed                                                                                  │
+│ Full diff   everything since the branch base: press : and choose diff                                                                   │
+│                                                                                                                                         │
+│ CHECKS                                                                                                                                  │
+│ Approval requests  1 of 2 approved · waiting for your decision                                                                          │
+│ Messages           3 exchanged with other heads                                                                                         │
+│                                                                                                                                         │
+│ NEXT                                                                                                                                    │
+│ a  talk to the agent in the workspace     p  show recent terminal output                                                                │
+│ c  coordination with other heads          x  remove this head                                                                           │
+│ :  more actions (diff, switch, approvals)  d  technical details                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live · Remote live                                                                                                                        
+ a agent  p output  c coordination  x remove  d technical  Esc back  ? help  q quit                                                        

@@ -2,7 +2,7 @@
 #ifdef __APPLE__
 #define _DARWIN_C_SOURCE
 #endif
-#include "internal.h"
+#include "statistics_cohorts.h"
 /* Agent evidence in the statistics view: tokens, agent, version, model and
  * effort come from exec receipts. Unknown is named, never shown as zero. */
 
@@ -77,8 +77,16 @@ void statistics_scope_notes(struct tv_canvas *c, int x, int y, int width, int ro
     cost_text(s->usage[HS_COST_MICROUSD], s->usage_known[HS_COST_MICROUSD] > 0, cost, sizeof(cost));
     if (s->agent_steps && row < end) dashboard_text(c, x, row++, width, TV_MUTED, "%s", cost);
     if (row + 1 < end) row++;
-    row += statistics_wrap(c, x, row, width, end - row, TV_MUTED,
-        "CPU and memory: not measured. Hydra does not sample processes yet (roadmap item 10).");
+    if (!s->remote_steps) {
+        row += statistics_wrap(c, x, row, width, end - row, TV_MUTED,
+            "CPU and memory: not measured for local steps (no task receipt); remote task receipts report them (C cohorts).");
+    } else {
+        char cpu[40], rss[40], note[160];
+        statistics_remote_text(HS_CPU_MICROSECONDS, s->remote[HS_CPU_MICROSECONDS], s->remote_known[HS_CPU_MICROSECONDS], s->remote_steps, cpu, sizeof(cpu));
+        statistics_remote_text(HS_PEAK_RSS_BYTES, s->remote[HS_PEAK_RSS_BYTES], s->remote_known[HS_PEAK_RSS_BYTES], s->remote_steps, rss, sizeof(rss));
+        snprintf(note, sizeof(note), "Remote CPU %s, peak RSS %s from %zu task receipts; local steps unmeasured.", cpu, rss, s->remote_steps);
+        row += statistics_wrap(c, x, row, width, end - row, TV_MUTED, note);
+    }
     if (row + 1 < end) statistics_wrap(c, x, row + 1, width, end - row - 1, TV_MUTED, "0 resets filters");
 }
 

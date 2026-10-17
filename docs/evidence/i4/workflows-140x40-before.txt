@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / WORKFLOWS                                               Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
+ Work  Details  Overview  Attention  Recovery  [Workflows]  Statistics  Workspace  Hosts                                                   
+╭─ Workflows ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  kill-dry-run / succeeded / run 1 of 1                                                                                                  │
+│  Recorded state / 4 steps / 3 dependency edges                                                                                          │
+│                                                                                                                                         │
+│ ╭─ DEPENDENCIES / prerequisite -> dependent ──────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │                                                                                                                                     │ │
+│ │ +────────────────────+     +────────────────────+     +────────────────────+                                                        │ │
+│ │ │ spawn-worker       │──+──│ implement          │────>│ verify             │                                                        │ │
+│ │ │ succeeded          │  │  │ succeeded          │     │ succeeded          │                                                        │ │
+│ │ +────────────────────+  │  +────────────────────+     +────────────────────+                                                        │ │
+│ │                         │                                                                                                           │ │
+│ │ +────────────────────+  │                                                                                                           │ │
+│ │ │ spawn-check        │──+                                                                                                           │ │
+│ │ │ succeeded          │                                                                                                              │ │
+│ │ +────────────────────+                                                                                                              │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ │                                                                                                                                     │ │
+│ ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│  spawn-worker [spawn/work] / succeeded / attempts 1 / on kill-dry-run-worker                                                            │
+│  Requires: -                                                                                                                            │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k step  [/] run  h/l/J/K pan  Enter recentre  Esc back  ? help  q quit                                                                  

@@ -7,48 +7,6 @@
  * on it (agent, model, tokens, live output), never as a terminal that is
  * missing. Technical details are grouped by what they identify. */
 
-#define DETAIL_LABEL 12
-
-/* Bytes of text that fit width columns, broken at a space when one is near. */
-static size_t wrap_chunk(const char *text, size_t length, size_t width) {
-    size_t cut;
-    if (length <= width) return length;
-    for (cut = width; cut > width / 2 && cut < length; cut--) if (text[cut] == ' ') return cut;
-    return width < length ? width : length;
-}
-
-/* "Label       text" with the text wrapped under itself. */
-static void labelled_at(struct app *app, int label_width, const char *label, const char *text, enum tv_style tone) {
-    size_t length = strlen(text), offset = 0, width;
-    int saved_x = app->content_x, saved_width = app->content_width;
-    if (app->line >= app->limit) return;
-    column(app, 0, label_width, TV_MUTED, label);
-    app->content_x += label_width; app->content_width -= label_width;
-    width = app->content_width > 0 ? (size_t)app->content_width : 1;
-    do {
-        char piece[1024];
-        size_t chunk = wrap_chunk(text + offset, length - offset, width);
-        snprintf(piece, sizeof(piece), "%.*s", (int)(chunk < sizeof(piece) ? chunk : sizeof(piece) - 1), text + offset);
-        column(app, 0, app->content_width, tone, piece);
-        app->line++;
-        offset += chunk;
-        offset += strspn(text + offset, " ");
-    } while (offset < length && app->line < app->limit);
-    app->content_x = saved_x; app->content_width = saved_width;
-}
-
-static void labelled(struct app *app, const char *label, const char *text, enum tv_style tone) {
-    labelled_at(app, DETAIL_LABEL, label, text, tone);
-}
-
-static void detail_fleet(struct app *app, const struct head *head) {
-    pair(app, "Host", head->remote_host, TV_BASE, "Desired", head->desired, TV_BASE);
-    linef(app, "Project     %s", head->remote_project);
-    section(app, "NEXT");
-    linef(app, "a  attach to the remote terminal to see what it is doing");
-    linef(app, "c  interrupt the agent; the worktree and its files are kept");
-}
-
 static void detail_group_label(const struct app *app, const struct head *head, char *group, size_t size) {
     const char *sep = dot(app);
     bool has_pr = head->pr[0] && strcmp(head->pr, "-");
@@ -63,42 +21,62 @@ static const char *role_text(const char *role) {
     return "created by the run";
 }
 
-/* Two labelled values per row where they fit; one per row otherwise, so a
- * long agent or run description is never cut. */
-static void detail_pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
-                        const char *right_label, const char *right, enum tv_style right_tone) {
-    if (app->content_width >= 110) { pair(app, left_label, left, left_tone, right_label, right, right_tone); return; }
-    labelled(app, left_label, left, left_tone);
-    labelled(app, right_label, right, right_tone);
-}
-
 static void detail_run_pair(struct app *app, size_t owner, size_t record) {
     const struct workflow_run *r = &app->workflows->runs[owner];
     char run[TEXT + 96];
     snprintf(run, sizeof(run), "%s %s%s%s", run_label_kind(r), r->name, dot(app), r->state);
-    detail_pair(app, "Run", run, run_needs_attention(app, owner) ? TV_WARNING : TV_BASE, "Role",
+    labelled_pair(app, "Run", run, run_needs_attention(app, owner) ? TV_WARNING : TV_BASE, "Role",
                 record != SIZE_MAX ? role_text(app->workflows->heads[record].role) : "created by the run", TV_BASE);
 }
 
 /* Reported outcome and group; an empty group is left out of a narrow view. */
 static void detail_reported(struct app *app, const struct head *head, const char *group) {
-    const char *reported = head->declared[0] ? head->declared : "nothing yet";
+    const char *reported = head->declared[0] ? head->declared : "nothing yet; declared when done: done or blocked";
     enum tv_style tone = head->declared[0] ? TV_STRONG : TV_MUTED;
     if (app->content_width < 110 && !strcmp(group, "none")) labelled(app, "Reported", reported, tone);
-    else detail_pair(app, "Reported", reported, tone, "Group", group, TV_BASE);
+    else labelled_pair(app, "Reported", reported, tone, "Group", group, TV_BASE);
 }
 
 static void detail_identity(struct app *app, const struct head *head) {
     char agent[TEXT + 96], group[TEXT + 64];
     size_t record, owner = head_owner_run(app, head, &record);
     head_agent_text(app, head, agent, sizeof(agent));
-    if (head_headless(head)) detail_pair(app, "Agent", agent, TV_BASE, "Terminal", "headless (no terminal)", TV_MUTED);
-    else detail_pair(app, "Agent", agent, TV_BASE, "Session", status_label(head), status_tone(head));
+    if (head_headless(head)) labelled_pair(app, "Agent", agent, TV_BASE, "Terminal", "headless (no terminal)", TV_MUTED);
+    else {
+        char session[96];
+        snprintf(session, sizeof(session), "%s%s", status_label(head), !strcmp(status_label(head), "running") ? " (the live terminal)" : "");
+        labelled_pair(app, "Agent", agent, TV_BASE, "Session", session, status_tone(head));
+    }
     if (owner != SIZE_MAX) detail_run_pair(app, owner, record);
     detail_group_label(app, head, group, sizeof(group));
     detail_reported(app, head, group);
-    if (!head_headless(head) && !strcmp(display_status(head), "STALE"))
-        paragraph(app, "The terminal is gone but the last observation said the agent was still working. Files in the worktree are kept; a restarts the terminal in the same worktree. Check the files before removing the head.", TV_WARNING);
+}
+
+/* Why the head needs the user, and the key that acts on it, right under the
+ * name. Two rows at most, so the account and every action fit 80x24;
+ * nothing is inferred from a missing terminal beyond what was observed. */
+static void detail_attention(struct app *app, const struct head *head) {
+    const struct workflow_node *step = head_step(app, head);
+    char text[256];
+    if (head_headless(head)) {
+        if (step && (!strcmp(step->state, "failed") || !strcmp(step->state, "recovery-required"))) {
+            snprintf(text, sizeof(text), "Step %s %s; p shows its output and Attention (I) lists what it decides.", step->id,
+                     !strcmp(step->state, "failed") ? "failed" : "needs recovery");
+            paragraph(app, text, TV_WARNING);
+        }
+        return;
+    }
+    if (!strcmp(display_status(head), "STALE"))
+        paragraph(app, "The terminal is gone; the agent was last seen working. The worktree's files are kept: a restarts the terminal. Check them before removing it.", TV_WARNING);
+    else if (!strcmp(display_status(head), "STOPPED") && !strcmp(head->observed, "exited"))
+        paragraph(app, "The agent reported that it exited and its terminal is closed. Files in the worktree are kept: a restarts the terminal there.", TV_BASE);
+    else if (!strcmp(display_status(head), "STOPPED") && !strcmp(head->observed, "failed"))
+        paragraph(app, "The agent reported a failure and its terminal is closed. Files in the worktree are kept: a restarts the terminal there.", TV_WARNING);
+    else if (head->head_id[0] && head->gates > head->approved) {
+        unsigned pending = head->gates - head->approved;
+        snprintf(text, sizeof(text), "%u approval request%s waiting for your decision; press : and choose approvals.", pending, pending == 1 ? " is" : "s are");
+        paragraph(app, text, TV_WARNING);
+    }
 }
 
 static void detail_step_exec(struct app *app, const struct workflow_node *step) {
@@ -218,8 +196,7 @@ static void detail_next(struct app *app, const struct head *head) {
     }
     linef(app, "%s", head_terminal_gone(app, head) ? "a  restart its terminal (files are kept)   p  show recent terminal output" :
           "a  talk to the agent in the workspace     p  show recent terminal output");
-    linef(app, "c  coordination with other heads          x  remove this head");
-    linef(app, ":  more actions (diff, switch, approvals)  d  technical details");
+    linef(app, "c  coordination  x  remove this head  :  more actions  d  technical details");
 }
 
 /* Technical details: one group per kind of identity, each row labelled. */
@@ -233,16 +210,6 @@ static void technical_row(struct app *app, const char *label, const char *format
 static void technical_heading(struct app *app, const char *label, bool first) {
     if (first) { style(app, TONE_BORDER); linef(app, "%s", label); style(app, TONE_BASE); }
     else section(app, label);
-}
-
-static void technical_fleet(struct app *app, const struct head *head) {
-    technical_heading(app, "IDENTITY", true);
-    technical_row(app, "Host", "%s", head->remote_host);
-    technical_row(app, "Branch", "%s", head->remote_branch);
-    technical_row(app, "Project", "%s", head->remote_project);
-    technical_row(app, "Head", "%s   instance: %s", head->head_id, head->instance);
-    technical_heading(app, "LIFECYCLE", false);
-    technical_row(app, "Desired", "%s", head->desired);
 }
 
 /* Four groups sized to fit an 80x24 terminal without scrolling. */
@@ -270,16 +237,25 @@ static void technical_local(struct app *app, const struct head *head) {
 static void render_technical(struct app *app) {
     const struct head *head = selected_head(app);
     if (head == NULL) { linef(app, "No selected head matching the current search."); return; }
-    if (app->fleet) technical_fleet(app, head);
+    if (head_remote(head)) remote_technical(app, head);
     else technical_local(app, head);
 }
 
 void render_head_detail(struct app *app) {
     const struct head *head = selected_head(app);
+    const struct task_observation *task = selected_task(app);
+    if (task) {
+        char title[TEXT + 160];
+        snprintf(title, sizeof(title), "task %s on %s", task->task_id, task->host);
+        paragraph(app, title, TV_STRONG);
+        task_detail(app, task);
+        return;
+    }
     if (head == NULL) { render_empty_work(app); return; }
     if (app->diagnostics) { render_technical(app); return; }
-    style(app, TONE_STRONG); linef(app, "%s", head->branch); style(app, TONE_BASE);
-    if (app->fleet) { detail_fleet(app, head); return; }
+    paragraph(app, head->branch, TV_STRONG);
+    if (head_remote(head)) { remote_detail(app, head); return; }
+    detail_attention(app, head);
     detail_identity(app, head);
     /* The output view keeps the identity and gives the rest to the output. */
     if (app->preview) { detail_preview(app, head); return; }

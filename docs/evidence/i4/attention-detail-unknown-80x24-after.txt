@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / ATTENTION                                                             
+ Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
+╭─ Attention ─────────────────────────────────────────────────────────────────╮
+│ ATTENTION DETAIL                                                            │
+│ Needs inspection · index-rebuild · on archive                               │
+│ Status      New: not marked seen yet.                                       │
+│ Why         This item could not be classified by Hydra (provider_question). │
+│             Inspect its records before acting.                              │
+│ Next        r shows the records Hydra could read; inspect them before       │
+│             acting.                                                         │
+│                                                                             │
+│ IDENTITY                                                                    │
+│ Kind        question · provider_ques Source      fleet overview             │
+│ Project     project_7f3a             Host        archive                    │
+│ Task        task_9e8d7c6b            Run         run_aa11bb22cc33           │
+│ Step        -                        Attempt     -                          │
+│ Head        head_a7b9c1d3            Instance    instance_a7b9c1d3          │
+│ Request     -                        Binding     -                          │
+│ Freshness   unknown                                                         │
+│ Route       unavailable · not navigable                                     │
+│ Revision   1111111111111111111111111111111111111111111111111111111111111111 │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ r review  s mark seen  Space/b scroll  Esc back  ? help  q quit               

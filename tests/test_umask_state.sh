@@ -111,6 +111,13 @@ assert_equal succeeded "$(sed -n '1p' "$run_dir/state" 2>/dev/null)" "workflow r
 assert_equal "drwx------" "$(mode_of "$run_dir/steps/write")" "workflow run creates a private steps directory"
 workflow_tree="$("$HYDRA_BIN" path umask-workflow 2>/dev/null)"
 assert_equal "-rw-rw-r--" "$(mode_of "$workflow_tree/workflow.txt")" "workflow step commands keep the user's umask"
+"$HYDRA_BIN" pool create umask-pool --max-tasks 2 >/dev/null 2>&1 &&
+    "$HYDRA_BIN" pool add umask-pool --exec umask-head --id t1 --idempotent --seal -- sh -c 'printf pooled' >/dev/null 2>&1 &&
+    "$HYDRA_BIN" pool run umask-pool --worker umask-worker --max 1 >/dev/null 2>&1
+assert_success $? "a pool records, claims and completes a task under umask 002"
+"$HYDRA_BIN" schedule add umask-schedule --every 1d --pool umask-pool --workflow umask-run >/dev/null 2>&1 &&
+    "$HYDRA_BIN" schedule run-now umask-schedule >/dev/null 2>&1
+assert_success $? "a schedule records a firing that adds a pool task under umask 002"
 "$HYDRA_BIN" events tail --branch umask-head >/dev/null 2>&1 || true
 "$HYDRA_BIN" state verify >/dev/null 2>&1
 assert_success $? "state verifies under umask 002"

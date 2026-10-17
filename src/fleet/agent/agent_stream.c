@@ -4,19 +4,57 @@
 #include "fleet/agent/agent.h"
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+/* A failed status observation is retried no sooner than this, so a busy or
+ * broken state store costs at most one bounded ingest per interval. */
+#define AGENT_OBSERVATION_RETRY_MS 1000LL
 
 bool agent_stop(void *context) {
     struct agent_stream *stream = context; char *current = f_read(stream->current_path, 128);
     if (current) current[strcspn(current, "\r\n")] = '\0';
     if (!current || strcmp(current, stream->instance)) stream->stale = true;
-    free(current); return stream->malformed || stream->stale || stream->permission || stream->observation_failed;
+    free(current); return stream->malformed || stream->stale || stream->permission;
 }
 static int observation(struct agent_stream *stream, const char *status) {
     struct f_capture cap = {0}; char event[512];
     char *argv[] = {(char *)f_hydra, "adapter", "ingest", (char *)stream->branch, NULL};
     int length = snprintf(event, sizeof(event), "{\"schema_version\":1,\"instance_id\":\"%s\",\"kind\":\"observed\",\"status\":\"%s\"}", stream->instance, status);
     int result = length < 0 || length >= (int)sizeof(event) || f_run(argv, event, (size_t)length, 5, &cap) || cap.status;
+    if (result) {
+        /* Keep why the observation was lost: exit status, deadline, stderr. */
+        stream->observation_failures++; stream->observation_exit = cap.status; stream->observation_timed_out = cap.timeout;
+        json_object_put(stream->observation_error); stream->observation_error = agent_excerpt(cap.err, cap.err_bytes);
+    }
     f_capture_free(&cap); return result ? -1 : 0;
+}
+static long long now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000L;
+}
+/* Records the pending status unless the shell already accepted it in this run.
+ * Status observations are heuristic, so a failure only delays the next attempt
+ * and is kept for the receipt; while the provider runs, a changed current
+ * instance still stops it. The final attempt ignores the retry interval. */
+static void observation_flush(struct agent_stream *stream, bool final) {
+    if (!stream->pending_status[0] || !strcmp(stream->pending_status, stream->recorded_status) || f_stopped) return;
+    if (!final && now_ms() < stream->retry_at) return;
+    if (!observation(stream, stream->pending_status)) {
+        memcpy(stream->recorded_status, stream->pending_status, sizeof(stream->recorded_status));
+        return;
+    }
+    stream->retry_at = now_ms() + AGENT_OBSERVATION_RETRY_MS;
+    if (!final && !f_stopped) (void)agent_stop(stream);
+}
+static void observe_status(struct agent_stream *stream, const char *status) {
+    /* Decoded statuses are short literals; anything else is not recordable. */
+    if (strlen(status) >= sizeof(stream->pending_status)) return;
+    memcpy(stream->pending_status, status, strlen(status) + 1);
+    observation_flush(stream, false);
+}
+void agent_observe_final(struct agent_stream *stream) {
+    if (!stream->malformed && !stream->stale) observation_flush(stream, true);
 }
 static void observed_text(char *out, size_t size, const char *value) {
     size_t i;
@@ -32,7 +70,7 @@ static void observe_model(struct agent_stream *stream, json_object *input) {
 }
 void agent_observe(void *context, const char *text, size_t size) {
     struct agent_stream *stream = context;
-    if (stream->malformed || stream->stale || stream->permission || stream->observation_failed || f_stopped) return;
+    if (stream->malformed || stream->stale || stream->permission || f_stopped) return;
     stream->received = size;
     if (!strcmp(stream->adapter, "none")) return;
     while (stream->consumed < size) {
@@ -70,11 +108,8 @@ void agent_observe(void *context, const char *text, size_t size) {
             json_object_object_add(record, "usage", json_object_get(event.usage));
         }
         json_object_array_add(stream->events, record);
-        if (!stream->malformed && event.status && !f_stopped && observation(stream, event.status) && !f_stopped) {
-            (void)agent_stop(stream);
-            if (!stream->stale) stream->observation_failed = true;
-        }
+        if (!stream->malformed && event.status && !f_stopped) observe_status(stream, event.status);
         json_object_put(input);
-        if (stream->malformed || stream->stale || stream->permission || stream->observation_failed) return;
+        if (stream->malformed || stream->stale || stream->permission) return;
     }
 }
