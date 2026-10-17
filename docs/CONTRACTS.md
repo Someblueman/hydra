@@ -256,7 +256,21 @@ rows. Version-1 and version-2 fleet fixtures remain readable. Unsupported protoc
 versions fail closed. This adapter is not a general automation API.
 
 Version-2 `H` rows may add a trailing terminal mode (`interactive` or
-`headless`); readers accept rows without it. The workflow projection (`workflow
+`headless`); readers accept rows without it. `hydra tui` reads both streams and
+composes one model: local heads first, then remote heads, with the hosts and
+remote tasks of the latest remote observation. `hydra tui --remote-data`
+(internal) is the remote source: the fleet visual stream when the optional
+helper and at least one registered remote alias exist, an empty
+`HYDRA_FLEET_TUI<TAB>3` stream when no alias is registered, and that stream plus
+an `R` `fleet-unavailable` recovery row when aliases exist but the helper is not
+built. The composed model keeps a host that stops answering (`T` state `failed`)
+with the heads and tasks of its previous observation marked retained, with the
+age of that observation; retained, stale or unknown observations are displayed
+as such and never authorize `fleet attach`, `fleet cancel` or `fleet task`.
+`hydra fleet tui` (compatibility) opens the same control centre with the location
+filter set to remote and reads the helper's own `tui-visual-data` and
+`attention-data` streams. `hydra tui --location all|local|remote|HOST` sets the
+filter; `--headless-fixture FILE --remote-fixture FILE` composes two fixtures. The workflow projection (`workflow
 tui-data`) is internal protocol `HYDRA_WORKFLOW_TUI<TAB>2`: version 1 `W` and `N`
 fields keep their positions and gain trailing fields (run kind, planning branch,
 created and completed times, accepted digest prefix; step role, head, profile,
@@ -269,8 +283,12 @@ Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. B
 retain navigation, search, refresh, preview, switch, spawn, group assignment,
 dashboard, regenerate, confirmed kill, and help behavior. Native mutations execute
 the public shell CLI with explicit argv and never write Hydra state directly. Native
-attention consumes `workflow attention-data` or `fleet attention-data`; its `I`
-view and `r` exact review route are read-only client interaction.
+attention consumes `hydra tui --attention-data` (internal), which merges `workflow
+attention-data` with `fleet attention-data` (when remote aliases are registered)
+into one `HYDRA_ATTENTION<TAB>3` stream whose `END` counts the merged items and
+whose partial flag is set when either producer failed; `hydra fleet tui` consumes
+`fleet attention-data` alone. The `I` view and `r` exact review route are
+read-only client interaction.
 Review selection carries the complete attention identity, requested revision, and
 identity hash. `review-data` is a bounded framed projection of the public workflow
 or Fleet review command; opening a review or supplied reference cannot change

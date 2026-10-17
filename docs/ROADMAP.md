@@ -254,6 +254,20 @@ an acceptance blocker, not optional cosmetic polish.
       agent, inspect results and handle remote disconnection without switching
       applications or learning another keymap. Stale remote observations must not
       authorize actions or make ongoing work appear successfully completed.
+      Shipped in 3.0.0 (unreleased): `hydra tui` composes the local snapshot with
+      the fleet observation, lists remote heads and remote tasks beside local
+      heads with their host and observation age, filters by location (`L`,
+      `--location`), attaches, interrupts and decides remote work with the local
+      keymap through the public fleet commands, keeps a disconnected host's rows
+      as its retained last observation and never lets a stale, retained or
+      unknown observation authorize an action or count as running; `hydra fleet
+      tui` opens the same control centre filtered to remote work. Covered by
+      headless fixtures and PTY cases against a fake `hydra` (side by side,
+      location filter, exact attach/cancel/task argv, stale and disconnected
+      observations, 80x24 and 140x40). Open: the acceptance itself needs a live
+      remote host (real SSH attach, reconnect after a real disconnection, remote
+      history scrolling against a real host tmux) and has not been observed.
+      Remote tasks are not yet nodes of the workspace navigation tree.
 
 - [ ] **U12 — Keep action confirmation and results inside the control centre.**
       Killing a head currently leaves the TUI for a shell confirmation and teardown
@@ -315,8 +329,10 @@ an acceptance blocker, not optional cosmetic polish.
       views, residual screen regions or lost work; closing a client does not kill
       its execution owner. Verify leaving attachment with actual user input.
       Accepted locally by the user on 27 September 2026 after reviewing the 2.8.0
-      attach/leave/close/resize captures. Remote panes still lack tmux history
-      scrolling; remote attach cycles move to U11.
+      attach/leave/close/resize captures. Since 3.0.0 (unreleased) a remote pane
+      scrolls the host's own tmux history through the attached client (`Ctrl-B
+      [`, which needs the host tmux's default prefix); remote attach cycles are
+      covered by the U11 fixtures and remain to be accepted on a live host.
 - [ ] **U17 — Conversation-to-plan integration without manual JSON.** The current
       plan page asks the user to load draft and policy files. Make agent-authored
       planning part of the conversation: discuss an objective, generate a structured
@@ -387,7 +403,7 @@ part of that work.
 | U18 | initial deterministic installed-journey runner in 2.7.0 |
 | U5 | accepted on 27 September 2026; its fixes ship in 2.8.0 |
 | U10 | guided setup CLI, control-centre flow, static release helpers in 2.9.0 |
-| U11 | none yet |
+| U11 | one local/remote control centre (location filter, remote task rows and controls, retained disconnected observations, remote history scrolling) in 3.0.0 (unreleased); live-host acceptance open |
 
 ### Reliability fixes
 

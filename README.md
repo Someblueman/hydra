@@ -166,10 +166,12 @@ hydra fleet spawn build --project /srv/project -- feature/search --profile codex
 hydra fleet tui
 ```
 
-The native fleet view shows heads by host and supports attach and confirmed
-interrupts. Agent executables and repositories live on the host that runs the work.
-See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements, remote
-workflows, and recovery behavior.
+Remote heads and tasks then appear in `hydra tui` beside local work, with their
+host and observation age; `L` filters by location, `a` attaches and `x`
+interrupts through the fleet commands, and `hydra fleet tui` opens the same
+control centre filtered to remote work. Agent executables and repositories live
+on the host that runs the work. See [fleet setup](docs/FLEET.md) for pinned
+bootstrap, host requirements, remote workflows, and recovery behavior.
 
 ## Plan an objective
 
