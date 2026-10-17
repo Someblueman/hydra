@@ -3,6 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "setup_flow.h"
 
 static enum tv_style host_tone(const struct host_observation *host, bool selected) {
     if (selected) return TV_SELECTED;
@@ -72,9 +73,23 @@ static void render_setup_row(struct app *app, struct tv_canvas *canvas, const st
     app->hit_left[app->hit_count] = app->content_x + 3; app->hit_right[app->hit_count] = app->content_x + split - 2; app->hit_items[app->hit_count++] = index;
 }
 
+/* A finished setup whose host runs another Hydra: Enter shows the upgrade plan. */
+static void render_upgrade_detail(struct tv_canvas *canvas, const char *name, const char *state, int split, int width, int height) {
+    tv_panel(canvas, (struct tv_rect){split + 1, 0, width - split - 1, height}, "HYDRA UPGRADE");
+    dashboard_text(canvas, split + 3, 2, width - split - 5, TV_STRONG, "%s", name);
+    dashboard_text(canvas, split + 3, 4, width - split - 5, TV_WARNING, "%s", state);
+    dashboard_text(canvas, split + 3, 6, width - split - 5, TV_BASE, "%s", "Enter shows the upgrade plan: a new pinned install");
+    dashboard_text(canvas, split + 3, 7, width - split - 5, TV_BASE, "%s", "beside the old one, which stays; after a handshake");
+    dashboard_text(canvas, split + 3, 8, width - split - 5, TV_BASE, "%s", "the host switches to it. You approve it first.");
+}
+
 static void render_setup_detail(struct app *app, struct tv_canvas *canvas, const struct host_row *row, int split, int width, int height) {
     char name[160], state[200];
     setup_row_text(app, row, name, sizeof(name), state, sizeof(state));
+    if (row->kind == HOST_ROW_SETUP && app->setup->records[row->index].upgrade) {
+        render_upgrade_detail(canvas, name, state, split, width, height);
+        return;
+    }
     tv_panel(canvas, (struct tv_rect){split + 1, 0, width - split - 1, height}, row->kind == HOST_ROW_ADD ? "ADD A HOST" : "UNFINISHED SETUP");
     dashboard_text(canvas, split + 3, 2, width - split - 5, TV_STRONG, "%s", name);
     dashboard_text(canvas, split + 3, 4, width - split - 5, TV_BASE, "%s", state);
