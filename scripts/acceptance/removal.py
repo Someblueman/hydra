@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from acceptance.harness import Case, case, make_stopped, select_head
+from acceptance.harness import Case, case, heads, make_stopped, select_head
 
 RETURN_PROMPT = "Press Enter to return"
 
@@ -18,10 +18,6 @@ def in_app_throughout(j: Case, bullet: str, label: str, seconds: float = 3.0) ->
     j.record(bullet, f"{label}: no shell detour and no '{RETURN_PROMPT}' during {len(screens)} continuous snapshots",
              not detours, detail=f"snapshots with a detour: {detours}" if detours else "")
     return screens
-
-
-def heads(j: Case) -> set[str]:
-    return {row.split()[0] for row in j.cli("list").splitlines()[1:] if row.split() and row.split()[0] != "BRANCH"}
 
 
 def remove(j: Case, bullet: str, name: str, answer: bytes = b"y\r") -> str:

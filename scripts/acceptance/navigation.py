@@ -189,7 +189,7 @@ def agent_focus(j: Case) -> None:
     screen = j.see("Keys go to Hydra")
     j.record("U8.c", "Ctrl-B Tab leaves agent input: the status says keys go to Hydra", True)
     j.record("U8.c", "after leaving input the screen says how to return to the agent (pane label or hint)",
-             "Tab here to talk to the agent" in screen or "ATTACHED /" in screen
+             "Tab here to talk to the agent" in screen or "ATTACHED /" in screen or "Tab pane" in j.hint(screen)
              or " a agent" in j.hint(screen) or "a talk to agent" in j.hint(screen) or "a reconnect" in screen,
              detail=f"hint: {j.hint(screen)!r}")
     returned = False

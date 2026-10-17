@@ -580,3 +580,10 @@ include scripts/shell-tests.mk
 USABILITY_OUTPUT ?= $(BUILD_DIR)/usability-$(shell date +%Y%m%d-%H%M%S)
 test-usability: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 	PYTHONPATH=scripts python3 -m usability --output "$(USABILITY_OUTPUT)" $(USABILITY_ARGS)
+
+# Installed-build acceptance for the open roadmap items (docs/ACCEPTANCE.md):
+# one HTML+JSON matrix mapping each acceptance bullet to its checks and evidence.
+.PHONY: test-acceptance
+ACCEPTANCE_OUTPUT ?= $(BUILD_DIR)/acceptance-$(shell date +%Y%m%d-%H%M%S)
+test-acceptance: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
+	PYTHONPATH=scripts python3 -m acceptance --output "$(ACCEPTANCE_OUTPUT)" $(ACCEPTANCE_ARGS)

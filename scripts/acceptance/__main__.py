@@ -22,7 +22,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
-import usability  # noqa: E402
+from usability import journey as usability  # noqa: E402
 from acceptance import harness, matrix, report  # noqa: E402
 
 MODULES = ("entry", "terminal", "flicker", "details", "navigation", "overview", "removal", "journeys")

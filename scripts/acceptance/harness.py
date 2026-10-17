@@ -15,7 +15,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-import usability
+from bench_i1_pty import Observer
+from usability import journey as usability
 from acceptance import vt
 from acceptance.ptyrun import PtyProcess
 
@@ -97,7 +98,7 @@ class Case(usability.Journey):
         a second call after close() retains a second terminal directory."""
         self.opens = getattr(self, "opens", 0) + 1
         directory = self.output / ("terminal" if self.opens == 1 else f"terminal-{self.opens}")
-        self.observer = usability.Observer(
+        self.observer = Observer(
             self.source / "build/test-tui-pty", self.prefix / "libexec/hydra/hydra-tui", self.hydra,
             directory, self.repo, {**self.env, **(argv_env or {})}, self.columns,
             40 if self.columns > 80 else 24)
@@ -242,6 +243,35 @@ def select_head(j: Case, name: str, attempts: int = 12) -> str:
         j.keys(b"j")
         time.sleep(0.2)
     raise AssertionError(f"head {name!r} not found in the list; last selected {j.selected_row()!r}")
+
+
+def heads(j: Case) -> set[str]:
+    """Branch names from `hydra list` (its rows may start with the current-head marker)."""
+    rows = j.cli("list").splitlines()
+    start = next((i + 1 for i, r in enumerate(rows) if r.split()[:1] == ["BRANCH"]), len(rows))
+    names = set()
+    for row in rows[start:]:
+        tokens = row.split()
+        if tokens and tokens[0] == "*":
+            tokens = tokens[1:]
+        if tokens:
+            names.add(tokens[0])
+    return names
+
+
+def tab_position(j: Case, *labels: str) -> int:
+    """1-based position of a tab in the visible bar (help: 1-9 jump to a tab); 0 if absent."""
+    names = [t.strip("[]") for t in j.tab_bar().split()]
+    return next((i + 1 for i, n in enumerate(names) if n in labels), 0)
+
+
+def goto_tab(j: Case, *labels: str) -> str:
+    """Press the number the visible tab bar gives the tab and wait for it."""
+    position = tab_position(j, *labels)
+    if not position:
+        raise AssertionError(f"tab {labels} not in the bar {j.tab_bar()!r}")
+    j.keys(str(position).encode())
+    return j.see_any(*(f"[{label}]" for label in labels))
 
 
 def make_stopped(j: Case, branch: str) -> None:

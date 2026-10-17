@@ -65,10 +65,10 @@ def details_recovery(j: Case) -> None:
     plain = " ".join(body(stopped)).lower()
     j.record("U7.c", "stopped head: the session is labelled stopped in plain words and the restore action says files are kept",
              "stopped" in plain and "files are kept" in plain and not any(w in plain for w in INTERNAL_WORDS))
+    account = " ".join(l for l in body(stopped) if not l.startswith(("a ", "c ", "x ", ":  ")) and l not in SECTIONS)
     j.record("U7.c", "stopped head: Details carry a plain-language account of what stopped and what remains",
-             any(("exited" in l.lower() or "stopped" in l.lower()) and ("kept" in l.lower() or "work" in l.lower())
-                 for l in body(stopped) if not l.startswith(("a ", "x "))),
-             detail="desired behaviour: only the Session label changes; no sentence explains the stop")
+             "the agent reported that it exited" in account.lower() and "files in the worktree are kept" in account.lower()
+             and "restarts the terminal" in account, detail=account[-220:])
     j.keys(b"\x1b")
     gone = details_checks(j, "gone", "terminal-gone")
     text = " ".join(body(gone))

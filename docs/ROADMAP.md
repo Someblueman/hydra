@@ -384,25 +384,37 @@ The subsequent six findings are covered by U13 (statistics), U14 (output), U15
 
 Delivery boundary: the items above remain outstanding requirements. Source changes
 have shipped as follows; each item stays open until its installed-build
-acceptance has been observed (U5 was accepted on 27 September 2026). Close items
-with observed first-use, visual and agentic acceptance from the installed build,
-and update the getting-started and evaluation guides to the delivered flow as
-part of that work.
+acceptance has been observed (U5 was accepted on 27 September 2026). For U1, U2,
+U3, U6, U7, U8, U9, U12, U13, U15 and U17 that observation is automated:
+`make test-acceptance` ([ACCEPTANCE.md](ACCEPTANCE.md)) runs each item's
+Acceptance sentences as checks against a fresh prefix installation and writes
+the acceptance matrix with retained evidence; the "Automated acceptance" column
+names the cases and the "Still needs a human" column what no automated run can
+observe. Close an item when its matrix rows are green and its human column has
+been observed; update the getting-started and evaluation guides to the delivered
+flow as part of that work.
 
-| Item | Shipped source changes |
-| --- | --- |
-| U1, U2, U4, U6, U7, U8, U9, U13 | [2.6.0](../CHANGELOG.md#260---2026-09-14) |
-| U19 | explanations and empty states in 2.6.0; comprehension trials and copy fixes at every entry point in 3.0.0 (human first-use review open) |
-| U3 | CLI half in 2.6.0; in-app conversation launch and interactive spawn/resume opening inside Hydra in 2.7.0 |
-| U12 | in-app removal in 2.6.0; untracked-file protection in 2.7.0 |
-| U14 | DEC special graphics and a labelled read-only Details excerpt in 2.7.0; read-only transcripts in 2.8.0 (accepted) |
-| U15 | view consolidation in 2.6.0 |
-| U16 | nested tmux attachment with deterministic input/resize/return checks in 2.7.0; leave/close keys, disconnect release and attach cycles in 2.8.0 (accepted locally) |
-| U17 | head-associated proposals, guided local policy, invalidation and exact-digest approval in 2.7.0 |
-| U18 | initial deterministic installed-journey runner in 2.7.0; goal-driven screen-only trials, discoverability scores and comprehension trials in 3.0.0 (live and human gates open) |
-| U5 | accepted on 27 September 2026; its fixes ship in 2.8.0 |
-| U10 | guided setup CLI, control-centre flow, static release helpers in 2.9.0 |
-| U11 | none yet |
+| Item | Shipped source changes | Automated acceptance (`make test-acceptance`) | Still needs a human |
+| --- | --- | --- | --- |
+| U1 | [2.6.0](../CHANGELOG.md#260---2026-09-14) | `u1-clean-repo`, `u1-dirty-repo`: byte-identical tree, `git status` and exclude rules across open, configure, reopen; previewed shared-config opt-in; trust still required | nothing |
+| U2 | 2.6.0 | `u2-spawn-reconnect` at 80 and 140 columns: real `tmux attach` clients, scrollback and shell history free of bootstrap exports, `/proc/<pid>/environ` of the agent carries the head environment, reconnect usable | real terminal applications (macOS Terminal, iTerm2) |
+| U3 | CLI half in 2.6.0; in-app conversation launch and interactive spawn/resume opening inside Hydra in 2.7.0 | `u3-ui-conversation`, `u3-cli-launch`, `u3-missing-provider`, `u3-missing-auth`: conversation from an uninitialized repository without init/spawn/exports, interactive `spawn --profile --prompt` inside the control centre, in-app missing-provider and missing-login states (one red row: Details keep presenting a running agent after the provider exited for lack of login) | live provider sign-in flows |
+| U4 | 2.6.0 | none (visual comparison) | compare installed-build captures with both references |
+| U6 | 2.6.0 | `u6-flicker` at 80x24 and 140x40: raw PTY bytes recorded idle 30 s, streaming, polling, pane switch and resize, replayed through the emulator; zero full clears, bounded repaint of unchanged cells, no blinks, selection and hidden cursor preserved, at most one full repaint per resize; recordings retained | perceptual review of the retained recordings in a real terminal application |
+| U7 | 2.6.0 | `u7-details-recovery`: running, stopped and terminal-gone heads; grouped and wrapped Details, raw ids only under technical details, plain-language stopped account, restart and removal separated, Recovery account before DIAGNOSTICS | judge the wording as plain language |
+| U8 | 2.6.0 | `u8-hints` at 80 and 140 columns: real Tab/Shift-Tab/arrow/Enter/Esc events compared with the displayed hints in Work, Details, Overview, Coordination, help and dialogs; Workspace focus read from styled snapshots; Tab and Esc delivered to an attached agent | first-time discoverability (goal-driven trials, human first use) |
+| U9 | 2.6.0 | `u9-empty`, `u9-single-agent`, `u9-multi-agent-blocked`: explained empty states, labelled counters with routes, a run blocked on an approval across two heads with its decision route, unknown distinguished from zero, in-app approval unblocking the dependent step | whether the summaries answer a real user's question |
+| U12 | in-app removal in 2.6.0; untracked-file protection in 2.7.0 | `u12-removal`: stopped and active heads removed, cancel, dirty-work refusal, partial bulk action; continuous snapshots show no shell detour or return keypress; outcomes checked against worktrees, branches and `/proc` | nothing |
+| U13 | 2.6.0 | `u9-empty`, `u9-single-agent`, `u9-multi-agent-blocked`: Statistics entered from Work and Coordination during standalone work and a recorded run keeps the tab bar and selection, explains its coverage and returns to the previous view | nothing |
+| U15 | view consolidation in 2.6.0 | `u17-plan-from-conversation` (U15.a: committed two-file change shown as the task's diff, not "0 files"), `u9-single-agent` and `u9-multi-agent-blocked` (U15.b: distinct questions, explained empty coordination) | whether each view's answer is useful |
+| U17 | head-associated proposals, guided local policy, invalidation and exact-digest approval in 2.7.0 | `u17-plan-from-conversation`: proposal, policy review, validation, revision and approval from the conversation with no JSON or paths; exact revision and digest shown and independently recompiled; a changed plan invalidates the approval; the approved revision executes and verifies | a live provider authoring a plan |
+| U19 | explanations and empty states in 2.6.0; comprehension trials and copy fixes at every entry point in 3.0.0 | comprehension trials of `make test-usability` | human first-use review |
+| U14 | DEC special graphics and a labelled read-only Details excerpt in 2.7.0; read-only transcripts in 2.8.0 (accepted) | | |
+| U16 | nested tmux attachment with deterministic input/resize/return checks in 2.7.0; leave/close keys, disconnect release and attach cycles in 2.8.0 (accepted locally) | | |
+| U18 | initial deterministic installed-journey runner in 2.7.0; goal-driven screen-only trials, discoverability scores and comprehension trials in 3.0.0 (live and human gates open) | | |
+| U5 | accepted on 27 September 2026; its fixes ship in 2.8.0 | | |
+| U10 | guided setup CLI, control-centre flow, static release helpers in 2.9.0 | none (needs a host) | onboard a supported host |
+| U11 | none yet | | |
 
 ### Reliability fixes
 
