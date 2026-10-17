@@ -178,13 +178,14 @@ static void render_list(struct app *app) {
 
 /* ---- Detail ---- */
 
-static void source_pairs(struct pen *p, const struct onb_candidate *c, long long now) {
+/* The age is the one the CLI recorded with the observation, not recomputed. */
+static void source_pairs(struct pen *p, const struct onb_candidate *c) {
     size_t i;
-    char text[600], age[16];
+    char text[600], age[24];
     for (i = 0; i < c->source_count; i++) {
         const struct onb_source_ref *r = &c->sources[i];
-        onb_candidate_age(c, now, age, sizeof(age));
-        snprintf(text, sizeof(text), "%s %s as %s (%s, observed %llds ago%s%s%s%s)", r->kind, r->locator, r->name, r->freshness, r->age_seconds,
+        onb_age_text(r->age_seconds, age, sizeof(age));
+        snprintf(text, sizeof(text), "%s %s as %s (%s, %s old when observed%s%s%s%s)", r->kind, r->locator, r->name, r->freshness, age,
                  r->scope[0] ? ", scope " : "", r->scope, r->client[0] ? ", client " : "", r->client);
         pen_pair(p, i ? "" : "Provenance", text, TV_BASE);
         if (r->labels[0]) pen_pair(p, "Labels", r->labels, TV_BASE);
@@ -217,13 +218,12 @@ static void enrollment_pairs(struct pen *p, const struct onb_host *h) {
 }
 static void render_candidate(struct app *app, struct pen *p, const struct onb_candidate *c) {
     const struct onb_model *m = app->onboarding->model;
-    long long now = (long long)time(NULL);
     char text[600], when[48], state[64];
     onb_candidate_state(m, c, state, sizeof(state));
     pen_pair(p, "Candidate", c->candidate_id, TV_STRONG);
     pen_pair(p, "Target", c->target, TV_BASE);
     pen_pair(p, "State", state, typed_tone(onb_candidate_typed(m, c), false));
-    source_pairs(p, c, now);
+    source_pairs(p, c);
     if (c->resolution_ok) {
         snprintf(text, sizeof(text), "%.100s@%.200s port %.8s, policy %.12s%s%.200s", c->user, c->hostname, c->port[0] ? c->port : "22", c->policy_sha256, c->ssh_config[0] ? ", config " : "", c->ssh_config);
         pen_pair(p, "Resolved", text, TV_BASE);

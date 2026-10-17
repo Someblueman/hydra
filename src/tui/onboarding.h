@@ -90,6 +90,8 @@ void onb_candidate_state(const struct onb_model *m, const struct onb_candidate *
 const char *onb_candidate_source(const struct onb_candidate *c);
 const char *onb_candidate_platform(const struct onb_candidate *c);
 void onb_candidate_age(const struct onb_candidate *c, long long now, char *out, size_t size);
+/* Compact age: 45s, 12m, 5h, 3d. */
+void onb_age_text(long long seconds, char *out, size_t size);
 enum onb_row_kind { ONB_ROW_CANDIDATE, ONB_ROW_RECORD };
 struct onb_row { enum onb_row_kind kind; size_t index; };
 /* Filters: typed state (-1 for all), source kind, platform, label text and

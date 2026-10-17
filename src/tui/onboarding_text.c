@@ -77,7 +77,7 @@ const char *onb_candidate_source(const struct onb_candidate *c) {
 
 const char *onb_candidate_platform(const struct onb_candidate *c) { return c->platform[0] ? c->platform : "unknown"; }
 
-static void age_text(long long seconds, char *out, size_t size) {
+void onb_age_text(long long seconds, char *out, size_t size) {
     if (seconds < 0) seconds = 0;
     if (seconds < 90) snprintf(out, size, "%llds", seconds);
     else if (seconds < 5400) snprintf(out, size, "%lldm", seconds / 60);
@@ -90,7 +90,7 @@ void onb_candidate_age(const struct onb_candidate *c, long long now, char *out, 
     size_t i;
     for (i = 0; !at && i < c->source_count; i++) at = c->sources[i].observed_at;
     if (!at) { snprintf(out, size, "never"); return; }
-    age_text(now - at, out, size);
+    onb_age_text(now - at, out, size);
 }
 
 void onb_time_text(long long at, char *out, size_t size) {
