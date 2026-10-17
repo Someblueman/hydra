@@ -635,16 +635,27 @@ static void render_recovery_detail(struct app *app) {
     /* Wrapped so long labels, such as a leftover worktree's path, stay readable. */
     lead_block(app, "RECOVERY FINDING", title);
     paragraph(app, detail, TV_BASE);
-    linef(app, "");
-    labelled(app, "Check", item->action, TV_BASE);
-    section(app, "IDENTITY");
-    labelled(app, "Kind", item->kind, TV_BASE);
-    labelled(app, "Source", item->source, TV_BASE);
-    labelled(app, "Confidence", item->confidence, TV_BASE);
-    labelled(app, "Inspect", item->action, TV_MUTED);
+    /* The raw kind, source path and confidence are diagnostics; the
+     * account above is what a user needs to decide. */
+    section(app, "DIAGNOSTICS");
+    labelled(app, "Kind", item->kind, TV_MUTED);
+    labelled(app, "Source", item->source, TV_MUTED);
+    labelled(app, "Confidence", item->confidence, TV_MUTED);
+    labelled(app, "Inspect", item->action, TV_BASE);
     section(app, "NEXT");
-    key_row(app, "Enter", "runs the check and shows its output here; d returns to the list");
-    if (!strcmp(item->kind, "orphan-worktree")) key_row(app, "x", "removes this worktree after confirmation; the branch is kept");
+    paragraph(app, "Enter runs the check and shows its output here; d returns to the list", TV_BASE);
+    if (!strcmp(item->kind, "orphan-worktree")) paragraph(app, "x removes this worktree after confirmation; the branch is kept", TV_BASE);
+}
+
+/* What the finding offers, in plain words; the raw kind stays in diagnostics. */
+static const char *recovery_offer(const struct recovery *item) {
+    if (!strcmp(item->kind, "dead-session")) return "files kept";
+    if (!strcmp(item->kind, "stale-lock")) return "safe to clear";
+    if (!strcmp(item->kind, "orphan-worktree")) return "cleanup preview";
+    if (!strcmp(item->kind, "orphan-worktree-dirty")) return "review first";
+    if (!strcmp(item->kind, "teardown-failure")) return "finish or keep";
+    if (!strcmp(item->kind, "malformed-state")) return "check reports";
+    return "d explains";
 }
 
 static void render_recovery_row(struct app *app, size_t index) {
@@ -657,7 +668,7 @@ static void render_recovery_row(struct app *app, size_t index) {
     if (selected) column(app, 0, app->content_width, TV_SELECTED, ">");
     fit_text(app, title, width > 0 ? (size_t)width : 1U, cell, sizeof(cell));
     column(app, 2, width, selected ? TV_SELECTED : TV_WARNING, cell);
-    if (wide) column(app, app->content_width - 18, 18, selected ? TV_SELECTED : TV_MUTED, item->kind);
+    if (wide) column(app, app->content_width - 18, 18, selected ? TV_SELECTED : TV_MUTED, recovery_offer(item));
     app->line++;
 }
 
@@ -880,8 +891,8 @@ static const char *local_hints(struct app *app, bool narrow) {
     if (app->view == 2) return "Esc back  : more actions  ? help  q quit";
     if (app->view == 4) return narrow ? "Enter open  Tab next tab  ? help  q quit" : "j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit";
     if (narrow) return head && head_remote(head) ? "Enter open  a agent  x interrupt  ? help  q quit" : "Enter open  n new  x remove  ? help  q quit";
-    if (app->cols < 100) return head && head_remote(head) ? "Enter details  a agent  x interrupt  r retry  L where  ? help  q quit"
-                                                          : "Enter details  a agent  n new  x remove  L where  : more  ? help  q quit";
+    if (app->cols < 100) return head && head_remote(head) ? "j/k select  Enter details  a agent  x interrupt  r retry  L where  q quit"
+                                                          : "j/k select  Enter details  a agent  n new  x remove  L where  : more  ? help  q quit";
     if (head && head_remote(head)) return "j/k select  Enter details  a agent  x interrupt  r retry host  L location  / search  ? help  q quit";
     return app->model.head_count || app->model.task_count ? "j/k select  Enter details  a agent  n new task  x remove  L location  / search  : more  ? help  q quit"
                                  : "n new task  : more actions  L location  Tab next tab  ? help  q quit";

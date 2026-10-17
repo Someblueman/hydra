@@ -1,0 +1,27 @@
+version: 1
+id: handoff
+data: data.json
+resources:
+  disk_mb: 1
+steps:
+  - id: produce
+    kind: exec
+    idempotent: false
+    args:
+      head: worker-a
+      argv: [sh, @PRODUCE@]
+  - id: approval
+    kind: approval-wait
+    needs: [produce]
+    idempotent: false
+    args:
+      head: worker-a
+      name: review
+      message: Review the draft before worker-b continues
+  - id: handoff
+    kind: exec
+    needs: [approval]
+    idempotent: true
+    args:
+      head: worker-b
+      argv: [sh, -c, "echo handoff done"]

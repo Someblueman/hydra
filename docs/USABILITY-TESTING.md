@@ -13,6 +13,12 @@ package `scripts/usability/` (`PYTHONPATH=scripts python3 -m usability`); pass
 extra options with `USABILITY_ARGS`, for example
 `make test-usability USABILITY_ARGS="--trial approve-plan --columns 80"`.
 
+The separate `make test-acceptance` ([ACCEPTANCE.md](ACCEPTANCE.md)) reuses this
+runner's installation, journey and PTY observer helpers to produce the
+installed-build acceptance matrix for the open roadmap items (U1, U2, U3, U6,
+U7, U8, U9, U12, U13, U15, U17): one check per acceptance sentence with retained
+evidence, including measured flicker from the raw terminal bytes.
+
 One run has three parts, each at 80x24 and 140x40 (`--columns` selects a width):
 the scripted journeys (`--journey NAME` selects one), the goal-driven trials
 (`--trial NAME`) and the comprehension trials (`--trial comprehension`). Selecting

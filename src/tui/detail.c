@@ -53,21 +53,26 @@ static void detail_identity(struct app *app, const struct head *head) {
 }
 
 /* Why the head needs the user, and the key that acts on it, right under the
- * name; nothing is inferred from a missing terminal beyond what was observed. */
+ * name. Two rows at most, so the account and every action fit 80x24;
+ * nothing is inferred from a missing terminal beyond what was observed. */
 static void detail_attention(struct app *app, const struct head *head) {
     const struct workflow_node *step = head_step(app, head);
     char text[256];
-    if (!head_headless(head) && !strcmp(display_status(head), "STALE")) {
-        paragraph(app, "Terminal gone: the last observation said the agent was still working. Files in the worktree are kept; a restarts the terminal in the same worktree. Check the files before removing the head.", TV_WARNING);
+    if (head_headless(head)) {
+        if (step && (!strcmp(step->state, "failed") || !strcmp(step->state, "recovery-required"))) {
+            snprintf(text, sizeof(text), "Step %s %s; p shows its output and Attention (I) lists what it decides.", step->id,
+                     !strcmp(step->state, "failed") ? "failed" : "needs recovery");
+            paragraph(app, text, TV_WARNING);
+        }
         return;
     }
-    if (head_headless(head) && step && (!strcmp(step->state, "failed") || !strcmp(step->state, "recovery-required"))) {
-        snprintf(text, sizeof(text), "Step %s %s; p shows its output and Attention (I) lists what it decides.", step->id,
-                 !strcmp(step->state, "failed") ? "failed" : "needs recovery");
-        paragraph(app, text, TV_WARNING);
-        return;
-    }
-    if (head->head_id[0] && head->gates > head->approved) {
+    if (!strcmp(display_status(head), "STALE"))
+        paragraph(app, "The terminal is gone; the agent was last seen working. The worktree's files are kept: a restarts the terminal. Check them before removing it.", TV_WARNING);
+    else if (!strcmp(display_status(head), "STOPPED") && !strcmp(head->observed, "exited"))
+        paragraph(app, "The agent reported that it exited and its terminal is closed. Files in the worktree are kept: a restarts the terminal there.", TV_BASE);
+    else if (!strcmp(display_status(head), "STOPPED") && !strcmp(head->observed, "failed"))
+        paragraph(app, "The agent reported a failure and its terminal is closed. Files in the worktree are kept: a restarts the terminal there.", TV_WARNING);
+    else if (head->head_id[0] && head->gates > head->approved) {
         unsigned pending = head->gates - head->approved;
         snprintf(text, sizeof(text), "%u approval request%s waiting for your decision; press : and choose approvals.", pending, pending == 1 ? " is" : "s are");
         paragraph(app, text, TV_WARNING);
@@ -191,8 +196,7 @@ static void detail_next(struct app *app, const struct head *head) {
     }
     linef(app, "%s", head_terminal_gone(app, head) ? "a  restart its terminal (files are kept)   p  show recent terminal output" :
           "a  talk to the agent in the workspace     p  show recent terminal output");
-    linef(app, "c  coordination with other heads          x  remove this head");
-    linef(app, ":  more actions (diff, switch, approvals)  d  technical details");
+    linef(app, "c  coordination  x  remove this head  :  more actions  d  technical details");
 }
 
 /* Technical details: one group per kind of identity, each row labelled. */

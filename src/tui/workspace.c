@@ -591,16 +591,16 @@ static const char *attached_label(const struct native_terminal *t, bool focused,
 static const char *plan_hints(const struct app *app, int width) {
     const struct native_plan *p = app->plan;
     bool narrow = width < 100;
-    if (!p) return narrow ? "P proposal  I import  A conversation  ? help  q quit" :
+    if (!p) return narrow ? "P proposal  I import  A conversation  Tab pane  ? help  q quit" :
         "P review agent proposal  I import files  A conversation  C monitor  Tab pane  ? help  q quit";
     switch (p->state) {
-    case PLAN_READY: return narrow ? "E execute  F request changes  A conversation  ? help  q quit" :
+    case PLAN_READY: return narrow ? "E execute  F request changes  A conversation  Tab pane  ? help  q quit" :
         "E execute (confirm)  F request changes  V validate again  A conversation  C monitor  Tab pane  ? help  q quit";
-    case PLAN_INVALID: return narrow ? "F request changes  V validate  A conversation  ? help  q quit" :
+    case PLAN_INVALID: return narrow ? "F request changes  V validate  A conversation  Tab pane  ? help  q quit" :
         "F request changes (sends the diagnostics)  V validate again  A conversation  Tab pane  ? help  q quit";
-    case PLAN_RETURNED: return narrow ? "Returned: awaiting the agent's revision  A conversation  q quit" :
+    case PLAN_RETURNED: return narrow ? "Returned: awaiting the agent's revision  A conversation  Tab pane  q quit" :
         "Returned for changes: awaiting the agent's revision  A conversation  C monitor  Tab pane  ? help  q quit";
-    default: return narrow ? "V validate  F request changes  A conversation  ? help  q quit" :
+    default: return narrow ? "V validate  F request changes  A conversation  Tab pane  ? help  q quit" :
         "V validate  F request changes  P reload proposal  A conversation  C monitor  Tab pane  ? help  q quit";
     }
 }

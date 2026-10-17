@@ -422,6 +422,8 @@ static bool option_valid(const struct setup_envelope *e, size_t *i) {
     if (!strcmp(flag, "--agent")) return alias_text(value) && strlen(value) < 64;
     if (!strcmp(flag, "--approve")) return e->plan_sha256[0] && !strcmp(value, e->plan_sha256) && strlen(value) == 64;
     if (!strcmp(flag, "--fingerprint")) return e->fingerprint[0] && !strcmp(value, e->fingerprint) && !strncmp(value, "SHA256:", 7);
+    /* Only the helper this control centre asked the CLI to provision with. */
+    if (!strcmp(flag, "--binary")) return getenv("HYDRA_REMOTE_SETUP_BINARY") && !strcmp(value, getenv("HYDRA_REMOTE_SETUP_BINARY"));
     return false;
 }
 

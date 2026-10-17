@@ -1,0 +1,1 @@
+{"schema_version":1,"inputs":{},"steps":{"produce":{"outputs":{"answer":{"path":"answer.txt","type":"file","max_bytes":128}}}}}
