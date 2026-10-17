@@ -226,6 +226,15 @@ transport_records="$(find "$run_dir/steps" -path '*/attempt-*/remote/transport-m
 fixture_json transport-metrics "$run_dir" "${HYDRA_TEST_DAG_LOST_ACK:-0}"
 "$root/bin/hydra" workflow statistics-data > "$fixture/statistics.tsv"
 awk -F '\t' -v id="$run" '$1 == "R" && $2 == id {found=1; if ($13 == "-" || $14 == "-" || $15 == "-") bad=1} END {exit !found || bad}' "$fixture/statistics.tsv"
+# Telemetry block 1 recorded by the task owner reaches the T rows: wall, CPU
+# and transport are measured for both dispatched steps; peak RSS may stay
+# unknown (never zero) and then names its reason.
+awk -F '\t' -v id="$run" -v host="$dag_host" '$1 == "T" && $2 == id && ($3 == "produce" || $3 == "consume") {
+    rows++
+    if ($4 != host || $6 != "pinned" || $7 != "1" || $8 != "succeeded" || $9 !~ /^[0-9]+$/ || $10 !~ /^[1-9][0-9]*$/ || $12 !~ /^[1-9][0-9]*$/ || $13 !~ /^[1-9][0-9]*$/) bad=1
+    if ($11 == "-" && $14 !~ /peak_rss_bytes=/) bad=1
+    if ($11 != "-" && $11 !~ /^[1-9][0-9]*$/) bad=1
+} END {exit rows != 2 || bad}' "$fixture/statistics.tsv"
 if [ "${HYDRA_TEST_DAG_REPLAY:-0}" = 1 ]; then
     "$root/bin/hydra" workflow replay "$run" > "$fixture/replay-1.json"
     "$root/bin/hydra" workflow replay "$run" > "$fixture/replay-2.json"

@@ -32,7 +32,7 @@ test-plan-workspace: $(BUILD_DIR)/native-tests/pty-workflow-controls
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-runs-heads
 test-tui-pty: $(BUILD_DIR)/native-tests/pty-remote-setup
 
-NATIVE_TEST_NAMES = statistics-export task-announce retention workflow-task-metrics plan-inspection plan-evaluate plan-reuse-invalidation retention-accepted discovery enrollment enrollment-receiver enrollment-ssh plan-patterns plan-manifest plan-staged research-outcome performance-outcome plan-staged-public remote-setup-ssh
+NATIVE_TEST_NAMES = statistics-export task-announce retention workflow-task-metrics workflow-task-cohorts plan-inspection plan-evaluate plan-reuse-invalidation retention-accepted discovery enrollment enrollment-receiver enrollment-ssh plan-patterns plan-manifest plan-staged research-outcome performance-outcome plan-staged-public remote-setup-ssh
 NATIVE_TEST_BINS = $(addprefix $(BUILD_DIR)/native-tests/test-,$(NATIVE_TEST_NAMES)) $(BUILD_DIR)/native-tests/workflow-contract-cases
 $(foreach n,$(NATIVE_TEST_NAMES),$(eval $(BUILD_DIR)/native-tests/test-$(n): tests/native/test_$(subst -,_,$(n)).c))
 $(addprefix $(BUILD_DIR)/native-tests/test-,plan-reuse-invalidation retention-accepted): tests/native/accepted_fixture.c
@@ -44,6 +44,7 @@ test-workflow-contracts: $(BUILD_DIR)/native-tests/workflow-contract-cases
 test-task-announce: $(BUILD_DIR)/native-tests/test-task-announce
 test-retention: $(BUILD_DIR)/native-tests/test-retention
 test-workflow-metrics: $(BUILD_DIR)/native-tests/test-workflow-task-metrics
+test-workflow-metrics: $(BUILD_DIR)/native-tests/test-workflow-task-cohorts
 test-workflow-metrics: $(BUILD_DIR)/native-tests/test-statistics-export
 test-plan-inspection: $(BUILD_DIR)/native-tests/test-plan-inspection $(BUILD_DIR)/native-tests/test-plan-evaluate
 test-plan-reuse: $(BUILD_DIR)/native-tests/test-plan-reuse-invalidation $(BUILD_DIR)/native-tests/test-retention-accepted
