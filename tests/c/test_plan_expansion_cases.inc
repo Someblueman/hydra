@@ -138,7 +138,14 @@ static void evidence_cases(void) {
     set_run_state(base_run, "running\n");
     p = third_proposal(sha, "Third question");
     json_object_put(admit(p, "unknown_outcome", "deliverable", "report"));
+    set_run_state(base_run, "recovery-required\n");
+    json_object_put(admit(p, "unknown_outcome", "deliverable", "report"));
     set_run_state(base_run, "succeeded\n");
+    /* A producer awaiting reconciliation inside a terminal run is no verdict either. */
+    { char steps[F_PATH], step[F_PATH];
+      make_dir(base_run, "steps", steps); make_dir(steps, "compose", step); write_text(step, "state", "recovery-required\n");
+      json_object_put(admit(p, "unknown_outcome", "deliverable", "report"));
+      write_text(step, "state", "succeeded\n"); }
     /* Round 1 executed and failed: its claim may be retried once, its deliverable is no input. */
     fabricate_failed_round(); chain_errors(2, NULL);
     { struct px_chain chain; px_chain_load(&chain, expansions, base_run, runs);
