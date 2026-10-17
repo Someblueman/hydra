@@ -199,19 +199,45 @@ static bool parse_document(FILE *input, const struct native_review_identity *id,
     return header && ended && !used && !ferror(input);
 }
 
-static void complete_review(struct native_review *review)
+/* Accepts one framed document for the bound identity; closes input. */
+static bool accept_document(struct native_review *review, FILE *input)
 {
-    FILE *input = native_capture_take(&review->job);
     struct review_document *document = calloc(1U, sizeof(*document));
     bool valid = input && document && parse_document(input, &review->identity, document);
     if (input) fclose(input);
     if (!valid) {
         free(document); review->stale = true;
         copy_text(review->notice, sizeof(review->notice), "Review unavailable: failed, malformed or identity mismatch");
-        return;
+        return false;
     }
     free(review->document); review->document = document;
     review->stale = false; review->notice[0] = '\0';
+    return true;
+}
+
+static void complete_review(struct native_review *review)
+{
+    (void)accept_document(review, native_capture_take(&review->job));
+}
+
+static struct native_review *review_state(struct app *app)
+{
+    if (!app->review) {
+        app->review = calloc(1U, sizeof(*app->review));
+        if (app->review) app->review->job.fd = -1;
+    }
+    return app->review;
+}
+
+/* Headless fixtures: the exact review of identity read from a file, bound
+ * and validated exactly as a public review-data answer is. */
+bool native_review_load(struct app *app, const struct native_review_identity *identity, const char *path)
+{
+    struct native_review *review = review_state(app);
+    if (!review) return false;
+    if (memcmp(identity, &review->identity, sizeof(*identity))) review->supplied_reference[0] = '\0';
+    discard_document(review); review->identity = *identity; review->active = true; review->stale = false;
+    return accept_document(review, fopen(path, "r"));
 }
 
 void native_review_tick(struct app *app)
@@ -230,14 +256,10 @@ void native_review_tick(struct app *app)
 
 void native_review_open(struct app *app, const struct native_review_identity *identity)
 {
-    struct native_review *review = app->review;
+    struct native_review *review = review_state(app);
     const char *command = !strcmp(identity->source, "workflow records") ? "workflow" :
         !strcmp(identity->source, "fleet overview") ? "fleet" : NULL;
-    if (!review) {
-        review = calloc(1U, sizeof(*review));
-        if (!review) return;
-        review->job.fd = -1; app->review = review;
-    }
+    if (!review) return;
     if (memcmp(identity, &review->identity, sizeof(*identity))) review->supplied_reference[0] = '\0';
     discard_document(review); review->identity = *identity; review->active = true; review->stale = false;
     if (command) {

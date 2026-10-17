@@ -457,6 +457,25 @@ static void accept_attention(struct app *app, FILE *input)
 }
 static void capture_failure(struct app *app)
 { attention_error(app, app->attention && app->attention->have_good ? "Attention unavailable; showing last good snapshot" : "Attention unavailable; no valid snapshot yet"); }
+/* Headless fixtures: one attention stream read from a file, with no refresh
+ * and no seen store; a second unreadable file leaves the first as the stale
+ * last good snapshot, as a failed refresh does. */
+bool native_attention_load(struct app *app, const char *path)
+{
+    FILE *input = fopen(path, "r");
+    if (!app->attention) app->attention = calloc(1U, sizeof(*app->attention));
+    if (!app->attention) { if (input) fclose(input); return false; }
+    accept_attention(app, input);
+    return app->attention->have_good;
+}
+/* The exact review of the selected item, read from a framed document file. */
+bool native_attention_review_load(struct app *app, const char *path)
+{
+    struct native_review_identity id;
+    if (!item_selected(app->attention)) return false;
+    review_identity(&app->attention->items[app->attention->selected], &id);
+    return native_review_load(app, &id, path);
+}
 void native_attention_tick(struct app *app, bool request)
 {
     struct native_capture *job; char *argv[4];

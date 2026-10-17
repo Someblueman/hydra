@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / OVERVIEW                                                              
+ Work Details [Overview] Attention Recovery Flows Stats Workspace Hosts        
+╭─ Overview ──────────────────────────────────────────────────────────────────╮
+│  1 running / 1 need attention / 0 active runs / 1 to repair / 0 remote      │
+│                                                                             │
+│ ╭─ WORK / what you started, local and remote ─────────────────────────────╮ │
+│ │                                                                         │ │
+│ │ > add-kill                                             running          │ │
+│ │   kill-dry-run-worker                                  headless         │ │
+│ │   notes-cleanup                                        terminal gone    │ │
+│ │ 3 heads you started / Enter opens or expands                            │ │
+│ ╰─────────────────────────────────────────────────────────────────────────╯ │
+│ ╭─ RUN / no run yet ──────────────────────────────────────────────────────╮ │
+│ │                                                                         │ │
+│ │ No workflow run yet.                                                    │ │
+│ │ A run appears here when you execute an approved plan (E in the plan     │ │
+│ │ review) or start one with hydra workflow run. It shows each step, the   │ │
+│ │ head it ran on, and what needs you next.                                │ │
+│ │                                                                         │ │
+│ │                                                                         │ │
+│ ╰─────────────────────────────────────────────────────────────────────────╯ │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit  

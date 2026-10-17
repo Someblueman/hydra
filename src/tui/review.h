@@ -15,6 +15,7 @@ struct native_review_identity {
 void native_review_destroy(struct app *app);
 void native_review_sync(struct app *app, const struct native_review_identity *identity, bool current);
 void native_review_open(struct app *app, const struct native_review_identity *identity);
+bool native_review_load(struct app *app, const struct native_review_identity *identity, const char *path);
 void native_review_tick(struct app *app);
 bool native_review_key(struct app *app, char key);
 bool native_review_render(struct app *app);

@@ -22,7 +22,8 @@ static void usage(FILE *out) {
           "  [--location all|local|remote|HOST]\n"
           "  [--version|--protocol-version|--diagnostics|--hydra PATH|--task BRANCH]\n"
           "  [--headless-fixture FILE [--remote-fixture FILE] [--workflow-fixture FILE]\n"
-          "   [--statistics-fixture FILE] --size COLSxROWS --frames N]\n", out);
+          "   [--statistics-fixture FILE] [--attention-fixture FILE]... [--review-fixture FILE]\n"
+          "   [--keys KEYS]... --size COLSxROWS --frames N]\n", out);
 }
 
 static int parse_view(const char *name) {
@@ -45,8 +46,33 @@ static int accept_fixture(struct app *app, const char *fixture) {
     return 0;
 }
 
+/* Headless attention, review and key fixtures: attention streams load in
+ * order (an unreadable later one is a failed refresh), the review document
+ * binds to the selected attention item, and keys replay before the first
+ * frame so a fixture screen is the one those keys reach interactively. */
+struct screen_fixtures {
+    const char *attention[2], *review, *keys[2];
+    size_t attention_count, key_count;
+};
+
+static bool prepare_screen(struct app *app, const struct screen_fixtures *f) {
+    size_t i;
+    for (i = 0; i < f->attention_count; i++) {
+        bool loaded = native_attention_load(app, f->attention[i]);
+        if (!loaded && !i) { fprintf(stderr, "attention fixture rejected: %s\n", f->attention[i]); return false; }
+    }
+    /* The first key string selects the item the review binds to; the second
+     * navigates inside the review. */
+    for (i = 0; f->key_count && f->keys[0][i]; i++) headless_key(app, f->keys[0][i]);
+    if (f->review && !native_attention_review_load(app, f->review) && !app->review) {
+        fprintf(stderr, "review fixture needs a selected attention item: %s\n", f->review); return false;
+    }
+    for (i = 0; f->key_count > 1U && f->keys[1][i]; i++) headless_key(app, f->keys[1][i]);
+    return true;
+}
+
 static int render_fixture(struct app *app, const char *fixture, const char *remote_fixture, const char *workflow_fixture,
-                      const char *statistics_fixture, unsigned frames) {
+                      const char *statistics_fixture, const struct screen_fixtures *screen, unsigned frames) {
     unsigned frame;
     int status = accept_fixture(app, fixture);
     if (!status && remote_fixture) status = accept_fixture(app, remote_fixture);
@@ -57,8 +83,10 @@ static int render_fixture(struct app *app, const char *fixture, const char *remo
     if (app->pending_task[0] && head_for_branch(app, app->pending_task))
         app->selected = (size_t)(head_for_branch(app, app->pending_task) - app->model.heads);
     if (statistics_fixture && refresh_statistics(app, statistics_fixture)) return 2;
+    if (!prepare_screen(app, screen)) return 2;
     for (frame = 1U; frame <= frames && !terminal_stopped(); frame++) render(app, frame, true);
     free(app->workflows);
+    native_review_destroy(app);
     native_attention_destroy(app);
     native_workspace_destroy(app);
     statistics_destroy(app);
@@ -111,6 +139,7 @@ int main(int argc, char **argv) {
     const char *fixture = NULL, *remote_fixture = NULL;
     const char *workflow_fixture = NULL;
     const char *statistics_fixture = NULL;
+    struct screen_fixtures screen = {{NULL, NULL}, NULL, {NULL, NULL}, 0, 0};
     unsigned frames = 1U;
     int index;
     bool explicit_view = false;
@@ -133,6 +162,15 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[index], "--remote-fixture") == 0 && index + 1 < argc) remote_fixture = argv[++index];
         else if (strcmp(argv[index], "--workflow-fixture") == 0 && index + 1 < argc) workflow_fixture = argv[++index];
         else if (strcmp(argv[index], "--statistics-fixture") == 0 && index + 1 < argc) statistics_fixture = argv[++index];
+        else if (strcmp(argv[index], "--attention-fixture") == 0 && index + 1 < argc) {
+            if (screen.attention_count == 2U) { usage(stderr); return 2; }
+            screen.attention[screen.attention_count++] = argv[++index];
+        }
+        else if (strcmp(argv[index], "--review-fixture") == 0 && index + 1 < argc) screen.review = argv[++index];
+        else if (strcmp(argv[index], "--keys") == 0 && index + 1 < argc) {
+            if (screen.key_count == 2U) { usage(stderr); return 2; }
+            screen.keys[screen.key_count++] = argv[++index];
+        }
         else if (strcmp(argv[index], "--size") == 0 && index + 1 < argc) {
             if (parse_size(argv[++index], &app.cols, &app.rows) != 0) { usage(stderr); return 2; }
         } else if (strcmp(argv[index], "--frames") == 0 && index + 1 < argc) {
@@ -151,9 +189,9 @@ int main(int argc, char **argv) {
     }
     if (!theme_option(&app, theme)) return 2;
     if (fixture != NULL) {
-        return render_fixture(&app, fixture, remote_fixture, workflow_fixture, statistics_fixture, frames);
+        return render_fixture(&app, fixture, remote_fixture, workflow_fixture, statistics_fixture, &screen, frames);
     }
-    if (remote_fixture || workflow_fixture || statistics_fixture) { usage(stderr); return 2; }
+    if (remote_fixture || workflow_fixture || statistics_fixture || screen.attention_count || screen.review || screen.key_count) { usage(stderr); return 2; }
     if (!explicit_view && !app.diagnostics) app.view = 7;
     index = interactive_main(&app);
     free(app.workflows);

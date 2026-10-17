@@ -348,6 +348,10 @@ void native_attention_destroy(struct app *app);
 void native_attention_tick(struct app *app, bool request);
 bool native_attention_key(struct app *app, char key);
 void render_attention(struct app *app);
+bool native_attention_load(struct app *app, const char *path);
+bool native_attention_review_load(struct app *app, const char *path);
+/* Headless fixtures replay keys through the interactive dispatcher. */
+void headless_key(struct app *app, char key);
 void native_links_accept(struct app *app, FILE *input);
 void native_controls_tick(struct app *app);
 bool native_control_submit(struct app *app, const char *run, const char *action, const char *request);

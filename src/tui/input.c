@@ -476,6 +476,15 @@ static void handle_key(struct app *app, char key) {
     head_key(app, key);
 }
 
+/* Fixture rendering replays keys without a terminal: Esc steps back directly
+ * (no escape sequence can follow it) and everything else takes the
+ * interactive path, so a fixture screen is the screen those keys reach. */
+void headless_key(struct app *app, char key) {
+    if (key != 27) { handle_key(app, key); return; }
+    if (app->view == 9) (void)native_attention_key(app, 27);
+    else go_back(app);
+}
+
 static void handle_input(struct app *app, char key) {
     if (app->input_mode == INPUT_KEYS) handle_key(app, key);
     else discard_input(app, key);

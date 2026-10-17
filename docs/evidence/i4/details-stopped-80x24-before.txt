@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / DETAILS                                                               
+ Work [Details] Overview Attention Recovery Flows Stats Workspace Hosts        
+╭─ Details: notes-cleanup ────────────────────────────────────────────────────╮
+│ notes-cleanup                                                               │
+│ Agent       claude                                                          │
+│ Session     terminal gone                                                   │
+│ Reported    nothing yet; declared when done: done or blocked                │
+│ The terminal is gone but the last observation said the agent was still      │
+│ working. Files in the worktree are kept; a restarts the terminal in the     │
+│ same worktree. Check the files before removing the head.                    │
+│                                                                             │
+│ CHANGES                                                                     │
+│ Changed     2 files in the worktree, not yet committed                      │
+│ Full diff   everything since the branch base: press : and choose diff       │
+│                                                                             │
+│ CHECKS                                                                      │
+│ Approval requests  none                                                     │
+│ Messages           0 exchanged with other heads                             │
+│                                                                             │
+│ NEXT                                                                        │
+│ a  restart its terminal (files are kept)   p  show recent terminal output   │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ a agent  p output  c coordination  x remove  d technical  Esc back  ? help  q 
