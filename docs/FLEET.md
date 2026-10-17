@@ -754,6 +754,14 @@ already recorded this task ID (`previous_generation`), or holds a task named by
 `--separate-from` (`validator_separation`). An idle host that fails any filter is
 not eligible.
 
+The project filter compares the spec's `project` with the receiver's registered
+project paths as text. Receivers register the resolved path (symbolic links
+followed), so a spec that names the project through a link, such as `/tmp/...`
+or `/var/...` on macOS where those are links to `/private/...`, is
+`project_unmapped` for automatic placement. An explicit `task submit HOST`
+resolves the path on the receiver and accepts it. Write the resolved path in
+specs meant for automatic placement.
+
 **Ranking.** Eligible hosts are ordered by capacity-normalized load
 `(reserved + queued) * 1000 / capacity` where `capacity` is the host's
 `host_limit`, or 1 when the host advertises no limit (an unbounded host looks
