@@ -50,13 +50,15 @@ class FixtureRun:
     """Provision once per (heads, mode); every client group and case reuses it."""
 
     def __init__(self, source: Path, build: Path, observer: Path, output: Path,
-                 heads: int, mode: str, durations: Durations, label: str) -> None:
+                 heads: int, mode: str, durations: Durations, label: str,
+                 extra_env: dict[str, str] | None = None) -> None:
         self.source, self.build, self.observer = source, build, observer
         self.output, self.heads, self.mode, self.durations = output, heads, mode, durations
         self.output.mkdir(parents=True)
         self.shim = Shim(output / "shim", build, source / "bin/hydra")
         self.fixture = Fixture(source, build, output, heads, mode)
         self.fixture.env = self.shim.environment(self.fixture.env)
+        self.fixture.env.update(extra_env or {})
         self.roots: dict[int, str] = {os.getpid(): "controller"}
         self.worktrees: dict[str, str] = {}
         self.sessions: dict[str, str] = {}
@@ -266,12 +268,19 @@ class FixtureRun:
             for index in changing:
                 self.fixture.command(["git", "-C", self.fixture.workers[index]["worktree"], "checkout", "--", "."])
             cell["seed_restored_after_cell"] = sorted(self.fixture.workers[index]["branch"] for index in changing)
-        restore_work_view(clients[0], states[0])
-        if meta.get("preview") == "open" and not states[0].attached:
-            _attach(clients[0], self.fixture, 1)
-            states[0].attached = True
-        (cell_dir / "cell.json").write_text(json.dumps(cell, indent=1) + "\n")
-        self.record["cells"].append(cell)
+        try:
+            # Untimed restore; at scale the Work view repaint can outlast the stimulus deadline.
+            restore_work_view(clients[0], states[0], timeout=8 + 0.5 * self.heads)
+            if meta.get("preview") == "open" and not states[0].attached:
+                _attach(clients[0], self.fixture, 1)
+                states[0].attached = True
+        except (OSError, RuntimeError, TimeoutError) as error:
+            # The cell's measurements are complete; keep them and fail the fixture after.
+            cell["restore_error"] = repr(error)
+            raise
+        finally:
+            (cell_dir / "cell.json").write_text(json.dumps(cell, indent=1) + "\n")
+            self.record["cells"].append(cell)
         return cell
 
     def _locality(self, launches: dict[str, Any], changing: set[int]) -> dict[str, Any]:

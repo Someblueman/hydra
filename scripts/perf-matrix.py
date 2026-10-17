@@ -91,7 +91,7 @@ def run_variant(args: argparse.Namespace, variant: dict[str, Any], trial: int,
         label = f"{variant['name']}-t{trial}-h{heads}-{mode}"
         print(f"fixture {label}: provisioning {heads} {mode} heads", flush=True)
         run = FixtureRun(variant["source"], variant["build"], args.observer, args.output / label,
-                         heads, mode, durations, label)
+                         heads, mode, durations, label, extra_env=args.fixture_env)
         run.record.update(variant=variant["name"], trial=trial, load_before=os.getloadavg())
         try:
             run.provision()
@@ -144,7 +144,13 @@ def main() -> int:
     parser.add_argument("--evidence-dir", type=Path, help="publish summary.md, bundle.json and bounded raw samples here")
     parser.add_argument("--raw-budget-bytes", type=int, default=1_500_000)
     parser.add_argument("--load-note", default="shared 4-core container; peers may run concurrently")
+    parser.add_argument("--fixture-env", action="append", default=[], metavar="KEY=VALUE",
+                        help="extra environment for the fixture's public hydra commands, owners and workers "
+                             "(a non-default configuration under test; recorded as declared.fixture_env)")
     args = parser.parse_args()
+    if any("=" not in entry or entry.startswith("=") for entry in args.fixture_env):
+        parser.error("--fixture-env expects KEY=VALUE")
+    args.fixture_env = dict(entry.split("=", 1) for entry in args.fixture_env)
     args.source, args.build, args.output = args.source.resolve(), args.build.resolve(), args.output.resolve()
     args.observer = (args.observer or args.build / "test-tui-pty").resolve()
     if bool(args.candidate_source) != bool(args.candidate_build):
@@ -171,7 +177,8 @@ def main() -> int:
                       "identities": identities(v["source"], v["build"], args.observer, None)} for v in variants],
         "declared": {**declared_policy(args.source),
                      "interactive_output_interval_ns": args.output_interval_ns or 31_250_000,
-                     "headless_output_interval_ns": args.headless_output_interval_ns},
+                     "headless_output_interval_ns": args.headless_output_interval_ns,
+                     "fixture_env": args.fixture_env},
         "durations": {"settle_s": args.settle, "idle_s": args.idle, "stimulus_gap_s": args.gap,
                       "interaction_s": durations.interaction_ns / 1e9, "poll_ms": args.poll_ms,
                       "sample_interval_ms": 500, "stimulus_deadline_ms": 4000},

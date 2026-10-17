@@ -62,13 +62,20 @@ make perf-attention PERF_ATTENTION_ARGS="--out /tmp/hydra-attention"
 make test-perf-matrix
 ```
 
+`scripts/perf_matrix_merge.py --run LABEL=DIR ... --output DIR --evidence-dir DIR`
+joins several runner invocations into one validated bundle and summary, with the
+proposed budgets recomputed over every measured cell; fixture ids carry the run
+label and each run's command, load and producer interval are kept.
+
 `python3 scripts/perf-matrix.py --help` lists every option. `--settle`, `--idle`
 and `--gap` set the window lengths (idle plus the four-stimulus interaction window
 must fit the worker's 30 s phase bound); `--trials` repeats cells and, with
 `--candidate-source`/`--candidate-build`, alternates baseline and candidate
 fixtures per trial; `--output-interval-ns` changes the declared 31.25 ms producer
-line interval (128-byte lines). `--attention REPORT` embeds a `perf-attention`
-report; `--evidence-dir` publishes `summary.md`, a compact `bundle.json` and
+line interval (128-byte lines); `--fixture-env KEY=VALUE` runs the fixture's public
+commands, owners and workers under a non-default configuration (recorded as
+`declared.fixture_env`; say why in `--load-note`). `--attention REPORT` embeds a
+`perf-attention` report; `--evidence-dir` publishes `summary.md`, a compact `bundle.json` and
 gzipped raw samples bounded by `--raw-budget-bytes`.
 
 What each cell measures:
@@ -143,10 +150,11 @@ runtime file hashes remain in the run directory, replaced by digests and counts)
 This harness is a bounded measurement tool, not completion of roadmap item 10.
 The earlier Mac 1/10/50 quiescent observations and selected single-worker output
 observations remain historical, source-specific evidence. The Linux container
-baseline under `docs/evidence/performance/` covers the local matrix with
-deterministic stand-ins on a shared 4-core host; remote headless, macOS,
-disconnect/reconnect under pressure and authenticated-agent qualification remain
-outstanding.
+baseline under `docs/evidence/performance/2026-10-17-linux-x86_64/` covers the
+local matrix with deterministic stand-ins on a shared 4-core host (its `README.md`
+lists the cells, the observed load and the provisional budgets); remote headless,
+macOS, disconnect/reconnect under pressure and authenticated-agent qualification
+remain outstanding.
 
 Helper accounting is exact only for shimmed helpers and reaped children;
 latency tails need more samples than a single run provides; the proposed

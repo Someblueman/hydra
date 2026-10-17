@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from perf_matrix_actions import ClientState, _step
+from perf_matrix_merge import merge
 from perf_matrix_report import validate_bundle
 from perf_matrix_sampling import distribution, summarize_window
 from perf_matrix_shim import parse_records, summarize_launches
@@ -98,7 +99,7 @@ def _window() -> dict:
             "families": {}, "launches": {"per_minute": 20.0}}
 
 
-def schema_checks() -> None:
+def _bundle() -> dict:
     cell = {"status": "measured", "phase": "p1", "windows": {name: _window() for name in ("settle", "idle", "interaction")},
             "actions": [{"id": f"p1-{k}", "kind": k, "status": "observed", "input_to_observed_ns": 1000}
                         for k in ("navigation", "search", "resize", "cancel")],
@@ -109,6 +110,11 @@ def schema_checks() -> None:
     bundle.update(schema="hydra-perf-matrix/1", generated_utc="now", variants=[], planned_cells=[],
                   unsupported_cells=[{"status": "unmeasured", "reason": "stated"}],
                   fixtures=[{"id": "f", "cleanup_ok": True, "shim_overhead": {}, "provisioning": {}, "errors": [], "cells": [cell]}])
+    return bundle
+
+
+def schema_checks() -> None:
+    bundle = _bundle()
     assert validate_bundle(bundle) == [], validate_bundle(bundle)
     broken = copy.deepcopy(bundle)
     broken["fixtures"][0]["cells"][0]["windows"]["idle"]["processes"]["roles"]["agent"]["wakeups_unknown_processes"] = 0
@@ -122,6 +128,32 @@ def schema_checks() -> None:
     assert any("status ok" in p for p in problems) and any("update latency" in p for p in problems)
 
 
+def merge_checks() -> None:
+    runs = []
+    for label, interval in (("main", 125), ("retry", 1000)):
+        bundle = _bundle()
+        bundle.update(command=["perf-matrix.py", label], duration_seconds=10.0, load_at_end=[1, 1, 1],
+                      declared={"headless_output_interval_ns": interval}, durations={"idle_s": 8},
+                      variants=[{"name": "baseline", "identities_unchanged": label == "main"}],
+                      planned_cells=[{"heads": 1, "case": "quiescent"}])
+        bundle["platform"] = {"load_note": f"{label} load", "load_at_start": [2, 2, 2]}
+        bundle["fixtures"][0]["cells"][0].update(heads=1, mode="headless", clients=1, preview="closed",
+                                                 case="quiescent", trial=0)
+        for fixture in bundle["fixtures"]:
+            fixture["id"] = f"{label}--{fixture['id']}"
+            for cell in fixture["cells"]:
+                cell["fixture"] = fixture["id"]
+        runs.append((label, bundle))
+    merged = merge(runs)
+    assert validate_bundle(merged) == [], validate_bundle(merged)
+    assert [f["id"] for f in merged["fixtures"]] == ["main--f", "retry--f"]
+    assert len(merged["planned_cells"]) == 2 and len(merged["unsupported_cells"]) == 1
+    assert merged["command"] == [["perf-matrix.py", "main"], ["perf-matrix.py", "retry"]]
+    assert merged["duration_seconds"] == 20.0 and merged["variants"][0]["identities_unchanged"] is False
+    assert merged["declared"]["per_run"]["retry"]["headless_output_interval_ns"] == 1000
+    assert "main load" in merged["platform"]["load_note"] and "retry load" in merged["platform"]["load_note"]
+
+
 def main() -> None:
     output = Path(sys.argv[2])
     output.mkdir(parents=True, exist_ok=True)
@@ -130,8 +162,9 @@ def main() -> None:
     window_checks()
     stimulus_checks()
     schema_checks()
-    (output / "units.json").write_text(json.dumps({"passed": ["shim", "tails", "window", "stimuli", "schema"]}) + "\n")
-    print("PASS perf matrix units: shim attribution, guarded tails, window summary, stimulus plan, schema")
+    merge_checks()
+    (output / "units.json").write_text(json.dumps({"passed": ["shim", "tails", "window", "stimuli", "schema", "merge"]}) + "\n")
+    print("PASS perf matrix units: shim attribution, guarded tails, window summary, stimulus plan, schema, merge")
 
 
 if __name__ == "__main__":

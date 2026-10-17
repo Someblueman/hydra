@@ -312,9 +312,13 @@ def compact_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
                 cell["update_latency"].pop("frames", None)
             for proof in cell.get("workload_proof", []):
                 proof["file_hashes"] = len(proof.get("file_hashes", {}))
+                for event in proof.values():
+                    if isinstance(event, dict):
+                        event.pop("cwd", None)  # the head id names the worktree
     if compact.get("attention"):
         compact["attention"].pop("calls", None)
-    compact["compaction"] = "per-process rows, polled frames, screens after misses, runtime file hashes and attention call logs stay in the run directory"
+    compact["compaction"] = ("per-process rows, polled frames, screens after misses, runtime file hashes, attention call "
+                             "logs and worktree paths inside workload proofs stay in the run directory")
     return compact
 
 
@@ -337,5 +341,6 @@ def publish(bundle: dict[str, Any], output: Path, evidence: Path, raw_budget: in
             else:
                 index.append({"cell": _label(cell), "file": None, "omitted": "raw budget exhausted; retained in the run directory"})
     bundle["raw_samples_published"] = {"budget_bytes": raw_budget, "used_bytes": used, "files": index}
-    (evidence / "bundle.json").write_text(json.dumps(compact_bundle(bundle), indent=1) + "\n")
+    # Minified: the published copy is for tools and diffs; the run directory keeps the indented one.
+    (evidence / "bundle.json").write_text(json.dumps(compact_bundle(bundle), separators=(",", ":")) + "\n")
     (output / "bundle.json").write_text(json.dumps(bundle, indent=1) + "\n")
