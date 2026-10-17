@@ -498,10 +498,46 @@ this first and offers each check log as a local `REF log`. Plan checks of a run
 that is not terminal are `pending`; a step without deliverables reports
 `inventory_state` and `readiness` `not_applicable`.
 
-`workflow statistics-data` is `HYDRA_STATISTICS<TAB>4`. Schema 4 adds
+`workflow statistics-data` is `HYDRA_STATISTICS<TAB>5`. Schema 4 added
 `U<TAB>run<TAB>step<TAB>profile<TAB>executable-version<TAB>model<TAB>effort<TAB>tokens-in<TAB>tokens-cached<TAB>tokens-out<TAB>cost-microusd`
 after a run's `S` rows, one per listed step with an exec receipt; `-` is unknown,
-never zero. Readers accept schemas 2 to 4. CPU and memory are not collected.
+never zero. Schema 5 (3.0.0) adds
+`T<TAB>run<TAB>step<TAB>host<TAB>transport<TAB>placement<TAB>generation<TAB>state<TAB>wall-seconds<TAB>cpu-microseconds<TAB>peak-rss-bytes<TAB>transport-calls<TAB>transport-bytes<TAB>reason`,
+one per listed step whose latest attempt was dispatched as a remote task, read
+only from the records the fleet protocol wrote (`tasks.json` destination,
+`attempt-N/remote/receipt.json` and `observation.json`, the receipt runtime's
+[telemetry block 1](FLEET.md#task-telemetry), `transport-metrics.json`, and
+`$HYDRA_HOME/fleet/placements/TASK_ID/placement.json`): `host` is the alias or
+`local`, `transport` is `ssh` or `local`, `placement` is `auto` only when a
+digest-valid placement record says so and otherwise `pinned` (a workflow binding
+pins its destination), `generation` is the receipt's `assignment_generation`, else
+the placement record's generation, else `-`, `state` is the receiver's runtime
+state, CPU is user plus system time, transport bytes are request plus response
+bytes of a complete transport record, and `reason` is `no_telemetry_block`,
+`receipt_unverified`, the owner's `field=reason` list for fields it could not
+measure, or `-`. A step with a remote exec receipt collected in `result.json`
+also gets a `U` row when it has no local one. Readers accept schemas 2 to 5.
+
+`workflow statistics-json` and `statistics-compare` export schema 1 for a schema
+2 feed, 2 for schemas 3 and 4, and 3 for schema 5. Schema 3 is additive: `filter`
+gains `location` (`""`, `local`, `remote` or a host alias; a run is remote when any
+recorded step ran as a remote task), `remote` keeps its scalar keys and fills
+`transfer_bytes`, `cpu_seconds` and `memory_bytes` only when every remote step in
+scope reported them (`state` `unavailable`, `unknown`, `partial` or `known`), and
+two sections are added. `cohorts` groups the scope's steps by `location`, `host`,
+`placement`, `generation` and `provider` (`truncated` when more than 32 cohorts
+exist); each cohort carries runs, steps, succeeded and failed counts, a duration
+measurement, `remote_steps`, `telemetry_steps`, five telemetry measurements
+(`wall_seconds`, `cpu_microseconds`, `peak_rss_bytes` as a maximum,
+`transport_calls`, `transport_bytes`), four usage measurements, `unmeasured_steps`
+and the first recorded `unmeasured_reason`. `telemetry` names the contract
+(`fleet task telemetry 1`, `measured_by` `task_owner`, `scope`
+`execution_phase`), counts local, remote and telemetry-carrying steps, repeats the
+five measurements for the whole scope and lists what is not measured and why.
+Every measurement is `{state, eligible, known, sum|max}` and carries a number only
+when every eligible step reported it; a partly reported measurement is `null`
+with `state` `partial`, never a sum that silently omits steps. Older readers skip
+the new sections.
 
 ## Process, install, and platform contracts
 

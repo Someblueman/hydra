@@ -694,6 +694,66 @@ boundary. Heterogeneous-host trials comparing explicit and balanced placement
 (queue wait, time to verified result, throughput, transfer bytes, starvation)
 need real hosts and have not been run; no performance improvement is claimed.
 
+## Task telemetry
+
+Since 3.0 the task owner records what it measured about the execution phase in
+the task's `state.json` as an optional, additive `telemetry` object (telemetry
+block 1). The block travels with the receipt: `task status`, `task observation`
+and the coordinator's `attempt-N/remote/observation.json` carry it under
+`runtime.telemetry`, and the sealed `result.json` keeps it under
+`receipt.runtime.telemetry`. Receivers without it, and tasks that never started,
+carry no block; a reader never treats its absence as zero.
+
+```json
+"telemetry": {
+  "schema_version": 1,
+  "measured_by": "task_owner",
+  "scope": "execution_phase",
+  "clock": "monotonic",
+  "cpu_source": "getrusage_children",
+  "rss_source": "getrusage_children_maxrss",
+  "invocations": 1,
+  "wall_seconds": 12,
+  "cpu_user_microseconds": 300000,
+  "cpu_system_microseconds": 50000,
+  "unmeasured": {"peak_rss_bytes": "rss_not_distinguishable"}
+}
+```
+
+The provenance fields say who measured and how: the owner process measures the
+`hydra workflow run` or `hydra exec` child and every descendant it waited for,
+from the moment it launches that child until it reaps it, with `CLOCK_MONOTONIC`
+for `wall_seconds` and the difference of `getrusage(RUSAGE_CHILDREN)` for the CPU
+times. Preparation (bundle clone, checkout, head spawn), result sealing and
+transport are outside the scope. `peak_rss_bytes` is present only when the
+execution child raised the owner's children maximum RSS above what earlier
+children (git, the head spawn) had reached; otherwise its peak is known to be no
+larger than theirs but not itself, and the field is listed under `unmeasured` as
+`rss_not_distinguishable`. The other recorded reasons are
+`execution_not_started` (the deadline passed before launch), `child_not_reaped`
+(the child could not be collected after a cancellation; its CPU is unknown),
+`owner_measurement_unavailable` (the owner's clock or rusage call failed),
+`prior_invocation_unmeasured` and `overflow`. A resumed task adds a new
+invocation's wall and CPU to the recorded totals and keeps the larger RSS;
+`invocations` counts the owner runs that contributed. Provider tokens, model and
+cost are not part of this block: they come from the exec receipt (`agent.json`)
+the result collects as evidence, and only when the provider reported them.
+Transport bytes and calls come from the coordinator's `transport-metrics.json`,
+which records no time.
+
+No daemon or poller is involved: the measurement is taken once, by the process
+that already waits for the child, and written with the state it already writes.
+`hydra workflow statistics-data` (schema 5), `statistics-json` (export schema 3)
+and the native Statistics view read these records per workflow step through the
+read-only `workflow-task remote-tsv` helper and group remote steps into cohorts
+by host, placement mode, assignment generation and provider; see
+[Contracts](CONTRACTS.md#tui-protocols-and-parity) for the rows and
+[workflows](workflows.md#reviewing-a-finished-plan) for the screen. Everything
+the receipt does not carry stays unknown with its reason. The block is qualified
+here with local receivers behind the local transport and a controlled SSH
+loopback; measurements from real remote hosts are operator observations and no
+provider or performance claim is made from them.
+
 ## Remote work in the control centre
 
 ```sh

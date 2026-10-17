@@ -285,7 +285,22 @@ Technical identity and retained-contract checks follow the result.
 item to a collapsed Seen group and out of the count, and lasts until the item
 changes. An approval that is marked seen stays listed until someone decides.
 The Statistics view (`D`) shows the same token counts per step and run, with
-totals for the selected range; CPU and memory are not measured.
+totals for the selected range. Since 3.0 it also reads the remote evidence of
+steps that ran as fleet tasks: `C` opens the remote cohorts page, which groups the
+scope's steps by location (local or remote), receiving host, placement mode
+(`auto` from a placement record, otherwise `pinned`), assignment generation and
+agent provider, and shows per cohort the runs, steps, outcomes, wall time, CPU,
+peak RSS and transport bytes that the task receipts and transport records carry
+([telemetry block 1](FLEET.md#task-telemetry)). `L` cycles the location filter
+(all, local, remote, then each recorded host) on every statistics page, the same
+location notion the workspace uses; `0` clears it with the other filters. A
+measurement the protocol did not supply is shown as `unknown`, a partly reported
+one as `value (n/N)`, and each cohort names how many steps are unmeasured and the
+recorded reason (`no task receipt` for local steps, `no telemetry block` for
+receivers that do not record it, `receipt unverified`, or the owner's own reason
+such as `peak_rss_bytes=rss_not_distinguishable`). Nothing unmeasured is ever
+shown as zero, and transport time is not recorded at all. `hydra workflow
+statistics-json` exports the same cohorts and telemetry (export schema 3).
 
 ### Inspecting, evaluating and deciding between compiled plans
 
