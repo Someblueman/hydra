@@ -14,7 +14,7 @@ FRAME 1 80x24
 │ ╭─ RUN / plan run kill-dry-run · running · 2 heads · from add-kill ───────╮ │
 │ │ STEP            STATE         TIME          HEAD                        │ │
 │ │ spawn-worker    succeeded     5s            kill-dry-run-worker         │ │
-│ │ implement       running       511h09m       kill-dry-run-worker         │ │
+│ │ implement       running       511h28m       kill-dry-run-worker         │ │
 │ │ spawn-check     ready         -             kill-dry-run-check (pendin… │ │
 │ │ verify          queued        -             kill-dry-run-check (pendin… │ │
 │ │ Next  Running step implement on kill-dry-run-worker (codex); p on that  │ │

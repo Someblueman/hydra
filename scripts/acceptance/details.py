@@ -88,7 +88,8 @@ def details_recovery(j: Case) -> None:
     j.record("U7.c", "Recovery lists the finding in plain language without its raw kind",
              bool(rows) and not any(RAW_KINDS.search(r) for r in rows), detail="; ".join(rows)[:160])
     j.keys(b"d")
-    detail = j.see("The terminal session for gone is no longer running")
+    # The list explains the selected finding too; wait for the detail itself.
+    detail = j.see_all("RECOVERY FINDING", "The terminal session for gone is no longer running")
     lines = body(detail)
     heading = next((i for i, l in enumerate(lines) if l in ("DIAGNOSTICS", "Check: hydra doctor") or l.startswith("Check:")), len(lines))
     account = " ".join(lines[:heading])

@@ -14,8 +14,8 @@ FRAME 1 80x24
 ││ and files are kept; nothing was removed from the repository. Open it from ││
 ││ Work (a) to restart its terminal and agent in the same worktree, or       ││
 ││ remove the head once its work is finished.                                ││
-││ Check: hydra doctor                                                       ││
 │╰───────────────────────────────────────────────────────────────────────────╯│
+│                                                                             │
 │                                                                             │
 │                                                                             │
 │                                                                             │

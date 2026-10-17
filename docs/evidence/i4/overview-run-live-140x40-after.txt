@@ -22,7 +22,7 @@ FRAME 1 140x40
 │ ╭─ RUN / plan run kill-dry-run · running · 2 heads · from add-kill ───────────────────────────────────────────────────────────────────╮ │
 │ │ STEP             KIND/ROLE      STATE             TRIES TIME          HEAD                                                          │ │
 │ │ spawn-worker     spawn/work     succeeded         1     5s            kill-dry-run-worker                                           │ │
-│ │ implement        exec/compose   running           1     511h09m       kill-dry-run-worker                                           │ │
+│ │ implement        exec/compose   running           1     511h28m       kill-dry-run-worker                                           │ │
 │ │   codex-cli 0.46.0 · gpt-6-sol (configured), effort xhigh (configured) · tokens in unknown, cached unknown, out unknown             │ │
 │ │ spawn-check      spawn/work     ready             0     -             kill-dry-run-check (pending)                                  │ │
 │ │ verify           exec/verify    queued            0     -             kill-dry-run-check (pending)                                  │ │

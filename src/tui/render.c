@@ -528,10 +528,10 @@ static void summary_panel_rows(struct app *app, const char *title, const char *f
     app->line = r.y + 1;
     app->content_x++; app->content_width -= 2;
     /* Prose stops above the panel's bottom edge, leaving the last row to second. */
-    app->limit = r.y + r.height - 2;
+    app->limit = r.y + r.height - (second ? 2 : 1);
     paragraph(app, first, TV_BASE);
     app->limit = r.y + r.height - 1;
-    if (app->line < app->limit) { style(app, TONE_MUTED); linef(app, "%s", second); style(app, TONE_BASE); }
+    if (second && app->line < app->limit) { style(app, TONE_MUTED); linef(app, "%s", second); style(app, TONE_BASE); }
     app->limit = limit;
     app->content_x--; app->content_width += 2;
     app->line = r.y + r.height;
@@ -683,12 +683,12 @@ static void render_recovery_row(struct app *app, size_t index) {
 /* The selected finding in plain language under the list, with its check. */
 static void render_recovery_summary(struct app *app) {
     const struct recovery *item = &app->model.recovery[app->recovery_selected];
-    char title[TEXT + 64], detail[1024], check[TEXT + 96];
+    char title[TEXT + 64], detail[1024];
     recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
-    snprintf(check, sizeof(check), "Check: %s", item->action);
-    /* Tall enough for the whole explanation where the screen has room. */
-    summary_panel_rows(app, title, detail, check,
-                       (int)wrapped_rows(detail, app->content_width > 2 ? (size_t)app->content_width - 2U : 1U) + 3);
+    /* The plain account only, tall enough for all of it where the screen
+     * has room; the check and its diagnostics are in the detail (d). */
+    summary_panel_rows(app, title, detail, NULL,
+                       (int)wrapped_rows(detail, app->content_width > 2 ? (size_t)app->content_width - 2U : 1U) + 2);
 }
 
 static void render_recovery(struct app *app) {

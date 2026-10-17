@@ -13,8 +13,8 @@ FRAME 1 140x40
 ││ The terminal session for feature-stale is no longer running. Its worktree and files are kept; nothing was removed from the            ││
 ││ repository. Open it from Work (a) to restart its terminal and agent in the same worktree, or remove the head once its work is         ││
 ││ finished.                                                                                                                             ││
-││ Check: hydra doctor                                                                                                                   ││
 │╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯│
+│                                                                                                                                         │
 │                                                                                                                                         │
 │                                                                                                                                         │
 │                                                                                                                                         │
