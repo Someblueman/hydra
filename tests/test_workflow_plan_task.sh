@@ -2,6 +2,13 @@
 # Real task executions with required intermediate and combined validation.
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
+# The repair fault removes write permission from a step directory (chmod 500),
+# which does not stop root: as root the injected refusal never happens, so
+# skip the fault and run the rest of the case instead of failing falsely.
+if [ "${HYDRA_TEST_PLAN_REPAIR_FAULT:-0}" = 1 ] && [ "$(id -u)" = 0 ]; then
+    printf 'SKIP plan repair fault injection: chmod 500 cannot refuse writes as root (uid 0); run as an unprivileged user to cover it. Running the case without the fault.\n'
+    HYDRA_TEST_PLAN_REPAIR_FAULT=0
+fi
 fixture="$(mktemp -d "${HYDRA_TEST_FIXTURE_ROOT:-${TMPDIR:-/tmp}}/hydra-task.XXXXXX")"
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"

@@ -1091,8 +1091,9 @@ whether or not it changed.
       and unknown cases, reporting false positives and missed signals separately.
       These measurements do not make an attention hint an accepted outcome.
       Delivered on Linux: one and three clients, local interactive and local
-      headless, unsupported cells recorded with reasons, and the thirteen-case
-      attention corpus (`make perf-attention`) with zero false positives and zero
+      headless, unsupported cells recorded with reasons, and the attention corpus
+      (`make perf-attention`; thirteen cases in the 2026-10-17 evidence, fourteen
+      since 3.0.0 adds unavailable run storage) with zero false positives and zero
       missed signals. Open: remote headless (needs a live verified fleet host),
       disconnect/reconnect under pressure, and per-client frame attribution.
 
