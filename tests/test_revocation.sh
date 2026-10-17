@@ -124,7 +124,9 @@ run_cases() {
     out="$("$hydra" fleet discover --source dns-sd --json 2>&1)" && status=0 || status=$?
     assert_failure "$status" "umask $1: dns-sd without a client fails"
     assert_equal source_unavailable "$(printf '%s' "$out" | json_field code)" "umask $1: missing client is typed"
-    case "$out" in *'"status":"unavailable"'*'"reason":"client_missing"'*) unavailable=yes ;; *) unavailable=no ;; esac
+    missing=client_missing
+    command -v dns-sd >/dev/null 2>&1 && missing=client_unsupported
+    case "$out" in *'"status":"unavailable"'*"\"reason\":\"$missing\""*) unavailable=yes ;; *) unavailable=no ;; esac
     assert_equal yes "$unavailable" "umask $1: dns-sd adapter reports unavailable"
     out="$("$hydra" fleet qualify --source "ssh-config:$fixture/ssh.conf" --json 2>&1)" && status=0 || status=$?
     assert_equal invalid_input "$(printf '%s' "$out" | json_field code)" "umask $1: qualify over a source needs --select"

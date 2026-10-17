@@ -171,11 +171,21 @@ static void client(const char *body) {
   nt_write(live_bin, text);
   assert(!chmod(live_bin, 0700));
 }
+/* Without avahi-browse the adapter names a present but unsupported dns-sd(1)
+ * client (macOS ships one) apart from no client at all. */
+static const char *missing_reason(void) {
+  char *argv[] = {"sh", "-c", "command -v dns-sd >/dev/null", NULL};
+  struct f_capture c = nt_run(argv);
+  int status = c.status;
+  f_capture_free(&c);
+  return status ? "client_missing" : "client_unsupported";
+}
 static void dnssd(void) {
   nt_path(live_bin, dc_root, "bin/avahi-browse");
+  const char *missing = missing_reason();
   json_object *v = DC("discover", false, "--source", "dns-sd"), *s = source0(v);
   assert(!strcmp(f_string(f_field(v, "error"), "code"), "source_unavailable"));
-  status_is(s, "unavailable", "client_missing");
+  status_is(s, "unavailable", missing);
   assert(!strncmp(f_string(s, "scope"), "network:local", 13) &&
          !json_object_array_length(dc_rows(v)));
   nt_equal(f_field(s, "cache"), "null");
@@ -226,7 +236,7 @@ static void dnssd(void) {
   json_object_put(v);
   client(NULL);
   v = DC("discover", false, "--source", "dns-sd:local");
-  status_is(source0(v), "unavailable", "client_missing");
+  status_is(source0(v), "unavailable", missing);
   nt_equal(f_field(f_field(source0(v), "cache"), "record_count"), "1");
   json_object_put(v);
   dc_error(DC("discover", false, "--source", "dns-sd:Bad Domain"),
