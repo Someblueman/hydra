@@ -154,6 +154,25 @@ class FixtureRun:
                 raise TimeoutError("worker did not stop generating within the recovery guard")
         return stops
 
+    def _await_drain(self, stops: list[dict[str, Any]], deadline_ns: int) -> dict[str, Any]:
+        """A slow sink may still hold producer backlog after the declared end; wait, bounded."""
+        waits, timed_out = [], 0
+        for worker, stop in zip(self.fixture.workers, stops):
+            started = time.monotonic_ns()
+            while True:
+                drains = [row for row in json_lines(Path(worker["receipt"]))
+                          if row["event"] == "output-drained" and row["monotonic_ns"] >= stop["monotonic_ns"] - 1]
+                if (not stop["generated_bytes"] or not stop["backlog_bytes"]
+                        or (drains and drains[-1]["total_written_bytes"] == stop["generated_bytes"])):
+                    break
+                if time.monotonic_ns() >= deadline_ns:
+                    timed_out += 1
+                    break
+                time.sleep(0.1)
+            waits.append(time.monotonic_ns() - started)
+        return {"controller_wait_ns": waits, "timed_out_workers": timed_out,
+                "scope": "time this controller waited after generation stopped until each producer reported its backlog drained"}
+
     def run_case(self, clients: list[Observer], states: list[ClientState], case: str,
                  meta: dict[str, Any], interval_ns: int | None) -> dict[str, Any]:
         d = self.durations
@@ -195,6 +214,7 @@ class FixtureRun:
         thread.join(timeout=d.interaction_ns / 1e9 + 10)
         end = start + duration
         stops = self._await_stop(phase, end + 15_000_000_000)
+        cell["drain"] = self._await_drain(stops, end + 120_000_000_000)
         usage_after = resource.getrusage(resource.RUSAGE_SELF)
         records = self.shim.records(mark)
         roles = {**role_map(settle + idle + interaction), **self.roots}
@@ -226,15 +246,21 @@ class FixtureRun:
             cell["unknowns"]["update_latency"] = "no repository changes in this case"
         cell["pressure"] = self._pressure(case, stops, end, idle, interaction, clients, window_marks,
                                           interval_ns or 31_250_000, duration)
-        cell["workload_proof"] = phase_proof(self.fixture, case, start, duration, phase=phase,
-                                             interval_ns=interval_ns if case == "sustained-output" else None,
-                                             changing=changing)
+        try:
+            cell["workload_proof"] = phase_proof(self.fixture, case, start, duration, phase=phase,
+                                                 interval_ns=interval_ns if case == "sustained-output" else None,
+                                                 changing=changing)
+            cell["status"] = "measured"
+        except RuntimeError as error:
+            # Keep the cell's evidence; a failed proof is reported, not hidden.
+            cell["workload_proof"] = []
+            cell["workload_proof_error"] = repr(error)
+            cell["status"] = "proof-failed"
         cell["phase_start_ns"], cell["phase_end_ns"] = start, end
         restore_work_view(clients[0], states[0])
         if meta.get("preview") == "open" and not states[0].attached:
             _attach(clients[0], self.fixture, 1)
             states[0].attached = True
-        cell["status"] = "measured"
         (cell_dir / "cell.json").write_text(json.dumps(cell, indent=1) + "\n")
         self.record["cells"].append(cell)
         return cell
