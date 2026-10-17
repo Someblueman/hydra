@@ -7,18 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- On macOS, which has no `setsid(1)`, a timed-out native helper
-  (`hydra snapshot --native` and its probes) could still leave a descendant
-  running when that descendant's parent had already exited: the helper shared
-  the CLI's process group, so only the process-table walk was left, and no
-  parent chain led to the orphan. The helper now gets its own session through
-  `setsid(1)`, else the `setsid` call through `perl` (shipped with macOS), else
-  `python3`, each replacing itself with the helper so its pid is unchanged; the
-  process-table walk remains the last resort. `make test-parity` also runs the
-  tree and orphan cases with those tools hidden from `PATH`.
-
 ## [3.0.0] - 2026-10-17
 
 Hydra 3.0.0 makes the control centre one workspace for local and remote work:
@@ -604,6 +592,15 @@ NAME` (or `hydra fleet bootstrap NAME` with a reviewed 3.0.0 package). See
 
 ### Fixed
 
+- On macOS, which has no `setsid(1)`, a timed-out native helper
+  (`hydra snapshot --native` and its probes) could still leave a descendant
+  running when that descendant's parent had already exited: the helper shared
+  the CLI's process group, so only the process-table walk was left, and no
+  parent chain led to the orphan. The helper now gets its own session through
+  `setsid(1)`, else the `setsid` call through `perl` (shipped with macOS), else
+  `python3`, each replacing itself with the helper so its pid is unchanged; the
+  process-table walk remains the last resort. `make test-parity` also runs the
+  tree and orphan cases with those tools hidden from `PATH`.
 - Hydra state stays private below a directory that carries a default POSIX
   ACL. There the kernel ignores the umask, so `umask 077` alone created
   `HYDRA_HOME`, `admission/`, `locks/` and `state/` group-writable, and
