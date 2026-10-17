@@ -56,6 +56,26 @@ attention_path_bounds() (
     [ "$(cat "$prefix")" = step_b ]
     printf '%s\n' 'workflow attention rejects truncated child paths without reading prefix evidence'
 )
+# A registered project that has never recorded a run lists nothing, exactly;
+# run storage that exists but is not a directory stays unavailable.
+attention_without_runs() (
+    fleet="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
+    state_root="$fixture/no-runs"
+    mkdir -p "$state_root/projects/project_b/heads"
+    output="$(HYDRA_STATE_V2_ROOT="$state_root" "$fleet" workflow-data attention project_b)"
+    printf '%s\n' "$output" | grep -q '"ok":true'
+    printf '%s\n' "$output" | grep -q '"items":\[\]'
+    printf '%s\n' "$output" | grep -q '"runs":0'
+    mkdir -p "$state_root/projects/project_b/workflows"
+    output="$(HYDRA_STATE_V2_ROOT="$state_root" "$fleet" workflow-data attention project_b)"
+    printf '%s\n' "$output" | grep -q '"items":\[\]'
+    printf 'not a directory\n' > "$state_root/projects/project_b/workflows/runs"
+    set +e
+    output="$(HYDRA_STATE_V2_ROOT="$state_root" "$fleet" workflow-data attention project_b 2>&1)"
+    set -e
+    printf '%s\n' "$output" | grep -q 'workflow run storage is unavailable'
+    printf '%s\n' 'workflow attention lists nothing for a project without runs and refuses non-directory storage'
+)
 if [ "${HYDRA_TEST_ATTENTION_PATH_ONLY:-0}" = 1 ]; then
     attention_path_bounds
     exit
@@ -266,4 +286,5 @@ printf '%s\n' "$output" | grep -q '"truncated":true'
 printf '%s\n' "$output" | grep -q '"partial":true'
 
 attention_path_bounds
+attention_without_runs
 printf '%s\n' 'workflow attention public CLI checks passed'

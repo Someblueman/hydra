@@ -9,11 +9,9 @@
 
 #define REMOTE_LABEL 13
 
+/* A labelled row whose value wraps under itself instead of being cut. */
 static void remote_row(struct app *app, const char *label, const char *text, enum tv_style tone) {
-    if (app->line >= app->limit) return;
-    column(app, 0, REMOTE_LABEL, TV_MUTED, label);
-    column(app, REMOTE_LABEL, app->content_width - REMOTE_LABEL, tone, text);
-    app->line++;
+    labelled_at(app, REMOTE_LABEL, label, text, tone);
 }
 
 static void remote_host_rows(struct app *app, const char *name) {
@@ -30,6 +28,8 @@ void remote_detail(struct app *app, const struct head *head) {
     char text[2048];
     const char *status = remote_head_status(app, head);
     enum tv_style tone = remote_head_tone(app, head);
+    if (head->retained || !strcmp(status, "disconnected") || !strcmp(status, "stale"))
+        paragraph(app, "This is the host's last observation, not its current state. Its agent may still be working; nothing here completes or stops it. r retries the host.", TV_WARNING);
     remote_row(app, "Where", head->remote_host, TV_BASE);
     remote_row(app, "Project", head->remote_project, TV_BASE);
     snprintf(text, sizeof(text), "%s%sdesired %s", status, dot(app), head->desired);
@@ -39,8 +39,6 @@ void remote_detail(struct app *app, const struct head *head) {
     remote_host_rows(app, head->remote_host);
     remote_row(app, "Agent", remote_agent_name(head), TV_BASE);
     remote_row(app, "Liveness", "unobserved: a remote head reports desired state, not a live process", TV_MUTED);
-    if (head->retained || !strcmp(status, "disconnected") || !strcmp(status, "stale"))
-        paragraph(app, "This is the host's last observation, not its current state. Its agent may still be working; nothing here completes or stops it. r retries the host.", TV_WARNING);
     section(app, "NEXT");
     linef(app, "a  talk to the agent in its terminal on %s", head->remote_host);
     linef(app, "x  interrupt the agent (confirmed); the worktree and files stay on the host");
@@ -67,6 +65,8 @@ void task_detail(struct app *app, const struct task_observation *task) {
     char text[2048];
     const char *status = task_status(app, task);
     enum tv_style tone = task_tone(app, task);
+    if (strcmp(status, task->state))
+        paragraph(app, "This is the receiver's last observation, not its current state; controls stay disabled until a fresh one arrives. r retries the host.", TV_WARNING);
     remote_row(app, "Where", task->host, TV_BASE);
     remote_row(app, "Workspace", task->workspace, TV_BASE);
     snprintf(text, sizeof(text), "%s%sowner %s", status, dot(app), task->owner);
@@ -85,10 +85,9 @@ void task_detail(struct app *app, const struct task_observation *task) {
     remote_row(app, "Result", text, TV_BASE);
     snprintf(text, sizeof(text), "%s%sscope %s%srequested %s", task->cancellation, dot(app), task->cancellation_scope, dot(app), task->cancel_requested_at);
     remote_row(app, "Cancel", text, strcmp(task->cancellation, "-") ? TV_WARNING : TV_MUTED);
+    section(app, "IDENTITY");
     remote_row(app, "Request", task->request_id, TV_MUTED);
     remote_row(app, "Spec", task->spec_sha256, TV_MUTED);
-    if (strcmp(status, task->state))
-        paragraph(app, "This is the receiver's last observation, not its current state; controls stay disabled until a fresh one arrives. r retries the host.", TV_WARNING);
     section(app, "NEXT");
     linef(app, "Y approve  N reject  R resume  X cancel   (each confirmed; fresh evidence only)");
     linef(app, "r  retry the host    I  attention items for this task");

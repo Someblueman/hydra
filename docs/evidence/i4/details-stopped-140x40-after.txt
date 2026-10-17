@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / DETAILS                                                 Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
+ Work  [Details]  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Details: notes-cleanup ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ notes-cleanup                                                                                                                           │
+│ The terminal is gone; the agent was last seen working. The worktree's files are kept: a restarts the terminal. Check them before        │
+│ removing it.                                                                                                                            │
+│ Agent       claude                                                 Session     terminal gone                                            │
+│ Reported    nothing yet; declared when done: done or blocked       Group       none                                                     │
+│                                                                                                                                         │
+│ CHANGES                                                                                                                                 │
+│ Changed     2 files in the worktree, not yet committed                                                                                  │
+│ Full diff   everything since the branch base: press : and choose diff                                                                   │
+│                                                                                                                                         │
+│ CHECKS                                                                                                                                  │
+│ Approval requests  none                                                                                                                 │
+│ Messages           0 exchanged with other heads                                                                                         │
+│                                                                                                                                         │
+│ NEXT                                                                                                                                    │
+│ a  restart its terminal (files are kept)   p  show recent terminal output                                                               │
+│ c  coordination  x  remove this head  :  more actions  d  technical details                                                             │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ a agent  p output  Esc back  ? help  q quit                                                                                               

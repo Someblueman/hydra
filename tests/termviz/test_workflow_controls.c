@@ -166,21 +166,18 @@ int main(void) {
                 U("waiting-approval", 10);
                 save(&s, "waiting", sizes[j][0], sizes[j][1]);
             }
+            /* The run's one pending request is bound from its evidence;
+             * the typed confirmation names it. */
             S("Y");
-            U("Request ID from the evidence pane", 3);
-            S(request);
-            S("\r");
-            U("Type approve to confirm", 3);
+            tv_format(text, sizeof(text), "request %s. Type approve to confirm", request);
+            U(text, 3);
             S("wrong\r");
             U("Control not submitted", 3);
             CHECK(!tv_exists(decision), "wrong confirmation has no decision");
         }
         if (i < 2) {
             S(i == 0 ? "Y" : "N");
-            U("Request ID from the evidence pane", 3);
-            S(request);
-            S("\r");
-            tv_format(text, sizeof(text), "Type %s to confirm", action);
+            tv_format(text, sizeof(text), "request %s. Type %s to confirm", request, action);
             U(text, 3);
             S(action);
             S("\r");

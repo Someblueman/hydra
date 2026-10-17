@@ -1160,6 +1160,31 @@ provider status for Hydra verification.
       ([VISUAL-REVIEW.md](VISUAL-REVIEW.md)). What remains is the user's review of
       that page for hierarchy and visual quality, plus the walk-through of finding
       an item, reviewing its evidence and returning with the selection preserved.
+      *Source pass delivered in 3.0.0 (not yet accepted):* the attention queue
+      leads with who needs the user and lists items in aligned WHAT / TASK /
+      STATE columns with one wrapped reason each (one sentence per row below 64
+      columns); its detail opens with the item, its seen state (kept apart from
+      any decision), why it needs the user and the next action, with the full
+      digests in an IDENTITY group; the exact review leads with the task, step
+      and read-only binding, lists references with their state and a
+      middle-elided locator, and labels the identity and full-log views; loading,
+      empty, stale and unavailable states say what is known and how to refresh.
+      Details lead with the reason for attention and wrap long values, Recovery
+      explains the selected finding in full under the list and keeps raw kinds
+      under DIAGNOSTICS, run panels end cut cells and the Next sentence with an
+      ellipsis between words, dependency graphs join edges with box-drawing
+      junctions and rounded node corners, footers below 100 columns carry a
+      compact hint set that fits whole (a footer that still does not fit drops
+      whole hints, never half a word), keyboard help wraps, scrolls and lists
+      the attention and review keys, and Enter opens Details for the selected
+      head from whichever Workspace pane holds focus. Before/after text captures
+      of every state at 80x24 and 140x40 from deterministic fixtures are in
+      `docs/evidence/i4/` (`scripts/capture-i4.sh`), and
+      `tests/test_native_tui_i4.sh` compares a fresh capture with each committed
+      after capture. Acceptance still needs the user's review of the
+      `make visual-review` contact sheet (themes, contrast and hierarchy; the
+      palette contrast rows in `lint-known.tsv` are a palette decision left to
+      that review) and the interactive walk-through above.
 
 I1 builds on V1–V4 and existing interactive attach; tmux-free distributed
 qualification stays in T2/T3. I2/I3 reuse lifecycle, outcome and review contracts.

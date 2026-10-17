@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / WORK                                                    Local · 2 heads (+1 in runs) · 1 running · 1 need attention · 1 to repair 
+ [Work]  Details  Overview  Attention  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Heads in this project ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│    HEAD                                                                        STATUS         AGENT           WHERE        REPORTED     │
+│    add-kill                                                                    running        codex           local        -            │
+│      ▾ plan run kill-dry-run                                                   succeeded      2 heads                                   │
+│ >      worker   kill-dry-run-worker                                            done           codex           local        -            │
+│        verifier kill-dry-run-check                                             retired                                                  │
+│    notes-cleanup                                                               terminal gone  claude          local        -            │
+│ 2 heads you started · 1 in runs  |  Row 3 of 5                                                                                          │
+│                                                                                                                                         │
+│╭─ kill-dry-run-worker ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮│
+││ codex · step implement · succeeded · headless (no terminal) · 1 changed file                                                          ││
+││ Enter details · p step output · x dismiss (keeps the branch) · : more actions                                                         ││
+││                                                                                                                                       ││
+│╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯│
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k select  Enter details  a agent  n new task  x remove  L location  / search  : more  ? help  q quit                                    

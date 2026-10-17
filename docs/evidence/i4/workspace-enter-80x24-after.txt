@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / DETAILS                                                               
+ Work [Details] Overview Attention Recovery Flows Stats Workspace Hosts        
+╭─ Details: add-kill ─────────────────────────────────────────────────────────╮
+│ add-kill                                                                    │
+│ Agent       codex                                                           │
+│ Session     running (the live terminal)                                     │
+│ Reported    nothing yet; declared when done: done or blocked                │
+│                                                                             │
+│ PLAN                                                                        │
+│ Plan        plan 60c5133478a6 approved 2026-09-26 10:21 UTC · run           │
+│             run_aaaaaaaaaaaaaaaaaaaa · succeeded                            │
+│ Next        Worker branch kill-dry-run-worker holds the result: review (:   │
+│             diff) · land (hydra land kill-dry-run-worker) · dismiss (x      │
+│             removes the worker head, keeps the branch)                      │
+│                                                                             │
+│ CHANGES                                                                     │
+│ Changed     0 files in the worktree, not yet committed                      │
+│ Full diff   everything since the branch base: press : and choose diff       │
+│                                                                             │
+│ CHECKS                                                                      │
+│ Approval requests  none                                                     │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ a agent  p output  Esc back  ? help  q quit                                   

@@ -77,6 +77,12 @@ directory(const char *p)
     struct stat     st;
     return !lstat(p, &st) && S_ISDIR(st.st_mode);
 }
+static bool
+absent(const char *p)
+{
+    struct stat     st;
+    return lstat(p, &st) && errno == ENOENT;
+}
 static char *
 scalar(const char *p)
 {
@@ -864,8 +870,13 @@ attention_open(struct wa *w, const char *project, char runs[F_PATH], DIR **dir)
     } else snprintf(w->root, sizeof(w->root), "%s", root);
     if (f_path(projects, sizeof(projects), w->root, "projects") || !directory(projects) ||
         f_path(project_dir, sizeof(project_dir), projects, project) || !directory(project_dir) ||
-        f_path(workflows, sizeof(workflows), project_dir, "workflows") || !directory(workflows) ||
-        f_path(runs, F_PATH, workflows, "runs") || !directory(runs) || !(*dir = opendir(runs)))
+        f_path(workflows, sizeof(workflows), project_dir, "workflows") ||
+        f_path(runs, F_PATH, workflows, "runs"))
+        return f_error("workflow attention", "not_initialized", "workflow run storage is unavailable");
+    /* A registered project that has never recorded a run has no run
+     * storage yet: that is an exact, empty list, not an unavailable one. */
+    if (absent(workflows) || (directory(workflows) && absent(runs))) return NULL;
+    if (!directory(workflows) || !directory(runs) || !(*dir = opendir(runs)))
         return f_error("workflow attention", "not_initialized", "workflow run storage is unavailable");
     return NULL;
 }
@@ -902,7 +913,7 @@ wd_attention(const char *project)
     w.project = project;
     { json_object *error = attention_open(&w, project, runs, &d); if (error) return error; }
     w.items = json_object_new_array();
-    attention_scan(&w, runs, d); closedir(d);
+    if (d) { attention_scan(&w, runs, d); closedir(d); }
     index_release(&w);
     free(w.label);
     data = json_object_new_object();

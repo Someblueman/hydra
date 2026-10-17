@@ -13,7 +13,7 @@ pick() {
 case "${1:-}:${2:-}" in
     workflow:tui-data) cat "$(pick workflow "$fixtures/workflow-v1.tsv")" ;;
     workflow:statistics-data) cat "$(pick statistics "$fixtures/statistics-v4.tsv")" ;;
-    workflow:attention-data|fleet:attention-data) cat "$(pick attention "$fixtures/attention-v1.tsv")" ;;
+    workflow:attention-data|fleet:attention-data|tui:--attention-data) cat "$(pick attention "$fixtures/attention-v1.tsv")" ;;
     workflow:review-data|fleet:review-data) cat "$(pick review "$fixtures/review-v1.tsv")" ;;
     *)
         HYDRA_TEST_SEEN_FILE="$state/seen.tsv"

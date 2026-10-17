@@ -41,7 +41,7 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     mouse_input(&session, "\033[<0;8;6M");
     result(wait_for_marker(&session, "> Leftover lock", 1000), "recovery row click selects finding");
     write_input(session.master, "d", 1U);
-    result(wait_for_marker(&session, "Inspect:", 1000), "clicked recovery finding retains keyboard diagnostics");
+    result(wait_for_marker(&session, "Inspect     hydra", 1000), "clicked recovery finding retains keyboard diagnostics");
     write_input(session.master, "\033", 1U);
     result(wait_for_marker(&session, "> Leftover lock", 1000), "Escape closes the finding explanation and stays in Recovery");
     sleep_ms(60);

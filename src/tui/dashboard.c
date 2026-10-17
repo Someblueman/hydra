@@ -17,12 +17,37 @@ void dashboard_text(struct tv_canvas *c, int x, int y, int width,
     tv_text(c, (struct tv_rect){x, y, width, 1}, buffer, tone);
 }
 
+/* Where a caption's clause ends (at "; ") within room columns, or 0. */
+static size_t caption_clause(const char *text, size_t room) {
+    const char *at = strstr(text, "; ");
+    return at && (size_t)(at - text) <= room ? (size_t)(at - text) : 0U;
+}
+
+/* A card's caption on its last row, or over the last two rows broken at a
+ * clause ("; ") or between words when it is wider than the card; a remainder
+ * that still does not fit keeps its first clause, else ends with "..." after
+ * a whole word. */
+static void dashboard_caption(struct tv_canvas *c, int x, int width, const char *caption) {
+    size_t room = width > 0 ? (size_t)width : 1U, cut;
+    if (strlen(caption) <= room) { dashboard_text(c, x, 3, width, TV_BASE, "%s", caption); return; }
+    if (!(cut = caption_clause(caption, room))) {
+        for (cut = room; cut > 0 && caption[cut] != ' '; cut--) {}
+        if (!cut) cut = room;
+    }
+    dashboard_text(c, x, 2, width, TV_BASE, "%.*s", (int)cut, caption);
+    caption += cut; caption += strspn(caption, "; ");
+    if (strlen(caption) <= room) { dashboard_text(c, x, 3, width, TV_BASE, "%s", caption); return; }
+    if ((cut = caption_clause(caption, room))) { dashboard_text(c, x, 3, width, TV_BASE, "%.*s", (int)cut, caption); return; }
+    for (cut = room > 3U ? room - 3U : 0U; cut > 0 && caption[cut] != ' '; cut--) {}
+    dashboard_text(c, x, 3, width, TV_BASE, "%.*s...", (int)cut, caption);
+}
+
 void dashboard_card(struct tv_canvas *c, int x, int width, const char *title,
                            size_t count, const char *caption, enum tv_style tone) {
     tv_panel(c, (struct tv_rect){x, 0, width, 5}, title);
     if (count == SIZE_MAX) dashboard_text(c, x + 2, 1, width - 4, tone, "--");
     else dashboard_text(c, x + 2, 1, width - 4, tone, "%zu", count);
-    dashboard_text(c, x + 2, 3, width - 4, TV_BASE, "%s", caption);
+    dashboard_caption(c, x + 2, width - 4, caption);
 }
 
 static void dashboard_head_hit(struct app *app, struct tv_rect r, int row, size_t item) {
@@ -112,7 +137,13 @@ static void dashboard_detail_head(struct app *app, struct tv_canvas *c, struct t
     head_agent_text(app, h, agent, sizeof(agent));
     dashboard_text(c, r.x + 2, r.y + 2, r.width - 4, TV_STRONG, "%s", h->branch);
     dashboard_text(c, r.x + 2, r.y + 4, r.width - 4, TV_BASE, "Agent: %s%s%s%s", agent, dot(app), head_remote(h) ? "on " : "", head_where(h));
-    if (head_remote(h)) dashboard_text(c, r.x + 2, r.y + 5, r.width - 4, remote_head_tone(app, h), "Session: %s%sdesired %s", remote_head_status(app, h), dot(app), h->desired);
+    if (head_remote(h)) {
+        /* The observed status in its tone; the desired state, a request, muted. */
+        const char *status = remote_head_status(app, h);
+        int used = (int)strlen("Session: ") + (int)strlen(status);
+        dashboard_text(c, r.x + 2, r.y + 5, r.width - 4, remote_head_tone(app, h), "Session: %s", status);
+        if (used < r.width - 4) dashboard_text(c, r.x + 2 + used, r.y + 5, r.width - 4 - used, TV_MUTED, "%sdesired %s", dot(app), h->desired);
+    }
     else if (head_headless(h)) dashboard_text(c, r.x + 2, r.y + 5, r.width - 4, TV_MUTED, "Terminal: headless (no terminal)");
     else dashboard_text(c, r.x + 2, r.y + 5, r.width - 4, status_tone(h), "Session: %s", status_label(h));
 }
@@ -239,17 +270,22 @@ static enum tv_style run_step_tone(const char *state) {
 }
 
 static void run_step_line(struct app *app, struct tv_canvas *c, struct tv_rect r, int row, const struct workflow_node *n, const struct run_columns *k) {
-    char kind[48], time[48], tries[16], head[TEXT + 32];
-    int x = r.x + 2, width = r.width - 4;
+    char kind[48], time[48], tries[16], head[TEXT + 32], cell[TEXT + 32];
+    int x = r.x + 2, width = r.width - 4, step_width = (k->wide ? k->kind : k->state) - 1;
     snprintf(kind, sizeof(kind), "%s%s%s", n->kind, n->role[0] ? "/" : "", n->role);
     step_duration_text(n, time, sizeof(time));
+    /* A long running time drops "so far" (the state says running) before
+     * its cell would cut a word. */
+    if (strlen(time) > 13U && strlen(time) > 7U && !strcmp(time + strlen(time) - 7U, " so far")) time[strlen(time) - 7U] = '\0';
     snprintf(tries, sizeof(tries), "%u", n->attempts);
-    dashboard_text(c, x + k->step, row, (k->wide ? k->kind : k->state) - 1, TV_BASE, "%s", n->id);
+    fit_text(app, n->id, step_width > 1 ? (size_t)step_width - 1U : 1U, cell, sizeof(cell));
+    dashboard_text(c, x + k->step, row, step_width, TV_BASE, "%s", cell);
     if (k->wide) dashboard_text(c, x + k->kind, row, k->state - k->kind - 1, TV_MUTED, "%s", kind);
     dashboard_text(c, x + k->state, row, 17, run_step_tone(n->state), "%s", n->state);
     if (k->attempts) dashboard_text(c, x + k->tries, row, 5, TV_BASE, "%s", tries);
     dashboard_text(c, x + k->time, row, 13, TV_BASE, "%s", time);
-    dashboard_text(c, x + k->head, row, width - k->head, TV_BASE, "%s", run_step_head(app, n, head, sizeof(head)));
+    fit_text(app, run_step_head(app, n, head, sizeof(head)), width - k->head > 0 ? (size_t)(width - k->head) : 1U, cell, sizeof(cell));
+    dashboard_text(c, x + k->head, row, width - k->head, TV_BASE, "%s", cell);
 }
 
 static const char *setting_mark(const char *source) {
@@ -315,6 +351,15 @@ static void run_panel_next(struct app *app, struct tv_canvas *c, struct tv_rect 
     dashboard_text(c, r.x + 2, row, 6, TV_STRONG, "Next");
     while (offset < length && row < r.y + r.height - 1) {
         size_t chunk = wrap_width(text + offset, length - offset, width);
+        /* The panel's last row ends between words with an ellipsis when
+         * more remains; Details (Enter) carries the whole sentence. */
+        if (row == r.y + r.height - 2 && offset + chunk < length) {
+            size_t room = width > 3U ? width - 3U : 1U;
+            chunk = wrap_width(text + offset, length - offset, room);
+            while (chunk && text[offset + chunk - 1U] == ' ') chunk--;
+            dashboard_text(c, r.x + 8, row++, (int)width, tone, "%.*s%s", (int)chunk, text + offset, app->ascii ? "..." : "\xe2\x80\xa6");
+            break;
+        }
         dashboard_text(c, r.x + 8, row++, (int)width, tone, "%.*s", (int)chunk, text + offset);
         offset += chunk;
         offset += strspn(text + offset, " ");
@@ -373,13 +418,16 @@ static void dashboard_cards(struct app *app, struct tv_canvas *c, int width) {
     cards = r.hosts || r.heads || r.tasks ? 5 : 4;
     card = width / cards;
     snprintf(runs, sizeof(runs), "%zu recorded in this project", n.runs);
-    dashboard_card(c, 0, card - 1, "RUNNING", n.running + n.runs_active, "local heads and runs working now", TV_SUCCESS);
+    dashboard_card(c, 0, card - 1, "RUNNING", n.running + n.runs_active,
+                   cards == 4 ? "heads and runs working now" : "local heads and runs working", TV_SUCCESS);
     dashboard_card(c, card, card - 1, "NEED ATTENTION", n.attention, app->model.recovery_count ? "failures, decisions, stopped; see Recovery too" : "failures, decisions, stopped terminals", n.attention ? TV_WARNING : TV_BASE);
     dashboard_card(c, card * 2, card - 1, "RUNS ACTIVE", n.runs_active, runs, TV_STRONG);
-    dashboard_card(c, card * 3, cards == 4 ? width - card * 3 : card - 1, "CHANGED FILES", changed_files(app), "uncommitted, local heads", TV_STRONG);
+    dashboard_card(c, card * 3, cards == 4 ? width - card * 3 : card - 1, "CHANGED FILES", changed_files(app),
+                   cards == 4 ? "uncommitted, all heads" : "uncommitted, local heads", TV_STRONG);
     if (cards == 4) return;
     if (app->remote_stale) snprintf(hosts, sizeof(hosts), "remote observation stale, %lds old", remote_age(app));
-    else snprintf(hosts, sizeof(hosts), "%zu host%s, %zu disconnected; liveness unobserved", r.hosts, r.hosts == 1 ? "" : "s", r.hosts_down);
+    else if (r.hosts_down) snprintf(hosts, sizeof(hosts), "%zu disconnected of %zu host%s; liveness unobserved", r.hosts_down, r.hosts, r.hosts == 1 ? "" : "s");
+    else snprintf(hosts, sizeof(hosts), "%zu host%s; liveness unobserved", r.hosts, r.hosts == 1 ? "" : "s");
     dashboard_card(c, card * 4, width - card * 4, "REMOTE", r.heads + r.tasks, hosts, app->remote_stale || r.hosts_down ? TV_WARNING : TV_STRONG);
 }
 

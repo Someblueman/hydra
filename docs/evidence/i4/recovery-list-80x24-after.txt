@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / RECOVERY                                                              
+ Work Details Overview Attention [Recovery] Flows Stats Workspace Hosts        
+╭─ Recovery ──────────────────────────────────────────────────────────────────╮
+│ RECOVERY  4 findings                                                        │
+│ > Terminal stopped: feature-stale                                           │
+│   Leftover lock: state_project_0123456789abcdefabcd.lock                    │
+│   Leftover worktree from a removed task: feature-old (/tmp/wt/head_0123456… │
+│   Removal did not finish: feature-stale                                     │
+│ 1 of 4                                                                      │
+│                                                                             │
+│╭─ Terminal stopped: feature-stale ─────────────────────────────────────────╮│
+││ The terminal session for feature-stale is no longer running. Its worktree ││
+││ and files are kept; nothing was removed from the repository. Open it from ││
+││ Work (a) to restart its terminal and agent in the same worktree, or       ││
+││ remove the head once its work is finished.                                ││
+│╰───────────────────────────────────────────────────────────────────────────╯│
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k select  Enter run the check  d explain  Esc back  ? help  q quit          

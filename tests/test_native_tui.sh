@@ -117,14 +117,14 @@ else
     assert_success 0 "recovery list keeps raw finding kinds out of the primary text"
 fi
 "$tui" --headless-fixture "$fixture" --size 100x28 --view recovery --diagnostics > "$test_root/recovery-detail.out"
-contains "Kind: dead-session" "$test_root/recovery-detail.out" "recovery diagnostics retain the raw finding kind"
-contains "Inspect: hydra doctor" "$test_root/recovery-detail.out" "recovery diagnostics retain the inspection command"
+contains "Kind        dead-session" "$test_root/recovery-detail.out" "recovery diagnostics retain the raw finding kind"
+contains "Inspect     hydra doctor" "$test_root/recovery-detail.out" "recovery diagnostics retain the inspection command"
 contains "worktree and files are kept" "$test_root/recovery-detail.out" "recovery explains what is retained"
 { grep -v '^R	' "$fixture"; grep '^R	orphan-worktree	' "$fixture"; } > "$test_root/orphan-first.tsv"
 "$tui" --headless-fixture "$test_root/orphan-first.tsv" --size 140x28 --view recovery --diagnostics > "$test_root/orphan-detail.out"
 contains "Leftover worktree from a removed task: feature-old (/tmp/wt/head_0123456789abcdef), 1.3 GiB; no uncommitted changes" \
     "$test_root/orphan-detail.out" "leftover worktree finding names branch, path, size and change state"
-contains "Inspect: hydra gc --policy orphaned --dry-run" "$test_root/orphan-detail.out" "leftover worktree check is the read-only gc review"
+contains "Inspect     hydra gc --policy orphaned --dry-run" "$test_root/orphan-detail.out" "leftover worktree check is the read-only gc review"
 contains "x removes this worktree after confirmation; the branch is kept" "$test_root/orphan-detail.out" "leftover worktree offers confirmed removal"
 "$tui" --headless-fixture "$test_root/orphan-first.tsv" --size 100x28 --view recovery > "$test_root/orphan-list.out"
 contains "x remove" "$test_root/orphan-list.out" "recovery footer offers removal for a clean leftover worktree"
@@ -556,7 +556,7 @@ contains 'never observed' "$test_root/unified-hosts.txt" 'a never-observed host 
 contains 'r retries' "$test_root/unified-hosts.txt" 'hosts offer an explicit retry'
 "$tui" --headless-fixture "$fixture" --remote-fixture "$remote_fixture" --ascii --size 140x40 --view overview > "$test_root/unified-overview.txt"
 contains 'REMOTE' "$test_root/unified-overview.txt" 'overview counts remote work'
-contains '3 hosts, 1 disconnected' "$test_root/unified-overview.txt" 'overview names disconnected hosts'
+contains '1 disconnected of 3' "$test_root/unified-overview.txt" 'overview names disconnected hosts'
 
 # Runs group the heads they create; headless heads describe their steps.
 runs_heads="$repo_root/tests/fixtures/tui/native-runs.tsv"

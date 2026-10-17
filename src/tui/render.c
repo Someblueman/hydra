@@ -400,7 +400,9 @@ void chrome_header(struct app *app, struct tv_canvas *c, const char *title) {
 void chrome_footer(struct app *app, struct tv_canvas *c, const char *status, enum tv_style tone, const char *hints) {
     int height = c->height;
     if (height >= 3) tv_text(c, (struct tv_rect){1, height - 2, c->width - 2, 1}, status, tone);
-    tv_text(c, (struct tv_rect){1, height - 1, c->width - 2, 1}, hints, TV_MUTED);
+    char fitted[512];
+    tv_text(c, (struct tv_rect){1, height - 1, c->width - 2, 1},
+            fit_hints(hints, c->width > 2 ? (size_t)(c->width - 2) : 1U, fitted, sizeof(fitted)), TV_MUTED);
     (void)app;
 }
 
@@ -507,23 +509,36 @@ static const char *open_action(const struct app *app, const struct head *head) {
 
 static void summary_actions(struct app *app, const struct head *head, char *line, size_t size) {
     const char *sep = dot(app);
-    if (head_remote(head)) snprintf(line, size, "Enter details%sa talk to the agent%sx interrupt%sr retry its host", sep, sep, sep);
+    /* A remote head's keys are the footer's; the card says what it cannot. */
+    if (head_remote(head)) snprintf(line, size, "Liveness unobserved: a desired state, not a live process.");
     else if (!head->head_id[0]) snprintf(line, size, "Enter details%sx remove", sep);
     else if (head_headless(head)) snprintf(line, size, "Enter details%sp step output%sx %s%s: more actions", sep, sep,
                                            head_run_role(app, head) && !strcmp(head_run_role(app, head), "worker") ? "dismiss (keeps the branch)" : "remove", sep);
     else snprintf(line, size, "Enter details%sa %s%sx remove%s: more actions", sep, open_action(app, head), sep, sep);
 }
 
-static void summary_panel(struct app *app, const char *title, const char *first, const char *second) {
+/* A bordered summary at most max_rows tall (borders included). */
+static void summary_panel_rows(struct app *app, const char *title, const char *first, const char *second, int max_rows) {
     struct tv_rect r = {app->content_x - 1, app->line + 1, app->content_width + 2, app->limit - app->line - 1};
-    if (r.height > 5) r.height = 5;
-    tv_panel_styled(&app->frame, r, title, TV_BORDER, TV_STRONG);
+    int limit = app->limit;
+    char heading[TEXT + 64];
+    if (r.height > max_rows) r.height = max_rows;
+    fit_text(app, title, r.width > 6 ? (size_t)r.width - 6U : 1U, heading, sizeof(heading));
+    tv_panel_styled(&app->frame, r, heading, TV_BORDER, TV_STRONG);
     app->line = r.y + 1;
     app->content_x++; app->content_width -= 2;
+    /* Prose stops above the panel's bottom edge, leaving the last row to second. */
+    app->limit = r.y + r.height - (second ? 2 : 1);
     paragraph(app, first, TV_BASE);
-    if (app->line < r.y + r.height - 1) { style(app, TONE_MUTED); linef(app, "%s", second); style(app, TONE_BASE); }
+    app->limit = r.y + r.height - 1;
+    if (second && app->line < app->limit) { style(app, TONE_MUTED); linef(app, "%s", second); style(app, TONE_BASE); }
+    app->limit = limit;
     app->content_x--; app->content_width += 2;
     app->line = r.y + r.height;
+}
+
+static void summary_panel(struct app *app, const char *title, const char *first, const char *second) {
+    summary_panel_rows(app, title, first, second, 5);
 }
 
 /* The selected remote task: receiver-owned, observed through its host. */
@@ -626,18 +641,18 @@ static void render_recovery_detail(struct app *app) {
     char title[TEXT + 64], detail[1024];
     recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
     /* Wrapped so long labels, such as a leftover worktree's path, stay readable. */
-    paragraph(app, title, TV_STRONG);
+    lead_block(app, "RECOVERY FINDING", title);
     paragraph(app, detail, TV_BASE);
     /* The raw kind, source path and confidence are diagnostics; the
      * account above is what a user needs to decide. */
     section(app, "DIAGNOSTICS");
-    linef(app, "Check: %s", item->action);
-    style(app, TONE_MUTED);
-    linef(app, "Kind: %s   Source: %s   Confidence: %s", item->kind, item->source, item->confidence);
-    linef(app, "Inspect: %s", item->action);
-    linef(app, "Enter runs the check and shows its output here; d returns to the list");
-    if (!strcmp(item->kind, "orphan-worktree")) linef(app, "x removes this worktree after confirmation; the branch is kept");
-    style(app, TONE_BASE);
+    labelled(app, "Kind", item->kind, TV_MUTED);
+    labelled(app, "Source", item->source, TV_MUTED);
+    labelled(app, "Confidence", item->confidence, TV_MUTED);
+    labelled(app, "Inspect", item->action, TV_BASE);
+    section(app, "NEXT");
+    paragraph(app, "Enter runs the check and shows its output here; d returns to the list", TV_BASE);
+    if (!strcmp(item->kind, "orphan-worktree")) paragraph(app, "x removes this worktree after confirmation; the branch is kept", TV_BASE);
 }
 
 /* What the finding offers, in plain words; the raw kind stays in diagnostics. */
@@ -653,19 +668,34 @@ static const char *recovery_offer(const struct recovery *item) {
 
 static void render_recovery_row(struct app *app, size_t index) {
     const struct recovery *item = &app->model.recovery[index];
-    char title[TEXT + 64], detail[1024];
+    char title[TEXT + 64], detail[1024], cell[TEXT + 64];
     bool selected = index == app->recovery_selected, wide = app->content_width >= 100;
+    int width = wide ? app->content_width - 22 : app->content_width - 2;
     recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
     record_hit(app, index);
     if (selected) column(app, 0, app->content_width, TV_SELECTED, ">");
-    column(app, 2, wide ? app->content_width - 22 : app->content_width - 2, selected ? TV_SELECTED : TV_WARNING, title);
+    fit_text(app, title, width > 0 ? (size_t)width : 1U, cell, sizeof(cell));
+    column(app, 2, width, selected ? TV_SELECTED : TV_WARNING, cell);
     if (wide) column(app, app->content_width - 18, 18, selected ? TV_SELECTED : TV_MUTED, recovery_offer(item));
     app->line++;
 }
 
+/* The selected finding in plain language under the list, with its check. */
+static void render_recovery_summary(struct app *app) {
+    const struct recovery *item = &app->model.recovery[app->recovery_selected];
+    char title[TEXT + 64], detail[1024];
+    recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
+    /* The plain account only, tall enough for all of it where the screen
+     * has room; the check and its diagnostics are in the detail (d). */
+    summary_panel_rows(app, title, detail, NULL,
+                       (int)wrapped_rows(detail, app->content_width > 2 ? (size_t)app->content_width - 2U : 1U) + 2);
+}
+
 static void render_recovery(struct app *app) {
     size_t index, start;
+    bool summary = app->rows >= 20 && app->cols >= 70;
     int available = app->limit - app->line - 2;
+    if (summary && available > app->rows / 3) available = app->rows / 3;
     style(app, TONE_STRONG); linef(app, "RECOVERY  %zu finding%s", app->model.recovery_count, app->model.recovery_count == 1 ? "" : "s"); style(app, TONE_BASE);
     if (app->model.recovery_count == 0U) {
         linef(app, "");
@@ -680,41 +710,7 @@ static void render_recovery(struct app *app) {
     style(app, TONE_MUTED);
     linef(app, "%zu of %zu", app->recovery_selected + 1U, app->model.recovery_count);
     style(app, TONE_BASE);
-}
-
-static void render_help(struct app *app) {
-    const char *sep = dot(app);
-    style(app, TONE_STRONG); linef(app, "KEYBOARD HELP"); style(app, TONE_BASE);
-    if (app->rows < 20) {
-        linef(app, "Tab/Shift-Tab tabs or panes  arrows select  Enter open  Esc back");
-        linef(app, "n new task  a agent  x remove (remote: interrupt)  / search  L location  : actions");
-        linef(app, "t theme  ? close help  q quit");
-        return;
-    }
-    section(app, "MOVE AROUND");
-    linef(app, "Tab / Shift-Tab   next / previous tab; inside Workspace, next / previous pane");
-    linef(app, "Left / Right      previous / next tab       1-9  jump to a tab");
-    linef(app, "Up / Down, j / k  select                    Enter  open the selection");
-    linef(app, "Esc               one step back (details%slist, close help, clear search)", sep);
-    section(app, "WORK, LOCAL AND REMOTE");
-    linef(app, "n  start a new task                   a  talk to the selected agent (local or remote)");
-    linef(app, "x  remove selected or marked heads;   on a remote head: interrupt its agent (confirmed)");
-    linef(app, "L  location: all / local / remote / one host    r  retry a disconnected host");
-    linef(app, "/  search                             :  more actions (diff, switch, approvals...)");
-    linef(app, "p  recent terminal output             d  technical details      c  coordination");
-    linef(app, "Enter / l / h  expand or collapse a run; its heads are listed inside it");
-    linef(app, "Remote task row: Y approve  N reject  R resume  X cancel (fresh evidence only)");
-    section(app, "WORKSPACE");
-    linef(app, "A  conversation   B  plan overview   C  monitor   z  zoom the focused pane   S  two agents");
-    linef(app, "While typing to an agent (Esc and Tab go to the agent): Ctrl-B Tab leaves input,");
-    linef(app, "Ctrl-B x closes the view (the agent keeps running; a reopens it), Ctrl-B n switches");
-    linef(app, "agent, Ctrl-B [ scrolls history, Ctrl-B q quits.");
-    section(app, "PLANNING");
-    linef(app, "P  review the agent's proposal   V  validate   F  request changes (feedback to the agent)");
-    linef(app, "E  execute the validated revision (confirm with y)   I  import draft and policy files");
-    section(app, "OTHER");
-    linef(app, "H  hosts: Enter follows a host's work, r retries it, A adds a machine over SSH, O onboarding");
-    linef(app, "t  theme (terminal / dark / light)    D  statistics    I  attention    ?  close help    q  quit");
+    if (summary && app->limit - app->line >= 5) render_recovery_summary(app);
 }
 
 /* Command output wraps instead of clipping; j/k scroll by wrapped rows. */
@@ -839,8 +835,15 @@ static const char *hosts_hints(struct app *app, bool narrow) {
 /* Hints for views whose keys do not depend on local versus fleet mode. */
 static const char *view_hints(struct app *app, bool narrow) {
     if (app->view == 9) {
-        if (native_review_active(app)) return "j/k scroll  i IDs  f refs  l/t/p log/transcript/PR  Esc back  ? help  q quit";
-        return narrow ? "Enter details  r review  ? help  q quit" : "j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit";
+        const char *review = native_review_hints(app, narrow);
+        if (review) return review;
+        /* Below 100 columns a compact set that fits whole; ? lists the rest. */
+        if (native_attention_detail_open(app)) return narrow ? "r review  s seen  Esc back  q quit"
+            : app->cols < 100 ? "r review  s mark seen  Space/b scroll  Esc back  ? help  q quit"
+            : "r review  s mark seen / new again  Space/b scroll  Esc back to the list  ? help  q quit";
+        if (!native_attention_listed(app)) return narrow ? "I refresh  Esc back  q quit" : "I refresh  Esc back  ? help  q quit";
+        return narrow ? "Enter details  r review  ? help  q quit" : app->cols < 100 ? "j/k select  Enter details  r review  s mark seen  Esc back  ? help  q quit"
+            : "j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit";
     }
     if (app->view == 5) return narrow ? "j/k step  [/] run  ? help  q quit" : "j/k step  [/] run  h/l/J/K pan  Enter recentre  Esc back  ? help  q quit";
     if (app->view == 6) return hosts_hints(app, narrow);
@@ -856,7 +859,9 @@ static const char *detail_hints(struct app *app, bool narrow) {
     if (selected_task(app)) return narrow ? "Y/N/R/X controls  Esc back  q quit" : "Y approve  N reject  R resume  X cancel  r retry host  Esc back  ? help  q quit";
     if (head && head_remote(head)) return narrow ? "a agent  x interrupt  Esc back  q quit" : "a agent  x interrupt  r retry host  c coordination  d technical  Esc back  ? help  q quit";
     if (head && head_headless(head)) return narrow ? "p step output  Esc back  ? help  q quit" : "p step output  x remove  d technical  : more  Esc back  ? help  q quit";
-    return narrow ? "a agent  p output  Esc back  ? help  q quit" : "a agent  p output  c coordination  x remove  d technical  Esc back  ? help  q quit";
+    /* The NEXT group lists c, x, : and d with what they do; the footer
+     * keeps the two ways in and the way back. */
+    return "a agent  p output  Esc back  ? help  q quit";
 }
 
 static const char *local_hints(struct app *app, bool narrow) {
@@ -870,7 +875,7 @@ static const char *local_hints(struct app *app, bool narrow) {
     if (app->view == 4) return narrow ? "Enter open  Tab next tab  ? help  q quit" : "j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit";
     if (narrow) return head && head_remote(head) ? "Enter open  a agent  x interrupt  ? help  q quit" : "Enter open  n new  x remove  ? help  q quit";
     if (app->cols < 100) return head && head_remote(head) ? "Enter details  a agent  x interrupt  r retry  L where  ? help  q quit"
-                                                          : "Enter details  a agent  n new  x remove  L where  : more  ? help  q quit";
+                                                          : "j/k select  Enter details  a agent  n new  x remove  L where  : more  ? help  q quit";
     if (head && head_remote(head)) return "j/k select  Enter details  a agent  x interrupt  r retry host  L location  / search  ? help  q quit";
     return app->model.head_count || app->model.task_count ? "j/k select  Enter details  a agent  n new task  x remove  L location  / search  : more  ? help  q quit"
                                  : "n new task  : more actions  L location  Tab next tab  ? help  q quit";
@@ -880,7 +885,7 @@ static const char *hint_line(struct app *app) {
     bool narrow = app->cols < 70;
     const char *hints;
     if (app->result_open) return "Enter or Esc closes  j/k scroll";
-    if (app->help) return "? or Esc closes help";
+    if (app->help) return "j/k scroll  Space/b page  ? or Esc closes help";
     hints = view_hints(app, narrow);
     if (hints) return hints;
     return local_hints(app, narrow);

@@ -231,6 +231,7 @@ test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(
 	$(BUILD_DIR)/test-tui-setup tests/fixtures/tui/setup "$(abspath $(BUILD_DIR))/setup-screens"
 	$(BUILD_DIR)/test-tui-onboarding tests/fixtures/tui/onboarding "$(abspath $(BUILD_DIR))/onboarding-screens"
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_native_tui.sh
+	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_native_tui_i4.sh
 
 test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 	@mkdir -p "$(abspath $(BUILD_DIR))/test-tui-home"

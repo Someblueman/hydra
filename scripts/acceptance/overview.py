@@ -119,7 +119,8 @@ def single_agent(j: Case) -> None:
     j.record("U13.a", "the Work selection is unchanged after visiting Statistics",
              j.selected_row() == before and before != "", detail=before[:40])
     j.keys(b"4")
-    screen = j.see("[Attention]")
+    # The list loads asynchronously; its loading state names no counts.
+    screen = j.see_all("[Attention]", "need you")
     j.record("U9.d", "Attention counts unknown items separately from items that need the user",
              "unknown" in screen and "need you" in screen)
 
@@ -163,7 +164,7 @@ def multi_agent_blocked(j: Case) -> None:
     j.keys(b"4")
     screen = j.see_all("[Attention]", "Approval needed")
     j.record("U9.c", "Attention lists the approval with a plain explanation and the review route (r)",
-             "waiting for your decision" in screen and "Press r" in screen)
+             "waiting for your decision" in screen and ("Press r" in screen or "r review" in j.hint(screen)))
     j.keys(b"6")
     screen = j.see_any("[Workflows]", "[Flows]")
     j.record("U9.c", "Workflows draws the dependency chain produce -> approval -> handoff with each state",
@@ -195,15 +196,40 @@ def multi_agent_blocked(j: Case) -> None:
     j.keys(b"W")
     j.see("[Workspace]")
     j.keys(b"C")
-    screen = j.see("MONITOR")
+    screen = j.see_all("MONITOR", "Y approve")
     j.record("U9.c", "the monitor layout offers Y approve / N reject for the waiting step", "Y approve" in screen)
-    j.keys(b"Y")
-    time.sleep(0.5)
-    confirm = j.screen()
-    if "y/N" in confirm or "confirm" in confirm.lower():
-        j.keys(b"y\r")
     states = j.base / "state" / "state" / "v2" / "projects"
     run_dirs = list(states.glob(f"*/workflows/runs/{run}")) if run else []
+    j.keys(b"Y")
+    # The monitor binds the decision to the run's one undecided request once
+    # its evidence has loaded, else asks for the request id; either way the
+    # typed action confirms, as the remote-task controls do.
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        # The prompt wraps at 80 columns; compare its words, not its rows.
+        confirm = " ".join(j.screen().split())
+        if "Request ID from the evidence pane" in confirm and run_dirs:
+            j.keys((run_dirs[0] / "steps" / "approval" / "request-id").read_text().split()[0].encode() + b"\r")
+            time.sleep(0.5)
+        elif "Type approve to confirm" in confirm:
+            j.keys(b"approve\r")
+            break
+        elif "y/N" in confirm:
+            j.keys(b"y\r")
+            break
+        else:
+            time.sleep(0.2)
+    # A decision never resumes work by itself (the notice says so): once it
+    # is recorded, R resumes the run after its own typed confirmation.
+    j.until(lambda: bool(run_dirs and list(run_dirs[0].glob("approvals/*/decision/action"))), 30,
+            "the in-app approval was recorded")
+    j.keys(b"R")
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if "Type resume to confirm" in " ".join(j.screen().split()):
+            j.keys(b"resume\r")
+            break
+        time.sleep(0.2)
     j.until(lambda: run_dirs and (run_dirs[0] / "state").read_text().strip() in ("succeeded", "failed"), 120,
             "the run reached a final state after the in-app approval")
     final = (run_dirs[0] / "state").read_text().strip() if run_dirs else "absent"

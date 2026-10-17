@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / DETAILS                                                               
+ Work [Details] Overview Attention Recovery Flows Stats Workspace Hosts        
+╭─ Details: task task_build on builder ───────────────────────────────────────╮
+│ task task_build on builder                                                  │
+│ This is the receiver's last observation, not its current state; controls    │
+│ stay disabled until a fresh one arrives. r retries the host.                │
+│ Where        builder                                                        │
+│ Workspace    /work/project                                                  │
+│ State        needs approval · owner recorded                                │
+│ Observation  fresh · receiver observed 2026-10-17T10:00:00Z · confirmed     │
+│              2026-10-17T10:00:00Z                                           │
+│ Connection   reachable · fresh · 3s old                                     │
+│ Confirmed    2026-10-17T10:00:00Z                                           │
+│ Agent        codex  step implement                                          │
+│ Waiting      approval: Review the plan                                      │
+│ Next         decide                                                         │
+│ Result       unavailable · verification unavailable                         │
+│ Cancel       - · scope - · requested -                                      │
+│                                                                             │
+│ IDENTITY                                                                    │
+│ Request      req-1                                                          │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live · Remote live                                                            
+ Y approve  N reject  R resume  X cancel  r retry host  ? help  q quit         
