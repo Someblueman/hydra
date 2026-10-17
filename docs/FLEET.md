@@ -210,6 +210,26 @@ they finish (on failure after Enter, so the output can be read); a failure is
 explained from the error the CLI recorded for that step. An unknown outcome offers Enter
 to reconcile, which never replays the earlier attempt.
 
+A development build has no pinned release helper for its version, so its
+control centre cannot provision from the Hosts tab on its own: set
+`HYDRA_REMOTE_SETUP_BINARY=/abs/path/to/hydra-fleet` (the `--binary FILE` the
+CLI's `asset_unavailable` recovery names, for example the output of `make
+build-fleet-static`) and the Hosts tab passes it to `hydra remote setup`, shows
+the helper as unpinned in the plan and reruns only the provisioning command
+that names that same file. Release builds leave it unset.
+
+`make test-u10-loopback` runs the whole guided flow without a VPS: a private
+sshd on a loopback port serves a throwaway account (created with `useradd`
+when the test runs as root or under passwordless sudo; otherwise it prints
+SKIP), the control centre is driven over a PTY through host-key trust, preflight,
+provisioning from this checkout's helper, the deterministic agent fixture
+installed as `codex` by a private `agent-recipes.json`, a sign-in killed
+mid-way and resumed without being repeated, a sign-in whose verification fails
+and is retried, a real fixture-agent task launched on the host and found again
+after reconnecting, a second setup of the same account, a host whose sshd
+hides `git`, untouched unrelated files and no copied credential. Its screens
+and logs land in `build/u10-loopback-evidence/`.
+
 ## Discover, qualify and enroll hosts
 
 ```sh
