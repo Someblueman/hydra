@@ -69,7 +69,8 @@ def view_actions(
             (1, 38, len(f"Search: {tag}"), f"Search: {tag}"),
         ),
         (8, "resize", b"", (98, 2, 1, "+")),
-        (12, "cancel", b"\x1b", (1, 30, len("Current snapshot"), "Current snapshot")),
+        # The status line reads "Live" for current data (it said "Current snapshot" before 2.9).
+        (12, "cancel", b"\x1b", (1, 30, len("Live"), "Live")),
     )
     actions: list[dict[str, Any]] = []
     for offset, identifier, keys, response in plan:
@@ -96,7 +97,7 @@ def view_actions(
                     else "Details tab applied",
                     "search": "accepted query echoed in status line; result completeness is unmeasured",
                     "resize": "new-width top border applied",
-                    "cancel": "query cleared and current snapshot status restored; worker cancellation is unmeasured",
+                    "cancel": "query cleared and the live status line restored; worker cancellation is unmeasured",
                 }[identifier],
             }
         )
