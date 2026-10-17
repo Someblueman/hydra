@@ -308,6 +308,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The native PTY observer (`test-tui-pty`) writes a timestamped read index
   (`terminal.index`) beside the flushed raw stream so phases of a recording can
   be replayed and styled snapshots re-derived.
+- `make perf-matrix` runs the item 10 measurement matrix over the existing I1
+  fixture (`scripts/perf-matrix.py`, standard-library Python): 1/10/50 real
+  worktrees with deterministic stand-in agents across quiescent, one-changing,
+  all-changing and sustained-output cases, one or three attached native clients,
+  local interactive and local headless workers, and preview closed or open.
+  Cells record idle cost per role (CPU, wakeups, memory, descriptors), helper
+  launches counted and attributed by PATH shims, scheduled interaction latency
+  (PTY frame completion, never input-to-pixel), selected-head update latency,
+  per-worktree change locality, output pressure, startup and result retention,
+  with unsupported cells and unknown counters kept explicit. The evidence bundle
+  (`hydra-perf-matrix/1`) stores revisions, hashes, seeds, tool versions, clock
+  calibration, observer overhead and raw samples; `--evidence-dir` publishes a
+  compact gzipped copy (`bundle.json.gz`), a Markdown summary, provisional
+  budgets and gzipped raw samples within a byte budget. `--fixture-env KEY=VALUE`
+  runs a fixture under a declared non-default configuration.
+- `make perf-attention` (`scripts/perf_matrix_attention.py`, also
+  `scripts/bench-attention.py --local-corpus`) scores `hydra workflow attention`
+  against thirteen annotated local cases (blocked/approval, question, working,
+  done-but-unseen, idle, unknown, failed step), reporting false positives and
+  missed signals separately.
+- `make test-perf-matrix` runs the unit checks, the attention corpus, the
+  smallest interactive and headless cells and the bundle schema validation.
+- `scripts/perf_matrix_merge.py` joins several runner invocations (a retried
+  fixture, the 50-head cells run on their own) into one validated bundle and
+  summary; fixtures keep their errors, cells carry the run label, and cells
+  measured under a non-default configuration are flagged and left out of the
+  proposed budgets.
+- First Linux x86_64 container baseline under
+  `docs/evidence/performance/2026-10-17-linux-x86_64/` (one trial, shared 4-core
+  container, load recorded per fixture): 45 measured cells covering 1 and 10
+  worktrees in all four cases with one and three clients, interactive and
+  headless, preview closed and open, and 50 interactive worktrees quiescent and
+  one-changing; Linux-container provisional (not frozen) idle, tail-latency,
+  memory, recovery and locality budgets. The 10-head headless sustained-output
+  cells and the 50-head headless cells could not be measured and are recorded
+  as findings (concurrent supervised runs ending `observation_unavailable`; the
+  native client never receiving a first snapshot at 50 headless heads); remote
+  headless and macOS cells are recorded as unmeasured.
 
 ### Changed
 
@@ -351,9 +389,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `REMOTE TASKS` panel or a separate keymap (`c` interrupt): remote heads and
   tasks use the one Work list, `x` interrupts, `c` is coordination everywhere.
   Host statistics (`D`) are unchanged.
+- The I1 stand-in worker accepts an `interval_ns` override per phase and waits a
+  bounded 120 s for a slow supervised sink before retaining its final result,
+  recording the wait; `phase_proof` validates a named phase; the native PTY
+  observer honours `HYDRA_ITEM10_PATH_PREFIX`; Linux process samples add
+  reaped-children CPU, thread and context-switch counters. The I1 readiness
+  check accepts the 3.0 Work list's WHERE column; the perf matrix waits 15 s
+  plus 0.5 s per head for a client to show every owned head.
 
 ### Fixed
 
+- `make test-bench-i1` always failed its cancel stimulus: the I1 gate waited
+  for a "Current snapshot" status line that the native client now shows as
+  "Live".
 - `check_tmux_version` accepted a tmux on PATH whose `tmux -V` failed or printed no
   parsable version, because the numeric comparison error was taken as "new enough";
   such a tmux is now reported as unusable.
