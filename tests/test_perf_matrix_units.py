@@ -9,8 +9,8 @@ import sys
 from pathlib import Path
 
 from perf_matrix_actions import ClientState, _step
-from perf_matrix_merge import merge
-from perf_matrix_report import validate_bundle
+from perf_matrix_merge import load_run, merge
+from perf_matrix_report import _label, propose_budgets, validate_bundle
 from perf_matrix_sampling import distribution, summarize_window
 from perf_matrix_shim import parse_records, summarize_launches
 
@@ -93,7 +93,8 @@ def stimulus_checks() -> None:
 
 
 def _window() -> dict:
-    return {"processes": {"roles": {"native-tui": {"wakeups_per_second": 1.0, "wakeups_unknown_processes": 0},
+    return {"processes": {"roles": {"native-tui": {"wakeups_per_second": 1.0, "wakeups_unknown_processes": 0,
+                                                   "cpu_percent_one_core": 1.0, "reaped_children_cpu_seconds": 0.1},
                                     "agent": {"wakeups_per_second": None, "wakeups_unknown_processes": 1}},
                           "span_seconds": 3.0},
             "families": {}, "launches": {"per_minute": 20.0}}
@@ -128,22 +129,23 @@ def schema_checks() -> None:
     assert any("status ok" in p for p in problems) and any("update latency" in p for p in problems)
 
 
-def merge_checks() -> None:
+def merge_checks(output: Path) -> None:
     runs = []
     for label, interval in (("main", 125), ("retry", 1000)):
         bundle = _bundle()
+        env = {"HYDRA_LOCK_RETRIES": "200"} if label == "retry" else {}
         bundle.update(command=["perf-matrix.py", label], duration_seconds=10.0, load_at_end=[1, 1, 1],
-                      declared={"headless_output_interval_ns": interval}, durations={"idle_s": 8},
+                      declared={"headless_output_interval_ns": interval, "fixture_env": env}, durations={"idle_s": 8},
                       variants=[{"name": "baseline", "identities_unchanged": label == "main"}],
                       planned_cells=[{"heads": 1, "case": "quiescent"}])
         bundle["platform"] = {"load_note": f"{label} load", "load_at_start": [2, 2, 2]}
         bundle["fixtures"][0]["cells"][0].update(heads=1, mode="headless", clients=1, preview="closed",
                                                  case="quiescent", trial=0)
-        for fixture in bundle["fixtures"]:
-            fixture["id"] = f"{label}--{fixture['id']}"
-            for cell in fixture["cells"]:
-                cell["fixture"] = fixture["id"]
-        runs.append((label, bundle))
+        bundle["fixtures"][0]["cells"][0]["locality"]["git_launches_per_unchanged_worktree"] = [len(label)]
+        run_dir = output / f"merge-{label}"
+        run_dir.mkdir(exist_ok=True)
+        (run_dir / "bundle.json").write_text(json.dumps(bundle))
+        runs.append((label, load_run(label, run_dir)))
     merged = merge(runs)
     assert validate_bundle(merged) == [], validate_bundle(merged)
     assert [f["id"] for f in merged["fixtures"]] == ["main--f", "retry--f"]
@@ -151,7 +153,15 @@ def merge_checks() -> None:
     assert merged["command"] == [["perf-matrix.py", "main"], ["perf-matrix.py", "retry"]]
     assert merged["duration_seconds"] == 20.0 and merged["variants"][0]["identities_unchanged"] is False
     assert merged["declared"]["per_run"]["retry"]["headless_output_interval_ns"] == 1000
+    assert merged["declared"]["per_run"]["main"]["headless_output_interval_ns"] == 125
+    json.dumps(merged)  # no shared or circular references between merged and per-run policy
     assert "main load" in merged["platform"]["load_note"] and "retry load" in merged["platform"]["load_note"]
+    cells = [c for f in merged["fixtures"] for c in f["cells"]]
+    assert [c["run"] for c in cells] == ["main", "retry"] and "fixture_env" not in cells[0]
+    assert _label(cells[1]).endswith("(retry) [non-default env]"), _label(cells[1])
+    # The non-default-configuration cell is a diagnostic: excluded from the proposed budgets.
+    scans = propose_budgets(merged)["idle_per_heads"]["1"]["git_scans_per_unchanged_worktree_per_idle_window_observed"]
+    assert scans["n"] == 1 and scans["max"] == len("main"), scans
 
 
 def main() -> None:
@@ -162,7 +172,7 @@ def main() -> None:
     window_checks()
     stimulus_checks()
     schema_checks()
-    merge_checks()
+    merge_checks(output)
     (output / "units.json").write_text(json.dumps({"passed": ["shim", "tails", "window", "stimuli", "schema", "merge"]}) + "\n")
     print("PASS perf matrix units: shim attribution, guarded tails, window summary, stimulus plan, schema, merge")
 

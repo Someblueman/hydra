@@ -112,7 +112,8 @@ class FixtureRun:
             client = Observer(self.observer, self.build / "hydra-tui", self.shim.wrappers["hydra"],
                               self.output / f"client-{serial}", self.fixture.repo, self.fixture.env)
             clients.append(client)
-            _, ready = client.ready({row["branch"] for row in self.fixture.workers})
+            # Time to usable is recorded either way; the bound only scales with the head count.
+            _, ready = client.ready({row["branch"] for row in self.fixture.workers}, timeout=15 + 0.5 * self.heads)
             spawn = client.wait("spawn")
             raw = client.wait("raw-ready")
             self.roots[spawn["tui_pid"]] = f"native-tui#{index}"

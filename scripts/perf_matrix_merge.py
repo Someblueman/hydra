@@ -12,6 +12,7 @@ merged bundle with their errors.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 from pathlib import Path
@@ -25,12 +26,15 @@ MERGED_KEYS = ("command", "generated_utc", "duration_seconds", "load_at_end", "v
 
 def load_run(label: str, directory: Path) -> dict[str, Any]:
     bundle = json.loads((directory / "bundle.json").read_text())
+    env = bundle["declared"].get("fixture_env") or {}
     for fixture in bundle["fixtures"]:
         fixture["id"] = f"{label}--{fixture['id']}"
         fixture["run"] = label
         for cell in fixture["cells"]:
             cell["fixture"] = fixture["id"]
             cell["run"] = label
+            if env:
+                cell["fixture_env"] = env  # flagged in the summary, excluded from proposed budgets
     for cell in bundle["planned_cells"]:
         cell["run"] = label
     return bundle
@@ -38,7 +42,8 @@ def load_run(label: str, directory: Path) -> dict[str, Any]:
 
 def merge(runs: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
     first = runs[0][1]
-    merged = {key: value for key, value in first.items() if key not in MERGED_KEYS}
+    # A deep copy: per_run below holds the first run's declared policy beside the merged one.
+    merged = copy.deepcopy({key: value for key, value in first.items() if key not in MERGED_KEYS})
     merged["generated_utc"] = first["generated_utc"]
     merged["runs"] = []
     merged["planned_cells"], merged["fixtures"], merged["unsupported_cells"] = [], [], []
@@ -81,7 +86,7 @@ def main() -> int:
     parser.add_argument("--run", action="append", required=True, metavar="LABEL=DIR",
                         help="a perf-matrix --output directory with its bundle.json; repeatable, in order")
     parser.add_argument("--output", type=Path, required=True, help="new directory for the merged bundle")
-    parser.add_argument("--evidence-dir", type=Path, help="publish summary.md, bundle.json and bounded raw samples here")
+    parser.add_argument("--evidence-dir", type=Path, help="publish summary.md, bundle.json.gz and bounded raw samples here")
     parser.add_argument("--raw-budget-bytes", type=int, default=600_000)
     args = parser.parse_args()
     runs = []

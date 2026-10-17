@@ -64,8 +64,10 @@ make test-perf-matrix
 
 `scripts/perf_matrix_merge.py --run LABEL=DIR ... --output DIR --evidence-dir DIR`
 joins several runner invocations into one validated bundle and summary, with the
-proposed budgets recomputed over every measured cell; fixture ids carry the run
-label and each run's command, load and producer interval are kept.
+proposed budgets recomputed over every measured cell; fixture ids and cell labels
+carry the run label and each run's command, load and producer interval are kept.
+Cells from a run with a declared `--fixture-env` are flagged `[non-default env]`
+and left out of the proposed budgets.
 
 `python3 scripts/perf-matrix.py --help` lists every option. `--settle`, `--idle`
 and `--gap` set the window lengths (idle plus the four-stimulus interaction window
@@ -75,8 +77,8 @@ fixtures per trial; `--output-interval-ns` changes the declared 31.25 ms produce
 line interval (128-byte lines); `--fixture-env KEY=VALUE` runs the fixture's public
 commands, owners and workers under a non-default configuration (recorded as
 `declared.fixture_env`; say why in `--load-note`). `--attention REPORT` embeds a
-`perf-attention` report; `--evidence-dir` publishes `summary.md`, a compact `bundle.json` and
-gzipped raw samples bounded by `--raw-budget-bytes`.
+`perf-attention` report; `--evidence-dir` publishes `summary.md`, a compact
+gzipped `bundle.json.gz` and gzipped raw samples bounded by `--raw-budget-bytes`.
 
 What each cell measures:
 
@@ -135,7 +137,8 @@ unknown items are matched by count, and cases the local route cannot classify
 are reported as silent by design rather than as misses. Marking an item seen is
 checked to keep the public signal.
 
-Evidence bundles (`bundle.json`, schema `hydra-perf-matrix/1`) keep exact
+Evidence bundles (`bundle.json` in the run directory, `bundle.json.gz` when
+published; schema `hydra-perf-matrix/1`) keep exact
 revisions and runtime, harness and binary hashes, the workload seed, tool
 versions, declared policy constants, clock calibrations, attribution boundaries,
 shim overhead, per-window role summaries, per-cell stimuli, update, locality and

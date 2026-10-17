@@ -141,7 +141,7 @@ def main() -> int:
     parser.add_argument("--candidate-source", type=Path, help="second runtime to alternate with the baseline")
     parser.add_argument("--candidate-build", type=Path)
     parser.add_argument("--attention", type=Path, help="existing attention qualification report.json to embed")
-    parser.add_argument("--evidence-dir", type=Path, help="publish summary.md, bundle.json and bounded raw samples here")
+    parser.add_argument("--evidence-dir", type=Path, help="publish summary.md, bundle.json.gz and bounded raw samples here")
     parser.add_argument("--raw-budget-bytes", type=int, default=1_500_000)
     parser.add_argument("--load-note", default="shared 4-core container; peers may run concurrently")
     parser.add_argument("--fixture-env", action="append", default=[], metavar="KEY=VALUE",

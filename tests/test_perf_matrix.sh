@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 from perf_matrix_report import validate_bundle
 out = Path(sys.argv[1])
-bundle = json.loads((out / "evidence/bundle.json").read_text())
+bundle = json.loads(gzip.decompress((out / "evidence/bundle.json.gz").read_bytes()))
 assert validate_bundle(bundle) == [], validate_bundle(bundle)
 cells = [c for f in bundle["fixtures"] for c in f["cells"]]
 assert len(cells) == 4 and all(c["status"] == "measured" for c in cells), [c["status"] for c in cells]

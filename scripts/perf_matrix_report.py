@@ -114,12 +114,15 @@ def _observer_cpu(cell: dict[str, Any], window: str = "idle") -> float | None:
 
 def _label(cell: dict[str, Any]) -> str:
     flag = "" if cell.get("status") == "measured" else f" [{cell.get('status')}]"
-    return f"{cell['heads']}/{cell['mode']}/{cell['clients']}c/{cell['preview']}/{cell['case']}/t{cell['trial']}{flag}"
+    flag += " [non-default env]" if cell.get("fixture_env") else ""
+    run = f" ({cell['run']})" if cell.get("run") else ""
+    return f"{cell['heads']}/{cell['mode']}/{cell['clients']}c/{cell['preview']}/{cell['case']}/t{cell['trial']}{run}{flag}"
 
 
 def propose_budgets(bundle: dict[str, Any]) -> dict[str, Any]:
     """Numbers derived from this run with a 1.5x margin; provisional, not frozen."""
-    cells = [c for c in cells_of(bundle) if c["status"] == "measured"]
+    # Cells measured under a declared non-default configuration are diagnostics, not baseline.
+    cells = [c for c in cells_of(bundle) if c["status"] == "measured" and not c.get("fixture_env")]
     quiet = [c for c in cells if c["case"] == "quiescent" and c["clients"] == 1 and c["preview"] == "closed"]
     per_heads: dict[int, dict[str, Any]] = {}
     for cell in quiet:
@@ -131,6 +134,9 @@ def propose_budgets(bundle: dict[str, Any]) -> dict[str, Any]:
         entry.setdefault("unchanged_git_per_wt", []).extend(cell["locality"]["git_launches_per_unchanged_worktree"])
     latencies = [a["input_to_observed_ns"] for c in cells for a in c["actions"] if a["status"] == "observed"]
     updates = [v for c in cells for v in c.get("update_latency", {}).get("latency_ns", [])]
+    scales = sorted({c["heads"] for c in cells})
+    loads = [value for f in bundle.get("fixtures", []) for key in ("load_before", "load_after")
+             for value in (f.get(key) or [])[:1]]
     recoveries = [r for c in cells if c["case"] == "sustained-output"
                   for r in c["pressure"]["recovery_after_stop_ns"] if r is not None]
 
@@ -151,12 +157,31 @@ def propose_budgets(bundle: dict[str, Any]) -> dict[str, Any]:
         },
         "interaction_latency_ms": {"observed": distribution([v / 1e6 for v in latencies]),
                                    "proposed_p95_ceiling_ms": ceiling([v / 1e6 for v in latencies]),
+                                   "per_heads": {str(heads): {
+                                       kind: {"observed": distribution(values), "proposed_max_ms": ceiling(values),
+                                              "not_observed": sum(1 for c in cells if c["heads"] == heads
+                                                                  for a in c["actions"]
+                                                                  if a["kind"] == kind and a["status"] != "observed")}
+                                       for kind in ("navigation", "search", "resize", "cancel")
+                                       for values in [[a["input_to_observed_ns"] / 1e6 for c in cells if c["heads"] == heads
+                                                       for a in c["actions"] if a["kind"] == kind and a["status"] == "observed"]]}
+                                       for heads in scales},
                                    "note": "deadline misses must stay zero; the proposed ceiling is 1.5x the observed maximum"},
         "update_latency_ms": {"observed": distribution([v / 1e6 for v in updates]),
                               "proposed_max_ms": ceiling([v / 1e6 for v in updates]),
+                              "per_heads": {str(heads): {
+                                  "observed": distribution(values), "proposed_max_ms": ceiling(values),
+                                  "changes_not_seen_in_window": sum(c["update_latency"]["changes_not_seen_in_window"]
+                                                                    for c in cells if c["heads"] == heads and "update_latency" in c)}
+                                  for heads in scales
+                                  for values in [[v / 1e6 for c in cells if c["heads"] == heads
+                                                  for v in c.get("update_latency", {}).get("latency_ns", [])]]},
                               "note": "selected-head changed-file count; bounded below by the 2 s refresh period"},
+        "observed_load_average_1m": {"min": min(loads, default=None), "max": max(loads, default=None),
+                                     "scope": "1-minute load average recorded before and after each fixture on the shared host"},
         "recovery_after_output_stop_ms": {"observed": distribution([v / 1e6 for v in recoveries]),
-                                          "proposed_max_ms": ceiling([v / 1e6 for v in recoveries])},
+                                          "proposed_max_ms": ceiling([v / 1e6 for v in recoveries]),
+                                          "scope": "producer backlog drained after the declared end at the declared rates; display catch-up is unmeasured"},
         "locality": {
             "target": "unchanged worktrees should incur zero repeated git scans; the observed per-refresh scan of every worktree is the current cost, not a budget",
         },
@@ -326,21 +351,32 @@ def publish(bundle: dict[str, Any], output: Path, evidence: Path, raw_budget: in
     evidence.mkdir(parents=True, exist_ok=True)
     (evidence / "raw").mkdir(exist_ok=True)
     shutil.copy(output / "summary.md", evidence / "summary.md")
-    index, used = [], 0
+    candidates = []
     for fixture in bundle["fixtures"]:
         for cell in fixture["cells"]:
             source = Path(cell["directory"]) / "samples.json"
-            if not source.is_file():
-                continue
-            data = gzip.compress(source.read_bytes(), 9)
-            name = f"{fixture['id']}-{cell['phase']}-{cell['case']}.samples.json.gz"
-            if used + len(data) <= raw_budget:
-                (evidence / "raw" / name).write_bytes(data)
-                used += len(data)
-                index.append({"cell": _label(cell), "file": name, "bytes": len(data)})
-            else:
-                index.append({"cell": _label(cell), "file": None, "omitted": "raw budget exhausted; retained in the run directory"})
+            if source.is_file():
+                candidates.append((fixture, cell, gzip.compress(source.read_bytes(), 9, mtime=0)))
+    # Smallest first so the budget covers as many cells as it can; diagnostics under a
+    # non-default configuration are never published in place of a baseline cell.
+    chosen, used = set(), 0
+    for fixture, cell, data in sorted(candidates, key=lambda row: len(row[2])):
+        if not cell.get("fixture_env") and used + len(data) <= raw_budget:
+            chosen.add(id(cell))
+            used += len(data)
+    index = []
+    for fixture, cell, data in candidates:
+        name = f"{fixture['id']}-{cell['phase']}-{cell['case']}.samples.json.gz"
+        if id(cell) in chosen:
+            (evidence / "raw" / name).write_bytes(data)
+            index.append({"cell": _label(cell), "file": name, "bytes": len(data)})
+        else:
+            reason = "diagnostic under a non-default configuration" if cell.get("fixture_env") else "raw budget exhausted"
+            index.append({"cell": _label(cell), "file": None, "bytes": len(data),
+                          "omitted": f"{reason}; the bundle keeps its per-window summaries"})
     bundle["raw_samples_published"] = {"budget_bytes": raw_budget, "used_bytes": used, "files": index}
-    # Minified: the published copy is for tools and diffs; the run directory keeps the indented one.
-    (evidence / "bundle.json").write_text(json.dumps(compact_bundle(bundle), separators=(",", ":")) + "\n")
+    # Minified and gzipped (fixed mtime, reproducible bytes) so a multi-run baseline stays small in the
+    # repository; summary.md is the readable copy and the run directory keeps the indented bundle.
+    compact = json.dumps(compact_bundle(bundle), separators=(",", ":")) + "\n"
+    (evidence / "bundle.json.gz").write_bytes(gzip.compress(compact.encode(), 9, mtime=0))
     (output / "bundle.json").write_text(json.dumps(bundle, indent=1) + "\n")
