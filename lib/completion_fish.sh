@@ -32,8 +32,12 @@ complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_sub
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from install-agent sign-in' -l agent -r -a 'claude codex opencode cursor agy pi' -d 'Agent'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup trust-key preflight provision agents install-agent sign-in' -l timeout -r -d 'SSH connect timeout, 1-300 seconds'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup trust-key preflight provision agents install-agent sign-in' -l json -d 'Versioned JSON output'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth enroll revoke' -a 'handshake discover qualify enroll revoke list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect announce submit start resume requests decide status observe cancel logs result inspect-result collect collected help'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth enroll revoke placement' -a 'handshake discover qualify enroll revoke list overview doctor admission bootstrap package task auth placement init spawn signal cancel workflow attach export import reconcile watch tui'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect announce submit start resume requests decide status observe cancel withdraw logs result inspect-result collect collected help'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from submit' -l placement -xa 'auto'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from submit' -l separate-from -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from placement' -a 'explain replay withdraw drain undrain policy help'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from placement; and __fish_seen_subcommand_from withdraw' -l timeout -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l source -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l spec -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l input -r

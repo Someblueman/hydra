@@ -20,8 +20,9 @@ flow. Existing direct remote workflow calls remain synchronous.
 
 Fleet and remote tasks shipped in v2.1.0. Headless provider execution and durable
 approval suspension are available in v2.2.0; see the [changelog](../CHANGELOG.md).
-A remote workflow runs on one selected host. Cross-host DAG coordination and
-automatic placement remain on the [roadmap](ROADMAP.md).
+A remote workflow runs on one selected host. New remote tasks can be placed
+automatically across eligible hosts (see [Automatic placement](#automatic-placement));
+cross-host DAG coordination remains on the [roadmap](ROADMAP.md).
 
 ## Architecture and installation
 
@@ -551,6 +552,124 @@ Initialized-host snapshots include capacity and observation timestamps. These ar
 observations; the receiving shell authority grants every reservation against live
 policy. See [Contracts](CONTRACTS.md#durable-state-v2) for limits, labels, queue
 deadlines, and retained claims after owner loss.
+
+## Automatic placement
+
+Remote task submission pins one host by default: the package's immutable `host`
+must be the alias you submit to, and nothing is recorded beyond the receiver's
+acceptance. Automatic placement (since 3.0) chooses the receiver for **new,
+unassigned work** from the registered aliases and records why:
+
+```sh
+hydra fleet task prepare --source . --spec task.json --output /tmp/task.json
+hydra fleet task submit --placement auto --input /tmp/task.json --key build-42
+hydra fleet task submit alpha --input /tmp/task.json --key build-43 --placement alpha
+hydra fleet placement explain task_ID --json     # the recorded decision
+hydra fleet placement replay task_ID             # re-derives it; must be identical
+hydra fleet placement policy                     # effective knobs and drained hosts
+hydra fleet placement drain ovh                  # keep new work off a host
+hydra fleet placement undrain ovh
+```
+
+With `--placement auto` the positional alias is omitted; the package's `host` is
+only the prepared template and the chosen host receives a copy whose `spec.host`
+and `spec_sha256` are rebound (bundle, inputs and limits are byte-identical).
+`--trust-spec` names the digest you reviewed (the prepared package); the
+host-bound digest the receiver trusts is reported as `bound_spec_sha256` and is
+what `hydra fleet task start HOST --id ID --trust-spec` needs later. `--placement
+HOST` is an explicit pin that also records a decision. `--separate-from TASK_ID`
+(repeatable, at most 8) excludes the current host of another placed task, which is
+how a validator stays off its producer's host.
+
+**Eligibility.** Every registered alias is observed with one handshake and one
+`admission status --json` call (serially, each bounded by the task's
+`transport_seconds`). A host is excluded, with every applicable reason recorded,
+when it is drained, offline or incompatible (`offline`, `timeout`,
+`version_incompatible`, ...), lacks `task-accept`/`task-withdraw` or an adapter
+capability the spec names (`capability_missing`), does not map the spec's
+project path (`project_unmapped`), differs from a `platform.OS-ARCH` capability
+(`platform_mismatch`), lacks a required `label.X` in its admission policy
+(`label_unsupported`), has no admission observation (`admission_unobserved`),
+reports an observation older than `max_observation_age_seconds` or ahead of the
+submitter's clock by more than that (`stale_observation`), has a full queue
+(`queue_full`) or more queued requests than `max_queued` (`queue_bound`), is
+below its disk floor or the task's log/artifact bytes (`disk_floor`,
+`disk_insufficient`), would consume validator headroom (`validator_reserved`),
+already recorded this task ID (`previous_generation`), or holds a task named by
+`--separate-from` (`validator_separation`). An idle host that fails any filter is
+not eligible.
+
+**Ranking.** Eligible hosts are ordered by capacity-normalized load
+`(reserved + queued) * 1000 / capacity` where `capacity` is the host's
+`host_limit`, or 1 when the host advertises no limit (an unbounded host looks
+fully loaded as soon as it holds one reservation; configure `host_limit` for
+balanced placement), then by reserved slots of the same task class (requests
+with the same required-label set), then by queue depth, then by alias order.
+The first host receives the task. The receiver's admission remains final: a
+definitive refusal (`capability_unavailable`, `unmapped_project`,
+`missing_dependency`, `invalid_package`, or a start that fails with `queue_full`)
+is recorded and the next-ranked host is tried; an ambiguous dispatch
+(`outcome_unknown`) leaves the task assigned to that host and a later submission
+with the same key reconciles with that host only, never a second one. Submissions
+for one key serialize on the record, so concurrent submitters cannot dispatch the
+same task twice. Each candidate also carries typed, versioned `estimates`
+(`queue_delay_seconds`, `measured_duration_seconds`, `transfer_cost_bytes`,
+estimates schema 1) that are recorded as unavailable and never used in ranking
+until measured evidence exists.
+
+**Policy.** `$HYDRA_HOME/fleet/placement-policy.json` (optional, closed schema,
+policy version 1) holds `max_observation_age_seconds` (default 60),
+`max_queued` (default 8, 0..128) and `validator_reserve_slots` (default 0,
+0..64): the number of free slots per host, out of its `host_limit`, kept for
+`role.validator` tasks so fan-out of producers cannot fill every host ahead of
+validation. The default reserves nothing; raise it where validators demonstrably
+wait behind producers. Receivers keep FIFO queue order; placement never
+reorders a receiver's queue. Task classes come from capability names:
+`role.producer`, `role.validator` (otherwise `general`); receivers accept and
+record `role.*` and check `platform.OS-ARCH` against their own platform.
+
+**Record.** Every `--placement` submission writes
+`$HYDRA_HOME/fleet/placements/TASK_ID/placement.json` (`fleet-placement` schema
+1, digest-sealed): the inputs derived from the spec, the policy used, and for
+each assignment generation every round's observations (with ages), candidates
+(eligibility, reasons, score, rank, estimates), the decision, and every dispatch
+attempt with its reservation outcome (`accepted`, `refused` with the receiver's
+code, `unknown`, `error`). `placement explain` prints it; `placement replay`
+re-runs the ranking from the recorded observations and policy and fails with
+`replay_mismatch` unless the result is identical. A record whose digest does not
+match is refused (`not_found`). Drain markers live in
+`$HYDRA_HOME/fleet/placement-drained/HOST` and affect only automatic placement.
+
+**Rebalancing.** Only accepted work that has not started moves:
+
+```sh
+hydra fleet placement withdraw task_ID        # the current receiver records the withdrawal
+hydra fleet task submit --placement auto --input /tmp/task.json --key build-42   # generation 2
+```
+
+`withdraw` sends `task withdraw` to the assigned host. The receiver takes the
+launch owner lock, records `withdrawal.json` and the durable `withdrawn` state
+only for an accepted task without a launch claim, and refuses anything else
+(`execution_owned`); a withdrawn task never starts there (`withdrawn`). Nothing
+is released because admission is requested only at launch. The submitter then
+opens the next generation on the next submission, excluding every host that
+recorded the task. A lost withdrawal response marks the generation
+`withdrawal: unknown` and blocks transfer (`withdrawal_unconfirmed`) until a
+rerun confirms it; running agents are never migrated and uncertain work is never
+replayed as balancing. Receivers that advertise `task-withdraw` record the
+submitter's `assignment_generation` at acceptance and reject a start, resume or
+re-submission that names another generation (`stale_generation`); result
+collection admits a snapshot only from the current generation and host
+(`stale_generation`), and promotion consumes only collected results, so a late
+result from a superseded generation can never be integrated. This fence covers
+Hydra's own records; a task's external side effects (pushes, API calls, provider
+sessions) need their own idempotency or fencing contract, and expiry of a queue
+deadline or lease never authorizes a second execution.
+
+Placement is qualified here with local receivers behind a controlled SSH
+boundary. Heterogeneous-host trials comparing explicit and balanced placement
+(queue wait, time to verified result, throughput, transfer bytes, starvation)
+need real hosts and have not been run; no performance improvement is claimed.
 
 ## Native fleet view
 

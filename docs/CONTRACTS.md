@@ -463,6 +463,47 @@ local gate, approval, and promotion flow without restoring remote live state.
 Fleet stdin rejects embedded NUL bytes
 and input beyond its 8 MiB bound instead of accepting a truncated JSON prefix.
 
+Automatic placement (since 3.0, [FLEET.md](FLEET.md#automatic-placement)) adds
+to task protocol 1, additively: receivers advertise `task-withdraw`; a `submit`,
+`start` or `resume` request may carry `assignment_generation` (integer
+1..1000000), which acceptance records as `assignment_generation` (1 when absent)
+and which a later request must match (`stale_generation`); the `withdraw`
+operation moves an accepted task without a launch claim to the durable runtime
+state `withdrawn` (refusing anything else with `execution_owned` or
+`invalid_state`), after which start and resume fail with `withdrawn`; spec
+capabilities `role.NAME` are recorded placement classes and `platform.OS-ARCH`
+must equal the receiver's handshake platform. `fleet task submit --placement
+auto|HOST [--separate-from TASK_ID]` and `fleet placement explain|replay|
+withdraw TASK_ID`, `drain|undrain HOST` and `policy` are the submitter surface.
+`fleet-placement` schema 1 is the digest-sealed record at
+`$HYDRA_HOME/fleet/placements/TASK_ID/placement.json`: `{schema_version, task_id,
+submission_key, mode: auto|explicit, prepared_spec_sha256, prepared_host, inputs
+{project, work_kind, task_class, required_labels[], required_labels_key,
+adapter_capabilities[], platform, disk_bytes_required}, policy {policy_version,
+max_observation_age_seconds, max_queued, validator_reserve_slots}, generation,
+assigned_host, reservation: none|accepted|refused|unknown|withdrawn,
+bound_spec_sha256, generations[] {generation, host, reservation,
+bound_spec_sha256, withdrawal: null|{state: requested|confirmed|unknown|refused,
+code?, requested_at, confirmed_at?}, rounds[] {decided_at, mode, excluded_hosts[],
+separation_hosts[], observations[], candidates[] {host, eligible, reasons[],
+observation_age_seconds, score {capacity, reserved, queued, class_reserved,
+load_milli}|null, estimates {schema_version: 1, queue_delay_seconds,
+measured_duration_seconds, transfer_cost_bytes, used_in_ranking: false}, rank},
+decision {host|null, reason: ranked|explicit|no_eligible_host, policy_version},
+attempts[] {host, outcome: in_flight|accepted|refused|unknown|error, code?,
+receiver_record, requested_at, spec_sha256, task_state?}}}, sha256}`. `fleet
+placement replay` re-derives every automatic round's candidates and decision from
+its recorded observations, excluded and separation hosts, `decided_at` and the
+recorded policy and reports `identical: true` or `replay_mismatch`. Successful
+`--placement` submissions add `data.placement {task_id, generation,
+assigned_host, reservation, bound_spec_sha256, mode, record_directory}`. Result
+collection refuses a snapshot whose receipt generation or host differs from the
+record (`stale_generation`). The fence covers Hydra's records only: external side
+effects need their own idempotency contract, and no deadline or lease expiry
+authorizes duplicate execution. The policy file is
+`$HYDRA_HOME/fleet/placement-policy.json` (closed schema, integer knobs; an invalid
+file fails every automatic submission with `policy_invalid`).
+
 ## Durable state, trust, and execution boundaries
 
 State v2 is project-scoped beneath `$HYDRA_HOME/state/v2`. Records are replaced

@@ -3,6 +3,7 @@
 #include "fleet/transport/remote.h"
 #include "fleet/task/task.h"
 #include "fleet/revocation/revocation.h"
+#include "fleet/placement/placement.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,13 +25,13 @@ static bool uncertain(json_object *response) {
 struct remote_options {
     const char *host, *output, *timeout, *input, *key, *id, *trust;
     const char *stream, *offset, *limit, *source, *step, *attempt;
-    const char *request_id, *decision, *actor;
+    const char *request_id, *decision, *actor, *placement;
     const char *cursor, *event_limit, *byte_offset, *stream_id;
-    bool submit, start, cancel, logs, resume, decide, result_read, observe;
-    unsigned log_offset, log_limit, seconds;
+    const char *separate[PLACEMENT_SEPARATIONS];
+    bool submit, start, cancel, logs, resume, decide, result_read, observe, withdraw;
+    unsigned log_offset, log_limit, seconds, generation, separations;
     unsigned event_cursor, event_count;
 };
-
 static bool observation_text(json_object *object, const char *key, size_t limit, bool nullable_value) {
     json_object *value = f_field(object, key); const char *text = f_text(value);
     const unsigned char *p;
@@ -139,7 +140,7 @@ static json_object *parse_observe_limits(struct remote_options *options) {
 static json_object *parse_limits(struct remote_options *options) {
     unsigned attempt;
     if (options->timeout && !number(options->timeout, 1, 300, &options->seconds))
-        return f_error(options->cancel ? "fleet-task-cancel" : "fleet-task-result", "invalid_input", "timeout must be 1-300 seconds");
+        return f_error(options->cancel ? "fleet-task-cancel" : options->withdraw ? "fleet-task-withdraw" : "fleet-task-result", "invalid_input", "timeout must be 1-300 seconds");
     if (!options->logs && options->observe) {
         return parse_observe_limits(options);
     }
@@ -152,30 +153,57 @@ static json_object *parse_limits(struct remote_options *options) {
         return f_error("fleet-task-logs", "invalid_input", "limit must be 1-65536");
     return NULL;
 }
-static json_object *parse_options(int argc, char **argv, struct remote_options *options) {
-    int i;
+/* The host is explicit unless automatic placement is requested; then the
+ * placement record names the receiver and the positional alias is omitted. */
+static json_object *parse_placement(struct remote_options *options) {
+    if (!options->submit) return options->host ? NULL : f_error("fleet-task", "invalid_input", "select a registered host alias");
+    if (!options->placement) return options->host ? NULL : f_error("fleet-task", "invalid_input", "select a registered host alias or use --placement auto");
+    if (!strcmp(options->placement, "auto")) return options->host ? f_error("fleet-task-submit", "invalid_input", "omit the host alias with --placement auto") : NULL;
+    if (!f_name(options->placement)) return f_error("fleet-task-submit", "invalid_input", "--placement takes auto or a registered host alias");
+    if (options->host && strcmp(options->host, options->placement)) return f_error("fleet-task-submit", "placement_mismatch", "the host alias and --placement name different hosts");
+    options->host = options->placement;
+    return NULL;
+}
+/* --separate-from TASK_ID (submit only, repeatable) names tasks whose current
+ * host this one must avoid; returns the index of the consumed value. */
+static json_object *parse_separation(int argc, char **argv, int *i, struct remote_options *options) {
+    if (++*i == argc || !*argv[*i] || options->separations >= PLACEMENT_SEPARATIONS) return f_error("fleet-task-submit", "invalid_input", "--separate-from takes a task ID, at most 8 times");
+    options->separate[options->separations++] = argv[*i];
+    return NULL;
+}
+struct remote_field { const char *name; bool allowed; const char **destination; };
+static const char **match_field(const struct remote_field *fields, size_t count, const char *name) {
+    size_t field;
+    for (field = 0; field < count; field++) if (fields[field].allowed && !strcmp(name, fields[field].name)) return fields[field].destination;
+    return NULL;
+}
+/* Returns the index of the first option; a leading alias is the host. */
+static int parse_operation(int argc, char **argv, struct remote_options *options) {
+    const char *operation = argv[0];
     *options = (struct remote_options){0};
-    options->submit = !strcmp(argv[0], "submit");
-    options->start = !strcmp(argv[0], "start");
-    options->cancel = !strcmp(argv[0], "cancel");
-    options->logs = !strcmp(argv[0], "logs");
-    options->resume = !strcmp(argv[0], "resume");
-    options->decide = !strcmp(argv[0], "decide");
-    options->result_read = !strcmp(argv[0], "result");
-    options->observe = !strcmp(argv[0], "observe");
-    options->seconds = (options->result_read || options->cancel) ? 30 : 5;
+    if (argc >= 2 && argv[1][0] != '-') { options->host = argv[1]; }
+    options->submit = !strcmp(operation, "submit");
+    options->start = !strcmp(operation, "start");
+    options->cancel = !strcmp(operation, "cancel");
+    options->logs = !strcmp(operation, "logs");
+    options->resume = !strcmp(operation, "resume");
+    options->decide = !strcmp(operation, "decide");
+    options->result_read = !strcmp(operation, "result");
+    options->observe = !strcmp(operation, "observe");
+    options->withdraw = !strcmp(operation, "withdraw");
+    options->seconds = (options->result_read || options->cancel || options->withdraw) ? 30 : 5;
     options->log_limit = 4096;
-    if (argc < 2 || !f_name(argv[1])) return f_error("fleet-task", "invalid_input", "select a registered host alias");
-    options->host = argv[1];
-    const struct {
-        const char *name;
-        bool allowed;
-        const char **destination;
-    } fields[] = {
+    return options->host ? 2 : 1;
+}
+static json_object *parse_options(int argc, char **argv, struct remote_options *options) {
+    int i, first = parse_operation(argc, argv, options);
+    if (options->host && !f_name(options->host)) return f_error("fleet-task", "invalid_input", "select a registered host alias");
+    const struct remote_field fields[] = {
         {"--output", options->result_read, &options->output},
-        {"--timeout", options->result_read || options->cancel, &options->timeout},
+        {"--timeout", options->result_read || options->cancel || options->withdraw, &options->timeout},
         {"--input", options->submit, &options->input},
         {"--key", options->submit, &options->key},
+        {"--placement", options->submit, &options->placement},
         {"--id", !options->submit, &options->id},
         {"--trust-spec", options->start || options->submit || options->resume || options->decide, &options->trust},
         {"--request", options->decide, &options->request_id},
@@ -192,20 +220,20 @@ static json_object *parse_options(int argc, char **argv, struct remote_options *
         ,{"--stream-id", options->observe, &options->stream_id}
         ,{"--byte-offset", options->observe, &options->byte_offset}
     };
-    for (i = 2; i < argc; i++) {
-        const char **destination = NULL;
-        size_t field;
-        for (field = 0; field < sizeof(fields) / sizeof(fields[0]); field++) {
-            if (fields[field].allowed && !strcmp(argv[i], fields[field].name)) {
-                destination = fields[field].destination;
-                break;
-            }
+    for (i = first; i < argc; i++) {
+        const char **destination;
+        if (options->submit && !strcmp(argv[i], "--separate-from")) {
+            json_object *invalid = parse_separation(argc, argv, &i, options);
+            if (invalid) return invalid;
+            continue;
         }
+        destination = match_field(fields, sizeof(fields) / sizeof(fields[0]), argv[i]);
         if (!destination) return f_error("fleet-task", "invalid_input", "use hydra fleet task help");
         if (*destination || ++i == argc || !*argv[i]) return f_error("fleet-task", "invalid_input", "each option requires one value");
         *destination = argv[i];
     }
     if ((options->submit ? !options->input || !options->key : !options->id) || ((options->start || options->resume || options->decide) && !options->trust) || (options->decide && (!options->request_id || !options->decision))) return f_error("fleet-task", "invalid_input", "required task options are missing");
+    { json_object *invalid = parse_placement(options); if (invalid) return invalid; }
     return parse_limits(options);
 }
 static void request_log_options(json_object *request, const struct remote_options *options) {
@@ -233,6 +261,7 @@ static json_object *make_request(const struct remote_options *options, const cha
     if (options->trust) f_string_add(request, "trust_spec", options->trust);
     if (options->logs) request_log_options(request, options);
     if (options->observe) request_observe_options(request, options);
+    if (options->generation) json_object_object_add(request, "assignment_generation", json_object_new_int64(options->generation));
     if (options->submit) { json_object_object_add(request, "package", json_object_get(package)); f_string_add(request, "submission_key", options->key); }
     else f_string_add(request, "task_id", options->id);
     return request;
@@ -252,41 +281,67 @@ static json_object *result_output(const struct remote_options *options, json_obj
     json_object_put(checked);
     return response;
 }
-json_object *task_remote_cli(int argc, char **argv) {
-    struct remote_options parsed, *options = &parsed;
-    struct f_remote remote; char capability[32];
-    json_object *package = NULL, *checked = NULL, *request = NULL;
-    json_object *response = parse_options(argc, argv, options);
-    if (response) return response;
-    if (revocation_blocked("transport", options->host)) return revocation_error("fleet-task", "transport", options->host);
-    if (f_remote_load(options->host, &remote)) return f_error("fleet-task", "invalid_alias", "register the remote before submitting a task");
-    if (options->submit) {
-        json_object *spec;
-        package = f_read_json(options->input, TASK_PACKAGE_LIMIT); checked = task_inspect(package);
-        if (!json_object_get_boolean(f_field(checked, "ok"))) { response = checked; checked = NULL; goto done; }
-        spec = f_field(checked, "data");
-        if (strcmp(options->host, f_string(spec, "host"))) { response = f_error("fleet-task-submit", "placement_mismatch", "the selected alias differs from the immutable task destination"); goto done; }
-        options->seconds = (unsigned)json_object_get_int(f_field(f_field(spec, "limits"), "transport_seconds"));
-    }
-    response = f_observe(&remote, "handshake", options->seconds);
-    if (!json_object_get_boolean(f_field(response, "ok"))) goto done;
-    snprintf(capability, sizeof(capability), "task-%s", options->submit ? "accept" : argv[0]);
+/* One negotiated transport to a loaded alias; package is borrowed. Lost or
+ * invalid responses to mutations become outcome_unknown, never a retry. */
+static json_object *transact(struct remote_options *options, const struct f_remote *remote, const char *operation, json_object *package) {
+    char capability[32]; json_object *request, *response = f_observe(remote, "handshake", options->seconds);
+    if (!json_object_get_boolean(f_field(response, "ok"))) return response;
+    snprintf(capability, sizeof(capability), "task-%s", options->submit ? "accept" : operation);
     if (!supported(response, capability) || (options->submit && options->trust && !supported(response, "task-start"))) {
-        json_object_put(response); response = f_error("fleet-task", "capability_unavailable", "the receiver lacks the requested task protocol 1 capability"); goto done;
+        json_object_put(response); return f_error("fleet-task", "capability_unavailable", "the receiver lacks the requested task protocol 1 capability");
     }
+    /* Receivers advertising task-withdraw record and enforce assignment generations. */
+    if (options->generation && !supported(response, "task-withdraw")) options->generation = 0;
     json_object_put(response);
-    request = make_request(options, argv[0], package);
-    response = f_request(&remote, request, options->seconds);
+    request = make_request(options, operation, package);
+    response = f_request(remote, request, options->seconds); json_object_put(request);
     if (json_object_get_boolean(f_field(response, "ok")) && !response_binding_valid(response, options, package)) {
         json_object_put(response); response = f_error("fleet-task", "invalid_response", "the receiver returned a task handle with inconsistent bindings");
     }
     if (options->result_read && json_object_get_boolean(f_field(response, "ok"))) response = result_output(options, response);
-    if ((options->submit || options->start || options->cancel || options->resume || options->decide) && uncertain(response)) {
+    if ((options->submit || options->start || options->cancel || options->resume || options->decide || options->withdraw) && uncertain(response)) {
         json_object *wrapped = f_error("fleet-task", "outcome_unknown", options->submit ? "the acceptance response was lost or invalid; retry this same package and key to reconcile, never invent a new key" : "the mutation response was lost or invalid; inspect this task's status; execution is never replayed");
         json_object_object_add(f_field(wrapped, "error"), "cause", json_object_get(f_field(response, "error")));
         json_object_put(response); response = wrapped;
     }
-done:
-    if (response) f_string_add(response, "host", options->host);
-    json_object_put(checked); json_object_put(package); json_object_put(request); return response;
+    return response;
+}
+json_object *task_remote_submit(const char *host, json_object *package, const char *key, const char *trust, int generation, unsigned seconds) {
+    struct remote_options options = {0}; struct f_remote remote; json_object *response;
+    options.submit = true; options.host = host; options.key = key; options.trust = trust; options.seconds = seconds;
+    options.generation = generation > 0 ? (unsigned)generation : 0;
+    if (f_name(host) && revocation_blocked("transport", host)) return revocation_error("fleet-task", "transport", host);
+    if (!f_name(host) || f_remote_load(host, &remote)) return f_error("fleet-task", "invalid_alias", "register the remote before submitting a task");
+    response = transact(&options, &remote, "submit", package);
+    f_string_add(response, "host", host);
+    return response;
+}
+static json_object *submit_command(struct remote_options *options) {
+    json_object *package = f_read_json(options->input, TASK_PACKAGE_LIMIT), *checked = task_inspect(package), *response, *separate = NULL;
+    const char *bound; unsigned i;
+    if (!json_object_get_boolean(f_field(checked, "ok"))) { json_object_put(package); return checked; }
+    bound = f_string(f_field(checked, "data"), "host");
+    options->seconds = (unsigned)json_object_get_int(f_field(f_field(f_field(checked, "data"), "limits"), "transport_seconds"));
+    if (options->placement) {
+        separate = json_object_new_array();
+        for (i = 0; i < options->separations; i++) json_object_array_add(separate, json_object_new_string(options->separate[i]));
+        if (strcmp(options->placement, "auto") && strcmp(options->placement, bound)) response = f_error("fleet-task-submit", "placement_mismatch", "the pinned alias differs from the immutable task destination");
+        else response = placement_submit(package, options->key, options->trust, options->placement, separate, options->seconds);
+    } else if (strcmp(options->host, bound)) response = f_error("fleet-task-submit", "placement_mismatch", "the selected alias differs from the immutable task destination");
+    else response = task_remote_submit(options->host, package, options->key, options->trust, 0, options->seconds);
+    json_object_put(separate); json_object_put(checked); json_object_put(package);
+    return response;
+}
+json_object *task_remote_cli(int argc, char **argv) {
+    struct remote_options parsed, *options = &parsed;
+    struct f_remote remote; char assigned[128];
+    json_object *response = parse_options(argc, argv, options);
+    if (response) return response;
+    if (options->host && revocation_blocked("transport", options->host)) return revocation_error("fleet-task", "transport", options->host);
+    if (options->submit) return submit_command(options);
+    if (f_remote_load(options->host, &remote)) return f_error("fleet-task", "invalid_alias", "register the remote before submitting a task");
+    if (options->start || options->resume) options->generation = (unsigned)placement_generation(options->id, assigned);
+    response = transact(options, &remote, argv[0], NULL);
+    f_string_add(response, "host", options->host);
+    return response;
 }

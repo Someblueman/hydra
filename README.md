@@ -173,6 +173,11 @@ workflows, and recovery behavior. `hydra fleet discover --source ssh-config|
 ansible-inventory:FILE|dns-sd` lists candidates from your own inventories with a
 diff against the previous snapshot, and `hydra fleet revoke` records a final,
 local revocation of a candidate, source, alias, package or project decision.
+New remote tasks can be placed automatically across eligible hosts
+(`hydra fleet task submit --placement auto`), with every decision recorded and
+replayable (`hydra fleet placement explain|replay`); explicit host pinning is the
+default. See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements,
+remote workflows, placement, and recovery behavior.
 
 ## Plan an objective
 

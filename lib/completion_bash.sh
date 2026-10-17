@@ -40,9 +40,16 @@ _hydra_completion() {
             sign-in) COMPREPLY=($(compgen -W "--agent --timeout --json" -- "${cur}")); return 0 ;;
         esac
     fi
+    if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && ${COMP_WORDS[3]:-} == submit && ${prev} == --placement ]]; then
+        COMPREPLY=($(compgen -W "auto" -- "${cur}")); return 0
+    fi
+    if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == placement && $COMP_CWORD -ge 4 ]]; then
+        COMPREPLY=($(compgen -W "--json --timeout" -- "${cur}")); return 0
+    fi
     if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && $COMP_CWORD -ge 5 ]]; then
         case ${COMP_WORDS[3]:-} in
-            submit) COMPREPLY=($(compgen -W "--input --key --trust-spec" -- "${cur}")); return 0 ;;
+            submit) COMPREPLY=($(compgen -W "--input --key --trust-spec --placement --separate-from" -- "${cur}")); return 0 ;;
+            withdraw) COMPREPLY=($(compgen -W "--id --timeout" -- "${cur}")); return 0 ;;
             decide) COMPREPLY=($(compgen -W "--id --trust-spec --request --decision --by" -- "${cur}")); return 0 ;;
             start|resume) COMPREPLY=($(compgen -W "--id --trust-spec" -- "${cur}")); return 0 ;;
             collect) COMPREPLY=($(compgen -W "--id --input --into --timeout" -- "${cur}")); return 0 ;;
@@ -72,7 +79,7 @@ _hydra_completion() {
             return 0
             ;;
         fleet)
-            COMPREPLY=($(compgen -W "handshake discover qualify enroll revoke list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            COMPREPLY=($(compgen -W "handshake discover qualify enroll revoke list overview doctor admission bootstrap package task auth placement init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
             return 0
             ;;
         discover|qualify)
@@ -92,7 +99,11 @@ _hydra_completion() {
             return 0
             ;;
         task)
-            COMPREPLY=($(compgen -W "prepare inspect announce submit start resume requests decide status observe cancel logs result inspect-result collect collected help" -- "${cur}"))
+            COMPREPLY=($(compgen -W "prepare inspect announce submit start resume requests decide status observe cancel withdraw logs result inspect-result collect collected help" -- "${cur}"))
+            return 0
+            ;;
+        placement)
+            COMPREPLY=($(compgen -W "explain replay withdraw drain undrain policy help" -- "${cur}"))
             return 0
             ;;
         prepare)
