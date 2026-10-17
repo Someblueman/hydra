@@ -7,6 +7,13 @@
 /* Onboarding screens. Values come from the CLI envelopes; the fixed
  * sentences say what each screen is and which command a key would run. */
 
+void onb_job_label(enum onb_job kind, char *out, size_t size) {
+    static const char *const labels[] = {"", "Finding the onboarding records", "Discovering candidates (no connection)",
+                                         "Qualifying candidates (one read-only handshake each)", "Reviewing the enrollment intent",
+                                         "Reading the recorded enrollment status", "Applying the reviewed enrollment"};
+    copy_text(out, size, labels[kind]);
+}
+
 /* A scrolled body between a fixed title and footer. */
 struct pen { struct app *app; size_t row, skip; int bottom; bool more; };
 

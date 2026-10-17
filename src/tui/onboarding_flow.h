@@ -57,4 +57,6 @@ void onb_form_insert(struct native_onboarding *s, const struct tv_event *e);
 void onb_form_set(struct onb_field *f, const char *text);
 /* The job each screen leads to, for the hint line and the running label. */
 void onb_job_label(enum onb_job kind, char *out, size_t size);
+/* Opens the detail screen of the selected row (a candidate or a source record). */
+void onb_open_detail(struct native_onboarding *s);
 #endif

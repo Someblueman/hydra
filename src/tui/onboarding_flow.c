@@ -38,13 +38,6 @@ bool native_onboarding_active(const struct app *app) { return app->onboarding &&
 
 static void notice(struct native_onboarding *s, const char *text) { copy_text(s->notice, sizeof(s->notice), text); }
 
-void onb_job_label(enum onb_job kind, char *out, size_t size) {
-    static const char *const labels[] = {"", "Finding the onboarding records", "Discovering candidates (no connection)",
-                                         "Qualifying candidates (one read-only handshake each)", "Reviewing the enrollment intent",
-                                         "Reading the recorded enrollment status", "Applying the reviewed enrollment"};
-    copy_text(out, size, labels[kind]);
-}
-
 /* ---- Directory records ---- */
 
 /* Highest N of PREFIX-N.json in the onboarding directory, 0 when none. */
@@ -265,7 +258,7 @@ static const struct onb_candidate *selected_candidate(const struct native_onboar
     return &s->model->candidates[rows[s->selected].index];
 }
 
-static void open_detail(struct native_onboarding *s) {
+void onb_open_detail(struct native_onboarding *s) {
     struct onb_row rows[ONB_CANDIDATES + ONB_RECORDS];
     size_t count = rows_of(s, rows);
     if (s->selected >= count) { notice(s, "No row is selected"); return; }
@@ -409,7 +402,7 @@ static void list_key(struct app *app, struct native_onboarding *s, uint32_t key)
 
 static void enter(struct app *app, struct native_onboarding *s) {
     switch (s->screen) {
-        case ONB_SCREEN_LIST: open_detail(s); break;
+        case ONB_SCREEN_LIST: onb_open_detail(s); break;
         case ONB_SCREEN_SELECT:
             if (s->focus + 1 < ONB_FORM_FIELDS) s->focus++; else submit_select(app, s);
             break;
@@ -499,46 +492,4 @@ void native_onboarding_flush_input(struct app *app) {
     struct tv_event e;
     struct native_onboarding *s = app->onboarding;
     if (s && s->open && tv_input_flush(&s->input, &e)) onboarding_event(app, s, &e);
-}
-
-/* ---- Headless ---- */
-
-int native_onboarding_fixture(struct app *app, const char *export_file, const char *intent_file, const char *screen) {
-    struct native_onboarding *s = native_onboarding_state(app);
-    if (!s) return 2;
-    s->open = true; s->directory_known = true; s->loaded = true;
-    copy_text(s->directory, sizeof(s->directory), "/fixture/onboarding");
-    if (export_file && (onb_parse_file(s->model, export_file) || !s->model->last.parsed)) { fprintf(stderr, "onboarding fixture %s is not a Hydra envelope\n", export_file); return 2; }
-    if (export_file) copy_text(s->model->export_path, sizeof(s->model->export_path), export_file);
-    if (intent_file && (onb_parse_file(s->model, intent_file) || !s->model->intent.loaded)) { fprintf(stderr, "onboarding intent fixture %s is not a review or status envelope\n", intent_file); return 2; }
-    if (intent_file) copy_text(s->intent_path, sizeof(s->intent_path), s->model->intent.path[0] ? s->model->intent.path : intent_file);
-    s->screen = ONB_SCREEN_LIST;
-    if (screen && !strcmp(screen, "detail")) { s->selected = 0; open_detail(s); }
-    else if (screen && !strcmp(screen, "changes")) s->screen = ONB_SCREEN_CHANGES;
-    else if (screen && !strcmp(screen, "intent")) s->screen = ONB_SCREEN_INTENT;
-    else if (screen && !strcmp(screen, "select")) s->screen = ONB_SCREEN_SELECT;
-    else if (screen && !strcmp(screen, "review")) { copy_text(s->candidate, sizeof(s->candidate), s->model->candidate_count ? s->model->candidates[0].candidate_id : ""); s->screen = ONB_SCREEN_REVIEW; }
-    else if (screen && strcmp(screen, "list")) { fprintf(stderr, "unknown onboarding screen %s\n", screen); return 2; }
-    return 0;
-}
-
-void native_onboarding_dump(struct app *app, FILE *out) {
-    struct native_onboarding *s = app->onboarding;
-    struct onb_row rows[ONB_CANDIDATES + ONB_RECORDS];
-    size_t count, i;
-    if (!s) return;
-    count = rows_of(s, rows);
-    fprintf(out, "HYDRA_ONBOARDING\t1\n");
-    for (i = 0; i < count; i++) {
-        if (rows[i].kind == ONB_ROW_CANDIDATE) {
-            const struct onb_candidate *c = &s->model->candidates[rows[i].index];
-            const struct onb_host *h = onb_host_for(s->model, c->candidate_id);
-            fprintf(out, "C\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", c->candidate_id, c->target, c->status, onb_typed_name(onb_candidate_typed(s->model, c)),
-                    onb_candidate_source(c), onb_candidate_platform(c), h ? h->alias : "-", h ? h->status : "-");
-        } else {
-            const struct onb_record *r = &s->model->records[rows[i].index];
-            fprintf(out, "N\t%s\t%s\t%s\t%s\t%s\n", r->name, r->target, r->reason, r->revocation.present ? "revoked" : "conflicting", r->source);
-        }
-    }
-    fprintf(out, "END\t%zu\n", count);
 }
