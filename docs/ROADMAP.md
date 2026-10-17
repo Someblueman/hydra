@@ -523,7 +523,7 @@ to open work:
 | Control-mode polling is a bounded historical lead ([tmux prototype][src-tmux-prototype]). | Item 10 may evaluate it; reconnect, restart, partial frames, sustained CPU/RSS, resize and platform parity remain unqualified. Next: measure the supported matrix before selecting a change. |
 | Scheduled input, coordinated omission, monotonic clocks, attribution and counter limits ([performance research][src-performance]). | [Item 10](#10-performance-baselines-idle-efficiency-and-change-locality). Next: establish 1/10/50-worktree baselines with agent/tmux/observer attribution and explicit unknown counters before budgets or parity claims. |
 | Discovery supplies untrusted coordinates and needs typed, private candidate state ([host discovery][src-host-report]). | [H4](#h-host-discovery-qualification-and-staged-onboarding). Next: select one live source, then implement and qualify bounded acquisition and snapshot diffs. |
-| Onboarding needs provenance, freshness, identity and typed progress ([host discovery][src-host-brief]). | [H5](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify review, filters, detail and interrupted multi-host progress. |
+| Onboarding needs provenance, freshness, identity and typed progress ([host discovery][src-host-brief]). | [H5](#h-host-discovery-qualification-and-staged-onboarding) delivered within local fixture qualification. Next: observe one live multi-host onboarding through the control centre. |
 | Changed keys and source conflicts require explicit revocation and review ([host discovery][src-host-report]). | [H6](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify scoped revocation and reviewed key rotation without cancelling or replaying tasks. |
 | Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 has no open provider checks: Claude's and Cursor's (with the `--trust` profile fix) remote tasks passed on 26 September 2026; Antigravity is closed upstream ([antigravity-cli#219](https://github.com/google-antigravity/antigravity-cli/issues/219)). The operator-provided Ubuntu VPS runs Hydra with tmux installed; prepare a separate tmux-absent environment for T2. |
 | Structural plan inspection, three-concern evaluation, replayable decision records and a held-out deterministic evaluation are implemented; semantic planning benefit over overhead on a real workload with live agents remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality). Next: run `make test-plan-eval`'s matched protocol on a live-agent workload with recorded human corrections and supplied estimates before claiming planning benefit. |
@@ -1094,15 +1094,29 @@ aliases, installs Hydra or grants execution permission.
       and is not claimed. VPN and cloud-tag live clients remain snapshot-only
       (schema-2 inventories).
 
-- [ ] **H5 — Onboarding operator view and workflow qualification.** Add filters,
-      candidate details, snapshot changes and per-host apply/resume/reconcile
-      progress over H1–H3 records, delegating actions to the existing CLI.
-      Acceptance: with a prepared alias/key/credentials/package, reach one-host
-      review in at most three explicit commands and one confirmation; show the
-      exact actions and bindings before apply. CLI/JSON/TUI agree on identity and
-      typed state. Mixed ten-host and interrupted 50-host runs retain every row,
-      success and unknown outcome; 100-host views remain bounded and responsive.
-      No UI retry replays an uncertain mutation or silently bootstraps a host.
+- [x] **H5 — Onboarding operator view and workflow qualification.** Delivered
+      within local fixture qualification: `O` on the control centre's Hosts tab
+      shows candidates with state/source/platform/label filters, a candidate
+      detail (identity, provenance, observation age, qualification result,
+      fingerprints on a key change, revocation), the `discover --diff` source
+      changes and per-host apply/resume/reconcile progress read through the new
+      read-only `fleet enroll status`; every action is a `hydra fleet` child
+      (`qualify --progress`, `enroll review --output`, and `enroll apply --input
+      INTENT --confirm DIGEST` only after the digest is typed). Verified (`make
+      test-tui`, `make test-one T=onboarding_view`, `pty-onboarding` in `make
+      test-tui-pty`): one-host review in three explicit actions (`Q`, `r`, `a`)
+      and one typed confirmation, with the intent digest, project, package
+      digest, prefix and exact command shown before apply; the CLI's `--json` and
+      the view's model agree on every candidate ID, target, status, typed state
+      and enrollment row for real `discover`, `enroll review` and `enroll status`
+      output; recorded mixed ten-host and interrupted 50-host runs retain every
+      row, success and unknown outcome; 100 candidates stay paged at 80x24 and
+      140x40; argv checks show a wrong or cancelled confirmation, a cancelled or
+      timed-out child and a retry key run nothing but a read-only status, the
+      apply runs once, and no bootstrap or trust command is ever composed;
+      revoked identities are inspect-only. Not observed: onboarding a real
+      multi-host fleet through the view, or its responsiveness on a slow live
+      network; that stays an operator observation.
 
 - [x] **H6 — Scoped revocation and reviewed key rotation.** Delivered within
       local fixture qualification: `fleet revoke candidate|source|transport|
@@ -1123,8 +1137,8 @@ aliases, installs Hydra or grants execution permission.
       refresh; enrolled rows, alias records and prior qualification evidence stay
       inspectable; revocation cancels no task, uninstalls nothing, deletes no
       remote state and leaves `known_hosts` byte-identical. Not observed: a real
-      host key rotation on a live host or the TUI onboarding view (H5), which
-      stays open.
+      host key rotation on a live host. The TUI onboarding view (H5) shows
+      revoked identities as inspect-only.
 
 Dependencies: H4–H6 build on the H1–H3 records, the existing strict OpenSSH policy,
 versioned handshake, package/bootstrap, fleet-init/trust and remote-task contracts
