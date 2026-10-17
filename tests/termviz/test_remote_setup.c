@@ -274,6 +274,9 @@ static void add_host_tilde(struct tv_session *s) {
     tv_send(s, "\r");
     tv_until(s, "Checking the host key", 6);
     tv_format(config, sizeof(config), "setup ovh deploy@ovh.example.net --ssh-config %s/.ssh/hydra-test --json", getenv("HOME"));
+    /* The notice appears when the step starts; the fake CLI logs its argv a
+     * moment later, so wait for the line rather than racing it. */
+    for (double end = tv_now() + 6; !called(config) && tv_now() < end;) tv_pump(s, .1);
     CHECK(called(config), "a ~/ SSH config path reaches the CLI as an absolute path");
 }
 
