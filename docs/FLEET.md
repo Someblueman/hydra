@@ -477,8 +477,10 @@ hydra fleet watch --interval 5 --timeout 5 --jobs 4
 The handshake exposes Hydra version, fleet/state/event/JSON protocols, native
 protocol expectations and executable presence, project mappings, capabilities,
 and supported signals. Native presence does not certify helper compatibility.
-The coordinator requires Hydra 2.x, fleet protocol 1, state 2, event 1, JSON 1,
-and the requested capability. Fleet is available from 2.1.0; build and bootstrap a qualified
+The coordinator requires Hydra 2.x or 3.x, fleet protocol 1, state 2, event 1, JSON 1,
+and the requested capability. A 2.x coordinator accepts only 2.x receivers, so a
+3.x receiver answers it with `version_mismatch`: upgrade the coordinator with or
+before its hosts. Fleet is available from 2.1.0; build and bootstrap a qualified
 fleet helper before using these commands.
 
 List returns canonical durable head records, including remote project paths.

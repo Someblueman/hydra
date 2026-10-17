@@ -235,11 +235,14 @@ json_object *f_request_measured(const struct f_remote *remote, json_object *requ
 json_object *f_request(const struct f_remote *remote, json_object *request, unsigned seconds) {
     return f_request_measured(remote, request, seconds, NULL, NULL, NULL);
 }
+/* Hydra 2.x and 3.x both speak fleet protocol 1 over state 2; features are
+ * negotiated by capability, not by version. */
 bool f_handshake_compatible(json_object *data) {
     const char *version = f_string(data, "hydra_version");
     return f_number_is(data, "fleet_protocol", F_PROTOCOL) && f_number_is(data, "state_schema", 2) &&
         f_number_is(data, "event_schema", 1) && f_number_is(data, "json_schema", 1) &&
-        version && !strncmp(version, "2.", 2) && json_object_is_type(f_field(data, "capabilities"), json_type_array);
+        version && (!strncmp(version, "2.", 2) || !strncmp(version, "3.", 2)) &&
+        json_object_is_type(f_field(data, "capabilities"), json_type_array);
 }
 json_object *f_observe(const struct f_remote *remote, const char *action, unsigned seconds) {
     json_object *req = json_object_new_object(), *res, *data, *caps;
