@@ -22,7 +22,9 @@ static void usage(FILE *out) {
           "  [--location all|local|remote|HOST]\n"
           "  [--version|--protocol-version|--diagnostics|--hydra PATH|--task BRANCH]\n"
           "  [--headless-fixture FILE [--remote-fixture FILE] [--workflow-fixture FILE]\n"
-          "   [--statistics-fixture FILE] --size COLSxROWS --frames N]\n", out);
+          "   [--statistics-fixture FILE] [--onboarding-fixture FILE [--onboarding-intent FILE]\n"
+          "   [--onboarding-screen list|detail|changes|intent|select|review] [--onboarding-dump]]\n"
+          "   --size COLSxROWS --frames N]\n", out);
 }
 
 static int parse_view(const char *name) {
@@ -45,11 +47,19 @@ static int accept_fixture(struct app *app, const char *fixture) {
     return 0;
 }
 
+/* Onboarding fixtures (H5): recorded fleet envelopes shown in the Hosts tab. */
+struct onboarding_fixtures { const char *export_file, *intent_file, *screen; bool dump; };
+
 static int render_fixture(struct app *app, const char *fixture, const char *remote_fixture, const char *workflow_fixture,
-                      const char *statistics_fixture, unsigned frames) {
+                      const char *statistics_fixture, const struct onboarding_fixtures *onboarding, unsigned frames) {
     unsigned frame;
     int status = accept_fixture(app, fixture);
     if (!status && remote_fixture) status = accept_fixture(app, remote_fixture);
+    if (!status && (onboarding->export_file || onboarding->intent_file)) {
+        app->view = 6;
+        status = native_onboarding_fixture(app, onboarding->export_file, onboarding->intent_file, onboarding->screen);
+        if (!status && onboarding->dump) { native_onboarding_dump(app, stdout); native_onboarding_destroy(app); model_release(app); return ferror(stdout) ? 3 : 0; }
+    }
     if (status) return status;
     record_snapshot(app, true);
     if (workflow_fixture && refresh_workflows(app, workflow_fixture)) return 2;
@@ -61,6 +71,7 @@ static int render_fixture(struct app *app, const char *fixture, const char *remo
     free(app->workflows);
     native_attention_destroy(app);
     native_workspace_destroy(app);
+    native_onboarding_destroy(app);
     statistics_destroy(app);
     transcript_free(app->transcript); app->transcript = NULL;
     frame_free(app);
@@ -111,6 +122,7 @@ int main(int argc, char **argv) {
     const char *fixture = NULL, *remote_fixture = NULL;
     const char *workflow_fixture = NULL;
     const char *statistics_fixture = NULL;
+    struct onboarding_fixtures onboarding = {NULL, NULL, NULL, false};
     unsigned frames = 1U;
     int index;
     bool explicit_view = false;
@@ -133,6 +145,10 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[index], "--remote-fixture") == 0 && index + 1 < argc) remote_fixture = argv[++index];
         else if (strcmp(argv[index], "--workflow-fixture") == 0 && index + 1 < argc) workflow_fixture = argv[++index];
         else if (strcmp(argv[index], "--statistics-fixture") == 0 && index + 1 < argc) statistics_fixture = argv[++index];
+        else if (strcmp(argv[index], "--onboarding-fixture") == 0 && index + 1 < argc) onboarding.export_file = argv[++index];
+        else if (strcmp(argv[index], "--onboarding-intent") == 0 && index + 1 < argc) onboarding.intent_file = argv[++index];
+        else if (strcmp(argv[index], "--onboarding-screen") == 0 && index + 1 < argc) onboarding.screen = argv[++index];
+        else if (strcmp(argv[index], "--onboarding-dump") == 0) onboarding.dump = true;
         else if (strcmp(argv[index], "--size") == 0 && index + 1 < argc) {
             if (parse_size(argv[++index], &app.cols, &app.rows) != 0) { usage(stderr); return 2; }
         } else if (strcmp(argv[index], "--frames") == 0 && index + 1 < argc) {
@@ -151,9 +167,9 @@ int main(int argc, char **argv) {
     }
     if (!theme_option(&app, theme)) return 2;
     if (fixture != NULL) {
-        return render_fixture(&app, fixture, remote_fixture, workflow_fixture, statistics_fixture, frames);
+        return render_fixture(&app, fixture, remote_fixture, workflow_fixture, statistics_fixture, &onboarding, frames);
     }
-    if (remote_fixture || workflow_fixture || statistics_fixture) { usage(stderr); return 2; }
+    if (remote_fixture || workflow_fixture || statistics_fixture || onboarding.export_file || onboarding.intent_file) { usage(stderr); return 2; }
     if (!explicit_view && !app.diagnostics) app.view = 7;
     index = interactive_main(&app);
     free(app.workflows);
@@ -163,6 +179,7 @@ int main(int argc, char **argv) {
     native_attention_destroy(&app);
     native_plan_destroy(&app);
     native_setup_destroy(&app);
+    native_onboarding_destroy(&app);
     statistics_destroy(&app);
     transcript_free(app.transcript);
     frame_free(&app);

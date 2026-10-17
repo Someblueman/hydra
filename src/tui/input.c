@@ -365,11 +365,12 @@ static bool overlay_key(struct app *app, char key) {
     return false;
 }
 
-/* Hosts: A adds a host, r retries one, e / x edit or remove an unfinished
- * setup; head actions do not apply to host rows. */
+/* Hosts: A adds a host, O opens onboarding, r retries one, e / x edit or
+ * remove an unfinished setup; head actions do not apply to host rows. */
 static bool hosts_key(struct app *app, char key) {
     size_t record;
     if (key == 'A') { native_setup_open_form(app); return true; }
+    if (key == 'O') { native_onboarding_open(app); return true; }
     if (key == 'r') { hosts_retry_row(app); return true; }
     if ((key == 'e' || key == 'x') && hosts_setup_selected(app, &record)) {
         if (key == 'e') native_setup_edit(app, record);
@@ -377,7 +378,7 @@ static bool hosts_key(struct app *app, char key) {
         return true;
     }
     if (!key || !strchr("/:pac xGd", key)) return false;
-    copy_text(app->notice, sizeof(app->notice), "Select a row and press Enter; A adds a host");
+    copy_text(app->notice, sizeof(app->notice), "Select a row and press Enter; A adds a host, O opens onboarding");
     return true;
 }
 
@@ -470,6 +471,7 @@ static void handle_key(struct app *app, char key) {
     if (native_terminal_byte(app, (unsigned char)key)) return;
     if (key == 3) { terminal_request_stop(SIGINT); return; }
     if (native_setup_byte(app, (unsigned char)key)) return;
+    if (native_onboarding_byte(app, (unsigned char)key)) return;
     if (overlay_key(app, key)) return;
     if (key == 'q') { app->running = false; return; }
     if (view_key(app, key)) return;
@@ -525,11 +527,13 @@ int interactive_main(struct app *app) {
         refresh_observations(app, &last_refresh);
         native_terminals_pump(app);
         native_setup_tick(app);
+        native_onboarding_tick(app);
         update_size(app);
         render(app, 0U, false);
-        if (read_key(app->terminals || app->observations || app->setup ? 40 : 500, &key) <= 0) {
+        if (read_key(app->terminals || app->observations || app->setup || app->onboarding ? 40 : 500, &key) <= 0) {
             native_terminal_flush_input(app);
             native_setup_flush_input(app);
+            native_onboarding_flush_input(app);
             continue;
         }
         handle_input(app, key);

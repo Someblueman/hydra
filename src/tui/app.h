@@ -17,6 +17,7 @@ struct native_links;
 struct native_attention;
 struct native_review;
 struct native_setup;
+struct native_onboarding;
 struct transcript;
 
 /* When a host last answered, so rows retained after it stops answering can
@@ -52,6 +53,8 @@ struct app {
     struct native_review *review;
     /* In-app remote setup (U10); allocated when Hosts is first used. */
     struct native_setup *setup;
+    /* Onboarding operator view (H5); allocated when first opened from Hosts. */
+    struct native_onboarding *onboarding;
     /* Lazily allocated interpreter for read-only captured output. */
     struct transcript *transcript;
     pid_t control_pids[4];
