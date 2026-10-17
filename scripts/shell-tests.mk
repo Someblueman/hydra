@@ -16,6 +16,7 @@ SHELL_TEST_EXCLUDES = \
 	tests/test_workflow_task.sh \
 	tests/test_workflow_data.sh \
 	tests/test_workflow_plan.sh \
+	tests/test_workflow_plan_expansion.sh \
 	tests/test_workflow_approval.sh \
 	tests/test_agent_execution.sh \
 	tests/test_agent_auth.sh \

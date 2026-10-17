@@ -2,6 +2,7 @@
 #include "fleet/support/files.h"
 #include "fleet/plan/plan.h"
 #include "fleet/plan/plan_inspect.h"
+#include "fleet/plan/plan_expansion.h"
 #include "fleet/retention/retention.h"
 #include <stdlib.h>
 #include <string.h>
@@ -334,6 +335,13 @@ static json_object *with_recovery(json_object *result) {
         f_string_add(f_field(result, "error"), "recovery", "inspect the compiled artifact, source, inputs, head availability and verification; compile and accept fresh scope when bindings change");
     return result;
 }
+/* Decision and expansion operations own their argv shapes. */
+static bool prefixed_command(int argc, char **argv, bool *printed, json_object **result) {
+    if (argc < 2) return false;
+    if (!strncmp(argv[0], "decision-", 9)) { *result = plan_decision_cli(argc, argv, printed); return true; }
+    if (!strncmp(argv[0], "expansion-", 10)) { *result = plan_expansion_cli(argc, argv, printed); return true; }
+    return false;
+}
 json_object *plan_cli(int argc, char **argv) {
     static const struct {
         const char *name;
@@ -377,7 +385,7 @@ json_object *plan_cli(int argc, char **argv) {
     if (argc == 1 && !strcmp(argv[0], "schema")) return schema_command();
     if (argc >= 1) result = compile_dispatch(argc, argv, &compile);
     if (compile) return result ? result : f_error("workflow plan", "invalid_arguments", "use validate or compile with an optional trailing --assets-dir <directory>");
-    if (argc >= 2 && !strncmp(argv[0], "decision-", 9)) { result = plan_decision_cli(argc, argv, &printed); return printed ? NULL : result; }
+    if (prefixed_command(argc, argv, &printed, &result)) return printed ? NULL : result;
     for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
         if (argc != commands[i].argc || strcmp(argv[0], commands[i].name)) continue;
         result = commands[i].call(argv, &printed);

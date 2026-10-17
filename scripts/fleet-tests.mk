@@ -13,6 +13,7 @@ FLEET_CASES = shell-task-acceptance \
 	plan-repair-pass-plan-source-1-plan-repair-fault-1 \
 	report-v2-1 \
 	shell-workflow-plan \
+	shell-workflow-plan-expansion \
 	headless-1 \
 	plan-repair-exhaust \
 	plan-repair-same \
@@ -52,6 +53,7 @@ FLEET_CASES = shell-task-acceptance \
 	shell-remote-agents \
 	native-agent-recipes \
 	native-plan \
+	native-plan-expansion \
 	shell-fleet-install \
 	shell-task-package \
 	native-fleet \
@@ -99,6 +101,9 @@ test-fleet-cases: $(addprefix fleet-case-,$(FLEET_SELECTED_CASES))
 
 fleet-case-native-plan:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-plan
+
+fleet-case-native-plan-expansion:
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-plan-expansion
 
 fleet-case-native-workflow-schedule:
 	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-workflow-schedule
@@ -186,6 +191,9 @@ fleet-case-shell-headless-plan-adapter:
 
 fleet-case-shell-workflow-plan:
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan.sh
+
+fleet-case-shell-workflow-plan-expansion:
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_expansion.sh
 
 fleet-case-shell-workflow-plan-v3:
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_workflow_plan_v3.sh

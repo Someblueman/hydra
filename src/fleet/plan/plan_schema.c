@@ -1,5 +1,5 @@
 #include "fleet/support/json.h"
-#include "fleet/plan/plan.h"
+#include "fleet/plan/plan_expansion.h"
 #include "fleet/task/task.h"
 #include <stdio.h>
 #include <string.h>
@@ -33,7 +33,7 @@ static bool scope(const char *s) {
     memcpy(head, s, length); head[length] = '\0';
     return plan_id(head) && (!strcmp(colon + 1, "*") || task_path(colon + 1));
 }
-static bool permitted_scope(json_object *allowed, const char *s) {
+bool plan_scope_permitted(json_object *allowed, const char *s) {
     size_t i;
     for (i = 0; i < json_object_array_length(allowed); i++) {
         const char *a = f_text(json_object_array_get_idx(allowed, i)); size_t n = strlen(a);
@@ -47,8 +47,8 @@ static bool permitted_scope(json_object *allowed, const char *s) {
  * refuses spawn branches that already exist, so this never names the source
  * checkout or an existing head. */
 #define PLAN_SPAWNED_SCOPE "@spawned:*"
-static bool spawned_head(json_object *steps, const char *s) {
-    const char *colon = strchr(s, ':'); size_t i;
+bool plan_scope_spawned(json_object *steps, const char *s) {
+    const char *colon = s ? strchr(s, ':') : NULL; size_t i;
     for (i = 0; colon && json_object_is_type(steps, json_type_array) && i < json_object_array_length(steps); i++) {
         json_object *step = json_object_array_get_idx(steps, i); const char *kind = f_string(step, "kind");
         const char *branch = f_string(f_field(step, "args"), "branch");
@@ -57,7 +57,7 @@ static bool spawned_head(json_object *steps, const char *s) {
     return false;
 }
 static bool policy_write(json_object *allowed, json_object *steps, const char *s) {
-    return permitted_scope(allowed, s) || (plan_has(allowed, PLAN_SPAWNED_SCOPE) && spawned_head(steps, s));
+    return plan_scope_permitted(allowed, s) || (plan_has(allowed, PLAN_SPAWNED_SCOPE) && plan_scope_spawned(steps, s));
 }
 static bool write_scopes(json_object *writes, bool policy) {
     size_t i;
@@ -167,7 +167,7 @@ static bool recipe(json_object *step, json_object *env, json_object *errors, con
     for (i = 0; i < json_object_array_length(writes); i++) {
         const char *s = f_text(json_object_array_get_idx(writes, i));
         if (!scope(s)) goto invalid;
-        if (!permitted_scope(f_field(env, "writes"), s)) goto unauthorized;
+        if (!plan_scope_permitted(f_field(env, "writes"), s)) goto unauthorized;
         if (!strcmp(kind, "exec")) {
             const char *head = f_string(args, "head"); size_t n = strlen(head);
             if (strncmp(head, s, n) || s[n] != ':') goto invalid;
@@ -214,7 +214,7 @@ static void repair_version(json_object *plan, json_object *errors) {
 }
 int plan_validate(json_object *plan, json_object *policy, json_object *errors) {
     const char *const keys[] = {"schema_version", "id", "objective", "context", "assumptions", "questions", "deliverables", "requirements", "checks", "obligations", "steps", "data", "envelope", "relations", "reuse_policy", NULL};
-    const char *const policy_keys[] = {"schema_version", "envelope", NULL};
+    const char *const policy_keys[] = {"schema_version", "envelope", "expansion", NULL};
     const char *const deliverable_keys[] = {"id", "description", "step", "output", "destination", NULL};
     const char *const requirement_keys[] = {"id", "criterion", "deliverable", "check", NULL};
     const char *const check_keys[] = {"id", "method", "definition", "step", "input", "report", "deliverable", NULL};
@@ -226,8 +226,9 @@ int plan_validate(json_object *plan, json_object *policy, json_object *errors) {
         !strings(f_field(plan, "assumptions"), 0, false) || !strings(f_field(plan, "questions"), 0, false))
         plan_error(errors, "$", "invalid_plan", "expected schema 1 or 2, objective, ID and explicit context, assumptions and questions arrays; unknown fields are rejected");
     if (plan_list(f_field(plan, "questions"), 1, 64)) plan_error(errors, "questions", "unresolved_question", "resolve material questions before compilation");
-    if (!envelope(env, false) || !task_keys(policy, policy_keys) || !f_number_is(policy, "schema_version", 1) || !envelope(allowed, true)) {
-        plan_error(errors, "envelope", "invalid_policy", "explicit bounded plan and policy envelopes required; execution retries must be zero and repairs bounded to 0 through 10"); return -1;
+    if (!envelope(env, false) || !task_keys(policy, policy_keys) || !f_number_is(policy, "schema_version", 1) || !envelope(allowed, true) ||
+        !plan_expansion_policy(policy, errors)) {
+        plan_error(errors, "envelope", "invalid_policy", "explicit bounded plan and policy envelopes required; execution retries must be zero, repairs bounded to 0 through 10 and expansion bounds, when declared, complete"); return -1;
     }
     if (!placed_hosts(plan, env))
         plan_error(errors, "envelope.hosts", "unsupported_host", "only local execution is implemented");
