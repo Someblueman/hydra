@@ -115,8 +115,10 @@ awk -F '\t' '$1=="F" && $2=="slowgood" && $3=="/srv/slowgood" && $4=="delayed" &
 # The fleet case passes the native TUI it built; a missing binary is a failure.
 if [ -n "${HYDRA_TUI_BIN:-}" ]; then
     "$HYDRA_TUI_BIN" --fleet --headless-fixture "$fixture/tui-v2" --view hosts --ascii --size 140x30 > "$fixture/hosts.out"
-    grep -q 'good.*responded.*0 heads' "$fixture/hosts.out"
-    grep -q 'offline.*failed' "$fixture/hosts.out"
+    # The Hosts list words a responded host as connected and a failed one as
+    # disconnected with its recorded reason.
+    grep -q 'good  *connected  *0 heads' "$fixture/hosts.out"
+    grep -q 'offline  *disconnected  *-- heads  *offline' "$fixture/hosts.out"
     grep -q 'CPU / memory / load: unavailable' "$fixture/hosts.out"
 fi
 for host in key auth offline malformed skew good slowgood; do "$root/bin/hydra" remote remove "$host" >/dev/null; done
