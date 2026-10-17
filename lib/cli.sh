@@ -62,8 +62,16 @@ Commands:
   fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
                     Commands: list, doctor, admission, handshake, bootstrap, package, init, spawn,
                               signal, cancel, workflow, attach, export, import,
-                              overview, reconcile, watch, tui, task (see fleet help)
+                              overview, reconcile, watch, tui, task, placement (see fleet help)
+                    Placement: fleet task submit --placement auto|HOST --input PACKAGE --key KEY
+                               [--separate-from TASK_ID]; fleet placement explain|replay|withdraw
+                               TASK_ID; fleet placement drain|undrain HOST; fleet placement policy
                     Options: --project PATH, --instance ID, --jobs 1-16, --timeout 1-300
+                    Onboarding: discover|qualify --ssh ALIAS | --inventory FILE --select NAME
+                                | --source ssh-config[:FILE]|ansible-inventory:FILE|dns-sd[:DOMAIN]
+                                  [--select NAME] [--diff]; enroll review|apply (see fleet help)
+                    Revocation: revoke candidate|source|transport|package|project ID --reason TEXT
+                                revoke list [--scope SCOPE]; final, local, never edits known_hosts
   capabilities      Print machine-readable Hydra and agent capabilities
   workflow          Run or inspect finite, recoverable workflow definitions
                     Usage: hydra workflow list
@@ -193,6 +201,12 @@ Commands:
                       queue process            Process queue immediately
                     Options:
                       -j, --json               Output in JSON format
+  pool              File-backed task pools with sealed bounded expansions
+                    Usage: hydra pool create|add|seal|claim|complete|cancel|status|list|run
+                           hydra pool --help
+  schedule          Host-timer schedules that submit work with a dedup token
+                    Usage: hydra schedule add|list|remove|run-now|status
+                           hydra schedule --help
   completion        Generate shell completion scripts
   version           Show version information
 
@@ -304,7 +318,7 @@ main() {
     esac
     HYDRA_JSON_REQUESTED=0
     case "${1:-}" in
-        remote|fleet|init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue)
+        remote|fleet|init|capabilities|workflow|lifecycle|wait|exec|diff|review|provenance|claim|scope|collision|resource|gate|context|du|snapshot|list|status|group|recv|queue|pool|schedule)
             for _main_arg in "$@"; do
                 case "$_main_arg" in
                     --) break ;;
@@ -538,6 +552,14 @@ main() {
         queue)
             shift
             cmd_queue "$@"
+            ;;
+        pool)
+            shift
+            cmd_pool "$@"
+            ;;
+        schedule)
+            shift
+            cmd_schedule "$@"
             ;;
         version|-v|--version)
             echo "Hydra version $HYDRA_VERSION"

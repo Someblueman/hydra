@@ -333,6 +333,8 @@ help:
 	@echo "  make test-fast - Run the fixed PR feedback test selection"
 	@echo "  make test-one T=<name> - Run tests/test_<name>.sh like make test does"
 	@echo "  make test-umask - Run test-fast, umask state and DAG fleet cases under umask 002"
+	@echo "  make test-t2-headless - Qualify remote execution with tmux absent on the receiver"
+	@echo "  make test-t3-distributed - Qualify the two-host plan with tmux absent (plus loopback SSH)"
 	@echo "  make build-core - Build the optional read-only native helper"
 	@echo "  make build-tui - Build the optional native mission-control TUI"
 	@echo "  make test-c    - Run native library unit tests"
@@ -392,7 +394,7 @@ $(BUILD_DIR)/native-tests/statistics-evidence: tests/native/statistics_evidence.
 # Compile shared fleet code once. Compiler dependency files track the actual
 # header/.inc closure for each object and test, including sanitizer builds.
 FLEET_OBJECTS = $(patsubst src/fleet/%.c,$(BUILD_DIR)/fleet/%.o,$(filter-out src/fleet/main.c,$(FLEET_SOURCES)))
-FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data workflow-schedule agent-profile agent-auth plan remote-setup agent-recipes fleet-assets)
+FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data workflow-schedule agent-profile agent-auth plan remote-setup agent-recipes fleet-assets placement)
 
 $(BUILD_DIR)/fleet/%.o: src/fleet/%.c
 	@mkdir -p "$(@D)"
@@ -430,6 +432,7 @@ $(BUILD_DIR)/test-workflow-schedule: tests/c/test_workflow_schedule.c
 $(BUILD_DIR)/test-remote-setup: tests/c/test_remote_setup.c
 $(BUILD_DIR)/test-agent-recipes: tests/c/test_agent_recipes.c
 $(BUILD_DIR)/test-fleet-assets: tests/c/test_fleet_assets.c
+$(BUILD_DIR)/test-placement: tests/c/test_placement.c
 
 $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) -MMD -MP -MF $@.d -MT $@ $(filter %.c,$^) $(BUILD_DIR)/libhydra-fleet.a $(FLEET_JSON_LIB) -lm -o $@
@@ -472,9 +475,17 @@ test-plan-staged: build-fleet build-plan-precompile
 test-plan-staged-public: build-fleet build-plan-precompile
 	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" "$(BUILD_DIR)/native-tests/test-plan-staged-public" --fleet "$(abspath $(BUILD_DIR))/hydra-fleet" --output "$(BUILD_DIR)/staged-public.json"
 
+# Planning-quality evaluation (roadmap 9E): archived pilot cases plus held-out
+# additions through the independent oracle, one executed run per arm and the
+# serial/fork-join scheduling patterns. The report lands in build/plan-eval/.
+.PHONY: test-plan-eval
+test-plan-eval: build-fleet build-plan-example
+	python3 scripts/plan-eval.py --execute 1 --fleet "$(abspath $(BUILD_DIR))/hydra-fleet" --plan-example "$(abspath $(BUILD_DIR))/plan-example" --output "$(abspath $(BUILD_DIR))/plan-eval/report.json"
+
 .PHONY: test-plan-inspection
 test-plan-inspection: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-inspection"
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-evaluate"
 
 
 .PHONY: sanitize-fleet
@@ -547,6 +558,19 @@ test-enrollment-ssh: build-fleet
 test-remote-setup-ssh: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-remote-setup-ssh"
 
+# T2/T3 qualification with tmux absent on the execution hosts (the coordinator
+# keeps its PATH). See docs/T2_T3_QUALIFICATION.md. The loopback SSH variant
+# prints SKIP and exits 0 without an OpenSSH server, like test-remote-setup-ssh.
+.PHONY: test-t2-headless test-t3-distributed test-t3-distributed-ssh
+test-t2-headless: fleet-test-build
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" t2-headless tests/test_t2_headless.sh
+test-t3-distributed: fleet-test-build
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" t3-distributed tests/test_t3_distributed.sh
+	@$(MAKE) test-t3-distributed-ssh
+test-t3-distributed-ssh: fleet-test-build
+	@HYDRA_TEST_T3_TRANSPORT=ssh BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" t3-distributed-ssh tests/test_t3_distributed.sh
+	@grep -E '^(SKIP T3 distributed SSH|T3 distributed over loopback SSH passed)' "$(BUILD_DIR)/test-logs/t3-distributed-ssh.log"
+
 include scripts/native-tests.mk
 
 include scripts/fleet-tests.mk
@@ -555,4 +579,4 @@ include scripts/shell-tests.mk
 .PHONY: test-usability
 USABILITY_OUTPUT ?= $(BUILD_DIR)/usability-$(shell date +%Y%m%d-%H%M%S)
 test-usability: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
-	python3 scripts/usability.py --output "$(USABILITY_OUTPUT)"
+	PYTHONPATH=scripts python3 -m usability --output "$(USABILITY_OUTPUT)" $(USABILITY_ARGS)

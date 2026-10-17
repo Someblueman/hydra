@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "purpose": "Exact digests of the archived finite pilot files that scripts/plan-eval.py exports from Git history and refuses to use when any byte differs. The archived record itself is never edited.",
+  "commit": "b0fb5b1d9220189ad2498a244274ae498a3c7d0c",
+  "files": {
+    "examples/planning/evaluation/candidates/contract-aware-1/candidate.py": "8c8b40f2e82f96fec4991d5df7ee68b2e0f206280fcad381a13b3ff3f6788bb6",
+    "examples/planning/evaluation/candidates/contract-aware-1/planning.json": "36ad605be81e5428b52f47878d398392e01d4b056e3257a4f511916da7327faa",
+    "examples/planning/evaluation/candidates/contract-aware-2/candidate.py": "930b0345e7258457087f80d11aec414b1d934b3c0c6bf57a4e28f4fd3d3615a6",
+    "examples/planning/evaluation/candidates/contract-aware-2/planning.json": "a2cddbf2a14ef93a03b5976ba2671167f85dfc5a6b42e7e52a15a7b85f6f2bc1",
+    "examples/planning/evaluation/candidates/contract-aware-3/candidate.py": "3a3fd3f1f39ac19a9029365951d44846d79b9bad0b18ab61ea364cb181f2ec97",
+    "examples/planning/evaluation/candidates/contract-aware-3/planning.json": "feb49e165dfa1f0f70d89b48ae627b07a526ee3dd686ddba35f4f189f3b4fe55",
+    "examples/planning/evaluation/candidates/current-1/candidate.py": "b4b7946bcd67ae6bcc3af6e4ca1148e409173063ea63f02f7deca7d18095cfff",
+    "examples/planning/evaluation/candidates/current-1/planning.json": "01b2f75acebe0bb8df7767431a0a920afce669ab0e916492410b5740ad4242a2",
+    "examples/planning/evaluation/candidates/current-2/candidate.py": "144a150672cab8db38677d8afbdc056b6b5c0475b06cdecb404b04a54dc7884d",
+    "examples/planning/evaluation/candidates/current-2/planning.json": "40e59fccff41a5a1ac3901cd65bdf0cbb56448b0665b7d30c95049773e16ff01",
+    "examples/planning/evaluation/candidates/current-3/candidate.py": "ce0cb89268ddb65c5f6a2ba08f3cee335a55e28c1b4ff0ac8d1ee5794ea56e94",
+    "examples/planning/evaluation/candidates/current-3/planning.json": "d906cd0d369fc0750d98172a6cca9b65793ff60464157430089a45c23ff287c5",
+    "examples/planning/evaluation/check.py": "a5614983ffc6dc276ab0e0c2d229ee5a054767974be84032a9140fd132c05a95",
+    "examples/planning/evaluation/evaluate.py": "08160cf96744c0b6606a15171f0a924fa538412714bebdd055c840b3c6644fc3",
+    "examples/planning/evaluation/plan.json": "b6dcb6591319313e308995d0758aa846c239e8b5be38f999f4a5de86be78f2ac",
+    "examples/planning/evaluation/planner-evaluation-heldout-v2.json": "67365d52b98eae99b138c2477a526fd277601cff8038ea0fbe31b8526c5000f6",
+    "examples/planning/evaluation/planner-visible-contracts.json": "8bfd9b165e8680326af945768d8483c758bd33c5375766f44a70cfa4767914b1",
+    "examples/planning/evaluation/policy.json": "9e8ea06f2c9e05072811d0d98cfc172b480f49e64b76eac1045f46a50de2fb2d",
+    "examples/planning/evaluation/produce.py": "248bbe5fe725daedb9ac7f1abc08f9c43433ff38f519b825a7190fd91bd45087",
+    "examples/planning/evaluation/requests.json": "b666fee67991bb1b9c1dfb918c7ffaba5b14cff709f82dd50d014f9742315ccf"
+  },
+  "arms": {
+    "current": ["current-1", "current-2", "current-3"],
+    "contract_aware": ["contract-aware-1", "contract-aware-2", "contract-aware-3"]
+  }
+}

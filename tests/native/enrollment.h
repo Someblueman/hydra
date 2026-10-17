@@ -24,6 +24,7 @@ void ec_count(const char *name, const char *line, size_t count);
 void ec_package_make(struct ec_package *package);
 void ec_batch_case(void);
 void ec_package_cases(void);
+void ec_revocation_cases(void);
 #define EC(enroll, ok, ...)                                                    \
   ec_cli(enroll, (const char *[]){__VA_ARGS__, NULL}, ok)
 #endif

@@ -169,7 +169,15 @@ hydra fleet tui
 The native fleet view shows heads by host and supports attach and confirmed
 interrupts. Agent executables and repositories live on the host that runs the work.
 See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements, remote
-workflows, and recovery behavior.
+workflows, and recovery behavior. `hydra fleet discover --source ssh-config|
+ansible-inventory:FILE|dns-sd` lists candidates from your own inventories with a
+diff against the previous snapshot, and `hydra fleet revoke` records a final,
+local revocation of a candidate, source, alias, package or project decision.
+New remote tasks can be placed automatically across eligible hosts
+(`hydra fleet task submit --placement auto`), with every decision recorded and
+replayable (`hydra fleet placement explain|replay`); explicit host pinning is the
+default. See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements,
+remote workflows, placement, and recovery behavior.
 
 ## Plan an objective
 
@@ -180,6 +188,10 @@ verified artifacts with `hydra workflow plan result <run-id>`. Schema-2 plans
 require bound validation, hand off collected Git commits, and support bounded
 candidate repair.
 Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
+`hydra workflow plan evaluate` compares two compiled alternatives by decomposition,
+fixed-graph scheduling and placement with ranges and explicit unknowns, `plan
+decision` records why one was selected and replays that comparison from its
+recorded inputs, and `make test-plan-eval` measures held-out planning quality.
 Planning does not call a model itself; an ordinary agent authors the proposal
 through the CLI. Plans carry their own inline agent prompts and proposal assets,
 bound by the acceptance digest, so planning never commits to your checkout. See the
@@ -194,6 +206,7 @@ the [planning examples](examples/planning/README.md).
 | Agent profiles and prompts | [Usage: agent profiles and inputs](docs/USAGE.md#agent-profiles-and-inputs) |
 | Workflows and guarded integration | [Workflows](docs/workflows.md) |
 | Agent-authored objectives and staged plans | [Workflows](docs/workflows.md) |
+| Task pools and host-timer schedules | [Workflows: pools and schedules](docs/workflows.md#pools-and-schedules) |
 | State, trust, and public interfaces | [Contracts](docs/CONTRACTS.md) |
 | Releases and upcoming work | [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) |
 

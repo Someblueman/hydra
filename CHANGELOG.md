@@ -7,6 +7,192 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `hydra fleet discover|qualify --source KIND[:LOCATOR]` acquires one explicitly
+  selected live inventory and feeds the existing candidate importer: `ssh-config`
+  scans the literal `Host` names of `~/.ssh/config` (or a file) and its literal
+  includes, `ansible-inventory:FILE` reads an INI hosts file (groups become labels,
+  secret-looking variables are counted and dropped, `vars`/`children` sections are
+  ignored), and `dns-sd[:DOMAIN]` runs one terminating `avahi-browse` for
+  `_ssh._tcp` and reports `unavailable` without the client. Each source runs once
+  per invocation within `--timeout`, 1 MiB and 100 records, records its account or
+  network scope and client, and is diffed against its previous private snapshot
+  (`$HYDRA_HOME/fleet/discovery/sources/`): cache age and added, removed, changed
+  and conflicting records are reported before selection (`--diff` lists them).
+  Stale caches, missing files or clients, timeouts, partial output, identity
+  conflicts and revoked identities are reported with provenance and never widen
+  the selection; `qualify` over a source requires `--select`.
+- `hydra fleet revoke candidate|source|transport|package|project ID --reason TEXT`
+  records a final local revocation (private, with who/when/reason and the
+  superseded binding) and `hydra fleet revoke list [--scope SCOPE]` shows them.
+  Revoked identities show as `revoked` in discovery, re-import and resumed
+  qualification, are refused by `fleet enroll review`, invalidate pending `fleet
+  enroll apply` rows before any connection, and block every operation, task
+  submission, alias reuse, setup and enrollment publication for a revoked alias;
+  a revoked package or project is refused by bootstrap, review and `--project`
+  operations. A changed host key now reports the presented and the recorded
+  fingerprints with where each was observed (`qualify`, `enroll apply`, `remote
+  trust-key`); acceptance stays with the operator's `ssh-keygen -R` and a fresh
+  review. Revocation never cancels a task, uninstalls a package, deletes remote
+  state or edits `known_hosts`. Help and bash, zsh and fish completions include
+  the new commands and options.
+- Automatic placement of new remote tasks across eligible hosts: `hydra fleet
+  task submit --placement auto --input PACKAGE --key KEY [--separate-from
+  TASK_ID]` observes every registered alias (handshake and admission status),
+  excludes drained, offline, incompatible, unmapped, wrong-platform,
+  label-unsupported, stale, queue-full or disk-starved hosts and hosts that must
+  stay separate from a named task, ranks the rest by capacity-normalized load
+  with comparable-class, queue-depth and alias-order tie-breaks, and dispatches
+  to the first host; a definitive receiver refusal moves on to the next host and
+  an ambiguous dispatch stays assigned for reconciliation. `--placement HOST`
+  records an explicit pin; submissions without `--placement` are unchanged.
+- `hydra fleet placement explain TASK_ID` prints the digest-sealed
+  `fleet-placement` schema 1 record (observations with ages, candidates with
+  reasons, scores and ranks, policy version, every dispatch attempt and its
+  reservation outcome); `replay` re-derives the decision from the recorded
+  observations and must match; `policy` shows the effective knobs
+  (`max_observation_age_seconds`, `max_queued`, `validator_reserve_slots`, all
+  with conservative defaults in `fleet/placement-policy.json`); `drain|undrain
+  HOST` keeps new automatic work off a host.
+- Rebalancing of accepted, not-started work: `hydra fleet placement withdraw
+  TASK_ID` asks the current receiver for a durable withdrawal (new `task-withdraw`
+  capability and `withdrawn` task state) and a later `--placement auto`
+  submission opens the next assignment generation elsewhere; a lost withdrawal
+  response blocks transfer until confirmed, and running or claimed work is never
+  moved. Receivers record `assignment_generation` at acceptance and reject stale
+  starts, resumes and re-submissions (`stale_generation`); result collection
+  admits only the current generation and host.
+- Spec capabilities `role.producer`/`role.validator` (placement class) and
+  `platform.OS-ARCH` (checked by the receiver against its own platform).
+  Help and bash, zsh and fish completions cover the new commands and options.
+- `hydra workflow plan evaluate <left> <right> [--estimates FILE]` compares two
+  compiled alternatives in three separate concerns: decomposition quality
+  (required and unconnected nodes, validation effort, declared transfers, declared
+  rework budgets), fixed-graph scheduling (depth, width, critical path, time and
+  cost to a verified result, hard budgets copied from the envelope) and host
+  placement (declared only, never assessed). Estimate-derived figures are ranges
+  or `null`; an estimate above a hard budget marks a conflict and never relaxes
+  the budget; no preference claims semantic adequacy or global optimality.
+- `hydra workflow plan observed <run-id>` prints an estimates document from a
+  run's recorded step durations (one-second resolution ranges, no cost rows).
+- `hydra workflow plan decision record|list|show` keeps, under the head's private
+  planning state, which compiled alternative was selected and which were
+  rejected, each reason, the compiler, analysis and policy versions and the exact
+  analysis inputs; `show --json` replays every comparison from the recorded
+  inputs and reports whether it matches byte for byte. Selecting a plan whose
+  estimate exceeds its own hard budget is refused.
+- `make test-plan-eval` (`scripts/plan-eval.py`) revives the archived finite
+  planner pilot from Git history without editing it, adds eight held-out cases
+  with sixteen incorrect artifacts, and reports planning, validation and
+  scheduling effects separately: candidate acceptance per arm and interface,
+  false acceptances and rejections, executed verified outcomes, elapsed times,
+  repeated work, unknown cost and human corrections, a one-run scheduling
+  calibration and the determinism check. Every declared corruption must be
+  rejected for the target to pass. Help text and completions cover the new
+  planning commands.
+
+- Reproducible T2/T3 qualification with tmux absent on the execution hosts:
+  `make test-t2-headless` (remote command and headless-adapter tasks, reconnect,
+  exact collection and dependent consumption, the local compiled plan, duplicate
+  submission, lost start, owner death, cancellation, bounded logs and retained
+  reservations) and `make test-t3-distributed` (the two-host fan-out, cross-host
+  validation, join, composition and final check over two tmux-less loopback
+  receivers, with lost acknowledgment, coordinator restart and stale results over
+  the controlled transport and the same scenario over two private loopback OpenSSH
+  daemons; `make test-t3-distributed-ssh` prints SKIP without sshd). The receiver
+  side runs with a private PATH without tmux and a tmux stand-in that refuses
+  terminal operations loudly (`headless_receiver_path` in `tests/headless_path.sh`);
+  the coordinator keeps its own PATH. Both controlled cases run in `make test-fleet`,
+  and CI requires the loopback SSH pass line next to `test-remote-setup-ssh`.
+  `docs/T2_T3_QUALIFICATION.md` records the commands, evidence, the tmux
+  dependency audit and the remaining operator step on a real host.
+- `hydra remote add NAME DEST --ssh-config /absolute/file` binds an alias to one
+  OpenSSH client configuration, as a finished guided setup records.
+
+- `make test-usability` runs goal-driven screen-only trials beside the scripted
+  journeys: a deterministic rule-based evaluator (`scripts/usability/policy.py`,
+  no model) is given only a goal in plain words and each screen, reads the
+  controls the screen offers (footer and inline key hints, "Press n to ..."
+  sentences, prompts, the tab bar once the screen says how tabs are reached) and
+  presses the one whose label matches the goal's vocabulary, within a step bound.
+  Six goals (`start-task`, `why-stopped`, `find-attention`, `leave-return`,
+  `remove-stopped`, `approve-plan`) are verified independently against Git, tmux
+  and Hydra state, and each gets a discoverability score (steps, dead ends, help
+  opened, controls read, fit, completed). A control whose label matched the goal
+  but did nothing fails its check; nothing is special-cased.
+- Comprehension trials (`--trial comprehension`) reach each concept's entry point
+  or empty state (head, shell TUI head, workflow, plan versus approved workflow,
+  workflow run, gate and check, coordination, Fleet and host, statistics, live
+  session versus completed work, interruption, removal) and assert that the
+  visible text states purpose, when it helps, a concrete example and the next
+  action in plain language within 80x24 and 140x40, that consequences precede
+  approval, interruption and removal, and that mentioned commands exist in
+  `hydra help`. `--trial NAME` selects one trial; `USABILITY_ARGS` passes options
+  through make. The runner is now the package `scripts/usability/`; the report
+  lists the live-provider, visual, human first-use and remote-onboarding gates
+  as explicitly unexecuted.
+
+- `hydra pool create|add|seal|claim|complete|cancel|status|list|run`: file-backed
+  task pools under `$HYDRA_HOME/state/v2/projects/<project>/pools/<pool>` with
+  private modes. `create` seals the bounds (tasks, outstanding claims,
+  expansions, definition bytes, repair rounds, lease, default retry) in a
+  digest-bound manifest; `add` appends workflow or exec tasks to the open
+  expansion and `seal` freezes its membership before any task can be claimed.
+  Claims are unique under the pool lock, carry the lock protocol's owner record
+  and a token, and never exceed the outstanding bound. A stale claim (expired
+  lease or dead owner) is reconciled from recorded evidence only: a terminal
+  workflow run decides, an idempotent task with budget is re-queued, and any
+  other unknown outcome becomes `recovery-required` for an explicit
+  `complete --by` decision (`retry` consumes a repair round). `run` is a worker
+  loop around the public `hydra workflow run` and `hydra exec` commands, so
+  admission is unchanged and no second scheduler exists; `cancel` stops queued
+  tasks and asks claimed work to stop through those commands.
+- `hydra schedule add|list|remove|run-now|status`: host-timer schedules that
+  print the exact crontab line, systemd user timer/service units and launchd
+  plist for you to install; Hydra never installs a daemon. Every firing is
+  `hydra schedule run-now <name>`, whose dedup token is the current slot, so a
+  double cron fire, a timer plus a manual run or competing firings submit once.
+  Submissions are a workflow run in the firing process, one sealed pool task,
+  or the pool worker loop. Missed slots are skipped by default or caught up
+  within `--catch-up-limit`; `--reboot-recovery` opts into `@reboot`,
+  `Persistent=true` and `RunAtLoad` entries that start a new firing after a
+  restart without replaying in-flight work. Help, bash/zsh/fish completions,
+  `--json` envelopes and `docs/CONTRACTS.md` schemas cover both commands.
+
+### Changed
+
+- tmux is documented as required only for interactive terminal operations; headless
+  heads, exec, workflows, remote tasks, bootstrap, install and doctor run without it.
+- A workflow task step whose first submission a receiver refuses before acceptance
+  (`capability_unavailable`, `unmapped_project`, `submission_conflict`,
+  `missing_dependency`, `placement_mismatch`) now records that code in
+  `remote-response.json` and fails, instead of reporting `waiting-remote` for a
+  dispatch that can never be reconciled; transport failures still wait.
+
+- Explanations where users meet each feature: Work's empty state gives an example
+  of two heads; Workflows wraps its explanation at 80 columns and names the plan
+  review (E) as the usual way a run starts; Overview's run panel and the
+  statistics empty state wrap instead of clipping; Attention's empty state says
+  what the view lists (approval requests, failed checks, results to review,
+  stopped terminals) and what Enter and r do; the plan pane says a proposal runs
+  nothing until validated and its exact revision approved; Coordination says when
+  it matters with an example and no longer clips its last line; Hosts says when a
+  remote machine helps; Details says `Session` is the live terminal and `Reported`
+  the outcome the agent declares; the attached status row says leaving or closing
+  the view keeps the agent running. The shell TUI's empty list explains a head the
+  same way.
+
+### Fixed
+
+- `check_tmux_version` accepted a tmux on PATH whose `tmux -V` failed or printed no
+  parsable version, because the numeric comparison error was taken as "new enough";
+  such a tmux is now reported as unusable.
+- Workflow task dispatch ignored an alias's recorded `ssh_config` and `principal`
+  (honoured by `hydra fleet task` and `fleet list`), so a setup-created alias could
+  not reach its host through its own client configuration; recorded destinations
+  now carry both when bound, and existing records without them stay valid.
+
 ## [2.9.0] - 2026-09-28
 
 ### Added

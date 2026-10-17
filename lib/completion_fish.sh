@@ -32,8 +32,12 @@ complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_sub
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from install-agent sign-in' -l agent -r -a 'claude codex opencode cursor agy pi' -d 'Agent'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup trust-key preflight provision agents install-agent sign-in' -l timeout -r -d 'SSH connect timeout, 1-300 seconds'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup trust-key preflight provision agents install-agent sign-in' -l json -d 'Versioned JSON output'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth' -a 'handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect announce submit start resume requests decide status observe cancel logs result inspect-result collect collected help'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth enroll revoke placement' -a 'handshake discover qualify enroll revoke list overview doctor admission bootstrap package task auth placement init spawn signal cancel workflow attach export import reconcile watch tui'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect announce submit start resume requests decide status observe cancel withdraw logs result inspect-result collect collected help'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from submit' -l placement -xa 'auto'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task; and __fish_seen_subcommand_from submit' -l separate-from -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from placement' -a 'explain replay withdraw drain undrain policy help'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from placement; and __fish_seen_subcommand_from withdraw' -l timeout -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l source -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l spec -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l input -r
@@ -103,6 +107,8 @@ complete -c hydra -f -n '__fish_use_subcommand' -a 'tail' -d 'View output from a
 complete -c hydra -f -n '__fish_use_subcommand' -a 'broadcast' -d 'Send a command to sessions'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'wait-idle' -d 'Wait for sessions to become idle'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'queue' -d 'Inspect or process the spawn queue'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'pool' -d 'File-backed task pools with sealed bounded expansions'
+complete -c hydra -f -n '__fish_use_subcommand' -a 'schedule' -d 'Host-timer schedules that submit work with a dedup token'
 
 # Complete flags
 complete -c hydra -f -n '__fish_use_subcommand' -s h -l help -d 'Show help message'
@@ -199,7 +205,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l gate -d 'Appr
 complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l dry-run -d 'Simulate without mutation'
 complete -c hydra -f -n '__fish_seen_subcommand_from land' -l into -d 'Current target branch'
 complete -c hydra -f -n '__fish_seen_subcommand_from land' -l keep-head -d 'Keep source head after landing'
-complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -a 'schema propose proposal validate compile show obligations checks explain compare run result'
+complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -a 'schema propose proposal validate compile show obligations checks explain compare evaluate observed decision run result'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l accept -r -d 'Accept exact compiled digest'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l branch -r -d 'Head that owns the proposal'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l local-policy -d 'Write the local policy preset'
@@ -207,6 +213,37 @@ complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_s
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l asset -r -d 'Publish a proposal asset NAME=FILE'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l assets-dir -r -d 'Directory holding the plan assets'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow' -l json -d 'Output versioned status JSON'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and not __fish_seen_subcommand_from create add seal claim complete cancel status list run' -a 'create add seal claim complete cancel status list run'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from create' -l max-tasks -r -d 'Sealed task bound'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from create' -l max-outstanding -r -d 'Claimed tasks at once'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from create' -l max-expansions -r -d 'Sealed expansion bound'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from create' -l max-artifact-bytes -r -d 'Task definition byte bound'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from create' -l max-repair-rounds -r -d 'Operator retry bound'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from create claim run' -l lease -r -d 'Claim lease seconds'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from create add' -l retry -r -d 'Retries for idempotent tasks'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from add' -l workflow -r -d 'Workflow ID or path'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from add' -l exec -r -d 'Head that runs the argv'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from add' -l id -r -d 'Task ID'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from add' -l idempotent -d 'Task may retry'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from add' -l seal -d 'Seal the expansion after adding'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from claim run' -l worker -r -d 'Worker label'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from claim' -l owner-pid -r -d 'Worker process ID'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from complete' -l token -r -d 'Claim token'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from complete' -l by -r -d 'Operator label'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from complete' -l outcome -r -d 'Reported outcome' -a 'succeeded failed retry'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from complete' -l run -r -d 'Workflow run ID'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from run' -l max -r -d 'Tasks to execute'
+complete -c hydra -f -n '__fish_seen_subcommand_from pool' -l json -d 'Output versioned JSON'
+complete -c hydra -f -n '__fish_seen_subcommand_from schedule; and not __fish_seen_subcommand_from add list remove run-now status' -a 'add list remove run-now status'
+complete -c hydra -f -n '__fish_seen_subcommand_from schedule; and __fish_seen_subcommand_from add' -l every -r -d 'Cadence: Nm, Nh or Nd'
+complete -c hydra -f -n '__fish_seen_subcommand_from schedule; and __fish_seen_subcommand_from add' -l workflow -r -d 'Workflow ID or path'
+complete -c hydra -f -n '__fish_seen_subcommand_from schedule; and __fish_seen_subcommand_from add' -l pool -r -d 'Pool to add to or run'
+complete -c hydra -f -n '__fish_seen_subcommand_from schedule; and __fish_seen_subcommand_from add' -l missed -r -d 'Missed-run policy' -a 'skip catch-up'
+complete -c hydra -f -n '__fish_seen_subcommand_from schedule; and __fish_seen_subcommand_from add' -l catch-up-limit -r -d 'Missed slots to catch up'
+complete -c hydra -f -n '__fish_seen_subcommand_from schedule; and __fish_seen_subcommand_from add' -l reboot-recovery -d 'Opt into reboot entries'
+complete -c hydra -f -n '__fish_seen_subcommand_from schedule; and __fish_seen_subcommand_from add status' -l format -r -d 'Timer entry format' -a 'crontab systemd launchd all'
+complete -c hydra -f -n '__fish_seen_subcommand_from schedule; and __fish_seen_subcommand_from run-now' -l token -r -d 'Explicit dedup token'
+complete -c hydra -f -n '__fish_seen_subcommand_from schedule' -l json -d 'Output versioned JSON'
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -l base -d 'Explicit base ref'
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -l target -d 'Local target ref'
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -l into -d 'Local target ref'
@@ -262,6 +299,22 @@ complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcomm
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l select -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l ssh-config -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from qualify' -l require -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l source -r -d 'Live source: ssh-config[:FILE], ansible-inventory:FILE, dns-sd[:DOMAIN]'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l diff -d 'List added, removed and changed records against the previous snapshot'
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from qualify' -l progress -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -a 'review apply'
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l input -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l output -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l candidate -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l project -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l package -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l sha256 -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l prefix -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l alias -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l confirm -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from revoke' -a 'candidate source transport package project list'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from revoke' -l reason -r -d 'Retained reason (required)'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from revoke' -l scope -r -a 'candidate source transport package project'
 
 EOF
 }

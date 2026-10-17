@@ -137,9 +137,10 @@ void render_setup_hub(struct app *app) {
     size_t count = hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0])), i;
     if (app->host_selected >= count) app->host_selected = 0;
     style(app, TONE_STRONG); linef(app, "REMOTE HOSTS"); style(app, TONE_BASE);
-    paragraph(app, "Hydra can run agents on other machines over SSH. Adding a host checks its SSH host key and "
-              "requirements, installs a matching Hydra there and helps you install and sign in to agents. "
-              "Nothing changes on the remote until you approve it.", TV_BASE);
+    paragraph(app, "Hydra can run agents on other machines over SSH, for example a build box with more cores or a "
+              "machine that already has the right toolchain, when a task needs more than this machine offers. Adding a "
+              "host checks its SSH host key and requirements, installs a matching Hydra there and helps you install "
+              "and sign in to agents. Nothing changes on the remote until you approve it.", TV_BASE);
     linef(app, "");
     for (i = 0; i < count && app->line < app->limit - 2; i++) hub_row(app, &rows[i], i);
     linef(app, "");

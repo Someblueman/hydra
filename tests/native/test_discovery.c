@@ -454,6 +454,7 @@ int main(int argc, char **argv) {
     printf("Discovery case %zu passed\n", i + 1);
   }
   dc_progress_cases();
+  dc_live_cases();
   free(original_path);
   free(ssh);
   return 0;

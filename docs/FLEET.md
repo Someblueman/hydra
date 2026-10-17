@@ -7,6 +7,10 @@ explicit configuration/history transport, and a native fleet view.
 `fleet discover` and `fleet qualify` inspect explicitly
 selected OpenSSH aliases/static records and qualify them with a strict read-only
 handshake. Candidate evidence stays separate from registered aliases and trust.
+Opt-in [live sources](#discover-qualify-and-enroll-hosts) read the operator's own
+SSH configuration, an Ansible hosts file or an mDNS client and diff each
+acquisition against the previous private snapshot; [revocation](#revoke-decisions)
+blocks a candidate, source, alias, key, package or project decision for good.
 
 The `remote task interface` prepares exact source/input packages,
 persists receiver-owned acceptance and execution, and supports disconnected
@@ -16,8 +20,9 @@ flow. Existing direct remote workflow calls remain synchronous.
 
 Fleet and remote tasks shipped in v2.1.0. Headless provider execution and durable
 approval suspension are available in v2.2.0; see the [changelog](../CHANGELOG.md).
-A remote workflow runs on one selected host. Cross-host DAG coordination and
-automatic placement remain on the [roadmap](ROADMAP.md).
+A remote workflow runs on one selected host. New remote tasks can be placed
+automatically across eligible hosts (see [Automatic placement](#automatic-placement));
+cross-host DAG coordination remains on the [roadmap](ROADMAP.md).
 
 ## Architecture and installation
 
@@ -205,6 +210,119 @@ they finish (on failure after Enter, so the output can be read); a failure is
 explained from the error the CLI recorded for that step. An unknown outcome offers Enter
 to reconcile, which never replays the earlier attempt.
 
+## Discover, qualify and enroll hosts
+
+```sh
+hydra fleet discover --ssh build --ssh mac --json
+hydra fleet discover --inventory /path/hosts.json --select build --json
+hydra fleet qualify --ssh build --require list --timeout 5 > qualification.json
+hydra fleet enroll review --input qualification.json --candidate cand_6275696c64 \
+  --project /srv/project --output enrollment.json
+hydra fleet enroll apply --input enrollment.json --confirm INTENT_SHA256
+```
+
+`discover` resolves explicitly selected targets with `ssh -G` and makes no
+connection; `qualify` adds one strict read-only protocol-1 handshake per selected
+candidate and records the authenticated peer fingerprint. `enroll review` binds
+selected compatible candidates, their source, principal, fingerprint, policy
+digest, project and optional pinned package into a digest-confirmed intent;
+`enroll apply` performs the reviewed steps with durable per-host progress. The
+candidate/result, inventory, intent and progress schemas are in
+[CONTRACTS.md](CONTRACTS.md#fleet-coordination-since-v210). Discovery never
+accepts a host key, creates an alias, installs Hydra or submits work.
+
+**Live sources.** `--source KIND[:LOCATOR]` acquires one explicitly selected
+inventory through its normal client or the operator's own files and feeds the
+same candidate importer. At most four distinct sources per invocation, each run
+once (Hydra never polls), each bounded to `--timeout` seconds of client time,
+1 MiB of file or client output and 100 records; beyond those the report is
+`partial`. Every record is `{name, target, labels}`; credentials never enter a
+record. The report carries the scope the records belong to (`account:USER@HOST`
+for local files, `network:DOMAIN via HOST` for mDNS) and the client used.
+
+| Source | Reads | Scope and limits |
+| --- | --- | --- |
+| `ssh-config[:FILE]` | Literal `Host` names from `~/.ssh/config` (or FILE) and its literal `Include` files; each becomes a candidate that the normal `ssh -G` resolution then explains. Patterns (`*`, `?`, `!`), `Match` blocks and glob includes are reported as skipped, never expanded. | The local account; at most 16 files, two include levels. |
+| `ansible-inventory:FILE` | Host lines of plain `[group]` sections in an INI hosts file; groups become labels, `ansible_host`/`ansible_user` form the target and `ansible_port` a `port:N` label. `[group:vars]` and `[group:children]` are ignored, ranges and non-SSH connections skipped, and any variable that looks like a secret (`pass`, `token`, `secret`, `private_key`, `become`, `vault`, `credential`) is counted in `credentials_omitted` and dropped. | The local account. |
+| `dns-sd[:DOMAIN]` | `_ssh._tcp` services from one terminating `avahi-browse -rtpk` run (port 22 only; names are unescaped). Without `avahi-browse` the source is `unavailable` with reason `client_missing` (`client_unsupported` when only macOS `dns-sd` is present): Hydra never browses the network itself. | `network:DOMAIN` (default `local`). Live multicast acquisition is unqualified; see the roadmap. |
+
+Each acquisition is compared with the previous private snapshot of the same
+source (`$HYDRA_HOME/fleet/discovery/sources/`, owner-only) before any
+selection: the report shows the cache age and the added, removed, changed and
+conflicting records (`--diff` lists them; counts are always present). The cache
+is replaced only by a complete or partial acquisition. When the file is gone,
+the client is missing or times out, or the source was revoked, the report is
+`unavailable`/`revoked`, the command fails with `source_unavailable`/`revoked`,
+the stale cache is shown with its age and record count, and nothing from it is
+imported. Only records of a complete current acquisition become candidates by
+default; `--select NAME` imports named records, also from a partial acquisition,
+and `qualify` over a source always requires `--select`. Records that conflict
+(two names for one target, one name for two targets, or a target that another
+name held in the previous snapshot) or whose identity is revoked are reported
+with provenance and never imported; selecting one is an error. A larger or
+changed acquisition changes the qualification progress binding, so a resumed
+batch cannot silently reuse results for a different membership.
+
+`make test-discovery` covers these adapters with fixture files and a fixture
+`avahi-browse` only. No live mDNS network, Ansible installation or provider was
+observed; that qualification needs a separately authorized operator run.
+
+## Revoke decisions
+
+```sh
+hydra fleet revoke transport build --reason "host key rotated 2026-10-17"
+hydra fleet revoke candidate cand_6275696c64 --reason "retired"
+hydra fleet revoke source ansible-inventory:/etc/ansible/hosts --reason "moved"
+hydra fleet revoke package PACKAGE_SHA256 --reason "superseded build"
+hydra fleet revoke project /srv/project --reason "decommissioned"
+hydra fleet revoke list [--scope transport] --json
+```
+
+A revocation is an explicit local decision about one identity: a candidate (by
+`cand_` ID or exact target), a source (`KIND:LOCATOR`), a transport binding (an
+alias name together with its recorded accepted host key), a package digest or a
+project path. The private record (`$HYDRA_HOME/fleet/revocations/SCOPE/`,
+0600 in 0700 directories) keeps who, when, the reason and the superseded
+binding: for an alias, the alias record with its target, principal, project and
+accepted key; for a source, its cached snapshot summary; for a project, the
+aliases mapped to it. The live alias record stays on disk for inspection and is
+never edited, and a second revocation of the same identity is refused with
+`already_revoked`. Revocation is final for that identity; there is no
+un-revoke, so a rotated host is enrolled again under a fresh review and a new
+alias.
+
+Revoked bindings block new operations and invalidate pending intents: a revoked
+alias cannot be loaded by any `fleet` operation, `fleet task` submission, agent
+sign-in or workflow binding (typed `revoked`, with the record's detail), shows
+as a `revoked` row in `fleet list`, cannot be re-added, re-set-up or published by
+enrollment under the same name, and no endpoint change or source refresh reaches
+the host through it. A revoked candidate shows as `revoked` in `discover`,
+`qualify` and resumed progress (its earlier evidence is retained under the
+status), is reported but not imported from any inventory or live source, and is
+refused by `enroll review`. A revoked source is not acquired. A revoked package
+digest is refused by `fleet bootstrap` and `enroll review`; a revoked project by
+`enroll review` and every `--project` operation. `enroll apply` marks a reviewed
+host whose candidate, alias, accepted key, package or project was revoked after
+review as `revoked` before any connection; rows already `enrolled` stay as they
+are. A host that still presents a revoked alias's accepted key is refused by
+review even under a new alias.
+
+Revocation alone cancels no task, uninstalls no package, deletes no remote state
+and rewrites no `known_hosts`; those actions keep their own explicit commands.
+
+**Changed host keys.** When strict OpenSSH refuses a changed key during
+`qualify`, the candidate's `host_key_changed` result adds `error.host_key`: the
+presented fingerprint, key type and offending `known_hosts` file and line as
+OpenSSH reported them, the fingerprints Hydra has recorded for that target
+(alias `accepted_host_key`, revoked transports' superseded keys, earlier
+qualification results) each with its source, and the acceptance path. `enroll
+apply` reports `host_key` with the reviewed and the presented fingerprint and
+where each was observed; `remote trust-key` adds the alias's recorded
+fingerprint next to the presented one. Hydra never accepts the new key or edits
+`known_hosts`: verify it out of band, remove the old entry with your own
+`ssh-keygen -R`, re-qualify, and review enrollment afresh. The old binding can
+then be revoked explicitly so nothing silently re-points to the rotated host.
+
 ## Register and bootstrap a host
 
 ```sh
@@ -218,7 +336,10 @@ settings. Hydra enforces batch authentication and strict host-key verification;
 verify the host key through your trusted process first. Aliases are private JSON
 records under `$HYDRA_HOME/fleet/remotes/`. `remote add` replaces that alias's record.
 Optional `--hydra /absolute/bin/hydra` selects an existing installation and `--home
-/absolute/state-directory` isolates remote Hydra state. `--multiplex` enables
+/absolute/state-directory` isolates remote Hydra state. `--ssh-config
+/absolute/file` binds the alias to one OpenSSH client configuration (`ssh -F`), as
+a finished guided setup records; every transport for that alias, including
+workflow task dispatch, uses it. `--multiplex` enables
 OpenSSH ControlMaster/ControlPersist with private control sockets; existing SSH
 multiplexing configuration is otherwise respected.
 
@@ -434,6 +555,124 @@ Initialized-host snapshots include capacity and observation timestamps. These ar
 observations; the receiving shell authority grants every reservation against live
 policy. See [Contracts](CONTRACTS.md#durable-state-v2) for limits, labels, queue
 deadlines, and retained claims after owner loss.
+
+## Automatic placement
+
+Remote task submission pins one host by default: the package's immutable `host`
+must be the alias you submit to, and nothing is recorded beyond the receiver's
+acceptance. Automatic placement (since 3.0) chooses the receiver for **new,
+unassigned work** from the registered aliases and records why:
+
+```sh
+hydra fleet task prepare --source . --spec task.json --output /tmp/task.json
+hydra fleet task submit --placement auto --input /tmp/task.json --key build-42
+hydra fleet task submit alpha --input /tmp/task.json --key build-43 --placement alpha
+hydra fleet placement explain task_ID --json     # the recorded decision
+hydra fleet placement replay task_ID             # re-derives it; must be identical
+hydra fleet placement policy                     # effective knobs and drained hosts
+hydra fleet placement drain ovh                  # keep new work off a host
+hydra fleet placement undrain ovh
+```
+
+With `--placement auto` the positional alias is omitted; the package's `host` is
+only the prepared template and the chosen host receives a copy whose `spec.host`
+and `spec_sha256` are rebound (bundle, inputs and limits are byte-identical).
+`--trust-spec` names the digest you reviewed (the prepared package); the
+host-bound digest the receiver trusts is reported as `bound_spec_sha256` and is
+what `hydra fleet task start HOST --id ID --trust-spec` needs later. `--placement
+HOST` is an explicit pin that also records a decision. `--separate-from TASK_ID`
+(repeatable, at most 8) excludes the current host of another placed task, which is
+how a validator stays off its producer's host.
+
+**Eligibility.** Every registered alias is observed with one handshake and one
+`admission status --json` call (serially, each bounded by the task's
+`transport_seconds`). A host is excluded, with every applicable reason recorded,
+when it is drained, offline or incompatible (`offline`, `timeout`,
+`version_incompatible`, ...), lacks `task-accept`/`task-withdraw` or an adapter
+capability the spec names (`capability_missing`), does not map the spec's
+project path (`project_unmapped`), differs from a `platform.OS-ARCH` capability
+(`platform_mismatch`), lacks a required `label.X` in its admission policy
+(`label_unsupported`), has no admission observation (`admission_unobserved`),
+reports an observation older than `max_observation_age_seconds` or ahead of the
+submitter's clock by more than that (`stale_observation`), has a full queue
+(`queue_full`) or more queued requests than `max_queued` (`queue_bound`), is
+below its disk floor or the task's log/artifact bytes (`disk_floor`,
+`disk_insufficient`), would consume validator headroom (`validator_reserved`),
+already recorded this task ID (`previous_generation`), or holds a task named by
+`--separate-from` (`validator_separation`). An idle host that fails any filter is
+not eligible.
+
+**Ranking.** Eligible hosts are ordered by capacity-normalized load
+`(reserved + queued) * 1000 / capacity` where `capacity` is the host's
+`host_limit`, or 1 when the host advertises no limit (an unbounded host looks
+fully loaded as soon as it holds one reservation; configure `host_limit` for
+balanced placement), then by reserved slots of the same task class (requests
+with the same required-label set), then by queue depth, then by alias order.
+The first host receives the task. The receiver's admission remains final: a
+definitive refusal (`capability_unavailable`, `unmapped_project`,
+`missing_dependency`, `invalid_package`, or a start that fails with `queue_full`)
+is recorded and the next-ranked host is tried; an ambiguous dispatch
+(`outcome_unknown`) leaves the task assigned to that host and a later submission
+with the same key reconciles with that host only, never a second one. Submissions
+for one key serialize on the record, so concurrent submitters cannot dispatch the
+same task twice. Each candidate also carries typed, versioned `estimates`
+(`queue_delay_seconds`, `measured_duration_seconds`, `transfer_cost_bytes`,
+estimates schema 1) that are recorded as unavailable and never used in ranking
+until measured evidence exists.
+
+**Policy.** `$HYDRA_HOME/fleet/placement-policy.json` (optional, closed schema,
+policy version 1) holds `max_observation_age_seconds` (default 60),
+`max_queued` (default 8, 0..128) and `validator_reserve_slots` (default 0,
+0..64): the number of free slots per host, out of its `host_limit`, kept for
+`role.validator` tasks so fan-out of producers cannot fill every host ahead of
+validation. The default reserves nothing; raise it where validators demonstrably
+wait behind producers. Receivers keep FIFO queue order; placement never
+reorders a receiver's queue. Task classes come from capability names:
+`role.producer`, `role.validator` (otherwise `general`); receivers accept and
+record `role.*` and check `platform.OS-ARCH` against their own platform.
+
+**Record.** Every `--placement` submission writes
+`$HYDRA_HOME/fleet/placements/TASK_ID/placement.json` (`fleet-placement` schema
+1, digest-sealed): the inputs derived from the spec, the policy used, and for
+each assignment generation every round's observations (with ages), candidates
+(eligibility, reasons, score, rank, estimates), the decision, and every dispatch
+attempt with its reservation outcome (`accepted`, `refused` with the receiver's
+code, `unknown`, `error`). `placement explain` prints it; `placement replay`
+re-runs the ranking from the recorded observations and policy and fails with
+`replay_mismatch` unless the result is identical. A record whose digest does not
+match is refused (`not_found`). Drain markers live in
+`$HYDRA_HOME/fleet/placement-drained/HOST` and affect only automatic placement.
+
+**Rebalancing.** Only accepted work that has not started moves:
+
+```sh
+hydra fleet placement withdraw task_ID        # the current receiver records the withdrawal
+hydra fleet task submit --placement auto --input /tmp/task.json --key build-42   # generation 2
+```
+
+`withdraw` sends `task withdraw` to the assigned host. The receiver takes the
+launch owner lock, records `withdrawal.json` and the durable `withdrawn` state
+only for an accepted task without a launch claim, and refuses anything else
+(`execution_owned`); a withdrawn task never starts there (`withdrawn`). Nothing
+is released because admission is requested only at launch. The submitter then
+opens the next generation on the next submission, excluding every host that
+recorded the task. A lost withdrawal response marks the generation
+`withdrawal: unknown` and blocks transfer (`withdrawal_unconfirmed`) until a
+rerun confirms it; running agents are never migrated and uncertain work is never
+replayed as balancing. Receivers that advertise `task-withdraw` record the
+submitter's `assignment_generation` at acceptance and reject a start, resume or
+re-submission that names another generation (`stale_generation`); result
+collection admits a snapshot only from the current generation and host
+(`stale_generation`), and promotion consumes only collected results, so a late
+result from a superseded generation can never be integrated. This fence covers
+Hydra's own records; a task's external side effects (pushes, API calls, provider
+sessions) need their own idempotency or fencing contract, and expiry of a queue
+deadline or lease never authorizes a second execution.
+
+Placement is qualified here with local receivers behind a controlled SSH
+boundary. Heterogeneous-host trials comparing explicit and balanced placement
+(queue wait, time to verified result, throughput, transfer bytes, starvation)
+need real hosts and have not been run; no performance improvement is claimed.
 
 ## Native fleet view
 

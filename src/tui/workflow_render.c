@@ -6,10 +6,9 @@
 static void workflow_empty(struct app *app) {
     style(app, TONE_STRONG); linef(app, "%s", app->workflow_error[0] ? app->workflow_error : "No workflow runs recorded in this project."); style(app, TONE_BASE);
     linef(app, "");
-    linef(app, "A workflow is a saved sequence of steps Hydra runs and tracks for a task: for example");
-    linef(app, "implement a change, run the tests, then wait for your review. Steps can run agents or");
-    linef(app, "commands, and independent steps run in parallel. A single agent conversation does not");
-    linef(app, "need one. Runs started with hydra workflow run <id> appear here with their dependencies.");
+    paragraph(app, "A workflow is a saved sequence of steps Hydra runs and tracks for a task: for example implement a change, run the tests, then wait for your review. Steps can run agents or commands, and independent steps run in parallel. A single agent conversation does not need one.", TV_BASE);
+    linef(app, "");
+    paragraph(app, "A run starts when you approve a validated plan in the plan review (E) or with hydra workflow run <id>; runs appear here with their steps and dependencies.", TV_BASE);
 }
 
 static void workflow_compact(struct app *app, const struct workflow_model *m, const size_t *indices, size_t n) {

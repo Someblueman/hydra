@@ -644,7 +644,14 @@ static void render_rows(struct app *app, struct native_attention *view)
     size_t rows[NATIVE_ATTENTION_ITEMS + 1U], n = build_rows(view, rows), selected = current_row(view, rows, n), i;
     size_t available = app->limit > app->line ? (size_t)(app->limit - app->line) : 1U, start = 0U, end = 0U;
     struct cursor measure = {0U, 0U, 0U}, draw;
-    if (!n) { linef(app, "Nothing needs your attention."); return; }
+    if (!n) {
+        linef(app, "Nothing needs your attention.");
+        linef(app, "");
+        paragraph(app, "Attention lists what needs a decision or a look from you: an approval request a step is waiting on, a failed check, a result ready for review, or a terminal that stopped. For example, a plan step asks you to approve before it merges.", TV_BASE);
+        linef(app, "");
+        paragraph(app, "Items stay listed until the request is resolved; Enter shows what an item asks and r reviews a result.", TV_MUTED);
+        return;
+    }
     for (i = 0U; i < n; i++) {
         if (i == selected) start = measure.line;
         render_row(app, &measure, view, rows[i], false);

@@ -52,8 +52,8 @@ Failure has:
 required. Error `code`, `message`, and `recovery` are required strings. Envelope v1 is
 used by `init`, `capabilities`, `list`, `status`, `group status`, `recv`, `receipts`,
 `queue`, `lifecycle`, `wait`, `exec`, `diff`, `review`, `provenance`, `workflow`,
-`collision`, `resource`, `gate`, `du`, and `snapshot` where their help documents
-`--json`.
+`collision`, `resource`, `gate`, `du`, `snapshot`, `pool`, and `schedule` where their
+help documents `--json`.
 
 `json_escape` accepts POSIX C strings (there is no NUL). It escapes JSON syntax and
 C0 controls and preserves other UTF-8 bytes.
@@ -219,6 +219,58 @@ records also require nonempty rubric, source locators, disagreement, and authori
 review fields. Assessment records bind the same definition-and-arguments recipe
 digest, but do not claim machine verification of rubric correctness.
 
+`workflow plan evaluate` (schema 1, `analysis` `hydra-plan-evaluate-1`) adds
+to the `compare` fields three sections, `decomposition`, `scheduling` and
+`placement`, each with `left`, `right`, `modeled_preference` (`left`, `right`,
+`unresolved`, or `not_assessed` for placement) and `reason`. Decomposition rows
+carry `nodes`, `edges`, `required_nodes`, `unconnected_nodes`,
+`validation_effort` (`checks`, `obligations`, `verify_steps`,
+`verify_milliseconds`, `verify_cost_microunits`), `transfers` (`artifact_inputs`,
+`cross_head_inputs`, `declared_max_bytes`, `observed_bytes`) and `rework_risk`
+(`retry_budget`, `repair_budget`, `repair_scope`, `probability`, `basis`).
+Scheduling rows carry `depth_nodes`, `max_level_width`, `hard_budgets`
+(`parallelism`, `timeout_seconds`, `max_heads`, copied from the envelope),
+`critical_path_milliseconds`, `total_work_milliseconds`, `cost_microunits`,
+`time_to_verified_result_milliseconds`, `cost_to_verified_result_microunits`,
+`estimate_budget_conflict` and the supplied `estimates`. Placement rows carry
+`hosts` and `heads_created`. Range fields are `[low, high]` integer arrays or
+`null`; `observed_bytes` and `probability` are always `null`. `evaluate` accepts
+an estimates file that names only one of the two digests. `workflow plan
+observed <run-id>` prints an estimates document (schema 1) bound to the run's
+compiled digest with one `milliseconds` range per step that has a completed
+attempt and no cost rows.
+
+A planning decision record (`planning/decisions/<id>/decision.json`, schema 1,
+`record` `hydra-plan-decision-1`) is canonical JSON with `recorded_at`,
+`compiler`, `analysis`, `policy` (`schema_version`, `sha256`), `hard_budgets`
+(the selected plan's envelope), `estimates` (`sha256`, `input`, both null without
+estimates), `selected` (`sha256`, `reason`, `input`, `estimate_budget_conflict`),
+`rejected` (rows with `sha256`, `reason`, `input`, `evaluation_sha256` and the
+full `evaluation`) and `limits`. `<id>` is the first sixteen hex characters of
+the record file's SHA-256; `inputs/<sha256>.json` holds each alternative's
+canonical compiled artifact and `inputs/estimates.json` the canonical estimates.
+`decision show --json` returns `decision_id`, `record` and `replay` (`status`
+`reproduced` or `diverged`, `comparisons` rows with `rejected_sha256`,
+`recorded_sha256`, `replayed_sha256`, `reproduced`, and `method`); a record whose
+bytes or ID changed fails with `invalid_decision`. `decision list --json` returns
+`decisions` rows (`decision_id`, `recorded_at`, `selected_sha256`, `rejected`,
+`replay`). Recording refuses `estimate_budget_conflict`, `duplicate_alternative`,
+`invalid_alternative`, `invalid_reason` and `invalid_estimates`.
+
+The planning evaluation report (`build/plan-eval/report.json`, schema 1,
+`report` `hydra-plan-eval-1`) records `source_commit`, `archive` (`commit`,
+`files` digests, `verified`), `matched_contract`, `case_set`, `planning` (per arm
+and candidate: `interfaces.declared` and `interfaces.adapted` with `accepted`,
+`total`, `by_class`, `by_source`, `cases`, `repeats`, `distinct_outcomes`),
+`validation` (`false_rejections`, `false_acceptances`, `incorrect_rejected`,
+`incorrect_total`, `by_class`, `controls`), `execution` (`compiled`, `runs` with
+`verified_outcome`, `as_expected`, `wall_seconds`,
+`time_to_verified_result_milliseconds`, `cost`, `human_corrections`,
+`repeated_work`), `scheduling` (`structural`, `executed`, `calibration`),
+`calibration`, `human_corrections`, `stochastic_variability`, `failures`,
+`status` and `limits`. Unobserved quantities are `null` or `unknown` strings,
+never estimates.
+
 Workflow definition schema v1 is the stable finite-DAG contract. Definitions use the
 documented restricted YAML subset, every step declares idempotency, argv is the
 default execution form, and shell strings require both `allow_shell: true` and a
@@ -239,6 +291,105 @@ Integration manifests bind the target, initial target ref, ordered immutable
 candidates, gates, merge output, verification result, approval, and recovery action.
 Promotion revalidates those bindings under a project lock, updates only a local ref,
 and never pushes. See [workflows.md](workflows.md).
+
+## Pools and schedules
+
+Task pools and schedules (since 3.0.0) are project-scoped state v2 records
+beneath `$HYDRA_HOME/state/v2/projects/<project>/pools/<pool>/` and
+`.../schedules/<schedule>/`, created with private modes and inspectable as
+plain files. Pool and task names are validated workflow-style identifiers
+used as path keys. A pool holds `schema-version` (`1`), the sealed bounds
+manifest `manifest.json` (`{"schema_version":1,"pool","project_id",
+"created_at","bounds":{"max_tasks","max_outstanding","max_expansions",
+"max_artifact_bytes","max_repair_rounds","lease_seconds","retry"}}`) with its
+Git blob digest in `manifest-digest`, scalar counters (`task-count`,
+`expansion-count`, `expansion-open`, `artifact-bytes`, `repair-rounds`), the
+task `order`, `expansions/<n>/{state,tasks,manifest.json,manifest-digest}`
+(`manifest.json` is `{"schema_version":1,"pool","expansion","sealed_at",
+"task_count","artifact_bytes","tasks":[...]}`, written once at seal),
+`tasks/<id>/` and an append-only `events.jsonl` (schema 1 lines with
+`sequence`, `occurred_at`, `pool`, `task_id`, `type`, `detail`). Bounds and
+sealed manifests never change. A task directory holds `state` (`pending`,
+`ready`, `claimed`, `succeeded`, `failed`, `cancelled`, `recovery-required`),
+`kind` (`workflow` or `exec`), `definition` (an absolute workflow path or a
+head branch), `argv` (one element per line), `idempotent`, `retry`,
+`attempts`, `expansion`, `bytes`, `cancel-requested` when requested, the live
+`claim/` record (`pid`, `host`, `created_at`, `operation`, `worker`, `token`,
+`attempt`, `expires-at`) and `attempt-<n>/` evidence (`worker`, `claimed-at`,
+`outcome`, `source` of `worker`, `workflow-record` or `operator`, `decision`,
+`stale-at`, `run-id`, `exit-code`, `stdout`, `stderr`, `completed-at`).
+
+Claims are issued only under the pool lock (`pool_<project>_<pool>`), one
+task per claim, never above `max_outstanding`, and only from sealed
+expansions. A claim is stale when its lease expired or its owner pid is dead
+on the recording host; stale claims are resolved from recorded evidence
+alone. A terminal workflow run bound to the attempt is authoritative; an
+unknown outcome re-queues an idempotent task within its retry budget and
+otherwise yields `recovery-required` with no new attempt. Completion requires
+the live token (`stale_owner` otherwise) or, for `recovery-required` tasks, an
+explicit `--by` decision; operator `retry` consumes a repair round. Tasks are
+executed by the public `hydra workflow run` and `hydra exec` commands, so
+admission applies unchanged; pools add no scheduler.
+
+`pool create|status --json` return `data` with `pool`, `state`,
+`created_at`, `manifest_digest`, `bounds`, `usage` (`tasks`, `expansions`,
+`open_expansion`, `artifact_bytes`, `repair_rounds`, `outstanding`), `counts`
+per state, `drained`, `cancel_requested`, `expansions[]` (`number`, `state`,
+`task_count`, `manifest_digest`) and `tasks[]` (`task_id`, `state`, `kind`,
+`definition`, `argv`, `idempotent`, `retry`, `attempts`, `expansion`,
+`cancel_requested`, `claim` with `worker`, `host`, `pid`, `claimed_at`,
+`expires_at`, `stale` or null, `run_id`, `last_outcome`, `outcome_source`).
+`pool add` returns `pool`, `task_id`, `state`, `expansion`,
+`sealed_expansion`; `pool seal` returns `expansion`, `task_count`,
+`manifest_digest`; `pool claim` returns `claimed`, `reason` (`none`,
+`unsealed`, `outstanding_limit`, `pool_cancelled`), `token`, `lease_seconds`,
+`reconciled` and the claimed `task`; `pool complete` returns `task_id`,
+`outcome`, `state`; `pool cancel` returns `result` (`cancelled`, `signalled`,
+`terminal`) for one task or `cancelled` and `signalled` counts for the pool;
+`pool list` returns `pools[]`; `pool run` returns `worker`, `executed`,
+`stopped` and `results[]`. Error codes include `not_initialized`,
+`not_found`, `already_exists`, `growth_exhausted`,
+`artifact_bytes_exhausted`, `nothing_to_seal`, `not_claimed`,
+`stale_owner`, `invalid_state`, `repair_exhausted`, `pool_cancelled`,
+`head_not_found` and `busy`.
+
+A schedule holds `schema-version` (`1`), `manifest.json`
+(`{"schema_version":1,"schedule","project_id","created_at","every",
+"interval_seconds","submission":{"kind","workflow","pool"},"missed_policy",
+"catch_up_limit","reboot_recovery"}`) with `manifest-digest`, the same
+values as scalars, `last-slot`, `missed-total`, `firings/<token>/` (`slot`,
+`fired-at`, `trigger` of `run-now` or `catch-up`, `state` of `submitting`,
+`finished` or `failed`, `owner-pid`, `exit-code`, `run-id` or `task-id`,
+`stdout`, `stderr`, `completed-at`) and `events.jsonl`. Kinds are
+`workflow`, `pool-add` and `pool-run`. The dedup token of a firing is
+`<schedule>-<slot>` with `slot = now - now mod interval_seconds` (UTC), or an
+explicit `--token`; the firing directory is created under the schedule lock
+before submission, so a token submits at most once. Missed slots are the
+slots strictly between `last-slot` and the current slot; `skip` fires only
+the current slot, `catch-up` also fires the newest `catch_up_limit` missed
+slots in order. Timer text is a pure function of the schedule record,
+`HYDRA_HOME`, the repository root and the hydra binary path; paths with
+quotes, `%`, `\`, `<`, `>`, `&`, `$`, backquotes or whitespace are refused
+(`unsupported_path`). `schedule add|status --json` return `schedule`,
+`state`, `created_at`, `manifest_digest`, `every`, `interval_seconds`,
+`submission`, `execution_owner` (`timer-process` or `pool-worker`),
+`missed_policy`, `catch_up_limit`, `reboot_recovery`, `last_slot`,
+`next_slot`, `missed_total`, `firings[]` and `timer` (`crontab`, `systemd`,
+`launchd` text). `schedule run-now --json` returns `schedule`, `slot`,
+`fired[]`, `deduplicated[]` and `missed` (`policy`, `detected`,
+`caught_up`, `skipped`), exiting nonzero when a submission failed.
+
+Hydra never installs a timer or daemon. Unattended scheduling requires an
+always-on execution owner outside Hydra: the host timer service starts the
+firing process, which owns a `workflow` run or `pool-run` loop until it exits;
+a `pool-add` firing only enqueues and its owner is whoever runs `hydra pool
+run`. Reboot recovery is opt-in (`--reboot-recovery`: `@reboot`,
+`Persistent=true`, `RunAtLoad`) and only starts a new firing of the current
+slot; a service restart never replays in-flight work, an interrupted run is
+resumed only by an explicit `hydra workflow resume`, and a restarted
+coordinator reconciles unknown pool outcomes from evidence instead of
+inventing completion. Live cron, systemd and launchd installations are not
+qualified by Hydra's own tests; the generated text is.
 
 ## TUI protocols and parity
 
@@ -349,8 +500,14 @@ them, remain typed keys. `hydra provenance` exposes the exact identity, paths, a
 launcher.
 
 Source and prefix installs provide `bin/hydra`, `lib/hydra/*.sh`, and an optional
-qualified `hydra-tui`. Core shell operation requires POSIX `sh`, Git, and tmux 3.0 or
-newer on supported macOS and Linux systems. The root README lists supported tools.
+qualified `hydra-tui`. Core shell operation requires POSIX `sh` and Git on supported
+macOS and Linux systems. tmux 3.0 or newer is required only for interactive
+terminal operations (interactive spawn and resume, attach, switch, broadcast,
+dashboard, TUI, and workflow steps that request a terminal); headless heads, exec,
+workflows, remote tasks, bootstrap, install, and doctor run without it. A tmux on
+PATH that cannot report a version is unusable, never "old enough". The root README
+lists supported tools; [T2/T3 qualification](T2_T3_QUALIFICATION.md) records the
+reproducible execution-without-tmux cases.
 
 ## Fleet coordination (since v2.1.0)
 
@@ -390,6 +547,57 @@ detail}` with an optional `suggestion` (an example command; Hydra never runs it)
 Plans are `remote-setup-plan` schema 1 approved by their SHA-256; exit statuses
 are 0, 1, 3 (approval required), 4 (outcome unknown) and 128+n.
 
+Host discovery (`fleet discover|qualify`) returns candidate schema 1:
+`data.{candidate_schema_version, observed_at, required_capability, partial_failure,
+revoked_count, candidates[]}` where a candidate carries `candidate_id` (`cand_` plus
+hex of the exact target), `target`, `deduplication`, `sources[]` (`{kind, locator,
+name, observed_at, age_seconds, freshness, labels}`, plus `scope` and `client` for
+snapshot and live sources), `resolution`, `qualification`, `qualified_at` and
+`status` (`discovered`, `resolution_failed`, `not_qualified`, `compatible`,
+`qualification_failed` or `revoked`, the last with `revocation`). Inventories are
+schema 1 (`{schema_version, observed_at, hosts[{name, target, labels}]}`) or schema
+2 with a closed `source_snapshot` (`kind` `mdns|vpn|cloud-tags|config-management`,
+`locator`, `scope`, `observed_at`, `freshness`, up to 100 `records`). Since 3.0,
+`--source KIND[:LOCATOR]` (`ssh-config`, `ansible-inventory`, `dns-sd`; at most four,
+each acquired once per invocation within `--timeout`, 1 MiB and 100 records) adds
+`data.sources[]`: `{kind, locator, scope, client, source_id, status
+acquired|partial|unavailable|revoked, reason, observed_at, bytes, record_count,
+credentials_omitted, skipped[{name, reason}], cache {observed_at, age_seconds,
+record_count, status}|null, diff {diff_schema_version 1, first_observation,
+added_count, removed_count, changed_count, conflicting_count, conflicting[{name,
+target, reason duplicate_name|duplicate_target|target_reassigned}], and with --diff
+added[], removed[], changed[{name, previous_target, target, previous_labels,
+labels}]}, revoked[{name, target, revocation}]}` and `data.diff_requested`. An
+unavailable or revoked source fails the command with `source_unavailable` or
+`revoked` while retaining every report. Each source's previous acquisition is a
+private snapshot `{schema_version 1, kind "fleet-discovery-source-snapshot", source,
+status, observed_at, records}` under `$HYDRA_HOME/fleet/discovery/sources/`, keyed by
+the SHA-256 of `KIND:LOCATOR`; qualification progress binds `sources[{kind, locator,
+records_sha256}]`. A `host_key_changed` qualification adds `error.host_key`
+(`presented_fingerprint`, `key_type`, `known_hosts`, `known_hosts_line`,
+`observation`, `observed_at`, `recorded[{fingerprint, source}]`, `acceptance`);
+an enrollment apply row with that status adds `host_key {reviewed_fingerprint,
+reviewed_source, presented_fingerprint, observation, acceptance,
+presented_key_revoked?}`. Enrollment intent schema 2 and progress schema 1 are
+unchanged; a row may now have status `revoked` with `revocation`.
+
+Revocation (`fleet revoke SCOPE ID --reason TEXT`, since 3.0) writes one private
+record `{schema_version 1, kind "fleet-revocation", scope candidate|source|
+transport|package|project, id, requested_id?, reason, revoked_at, revoked_by {user,
+uid, host}, superseded, effect}` at `$HYDRA_HOME/fleet/revocations/SCOPE/<sha256 of
+id>.json` (0600 inside 0700 directories, never replaced; a repeat fails with
+`already_revoked`). Identities are canonical: a candidate target becomes its
+`cand_` ID, a source is `KIND:LOCATOR`, a transport is the alias name, a package its
+64-hex digest, a project its absolute path. `superseded` retains the alias record
+(with `target`, `principal`, `project`, `accepted_host_key`), the candidate target,
+the source's cached snapshot summary, or the aliases mapped to a project.
+`fleet-revoke-list` returns `data.{revocation_schema_version 1, count,
+revocations[]}`. Blocked operations fail with code `revoked` and `data` holding the
+record's `{scope, id, reason, revoked_at, revoked_by}`; `fleet list` reports a
+revoked alias as a row with that error. Revocation records are decisions, not
+remote state: they cancel nothing, uninstall nothing and never modify
+`known_hosts` or an alias record.
+
 Task package schema 1 binds an
 exact Git bundle, selected inputs, work, destination, completion policy, and limits
 for local preparation and validation. Task protocol 1 advertises `task-accept`
@@ -404,6 +612,17 @@ confirmation is scoped to managed commands; missing owner evidence stays unknown
 `task-result` returns an immutable receiver-completion snapshot with checksummed
 artifacts/evidence and an exact source/result Git bundle. Both endpoints validate
 the result envelope before use; downloads never recapture changed worktrees.
+A receiver advertises `tmux` only when a working tmux 3.x answers `tmux -V` and
+always advertises `execution-headless`; a task requiring `tmux` on a receiver
+without it is refused before acceptance with `capability_unavailable`, and a
+compiled plan admits only `exec` plus `execution-headless` recipes
+(`invalid_task_policy`). A workflow task step whose first submission is refused
+with a final receiver code (`capability_unavailable`, `unmapped_project`,
+`submission_conflict`, `missing_dependency`, `placement_mismatch`) records that
+code in its `remote-response.json` and fails instead of waiting for
+reconciliation; transport failures still wait. Alias records may bind an OpenSSH
+client configuration (`remote add --ssh-config`, or a finished guided setup), and
+recorded workflow destinations carry `ssh_config` and `principal` when bound.
 Collection installs verified snapshots beneath the common Git directory and uses
 compare-and-set direct refs under `refs/hydra/tasks/collection_ID/`. Repeated
 collection preserves checkout/index/ordinary refs; changed private bindings fail.
@@ -411,6 +630,47 @@ collection preserves checkout/index/ordinary refs; changed private bindings fail
 local gate, approval, and promotion flow without restoring remote live state.
 Fleet stdin rejects embedded NUL bytes
 and input beyond its 8 MiB bound instead of accepting a truncated JSON prefix.
+
+Automatic placement (since 3.0, [FLEET.md](FLEET.md#automatic-placement)) adds
+to task protocol 1, additively: receivers advertise `task-withdraw`; a `submit`,
+`start` or `resume` request may carry `assignment_generation` (integer
+1..1000000), which acceptance records as `assignment_generation` (1 when absent)
+and which a later request must match (`stale_generation`); the `withdraw`
+operation moves an accepted task without a launch claim to the durable runtime
+state `withdrawn` (refusing anything else with `execution_owned` or
+`invalid_state`), after which start and resume fail with `withdrawn`; spec
+capabilities `role.NAME` are recorded placement classes and `platform.OS-ARCH`
+must equal the receiver's handshake platform. `fleet task submit --placement
+auto|HOST [--separate-from TASK_ID]` and `fleet placement explain|replay|
+withdraw TASK_ID`, `drain|undrain HOST` and `policy` are the submitter surface.
+`fleet-placement` schema 1 is the digest-sealed record at
+`$HYDRA_HOME/fleet/placements/TASK_ID/placement.json`: `{schema_version, task_id,
+submission_key, mode: auto|explicit, prepared_spec_sha256, prepared_host, inputs
+{project, work_kind, task_class, required_labels[], required_labels_key,
+adapter_capabilities[], platform, disk_bytes_required}, policy {policy_version,
+max_observation_age_seconds, max_queued, validator_reserve_slots}, generation,
+assigned_host, reservation: none|accepted|refused|unknown|withdrawn,
+bound_spec_sha256, generations[] {generation, host, reservation,
+bound_spec_sha256, withdrawal: null|{state: requested|confirmed|unknown|refused,
+code?, requested_at, confirmed_at?}, rounds[] {decided_at, mode, excluded_hosts[],
+separation_hosts[], observations[], candidates[] {host, eligible, reasons[],
+observation_age_seconds, score {capacity, reserved, queued, class_reserved,
+load_milli}|null, estimates {schema_version: 1, queue_delay_seconds,
+measured_duration_seconds, transfer_cost_bytes, used_in_ranking: false}, rank},
+decision {host|null, reason: ranked|explicit|no_eligible_host, policy_version},
+attempts[] {host, outcome: in_flight|accepted|refused|unknown|error, code?,
+receiver_record, requested_at, spec_sha256, task_state?}}}, sha256}`. `fleet
+placement replay` re-derives every automatic round's candidates and decision from
+its recorded observations, excluded and separation hosts, `decided_at` and the
+recorded policy and reports `identical: true` or `replay_mismatch`. Successful
+`--placement` submissions add `data.placement {task_id, generation,
+assigned_host, reservation, bound_spec_sha256, mode, record_directory}`. Result
+collection refuses a snapshot whose receipt generation or host differs from the
+record (`stale_generation`). The fence covers Hydra's records only: external side
+effects need their own idempotency contract, and no deadline or lease expiry
+authorizes duplicate execution. The policy file is
+`$HYDRA_HOME/fleet/placement-policy.json` (closed schema, integer knobs; an invalid
+file fails every automatic submission with `policy_invalid`).
 
 ## Durable state, trust, and execution boundaries
 
@@ -494,6 +754,12 @@ lock, `planning/returned` (the SHA-256 of the current draft) and `planning/feedb
 without `--local-policy`) refuses, and so does a launch associated with the head.
 A successful `propose` removes both files. The TUI types the feedback into the
 agent's attached pane without submitting it.
+
+`hydra workflow plan decision record <head> ...` writes, under the head lock,
+one private `planning/decisions/<id>/` directory per decision (see the decision
+record schema above); `decision list` and `decision show` are read-only and
+create no planning state. A decision is a recorded reason, not a validation,
+approval or execution receipt.
 
 The private launch owner `hydra workflow plan --workspace-owner <sha256>
 [<head-id> <instance-id>]` reads the compiled snapshot on stdin. The optional pair
