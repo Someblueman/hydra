@@ -9,6 +9,8 @@ json_object *wt_metric_record(const char *directory, const char *name, size_t li
 bool wt_transfer_read(const char *directory, struct wt_transfer *transfer);
 json_object *wt_metrics(const char *run);
 int wt_metrics_tsv(const char *run);
+/* Statistics schema 5 remote rows: one per dispatched task step. */
+int wt_remote_tsv(const char *run);
 json_object *wt_destination(const char *alias);
 json_object *wt_bindings(const char *run);
 json_object *wt_step_binding(const char *run, json_object *data, const char *id, const char *descriptor);
