@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `make perf-matrix` runs the item 10 measurement matrix over the existing I1
+  fixture (`scripts/perf-matrix.py`, standard-library Python): 1/10/50 real
+  worktrees with deterministic stand-in agents across quiescent, one-changing,
+  all-changing and sustained-output cases, one or three attached native clients,
+  local interactive and local headless workers, and preview closed or open.
+  Cells record idle cost per role (CPU, wakeups, memory, descriptors), helper
+  launches counted and attributed by PATH shims, scheduled interaction latency
+  (PTY frame completion, never input-to-pixel), selected-head update latency,
+  per-worktree change locality, output pressure, startup and result retention,
+  with unsupported cells and unknown counters kept explicit. The evidence bundle
+  (`hydra-perf-matrix/1`) stores revisions, hashes, seeds, tool versions, clock
+  calibration, observer overhead and raw samples; `--evidence-dir` publishes a
+  compact copy with a Markdown summary and provisional budgets.
+- `make perf-attention` (`scripts/perf_matrix_attention.py`, also
+  `scripts/bench-attention.py --local-corpus`) scores `hydra workflow attention`
+  against thirteen annotated local cases (blocked/approval, question, working,
+  done-but-unseen, idle, unknown, failed step), reporting false positives and
+  missed signals separately.
+- `make test-perf-matrix` runs the unit checks, the attention corpus, the
+  smallest interactive and headless cells and the bundle schema validation.
+- First Linux x86_64 container baseline under `docs/evidence/performance/`.
+
+### Changed
+
+- The I1 stand-in worker accepts an `interval_ns` override per phase and waits a
+  bounded 120 s for a slow supervised sink before retaining its final result,
+  recording the wait; `phase_proof` validates a named phase; the native PTY
+  observer honours `HYDRA_ITEM10_PATH_PREFIX`; Linux process samples add
+  reaped-children CPU, thread and context-switch counters.
+
 ## [2.9.0] - 2026-09-28
 
 ### Added
