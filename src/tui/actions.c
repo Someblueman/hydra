@@ -65,6 +65,7 @@ static const char *first_line(const char *text, char *out, size_t size) {
 
 struct removal {
     size_t count, removed, skipped, failed, dirty;
+    bool gone[MAX_HEADS];
     char output[8192], transcript[8192];
 };
 
@@ -116,7 +117,7 @@ static void remove_one(struct app *app, char *target, size_t index, struct remov
     snprintf(app->notice, sizeof(app->notice), "Removing %.200s (%zu of %zu)...", target, index + 1U, r->count);
     status = run_captured(app, argv, r->output, sizeof(r->output), 60000L);
     text_append(r->transcript, sizeof(r->transcript), "== %s (exit %d)\n%s\n", target, status, r->output);
-    if (status == 0) { r->removed++; return; }
+    if (status == 0) { r->removed++; r->gone[index] = true; return; }
     r->failed++;
     if (strstr(r->output, "uncommitted") || strstr(r->output, "Refusing")) r->dirty++;
 }
@@ -152,6 +153,25 @@ static void removal_report(struct app *app, char targets[][TEXT], const struct r
     if (!r->failed) copy_text(app->result_title, sizeof(app->result_title), "REMOVAL OUTPUT");
 }
 
+/* When the selected head was removed, focus lands on the nearest head that
+ * survives (after it, else before it) at once; the next snapshot drops the
+ * removed rows. A refused or skipped head keeps its selection. */
+static bool removed_target(const char *branch, char targets[][TEXT], const struct removal *r) {
+    size_t i;
+    for (i = 0U; i < r->count; i++) if (r->gone[i] && !strcmp(targets[i], branch)) return true;
+    return false;
+}
+
+static void select_survivor(struct app *app, char targets[][TEXT], const struct removal *r) {
+    size_t i, from = app->selected;
+    if (app->run_row || app->task_row || from >= app->model.head_count ||
+        !removed_target(app->model.heads[from].branch, targets, r)) return;
+    for (i = from; i < app->model.head_count; i++)
+        if (!removed_target(app->model.heads[i].branch, targets, r) && head_visible(app, &app->model.heads[i])) { app->selected = i; return; }
+    for (i = from; i-- > 0U;)
+        if (!removed_target(app->model.heads[i].branch, targets, r) && head_visible(app, &app->model.heads[i])) { app->selected = i; return; }
+}
+
 /* Remove marked heads, or the selected head, after an in-app confirmation.
  * The shell CLI keeps its dirty-worktree refusal; the UI never adds --force. */
 void remove_heads_action(struct app *app) {
@@ -167,6 +187,7 @@ void remove_heads_action(struct app *app) {
     app->marked_count = 0U;
     removal_report(app, targets, &r);
     native_observations_tick(app, true);
+    select_survivor(app, targets, &r);
     retarget_selection(app);
 }
 

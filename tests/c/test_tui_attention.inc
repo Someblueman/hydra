@@ -175,7 +175,7 @@ static void test_attention_failure(const char *tui, const char *hydra, const cha
     result(wait_for_markers(&session, "ATTENTION  2 need you", "1 failed check or step needs a decision", 3000),
            "a failed check counts as needing the user and is counted in the header");
     result(wait_for_markers(&session, "> Check failed", "repo-check", 1000), "the failed check leads the list and names its step");
-    result(wait_for_markers(&session, "It decides req-a, req-b", "send the plan back or retry", 1000),
+    result(wait_for_markers(&session, "req-a, req-b.", "send the plan back or retry", 1000),
            "the failure names its requirements and what the user can do");
     result(wait_for_marker(&session, "failed its check; review the log", 1000),
            "the failure explains itself in plain language");

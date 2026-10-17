@@ -40,6 +40,13 @@ static void test_palette(const char *tui, const char *hydra, const char *fake_bi
         session.slow_output = false;
         write_input(session.master, "\n", 1U);
         (void)wait_for_marker(&session, "HYDRA / ", 1000);
+        if (strcmp(cases[index].query, "kill") == 0) {
+            /* A removal that succeeded moves focus to surviving work; the
+             * fake keeps the head, so step back to it for the next cases. */
+            result(wait_for_marker(&session, ">  feature-stale", 1000), "a removed head hands focus to the next surviving head");
+            write_input(session.master, "k", 1U);
+            (void)wait_for_marker(&session, ">  feature-live", 1000);
+        }
     }
     write_input(session.master, ":", 1U);
     (void)wait_for_marker(&session, "Action search:", 1000);

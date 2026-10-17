@@ -292,6 +292,9 @@ static void test_review_navigation(const char *tui, const char *hydra) {
     write_input(session.master, "r", 1U);
     result(wait_for_markers(&session, "readiness: ready", "accepted: false", 3000), "readiness is separate from acceptance");
     result(wait_for_markers(&session, "Long identifier: BEGIN-", "-END", 1000), "long identifier wraps through its exact suffix at 80x24");
+    /* The review leads with its task and binding, so the prose sits a few
+     * rows below the first screen at 80x24. */
+    write_input(session.master, "jjjjjj", 6U);
     result(wait_for_marker(&session, "UNSPLITTABLEWORD ends the sentence.", 1000), "review prose wraps between words at 80x24");
     write_input(session.master, "i", 1U);
     result(wait_for_markers(&session, "Source      workflow records", "Project     /project", 1000), "selected identity view exposes exact source and project");

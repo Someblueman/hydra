@@ -375,10 +375,12 @@ static void dashboard_cards(struct app *app, struct tv_canvas *c, int width) {
     cards = r.hosts || r.heads || r.tasks ? 5 : 4;
     card = width / cards;
     snprintf(runs, sizeof(runs), "%zu recorded in this project", n.runs);
-    dashboard_card(c, 0, card - 1, "RUNNING", n.running + n.runs_active, "local heads and runs working now", TV_SUCCESS);
+    dashboard_card(c, 0, card - 1, "RUNNING", n.running + n.runs_active,
+                   cards == 4 ? "heads and runs working now" : "local heads and runs working", TV_SUCCESS);
     dashboard_card(c, card, card - 1, "NEED ATTENTION", n.attention, app->model.recovery_count ? "failures, decisions, stopped; see Recovery too" : "failures, decisions, stopped terminals", n.attention ? TV_WARNING : TV_BASE);
     dashboard_card(c, card * 2, card - 1, "RUNS ACTIVE", n.runs_active, runs, TV_STRONG);
-    dashboard_card(c, card * 3, cards == 4 ? width - card * 3 : card - 1, "CHANGED FILES", changed_files(app), "uncommitted, local heads", TV_STRONG);
+    dashboard_card(c, card * 3, cards == 4 ? width - card * 3 : card - 1, "CHANGED FILES", changed_files(app),
+                   cards == 4 ? "uncommitted, all heads" : "uncommitted, local heads", TV_STRONG);
     if (cards == 4) return;
     if (app->remote_stale) snprintf(hosts, sizeof(hosts), "remote observation stale, %lds old", remote_age(app));
     else snprintf(hosts, sizeof(hosts), "%zu host%s, %zu disconnected; liveness unobserved", r.hosts, r.hosts == 1 ? "" : "s", r.hosts_down);

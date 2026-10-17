@@ -891,7 +891,7 @@ static const char *local_hints(struct app *app, bool narrow) {
     if (app->view == 2) return "Esc back  : more actions  ? help  q quit";
     if (app->view == 4) return narrow ? "Enter open  Tab next tab  ? help  q quit" : "j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit";
     if (narrow) return head && head_remote(head) ? "Enter open  a agent  x interrupt  ? help  q quit" : "Enter open  n new  x remove  ? help  q quit";
-    if (app->cols < 100) return head && head_remote(head) ? "j/k select  Enter details  a agent  x interrupt  r retry  L where  q quit"
+    if (app->cols < 100) return head && head_remote(head) ? "Enter details  a agent  x interrupt  r retry  L where  ? help  q quit"
                                                           : "j/k select  Enter details  a agent  n new  x remove  L where  : more  ? help  q quit";
     if (head && head_remote(head)) return "j/k select  Enter details  a agent  x interrupt  r retry host  L location  / search  ? help  q quit";
     return app->model.head_count || app->model.task_count ? "j/k select  Enter details  a agent  n new task  x remove  L location  / search  : more  ? help  q quit"
