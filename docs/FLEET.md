@@ -239,6 +239,7 @@ hydra fleet qualify --ssh build --require list --timeout 5 > qualification.json
 hydra fleet enroll review --input qualification.json --candidate cand_6275696c64 \
   --project /srv/project --output enrollment.json
 hydra fleet enroll apply --input enrollment.json --confirm INTENT_SHA256
+hydra fleet enroll status --input enrollment.json --json
 ```
 
 `discover` resolves explicitly selected targets with `ssh -G` and makes no
@@ -250,6 +251,11 @@ digest, project and optional pinned package into a digest-confirmed intent;
 candidate/result, inventory, intent and progress schemas are in
 [CONTRACTS.md](CONTRACTS.md#fleet-coordination-since-v210). Discovery never
 accepts a host key, creates an alias, installs Hydra or submits work.
+`enroll status` (since 3.0) reads an intent's reviewed hosts with the per-host
+progress `enroll apply` recorded for its digest: `not_started` for a host never
+attempted, the recorded status and phase otherwise (`outcome_unknown` stays
+unknown), and `revoked` for a binding revoked since review. It connects nowhere,
+takes no lock and writes nothing.
 
 **Live sources.** `--source KIND[:LOCATOR]` acquires one explicitly selected
 inventory through its normal client or the operator's own files and feeds the
@@ -286,6 +292,59 @@ batch cannot silently reuse results for a different membership.
 `make test-discovery` covers these adapters with fixture files and a fixture
 `avahi-browse` only. No live mDNS network, Ansible installation or provider was
 observed; that qualification needs a separately authorized operator run.
+
+### Onboarding in the control centre
+
+`O` on the Hosts tab of `hydra tui` opens the onboarding view: the same
+records, shown and acted on through the commands above. Every action is a
+`hydra fleet ...` child with an explicit argv whose envelope the view displays;
+the view never decides identity, state or progress itself and writes no state.
+Its files live in `$HYDRA_HOME/fleet/onboarding/` (owner-only, created by the
+CLI): qualification exports as `qualification-N.json` (`qualify --progress`) and
+reviewed intents as `intent-N.json` (`enroll review --output`). On open it
+loads the newest of each and reads the intent's progress through `enroll status`.
+
+| Screen | Shows | Keys |
+| --- | --- | --- |
+| Candidates | One row per candidate (name or target, state, source, platform, observation age) and each conflicting or revoked source record, with the export, completion and intent summary. At most 100 rows; the list pages within the terminal. | `j`/`k`, PgUp/PgDn, Enter detail; `s` state (new, qualified, failed, conflicting, revoked, reviewed, unknown, enrolled), `S` source kind, `P` platform, `l` label text, `/` search, `x` clears filters; `f` find (discover a selection), `Q` qualify, `r` review, `i` intent, `c` changes, `o` open another export, `R` reload |
+| Detail | Candidate ID, target, state; provenance per source (kind, locator, name, freshness, age when observed, scope and client); labels; resolution and policy digest; qualification result and attempt count; peer fingerprint, and on a changed key the presented and recorded fingerprints with their sources; remote platform and versions; revocation (who, when, reason); and the enrollment row (status, phase, alias, operation ID). | `j`/`k` scroll, Esc |
+| Changes | Each live source's status, scope, client, cache age and the added, removed, changed, conflicting and revoked records of `discover --diff`. | `j`/`k`, Esc |
+| Intent | The intent digest and file, review time, and per host the alias, apply status and phase, candidate, principal, fingerprint, project, package digest and prefix (or that none is pinned), operation ID; then the exact apply command. | `a` apply, `s` refresh status, Esc |
+
+One-host onboarding with a prepared alias, key, credentials and optional package
+takes three actions and one confirmation: `Q` with an empty list asks for the
+selection (SSH aliases, or a source or inventory with names) and runs `fleet
+qualify --progress` into a new export; `r` on a compatible candidate asks for the
+project, alias and optional package, digest and prefix and runs `fleet enroll
+review --output` into a new intent; `a` on the intent shows the bindings and
+the exact `hydra fleet enroll apply --input INTENT --confirm DIGEST --json`
+command, and runs it only after the operator types at least the first 12
+characters of that digest. A wrong prefix, Esc, or an intent that changed while
+the prompt was open runs nothing. `Q` on a loaded export continues its batch
+(the CLI skips hosts it already recorded).
+
+Revoked identities, failed or unqualified candidates and conflicting records are
+inspect-only: `r` refuses them with the reason. `a` refuses an intent whose
+hosts are all enrolled or revoked. No action is retried automatically. A
+finished apply shows every row it recorded; a cancelled apply is followed by a
+read-only `enroll status`, and a timed-out or unparsable one is shown as having
+no result, with Enter reading `enroll status` rather than rerunning anything.
+`outcome_unknown` rows stay visible until the operator applies again with a
+fresh confirmation, when the CLI reconciles each from the receiver's operation
+record instead of replaying it. The view never runs `fleet bootstrap`, `remote trust-key`
+or any other command; installing Hydra happens only as a reviewed step of the
+confirmed apply. Running children keep running when the view closes (`b`);
+`O` shows their result.
+
+`make test-tui` (headless screens over recorded envelopes, argv checks),
+`make test-one T=onboarding_view` (the CLI's `--json` and the view's model agree
+on every candidate ID, target, status, typed state and enrollment row for real
+`discover`, `enroll review` and `enroll status` output; mixed ten-host and
+interrupted fifty-host runs keep every row and outcome; 100 candidates stay
+paged at 80x24 and 140x40) and `make test-tui-pty` (`pty-onboarding`: the
+one-host path through a fake CLI, a single apply after confirmation, cancellation
+without rerun) qualify the view against local fixtures. Live multi-host
+onboarding through it has not been observed.
 
 ## Revoke decisions
 
@@ -712,7 +771,9 @@ observation it comes from (`fresh, 3s old`, `stale, 300s old`, `unknown`). `L`
 cycles the location filter (all work, local, remote, then each host) and Esc
 shows all work again; the Hosts tab (`H`) lists the observed hosts with their
 connection, head count and observation age, Enter there follows one host's
-work and `r` asks for a fresh observation of it.
+work and `r` asks for a fresh observation of it; `A` adds a host through
+[guided setup](#guided-remote-setup) and `O` opens
+[onboarding](#onboarding-in-the-control-centre).
 
 Details, attention (`I`) and review (`r`) use the same keys for remote work.
 Select a current interactive remote head and press `a` to open its pane in the

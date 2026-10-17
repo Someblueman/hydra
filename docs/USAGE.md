@@ -374,6 +374,15 @@ revoked identity is reported and never widens the selection. Credentials found i
 an inventory are counted and dropped.
 
 ```sh
+hydra fleet enroll status --input enrollment.json --json   # read-only per-host progress
+```
+
+`enroll status` lists an intent's reviewed hosts with what `enroll apply` recorded
+for each (`not_started`, `enrolled`, `outcome_unknown`, `revoked`, ...) without
+connecting or writing anything. The control centre's onboarding view (`O` on Hosts)
+shows the same records.
+
+```sh
 hydra fleet revoke transport build --reason "host key rotated"
 hydra fleet revoke candidate cand_6275696c64 --reason "retired"
 hydra fleet revoke list --json
@@ -614,7 +623,7 @@ One interaction model applies everywhere:
 | `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
 | `/`, `:` | Search heads, search explicit actions |
 | `p`, `d`, `c` | Terminal output (a headless head's step output), technical details, coordination |
-| `H` | Hosts: `A` adds a remote machine over SSH, Enter continues its setup |
+| `H` | Hosts: `A` adds a remote machine over SSH, Enter continues its setup, `O` opens onboarding |
 | `?`, `t`, `q` | Keyboard help, theme, quit |
 
 Work lists the heads you started. Heads a workflow run created sit inside their
@@ -630,6 +639,16 @@ centre: `A` asks for the SSH destination and a name, then walks through the guid
 `hydra remote setup` steps (host key, requirements, installing Hydra, agents and
 sign-in), showing each plan before anything changes. Unfinished setups are listed
 there and Enter continues one. See [guided remote setup](FLEET.md#guided-remote-setup).
+
+`O` on Hosts opens onboarding for hosts found through `hydra fleet discover`:
+candidates with filters for state, source, platform and label (`s`, `S`, `P`,
+`l`, `/`), a detail with provenance, observation age, qualification result,
+fingerprints and revocation, the source changes (`c`) and the reviewed intent
+(`i`) with per-host apply progress. `Q` qualifies, `r` reviews a compatible
+candidate into an intent, and `a` shows the exact `hydra fleet enroll apply
+--confirm DIGEST` command and runs it once you type the start of that digest.
+Revoked identities can be inspected, not reviewed. See
+[onboarding in the control centre](FLEET.md#onboarding-in-the-control-centre).
 
 Removal confirms the exact targets in the UI, runs `hydra kill` per head with output
 captured, reports a concise result in the status line and opens the full output only

@@ -430,6 +430,27 @@ heads a run's spawn steps created (worker or verifier, and retirement). Version-
 workflow fixtures remain readable. `hydra tui --head-output <branch>` is a private,
 bounded, read-only text view of the step running (or last run) on a headless head.
 
+The onboarding view (`O` on Hosts, since 3.0) reads CLI envelopes only:
+`fleet-discovery` (candidate schema 1, with `sources[]`), `fleet-enrollment-review`,
+`fleet-enrollment-status` and `fleet-enrollment`, parsed within the CLI's own
+bounds (100 candidates and records, four sources, 100 intent hosts). `hydra tui
+--onboarding-home` (internal) creates `$HYDRA_HOME/fleet/onboarding` owner-only
+and prints its path; the view writes there only through `fleet qualify
+--progress DIR/qualification-N.json` and `fleet enroll review --output
+DIR/intent-N.json`. The only mutation it runs is exactly `hydra fleet enroll apply
+--input INTENT --confirm DIGEST --json` for the intent and digest displayed,
+after a typed confirmation of at least 12 leading digest characters. Headless,
+`hydra-tui --headless-fixture FILE --onboarding-fixture ENVELOPE
+[--onboarding-intent ENVELOPE] [--onboarding-screen
+list|detail|changes|intent|select|review]` renders recorded envelopes, and
+`--onboarding-dump` prints the model as `HYDRA_ONBOARDING<TAB>1`, then
+`C<TAB>candidate_id<TAB>target<TAB>status<TAB>typed<TAB>source<TAB>platform<TAB>alias<TAB>apply_status`
+per candidate (`-` without an intent row), `N<TAB>name<TAB>target<TAB>reason<TAB>conflicting|revoked<TAB>source`
+per reported record and `END<TAB>count`. Typed states are `new`, `qualified`,
+`failed`, `conflicting`, `revoked`, `reviewed`, `unknown` and `enrolled`; they
+are a display of the CLI's statuses, not new state. This dump is a test
+projection, not an automation API.
+
 Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. Both
 retain navigation, search, refresh, preview, switch, spawn, group assignment,
 dashboard, regenerate, confirmed kill, and help behavior. Native mutations execute
@@ -598,6 +619,22 @@ an enrollment apply row with that status adds `host_key {reviewed_fingerprint,
 reviewed_source, presented_fingerprint, observation, acceptance,
 presented_key_revoked?}`. Enrollment intent schema 2 and progress schema 1 are
 unchanged; a row may now have status `revoked` with `revocation`.
+`fleet enroll status --input INTENT` (since 3.0, additive, read-only: no
+connection, no apply lock, no write) returns `fleet-enrollment-status` with
+`data.{enrollment_status_schema 1, intent_sha256, intent, reviewed_at,
+progress_recorded, progress (path)|null, partial_failure|null, hosts[]}`. Each
+host keeps the intent's `alias, candidate_id, target, principal, project,
+fingerprint, required_capability, package_sha256, prefix, ssh_config` in intent
+order, adds the recorded progress row's `operation_id, status, phase, host_key,
+revocation` and `attempted`; a host never attempted is `{operation_id
+"DIGEST:ALIAS", status "not_started", phase "preflight", attempted false}`, and a
+host not `enrolled` whose binding has since been revoked reads `revoked` with
+`revocation`, as apply would mark it before any connection. A recorded
+`outcome_unknown` is reported as recorded, never resolved by reading. Failures:
+`invalid_input` (any option besides `--input`), `invalid_intent` (not a complete
+schema-2 intent whose digest verifies) and `state_unavailable` (progress
+unreadable or bound to another digest). `enroll` also accepts `--json`, as
+`discover` does; output is always the envelope.
 
 Revocation (`fleet revoke SCOPE ID --reason TEXT`, since 3.0) writes one private
 record `{schema_version 1, kind "fleet-revocation", scope candidate|source|

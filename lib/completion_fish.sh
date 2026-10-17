@@ -302,7 +302,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subc
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l source -r -d 'Live source: ssh-config[:FILE], ansible-inventory:FILE, dns-sd[:DOMAIN]'
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l diff -d 'List added, removed and changed records against the previous snapshot'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from qualify' -l progress -r
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -a 'review apply'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -a 'review apply status'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l input -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l output -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l candidate -r

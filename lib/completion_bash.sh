@@ -108,7 +108,7 @@ _hydra_completion() {
             return 0
             ;;
         enroll)
-            COMPREPLY=($(compgen -W "review apply --input --output --candidate --project --package --sha256 --prefix --alias --confirm --timeout --json" -- "${cur}"))
+            COMPREPLY=($(compgen -W "review apply status --input --output --candidate --project --package --sha256 --prefix --alias --confirm --timeout --json" -- "${cur}"))
             return 0
             ;;
         revoke)

@@ -310,6 +310,20 @@ const char *native_setup_hints(const struct app *app, bool narrow);
 void native_setup_destroy(struct app *app);
 int setup_terminal_handoff(struct app *app, char *const argv[], const char *step);
 void render_setup_hub(struct app *app);
+/* Onboarding operator view (H5): onboarding_flow.c, onboarding_render.c,
+ * onboarding_model.c, onboarding_text.c and onboarding_form.c. A layer over
+ * the Hosts tab like setup; every action is a `hydra fleet ...` child. */
+bool native_onboarding_active(const struct app *app);
+void native_onboarding_open(struct app *app);
+bool native_onboarding_byte(struct app *app, unsigned char byte);
+void native_onboarding_flush_input(struct app *app);
+void native_onboarding_tick(struct app *app);
+void native_onboarding_render(struct app *app);
+const char *native_onboarding_title(const struct app *app);
+const char *native_onboarding_hints(const struct app *app, bool narrow);
+void native_onboarding_destroy(struct app *app);
+int native_onboarding_fixture(struct app *app, const char *export_file, const char *intent_file, const char *screen);
+void native_onboarding_dump(struct app *app, FILE *out);
 /* Hosts tab rows: fleet hosts, setup records and the "Add a host" row. */
 enum host_row_kind { HOST_ROW_HOST, HOST_ROW_SETUP, HOST_ROW_ADD };
 struct host_row { enum host_row_kind kind; size_t index; };
