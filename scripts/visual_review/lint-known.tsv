@@ -26,14 +26,14 @@ hint-repeat	hosts-unfinished--hosts-duplicate--*	'x remove'	the duplicate-name s
 clip-area	work--overview-*-80x24	kill-dry-run-check (	the RUN panel's HEAD column cuts "(pending)" and "(retired)" at 80 columns; U4 compact layout
 clip-area	work--overview-*-80x24	the footer hints are cut	the run-row footer hint line exceeds 80 columns; U4 compact layout
 clip-area	work--work-run-expanded--*-80x24	the footer hints are cut	the run-row footer hint line exceeds 80 columns; U4 compact layout
-clip-area	work--overview-*-80x24	on kill-dry-run-check; p on tha	the RUN panel's two-line Next text is cut at 80 columns; U4 compact layout
-clip-area	work--overview-*-80x24	tput. Worker branch kill-dry-ru	the RUN panel's two-line Next text is cut at 80 columns; U4 compact layout
-clip-area	work--overview-*-80x24	ent on kill-dry-run-worker (cod	the RUN panel's two-line Next text is cut at 80 columns; U4 compact layout
-clip-area	work--statistics--*-80x24	failed, blocke	the KPI tiles are narrower than their captions at 80 columns; U13 compact layout
+clip-area	work--overview-*	on kill-dry-run-check; p on tha	the RUN panel's two-line Next text is cut, and wrapped mid-word at 140 columns; U4 layout
+clip-area	work--overview-*	tput. Worker branch kill-dry-ru	the RUN panel's two-line Next text is cut, and wrapped mid-word at 140 columns; U4 layout
+clip-area	work--overview-*	ent on kill-dry-run-worker (cod	the RUN panel's two-line Next text is cut, and wrapped mid-word at 140 columns; U4 layout
+clip-area	work--statistics--*	failed, blocke	the NEED ATTENTION tile is narrower than its caption at both sizes; U13 layout
 clip-area	work--statistics--*-80x24	eps right no	the KPI tiles are narrower than their captions at 80 columns; U13 compact layout
 clip-area	work--help--*-80x24	approv	the two-column keyboard help is cut at 80 columns; U8
 clip-area	work--help--*-80x24	coordina	the two-column keyboard help is cut at 80 columns; U8
 clip-area	work--coordination--*-80x24	Workflows shows steps and depen	the coordination summary line is cut instead of wrapped at 80 columns; U9
 clip-area	work--attention-detail--*-80x24	1111111111111111111111111111111	the attention detail's revision and identity digests are cut instead of wrapped at 80 columns; U7 detail view
-clip-area	hosts--hosts-done--*-80x24	hydra/fleet/	the done screen's install prefix path is cut at 80 columns; U10 screens
+clip-area	hosts--hosts-done--*	hydra/fleet/	the done screen cuts the install prefix path at both sizes; U10 screens
 clip-area	hosts--hosts-agents--*-80x24	Esc bac	the agents screen's footer exceeds 80 columns; U10 screens
