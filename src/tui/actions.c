@@ -77,6 +77,10 @@ static bool removal_targets(struct app *app, char targets[][TEXT], size_t *count
         for (index = 0U; index < app->marked_count && *count < MAX_HEADS; index++) copy_text(targets[(*count)++], TEXT, app->marked[index]);
         return true;
     }
+    if (selected && head_remote(selected)) {
+        copy_text(app->notice, sizeof(app->notice), "Remote heads are removed on their host; x interrupts the agent instead");
+        return false;
+    }
     if (selected) { copy_text(targets[(*count)++], TEXT, selected->branch); return true; }
     copy_text(app->notice, sizeof(app->notice), "Select a head to remove, or mark several with Space");
     return false;
@@ -236,7 +240,7 @@ void remove_key_action(struct app *app) {
 
 /* Order preserves first-substring-match selection after exact and prefix
  * matches. Arguments are literal argv entries. */
-enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE };
+enum palette_scope { ACTION_GLOBAL, ACTION_HEAD, ACTION_COMPARE, ACTION_SPAWN, ACTION_REMOVE, ACTION_INTERRUPT };
 struct palette_action {
     const char *name;
     const char *command;
@@ -260,7 +264,8 @@ static const struct palette_action palette[] = {
     {"git diff", "diff", NULL, ACTION_HEAD},
     {"approvals", "gate", "status", ACTION_HEAD},
     {"recovery inspect", "doctor", NULL, ACTION_GLOBAL},
-    {"dashboard", "dashboard", NULL, ACTION_GLOBAL}
+    {"dashboard", "dashboard", NULL, ACTION_GLOBAL},
+    {"interrupt remote head", "fleet", "cancel", ACTION_INTERRUPT}
 };
 
 static const struct palette_action *match_palette(const char *query) {
@@ -284,7 +289,16 @@ void execute_palette(struct app *app, const char *query) {
     chosen = match_palette(query);
     if (chosen == NULL) { copy_text(app->notice, sizeof(app->notice), "no explicit local action matched"); return; }
     if (chosen->scope == ACTION_SPAWN) { new_task_action(app); return; }
+    if (chosen->scope == ACTION_INTERRUPT || (chosen->scope == ACTION_REMOVE && head && head_remote(head))) {
+        if (head && head_remote(head)) fleet_action(app);
+        else copy_text(app->notice, sizeof(app->notice), "select a remote head to interrupt");
+        return;
+    }
     if (chosen->scope == ACTION_REMOVE) { remove_heads_action(app); return; }
+    if ((chosen->scope == ACTION_HEAD || chosen->scope == ACTION_COMPARE) && head && head_remote(head)) {
+        copy_text(app->notice, sizeof(app->notice), "that action runs on the head's host; a attaches, x interrupts");
+        return;
+    }
     argv[count++] = (char *)app->hydra;
     argv[count++] = (char *)chosen->command;
     if (chosen->subcommand != NULL) argv[count++] = (char *)chosen->subcommand;
@@ -300,13 +314,20 @@ void execute_palette(struct app *app, const char *query) {
     (void)run_argv(app, argv);
 }
 
-/* Fleet cancellation carries host, project and observed instance to the public CLI. */
+/* Fleet interruption carries host, project and observed instance to the
+ * public CLI; only a fresh observation of an answering host authorizes it. */
 void fleet_action(struct app *app) {
     struct head *head = selected_head(app);
-    char confirm[TEXT] = "";
+    char confirm[TEXT] = "", refusal[TEXT], question[TEXT + 200];
     char *argv[12];
     if (head == NULL || head->remote_host[0] == '\0') return;
-    if (prompt_text(app, "Interrupt remote head? Type yes: ", confirm, sizeof(confirm)) != 0 || strcmp(confirm, "yes") != 0) return;
+    if (remote_action_refusal(app, head, refusal, sizeof(refusal))) { copy_text(app->notice, sizeof(app->notice), refusal); return; }
+    snprintf(question, sizeof(question), "Interrupt %.100s on %.60s? This sends Ctrl-C to its agent; the worktree and files stay on the host. Type yes: ",
+             head->remote_branch[0] ? head->remote_branch : head->branch, head->remote_host);
+    if (prompt_text(app, question, confirm, sizeof(confirm)) != 0 || strcmp(confirm, "yes") != 0) {
+        copy_text(app->notice, sizeof(app->notice), "Interrupt cancelled; nothing was sent");
+        return;
+    }
     argv[0] = (char *)app->hydra; argv[1] = (char *)"fleet";
     argv[2] = (char *)"cancel"; argv[3] = head->remote_host;
     argv[4] = (char *)"--project"; argv[5] = head->remote_project;

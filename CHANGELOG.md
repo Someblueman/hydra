@@ -160,6 +160,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   restart without replaying in-flight work. Help, bash/zsh/fish completions,
   `--json` envelopes and `docs/CONTRACTS.md` schemas cover both commands.
 
+- One workspace across local and remote execution (U11). `hydra tui` now
+  observes registered remote hosts beside the local project: remote heads
+  (`host/branch`) and receiver-owned remote tasks (`task ID`) are rows of the
+  same Work and Overview lists as local heads, with a `WHERE` column from 95
+  columns, the host in every summary and detail, and the host's connection and
+  observation age (`fresh, 3s old`, `stale, 300s old`, `unknown`) wherever a
+  remote row is described. `L` cycles the location filter (all, local, remote,
+  then each host) and `hydra tui --location local|remote|HOST` opens with one;
+  Esc shows all work again. Details, attention (`I`) and review (`r`) use the
+  same navigation and keys for remote work; a remote task's Details shows its
+  receiver state, waiting reason, next action, result and cancellation, and
+  `Y`/`N`/`R`/`X` on a selected task row dispatch its decisions through
+  `hydra fleet task` after a typed confirmation, only from a fresh observation.
+  `a` on a remote head attaches through `hydra fleet attach` in the workspace
+  with the same leave (`Ctrl-B Tab`), close (`Ctrl-B x`), reconnect (`Ctrl-B r`)
+  and resize behaviour as a local pane; `Ctrl-B [` forwards the host tmux's
+  default prefix and `[` so the remote pane scrolls the host's own history
+  (`q` or `Ctrl-B ]` leaves it; a host tmux with another prefix receives the
+  keys instead, which Hydra cannot verify). `x` on a remote head interrupts
+  its agent through `hydra fleet cancel` after a confirmation that names the
+  host and branch; `:` offers `interrupt remote head`. The Hosts tab lists the
+  observed hosts with their connection, head count and observation age before
+  the unfinished setups; Enter follows a host's work (the Work list filtered to
+  it) and `r` asks for a fresh observation of it. The Overview gains a REMOTE
+  card (remote heads and tasks, hosts, disconnected hosts) and, when filtered
+  to remote work, a hosts panel; the header counts local and remote work
+  separately.
+- Remote observations never authorize an action or make work look finished:
+  a host that stops answering is shown as `disconnected`, keeps its heads and
+  tasks from the last observation as retained rows (status `disconnected`,
+  "retained from an observation Ns old; host disconnected") and refuses attach,
+  interrupt and task controls until it answers again; a remote observation that
+  fails altogether keeps every remote row and shows `Remote: STALE, last good
+  observation Ns ago` with the reason, every remote status becomes `stale`, and
+  `r` retries explicitly. A host with no observation is `unknown`, never live.
+  Remote liveness stays unobserved: a remote head shows its desired state only
+  while its observation is fresh and is never counted as running.
+- `hydra tui --remote-data` (internal) answers with the fleet visual stream,
+  with an empty `HYDRA_FLEET_TUI 3` stream when no remote host is registered,
+  and with a `fleet-unavailable` recovery finding when hosts are registered but
+  the `hydra-fleet` helper is not built; `hydra tui --attention-data` merges
+  `workflow attention-data` with `fleet attention-data` into one
+  `HYDRA_ATTENTION 3` stream (a failed producer marks it partial).
+  `hydra-tui --headless-fixture FILE --remote-fixture FILE` composes a local
+  and a remote fixture the way the live adapters do.
+
 ### Changed
 
 - tmux is documented as required only for interactive terminal operations; headless
@@ -182,6 +228,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the outcome the agent declares; the attached status row says leaving or closing
   the view keeps the agent running. The shell TUI's empty list explains a head the
   same way.
+
+- `hydra fleet tui` remains as a compatibility entry: it opens the same control
+  centre filtered to remote work (`L` or Esc widens it) and reads the fleet
+  helper's own `tui-visual-data` and `attention-data` streams. It no longer has
+  its own tab order, its own Work list (`REMOTE HEADS / DESIRED`), a separate
+  `REMOTE TASKS` panel or a separate keymap (`c` interrupt): remote heads and
+  tasks use the one Work list, `x` interrupts, `c` is coordination everywhere.
+  Host statistics (`D`) are unchanged.
 
 ### Fixed
 

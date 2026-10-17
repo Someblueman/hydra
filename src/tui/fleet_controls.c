@@ -8,8 +8,8 @@ static bool bound_spec(const char *digest) {
     return strlen(digest) == 64 && strspn(digest, "0123456789abcdef") == 64;
 }
 static const char *disabled_reason(const struct app *app, const struct task_observation *task, char key) {
-    if (app->view != 4) return "Select a remote task in Overview before using task controls.";
-    if (strcmp(task->freshness, "fresh") || !strcmp(task->state, "outcome_unknown"))
+    if (app->view != 0 && app->view != 1 && app->view != 4) return "Select a remote task in Work or Overview before using task controls.";
+    if (app->remote_stale || task->retained || strcmp(task->freshness, "fresh") || !strcmp(task->state, "outcome_unknown"))
         return "Task evidence is stale or uncertain; inspect and reconcile before mutating.";
     if (key == 'X') {
         if (!strcmp(task->state, "succeeded") || !strcmp(task->state, "failed") || !strcmp(task->state, "cancelled"))
@@ -35,8 +35,8 @@ static const struct task_observation *current_target(const struct app *app, cons
 }
 bool native_fleet_control_key(struct app *app, char key, const char *action) {
     char answer[64], prompt[192];
-    if (app->task_selected >= app->model.task_count) {
-        copy_text(app->notice, sizeof(app->notice), "No current remote task is selected; use j/k in Overview."); return true;
+    if (!selected_task(app)) {
+        copy_text(app->notice, sizeof(app->notice), "No current remote task is selected; select its row in Work or Overview."); return true;
     }
     /* prompt_text refreshes the entire model. Keep no borrowed model pointers
      * across the modal; copy the exact receiver-owned binding first. */

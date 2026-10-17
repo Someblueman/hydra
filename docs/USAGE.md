@@ -209,9 +209,18 @@ hydra snapshot --native # explicitly try the optional read-only native helper
 # Dashboard & TUI
 hydra dashboard                                    # multi-session overview
 hydra tui                                          # native mission control; visible basic fallback
+hydra tui --location remote                        # the same, opened on remote work (L cycles the filter)
 hydra tui --basic                                  # explicit basic shell TUI
 hydra tui --capabilities                           # native/basic diagnostics
 ```
+
+The control centre shows local and remote work together: heads on registered
+remote hosts (`host/branch`) and remote tasks are rows of the same Work list,
+with the host and the age of the observation they come from. `L` filters by
+location, `a` talks to a local or remote agent, `x` removes a local head or
+interrupts a remote agent, and remote rows whose observation is stale,
+retained from a host that stopped answering, or unknown refuse every action.
+See [fleet](FLEET.md#remote-work-in-the-control-centre).
 
 ## Launching heads and attaching
 

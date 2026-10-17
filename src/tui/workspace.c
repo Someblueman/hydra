@@ -122,7 +122,7 @@ static void prune_collapsed(struct app *app, struct native_workspace *w) {
 
 static void workspace_run_labels(struct app *app, struct native_workspace *w) {
     size_t r;
-    if (app->fleet || !app->workflows) return;
+    if (!app->workflows) return;
     for (r=0;r<app->workflows->run_count;r++)
         snprintf(w->run_labels[r],sizeof(w->run_labels[r]),"%s %s%s%s",run_label_kind(&app->workflows->runs[r]),
             app->workflows->runs[r].name,dot(app),app->workflows->runs[r].state);
@@ -169,7 +169,7 @@ static void tree_run(struct workspace_tree_build *b, size_t run, size_t owner, u
     if (!tree_add(b,(struct tv_tree_node){b->w->run_labels[run],(run+1)*(MAX_HEADS+1)+owner,depth,open,
         run_needs_attention(app,run) ? TV_WARNING : TV_MUTED})) return;
     for (i=0;i<app->model.head_count;i++)
-        if (b->owner[i]==run && head_matches(&app->model.heads[i],app->search)) tree_member(b,i,depth+1);
+        if (b->owner[i]==run && head_visible(app,&app->model.heads[i])) tree_member(b,i,depth+1);
 }
 
 static void tree_user_head(struct workspace_tree_build *b, size_t head) {
@@ -178,8 +178,8 @@ static void tree_user_head(struct workspace_tree_build *b, size_t head) {
     size_t r;
     if (head==app->selected && !b->w->run_selected) { b->chosen=b->count; b->w->selection_initialized=true; }
     if (!tree_add(b,(struct tv_tree_node){h->branch,head,1,!head_collapsed(b->w,h->branch),
-        app->fleet ? TV_BASE : head_list_tone(app,h)==TV_SUCCESS ? TV_BASE : head_list_tone(app,h)})) return;
-    for (r=0;!app->fleet && app->workflows && r<app->workflows->run_count;r++)
+        head_list_tone(app,h)==TV_SUCCESS ? TV_BASE : head_list_tone(app,h)})) return;
+    for (r=0;app->workflows && r<app->workflows->run_count;r++)
         if (run_owner_head(app,r)==head) tree_run(b,r,head,2);
 }
 
@@ -190,14 +190,14 @@ static void native_workspace_tree(struct app *app) {
     bool root_selected = w->selection_initialized && w->tree.count && !w->tree.selected;
     if (w->tree.count) w->root_open = w->nodes[0].expanded;
     workspace_project_label(app, w);
-    w->nodes[0] = (struct tv_tree_node){app->fleet ? "Remote heads" : app->links ? w->project_label : "This project", SIZE_MAX, 0, w->root_open, TV_STRONG};
+    w->nodes[0] = (struct tv_tree_node){location_remote_only(app) ? "Remote work" : app->links ? w->project_label : "This project", SIZE_MAX, 0, w->root_open, TV_STRONG};
     prune_collapsed(app, w);
     workspace_run_labels(app, w);
     retarget_selection(app);
     for (i = 0; i < app->model.head_count && i < MAX_HEADS; i++) b.owner[i] = head_owner_run(app, &app->model.heads[i], NULL);
     for (i = 0; i < app->model.head_count; i++)
-        if (b.owner[i] == SIZE_MAX && head_matches(&app->model.heads[i], app->search)) tree_user_head(&b, i);
-    for (i = 0; !app->fleet && app->workflows && i < app->workflows->run_count; i++)
+        if (b.owner[i] == SIZE_MAX && head_visible(app, &app->model.heads[i])) tree_user_head(&b, i);
+    for (i = 0; app->workflows && i < app->workflows->run_count; i++)
         if (run_owner_head(app, i) == SIZE_MAX) tree_run(&b, i, MAX_HEADS, 1);
     (void)tv_tree_init(&w->tree, w->nodes, b.count);
     w->tree.selected = root_selected ? 0 : b.chosen;
@@ -243,7 +243,7 @@ void native_workspace_move(struct app *app, int direction) {
     }
     else if (w->layout.focus == 1) { tv_tree_move(&w->tree, direction); native_workspace_select(app); }
     else tv_workspace_scroll(&w->layout, direction, w->layout.focus==6 ? NATIVE_PLAN_TEXT :
-        app->fleet ? app->model.host_count+2 : app->model.recovery_count+8);
+        app->model.recovery_count+app->model.host_count+10);
 }
 
 /* Pane focus is the workspace's Tab model; Shift-Tab reverses it. */
@@ -251,15 +251,6 @@ void native_workspace_focus_previous(struct app *app) {
     if (!app->workspace) return;
     tv_workspace_focus_next(&app->workspace->layout,-1);
     native_workspace_sync_terminal(app);
-}
-
-static void workspace_host_key(struct app *app) {
-    const struct head *h=selected_head(app);
-    size_t i;
-    for (i=0;h && i<app->model.host_count;i++) if (!strcmp(h->remote_host,app->model.hosts[i].name)) {
-        app->host_selected=i; break;
-    }
-    app->view=6;
 }
 
 /* Expand or collapse the selected head or run and remember the choice. */
@@ -283,7 +274,6 @@ bool native_workspace_key(struct app *app, char key) {
     struct native_workspace *w = app->workspace;
     if (!w) return false;
     if (key=='A' || key=='B' || key=='C') { native_workspace_mode(app,key-'A'); return true; }
-    if (key=='H' && app->fleet) { workspace_host_key(app); return true; }
     if (w->mode==2 && (key=='[' || key==']')) return workflow_key(app,key);
     if (key == 'z') {
         w->zoom = !w->zoom;
@@ -343,11 +333,11 @@ static const char *agent_name(const struct head *h) {
 
 static void workspace_empty(struct app *app, struct tv_canvas *c) {
     int y = 0;
-    dashboard_text(c, 0, y++, c->width, TV_STRONG, "%s", app->fleet ? "No remote heads observed" : "No agent work in this project yet");
+    dashboard_text(c, 0, y++, c->width, TV_STRONG, "%s", location_remote_only(app) ? "No remote work to show" : "No agent work in this project yet");
     y++;
-    if (app->fleet) {
-        dashboard_text(c, 0, y++, c->width, TV_BASE, "Hosts shows connectivity for each machine.");
-        dashboard_text(c, 0, y++, c->width, TV_BASE, "Recovery lists host problems.");
+    if (location_remote_only(app)) {
+        dashboard_text(c, 0, y++, c->width, TV_BASE, "Hosts shows each machine's connection and last observation.");
+        dashboard_text(c, 0, y++, c->width, TV_BASE, "Recovery lists host problems. L or Esc shows all work.");
         return;
     }
     dashboard_text(c, 0, y++, c->width, TV_BASE, "Press n to start a task. Hydra creates a branch and");
@@ -363,7 +353,7 @@ static void workspace_empty(struct app *app, struct tv_canvas *c) {
 }
 
 static enum tv_style details_session(struct app *app, const struct head *h, char *text, size_t size) {
-    if (app->fleet) { snprintf(text, size, "Session   %s", h->desired); return TV_BASE; }
+    if (head_remote(h)) { snprintf(text, size, "Session   %s%sdesired %s", remote_head_status(app, h), dot(app), h->desired); return remote_head_tone(app, h); }
     if (head_headless(h)) { snprintf(text, size, "Terminal  headless (no terminal)"); return TV_MUTED; }
     snprintf(text, size, "Session   %s", status_label(h));
     return status_tone(h);
@@ -371,7 +361,7 @@ static enum tv_style details_session(struct app *app, const struct head *h, char
 
 static void details_agent(struct app *app, const struct head *h, char *text, size_t size) {
     char agent[TEXT + 96];
-    if (app->fleet) { snprintf(text, size, "Agent     %s", h->profile); return; }
+    if (head_remote(h)) { snprintf(text, size, "Agent     %s", remote_agent_name(h)); return; }
     if (head_headless(h)) head_agent_text(app, h, agent, sizeof(agent));
     else snprintf(agent, sizeof(agent), "%s", agent_name(h));
     snprintf(text, size, "Agent     %s", agent);
@@ -382,19 +372,24 @@ static void details_stale(const struct head *h, char *text, size_t size) {
 }
 
 static void details_where(struct app *app, const struct head *h, char *text, size_t size) {
-    snprintf(text, size, "Where     %s%s%s", app->fleet ? h->remote_host : "this machine", dot(app),
-             app->fleet ? h->remote_project : app->links ? app->links->root : "this project");
+    char observation[TEXT];
+    if (head_remote(h)) {
+        remote_observation_text(app, h, observation, sizeof(observation));
+        snprintf(text, size, "Where     %.100s%s%.400s%sobservation %.200s", h->remote_host, dot(app), h->remote_project, dot(app), observation);
+        return;
+    }
+    snprintf(text, size, "Where     this machine%s%s", dot(app), app->links ? app->links->root : "this project");
 }
 
 static enum tv_style details_changes(struct app *app, const struct head *h, char *text, size_t size) {
-    if (app->fleet || !h->head_id[0]) { snprintf(text,size,"Changes   unknown"); return TV_MUTED; }
+    if (head_remote(h) || !h->head_id[0]) { snprintf(text,size,"Changes   unknown"); return TV_MUTED; }
     snprintf(text,size,"Changes   %u file%s not yet committed%s%u queued",h->diff,h->diff==1 ? "" : "s",dot(app),h->queue);
     return TV_BASE;
 }
 
 static enum tv_style details_reported(struct app *app, const struct head *h, char *text, size_t size) {
     const char *reported = h->declared[0] ? h->declared : "nothing yet";
-    if (app->fleet || !h->head_id[0]) { snprintf(text,size,"Reported  %s", reported); return TV_BASE; }
+    if (head_remote(h) || !h->head_id[0]) { snprintf(text,size,"Reported  %s", head_remote(h) ? "not observed remotely" : reported); return TV_BASE; }
     snprintf(text, size, "Reported  %s", reported);
     if (h->gates) text_append(text, size, "%s%u of %u approval requests approved", dot(app), h->approved, h->gates);
     return h->gates > h->approved ? TV_WARNING : TV_BASE;
@@ -408,7 +403,7 @@ static void details_group(struct app *app, const struct head *h, char *text, siz
 
 static void details_run(struct app *app, const struct head *h, char *text, size_t size) {
     size_t record, run = head_owner_run(app, h, &record);
-    if (run == SIZE_MAX || app->fleet) return;
+    if (run == SIZE_MAX) return;
     snprintf(text, size, "Run       %s %s%s%s%s%s", run_label_kind(&app->workflows->runs[run]), app->workflows->runs[run].name,
              dot(app), app->workflows->runs[run].state, record != SIZE_MAX ? dot(app) : "", record != SIZE_MAX ? app->workflows->heads[record].role : "");
 }
@@ -428,7 +423,7 @@ static enum tv_style details_line(struct app *app, const struct head *h, size_t 
     case 8: if (!head_headless(h)) details_stale(h, text, size); return TV_WARNING;
     case 10: snprintf(text, size, "%s", head_headless(h) ? "p  step output in Details      Enter  full details" :
                       head_terminal_gone(app, h) ? "a  restart its terminal        Enter  full details" : "a  talk to the agent here      Enter  full details"); return TV_MUTED;
-    case 11: snprintf(text, size, ":  more actions                d  technical details"); return TV_MUTED;
+    case 11: snprintf(text, size, "%s", head_remote(h) ? "x  interrupt (confirmed)       r  retry its host" : ":  more actions                d  technical details"); return TV_MUTED;
     default: return TV_BASE;
     }
 }
@@ -454,7 +449,7 @@ static enum tv_style activity_host_line(struct app *app, const struct host_obser
 }
 
 static enum tv_style activity_fleet_line(struct app *app, size_t index, char *text, size_t size) {
-    if (!index) { snprintf(text,size,"Hosts: %zu observed", app->model.host_count); return TV_STRONG; }
+    if (!index) { snprintf(text,size,"Hosts: %zu observed%s", app->model.host_count, app->remote_stale ? " (remote observation stale)" : ""); return TV_STRONG; }
     if (index<=app->model.host_count) return activity_host_line(app, &app->model.hosts[index-1], text, size);
     if (index==app->model.host_count+1) { snprintf(text,size,"CPU and memory are not measured"); return TV_MUTED; }
     return TV_BASE;
@@ -499,7 +494,7 @@ static enum tv_style activity_missing_record(const struct head *h, size_t index,
 
 static enum tv_style activity_line(struct app *app, const struct head *h, size_t attention, size_t index, char *text, size_t size) {
     text[0] = '\0';
-    if (app->fleet) return activity_fleet_line(app, index, text, size);
+    if (location_remote_only(app) || (h && head_remote(h))) return activity_fleet_line(app, index, text, size);
     if (index == 0) { activity_summary(app, attention, text, size); return TV_STRONG; }
     if (!app->model.head_count && index == 2) { snprintf(text, size, "Nothing has happened yet."); return TV_MUTED; }
     if (index < 6 && (!h || !h->head_id[0])) return activity_missing_record(h, index, text, size);
@@ -614,14 +609,16 @@ static const char *layout_hints(const struct app *app, const struct native_works
 
 static const char *workspace_hints(struct app *app, struct native_workspace *w, int width) {
     struct native_terminal *t = native_workspace_terminal(app, w->layout.focus);
+    const struct head *h = selected_head(app);
     const char *layout;
+    bool remote = h && head_remote(h);
     if (t && t->screen) return attached_hints(w, t, width);
     if (w->layout.focus == 1 && w->run_selected) return "Enter evidence / h parent / Tab panes / ? help / q quit";
     layout = layout_hints(app, w, width);
     if (layout) return layout;
-    if (workspace_review_hidden(w) && !app->fleet) return "Tab pane  a agent  B plan review  n new task  ? help  q quit";
-    if (width < 100) return app->fleet ? "Tab pane  a attach  B plan  C monitor  ? help  q quit" : "Tab pane  a agent  n new task  B plan  C monitor  ? help  q quit";
-    return app->fleet ? "Tab pane  Enter select  a attach  H host  B plan  C monitor  z zoom  ? help  q quit" :
+    if (workspace_review_hidden(w)) return "Tab pane  a agent  B plan review  n new task  ? help  q quit";
+    if (width < 100) return "Tab pane  a agent  n new task  B plan  C monitor  ? help  q quit";
+    return remote ? "Tab pane  Enter select  a talk to agent  x interrupt  H hosts  B plan  C monitor  z zoom  ? help  q quit" :
         "Tab pane  Enter select  a talk to agent  n new task  x remove  B plan  C monitor  z zoom  ? help  q quit";
 }
 

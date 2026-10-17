@@ -41,14 +41,6 @@ static void labelled(struct app *app, const char *label, const char *text, enum 
     labelled_at(app, DETAIL_LABEL, label, text, tone);
 }
 
-static void detail_fleet(struct app *app, const struct head *head) {
-    pair(app, "Host", head->remote_host, TV_BASE, "Desired", head->desired, TV_BASE);
-    linef(app, "Project     %s", head->remote_project);
-    section(app, "NEXT");
-    linef(app, "a  attach to the remote terminal to see what it is doing");
-    linef(app, "c  interrupt the agent; the worktree and its files are kept");
-}
-
 static void detail_group_label(const struct app *app, const struct head *head, char *group, size_t size) {
     const char *sep = dot(app);
     bool has_pr = head->pr[0] && strcmp(head->pr, "-");
@@ -239,16 +231,6 @@ static void technical_heading(struct app *app, const char *label, bool first) {
     else section(app, label);
 }
 
-static void technical_fleet(struct app *app, const struct head *head) {
-    technical_heading(app, "IDENTITY", true);
-    technical_row(app, "Host", "%s", head->remote_host);
-    technical_row(app, "Branch", "%s", head->remote_branch);
-    technical_row(app, "Project", "%s", head->remote_project);
-    technical_row(app, "Head", "%s   instance: %s", head->head_id, head->instance);
-    technical_heading(app, "LIFECYCLE", false);
-    technical_row(app, "Desired", "%s", head->desired);
-}
-
 /* Four groups sized to fit an 80x24 terminal without scrolling. */
 static void technical_local(struct app *app, const struct head *head) {
     technical_heading(app, "IDENTITY", true);
@@ -274,16 +256,22 @@ static void technical_local(struct app *app, const struct head *head) {
 static void render_technical(struct app *app) {
     const struct head *head = selected_head(app);
     if (head == NULL) { linef(app, "No selected head matching the current search."); return; }
-    if (app->fleet) technical_fleet(app, head);
+    if (head_remote(head)) remote_technical(app, head);
     else technical_local(app, head);
 }
 
 void render_head_detail(struct app *app) {
     const struct head *head = selected_head(app);
+    const struct task_observation *task = selected_task(app);
+    if (task) {
+        style(app, TONE_STRONG); linef(app, "task %s on %s", task->task_id, task->host); style(app, TONE_BASE);
+        task_detail(app, task);
+        return;
+    }
     if (head == NULL) { render_empty_work(app); return; }
     if (app->diagnostics) { render_technical(app); return; }
     style(app, TONE_STRONG); linef(app, "%s", head->branch); style(app, TONE_BASE);
-    if (app->fleet) { detail_fleet(app, head); return; }
+    if (head_remote(head)) { remote_detail(app, head); return; }
     detail_identity(app, head);
     /* The output view keeps the identity and gives the rest to the output. */
     if (app->preview) { detail_preview(app, head); return; }

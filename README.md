@@ -166,19 +166,20 @@ hydra fleet spawn build --project /srv/project -- feature/search --profile codex
 hydra fleet tui
 ```
 
-The native fleet view shows heads by host and supports attach and confirmed
-interrupts. Agent executables and repositories live on the host that runs the work.
-See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements, remote
-workflows, and recovery behavior. `hydra fleet discover --source ssh-config|
+Remote heads and tasks then appear in `hydra tui` beside local work, with their
+host and observation age; `L` filters by location, `a` attaches and `x`
+interrupts through the fleet commands, and `hydra fleet tui` opens the same
+control centre filtered to remote work. Agent executables and repositories live
+on the host that runs the work. See [fleet setup](docs/FLEET.md) for pinned
+bootstrap, host requirements, remote workflows, and recovery behavior.
+`hydra fleet discover --source ssh-config|
 ansible-inventory:FILE|dns-sd` lists candidates from your own inventories with a
 diff against the previous snapshot, and `hydra fleet revoke` records a final,
 local revocation of a candidate, source, alias, package or project decision.
 New remote tasks can be placed automatically across eligible hosts
 (`hydra fleet task submit --placement auto`), with every decision recorded and
 replayable (`hydra fleet placement explain|replay`); explicit host pinning is the
-default. See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements,
-remote workflows, placement, and recovery behavior.
-
+default. 
 ## Plan an objective
 
 The optional native helper supports `hydra workflow plan`: discover the JSON

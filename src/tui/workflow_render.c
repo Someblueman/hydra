@@ -41,7 +41,6 @@ void render_workflow_graph(struct app *app) {
     size_t indices[TV_GRAPH_MAX_NODES], n, count, i;
     int width = app->cols - 1, height = app->limit - app->line;
     struct tv_rect area;
-    if (app->fleet) { linef(app, "Workflow graphs show local recorded runs. Remote graphs are unavailable."); return; }
     if (!m || !m->run_count) { workflow_empty(app); return; }
     if (width > 300) width = 300;
     if (height > 120) height = 120;
