@@ -370,10 +370,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bounded 120 s for a slow supervised sink before retaining its final result,
   recording the wait; `phase_proof` validates a named phase; the native PTY
   observer honours `HYDRA_ITEM10_PATH_PREFIX`; Linux process samples add
-  reaped-children CPU, thread and context-switch counters.
+  reaped-children CPU, thread and context-switch counters. The I1 readiness
+  check accepts the 3.0 Work list's WHERE column; the perf matrix waits 15 s
+  plus 0.5 s per head for a client to show every owned head.
 
 ### Fixed
 
+- `make test-bench-i1` always failed its cancel stimulus: the I1 gate waited
+  for a "Current snapshot" status line that the native client now shows as
+  "Live".
 - `check_tmux_version` accepted a tmux on PATH whose `tmux -V` failed or printed no
   parsable version, because the numeric comparison error was taken as "new enough";
   such a tmux is now reported as unusable.
