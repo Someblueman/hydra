@@ -186,6 +186,14 @@ _load_libs_for_cmd() {
             _load_runtime_libs layout
             _load_libs operations parallel notify hooks yaml limits spawn cmd_queue
             ;;
+        pool)
+            _load_runtime_libs
+            _load_libs operations workflow pool pool_control cmd_pool
+            ;;
+        schedule)
+            _load_runtime_libs
+            _load_libs operations workflow pool pool_control schedule cmd_schedule
+            ;;
         completion)
             _load_libs completion_bash completion_zsh completion_fish completion cmd_completion
             ;;

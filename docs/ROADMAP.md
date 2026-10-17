@@ -1006,18 +1006,38 @@ Select this work only when real workloads need newly discovered tasks or persist
 queues that finite workflows cannot express cleanly. Build on item 9F's admitted
 expansion and join semantics rather than introducing a second graph compiler.
 
-- [ ] Add file-backed pools with one coordinator, unique task claims, bounded
+- [x] Add file-backed pools with one coordinator, unique task claims, bounded
       outstanding work, cancellation/retry budgets, and stale-owner rejection.
       Reuse task execution and admission rather than adding another scheduler.
       Seal bounded expansion manifests before scheduling; freeze join membership
       and cap graph growth, artifact bytes, and repair rounds.
-- [ ] Start schedules through host timers invoking the same submission API. Define
+      *Delivered in 3.0.0:* `hydra pool` keeps pools under state v2 with the
+      pool lock as the one coordinator, sealed bounds and per-expansion
+      membership manifests, lock-protocol claim records with lease tokens,
+      `stale_owner` rejection, per-task retry budgets and pool repair rounds,
+      and executes every task through the public `hydra workflow run` and
+      `hydra exec` commands. Unknown outcomes are reconciled from recorded
+      workflow evidence or wait for an explicit operator decision.
+- [x] Start schedules through host timers invoking the same submission API. Define
       missed-run and duplicate-trigger behavior and the always-on owner needed for
       unattended scheduling; make reboot recovery an explicit opt-in contract.
+      *Delivered in 3.0.0:* `hydra schedule` prints exact crontab, systemd and
+      launchd entries, fires through `hydra schedule run-now` with slot dedup
+      tokens, skips or catches up missed slots within a bound, documents the
+      timer-process/pool-worker execution owner and makes reboot recovery an
+      opt-in flag whose restart never replays in-flight work.
 
 Acceptance: duplicate triggers and competing workers do not create duplicate task
 claims. Work growth remains bounded, cancellation propagates, and restart recovery
-does not invent completion or replay uncertain actions.
+does not invent completion or replay uncertain actions. *Local qualification*
+(`tests/test_pool.sh`, `tests/test_pool_recovery.sh`, `tests/test_schedule.sh`):
+six competing claimers and two worker loops never double-claim, competing
+firings of one slot submit once, bounds refuse growth, cancellation reaches
+claimed exec and workflow work, a killed worker's task is reconciled as
+`recovery-required` without a second attempt, and the timer text is exact and
+stable. Not qualified here: a live cron, systemd or launchd installation, macOS,
+and multi-host workers (owner-pid staleness is evaluated on the recording host
+only; other hosts rely on lease expiry).
 
 #### H. Host discovery, qualification, and staged onboarding
 
@@ -1146,8 +1166,12 @@ remote execution changes require their own bounded scope.
 
 ## Simplification alongside feature work
 
-- [ ] Keep spawn queues, workflow scheduling, and future pools on one admission and
+- [x] Keep spawn queues, workflow scheduling, and future pools on one admission and
       execution path. Avoid separate policy implementations in native frontends.
+      *3.0.0:* task pools and schedules submit through `hydra workflow run`,
+      `hydra exec` and `hydra pool add`; they add no scheduler, admission
+      policy or native frontend logic. Keep this a standing guardrail for later
+      work.
 - [ ] Keep workflow syntax deliberately restricted. Use versioned fields and files
       for dataflow; make any structured-parser dependency an explicit toolchain
       decision rather than growing ad hoc YAML or shell interpolation.

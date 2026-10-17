@@ -389,3 +389,115 @@ correct artifact is rejected, a candidate varies across repeats, the archived
 nine-case outcomes are not reproduced or an executed outcome differs from the
 archived expectation. See the [evaluation record](../examples/planning/evaluation/README.md)
 for the measured results and their limits.
+
+## Pools and schedules
+
+Pools and schedules add persistent queues and host-timer starts without a
+second scheduler. Every pool task is executed by `hydra workflow run` or
+`hydra exec`, so admission, supervision, retries and recovery stay where they
+are; every schedule firing is the public `hydra schedule run-now` command.
+Hydra installs no daemon. A pool's one coordinator is its lock, and the
+execution owner of a firing is the process the host timer starts.
+
+### Task pools
+
+`hydra pool create <pool>` seals the pool's bounds in `manifest.json`:
+`--max-tasks` (1-1024, default 64), `--max-outstanding` claimed tasks at once
+(1-16, default 1), `--max-expansions` (1-64, default 8), `--max-artifact-bytes`
+of task definitions (1-1048576, default 65536), `--max-repair-rounds` operator
+retries (0-10, default 0), the claim `--lease` in seconds (default 300) and the
+default per-task `--retry` (0-10). Bounds never change; create a new pool for
+more. Pool and task names follow the workflow ID rules.
+
+`hydra pool add <pool> --workflow <id|path>` or `--exec <head> -- <argv...>`
+appends a task to the open expansion, opening one when needed. `--idempotent`
+with `--retry N` allows automatic retries; a non-idempotent task never retries.
+Growth beyond a bound is refused (`growth_exhausted` for tasks or expansions,
+`artifact_bytes_exhausted` for definition bytes). `hydra pool seal <pool>` (or
+`add --seal`) writes the expansion's manifest, freezes its membership and makes
+its tasks `ready`; tasks of an unsealed expansion are never claimed.
+
+`hydra pool claim <pool> --worker <label> [--owner-pid <pid>] [--lease <s>]`
+takes the first ready task under the pool lock, so competing workers never
+share a task and the outstanding bound is never exceeded. The claim record
+holds the lock protocol's owner fields (`pid`, `host`, `created_at`,
+`operation`), the worker label, a random token and the lease expiry.
+`hydra pool complete <pool> <task> --token <token> --outcome succeeded|failed
+[--run <run-id>]` reports with that token; a token that no longer matches the
+live claim is rejected as `stale_owner`, so a worker whose claim was taken away
+cannot overwrite the record.
+
+A claim is stale once its lease expires or its recorded owner pid is dead on
+this host. The next `claim` (or `run`) reconciles stale claims from recorded
+evidence only: a workflow run bound to the attempt that reached `succeeded`,
+`failed` or `cancelled` is authoritative; anything else is an unknown outcome.
+An idempotent task with retry budget then returns to `ready` (the attempt is
+counted); every other task becomes `recovery-required` with no new attempt and
+nothing replayed. The operator resolves it with `hydra pool complete <pool>
+<task> --by <label> --outcome succeeded|failed|retry`; `retry` consumes one of
+the pool's sealed repair rounds. `hydra pool status` shows a stale claim
+(`"stale": true`) without changing it.
+
+`hydra pool run <pool> [--worker <label>] [--max N] [--lease <s>]` is a worker
+loop, not a scheduler: claim, run the task's public command in the repository
+with the attempt's `stdout`/`stderr` as evidence, renew the lease while it runs,
+and complete with the exit status. A workflow task's run ID is captured from
+the command's first output line and bound to the attempt. The loop stops when
+nothing is claimable (`none`, `unsealed`, `outstanding_limit`,
+`pool_cancelled`) or after `--max` tasks. `hydra pool cancel <pool> [<task>]`
+cancels pending and ready tasks immediately and asks claimed work to stop: the
+worker loop sends TERM to its `hydra workflow run` or `hydra exec` process,
+and a recorded running workflow run is cancelled through `hydra workflow
+cancel`. A claimed task ends `cancelled` when its owner reports or is
+reconciled; cancellation never invents an outcome for work that may have
+finished.
+
+### Schedules
+
+`hydra schedule add <name> --every <N>m|<N>h|<N>d` records a schedule and
+prints the exact host timer entry to install: a crontab line (every platform),
+systemd user timer and service units (Linux) or a launchd property list
+(macOS); `--format crontab|systemd|launchd|all` selects the text, and `status`
+prints it again. The cadence must divide the hour (`1m`-`30m`), the day
+(`1h`-`12h`) or be 1-28 days, so each timer expresses it exactly. Hydra
+never installs the entry. Three submissions exist: `--workflow <id|path>`
+runs the workflow in the firing process; `--pool <pool> --workflow <id|path>`
+adds one sealed task to the pool; `--pool <pool>` alone runs the pool worker
+loop. `hydra schedule list`, `status <name>` and `remove <name>` manage the
+record; removal reminds you to remove the timer entry yourself.
+
+Every entry runs `hydra schedule run-now <name>` from the repository with
+`HYDRA_HOME` set. A firing's dedup token is its slot, `floor(now / interval)`
+in UTC seconds, recorded as `firings/<name>-<slot>` under the schedule lock
+before anything is submitted. A double cron fire, a timer firing plus a manual
+`run-now`, or two competing firings of the same slot therefore submit exactly
+once; the rest report `deduplicated`. `run-now --token <token>` names an
+explicit token for integrations that already have one.
+
+Missed runs are detected from the last fired slot. The default `--missed
+skip` fires only the current slot and counts the skipped slots
+(`missed_total`, a `schedule.missed` event). `--missed catch-up` additionally
+fires the newest missed slots in order, at most `--catch-up-limit` (1-16,
+default 4) of them, each with its own slot token; older slots are skipped.
+Catch-up never fires more than that bound, whatever the outage length.
+
+Unattended scheduling needs an always-on execution owner, which Hydra does
+not provide: the host timer service starts the firing process, and that
+process owns a `--workflow` run or a `--pool` worker loop until it exits. A
+`--pool P --workflow W` schedule only enqueues; its owner is whoever runs
+`hydra pool run P`, typically a second schedule or a supervised session. If the
+owner dies, the run becomes `stale` and pool claims become stale exactly as
+described above; nothing restarts them by itself.
+
+Reboot recovery is an explicit opt-in: `--reboot-recovery` adds `@reboot` to
+the crontab text, `Persistent=true` to the systemd timer and `RunAtLoad` to the
+launchd plist, so the first firing after a restart happens without waiting for
+the next slot. Its boundaries: the restart firing is an ordinary firing of the
+current slot (deduplicated if that slot already fired), missed slots follow the
+missed-run policy, and work that was in flight when the host went down is never
+replayed by the service restart. A workflow run interrupted that way is resumed
+only by an explicit `hydra workflow resume`, which keeps completed attempts and
+turns interrupted non-idempotent steps into `recovery-required`; a pool task
+whose owner died is reconciled by the next claim as above. The platform
+qualification is local: the generated text is exact and stable under test, but
+no live cron, systemd or launchd installation was observed here.

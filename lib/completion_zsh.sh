@@ -146,6 +146,12 @@ _hydra() {
                     fi
                     _arguments '1:subcommand:(list show validate dry-run run status cancel resume replay requests decide statistics-data statistics-json statistics-compare plan)' '--json[Output versioned status JSON]' '2:workflow or run:'
                     ;;
+                pool)
+                    _arguments '1:subcommand:(create add seal claim complete cancel status list run)' '2:pool:' '--max-tasks[Sealed task bound]:count:' '--max-outstanding[Claimed tasks at once]:count:' '--max-expansions[Sealed expansion bound]:count:' '--max-artifact-bytes[Task definition byte bound]:bytes:' '--max-repair-rounds[Operator retry bound]:count:' '--lease[Claim lease seconds]:seconds:' '--retry[Retries for idempotent tasks]:count:' '--workflow[Workflow ID or path]:workflow:' '--exec[Head that runs the argv]:head:_hydra_sessions' '--id[Task ID]:task:' '--idempotent[Task may retry]' '--seal[Seal the expansion after adding]' '--worker[Worker label]:label:' '--owner-pid[Worker process ID]:pid:' '--token[Claim token]:token:' '--by[Operator label]:label:' '--outcome[Reported outcome]:outcome:(succeeded failed retry)' '--run[Workflow run ID]:run:' '--max[Tasks to execute]:count:' '--json[Output versioned JSON]'
+                    ;;
+                schedule)
+                    _arguments '1:subcommand:(add list remove run-now status)' '2:schedule:' '--every[Cadence: Nm, Nh or Nd]:every:' '--workflow[Workflow ID or path]:workflow:' '--pool[Pool to add to or run]:pool:' '--missed[Missed-run policy]:policy:(skip catch-up)' '--catch-up-limit[Missed slots to catch up]:count:' '--reboot-recovery[Opt into reboot entries]' '--format[Timer entry format]:format:(crontab systemd launchd all)' '--token[Explicit dedup token]:token:' '--json[Output versioned JSON]'
+                    ;;
                 sync)
                     _arguments '--from[Source ref]:ref:' '--gate[Approved gate]:name:' '--dry-run[Simulate without mutation]' '1:head:_hydra_sessions'
                     ;;
@@ -265,6 +271,8 @@ _hydra_commands() {
         'broadcast:Send a command to sessions'
         'wait-idle:Wait for sessions to become idle'
         'queue:Inspect or process the spawn queue'
+        'pool:File-backed task pools with sealed bounded expansions'
+        'schedule:Host-timer schedules that submit work with a dedup token'
     )
     _describe 'command' commands
 }
