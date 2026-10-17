@@ -140,7 +140,10 @@ printf '%s\n' \
     '#!/bin/sh' \
     'case "${1:-}" in' \
     '  --protocol-version)' \
-    '    case "${FAKE_CORE_MODE:-}" in skew) echo 99 ;; hang) sleep 3 ;; descendant) sleep 20 & echo $! > "$FAKE_CORE_CHILD_PID"; wait ;; crash) exit 9 ;; *) echo 1 ;; esac ;;' \
+    '    case "${FAKE_CORE_MODE:-}" in skew) echo 99 ;; hang) sleep 3 ;; descendant) sleep 20 & echo $! > "$FAKE_CORE_CHILD_PID"; wait ;; crash) exit 9 ;;' \
+    '    tree) echo $$ > "$FAKE_CORE_CHILD_PID"; sh -c '\''sleep 20 & echo $$ >> "$FAKE_CORE_CHILD_PID"; echo $! >> "$FAKE_CORE_CHILD_PID"; wait'\'' & wait ;;' \
+    '    orphan) (sleep 20 & echo $! > "$FAKE_CORE_CHILD_PID"); sleep 20 ;;' \
+    '    *) echo 1 ;; esac ;;' \
     '  --version)' \
     '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 2.9.0 protocol 1" ;; esac ;;' \
     '  snapshot)' \
@@ -156,16 +159,61 @@ assert_fallback skew protocol-skew "$fake_core"
 assert_fallback version-skew version-skew "$fake_core"
 assert_fallback crash protocol-failure "$fake_core"
 assert_fallback hang protocol-timeout "$fake_core"
-descendant_pid_file="$test_root/descendant.pid"
-FAKE_CORE_CHILD_PID="$descendant_pid_file"
-export FAKE_CORE_CHILD_PID
-assert_fallback descendant protocol-timeout "$fake_core"
-descendant_pid="$(sed -n '1p' "$descendant_pid_file")"
-if kill -0 "$descendant_pid" 2>/dev/null; then
-    assert_success 1 "native timeout terminates helper descendants"
-else
-    assert_success 0 "native timeout terminates helper descendants"
-fi
+
+# Succeeds once no pid listed in the file exists any more, polling for up to the
+# given seconds. A terminated descendant that was orphaned stays visible until
+# init reaps it, which some inits do on a schedule rather than at once.
+wait_pids_gone() {
+    _wpg_file="$1"
+    _wpg_polls=$(( $2 * 10 ))
+    while :; do
+        _wpg_left=""
+        while read -r _wpg_pid; do
+            [ -n "$_wpg_pid" ] || continue
+            kill -0 "$_wpg_pid" 2>/dev/null && _wpg_left="$_wpg_left $_wpg_pid"
+        done < "$_wpg_file"
+        [ -n "$_wpg_left" ] || return 0
+        if [ "$_wpg_polls" -le 0 ]; then
+            echo "still present after the bound:$_wpg_left" >&2
+            return 1
+        fi
+        _wpg_polls=$((_wpg_polls - 1))
+        sleep 0.1
+    done
+}
+
+# Runs a timing-out helper that records PIDs of its subtree into the file and
+# asserts the fallback is bounded and every recorded level is gone.
+assert_tree_terminated() {
+    _att_mode="$1"
+    _att_levels="$2"
+    _att_file="$test_root/$_att_mode.pid"
+    : > "$_att_file"
+    FAKE_CORE_CHILD_PID="$_att_file"
+    export FAKE_CORE_CHILD_PID
+    _att_started="$(date +%s)"
+    assert_fallback "$_att_mode" protocol-timeout "$fake_core"
+    _att_elapsed=$(( $(date +%s) - _att_started ))
+    assert_equal "$_att_levels" "$(wc -l < "$_att_file" | tr -d ' ')" "$_att_mode helper recorded every level of its tree"
+    echo "$_att_mode timeout returned after ${_att_elapsed}s"
+    if [ "$_att_elapsed" -le 10 ]; then
+        assert_success 0 "$_att_mode timeout returns within a bound"
+    else
+        assert_success 1 "$_att_mode timeout returns within a bound"
+    fi
+    if wait_pids_gone "$_att_file" 10; then
+        assert_success 0 "native timeout terminates every level of the $_att_mode helper tree"
+    else
+        assert_success 1 "native timeout terminates every level of the $_att_mode helper tree"
+    fi
+    unset FAKE_CORE_CHILD_PID
+}
+
+assert_tree_terminated descendant 1
+assert_tree_terminated tree 3
+# The orphan's parent has exited before the timeout fires, so no parent chain
+# leads to it; only the helper's process group still does.
+assert_tree_terminated orphan 1
 assert_fallback malformed malformed-output "$fake_core"
 assert_fallback shape malformed-output "$fake_core"
 
