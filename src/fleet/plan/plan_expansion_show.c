@@ -186,7 +186,7 @@ json_object *px_bind(const char *round, const char *accepted, const char *runs) 
     *strrchr(expansions, '/') = '\0';
     px_chain_load(&chain, expansions, base, runs);
     v = (size_t)number < chain.count ? &chain.versions[number] : NULL;
-    if (!(result = bind_refusal(&chain, v, record, number, accepted))) {
+    if (!(result = bind_refusal(&chain, v, record, number, accepted)) && v) {
         data = json_object_new_object(); json_object_object_add(data, "round", json_object_new_int(number)); f_string_add(data, "compiled_sha256", v->sha256);
         if (!strcmp(v->run_state, "absent")) f_string_add(data, "previous_run", v->run_id); else json_object_object_add(data, "previous_run", NULL);
         result = f_success("workflow plan expand", data);

@@ -153,8 +153,9 @@ json_object *px_resolve_dependencies(const struct px_chain *chain, json_object *
     *rows = json_object_new_array(); *assets = json_object_new_object(); *inputs = json_object_new_object();
     for (size_t i = 0; !result && i < json_object_array_length(dependencies); i++) {
         json_object *dependency = json_object_array_get_idx(dependencies, i), *text = NULL, *declaration = NULL, *input, *row;
-        const char *id = f_string(dependency, "deliverable"); const struct px_version *version = px_find(chain, "deliverables", id);
-        const char *status = version ? px_deliverable_status(version, id, &text, &declaration) : "unknown_deliverable";
+        const char *id = f_string(dependency, "deliverable"), *status; const struct px_version *version = px_find(chain, "deliverables", id);
+        if (!version) { result = dependency_refusal("unknown_deliverable", id); break; }
+        status = px_deliverable_status(version, id, &text, &declaration);
         if ((result = dependency_refusal(status, id))) { json_object_put(text); break; }
         if (!(row = dependency_row(version, dependency, px_deliverable_effects(f_field(version->compiled, "plan"), id)))) {
             json_object_put(text); result = px_refuse("unknown_outcome", "the sealed receipt of the deliverable could not be read", "inspect the run record", named("deliverable", id)); break;
