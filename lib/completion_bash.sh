@@ -27,7 +27,7 @@ _hydra_completion() {
         fi
     fi
 
-    commands="remote fleet admission spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue"
+    commands="remote fleet admission spawn init agent capabilities workflow path lifecycle outcome wait adapter resume notify exec diff review provenance claim scope collision resource gate context sync land integrate du gc worktree snapshot list switch kill regenerate state events status doctor dashboard dashboard-exit cycle-layout tui cleanup pr template completion version help group send recv tail broadcast wait-idle queue pool schedule"
     opts="-h --help -v --version"
     if [[ ${COMP_WORDS[1]:-} == remote && $COMP_CWORD -ge 3 && ( -z $cur || $cur == -* ) ]]; then
         case ${COMP_WORDS[2]:-} in
@@ -38,6 +38,24 @@ _hydra_completion() {
             agents) COMPREPLY=($(compgen -W "--record --timeout --json" -- "${cur}")); return 0 ;;
             install-agent) COMPREPLY=($(compgen -W "--agent --approve --timeout --json" -- "${cur}")); return 0 ;;
             sign-in) COMPREPLY=($(compgen -W "--agent --timeout --json" -- "${cur}")); return 0 ;;
+        esac
+    fi
+    if [[ ${COMP_WORDS[1]:-} == pool && $COMP_CWORD -ge 3 && ( -z $cur || $cur == -* ) ]]; then
+        case ${COMP_WORDS[2]:-} in
+            create) COMPREPLY=($(compgen -W "--max-tasks --max-outstanding --max-expansions --max-artifact-bytes --max-repair-rounds --lease --retry --json" -- "${cur}")); return 0 ;;
+            add) COMPREPLY=($(compgen -W "--workflow --exec --id --idempotent --retry --seal --json" -- "${cur}")); return 0 ;;
+            claim) COMPREPLY=($(compgen -W "--worker --owner-pid --lease --json" -- "${cur}")); return 0 ;;
+            complete) COMPREPLY=($(compgen -W "--token --by --outcome --run --json" -- "${cur}")); return 0 ;;
+            run) COMPREPLY=($(compgen -W "--worker --max --lease --json" -- "${cur}")); return 0 ;;
+            seal|cancel|status|list) COMPREPLY=($(compgen -W "--json" -- "${cur}")); return 0 ;;
+        esac
+    fi
+    if [[ ${COMP_WORDS[1]:-} == schedule && $COMP_CWORD -ge 3 && ( -z $cur || $cur == -* ) ]]; then
+        case ${COMP_WORDS[2]:-} in
+            add) COMPREPLY=($(compgen -W "--every --workflow --pool --missed --catch-up-limit --reboot-recovery --format --json" -- "${cur}")); return 0 ;;
+            run-now) COMPREPLY=($(compgen -W "--token --json" -- "${cur}")); return 0 ;;
+            status) COMPREPLY=($(compgen -W "--format --json" -- "${cur}")); return 0 ;;
+            list|remove) COMPREPLY=($(compgen -W "--json" -- "${cur}")); return 0 ;;
         esac
     fi
     if [[ ${COMP_WORDS[1]:-} == fleet && ${COMP_WORDS[2]:-} == task && $COMP_CWORD -ge 5 ]]; then
@@ -122,6 +140,8 @@ _hydra_completion() {
         gate) COMPREPLY=($(compgen -W "run approve status" -- ${cur})); return 0 ;;
         context) COMPREPLY=($(compgen -W "create" -- ${cur})); return 0 ;;
         workflow) COMPREPLY=($(compgen -W "list show validate dry-run run status cancel resume replay requests decide statistics-data statistics-json statistics-compare plan" -- ${cur})); return 0 ;;
+        pool) COMPREPLY=($(compgen -W "create add seal claim complete cancel status list run --json" -- ${cur})); return 0 ;;
+        schedule) COMPREPLY=($(compgen -W "add list remove run-now status --json" -- ${cur})); return 0 ;;
         integrate) COMPREPLY=($(compgen -W "train status report cancel resume approve promote cleanup" -- ${cur})); return 0 ;;
         worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
         snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
