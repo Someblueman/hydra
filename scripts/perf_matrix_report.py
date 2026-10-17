@@ -113,7 +113,8 @@ def _observer_cpu(cell: dict[str, Any], window: str = "idle") -> float | None:
 
 
 def _label(cell: dict[str, Any]) -> str:
-    return f"{cell['heads']}/{cell['mode']}/{cell['clients']}c/{cell['preview']}/{cell['case']}/t{cell['trial']}"
+    flag = "" if cell.get("status") == "measured" else f" [{cell.get('status')}]"
+    return f"{cell['heads']}/{cell['mode']}/{cell['clients']}c/{cell['preview']}/{cell['case']}/t{cell['trial']}{flag}"
 
 
 def propose_budgets(bundle: dict[str, Any]) -> dict[str, Any]:
@@ -164,7 +165,8 @@ def propose_budgets(bundle: dict[str, Any]) -> dict[str, Any]:
 
 def write_summary(bundle: dict[str, Any], path: Path) -> None:
     cells = cells_of(bundle)
-    measured = [c for c in cells if c["status"] == "measured"]
+    # Proof-failed cells keep their samples and are shown with a status flag.
+    measured = [c for c in cells if c["status"] in ("measured", "proof-failed")]
     lines = ["# Hydra performance matrix (Linux container baseline)", ""]
     plat = bundle["platform"]
     lines += [f"Generated {bundle['generated_utc']}; {plat['system']} {plat['release']} {plat['machine']}, "
@@ -235,8 +237,8 @@ def write_summary(bundle: dict[str, Any], path: Path) -> None:
                      f"{cell['windows']['idle']['launches']['by_helper'].get('hydra', 0)} | "
                      f"{_ms(wrapped.get('median'))}/{_ms(wrapped.get('max'))} |")
     lines += ["", "## Output pressure (sustained-output cells)", "",
-              "| Cell | producers x B/s | peak backlog B | EAGAIN | queue non-empty ms (max) | recovery ms (max) | RSS growth tmux/TUI MiB | PTY reads idle |",
-              "|---|---|---:|---:|---:|---:|---|---:|"]
+              "| Cell | producers x B/s | peak backlog B | EAGAIN | queue non-empty ms (max) | stop late ms (max) | recovery ms (max) | RSS growth tmux/TUI MiB | PTY reads idle |",
+              "|---|---|---:|---:|---:|---:|---:|---|---:|"]
     for cell in measured:
         if cell["case"] != "sustained-output":
             continue
@@ -246,8 +248,15 @@ def write_summary(bundle: dict[str, Any], path: Path) -> None:
         lines.append(f"| {_label(cell)} | {p['declared']['producers']} x {p['declared']['bytes_per_second_per_producer']:.0f} | "
                      f"{max(r['peak_backlog_bytes'] for r in receipts)} | {sum(r['write_eagain_count'] for r in receipts)} | "
                      f"{max(r['queue_nonempty_ns'] for r in receipts) / 1e6:.1f} | "
+                     f"{_ms(max(cell.get('stop_lateness_ns', [0])))} | "
                      f"{_ms(max((r for r in p['recovery_after_stop_ns'] if r is not None), default=None))} | "
                      f"{_mib(growth.get('tmux-server'))}/{_mib(growth.get('native-tui'))} | {p['client_pty_reads_idle_window']} |")
+    lines += ["", "Result retention after the output phases (headless owners retain every event after the worker exits):", ""]
+    for fixture in bundle["fixtures"]:
+        retention = fixture.get("result_retention")
+        if retention:
+            lines.append(f"- {fixture['id']}: {retention.get('status', 'verified')}; "
+                         f"{json.dumps({k: v for k, v in retention.items() if k not in ('scope', 'status')})[:400]}")
     lines += ["", "Dropped/coalesced display updates: not exposed by the renderer (null, see cell pressure reason).", "",
               "## Fleet scaling and startup", "", "| Fixture | heads | mode | provisioning ms | spawn ms (median) | client time-to-usable ms | cleanup ok | errors |",
               "|---|---:|---|---:|---:|---|---|---|"]

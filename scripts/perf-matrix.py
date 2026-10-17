@@ -102,7 +102,8 @@ def run_variant(args: argparse.Namespace, variant: dict[str, Any], trial: int,
                         meta = {"heads": heads, "mode": mode, "clients": clients, "preview": preview,
                                 "variant": variant["name"], "trial": trial, "fixture": label}
                         print(f"  cell {heads}/{mode}/{clients}c/{preview}/{case}", flush=True)
-                        run.run_case(observers, states, case, meta, args.output_interval_ns)
+                        interval = args.output_interval_ns if mode == "interactive" else args.headless_output_interval_ns
+                        run.run_case(observers, states, case, meta, interval)
                 finally:
                     run.close_clients(observers, states)
         except (OSError, RuntimeError, ValueError, TimeoutError, subprocess.SubprocessError) as error:
@@ -133,6 +134,9 @@ def main() -> int:
     parser.add_argument("--gap", type=float, default=2.0, help="seconds between the four scheduled stimuli")
     parser.add_argument("--poll-ms", type=int, default=100, help="display-update polling period")
     parser.add_argument("--output-interval-ns", type=int, help="override the 31.25 ms producer line interval")
+    parser.add_argument("--headless-output-interval-ns", type=int, default=125_000_000,
+                        help="producer line interval for supervised headless workers (default 125 ms: the public "
+                             "retention caps a run at 1024 decoded events and retains each at about 0.1 s)")
     parser.add_argument("--trials", type=int, default=1)
     parser.add_argument("--candidate-source", type=Path, help="second runtime to alternate with the baseline")
     parser.add_argument("--candidate-build", type=Path)
@@ -165,7 +169,9 @@ def main() -> int:
         "variants": [{"name": v["name"], "source": str(v["source"]), "build": str(v["build"]),
                       "provenance": runtime_provenance(v["source"], None),
                       "identities": identities(v["source"], v["build"], args.observer, None)} for v in variants],
-        "declared": declared_policy(args.source),
+        "declared": {**declared_policy(args.source),
+                     "interactive_output_interval_ns": args.output_interval_ns or 31_250_000,
+                     "headless_output_interval_ns": args.headless_output_interval_ns},
         "durations": {"settle_s": args.settle, "idle_s": args.idle, "stimulus_gap_s": args.gap,
                       "interaction_s": durations.interaction_ns / 1e9, "poll_ms": args.poll_ms,
                       "sample_interval_ms": 500, "stimulus_deadline_ms": 4000},

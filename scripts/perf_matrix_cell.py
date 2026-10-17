@@ -213,8 +213,11 @@ class FixtureRun:
                               cell_dir / "actions.json")
         thread.join(timeout=d.interaction_ns / 1e9 + 10)
         end = start + duration
-        stops = self._await_stop(phase, end + 15_000_000_000)
-        cell["drain"] = self._await_drain(stops, end + 120_000_000_000)
+        # A blocked producer (full sink pipe) may finish its schedule late; wait,
+        # bounded, and report the lateness instead of failing the cell.
+        stops = self._await_stop(phase, end + 180_000_000_000)
+        cell["stop_lateness_ns"] = [max(0, stop["monotonic_ns"] - end) for stop in stops]
+        cell["drain"] = self._await_drain(stops, end + 180_000_000_000)
         usage_after = resource.getrusage(resource.RUSAGE_SELF)
         records = self.shim.records(mark)
         roles = {**role_map(settle + idle + interaction), **self.roots}
@@ -257,6 +260,12 @@ class FixtureRun:
             cell["workload_proof_error"] = repr(error)
             cell["status"] = "proof-failed"
         cell["phase_start_ns"], cell["phase_end_ns"] = start, end
+        if changing:
+            # Each changing cell starts from the committed seed so the visible
+            # changed-file count can rise again; receipts keep every edit.
+            for index in changing:
+                self.fixture.command(["git", "-C", self.fixture.workers[index]["worktree"], "checkout", "--", "."])
+            cell["seed_restored_after_cell"] = sorted(self.fixture.workers[index]["branch"] for index in changing)
         restore_work_view(clients[0], states[0])
         if meta.get("preview") == "open" and not states[0].attached:
             _attach(clients[0], self.fixture, 1)
@@ -339,7 +348,21 @@ class FixtureRun:
                 "scope": "headless only: time from the finish command to the public hydra exec result; interactive workers have no owner",
             }
         except (OSError, RuntimeError, TimeoutError, ValueError) as error:
-            self.record["errors"].append("finish: " + repr(error))
+            # Public retention failing under output load is a finding, not a
+            # harness failure: record it and check the worker artifacts directly.
+            artifacts = {}
+            for worker in self.fixture.workers:
+                try:
+                    artifacts[worker["branch"]] = (Path(worker["worktree"]) / "item10-result.txt").read_text() == worker["token"]
+                except OSError:
+                    artifacts[worker["branch"]] = False
+            self.record["result_retention"] = {
+                "status": "failed", "error": repr(error),
+                "worker_artifact_bytes_verified": artifacts,
+                "owner_exits": [owner.poll() for owner in self.fixture.owners],
+                "scope": "public hydra exec retention of the supervised run; see the evidence summary",
+            }
+            self.record["result_integrity"] = "public retention failed; worker artifacts checked directly"
         finally:
             self.record["cleanup"] = self.fixture.cleanup()
             self.record["cleanup_ok"] = bool(self.record["cleanup"].get("cleanup_ok"))
