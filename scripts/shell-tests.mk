@@ -26,7 +26,8 @@ SHELL_TEST_EXCLUDES = \
 	tests/test_remote_provision.sh \
 	tests/test_t2_headless.sh \
 	tests/test_t3_distributed.sh \
-	tests/test_bench_i1.sh
+	tests/test_bench_i1.sh \
+	tests/test_u10_loopback.sh
 
 SHELL_TEST_FILES = $(filter-out $(SHELL_TEST_EXCLUDES),$(wildcard tests/test_*.sh))
 SHELL_TEST_NAMES = $(patsubst tests/test_%.sh,%,$(SHELL_TEST_FILES))

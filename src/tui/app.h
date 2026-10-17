@@ -19,8 +19,28 @@ struct native_review;
 struct native_setup;
 struct transcript;
 
+/* When a host last answered, so rows retained after it stops answering can
+ * say how old they are. */
+struct remote_memory { char host[128]; time_t good_at; };
+
 struct app {
+    /* The composed model: local heads first, then remote heads, with the
+     * hosts and remote tasks of the latest remote observation. */
     struct model model;
+    /* The two observations it is composed from (U11); each replaced whole. */
+    struct model *local, *remote;
+    struct remote_memory remote_hosts[16];
+    size_t remote_host_count;
+    /* The remote source's own freshness: when it last completed, whether the
+     * last attempt failed (rows stay, as the last observation) and why. */
+    time_t remote_at, remote_next;
+    bool remote_stale, remote_known;
+    char remote_error[TEXT];
+    /* Location filter: empty for all work, "local", "remote" or a host alias. */
+    char location[128];
+    /* A remote task row rather than a head is selected in Work, Details or
+     * Overview (task_selected names it). */
+    bool task_row;
     struct native_workspace *workspace;
     struct statistics_view *statistics;
     struct native_terminals *terminals;

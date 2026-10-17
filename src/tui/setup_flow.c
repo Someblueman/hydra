@@ -63,15 +63,20 @@ static bool job_start(struct native_setup *s, enum setup_job kind, const struct 
     return true;
 }
 
-/* hydra remote setup NAME [DEST [--ssh-config FILE]] --json */
+/* hydra remote setup NAME [DEST [--ssh-config FILE]] [--binary FILE] --json.
+ * HYDRA_REMOTE_SETUP_BINARY names the unpinned helper a development build
+ * provisions with (the `--binary FILE` the CLI's asset_unavailable recovery
+ * asks for); release builds leave it unset and use the pinned asset. */
 static void guided_run(struct app *app, struct native_setup *s, bool first) {
     struct setup_argv a = {{NULL}, 0};
     const struct setup_step *open = setup_open_step(s->current);
+    const char *binary = getenv("HYDRA_REMOTE_SETUP_BINARY");
     argv_add(&a, app->hydra); argv_add(&a, "remote"); argv_add(&a, "setup"); argv_add(&a, s->name);
     if (first) {
         argv_add(&a, s->destination);
         if (s->config[0]) { argv_add(&a, "--ssh-config"); argv_add(&a, s->config); }
     }
+    if (binary && binary[0] == '/') { argv_add(&a, "--binary"); argv_add(&a, binary); }
     argv_add(&a, "--json");
     (void)job_start(s, SETUP_JOB_GUIDED, &a, first ? "host_key" : open ? open->id : "");
 }

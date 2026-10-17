@@ -210,6 +210,26 @@ they finish (on failure after Enter, so the output can be read); a failure is
 explained from the error the CLI recorded for that step. An unknown outcome offers Enter
 to reconcile, which never replays the earlier attempt.
 
+A development build has no pinned release helper for its version, so its
+control centre cannot provision from the Hosts tab on its own: set
+`HYDRA_REMOTE_SETUP_BINARY=/abs/path/to/hydra-fleet` (the `--binary FILE` the
+CLI's `asset_unavailable` recovery names, for example the output of `make
+build-fleet-static`) and the Hosts tab passes it to `hydra remote setup`, shows
+the helper as unpinned in the plan and reruns only the provisioning command
+that names that same file. Release builds leave it unset.
+
+`make test-u10-loopback` runs the whole guided flow without a VPS: a private
+sshd on a loopback port serves a throwaway account (created with `useradd`
+when the test runs as root or under passwordless sudo; otherwise it prints
+SKIP), the control centre is driven over a PTY through host-key trust, preflight,
+provisioning from this checkout's helper, the deterministic agent fixture
+installed as `codex` by a private `agent-recipes.json`, a sign-in killed
+mid-way and resumed without being repeated, a sign-in whose verification fails
+and is retried, a real fixture-agent task launched on the host and found again
+after reconnecting, a second setup of the same account, a host whose sshd
+hides `git`, untouched unrelated files and no copied credential. Its screens
+and logs land in `build/u10-loopback-evidence/`.
+
 ## Discover, qualify and enroll hosts
 
 ```sh
@@ -674,28 +694,58 @@ boundary. Heterogeneous-host trials comparing explicit and balanced placement
 (queue wait, time to verified result, throughput, transfer bytes, starvation)
 need real hosts and have not been run; no performance improvement is claimed.
 
-## Native fleet view
+## Remote work in the control centre
 
 ```sh
-make build-tui
-hydra fleet tui
+make build-tui build-fleet
+hydra tui                      # local and remote work in one workspace
+hydra tui --location remote    # the same, opened on remote work only
+hydra fleet tui                # compatibility entry: the same, filtered to remote work
 ```
 
-The native view displays host-qualified heads and recorded desired state. `j/k`,
-search, and views work as usual; recovery shows offline hosts. Select a current
-interactive head and press `a` to open its pane in the operator workspace. The
-selection includes host, project, branch, head, and current instance; attachment
-is refused for stale or unreachable hosts, headless heads, missing identities,
-and replaced instances. The remote shell rechecks that composite identity and
-the live tmux session before handing the client to tmux.
+`hydra tui` observes every registered remote host beside the local project. A
+remote head is a row `host/branch` of the same Work and Overview lists as a
+local head, a remote task (receiver-owned, no head on this machine) a row
+`task ID`; from 95 columns a `WHERE` column names the machine, and every
+summary and detail names the host, the desired state the host recorded and the
+observation it comes from (`fresh, 3s old`, `stale, 300s old`, `unknown`). `L`
+cycles the location filter (all work, local, remote, then each host) and Esc
+shows all work again; the Hosts tab (`H`) lists the observed hosts with their
+connection, head count and observation age, Enter there follows one host's
+work and `r` asks for a fresh observation of it.
 
-Inside an attached pane, `Ctrl-B Tab` leaves input (focus goes back to Hydra),
-`Ctrl-B x` closes the selected client while leaving the owner session alive, and
-`Ctrl-B q` exits the operator view. `c` requests a confirmed interrupt and `q`
-restores the terminal and exits when no pane is focused. Actions carry host, project, and
-observed instance through the public CLI. Local mutation shortcuts and local
-pane preview are disabled in fleet mode. Paths/identifiers that cannot be
-represented safely within native text bounds require the CLI.
+Details, attention (`I`) and review (`r`) use the same keys for remote work.
+Select a current interactive remote head and press `a` to open its pane in the
+workspace: the selection carries host, project, branch, head and current
+instance into `hydra fleet attach`, the remote shell rechecks that composite
+identity and the live tmux session before handing the client to tmux, and the
+pane behaves like a local one (`Ctrl-B Tab` leaves input, `Ctrl-B x` closes
+the client while the owner session lives on, `Ctrl-B r` reconnects, `Ctrl-B n`
+switches agents, `Ctrl-B q` quits). `Ctrl-B [` scrolls the host's own tmux
+history: Hydra forwards the host tmux's default prefix and `[` through the
+client, so the host's copy mode handles PgUp/PgDn and arrows and `q` (or
+`Ctrl-B ]`) leaves it; a host tmux configured with another prefix receives
+those keys instead, which Hydra cannot verify. `x` on a remote head interrupts
+its agent through `hydra fleet cancel` after a confirmation that names the host
+and branch (`:` offers `interrupt remote head`); removal, grouping and the
+local palette actions run on the host, not here. On a remote task row `Y`,
+`N`, `R` and `X` dispatch `hydra fleet task decide|resume|cancel` with the
+exact task, request and bound spec after a typed confirmation.
+
+Attach, interrupt and task controls are authorized only by a fresh observation
+of a host that answers. A host that stops answering is `disconnected`: its
+heads and tasks stay listed as retained rows from the last observation, with
+that observation's age, and refuse every action until the host answers again.
+When the remote observation itself fails the footer says `Remote: STALE, last
+good observation Ns ago` with the reason, every remote status reads `stale`,
+and `r` retries. Nothing in the control centre stops, completes or replays
+remote work because an observation is missing; remote liveness is never
+observed, and a remote head is never counted as running.
+
+`hydra fleet tui` keeps working as a compatibility entry: it opens the same
+control centre filtered to remote work and reads the fleet helper's own
+`tui-visual-data` and `attention-data` streams. Paths and identifiers that
+cannot be represented within native text bounds require the CLI.
 
 Qualification evidence is host- and provider-specific; local fixtures and controlled
 SSH failures do not establish live-provider or external-host qualification.

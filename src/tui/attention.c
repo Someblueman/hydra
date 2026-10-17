@@ -475,9 +475,12 @@ void native_attention_tick(struct app *app, bool request)
      * attention snapshot is still loading. */
     enqueue(app->attention, &list);
     if (job->pid) return;
-    argv[0] = (char *)app->hydra; argv[1] = (char *)(app->fleet ? "fleet" : "workflow"); argv[2] = (char *)"attention-data"; argv[3] = NULL;
+    /* One stream for local and remote items; the compatibility entry keeps
+     * the fleet helper's own stream. */
+    argv[0] = (char *)app->hydra; argv[1] = (char *)(app->fleet ? "fleet" : "tui");
+    argv[2] = (char *)(app->fleet ? "attention-data" : "--attention-data"); argv[3] = NULL;
     app->attention->loading = true;
-    if (!native_capture_start(job, argv, app->fleet ? 13000L : 10000L)) capture_failure(app);
+    if (!native_capture_start(job, argv, app->fleet ? 13000L : 25000L)) capture_failure(app);
 }
 
 /* ---- wording ---------------------------------------------------------------- */

@@ -68,8 +68,8 @@ static void test_visualization_hosts(const char *tui, const char *hydra, const c
     unsetenv("HYDRA_TEST_FLEET_VIEW");
     result(wait_for_marker(&session, "CPU / memory / load: unavailable", 1000), "host detail distinguishes missing telemetry");
     write_input(session.master, "j\r", 2);
-    result(wait_for_marker(&session, "Search: empty", 1000), "Enter filters heads for an empty host");
-    result(wait_for_marker(&session, "No heads match the search.", 1000), "empty host does not borrow another host's head");
+    result(wait_for_marker(&session, "Showing host empty", 1000), "Enter follows an empty host's work, filtered to that host");
+    result(wait_for_marker(&session, "No host empty to show.", 1000), "empty host does not borrow another host's head");
     write_input(session.master, "\033", 1);
     (void)wait_for_marker(&session, "[Work]", 2000);
     write_input(session.master, "H", 1);

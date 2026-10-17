@@ -9,7 +9,7 @@
 
 struct head *native_plan_head(struct app *app, const char *branch) {
     size_t i;
-    if (app->fleet || !branch[0]) return NULL;
+    if (!branch[0]) return NULL;
     for (i=0;i<app->model.head_count;i++) if (!strcmp(app->model.heads[i].branch,branch)) return &app->model.heads[i];
     return NULL;
 }

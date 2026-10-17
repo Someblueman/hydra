@@ -36,6 +36,8 @@ static int fleet_record(struct model *model, char **fields, char *error, size_t 
     copy_text(head->status, sizeof(head->status), fields[6]);
     copy_text(head->liveness, sizeof(head->liveness), "unknown");
     copy_text(head->source, sizeof(head->source), "remote durable state");
+    copy_text(head->freshness, sizeof(head->freshness), "unknown");
+    copy_text(head->age, sizeof(head->age), "-");
     return 0;
 }
 static int head_record(struct model *model, size_t count, char **fields, char *error, size_t error_size) {
@@ -214,12 +216,13 @@ struct stream_state {
     bool fleet_v3;
 };
 
-static int parse_handshake(size_t count, char **fields, struct stream_state *state, char *error, size_t error_size) {
+static int parse_handshake(struct model *model, size_t count, char **fields, struct stream_state *state, char *error, size_t error_size) {
     if (!valid_handshake(count, fields)) {
         copy_text(error, error_size, "native data protocol handshake failed");
         return -1;
     }
     state->fleet_stream = strcmp(fields[0], "HYDRA_FLEET_TUI") == 0;
+    model->protocol = state->fleet_stream ? MODEL_FLEET : MODEL_LOCAL;
     state->fleet_v3 = state->fleet_stream && !strcmp(fields[1], "3");
     state->fleet_hosts = state->fleet_stream && (!strcmp(fields[1], "2") || state->fleet_v3);
     return 0;
@@ -264,7 +267,7 @@ int load_model_stream(FILE *input, struct model *model, char *error, size_t erro
         if (length > 0 && line[length - 1] == '\r') line[--length] = '\0';
         count = split_fields(line, fields, sizeof(fields) / sizeof(fields[0]));
         if (!handshake) {
-            if (parse_handshake(count, fields, &state, error, error_size)) { free(line); return -1; }
+            if (parse_handshake(model, count, fields, &state, error, error_size)) { free(line); return -1; }
             handshake = true;
             continue;
         }

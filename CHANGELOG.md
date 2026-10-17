@@ -32,6 +32,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recomputed claim, dependency, run and integrity states. Help and bash, zsh and
   fish completions include the command; `make test-plan-expansion` runs the
   native and public-CLI cases.
+- `make visual-review` installs this checkout into a private prefix, drives the
+  installed native TUI over a pseudo-terminal through the planning, running,
+  finished and failed, waiting-for-input, details, recovery, workflows,
+  statistics, attention, review, identity, Fleet and 2.9.0 Hosts screens at
+  80x24 and 140x40 in the dark, light and no-colour themes, keeps every state's
+  raw bytes, renders each through the product's own terminal interpreter
+  (`build/termviz-cells`, from `src/termviz/tools/cells.c`) with exact colours
+  to HTML and SVG, and writes one contact sheet, `build/visual-review/index.html`,
+  with before/after columns when `VISUAL_BASELINE=dir` names an earlier output.
+  `make test-visual-lint` fails on text clipped at the edge or cut at the end of
+  its area, overlapping panels, a missing focus indicator, colours outside the
+  theme's declared palette or a status word in a contradicting tone, raw
+  identifiers in headings or more than three outside detail and diagnostic
+  screens, repeated keyboard hints and contrast below 4.5 (3.0 for muted text
+  and borders); findings in `scripts/visual_review/lint-known.tsv` are reported
+  as known. See `docs/VISUAL-REVIEW.md`.
+- `make test-u10-loopback` (gated in CI) onboards a fresh throwaway account
+  behind a private loopback sshd through the control centre's Hosts tab over a
+  PTY: typed-`yes` host-key trust, preflight, provisioning from this checkout's
+  helper, the deterministic agent fixture installed as `codex` by the real
+  recipe machinery from a private `agent-recipes.json`, a sign-in killed
+  mid-way and resumed without being repeated, a sign-in whose verification
+  fails and is retried, a real fixture-agent task launched on the host and found
+  again after reconnecting, a second setup of the same account reusing the pin,
+  a host whose sshd hides `git`, unrelated files byte-identical and no local
+  credential copied. The case prints SKIP without root (or passwordless sudo)
+  and sshd. Evidence lands in `build/u10-loopback-evidence/`.
+- The control centre passes `--binary FILE` to `hydra remote setup` when
+  `HYDRA_REMOTE_SETUP_BINARY` names a helper, so a development build can
+  provision from the Hosts tab with the unpinned helper the CLI's
+  `asset_unavailable` recovery asks for; the plan shows it as not a release
+  build, and only the provisioning command naming that same file is rerun.
 - `hydra fleet discover|qualify --source KIND[:LOCATOR]` acquires one explicitly
   selected live inventory and feeds the existing candidate importer: `ssh-config`
   scans the literal `Host` names of `~/.ssh/config` (or a file) and its literal
@@ -183,8 +215,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   restart without replaying in-flight work. Help, bash/zsh/fish completions,
   `--json` envelopes and `docs/CONTRACTS.md` schemas cover both commands.
 
+- One workspace across local and remote execution (U11). `hydra tui` now
+  observes registered remote hosts beside the local project: remote heads
+  (`host/branch`) and receiver-owned remote tasks (`task ID`) are rows of the
+  same Work and Overview lists as local heads, with a `WHERE` column from 95
+  columns, the host in every summary and detail, and the host's connection and
+  observation age (`fresh, 3s old`, `stale, 300s old`, `unknown`) wherever a
+  remote row is described. `L` cycles the location filter (all, local, remote,
+  then each host) and `hydra tui --location local|remote|HOST` opens with one;
+  Esc shows all work again. Details, attention (`I`) and review (`r`) use the
+  same navigation and keys for remote work; a remote task's Details shows its
+  receiver state, waiting reason, next action, result and cancellation, and
+  `Y`/`N`/`R`/`X` on a selected task row dispatch its decisions through
+  `hydra fleet task` after a typed confirmation, only from a fresh observation.
+  `a` on a remote head attaches through `hydra fleet attach` in the workspace
+  with the same leave (`Ctrl-B Tab`), close (`Ctrl-B x`), reconnect (`Ctrl-B r`)
+  and resize behaviour as a local pane; `Ctrl-B [` forwards the host tmux's
+  default prefix and `[` so the remote pane scrolls the host's own history
+  (`q` or `Ctrl-B ]` leaves it; a host tmux with another prefix receives the
+  keys instead, which Hydra cannot verify). `x` on a remote head interrupts
+  its agent through `hydra fleet cancel` after a confirmation that names the
+  host and branch; `:` offers `interrupt remote head`. The Hosts tab lists the
+  observed hosts with their connection, head count and observation age before
+  the unfinished setups; Enter follows a host's work (the Work list filtered to
+  it) and `r` asks for a fresh observation of it. The Overview gains a REMOTE
+  card (remote heads and tasks, hosts, disconnected hosts) and, when filtered
+  to remote work, a hosts panel; the header counts local and remote work
+  separately.
+- Remote observations never authorize an action or make work look finished:
+  a host that stops answering is shown as `disconnected`, keeps its heads and
+  tasks from the last observation as retained rows (status `disconnected`,
+  "retained from an observation Ns old; host disconnected") and refuses attach,
+  interrupt and task controls until it answers again; a remote observation that
+  fails altogether keeps every remote row and shows `Remote: STALE, last good
+  observation Ns ago` with the reason, every remote status becomes `stale`, and
+  `r` retries explicitly. A host with no observation is `unknown`, never live.
+  Remote liveness stays unobserved: a remote head shows its desired state only
+  while its observation is fresh and is never counted as running.
+- `hydra tui --remote-data` (internal) answers with the fleet visual stream,
+  with an empty `HYDRA_FLEET_TUI 3` stream when no remote host is registered,
+  and with a `fleet-unavailable` recovery finding when hosts are registered but
+  the `hydra-fleet` helper is not built; `hydra tui --attention-data` merges
+  `workflow attention-data` with `fleet attention-data` into one
+  `HYDRA_ATTENTION 3` stream (a failed producer marks it partial).
+  `hydra-tui --headless-fixture FILE --remote-fixture FILE` composes a local
+  and a remote fixture the way the live adapters do.
+
+- `make test-acceptance` runs the installed-build acceptance for the roadmap
+  items whose source has shipped but whose acceptance had to be observed by hand
+  (U1, U2, U3, U6, U7, U8, U9, U12, U13, U15, U17). The stdlib package
+  `scripts/acceptance/` installs a fresh prefix and reuses the usability runner's
+  journey and PTY observer helpers; each item's Acceptance sentences are checks,
+  and the HTML and JSON report is an acceptance matrix (item, bullet, check,
+  result, evidence) with retained snapshots, styled screens re-derived from the
+  raw bytes, `/proc` and Git/tmux inspections and PTY recordings. It covers
+  byte-identical repositories across open/configure/reopen, bootstrap-free
+  transcripts, scrollback and shell history at 80 and 140 columns with the agent's
+  `/proc/<pid>/environ` checked, conversations from an uninitialized repository
+  from the UI and from an interactive `hydra spawn`, measured flicker (raw PTY
+  bytes idle for 30 s, streaming, polling, pane switches and resizes replayed
+  through a bounded VT emulator: full clears, identical-cell repaints, blinks,
+  cursor moves), Details and Recovery wording for running, stopped and
+  terminal-gone heads, hinted keys delivered as real key events, empty,
+  single-agent and blocked multi-agent overview and coordination, in-app removal
+  including a partial bulk action, Statistics round trips and the
+  conversation-to-plan flow with exact revision and digest. `docs/ACCEPTANCE.md`
+  documents the cases, thresholds and the gates that still need a human; the
+  roadmap's delivery boundary table cites each item's automated acceptance.
+- The native PTY observer (`test-tui-pty`) writes a timestamped read index
+  (`terminal.index`) beside the flushed raw stream so phases of a recording can
+  be replayed and styled snapshots re-derived.
+
 ### Changed
 
+- Recovery rows say what a finding offers (`files kept`, `safe to clear`,
+  `cleanup preview`, `review first`) instead of its raw kind, and the finding's
+  kind, source path and confidence sit under a DIAGNOSTICS heading after the
+  plain-language account.
+- Details explain a stopped head in plain words: a head whose agent reported
+  its exit (or failure) and whose terminal is closed says so and that the
+  worktree's files are kept with `a` restarting the terminal, as the
+  terminal-gone account already did. Both accounts are two rows and the NEXT
+  group is two rows, so the account and every action fit 80x24 (the
+  terminal-gone Details previously pushed `x remove` below the panel).
+- The narrow (under 100 columns) Workspace plan footers name `Tab pane`, the
+  hinted way back to the agent pane after Ctrl-B Tab leaves its input.
 - tmux is documented as required only for interactive terminal operations; headless
   heads, exec, workflows, remote tasks, bootstrap, install and doctor run without it.
 - A workflow task step whose first submission a receiver refuses before acceptance
@@ -206,6 +321,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the view keeps the agent running. The shell TUI's empty list explains a head the
   same way.
 
+- `hydra fleet tui` remains as a compatibility entry: it opens the same control
+  centre filtered to remote work (`L` or Esc widens it) and reads the fleet
+  helper's own `tui-visual-data` and `attention-data` streams. It no longer has
+  its own tab order, its own Work list (`REMOTE HEADS / DESIRED`), a separate
+  `REMOTE TASKS` panel or a separate keymap (`c` interrupt): remote heads and
+  tasks use the one Work list, `x` interrupts, `c` is coordination everywhere.
+  Host statistics (`D`) are unchanged.
+
 ### Fixed
 
 - `check_tmux_version` accepted a tmux on PATH whose `tmux -V` failed or printed no
@@ -215,6 +338,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (honoured by `hydra fleet task` and `fleet list`), so a setup-created alias could
   not reach its host through its own client configuration; recorded destinations
   now carry both when bound, and existing records without them stay valid.
+
+- The bounded native-helper runner (`hydra snapshot --native` and the protocol
+  and version probes before it) no longer lets part of a timed-out helper's
+  subtree outlive the call. It signalled the helper's descendants from one
+  process-table walk, so a descendant that had already been reparented, or was
+  forked after the walk, was never signalled, and the parent stopped the
+  watchdog as soon as the helper itself exited, before its KILL pass. The helper
+  now runs in its own session (`setsid` where available) so a timeout signals
+  the whole subtree as one process group, with the process-table walk kept as the
+  fallback; after a timeout the call waits for the TERM, then KILL pass to finish
+  and until nothing of the subtree still runs. Exit codes, the `124` timeout
+  status and the named fallback reasons are unchanged.
+- `make test-parity` and `make test-tui-pty` no longer fail on a host whose init
+  reaps orphans on a schedule instead of at once (such as a container's PID 1):
+  the cases that check a terminated owner's descendants are gone treated an
+  already-dead descendant that still awaited init as alive. They now allow a
+  bounded reaping grace, and the parity case also covers a helper whose
+  descendant was orphaned before the timeout.
 
 ## [2.9.0] - 2026-09-28
 

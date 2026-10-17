@@ -10,8 +10,9 @@ bool native_terminal_focused(struct app *app) {
     return app->view==7 && t && t->screen && !t->client.finished && !t->client.eof;
 }
 static bool terminal_head_matches(const struct app *app, const struct head *h, const struct native_terminal *t) {
+    (void)app;
     return !strcmp(h->head_id,t->head) && !strcmp(h->instance,t->instance) &&
-        (!app->fleet || (!strcmp(h->remote_host,t->remote_host) && !strcmp(h->remote_project,t->remote_project)));
+        !strcmp(h->remote_host,t->remote_host) && !strcmp(h->remote_project,t->remote_project);
 }
 
 static size_t terminal_head_index(const struct app *app, const struct native_terminal *t) {
@@ -120,6 +121,8 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
         else if (e->key==27) { t->scrolling=false; t->scroll=0; }
         return;
     }
+    /* The user left the host's copy mode by hand: Ctrl-B ] must not type q. */
+    if (t->remote_history && (e->key=='q' || e->key==27 || e->key=='\r')) t->remote_history=false;
     native_terminal_send(app,t,e->bytes,e->length);
 }
 
