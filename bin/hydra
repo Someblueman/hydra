@@ -215,7 +215,12 @@ export HYDRA_BIN_CMD
 
 # Initialize Hydra home directory
 init_hydra_home() {
-    if ! (umask 077; mkdir -p "$HYDRA_HOME") 2>/dev/null; then
+    # A new HYDRA_HOME is set to 0700 explicitly: below a directory with a
+    # default POSIX ACL the umask is ignored. An existing one keeps its mode.
+    if [ ! -d "$HYDRA_HOME" ] && (umask 077; mkdir -p "$HYDRA_HOME") 2>/dev/null; then
+        chmod 700 "$HYDRA_HOME" 2>/dev/null || true
+    fi
+    if ! [ -d "$HYDRA_HOME" ]; then
         echo "Error: HYDRA_HOME is not writable: $HYDRA_HOME" >&2
         echo "Next: export HYDRA_HOME=\"\$HOME/.hydra\" and ensure that directory is writable, or see README Quick Start" >&2
         exit 1

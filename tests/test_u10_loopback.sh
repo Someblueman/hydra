@@ -51,6 +51,13 @@ mkdir -p /run/sshd
 
 cleanup() {
     for pid in $sshd_pids; do kill "$pid" 2>/dev/null || true; done
+    # The evidence is written as root; hand it to the user who invoked sudo so
+    # the CI upload (and that user) can read it. Modes stay as written: the
+    # copied setup record keeps 0600 and Hydra's own state is not touched.
+    case "${SUDO_UID:-}:${SUDO_GID:-}" in
+        *[!0-9:]*|:*|*:) ;;
+        *) chown -R "$SUDO_UID:$SUDO_GID" "$evidence" 2>/dev/null || true ;;
+    esac
     if id "$user" >/dev/null 2>&1; then
         pkill -KILL -u "$user" 2>/dev/null || true
         sleep 0.3
@@ -220,6 +227,11 @@ assert_success $? "the remote project was trusted explicitly"
 spawn_status=$?
 cat "$evidence/spawn.json"
 assert_success "$spawn_status" "fleet spawn launched u10-task with the codex profile on the host"
+if [ "$spawn_status" -ne 0 ]; then
+    # What the remote admission and state checks saw (modes, ACLs, umask, disk).
+    remote 'umask; id; ls -ld ~ ~/.hydra ~/.hydra/admission ~/.hydra/locks ~/.hydra/state; if command -v getfacl >/dev/null 2>&1; then getfacl -p ~ ~/.hydra ~/.hydra/admission; fi; df -Pk ~' \
+        > "$evidence/remote-state-after-spawn-failure.txt" 2>&1 || true
+fi
 tries=0
 until remote 'tmux capture-pane -p -t u10-task 2>/dev/null' | grep -q 'ready to discuss'; do
     tries=$((tries + 1)); [ "$tries" -lt 150 ] || break; sleep 0.2
