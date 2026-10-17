@@ -74,11 +74,15 @@ fails the trial; the runner is not taught workarounds.
 Findings on the 3.0 build: `why-stopped` fails at both sizes because the
 Workspace pane's `Enter  full details` hint does not open Details while the
 project pane is focused (the hint is the first control the evaluator reads);
-`find-attention` and `remove-stopped` reach their goals only after one help read
-because the initial Workspace footer offers neither the Attention tab nor
-removal; `leave-return` at 140 columns needs three `Tab` presses from the
-`Tab here to talk to the agent` hint, the first two giving no textual feedback.
-These stay red or scored until the Workspace changes; they are not special-cased.
+`find-attention` at both sizes and `remove-stopped` at 80 columns reach their
+goals only after one help read because the initial Workspace footer there offers
+neither the Attention tab nor removal (at 140 columns the wider footer offers
+`x remove`); at 140 columns `find-attention` first walks into the `Draft JSON
+path` prompt because help lists `I attention` while the Workspace's `I` imports
+draft files, and cancels it; `leave-return` at 140 columns needs three `Tab`
+presses from the `Tab here to talk to the agent` hint, the first two giving no
+textual feedback. These stay red or scored until the Workspace changes; they
+are not special-cased.
 
 ## Comprehension trials
 
