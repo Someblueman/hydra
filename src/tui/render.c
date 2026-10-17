@@ -516,12 +516,19 @@ static void summary_actions(struct app *app, const struct head *head, char *line
 
 static void summary_panel(struct app *app, const char *title, const char *first, const char *second) {
     struct tv_rect r = {app->content_x - 1, app->line + 1, app->content_width + 2, app->limit - app->line - 1};
+    int limit = app->limit;
+    char heading[TEXT + 64];
     if (r.height > 5) r.height = 5;
-    tv_panel_styled(&app->frame, r, title, TV_BORDER, TV_STRONG);
+    fit_text(app, title, r.width > 6 ? (size_t)r.width - 6U : 1U, heading, sizeof(heading));
+    tv_panel_styled(&app->frame, r, heading, TV_BORDER, TV_STRONG);
     app->line = r.y + 1;
     app->content_x++; app->content_width -= 2;
+    /* Prose stops above the panel's bottom edge, leaving the last row to second. */
+    app->limit = r.y + r.height - 2;
     paragraph(app, first, TV_BASE);
-    if (app->line < r.y + r.height - 1) { style(app, TONE_MUTED); linef(app, "%s", second); style(app, TONE_BASE); }
+    app->limit = r.y + r.height - 1;
+    if (app->line < app->limit) { style(app, TONE_MUTED); linef(app, "%s", second); style(app, TONE_BASE); }
+    app->limit = limit;
     app->content_x--; app->content_width += 2;
     app->line = r.y + r.height;
 }
@@ -626,33 +633,48 @@ static void render_recovery_detail(struct app *app) {
     char title[TEXT + 64], detail[1024];
     recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
     /* Wrapped so long labels, such as a leftover worktree's path, stay readable. */
-    paragraph(app, title, TV_STRONG);
+    lead_block(app, "RECOVERY FINDING", title);
     paragraph(app, detail, TV_BASE);
     linef(app, "");
-    linef(app, "Check: %s", item->action);
-    style(app, TONE_MUTED);
-    linef(app, "Kind: %s   Source: %s   Confidence: %s", item->kind, item->source, item->confidence);
-    linef(app, "Inspect: %s", item->action);
-    linef(app, "Enter runs the check and shows its output here; d returns to the list");
-    if (!strcmp(item->kind, "orphan-worktree")) linef(app, "x removes this worktree after confirmation; the branch is kept");
-    style(app, TONE_BASE);
+    labelled(app, "Check", item->action, TV_BASE);
+    section(app, "IDENTITY");
+    labelled(app, "Kind", item->kind, TV_BASE);
+    labelled(app, "Source", item->source, TV_BASE);
+    labelled(app, "Confidence", item->confidence, TV_BASE);
+    labelled(app, "Inspect", item->action, TV_MUTED);
+    section(app, "NEXT");
+    key_row(app, "Enter", "runs the check and shows its output here; d returns to the list");
+    if (!strcmp(item->kind, "orphan-worktree")) key_row(app, "x", "removes this worktree after confirmation; the branch is kept");
 }
 
 static void render_recovery_row(struct app *app, size_t index) {
     const struct recovery *item = &app->model.recovery[index];
-    char title[TEXT + 64], detail[1024];
+    char title[TEXT + 64], detail[1024], cell[TEXT + 64];
     bool selected = index == app->recovery_selected, wide = app->content_width >= 100;
+    int width = wide ? app->content_width - 22 : app->content_width - 2;
     recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
     record_hit(app, index);
     if (selected) column(app, 0, app->content_width, TV_SELECTED, ">");
-    column(app, 2, wide ? app->content_width - 22 : app->content_width - 2, selected ? TV_SELECTED : TV_WARNING, title);
+    fit_text(app, title, width > 0 ? (size_t)width : 1U, cell, sizeof(cell));
+    column(app, 2, width, selected ? TV_SELECTED : TV_WARNING, cell);
     if (wide) column(app, app->content_width - 18, 18, selected ? TV_SELECTED : TV_MUTED, item->kind);
     app->line++;
 }
 
+/* The selected finding in plain language under the list, with its check. */
+static void render_recovery_summary(struct app *app) {
+    const struct recovery *item = &app->model.recovery[app->recovery_selected];
+    char title[TEXT + 64], detail[1024], check[TEXT + 96];
+    recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
+    snprintf(check, sizeof(check), "Check: %s", item->action);
+    summary_panel(app, title, detail, check);
+}
+
 static void render_recovery(struct app *app) {
     size_t index, start;
+    bool summary = app->rows >= 20 && app->cols >= 70;
     int available = app->limit - app->line - 2;
+    if (summary && available > app->rows / 3) available = app->rows / 3;
     style(app, TONE_STRONG); linef(app, "RECOVERY  %zu finding%s", app->model.recovery_count, app->model.recovery_count == 1 ? "" : "s"); style(app, TONE_BASE);
     if (app->model.recovery_count == 0U) {
         linef(app, "");
@@ -667,6 +689,7 @@ static void render_recovery(struct app *app) {
     style(app, TONE_MUTED);
     linef(app, "%zu of %zu", app->recovery_selected + 1U, app->model.recovery_count);
     style(app, TONE_BASE);
+    if (summary && app->limit - app->line >= 5) render_recovery_summary(app);
 }
 
 static void render_help(struct app *app) {
@@ -824,7 +847,10 @@ static const char *hosts_hints(struct app *app, bool narrow) {
 /* Hints for views whose keys do not depend on local versus fleet mode. */
 static const char *view_hints(struct app *app, bool narrow) {
     if (app->view == 9) {
-        if (native_review_active(app)) return "j/k scroll  i IDs  f refs  l/t/p log/transcript/PR  Esc back  ? help  q quit";
+        const char *review = native_review_hints(app, narrow);
+        if (review) return review;
+        if (native_attention_detail_open(app)) return narrow ? "r review  s seen  Esc back  q quit" : "r review  s mark seen / new again  Space/b scroll  Esc back to the list  ? help  q quit";
+        if (!native_attention_listed(app)) return narrow ? "I refresh  Esc back  q quit" : "I refresh  Esc back  ? help  q quit";
         return narrow ? "Enter details  r review  ? help  q quit" : "j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit";
     }
     if (app->view == 5) return narrow ? "j/k step  [/] run  ? help  q quit" : "j/k step  [/] run  h/l/J/K pan  Enter recentre  Esc back  ? help  q quit";

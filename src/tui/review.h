@@ -8,6 +8,9 @@ struct native_review_identity {
     char run[128], step[128], attempt[128];
     char head[128], instance[128], request[128];
     char revision[65], identity[65], binding[65];
+    /* The presentation label (the task or plan name), outside the identity
+     * the public review binds to but part of what the screen leads with. */
+    char label[128];
 };
 
 /* These functions borrow app and identity. app owns the review and capture;

@@ -525,41 +525,87 @@ static void render_text(struct app *app, struct native_review *review, const cha
     }
 }
 
+static const char *reference_state(const struct review_reference *ref)
+{
+    if (!strcmp(ref->state, "available")) return "recorded preview";
+    if (!strcmp(ref->state, "inaccessible")) return "inaccessible";
+    return "supplied, unopened";
+}
+
+/* Every recorded reference as a row (kind, state, locator with its head and
+ * tail kept), then the selected one in full with what Enter does to it. */
+static void render_reference_rows(struct app *app, struct native_review *review, size_t *row)
+{
+    struct review_document *document = review->document;
+    size_t i, width = app->content_width > 42 ? (size_t)app->content_width - 34U : 8U;
+    for (i = 0U; i < document->ref_count; i++) {
+        const struct review_reference *ref = &document->refs[i];
+        char locator[4200], line[4300];
+        bool selected = i == review->reference;
+        fit_path(app, ref->locator, width, locator, sizeof(locator));
+        snprintf(line, sizeof(line), "%s %-11s %-18s %s", selected ? ">" : " ", ref->kind, reference_state(ref), locator);
+        style(app, selected ? TONE_SELECTED : TONE_BASE);
+        *row += transcript_line_view(app, line, strlen(line), (enum tv_style)app->tone, *row, review->scroll);
+        style(app, TONE_BASE);
+    }
+}
+
 static void render_references(struct app *app, struct native_review *review, size_t *row)
 {
     struct review_document *document = review->document;
     struct review_reference *ref;
-    char heading[128];
-    if (!document->ref_count) { render_text(app, review, "No explicit references recorded\n", row); return; }
+    char heading[160];
+    if (!document->ref_count) {
+        render_text(app, review, "No explicit references recorded for this review.\n\nl, t or p asks the producer to record a log, transcript or pull request reference by absolute path or http(s) URL; Hydra opens nothing by itself.\n", row);
+        return;
+    }
+    snprintf(heading, sizeof(heading), "REFERENCES  %zu recorded", document->ref_count);
+    style(app, TONE_STRONG); wrapped_line(app, heading, strlen(heading), row, review->scroll); style(app, TONE_BASE);
+    render_reference_rows(app, review, row);
     ref = &document->refs[review->reference];
+    wrapped_line(app, "", 0U, row, review->scroll);
     snprintf(heading, sizeof(heading), "Reference %zu/%zu: %s / %s", review->reference + 1U, document->ref_count, ref->kind, ref->state);
-    wrapped_line(app, heading, strlen(heading), row, review->scroll);
-    wrapped_line(app, ref->locator, strlen(ref->locator), row, review->scroll);
-    if (review->preview) render_text(app, review, ref->length ? ref->preview : "No local preview available\n", row);
-    else render_text(app, review, "j/k selects; Enter follows reference\n", row);
+    style(app, TONE_STRONG); wrapped_line(app, heading, strlen(heading), row, review->scroll); style(app, TONE_BASE);
+    style(app, TONE_MUTED); wrapped_line(app, ref->locator, strlen(ref->locator), row, review->scroll); style(app, TONE_BASE);
+    if (review->preview) {
+        wrapped_line(app, "", 0U, row, review->scroll);
+        render_text(app, review, ref->length ? ref->preview : "No local preview was recorded for this reference.\n", row);
+        return;
+    }
+    style(app, TONE_MUTED);
+    render_text(app, review, ref->locator[0] == '/' ? "Enter shows the preview the producer recorded (bounded, read-only).\n"
+        : "Enter opens this web reference in your browser; its content is not read or verified by Hydra.\n", row);
+    style(app, TONE_BASE);
 }
 
 static void render_identity(struct app *app, struct native_review *review, size_t *row)
 {
     const struct native_review_identity *id = &review->identity;
     const char *labels[] = {"Source", "Kind", "Project", "Host", "Task", "Run", "Step", "Attempt",
-        "Head", "Instance", "Request", "Binding", "Requested revision SHA256", "Identity SHA256"};
+        "Head", "Instance", "Request", "Binding", "Revision", "Identity"};
     const char *values[] = {id->source, id->kind, id->project, id->host, id->task, id->run, id->step, id->attempt,
         id->head, id->instance, id->request, id->binding, id->revision, id->identity};
+    style(app, TONE_STRONG); wrapped_line(app, "SELECTED IDENTITY", 17U, row, review->scroll); style(app, TONE_BASE);
+    style(app, TONE_MUTED);
+    render_text(app, review, "Bound subject; a changed revision invalidates this review.\n", row);
+    style(app, TONE_BASE);
     for (size_t i = 0U; i < 14U; i++) {
         char line[200];
-        snprintf(line, sizeof(line), "%s: %s", labels[i], values[i]);
+        snprintf(line, sizeof(line), "%-*s%s", i >= 12U ? DETAIL_LABEL - 1 : DETAIL_LABEL, labels[i], values[i]);
+        if (i >= 12U) style(app, TONE_MUTED);
         wrapped_line(app, line, strlen(line), row, review->scroll);
+        style(app, TONE_BASE);
     }
 }
 
 static void render_log(struct app *app, struct native_review *review, size_t *row)
 {
-    char heading[4200];
-    if (snprintf(heading, sizeof(heading), "Full log, %zu bytes%s: %s", review->log_bytes,
-                 review->log_tail ? " (the last 1 MiB is shown)" : "", review->log_path) >= (int)sizeof(heading))
-        heading[sizeof(heading) - 1U] = '\0';
-    style(app, TONE_MUTED); wrapped_line(app, heading, strlen(heading), row, review->scroll); style(app, TONE_BASE);
+    char heading[160], size[32];
+    format_tokens((long long)review->log_bytes, size, sizeof(size));
+    snprintf(heading, sizeof(heading), "FULL LOG  %s bytes%s", size, review->log_tail ? " (the last 1 MiB is shown)" : "");
+    style(app, TONE_STRONG); wrapped_line(app, heading, strlen(heading), row, review->scroll); style(app, TONE_BASE);
+    style(app, TONE_MUTED); wrapped_line(app, review->log_path, strlen(review->log_path), row, review->scroll); style(app, TONE_BASE);
+    wrapped_line(app, "", 0U, row, review->scroll);
     render_text(app, review, review->log[0] ? review->log : "The log is empty.\n", row);
 }
 
@@ -570,17 +616,60 @@ static const char *review_mode(const struct native_review *review)
     return review->references ? "references" : "evidence";
 }
 
+static const char *kind_word(const char *kind)
+{
+    if (!strcmp(kind, "result")) return "Result";
+    if (!strcmp(kind, "approval")) return "Approval request";
+    if (!strcmp(kind, "permission")) return "Permission request";
+    if (!strcmp(kind, "failure")) return "Failure";
+    if (!strcmp(kind, "approval_expired")) return "Expired approval";
+    return "Item";
+}
+
+/* The lead: what is reviewed, bound to which run, step and attempt, and
+ * whether the document on screen is current. */
+static void render_lead(struct app *app, struct native_review *review)
+{
+    const struct native_review_identity *id = &review->identity;
+    const char *sep = dot(app);
+    char eyebrow[96], title[512], binding[512];
+    bool named = id->label[0] && strcmp(id->label, "-");
+    snprintf(eyebrow, sizeof(eyebrow), "EXACT REVIEW / %s%s", review_mode(review), review->stale ? " / UNAVAILABLE" : "");
+    snprintf(title, sizeof(title), "%s%s%s", named ? id->label : id->task[0] && strcmp(id->task, "-") ? id->task : id->run,
+             id->step[0] && strcmp(id->step, "-") ? sep : "", id->step[0] && strcmp(id->step, "-") ? id->step : "");
+    if (id->host[0] && strcmp(id->host, "-") && strcmp(id->host, "local")) text_append(title, sizeof(title), "%son %s", sep, id->host);
+    lead_block(app, eyebrow, title);
+    /* A short view keeps its rows for the document. */
+    if (app->limit - app->line < 8) { if (review->notice[0]) paragraph(app, review->notice, review->stale ? TV_WARNING : TV_MUTED); return; }
+    binding[0] = '\0';
+    text_append(binding, sizeof(binding), "%s%srun %s", kind_word(id->kind), sep, id->run[0] ? id->run : "-");
+    if (id->attempt[0] && strcmp(id->attempt, "-")) text_append(binding, sizeof(binding), "%s%s", sep, id->attempt);
+    text_append(binding, sizeof(binding), "%s%s", sep, review->stale ? "not current" : review->document ? "read-only" : "loading");
+    style(app, review->stale ? TONE_WARNING : TONE_MUTED); linef(app, "%s", binding); style(app, TONE_BASE);
+    if (review->notice[0]) paragraph(app, review->notice, review->stale ? TV_WARNING : TV_MUTED);
+    if (app->line < app->limit) linef(app, "");
+}
+
+/* Footer hints follow the view inside the review, so no hint is repeated
+ * in the content. */
+const char *native_review_hints(const struct app *app, bool narrow)
+{
+    const struct native_review *review = app->review;
+    if (!native_review_active(app)) return NULL;
+    if (review->log_view) return narrow ? "j/k scroll  g/G ends  Esc back  q quit" : "j/k scroll  Space/b page  g/G top/end  Esc back to the review  ? help  q quit";
+    if (review->identity_view) return narrow ? "j/k scroll  Esc back  q quit" : "j/k scroll  i back to evidence  f references  Esc back  ? help  q quit";
+    if (review->references && review->preview) return narrow ? "j/k scroll  Esc back  q quit" : "j/k scroll  Esc back to the references  ? help  q quit";
+    if (review->references) return narrow ? "j/k select  Enter open  Esc back  q quit" : "j/k select  Enter open  l/t/p add log/transcript/PR  i identity  Esc back  ? help  q quit";
+    if (!review->document) return narrow ? "Esc back  q quit" : "Esc back to the list  ? help  q quit";
+    return narrow ? "j/k scroll  n/N section  Esc back  q quit"
+                  : "j/k scroll  n/N section  Space/b page  L full log  f references  i identity  Esc back  ? help  q quit";
+}
+
 bool native_review_render(struct app *app)
 {
     struct native_review *review = app->review; size_t row = 0U;
     if (!native_review_active(app)) return false;
-    linef(app, "EXACT REVIEW / %s%s", review_mode(review), review->stale ? " / UNAVAILABLE" : "");
-    if (review->notice[0]) linef(app, "%s", review->notice);
-    if (review->document && !review->stale) {
-        style(app, TONE_MUTED);
-        linef(app, "n/N section  L log  space/b page  f refs  i IDs  Esc back");
-        style(app, TONE_BASE);
-    }
+    render_lead(app, review);
     review->heading_count = 0U;
     transcript_view_reset(app);
     if (review->identity_view) { render_identity(app, review, &row); review->lines = row; return true; }

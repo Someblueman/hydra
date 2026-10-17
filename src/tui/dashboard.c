@@ -239,17 +239,19 @@ static enum tv_style run_step_tone(const char *state) {
 }
 
 static void run_step_line(struct app *app, struct tv_canvas *c, struct tv_rect r, int row, const struct workflow_node *n, const struct run_columns *k) {
-    char kind[48], time[48], tries[16], head[TEXT + 32];
-    int x = r.x + 2, width = r.width - 4;
+    char kind[48], time[48], tries[16], head[TEXT + 32], cell[TEXT + 32];
+    int x = r.x + 2, width = r.width - 4, step_width = (k->wide ? k->kind : k->state) - 1;
     snprintf(kind, sizeof(kind), "%s%s%s", n->kind, n->role[0] ? "/" : "", n->role);
     step_duration_text(n, time, sizeof(time));
     snprintf(tries, sizeof(tries), "%u", n->attempts);
-    dashboard_text(c, x + k->step, row, (k->wide ? k->kind : k->state) - 1, TV_BASE, "%s", n->id);
+    fit_text(app, n->id, step_width > 1 ? (size_t)step_width - 1U : 1U, cell, sizeof(cell));
+    dashboard_text(c, x + k->step, row, step_width, TV_BASE, "%s", cell);
     if (k->wide) dashboard_text(c, x + k->kind, row, k->state - k->kind - 1, TV_MUTED, "%s", kind);
     dashboard_text(c, x + k->state, row, 17, run_step_tone(n->state), "%s", n->state);
     if (k->attempts) dashboard_text(c, x + k->tries, row, 5, TV_BASE, "%s", tries);
     dashboard_text(c, x + k->time, row, 13, TV_BASE, "%s", time);
-    dashboard_text(c, x + k->head, row, width - k->head, TV_BASE, "%s", run_step_head(app, n, head, sizeof(head)));
+    fit_text(app, run_step_head(app, n, head, sizeof(head)), width - k->head > 0 ? (size_t)(width - k->head) : 1U, cell, sizeof(cell));
+    dashboard_text(c, x + k->head, row, width - k->head, TV_BASE, "%s", cell);
 }
 
 static const char *setting_mark(const char *source) {

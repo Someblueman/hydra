@@ -57,10 +57,9 @@ struct screen_fixtures {
 
 static bool prepare_screen(struct app *app, const struct screen_fixtures *f) {
     size_t i;
-    for (i = 0; i < f->attention_count; i++) {
-        bool loaded = native_attention_load(app, f->attention[i]);
-        if (!loaded && !i) { fprintf(stderr, "attention fixture rejected: %s\n", f->attention[i]); return false; }
-    }
+    /* An unreadable stream is a screen too: unavailable, or stale after a good one. */
+    for (i = 0; i < f->attention_count; i++) (void)native_attention_load(app, f->attention[i]);
+    if (app->view == 7 && f->key_count) native_workspace_prepare(app);
     /* The first key string selects the item the review binds to; the second
      * navigates inside the review. */
     for (i = 0; f->key_count && f->keys[0][i]; i++) headless_key(app, f->keys[0][i]);
@@ -79,9 +78,15 @@ static int render_fixture(struct app *app, const char *fixture, const char *remo
     if (status) return status;
     record_snapshot(app, true);
     if (workflow_fixture && refresh_workflows(app, workflow_fixture)) return 2;
-    /* --task selects a head, as it does when the interactive view opens. */
+    /* --task selects a head, as it does when the interactive view opens; a
+     * remote task is selected by its task id. */
     if (app->pending_task[0] && head_for_branch(app, app->pending_task))
         app->selected = (size_t)(head_for_branch(app, app->pending_task) - app->model.heads);
+    else if (app->pending_task[0]) {
+        size_t i;
+        for (i = 0; i < app->model.task_count; i++)
+            if (!strcmp(app->model.tasks[i].task_id, app->pending_task)) { app->task_row = true; app->task_selected = i; }
+    }
     if (statistics_fixture && refresh_statistics(app, statistics_fixture)) return 2;
     if (!prepare_screen(app, screen)) return 2;
     for (frame = 1U; frame <= frames && !terminal_stopped(); frame++) render(app, frame, true);

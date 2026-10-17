@@ -203,6 +203,12 @@ static void native_workspace_tree(struct app *app) {
     w->tree.selected = root_selected ? 0 : b.chosen;
 }
 
+/* Headless key replay: the navigation tree exists before the first frame,
+ * as it does once an interactive session has drawn the workspace. */
+void native_workspace_prepare(struct app *app) {
+    if (native_workspace_init(app)) native_workspace_tree(app);
+}
+
 static void native_workspace_select(struct app *app) {
     struct native_workspace *w = app->workspace;
     size_t value,head;
@@ -283,7 +289,11 @@ bool native_workspace_key(struct app *app, char key) {
     if (key == 'S') { native_workspace_split_agents(app); return true; }
     if (key == '\t') { native_workspace_focus_next(app); return true; }
     if (w->layout.focus == 1 && (key == 'h' || key == 'l')) { workspace_expand_key(app, w, key == 'l'); return true; }
-    if (w->layout.focus==1 && w->run_selected && (key=='\r' || key=='\n')) {
+    /* Enter follows the selection whichever Hydra pane holds focus: a run
+     * opens its evidence in the monitor, a head its full details (Esc
+     * returns here with the selection kept). An attached agent pane takes
+     * its own keys before this point. */
+    if (w->run_selected && (key=='\r' || key=='\n')) {
         native_workspace_mode(app,2); w->layout.focus=6; return true;
     }
     if (w->layout.focus==1 && w->run_selected &&
@@ -300,11 +310,8 @@ bool native_workspace_key(struct app *app, char key) {
         else copy_text(app->notice, sizeof(app->notice), app->model.head_count ? "Select a head on the left first" : "Nothing selected yet; press n to start a task");
         return true;
     }
-    /* Enter on a head keeps the user inside the workspace: focus its pane. */
-    if ((key == '\r' || key == '\n') && w->layout.focus == 1 && selected_head(app)) {
-        int first=w->agents[w->mode].first;
-        w->layout.focus = first ? first : 3;
-        native_workspace_sync_terminal(app);
+    if ((key == '\r' || key == '\n') && selected_head(app) && !(w->layout.focus == 1 && !w->tree.selected)) {
+        enter_view(app, 1);
         return true;
     }
     return false;
@@ -600,7 +607,7 @@ static const char *plan_hints(const struct app *app, int width) {
 
 /* Hints for the compact, monitoring and plan layouts; NULL for the conversation layout. */
 static const char *layout_hints(const struct app *app, const struct native_workspace *w, int width) {
-    if (w->compact) return w->mode == 2 ? "Y approve  N reject  Tab pane  q quit" : "Tab pane  a agent  ? help  q quit";
+    if (w->compact) return w->mode == 2 ? "Y approve  N reject  Tab pane  q quit" : "Tab pane  Enter details  a agent  ? help  q quit";
     if (w->mode == 2) return width < 100 ? "Y approve  N reject  R resume  X cancel  A conversation  ? help  q quit" :
         "[/] run  Y approve  N reject  R resume  X cancel  A conversation  B plan  Tab pane  ? help  q quit";
     if (w->mode == 1 || w->layout.focus == 5 || w->layout.focus == 6) return plan_hints(app, width);
@@ -616,10 +623,10 @@ static const char *workspace_hints(struct app *app, struct native_workspace *w, 
     if (w->layout.focus == 1 && w->run_selected) return "Enter evidence / h parent / Tab panes / ? help / q quit";
     layout = layout_hints(app, w, width);
     if (layout) return layout;
-    if (workspace_review_hidden(w)) return "Tab pane  a agent  B plan review  n new task  ? help  q quit";
-    if (width < 100) return "Tab pane  a agent  n new task  B plan  C monitor  ? help  q quit";
-    return remote ? "Tab pane  Enter select  a talk to agent  x interrupt  H hosts  B plan  C monitor  z zoom  ? help  q quit" :
-        "Tab pane  Enter select  a talk to agent  n new task  x remove  B plan  C monitor  z zoom  ? help  q quit";
+    if (workspace_review_hidden(w)) return "Tab pane  Enter details  a agent  B plan review  n new task  ? help  q quit";
+    if (width < 100) return "Tab pane  Enter details  a agent  n new task  B plan  C monitor  ? help  q quit";
+    return remote ? "Tab pane  Enter details  a talk to agent  x interrupt  H hosts  B plan  C monitor  z zoom  ? help  q quit" :
+        "Tab pane  Enter details  a talk to agent  n new task  x remove  B plan  C monitor  z zoom  ? help  q quit";
 }
 
 bool render_native_workspace(struct app *app, unsigned frame, bool headless) {

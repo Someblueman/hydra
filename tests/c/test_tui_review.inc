@@ -162,10 +162,10 @@ static void review_references_test(struct session *session, struct review_fixtur
     write_input(session->master, "f\r", 2U);
     result(wait_for_marker(session, "EXPLICIT-LOCAL-PREVIEW", 1000), "selected local reference opens bounded data preview");
     drain_output(session); write_input(session->master, "\033", 1U);
-    (void)wait_for_marker(session, "j/k selects; Enter follows reference", 1000); write_input(session->master, "j\r", 2U);
+    (void)wait_for_marker(session, "REFERENCES  3 recorded", 1000); write_input(session->master, "j\r", 2U);
     result(wait_for_marker(session, "Reference inaccessible", 1000), "missing reference has explicit inaccessible state");
     drain_output(session); write_input(session->master, "\033", 1U);
-    (void)wait_for_marker(session, "j/k selects; Enter follows reference", 1000); write_input(session->master, "j\r", 2U);
+    (void)wait_for_marker(session, "REFERENCES  3 recorded", 1000); write_input(session->master, "j\r", 2U);
     result(wait_for_marker(session, "Opened in browser; content not verified", 2000), "explicit http reference dispatches read-only opener");
     result(review_read(fixture->opened, opened, sizeof(opened)) && !strcmp(opened, "https://example.invalid/review/123\n"), "opener receives only exact supplied URL as one argument");
     result(review_read(fixture->calls, calls, sizeof(calls)) && strstr(calls, "workflow\nreview-data\nresult\n/project\n-\n-\nR-1\nS-1\nattempt-1\nhead-1\ninstance-1\n-\n") != NULL &&
@@ -277,7 +277,7 @@ static void review_result_case(struct session *session, struct review_fixture *f
     write_input(session->master, "n", 1U);
     result(wait_for_marker(session, "+added line", 1000), "n reaches the diff section");
     write_input(session->master, "L", 1U);
-    result(wait_for_markers(session, "EXACT REVIEW / full log", "Full log, ", 1000), "L opens the verify log");
+    result(wait_for_markers(session, "EXACT REVIEW / full log", "FULL LOG  ", 1000), "L opens the verify log");
     write_input(session->master, "G", 1U);
     result(wait_for_marker(session, "LOG-TAIL-MARKER", 1000), "the full log extends past the bounded preview");
     write_input(session->master, "\033", 1U);
@@ -294,7 +294,7 @@ static void test_review_navigation(const char *tui, const char *hydra) {
     result(wait_for_markers(&session, "Long identifier: BEGIN-", "-END", 1000), "long identifier wraps through its exact suffix at 80x24");
     result(wait_for_marker(&session, "UNSPLITTABLEWORD ends the sentence.", 1000), "review prose wraps between words at 80x24");
     write_input(session.master, "i", 1U);
-    result(wait_for_markers(&session, "Source: workflow records", "Project: /project", 1000), "selected identity view exposes exact source and project");
+    result(wait_for_markers(&session, "Source      workflow records", "Project     /project", 1000), "selected identity view exposes exact source and project");
     write_input(session.master, "i", 1U);
     write_input(session.master, "G", 1U);
     result(wait_for_marker(&session, "FINAL-REVIEW-EVIDENCE", 1000), "long review scroll reaches final evidence at 80x24");

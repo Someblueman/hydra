@@ -227,6 +227,20 @@ void exec_tokens_text(const struct workflow_exec *e, char *out, size_t size);
 bool exec_configuration_text(const struct workflow_exec *e, char *out, size_t size);
 void step_duration_text(const struct workflow_node *n, char *out, size_t size);
 void plan_approval_text(const struct app *app, size_t run, char *out, size_t size);
+/* Shared text layout (layout_text.c): labelled rows that wrap, names that
+ * end in an ellipsis rather than a cut word, paths that keep head and tail,
+ * and the lead block a detail screen opens with. */
+#define DETAIL_LABEL 12
+void fit_text(const struct app *app, const char *text, size_t width, char *out, size_t size);
+void fit_path(const struct app *app, const char *path, size_t width, char *out, size_t size);
+void labelled_at(struct app *app, int label_width, const char *label, const char *text, enum tv_style tone);
+void labelled(struct app *app, const char *label, const char *text, enum tv_style tone);
+void labelled_skip(struct app *app, int label_width, const char *label, const char *text, enum tv_style tone, size_t *skip);
+void paragraph_skip(struct app *app, const char *text, enum tv_style tone, size_t *skip);
+void labelled_pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
+                   const char *right_label, const char *right, enum tv_style right_tone);
+void lead_block(struct app *app, const char *eyebrow, const char *title);
+void key_row(struct app *app, const char *key, const char *action);
 /* Shared text-view helpers (render.c) and the head details view (detail.c). */
 void column(struct app *app, int x, int width, enum tv_style tone, const char *text);
 void paragraph(struct app *app, const char *text, enum tv_style tone);
@@ -277,6 +291,7 @@ bool native_workspace_monitoring(struct app *app);
 void native_workspace_destroy(struct app *app);
 void native_workspace_invalidate(struct app *app);
 bool native_workspace_init(struct app *app);
+void native_workspace_prepare(struct app *app);
 void native_workspace_mode(struct app *app, int mode);
 void native_workspace_move(struct app *app, int direction);
 bool native_workspace_key(struct app *app, char key);
@@ -349,6 +364,9 @@ void native_attention_tick(struct app *app, bool request);
 bool native_attention_key(struct app *app, char key);
 void render_attention(struct app *app);
 bool native_attention_load(struct app *app, const char *path);
+bool native_attention_detail_open(const struct app *app);
+bool native_attention_listed(const struct app *app);
+const char *native_review_hints(const struct app *app, bool narrow);
 bool native_attention_review_load(struct app *app, const char *path);
 /* Headless fixtures replay keys through the interactive dispatcher. */
 void headless_key(struct app *app, char key);
