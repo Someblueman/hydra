@@ -105,8 +105,8 @@ static json_object *alias_options(struct f_remote *remote, int argc, char **argv
     int i;
     for (i = 3; i < argc; i++) {
         if (!strcmp(argv[i], "--multiplex")) remote->multiplex = true;
-        else if ((!strcmp(argv[i], "--hydra") || !strcmp(argv[i], "--home")) && i + 1 < argc && argv[i+1][0] == '/') {
-            char *dst = !strcmp(argv[i], "--home") ? remote->home : remote->hydra;
+        else if ((!strcmp(argv[i], "--hydra") || !strcmp(argv[i], "--home") || !strcmp(argv[i], "--ssh-config")) && i + 1 < argc && argv[i+1][0] == '/') {
+            char *dst = !strcmp(argv[i], "--home") ? remote->home : !strcmp(argv[i], "--ssh-config") ? remote->ssh_config : remote->hydra;
             if (f_copy(dst, F_PATH, argv[++i])) return f_error("remote", "invalid_input", "path is too long");
         } else return f_error("remote", "invalid_input", "unknown or missing alias option");
     }
@@ -127,7 +127,7 @@ json_object *f_remote_cli(int argc, char **argv) {
     }
     if (argc < 3 || strcmp(argv[0], "add") || !f_name(argv[1]) || !f_target(argv[2]) ||
         f_copy(remote.name, sizeof(remote.name), argv[1]) || f_copy(remote.target, sizeof(remote.target), argv[2]))
-        return f_error("remote", "invalid_input", "remote add NAME [USER@]SSH_ALIAS [--hydra /path] [--home /path] [--multiplex]");
+        return f_error("remote", "invalid_input", "remote add NAME [USER@]SSH_ALIAS [--hydra /path] [--home /path] [--ssh-config /path] [--multiplex]");
     f_copy(remote.hydra, sizeof(remote.hydra), "hydra");
     if ((error = alias_options(&remote, argc, argv))) return error;
     if (f_remote_save(&remote)) return f_error("remote", "io_failed", "cannot store alias");

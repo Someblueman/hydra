@@ -4,7 +4,9 @@
 #include <json-c/json.h>
 
 struct f_remote { char name[128], target[256], hydra[F_PATH], home[F_PATH]; bool multiplex, require_existing_master;
-    /* Transient discovery policy only; never persisted in an alias record. */
+    /* ssh_config is persisted when an alias binds one (remote add --ssh-config,
+     * finished guided setup); the remaining fields are transient discovery
+     * policy, never persisted in an alias record. */
     char ssh_config[F_PATH], peer_fingerprint[256], control_path[F_PATH], ssh_log[F_PATH];
     char principal[128], project[F_PATH], accepted_host_key[256];
 };

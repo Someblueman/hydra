@@ -23,6 +23,8 @@ SHELL_TEST_EXCLUDES = \
 	tests/test_remote_agents.sh \
 	tests/test_remote_setup.sh \
 	tests/test_remote_provision.sh \
+	tests/test_t2_headless.sh \
+	tests/test_t3_distributed.sh \
 	tests/test_bench_i1.sh
 
 SHELL_TEST_FILES = $(filter-out $(SHELL_TEST_EXCLUDES),$(wildcard tests/test_*.sh))

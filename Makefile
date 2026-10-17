@@ -333,6 +333,8 @@ help:
 	@echo "  make test-fast - Run the fixed PR feedback test selection"
 	@echo "  make test-one T=<name> - Run tests/test_<name>.sh like make test does"
 	@echo "  make test-umask - Run test-fast, umask state and DAG fleet cases under umask 002"
+	@echo "  make test-t2-headless - Qualify remote execution with tmux absent on the receiver"
+	@echo "  make test-t3-distributed - Qualify the two-host plan with tmux absent (plus loopback SSH)"
 	@echo "  make build-core - Build the optional read-only native helper"
 	@echo "  make build-tui - Build the optional native mission-control TUI"
 	@echo "  make test-c    - Run native library unit tests"
@@ -555,6 +557,19 @@ test-enrollment-ssh: build-fleet
 .PHONY: test-remote-setup-ssh
 test-remote-setup-ssh: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-remote-setup-ssh"
+
+# T2/T3 qualification with tmux absent on the execution hosts (the coordinator
+# keeps its PATH). See docs/T2_T3_QUALIFICATION.md. The loopback SSH variant
+# prints SKIP and exits 0 without an OpenSSH server, like test-remote-setup-ssh.
+.PHONY: test-t2-headless test-t3-distributed test-t3-distributed-ssh
+test-t2-headless: fleet-test-build
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" t2-headless tests/test_t2_headless.sh
+test-t3-distributed: fleet-test-build
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" t3-distributed tests/test_t3_distributed.sh
+	@$(MAKE) test-t3-distributed-ssh
+test-t3-distributed-ssh: fleet-test-build
+	@HYDRA_TEST_T3_TRANSPORT=ssh BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" t3-distributed-ssh tests/test_t3_distributed.sh
+	@grep -E '^(SKIP T3 distributed SSH|T3 distributed over loopback SSH passed)' "$(BUILD_DIR)/test-logs/t3-distributed-ssh.log"
 
 include scripts/native-tests.mk
 

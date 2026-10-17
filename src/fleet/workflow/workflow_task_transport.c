@@ -84,7 +84,9 @@ json_object *wt_request(json_object *destination, json_object *request, unsigned
         if (!f_copy(remote.name, sizeof(remote.name), alias) &&
             !f_copy(remote.target, sizeof(remote.target), f_string(destination, "target")) &&
             !f_copy(remote.home, sizeof(remote.home), f_string(destination, "home")) &&
-            !f_copy(remote.hydra, sizeof(remote.hydra), f_string(destination, "hydra"))) {
+            !f_copy(remote.hydra, sizeof(remote.hydra), f_string(destination, "hydra")) &&
+            !f_copy(remote.ssh_config, sizeof(remote.ssh_config), f_string(destination, "ssh_config")) &&
+            !f_copy(remote.principal, sizeof(remote.principal), f_string(destination, "principal"))) {
             remote.multiplex = json_object_get_boolean(f_field(destination, "multiplex"));
             response = f_request_measured(&remote, request, seconds, &request_bytes, &response_bytes, &request_complete);
         }

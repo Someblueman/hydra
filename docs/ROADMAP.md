@@ -556,7 +556,16 @@ tmux, and status and teardown work for both execution modes (*historical*:
       artifact bindings. Unsupported remote or terminal capabilities fail before
       launch, rather than silently changing the requested execution mode.
       Implementation and controlled acceptance: [T2 record][h-t2] *(historical)*.
-      Live authenticated-host qualification remains required.
+      Delivered: the reproducible local qualification
+      ([T2/T3 qualification](T2_T3_QUALIFICATION.md), `make test-t2-headless`, in
+      CI) runs every acceptance step below with tmux hidden from the execution
+      host and a loud tmux stand-in, using the committed deterministic adapter
+      fixture; a tmux that cannot report a version no longer passes the version
+      gate, and a receiver's pre-acceptance refusal fails a workflow task step with
+      its typed code. Open: the same steps on a real, separately authenticated
+      remote host without tmux and with a signed-in headless adapter remain an
+      operator step (documented there); no live-host or provider qualification is
+      claimed.
       Acceptance: on hosts without tmux installed, submit a command and an available
       authenticated headless adapter, disconnect, reconnect, collect exact outputs,
       and consume them in a dependent step. Run the corresponding local compiled
@@ -569,6 +578,14 @@ tmux, and status and teardown work for both execution modes (*historical*:
       priority 7's run/step/attempt visibility through CLI/TUI without requiring attach.
       Interactive terminal access remains an explicit capability; viewing logs is
       not attachment to a headless process's stdin.
+      Delivered: `make test-t3-distributed` runs the scenario against two tmux-less
+      loopback receivers with distinct state, projects and endpoints, over the
+      controlled transport (lost acknowledgment, coordinator restart, stale and
+      malformed results) and over two private loopback OpenSSH daemons (aliases
+      bound with `hydra remote add --ssh-config`; SKIP without sshd, required in
+      CI). Interactive spawn, attach, messaging, transcript and teardown suites
+      were re-run with tmux installed. Open: the same scenario across real
+      remote hosts is an operator step.
       Acceptance: the complete distributed scenario succeeds with tmux absent on
       execution hosts. Coordinator restart and lost acknowledgments preserve task
       identity; stale results cannot advance dependents. Re-run interactive spawn,
