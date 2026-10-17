@@ -802,29 +802,47 @@ and receiver reservations are qualified, plus item 9's contract and outcome pilo
 (9F) or dynamic task pools. Preserve measurement exclusivity and required validator
 separation when choosing eligible hosts.
 
-- [ ] Filter hosts by authorized destination, project mapping, platform/toolchain,
+- [x] Filter hosts by authorized destination, project mapping, platform/toolchain,
       adapter capabilities, resource requirements, freshness, and any validator
       separation requirement. An idle incompatible host is not eligible.
-- [ ] Start with capacity-normalized reserved slots for comparable task classes,
+      (3.0: `hydra fleet task submit --placement auto`; every exclusion reason is
+      recorded per candidate. Toolchain beyond the handshake platform and adapter
+      capabilities is expressed through receiver admission labels.)
+- [x] Start with capacity-normalized reserved slots for comparable task classes,
       bounded queues, and stable tie-breaks. Then evaluate queue-delay estimates,
       measured task duration, and artifact-transfer cost as evidence warrants.
       CPU utilization alone is insufficient for agents waiting on remote APIs;
       account/provider limits shared across hosts need an explicit shared budget
       authority before Hydra claims to enforce them fleet-wide.
-- [ ] Record candidate hosts, observations, ranking, policy version, and reservation
+      (3.0: load `(reserved + queued) / host_limit`, same-class reservations,
+      queue depth, alias order; `max_queued` bounds queues. Queue-delay, duration
+      and transfer-cost hooks are typed and versioned (estimates schema 1) but
+      recorded as unavailable and unused; no shared provider budget exists.)
+- [x] Record candidate hosts, observations, ranking, policy version, and reservation
       outcome. Receiver admission remains final. Reconsider placement after a
       definitive refusal; an ambiguous dispatch remains assigned for reconciliation.
-- [ ] Add queue aging or bounded fair sharing where workloads demonstrate starvation.
+      (3.0: `fleet-placement` schema 1 under `fleet/placements/TASK_ID`;
+      `hydra fleet placement explain|replay`.)
+- [x] Add queue aging or bounded fair sharing where workloads demonstrate starvation.
       Balance producer and validator demand so fan-out does not indefinitely delay
       validation. Measure useful completions rather than pursuing equal CPU usage.
-- [ ] Consider rebalancing accepted but not-started work only with durable withdrawal
+      (3.0: `validator_reserve_slots` policy knob, default 0, keeps per-host
+      headroom for `role.validator` tasks; receivers keep FIFO order. No workload
+      has yet demonstrated starvation, so the default reserves nothing and no
+      completion measurements are claimed.)
+- [x] Consider rebalancing accepted but not-started work only with durable withdrawal
       that prevents its old receiver from starting it, followed by confirmed release
       and a new assignment generation. A lost withdrawal response blocks transfer.
       Do not migrate running agents or replay uncertain effects as load balancing.
-- [ ] Before any broader reassignment, define enforced ownership generations and
+      (3.0: `hydra fleet placement withdraw`, receiver `task-withdraw` and the
+      `withdrawn` state, generation N+1 on the next automatic submission.)
+- [x] Before any broader reassignment, define enforced ownership generations and
       stale-update rejection at receivers, result admission, and promotion. External
       side effects require their own idempotency/fencing contract; lease expiry alone
       must not authorize duplicate execution.
+      (3.0: `assignment_generation` recorded at acceptance and enforced on
+      start/resume/re-submission and at result collection, which promotion
+      consumes; the external side-effect boundary is documented, not enforced.)
 
 Acceptance: heterogeneous-host trials compare explicit placement and simple balanced
 placement using queue wait, time to verified result, throughput, transfer bytes, and
@@ -832,6 +850,13 @@ starvation. Record workload and observation traces; replay yields identical deci
 Race concurrent submitters, stale capacity, node drain, lost reservation/withdrawal
 responses, and late results. Admission limits and artifact bindings always hold;
 performance improvement is claimed only where repeated measurements support it.
+
+Status (3.0): replay identity, racing submitters (distinct and shared keys), stale
+capacity, drain, outages, definitive refusal then re-placement, lost withdrawal
+responses, stale-generation starts and late-result fencing are covered by
+`tests/test_placement.sh` and `tests/c/test_placement.c` against local receivers
+behind a controlled SSH boundary. The heterogeneous-host performance comparison
+needs real hosts and remains open; no performance improvement is claimed.
 
 Research basis (6 September 2026): Kubernetes separates
 [filtering, scoring, and reservation](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/).

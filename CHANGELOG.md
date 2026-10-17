@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Automatic placement of new remote tasks across eligible hosts: `hydra fleet
+  task submit --placement auto --input PACKAGE --key KEY [--separate-from
+  TASK_ID]` observes every registered alias (handshake and admission status),
+  excludes drained, offline, incompatible, unmapped, wrong-platform,
+  label-unsupported, stale, queue-full or disk-starved hosts and hosts that must
+  stay separate from a named task, ranks the rest by capacity-normalized load
+  with comparable-class, queue-depth and alias-order tie-breaks, and dispatches
+  to the first host; a definitive receiver refusal moves on to the next host and
+  an ambiguous dispatch stays assigned for reconciliation. `--placement HOST`
+  records an explicit pin; submissions without `--placement` are unchanged.
+- `hydra fleet placement explain TASK_ID` prints the digest-sealed
+  `fleet-placement` schema 1 record (observations with ages, candidates with
+  reasons, scores and ranks, policy version, every dispatch attempt and its
+  reservation outcome); `replay` re-derives the decision from the recorded
+  observations and must match; `policy` shows the effective knobs
+  (`max_observation_age_seconds`, `max_queued`, `validator_reserve_slots`, all
+  with conservative defaults in `fleet/placement-policy.json`); `drain|undrain
+  HOST` keeps new automatic work off a host.
+- Rebalancing of accepted, not-started work: `hydra fleet placement withdraw
+  TASK_ID` asks the current receiver for a durable withdrawal (new `task-withdraw`
+  capability and `withdrawn` task state) and a later `--placement auto`
+  submission opens the next assignment generation elsewhere; a lost withdrawal
+  response blocks transfer until confirmed, and running or claimed work is never
+  moved. Receivers record `assignment_generation` at acceptance and reject stale
+  starts, resumes and re-submissions (`stale_generation`); result collection
+  admits only the current generation and host.
+- Spec capabilities `role.producer`/`role.validator` (placement class) and
+  `platform.OS-ARCH` (checked by the receiver against its own platform).
+  Help and bash, zsh and fish completions cover the new commands and options.
+
 ## [2.9.0] - 2026-09-28
 
 ### Added
