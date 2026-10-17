@@ -66,14 +66,23 @@ def strip_frame(line: str) -> str:
 
 
 def chunk_affordances(line: str, row: int, source: str) -> list[Affordance]:
-    """Pairs of key and label from a hint line. A line offers controls when it
-    has at least two key-led chunks, or a key followed by two spaces and a
-    label; a sentence whose first word happens to be a letter does not."""
+    """Pairs of key and label from a hint line, read pane by pane (panes are
+    separated by their borders). A cell offers controls when it has at least
+    two key-led chunks, or a key followed by two spaces and a label; a sentence
+    whose first word happens to be a letter does not."""
+    found: list[Affordance] = []
+    for cell in re.split(r"\|+", line):
+        found += cell_affordances(cell, row, source)
+    return found
+
+
+def cell_affordances(line: str, row: int, source: str) -> list[Affordance]:
     text = strip_frame(line)
     if not text:
         return []
     chunks = [c for c in re.split(r"\s{2,}", text) if c]
-    if len(chunks) == 1 and text.count(" / ") >= 1:
+    listed = len(chunks) == 1 and text.count(" / ") >= 1
+    if listed:
         chunks = [c.strip() for c in text.split(" / ") if c.strip()]
     found: list[Affordance] = []
     pending: list[str] = []
@@ -96,7 +105,7 @@ def chunk_affordances(line: str, row: int, source: str) -> list[Affordance]:
         elif pending:
             found.append(Affordance(pending, chunk, source, row))
             pending = []
-    if key_led >= 2 or source == "footer":
+    if key_led >= 2 or source == "footer" or listed:
         return found
     # One pair: accept only "x  label" (two spaces after the key).
     return [a for a in found if re.search(rf"(^|\s){re.escape(a.keys[-1])}\s{{2,}}", text)]

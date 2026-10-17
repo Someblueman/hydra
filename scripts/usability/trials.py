@@ -54,14 +54,16 @@ class Trial:
         self.tab_method: str | None = None
         self.exhausted: dict[str, set[str]] = {}
         self.history: list[tuple[str, str]] = []
+        self.unresponsive: list[str] = []
         self.before = ""
 
     def changed(self, timeout: float = 8) -> bool:
-        """Wait for the screen to react to the last action; a screen that does
-        not change within the deadline is reported as such in the proof."""
+        """Wait for the screen's content to react to the last action (the
+        title and status rows may tick on their own); a screen that does not
+        change within the deadline is reported as such in the proof."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if self.j.screen() != self.before:
+            if body(self.j.screen()) != body(self.before):
                 return True
             time.sleep(0.1)
         self.j.proof.append({"trial_note": "screen unchanged after the action", "at_ns": time.monotonic_ns()})
@@ -71,7 +73,11 @@ class Trial:
         if self.help_open and keys != ["Esc"]:
             self.j.keys(key_bytes("Esc"))  # help only explains; close it, then act on what it said
             self.help_open = False
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline and "KEYBOARD HELP" in self.j.screen():
+                time.sleep(0.1)
             time.sleep(0.3)
+            self.before = self.j.screen()  # judge the key against the screen it acts on
         for key in keys:
             value = key_bytes(key)
             if value:
@@ -83,9 +89,19 @@ class Trial:
                              "fits_goal": fits, "at_ns": time.monotonic_ns()})
         if not self.changed():
             self.dead_ends += 1
-            if fits:
-                # A control whose label matched the goal must do something.
-                self.j.expect(False, f"The visible control '{label}' ({' '.join(keys)}) responds when pressed")
+            self.unresponsive.append(f"{' '.join(keys)} {label} ({source})")
+            if fits and source in ("panel", "sentence"):
+                # A hint shown next to the content promises an action here. Text
+                # captures miss colour-only feedback (a focused pane's border),
+                # so the control gets a second press before it is judged.
+                for key in keys:
+                    self.j.keys(key_bytes(key) or b"")
+                    time.sleep(0.15)
+                self.steps += 1
+                self.j.proof.append({"trial_choice": keys, "label": label, "source": source,
+                                     "fits_goal": fits, "retry": True, "at_ns": time.monotonic_ns()})
+                if not self.changed(timeout=4):
+                    self.j.expect(False, f"The visible control '{label}' ({' '.join(keys)}) responds when pressed")
 
     def answer(self, reading: Reading, phase: Phase) -> bool:
         """An open prompt: answer it from the goal's own words, confirm when the
@@ -100,12 +116,13 @@ class Trial:
                     self.j.proof.append({"trial_answer": pattern, "value": value, "at_ns": time.monotonic_ns()})
                     self.changed()
                     return True
-        if reading.prompt_kind == "yes-no":
-            if phase.confirm:
-                self.press(["y", "Enter"], "y/N confirm", "prompt", True)
-                return True
+        if reading.prompt_kind == "yes-no" and phase.confirm:
+            self.press(["y", "Enter"], "y/N confirm", "prompt", True)
+            return True
+        if reading.prompt_kind in ("yes-no", "text"):
+            # A question the goal gives no answer to: cancel it, a dead end.
             self.dead_ends += 1
-            self.press(["Esc"], "cancel the prompt", "prompt", False)
+            self.press(["Esc"], f"cancel the prompt: {prompt[:60]}", "prompt", False)
             return True
         return False
 
@@ -114,7 +131,7 @@ class Trial:
         reading = read_screen(screen, self.help_open)
         self.hints_read += len(reading.affordances)
         self.tab_method = learned_tab_method(reading, screen) or self.tab_method
-        digest = hashlib.sha256(screen.encode()).hexdigest()[:16]
+        digest = hashlib.sha256(body(screen).encode()).hexdigest()[:16]
         if reading.prompt and self.answer(reading, phase):
             return True
         choices = rank(reading, phase.want, phase.avoid, self.tab_method)
@@ -181,9 +198,17 @@ class Trial:
             "controls_read": self.hints_read, "fit": round(self.fits / self.steps, 2) if self.steps else 0.0,
             "completed": all(p["reached"] for p in outcome["phases"]) and len(outcome["phases"]) == len(goal.phases),
             "bound": goal.max_steps,
+            "unresponsive": self.unresponsive,
         }
         j.proof.append({"discoverability": outcome["score"], "at_ns": time.monotonic_ns()})
         return outcome
+
+
+def body(screen: str) -> str:
+    """The rows a key can change: content and key hints, without the title
+    row and the status row, which tick on their own."""
+    rows = screen.splitlines()
+    return "\n".join(rows[1:-2] + rows[-1:]) if len(rows) > 3 else screen
 
 
 def settled_screen(j: Journey, quiet: float = 0.35) -> str:

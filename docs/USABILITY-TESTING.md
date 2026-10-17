@@ -61,14 +61,24 @@ answered, and the score:
 
 Read it as a measurement, not a grade: a goal reached with `fit` 1.0 and no help
 was reachable from what the screen said; one that needed help, or that failed,
-is a discoverability finding. A control whose label matched the goal but did
-nothing fails a desired-behaviour check (`The visible control ... responds`),
-and a goal the evaluator cannot reach fails the trial; the runner is not taught
-workarounds. On the 3.0 build, `find-attention` and `remove-stopped` need one
-help read from the initial Workspace view because its footer offers neither the
-Attention tab nor removal, and `why-stopped` records that the Workspace pane's
-`Enter  full details` hint does not open Details while the project pane is
-focused; both stay red or scored until the view changes.
+is a discoverability finding. Every control that changed nothing when pressed
+is listed with the score (`unresponsive`). A hint shown next to the content
+(such as `Enter  full details` in a pane) promises an action there, so when it
+still changes nothing on a second press it fails a desired-behaviour check (`The
+visible control ... responds when pressed`); footer keys that are no-ops in the
+current state, such as `A conversation` while already in that layout, are
+recorded as dead ends only, because text captures cannot see colour-only
+feedback such as a focused pane's border. A goal the evaluator cannot reach
+fails the trial; the runner is not taught workarounds.
+
+Findings on the 3.0 build: `why-stopped` fails at both sizes because the
+Workspace pane's `Enter  full details` hint does not open Details while the
+project pane is focused (the hint is the first control the evaluator reads);
+`find-attention` and `remove-stopped` reach their goals only after one help read
+because the initial Workspace footer offers neither the Attention tab nor
+removal; `leave-return` at 140 columns needs three `Tab` presses from the
+`Tab here to talk to the agent` hint, the first two giving no textual feedback.
+These stay red or scored until the Workspace changes; they are not special-cased.
 
 ## Comprehension trials
 

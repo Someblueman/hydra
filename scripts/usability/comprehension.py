@@ -47,12 +47,31 @@ def check_commands(j: Journey, text: str, index: dict[str, str]) -> None:
     for command, sub in COMMAND.findall(text):
         j.expect(command in index, f"Mentioned command exists in hydra help: hydra {command}")
         if sub and command in index and sub not in ("and", "or", "to", "with", "for", "the", "appear", "here"):
-            j.expect(re.search(rf"\b{re.escape(sub)}\b", index[command]) is not None,
+            block = index[command]
+            # A command that takes a positional argument (`provenance <head>`)
+            # may be shown with a real head name after it.
+            positional = re.search(rf"^  {re.escape(command)}\s+<", block, re.M) is not None
+            j.expect(positional or re.search(rf"\b{re.escape(sub)}\b", block) is not None,
                      f"Mentioned subcommand exists in hydra help: hydra {command} {sub}")
+
+
+def settled(j: Journey, screen: str) -> str:
+    """The screen once two consecutive snapshots agree (a panel's text can
+    land a frame after its title)."""
+    deadline = time.monotonic() + 6
+    while time.monotonic() < deadline:
+        time.sleep(0.3)
+        current = j.screen()
+        if current == screen:
+            return current
+        screen = current
+    return screen
 
 
 def evaluate(j: Journey, concept: Concept, index: dict[str, str]) -> dict:
     screen = concept.reach(j)
+    if "shell TUI" not in concept.name:
+        screen = settled(j, screen)
     j.proof.append({"comprehension": concept.name, "entry": concept.entry, "at_ns": time.monotonic_ns()})
     text = prose(screen)
     lower = text.lower()
@@ -221,9 +240,9 @@ CONCEPTS = [
         "next action": [": claims", "more actions"],
     }, "head", lambda j: j.keys(b"\x1b\x1b")),
     Concept("live session vs. completed work", "Details of a running head", reach_details, {
-        "purpose": ["Session is the live terminal"],
-        "when it helps": ["Reported is the outcome the agent declares"],
-        "example": ["for example done or blocked"],
+        "purpose": ["(the live terminal)"],
+        "when it helps": ["declared when done"],
+        "example": ["done or blocked"],
         "next action": ["talk to the agent"],
     }, "head", back, plain=False),
     Concept("interruption", "attached agent input", reach_attached, {

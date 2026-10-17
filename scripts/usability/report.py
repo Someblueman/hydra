@@ -66,8 +66,10 @@ def score_table(score: dict) -> str:
         return ""
     cells = "".join(f"<td>{html.escape(str(score.get(k, '')))}</td>"
                     for k in ("steps", "dead_ends", "help_opened", "controls_read", "fit", "completed", "bound"))
+    unresponsive = "".join(f"<li>{html.escape(u)}</li>" for u in score.get("unresponsive", []))
     return ("<table><tr><th>steps</th><th>dead ends</th><th>help opened</th><th>controls read</th>"
-            f"<th>fit</th><th>completed</th><th>bound</th></tr><tr>{cells}</tr></table>")
+            f"<th>fit</th><th>completed</th><th>bound</th></tr><tr>{cells}</tr></table>"
+            + (f"<p>Controls that changed nothing when pressed:</p><ul>{unresponsive}</ul>" if unresponsive else ""))
 
 
 def facet_table(results: list[dict]) -> str:
