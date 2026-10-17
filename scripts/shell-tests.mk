@@ -5,6 +5,7 @@ SHELL_TEST_EXCLUDES = \
 	tests/test_visualization.sh \
 	tests/test_native_install.sh \
 	tests/test_native_tui.sh \
+	tests/test_native_tui_i4.sh \
 	tests/test_fleet.sh \
 	tests/test_fleet_install.sh \
 	tests/test_task_package.sh \

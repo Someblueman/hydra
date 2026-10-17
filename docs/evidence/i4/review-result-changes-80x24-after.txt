@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / ATTENTION                                                             
+ Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
+╭─ Attention ─────────────────────────────────────────────────────────────────╮
+│ EXACT REVIEW / evidence                                                     │
+│ kill-dry-run · implement                                                    │
+│ Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                       │
+│                                                                             │
+│ RESULT  kill-dry-run  -  verdict PASS  -  run succeeded                     │
+│ Objective: add hydra kill --dry-run so a removal can be previewed without   │
+│     removing anything                                                       │
+│                                                                             │
+│ WHAT WAS PRODUCED                                                           │
+│   answer - the implementation summary (step implement, available)           │
+│     412 bytes                                                               │
+│     | Added --dry-run to hydra kill. It lists the heads, worktrees and tmux │
+│     | sessions a removal would touch and exits 0 without changing anything. │
+│                                                                             │
+│ WHAT WAS CHECKED                                                            │
+│   PASS    req-dry-run-flag - kill accepts --dry-run and lists what it would │
+│       remove (check: dry-run-lists)                                         │
+│   PASS    req-no-removal - a dry run removes nothing (check:                │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k scroll  L full log  f references  i identity  Esc back  ? help  q quit    

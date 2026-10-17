@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / ATTENTION                                                             
+ Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
+╭─ Attention ─────────────────────────────────────────────────────────────────╮
+│ ATTENTION DETAIL                                                            │
+│ Check failed · kill-dry-run · repo-check                                    │
+│ Status      New: not marked seen yet; listed until the run is resolved.     │
+│ Why         Step repo-check (attempt 1) failed its check; review the log,   │
+│             then send the plan back or retry. It decides req-dry-run-flag,  │
+│             req-no-removal.                                                 │
+│ Next        r reviews the failed requirement and its log. To send the plan  │
+│             back, open its planning conversation from Work: F requests      │
+│             changes, V validates the revision and E runs it.                │
+│                                                                             │
+│ IDENTITY                                                                    │
+│ Kind        failure · check_failed   Source      workflow records           │
+│ Project     project_7f3a             Host        -                          │
+│ Task        -                        Run         run_2cdf8bbe1a4e           │
+│ Step        repo-check               Attempt     attempt-1                  │
+│ Head        head_b2c4d6e8            Instance    instance_b2c4d6e8          │
+│ Request     -                        Binding     -                          │
+│ Freshness   fresh                                                           │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ r review  s mark seen  Space/b scroll  Esc back  ? help  q quit               

@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ EXACT REVIEW / full log                                                                                                                 │
+│ kill-dry-run · implement                                                                                                                │
+│ Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                                                                                   │
+│                                                                                                                                         │
+│ FULL LOG  2,663 bytes                                                                                                                   │
+│ /tmp/hydra-i4-capture.rLmR5i/output.log                                                                                                 │
+│                                                                                                                                         │
+│ [PASS] check number 0 of the fixture suite                                                                                              │
+│ [PASS] check number 1 of the fixture suite                                                                                              │
+│ [PASS] check number 2 of the fixture suite                                                                                              │
+│ [PASS] check number 3 of the fixture suite                                                                                              │
+│ [PASS] check number 4 of the fixture suite                                                                                              │
+│ [PASS] check number 5 of the fixture suite                                                                                              │
+│ [PASS] check number 6 of the fixture suite                                                                                              │
+│ [PASS] check number 7 of the fixture suite                                                                                              │
+│ [PASS] check number 8 of the fixture suite                                                                                              │
+│ [PASS] check number 9 of the fixture suite                                                                                              │
+│ [PASS] check number 10 of the fixture suite                                                                                             │
+│ [PASS] check number 11 of the fixture suite                                                                                             │
+│ [PASS] check number 12 of the fixture suite                                                                                             │
+│ [PASS] check number 13 of the fixture suite                                                                                             │
+│ [PASS] check number 14 of the fixture suite                                                                                             │
+│ [PASS] check number 15 of the fixture suite                                                                                             │
+│ [PASS] check number 16 of the fixture suite                                                                                             │
+│ [PASS] check number 17 of the fixture suite                                                                                             │
+│ [PASS] check number 18 of the fixture suite                                                                                             │
+│ [PASS] check number 19 of the fixture suite                                                                                             │
+│ [PASS] check number 20 of the fixture suite                                                                                             │
+│ [PASS] check number 21 of the fixture suite                                                                                             │
+│ [PASS] check number 22 of the fixture suite                                                                                             │
+│ [PASS] check number 23 of the fixture suite                                                                                             │
+│ [PASS] check number 24 of the fixture suite                                                                                             │
+│ [PASS] check number 25 of the fixture suite                                                                                             │
+│ [PASS] check number 26 of the fixture suite                                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k scroll  Space/b page  g/G top/end  Esc back to the review  ? help  q quit                                                             

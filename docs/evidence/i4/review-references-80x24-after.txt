@@ -1,0 +1,25 @@
+FRAME 1 80x24
+ HYDRA / ATTENTION                                                             
+ Work Details Overview [Attention] Recovery Flows Stats Workspace Hosts        
+╭─ Attention ─────────────────────────────────────────────────────────────────╮
+│ EXACT REVIEW / references                                                   │
+│ kill-dry-run · implement                                                    │
+│ Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                       │
+│                                                                             │
+│ REFERENCES  3 recorded                                                      │
+│ > log         recorded preview   /tmp/hydra-fi…verify/attempt-1/output.log  │
+│   transcript  inaccessible       /tmp/hydra-fi…nt/attempt-1/transcript.log  │
+│   pr          supplied, unopened https://github.com/example/hydra/pull/84   │
+│                                                                             │
+│ Reference 1/3: log / available                                              │
+│ /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/verify/attempt-1/outpu │
+│     t.log                                                                   │
+│ Enter shows the preview the producer recorded (bounded, read-only).         │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+╰─────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                          
+ j/k select  Enter open  l/t/p add  i identity  Esc back  ? help  q quit       

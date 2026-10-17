@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / ATTENTION                                                            Local · 3 heads · 1 running · 1 need attention · 1 to repair 
+ Work  Details  Overview  [Attention]  Recovery  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Attention ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ EXACT REVIEW / references                                                                                                               │
+│ kill-dry-run · implement                                                                                                                │
+│ Result · run run_2cdf8bbe1a4e · attempt-1 · read-only                                                                                   │
+│ Recorded local preview (bounded)                                                                                                        │
+│                                                                                                                                         │
+│ REFERENCES  3 recorded                                                                                                                  │
+│ > log         recorded preview   /tmp/hydra-i4-capture.rLmR5i/output.log                                                                │
+│   transcript  inaccessible       /tmp/hydra-fixture/state/runs/run_2cdf8bbe1a4e/steps/implement/attempt-1/transcript.log                │
+│   pr          supplied, unopened https://github.com/example/hydra/pull/84                                                               │
+│                                                                                                                                         │
+│ Reference 1/3: log / available                                                                                                          │
+│ /tmp/hydra-i4-capture.rLmR5i/output.log                                                                                                 │
+│                                                                                                                                         │
+│ Tests: 12, Passed: 12, Failed: 0                                                                                                        │
+│ LOG END                                                                                                                                 │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k scroll  Esc back to the references  ? help  q quit                                                                                    

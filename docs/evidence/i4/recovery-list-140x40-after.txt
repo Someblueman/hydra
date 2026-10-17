@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / RECOVERY                                                             Local · 3 heads · 1 running · 3 need attention · 4 to repair 
+ Work  Details  Overview  Attention  [Recovery]  Workflows  Statistics  Workspace  Hosts                                                   
+╭─ Recovery ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ RECOVERY  4 findings                                                                                                                    │
+│ > Terminal stopped: feature-stale                                                                                    files kept         │
+│   Leftover lock: state_project_0123456789abcdefabcd.lock                                                             safe to clear      │
+│   Leftover worktree from a removed task: feature-old (/tmp/wt/head_0123456789abcdef), 1.3 GiB; no uncommitted chan…  cleanup preview    │
+│   Removal did not finish: feature-stale                                                                              finish or keep     │
+│ 1 of 4                                                                                                                                  │
+│                                                                                                                                         │
+│╭─ Terminal stopped: feature-stale ─────────────────────────────────────────────────────────────────────────────────────────────────────╮│
+││ The terminal session for feature-stale is no longer running. Its worktree and files are kept; nothing was removed from the            ││
+││ repository. Open it from Work (a) to restart its terminal and agent in the same worktree, or remove the head once its work is         ││
+││ finished.                                                                                                                             ││
+││ Check: hydra doctor                                                                                                                   ││
+│╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯│
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+│                                                                                                                                         │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ Live                                                                                                                                      
+ j/k select  Enter run the check  d explain  Esc back  ? help  q quit                                                                      
