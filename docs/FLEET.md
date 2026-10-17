@@ -218,7 +218,10 @@ settings. Hydra enforces batch authentication and strict host-key verification;
 verify the host key through your trusted process first. Aliases are private JSON
 records under `$HYDRA_HOME/fleet/remotes/`. `remote add` replaces that alias's record.
 Optional `--hydra /absolute/bin/hydra` selects an existing installation and `--home
-/absolute/state-directory` isolates remote Hydra state. `--multiplex` enables
+/absolute/state-directory` isolates remote Hydra state. `--ssh-config
+/absolute/file` binds the alias to one OpenSSH client configuration (`ssh -F`), as
+a finished guided setup records; every transport for that alias, including
+workflow task dispatch, uses it. `--multiplex` enables
 OpenSSH ControlMaster/ControlPersist with private control sockets; existing SSH
 multiplexing configuration is otherwise respected.
 
