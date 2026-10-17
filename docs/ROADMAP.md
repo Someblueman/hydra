@@ -169,6 +169,16 @@ an acceptance blocker, not optional cosmetic polish.
       terminal sizes, including 80x24 and 140x40, with a usable compact fallback.
       The objective, agent input destination, progress and next action remain clear;
       raw IDs, repeated keyboard hints and diagnostic fields do not dominate.
+      Captures and lint are automated: `make visual-review` drives the installed
+      native TUI through planning, running, finished and failed runs, waiting for
+      input, details, recovery, workflows and statistics at 80x24 and 140x40 in the
+      dark, light and no-colour themes and renders every screen with its exact
+      colours onto one contact sheet (`build/visual-review/index.html`, before/after
+      columns with `VISUAL_BASELINE=dir`); `make test-visual-lint` fails on clipping,
+      overlap, missing focus, foreign or contradicting status colours, raw
+      identifiers, repeated hints and low contrast, with the open findings listed
+      in `scripts/visual_review/lint-known.tsv`. Only the human aesthetic judgement
+      remains, with the contact sheet as its input ([VISUAL-REVIEW.md](VISUAL-REVIEW.md)).
 - [x] **U5 — Test the agentic product journey.** Accepted by the user on 27
       September 2026 after the first installed-build run (Codex, task "add
       `hydra kill --dry-run`"): the agent discussed and published a plan, the
@@ -243,6 +253,26 @@ an acceptance blocker, not optional cosmetic polish.
       `PATH` omits it and agent detection is `PATH`-only. Onboarding should also
       offer agent installation and detect per-user install locations. Prior
       bootstrap pins accumulate under `~/.local/share/hydra/fleet` (seven found).
+      Loopback acceptance is automated: `make test-u10-loopback` (gated in CI)
+      onboards a fresh throwaway account behind a private loopback sshd through
+      the control centre's Hosts tab over a PTY: typed-`yes` host-key trust,
+      preflight, provisioning from this checkout's helper through the documented
+      `--binary` path, the deterministic agent fixture installed as `codex` by the
+      real recipe machinery and recorded off `PATH`, a sign-in killed mid-way and
+      resumed without being repeated, a sign-in whose verification fails and is
+      retried, a real fixture-agent task launched on the host (`hydra fleet
+      spawn`; the control centre has no remote launch until U11) and found again
+      in the Fleet view after the client reconnects, a second setup of the same
+      account reusing the pin, a host whose sshd hides `git` (the explained
+      requirement with its suggestion, continuing once `git` is back), unrelated
+      files byte-identical and no local credential copied
+      ([FLEET.md](FLEET.md#guided-remote-setup)). The operator VPS run remains the
+      only thing a human need do: from an installed build, `hydra tui`, `H`, `A`,
+      enter `ubuntu@<vps>`, type `yes` for the fingerprint read on the VPS,
+      approve the plans and sign in to a real provider on the VPS, then
+      `hydra fleet spawn <name> --project /abs/project -- task --profile <agent>`
+      and `hydra tui --fleet` to find it; a pinned release build needs no
+      `HYDRA_REMOTE_SETUP_BINARY`.
 - [ ] **U11 — One workspace across local and remote execution.** Unify ordinary
       and Fleet UI navigation, agent interaction, task details, attention and review.
       Represent local/remote as a visible location and filter within the same control
@@ -400,25 +430,37 @@ The subsequent six findings are covered by U13 (statistics), U14 (output), U15
 
 Delivery boundary: the items above remain outstanding requirements. Source changes
 have shipped as follows; each item stays open until its installed-build
-acceptance has been observed (U5 was accepted on 27 September 2026). Close items
-with observed first-use, visual and agentic acceptance from the installed build,
-and update the getting-started and evaluation guides to the delivered flow as
-part of that work.
+acceptance has been observed (U5 was accepted on 27 September 2026). For U1, U2,
+U3, U6, U7, U8, U9, U12, U13, U15 and U17 that observation is automated:
+`make test-acceptance` ([ACCEPTANCE.md](ACCEPTANCE.md)) runs each item's
+Acceptance sentences as checks against a fresh prefix installation and writes
+the acceptance matrix with retained evidence; the "Automated acceptance" column
+names the cases and the "Still needs a human" column what no automated run can
+observe. Close an item when its matrix rows are green and its human column has
+been observed; update the getting-started and evaluation guides to the delivered
+flow as part of that work.
 
-| Item | Shipped source changes |
-| --- | --- |
-| U1, U2, U4, U6, U7, U8, U9, U13 | [2.6.0](../CHANGELOG.md#260---2026-09-14) |
-| U19 | explanations and empty states in 2.6.0; comprehension trials and copy fixes at every entry point in 3.0.0 (human first-use review open) |
-| U3 | CLI half in 2.6.0; in-app conversation launch and interactive spawn/resume opening inside Hydra in 2.7.0 |
-| U12 | in-app removal in 2.6.0; untracked-file protection in 2.7.0 |
-| U14 | DEC special graphics and a labelled read-only Details excerpt in 2.7.0; read-only transcripts in 2.8.0 (accepted) |
-| U15 | view consolidation in 2.6.0 |
-| U16 | nested tmux attachment with deterministic input/resize/return checks in 2.7.0; leave/close keys, disconnect release and attach cycles in 2.8.0 (accepted locally) |
-| U17 | head-associated proposals, guided local policy, invalidation and exact-digest approval in 2.7.0 |
-| U18 | initial deterministic installed-journey runner in 2.7.0; goal-driven screen-only trials, discoverability scores and comprehension trials in 3.0.0 (live and human gates open) |
-| U5 | accepted on 27 September 2026; its fixes ship in 2.8.0 |
-| U10 | guided setup CLI, control-centre flow, static release helpers in 2.9.0 |
-| U11 | one local/remote control centre (location filter, remote task rows and controls, retained disconnected observations, remote history scrolling) in 3.0.0 (unreleased); live-host acceptance open |
+| Item | Shipped source changes | Automated acceptance (`make test-acceptance`) | Still needs a human |
+| --- | --- | --- | --- |
+| U1 | [2.6.0](../CHANGELOG.md#260---2026-09-14) | `u1-clean-repo`, `u1-dirty-repo`: byte-identical tree, `git status` and exclude rules across open, configure, reopen; previewed shared-config opt-in; trust still required | nothing |
+| U2 | 2.6.0 | `u2-spawn-reconnect` at 80 and 140 columns: real `tmux attach` clients, scrollback and shell history free of bootstrap exports, `/proc/<pid>/environ` of the agent carries the head environment, reconnect usable | real terminal applications (macOS Terminal, iTerm2) |
+| U3 | CLI half in 2.6.0; in-app conversation launch and interactive spawn/resume opening inside Hydra in 2.7.0 | `u3-ui-conversation`, `u3-cli-launch`, `u3-missing-provider`, `u3-missing-auth`: conversation from an uninitialized repository without init/spawn/exports, interactive `spawn --profile --prompt` inside the control centre, in-app missing-provider and missing-login states (one red row: Details keep presenting a running agent after the provider exited for lack of login) | live provider sign-in flows |
+| U4 | 2.6.0 | `make visual-review` captures every screen state at 80x24 and 140x40 in dark, light and no-colour into one contact sheet; `make test-visual-lint` fails on clipping, overlap, missing focus, off-palette status tones, raw ids in headings, repeated hints and low contrast (see [VISUAL-REVIEW.md](VISUAL-REVIEW.md)) | compare the contact sheet with both references |
+| U6 | 2.6.0 | `u6-flicker` at 80x24 and 140x40: raw PTY bytes recorded idle 30 s, streaming, polling, pane switch and resize, replayed through the emulator; zero full clears, bounded repaint of unchanged cells, no blinks, selection and hidden cursor preserved, at most one full repaint per resize; recordings retained | perceptual review of the retained recordings in a real terminal application |
+| U7 | 2.6.0 | `u7-details-recovery`: running, stopped and terminal-gone heads; grouped and wrapped Details, raw ids only under technical details, plain-language stopped account, restart and removal separated, Recovery account before DIAGNOSTICS (one red row: Details do not show the objective given at launch) | judge the wording as plain language |
+| U8 | 2.6.0 | `u8-hints` at 80 and 140 columns: real Tab/Shift-Tab/arrow/Enter/Esc events compared with the displayed hints in Work, Details, Overview, Coordination, help and dialogs; Workspace focus read from styled snapshots; Tab and Esc delivered to an attached agent | first-time discoverability (goal-driven trials, human first use) |
+| U9 | 2.6.0 | `u9-empty`, `u9-single-agent`, `u9-multi-agent-blocked`: explained empty states, labelled counters with routes, a run blocked on an approval across two heads with its decision route, unknown distinguished from zero, in-app approval unblocking the dependent step (one red row: Coordination for the head holding the queued step calls it a single agent session and names neither the assignment nor the blocking approval) | whether the summaries answer a real user's question |
+| U12 | in-app removal in 2.6.0; untracked-file protection in 2.7.0 | `u12-removal`: stopped and active heads removed, cancel, dirty-work refusal, partial bulk action; continuous snapshots show no shell detour or return keypress; outcomes checked against worktrees, branches and `/proc` | nothing |
+| U13 | 2.6.0 | `u9-empty`, `u9-single-agent`, `u9-multi-agent-blocked`: Statistics entered from Work and Coordination during standalone work and a recorded run keeps the tab bar and selection, explains its coverage and returns to the previous view (red rows: the number keys shift while Coordination is open, so 7 reaches Workflows; at 80 columns Statistics during standalone work lacks the not-a-recorded-run explanation and its empty list reads as a filter) | nothing |
+| U15 | view consolidation in 2.6.0 | `u17-plan-from-conversation` (U15.a: committed two-file change shown as the task's diff, not "0 files"), `u9-single-agent` and `u9-multi-agent-blocked` (U15.b: distinct questions, explained empty coordination) | whether each view's answer is useful |
+| U17 | head-associated proposals, guided local policy, invalidation and exact-digest approval in 2.7.0 | `u17-plan-from-conversation`: proposal, policy review, validation, revision and approval from the conversation with no JSON or paths; exact revision and digest shown and independently recompiled; a changed plan invalidates the approval; the approved revision executes and verifies | a live provider authoring a plan |
+| U19 | explanations and empty states in 2.6.0; comprehension trials and copy fixes at every entry point in 3.0.0 | comprehension trials of `make test-usability` | human first-use review |
+| U14 | DEC special graphics and a labelled read-only Details excerpt in 2.7.0; read-only transcripts in 2.8.0 (accepted) | | |
+| U16 | nested tmux attachment with deterministic input/resize/return checks in 2.7.0; leave/close keys, disconnect release and attach cycles in 2.8.0 (accepted locally) | | |
+| U18 | initial deterministic installed-journey runner in 2.7.0; goal-driven screen-only trials, discoverability scores and comprehension trials in 3.0.0 (live and human gates open) | | |
+| U5 | accepted on 27 September 2026; its fixes ship in 2.8.0 | | |
+| U10 | guided setup CLI, control-centre flow, static release helpers in 2.9.0; `--binary` provisioning from Hosts in 3.0.0 | `make test-u10-loopback`: a throwaway account behind a private loopback sshd onboarded through the Hosts tab (typed host-key trust, preflight, provisioning, agent install and sign-in through the real recipes, interrupted and failed steps, existing installation, missing prerequisites), a fixture-agent task and two reconnects | the operator VPS run recorded in the U10 item |
+| U11 | one local/remote control centre (location filter, remote task rows and controls, retained disconnected observations, remote history scrolling) in 3.0.0 | native fixture and PTY cases (`make test-tui`, `test-tui-pty`): local and remote work side by side, location filter, stale and disconnected observations with refusals, exact fleet argv, 80x24 and 140x40 | live-host attach, disconnect/reconnect and remote history with a non-default tmux prefix |
 
 ### Reliability fixes
 
@@ -1011,6 +1053,16 @@ provider status for Hydra verification.
       resolved, but visual design and graphics across the control centre need a
       dedicated pass. Extend this item to the new run, result, failure and
       statistics screens when it is selected.
+      The before/after captures are automated: `make visual-review` records the
+      attention queue and detail, a failed check, the result and evidence reviews,
+      the selected identity, Fleet navigation (remote heads, overview, hosts,
+      recovery, attention), the run, result, failure and statistics screens and
+      the 2.9.0 Hosts screens at 80x24 and 140x40, dark, light and no-colour, on
+      one contact sheet with exact colours, and `make test-visual-lint` checks
+      alignment, wrapping, clipping, focus, palette and contrast on every one
+      ([VISUAL-REVIEW.md](VISUAL-REVIEW.md)). What remains is the user's review of
+      that page for hierarchy and visual quality, plus the walk-through of finding
+      an item, reviewing its evidence and returning with the selection preserved.
 
 I1 builds on V1–V4 and existing interactive attach; tmux-free distributed
 qualification stays in T2/T3. I2/I3 reuse lifecycle, outcome and review contracts.

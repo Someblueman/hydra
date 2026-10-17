@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `make visual-review` installs this checkout into a private prefix, drives the
+  installed native TUI over a pseudo-terminal through the planning, running,
+  finished and failed, waiting-for-input, details, recovery, workflows,
+  statistics, attention, review, identity, Fleet and 2.9.0 Hosts screens at
+  80x24 and 140x40 in the dark, light and no-colour themes, keeps every state's
+  raw bytes, renders each through the product's own terminal interpreter
+  (`build/termviz-cells`, from `src/termviz/tools/cells.c`) with exact colours
+  to HTML and SVG, and writes one contact sheet, `build/visual-review/index.html`,
+  with before/after columns when `VISUAL_BASELINE=dir` names an earlier output.
+  `make test-visual-lint` fails on text clipped at the edge or cut at the end of
+  its area, overlapping panels, a missing focus indicator, colours outside the
+  theme's declared palette or a status word in a contradicting tone, raw
+  identifiers in headings or more than three outside detail and diagnostic
+  screens, repeated keyboard hints and contrast below 4.5 (3.0 for muted text
+  and borders); findings in `scripts/visual_review/lint-known.tsv` are reported
+  as known. See `docs/VISUAL-REVIEW.md`.
+- `make test-u10-loopback` (gated in CI) onboards a fresh throwaway account
+  behind a private loopback sshd through the control centre's Hosts tab over a
+  PTY: typed-`yes` host-key trust, preflight, provisioning from this checkout's
+  helper, the deterministic agent fixture installed as `codex` by the real
+  recipe machinery from a private `agent-recipes.json`, a sign-in killed
+  mid-way and resumed without being repeated, a sign-in whose verification
+  fails and is retried, a real fixture-agent task launched on the host and found
+  again after reconnecting, a second setup of the same account reusing the pin,
+  a host whose sshd hides `git`, unrelated files byte-identical and no local
+  credential copied. The case prints SKIP without root (or passwordless sudo)
+  and sshd. Evidence lands in `build/u10-loopback-evidence/`.
+- The control centre passes `--binary FILE` to `hydra remote setup` when
+  `HYDRA_REMOTE_SETUP_BINARY` names a helper, so a development build can
+  provision from the Hosts tab with the unpinned helper the CLI's
+  `asset_unavailable` recovery asks for; the plan shows it as not a release
+  build, and only the provisioning command naming that same file is rerun.
 - The control centre's Hosts tab opens an onboarding operator view with `O`:
   discovered and qualified candidates with filters by state (new, qualified,
   failed, conflicting, revoked, reviewed, unknown, enrolled), source, platform,
@@ -229,8 +261,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `hydra-tui --headless-fixture FILE --remote-fixture FILE` composes a local
   and a remote fixture the way the live adapters do.
 
+- `make test-acceptance` runs the installed-build acceptance for the roadmap
+  items whose source has shipped but whose acceptance had to be observed by hand
+  (U1, U2, U3, U6, U7, U8, U9, U12, U13, U15, U17). The stdlib package
+  `scripts/acceptance/` installs a fresh prefix and reuses the usability runner's
+  journey and PTY observer helpers; each item's Acceptance sentences are checks,
+  and the HTML and JSON report is an acceptance matrix (item, bullet, check,
+  result, evidence) with retained snapshots, styled screens re-derived from the
+  raw bytes, `/proc` and Git/tmux inspections and PTY recordings. It covers
+  byte-identical repositories across open/configure/reopen, bootstrap-free
+  transcripts, scrollback and shell history at 80 and 140 columns with the agent's
+  `/proc/<pid>/environ` checked, conversations from an uninitialized repository
+  from the UI and from an interactive `hydra spawn`, measured flicker (raw PTY
+  bytes idle for 30 s, streaming, polling, pane switches and resizes replayed
+  through a bounded VT emulator: full clears, identical-cell repaints, blinks,
+  cursor moves), Details and Recovery wording for running, stopped and
+  terminal-gone heads, hinted keys delivered as real key events, empty,
+  single-agent and blocked multi-agent overview and coordination, in-app removal
+  including a partial bulk action, Statistics round trips and the
+  conversation-to-plan flow with exact revision and digest. `docs/ACCEPTANCE.md`
+  documents the cases, thresholds and the gates that still need a human; the
+  roadmap's delivery boundary table cites each item's automated acceptance.
+- The native PTY observer (`test-tui-pty`) writes a timestamped read index
+  (`terminal.index`) beside the flushed raw stream so phases of a recording can
+  be replayed and styled snapshots re-derived.
+
 ### Changed
 
+- Recovery rows say what a finding offers (`files kept`, `safe to clear`,
+  `cleanup preview`, `review first`) instead of its raw kind, and the finding's
+  kind, source path and confidence sit under a DIAGNOSTICS heading after the
+  plain-language account.
+- Details explain a stopped head in plain words: a head whose agent reported
+  its exit (or failure) and whose terminal is closed says so and that the
+  worktree's files are kept with `a` restarting the terminal, as the
+  terminal-gone account already did. Both accounts are two rows and the NEXT
+  group is two rows, so the account and every action fit 80x24 (the
+  terminal-gone Details previously pushed `x remove` below the panel).
+- The narrow (under 100 columns) Workspace plan footers name `Tab pane`, the
+  hinted way back to the agent pane after Ctrl-B Tab leaves its input.
 - tmux is documented as required only for interactive terminal operations; headless
   heads, exec, workflows, remote tasks, bootstrap, install and doctor run without it.
 - A workflow task step whose first submission a receiver refuses before acceptance
@@ -269,6 +338,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (honoured by `hydra fleet task` and `fleet list`), so a setup-created alias could
   not reach its host through its own client configuration; recorded destinations
   now carry both when bound, and existing records without them stay valid.
+
+- The bounded native-helper runner (`hydra snapshot --native` and the protocol
+  and version probes before it) no longer lets part of a timed-out helper's
+  subtree outlive the call. It signalled the helper's descendants from one
+  process-table walk, so a descendant that had already been reparented, or was
+  forked after the walk, was never signalled, and the parent stopped the
+  watchdog as soon as the helper itself exited, before its KILL pass. The helper
+  now runs in its own session (`setsid` where available) so a timeout signals
+  the whole subtree as one process group, with the process-table walk kept as the
+  fallback; after a timeout the call waits for the TERM, then KILL pass to finish
+  and until nothing of the subtree still runs. Exit codes, the `124` timeout
+  status and the named fallback reasons are unchanged.
+- `make test-parity` and `make test-tui-pty` no longer fail on a host whose init
+  reaps orphans on a schedule instead of at once (such as a container's PID 1):
+  the cases that check a terminated owner's descendants are gone treated an
+  already-dead descendant that still awaited init as alive. They now allow a
+  bounded reaping grace, and the parity case also covers a helper whose
+  descendant was orphaned before the timeout.
 
 ## [2.9.0] - 2026-09-28
 
