@@ -52,8 +52,8 @@ Failure has:
 required. Error `code`, `message`, and `recovery` are required strings. Envelope v1 is
 used by `init`, `capabilities`, `list`, `status`, `group status`, `recv`, `receipts`,
 `queue`, `lifecycle`, `wait`, `exec`, `diff`, `review`, `provenance`, `workflow`,
-`collision`, `resource`, `gate`, `du`, and `snapshot` where their help documents
-`--json`.
+`collision`, `resource`, `gate`, `du`, `snapshot`, `pool`, and `schedule` where their
+help documents `--json`.
 
 `json_escape` accepts POSIX C strings (there is no NUL). It escapes JSON syntax and
 C0 controls and preserves other UTF-8 bytes.
@@ -239,6 +239,105 @@ Integration manifests bind the target, initial target ref, ordered immutable
 candidates, gates, merge output, verification result, approval, and recovery action.
 Promotion revalidates those bindings under a project lock, updates only a local ref,
 and never pushes. See [workflows.md](workflows.md).
+
+## Pools and schedules
+
+Task pools and schedules (since 3.0.0) are project-scoped state v2 records
+beneath `$HYDRA_HOME/state/v2/projects/<project>/pools/<pool>/` and
+`.../schedules/<schedule>/`, created with private modes and inspectable as
+plain files. Pool and task names are validated workflow-style identifiers
+used as path keys. A pool holds `schema-version` (`1`), the sealed bounds
+manifest `manifest.json` (`{"schema_version":1,"pool","project_id",
+"created_at","bounds":{"max_tasks","max_outstanding","max_expansions",
+"max_artifact_bytes","max_repair_rounds","lease_seconds","retry"}}`) with its
+Git blob digest in `manifest-digest`, scalar counters (`task-count`,
+`expansion-count`, `expansion-open`, `artifact-bytes`, `repair-rounds`), the
+task `order`, `expansions/<n>/{state,tasks,manifest.json,manifest-digest}`
+(`manifest.json` is `{"schema_version":1,"pool","expansion","sealed_at",
+"task_count","artifact_bytes","tasks":[...]}`, written once at seal),
+`tasks/<id>/` and an append-only `events.jsonl` (schema 1 lines with
+`sequence`, `occurred_at`, `pool`, `task_id`, `type`, `detail`). Bounds and
+sealed manifests never change. A task directory holds `state` (`pending`,
+`ready`, `claimed`, `succeeded`, `failed`, `cancelled`, `recovery-required`),
+`kind` (`workflow` or `exec`), `definition` (an absolute workflow path or a
+head branch), `argv` (one element per line), `idempotent`, `retry`,
+`attempts`, `expansion`, `bytes`, `cancel-requested` when requested, the live
+`claim/` record (`pid`, `host`, `created_at`, `operation`, `worker`, `token`,
+`attempt`, `expires-at`) and `attempt-<n>/` evidence (`worker`, `claimed-at`,
+`outcome`, `source` of `worker`, `workflow-record` or `operator`, `decision`,
+`stale-at`, `run-id`, `exit-code`, `stdout`, `stderr`, `completed-at`).
+
+Claims are issued only under the pool lock (`pool_<project>_<pool>`), one
+task per claim, never above `max_outstanding`, and only from sealed
+expansions. A claim is stale when its lease expired or its owner pid is dead
+on the recording host; stale claims are resolved from recorded evidence
+alone. A terminal workflow run bound to the attempt is authoritative; an
+unknown outcome re-queues an idempotent task within its retry budget and
+otherwise yields `recovery-required` with no new attempt. Completion requires
+the live token (`stale_owner` otherwise) or, for `recovery-required` tasks, an
+explicit `--by` decision; operator `retry` consumes a repair round. Tasks are
+executed by the public `hydra workflow run` and `hydra exec` commands, so
+admission applies unchanged; pools add no scheduler.
+
+`pool create|status --json` return `data` with `pool`, `state`,
+`created_at`, `manifest_digest`, `bounds`, `usage` (`tasks`, `expansions`,
+`open_expansion`, `artifact_bytes`, `repair_rounds`, `outstanding`), `counts`
+per state, `drained`, `cancel_requested`, `expansions[]` (`number`, `state`,
+`task_count`, `manifest_digest`) and `tasks[]` (`task_id`, `state`, `kind`,
+`definition`, `argv`, `idempotent`, `retry`, `attempts`, `expansion`,
+`cancel_requested`, `claim` with `worker`, `host`, `pid`, `claimed_at`,
+`expires_at`, `stale` or null, `run_id`, `last_outcome`, `outcome_source`).
+`pool add` returns `pool`, `task_id`, `state`, `expansion`,
+`sealed_expansion`; `pool seal` returns `expansion`, `task_count`,
+`manifest_digest`; `pool claim` returns `claimed`, `reason` (`none`,
+`unsealed`, `outstanding_limit`, `pool_cancelled`), `token`, `lease_seconds`,
+`reconciled` and the claimed `task`; `pool complete` returns `task_id`,
+`outcome`, `state`; `pool cancel` returns `result` (`cancelled`, `signalled`,
+`terminal`) for one task or `cancelled` and `signalled` counts for the pool;
+`pool list` returns `pools[]`; `pool run` returns `worker`, `executed`,
+`stopped` and `results[]`. Error codes include `not_initialized`,
+`not_found`, `already_exists`, `growth_exhausted`,
+`artifact_bytes_exhausted`, `nothing_to_seal`, `not_claimed`,
+`stale_owner`, `invalid_state`, `repair_exhausted`, `pool_cancelled`,
+`head_not_found` and `busy`.
+
+A schedule holds `schema-version` (`1`), `manifest.json`
+(`{"schema_version":1,"schedule","project_id","created_at","every",
+"interval_seconds","submission":{"kind","workflow","pool"},"missed_policy",
+"catch_up_limit","reboot_recovery"}`) with `manifest-digest`, the same
+values as scalars, `last-slot`, `missed-total`, `firings/<token>/` (`slot`,
+`fired-at`, `trigger` of `run-now` or `catch-up`, `state` of `submitting`,
+`finished` or `failed`, `owner-pid`, `exit-code`, `run-id` or `task-id`,
+`stdout`, `stderr`, `completed-at`) and `events.jsonl`. Kinds are
+`workflow`, `pool-add` and `pool-run`. The dedup token of a firing is
+`<schedule>-<slot>` with `slot = now - now mod interval_seconds` (UTC), or an
+explicit `--token`; the firing directory is created under the schedule lock
+before submission, so a token submits at most once. Missed slots are the
+slots strictly between `last-slot` and the current slot; `skip` fires only
+the current slot, `catch-up` also fires the newest `catch_up_limit` missed
+slots in order. Timer text is a pure function of the schedule record,
+`HYDRA_HOME`, the repository root and the hydra binary path; paths with
+quotes, `%`, `\`, `<`, `>`, `&`, `$`, backquotes or whitespace are refused
+(`unsupported_path`). `schedule add|status --json` return `schedule`,
+`state`, `created_at`, `manifest_digest`, `every`, `interval_seconds`,
+`submission`, `execution_owner` (`timer-process` or `pool-worker`),
+`missed_policy`, `catch_up_limit`, `reboot_recovery`, `last_slot`,
+`next_slot`, `missed_total`, `firings[]` and `timer` (`crontab`, `systemd`,
+`launchd` text). `schedule run-now --json` returns `schedule`, `slot`,
+`fired[]`, `deduplicated[]` and `missed` (`policy`, `detected`,
+`caught_up`, `skipped`), exiting nonzero when a submission failed.
+
+Hydra never installs a timer or daemon. Unattended scheduling requires an
+always-on execution owner outside Hydra: the host timer service starts the
+firing process, which owns a `workflow` run or `pool-run` loop until it exits;
+a `pool-add` firing only enqueues and its owner is whoever runs `hydra pool
+run`. Reboot recovery is opt-in (`--reboot-recovery`: `@reboot`,
+`Persistent=true`, `RunAtLoad`) and only starts a new firing of the current
+slot; a service restart never replays in-flight work, an interrupted run is
+resumed only by an explicit `hydra workflow resume`, and a restarted
+coordinator reconciles unknown pool outcomes from evidence instead of
+inventing completion. Live cron, systemd and launchd installations are not
+qualified by Hydra's own tests; the generated text is.
 
 ## TUI protocols and parity
 

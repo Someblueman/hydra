@@ -194,6 +194,7 @@ the [planning examples](examples/planning/README.md).
 | Agent profiles and prompts | [Usage: agent profiles and inputs](docs/USAGE.md#agent-profiles-and-inputs) |
 | Workflows and guarded integration | [Workflows](docs/workflows.md) |
 | Agent-authored objectives and staged plans | [Workflows](docs/workflows.md) |
+| Task pools and host-timer schedules | [Workflows: pools and schedules](docs/workflows.md#pools-and-schedules) |
 | State, trust, and public interfaces | [Contracts](docs/CONTRACTS.md) |
 | Releases and upcoming work | [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) |
 

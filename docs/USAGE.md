@@ -339,6 +339,50 @@ hydra broadcast -g backend "git status" # type text into the group's target pane
 hydra wait-idle -g backend -s 10        # wait for ten seconds of terminal inactivity
 ```
 
+## Pools and schedules
+
+A pool is a file-backed queue of tasks that run through the ordinary
+`hydra workflow run` and `hydra exec` commands. Bounds are sealed when the
+pool is created; tasks become claimable once their expansion is sealed.
+
+```sh
+hydra pool create review --max-outstanding 2 --max-tasks 32   # seal the bounds
+hydra pool add review --workflow review-change                 # queue a workflow
+hydra pool add review --exec feature-x --idempotent --retry 1 -- make test
+hydra pool seal review                                         # freeze membership
+hydra pool run review --worker laptop                          # claim, run, report
+hydra pool status review --json                                # inspect the record
+hydra pool cancel review                                       # stop queued and claimed work
+```
+
+A worker that dies leaves a stale claim. The next `claim` or `run` reconciles
+it from evidence: a recorded workflow run decides, an idempotent task with
+budget is re-queued, and anything else waits as `recovery-required` for
+`hydra pool complete review <task> --by you --outcome succeeded|failed|retry`.
+Expert workers call `hydra pool claim review --worker w --owner-pid $$` and
+`hydra pool complete review <task> --token <token> --outcome succeeded`
+themselves; a token that no longer matches is refused as `stale_owner`.
+
+A schedule starts work from a host timer that you install yourself; Hydra
+prints the exact crontab, systemd or launchd entry and never runs a daemon.
+
+```sh
+hydra schedule add nightly --every 1d --workflow review-change   # prints the timer entry
+hydra schedule add inbox --every 15m --pool review --workflow review-change
+hydra schedule add drain --every 15m --pool review               # worker loop by timer
+hydra schedule status nightly --format systemd                   # reprint the units
+hydra schedule run-now nightly                                   # fire this slot by hand
+hydra schedule remove nightly                                    # then remove the timer entry
+```
+
+Each firing is `hydra schedule run-now <name>` with the current slot as its
+dedup token, so a double timer fire or a manual run in the same slot submits
+once. Missed slots are skipped by default; `--missed catch-up --catch-up-limit
+N` fires the newest N missed slots. `--reboot-recovery` adds the `@reboot`,
+`Persistent=true` or `RunAtLoad` entry; it starts a new firing after a
+restart and never replays work that was in flight. See
+[workflows](workflows.md#pools-and-schedules) for the owner contract.
+
 ## Shell completions
 
 ```sh

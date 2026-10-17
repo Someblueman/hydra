@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `hydra pool create|add|seal|claim|complete|cancel|status|list|run`: file-backed
+  task pools under `$HYDRA_HOME/state/v2/projects/<project>/pools/<pool>` with
+  private modes. `create` seals the bounds (tasks, outstanding claims,
+  expansions, definition bytes, repair rounds, lease, default retry) in a
+  digest-bound manifest; `add` appends workflow or exec tasks to the open
+  expansion and `seal` freezes its membership before any task can be claimed.
+  Claims are unique under the pool lock, carry the lock protocol's owner record
+  and a token, and never exceed the outstanding bound. A stale claim (expired
+  lease or dead owner) is reconciled from recorded evidence only: a terminal
+  workflow run decides, an idempotent task with budget is re-queued, and any
+  other unknown outcome becomes `recovery-required` for an explicit
+  `complete --by` decision (`retry` consumes a repair round). `run` is a worker
+  loop around the public `hydra workflow run` and `hydra exec` commands, so
+  admission is unchanged and no second scheduler exists; `cancel` stops queued
+  tasks and asks claimed work to stop through those commands.
+- `hydra schedule add|list|remove|run-now|status`: host-timer schedules that
+  print the exact crontab line, systemd user timer/service units and launchd
+  plist for you to install; Hydra never installs a daemon. Every firing is
+  `hydra schedule run-now <name>`, whose dedup token is the current slot, so a
+  double cron fire, a timer plus a manual run or competing firings submit once.
+  Submissions are a workflow run in the firing process, one sealed pool task,
+  or the pool worker loop. Missed slots are skipped by default or caught up
+  within `--catch-up-limit`; `--reboot-recovery` opts into `@reboot`,
+  `Persistent=true` and `RunAtLoad` entries that start a new firing after a
+  restart without replaying in-flight work. Help, bash/zsh/fish completions,
+  `--json` envelopes and `docs/CONTRACTS.md` schemas cover both commands.
+
 ## [2.9.0] - 2026-09-28
 
 ### Added
