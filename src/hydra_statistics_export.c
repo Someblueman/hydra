@@ -13,16 +13,6 @@ static const char *evidence_state(const struct hs_metric_summary *s) {
     return "known";
 }
 
-static void write_json_string(FILE *out, const char *value) {
-    const unsigned char *p;
-    fputc('"', out);
-    for (p = (const unsigned char *)value; *p; p++) {
-        if (*p == '"' || *p == '\\') fputc('\\', out);
-        if (*p < 0x20) fputc(' ', out); else fputc(*p, out);
-    }
-    fputc('"', out);
-}
-
 static void write_summary(FILE *out, const struct hs_metric_summary *s) {
     fprintf(out, "{\"state\":\"%s\",\"eligible\":%zu,\"known\":%zu",
             evidence_state(s), s->eligible, s->known);
@@ -131,10 +121,11 @@ static bool write_one(FILE *out, const struct hs_model *m,
     struct hs_summary cohort;
     hs_summarize(m, filter, &cohort);
     fprintf(out, "{\"schema_version\":%u,\"availability\":\"known\",\"observed\":%llu,\"filter\":{\"days\":%u,\"attention\":%s,\"query\":",
-            m->schema_version >= 3 ? 2U : 1U,
+            m->schema_version >= 5 ? 3U : m->schema_version >= 3 ? 2U : 1U,
             (unsigned long long)m->observed, filter->days, filter->attention ? "true" : "false");
-    write_json_string(out, filter->query);
-    fputs(",\"workflow\":", out); write_json_string(out, filter->workflow);
+    hs_json_string(out, filter->query);
+    fputs(",\"workflow\":", out); hs_json_string(out, filter->workflow);
+    if (m->schema_version >= 5) { fputs(",\"location\":", out); hs_json_string(out, filter->location); }
     fputs("},\"cohort\":{\"runs\":", out);
     fprintf(out, "%zu,\"steps\":%zu},\"metrics\":{", cohort.runs, cohort.steps);
     for (metric = HS_QUEUE; metric < HS_METRICS; metric++) {
@@ -155,8 +146,13 @@ static bool write_one(FILE *out, const struct hs_model *m,
     } else fputs(",\"unmeasured\":{\"unknown_receiver_outcomes\":null,\"manual_interventions\":null,\"network_transfer_bytes\":null}", out);
     fprintf(out, ",\"coverage\":{\"partial\":%s,\"partial_runs\":%zu,\"warnings\":%zu,\"last_warning\":",
             (m->warnings || cohort.partial_runs) ? "true" : "false", cohort.partial_runs, m->warnings);
-    write_json_string(out, m->warning);
-    fputs("},\"remote\":{\"state\":\"unavailable\",\"transfer_bytes\":null,\"provider_cost\":null,\"cpu_seconds\":null,\"memory_bytes\":null,\"tokens\":null}}", out);
+    hs_json_string(out, m->warning);
+    fputs("},", out);
+    if (m->schema_version >= 5) {
+        hs_write_remote_json(out, &cohort); fputc(',', out);
+        hs_write_cohorts_json(out, m, filter); fputc(',', out);
+        hs_write_telemetry_json(out, &cohort); fputc('}', out);
+    } else fputs("\"remote\":{\"state\":\"unavailable\",\"transfer_bytes\":null,\"provider_cost\":null,\"cpu_seconds\":null,\"memory_bytes\":null,\"tokens\":null}}", out);
     return !ferror(out);
 }
 
@@ -187,7 +183,7 @@ bool hs_write_metrics_compare_json(FILE *out, const struct hs_model *left,
     if (!out || !left || !right || !filter) return false;
     hs_summarize(left, filter, &lc); hs_summarize(right, filter, &rc);
     fprintf(out, "{\"schema_version\":%u,\"availability\":\"known\",\"left\":",
-            left->schema_version >= 3 || right->schema_version >= 3 ? 2U : 1U);
+            left->schema_version >= 5 || right->schema_version >= 5 ? 3U : left->schema_version >= 3 || right->schema_version >= 3 ? 2U : 1U);
     write_one(out, left, filter);
     fputs(",\"right\":", out);
     write_one(out, right, filter);

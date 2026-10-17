@@ -15,7 +15,7 @@ workflow_statistics_scalar() {
 }
 
 workflow_statistics_data() (
-    printf 'HYDRA_STATISTICS\t4\t%s\n' "$(date +%s)"
+    printf 'HYDRA_STATISTICS\t5\t%s\n' "$(date +%s)"
     _wst_root="$(workflow_runs_dir 2>/dev/null)" || { printf 'X\tProject identity unavailable\n'; printf 'Z\t0\t0\n'; return; }
     _wst_runs=0 _wst_steps=0
     for _wst_dir in "$_wst_root"/run_*; do
@@ -136,12 +136,32 @@ EOF
 }
 
 # Schema 4 U rows: one exec receipt per listed step (agent, version, model,
-# effort, tokens in/cached/out, cost in micro-USD). The native reader bounds
-# every field; "-" stays unknown. Steps outside the sample are not described.
+# effort, tokens in/cached/out, cost in micro-USD). Schema 5 adds T rows: one
+# per listed step whose latest attempt was dispatched as a remote task (host,
+# transport, placement, assignment generation, receiver state, telemetry
+# block 1 wall/CPU/peak RSS, transport calls and bytes, unmeasured reasons),
+# and a U row from the exec receipt collected with the remote result when the
+# step has no local one. The native reader bounds every field; "-" stays
+# unknown. Steps outside the sample are not described.
 workflow_statistics_usage() {
     _load_lib workflow_task
-    workflow_task_tool usage-tsv "$1" 2>/dev/null | while IFS='	' read -r _wsu_tag _wsu_step _wsu_rest; do
+    _wsu_seen=' '
+    _wsu_local="$(workflow_task_tool usage-tsv "$1" 2>/dev/null || true)"
+    _wsu_remote="$(workflow_task_tool remote-tsv "$1" 2>/dev/null || true)"
+    while IFS='	' read -r _wsu_tag _wsu_step _wsu_rest; do
         [ "$_wsu_tag" = usage ] || continue
-        case "$3" in *" $_wsu_step "*) printf 'U\t%s\t%s\t%s\n' "$2" "$_wsu_step" "$_wsu_rest" ;; esac
-    done
+        case "$3" in *" $_wsu_step "*) ;; *) continue ;; esac
+        case "$_wsu_seen" in *" $_wsu_step "*) continue ;; esac
+        _wsu_seen="$_wsu_seen$_wsu_step "
+        printf 'U\t%s\t%s\t%s\n' "$2" "$_wsu_step" "$_wsu_rest"
+    done <<EOF
+$_wsu_local
+$_wsu_remote
+EOF
+    while IFS='	' read -r _wsu_tag _wsu_step _wsu_rest; do
+        [ "$_wsu_tag" = remote ] || continue
+        case "$3" in *" $_wsu_step "*) printf 'T\t%s\t%s\t%s\n' "$2" "$_wsu_step" "$_wsu_rest" ;; esac
+    done <<EOF
+$_wsu_remote
+EOF
 }

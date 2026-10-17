@@ -129,8 +129,8 @@ $(BUILD_DIR)/test-workspace-child: tests/c/test_workspace_child.c | $(BUILD_DIR)
 test-workspace-pty: example-workspace build-tui $(BUILD_DIR)/test-workspace-child
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-pty"
 
-$(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c -o $@
+$(BUILD_DIR)/test-statistics: tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_statistics.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c -o $@
 
 .PHONY: test-statistics sanitize-statistics
 test-statistics: $(BUILD_DIR)/test-statistics build-tui
@@ -153,13 +153,13 @@ $(BUILD_DIR)/libhydra.o: src/libhydra.c src/libhydra.h | $(BUILD_DIR)
 $(BUILD_DIR)/libhydra.a: $(BUILD_DIR)/libhydra.o
 	$(AR) rcs $@ $<
 
-CORE_STATS_SOURCES = src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_export.c src/hydra_statistics_cli.c
+CORE_STATS_SOURCES = src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c src/hydra_statistics_cli.c
 
 $(BUILD_DIR)/hydra-core: src/hydra_core.c src/libhydra.h $(BUILD_DIR)/libhydra.a $(CORE_STATS_SOURCES) src/hydra_statistics.h
 	$(CC) $(CORE_CFLAGS) src/hydra_core.c $(CORE_STATS_SOURCES) $(BUILD_DIR)/libhydra.a -o $@
 
-$(BUILD_DIR)/test-statistics-export: tests/c/test_statistics_export.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_export.c src/hydra_statistics.h | $(BUILD_DIR)
-	$(CC) $(CORE_CFLAGS) tests/c/test_statistics_export.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_export.c -o $@
+$(BUILD_DIR)/test-statistics-export: tests/c/test_statistics_export.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c src/hydra_statistics.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_statistics_export.c src/hydra_statistics.c src/hydra_statistics_metrics.c src/hydra_statistics_cohorts.c src/hydra_statistics_export.c src/hydra_statistics_export_cohorts.c -o $@
 
 .PHONY: test-statistics-export
 test-statistics-export: build-core $(BUILD_DIR)/test-statistics-export
@@ -178,7 +178,7 @@ $(BUILD_DIR)/tui/%.o: src/tui/%.c
 TERMVIZ_SOURCES = $(filter-out src/termviz/tools/%,$(filter src/termviz/%.c,$(NATIVE_SOURCES)))
 TERMVIZ_HEADERS = $(wildcard src/termviz/*.h src/termviz/*.inc)
 TERMVIZ_OBJECTS = $(patsubst src/termviz/%.c,$(BUILD_DIR)/termviz/%.o,$(TERMVIZ_SOURCES))
-TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o $(BUILD_DIR)/hydra_statistics_metrics.o
+TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o $(BUILD_DIR)/hydra_statistics_metrics.o $(BUILD_DIR)/hydra_statistics_cohorts.o
 
 $(BUILD_DIR)/termviz/%.o: src/termviz/%.c
 	@mkdir -p "$(@D)"
@@ -472,6 +472,7 @@ test-retention: build-fleet
 
 test-workflow-metrics: build-fleet build-core
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-workflow-task-metrics"
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-workflow-task-cohorts"
 	"$(BUILD_DIR)/native-tests/test-statistics-export" "$(abspath $(BUILD_DIR))/hydra-core"
 
 test-plan-staged: build-fleet build-plan-precompile
