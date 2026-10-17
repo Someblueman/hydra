@@ -84,9 +84,10 @@ static json_object *withdraw(const char *task_id, const char *timeout) {
         code = json_object_get_boolean(f_field(response, "ok")) ? "not_withdrawn" : f_string(f_field(response, "error"), "code");
         f_string_add(withdrawal, "state", uncertain_code(code) ? "unknown" : "refused"); f_string_add(withdrawal, "code", code ? code : "unknown");
         if (json_object_get_boolean(f_field(response, "ok"))) {
-            json_object_put(response);
-            response = f_error("fleet-placement", "execution_owned", "the receiver did not record a withdrawal; running or claimed work is never migrated");
-            f_string_add(f_field(response, "error"), "task_state", state ? state : "unknown");
+            /* state and data are borrowed from response: use them before it is released. */
+            json_object *refusal = f_error("fleet-placement", "execution_owned", "the receiver did not record a withdrawal; running or claimed work is never migrated");
+            f_string_add(f_field(refusal, "error"), "task_state", state ? state : "unknown");
+            json_object_put(response); response = refusal; data = NULL;
         }
     }
     if (placement_record_write(record)) { json_object_put(response); response = f_error("fleet-placement", "io_failed", "the placement record could not be updated after the withdrawal request; inspect the receiver before transferring"); }
