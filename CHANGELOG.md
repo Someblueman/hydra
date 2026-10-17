@@ -238,8 +238,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `hydra-tui --headless-fixture FILE --remote-fixture FILE` composes a local
   and a remote fixture the way the live adapters do.
 
+- `make test-acceptance` runs the installed-build acceptance for the roadmap
+  items whose source has shipped but whose acceptance had to be observed by hand
+  (U1, U2, U3, U6, U7, U8, U9, U12, U13, U15, U17). The stdlib package
+  `scripts/acceptance/` installs a fresh prefix and reuses the usability runner's
+  journey and PTY observer helpers; each item's Acceptance sentences are checks,
+  and the HTML and JSON report is an acceptance matrix (item, bullet, check,
+  result, evidence) with retained snapshots, styled screens re-derived from the
+  raw bytes, `/proc` and Git/tmux inspections and PTY recordings. It covers
+  byte-identical repositories across open/configure/reopen, bootstrap-free
+  transcripts, scrollback and shell history at 80 and 140 columns with the agent's
+  `/proc/<pid>/environ` checked, conversations from an uninitialized repository
+  from the UI and from an interactive `hydra spawn`, measured flicker (raw PTY
+  bytes idle for 30 s, streaming, polling, pane switches and resizes replayed
+  through a bounded VT emulator: full clears, identical-cell repaints, blinks,
+  cursor moves), Details and Recovery wording for running, stopped and
+  terminal-gone heads, hinted keys delivered as real key events, empty,
+  single-agent and blocked multi-agent overview and coordination, in-app removal
+  including a partial bulk action, Statistics round trips and the
+  conversation-to-plan flow with exact revision and digest. `docs/ACCEPTANCE.md`
+  documents the cases, thresholds and the gates that still need a human; the
+  roadmap's delivery boundary table cites each item's automated acceptance.
+- The native PTY observer (`test-tui-pty`) writes a timestamped read index
+  (`terminal.index`) beside the flushed raw stream so phases of a recording can
+  be replayed and styled snapshots re-derived.
+
 ### Changed
 
+- Recovery rows say what a finding offers (`files kept`, `safe to clear`,
+  `cleanup preview`, `review first`) instead of its raw kind, and the finding's
+  kind, source path and confidence sit under a DIAGNOSTICS heading after the
+  plain-language account.
+- Details explain a stopped head in plain words: a head whose agent reported
+  its exit (or failure) and whose terminal is closed says so and that the
+  worktree's files are kept with `a` restarting the terminal, as the
+  terminal-gone account already did. Both accounts are two rows and the NEXT
+  group is two rows, so the account and every action fit 80x24 (the
+  terminal-gone Details previously pushed `x remove` below the panel).
+- The narrow (under 100 columns) Workspace plan footers name `Tab pane`, the
+  hinted way back to the agent pane after Ctrl-B Tab leaves its input.
 - tmux is documented as required only for interactive terminal operations; headless
   heads, exec, workflows, remote tasks, bootstrap, install and doctor run without it.
 - A workflow task step whose first submission a receiver refuses before acceptance

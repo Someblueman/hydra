@@ -628,7 +628,9 @@ static void render_recovery_detail(struct app *app) {
     /* Wrapped so long labels, such as a leftover worktree's path, stay readable. */
     paragraph(app, title, TV_STRONG);
     paragraph(app, detail, TV_BASE);
-    linef(app, "");
+    /* The raw kind, source path and confidence are diagnostics; the
+     * account above is what a user needs to decide. */
+    section(app, "DIAGNOSTICS");
     linef(app, "Check: %s", item->action);
     style(app, TONE_MUTED);
     linef(app, "Kind: %s   Source: %s   Confidence: %s", item->kind, item->source, item->confidence);
@@ -636,6 +638,17 @@ static void render_recovery_detail(struct app *app) {
     linef(app, "Enter runs the check and shows its output here; d returns to the list");
     if (!strcmp(item->kind, "orphan-worktree")) linef(app, "x removes this worktree after confirmation; the branch is kept");
     style(app, TONE_BASE);
+}
+
+/* What the finding offers, in plain words; the raw kind stays in diagnostics. */
+static const char *recovery_offer(const struct recovery *item) {
+    if (!strcmp(item->kind, "dead-session")) return "files kept";
+    if (!strcmp(item->kind, "stale-lock")) return "safe to clear";
+    if (!strcmp(item->kind, "orphan-worktree")) return "cleanup preview";
+    if (!strcmp(item->kind, "orphan-worktree-dirty")) return "review first";
+    if (!strcmp(item->kind, "teardown-failure")) return "finish or keep";
+    if (!strcmp(item->kind, "malformed-state")) return "check reports";
+    return "d explains";
 }
 
 static void render_recovery_row(struct app *app, size_t index) {
@@ -646,7 +659,7 @@ static void render_recovery_row(struct app *app, size_t index) {
     record_hit(app, index);
     if (selected) column(app, 0, app->content_width, TV_SELECTED, ">");
     column(app, 2, wide ? app->content_width - 22 : app->content_width - 2, selected ? TV_SELECTED : TV_WARNING, title);
-    if (wide) column(app, app->content_width - 18, 18, selected ? TV_SELECTED : TV_MUTED, item->kind);
+    if (wide) column(app, app->content_width - 18, 18, selected ? TV_SELECTED : TV_MUTED, recovery_offer(item));
     app->line++;
 }
 

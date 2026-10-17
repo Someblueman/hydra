@@ -93,8 +93,14 @@ static void detail_identity(struct app *app, const struct head *head) {
     if (owner != SIZE_MAX) detail_run_pair(app, owner, record);
     detail_group_label(app, head, group, sizeof(group));
     detail_reported(app, head, group);
-    if (!head_headless(head) && !strcmp(display_status(head), "STALE"))
-        paragraph(app, "The terminal is gone but the last observation said the agent was still working. Files in the worktree are kept; a restarts the terminal in the same worktree. Check the files before removing the head.", TV_WARNING);
+    if (head_headless(head)) return;
+    /* Two rows at most: with the two-row NEXT group the account fits 80x24. */
+    if (!strcmp(display_status(head), "STALE"))
+        paragraph(app, "The terminal is gone; the agent was last seen working. The worktree's files are kept: a restarts the terminal. Check them before removing it.", TV_WARNING);
+    else if (!strcmp(display_status(head), "STOPPED") && !strcmp(head->observed, "exited"))
+        paragraph(app, "The agent reported that it exited and its terminal is closed. Files in the worktree are kept: a restarts the terminal there.", TV_BASE);
+    else if (!strcmp(display_status(head), "STOPPED") && !strcmp(head->observed, "failed"))
+        paragraph(app, "The agent reported a failure and its terminal is closed. Files in the worktree are kept: a restarts the terminal there.", TV_WARNING);
 }
 
 static void detail_step_exec(struct app *app, const struct workflow_node *step) {
@@ -214,8 +220,7 @@ static void detail_next(struct app *app, const struct head *head) {
     }
     linef(app, "%s", head_terminal_gone(app, head) ? "a  restart its terminal (files are kept)   p  show recent terminal output" :
           "a  talk to the agent in the workspace     p  show recent terminal output");
-    linef(app, "c  coordination with other heads          x  remove this head");
-    linef(app, ":  more actions (diff, switch, approvals)  d  technical details");
+    linef(app, "c  coordination  x  remove this head  :  more actions  d  technical details");
 }
 
 /* Technical details: one group per kind of identity, each row labelled. */

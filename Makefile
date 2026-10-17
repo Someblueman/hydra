@@ -618,3 +618,10 @@ test-visual-lint: $(BUILD_DIR)/termviz-cells
 test-u10-loopback: build-fleet build-tui build-core $(BUILD_DIR)/termviz-cells
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" \
 		HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_u10_loopback.sh
+
+# Installed-build acceptance for the open roadmap items (docs/ACCEPTANCE.md):
+# one HTML+JSON matrix mapping each acceptance bullet to its checks and evidence.
+.PHONY: test-acceptance
+ACCEPTANCE_OUTPUT ?= $(BUILD_DIR)/acceptance-$(shell date +%Y%m%d-%H%M%S)
+test-acceptance: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
+	PYTHONPATH=scripts python3 -m acceptance --output "$(ACCEPTANCE_OUTPUT)" $(ACCEPTANCE_ARGS)
