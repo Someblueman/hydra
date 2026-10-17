@@ -1163,9 +1163,11 @@ aliases, installs Hydra or grants execution permission.
       and enrollment row for real `discover`, `enroll review` and `enroll status`
       output; recorded mixed ten-host and interrupted 50-host runs retain every
       row, success and unknown outcome; 100 candidates stay paged at 80x24 and
-      140x40; argv checks show a wrong or cancelled confirmation, a cancelled or
-      timed-out child and a retry key run nothing but a read-only status, the
-      apply runs once, and no bootstrap or trust command is ever composed;
+      140x40; argv checks show a wrong or declined confirmation runs nothing, a
+      cancelled apply or one that ends without a result is followed only by a
+      read-only status (Enter there reads status, never reapplies), each
+      confirmed apply runs once, an interrupted 50-host run is not reapplied on
+      opening, and no bootstrap, trust-key, `fleet init` or setup command runs;
       revoked identities are inspect-only. Not observed: onboarding a real
       multi-host fleet through the view, or its responsiveness on a slow live
       network; that stays an operator observation.
