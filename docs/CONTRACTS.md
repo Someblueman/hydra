@@ -678,7 +678,17 @@ complete, next}` (`status` is the first unfinished step's status, `done`, or
 local record after a `remove` plan is approved (`{removed, name, destination,
 record, summary, remote_left[], local_left[]}`); it never contacts the remote and
 fails with `setup_busy` or `setup_complete`. A step whose SSH connection failed
-adds OpenSSH's own reason as `data.ssh_error`. `remote-preflight` requirements are `{name, status, blocking,
+adds OpenSSH's own reason as `data.ssh_error`. Since 3.0.0 (additive), when the
+provision step recorded a Hydra version other than the running one, envelopes add
+`data.upgrade` and list rows `upgrade`: `{from_version, to_version, relation
+older|newer|different, previous_hydra, previous_prefix|null, summary}`; while the
+step is finished it is reported as the view-only status `upgrade_available`
+(never persisted), so `complete` is false and `next` names `remote provision`.
+That provision plan adds `upgrade` (`{from_version, to_version, previous_hydra,
+previous_prefix, previous_install, alias?{name, old_hydra, new_hydra, when}}`),
+which the provision step detail keeps; after the exact-version handshake the
+verify step reruns and the alias's `hydra` switches to `alias.new_hydra`.
+`remote-preflight` requirements are `{name, status, blocking,
 detail}` with an optional `suggestion` (an example command; Hydra never runs it).
 Plans are `remote-setup-plan` schema 1 approved by their SHA-256; exit statuses
 are 0, 1, 3 (approval required), 4 (outcome unknown) and 128+n.

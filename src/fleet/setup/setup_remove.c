@@ -85,9 +85,10 @@ static int delete_record(const struct setup_ctx *ctx) {
     return status;
 }
 static json_object *published(struct setup_ctx *ctx) {
-    char recovery[400];
+    char recovery[800];
     snprintf(recovery, sizeof(recovery), "this setup finished and published the remote alias %s; remove the alias with hydra "
-             "remote remove %s instead (the finished record then can be removed too)", ctx->name, ctx->name);
+             "remote remove %s instead (the finished record then can be removed too); to upgrade its Hydra run hydra remote "
+             "provision %s", ctx->name, ctx->name, ctx->name);
     return setup_error(ctx, "setup_complete", "a finished setup whose alias is in use cannot be removed", recovery, NULL);
 }
 static json_object *removed(struct setup_ctx *ctx, json_object *plan) {
@@ -102,8 +103,9 @@ static json_object *removed(struct setup_ctx *ctx, json_object *plan) {
 }
 json_object *setup_remove(struct setup_ctx *ctx, const char *approve) {
     const char *const argv[] = {"setup", "remove", ctx->name, NULL};
-    struct f_remote alias; char step[80]; json_object *plan, *result;
-    if (!setup_first_open(ctx, step) && !f_remote_load(ctx->name, &alias)) return published(ctx);
+    struct f_remote alias; json_object *plan, *result;
+    /* An offered runtime upgrade does not make a finished setup unfinished. */
+    if (setup_recorded_complete(ctx) && !f_remote_load(ctx->name, &alias)) return published(ctx);
     plan = plan_json(ctx);
     if ((result = setup_plan_gate(ctx, "remove", plan, approve, argv))) { json_object_put(plan); return result; }
     if (delete_record(ctx)) {

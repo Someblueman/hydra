@@ -29,6 +29,7 @@ static void sweep_finish(struct native_setup *s) {
         setup_listed_summary(&e->listed[i], r->summary, sizeof(r->summary));
         r->complete = e->listed[i].complete;
         r->remote_changed = e->listed[i].remote_changed;
+        r->upgrade = e->listed[i].upgrade[0] != '\0';
     }
 }
 
@@ -103,7 +104,8 @@ bool hosts_setup_selected(const struct app *app, size_t *record) {
     size_t count = hosts_rows(app, rows, sizeof(rows) / sizeof(rows[0]));
     if (app->host_selected >= count || rows[app->host_selected].kind != HOST_ROW_SETUP) return false;
     *record = rows[app->host_selected].index;
-    return !app->setup->records[*record].complete;
+    /* A finished setup offering an upgrade is neither edited nor removed here. */
+    return !app->setup->records[*record].complete && !app->setup->records[*record].upgrade;
 }
 
 void setup_row_text(const struct app *app, const struct host_row *row, char *name, size_t name_size, char *state, size_t state_size) {
@@ -157,6 +159,6 @@ void render_setup_hub(struct app *app) {
     for (i = 0; i < count && app->line < app->limit - 2; i++) hub_row(app, &rows[i], i);
     linef(app, "");
     if (app->remote_stale) paragraph(app, app->remote_error, TV_WARNING);
-    paragraph(app, count > 1 ? "Enter continues a host's setup; e edits and x removes an unfinished one. A set-up host's work appears in Work beside local heads; L filters by location."
+    paragraph(app, count > 1 ? "Enter continues a host's setup or upgrades its Hydra; e edits and x removes an unfinished one. A set-up host's work appears in Work beside local heads; L filters by location."
                              : "Press Enter or A to add a host. Its work then appears in Work beside local heads; L filters by location.", TV_MUTED);
 }

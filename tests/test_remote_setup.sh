@@ -407,6 +407,20 @@ upgrade_cases() {
     run 0 "$out" setup up2 --json
     has "$out" '"id":"alias","status":"skipped","detail":"alias already uses this install"'
     same_alias up2 "$fixture/up2.alias"
+    # A snapshot an older Hydra recorded as reusable (for its own version) is
+    # never reused as this version: provisioning runs instead.
+    write_upgrade_state up2 up-host2 "$new/bin/hydra" "$new/bin/hydra" "" \
+        "{\"host_key\":{\"status\":\"done\"},\"preflight\":{\"status\":\"done\",\"detail\":{\"alias_hydra\":{\"path\":\"$new/bin/hydra\",\"version\":\"2.9.0\",\"reusable\":true}}}}"
+    run 1 "$out" setup up2 --json
+    lacks "$out" '"id":"provision","status":"skipped"'; has "$out" '"code":"prerequisite_missing"'
+    same_alias up2 "$fixture/up2.alias"
+    # A setup finished by an older Hydra reports the runtime upgrade read-only.
+    write_upgrade_state up2 up-host2 "$new/bin/hydra" "$new/bin/hydra" "" \
+        '{"host_key":{"status":"done"},"preflight":{"status":"done"},"provision":{"status":"skipped","detail":{"hydra":"/old/bin/hydra","hydra_version":"2.9.0"}},"agents":{"status":"done"},"verify":{"status":"done"},"alias":{"status":"skipped"}}'
+    run 0 "$out" setup status up2 --json
+    has "$out" '"id":"provision","status":"upgrade_available"'; has "$out" '"relation":"older"'
+    has "$out" '"next":{"step":"provision","argv":\["hydra","remote","provision","up2","--json"\]'
+    run 1 "$out" setup remove up2 --json; has "$out" '"code":"setup_complete"'
 }
 
 for mask in 022 002; do
