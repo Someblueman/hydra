@@ -9,6 +9,7 @@ SHELL_TEST_EXCLUDES = \
 	tests/test_fleet_install.sh \
 	tests/test_task_package.sh \
 	tests/test_task_acceptance.sh \
+	tests/test_placement.sh \
 	tests/test_workflow_plan_task.sh \
 	tests/test_workflow_plan_v3.sh \
 	tests/test_headless_plan_adapter.sh \
