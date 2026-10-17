@@ -220,15 +220,19 @@ $(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c src/tui/transcri
 $(BUILD_DIR)/test-tui-setup: tests/c/test_tui_setup.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
+$(BUILD_DIR)/test-tui-setup-upgrade: tests/c/test_tui_setup_upgrade.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
+	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
+
 $(BUILD_DIR)/test-tui-onboarding: tests/c/test_tui_onboarding.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
-test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup $(BUILD_DIR)/test-tui-onboarding
+test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup $(BUILD_DIR)/test-tui-setup-upgrade $(BUILD_DIR)/test-tui-onboarding
 	$(BUILD_DIR)/test-tui-input
 	$(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-planning
 	$(BUILD_DIR)/test-tui-transcript
 	$(BUILD_DIR)/test-tui-setup tests/fixtures/tui/setup "$(abspath $(BUILD_DIR))/setup-screens"
+	$(BUILD_DIR)/test-tui-setup-upgrade tests/fixtures/tui/setup
 	$(BUILD_DIR)/test-tui-onboarding tests/fixtures/tui/onboarding "$(abspath $(BUILD_DIR))/onboarding-screens"
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_native_tui.sh
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_native_tui_i4.sh

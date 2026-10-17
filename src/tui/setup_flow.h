@@ -28,7 +28,8 @@ enum { SETUP_FIELD_DESTINATION, SETUP_FIELD_NAME, SETUP_FIELD_CONFIG };
 struct setup_field { char text[1024]; size_t cursor; };
 
 #define SETUP_RECORDS SETUP_LISTED_MAX
-struct setup_record { char name[128], summary[160], destination[256], config[1024]; bool complete, remote_changed; };
+/* upgrade: a finished setup whose host runs another Hydra (Enter upgrades it). */
+struct setup_record { char name[128], summary[160], destination[256], config[1024]; bool complete, remote_changed, upgrade; };
 
 struct setup_capture {
     pid_t pid;
