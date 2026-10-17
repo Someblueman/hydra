@@ -91,9 +91,12 @@ Upgrade the shell CLI and the native helpers (`hydra-core`, `hydra-tui`,
 `hydra-fleet`) together: the shell uses a native core or TUI only when it
 reports exactly the CLI's version, and otherwise falls back to the shell
 snapshot and the basic TUI. Upgrade a coordinator with or before its fleet
-hosts, then install the 3.0.0 runtime on each host (see
-[upgrading an enrolled alias](docs/FLEET.md#guided-remote-setup)) before relying
-on placement or withdrawal there.
+hosts, then install the 3.0.0 runtime on each host before relying on placement
+or withdrawal there: for a host set up with `hydra remote setup`, run `hydra
+remote provision NAME` and approve the upgrade plan (`--approve PLAN_SHA256`
+without a terminal); for a manually enrolled alias, run `hydra remote setup
+NAME` (or `hydra fleet bootstrap NAME` with a reviewed 3.0.0 package). See
+[Upgrading a host](docs/FLEET.md#upgrading-a-host).
 
 ### Added
 
@@ -473,6 +476,25 @@ on placement or withdrawal there.
   open. The addendum also records that the host admission lock refused 1 of 10
   and 14 of 20 simultaneous `exec` starts. Remote headless and macOS cells are
   recorded as unmeasured.
+- An upgrade path for hosts set up with `hydra remote setup` by an older Hydra.
+  When the provision step recorded another Hydra version, `hydra remote setup
+  status NAME` and `hydra remote setup list` report that step as
+  `upgrade_available` ("older Hydra (2.9.0) on this host; upgrade to 3.0.0")
+  with `data.upgrade` / `setups[].upgrade`, read-only, and name `hydra remote
+  provision NAME` as the next command instead of reporting the setup done.
+  Provisioning then plans the new pinned install (release asset checked against
+  `fleet-assets.tsv`, or the unpinned `--binary FILE`) beside the old prefix,
+  with a plan member `upgrade` naming both versions, the previous install,
+  which stays, and the alias's switch from the old to the new `bin/hydra`.
+  After approval and the exact-version handshake the verify step runs again and
+  only the alias's `hydra` path changes; a lost install response or a failed
+  re-verification reconciles on rerun without installing twice, and a finished
+  upgrade reruns as a no-op. `hydra remote setup remove` still refuses a
+  finished, published setup. The Hosts tab of `hydra tui` lists such a setup
+  with the same text and runs the same plan and approval flow. A preflight
+  snapshot that an older Hydra marked reusable is no longer reused as this
+  version when an enrolled alias is upgraded. See
+  [Upgrading a host](docs/FLEET.md#upgrading-a-host).
 
 ### Changed
 

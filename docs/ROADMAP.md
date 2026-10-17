@@ -354,7 +354,12 @@ an acceptance blocker, not optional cosmetic polish.
       approve the plans and sign in to a real provider on the VPS, then
       `hydra fleet spawn <name> --project /abs/project -- task --profile <agent>`
       and `hydra tui --location remote` to find it; a pinned release build needs no
-      `HYDRA_REMOTE_SETUP_BINARY`.
+      `HYDRA_REMOTE_SETUP_BINARY`. Upgrading a host that an older Hydra set up
+      (3.0.0): `hydra remote provision NAME` plans the new pin beside the old one
+      and switches the alias after re-verification
+      ([FLEET.md](FLEET.md#upgrading-a-host)); qualified over the fake SSH
+      boundary of `tests/test_remote_provision.sh` only. Upgrading the operator
+      VPS from its 2.9 setup has not been observed.
 - [ ] **U11 — One workspace across local and remote execution.** Unify ordinary
       and Fleet UI navigation, agent interaction, task details, attention and review.
       Represent local/remote as a visible location and filter within the same control

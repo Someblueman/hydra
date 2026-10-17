@@ -152,7 +152,9 @@ the previous install stays installed, and after approval (`hydra remote setup NA
 path, plus `accepted_host_key` if it was not recorded before; every other alias
 field is preserved and the record is replaced atomically. If the alias already
 uses a compatible install of this version, provisioning and the alias change are
-skipped. A new setup whose NAME is taken by an alias created meanwhile still fails
+skipped (a preflight snapshot that an older Hydra recorded is not reused as this
+version). A host that already has setup state is upgraded as described in
+[Upgrading a host](#upgrading-a-host). A new setup whose NAME is taken by an alias created meanwhile still fails
 with `alias_conflict`.
 
 Exit statuses: 0 done, 1 error, 3 approval required, 4 outcome unknown (reconcile
@@ -177,6 +179,75 @@ path, remove the prefix yourself and rerun provisioning twice:
 ssh ubuntu@build-host "rm -rf -- '/home/ubuntu/.local/share/hydra/fleet/DIGEST'"  # data.prefix
 hydra remote provision ovh    # nothing at the prefix: install_failed
 hydra remote provision ovh    # shows a fresh plan to approve
+```
+
+### Upgrading a host
+
+Upgrade the coordinator first (a 2.x coordinator refuses 3.x hosts), then each
+host. A 3.0 coordinator still talks to 2.9 hosts on fleet protocol 1, but
+automatic placement and withdrawal consider only hosts that advertise
+`task-withdraw` (3.0), and guided setup verifies the exact version it
+provisioned.
+
+**A host set up with `hydra remote setup`.** When the provision step recorded a
+Hydra version other than this one (`steps.provision.detail.hydra_version` in
+`$HYDRA_HOME/fleet/setup/NAME.json`), `hydra remote setup status NAME` and
+`hydra remote setup list` report the provision step as `upgrade_available`, for
+example "older Hydra (2.9.0) on this host; upgrade to 3.0.0", with
+`data.upgrade` (`setups[].upgrade` in the list) and the next command. These views
+are read-only and never connect to the host. Then:
+
+```sh
+hydra remote setup status ovh            # provision: upgrade_available
+hydra remote provision ovh               # shows the upgrade plan; y approves it
+hydra remote provision ovh --approve PLAN_SHA256   # without a terminal (exit 3 before)
+hydra remote setup status ovh            # complete; verify and alias done again
+```
+
+`hydra remote setup ovh` reaches the same plan. The plan is an ordinary
+provisioning plan (the pinned release asset checked against
+`share/hydra/fleet-assets.tsv`, or the unpinned helper given with `--binary
+FILE`, the new prefix `~/.local/share/hydra/fleet/DIGEST`) plus `upgrade`: the
+old and new version, the previous install and prefix, which stays installed, and
+the alias change from the old to the new `bin/hydra` when the alias still uses
+the previous install. After approval Hydra installs the new prefix beside the old
+one; once the new install answers the fleet handshake and `--version` with exactly
+this version, it re-runs the verify step and switches only the alias's `hydra`
+path (no other alias field changes, no second approval). A lost install response
+is `outcome_unknown` and the rerun reconciles the recorded prefix without
+installing again; a re-verification that fails leaves the alias on the old
+install, and rerunning `hydra remote provision ovh` re-verifies and switches it.
+A rerun after the upgrade is a no-op. A setup of the same version reports no
+upgrade, and a host recorded with a newer Hydra is offered this version beside
+it the same way. `hydra remote setup remove NAME` still refuses a finished setup
+whose alias is published (`setup_complete`). The Hosts tab of `hydra tui` lists
+such a setup with the same "older Hydra (2.9.0) on this host; upgrade to 3.0.0"
+row; Enter runs the same commands and shows the plan before anything changes.
+
+The old prefix is reported (`previous_prefix` in the plan and in the provision
+step's `upgrade` record) and is never removed by Hydra. Once no alias in `hydra
+remote list` uses it, remove it yourself if you want the space back:
+
+```sh
+ssh ubuntu@build-host "rm -rf -- '/home/ubuntu/.local/share/hydra/fleet/OLD_DIGEST'"  # previous_prefix
+```
+
+**A manually enrolled alias** (`hydra remote add`, `hydra fleet bootstrap`, no
+setup state) is upgraded through guided setup in upgrade mode, described in
+[Upgrading an enrolled alias](#guided-remote-setup) above:
+
+```sh
+hydra remote setup ovh                     # binds to the alias; shows each plan
+hydra remote setup ovh --approve PLAN_SHA256   # the final alias change, without a terminal
+```
+
+or by bootstrapping a reviewed package yourself, which also updates the alias's
+`hydra` path after its handshake:
+
+```sh
+hydra fleet package --source /path/to/hydra-3.0.0 \
+  --binary /path/to/hydra-fleet-3.0.0-linux-x86_64 --output /tmp/hydra-3.0.0.json
+hydra fleet bootstrap ovh --input /tmp/hydra-3.0.0.json --sha256 HASH
 ```
 
 **From the control centre.** `hydra tui` (not only `hydra fleet tui`) has a Hosts
