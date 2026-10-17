@@ -29,6 +29,9 @@ hydra_private_mkdir() (
 # components it creates are set to 0700, existing ones keep their mode.
 # Usage: hydra_private_mkdir_one <directory>
 hydra_private_mkdir_one() {
+    # macOS chmod takes no "--" (a mode may start with "-"), so a relative
+    # name that starts with "-" is passed as ./NAME instead.
+    case "$1" in -*) set -- "./$1" ;; esac
     [ -d "$1" ] && return 0
     case "$1" in
         */*) set -- "$1" "${1%/*}" ;;
@@ -36,11 +39,11 @@ hydra_private_mkdir_one() {
     esac
     [ -n "$2" ] || set -- "$1" /
     [ "$2" = "$1" ] || hydra_private_mkdir_one "$2" || return 1
-    if mkdir -- "$1" 2>/dev/null; then
-        chmod 700 -- "$1"
+    if mkdir "$1" 2>/dev/null; then
+        chmod 700 "$1"
     elif [ ! -d "$1" ]; then
         # Repeat the attempt so mkdir reports why it failed.
-        mkdir -- "$1"
+        mkdir "$1"
     fi
 }
 
