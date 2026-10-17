@@ -24,6 +24,9 @@ option() {
     return 1
 }
 
+# Every invocation, fleet or not, so a journey can prove what never ran.
+printf '%s\n' "$*" >> "$state/all.log"
+
 case "${1:-}:${2:-}" in
     tui:--onboarding-home)
         mkdir -p "$state/onboarding"
@@ -70,6 +73,10 @@ case "${1:-}:${2:-}" in
     enroll:apply)
         has reviewed || emit apply-wrong-digest.json 1
         [ "$(option --confirm "$@")" = "$(digest "$review_file")" ] || emit apply-wrong-digest.json 1
+        # slow_apply: the apply hangs until cancelled; broken_apply: it ends
+        # without an envelope. Either leaves its outcome uncertain.
+        if has slow_apply && ! has slow_apply_done; then mark slow_apply_done; echo $$ > "$state/slow.pid"; sleep 60; exit 1; fi
+        if has broken_apply; then exit 1; fi
         mark applied
         emit "$apply_file" 0 ;;
     *) exit 1 ;;

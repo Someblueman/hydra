@@ -67,11 +67,42 @@ static int calls(const char *prefix) {
     return count;
 }
 
+/* True when no invocation of the fake, fleet or not, contained TEXT. */
+static bool never_ran(const char *text) {
+    char path[4096], log[262144];
+    tv_format(path, sizeof(path), "%s/all.log", state);
+    tv_read(path, log, sizeof(log));
+    return strstr(log, text) == NULL;
+}
+
+/* The Hosts tab itself reads `remote setup list`; any other remote command
+ * (setup, trust-key, ...) would be a side effect of onboarding. */
+static bool only_remote_listing(void) {
+    char path[4096], log[262144];
+    const char *line;
+    tv_format(path, sizeof(path), "%s/all.log", state);
+    tv_read(path, log, sizeof(log));
+    for (line = log; line && *line; line = strchr(line, '\n') ? strchr(line, '\n') + 1 : NULL)
+        if (!strncmp(line, "remote ", 7) && strncmp(line, "remote setup list --json\n", 25)) return false;
+    return true;
+}
+
+static void no_side_commands(void) {
+    CHECK(never_ran("bootstrap") && never_ran("trust-key") && never_ran("fleet init") && only_remote_listing(),
+          "no bootstrap, trust or setup command ran");
+}
+
 /* The fake logs a call when it starts; wait for it rather than sample. */
 static bool wait_called(struct tv_session *s, const char *text) {
     double deadline = tv_now() + 6;
     while (!called(text) && tv_now() < deadline) tv_pump(s, .1);
     return called(text);
+}
+
+static bool wait_calls(struct tv_session *s, const char *prefix, int count) {
+    double deadline = tv_now() + 6;
+    while (calls(prefix) < count && tv_now() < deadline) tv_pump(s, .1);
+    return calls(prefix) == count;
 }
 
 static void capture(struct tv_session *s, const char *name) {
@@ -187,6 +218,69 @@ static void journey(int cols, int rows) {
     review(&s);
     apply(&s);
     tv_close(&s, "q", 0, 0);
+    no_side_commands();
+}
+
+/* Opens the view on a recorded export and a reviewed, unapplied intent. */
+static void open_reviewed(struct tv_session *s, const char *export_file, int cols, int rows) {
+    char from[4096], to[4096];
+    tv_format(to, sizeof(to), "%s/onboarding", state);
+    tv_mkdir(to);
+    tv_format(from, sizeof(from), "%s/%s", fixtures, export_file);
+    tv_format(to, sizeof(to), "%s/onboarding/qualification-1.json", state);
+    tv_copy(from, to, false);
+    tv_format(from, sizeof(from), "%s/intent-one.json", fixtures);
+    tv_format(to, sizeof(to), "%s/onboarding/intent-1.json", state);
+    tv_copy(from, to, false);
+    flag("qualified"); flag("reviewed");
+    launch(s, cols, rows);
+}
+
+static void confirm_apply(struct tv_session *s) {
+    char prefix[16];
+    memcpy(prefix, digest, 12); prefix[12] = '\0';
+    tv_send(s, "a");
+    tv_until(s, "Type at least the first 12 characters", 4);
+    tv_send(s, prefix);
+    tv_send(s, "\r");
+}
+
+/* An apply whose outcome is uncertain (cancelled, or ended without an
+ * envelope) is followed only by a read-only status; nothing reapplies it. */
+static void uncertain_apply(int cols, int rows) {
+    struct tv_session s;
+    char path[4096], pid[64];
+    reset("one");
+    flag("slow_apply");
+    open_reviewed(&s, "qualify-one.json", cols, rows);
+    CHECK(wait_called(&s, "enroll status --input"), "the reviewed intent's status is read on opening");
+    tv_send(&s, "i");
+    tv_until(&s, "ENROLLMENT INTENT", 4);
+    confirm_apply(&s);
+    tv_until(&s, "Applying the reviewed enrollment", 6);
+    capture(&s, "40-applying");
+    tv_send(&s, "c");
+    tv_until(&s, "Cancelled: Applying", 8);
+    CHECK(wait_calls(&s, "enroll status", 2), "a cancelled apply is followed by one status read");
+    tv_pump(&s, 1);
+    CHECK(calls("enroll apply") == 1 && calls("enroll status") == 2, "the cancelled apply is not rerun");
+    tv_format(path, sizeof(path), "%s/slow.pid", state);
+    tv_read(path, pid, sizeof(pid));
+    CHECK(pid[0] && kill((pid_t)atol(pid), 0) != 0, "the cancelled apply is gone");
+    capture(&s, "41-apply-cancelled");
+    flag("broken_apply");
+    tv_send(&s, "i");
+    tv_until(&s, "ENROLLMENT INTENT", 4);
+    confirm_apply(&s);
+    tv_until(&s, "no readable result", 8);
+    capture(&s, "42-apply-no-result");
+    CHECK(calls("enroll apply") == 2, "only the second explicit confirmation applied again");
+    tv_send(&s, "\r");
+    CHECK(wait_calls(&s, "enroll status", 3), "Enter on an apply without a result reads the status");
+    tv_pump(&s, 1);
+    CHECK(calls("enroll apply") == 2, "no apply follows on its own");
+    tv_close(&s, "\033\033q", 0, 0);
+    no_side_commands();
 }
 
 /* A hanging qualification is cancelled; nothing runs again on its own. */
@@ -216,18 +310,9 @@ static void cancel_running(int cols, int rows) {
  * outcome, paging reaches the last, the unknown outcome is isolated. */
 static void fifty(int cols, int rows) {
     struct tv_session s;
-    char from[4096], to[4096];
     reset("fifty");
-    tv_format(to, sizeof(to), "%s/onboarding", state);
-    tv_mkdir(to);
-    tv_format(from, sizeof(from), "%s/qualify-50-complete.json", fixtures);
-    tv_format(to, sizeof(to), "%s/onboarding/qualification-1.json", state);
-    tv_copy(from, to, false);
-    tv_format(from, sizeof(from), "%s/intent-one.json", fixtures);
-    tv_format(to, sizeof(to), "%s/onboarding/intent-1.json", state);
-    tv_copy(from, to, false);
-    flag("qualified"); flag("reviewed"); flag("applied");
-    launch(&s, cols, rows);
+    flag("applied");
+    open_reviewed(&s, "qualify-50-complete.json", cols, rows);
     tv_until(&s, "50 candidates", 6);
     CHECK(wait_called(&s, "enroll status --input"), "the recorded status is read on opening");
     see(&s, "outcome unknown");
@@ -252,7 +337,9 @@ static void fifty(int cols, int rows) {
     tv_until(&s, "ENROLLMENT INTENT", 4);
     see(&s, "50 hosts, progress recorded");
     capture(&s, "33-fifty-intent");
+    CHECK(calls("enroll apply") == 0, "an interrupted run with an unknown outcome is not reapplied on opening");
     tv_close(&s, "\033\033q", 0, 0);
+    no_side_commands();
 }
 
 int main(void) {
@@ -276,6 +363,7 @@ int main(void) {
     journey(140, 40);
     journey(80, 24);
     cancel_running(80, 24);
+    uncertain_apply(100, 30);
     fifty(140, 40);
     fifty(80, 24);
     {
@@ -284,7 +372,8 @@ int main(void) {
     }
     puts("PASS onboarding: Q qualifies a named alias into a recorded export, r reviews it into an intent with its bindings and "
          "exact apply command, a typed digest prefix applies it exactly once (a wrong prefix and Esc run nothing), status is read "
-         "through the CLI, a hanging qualification is cancelled without a rerun, fifty reviewed hosts keep every outcome with paging "
-         "and the state filter; 140x40 and 80x24");
+         "through the CLI, a hanging qualification is cancelled without a rerun, a cancelled or result-less apply is followed only "
+         "by a status read, no bootstrap or trust command runs, fifty reviewed hosts keep every outcome with paging and the state "
+         "filter and are not reapplied on opening; 140x40 and 80x24");
     return 0;
 }
