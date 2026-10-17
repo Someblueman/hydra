@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `hydra workflow plan expand <head> --run <run-id> --proposal <file> [--json]`
+  admits a bounded expansion of a finished schema 1 plan run (roadmap 9F). The
+  closed `hydra-plan-expansion-1` proposal names new nodes, dependencies on
+  sealed deliverables of earlier versions, new checks and the joins they feed;
+  it is lowered into an ordinary static plan whose bundle inputs are the exact
+  sealed bytes, compiled by the one compiler under the base run's own policy
+  (obligation, handoff, source, tool and scope checks unchanged) and recorded
+  as version N+1 under the head's private `planning/expansions/<run-id>/round-N/`
+  with its own digest. Each round runs once through `hydra workflow plan run
+  <round>/compiled.json --accept <sha256>`; a changed round, a changed sealed
+  dependency or a second execution is refused. The policy's new `expansion`
+  member bounds total nodes, work seconds, artifact bytes, rounds and repairs
+  per claim over the whole chain; exceeding any is one typed
+  `expansion_bound_exceeded` refusal, never a partial admission. The envelope
+  may only shrink (`authority_enlarged`). A retry restates an earlier claim
+  exactly and consumes its repair budget; restating a claim as new, changing a
+  claim while calling it a retry, retrying verified work, retrying or depending
+  on an outcome without a recorded terminal verdict, depending on failed or
+  untransportable bytes and skipped branches are all refused or reported rather
+  than completed. `expand <head> --run <run-id> [--json]` prints the chain with
+  recomputed claim, dependency, run and integrity states. Help and bash, zsh and
+  fish completions include the command; `make test-plan-expansion` runs the
+  native and public-CLI cases.
 - `hydra fleet discover|qualify --source KIND[:LOCATOR]` acquires one explicitly
   selected live inventory and feeds the existing candidate importer: `ssh-config`
   scans the literal `Host` names of `~/.ssh/config` (or a file) and its literal

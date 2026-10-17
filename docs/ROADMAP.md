@@ -738,10 +738,27 @@ Delivered: hierarchical patterns lowered into static graphs, staged experiments,
 finite manifest maps and conditional branches with fixed join membership, and
 qualified selective repair that requires fresh affected checks.
 
-- [ ] If staged plans are insufficient, admit proposed expansions through the same
+- [x] If staged plans are insufficient, admit proposed expansions through the same
       compiler and authority checks. Bound total graph growth, work, artifact bytes,
       and repair attempts; version expansions and freeze joins before scheduling.
       Keep new scientific questions distinct from retries of an unchanged claim.
+      *Delivered as `hydra workflow plan expand` (3.0) within local qualification:
+      a closed `hydra-plan-expansion-1` proposal is lowered into a static schema 1
+      plan whose bundle inputs are the sealed deliverable bytes, compiled by the
+      one compiler under the base run's own policy, recorded as version N+1 with
+      its own exact digest and run once through `plan run --accept`. The policy's
+      `expansion` bounds total nodes, work seconds, artifact bytes, rounds and
+      repairs per claim over the whole chain, refused whole as
+      `expansion_bound_exceeded`; the envelope only shrinks; joins are frozen in
+      the record and digest. Retries restate an unchanged claim and consume its
+      repair budget; restated, changed, verified or uncertain claims are refused.
+      Qualified by `make test-plan-expansion`: changed inputs, contracts and
+      acceptance rules, a changed source, failed branches, empty and over-bound
+      proposals, interrupted admission, exhausted round and repair budgets,
+      unknown outcomes, authority enlargement, retry-versus-new classification,
+      digest and approval invalidation and byte-identical chain replay. Local
+      schema 1 execution only: no remote hosts were exercised, and runtime
+      membership changes and late conditional evaluation remain unsupported.*
 
 Acceptance: changes invalidate exactly the evidence covered by the declared dependency
 model; unknown dependencies or unsupported effects make work ineligible for reuse.
@@ -758,9 +775,10 @@ lower at most eight members and boolean selection into fixed joins, including
 checked empty/all-skipped outputs. [Staged findings][h-staged] *(historical)* drive a
 separately compiled static graph only after their source, selection, results and
 public acceptance are reverified. Real two-stage outcomes cover empty, skipped,
-colliding-name and maximum-cardinality maps. Runtime membership changes, late conditional
-evaluation and dynamic expansion remain unsupported; rejection does not qualify
-those graph forms.
+colliding-name and maximum-cardinality maps. Bounded expansions (3.0) extend a
+finished local schema 1 run by admitted static rounds over sealed bytes; runtime
+membership changes and late conditional evaluation remain unsupported, and
+rejection does not qualify those graph forms.
 
 Research basis (8 September 2026): the review combined current Hydra code and bounded
 probes with [CWL typed workflows](https://www.commonwl.org/v1.2/Workflow.html),

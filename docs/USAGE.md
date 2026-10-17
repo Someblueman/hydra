@@ -169,6 +169,8 @@ hydra workflow plan evaluate ../left.json ../right.json [--estimates ../estimate
 hydra workflow plan observed run_ID > ../estimates.json
 hydra workflow plan decision record HEAD --select ../left.json 'reason' --reject ../right.json 'reason'
 hydra workflow plan decision show HEAD DECISION_ID --json
+hydra workflow plan expand HEAD --run run_ID --proposal ../expansion.json   # version N+1 of a finished run
+hydra workflow plan expand HEAD --run run_ID --json                         # the chain, bounds and claim states
 
 # Parallel safety and guarded integration
 hydra claim add feature-x --path 'lib/*' --access write --reason refactor --expires-at 1790000000

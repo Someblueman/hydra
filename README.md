@@ -192,6 +192,9 @@ Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
 fixed-graph scheduling and placement with ranges and explicit unknowns, `plan
 decision` records why one was selected and replays that comparison from its
 recorded inputs, and `make test-plan-eval` measures held-out planning quality.
+`hydra workflow plan expand` admits a bounded expansion of a finished run as a
+new version compiled under the same policy, with retries kept apart from new
+claims and every round run with its own exact digest.
 Planning does not call a model itself; an ordinary agent authors the proposal
 through the CLI. Plans carry their own inline agent prompts and proposal assets,
 bound by the acceptance digest, so planning never commits to your checkout. See the

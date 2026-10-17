@@ -352,6 +352,124 @@ input changed; a record whose bytes changed is refused as `invalid_decision`.
 Recording a decision validates, approves and executes nothing; the reasons are
 the generator's statements, not verified claims.
 
+### Expansions
+
+When a finished run's staged plan turns out to be insufficient, an expansion
+adds work to it without a second compiler or a dynamic scheduler. A proposal
+in the closed schema `hydra-plan-expansion-1` names new nodes, their
+dependencies on sealed deliverables of earlier versions, new checks and the
+joins the new branches feed:
+
+```sh
+hydra workflow plan expand <head> --run <run-id> --proposal expansion.json [--json]
+hydra workflow plan expand <head> --run <run-id> [--json]           # the chain so far
+hydra workflow plan run <round>/compiled.json --accept <sha256>     # one round, once
+```
+
+`<run-id>` is the base run (a schema 1 plan run) and `<head>` the head whose
+private planning state keeps the chain, `planning/expansions/<run-id>/round-N/`.
+The base run's policy must declare `expansion` bounds; without them nothing
+authorizes an expansion (`expansion_not_authorized`). The proposal has
+`schema_version` 1, `expansion` `"hydra-plan-expansion-1"`, `base_sha256` (the
+digest of the chain's latest version; a stale one is `stale_base`), `claims`,
+`dependencies`, `joins`, the new `steps`, `deliverables`, `requirements`,
+`checks`, optional `obligations`, `data.steps` and an optional `envelope`.
+
+A one-branch round that consumes the base run's sealed `report` deliverable
+as bundle input `base` and feeds the join `compose1`:
+
+```json
+{"schema_version": 1, "expansion": "hydra-plan-expansion-1",
+ "base_sha256": "<latest compiled digest from expand --json>",
+ "claims": [{"id": "second", "kind": "new"}],
+ "dependencies": [{"input": "base", "deliverable": "report"}],
+ "joins": ["compose1"],
+ "steps": [
+  {"id": "spawn1", "role": "work", "kind": "spawn", "needs": [], "writes": [], "args": {"branch": "plan-expansion-1"}},
+  {"id": "compose1", "role": "compose", "kind": "exec", "needs": ["spawn1"], "writes": [],
+   "args": {"head": "plan-expansion-1", "argv": ["sh", "expansion-compose.sh"], "timeout": 30}},
+  {"id": "verify1", "role": "verify", "kind": "exec", "needs": ["compose1"], "writes": [],
+   "args": {"head": "plan-expansion-1", "argv": ["sh", "expansion-check.sh", "second"], "timeout": 30}}],
+ "deliverables": [{"id": "report2", "description": "Second report", "step": "compose1", "output": "report", "destination": "run-artifact"}],
+ "requirements": [{"id": "second", "criterion": "Second report equals the base report", "deliverable": "report2", "check": "check2"}],
+ "checks": [{"id": "check2", "method": "executable", "definition": "Compare with base report", "step": "verify1",
+   "input": "subject", "report": "check", "deliverable": "report2"}],
+ "data": {"steps": {
+  "compose1": {"inputs": {"base": {"input": "base"}}, "outputs": {"report": {"type": "file", "path": "report.txt", "max_bytes": 1024}}},
+  "verify1": {"inputs": {"subject": {"step": "compose1", "output": "report"}, "expected": {"input": "base"}},
+              "outputs": {"check": {"type": "object", "path": "check.json", "max_bytes": 2048}}}}}}
+```
+
+```sh
+hydra workflow plan expand plan-smoke --run "$RUN" --proposal round1.json --json   # data.compiled, data.compiled_sha256
+hydra workflow plan show "$COMPILED" --json                                         # review the round as any plan
+hydra workflow plan run "$COMPILED" --accept "$SHA256"                              # prints the round's run ID
+hydra workflow plan result "$ROUND_RUN"                                             # the ordinary result gate
+```
+
+Admission lowers the proposal into an ordinary schema 1 plan: the base
+objective and assumptions, `id` `<base-id>-rN`, the proposal's records, and
+`data.inputs` with one bundle input per dependency whose text is the exact
+sealed bytes of that deliverable. It compiles that plan with the one compiler
+under the base run's own policy, so the 9A obligation checks, the 9B handoff
+checks, the tool, effect and write-scope checks and the source binding apply
+unchanged; the checkout must be at the base run's bound commit
+(`source_changed`). The round is recorded as version N+1 with its own exact
+digest, and execution is the ordinary `workflow plan run` with that digest: a
+changed round no longer admits it (`acceptance_mismatch`, `invalid_chain`), a
+round whose consumed bytes changed does not execute (`dependency_changed`), and
+a round executes once (`round_executed`); an interrupted run is resumed with
+the ordinary workflow commands, never re-admitted. Authority never enlarges:
+the policy is inherited verbatim and the expansion envelope (the base plan
+envelope by default) may only shrink; a write scope may additionally name a
+head the expansion itself spawns, under the policy's `@spawned:*`
+(`authority_enlarged`).
+
+The policy's `expansion` object declares `max_nodes`, `max_work_seconds` (sum of
+exec timeouts), `max_artifact_bytes` (sum of envelope `artifact_bytes`),
+`max_rounds` and `max_repairs_per_claim`, each a total over the base run and
+every admitted round. Exceeding any bound is one typed refusal,
+`expansion_bound_exceeded` with `data.bound`, `used` and `max`; nothing partial
+is admitted. `joins` lists the steps where the new branches converge; each
+needs members, every other new node must feed or follow one, and the recorded
+membership is frozen in the round's record and digest, so nothing joins or
+leaves at run time. A failed member leaves its join and everything behind it
+cancelled: the round fails, no delivery exists and the chain reports the claim
+as `fail`.
+
+Each requirement of a proposal is a claim: `{"id", "kind": "new"}` asks a
+question no earlier version asked, `{"id", "kind": "retry", "of": <earlier
+requirement>}` restates an earlier claim exactly (same criterion, same check
+method and definition) and consumes that claim's repair budget. A new claim
+whose criterion an earlier requirement already states is refused
+(`claim_restated`), a retry that changes the criterion or the acceptance rule is
+refused (`claim_changed`), a retry of a verified claim duplicates verified work
+(`duplicate_work`), a retry of a claim without a recorded terminal verdict is
+refused (`unknown_outcome`), and a retry names the original claim, never an
+earlier retry (`retry_of_retry`). Deliverable, requirement and check IDs stay
+unique over the whole chain (`duplicate_id`).
+
+Dependencies follow the declared dependency model through the sealed receipts
+of earlier runs: a deliverable is eligible when its producer succeeded, its
+bytes still match the sealed receipt and every check on it passed in a run with
+a recorded terminal state. A deliverable no version declares is
+`unknown_dependency`, a failed or invalid verification is `dependency_failed`,
+bytes that cannot travel as a bundle input (not UTF-8 text, NUL bytes, over
+64 KiB) are `unsupported_artifact`, and a run without a recorded terminal
+outcome (running, stale, recovery-required, or an admitted round that has not
+run) blocks dependents with `unknown_outcome` rather than guessing. The record
+notes the producer closure's effects (`artifact_only`, `declared_writes`,
+`agent`) for review.
+
+`expand <head> --run <run-id>` prints the chain: bounds used over every version,
+each round's digest, run and recorded terminal state, every claim with its
+recomputed status (`pass`, `fail`, `invalid`, `unknown`, `not_executed`), every
+dependency as `intact`, `changed` or its current status, and the frozen joins.
+Statuses are recomputed from the run records on every call, so unchanged
+state prints identical bytes and tampered files show as `expansion_changed`
+with `integrity` `invalid`. The supported form is local schema 1 execution;
+runtime membership changes and late conditional evaluation remain unsupported.
+
 ### Planning evaluation
 
 `make test-plan-eval` (or `python3 scripts/plan-eval.py --execute 1`) measures
