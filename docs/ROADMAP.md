@@ -948,16 +948,25 @@ lost-response reconciliation. No live host, provider, vendor discovery client or
 provider credential path is qualified; discovery never accepts keys, creates
 aliases, installs Hydra or grants execution permission.
 
-- [ ] **H4 — Opt-in live inventory acquisition and snapshot diffs.** Acquire one
-      selected mDNS/DNS-SD, VPN, cloud or configuration-management source through
-      its normal client/API and feed the existing candidate importer. Choose the
-      first source and account/network scope when selecting implementation. Keep
-      credentials outside records, bound acquisition time/bytes/rate, and expose
-      cache age plus added/removed/changed/conflicting candidates before selection.
-      Acceptance: stale cache, unavailable credentials, partial responses, source
-      disappearance and identity conflicts preserve provenance and do not widen
-      selection or mutate enrollment intent. Fixture coverage and separately
-      authorized live-source qualification are reported independently.
+- [x] **H4 — Opt-in live inventory acquisition and snapshot diffs.** Delivered
+      within local fixture qualification: `fleet discover|qualify --source` acquires
+      an explicitly selected `ssh-config[:FILE]` scan (literal `Host` names, then
+      the normal `ssh -G` resolution), an `ansible-inventory:FILE` INI hosts file
+      read through the operator's own files, or `dns-sd[:DOMAIN]` through one
+      terminating `avahi-browse` run, and feeds the existing candidate importer.
+      Each source records its account/network scope and client, runs once per
+      invocation within `--timeout`, 1 MiB and 100 records, keeps credentials out
+      of records (counted as omitted), and is diffed against its previous private
+      snapshot: cache age plus added/removed/changed/conflicting records are
+      reported before selection (`--diff`, `--json`). Fixture coverage (`make
+      test-discovery` live cases, `tests/test_revocation.sh`): stale cache, missing
+      file or client, timeout, partial output, source revocation, identity
+      conflicts and revoked identities preserve provenance, import nothing by
+      default and leave enrollment intents untouched. Not observed: any live mDNS
+      network, a real Ansible-managed inventory or `avahi-browse` on a real LAN;
+      that live-source qualification needs a separately authorized operator run
+      and is not claimed. VPN and cloud-tag live clients remain snapshot-only
+      (schema-2 inventories).
 
 - [ ] **H5 — Onboarding operator view and workflow qualification.** Add filters,
       candidate details, snapshot changes and per-host apply/resume/reconcile
@@ -969,17 +978,27 @@ aliases, installs Hydra or grants execution permission.
       success and unknown outcome; 100-host views remain bounded and responsive.
       No UI retry replays an uncertain mutation or silently bootstraps a host.
 
-- [ ] **H6 — Scoped revocation and reviewed key rotation.** Define explicit local
-      revocation for candidate/source, transport, package and project decisions,
-      retaining who/when/reason and the superseded binding under existing state
-      conventions. Re-import cannot revive a revoked identity silently. A changed
-      key shows old/new fingerprints and observation provenance; acceptance uses
-      the operator's OpenSSH process and requires fresh enrollment review.
-      Acceptance: revoked bindings block new operations and invalidate pending
-      intents; alias reuse, endpoint changes and source refresh cannot bypass the
-      block. Existing accepted tasks/evidence remain inspectable. Revocation alone
-      never cancels tasks, uninstalls packages, deletes remote state or rewrites
-      known_hosts; those actions retain their own explicit authorization.
+- [x] **H6 — Scoped revocation and reviewed key rotation.** Delivered within
+      local fixture qualification: `fleet revoke candidate|source|transport|
+      package|project ID --reason TEXT` records a final, private revocation
+      (`$HYDRA_HOME/fleet/revocations/SCOPE/`, owner-only like other fleet state)
+      with who/when/reason and the superseded binding (alias record with its
+      accepted key, candidate target, source cache summary, project aliases);
+      `fleet revoke list` shows them. Re-import from any inventory or live source
+      shows a revoked identity as `revoked`, never as a fresh candidate, and a
+      conflicting record is never imported. A changed key reports presented and
+      recorded fingerprints with observation provenance in `qualify`, `enroll
+      apply` and `remote trust-key`; acceptance stays the operator's `ssh-keygen
+      -R` plus a fresh review. Verified (`make test-discovery`, `make
+      test-enrollment`, `build/test-fleet`, `tests/test_revocation.sh`): revoked
+      bindings block fleet operations, task submission, alias reuse, re-setup,
+      enrollment publication and `--project`/package use, invalidate pending
+      apply rows before any connection, and survive endpoint changes and source
+      refresh; enrolled rows, alias records and prior qualification evidence stay
+      inspectable; revocation cancels no task, uninstalls nothing, deletes no
+      remote state and leaves `known_hosts` byte-identical. Not observed: a real
+      host key rotation on a live host or the TUI onboarding view (H5), which
+      stays open.
 
 Dependencies: H4–H6 build on the H1–H3 records, the existing strict OpenSSH policy,
 versioned handshake, package/bootstrap, fleet-init/trust and remote-task contracts
