@@ -219,6 +219,58 @@ records also require nonempty rubric, source locators, disagreement, and authori
 review fields. Assessment records bind the same definition-and-arguments recipe
 digest, but do not claim machine verification of rubric correctness.
 
+`workflow plan evaluate` (schema 1, `analysis` `hydra-plan-evaluate-1`) adds
+to the `compare` fields three sections, `decomposition`, `scheduling` and
+`placement`, each with `left`, `right`, `modeled_preference` (`left`, `right`,
+`unresolved`, or `not_assessed` for placement) and `reason`. Decomposition rows
+carry `nodes`, `edges`, `required_nodes`, `unconnected_nodes`,
+`validation_effort` (`checks`, `obligations`, `verify_steps`,
+`verify_milliseconds`, `verify_cost_microunits`), `transfers` (`artifact_inputs`,
+`cross_head_inputs`, `declared_max_bytes`, `observed_bytes`) and `rework_risk`
+(`retry_budget`, `repair_budget`, `repair_scope`, `probability`, `basis`).
+Scheduling rows carry `depth_nodes`, `max_level_width`, `hard_budgets`
+(`parallelism`, `timeout_seconds`, `max_heads`, copied from the envelope),
+`critical_path_milliseconds`, `total_work_milliseconds`, `cost_microunits`,
+`time_to_verified_result_milliseconds`, `cost_to_verified_result_microunits`,
+`estimate_budget_conflict` and the supplied `estimates`. Placement rows carry
+`hosts` and `heads_created`. Range fields are `[low, high]` integer arrays or
+`null`; `observed_bytes` and `probability` are always `null`. `evaluate` accepts
+an estimates file that names only one of the two digests. `workflow plan
+observed <run-id>` prints an estimates document (schema 1) bound to the run's
+compiled digest with one `milliseconds` range per step that has a completed
+attempt and no cost rows.
+
+A planning decision record (`planning/decisions/<id>/decision.json`, schema 1,
+`record` `hydra-plan-decision-1`) is canonical JSON with `recorded_at`,
+`compiler`, `analysis`, `policy` (`schema_version`, `sha256`), `hard_budgets`
+(the selected plan's envelope), `estimates` (`sha256`, `input`, both null without
+estimates), `selected` (`sha256`, `reason`, `input`, `estimate_budget_conflict`),
+`rejected` (rows with `sha256`, `reason`, `input`, `evaluation_sha256` and the
+full `evaluation`) and `limits`. `<id>` is the first sixteen hex characters of
+the record file's SHA-256; `inputs/<sha256>.json` holds each alternative's
+canonical compiled artifact and `inputs/estimates.json` the canonical estimates.
+`decision show --json` returns `decision_id`, `record` and `replay` (`status`
+`reproduced` or `diverged`, `comparisons` rows with `rejected_sha256`,
+`recorded_sha256`, `replayed_sha256`, `reproduced`, and `method`); a record whose
+bytes or ID changed fails with `invalid_decision`. `decision list --json` returns
+`decisions` rows (`decision_id`, `recorded_at`, `selected_sha256`, `rejected`,
+`replay`). Recording refuses `estimate_budget_conflict`, `duplicate_alternative`,
+`invalid_alternative`, `invalid_reason` and `invalid_estimates`.
+
+The planning evaluation report (`build/plan-eval/report.json`, schema 1,
+`report` `hydra-plan-eval-1`) records `source_commit`, `archive` (`commit`,
+`files` digests, `verified`), `matched_contract`, `case_set`, `planning` (per arm
+and candidate: `interfaces.declared` and `interfaces.adapted` with `accepted`,
+`total`, `by_class`, `by_source`, `cases`, `repeats`, `distinct_outcomes`),
+`validation` (`false_rejections`, `false_acceptances`, `incorrect_rejected`,
+`incorrect_total`, `by_class`, `controls`), `execution` (`compiled`, `runs` with
+`verified_outcome`, `as_expected`, `wall_seconds`,
+`time_to_verified_result_milliseconds`, `cost`, `human_corrections`,
+`repeated_work`), `scheduling` (`structural`, `executed`, `calibration`),
+`calibration`, `human_corrections`, `stochastic_variability`, `failures`,
+`status` and `limits`. Unobserved quantities are `null` or `unknown` strings,
+never estimates.
+
 Workflow definition schema v1 is the stable finite-DAG contract. Definitions use the
 documented restricted YAML subset, every step declares idempotency, argv is the
 default execution form, and shell strings require both `allow_shell: true` and a
@@ -494,6 +546,12 @@ lock, `planning/returned` (the SHA-256 of the current draft) and `planning/feedb
 without `--local-policy`) refuses, and so does a launch associated with the head.
 A successful `propose` removes both files. The TUI types the feedback into the
 agent's attached pane without submitting it.
+
+`hydra workflow plan decision record <head> ...` writes, under the head lock,
+one private `planning/decisions/<id>/` directory per decision (see the decision
+record schema above); `decision list` and `decision show` are read-only and
+create no planning state. A decision is a recorded reason, not a validation,
+approval or execution receipt.
 
 The private launch owner `hydra workflow plan --workspace-owner <sha256>
 [<head-id> <instance-id>]` reads the compiled snapshot on stdin. The optional pair

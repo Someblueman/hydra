@@ -286,3 +286,106 @@ item to a collapsed Seen group and out of the count, and lasts until the item
 changes. An approval that is marked seen stays listed until someone decides.
 The Statistics view (`D`) shows the same token counts per step and run, with
 totals for the selected range; CPU and memory are not measured.
+
+### Inspecting, evaluating and deciding between compiled plans
+
+`hydra workflow plan explain <compiled.json>` reports every node with its
+dependencies, inputs, writes and the deliverables and checks it reaches; an edge
+that creates a head or supplies an artifact says so, other edges are "declared
+order; purpose not formalized", and a node that reaches no outcome is marked for
+review. `hydra workflow plan compare <left.json> <right.json>` reports structural
+counts, changed sections and changed check bindings between two compiled
+artifacts, and whether their scope matches (same objective, requirements, checks,
+deliverables, obligations, envelope, data, policy, source and context).
+
+`hydra workflow plan evaluate <left.json> <right.json> [--estimates <file>]`
+separates three concerns of the same comparison and reports each with its own
+`modeled_preference` (`left`, `right`, `unresolved` or `not_assessed`) and reason:
+
+- **decomposition**: nodes, edges, required and unconnected nodes, validation
+  effort (checks, obligations, verify steps and, with estimates, their time and
+  cost ranges), transfers (artifact inputs, cross-head inputs, the declared
+  `max_bytes` bound; observed bytes stay `null`) and rework risk (the declared
+  retry and repair budgets and repair scope; `probability` is always `null`).
+  Under matched scope a preference needs fewer unconnected nodes, cross-head
+  transfers or verify steps with nothing worse.
+- **scheduling** of the fixed graph: depth in nodes, the widest level, the hard
+  budgets copied from the envelope, critical path, total work, cost,
+  `time_to_verified_result_milliseconds` (the longest estimated path ending at
+  a check step over required nodes only) and `cost_to_verified_result_microunits`
+  (summed over required nodes). A preference needs non-overlapping critical-path
+  ranges with no cost disadvantage.
+- **placement**: declared hosts and heads created; always `not_assessed`, since
+  only local execution is implemented.
+
+Every estimate-derived figure is a range or `null`; a missing step estimate keeps
+the aggregates that need it unknown. Hard budgets are never changed by estimates:
+an estimate whose lower bound exceeds a timeout sets `estimate_budget_conflict`
+and leaves the preference unresolved. No preference claims semantic adequacy or
+global optimality.
+
+Estimates use the closed schema `{"schema_version": 1, "plans": {"<sha256>":
+{"source", "cost_unit", "steps": {"<id>": {"milliseconds": [lo, hi],
+"cost_microunits": [lo, hi]}}}}}` bound to the exact compiled digests;
+`evaluate` accepts a file that names only one of the two plans and keeps the
+other unknown, `compare` and `explain` need every inspected digest.
+`hydra workflow plan observed <run-id> > estimates.json` writes that document
+from a run's recorded step durations: one observation per step, as the range
+`[d-1, d+1]` seconds in milliseconds because timestamps have one-second
+resolution, `cost_unit` `unrecorded` and no cost rows (provider cost is never
+recorded), with steps that have no completed attempt omitted. The `source` text
+names the run and how many steps had repeated attempts.
+
+Each selected or rejected alternative is recorded with
+`hydra workflow plan decision record <head> --select <compiled.json> <reason>
+[--reject <compiled.json> <reason>]... [--estimates <file>] [--json]`. The record
+lives under the head's private `planning/decisions/<id>/` with the exact canonical
+inputs (`inputs/<sha256>.json`, `inputs/estimates.json`), the reasons, the
+compiler and analysis versions (`hydra-plan-1`, `hydra-plan-evaluate-1`), the
+policy digest, the selected plan's hard budgets and the full `evaluate` output
+for every rejected alternative. Selecting a plan whose estimate exceeds its own
+hard budget is refused with `estimate_budget_conflict`. `decision list <head>
+[--json]` lists the records, and `decision show <head> <id> [--json]` recomputes
+every comparison from the recorded inputs and reports `replay.status`
+`reproduced` when the canonical output matches byte for byte, `diverged` when an
+input changed; a record whose bytes changed is refused as `invalid_decision`.
+Recording a decision validates, approves and executes nothing; the reasons are
+the generator's statements, not verified claims.
+
+### Planning evaluation
+
+`make test-plan-eval` (or `python3 scripts/plan-eval.py --execute 1`) measures
+planning quality on a held-out case set. It exports the archived finite pilot from
+Git history at commit `b0fb5b1d` and refuses to continue if any byte differs from
+`examples/planning/evaluation/archive-manifest.json`; the archived record is never
+edited. The nine archived cases are joined by the eight held-out additions in
+`examples/planning/evaluation/heldout-v3-additions.json`, each with two declared
+incorrect artifacts, and `examples/planning/evaluation/oracle.py` computes every
+expected artifact from the case inputs and the frozen visible contracts alone.
+Three effects are reported separately in `build/plan-eval/report.json`:
+
+- **planning**: each frozen `current` and `contract-aware` candidate against all
+  seventeen cases under the declared interface and under the archived post hoc
+  interface adaptation, by task class and by source, with the number of repeated
+  invocations and the number of distinct outcomes (a determinism check; frozen
+  deterministic candidates exercise no stochastic variability);
+- **validation**: false rejections of correct artifacts and false acceptances of
+  the thirty-four declared corruptions, by task class; every declared corruption
+  must be rejected;
+- **scheduling**: the serial and fork/join patterns compiled by the current
+  compiler and compared with `evaluate`; with `--execute`, both run through
+  `hydra workflow plan run`, their recorded durations become estimates through
+  `observed`, and the serial run's step durations are transplanted onto the
+  fork/join graph as a prediction that is compared with the fork/join run's own
+  elapsed time (calibration, n = 1).
+
+With `--execute N`, the first N candidates of each arm also run through the
+archived evaluation plan at the current source; the report records the verified
+outcome, elapsed times, repeated work (steps with more than one attempt),
+provider cost (`unknown`) and human corrections (`unknown (not observed)`).
+Estimate calibration by task class stays `unknown`: the frozen candidates
+supplied no estimates. The runner exits non-zero when a corruption is accepted, a
+correct artifact is rejected, a candidate varies across repeats, the archived
+nine-case outcomes are not reproduced or an executed outcome differs from the
+archived expectation. See the [evaluation record](../examples/planning/evaluation/README.md)
+for the measured results and their limits.
