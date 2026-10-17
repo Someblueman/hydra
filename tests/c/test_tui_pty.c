@@ -128,15 +128,17 @@ static bool pids_gone_within(const char *path, long timeout_ms) {
     return true;
 }
 
-/* Copies the PIDs recorded so far, so a check over the reaping grace is not
- * confused by a later run of the same fixture appending its own PIDs. */
-static bool snapshot_pids(const char *path, char *copy, size_t capacity) {
-    FILE *in, *out; char buffer[4096]; size_t length; bool ok;
+/* Copies the first `count` PIDs recorded: the fixture run that timed out
+ * (owner, then descendant). A periodic refresh may already have started the
+ * fixture again and appended a live pair before this copy is taken, so
+ * copying everything recorded so far would wait on that newer run. */
+static bool snapshot_pids(const char *path, unsigned count, char *copy, size_t capacity) {
+    FILE *in, *out; long pid; unsigned copied=0U; bool ok;
     if (!path || (in=fopen(path,"r")) == NULL) return false;
     snprintf(copy, capacity, "%s.snapshot", path);
     if ((out=fopen(copy,"w")) == NULL) { fclose(in); return false; }
-    while ((length=fread(buffer,1U,sizeof(buffer),in)) > 0U) fwrite(buffer,1U,length,out);
-    ok=!ferror(in) && !ferror(out);
+    while (copied < count && fscanf(in,"%ld",&pid) == 1) { fprintf(out,"%ld\n",pid); copied++; }
+    ok=!ferror(in) && !ferror(out) && copied == count;
     fclose(in);
     return fclose(out) == 0 && ok;
 }
@@ -852,9 +854,8 @@ static void test_preflight_failure(const char *tui, const char *hydra, const cha
                    "failed observation reaches a bounded failure state");
         if (pid_file) {
             char recorded[200];
-            /* A periodic refresh may run the fixture again meanwhile; only the
-             * owner that timed out, and its descendant, must be gone here. */
-            result(wait_for_file(pid_file, 1000) && snapshot_pids(pid_file, recorded, sizeof(recorded)) &&
+            /* Only the owner that timed out, and its descendant, must be gone here. */
+            result(wait_for_file(pid_file, 1000) && snapshot_pids(pid_file, 2U, recorded, sizeof(recorded)) &&
                    pids_gone_within(recorded, PIDS_GONE_GRACE_MS),
                    "timed-out capture owner and descendant are gone before quit");
             (void)unlink(recorded);
