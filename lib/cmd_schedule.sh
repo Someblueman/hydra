@@ -210,9 +210,15 @@ cmd_schedule_remove() {
 }
 
 cmd_schedule() {
+    # --json may appear anywhere; subcommands only see positional arguments.
     CMD_SCHEDULE_JSON=0
-    for _cs_arg in "$@"; do
-        case "$_cs_arg" in -j|--json) CMD_SCHEDULE_JSON=1 ;; esac
+    _cs_n=$# _cs_i=0
+    while [ "$_cs_i" -lt "$_cs_n" ]; do
+        _cs_arg="$1"; shift; _cs_i=$((_cs_i + 1))
+        case "$_cs_arg" in
+            -j|--json) CMD_SCHEDULE_JSON=1 ;;
+            *) set -- "$@" "$_cs_arg" ;;
+        esac
     done
     _cs_action="${1:-}"
     [ $# -eq 0 ] || shift

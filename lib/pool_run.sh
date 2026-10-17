@@ -31,6 +31,16 @@ pool_run_command() {
     POOL_EXEC_ARGS="$_prc_args"
 }
 
+# Signal the public command below the recording subshell: only its own
+# process, so it cancels its work the way `hydra workflow cancel` and
+# `hydra exec` already do, and never the recorder, which must stay alive to
+# write the exit status.
+pool_run_signal_children() {
+    for _prsc_child in $(ps -eo pid=,ppid= 2>/dev/null | awk -v parent="$1" '$2 == parent { print $1 }'); do
+        kill "-$2" "$_prsc_child" 2>/dev/null || true
+    done
+}
+
 # Usage: pool_run_execute <pool-name> <pool-dir> <task> <token> <lease>
 # Runs the task's public command in the repository, captures its output as
 # attempt evidence and sets POOL_RUN_OUTCOME (succeeded|failed) and
@@ -61,17 +71,22 @@ pool_run_execute() {
     [ "$_pre_renew_every" -ge 1 ] || _pre_renew_every=1
     _pre_last_renew="$(pool_now)"
     while [ ! -f "$_pre_attempt/exit-code" ]; do
+        # A recording subshell that died without its record (killed outright)
+        # leaves an unknown exit; do not wait for it forever.
+        case "$(ps -o stat= -p "$_pre_child" 2>/dev/null | tr -d ' ')" in
+            ''|Z*) [ -f "$_pre_attempt/exit-code" ] || break ;;
+        esac
         sleep 1
         if [ "$_pre_signalled" -eq 0 ]; then
             if [ "$POOL_RUN_STOP" -eq 1 ] || [ -f "$_pre_td/cancel-requested" ] || [ -f "$_pre_dir/cancel-requested" ]; then
-                operations_signal_tree "$_pre_child" TERM
+                pool_run_signal_children "$_pre_child" TERM
                 _pre_signalled=1
             elif [ "$(($(pool_now) - _pre_last_renew))" -ge "$_pre_renew_every" ]; then
                 _pre_last_renew="$(pool_now)"
                 if pool_lock "$_pre_name" >/dev/null 2>&1; then
                     if ! pool_renew "$_pre_dir" "$_pre_task" "$_pre_token" "$_pre_lease" >/dev/null 2>&1; then
                         # The claim is no longer ours: stop working on it.
-                        operations_signal_tree "$_pre_child" TERM
+                        pool_run_signal_children "$_pre_child" TERM
                         _pre_signalled=1
                     fi
                     pool_unlock "$_pre_name"

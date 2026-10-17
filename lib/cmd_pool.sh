@@ -353,9 +353,18 @@ cmd_pool_run() {
 }
 
 cmd_pool() {
+    # --json may appear anywhere before `--`; strip it so subcommands only
+    # see their positional arguments. Everything after `--` is task argv.
     CMD_POOL_JSON=0
-    for _cp_arg in "$@"; do
-        case "$_cp_arg" in --) break ;; -j|--json) CMD_POOL_JSON=1 ;; esac
+    _cp_n=$# _cp_i=0 _cp_argv=0
+    while [ "$_cp_i" -lt "$_cp_n" ]; do
+        _cp_arg="$1"; shift; _cp_i=$((_cp_i + 1))
+        if [ "$_cp_argv" -eq 1 ]; then set -- "$@" "$_cp_arg"; continue; fi
+        case "$_cp_arg" in
+            --) _cp_argv=1; set -- "$@" "$_cp_arg" ;;
+            -j|--json) CMD_POOL_JSON=1 ;;
+            *) set -- "$@" "$_cp_arg" ;;
+        esac
     done
     _cp_action="${1:-}"
     [ $# -eq 0 ] || shift
