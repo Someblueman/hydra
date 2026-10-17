@@ -51,7 +51,12 @@ workflow_event() {
 
 workflow_pid_alive() {
     case "$1" in ''|*[!0-9]*) return 1 ;; esac
-    kill -0 "$1" 2>/dev/null
+    kill -0 "$1" 2>/dev/null || return 1
+    # A killed worker whose parent died stays a zombie until init reaps it,
+    # which some container inits do late or never; it still answers kill -0
+    # but runs nothing, so recovery must not wait on it. An unreadable state
+    # keeps the process counted as alive.
+    case "$(ps -o stat= -p "$1" 2>/dev/null)" in *Z*) return 1 ;; esac
 }
 
 workflow_run_owner_active() {

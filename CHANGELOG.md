@@ -625,6 +625,13 @@ on placement or withdrawal there.
   already-dead descendant that still awaited init as alive. They now allow a
   bounded reaping grace, and the parity case also covers a helper whose
   descendant was orphaned before the timeout.
+- `hydra workflow resume` after a coordinator crash now reconciles a remote
+  task step whose observer was killed with it, instead of stopping at
+  `waiting-remote` (exit 3) without observing the task. Workflow recovery
+  counted a killed worker as alive while it was an unreaped zombie, which lasts
+  until init reaps it (late or never with some container inits), so the step
+  was left `running` past the point where recovery restarts remote
+  observations. A zombie now counts as exited for workflow owners and workers.
 
 ## [2.9.0] - 2026-09-28
 
