@@ -54,7 +54,7 @@ static void render_host_detail(struct app *app, struct tv_canvas *canvas, const 
     dashboard_text(canvas, split + 3, 11, width - split - 5, TV_BASE, "Process liveness: unobserved");
     dashboard_text(canvas, split + 3, 12, width - split - 5, TV_BASE, "CPU / memory / load: unavailable");
     dashboard_text(canvas, split + 3, 13, width - split - 5, failed ? TV_WARNING : TV_MUTED, "%s", failed
-                   ? "Disconnected: its rows are the last observation; r retries." : "Enter follows this host's work; r asks for a fresh observation.");
+                   ? "Disconnected: rows are the last observation; r retries." : "Enter shows this host's work; r refreshes it.");
     render_host_task(app, canvas, host, split, width);
 }
 
