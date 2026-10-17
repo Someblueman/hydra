@@ -118,7 +118,6 @@ static const char *end_state(int status, const struct f_capture *cap, const stru
     if (cap->status == 130) end_state = "cancelled";
     if (cap->timeout) end_state = "timed_out";
     if (stream->permission) end_state = "permission_required";
-    if (stream->observation_failed) end_state = "observation_unavailable";
     if (stream->malformed) end_state = "malformed_output";
     if (stream->stale) end_state = "stale_instance";
     return end_state;
@@ -132,7 +131,7 @@ static json_object *observations(const struct agent_stream *stream, const struct
     json_object_object_add(observed, "prompt", invoked && strcmp(f_string(profile, "prompt"), "none") ? json_object_new_boolean(true) : NULL);
     json_object_object_add(observed, "observations", json_object_array_length(stream->events) ? json_object_new_boolean(true) : NULL);
     json_object_object_add(observed, "resume", resumed && stream->session_seen && !status ? json_object_new_boolean(true) : NULL);
-    json_object_object_add(observed, "cancel", invoked && !cap->stop_unknown && !cap->timeout && (cap->cancelled || f_stopped) && !stream->permission && !stream->stale && !stream->malformed && !stream->observation_failed ? json_object_new_boolean(true) : NULL);
+    json_object_object_add(observed, "cancel", invoked && !cap->stop_unknown && !cap->timeout && (cap->cancelled || f_stopped) && !stream->permission && !stream->stale && !stream->malformed ? json_object_new_boolean(true) : NULL);
     json_object_object_add(observed, "safe-point", invoked && steering_bytes ? json_object_new_boolean(true) : NULL);
     json_object_object_add(observed, "permission-requests", stream->permission ? json_object_new_boolean(true) : NULL);
     json_object_object_add(observed, "usage", f_field(stream->usage, "input_tokens") || f_field(stream->usage, "output_tokens") || f_field(stream->usage, "cost_usd") ? json_object_new_boolean(true) : NULL);
@@ -235,7 +234,9 @@ json_object *agent_run_cli(int argc, char **argv) {
         }
     }
     if (strcmp(stream.adapter, "none") && stream.received != stream.consumed && !cap.cancelled && !f_stopped && !cap.timeout) stream.malformed = true;
-    if (stream.stale || stream.malformed || stream.observation_failed) status = 125;
+    /* The provider's final status may have arrived while the store was busy. */
+    if (invoked && !cap.cancelled && !cap.timeout) agent_observe_final(&stream);
+    if (stream.stale || stream.malformed) status = 125;
     else if (stream.permission) status = 3;
     else if (stream.failed && !cap.status) status = 1;
     else status = cap.status;
@@ -269,6 +270,6 @@ json_object *agent_run_cli(int argc, char **argv) {
 invalid:
     result = f_error("agent-run", "capability_unavailable", "profile, prompt, required capability, current instance, exact resume evidence, or receipt storage is unavailable; inspect recorded execution before retrying");
 done:
-    free(prompt); free(branch); free(stream.answer); json_object_put(stream.events); json_object_put(stream.usage);
+    free(prompt); free(branch); free(stream.answer); json_object_put(stream.events); json_object_put(stream.usage); json_object_put(stream.observation_error);
     json_object_put(profile); json_object_put(probe); json_object_put(record); json_object_put(values); json_object_put(args); json_object_put(prior); f_capture_free(&cap); return result;
 }
