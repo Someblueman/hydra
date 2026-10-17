@@ -2,6 +2,7 @@
 #include "fleet/support/files.h"
 #include "fleet/transport/remote.h"
 #include "fleet/task/task.h"
+#include "fleet/revocation/revocation.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -257,6 +258,7 @@ json_object *task_remote_cli(int argc, char **argv) {
     json_object *package = NULL, *checked = NULL, *request = NULL;
     json_object *response = parse_options(argc, argv, options);
     if (response) return response;
+    if (revocation_blocked("transport", options->host)) return revocation_error("fleet-task", "transport", options->host);
     if (f_remote_load(options->host, &remote)) return f_error("fleet-task", "invalid_alias", "register the remote before submitting a task");
     if (options->submit) {
         json_object *spec;

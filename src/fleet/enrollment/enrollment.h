@@ -16,4 +16,6 @@ int enrollment_hash(json_object *value, char hash[65]);
 int enrollment_write(const char *path, json_object *value);
 bool enrollment_file_matches(const char *path, const char *hash);
 json_object *enrollment_host_apply(json_object *host, json_object *row, json_object *progress, const char *path, unsigned seconds);
+/* Revocation detail (caller-owned) that invalidates a reviewed host, or NULL. */
+json_object *enrollment_host_revocation(json_object *host);
 #endif
