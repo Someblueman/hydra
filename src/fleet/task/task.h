@@ -47,6 +47,10 @@ bool task_no_agent_workers(json_object *state);
 bool task_owner_active(const char *directory);
 bool task_runtime_valid(json_object *state);
 void task_execute(const char *directory, json_object *package, json_object *state, bool resume);
+/* Owner-side resource probe around the execution phase (telemetry block 1). */
+struct task_telemetry { int64_t monotonic, user_us, system_us, maxrss; bool valid; };
+void task_telemetry_begin(struct task_telemetry *probe);
+void task_telemetry_record(json_object *state, const struct task_telemetry *before, bool started, bool reaped);
 struct task_control {
     struct f_control process;
     const char *directory, *digest;

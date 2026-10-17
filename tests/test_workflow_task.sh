@@ -226,6 +226,22 @@ transport_records="$(find "$run_dir/steps" -path '*/attempt-*/remote/transport-m
 fixture_json transport-metrics "$run_dir" "${HYDRA_TEST_DAG_LOST_ACK:-0}"
 "$root/bin/hydra" workflow statistics-data > "$fixture/statistics.tsv"
 awk -F '\t' -v id="$run" '$1 == "R" && $2 == id {found=1; if ($13 == "-" || $14 == "-" || $15 == "-") bad=1} END {exit !found || bad}' "$fixture/statistics.tsv"
+# Telemetry block 1 recorded by the task owner reaches the T rows. In the
+# plain run wall, CPU and transport are measured for both dispatched steps and
+# peak RSS is either measured or names its reason. Fault variants (lost
+# acknowledgements, crashes, cancellations) keep every column either measured
+# or "-" with a reason: unmeasured is never zero.
+dag_strict=1
+[ -z "${HYDRA_TEST_DAG_LOST_ACK:-}${HYDRA_TEST_DAG_CRASH:-}${HYDRA_TEST_DAG_FAULT:-}${HYDRA_TEST_DAG_RESULT_LOST:-}${HYDRA_TEST_DAG_RESULT_BAD:-}${HYDRA_TEST_DAG_PARALLELISM:-}" ] || dag_strict=0
+awk -F '\t' -v id="$run" -v host="$dag_host" -v strict="$dag_strict" '$1 == "T" && $2 == id && ($3 == "produce" || $3 == "consume") {
+    rows++
+    if ($4 != host || $6 != "pinned" || $8 != "succeeded") bad=1
+    for (column = 7; column <= 13; column++) if (column != 8 && $column != "-" && $column !~ /^[0-9]+$/) bad=1
+    for (column = 10; column <= 13; column++) if ($column == "0") bad=1
+    if (strict && ($7 != "1" || $9 == "-" || $10 == "-" || $12 == "-" || $13 == "-")) bad=1
+    if ($11 == "-" && $14 !~ /peak_rss_bytes=/ && $14 != "no_telemetry_block") bad=1
+    if ($9 == "-" && $14 == "-") bad=1
+} END {exit rows != 2 || bad}' "$fixture/statistics.tsv"
 if [ "${HYDRA_TEST_DAG_REPLAY:-0}" = 1 ]; then
     "$root/bin/hydra" workflow replay "$run" > "$fixture/replay-1.json"
     "$root/bin/hydra" workflow replay "$run" > "$fixture/replay-2.json"

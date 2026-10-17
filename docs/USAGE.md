@@ -156,6 +156,8 @@ hydra workflow cancel run_ID
 hydra workflow requests run_ID --json
 hydra workflow decide run_ID step_REQUEST_ID approve --by reviewer
 hydra workflow resume run_ID
+hydra workflow statistics-json                      # recorded runs, remote cohorts and telemetry (schema 3)
+hydra workflow statistics-compare left.tsv right.tsv --format text
 
 # Local objective plans (optional native helper; compile from clean source)
 hydra workflow plan schema
@@ -608,6 +610,12 @@ status and the keys that apply. Below 100 columns the tab bar uses short labels
 (`Coord`, `Flows`, `Stats`) so every tab stays visible at 80 columns. Only changed cells are repainted, so idle refreshes
 do not flicker. Session states use plain words: `running`, `terminal gone`,
 `stopped` and `unknown`; internal tokens stay behind `d` (technical details).
+Statistics (`D`) reads recorded workflow runs: `M` cycles the metric pages, `C`
+opens the remote cohorts page (steps that ran as fleet tasks grouped by host,
+placement, generation and provider, with the receipts' wall, CPU, peak RSS and
+transport bytes), and `L` cycles the location filter between all, local, remote
+and each recorded host. Unmeasured values read `unknown` with their reason, never
+zero; see [workflows](workflows.md#reviewing-a-finished-plan).
 
 One interaction model applies everywhere:
 

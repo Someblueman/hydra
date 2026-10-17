@@ -179,6 +179,67 @@ static void fleet_statistics(void) {
     tv_close(&s, "q", 0, 0);
     puts("PASS fleet statistics: responded/failed/empty, known counts, filters, drill-down");
 }
+/* Mixed local and remote runs (schema 5): the cohorts page, the location
+ * filter and the side panel say what the receipts measured and what stays
+ * unknown with its reason; nothing unmeasured is shown as zero. */
+static void remote_cohorts(void) {
+    struct tv_session s;
+    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", "--view", "statistics", NULL};
+    int sizes[][2] = {{140, 40}, {80, 24}, {40, 10}};
+    size_t i;
+    CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v5.tsv", 1), "schema 5 fixture environment");
+    tv_open(&s, argv, 140, 40, NULL);
+    U("Latest attempts average");
+    U("Remote CPU 5.5s");
+    CHECK(HAS("(2/4), peak RSS 50.0M") && HAS("unmeasured."), "side panel wraps remote telemetry coverage");
+    CHECK(HAS("Location: all"), "location scope line");
+    S("C");
+    U("REMOTE COHORTS / recorded task evidence / location: local and remote");
+    U("3 local steps, 4 remote steps on 2 hosts; telemetry block on 2/4 receipts");
+    U("Wall 227s (2/4) / CPU 5.5s (2/4) / peak RSS 50.0M (1/4) / transport 50.4k (3/4)");
+    save(&s, "cohorts", 140, 40);
+    CHECK(HAS("location   local") && HAS("location   remote") && HAS("host       alpha") && HAS("host       beta"), "location and host cohorts");
+    CHECK(HAS("placement  auto") && HAS("placement  pinned") && HAS("generation generation 2") && HAS("generation generation unknown"), "placement and generation cohorts");
+    CHECK(HAS("provider   claude") && HAS("provider   codex") && HAS("provider   no agent receipt"), "provider cohorts");
+    CHECK(HAS("2 no telemetry block") && HAS("3 no task receipt") && HAS("1 receipt unverified") && HAS("1 peak_rss_bytes=rss_not_distinguishable"), "unmeasured reasons");
+    CHECK(HAS("unknown     unknown     unknown"), "unmeasured host shows unknown, not zero");
+    CHECK(!HAS(" 0s "), "no zero stands in for an unmeasured wall time");
+    S("L");
+    U("location: local");
+    U("3 local steps, 0 remote steps on 0 hosts");
+    S("L");
+    U("location: remote");
+    U("0 local steps, 4 remote steps on 2 hosts");
+    S("L");
+    U("location: alpha");
+    U("0 local steps, 3 remote steps on 2 hosts");
+    S("jj");
+    tv_pump(&s, .15);
+    CHECK(HAS(">host       beta"), "j scrolls the cohort table");
+    S("0");
+    U("location: local and remote");
+    for (i = 0; i < 3; i++) {
+        if (s.screen.cols != sizes[i][0] || s.screen.rows != sizes[i][1])
+            tv_resize(&s, sizes[i][0], sizes[i][1]);
+        U("REMOTE COHORTS");
+        U("q quit");
+        CHECK(!s.screen.overflow, "cohorts resize overflow");
+        save(&s, "cohorts", sizes[i][0], sizes[i][1]);
+    }
+    CHECK(HAS("4 remote") && HAS("wall 227s (2/4)"), "compact cohorts keep coverage");
+    tv_resize(&s, 140, 40);
+    S("C");
+    U("RUNS / newest creation first");
+    S("L");
+    U("Recorded workflow runs · all recorded · all work / location: local");
+    U("1/1 / Enter evidence");
+    S("LL");
+    U("location: alpha");
+    U("1/1 / Enter evidence");
+    tv_close(&s, "q", 0, 0);
+    CHECK(!unsetenv("HYDRA_TEST_STATS_FIXTURE"), "reset fixture environment");
+    puts("PASS remote cohorts: location/host/placement/generation/provider, unknown reasons, L filter, three sizes");
+}
 int main(void) {
     tv_init();
     unsetenv("NO_COLOR");
@@ -190,5 +251,6 @@ int main(void) {
     local_statistics();
     fleet_statistics();
     metric_pages();
+    remote_cohorts();
     return 0;
 }

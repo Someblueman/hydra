@@ -1333,14 +1333,32 @@ acceptance for the workspace (Milestones 3, 6 and 7). Those gaps are tracked by
 [U1–U19](#immediate-product-priority-first-use-and-agentic-workflow); the earlier
 implementation checks do not establish that the experience is product-ready.
 
-- [ ] Add remote workflow cohorts to statistics when the fleet protocol supplies
+- [x] Add remote workflow cohorts to statistics when the fleet protocol supplies
       reliable evidence. Provider/resource telemetry requires explicit protocol and
       measurement contracts; missing measurements never appear as zero.
+      *3.0.0:* the task owner records telemetry block 1 (wall, user/system CPU,
+      peak RSS when distinguishable, with `measured_by`/`scope`/`clock` provenance
+      and per-field `unmeasured` reasons; see [FLEET.md](FLEET.md#task-telemetry))
+      in the receipt it already writes; statistics schema 5 `T` rows carry host,
+      transport, placement, generation, telemetry and transport bytes from the
+      recorded dispatch, receipt, placement and transport records; export schema 3
+      adds `cohorts` and `telemetry`; the Statistics view groups steps by
+      location, host, placement, generation and provider (`C`) and filters by
+      location (`L`). Qualified with local fixtures, the local transport and the
+      loopback SSH task DAG (`make test-statistics test-statistics-export
+      test-workflow-metrics`, `tests/test_workflow_statistics.sh`,
+      `tests/test_workflow_task.sh`); telemetry from real remote hosts and any
+      provider cost figures remain operator observations, and transport time is
+      not recorded by the protocol.
 - [ ] Standalone termviz release. Darwin 25.6.0 arm64 (Apple Clang 17, UBSan) and
       Linux aarch64 (Debian GCC 12.2, ASan/UBSan) passed standalone component/PTY
       checks on 8 September 2026; other platforms remain unqualified. Publication
       needs a separate release decision; local readiness does not authorize
-      repository creation, pushing or publication.
+      repository creation, pushing or publication. *3.0.0:* `make
+      test-termviz-export` re-run on Linux x86_64 (Ubuntu GCC 13.3, no sanitizer)
+      with the 3.0 tree and the [STANDALONE.md](../src/termviz/STANDALONE.md)
+      boundaries reviewed as current; the publication decision stays with the
+      user and nothing here creates a repository or publishes a package.
 
 Full terminal compatibility, a broad widget catalogue, new telemetry collection and
 remote execution changes require their own bounded scope.

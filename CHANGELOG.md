@@ -64,6 +64,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provision from the Hosts tab with the unpinned helper the CLI's
   `asset_unavailable` recovery asks for; the plan shows it as not a release
   build, and only the provisioning command naming that same file is rerun.
+- Fleet task telemetry block 1: the task owner records in the task's `state.json`,
+  and therefore in every receipt, observation and sealed result, what it measured
+  about the execution phase (`hydra workflow run`/`hydra exec` and the descendants
+  it waited for): wall seconds on the monotonic clock, user and system CPU from
+  `getrusage(RUSAGE_CHILDREN)`, and peak RSS when the child raised the owner's
+  children maximum, with `measured_by`, `scope`, `clock` and source provenance. A
+  field the owner could not measure is absent and named under `unmeasured` with
+  its reason (`rss_not_distinguishable`, `execution_not_started`,
+  `child_not_reaped`, ...); nothing is recorded as zero in its place. No poller or
+  daemon is added. Provider tokens and cost stay in the exec receipt the result
+  collects; transport metrics record bytes and calls, not time.
+- Remote workflow cohorts in statistics. `hydra workflow statistics-data` is
+  schema 5 and adds one `T` row per listed step whose latest attempt was
+  dispatched as a remote task (host, transport, placement `auto`/`pinned`,
+  assignment generation, receiver state, telemetry, transport calls and bytes,
+  unmeasured reasons), read only from the dispatch binding, receipt and
+  observation, telemetry block, transport metrics and placement record through
+  the read-only `workflow-task remote-tsv` helper; a remote exec receipt collected
+  with the result supplies the step's `U` row. `hydra workflow statistics-json`
+  and `statistics-compare` export schema 3 with `filter.location`, a filled
+  `remote` block and new `cohorts` (by location, host, placement, generation and
+  provider) and `telemetry` sections; every measurement is a number only when
+  every eligible step reported it and `null` with `state` `partial`, `unknown` or
+  `unavailable` otherwise. The native Statistics view gains the `C` remote cohorts
+  page (runs, steps, outcomes, wall, CPU, peak RSS, transport bytes and the
+  unmeasured count with its recorded reason per cohort, at 140x40, 80x24 and
+  40x10), the `L` location filter (all, local, remote, each recorded host) and a
+  scope note that says which remote receipts measured CPU and memory; local steps
+  are a cohort of their own and are never measured as zero.
 - The control centre's Hosts tab opens an onboarding operator view with `O`:
   discovered and qualified candidates with filters by state (new, qualified,
   failed, conflicting, revoked, reviewed, unknown, enrolled), source, platform,
@@ -361,6 +390,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   terminal-gone Details previously pushed `x remove` below the panel).
 - The narrow (under 100 columns) Workspace plan footers name `Tab pane`, the
   hinted way back to the agent pane after Ctrl-B Tab leaves its input.
+- The statistics feed header is `HYDRA_STATISTICS<TAB>5` and the JSON export
+  schema is 3 for such feeds (1 and 2 remain for older feeds); readers accept
+  feed schemas 2 to 5 and the additions are additive, so older export consumers
+  skip the new sections. The statistics footer and side panel name the `C` and
+  `L` keys; the "CPU and memory: not measured" note now reports what remote task
+  receipts measured and says that local steps remain unmeasured.
 - tmux is documented as required only for interactive terminal operations; headless
   heads, exec, workflows, remote tasks, bootstrap, install and doctor run without it.
 - A workflow task step whose first submission a receiver refuses before acceptance
