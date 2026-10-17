@@ -259,12 +259,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conversation-to-plan flow with exact revision and digest. `docs/ACCEPTANCE.md`
   documents the cases, thresholds and the gates that still need a human; the
   roadmap's delivery boundary table cites each item's automated acceptance.
+- `hydra-tui --headless-fixture` accepts `--attention-fixture FILE` (given
+  twice, the second is a failed refresh over a last good snapshot),
+  `--review-fixture FILE` (the exact review of the selected attention item,
+  validated as a public answer is) and `--keys KEYS` (replayed through the
+  interactive dispatcher before the frame), so every attention, review, run,
+  result, failure and recovery state renders deterministically.
+  `scripts/capture-i4.sh` captures each of those states at 80x24 and 140x40;
+  the before and after captures of the I4 visual pass are in
+  `docs/evidence/i4/`, and `tests/test_native_tui_i4.sh` (run by `make
+  test-tui`) checks each screen's content and compares a fresh capture with
+  every committed after capture.
 - The native PTY observer (`test-tui-pty`) writes a timestamped read index
   (`terminal.index`) beside the flushed raw stream so phases of a recording can
   be replayed and styled snapshots re-derived.
 
 ### Changed
 
+- Visual pass over the attention queue and detail, the exact review, Details,
+  Recovery and the run panels (roadmap I4, source pass; acceptance is the
+  user's review of the `make visual-review` contact sheet). Attention leads
+  with who needs the user and lists items in aligned WHAT / TASK / STATE
+  columns with one wrapped reason line each, dropping a subject's host and
+  then its step before eliding a name; its detail opens with the item, the
+  seen state (separate from any decision), why it needs the user and the next
+  action, then an IDENTITY group with the full digests (Space/b scroll it);
+  loading, empty, stale and unavailable states say what is known and that
+  `I` refreshes. The exact review leads with the task, step and read-only
+  binding, keeps its key hints in the footer, lists each reference with its
+  state and a middle-elided locator and labels the identity and full-log
+  views. Details lead with the reason for attention and wrap long values;
+  Recovery explains the selected finding in full under the list and its
+  detail ends with a NEXT group after the DIAGNOSTICS; run panels end a cut
+  head or Next sentence with an ellipsis between words and drop "so far"
+  from a running time too long for its cell; Overview cards wrap a caption
+  over two rows at a clause or word; dependency graphs join edges with
+  box-drawing junctions and use rounded node corners in Unicode. A remote
+  head's desired state is muted and kept apart from its observed status, and
+  its card says liveness is unobserved instead of repeating the footer keys.
+- Keyboard help (`?`) lists one "key  what it does" entry per row (two side
+  by side from 110 columns), wraps long descriptions instead of cutting them,
+  adds an ATTENTION AND REVIEW group (Enter, r, s, n/N, Space/b, L, f, i, I)
+  and scrolls with j/k and Space/b; any other key still closes it.
+- Footers below 100 columns carry a compact set of hints that fits whole
+  (`? help` lists the rest), and a footer that still does not fit drops whole
+  hints from its right, keeping `? help` and `q quit`, instead of cutting a
+  hint in half. Details' footer keeps `a`, `p` and `Esc back`; its NEXT group
+  lists coordination, removal, more actions and technical details.
+- The monitor's `Y` / `N` bind the decision to the selected run's one
+  pending, undecided input request when its evidence is loaded and current,
+  instead of asking for the request ID; with several, none or stale evidence
+  the ID is still asked for. The typed confirmation names the run and request,
+  and a decision still never resumes the run (`R` does).
 - Recovery rows say what a finding offers (`files kept`, `safe to clear`,
   `cleanup preview`, `review first`) instead of its raw kind, and the finding's
   kind, source path and confidence sit under a DIAGNOSTICS heading after the
@@ -308,6 +354,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `hydra workflow attention` and the control centre's Attention reported a
+  registered project that had never recorded a workflow run as unavailable
+  (`workflow run storage is unavailable`); an absent run store under an
+  existing project is now an exact empty list. A run store that is not a
+  directory, or a missing project, is still unavailable.
+- `make visual-review` stopped its work flow at the recovery finding and
+  captured no Fleet screens after the unified workspace merge (its markers
+  named the removed `Remote heads` list, `Inspect:` and the old Fleet tab
+  order, and its shim did not serve `hydra tui --attention-data`); every flow
+  captures again, and the lint rows the I4 pass resolved are removed from
+  `scripts/visual_review/lint-known.tsv`.
+- Enter in the Workspace opens Details for the selected head from whichever
+  pane holds focus, as the SELECTED WORK pane says.
+- An in-app removal of the selected head moves the selection to the nearest
+  surviving head at once instead of leaving the removed row selected until the
+  next snapshot; a refused or skipped head keeps the selection.
+- Overview's local-only cards are captioned "heads and runs working now" and
+  "uncommitted, all heads" again, so the captions fit their cards at 140
+  columns; Work's footer under 100 columns leads with `j/k select` for local
+  work and keeps `? help` for a remote head.
 - `check_tmux_version` accepted a tmux on PATH whose `tmux -V` failed or printed no
   parsable version, because the numeric comparison error was taken as "new enough";
   such a tmux is now reported as unusable.
