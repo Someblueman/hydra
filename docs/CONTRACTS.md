@@ -525,8 +525,9 @@ recorded step ran as a remote task), `remote` keeps its scalar keys and fills
 `transfer_bytes`, `cpu_seconds` and `memory_bytes` only when every remote step in
 scope reported them (`state` `unavailable`, `unknown`, `partial` or `known`), and
 two sections are added. `cohorts` groups the scope's steps by `location`, `host`,
-`placement`, `generation` and `provider` (`truncated` when more than 32 cohorts
-exist); each cohort carries runs, steps, succeeded and failed counts, a duration
+`placement`, `generation` and `provider` (at most 32 cohorts per grouping;
+`truncated` is `true` once that capacity is full, and steps of further cohorts
+are then not listed); each cohort carries runs, steps, succeeded and failed counts, a duration
 measurement, `remote_steps`, `telemetry_steps`, five telemetry measurements
 (`wall_seconds`, `cpu_microseconds`, `peak_rss_bytes` as a maximum,
 `transport_calls`, `transport_bytes`), four usage measurements, `unmeasured_steps`
