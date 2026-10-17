@@ -126,7 +126,8 @@ int main(void) {
     tv_until(&s, task[0], 15);
     tv_until(&s, task[1], 15);
     CHECK(tv_contains(&s, "host-a"), "first receiver visible");
-    tv_send(&s, "j");
+    /* The one Work list: host-a's head, then each receiver's task. */
+    tv_send(&s, "jj");
     tv_pump(&s, .3);
     CHECK(tv_contains(&s, "host-b"), "second receiver selectable");
     wait_for_payload();

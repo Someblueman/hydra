@@ -908,6 +908,7 @@ static int measure_interactive(const char *tui, const char *hydra, const char *f
 #include "test_tui_review.inc"
 #include "test_tui_measure.inc"
 #include "test_tui_layout.inc"
+#include "test_tui_remote.inc"
 
 /* Feed the raw PTY stream into a persistent emulator so a marker that spans
  * text the incremental presenter left unchanged is still observable. */
@@ -1009,6 +1010,13 @@ int main(int argc, char **argv) {
         return 2;
     }
     if (getenv("HYDRA_TEST_REVIEW_ONLY")) return review_tests_only(argv[1], argv[2], argv[0]);
+    if (getenv("HYDRA_TEST_REMOTE_ONLY")) {
+        test_remote_side_by_side(argv[1], argv[2], argv[3]);
+        test_remote_actions(argv[1], argv[2], argv[3]);
+        test_remote_stale_and_disconnected(argv[1], argv[2], argv[3]);
+        printf("Native remote workspace tests: %d passed, %d failed\n", tests - failures, failures);
+        return failures ? 1 : 0;
+    }
     if (getenv("HYDRA_TEST_LIFECYCLE_ONLY")) {
         test_review_cancellation(argv[1], argv[2], argv[0]);
         test_fleet_attach(argv[1], argv[2], argv[3]);
@@ -1030,6 +1038,9 @@ int main(int argc, char **argv) {
     test_review_narrow(argv[1], argv[2]);
     test_review_cancellation(argv[1], argv[2], argv[0]);
     test_fleet_attach(argv[1], argv[2], argv[3]);
+    test_remote_side_by_side(argv[1], argv[2], argv[3]);
+    test_remote_actions(argv[1], argv[2], argv[3]);
+    test_remote_stale_and_disconnected(argv[1], argv[2], argv[3]);
     test_workspace_layout(argv[1], argv[2], argv[3]);
     test_small_list(argv[1], argv[2], argv[3]);
     test_interaction(argv[1], argv[2], argv[3]);

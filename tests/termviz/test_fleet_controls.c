@@ -49,7 +49,8 @@ static void launch(struct tv_session *s) {
     const char *argv[] = {tui, "--fleet", "--view", "overview", NULL};
     tv_open(s, argv, 120, 40, base);
     tv_until(s, "task_2", 8);
-    tv_send(s, "j");
+    /* The one Work list: the remote head, then task_1, then task_2. */
+    tv_send(s, "jj");
     tv_until(s, "req-2", 3);
 }
 static void confirm(struct tv_session *s, const char *key, const char *word) {
