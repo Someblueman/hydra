@@ -53,8 +53,15 @@ void native_workspace_plan_text(struct app *app, struct tv_canvas *c, size_t *sc
     size_t length;
     static const char *states[]={"DRAFT / unvalidated","VALIDATING","INVALID / F request changes","READY / awaiting approval",
         "VIEW UNAVAILABLE","RETURNED / changes requested"};
-    static const char empty[]="P reviews the agent's proposal; I imports draft and policy files.\n"
-        "Then V validates it, F requests changes from the agent and E executes the validated revision.";
+    static const char empty[]="A proposal is the agent's suggested plan for the task.\n"
+        "It runs nothing until V validates it and you approve\n"
+        "that exact revision with E; the approved plan then runs\n"
+        "as a workflow you can follow in Overview. For example:\n"
+        "the agent proposes implement, test, then review; you\n"
+        "read the policy and approve.\n\n"
+        "P reviews the agent's proposal; I imports draft and\n"
+        "policy files. Then V validates it, F requests changes\n"
+        "from the agent and E executes the validated revision.";
     if (!p) {
         tv_text(c,(struct tv_rect){0,0,c->width,1},"No proposal loaded",TV_WARNING);
         native_workspace_text(c,empty,sizeof(empty)-1,scroll);

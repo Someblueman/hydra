@@ -23,7 +23,14 @@ json_object *task_remote_cli(int argc, char **argv);
 json_object *task_announce_cli(int argc, char **argv);
 bool task_observation_response_valid(json_object *data, const char *id);
 json_object *task_serve(json_object *request);
-json_object *task_accept(json_object *package, const char *key);
+/* generation is the submitter's assignment generation (1 when unstated). */
+json_object *task_accept(json_object *package, const char *key, int generation);
+/* Durable withdrawal of accepted, never-launched work; running work is refused. */
+json_object *task_withdraw(const char *id);
+/* NULL when a start/resume may proceed; otherwise a withdrawn or stale_generation error. */
+json_object *task_generation_fence(const char *id, json_object *request);
+/* One client-side submission to a registered alias; package is borrowed. */
+json_object *task_remote_submit(const char *host, json_object *package, const char *key, const char *trust, int generation, unsigned seconds);
 json_object *task_status(const char *id);
 /* Receiver-owned read-only execution observations. Returned JSON belongs to caller. */
 json_object *task_observation(const char *id, json_object *request);

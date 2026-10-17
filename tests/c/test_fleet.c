@@ -78,6 +78,7 @@ static void ssh_reasons(void) {
     assert(!strcmp(reason, "bad?["));
 }
 #include "test_fleet_attention.inc"
+#include "test_fleet_discovery.inc"
 int main(void) {
     char dir[] = "/tmp/hydra-fleet-unit.XXXXXX", path[F_PATH]; json_object *obj, *bundle, *files, *file, *result;
     struct f_capture cap = {0}; char *quoted, *text;
@@ -112,6 +113,7 @@ int main(void) {
     test_attention_unknowns();
     test_attention_failures();
     test_attention_cap();
+    test_discovery_units();
     obj = f_parse("{\"protocol\":\"1\",\"action\":\"handshake\"}");
     result = f_serve(obj); assert(!json_object_get_boolean(f_field(result, "ok"))); json_object_put(result); json_object_put(obj);
     obj = f_parse("{\"protocol\":1,\"action\":\"doctor\",\"args\":{}}");

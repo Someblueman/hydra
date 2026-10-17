@@ -375,6 +375,13 @@ The subsequent six findings are covered by U13 (statistics), U14 (output), U15
       a report with reproducible actions, captures and independent outcome checks;
       known UX defects fail their desired-behavior checks. Human visual review and
       live qualification remain explicit, not replaced by fixture passes or an AI score.
+      Delivered for 3.0.0: `make test-usability` runs the scripted journeys, six
+      goal-driven screen-only trials driven by a deterministic rule-based evaluator
+      that sees only the goal and the screen (steps, dead ends, help reads and fit
+      scored per goal, outcomes verified against Git, tmux and state) and the U19
+      comprehension trials, at 80x24 and 140x40, with `--trial NAME` selection.
+      The report names the live-provider, visual, human first-use and
+      remote-onboarding gates as unexecuted; those remain open.
 
 - [ ] **U19 — Explain features where users encounter them.** Users cannot be
       expected to know what a workflow, head, plan, gate, coordination view or Fleet
@@ -397,6 +404,13 @@ The subsequent six findings are covered by U13 (statistics), U14 (output), U15
       without leaving the control centre. Extend U18 with goal-driven comprehension
       trials that do not give the evaluator feature names or shortcuts; verify that
       its chosen action fits the goal, alongside human first-use review.
+      Delivered for 3.0.0: comprehension trials assert, at each entry point or
+      empty state and at both sizes, purpose, when it helps, a concrete example,
+      the next action, plain language, consequences before approval, interruption
+      and removal, and command names cross-checked against `hydra help`; the copy
+      was fixed where they failed (Work, Workflows, run panel, Attention, plan
+      pane, Coordination, Hosts, Statistics, Details, attached status, shell TUI).
+      Human first-use review remains open.
 
 Delivery boundary: the items above remain outstanding requirements. Source changes
 have shipped as follows; each item stays open until its installed-build
@@ -407,14 +421,15 @@ part of that work.
 
 | Item | Shipped source changes |
 | --- | --- |
-| U1, U2, U4, U6, U7, U8, U9, U13, U19 | [2.6.0](../CHANGELOG.md#260---2026-09-14) |
+| U1, U2, U4, U6, U7, U8, U9, U13 | [2.6.0](../CHANGELOG.md#260---2026-09-14) |
+| U19 | explanations and empty states in 2.6.0; comprehension trials and copy fixes at every entry point in 3.0.0 (human first-use review open) |
 | U3 | CLI half in 2.6.0; in-app conversation launch and interactive spawn/resume opening inside Hydra in 2.7.0 |
 | U12 | in-app removal in 2.6.0; untracked-file protection in 2.7.0 |
 | U14 | DEC special graphics and a labelled read-only Details excerpt in 2.7.0; read-only transcripts in 2.8.0 (accepted) |
 | U15 | view consolidation in 2.6.0 |
 | U16 | nested tmux attachment with deterministic input/resize/return checks in 2.7.0; leave/close keys, disconnect release and attach cycles in 2.8.0 (accepted locally) |
 | U17 | head-associated proposals, guided local policy, invalidation and exact-digest approval in 2.7.0 |
-| U18 | initial deterministic installed-journey runner in 2.7.0 |
+| U18 | initial deterministic installed-journey runner in 2.7.0; goal-driven screen-only trials, discoverability scores and comprehension trials in 3.0.0 (live and human gates open) |
 | U5 | accepted on 27 September 2026; its fixes ship in 2.8.0 |
 | U10 | guided setup CLI, control-centre flow, static release helpers in 2.9.0 |
 | U11 | none yet |
@@ -525,7 +540,7 @@ to open work:
 | Onboarding needs provenance, freshness, identity and typed progress ([host discovery][src-host-brief]). | [H5](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify review, filters, detail and interrupted multi-host progress. |
 | Changed keys and source conflicts require explicit revocation and review ([host discovery][src-host-report]). | [H6](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify scoped revocation and reviewed key rotation without cancelling or replaying tasks. |
 | Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 has no open provider checks: Claude's and Cursor's (with the `--trust` profile fix) remote tasks passed on 26 September 2026; Antigravity is closed upstream ([antigravity-cli#219](https://github.com/google-antigravity/antigravity-cli/issues/219)). The operator-provided Ubuntu VPS runs Hydra with tmux installed; prepare a separate tmux-absent environment for T2. |
-| Structural plan inspection and finite comparisons are implemented; broader planning-quality evaluation remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality). Next: define and measure matched held-out work before claiming planning benefit. |
+| Structural plan inspection, three-concern evaluation, replayable decision records and a held-out deterministic evaluation are implemented; semantic planning benefit over overhead on a real workload with live agents remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality). Next: run `make test-plan-eval`'s matched protocol on a live-agent workload with recorded human corrections and supplied estimates before claiming planning benefit. |
 | Runtime membership/expansion, PTY server replacement, cloud-manager integration and shared inventory remain conditional ([optional tmux][src-tmux], [host discovery][src-host-brief]). | 9F's open expansion item and the conditional extensions below. Next: revisit only with an explicit authority, workload and acceptance decision. |
 
 [hist]: https://github.com/Someblueman/hydra/tree/66a5baad011d50b17949f981b807f31627c59250/docs
@@ -586,7 +601,16 @@ tmux, and status and teardown work for both execution modes (*historical*:
       artifact bindings. Unsupported remote or terminal capabilities fail before
       launch, rather than silently changing the requested execution mode.
       Implementation and controlled acceptance: [T2 record][h-t2] *(historical)*.
-      Live authenticated-host qualification remains required.
+      Delivered: the reproducible local qualification
+      ([T2/T3 qualification](T2_T3_QUALIFICATION.md), `make test-t2-headless`, in
+      CI) runs every acceptance step below with tmux hidden from the execution
+      host and a loud tmux stand-in, using the committed deterministic adapter
+      fixture; a tmux that cannot report a version no longer passes the version
+      gate, and a receiver's pre-acceptance refusal fails a workflow task step with
+      its typed code. Open: the same steps on a real, separately authenticated
+      remote host without tmux and with a signed-in headless adapter remain an
+      operator step (documented there); no live-host or provider qualification is
+      claimed.
       Acceptance: on hosts without tmux installed, submit a command and an available
       authenticated headless adapter, disconnect, reconnect, collect exact outputs,
       and consume them in a dependent step. Run the corresponding local compiled
@@ -599,6 +623,14 @@ tmux, and status and teardown work for both execution modes (*historical*:
       priority 7's run/step/attempt visibility through CLI/TUI without requiring attach.
       Interactive terminal access remains an explicit capability; viewing logs is
       not attachment to a headless process's stdin.
+      Delivered: `make test-t3-distributed` runs the scenario against two tmux-less
+      loopback receivers with distinct state, projects and endpoints, over the
+      controlled transport (lost acknowledgment, coordinator restart, stale and
+      malformed results) and over two private loopback OpenSSH daemons (aliases
+      bound with `hydra remote add --ssh-config`; SKIP without sshd, required in
+      CI). Interactive spawn, attach, messaging, transcript and teardown suites
+      were re-run with tmux installed. Open: the same scenario across real
+      remote hosts is an operator step.
       Acceptance: the complete distributed scenario succeeds with tmux absent on
       execution hosts. Coordinator restart and lost acknowledgments preserve task
       identity; stale results cannot advance dependents. Re-run interactive spawn,
@@ -651,26 +683,50 @@ Start the baseline with 9A; use 9B–9D contracts and pilots to qualify the tool
 
 Delivered: reusable bounded decomposition patterns with node/dependency
 explanations, and CLI inspection, explanation, comparison and invalidation tools.
+Structural and deterministic measurement is delivered (3.0): `hydra workflow plan
+evaluate` separates decomposition, fixed-graph scheduling and placement; `plan
+observed` turns recorded step durations into estimate ranges; `plan decision`
+records and replays selection reasons with their exact inputs; and
+`make test-plan-eval` measures held-out outcome errors at the current source.
 
-- [ ] Separate decomposition quality, fixed-graph scheduling, and host placement.
+- [x] Separate decomposition quality, fixed-graph scheduling, and host placement.
       Compare admissible alternatives by time/cost to a verified result, critical
       path, resource/transfer requirements, validation effort, and rework risk.
       Preserve ranges and unknown estimates; do not invent calibrated probabilities
       from an agent's confidence or claim globally optimal arbitrary work plans.
-- [ ] Keep the planning agent a candidate generator and external checks explicit.
+      *Delivered as `plan evaluate` (3.0): ranges from supplied or recorded
+      durations, `null` for everything unobserved, rework risk as declared budgets
+      only, placement `not_assessed`, hard budgets copied from the envelope.*
+- [x] Keep the planning agent a candidate generator and external checks explicit.
       Record the reason for selected/rejected alternatives, compiler/policy versions,
       and the inputs to deterministic analysis. Estimates do not relax hard budgets.
+      *Delivered as `plan decision record|list|show` (3.0): private per-head
+      records with canonical inputs; `show --json` replays byte for byte; an
+      estimate above a hard budget refuses the selection and never changes it.*
 - [ ] Maintain independently specified and held-out task cases plus known incorrect
       artifacts. Compare current and contract-aware planning under matched scope,
       tools, and budgets; separate effects of planning, validation, and scheduling.
       Measure false acceptance/rejection, verified outcomes, time/cost, human
       correction, repeated work, and estimate calibration by task class.
+      *Partly delivered (3.0): seventeen held-out cases with thirty-four
+      corruptions, archived cases revived unchanged from Git history, the six
+      frozen candidates compared per interface, executed verified outcomes,
+      elapsed time, repeated work and a one-run scheduling calibration. Human
+      corrections and provider cost are recorded as unknown (never observed);
+      per-class estimate calibration is unknown because the frozen candidates
+      supplied no estimates; the only measured difference between the arms is
+      interface conformance.*
 
 Acceptance: explain every required node and reproduce deterministic comparisons from
 recorded inputs. Report stochastic variability and held-out outcome errors, not only
 plan validity or throughput. Reject every declared deterministic corruption case;
 qualify semantic improvements with observed results and explicit limits. Planning
 benefit must exceed its overhead on the workload where improvement is claimed.
+Status: node explanation, byte-for-byte replay, held-out outcome errors and
+corruption rejection (34/34) are met by deterministic fixtures, which exercise no
+stochastic variability (reported as such, n = 1 per run, 2 invocations per case).
+A semantic planning benefit over its overhead on a real workload with live agents
+has not been observed and remains open; nothing here claims it.
 
 Local implementation: [plan inspection][h-inspect] *(historical)* and
 [finite patterns][h-patterns] *(historical)* provide complete structural explanations,
@@ -681,7 +737,16 @@ estimate calibration or a planning benefit that exceeds overhead. The
 frozen candidates, nine independently specified cases and eighteen incorrect artifacts
 at its exact historical source commit. Its superseded active runner has been retired.
 Its interface-conformance difference disappears in a separate post hoc protocol
-diagnostic. Broader planning-benefit, human-correction and calibration measurements
+diagnostic. The current [planning evaluation](../examples/planning/evaluation/README.md)
+(3.0, `make test-plan-eval`) revives those nine cases unchanged from Git history,
+adds eight held-out cases with sixteen corruptions and an independent oracle, and
+reports planning, validation and scheduling effects separately at the current
+source: contract-aware candidates 17/17 and current candidates 0/17 under the
+declared interface, the reverse pattern under the archived interface adaptation
+(13/17 and 17/17), 34/34 corruptions rejected with no false rejection, one
+executed verified outcome per arm as expected, and a one-run scheduling
+calibration whose fixed-graph prediction under-predicted the observed elapsed
+time. Broader planning-benefit, human-correction and calibration measurements
 remain open; these results do not justify a more elaborate planner.
 
 A [real Python cleanup workload][h-cleanup] *(historical)*
@@ -832,29 +897,47 @@ and receiver reservations are qualified, plus item 9's contract and outcome pilo
 (9F) or dynamic task pools. Preserve measurement exclusivity and required validator
 separation when choosing eligible hosts.
 
-- [ ] Filter hosts by authorized destination, project mapping, platform/toolchain,
+- [x] Filter hosts by authorized destination, project mapping, platform/toolchain,
       adapter capabilities, resource requirements, freshness, and any validator
       separation requirement. An idle incompatible host is not eligible.
-- [ ] Start with capacity-normalized reserved slots for comparable task classes,
+      (3.0: `hydra fleet task submit --placement auto`; every exclusion reason is
+      recorded per candidate. Toolchain beyond the handshake platform and adapter
+      capabilities is expressed through receiver admission labels.)
+- [x] Start with capacity-normalized reserved slots for comparable task classes,
       bounded queues, and stable tie-breaks. Then evaluate queue-delay estimates,
       measured task duration, and artifact-transfer cost as evidence warrants.
       CPU utilization alone is insufficient for agents waiting on remote APIs;
       account/provider limits shared across hosts need an explicit shared budget
       authority before Hydra claims to enforce them fleet-wide.
-- [ ] Record candidate hosts, observations, ranking, policy version, and reservation
+      (3.0: load `(reserved + queued) / host_limit`, same-class reservations,
+      queue depth, alias order; `max_queued` bounds queues. Queue-delay, duration
+      and transfer-cost hooks are typed and versioned (estimates schema 1) but
+      recorded as unavailable and unused; no shared provider budget exists.)
+- [x] Record candidate hosts, observations, ranking, policy version, and reservation
       outcome. Receiver admission remains final. Reconsider placement after a
       definitive refusal; an ambiguous dispatch remains assigned for reconciliation.
-- [ ] Add queue aging or bounded fair sharing where workloads demonstrate starvation.
+      (3.0: `fleet-placement` schema 1 under `fleet/placements/TASK_ID`;
+      `hydra fleet placement explain|replay`.)
+- [x] Add queue aging or bounded fair sharing where workloads demonstrate starvation.
       Balance producer and validator demand so fan-out does not indefinitely delay
       validation. Measure useful completions rather than pursuing equal CPU usage.
-- [ ] Consider rebalancing accepted but not-started work only with durable withdrawal
+      (3.0: `validator_reserve_slots` policy knob, default 0, keeps per-host
+      headroom for `role.validator` tasks; receivers keep FIFO order. No workload
+      has yet demonstrated starvation, so the default reserves nothing and no
+      completion measurements are claimed.)
+- [x] Consider rebalancing accepted but not-started work only with durable withdrawal
       that prevents its old receiver from starting it, followed by confirmed release
       and a new assignment generation. A lost withdrawal response blocks transfer.
       Do not migrate running agents or replay uncertain effects as load balancing.
-- [ ] Before any broader reassignment, define enforced ownership generations and
+      (3.0: `hydra fleet placement withdraw`, receiver `task-withdraw` and the
+      `withdrawn` state, generation N+1 on the next automatic submission.)
+- [x] Before any broader reassignment, define enforced ownership generations and
       stale-update rejection at receivers, result admission, and promotion. External
       side effects require their own idempotency/fencing contract; lease expiry alone
       must not authorize duplicate execution.
+      (3.0: `assignment_generation` recorded at acceptance and enforced on
+      start/resume/re-submission and at result collection, which promotion
+      consumes; the external side-effect boundary is documented, not enforced.)
 
 Acceptance: heterogeneous-host trials compare explicit placement and simple balanced
 placement using queue wait, time to verified result, throughput, transfer bytes, and
@@ -862,6 +945,13 @@ starvation. Record workload and observation traces; replay yields identical deci
 Race concurrent submitters, stale capacity, node drain, lost reservation/withdrawal
 responses, and late results. Admission limits and artifact bindings always hold;
 performance improvement is claimed only where repeated measurements support it.
+
+Status (3.0): replay identity, racing submitters (distinct and shared keys), stale
+capacity, drain, outages, definitive refusal then re-placement, lost withdrawal
+responses, stale-generation starts and late-result fencing are covered by
+`tests/test_placement.sh` and `tests/c/test_placement.c` against local receivers
+behind a controlled SSH boundary. The heterogeneous-host performance comparison
+needs real hosts and remains open; no performance improvement is claimed.
 
 Research basis (6 September 2026): Kubernetes separates
 [filtering, scoring, and reservation](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/).
@@ -956,18 +1046,38 @@ Select this work only when real workloads need newly discovered tasks or persist
 queues that finite workflows cannot express cleanly. Build on item 9F's admitted
 expansion and join semantics rather than introducing a second graph compiler.
 
-- [ ] Add file-backed pools with one coordinator, unique task claims, bounded
+- [x] Add file-backed pools with one coordinator, unique task claims, bounded
       outstanding work, cancellation/retry budgets, and stale-owner rejection.
       Reuse task execution and admission rather than adding another scheduler.
       Seal bounded expansion manifests before scheduling; freeze join membership
       and cap graph growth, artifact bytes, and repair rounds.
-- [ ] Start schedules through host timers invoking the same submission API. Define
+      *Delivered in 3.0.0:* `hydra pool` keeps pools under state v2 with the
+      pool lock as the one coordinator, sealed bounds and per-expansion
+      membership manifests, lock-protocol claim records with lease tokens,
+      `stale_owner` rejection, per-task retry budgets and pool repair rounds,
+      and executes every task through the public `hydra workflow run` and
+      `hydra exec` commands. Unknown outcomes are reconciled from recorded
+      workflow evidence or wait for an explicit operator decision.
+- [x] Start schedules through host timers invoking the same submission API. Define
       missed-run and duplicate-trigger behavior and the always-on owner needed for
       unattended scheduling; make reboot recovery an explicit opt-in contract.
+      *Delivered in 3.0.0:* `hydra schedule` prints exact crontab, systemd and
+      launchd entries, fires through `hydra schedule run-now` with slot dedup
+      tokens, skips or catches up missed slots within a bound, documents the
+      timer-process/pool-worker execution owner and makes reboot recovery an
+      opt-in flag whose restart never replays in-flight work.
 
 Acceptance: duplicate triggers and competing workers do not create duplicate task
 claims. Work growth remains bounded, cancellation propagates, and restart recovery
-does not invent completion or replay uncertain actions.
+does not invent completion or replay uncertain actions. *Local qualification*
+(`tests/test_pool.sh`, `tests/test_pool_recovery.sh`, `tests/test_schedule.sh`):
+six competing claimers and two worker loops never double-claim, competing
+firings of one slot submit once, bounds refuse growth, cancellation reaches
+claimed exec and workflow work, a killed worker's task is reconciled as
+`recovery-required` without a second attempt, and the timer text is exact and
+stable. Not qualified here: a live cron, systemd or launchd installation, macOS,
+and multi-host workers (owner-pid staleness is evaluated on the recording host
+only; other hosts rely on lease expiry).
 
 #### H. Host discovery, qualification, and staged onboarding
 
@@ -988,16 +1098,25 @@ lost-response reconciliation. No live host, provider, vendor discovery client or
 provider credential path is qualified; discovery never accepts keys, creates
 aliases, installs Hydra or grants execution permission.
 
-- [ ] **H4 — Opt-in live inventory acquisition and snapshot diffs.** Acquire one
-      selected mDNS/DNS-SD, VPN, cloud or configuration-management source through
-      its normal client/API and feed the existing candidate importer. Choose the
-      first source and account/network scope when selecting implementation. Keep
-      credentials outside records, bound acquisition time/bytes/rate, and expose
-      cache age plus added/removed/changed/conflicting candidates before selection.
-      Acceptance: stale cache, unavailable credentials, partial responses, source
-      disappearance and identity conflicts preserve provenance and do not widen
-      selection or mutate enrollment intent. Fixture coverage and separately
-      authorized live-source qualification are reported independently.
+- [x] **H4 — Opt-in live inventory acquisition and snapshot diffs.** Delivered
+      within local fixture qualification: `fleet discover|qualify --source` acquires
+      an explicitly selected `ssh-config[:FILE]` scan (literal `Host` names, then
+      the normal `ssh -G` resolution), an `ansible-inventory:FILE` INI hosts file
+      read through the operator's own files, or `dns-sd[:DOMAIN]` through one
+      terminating `avahi-browse` run, and feeds the existing candidate importer.
+      Each source records its account/network scope and client, runs once per
+      invocation within `--timeout`, 1 MiB and 100 records, keeps credentials out
+      of records (counted as omitted), and is diffed against its previous private
+      snapshot: cache age plus added/removed/changed/conflicting records are
+      reported before selection (`--diff`, `--json`). Fixture coverage (`make
+      test-discovery` live cases, `tests/test_revocation.sh`): stale cache, missing
+      file or client, timeout, partial output, source revocation, identity
+      conflicts and revoked identities preserve provenance, import nothing by
+      default and leave enrollment intents untouched. Not observed: any live mDNS
+      network, a real Ansible-managed inventory or `avahi-browse` on a real LAN;
+      that live-source qualification needs a separately authorized operator run
+      and is not claimed. VPN and cloud-tag live clients remain snapshot-only
+      (schema-2 inventories).
 
 - [ ] **H5 — Onboarding operator view and workflow qualification.** Add filters,
       candidate details, snapshot changes and per-host apply/resume/reconcile
@@ -1009,17 +1128,27 @@ aliases, installs Hydra or grants execution permission.
       success and unknown outcome; 100-host views remain bounded and responsive.
       No UI retry replays an uncertain mutation or silently bootstraps a host.
 
-- [ ] **H6 — Scoped revocation and reviewed key rotation.** Define explicit local
-      revocation for candidate/source, transport, package and project decisions,
-      retaining who/when/reason and the superseded binding under existing state
-      conventions. Re-import cannot revive a revoked identity silently. A changed
-      key shows old/new fingerprints and observation provenance; acceptance uses
-      the operator's OpenSSH process and requires fresh enrollment review.
-      Acceptance: revoked bindings block new operations and invalidate pending
-      intents; alias reuse, endpoint changes and source refresh cannot bypass the
-      block. Existing accepted tasks/evidence remain inspectable. Revocation alone
-      never cancels tasks, uninstalls packages, deletes remote state or rewrites
-      known_hosts; those actions retain their own explicit authorization.
+- [x] **H6 — Scoped revocation and reviewed key rotation.** Delivered within
+      local fixture qualification: `fleet revoke candidate|source|transport|
+      package|project ID --reason TEXT` records a final, private revocation
+      (`$HYDRA_HOME/fleet/revocations/SCOPE/`, owner-only like other fleet state)
+      with who/when/reason and the superseded binding (alias record with its
+      accepted key, candidate target, source cache summary, project aliases);
+      `fleet revoke list` shows them. Re-import from any inventory or live source
+      shows a revoked identity as `revoked`, never as a fresh candidate, and a
+      conflicting record is never imported. A changed key reports presented and
+      recorded fingerprints with observation provenance in `qualify`, `enroll
+      apply` and `remote trust-key`; acceptance stays the operator's `ssh-keygen
+      -R` plus a fresh review. Verified (`make test-discovery`, `make
+      test-enrollment`, `build/test-fleet`, `tests/test_revocation.sh`): revoked
+      bindings block fleet operations, task submission, alias reuse, re-setup,
+      enrollment publication and `--project`/package use, invalidate pending
+      apply rows before any connection, and survive endpoint changes and source
+      refresh; enrolled rows, alias records and prior qualification evidence stay
+      inspectable; revocation cancels no task, uninstalls nothing, deletes no
+      remote state and leaves `known_hosts` byte-identical. Not observed: a real
+      host key rotation on a live host or the TUI onboarding view (H5), which
+      stays open.
 
 Dependencies: H4–H6 build on the H1–H3 records, the existing strict OpenSSH policy,
 versioned handshake, package/bootstrap, fleet-init/trust and remote-task contracts
@@ -1077,8 +1206,12 @@ remote execution changes require their own bounded scope.
 
 ## Simplification alongside feature work
 
-- [ ] Keep spawn queues, workflow scheduling, and future pools on one admission and
+- [x] Keep spawn queues, workflow scheduling, and future pools on one admission and
       execution path. Avoid separate policy implementations in native frontends.
+      *3.0.0:* task pools and schedules submit through `hydra workflow run`,
+      `hydra exec` and `hydra pool add`; they add no scheduler, admission
+      policy or native frontend logic. Keep this a standing guardrail for later
+      work.
 - [ ] Keep workflow syntax deliberately restricted. Use versioned fields and files
       for dataflow; make any structured-parser dependency an explicit toolchain
       decision rather than growing ad hoc YAML or shell interpolation.

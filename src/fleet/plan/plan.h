@@ -7,6 +7,8 @@
 #define PLAN_STEPS 64U
 #define PLAN_OBLIGATIONS 256U
 #define PLAN_COMPILER "hydra-plan-1"
+/* Deterministic analysis version recorded by plan decisions and evaluations. */
+#define PLAN_EVALUATION "hydra-plan-evaluate-1"
 /* Inline agent prompts and proposal assets travel inside the compiled artifact. */
 #define PLAN_PROMPT_LIMIT (32U * 1024U)
 #define PLAN_ASSET_LIMIT (64U * 1024U)

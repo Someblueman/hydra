@@ -12,13 +12,14 @@ static bool has_capability(json_object *result, const char *required) {
     }
     return false;
 }
-static void classify_key(json_object *result) {
+static void classify_key(json_object *result, json_object *candidate) {
     json_object *error = f_field(result, "error");
     const char *code = f_string(error, "code"), *message = f_string(error, "message");
     if (!code || strcmp(code, "host_key_failed")) return;
-    if (message && strstr(message, "REMOTE HOST IDENTIFICATION HAS CHANGED"))
+    if (message && strstr(message, "REMOTE HOST IDENTIFICATION HAS CHANGED")) {
         f_string_add(error, "code", "host_key_changed");
-    else if (message && strstr(message, "No ") && strstr(message, "host key is known"))
+        hd_host_key_detail(error, candidate, message);
+    } else if (message && strstr(message, "No ") && strstr(message, "host key is known"))
         f_string_add(error, "code", "host_key_unknown");
     /* Generic verification errors stay ambiguous; never invent a diagnosis. */
     f_string_add(error, "recovery", "review the host key through your existing OpenSSH process; Hydra did not accept or change it");
@@ -46,7 +47,7 @@ json_object *hd_probe(json_object *candidate, const char *config, const struct h
     json_object_object_add(request, "protocol", json_object_new_int(F_PROTOCOL));
     f_string_add(request, "action", "handshake");
     result = f_request(&remote, request, options->seconds); json_object_put(request);
-    classify_key(result);
+    classify_key(result, candidate);
     if (!json_object_get_boolean(f_field(result, "ok"))) {
         /* SSH stderr can contain an operator's ProxyCommand arguments. Keep
          * the typed diagnosis, not potentially credential-bearing text. */

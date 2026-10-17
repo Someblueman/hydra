@@ -10,6 +10,18 @@ notes.
 ## Starting out
 
 Open `hydra` in your repository and press `n`.
+Each view explains its concept where you meet it, in its empty state: Work says
+what a head is (one piece of work with its own branch, worktree, terminal and
+agent, with an example), Workflows what a workflow is and when a single
+conversation is enough, the plan pane that a proposal runs nothing until it is
+validated and the exact revision approved, Overview's run panel how a run starts,
+Attention what needs a decision (an approval request, a failed check, a result to
+review, a stopped terminal), Hosts when a remote machine helps, and Details that
+`Session` is the live terminal while `Reported` is the outcome the agent declares.
+While typing to an agent the status row says that leaving or closing the view
+keeps the agent running; removal and execution approval state their consequences
+before `y`. The shell TUI (`hydra tui --basic`) carries the same explanation of a
+head in its empty list.
 Enter a task name, choose an available agent profile (`none` opens a shell), then
 enter an objective or leave it blank to start a conversation. A task name that is
 not already a valid branch, such as `add kill dry run`, starts on a derived branch
@@ -152,6 +164,11 @@ hydra workflow plan compile ../plan.json ../policy.json ../compiled.json [--asse
 hydra workflow plan show ../compiled.json
 hydra workflow plan run ../compiled.json --accept SHA256_FROM_PREVIEW
 hydra workflow plan result run_ID
+hydra workflow plan explain ../compiled.json [--estimates ../estimates.json]
+hydra workflow plan evaluate ../left.json ../right.json [--estimates ../estimates.json]
+hydra workflow plan observed run_ID > ../estimates.json
+hydra workflow plan decision record HEAD --select ../left.json 'reason' --reject ../right.json 'reason'
+hydra workflow plan decision show HEAD DECISION_ID --json
 
 # Parallel safety and guarded integration
 hydra claim add feature-x --path 'lib/*' --access write --reason refactor --expires-at 1790000000
@@ -328,6 +345,37 @@ see [workflows](workflows.md). An accepted digest binds execution
 scope; it does not establish that a natural-language objective was interpreted
 correctly. Inspect the final deliverable and its checks.
 
+## Fleet discovery sources and revocation
+
+`hydra fleet discover` and `hydra fleet qualify` take explicit selections only.
+Besides `--ssh ALIAS` and `--inventory FILE --select NAME`, an opt-in live source
+reads the operator's own inventory through its normal client or files:
+
+```sh
+hydra fleet discover --source ssh-config --diff --json            # ~/.ssh/config Host names
+hydra fleet discover --source ansible-inventory:/etc/ansible/hosts --json
+hydra fleet discover --source dns-sd --json                       # avahi-browse, or unavailable
+hydra fleet qualify --source ssh-config --select build --require list
+```
+
+Each report names the scope the records belong to, the cache age, and the
+added/removed/changed/conflicting records against the previous private snapshot.
+A missing file or client, a timeout, partial output, a conflicting identity or a
+revoked identity is reported and never widens the selection. Credentials found in
+an inventory are counted and dropped.
+
+```sh
+hydra fleet revoke transport build --reason "host key rotated"
+hydra fleet revoke candidate cand_6275696c64 --reason "retired"
+hydra fleet revoke list --json
+```
+
+A revocation is final for that identity, keeps who/when/reason and the superseded
+binding, blocks new operations and pending enrollment intents, and never cancels a
+task, uninstalls a package, deletes remote state or edits `known_hosts`. See
+[fleet](FLEET.md#discover-qualify-and-enroll-hosts) and
+[revocation](FLEET.md#revoke-decisions).
+
 ## Expert terminal utilities
 
 These operate on tmux panes and terminal activity. `broadcast` does not provide
@@ -338,6 +386,50 @@ completion. Use them for interactive terminal work rather than workflow gates.
 hydra broadcast -g backend "git status" # type text into the group's target panes
 hydra wait-idle -g backend -s 10        # wait for ten seconds of terminal inactivity
 ```
+
+## Pools and schedules
+
+A pool is a file-backed queue of tasks that run through the ordinary
+`hydra workflow run` and `hydra exec` commands. Bounds are sealed when the
+pool is created; tasks become claimable once their expansion is sealed.
+
+```sh
+hydra pool create review --max-outstanding 2 --max-tasks 32   # seal the bounds
+hydra pool add review --workflow review-change                 # queue a workflow
+hydra pool add review --exec feature-x --idempotent --retry 1 -- make test
+hydra pool seal review                                         # freeze membership
+hydra pool run review --worker laptop                          # claim, run, report
+hydra pool status review --json                                # inspect the record
+hydra pool cancel review                                       # stop queued and claimed work
+```
+
+A worker that dies leaves a stale claim. The next `claim` or `run` reconciles
+it from evidence: a recorded workflow run decides, an idempotent task with
+budget is re-queued, and anything else waits as `recovery-required` for
+`hydra pool complete review <task> --by you --outcome succeeded|failed|retry`.
+Expert workers call `hydra pool claim review --worker w --owner-pid $$` and
+`hydra pool complete review <task> --token <token> --outcome succeeded`
+themselves; a token that no longer matches is refused as `stale_owner`.
+
+A schedule starts work from a host timer that you install yourself; Hydra
+prints the exact crontab, systemd or launchd entry and never runs a daemon.
+
+```sh
+hydra schedule add nightly --every 1d --workflow review-change   # prints the timer entry
+hydra schedule add inbox --every 15m --pool review --workflow review-change
+hydra schedule add drain --every 15m --pool review               # worker loop by timer
+hydra schedule status nightly --format systemd                   # reprint the units
+hydra schedule run-now nightly                                   # fire this slot by hand
+hydra schedule remove nightly                                    # then remove the timer entry
+```
+
+Each firing is `hydra schedule run-now <name>` with the current slot as its
+dedup token, so a double timer fire or a manual run in the same slot submits
+once. Missed slots are skipped by default; `--missed catch-up --catch-up-limit
+N` fires the newest N missed slots. `--reboot-recovery` adds the `@reboot`,
+`Persistent=true` or `RunAtLoad` entry; it starts a new firing after a
+restart and never replays work that was in flight. See
+[workflows](workflows.md#pools-and-schedules) for the owner contract.
 
 ## Shell completions
 

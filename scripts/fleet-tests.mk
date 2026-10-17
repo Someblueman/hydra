@@ -2,6 +2,9 @@
 TEST_JOBS ?= 4
 # Start the longest scenarios early so workers do not leave a long serial tail.
 FLEET_CASES = shell-task-acceptance \
+	t3-distributed \
+	t2-headless \
+	shell-placement \
 	shell-workflow-plan-v3 \
 	enrollment \
 	plan-repair-combine \
@@ -64,6 +67,7 @@ FLEET_CASES = shell-task-acceptance \
 	native-remote-setup \
 	shell-remote-setup \
 	native-fleet-assets \
+	native-placement \
 	shell-remote-provision
 
 # Shell cases run through scripts/run-shell-test.sh like make test: private
@@ -258,6 +262,14 @@ fleet-case-shell-task-package:
 fleet-case-shell-task-acceptance:
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_task_acceptance.sh
 
+# tmux absent on the execution hosts; the loopback SSH variant is a separate
+# make target (test-t3-distributed-ssh) because it needs an OpenSSH server.
+fleet-case-t2-headless:
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_t2_headless.sh
+
+fleet-case-t3-distributed:
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_t3_distributed.sh
+
 fleet-case-discovery:
 	+@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" $(MAKE) test-discovery
 
@@ -284,3 +296,9 @@ fleet-case-native-fleet-assets:
 
 fleet-case-shell-remote-provision:
 	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_remote_provision.sh
+
+fleet-case-native-placement:
+	@sh scripts/run-test.sh "$(BUILD_DIR)/test-logs" "$@" env $(BUILD_DIR)/test-placement
+
+fleet-case-shell-placement:
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "$@" tests/test_placement.sh
