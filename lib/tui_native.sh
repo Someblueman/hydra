@@ -348,6 +348,75 @@ EOF
     done
 }
 
+# Remote work beside local work (U11): the fleet helper's visual stream, or
+# an empty stream when no remote host is registered. A registered host that
+# cannot be observed because the helper is missing is a recovery finding, not
+# a failure of the local snapshot.
+tui_native_remote_count() {
+    _tnrc_dir="$HYDRA_HOME/fleet/remotes"
+    if [ -d "$_tnrc_dir" ]; then
+        find "$_tnrc_dir" -maxdepth 1 -name '*.json' -type f 2>/dev/null | awk 'END { print NR + 0 }'
+    else
+        printf '0\n'
+    fi
+}
+
+tui_native_emit_remote_data() {
+    _tnerd_count="$(tui_native_remote_count)"
+    if [ "$_tnerd_count" -eq 0 ]; then
+        printf 'HYDRA_FLEET_TUI\t3\n'
+        return 0
+    fi
+    _load_lib cmd_fleet
+    if ! _tnerd_binary="$(fleet_binary 2>/dev/null)"; then
+        printf 'HYDRA_FLEET_TUI\t3\n'
+        printf 'R\tfleet-unavailable\t%s registered remote host%s\t%s\texact\tmake build-fleet\n' \
+            "$_tnerd_count" "$( [ "$_tnerd_count" -eq 1 ] || printf 's' )" \
+            "$(tui_native_safe_field "$HYDRA_HOME/fleet/remotes")"
+        return 0
+    fi
+    exec "$_tnerd_binary" tui-visual-data
+}
+
+# One attention stream for local and remote items: the workflow items of this
+# project and, when remote hosts are registered, the fleet items. A producer
+# that fails contributes nothing and marks the stream partial; the item rows
+# and the END counts are the producers' own.
+tui_native_emit_attention_data() {
+    _tnead_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-tui-attention.XXXXXX")" || return 1
+    "$HYDRA_BIN_CMD" workflow attention-data > "$_tnead_dir/local.tsv" 2>/dev/null || :
+    : > "$_tnead_dir/remote.tsv"
+    _tnead_remote=skip
+    if [ "$(tui_native_remote_count)" -gt 0 ]; then
+        _tnead_remote=merge
+        "$HYDRA_BIN_CMD" fleet attention-data > "$_tnead_dir/remote.tsv" 2>/dev/null || :
+    fi
+    awk -F '\t' -v remote="$_tnead_remote" '
+        FILENAME != file { file = FILENAME; index_of_file++; expected[index_of_file] = (remote == "merge" || index_of_file == 1) }
+        $1 == "HYDRA_ATTENTION" { version[index_of_file] = $2; next }
+        $1 == "ITEM" && version[index_of_file] == "3" { rows[++n] = $0; count[index_of_file]++; next }
+        $1 == "END" && version[index_of_file] == "3" && $2 == count[index_of_file] + 0 {
+            ended[index_of_file] = 1
+            if ($3 == "1") partial = 1
+            if ($4 == "1") truncated = 1
+            next
+        }
+        END {
+            ok = 0
+            for (i = 1; i <= 2; i++) {
+                if (!expected[i]) continue
+                if (ended[i]) ok = 1; else partial = 1
+            }
+            if (!ok) exit 1
+            printf "HYDRA_ATTENTION\t3\n"
+            for (i = 1; i <= n; i++) print rows[i]
+            printf "END\t%d\t%d\t%d\n", n, partial ? 1 : 0, truncated ? 1 : 0
+        }' "$_tnead_dir/local.tsv" "$_tnead_dir/remote.tsv"
+    _tnead_status=$?
+    rm -rf "$_tnead_dir"
+    return "$_tnead_status"
+}
+
 tui_native_exec() {
     _tne_binary="$(tui_native_find_binary)" || {
         echo "Error: native TUI is unavailable" >&2

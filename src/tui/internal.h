@@ -104,8 +104,11 @@ struct native_links {
     size_t count;
     bool stale;
 };
-/* preview reads a headless head's step output (adapter.c). */
-struct native_observations { struct native_capture jobs[5]; struct native_capture preview; };
+/* jobs: 0 local snapshot, 1 workflows, 2 statistics, 3 links, 4 attention,
+ * 5 the remote snapshot; preview reads a headless head's step output. */
+#define OBSERVATION_JOBS 6
+#define OBSERVATION_REMOTE 5
+struct native_observations { struct native_capture jobs[OBSERVATION_JOBS]; struct native_capture preview; };
 struct native_terminal {
     struct tv_pty client;
     struct tv_terminal_model *screen;
@@ -114,6 +117,8 @@ struct native_terminal {
     char remote_host[128], remote_project[SOURCE_TEXT];
     size_t scroll;
     bool scrolling;
+    /* A remote client was sent into its host's tmux copy mode by Ctrl-B [. */
+    bool remote_history;
     /* tmux sized the window to another, smaller client: the drawn view shows
      * tmux's dotted fill beyond that window (set while drawing). */
     bool foreign_size;
@@ -149,11 +154,42 @@ struct native_workspace {
 };
 /* Work outline (outline.c): heads the user started, the runs they launched
  * and the heads each run created. */
-enum outline_kind { OUTLINE_HEAD, OUTLINE_RUN, OUTLINE_RETIRED };
+enum outline_kind { OUTLINE_HEAD, OUTLINE_RUN, OUTLINE_RETIRED, OUTLINE_TASK };
 struct outline_row { enum outline_kind kind; size_t head, run, record; int depth; bool open; };
-#define OUTLINE_ROWS (MAX_HEADS + WF_RUNS + WF_HEADS)
-struct work_counts { size_t heads, run_heads, running, attention, runs, runs_active; };
+#define OUTLINE_ROWS (MAX_HEADS + WF_RUNS + WF_HEADS + MAX_TASKS)
+struct work_counts { size_t heads, run_heads, running, attention, runs, runs_active, remote; };
 bool head_headless(const struct head *h);
+/* One workspace across local and remote execution (U11): remote.c composes
+ * the model from the local and remote observations and keeps a disconnected
+ * host's rows as its last observation; location.c filters by location;
+ * remote_text.c words remote rows and hosts. */
+struct remote_counts { size_t heads, tasks, hosts, hosts_down, retained; };
+bool head_remote(const struct head *h);
+const struct host_observation *host_for_name(const struct app *app, const char *name);
+void model_accept(struct app *app, struct model *next);
+void model_release(struct app *app);
+void remote_failed(struct app *app, const char *error);
+long remote_age(const struct app *app);
+const char *remote_action_refusal(const struct app *app, const struct head *h, char *out, size_t size);
+void remote_counts(const struct app *app, struct remote_counts *n);
+bool location_remote_only(const struct app *app);
+bool head_visible(const struct app *app, const struct head *h);
+bool task_matches(const struct task_observation *t, const char *search);
+bool task_visible(const struct app *app, const struct task_observation *t);
+const struct task_observation *selected_task(const struct app *app);
+const char *location_label(const struct app *app, char *out, size_t size);
+void location_set(struct app *app, const char *value);
+void location_cycle(struct app *app);
+const char *head_where(const struct head *h);
+const char *remote_head_status(const struct app *app, const struct head *h);
+const char *remote_agent_name(const struct head *h);
+enum tv_style remote_head_tone(const struct app *app, const struct head *h);
+void remote_observation_text(const struct app *app, const struct head *h, char *out, size_t size);
+void host_state_text(const struct app *app, const struct host_observation *host, char *out, size_t size);
+const char *task_status(const struct app *app, const struct task_observation *t);
+enum tv_style task_tone(const struct app *app, const struct task_observation *t);
+bool remote_footer_text(const struct app *app, char *out, size_t size, enum tv_style *tone);
+void remote_retry(struct app *app, const char *host);
 size_t head_owner_run(const struct app *app, const struct head *h, size_t *record);
 size_t run_owner_head(const struct app *app, size_t run);
 const struct workflow_node *head_step(const struct app *app, const struct head *h);
@@ -168,9 +204,10 @@ void outline_select(struct app *app, const struct outline_row *row);
 void outline_move(struct app *app, int direction, bool heads_only);
 bool outline_toggle(struct app *app, int direction);
 void outline_release_run(struct app *app);
+void outline_release_task(struct app *app);
 bool text_matches(const char *text, const char *search);
 /* Run and headless-head presentation (run_text.c). Outputs are caller buffers. */
-struct outline_text { char name[TEXT + 64], count[32]; const char *status, *agent, *reported; enum tv_style tone; };
+struct outline_text { char name[TEXT + 64], count[32]; const char *status, *agent, *reported, *where; enum tv_style tone; };
 void outline_row_text(const struct app *app, const struct outline_row *row, struct outline_text *t);
 const char *head_agent_short(const struct app *app, const struct head *head);
 const char *run_head_absence(const struct app *app, const struct workflow_head *r);
@@ -279,6 +316,7 @@ struct host_row { enum host_row_kind kind; size_t index; };
 size_t hosts_rows(const struct app *app, struct host_row *rows, size_t capacity);
 size_t hosts_row_count(const struct app *app);
 void hosts_open_row(struct app *app);
+void hosts_retry_row(struct app *app);
 void setup_row_text(const struct app *app, const struct host_row *row, char *name, size_t name_size, char *state, size_t state_size);
 void render_workflow_graph(struct app *app);
 void dashboard_style(void *context, enum tv_style tone);
@@ -380,6 +418,9 @@ void group_marked_action(struct app *app);
 void kill_marked_action(struct app *app);
 void execute_palette(struct app *app, const char *query);
 void fleet_action(struct app *app);
+void remote_detail(struct app *app, const struct head *head);
+void remote_technical(struct app *app, const struct head *head);
+void task_detail(struct app *app, const struct task_observation *task);
 bool parse_theme(const char *name, int *theme);
 void style(struct app *app, enum tone tone);
 void emit_style(const struct app *app, enum tone tone);
@@ -417,6 +458,7 @@ FILE *capture_adapter(struct app *app, const char *command, const char *option, 
 int accept_model_data(struct app *app, FILE *input);
 void refresh_current_session(struct app *app);
 void capture_preview(struct app *app);
+bool head_stale(const struct app *app, const struct head *h);
 void headless_preview_tick(struct app *app);
 size_t split_fields(char *line, char **fields, size_t capacity);
 int load_model_stream(FILE *input, struct model *model, char *error, size_t error_size);

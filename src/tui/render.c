@@ -176,7 +176,11 @@ void recovery_explain(const struct recovery *item, char *title, size_t title_siz
         {"teardown-failure", "Removal did not finish: %s",
          "Removing %s stopped part way. Remaining files and state are kept. The check below shows what is left so you can finish or keep it."},
         {"malformed-state", "Unreadable head record: %s",
-         "Hydra could not read the saved state for %s. It is listed so nothing is dropped silently. The check below reports the exact problem."}
+         "Hydra could not read the saved state for %s. It is listed so nothing is dropped silently. The check below reports the exact problem."},
+        {"fleet-unavailable", "Remote hosts cannot be observed: %s",
+         "Remote hosts are registered (%s), but the optional hydra-fleet helper is not built or installed, so their work cannot appear here. Nothing on those hosts is affected. The check below builds the helper."},
+        {"observation", "Host did not answer: %s",
+         "The latest remote observation could not reach host %s. Rows shown for it are its last observation, with their age; nothing there was stopped or completed. r retries the host."}
     };
     const char *kind = item->kind, *head = item->label;
     size_t i;
@@ -278,17 +282,17 @@ static const char *tab_labels[] = {"Work", "Details", "Coordination", "Recovery"
 static const char *tab_short[] = {"Work", "Details", "Coord", "Recovery", "Overview", "Flows", "Hosts", "Workspace", "Stats", "Attention"};
 #define TAB_SHORT_BELOW 100
 
+/* One tab order for local and remote work; Hosts lists the machines, adds
+ * one and continues its setup. */
 size_t tab_order(const struct app *app, int *views) {
     size_t count = 0;
     views[count++] = 0; views[count++] = 1;
     if (app->view == 2) views[count++] = 2;
     views[count++] = 4;
-    if (app->fleet) views[count++] = 6;
     views[count++] = 9; views[count++] = 3;
-    if (!app->fleet) views[count++] = 5;
+    views[count++] = 5;
     views[count++] = 8; views[count++] = 7;
-    /* Local work keeps its tab numbers; Hosts adds and continues remote setup. */
-    if (!app->fleet) views[count++] = 6;
+    views[count++] = 6;
     return count;
 }
 
@@ -345,15 +349,29 @@ static void header_project(const struct app *app, char *project, size_t size) {
 
 /* Counts describe tasks the user started; heads a run created are counted
  * once, inside their run. */
+static void header_remote(const struct app *app, char *right, size_t size) {
+    const char *sep = dot(app);
+    struct remote_counts r;
+    remote_counts(app, &r);
+    if (!r.hosts && !r.heads && !r.tasks) return;
+    text_append(right, size, "%sRemote%s%zu head%s", sep, sep, r.heads, r.heads == 1 ? "" : "s");
+    if (r.tasks) text_append(right, size, ", %zu task%s", r.tasks, r.tasks == 1 ? "" : "s");
+    if (r.hosts) text_append(right, size, " on %zu host%s", r.hosts, r.hosts == 1 ? "" : "s");
+    if (app->remote_stale) text_append(right, size, " (stale)");
+    else if (r.hosts_down) text_append(right, size, " (%zu disconnected)", r.hosts_down);
+}
+
 static void header_summary(const struct app *app, const char *project, char *right, size_t size) {
     const char *sep = dot(app);
     struct work_counts n;
-    if (app->fleet) { snprintf(right, size, "%sFleet%s%zu remote heads%s%zu hosts", project, sep, app->model.head_count, sep, app->model.host_count); return; }
-    if (!app->model.head_count) { snprintf(right, size, "%sLocal%sno agent work yet", project, sep); return; }
     work_counts(app, &n);
-    snprintf(right, size, "%sLocal%s%zu head%s", project, sep, n.heads, n.heads == 1 ? "" : "s");
-    if (n.run_heads) text_append(right, size, " (+%zu in runs)", n.run_heads);
-    text_append(right, size, "%s%zu running%s%zu need attention%s%zu to repair", sep, n.running, sep, n.attention, sep, app->model.recovery_count);
+    if (!n.heads && !n.run_heads) snprintf(right, size, "%sLocal%sno agent work yet", project, sep);
+    else {
+        snprintf(right, size, "%sLocal%s%zu head%s", project, sep, n.heads, n.heads == 1 ? "" : "s");
+        if (n.run_heads) text_append(right, size, " (+%zu in runs)", n.run_heads);
+        text_append(right, size, "%s%zu running%s%zu need attention%s%zu to repair", sep, n.running, sep, n.attention, sep, app->model.recovery_count);
+    }
+    header_remote(app, right, size);
 }
 
 /* Display columns of UTF-8 text counting one per scalar (chrome uses narrow glyphs). */
@@ -386,20 +404,24 @@ void chrome_footer(struct app *app, struct tv_canvas *c, const char *status, enu
     (void)app;
 }
 
-struct head_columns { int status_x, agent_x, reported_x, name_width; bool wide, medium; };
+/* Columns: HEAD, STATUS, AGENT, then WHERE (the machine) from 95 columns and
+ * REPORTED from 110; a remote head's name already carries its host. */
+struct head_columns { int status_x, agent_x, where_x, reported_x, name_width; bool wide, medium, reported; };
 
 static void head_row_layout(int width, struct head_columns *k) {
-    k->wide = width >= 95; k->medium = width >= 65;
+    k->wide = width >= 95; k->medium = width >= 65; k->reported = width >= 110;
     k->reported_x = width - 12;
-    k->agent_x = k->wide ? k->reported_x - 16 : width - 15;
+    k->where_x = k->reported ? k->reported_x - 13 : width - 12;
+    k->agent_x = k->wide ? k->where_x - 16 : width - 15;
     k->status_x = (k->wide || k->medium ? k->agent_x : width) - 15;
     if (k->status_x < 20) k->status_x = 20;
     k->name_width = k->status_x - 4;
 }
 
 static void outline_heading(const struct app *app, struct outline_text *t) {
+    (void)app;
     copy_text(t->name, sizeof(t->name), "HEAD");
-    t->status = app->fleet ? "DESIRED" : "STATUS"; t->agent = app->fleet ? "HOST" : "AGENT";
+    t->status = "STATUS"; t->agent = "AGENT"; t->where = "WHERE";
     t->reported = "REPORTED"; t->tone = TV_MUTED;
 }
 
@@ -429,18 +451,27 @@ static void outline_line(struct app *app, const struct outline_row *row, bool se
     column(app, 0, k.name_width + 3, row_tone, cell);
     column(app, k.status_x, 14, selected ? TV_SELECTED : t.tone, t.status);
     if (k.medium || k.wide) column(app, k.agent_x, k.wide ? 15 : 14, row_tone, t.agent);
-    if (k.wide && !app->fleet) column(app, k.reported_x, 12, row_tone, t.reported);
+    if (k.wide) column(app, k.where_x, 12, row_tone, t.where);
+    if (k.reported) column(app, k.reported_x, 12, row_tone, t.reported);
     app->line++;
 }
 
 void render_empty_work(struct app *app) {
+    char label[160];
     linef(app, "");
     style(app, TONE_STRONG);
-    linef(app, app->search[0] ? "No heads match the search." : app->fleet ? "No remote heads." : "No agent work in this project yet.");
+    if (app->search[0]) linef(app, "No heads match the search.");
+    else if (app->location[0]) linef(app, "No %s to show.", location_label(app, label, sizeof(label)));
+    else linef(app, "No agent work in this project yet.");
     style(app, TONE_BASE);
     linef(app, "");
     if (app->search[0]) { paragraph(app, "Esc clears the search.", TV_BASE); return; }
-    if (app->fleet) { paragraph(app, "Hosts shows connectivity for each machine; Recovery lists host problems. In Hosts, A adds a machine.", TV_BASE); return; }
+    if (location_remote_only(app)) {
+        paragraph(app, app->model.host_count ? "Hosts shows each machine's connection and last observation; r there retries a disconnected host. Esc or L shows all work."
+                  : "No remote host is registered yet. Hosts (H) adds a machine over SSH; Esc or L shows all work.", TV_BASE);
+        return;
+    }
+    if (app->location[0]) { paragraph(app, "Esc or L shows all work.", TV_BASE); return; }
     paragraph(app, "A head is one piece of work: its own branch and worktree, a terminal, and an agent working inside it. You can follow several heads here at once.", TV_BASE);
     linef(app, "");
     paragraph(app, "Press n to start one: Hydra creates the branch and worktree, opens the terminal and starts your agent in it. Press : for other actions.", TV_BASE);
@@ -452,8 +483,11 @@ void render_empty_work(struct app *app) {
 static void summary_line(struct app *app, const struct head *head, char *line, size_t size) {
     const char *sep = dot(app);
     char agent[TEXT + 96];
-    if (app->fleet) {
-        snprintf(line, size, "Host %.100s%sdesired %.40s%sproject %.300s", head->remote_host, sep, head->desired, sep, head->remote_project);
+    if (head_remote(head)) {
+        char observation[TEXT];
+        remote_observation_text(app, head, observation, sizeof(observation));
+        snprintf(line, size, "On %.100s%s%s%sdesired %.40s%sobservation %s%sproject %.300s", head->remote_host, sep,
+                 remote_head_status(app, head), sep, head->desired, sep, observation, sep, head->remote_project);
         return;
     }
     head_agent_text(app, head, agent, sizeof(agent));
@@ -473,7 +507,7 @@ static const char *open_action(const struct app *app, const struct head *head) {
 
 static void summary_actions(struct app *app, const struct head *head, char *line, size_t size) {
     const char *sep = dot(app);
-    if (app->fleet) snprintf(line, size, "Enter details%sa attach to terminal%sc interrupt", sep, sep);
+    if (head_remote(head)) snprintf(line, size, "Enter details%sa talk to the agent%sx interrupt%sr retry its host", sep, sep, sep);
     else if (!head->head_id[0]) snprintf(line, size, "Enter details%sx remove", sep);
     else if (head_headless(head)) snprintf(line, size, "Enter details%sp step output%sx %s%s: more actions", sep, sep,
                                            head_run_role(app, head) && !strcmp(head_run_role(app, head), "worker") ? "dismiss (keeps the branch)" : "remove", sep);
@@ -492,9 +526,24 @@ static void summary_panel(struct app *app, const char *title, const char *first,
     app->line = r.y + r.height;
 }
 
+/* The selected remote task: receiver-owned, observed through its host. */
+static void task_summary(struct app *app, const struct task_observation *task, char *first, size_t first_size, char *second, size_t second_size) {
+    const char *sep = dot(app);
+    snprintf(first, first_size, "On %.100s%s%s%sowner %s%sobservation %s%swaiting %s%snext %s", task->host, sep, task_status(app, task), sep,
+             task->owner, sep, task->retained ? "retained; host disconnected" : task->freshness, sep, task->waiting_reason, sep, task->next_action);
+    snprintf(second, second_size, "Enter details%sY approve%sN reject%sR resume%sX cancel%sr retry its host", sep, sep, sep, sep, sep);
+}
+
 static void render_selected_summary(struct app *app) {
     char first[1024], second[256], title[TEXT + 64];
     const struct head *head = selected_head(app);
+    const struct task_observation *task = selected_task(app);
+    if (task) {
+        snprintf(title, sizeof(title), "task %.200s on %.40s", task->task_id, task->host);
+        task_summary(app, task, first, sizeof(first), second, sizeof(second));
+        summary_panel(app, title, first, second);
+        return;
+    }
     if (app->run_row && app->workflows && app->workflow_run < app->workflows->run_count) {
         run_summary_text(app, app->workflow_run, title, sizeof(title));
         run_next_text(app, app->workflow_run, first, sizeof(first));
@@ -513,7 +562,8 @@ static void list_footer(struct app *app, size_t position, size_t count) {
     struct work_counts n;
     work_counts(app, &n);
     style(app, TONE_MUTED);
-    if (n.run_heads) linef(app, "%zu head%s you started%s%zu in runs  |  Row %zu of %zu", n.heads, n.heads == 1 ? "" : "s", dot(app), n.run_heads, position + 1U, count);
+    if (n.remote) linef(app, "%zu heads  |  Row %zu of %zu  |  %zu remote", n.heads + n.remote, position + 1U, count, n.remote);
+    else if (n.run_heads) linef(app, "%zu head%s you started%s%zu in runs  |  Row %zu of %zu", n.heads, n.heads == 1 ? "" : "s", dot(app), n.run_heads, position + 1U, count);
     else linef(app, "%zu heads  |  Row %zu of %zu", n.heads, position + 1U, count);
     style(app, TONE_BASE);
 }
@@ -524,6 +574,7 @@ static void list_rows(struct app *app, const struct outline_row *rows, size_t co
     for (index = start; index < count && available-- > 0; index++) {
         if (rows[index].kind == OUTLINE_HEAD) record_hit(app, rows[index].head);
         else if (rows[index].kind == OUTLINE_RUN) record_hit(app, MAX_HEADS + 1U + rows[index].run);
+        else if (rows[index].kind == OUTLINE_TASK) record_hit(app, MAX_HEADS + 1U + WF_RUNS + rows[index].record);
         outline_line(app, &rows[index], index == position);
     }
 }
@@ -537,7 +588,7 @@ static void render_list(struct app *app) {
     retarget_selection(app);
     count = outline_build(app, rows, OUTLINE_ROWS);
     position = outline_position(app, rows, count);
-    if (position == count && app->run_row) { app->run_row = false; retarget_selection(app); position = outline_position(app, rows, count); }
+    if (position == count && (app->run_row || app->task_row)) { app->run_row = app->task_row = false; retarget_selection(app); position = outline_position(app, rows, count); }
     if (count == 0U) { render_empty_work(app); return; }
     list_rows(app, rows, count, position, available < 1 ? 1 : available);
     list_footer(app, position < count ? position : 0, count);
@@ -548,8 +599,9 @@ static void render_coordination(struct app *app) {
     const struct head *head = selected_head(app);
     if (head == NULL) { render_empty_work(app); return; }
     style(app, TONE_STRONG); linef(app, "COORDINATION  %s", head->branch); style(app, TONE_BASE);
-    if (app->fleet) {
-        paragraph(app, "Remote heads are coordinated on their host. Use hydra fleet workflow to inspect assignments there.", TV_BASE);
+    if (head_remote(head)) {
+        linef(app, "");
+        paragraph(app, "This head runs on another machine. Claims, scopes, queue and resources are coordinated on that host; hydra fleet workflow inspects assignments there.", TV_BASE);
         return;
     }
     linef(app, "");
@@ -622,7 +674,7 @@ static void render_help(struct app *app) {
     style(app, TONE_STRONG); linef(app, "KEYBOARD HELP"); style(app, TONE_BASE);
     if (app->rows < 20) {
         linef(app, "Tab/Shift-Tab tabs or panes  arrows select  Enter open  Esc back");
-        linef(app, app->fleet ? "a attach  c interrupt  / search" : "n new task  a agent  x remove  / search  : actions");
+        linef(app, "n new task  a agent  x remove (remote: interrupt)  / search  L location  : actions");
         linef(app, "t theme  ? close help  q quit");
         return;
     }
@@ -631,17 +683,14 @@ static void render_help(struct app *app) {
     linef(app, "Left / Right      previous / next tab       1-9  jump to a tab");
     linef(app, "Up / Down, j / k  select                    Enter  open the selection");
     linef(app, "Esc               one step back (details%slist, close help, clear search)", sep);
-    section(app, app->fleet ? "REMOTE HEADS" : "WORK");
-    if (app->fleet) {
-        linef(app, "a  attach to a remote terminal        c  interrupt the remote head (confirmed)");
-        linef(app, "/  search heads                       I  attention");
-    } else {
-        linef(app, "n  start a new task                   a  talk to the selected agent");
-        linef(app, "x  remove selected or marked heads    Space / A  mark one / all   G  group marked");
-        linef(app, "/  search                             :  more actions (diff, switch, approvals...)");
-        linef(app, "p  recent terminal output             d  technical details      c  coordination");
-        linef(app, "Enter / l / h  expand or collapse a run; its heads are listed inside it");
-    }
+    section(app, "WORK, LOCAL AND REMOTE");
+    linef(app, "n  start a new task                   a  talk to the selected agent (local or remote)");
+    linef(app, "x  remove selected or marked heads;   on a remote head: interrupt its agent (confirmed)");
+    linef(app, "L  location: all / local / remote / one host    r  retry a disconnected host");
+    linef(app, "/  search                             :  more actions (diff, switch, approvals...)");
+    linef(app, "p  recent terminal output             d  technical details      c  coordination");
+    linef(app, "Enter / l / h  expand or collapse a run; its heads are listed inside it");
+    linef(app, "Remote task row: Y approve  N reject  R resume  X cancel (fresh evidence only)");
     section(app, "WORKSPACE");
     linef(app, "A  conversation   B  plan overview   C  monitor   z  zoom the focused pane   S  two agents");
     linef(app, "While typing to an agent (Esc and Tab go to the agent): Ctrl-B Tab leaves input,");
@@ -651,7 +700,7 @@ static void render_help(struct app *app) {
     linef(app, "P  review the agent's proposal   V  validate   F  request changes (feedback to the agent)");
     linef(app, "E  execute the validated revision (confirm with y)   I  import draft and policy files");
     section(app, "OTHER");
-    linef(app, "H  hosts: A adds a remote machine over SSH; Enter continues its setup");
+    linef(app, "H  hosts: Enter follows a host's work, r retries it, A adds a machine over SSH");
     linef(app, "t  theme (terminal / dark / light)    D  statistics    I  attention    ?  close help    q  quit");
 }
 
@@ -699,7 +748,8 @@ static long snapshot_age(time_t observed_at, bool headless) {
     return age < 0 ? 0L : age;
 }
 static long snapshot_limit(const struct app *app) {
-    return 2L * HYDRA_TUI_REFRESH_SECONDS + (app->fleet ? (long)HYDRA_FLEET_TUI_REQUEST_SECONDS : 0L);
+    (void)app;
+    return 2L * HYDRA_TUI_REFRESH_SECONDS;
 }
 enum tv_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size) {
     long age = snapshot_age(observed_at, headless), limit = snapshot_limit(app);
@@ -724,11 +774,31 @@ static void status_line(struct app *app, char *out, size_t size, enum tv_style *
     enum tv_style fresh_tone = snapshot_freshness(app, app->view == 5 ? app->workflow_at : app->snapshot_at, stale, headless, fresh, sizeof(fresh));
     *tone = TV_MUTED;
     if (app->marked_count) { status_marked(app, out, size); *tone = TV_STRONG; return; }
-    if (stale && app->snapshot_error[0]) { snprintf(out, size, "%s%s%s", fresh, sep, app->snapshot_error); *tone = TV_WARNING; return; }
+    /* The answer to the user's last action stays visible beside a stale
+     * snapshot's warning; neither hides the other. */
+    if (stale && app->snapshot_error[0]) {
+        if (app->notice[0]) snprintf(out, size, "%.200s%s%s%s%.200s", app->notice, sep, fresh, sep, app->snapshot_error);
+        else snprintf(out, size, "%s%s%s", fresh, sep, app->snapshot_error);
+        *tone = TV_WARNING; return;
+    }
     if (app->notice[0]) { snprintf(out, size, "%s", app->notice); *tone = TV_BASE; return; }
     if (app->search[0]) { snprintf(out, size, "Search: %s%sEsc clears", app->search, sep); *tone = TV_BASE; return; }
     snprintf(out, size, "%s", fresh);
     *tone = fresh_tone;
+    /* The remote observation has its own age; a stale one is said beside
+     * the local freshness so remote rows are never read as current. */
+    {
+        char remote[TEXT];
+        enum tv_style remote_tone;
+        if (app->view != 5 && remote_footer_text(app, remote, sizeof(remote), &remote_tone)) {
+            text_append(out, size, "%s%s", sep, remote);
+            if (remote_tone == TV_WARNING || *tone == TV_MUTED) *tone = remote_tone;
+        }
+    }
+    if (app->location[0]) {
+        char label[160];
+        text_append(out, size, "%sShowing %s", sep, location_label(app, label, sizeof(label)));
+    }
 }
 
 /* Recovery offers x only for a clean leftover worktree the shell gc can remove. */
@@ -748,7 +818,7 @@ static const char *hosts_hints(struct app *app, bool narrow) {
     if (hosts_setup_selected(app, &(size_t){0}))
         return narrow ? "Enter continue  e edit  x remove  q quit"
                       : "j/k select  Enter continue  e edit  x remove  A add a host  Esc back  ? help  q quit";
-    return narrow ? "Enter open  A add host  ? help  q quit" : "j/k select  Enter open  A add a host  Esc back  ? help  q quit";
+    return narrow ? "Enter follow  r retry  A add host  ? help  q quit" : "j/k select  Enter follow its work  r retry  A add a host  Esc back  ? help  q quit";
 }
 
 /* Hints for views whose keys do not depend on local versus fleet mode. */
@@ -763,28 +833,32 @@ static const char *view_hints(struct app *app, bool narrow) {
     return NULL;
 }
 
-static const char *fleet_hints(struct app *app, bool narrow) {
-    if (narrow) return "a attach  c interrupt  ? help  q quit";
-    return app->view == 1 ? "a attach  c interrupt  d technical  Esc back  ? help  q quit" : "Enter details  a attach  c interrupt  / search  Tab next tab  ? help  q quit";
-}
-
-/* Details of a headless head: its step output replaces the agent pane. */
+/* Details of a headless head: its step output replaces the agent pane. A
+ * remote head is talked to the same way; x interrupts instead of removing. */
 static const char *detail_hints(struct app *app, bool narrow) {
     const struct head *head = selected_head(app);
     if (app->diagnostics) return "d close technical details  Esc back  ? help  q quit";
+    if (selected_task(app)) return narrow ? "Y/N/R/X controls  Esc back  q quit" : "Y approve  N reject  R resume  X cancel  r retry host  Esc back  ? help  q quit";
+    if (head && head_remote(head)) return narrow ? "a agent  x interrupt  Esc back  q quit" : "a agent  x interrupt  r retry host  c coordination  d technical  Esc back  ? help  q quit";
     if (head && head_headless(head)) return narrow ? "p step output  Esc back  ? help  q quit" : "p step output  x remove  d technical  : more  Esc back  ? help  q quit";
     return narrow ? "a agent  p output  Esc back  ? help  q quit" : "a agent  p output  c coordination  x remove  d technical  Esc back  ? help  q quit";
 }
 
 static const char *local_hints(struct app *app, bool narrow) {
+    const struct head *head = selected_head(app);
     if (app->view == 1) return detail_hints(app, narrow);
     if ((app->view == 0 || app->view == 4) && app->run_row)
         return narrow ? "Enter expand  j/k select  ? help  q quit" : "j/k select  Enter or l/h expand/collapse the run  C monitor  w workflows  ? help  q quit";
+    if ((app->view == 0 || app->view == 4) && selected_task(app))
+        return narrow ? "Enter details  Y/N/R/X  L location  q quit" : "j/k select  Enter details  Y approve  N reject  R resume  X cancel  L location  ? help  q quit";
     if (app->view == 2) return "Esc back  : more actions  ? help  q quit";
-    if (app->view == 4) return narrow ? "Enter open  Tab next tab  ? help  q quit" : "j/k select  Enter details  Tab next tab  ? help  q quit";
-    if (narrow) return "Enter open  n new  x remove  ? help  q quit";
-    return app->model.head_count ? "j/k select  Enter details  a agent  n new task  x remove  / search  : more  ? help  q quit"
-                                 : "n new task  : more actions  Tab next tab  ? help  q quit";
+    if (app->view == 4) return narrow ? "Enter open  Tab next tab  ? help  q quit" : "j/k select  Enter details  a agent  L location  Tab next tab  ? help  q quit";
+    if (narrow) return head && head_remote(head) ? "Enter open  a agent  x interrupt  ? help  q quit" : "Enter open  n new  x remove  ? help  q quit";
+    if (app->cols < 100) return head && head_remote(head) ? "Enter details  a agent  x interrupt  r retry  L where  ? help  q quit"
+                                                          : "Enter details  a agent  n new  x remove  L where  : more  ? help  q quit";
+    if (head && head_remote(head)) return "j/k select  Enter details  a agent  x interrupt  r retry host  L location  / search  ? help  q quit";
+    return app->model.head_count || app->model.task_count ? "j/k select  Enter details  a agent  n new task  x remove  L location  / search  : more  ? help  q quit"
+                                 : "n new task  : more actions  L location  Tab next tab  ? help  q quit";
 }
 
 static const char *hint_line(struct app *app) {
@@ -794,12 +868,15 @@ static const char *hint_line(struct app *app) {
     if (app->help) return "? or Esc closes help";
     hints = view_hints(app, narrow);
     if (hints) return hints;
-    return app->fleet ? fleet_hints(app, narrow) : local_hints(app, narrow);
+    return local_hints(app, narrow);
 }
 
 static void detail_title(const struct app *app, const struct head *head, char *out, size_t size) {
     const char *label = app->diagnostics ? "Technical details" : "Details";
+    const struct task_observation *task = selected_task(app);
+    if (task) { snprintf(out, size, "%s: task %.100s on %.40s", label, task->task_id, task->host); return; }
     if (!head) { snprintf(out, size, "%s", label); return; }
+    if (head_remote(head)) { snprintf(out, size, "%s: %.120s on %.40s", label, head->remote_branch[0] ? head->remote_branch : head->branch, head->remote_host); return; }
     snprintf(out, size, "%s: %.200s", label, head->branch);
 }
 
@@ -809,7 +886,8 @@ static const char *panel_title(struct app *app, char *out, size_t size) {
     if (app->view == 6 && native_setup_active(app)) return native_setup_title(app);
     if (app->result_open) return app->result_title;
     if (app->help) return "HELP";
-    if (app->view == 0) snprintf(out, size, "%s", app->fleet ? "Remote heads" : "Heads in this project");
+    if (app->view == 0 && !app->location[0]) snprintf(out, size, "%s", "Heads in this project");
+    else if (app->view == 0) { char label[160]; snprintf(out, size, "Heads: %s", location_label(app, label, sizeof(label))); }
     else if (app->view == 1) detail_title(app, head, out, size);
     else snprintf(out, size, "%s", names[app->view] ? names[app->view] : tab_labels[app->view]);
     return out;
