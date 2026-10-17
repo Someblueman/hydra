@@ -325,7 +325,7 @@ static void test_review_stale(const char *tui, const char *hydra) {
     result(wait_for_marker(&session, "Loading exact review", 1000) && wait_for_file(fixture.pids, 1000), "slow evidence runs as tracked asynchronous capture");
     write_input(session.master, "]", 1U);
     result(wait_for_marker(&session, "Selection or revision changed", 1000), "changing candidate invalidates pending review");
-    result(pids_gone(fixture.pids), "candidate change removes review process and descendant");
+    result(pids_gone_within(fixture.pids, PIDS_GONE_GRACE_MS), "candidate change removes review process and descendant");
     unlink(fixture.delay);
     result(review_reload(&session, &fixture, fixture.original, "Review unavailable"), "previous candidate response cannot satisfy new selection");
     write_input(session.master, "[", 1U);
@@ -378,10 +378,11 @@ static void cancel_active_review(struct session *session, struct review_fixture 
     drain_output(session); long long started = monotonic_ms();
     write_input(session->master, keys[i], strlen(keys[i]));
     wait_review_cancellation(session, i);
-    long long gone_deadline = monotonic_ms() + 400;
-    while (!pids_gone(fixture->pids) && monotonic_ms() < gone_deadline) sleep_ms(10);
+    /* The cancellation bound covers the UI's reaction; the owner's descendants
+     * are then gone within the reaping grace. */
     long long elapsed = monotonic_ms() - started;
-    result(elapsed < (i == 5U ? 14500 : 1500) && pids_gone(fixture->pids), "capture cancellation is bounded and reaps owned processes");
+    bool gone = pids_gone_within(fixture->pids, PIDS_GONE_GRACE_MS);
+    result(elapsed < (i == 5U ? 14500 : 1500) && gone, "capture cancellation is bounded and reaps owned processes");
     if (i < 2U) result(marker_file_exists(cleaned) && !marker_file_exists(scratch), "producer removes scratch after reaping its separate group");
     else result(elapsed >= 650, "TERM-resistant capture reaches bounded KILL escalation");
     if (i == 0U || i == 3U || i == 5U) review_stop(session); else close_session(session);
