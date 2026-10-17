@@ -41,7 +41,7 @@ SHELL_TEST_SLOW = kill fleet_review workflow_run_heads workflow_runtime \
 	kill_all workflow_e2e verified_integration spawn_bootstrap merge_train \
 	orphan_worktrees admission_execution integration_safety parallel \
 	fixture_cleanup workflow_attention lifecycle workflow_review_bindings \
-	json_output init_source_tree dashboard admission
+	json_output init_source_tree dashboard admission concurrent_headless_observation
 SHELL_TEST_ORDER = $(filter $(SHELL_TEST_NAMES),$(SHELL_TEST_SLOW)) \
 	$(filter-out $(SHELL_TEST_SLOW),$(SHELL_TEST_NAMES))
 

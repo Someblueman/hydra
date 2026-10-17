@@ -81,7 +81,8 @@ observer-overhead tables, is in [summary.md](summary.md).
    run without output, all phases completed but 7 of 10 runs ended this way on
    their final, simultaneous observation. At one head every run completed. The
    public result does not keep the failing call's reason (timeout or non-zero
-   exit), so the cause is not isolated here.
+   exit), so the cause is not isolated here. **Resolved after this baseline**:
+   see the [addendum](#addendum-17-october-2026-10-head-headless-sustained-output-after-the-observation-fix).
 2. **50 headless heads never became usable.** In two attempts (15 s and 40 s
    readiness bounds) the first client showed "STALE: no snapshot yet / shell data
    adapter timed out" and no heads.
@@ -100,6 +101,53 @@ observer-overhead tables, is in [summary.md](summary.md).
 6. Sustained output at 4 KiB/s per producer left no producer backlog at the
    declared end (35 receipts, 0 EAGAIN); tmux resident memory grew up to
    23.2 MiB over 18 s at 10 interactive heads.
+
+## Addendum, 17 October 2026: 10-head headless sustained output after the observation fix
+
+Not part of the bundle above (which is unchanged) and not used for its budgets.
+
+Cause of finding 1, isolated afterwards with a deterministic reproduction
+(`make test-one T=concurrent_headless_observation`): each status ingest waited
+for the shared project state lock for 5 tries of 50 ms and then failed, and the
+CLI reported that as "unsupported adapter status 'running'". With
+`HYDRA_LOCK_RETRIES=200` the ingests queued behind one another instead and hit
+their 5 s deadline (exit 124), because every provider status line (8 per second
+per head) started one. Before the fix that reproduction kept 2 of 10 and 1 of
+20 concurrent runs under three `yes` burners.
+
+The fix records a status only when it changes within a run, keeps a lost one in
+the receipt (`diagnostic.observation`) without stopping the worker, retries it
+no sooner than 1 s later and once after the provider exits, gives observed
+status a bounded 2 s lock window and shortens the locked section. The
+reproduction then passed three consecutive times at 10 heads and at 20 heads
+with three `yes` burners (load average 1.8 to 10.7 at start); at 20 heads 1 to
+4 runs per pass needed a retry, and every final status was recorded.
+
+Rerun of the planned 10-head headless sustained-output cells, default
+configuration, 125 ms producer interval, one trial, at `6480418` (identities
+unchanged), load average 3.2 at start and 5.4 at end:
+
+```sh
+make perf-matrix PERF_MATRIX_ARGS="--output DIR --heads 10 --modes headless \
+  --clients 1 3 --preview closed --cases sustained-output --settle 3 --idle 8 \
+  --gap 1.5 --poll-ms 100 --load-note '...'"
+```
+
+Cells planned 2, measured 2; validation ok; cleanup ok; 0 fixture errors. All
+10 supervised runs exited 0 with state `completed`, no receipt recorded a lost
+observation, and result retention was verified (288 output events per worker).
+
+| Cell | TUI CPU % | helpers CPU % | launches/min (git/tmux/hydra) | TUI RSS MiB | nav / search / resize / cancel ms | peak backlog B | EAGAIN | recovery ms |
+|---|---:|---:|---|---:|---|---:|---:|---:|
+| 10/headless/1c/closed/sustained-output | 4.13 | 120.29 | 735 (91/0/7) | 37.0 | 0.6 / 4.6 / 15.5 / 20.9 | 128 | 0 | 0.0 |
+| 10/headless/3c/closed/sustained-output | 7.88 | 264.19 | 1530 (186/0/18) | 95.8 | 0.7 / 1.9 / 30.0 / 20.6 | 128 | 0 | 0.0 |
+
+Provisioning took 27.8 s (spawn median 1.9 s) and clients were usable after
+2.0 to 2.3 s. Finding 2 (50 headless heads) is not addressed. Starting many
+supervised runs at the same instant is a separate limit: the host admission
+lock (40 tries of 50 ms) refused 1 of 10 and 14 of 20 simultaneous `exec`
+starts in a side experiment, so the reproduction starts owners one at a time,
+as this fixture does.
 
 ## Provisional budgets (Linux container; not frozen)
 

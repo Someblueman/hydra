@@ -95,6 +95,17 @@ Head history remains after teardown with `desired-state=stopped`.
   Session disappearance alone is not task completion.
 - Resume retains the head ID, creates a new instance, and marks the old instance as
   superseded. Stale-instance adapter input is rejected.
+- Provider status in a supervised headless run is a heuristic observation, never
+  authoritative. The supervisor records a status only when it differs from the
+  last one recorded in that run (`observed-source=adapter`,
+  `observed-confidence=reported`), through `hydra adapter ingest` bounded at 5 s,
+  whose lock wait on the project state is bounded at about 2 s by default
+  (`HYDRA_LOCK_RETRIES` overrides it). A status that cannot be recorded never
+  stops the worker or changes the run's result: it is retried with the next
+  status line no sooner than 1 s later and once after the provider exits, and the
+  receipt keeps why (below). A changed current instance still stops the run as
+  `stale_instance`. The ingest reports an unsupported status, a busy project state
+  lock and a failed write as distinct errors.
 - Teardown defaults to no transcript. `redacted` and `full` are explicit policies;
   retained transcripts are bounded and instance-scoped.
 
@@ -142,8 +153,15 @@ Lifecycle, event, and message records follow the schemas described in this guide
   `{"text":string,"bytes":integer,"truncated":boolean}`: `text` is at most 4096
   bytes of the start of that output, cut at a character boundary, with invalid UTF-8
   and NUL bytes replaced by `?`; `bytes` counts the whole source and `truncated` is
-  true when `text` is shorter. It is absent from completed runs and when both
-  streams are empty. It is diagnostic text, never an answer, event or verification.
+  true when `text` is shorter. Without a lost observation it is absent from
+  completed runs and when both streams are empty. A receipt of any run in which a
+  status observation could not be recorded adds `diagnostic.observation`,
+  `{"failures":integer,"exit_status":integer,"timed_out":boolean,
+  "stderr":EXCERPT|null,"unrecorded_status":string|null}`: the number of failed
+  ingests, the last one's exit status (124 at its deadline), its stderr, and the
+  latest provider status never recorded (null when a retry recorded it); on a
+  completed run `stdout` and `stderr` are then null. It is diagnostic text, never
+  an answer, event or verification.
 - The receipt additively records `configuration` when a provider's own
   configuration decides the model: `{"model":{"value","source"},
   "reasoning_effort":{"value","source"},"scope"}` with either member optional.

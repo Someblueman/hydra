@@ -129,6 +129,18 @@ static void diagnose(void) {
     json_object_put(record); record = json_object_new_object(); stream.adapter = "none"; cap.err_bytes = 0;
     agent_diagnose(record, &stream, &cap, 1); assert(!f_field(record, "diagnostic"));
     json_object_put(record);
+    /* A lost status observation is kept with its reason even when the run completed. */
+    record = json_object_new_object(); stream.observation_failures = 2; stream.observation_exit = 124; stream.observation_timed_out = true;
+    stream.observation_error = agent_excerpt("Error: project state lock is busy\n", 34);
+    memcpy(stream.pending_status, "idle", 5); memcpy(stream.recorded_status, "running", 8);
+    agent_diagnose(record, &stream, &cap, 0); diagnostic = f_field(record, "diagnostic");
+    assert(diagnostic && !f_field(diagnostic, "stdout") && !f_field(diagnostic, "stderr"));
+    assert(json_object_get_int(f_field(f_field(diagnostic, "observation"), "failures")) == 2);
+    assert(json_object_get_int(f_field(f_field(diagnostic, "observation"), "exit_status")) == 124);
+    assert(json_object_get_boolean(f_field(f_field(diagnostic, "observation"), "timed_out")));
+    assert(!strcmp(f_string(f_field(f_field(diagnostic, "observation"), "stderr"), "text"), "Error: project state lock is busy\n"));
+    assert(!strcmp(f_string(f_field(diagnostic, "observation"), "unrecorded_status"), "idle"));
+    json_object_put(record); json_object_put(stream.observation_error);
 }
 int main(void) {
     char root[] = "/tmp/hydra-agent-profile-test.XXXXXX", script[F_PATH], link[F_PATH], definition[F_PATH];

@@ -349,6 +349,10 @@ it only skips Cursor's workspace prompt and never auto-approves commands (`--for
 A failed headless run keeps a 4096-byte, character-safe excerpt of provider stderr
 and of stdout the adapter could not decode in its receipt's `diagnostic` field; see
 [Contracts](CONTRACTS.md#profiles-tasks-adapters-and-scopes).
+Provider status reported by a headless run is a heuristic: Hydra records only
+changes, and when the project state is too busy to record one (for example many
+heads finishing together) the run continues and its receipt's
+`diagnostic.observation` says why and which status, if any, was never recorded.
 
 A declared `done` outcome is separate from verification: use `exec` or a named
 `gate` to record whether a command passed, then review before integration.
