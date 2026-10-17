@@ -29,7 +29,7 @@ fail_count=0
 # Setup test environment
 TEST_DIR=""
 setup_test_env() {
-    TEST_DIR="$(mktemp -d)"
+    TEST_DIR="$(test_mktemp_dir)"
     mkdir -p "$TEST_DIR"
     HYDRA_HOME="$TEST_DIR"
     export HYDRA_HOME

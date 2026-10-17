@@ -7,6 +7,178 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-09-28
+
+### Added
+
+- `hydra remote setup NAME [USER@]HOST` guides a fresh SSH account to a verified
+  fleet alias and resumes from private state when rerun; `hydra remote setup status
+  NAME` shows progress, and each step has its own command (`trust-key`, `preflight`,
+  `provision`, `agents`, `install-agent`, `sign-in`). Every change shows a plan and
+  needs approval: interactive `y` (typed `yes` for a host key), or with `--json`, CI
+  or no terminal an `approval_required` result (exit 3) naming the exact approving
+  command. `trust-key` never accepts a changed or ambiguous host key and only appends
+  the approved line to known_hosts; `preflight` reports platform, tools and existing
+  installs read-only and without sudo. macOS remotes pass preflight with a
+  warning when an unpinned helper will be installed (`--binary FILE`, or this
+  host's own helper for exactly the same platform); other platforms fail with
+  `platform_unsupported`. Help and bash, zsh and fish completions include the new
+  commands.
+- The control centre adds remote hosts: the Hosts tab (`H`, now also in local
+  work) lists unfinished setups (from `hydra remote setup list --json`) and `A`
+  starts one from an SSH destination. Hydra runs the same `hydra remote setup`
+  commands, shows each step, requirement (with its suggested fix) and plan, needs
+  a typed `yes` for a new host key and `y` for other plans, pauses on a missing or
+  pre-3.0 tmux (heads cannot run there; Enter continues anyway) while other
+  preflight warnings only show in the step list, and never offers to
+  accept a changed key. After provisioning it shows the agent inventory so you can
+  pick agents to install (after reviewing the installer plan) or sign in to; both
+  run on your terminal, and a failure is explained from the error the CLI recorded.
+  While a step runs it shows what it is doing and for how long (`Checking the
+  host key… 12s`); Esc or `c` cancels it (Hydra stops the step's processes and
+  shows the recorded setup status, so continuing later is safe) and `b` keeps it
+  running in the background. The form's SSH config file field accepts `~/...`
+  (expanded to your home directory; nothing else is expanded). On Hosts, `e`
+  edits an unfinished setup that has not changed the remote (the form opens
+  prefilled; the same name replaces the old record after you approve its
+  removal) and `x` removes a setup's record after showing what stays on the
+  remote. A name that already has an unfinished setup is caught in the form,
+  which offers to continue, edit or remove that setup instead.
+  Below 100 columns the tab bar uses short labels (`Coord`, `Flows`, `Stats`) so
+  every tab, Hosts included, stays visible at 80 columns.
+- `hydra remote setup list [--json]` lists every setup with its destination,
+  status and next step, read-only. `setup status NAME --json` reports a failed
+  installer or sign-in's recorded `steps[].error{code,message}`, and preflight
+  requirements gain an additive `suggestion` (an example install command on Linux)
+  beside `detail`. `hydra remote setup remove NAME [--approve PLAN_SHA256]`
+  deletes a setup's local record and lock so a setup bound to the wrong
+  destination or SSH config can start again (`setup_binding_changed` now names
+  it). It never connects to the remote: its plan, approved like any other, lists
+  what earlier steps left there (Hydra install, agents, sign-ins) and in
+  known_hosts, none of which is undone; it fails with `setup_busy` while a step
+  runs and with `setup_complete` for a finished setup whose alias is published.
+  `setup list` rows gain `ssh_config` and `remote_changed`. `status`, `list` and
+  `remove` are reserved setup names.
+- `hydra agent locate [--json] [--record EXECUTABLE PATH] [--forget EXECUTABLE]`
+  finds agents outside PATH (`~/.local/bin`, `~/.opencode/bin`, nvm, mise, ...)
+  as `agent-inventory` schema 1 and records a private per-executable location.
+  Resolution is PATH first, then a valid record, in both the shell and native
+  resolvers, so `spawn`, `agent list`, headless `exec --profile` and `agent
+  probe` find installer-placed agents on hosts whose non-interactive PATH omits
+  them. Records must be absolute, named after the executable, owned by you or
+  root and not group- or world-writable. Help and completions include it.
+- `hydra remote agents NAME [--record EXECUTABLE=/abs/path]` shows each agent's
+  status on the remote (receiver inventory, else the preflight scan), records
+  off-PATH locations and selects agents to install or sign in (interactively, or
+  by running the listed `install-agent`/`sign-in` commands). `hydra remote
+  install-agent NAME --agent A` runs the provider's own official installer
+  (built-in recipes for claude, cursor, opencode, codex, agy and pi, each checked
+  against the provider's docs on 2026-09-28) over `ssh -t` as your user, only after
+  approval of a plan binding the exact command, which runs the installer under
+  `umask 022` so a group-writable remote umask cannot leave an agent executable
+  that Hydra then refuses; no sudo, and Hydra adds no symlinks or PATH changes. It checks prerequisites first, verifies the result by `--version`
+  and the help probe, offers to record an off-PATH location, and reconciles an
+  interrupted install by inventory instead of re-running it. A private
+  `$HYDRA_HOME/fleet/agent-recipes.json` can replace recipes (plans say
+  `source: local`); recipes never come from the remote. `hydra remote sign-in NAME
+  --agent A` runs the provider's sign-in with the resolved absolute executable and
+  verifies it by the provider's documented status command or credential file, else
+  asks you to confirm; failures are recorded and can be retried, and credentials
+  are never copied.
+- Fleet receivers advertise `agent-inventory` (read-only; also a headless probe
+  of one candidate) and `agent-locate-record`, and the handshake additively
+  reports `platform: {os, arch}`.
+- `hydra remote provision NAME` installs Hydra into a private pinned prefix
+  (`~/.local/share/hydra/fleet/DIGEST`) on the remote, never changing PATH or
+  other installs. The plan names the platform, exact version, helper digest and
+  whether it is pinned (release asset) or unpinned (`--binary FILE`, or this
+  host's helper for an identical platform). Release assets are downloaded with
+  `curl -fL`, checked against the digests shipped in `fleet-assets.tsv` and
+  cached privately; a mismatching download is discarded. A same-version install
+  or an identical pin is reused without changes, and an interrupted install is
+  reconciled on rerun instead of repeated, rebuilding a deleted local package
+  when this Hydra reproduces its recorded digest.
+- Releases carry static Linux `hydra-fleet` helpers for x86_64 and aarch64,
+  reproduced by CI (`make build-fleet-static`) and listed in `SHA256SUMS`.
+- `hydra fleet package --platform OS-ARCH` binds a package to a platform and
+  checks the helper's executable header; packages can also be built from an
+  installed prefix. Bootstrap refuses a remote with a different `uname` before
+  running the package helper (`platform_mismatch`).
+- `install.sh` installs `share/licenses/hydra/` and
+  `share/hydra/fleet-assets.tsv`; `uninstall.sh` removes them.
+- `hydra doctor` reports group- or other-writable Hydra state in `$HYDRA_HOME`
+  and the repository's `.git/hydra`, and `hydra doctor --fix-permissions` repairs
+  it: it removes group and other write from your own regular files and
+  directories, never follows symbolic links, and only reports entries owned by
+  someone else or that are not files or directories. Help and bash, zsh and fish
+  completions include it.
+- `make test-umask` runs the fast checks, a umask state acceptance test and the
+  DAG fleet cases under umask `002`; CI runs it with the shell suite on Ubuntu.
+
+### Changed
+
+- The fleet installer requires the packaged `bin/hydra` and its handshake to
+  report exactly the helper's own version instead of any 2.x release.
+- Test suite (contributors): `make test-one T=<name>` runs one `tests/test_<name>.sh`
+  the way `make test` does. Shell cases, including Fleet shell cases, take native
+  binaries only from `BUILD_DIR` and fail with a clear message instead of using a
+  stale `./build`. Each case gets private `TMPDIR`/`TMUX_TMPDIR`, runs detached
+  from any caller's tmux (so checks no longer skip inside tmux), and leaves no
+  temporary files or tmux sockets behind. Shell cases start longest-first, the
+  dashboard case runs in parallel, fixed sleeps that raced asynchronous work now
+  poll, and the loopback-SSH enrollment and accepted-run retention tests run in CI.
+
+### Fixed
+
+- Hydra creates its own state, locks, workflow runs, event archives, exec and
+  gate evidence, caches and the repository's `.git/hydra` records without group
+  or other write permission, whatever your umask. Under a group-writable umask
+  such as Ubuntu's default `002`, workflow `steps/` directories, run records and
+  other entries were group-writable, so Hydra's own readers refused them: run
+  statistics and remote transport metrics were reported as unknown, and a
+  pre-created home was refused by admission. The ownership checks are unchanged.
+  Worktrees, agents, hooks, tmux sessions and the commands run by exec, gate and
+  workflow steps keep following your umask; outputs a step writes into its run
+  record are made private when the step ends.
+- Planning launch and workspace workflow controls no longer pass their private
+  umask to the heads, agents and step commands of the runs they start.
+- `hydra fleet auth login` returns after the provider's sign-in instead of
+  replacing Hydra with `ssh`, reports its exit status, and runs the remote
+  agent by its resolved absolute path.
+- Headless runs execute the exact executable the profile probe resolved.
+- An `exec` worker's timeout watchdog no longer outlives a worker that was
+  killed: it stopped only with the worker, so after a `SIGKILL` it kept running
+  (with a `sleep` for the whole timeout) and at the deadline signalled a command
+  PID the lost worker could no longer vouch for. It now leaves as soon as its
+  worker is gone and signals only processes that are still that worker's
+  unreaped children.
+- An attached agent pane no longer types stray text such as `1;0c` into the
+  agent. Hydra answered tmux's terminal queries through the agent's input; when
+  Hydra was held up (for example by a terminal that stopped reading its output)
+  and an answer reached tmux after its 5-second query window, tmux passed it on
+  as keys. Hydra no longer answers them; tmux learned nothing from the answers.
+- Fleet SSH no longer hangs when `~/.ssh/config` enables `ControlMaster auto`
+  with `ControlPersist` (a common `Host *` setup). The first connection started a
+  background master that kept Hydra's captured output open, so `hydra remote
+  setup` (the host-key check), preflight and fleet requests waited until the
+  master exited, up to its whole `ControlPersist` time, even past `--timeout`.
+  Hydra now never starts or reuses your own SSH masters: every Hydra SSH
+  connection passes `ControlMaster=no` and `ControlPath=none` unless the alias
+  uses Hydra's own `--multiplex`, so host-key checks always verify the host
+  itself. A command's own exit now also ends its output capture shortly after,
+  even when a background process still holds the output open.
+- The control centre footer no longer shows `Current snapshot · age Ns`, whose
+  age restarted with every two-second refresh. It shows `Live` while refreshes
+  succeed and `Updated Ns ago`, counting up, once the data is older than two
+  refresh intervals (plus one remote request in fleet mode); a failed refresh
+  shows `STALE: last good snapshot, updated Ns ago`.
+- A failed SSH connection during remote setup says why: the error message ends
+  with OpenSSH's own reason (also in `data.ssh_error`), such as `ssh: Could not
+  resolve hostname ...`, `Permission denied (publickey)` or `Connection timed
+  out`, and the recovery names the likely fix (for an unresolvable name: check
+  the destination or pass the SSH config file that defines it). The control
+  centre shows it on the error screen.
+
 ## [2.8.0] - 2026-09-27
 
 ### Added
@@ -1329,7 +1501,8 @@ the roadmap; dated evidence is intentionally not stored in the repository.
 [0.1.0]: https://github.com/yourusername/hydra/releases/tag/v0.1.0
 [1.2.0]: https://github.com/yourusername/hydra/compare/release/v1.1.0...release/v1.2.0
 
-[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.8.0...HEAD
+[Unreleased]: https://github.com/Someblueman/hydra/compare/v2.9.0...HEAD
+[2.9.0]: https://github.com/Someblueman/hydra/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/Someblueman/hydra/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/Someblueman/hydra/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/Someblueman/hydra/compare/v2.5.0...v2.6.0

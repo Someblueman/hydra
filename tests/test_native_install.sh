@@ -7,7 +7,12 @@ test_count=0
 pass_count=0
 fail_count=0
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-test_root="$(mktemp -d)"
+# Package the helpers make built (BUILD_DIR); the source-build cases below
+# run make in copied trees like a user would, so they must not inherit this
+# build directory, including through the calling make's MAKEFLAGS.
+native_build="${BUILD_DIR:-$repo_root/build}"
+unset BUILD_DIR MAKEFLAGS MFLAGS MAKELEVEL
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 package="$test_root/package"
 
 # shellcheck source=helpers.sh
@@ -39,8 +44,8 @@ file_hash() {
 echo "Running native install tests..."
 echo "==============================="
 
-HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_CORE_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" core >/dev/null
-HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_TUI_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" tui >/dev/null
+BUILD_DIR="$native_build" HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_CORE_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" core >/dev/null
+BUILD_DIR="$native_build" HYDRA_ALLOW_DIRTY_PACKAGE=1 HYDRA_TUI_PACKAGE_DIR="$package" sh "$repo_root/scripts/package-native.sh" tui >/dev/null
 prefix="$test_root/offline-prefix"
 home="$test_root/home"
 mkdir -p "$home"
@@ -158,10 +163,10 @@ HOME="$archive_home" PREFIX="$archive_prefix" HYDRA_INSTALL_CORE=required HYDRA_
 if [ "$archive_status" -ne 0 ]; then cat "$test_root/archive-source.out"; fi
 assert_success "$archive_status" "source archive auto-builds native TUI without Git metadata"
 assert_file "$archive_prefix/libexec/hydra/hydra-tui" "auto install builds and installs native TUI when a compiler is available"
-assert_equal "hydra-2.8.0-source-tree" \
+assert_equal "hydra-2.9.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-core.source")" \
     "source archive records explicit non-commit provenance"
-assert_equal "hydra-2.8.0-source-tree" \
+assert_equal "hydra-2.9.0-source-tree" \
     "$(sed -n '1p' "$archive_prefix/libexec/hydra/hydra-tui.source")" \
     "source archive records explicit native TUI provenance"
 

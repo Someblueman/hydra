@@ -135,7 +135,7 @@ _get_queue_lock() {
 # Returns: 0 on success, 1 on failure
 _ensure_queue_dir() {
     _qdir="$(_get_queue_dir)" || return 1
-    mkdir -p "$_qdir" 2>/dev/null || return 1
+    hydra_private_mkdir "$_qdir" 2>/dev/null || return 1
 }
 
 # =============================================================================
@@ -184,6 +184,7 @@ queue_spawn() {
             *) _seq=$((_seq + 1)) ;;
         esac
     fi
+    hydra_private_touch "$_seq_file" || { release_lock "$_queue_lock"; return 1; }
     printf '%s\n' "$_seq" > "$_seq_file"
     _seq_fmt="$(printf '%06d' "$_seq")"
 

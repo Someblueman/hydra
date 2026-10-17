@@ -8,6 +8,11 @@ on:
     - cron: '0 9 * * *'
   workflow_dispatch:
 
+# Reads history and comparisons; comments on open pull requests that are behind.
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   check-branches:
     name: Check Feature Branches

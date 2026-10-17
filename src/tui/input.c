@@ -3,6 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "fleet_budget.h"
 /* One interaction model everywhere: Tab / Shift-Tab move between tabs (or
  * panes inside the workspace), arrows select, Enter opens, Esc steps back. */
 
@@ -20,6 +21,13 @@ int read_key(int timeout_ms, char *key) {
     return read(STDIN_FILENO, key, 1U) == 1 ? 1 : -1;
 }
 
+/* Views that load their own data when opened. */
+static void enter_view_refresh(struct app *app, int view) {
+    if (view == 9) native_attention_tick(app, true);
+    if (view == 7) (void)native_workspace_init(app);
+    if (view == 6) native_setup_hosts_refresh(app);
+}
+
 /* View changes go through here so refreshes and stale flags stay consistent. */
 void enter_view(struct app *app, int view) {
     if (view < 0 || view > 9) return;
@@ -30,8 +38,7 @@ void enter_view(struct app *app, int view) {
     app->view = view;
     app->diagnostics = false; app->help = false; app->result_open = false;
     if (view == 5) { app->graph_follow = true; if (!app->fleet) (void)refresh_workflows(app, NULL); }
-    if (view == 9) native_attention_tick(app, true);
-    if (view == 7) (void)native_workspace_init(app);
+    enter_view_refresh(app, view);
 }
 
 void select_tab(struct app *app, int direction) {
@@ -319,10 +326,8 @@ static bool fleet_key(struct app *app, char key) {
 }
 
 static void open_selected(struct app *app) {
-    if (app->view == 6 && app->host_selected < app->model.host_count) {
-        copy_text(app->search, sizeof(app->search), app->model.hosts[app->host_selected].name);
-        enter_view(app, 0); retarget_selection(app);
-    } else if (app->view == 3) {
+    if (app->view == 6) hosts_open_row(app);
+    else if (app->view == 3) {
         if (app->model.recovery_count) recovery_check_action(app);
     } else if (app->view == 7) {
         /* Enter in a non-navigation pane has no target; navigation handles its own Enter. */
@@ -372,6 +377,21 @@ static bool overlay_key(struct app *app, char key) {
     return false;
 }
 
+/* Hosts: A adds a host, e / x edit or remove an unfinished setup; head
+ * actions do not apply to host rows. */
+static bool hosts_key(struct app *app, char key) {
+    size_t record;
+    if (key == 'A') { native_setup_open_form(app); return true; }
+    if ((key == 'e' || key == 'x') && hosts_setup_selected(app, &record)) {
+        if (key == 'e') native_setup_edit(app, record);
+        else native_setup_remove(app, record);
+        return true;
+    }
+    if (!key || !strchr("/:pac xGd", key)) return false;
+    copy_text(app->notice, sizeof(app->notice), "Select a row and press Enter; A adds a host");
+    return true;
+}
+
 static bool view_key(struct app *app, char key) {
     if (key == 27 && app->view == 9) { handle_escape(app); return true; }
     if (app->view == 9 && native_attention_key(app, key)) return true;
@@ -380,11 +400,7 @@ static bool view_key(struct app *app, char key) {
     if (app->view == 7 && workspace_key(app, key)) return true;
     if (app->view == 5 && workflow_key(app, key)) return true;
     if (select_view(app, key)) return true;
-    if (app->view == 6 && key && strchr("/:pac AxGd", key)) {
-        copy_text(app->notice, sizeof(app->notice), "Select a host and press Enter to see its heads");
-        return true;
-    }
-    return false;
+    return app->view == 6 && hosts_key(app, key);
 }
 
 static void attach_selected(struct app *app) {
@@ -434,6 +450,7 @@ static void head_key(struct app *app, char key) {
 static void handle_key(struct app *app, char key) {
     if (native_terminal_byte(app, (unsigned char)key)) return;
     if (key == 3) { terminal_request_stop(SIGINT); return; }
+    if (native_setup_byte(app, (unsigned char)key)) return;
     if (overlay_key(app, key)) return;
     if (key == 'q') { app->running = false; return; }
     if (view_key(app, key)) return;
@@ -448,7 +465,7 @@ static void handle_input(struct app *app, char key) {
 
 static void refresh_observations(struct app *app, time_t *last_refresh) {
     time_t now = time(NULL);
-    if (now - *last_refresh >= 2) {
+    if (now - *last_refresh >= HYDRA_TUI_REFRESH_SECONDS) {
         native_observations_tick(app,true);
         if (app->preview && !native_terminal_focused(app)) capture_preview(app);
         *last_refresh = now;
@@ -489,10 +506,12 @@ int interactive_main(struct app *app) {
     while (app->running && !terminal_stopped()) {
         refresh_observations(app, &last_refresh);
         native_terminals_pump(app);
+        native_setup_tick(app);
         update_size(app);
         render(app, 0U, false);
-        if (read_key(app->terminals || app->observations ? 40 : 500, &key) <= 0) {
+        if (read_key(app->terminals || app->observations || app->setup ? 40 : 500, &key) <= 0) {
             native_terminal_flush_input(app);
+            native_setup_flush_input(app);
             continue;
         }
         handle_input(app, key);

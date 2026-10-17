@@ -4,7 +4,7 @@ set -u
 test_count=0
 pass_count=0
 fail_count=0
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo="$test_root/repo"
 export HYDRA_HOME="$test_root/home" HYDRA_NONINTERACTIVE=1 HYDRA_NO_SWITCH=1
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-base=$(mktemp -d)
+base=$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")
 trap 'rm -rf "$base"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

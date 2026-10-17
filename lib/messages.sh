@@ -36,7 +36,7 @@ get_message_lock() {
 ensure_message_dir() {
     branch="$1"
     msg_dir="$(get_message_dir "$branch")" || return 1
-    mkdir -p "$msg_dir/queue" "$msg_dir/archive" "$msg_dir/metadata" "$msg_dir/receipts" 2>/dev/null || return 1
+    hydra_private_mkdir "$msg_dir/queue" "$msg_dir/archive" "$msg_dir/metadata" "$msg_dir/receipts" 2>/dev/null || return 1
     chmod 700 "$msg_dir" "$msg_dir/queue" "$msg_dir/archive" "$msg_dir/metadata" "$msg_dir/receipts" 2>/dev/null || true
     return 0
 }

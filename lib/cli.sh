@@ -46,7 +46,17 @@ Commands:
   agent             Inspect, probe, or import agent profiles
                     Headless: agy (Antigravity), cursor (Cursor Agent), opencode,
                               claude, codex, pi; inspect with agent contract NAME
+                    locate [--json] [--record EXECUTABLE PATH] [--forget EXECUTABLE]
+                              find agents outside PATH (~/.local/bin, ...) and
+                              record where one lives; PATH still wins
   remote            Manage OpenSSH aliases: add NAME [USER@]SSH_ALIAS, remove NAME, list
+                    Guided setup: setup NAME [USER@]HOST [--ssh-config FILE] [--binary FILE]
+                                  setup status NAME, setup list, setup remove NAME;
+                                  resumes from saved state
+                    Steps: trust-key NAME [--fingerprint SHA256:...], preflight NAME,
+                           provision NAME [--approve SHA256] [--binary FILE],
+                           agents NAME [--record EXE=/path], install-agent NAME --agent A
+                           [--approve SHA256], sign-in NAME --agent A (all accept --json)
   admission         Inspect or configure host-wide execution reservations and FIFO admission
                     Usage: hydra admission --help
   fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
@@ -163,6 +173,7 @@ Commands:
   doctor            Check install, dependencies, and first-run readiness
                     Options:
                       -f, --fix                Auto-fix detected issues
+                      --fix-permissions        Remove group/other write from your own Hydra state
   cleanup           Stop dead heads, remove stale locks, offer to remove leftover worktrees
                     Options:
                       --include-dirty          Also remove leftover worktrees with uncommitted changes

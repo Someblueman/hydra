@@ -61,7 +61,7 @@ assert_contains() {
 # Setup test environment
 setup_test_env() {
     # Create a unique parent directory to avoid worktree collisions
-    test_base_dir="$(mktemp -d)"
+    test_base_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
     mkdir -p "$test_base_dir/repo"
     cd "$test_base_dir/repo" || exit 1
     
@@ -69,7 +69,7 @@ setup_test_env() {
     export HYDRA_HOME="$test_base_dir/.hydra"
     export TMUX_TMPDIR="$test_base_dir/tmux"
     unset TMUX HYDRA_TMUX_SOCKET HYDRA_TMUX_SOCKET_NAME HYDRA_HEAD_ID HYDRA_INSTANCE_ID
-    mkdir -p "$HYDRA_HOME"
+    (umask 077; mkdir -p "$HYDRA_HOME")
     mkdir -p "$TMUX_TMPDIR"
     
     # Initialize a git repository

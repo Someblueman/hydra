@@ -369,7 +369,8 @@ spawn_start_session() {
         # A no-agent head is ready for `hydra exec`.  Profiles that provide a
         # launch command run without a pane and retain their durable identity.
         if [ "$ai_tool" != none ]; then
-            mkdir -p "$head_dir/logs" || return 1
+            hydra_private_mkdir "$head_dir/logs" || return 1
+            hydra_private_touch "$head_dir/logs/$instance_id.log" || return 1
             (
                 export HYDRA_PROJECT_ID="$project_id" HYDRA_HEAD_ID="$head_id" \
                     HYDRA_INSTANCE_ID="$instance_id" HYDRA_BRANCH="$branch" \

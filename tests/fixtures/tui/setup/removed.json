@@ -1,0 +1,1 @@
+{"schema_version":1,"ok":true,"command":"remote-setup-remove","data":{"removed":true,"name":"ovh","destination":"deploy@ovh.example.net","record":"\/Users\/you\/.hydra\/fleet\/setup\/ovh.json","summary":"removed the setup record for ovh; nothing on deploy@ovh.example.net was changed","remote_left":[],"local_left":[]}}

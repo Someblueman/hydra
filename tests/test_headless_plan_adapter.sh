@@ -4,7 +4,7 @@ set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 # shellcheck source=/dev/null
 . "$root/tests/fixture-tools.sh"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1
 cleanup() {
     (cd "$fixture/repo" && "$root/bin/hydra" kill plan-smoke --force) >/dev/null 2>&1 || :

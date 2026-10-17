@@ -4,7 +4,7 @@ set -eu
 # Artifact receipt directories must remain private under a collaborative umask.
 umask 002
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 export HYDRA_HOME="$fixture/home" HYDRA_NONINTERACTIVE=1 HYDRA_SKIP_AI=1 HYDRA_NO_SWITCH=1
 # shellcheck source=/dev/null
 . "$root/tests/tmux_fixture_cleanup.sh"

@@ -42,6 +42,7 @@ integration_verified_select() {
     _ivs_output="$2"
     _ivs_project="$3"
     _ivs_project_dir="$4"
+    hydra_private_touch "$_ivs_output" || return 1
     : > "$_ivs_output"
     case "$_ivs_selector" in
         task:collection_*)
@@ -215,7 +216,9 @@ integration_verified_run_gates() {
         _ivg_attempt=$((_ivg_attempt + 1))
         state_v2_write_scalar "$_ivg_attempts_file" "$_ivg_attempt"
         _ivg_dir="$_ivg_report/gate-${_ivg_candidate_index}-${_ivg_gate_n}-attempt-$_ivg_attempt"
-        mkdir -p "$_ivg_dir" || return 1
+        hydra_private_mkdir "$_ivg_dir" || return 1
+        # Gate transcripts are private; the gate itself keeps the user's umask.
+        hydra_private_touch "$_ivg_dir/stdout" "$_ivg_dir/stderr" || return 1
         state_v2_write_scalar "$_ivg_dir/command" "$_ivg_gate"
         state_v2_write_scalar "$_ivg_dir/started-at" "$(date +%s)"
         (cd "$_ivg_worktree" && sh -c "$_ivg_gate") >"$_ivg_dir/stdout" 2>"$_ivg_dir/stderr" &
@@ -283,12 +286,14 @@ EOF
             integration_verified_record_failure "$_ivct_report" resource-refused disk "$_ivct_branch" "" "hydra integrate resume $_ivct_run"
             return 1
         fi
+        hydra_private_touch "$_ivct_report/merge-$_ivct_index.stdout" "$_ivct_report/merge-$_ivct_index.stderr" || return 1
         git -C "$_ivct_worktree" merge --no-ff --no-edit "$_ivct_commit" >"$_ivct_report/merge-$_ivct_index.stdout" 2>"$_ivct_report/merge-$_ivct_index.stderr" &
         _ivct_child=$!
         state_v2_write_scalar "$_ivct_report/active-child" "$_ivct_child"
         if wait "$_ivct_child"; then _ivct_status=0; else _ivct_status=$?; fi
         rm -f "$_ivct_report/active-child"
         if [ "$_ivct_status" -ne 0 ]; then
+            hydra_private_touch "$_ivct_report/observed-conflicts" || true
             git -C "$_ivct_worktree" diff --name-only --diff-filter=U > "$_ivct_report/observed-conflicts" || true
             git -C "$_ivct_worktree" merge --abort >/dev/null 2>&1 || true
             integration_verified_record_failure "$_ivct_report" observed-conflict conflict "$_ivct_branch" "" "hydra integrate cleanup $_ivct_run --apply"
@@ -337,10 +342,10 @@ integration_verified_execute() {
     _ive_target="$(git rev-parse --verify "$_ive_target_ref^{commit}" 2>/dev/null)" || { release_lock "$_ive_lock"; return 1; }
     [ "$_ive_target" = "$_ive_base" ] || { release_lock "$_ive_lock"; echo "Error: recorded base must equal the current target commit" >&2; return 1; }
     _ive_root="$(integration_verified_root)" || { release_lock "$_ive_lock"; return 1; }
-    mkdir -p "$_ive_root" || { release_lock "$_ive_lock"; return 1; }
+    hydra_private_mkdir "$_ive_root" || { release_lock "$_ive_lock"; return 1; }
     _ive_run="$(hydra_new_id run "$_ive_project|integrate|$_ive_selector")" || { release_lock "$_ive_lock"; return 1; }
     _ive_report="$_ive_root/$_ive_run"
-    mkdir -p "$_ive_report" || { release_lock "$_ive_lock"; return 1; }
+    hydra_private_mkdir "$_ive_report" || { release_lock "$_ive_lock"; return 1; }
     _ive_candidates="$_ive_report/candidates.tsv"
     if ! integration_verified_select "$_ive_selector" "$_ive_candidates" "$_ive_project" "$_ive_project_dir"; then
         rm -rf "$_ive_report"; release_lock "$_ive_lock"; return 1
@@ -359,6 +364,8 @@ integration_verified_execute() {
     state_v2_write_scalar "$_ive_report/completed-candidates" 0
     state_v2_write_scalar "$_ive_report/progress-stage" merge
     state_v2_write_scalar "$_ive_report/last-result-commit" "$_ive_base"
+    hydra_private_touch "$_ive_report/gates.argv" "$_ive_report/manifest.tsv" \
+        "$_ive_report/worktree.stdout" "$_ive_report/worktree.stderr"
     cp "$_ive_gates" "$_ive_report/gates.argv"
     {
         printf 'schema_version\t1\nmode\t%s\nselector\t%s\nbase_commit\t%s\ntarget_ref\t%s\ninitial_target_commit\t%s\n' "$_ive_mode" "$_ive_selector" "$_ive_base" "$_ive_target_ref" "$_ive_target"

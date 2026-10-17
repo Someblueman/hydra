@@ -284,7 +284,8 @@ cache_pr_status() {
     _cache_file="$(_get_pr_cache_file)"
     _now="$(date +%s)"
 
-    mkdir -p "$(dirname "$_cache_file")"
+    # Hydra state is private whatever the caller's umask.
+    (umask 077; mkdir -p "$(dirname "$_cache_file")" && { [ -e "$_cache_file" ] || : > "$_cache_file"; })
 
     # Remove old entry for this PR (atomic update via temp file)
     if [ -f "$_cache_file" ]; then

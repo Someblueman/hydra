@@ -46,7 +46,7 @@ workflow_attention_seen_list() {
 # Replace the identity's row (mark) or drop it (clear) under the home lock.
 workflow_attention_seen_update() {
     _wasu_file="$1" _wasu_action="$2" _wasu_identity="$3" _wasu_revision="${4:-}"
-    mkdir -p "$(dirname "$_wasu_file")" || return 1
+    hydra_private_mkdir "$(dirname "$_wasu_file")" || return 1
     acquire_lock attention-seen || return 1
     _wasu_tmp="$(mktemp_adjacent "$_wasu_file")" || { release_lock attention-seen; return 1; }
     {

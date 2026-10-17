@@ -58,7 +58,7 @@ workflow_retire_record() {
 workflow_retire_head() {
     _wrh_dir="$1" _wrh_step="$2" _wrh_branch="$3"
     [ ! -f "$_wrh_dir/retirement/$_wrh_step/state" ] || return 0
-    mkdir -p "$_wrh_dir/retirement/$_wrh_step" || return 1
+    hydra_private_mkdir "$_wrh_dir/retirement/$_wrh_step" || return 1
     if ! workflow_retire_sealed "$_wrh_dir" "$_wrh_branch"; then
         workflow_retire_record "$_wrh_dir" "$_wrh_step" kept "verifier head $_wrh_branch kept: its evidence is not sealed in the run record" head.retire_skipped
         return 0
@@ -77,6 +77,7 @@ workflow_retire_head() {
             "verifier head $_wrh_branch kept: it has uncommitted or untracked changes; review them, then remove it with hydra kill $_wrh_branch" head.retire_skipped
         return 0
     fi
+    hydra_private_touch "$_wrh_dir/retirement/$_wrh_step/kill.log" || return 1
     if HYDRA_NONINTERACTIVE=1 "$HYDRA_BIN_PATH" kill "$_wrh_branch" --protect-untracked \
         < /dev/null > "$_wrh_dir/retirement/$_wrh_step/kill.log" 2>&1; then
         workflow_retire_record "$_wrh_dir" "$_wrh_step" retired \

@@ -4,7 +4,7 @@
 test_count=0
 pass_count=0
 fail_count=0
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 HYDRA_HOME="$test_root/home"
 HYDRA_LIB_DIR="$(cd "$(dirname "$0")/../lib" && pwd)"
 export HYDRA_HOME HYDRA_LIB_DIR

@@ -63,8 +63,10 @@ class Journey:
             LANG="C",
             TERM="xterm-256color",
         )
+        # Private like a real user's home and Hydra state: under a
+        # group-writable umask (Ubuntu's 002) Hydra refuses shared state.
         for key in ("HOME", "HYDRA_HOME", "TMUX_TMPDIR"):
-            Path(self.env[key]).mkdir()
+            Path(self.env[key]).mkdir(mode=0o700)
         self.proof: list[dict] = []
         self.failures: list[str] = []
         self.observer: Observer | None = None
@@ -303,8 +305,9 @@ def navigation(j: Journey) -> None:
         (b"3", "[Overview]"),
         (b"4", "[Attention]"),
         (b"5", "[Recovery]"),
-        (b"6", "[Workflows]"),
-        (b"7", "[Statistics]"),
+        # Below 100 columns the tab bar uses short labels.
+        (b"6", "[Workflows]" if j.columns >= 100 else "[Flows]"),
+        (b"7", "[Statistics]" if j.columns >= 100 else "[Stats]"),
     ):
         j.keys(key)
         j.see(label)

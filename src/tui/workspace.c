@@ -356,7 +356,10 @@ static void workspace_empty(struct app *app, struct tv_canvas *c) {
     dashboard_text(c, 0, y++, c->width, TV_BASE, "The conversation with that agent appears in this pane;");
     dashboard_text(c, 0, y++, c->width, TV_BASE, "its plan and progress appear next to it.");
     y++;
-    dashboard_text(c, 0, y++, c->width, TV_MUTED, "n new task   : more actions   ? help");
+    dashboard_text(c, 0, y++, c->width, TV_BASE, "To run agents on another machine, press H for Hosts");
+    dashboard_text(c, 0, y++, c->width, TV_BASE, "and add it there.");
+    y++;
+    dashboard_text(c, 0, y++, c->width, TV_MUTED, "n new task   H hosts   : more actions   ? help");
 }
 
 static enum tv_style details_session(struct app *app, const struct head *h, char *text, size_t size) {
@@ -687,14 +690,14 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
         else native_workspace_activity(app, &content, p->scroll);
     }
     {
-        long age = headless || !app->snapshot_at ? 0 : (long)(time(NULL) - app->snapshot_at);
+        char fresh[96];
         const char *notice=app->snapshot_stale ? app->snapshot_error : app->notice;
-        enum tv_style tone = app->snapshot_stale ? TV_WARNING : app->notice[0] ? TV_BASE : TV_MUTED;
-        if (age < 0) age = 0;
-        if (app->snapshot_stale) snprintf(status, sizeof(status), "STALE: last good snapshot%s%s", notice[0] ? sep : "", notice);
+        enum tv_style tone = snapshot_freshness(app, app->snapshot_at, app->snapshot_stale, headless, fresh, sizeof(fresh));
+        if (!app->snapshot_stale && app->notice[0]) tone = TV_BASE;
+        if (app->snapshot_stale) snprintf(status, sizeof(status), "%s%s%s", fresh, notice[0] ? sep : "", notice);
         else {
             const char *tail = app->notice[0] ? app->notice : w->zoom ? "z restores the splits" : "";
-            snprintf(status, sizeof(status), "Current snapshot%sage %lds%s%s", sep, age, tail[0] ? sep : "", tail);
+            snprintf(status, sizeof(status), "%s%s%s", fresh, tail[0] ? sep : "", tail);
         }
         if (compact) {
             if (app->notice[0] && !(native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen))

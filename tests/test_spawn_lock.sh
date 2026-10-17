@@ -15,12 +15,12 @@ export HYDRA_LOCK_RETRIES=1
 . "$(dirname "$0")/helpers.sh"
 
 setup() {
-    test_base_dir="$(mktemp -d)"
+    test_base_dir="$(test_mktemp_dir)"
     mkdir -p "$test_base_dir/repo"
     cd "$test_base_dir/repo" || exit 1
 
     export HYDRA_HOME="$test_base_dir/.hydra"
-    mkdir -p "$HYDRA_HOME/locks"
+    (umask 077; mkdir -p "$HYDRA_HOME/locks")
 
     git init >/dev/null 2>&1
     git config user.name "Test User"

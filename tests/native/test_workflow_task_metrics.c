@@ -98,6 +98,9 @@ static void state_is(const char *metric, const char *state) {
 }
 static void clear(void) { assert(!f_remove_tree(root)); }
 int main(void) {
+  /* Fixtures model records Hydra creates privately; the reader refuses
+   * group-writable records under a caller's umask such as 002. */
+  umask(077);
   fleet = getenv("HYDRA_FLEET_BIN");
   if (!fleet)
     fleet = "build/hydra-fleet";

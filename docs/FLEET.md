@@ -43,6 +43,168 @@ copies a prebuilt fleet executable when present; `HYDRA_INSTALL_FLEET=never` ski
 it and `required` refuses an absent executable. Uninstall removes it with the
 other native helpers. JSON-C's [license](licenses/json-c.txt) travels with packages.
 
+## Guided remote setup
+
+`hydra remote setup` takes a fresh SSH account to a verified alias one step at a
+time and can be rerun at any point: it resumes from private state in
+`$HYDRA_HOME/fleet/setup/NAME.json` (0600 in a 0700 directory, locked while a
+command runs).
+
+```sh
+hydra remote setup ovh ubuntu@build-host      # or an SSH Host alias
+hydra remote setup ovh --ssh-config /abs/config
+hydra remote setup status ovh
+hydra remote setup list                       # every setup: destination, status, next step
+hydra remote setup remove ovh                 # forget an unfinished setup (asks first)
+```
+
+Steps run in order: host key, preflight, provision, agents, then install and
+sign-in for each selected agent, verify, and alias. Each step also has its own
+command that uses the same state: `hydra remote trust-key|preflight|provision|agents
+NAME` and `hydra remote install-agent|sign-in NAME --agent A`. The alias record is
+published last and never overwrites a different alias, so a half-configured host
+never appears in `hydra fleet list`. Rerunning setup with a different destination
+or SSH config for an existing NAME fails with `setup_binding_changed`; `hydra remote
+setup remove NAME [--approve PLAN_SHA256] [--json]` (`remote-setup-remove`) deletes
+the local record and its lock so the setup can start again. It never connects to the
+remote: its plan lists what earlier steps left there (a Hydra install at its prefix,
+agents, provider sign-ins) and in `known_hosts`, none of which is undone. Like other
+plans it asks `y` on a terminal and otherwise returns `approval_required` (exit 3)
+with the approving command. It fails with `setup_busy` while a step runs and with
+`setup_complete` for a finished setup whose alias is published (remove the alias
+with `hydra remote remove NAME`). Unknown options are usage errors. `status`,
+`list` and `remove` are reserved and cannot be setup names. When SSH fails, the
+error message ends with OpenSSH's own reason (also `data.ssh_error`), for example
+`ssh: Could not resolve hostname ...`, and the recovery names the likely fix. `hydra remote setup list [--json]` (`remote-setup-list`) reads every record
+read-only, like `setup status`: `data.setups[]` holds `name`, `destination`,
+`ssh_config`, `status` (the first unfinished step's status, `done` when complete, or
+`unreadable` with `error{code,message}` for a record it refuses), `remote_changed`
+(a provision, agent installer or sign-in may have changed the remote), `complete`
+and `next`. When an agent installer or sign-in that ran on your terminal fails, the
+step keeps the error code and message, and `setup status NAME --json` reports it
+as `steps[].error{code,message}` while the step is `failed` or
+`outcome_unknown`. Setup does not prepare a remote project: once the alias
+exists, clone or copy the project on the host yourself and initialise it with
+`hydra fleet init NAME --project /abs/project -- --no-agent`, review its `.hydra`
+configuration, then trust it explicitly (see [Operate explicitly](#operate-explicitly)).
+
+Every step that changes something first shows a plan and asks for approval.
+Interactive terminals answer `y`; trusting a host key requires typing `yes`. With
+`--json`, without a terminal, or when `CI` or `HYDRA_NONINTERACTIVE` is set, Hydra
+never prompts: it stops with `approval_required` (exit 3) and returns the plan,
+`data.plan_sha256`, and `data.next.argv`, the exact command that approves that plan
+(`--approve PLAN_SHA256`, or `--fingerprint SHA256:...` for a host key). A changed
+plan no longer matches and fails with `approval_mismatch`. There is no blanket
+yes flag.
+
+**Host key.** Hydra reads the effective OpenSSH configuration (`ssh -G`, including
+`HostKeyAlias`, port, `UserKnownHostsFile` and `HashKnownHosts`) and probes with
+strict host key checking. It never accepts a changed key: it reports
+`host_key_changed` with the new fingerprint and the `ssh-keygen -R` command to run
+yourself once you have verified the change. Any other entry for the host, including
+a key of a different type, is `host_key_ambiguous`. An unknown key is captured
+without authenticating through your own SSH path (jump hosts included) and shown
+as its SHA256 fingerprint; compare it with one obtained out of band. After
+approval Hydra appends exactly that line to the first `UserKnownHostsFile` (created
+0600 in a 0700 directory if absent; refused if it is a symlink, not yours, or group
+or world writable) and proves it with a second strict probe. It never edits or
+removes existing lines, and every refusal leaves known_hosts byte-identical.
+
+**Preflight** is read-only and needs no Hydra on the host. A fixed POSIX script
+reports the platform, HOME, PATH, umask, tools, existing Hydra installs and pins,
+and agent executables in common install directories (`remote-preflight` schema 1).
+Blocking requirements are a supported platform, git, sha256sum or shasum, mktemp,
+head and tail, a writable HOME and 50 MB free; missing ones fail with
+`prerequisite_missing` and `data.missing[]`. Linux x86_64 and aarch64 have pinned
+release helpers. macOS (x86_64 or aarch64) has none, so it is a warning when an
+unpinned helper will be used, either `hydra remote setup NAME --binary FILE` or
+this host's own `hydra-fleet` when this host has exactly the remote's platform;
+otherwise, and for any other platform, preflight fails with `platform_unsupported`.
+tmux 3.0, curl (only for agent installers) and a group-writable umask are warnings.
+Hydra never uses sudo; install missing packages yourself. On Linux, a requirement
+that is not ok may carry a `suggestion`, an example command with Debian/Ubuntu
+package names (for example `sudo apt-get install git`) next to its `detail`; Hydra
+never runs it. An existing Hydra of the
+same version that passes the fleet handshake is reported as reusable; other
+installs are left untouched.
+
+**Agent installers.** `hydra remote install-agent NAME --agent A` runs the
+provider's official installer over `ssh -t` as your user after you approve a plan
+that shows the exact command. That command is `umask 022; ` followed by the
+recipe, so an account whose umask is 002 (the Ubuntu default) does not end up
+with a group-writable agent executable, which location records and probes
+refuse. The umask applies only to that installer session.
+
+**Upgrading an enrolled alias.** `hydra remote setup NAME` for an alias that already
+exists (and has no setup state) upgrades it. The destination and SSH config come
+from the alias; giving a different DEST or `--ssh-config` fails with
+`alias_conflict`, because setup never re-points an alias. The host key step accepts
+a host that strict SSH already trusts, but still refuses a key that differs from
+the alias's recorded one. Provisioning installs a new pin next to the old one. The
+final step shows a plan with the old and new Hydra path and version, states that
+the previous install stays installed, and after approval (`hydra remote setup NAME
+--approve PLAN_SHA256` when non-interactive) rewrites only the alias's `hydra`
+path, plus `accepted_host_key` if it was not recorded before; every other alias
+field is preserved and the record is replaced atomically. If the alias already
+uses a compatible install of this version, provisioning and the alias change are
+skipped. A new setup whose NAME is taken by an alias created meanwhile still fails
+with `alias_conflict`.
+
+Exit statuses: 0 done, 1 error, 3 approval required, 4 outcome unknown (reconcile
+before retrying; nothing is replayed), and 128+n when interrupted by signal n.
+Without `--json` the commands print one line per step on stderr followed by the
+next command.
+
+**Unconfirmed provisioning.** If the install response is lost (for example the
+connection drops), the provision step is `outcome_unknown` (exit 4). Rerunning
+`hydra remote provision NAME` never installs again: it checks the recorded prefix
+against the private package in `$HYDRA_HOME/fleet/packages/`. If that package was
+deleted, Hydra rebuilds it from this installation and the recorded helper source
+(pass the same `--binary FILE` if one was used), and uses the result only if its
+digest equals the recorded one. When this Hydra has changed since the plan and
+cannot rebuild it, the step stays `outcome_unknown` with the message "its local
+package is gone and this Hydra cannot rebuild it" and reports the installed
+prefix as `data.prefix`. Either run the rerun with the Hydra version that made
+the plan, or, after checking that no alias in `hydra remote list` uses that
+path, remove the prefix yourself and rerun provisioning twice:
+
+```sh
+ssh ubuntu@build-host "rm -rf -- '/home/ubuntu/.local/share/hydra/fleet/DIGEST'"  # data.prefix
+hydra remote provision ovh    # nothing at the prefix: install_failed
+hydra remote provision ovh    # shows a fresh plan to approve
+```
+
+**From the control centre.** `hydra tui` (not only `hydra fleet tui`) has a Hosts
+tab (`H`). `A`, or Enter on "+ Add a host", asks for the SSH destination, a name
+(the host name by default) and an optional SSH config file, then runs the same
+`hydra remote setup ... --json` commands and shows their steps. Unfinished setups
+are listed there (from `hydra remote setup list --json`); Enter continues one, `e`
+edits one that has not changed the remote yet (the form opens with its destination,
+name and SSH config; keeping the name removes the old record, after you approve its
+removal plan, and starts again) and `x` removes one's record after showing what stays
+on the remote. A name that already has an unfinished setup is caught in the form:
+Enter continues that setup instead, `e` edits and `x` removes it. The SSH config field
+takes `~/...`. While a step runs the screen shows it with its elapsed time; Esc or `c`
+cancels it (Hydra then shows the recorded status) and `b` keeps it running in the
+background. Each plan is shown before anything changes:
+a new host key needs `yes` typed and Enter, other plans `y` (Enter alone never
+approves; `n` or Esc declines and runs nothing). Hydra then reruns exactly the
+command the CLI returned, and only if its `--approve` hash or `--fingerprint` is the
+plan on screen. A changed or ambiguous host key shows the manual `ssh-keygen`
+recovery and has no accept action. Blocking requirements are listed with their
+suggested fixes; Enter checks again once they are installed. Of the warnings only a
+missing or older tmux pauses setup, because heads cannot run on the host without
+tmux 3.0: the requirements are shown with the suggested fix and Enter continues
+anyway. Other warnings (curl, a group-writable umask, ...) do not stop setup and
+stay visible in the step list. After provisioning
+the agent inventory is shown: choose "Install A" to review that agent's installer
+plan, "Sign in to A" for one already there, or Continue setup without agents
+(Enter on the done "Find agents" step shows the inventory again later). Agent
+installers and provider sign-in take over the terminal and return to Hydra when
+they finish (on failure after Enter, so the output can be read); a failure is
+explained from the error the CLI recorded for that step. An unknown outcome offers Enter
+to reconcile, which never replays the earlier attempt.
+
 ## Register and bootstrap a host
 
 ```sh

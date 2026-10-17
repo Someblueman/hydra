@@ -55,7 +55,7 @@ hydra_ensure_project_id() {
     _hepi_common="$(hydra_git_common_dir)" || return 1
     _hepi_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
     _hepi_dir="$_hepi_common/hydra"
-    mkdir -p "$_hepi_dir" || return 1
+    hydra_private_mkdir "$_hepi_dir" || return 1
     chmod 700 "$_hepi_dir" 2>/dev/null || true
     _hepi_id="$(hydra_new_id project "$_hepi_root|$_hepi_common")" || return 1
     _hepi_tmp="$(mktemp "$_hepi_dir/.project-id.XXXXXX")" || return 1

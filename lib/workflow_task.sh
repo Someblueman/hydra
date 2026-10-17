@@ -8,6 +8,7 @@ workflow_task_needs_owner() {
 }
 workflow_task_initialize() {
     grep -q '^task_args' "$1/graph.tsv" || return 0
+    hydra_private_touch "$1/task-initialization.json" || return 1
     workflow_task_tool init "$1" "$(workflow_repo_root)" > "$1/task-initialization.json"
 }
 workflow_task_bindings_match() {
@@ -46,6 +47,8 @@ workflow_task_start() {
     workflow_atomic_scalar "$_wts_sd/state" running
     workflow_event "$_wts_run" "$_wts_id" step.running task_reconciliation
     (
+        # Remote task records are Hydra evidence; no local user command runs here.
+        umask 077
         _wts_pid=""
         trap '[ -z "$_wts_pid" ] || operations_signal_tree "$_wts_pid" TERM' HUP INT TERM
         if ! workflow_bindings_match "$_wts_run"; then

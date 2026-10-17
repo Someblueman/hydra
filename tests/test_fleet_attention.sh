@@ -2,13 +2,13 @@
 # Public fleet attention projection checks over controlled SSH responses.
 set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 cleanup() { rm -rf "$fixture"; }
 trap cleanup 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 HYDRA_HOME="$fixture/home"
-HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 mkdir -p "$fixture/bin"
 export HYDRA_HOME HYDRA_FLEET_BIN
 cat > "$fixture/bin/ssh" <<'SSH'

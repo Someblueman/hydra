@@ -49,6 +49,7 @@ esac
 BIN_DIR="${DESTDIR}${PREFIX}/bin"
 LIB_DIR="${DESTDIR}${PREFIX}/lib/hydra"
 CORE_DIR="${DESTDIR}${PREFIX}/libexec/hydra"
+SHARE_DIR="${DESTDIR}${PREFIX}/share"
 
 echo "Uninstalling hydra from $PREFIX..."
 
@@ -69,6 +70,14 @@ if [ -d "$CORE_DIR" ]; then
     echo "Removing native helper files..."
     rm -rf "$CORE_DIR"
 fi
+
+# Remove Hydra's own shared files; share/ and share/licenses stay for others.
+for shared_dir in "$SHARE_DIR/hydra" "$SHARE_DIR/licenses/hydra"; do
+    if [ -d "$shared_dir" ]; then
+        echo "Removing $shared_dir..."
+        rm -rf "$shared_dir"
+    fi
+done
 
 # Remove library directory
 if [ -d "$LIB_DIR" ]; then
@@ -135,3 +144,4 @@ echo "Hydra has been uninstalled."
 echo "Binary removed from: $BIN_DIR/hydra"
 echo "Libraries removed from: $LIB_DIR"
 echo "Native helper removed from: $CORE_DIR"
+echo "Shared files removed from: $SHARE_DIR/hydra and $SHARE_DIR/licenses/hydra"

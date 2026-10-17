@@ -11,7 +11,7 @@ workflow_runs_dir() {
 }
 
 workflow_atomic_scalar() {
-    mkdir -p "$(dirname "$1")" || return 1
+    hydra_private_mkdir "$(dirname "$1")" || return 1
     state_v2_write_scalar "$1" "$2"
 }
 
@@ -20,7 +20,8 @@ workflow_event() {
     _we_file="$_we_dir/events.jsonl"
     _we_lock="$_we_dir/.events.lock"
     _we_tries=0
-    while ! mkdir "$_we_lock" 2>/dev/null; do
+    hydra_private_touch "$_we_file" || return 1
+    while ! (umask 077; mkdir "$_we_lock") 2>/dev/null; do
         _we_lock_pid="$(sed -n '1p' "$_we_lock/owner-pid" 2>/dev/null || true)"
         if [ -n "$_we_lock_pid" ] && ! workflow_pid_alive "$_we_lock_pid"; then
             rm -rf "$_we_lock"
@@ -30,7 +31,7 @@ workflow_event() {
         [ "$_we_tries" -lt 30 ] || return 1
         sleep 1
     done
-    printf '%s\n' "$$" > "$_we_lock/owner-pid"
+    (umask 077; printf '%s\n' "$$" > "$_we_lock/owner-pid")
     _we_seq="$(awk 'END { print NR + 1 }' "$_we_file" 2>/dev/null || printf 1)"
     _we_now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '{"schema_version":1,"sequence":%s,"occurred_at":"%s","run_id":"%s","step_id":%s,"type":"%s","detail":"%s"}\n' \
@@ -317,6 +318,7 @@ workflow_start_step() {
             exit 1
         fi
         if [ -f "$_wss_dir/data.json" ]; then
+            hydra_private_touch "$_wss_attempt_dir/data-preparation.json" || exit 1
             if ! workflow_data_definition_matches "$_wss_dir" ||
                 ! workflow_data_tool prepare "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" > "$_wss_attempt_dir/data-preparation.json"; then
                 workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
@@ -330,6 +332,7 @@ workflow_start_step() {
         fi
         if [ -f "$_wss_dir/compiled.json" ]; then
             HYDRA_WORKFLOW_VALIDATION_FILE="$_wss_attempt_dir/validation-context.json"
+            hydra_private_touch "$HYDRA_WORKFLOW_VALIDATION_FILE" || exit 1
             if ! workflow_plan_tool check-context "$_wss_dir/compiled.json" "$_wss_id" > "$HYDRA_WORKFLOW_VALIDATION_FILE"; then
                 workflow_atomic_scalar "$_wss_attempt_dir/exit-code" 1
                 workflow_atomic_scalar "$_wss_sd/state" failed
@@ -340,14 +343,21 @@ workflow_start_step() {
         else
             unset HYDRA_WORKFLOW_VALIDATION_FILE
         fi
+        # Attempt evidence is private; the step command keeps the user's umask.
+        # Transcripts exist only once the command starts.
+        hydra_private_touch "$_wss_attempt_dir/stdout" "$_wss_attempt_dir/stderr" || exit 1
         workflow_step_command "$_wss_dir" "$_wss_id" "$_wss_kind" "$@" >"$_wss_attempt_dir/stdout" 2>"$_wss_attempt_dir/stderr" &
         _ws_command_pid=$!
         workflow_atomic_scalar "$_wss_sd/command-pid" "$_ws_command_pid"
         if wait "$_ws_command_pid"; then _ws_code=0; else _ws_code=$?; fi
         trap - HUP INT TERM
         [ "$_ws_cancelled" -eq 0 ] || _ws_code=143
+        # Outputs the step command wrote with the user's umask become run
+        # evidence; seal them privately like every other run record.
+        hydra_private_tree "$_wss_attempt_dir/outputs" || true
         if [ "$_ws_code" -eq 0 ] && [ -f "$_wss_dir/data.json" ]; then
-            if ! workflow_data_tool seal "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" > "$_wss_attempt_dir/data-seal.json"; then
+            if ! hydra_private_touch "$_wss_attempt_dir/data-seal.json" ||
+                ! workflow_data_tool seal "$_wss_dir" "$_wss_id" "$_wss_attempt_dir" > "$_wss_attempt_dir/data-seal.json"; then
                 _ws_code=1
                 workflow_event "$_wss_dir" "$_wss_id" step.invalid_outputs
             fi
@@ -366,6 +376,7 @@ workflow_start_step() {
 
 workflow_cancel_steps() {
     _wcs_dir="$1"
+    hydra_private_touch "$_wcs_dir/residual-children.tsv" || return 1
     : > "$_wcs_dir/residual-children.tsv"
     while IFS= read -r _wcs_sd; do
         [ -n "$_wcs_sd" ] || continue
@@ -398,14 +409,14 @@ workflow_drive() {
     _wd_dir="$1"
     if workflow_task_needs_owner "$_wd_dir"; then workflow_task_tool drive "$_wd_dir"; return $?; fi
     _wd_drive_lock="$_wd_dir/.drive.lock"
-    if ! mkdir "$_wd_drive_lock" 2>/dev/null; then
+    if ! (umask 077; mkdir "$_wd_drive_lock") 2>/dev/null; then
         _wd_existing="$(sed -n '1p' "$_wd_dir/owner-pid" 2>/dev/null || true)"
         workflow_run_owner_active "$_wd_dir" && {
             cli_error workflow already_running "workflow owner is still alive" "wait or cancel the run"
             return 1
         }
         rm -rf "$_wd_drive_lock"
-        mkdir "$_wd_drive_lock" || return 1
+        (umask 077; mkdir "$_wd_drive_lock") || return 1
     fi
     _load_lib workflow_statistics
     workflow_statistics_begin "$_wd_dir" || true

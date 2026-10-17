@@ -2,6 +2,10 @@
 # Unit tests for lib/layout.sh
 # POSIX-compliant test framework
 
+# These checks describe behaviour outside tmux. Detach from any caller's tmux
+# server so running the file inside tmux neither skips them nor touches it.
+unset TMUX TMUX_PANE
+
 # Test framework setup
 test_count=0
 pass_count=0
@@ -30,14 +34,8 @@ test_apply_layout_validation() {
     assert_failure $? "apply_layout should fail with unknown layout"
     
     # Test without tmux session (outside tmux)
-    if [ -z "$TMUX" ]; then
-        apply_layout "default" 2>/dev/null
-        assert_failure $? "apply_layout should fail when not in tmux session"
-    else
-        echo "[WARN] Skipping tmux check - already in tmux session"
-        pass_count=$((pass_count + 1))
-        test_count=$((test_count + 1))
-    fi
+    apply_layout "default" 2>/dev/null
+    assert_failure $? "apply_layout should fail when not in tmux session"
 }
 
 # Test get_current_layout function
@@ -45,21 +43,8 @@ test_get_current_layout() {
     echo "Testing get_current_layout..."
     
     # Test outside tmux
-    if [ -z "$TMUX" ]; then
-        get_current_layout >/dev/null 2>&1
-        assert_failure $? "get_current_layout should fail when not in tmux session"
-    else
-        # Inside tmux - should return something
-        result="$(get_current_layout)"
-        if [ -n "$result" ]; then
-            echo "[PASS] get_current_layout returns a layout name when in tmux"
-            pass_count=$((pass_count + 1))
-        else
-            echo "[FAIL] get_current_layout should return a layout name when in tmux"
-            fail_count=$((fail_count + 1))
-        fi
-        test_count=$((test_count + 1))
-    fi
+    get_current_layout >/dev/null 2>&1
+    assert_failure $? "get_current_layout should fail when not in tmux session"
 }
 
 # Test cycle_layout function
@@ -67,14 +52,8 @@ test_cycle_layout() {
     echo "Testing cycle_layout..."
     
     # Test outside tmux
-    if [ -z "$TMUX" ]; then
-        cycle_layout 2>/dev/null
-        assert_failure $? "cycle_layout should fail when not in tmux session"
-    else
-        echo "[WARN] Skipping cycle_layout test - would modify current tmux session"
-        pass_count=$((pass_count + 1))
-        test_count=$((test_count + 1))
-    fi
+    cycle_layout 2>/dev/null
+    assert_failure $? "cycle_layout should fail when not in tmux session"
 }
 
 # Test save_layout parameter validation
@@ -120,7 +99,7 @@ test_restore_layout_no_file() {
     echo "Testing restore_layout with non-existent layout file..."
     
     # Set up temporary HYDRA_HOME
-    temp_home="$(mktemp -d)"
+    temp_home="$(test_mktemp_dir)"
     trap 'if [ -n "$temp_home" ] && [ -d "$temp_home" ]; then rm -rf "$temp_home"; fi' EXIT INT TERM
     HYDRA_HOME="$temp_home"
     export HYDRA_HOME
@@ -153,7 +132,7 @@ test_layout_save_restore() {
     echo "Testing layout save/restore integration..."
     
     # Set up temporary HYDRA_HOME
-    temp_home="$(mktemp -d)"
+    temp_home="$(test_mktemp_dir)"
     trap 'if [ -n "$temp_home" ] && [ -d "$temp_home" ]; then rm -rf "$temp_home"; fi' EXIT INT TERM
     HYDRA_HOME="$temp_home"
     export HYDRA_HOME

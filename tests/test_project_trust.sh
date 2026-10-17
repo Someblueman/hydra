@@ -5,7 +5,7 @@ root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 # shellcheck disable=SC1091
 . "$root/tests/helpers.sh"
 test_count=0 pass_count=0 fail_count=0
-fixture="$(mktemp -d)"
+fixture="$(test_mktemp_dir)"
 trap 'rm -rf "$fixture"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

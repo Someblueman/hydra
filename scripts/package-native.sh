@@ -9,7 +9,9 @@ case "${1:-}" in
     tui) name=hydra-tui; package_dir="${HYDRA_TUI_PACKAGE_DIR:-}" ;;
     *) echo 'Usage: package-native.sh core|tui' >&2; exit 2 ;;
 esac
-binary="$repo_root/build/$name"
+# BUILD_DIR (as make passes it) names the build; the default is ./build.
+build_dir="${BUILD_DIR:-$repo_root/build}"
+binary="$build_dir/$name"
 platform="$(uname -s) $(uname -m)"
 slug="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
 out="${package_dir:-$repo_root/dist/$name-$slug}"
@@ -23,7 +25,7 @@ if [ -n "$(git -C "$repo_root" status --porcelain=v1)" ]; then
 fi
 
 [ -x "$binary" ] || {
-    echo "Error: build/$name is missing; run make build-$1" >&2
+    echo "Error: $binary is missing; run make build-$1" >&2
     exit 1
 }
 mkdir -p "$out"

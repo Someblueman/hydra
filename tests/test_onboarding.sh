@@ -38,10 +38,10 @@ echo "================================="
 
 SRC_BEFORE="$(snapshot_source_repo)"
 
-base_dir="$(mktemp -d)" || exit 1
+base_dir="$(test_mktemp_dir)" || exit 1
 repo_dir="$base_dir/repo"
 hydra_home="$base_dir/.hydra"
-mkdir -p "$repo_dir" "$hydra_home"
+mkdir -p "$repo_dir"; (umask 077; mkdir -p "$hydra_home")
 
 trap 'tmux kill-session -t "${branch:-}" 2>/dev/null || true; rm -rf "$base_dir"' EXIT INT TERM
 
@@ -199,7 +199,7 @@ rm -f .hydra/config.yml
 
 # --- not in a git repository ---
 echo "Testing not-in-git-repo first-run error..."
-nogit="$(mktemp -d)"
+nogit="$(test_mktemp_dir)"
 nogit_out="$(
     cd "$nogit" || exit 1
     HYDRA_HOME="$hydra_home" "$HYDRA_BIN" spawn stray --no-agent 2>&1

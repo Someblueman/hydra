@@ -49,7 +49,7 @@ integration_context_create() {
     _icc_root="$PARALLEL_HEAD_DIR/context-packs"
     _icc_lock="context_${_icc_head}"
     acquire_lock "$_icc_lock" "typed context pack" "$_icc_head" || return 1
-    mkdir -p "$_icc_root" || { release_lock "$_icc_lock"; return 1; }
+    hydra_private_mkdir "$_icc_root" || { release_lock "$_icc_lock"; return 1; }
     _icc_tmp="$(mktemp -d "$_icc_root/.pack.XXXXXX")" || {
         release_lock "$_icc_lock"; return 1;
     }
@@ -60,7 +60,7 @@ integration_context_create() {
         rm -rf "$_icc_tmp"; release_lock "$_icc_lock"; return 1
     fi
 
-    : > "$_icc_tmp/manifest.tsv"
+    hydra_private_touch "$_icc_tmp/manifest.tsv" || { rm -rf "$_icc_tmp"; release_lock "$_icc_lock"; return 1; }
     if [ -n "$_icc_files" ]; then
         while IFS= read -r _icc_file; do
             [ -n "$_icc_file" ] || continue
@@ -90,6 +90,7 @@ EOF
         done <<EOF
 $_icc_changed
 EOF
+        hydra_private_touch "$_icc_tmp/diff.patch" || { rm -rf "$_icc_tmp"; release_lock "$_icc_lock"; return 1; }
         git -C "$_icc_worktree" diff --binary "$_icc_base" -- > "$_icc_tmp/diff.patch" || {
             rm -rf "$_icc_tmp"; release_lock "$_icc_lock"; return 1;
         }
@@ -107,6 +108,7 @@ EOF
     case "$_icc_history" in ''|*[!0-9]*) rm -rf "$_icc_tmp"; release_lock "$_icc_lock"; return 1 ;; esac
     if [ "$_icc_history" -gt 0 ]; then
         [ "$_icc_history" -le 100 ] || { rm -rf "$_icc_tmp"; release_lock "$_icc_lock"; return 1; }
+        hydra_private_touch "$_icc_tmp/history.tsv" || { rm -rf "$_icc_tmp"; release_lock "$_icc_lock"; return 1; }
         git -C "$_icc_worktree" log -n "$_icc_history" --format='%H%x09%aI%x09%s' > "$_icc_tmp/history.tsv" || {
             rm -rf "$_icc_tmp"; release_lock "$_icc_lock"; return 1;
         }
@@ -115,7 +117,7 @@ EOF
             "$(git hash-object "$_icc_tmp/history.tsv")" >> "$_icc_tmp/manifest.tsv"
     fi
     if [ -n "$_icc_artifacts" ]; then
-        : > "$_icc_tmp/artifacts.tsv"
+        hydra_private_touch "$_icc_tmp/artifacts.tsv" || { rm -rf "$_icc_tmp"; release_lock "$_icc_lock"; return 1; }
         while IFS= read -r _icc_artifact; do
             [ -n "$_icc_artifact" ] || continue
             case "$_icc_artifact" in *'	'*|*'
@@ -156,12 +158,14 @@ integration_archive_locked() {
     parallel_head_load "$_ia_branch" || return 1
     _ia_run="$(hydra_new_id run "$PARALLEL_HEAD_ID|$_ia_kind")" || return 1
     _ia_root="$PARALLEL_HEAD_DIR/archives/$_ia_kind/$_ia_run"
-    mkdir -p "$_ia_root" || return 1
+    hydra_private_mkdir "$_ia_root" || return 1
+    # The bundle and merge transcripts are archive evidence, not worktree files.
     if ! state_v2_write_scalar "$_ia_root/run-id" "$_ia_run" || \
        ! state_v2_write_scalar "$_ia_root/pre-head" "$(git -C "$_ia_worktree" rev-parse HEAD)" || \
        ! state_v2_write_scalar "$_ia_root/source" "$_ia_source" || \
        ! state_v2_write_scalar "$_ia_root/created-at" "$(date +%s)" || \
-       ! git -C "$_ia_worktree" bundle create "$_ia_root/pre-operation.bundle" HEAD >/dev/null 2>&1; then
+       ! hydra_private_touch "$_ia_root/merge.stdout" "$_ia_root/merge.stderr" || \
+       ! (umask 077; git -C "$_ia_worktree" bundle create "$_ia_root/pre-operation.bundle" HEAD) >/dev/null 2>&1; then
         return 1
     fi
     INTEGRATION_ARCHIVE_DIR="$_ia_root"

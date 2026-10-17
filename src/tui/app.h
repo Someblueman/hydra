@@ -16,6 +16,7 @@ struct native_evidence;
 struct native_links;
 struct native_attention;
 struct native_review;
+struct native_setup;
 struct transcript;
 
 struct app {
@@ -29,6 +30,8 @@ struct app {
     struct native_links *links;
     struct native_attention *attention;
     struct native_review *review;
+    /* In-app remote setup (U10); allocated when Hosts is first used. */
+    struct native_setup *setup;
     /* Lazily allocated interpreter for read-only captured output. */
     struct transcript *transcript;
     pid_t control_pids[4];

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 const char *f_home, *f_hydra;
 static void observe_stdout(void *context, const char *text, size_t size) {
@@ -50,6 +51,32 @@ static void capture_partial_input(void) {
     assert(cap.status == 7 && cap.in_bytes == 0 && cap.out_bytes == 0 && !cap.input_complete && cap.measurement_complete);
     f_capture_free(&cap);
 }
+/* A descendant that outlives the command (an OpenSSH ControlPersist master
+ * does) may keep the pipes open; the command's own exit ends the capture. */
+static void capture_exited_leader(void) {
+    struct f_capture cap = {0};
+    char *command[] = {"sh", "-c", "printf done; printf note >&2; sleep 6 & exit 3", NULL};
+    time_t started = time(NULL);
+    assert(!f_run(command, NULL, 0, 30, &cap));
+    assert(time(NULL) - started <= 4);
+    assert(cap.status == 3 && !cap.timeout && !strcmp(cap.out, "done") && !strcmp(cap.err, "note"));
+    f_capture_free(&cap);
+}
+/* OpenSSH's own reason is the last line that is not -v chatter or a banner. */
+static void ssh_reasons(void) {
+    char reason[128];
+    f_ssh_reason("OpenSSH_9.9p1, LibreSSL 3.3.6\ndebug1: Reading configuration data /x\n"
+                 "ssh: Could not resolve hostname u10: nodename nor servname provided\r\ndebug2: done\n", reason, sizeof(reason));
+    assert(!strcmp(reason, "ssh: Could not resolve hostname u10: nodename nor servname provided"));
+    f_ssh_reason("debug1: x\nuser@h: Permission denied (publickey).\nConnection to h closed.\n", reason, sizeof(reason));
+    assert(!strcmp(reason, "user@h: Permission denied (publickey)."));
+    f_ssh_reason("Connection to h closed by remote host.\n", reason, sizeof(reason));
+    assert(!strcmp(reason, "Connection to h closed by remote host."));
+    f_ssh_reason("debug1: only chatter\nTransferred: sent 1, received 2 bytes\n", reason, sizeof(reason));
+    assert(!reason[0]);
+    f_ssh_reason("bad\033[31m line\n", reason, 6);
+    assert(!strcmp(reason, "bad?["));
+}
 #include "test_fleet_attention.inc"
 int main(void) {
     char dir[] = "/tmp/hydra-fleet-unit.XXXXXX", path[F_PATH]; json_object *obj, *bundle, *files, *file, *result;
@@ -65,6 +92,8 @@ int main(void) {
     assert(!f_run(echo, "literal input", 13, 2, &cap));
     assert(cap.status == 0 && cap.in_bytes == 13 && cap.input_complete && !strcmp(cap.out, "literal input") && !strcmp(cap.err, "error")); f_capture_free(&cap);
     capture_partial_input();
+    capture_exited_leader();
+    ssh_reasons();
     assert(!f_run(hang, NULL, 0, 1, &cap) && cap.timeout && cap.status == 124); f_capture_free(&cap);
     bundle = json_object_new_object(); files = json_object_new_array(); file = json_object_new_object();
     json_object_object_add(bundle, "schema_version", json_object_new_int(1)); f_string_add(bundle, "kind", "config");

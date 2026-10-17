@@ -6,7 +6,7 @@ umask 002
 root="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=/dev/null
 . "$root/tests/fixture-tools.sh"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 # shellcheck source=/dev/null
 . "$root/tests/workflow_task_cleanup.sh"
 cleanup() {
@@ -34,7 +34,7 @@ trap 'exit 143' TERM HUP
 # shellcheck source=/dev/null
 . "$root/tests/headless_path.sh"
 headless_path "$fixture/no-tmux"
-HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 HYDRA_HOME="$fixture/client"
 HYDRA_TEST_TRANSPORT="$fixture/transport"
 export HYDRA_FLEET_BIN HYDRA_HOME HYDRA_TEST_TRANSPORT

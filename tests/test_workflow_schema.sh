@@ -10,7 +10,7 @@ HYDRA_BIN="$ROOT_DIR/bin/hydra"
 test_count=0
 pass_count=0
 fail_count=0
-TEST_ROOT="$(mktemp -d)"
+TEST_ROOT="$(test_mktemp_dir)"
 trap 'rm -rf "$TEST_ROOT"' EXIT INT TERM HUP
 export HYDRA_HOME="$TEST_ROOT/home"
 

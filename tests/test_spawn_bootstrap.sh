@@ -17,7 +17,7 @@ if ! command -v tmux >/dev/null 2>&1; then
     exit 0
 fi
 
-base="$(mktemp -d)"
+base="$(test_mktemp_dir)"
 base="$(cd "$base" && pwd -P)"
 socket="hydra-bootstrap-$$"
 real_tmux="$(command -v tmux)"

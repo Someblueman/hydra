@@ -63,6 +63,13 @@ branch is kept. An unavailable worktree has unknown change indicators.
 - `hydra doctor` reports the coding agents found on PATH. With none installed it
   suggests Claude Code or Codex, or a plain terminal task with
   `hydra spawn <branch> --no-agent`.
+- `hydra doctor` also fails when Hydra's own state (`$HYDRA_HOME` and the
+  repository's `.git/hydra`) is group- or other-writable, because Hydra refuses
+  shared state. Hydra creates its state privately under any umask; entries left by
+  earlier releases run under a group-writable umask such as Ubuntu's `002` are
+  listed. `hydra doctor --fix-permissions` removes group and other write from your
+  own files and directories there, never follows symbolic links, and only reports
+  entries owned by someone else. Your worktrees keep following your umask.
 - `hydra list` prints one aligned row per head: `BRANCH`, `AGENT`, `SESSION`
   (`running`, `terminal gone`, `stopped`, or `unknown`), `REPORTED` (the declared
   outcome or `-`), and `AGE`. The current head is marked with `*`. Add `--verbose`
@@ -179,6 +186,7 @@ hydra regenerate   # restore sessions after restart
 hydra status       # per-head health
 hydra status --json # JSON output
 hydra doctor       # install, dependencies, and first-run readiness
+hydra doctor --fix-permissions # remove group/other write from your own Hydra state
 hydra snapshot --native # explicitly try the optional read-only native helper
 
 # Dashboard & TUI
@@ -272,6 +280,39 @@ Imports cannot replace reserved built-in names. Headless `exec --resume-run RUN_
 requires the exact successful recorded session, head, instance, worktree, and profile;
 it never selects the provider's latest session. Interactive Codex restore is the
 separate cwd-scoped `resume --last` convenience.
+
+### Agents outside PATH
+
+A built-in profile's executable (`claude`, `codex`, `cursor-agent`, `agy`,
+`opencode`, `pi`, ...) resolves from PATH first, then from a location you
+recorded. Provider installers usually write to `~/.local/bin`, which a
+non-interactive SSH session's PATH often omits, so a fleet receiver would
+otherwise report the agent as missing.
+
+```sh
+hydra agent locate                  # status per agent: on_path, recorded, found_off_path, ambiguous, missing
+hydra agent locate --json           # agent-inventory schema 1
+hydra agent locate --record claude ~/.local/bin/claude
+hydra agent locate --forget claude
+```
+
+`locate` searches PATH plus `~/.local/bin`, `~/bin`, `~/.claude/local`,
+`~/.opencode/bin`, `~/.pi/agent/bin`, `~/.npm-global/bin`, `~/.bun/bin`,
+`~/.volta/bin`, `~/.local/share/pnpm`, `~/.cargo/bin`, `~/.local/share/mise/shims`,
+`~/.asdf/shims`, `~/.nvm/versions/node/*/bin` (several versions are `ambiguous`),
+`/usr/local/bin`, `/opt/homebrew/bin`, `/home/linuxbrew/.linuxbrew/bin` and `/snap/bin`.
+It never sources a login shell and runs only `--version` of candidates it could
+record. A record is a private scalar file,
+`$HYDRA_HOME/agents/locations/EXECUTABLE` (0600 in a 0700 directory whatever the
+umask), keyed by executable rather than profile. Hydra accepts and uses a record only
+when the path is absolute, its file name equals the executable, it is an executable
+file (a symlink keeps its invoked name), the entry and its target belong to you or
+root, and the target is not group- or world-writable. A record never shadows PATH
+and cannot create a profile: custom profiles still cannot reuse built-in names.
+`spawn`, `agent list/show/doctor`, headless `exec --profile` and `agent probe` share
+this resolution, and headless runs execute the probed absolute path.
+`hydra fleet auth login HOST --agent A` resolves the remote executable the same way
+and waits for the provider's sign-in to finish.
 
 Headless Cursor passes `--trust` so Cursor Agent accepts each fresh head worktree;
 it only skips Cursor's workspace prompt and never auto-approves commands (`--force`).
@@ -451,7 +492,8 @@ hydra tui --capabilities   # availability and observation diagnostics
 
 Every native screen shares one frame: a title row (`HYDRA / WORK`, `HYDRA / PLAN
 TOGETHER`, ...), a tab bar, one content panel and a two-line footer with the current
-status and the keys that apply. Only changed cells are repainted, so idle refreshes
+status and the keys that apply. Below 100 columns the tab bar uses short labels
+(`Coord`, `Flows`, `Stats`) so every tab stays visible at 80 columns. Only changed cells are repainted, so idle refreshes
 do not flicker. Session states use plain words: `running`, `terminal gone`,
 `stopped` and `unknown`; internal tokens stay behind `d` (technical details).
 
@@ -471,6 +513,7 @@ One interaction model applies everywhere:
 | `Space` / `A`, `G` | Mark one / all heads, group the marked heads |
 | `/`, `:` | Search heads, search explicit actions |
 | `p`, `d`, `c` | Terminal output (a headless head's step output), technical details, coordination |
+| `H` | Hosts: `A` adds a remote machine over SSH, Enter continues its setup |
 | `?`, `t`, `q` | Keyboard help, theme, quit |
 
 Work lists the heads you started. Heads a workflow run created sit inside their
@@ -480,6 +523,12 @@ head is described by the step that runs on it (agent, model and effort, tokens,
 duration) rather than by a terminal, and `p` shows that step's live output.
 Overview centres on the selected or active run: its steps, where each ran, and
 what comes next. See [workflows](workflows.md#heads-a-plan-run-creates).
+
+Hosts, the last tab of local work, adds a remote machine without leaving the control
+centre: `A` asks for the SSH destination and a name, then walks through the guided
+`hydra remote setup` steps (host key, requirements, installing Hydra, agents and
+sign-in), showing each plan before anything changes. Unfinished setups are listed
+there and Enter continues one. See [guided remote setup](FLEET.md#guided-remote-setup).
 
 Removal confirms the exact targets in the UI, runs `hydra kill` per head with output
 captured, reports a concise result in the status line and opens the full output only

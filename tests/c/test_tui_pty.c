@@ -184,9 +184,12 @@ static void write_input(int fd, const char *data, size_t length) {
     }
 }
 
-static void drain_output(int fd) {
-    char buffer[4096];
-    while (read(fd, buffer, sizeof(buffer)) > 0) { }
+/* Discard pending output from the marker stream, but still feed it to the
+ * emulator: the incremental presenter never re-sends a cell it already drew,
+ * so a frame read here and not fed would leave the reconstructed screen
+ * permanently behind the real one. */
+static void drain_output(struct session *session) {
+    session_drain(session);
 }
 
 static bool same_terminal(const struct termios *left, const struct termios *right) {
@@ -498,7 +501,7 @@ static int wait_for_exit(struct session *session) {
     int attempt, status = 0;
     for (attempt = 0; attempt < 150; attempt++) {
         pid_t waited;
-        drain_output(session->master);
+        drain_output(session);
         waited = waitpid(session->pid, &status, WNOHANG);
         if (waited == session->pid) {
             if (WIFEXITED(status)) return WEXITSTATUS(status);
@@ -644,7 +647,7 @@ static void test_interaction(const char *tui, const char *hydra, const char *fak
     for (paste_offset = 0U; paste_offset < sizeof(large_paste); paste_offset += 100U) {
         write_input(session.master, large_paste + paste_offset, 100U);
         sleep_ms(2);
-        drain_output(session.master);
+        drain_output(&session);
     }
     write_input(session.master, "?", 1U);
     result(wait_for_marker(&session, "KEYBOARD HELP", 2000), "oversized paste cannot inject quit and preserves the next key");

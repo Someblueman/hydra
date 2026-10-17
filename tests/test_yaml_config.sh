@@ -23,7 +23,7 @@ assert_true() {
 }
 
 setup() {
-    base_dir="$(mktemp -d)" || exit 1
+    base_dir="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")" || exit 1
     repo_dir="$base_dir/repo"
     mkdir -p "$repo_dir"
     cd "$repo_dir" || exit 1
@@ -35,7 +35,7 @@ setup() {
     git commit -m init >/dev/null 2>&1
     mkdir -p .hydra
     export HYDRA_HOME="$base_dir/.hydra"
-    mkdir -p "$HYDRA_HOME"
+    (umask 077; mkdir -p "$HYDRA_HOME")
 }
 
 teardown() {

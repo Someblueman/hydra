@@ -135,7 +135,7 @@ cmd_group_wait() {
         if [ -n "$mappings" ]; then
             # Use a temp file to avoid subshell variable scope issues
             tmp_active="${HYDRA_HOME}/tmp_wait_$$"
-            : > "$tmp_active"
+            (umask 077; : > "$tmp_active")
 
             printf '%s\n' "$mappings" | while IFS=' ' read -r branch session _rest; do
                 if [ "$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)" = headless ] || [ "$session" = - ]; then
@@ -223,7 +223,7 @@ cmd_group_status() {
 
     # Build session info using temp file to avoid subshell issues
     tmp_sessions="${HYDRA_HOME}/tmp_status_$$"
-    : > "$tmp_sessions"
+    (umask 077; : > "$tmp_sessions")
 
     printf '%s\n' "$mappings" | while IFS=' ' read -r branch session ai _group timestamp deps pr; do
         _group_mode="$(get_terminal_mode_for_branch "$branch" 2>/dev/null || echo interactive)"

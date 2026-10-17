@@ -4,7 +4,7 @@ set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 tool="$root/${1:-build/quality-tools/bin/clang-tidy}"
 case "${1:-}" in /*) tool="$1" ;; esac
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 cleanup() {
     code=$?
     [ "$code" -eq 0 ] || cat check.log >&2

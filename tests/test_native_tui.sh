@@ -6,9 +6,9 @@ set -u
 test_count=0
 pass_count=0
 fail_count=0
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-tui="${HYDRA_TUI_BIN:-$repo_root/build/hydra-tui}"
+tui="${HYDRA_TUI_BIN:?HYDRA_TUI_BIN is required: run via make test-tui or make test-one T=native_tui}"
 fixture="$repo_root/tests/fixtures/tui/native-v2.tsv"
 
 # shellcheck source=helpers.sh
@@ -64,7 +64,7 @@ echo "Running native TUI tests..."
 echo "==========================="
 
 assert_equal "2" "$("$tui" --protocol-version)" "native TUI protocol handshake"
-assert_equal "Hydra TUI 2.8.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
+assert_equal "Hydra TUI 2.9.0 protocol 2" "$("$tui" --version)" "native TUI version handshake"
 
 awk 'BEGIN { FS = OFS = "\t" } $1 == "H" && !changed { $13 = "invalid"; changed = 1 } { print }' \
     "$fixture" > "$test_root/invalid-number.tsv"
@@ -166,9 +166,17 @@ contains "+- Heads in this project" "$test_root/columns.out" "head list is enclo
 "$tui" --headless-fixture "$fixture" --size 100x24 > "$test_root/unicode.out"
 contains "$(printf '\342\225\255\342\224\200 Heads in this project')" "$test_root/unicode.out" "default output draws rounded Unicode borders"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view heads > "$test_root/tabs.out"
-contains "[Work] Details Overview Attention Recovery Workflows Statistics Workspace" "$test_root/tabs.out" "every view shares one tab bar at 80 columns"
+contains "[Work] Details Overview Attention Recovery Flows Stats Workspace Hosts" "$test_root/tabs.out" "every tab is fully visible at 80 columns with short labels"
+"$tui" --headless-fixture "$fixture" --size 80x24 --view hosts > "$test_root/hosts-tabs.out"
+contains " Work Details Overview Attention Recovery Flows Stats Workspace [Hosts]" "$test_root/hosts-tabs.out" "the Hosts tab keeps the leftmost tab in view at 80 columns"
+"$tui" --headless-fixture "$fixture" --size 80x24 --view coordination > "$test_root/coordination-tabs.out"
+contains "Work Details [Coord] Overview Attention Recovery Flows Stats Workspace Hosts" "$test_root/coordination-tabs.out" "the coordination tab fits every tab at 80 columns"
+"$tui" --fleet --headless-fixture "$fixture" --size 80x24 --view hosts > "$test_root/fleet-tabs.out"
+contains "Work  Details  Overview  [Hosts]  Attention  Recovery  Stats  Workspace" "$test_root/fleet-tabs.out" "fleet tabs are fully visible at 80 columns"
+"$tui" --headless-fixture "$fixture" --size 100x24 --view hosts > "$test_root/wide-tabs.out"
+contains "Work  Details  Overview  Attention  Recovery  Workflows  Statistics  Workspace  [Hosts]" "$test_root/wide-tabs.out" "tabs keep full labels from 100 columns"
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v2.tsv" --size 80x24 --view statistics > "$test_root/stats-tabs.out"
-contains "[Statistics]" "$test_root/stats-tabs.out" "statistics keeps the shared tab bar"
+contains "[Stats]" "$test_root/stats-tabs.out" "statistics keeps the shared tab bar"
 contains "Work Details Overview" "$test_root/stats-tabs.out" "statistics keeps the other tabs reachable"
 # Schema 4 usage rows: token totals, agent evidence and resource metrics said in full.
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 140x40 --view statistics > "$test_root/stats-usage.out"
@@ -255,14 +263,14 @@ assert_failure $? "TERM=dumb fails cleanly"
 assert_failure $? "non-TTY invocation fails cleanly"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.8.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.9.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
 chmod +x "$test_root/native-transient"
 HYDRA_TUI_BIN="$test_root/native-transient" "$repo_root/bin/hydra" tui > /dev/null 2> "$test_root/fallback.err"
 assert_failure $? "non-TTY basic fallback still fails cleanly"
 contains "starting the basic TUI" "$test_root/fallback.err" "transient native failure dispatches to basic fallback"
 
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.8.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
+printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.9.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
 chmod +x "$test_root/native-success"
 HYDRA_TUI_BIN="$test_root/native-success" "$repo_root/bin/hydra" tui > "$test_root/default.out"
 contains "NATIVE DEFAULT" "$test_root/default.out" "plain tui dispatches to a qualified native executable"

@@ -22,7 +22,16 @@ complete -c hydra -f -n '__fish_seen_subcommand_from exec' -l retain-raw
 # Complete commands
 complete -c hydra -f -n '__fish_use_subcommand' -a 'remote' -d 'Manage OpenSSH aliases'
 complete -c hydra -f -n '__fish_use_subcommand' -a 'fleet' -d 'Inspect trusted remote installations'
-complete -c hydra -f -n '__fish_seen_subcommand_from remote' -a 'add remove list'
+complete -c hydra -f -n '__fish_seen_subcommand_from remote; and not __fish_seen_subcommand_from add remove list setup trust-key preflight provision agents install-agent sign-in' -a 'add remove list setup trust-key preflight provision agents install-agent sign-in'
+complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup' -a 'status list remove'
+complete -c hydra -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup' -l ssh-config -r -d 'Trusted OpenSSH config'
+complete -c hydra -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup provision' -l binary -r -d 'Fleet helper for the remote platform'
+complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from trust-key' -l fingerprint -r -d 'Approve exactly this SHA256 host key'
+complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup provision install-agent' -l approve -r -d 'Exact plan_sha256'
+complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from agents' -l record -r -d 'EXECUTABLE=/absolute/path'
+complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from install-agent sign-in' -l agent -r -a 'claude codex opencode cursor agy pi' -d 'Agent'
+complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup trust-key preflight provision agents install-agent sign-in' -l timeout -r -d 'SSH connect timeout, 1-300 seconds'
+complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup trust-key preflight provision agents install-agent sign-in' -l json -d 'Versioned JSON output'
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth' -a 'handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect announce submit start resume requests decide status observe cancel logs result inspect-result collect collected help'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l source -r
@@ -149,7 +158,10 @@ complete -c hydra -f -n '__fish_seen_subcommand_from diff review provenance' -l 
 
 # Complete template command
 complete -c hydra -f -n '__fish_seen_subcommand_from template' -a 'list create show edit delete'
-complete -c hydra -f -n '__fish_seen_subcommand_from agent' -a 'list show doctor init contract probe import'
+complete -c hydra -f -n '__fish_seen_subcommand_from agent' -a 'list show doctor init locate contract probe import'
+complete -c hydra -f -n '__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from locate' -l json -d 'Versioned agent-inventory JSON'
+complete -c hydra -f -n '__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from locate' -l record -r -d 'Record EXECUTABLE at an absolute path'
+complete -c hydra -f -n '__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from locate' -l forget -r -a 'claude codex cursor-agent agy opencode pi copilot aider gemini' -d 'Forget a recorded location'
 complete -c hydra -f -n '__fish_seen_subcommand_from state' -a 'verify backup migrate rollback'
 complete -c hydra -f -n '__fish_seen_subcommand_from events' -a 'verify tail filter retain repair'
 complete -c hydra -f -n '__fish_seen_subcommand_from adapter' -a 'ingest'
@@ -163,6 +175,8 @@ complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and not __fish_se
 complete -c hydra -f -n '__fish_seen_subcommand_from integrate' -a 'train status report cancel resume approve promote cleanup'
 complete -c hydra -f -n '__fish_seen_subcommand_from worktree' -a 'doctor'
 complete -c hydra -f -n '__fish_seen_subcommand_from snapshot' -l native -d 'Try the optional read-only native helper'
+complete -c hydra -f -n '__fish_seen_subcommand_from doctor; and not __fish_seen_subcommand_from worktree fleet agent' -l fix -d 'Auto-fix detected issues'
+complete -c hydra -f -n '__fish_seen_subcommand_from doctor; and not __fish_seen_subcommand_from worktree fleet agent' -l fix-permissions -d 'Remove group/other write from your own Hydra state'
 complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l path -d 'Path pattern'
 complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l access -d 'Access mode' -a 'read write'
 complete -c hydra -f -n '__fish_seen_subcommand_from claim' -l reason -d 'Claim reason'

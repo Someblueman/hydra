@@ -1,0 +1,3 @@
+version	platform	sha256	filename
+2.9.0	linux-aarch64	e53fa0e9ee2f9e6f78466639e416ff7b88ade53f2114164e90d6df5b673d8093	hydra-fleet-2.9.0-linux-aarch64
+2.9.0	linux-x86_64	965347a12d1fe23c08f1af296955aa9148b6ff25310be2476276d7266d705170	hydra-fleet-2.9.0-linux-x86_64

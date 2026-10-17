@@ -4,6 +4,7 @@
 #endif
 #include "internal.h"
 #include <dirent.h>
+#include <fcntl.h>
 /* Planning presentation only. The shell CLI compiles and admits execution. */
 
 /* A draft's assets (published with propose --asset) sit in assets/ beside it. */
@@ -102,9 +103,12 @@ static bool native_plan_init(struct app *app) {
 static bool native_plan_write(struct native_plan *p, const char *name, const char *bytes, size_t length, char path[4096]) {
     FILE *out;
     bool ok;
+    int fd;
     if (snprintf(path,4096,"%s/%s",p->directory,name)>=4096) return false;
-    out=fopen(path,"wb");
-    if (!out) return false;
+    /* Private whatever the caller's umask, like the rest of Hydra's state. */
+    fd=open(path,O_WRONLY|O_CREAT|O_TRUNC,0600);
+    out=fd<0 ? NULL : fdopen(fd,"wb");
+    if (!out) { if (fd>=0) close(fd); return false; }
     ok=fwrite(bytes,1,length,out)==length;
     return fclose(out)==0 && ok;
 }

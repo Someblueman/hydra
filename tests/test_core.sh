@@ -6,12 +6,12 @@ set -u
 test_count=0
 pass_count=0
 fail_count=0
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 HYDRA_BIN="$repo_root/bin/hydra"
 HYDRA_HOME="$test_root/home"
 HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
-core="${HYDRA_CORE:-$repo_root/build/hydra-core}"
+core="${HYDRA_CORE:?HYDRA_CORE is required: run via make test-parity or make test-one T=core}"
 export HYDRA_HOME HYDRA_STATE_V2_ROOT
 
 # shellcheck source=helpers.sh
@@ -142,7 +142,7 @@ printf '%s\n' \
     '  --protocol-version)' \
     '    case "${FAKE_CORE_MODE:-}" in skew) echo 99 ;; hang) sleep 3 ;; descendant) sleep 20 & echo $! > "$FAKE_CORE_CHILD_PID"; wait ;; crash) exit 9 ;; *) echo 1 ;; esac ;;' \
     '  --version)' \
-    '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 2.8.0 protocol 1" ;; esac ;;' \
+    '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 2.9.0 protocol 1" ;; esac ;;' \
     '  snapshot)' \
     '    case "${FAKE_CORE_MODE:-}" in malformed) echo not-json ;; shape) echo '\''{"schema_version":1,"ok":true,"command":"snapshot","data":{"state_schema":2,"projects":1,"heads":[{"project_id":false}]}}'\'' ;; crash) exit 9 ;; *) echo not-json ;; esac ;;' \
     'esac' > "$fake_core"

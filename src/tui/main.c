@@ -138,6 +138,7 @@ int main(int argc, char **argv) {
     native_observations_destroy(&app);
     native_attention_destroy(&app);
     native_plan_destroy(&app);
+    native_setup_destroy(&app);
     statistics_destroy(&app);
     transcript_free(app.transcript);
     frame_free(&app);

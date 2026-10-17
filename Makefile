@@ -28,10 +28,14 @@ all: lint
 # Lint all shell scripts for POSIX compliance
 lint:
 	@sh scripts/lint-shell.sh
+	@sh scripts/check-fleet-assets.sh release/fleet-assets.tsv
 	@echo "All checks passed!"
 
 # Run CLI shell tests with their native structured-data fixture helpers.
-test: build-fleet build-tui build-test-fixture $(BUILD_DIR)/native-tests/statistics-evidence $(BUILD_DIR)/test-statistics
+# Every shell case runs through scripts/run-shell-test.sh, which exports these
+# binaries from BUILD_DIR (never ./build) and gives the case private temp/tmux dirs.
+SHELL_TEST_PREREQS = build-fleet build-tui build-core build-test-fixture $(BUILD_DIR)/native-tests/statistics-evidence $(BUILD_DIR)/test-statistics $(BUILD_DIR)/test-shell-exec
+test: $(SHELL_TEST_PREREQS)
 	@echo "Running tests..."
 	+@case "$(MAKEFLAGS)" in \
 		*jobserver*) exec $(MAKE) shell-tests ;; \
@@ -45,13 +49,11 @@ FAST_SHELL_TESTS = foundation paths state json_output git_simple project_trust d
 FAST_NATIVE_BINS = $(filter-out $(BUILD_DIR)/test-task-result,$(FLEET_TEST_BINS))
 .PHONY: test-fast
 test-fast:
-	+@$(MAKE) -j$(TEST_JOBS) build-fleet build-test-fixture build-core build-tui $(BUILD_DIR)/test-statistics $(FAST_NATIVE_BINS)
+	+@$(MAKE) -j$(TEST_JOBS) $(SHELL_TEST_PREREQS) $(FAST_NATIVE_BINS)
 	@$(MAKE) lint
 	@echo "Running fast shell tests..."
 	@for name in $(FAST_SHELL_TESTS); do \
-		test="tests/test_$${name}.sh"; \
-		echo "Running $$test..."; \
-		sh "$$test" || exit 1; \
+		BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "fast-$$name" "tests/test_$${name}.sh" || exit 1; \
 	done
 	@$(MAKE) -j1 test-c test-tui test-parity test-termviz
 	@$(BUILD_DIR)/test-statistics
@@ -61,6 +63,26 @@ test-fast:
 		"$$binary" || exit 1; \
 	done
 
+# Run one shell test file the way make test does: make test-one T=kill
+# (T may also be test_kill or tests/test_kill.sh). The case log is printed.
+.PHONY: test-one
+test-one: $(SHELL_TEST_PREREQS)
+	@name="$(T)"; name="$${name#tests/}"; name="$${name#test_}"; name="$${name%.sh}"; \
+	if [ -z "$$name" ] || [ ! -f "tests/test_$$name.sh" ]; then \
+		echo "usage: make test-one T=<name>   (runs tests/test_<name>.sh)" >&2; exit 2; \
+	fi; \
+	BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" "test-one-$$name" "tests/test_$$name.sh" && \
+		cat "$(BUILD_DIR)/test-logs/test-one-$$name.log"
+
+# Group-writable umask lane (Ubuntu's default 002): Hydra state stays private
+# and readers keep refusing shared state, while worktrees follow the umask.
+UMASK_FLEET_CASES = dag-crash-2 dag-parallelism-1
+.PHONY: test-umask
+test-umask: fleet-test-build
+	@umask 002 && $(MAKE) test-fast
+	@umask 002 && $(MAKE) $(addprefix fleet-case-,$(UMASK_FLEET_CASES))
+	@umask 002 && $(MAKE) test-one T=umask_state
+
 # Optional read-only native helper. The shell CLI remains the mutation authority.
 build-core: $(BUILD_DIR)/hydra-core
 
@@ -68,7 +90,7 @@ build-tui: $(BUILD_DIR)/hydra-tui
 
 .PHONY: test-termviz example-termviz example-workspace test-workspace-pty test-visualization sanitize-workspace
 test-visualization: build-tui test-termviz $(BUILD_DIR)/test-statistics
-	sh tests/test_visualization.sh
+	BUILD_DIR="$(abspath $(BUILD_DIR))" sh tests/test_visualization.sh
 $(BUILD_DIR)/test-termviz: tests/c/test_termviz.c $(TERMVIZ_SOURCES) src/termviz/termviz.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_termviz.c $(TERMVIZ_SOURCES) -o $@
 
@@ -193,11 +215,15 @@ $(BUILD_DIR)/test-tui-planning: tests/c/test_tui_planning.c src/tui/task_name.c 
 $(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c src/tui/transcript.c src/tui/transcript.h $(TERMVIZ_OBJECTS)
 	$(CC) $(CORE_CFLAGS) tests/c/test_tui_transcript.c src/tui/transcript.c $(TERMVIZ_OBJECTS) -o $@
 
-test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript
+$(BUILD_DIR)/test-tui-setup: tests/c/test_tui_setup.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
+	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
+
+test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup
 	$(BUILD_DIR)/test-tui-input
 	$(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-planning
 	$(BUILD_DIR)/test-tui-transcript
+	$(BUILD_DIR)/test-tui-setup tests/fixtures/tui/setup "$(abspath $(BUILD_DIR))/setup-screens"
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_native_tui.sh
 
 test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
@@ -216,6 +242,7 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 	after="$$(find "$(abspath $(BUILD_DIR))/test-tui-home" -type f -exec cksum {} \; | sort | cksum)"; \
 	if [ "$$before" != "$$after" ]; then echo "native crash path changed Hydra state" >&2; exit 1; fi; \
 	exit $$status
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-remote-setup"
 
 test-parity: build-core
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
@@ -252,10 +279,10 @@ bench-tui: build-tui $(BUILD_DIR)/test-tui-pty
 	@sh scripts/bench-tui.sh
 
 package-core: build-core
-	@sh scripts/package-native.sh core
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/package-native.sh core
 
 package-tui: build-tui
-	@sh scripts/package-native.sh tui
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/package-native.sh tui
 
 # Record shell baseline timings (not a CI gate; no speedup claims)
 bench:
@@ -282,7 +309,7 @@ test-install:
 	@HYDRA_INSTALL_CORE=never HYDRA_INSTALL_TUI=never sh tests/test_install.sh
 
 test-native-install: build-core build-tui
-	@sh tests/test_native_install.sh
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh tests/test_native_install.sh
 
 # Throwaway-repository, no-agent first-head path
 smoke-onboarding:
@@ -304,6 +331,8 @@ help:
 	@echo "  make lint      - Run ShellCheck and dash syntax validation"
 	@echo "  make test      - Run the shell-only test suite"
 	@echo "  make test-fast - Run the fixed PR feedback test selection"
+	@echo "  make test-one T=<name> - Run tests/test_<name>.sh like make test does"
+	@echo "  make test-umask - Run test-fast, umask state and DAG fleet cases under umask 002"
 	@echo "  make build-core - Build the optional read-only native helper"
 	@echo "  make build-tui - Build the optional native mission-control TUI"
 	@echo "  make test-c    - Run native library unit tests"
@@ -323,6 +352,8 @@ help:
 	@echo "  make test-native-install - Offline native install, handshake, and rollback tests"
 	@echo "  make package-core - Create a checksummed platform-qualified core artifact"
 	@echo "  make package-tui - Create a checksummed platform-qualified native TUI artifact"
+	@echo "  make build-fleet-static [ARCH=x86_64|aarch64] - Reproducible static Linux fleet helper (Docker)"
+	@echo "  make check-fleet-assets - Validate the pinned release/fleet-assets.tsv digests table"
 	@echo "  make smoke-onboarding - Throwaway-repo no-agent first-head smoke"
 	@echo "  make dev-setup - Set up development environment (git hooks)"
 	@echo "  make help      - Show this help message"
@@ -332,8 +363,20 @@ FLEET_SOURCES = $(filter src/fleet/%.c,$(NATIVE_SOURCES))
 FLEET_JSON_CFLAGS = $(shell pkg-config --cflags json-c)
 FLEET_JSON_LIB = $(shell pkg-config --variable=libdir json-c)/libjson-c.a
 
-.PHONY: build-fleet test-fleet test-workflow-contracts
+.PHONY: build-fleet test-fleet test-workflow-contracts build-fleet-static check-fleet-assets
 build-fleet: $(BUILD_DIR)/hydra-fleet
+# Link flags for the helper only (the static release build passes -static).
+FLEET_LDFLAGS ?=
+
+# Reproducible static musl helper for a Linux release asset (Docker; CI uses
+# the same script). Writes $(BUILD_DIR)/static/hydra-fleet-linux-$(ARCH).
+ARCH ?= $(shell uname -m | sed -e 's/^arm64$$/aarch64/' -e 's/^amd64$$/x86_64/')
+build-fleet-static:
+	sh scripts/build-fleet-static.sh "$(ARCH)" "$(abspath $(BUILD_DIR))/static"
+
+# Pinned release digests: header, row syntax, names and duplicates.
+check-fleet-assets:
+	@sh scripts/check-fleet-assets.sh release/fleet-assets.tsv
 
 .PHONY: build-test-fixture
 build-test-fixture: $(BUILD_DIR)/native-tests/fixture-json
@@ -349,7 +392,7 @@ $(BUILD_DIR)/native-tests/statistics-evidence: tests/native/statistics_evidence.
 # Compile shared fleet code once. Compiler dependency files track the actual
 # header/.inc closure for each object and test, including sanitizer builds.
 FLEET_OBJECTS = $(patsubst src/fleet/%.c,$(BUILD_DIR)/fleet/%.o,$(filter-out src/fleet/main.c,$(FLEET_SOURCES)))
-FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data workflow-schedule agent-profile agent-auth plan)
+FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data workflow-schedule agent-profile agent-auth plan remote-setup agent-recipes fleet-assets)
 
 $(BUILD_DIR)/fleet/%.o: src/fleet/%.c
 	@mkdir -p "$(@D)"
@@ -360,7 +403,7 @@ $(BUILD_DIR)/libhydra-fleet.a: $(FLEET_OBJECTS)
 	$(AR) rcs $@ $(FLEET_OBJECTS)
 
 $(BUILD_DIR)/hydra-fleet: $(BUILD_DIR)/fleet/main.o $(BUILD_DIR)/libhydra-fleet.a
-	$(CC) $(CORE_CFLAGS) $^ $(FLEET_JSON_LIB) -lm -o $@
+	$(CC) $(CORE_CFLAGS) $(FLEET_LDFLAGS) $^ $(FLEET_JSON_LIB) -lm -o $@
 
 .PHONY: build-plan-precompile
 build-plan-precompile: $(BUILD_DIR)/plan-precompile
@@ -384,6 +427,9 @@ $(BUILD_DIR)/test-agent-profile: tests/c/test_agent_profile.c
 $(BUILD_DIR)/test-agent-auth: tests/c/test_agent_auth.c
 $(BUILD_DIR)/test-plan: tests/c/test_plan.c
 $(BUILD_DIR)/test-workflow-schedule: tests/c/test_workflow_schedule.c
+$(BUILD_DIR)/test-remote-setup: tests/c/test_remote_setup.c
+$(BUILD_DIR)/test-agent-recipes: tests/c/test_agent_recipes.c
+$(BUILD_DIR)/test-fleet-assets: tests/c/test_fleet_assets.c
 
 $(FLEET_TEST_BINS): $(BUILD_DIR)/libhydra-fleet.a
 	$(CC) $(CORE_CFLAGS) $(FLEET_JSON_CFLAGS) -MMD -MP -MF $@.d -MT $@ $(filter %.c,$^) $(BUILD_DIR)/libhydra-fleet.a $(FLEET_JSON_LIB) -lm -o $@
@@ -411,7 +457,7 @@ test-task-announce: build-fleet
 	"$(BUILD_DIR)/native-tests/test-task-announce" "$(abspath $(BUILD_DIR))/hydra-fleet"
 
 test-plan-reuse: build-fleet
-	HYDRA_TEST_PLAN_REPAIR=combine HYDRA_TEST_PLAN_REUSE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
+	HYDRA_TEST_PLAN_REPAIR=combine HYDRA_TEST_PLAN_REUSE=1 HYDRA_TEST_PLAN_REPAIR_FAULT=1 BUILD_DIR="$(abspath $(BUILD_DIR))" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" sh tests/test_workflow_plan_task.sh
 
 test-retention: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-retention"
@@ -495,6 +541,11 @@ test-enrollment: build-fleet
 .PHONY: test-enrollment-ssh
 test-enrollment-ssh: build-fleet
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-enrollment-ssh" "$(abspath $(BUILD_DIR))/native-tests/enrollment-loopback-fixture" "$(abspath $(BUILD_DIR))/native-tests/enrollment-receiver-fixture"
+
+# Host key trust and preflight against a private loopback sshd (skips without one).
+.PHONY: test-remote-setup-ssh
+test-remote-setup-ssh: build-fleet
+	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-remote-setup-ssh"
 
 include scripts/native-tests.mk
 

@@ -22,6 +22,7 @@ workflow_data_initialize() {
     _wdi_file="$1" _wdi_dir="$2"
     _wdi_ref="$(workflow_parse "$_wdi_file" data)" || return 1
     [ -n "$_wdi_ref" ] || return 0
+    hydra_private_touch "$_wdi_dir/data-initialization.json" || return 1
     workflow_data_tool init "$_wdi_dir" "$(workflow_repo_root)" "$(dirname "$_wdi_file")" "$_wdi_ref" > "$_wdi_dir/data-initialization.json" || {
         cli_error workflow invalid_data 'workflow inputs could not be snapshotted and validated' 'inspect the data manifest, input types, paths, sizes, and digests'
         return 1

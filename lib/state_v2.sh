@@ -4,10 +4,10 @@
 HYDRA_STATE_V2_ROOT="${HYDRA_STATE_V2_ROOT:-${HYDRA_HOME:?HYDRA_HOME is required}/state/v2}"
 
 state_v2_init() {
-    mkdir -p "$HYDRA_STATE_V2_ROOT/projects" || return 1
+    hydra_private_mkdir "$HYDRA_STATE_V2_ROOT/projects" || return 1
     chmod 700 "$HYDRA_STATE_V2_ROOT" "$HYDRA_STATE_V2_ROOT/projects" 2>/dev/null || true
     if [ ! -f "$HYDRA_STATE_V2_ROOT/schema-version" ]; then
-        printf '2\n' > "$HYDRA_STATE_V2_ROOT/schema-version" || return 1
+        (umask 077; printf '2\n' > "$HYDRA_STATE_V2_ROOT/schema-version") || return 1
         chmod 600 "$HYDRA_STATE_V2_ROOT/schema-version" 2>/dev/null || true
     fi
     [ "$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/schema-version")" = "2" ]
@@ -70,7 +70,7 @@ state_v2_init_project() {
     acquire_lock "$_sv2ip_lock" "state project init" || return 1
     if [ -d "$_sv2ip_dir" ]; then
         if [ "$(sed -n '1p' "$_sv2ip_dir/project-id" 2>/dev/null || true)" != "$_sv2ip_project" ] || \
-           ! mkdir -p "$_sv2ip_dir/heads" || \
+           ! hydra_private_mkdir "$_sv2ip_dir/heads" || \
            ! state_v2_write_scalar "$_sv2ip_dir/repo-root" "$_sv2ip_root"; then
             release_lock "$_sv2ip_lock"
             return 1
@@ -81,7 +81,7 @@ state_v2_init_project() {
     _sv2ip_tmp="$(mktemp -d "$HYDRA_STATE_V2_ROOT/projects/.project.XXXXXX")" || {
         release_lock "$_sv2ip_lock"; return 1;
     }
-    mkdir -p "$_sv2ip_tmp/heads" || {
+    hydra_private_mkdir "$_sv2ip_tmp/heads" || {
         rm -rf "$_sv2ip_tmp"; release_lock "$_sv2ip_lock"; return 1;
     }
     chmod 700 "$_sv2ip_tmp" "$_sv2ip_tmp/heads" 2>/dev/null || true
@@ -178,7 +178,7 @@ state_v2_create_head() {
     _sv2ch_tmp="$(mktemp -d "$_sv2ch_heads_dir/.head.XXXXXX")" || {
         release_lock "$_sv2ch_lock"; return 1;
     }
-    mkdir -p "$_sv2ch_tmp/instances/$_sv2ch_instance" "$_sv2ch_tmp/events/archive" || {
+    hydra_private_mkdir "$_sv2ch_tmp/instances/$_sv2ch_instance" "$_sv2ch_tmp/events/archive" || {
         rm -rf "$_sv2ch_tmp"; release_lock "$_sv2ch_lock"; return 1;
     }
     chmod -R go-rwx "$_sv2ch_tmp" 2>/dev/null || true
@@ -215,7 +215,7 @@ state_v2_create_head() {
         release_lock "$_sv2ch_lock"
         return 1
     fi
-    : > "$_sv2ch_tmp/events/events.jsonl"
+    hydra_private_touch "$_sv2ch_tmp/events/events.jsonl"
     chmod 600 "$_sv2ch_tmp/events/events.jsonl" 2>/dev/null || true
     if ! mv "$_sv2ch_tmp" "$_sv2ch_dir"; then
         rm -rf "$_sv2ch_tmp"
@@ -310,13 +310,13 @@ state_v2_verify() {
 
 state_v2_backup() {
     _sv2b_stamp="$(date +%Y%m%dT%H%M%S)-$$"
-    mkdir -p "$HYDRA_HOME/backups" || return 1
+    hydra_private_mkdir "$HYDRA_HOME/backups" || return 1
     _sv2b_dir="$(mktemp -d "$HYDRA_HOME/backups/state-$_sv2b_stamp.XXXXXX")" || return 1
     chmod 700 "$_sv2b_dir" 2>/dev/null || true
     if [ -f "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" ]; then
         cp "${HYDRA_1X_MAP:-$HYDRA_HOME/map}" "$_sv2b_dir/map" || { rm -rf "$_sv2b_dir"; return 1; }
     else
-        : > "$_sv2b_dir/map.absent" || { rm -rf "$_sv2b_dir"; return 1; }
+        hydra_private_touch "$_sv2b_dir/map.absent" || { rm -rf "$_sv2b_dir"; return 1; }
     fi
     if [ ! -d "$HYDRA_HOME/state" ] || ! cp -R "$HYDRA_HOME/state" "$_sv2b_dir/state"; then
         rm -rf "$_sv2b_dir"

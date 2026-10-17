@@ -45,7 +45,7 @@ TEST_DIR=""
 # NOTE: Do not use $(setup_test_env) - call directly to preserve exports
 setup_test_env() {
     # Create unique test directory
-    TEST_DIR="$(mktemp -d)"
+    TEST_DIR="$(test_mktemp_dir)"
     HYDRA_HOME="$TEST_DIR"
     HYDRA_STATE_V2_ROOT="$HYDRA_HOME/state/v2"
     TEST_PROJECT_ID=project_0123456789abcdefabcd

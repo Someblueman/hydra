@@ -19,7 +19,7 @@ fail_count=0
 
 # Setup test environment
 setup_test_env() {
-    test_dir="$(mktemp -d)"
+    test_dir="$(test_mktemp_dir)"
     export HYDRA_HOME="$test_dir"
     export HYDRA_TEMPLATES_DIR="$test_dir/templates"
     export HYDRA_NONINTERACTIVE=1

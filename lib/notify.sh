@@ -20,7 +20,7 @@ notify_enable() {
     case "$_ne_sink" in terminal|desktop) ;; *) return 1 ;; esac
     case "$_ne_interval" in ''|*[!0-9]*) return 1 ;; esac
     _ne_file="$(notify_config_file)" || return 1
-    mkdir -p "$(dirname "$_ne_file")" || return 1
+    hydra_private_mkdir "$(dirname "$_ne_file")" || return 1
     _ne_lock="notify_config_$(printf '%s' "$_ne_file" | cksum | cut -d' ' -f1)"
     acquire_lock "$_ne_lock" "notification configuration" || return 1
     _ne_tmp="$(mktemp_adjacent "$_ne_file")" || { release_lock "$_ne_lock"; return 1; }
@@ -95,7 +95,7 @@ notify_event() {
         [ "$_nev_config_event" = "$_nev_event" ] || continue
         [ -z "$_nev_extra" ] || continue
         _nev_stamp_dir="$HYDRA_STATE_V2_ROOT/projects/$_nev_project/notifications"
-        mkdir -p "$_nev_stamp_dir" || continue
+        hydra_private_mkdir "$_nev_stamp_dir" || continue
         _nev_key="$(printf '%s|%s' "$_nev_event" "$_nev_sink" | cksum | cut -d' ' -f1)"
         _nev_stamp="$_nev_stamp_dir/$_nev_key"
         _nev_now="$(date +%s)"

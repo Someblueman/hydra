@@ -4,6 +4,7 @@
 #include "fleet/transport/remote.h"
 #include "fleet/transport/server.h"
 #include "fleet/transport/bundle.h"
+#include "fleet/transport/platform.h"
 #include "fleet/cli.h"
 #include "fleet/fleet.h"
 #include "fleet/task/task.h"
@@ -61,7 +62,7 @@ static json_object *launch_tui(void) {
     return f_error("fleet-tui", "missing_dependency", "build or install the optional native TUI");
 }
 struct fleet_options {
-    const char *name, *project, *instance, *output, *input, *digest, *source, *binary, *run;
+    const char *name, *project, *instance, *output, *input, *digest, *source, *binary, *run, *platform;
     unsigned seconds, jobs, interval;
     int rest;
     bool explicit_timeout;
@@ -84,7 +85,8 @@ static json_object *parse_options(int argc, char **argv, struct fleet_options *o
         {"--sha256", &options->digest},
         {"--source", &options->source},
         {"--binary", &options->binary},
-        {"--run", &options->run}
+        {"--run", &options->run},
+        {"--platform", &options->platform}
     };
     int i;
     for (i = 1; i < argc; i++) {
@@ -107,6 +109,21 @@ static json_object *parse_options(int argc, char **argv, struct fleet_options *o
         } else return f_error("fleet", "invalid_input", "unknown option");
     }
     return NULL;
+}
+/* fleet package --source ROOT --binary FILE --output NEW [--platform OS-ARCH] */
+static json_object *package_action(const struct fleet_options *options) {
+    struct f_platform platform; json_object *result, *data; char hash[65]; const char *text;
+    if (!options->source || !options->binary || !options->output) return f_error("fleet-package", "invalid_input", "source, target binary, and output are required");
+    if (options->platform && f_platform_parse(&platform, options->platform))
+        return f_error("fleet-package", "invalid_input", "--platform must be linux or darwin with x86_64 or aarch64, e.g. linux-x86_64");
+    result = f_package_installation(options->source, options->binary, options->platform ? &platform : NULL);
+    if (!json_object_get_boolean(f_field(result, "ok"))) return result;
+    text = json_object_to_json_string_ext(f_field(result, "data"), JSON_C_TO_STRING_PLAIN);
+    if (f_write(options->output, text, strlen(text), false) || f_hash(options->output, hash)) { json_object_put(result); return f_error("fleet-package", "io_failed", "cannot write new package output"); }
+    json_object_put(result);
+    data = json_object_new_object(); f_string_add(data, "file", options->output); f_string_add(data, "sha256", hash);
+    if (options->platform) f_string_add(data, "platform", options->platform);
+    return f_success("fleet-package", data);
 }
 static bool is_tui_data(const char *action) {
     return !strcmp(action, "tui-data") || !strcmp(action, "tui-visual-data");
@@ -160,7 +177,7 @@ json_object *f_cli(int argc, char **argv) {
     if (domain_cli(argc, argv, &result)) return result;
     if (!strcmp(action, "help") || !strcmp(action, "--help")) {
         json_object *data = json_object_new_object();
-        f_string_add(data, "usage", "fleet discover|qualify ...; fleet enroll review --input QUALIFICATION --candidate ID [--candidate ID...] --output INTENT --project /absolute [--package FILE --sha256 HASH --prefix /path]; fleet enroll apply --input INTENT --confirm DIGEST; fleet list|overview|attention|doctor|reconcile|watch [--timeout N --jobs N]; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path -- ARGS");
+        f_string_add(data, "usage", "fleet discover|qualify ...; fleet enroll review --input QUALIFICATION --candidate ID [--candidate ID...] --output INTENT --project /absolute [--package FILE --sha256 HASH --prefix /path]; fleet enroll apply --input INTENT --confirm DIGEST; fleet list|overview|attention|doctor|reconcile|watch [--timeout N --jobs N]; fleet package --source ROOT --binary FILE --output NEW [--platform OS-ARCH]; fleet bootstrap HOST --input PACKAGE --sha256 HASH; fleet init|spawn|signal|cancel|workflow|attach|export|import HOST --project /path -- ARGS");
         return f_success("fleet-help", data);
     }
     result = parse_options(argc, argv, &options);
@@ -173,16 +190,7 @@ json_object *f_cli(int argc, char **argv) {
     if (!strcmp(action, "attention-data")) {
         return attention_data_action();
     }
-    if (!strcmp(action, "package")) {
-        if (!options.source || !options.binary || !options.output) return f_error("fleet-package", "invalid_input", "source, target binary, and output are required");
-        result = f_package(options.source, options.binary);
-        if (json_object_get_boolean(f_field(result, "ok"))) {
-            const char *text = json_object_to_json_string_ext(f_field(result, "data"), JSON_C_TO_STRING_PLAIN); char hash[65];
-            if (f_write(options.output, text, strlen(text), false) || f_hash(options.output, hash)) { json_object_put(result); return f_error("fleet-package", "io_failed", "cannot write new package output"); }
-            json_object_put(result); request = json_object_new_object(); f_string_add(request, "file", options.output); f_string_add(request, "sha256", hash); result = f_success("fleet-package", request);
-        }
-        return result;
-    }
+    if (!strcmp(action, "package")) return package_action(&options);
     if (!strcmp(action, "watch")) {
         while (!f_stopped) {
             struct timespec pause = {0, 100000000}; unsigned tick;

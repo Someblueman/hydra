@@ -63,7 +63,7 @@ assert_contains() {
 TEST_DIR=""
 ORIGINAL_DIR="$(pwd)"
 setup_test_env() {
-    TEST_DIR="$(mktemp -d)" || {
+    TEST_DIR="$(test_mktemp_dir)" || {
         echo "Error: Failed to create temporary directory" >&2
         exit 1
     }
@@ -326,7 +326,7 @@ test_pr_command_optional_branch() {
 test_hydra_home_init() {
     echo "Testing HYDRA_HOME initialization..."
     
-    test_dir="$(mktemp -d)"
+    test_dir="$(test_mktemp_dir)"
     HYDRA_HOME="$test_dir/.hydra"
     export HYDRA_HOME
     

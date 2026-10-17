@@ -9,7 +9,7 @@ root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
 test_count=0 pass_count=0 fail_count=0
 HYDRA_BIN="$root/bin/hydra"
 
-fixture="$(mktemp -d)"
+fixture="$(test_mktemp_dir)"
 trap 'tmux kill-session -t parsed-head 2>/dev/null || true; rm -rf "$fixture"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -18,7 +18,7 @@ export HOME="$fixture"
 export HYDRA_HOME="$fixture/home"
 export HYDRA_NONINTERACTIVE=1
 unset HYDRA_ROOT
-mkdir -p "$HYDRA_HOME"
+(umask 077; mkdir -p "$HYDRA_HOME")
 
 assert_contains() {
     case "$1" in

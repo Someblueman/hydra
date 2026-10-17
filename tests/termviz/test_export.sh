@@ -2,7 +2,7 @@
 # Build and exercise the exported source outside Hydra's checkout.
 set -eu
 _export_root=$(CDPATH='' cd -- "$(dirname "$0")/../.." && pwd)
-_export_temp=$(mktemp -d)
+_export_temp=$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")
 trap 'rm -rf "$_export_temp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

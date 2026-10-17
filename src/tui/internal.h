@@ -1,5 +1,6 @@
 #ifndef HYDRA_TUI_INTERNAL_H
 #define HYDRA_TUI_INTERNAL_H
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <locale.h>
@@ -35,7 +36,7 @@
 #include "terminal.h"
 #include "transcript.h"
 extern char **environ;
-#define HYDRA_TUI_VERSION "2.8.0"
+#define HYDRA_TUI_VERSION "2.9.0"
 #define HYDRA_TUI_PROTOCOL 2
 #define NATIVE_PLAN_LIMIT (256U*1024U)
 #define NATIVE_PLAN_TEXT (1024U*1024U)
@@ -248,6 +249,37 @@ void native_workspace_evidence_text(struct app *app, struct tv_canvas *c, size_t
 void native_workspace_plan_text(struct app *app, struct tv_canvas *c, size_t *scroll);
 void native_workspace_graph(struct app *app, struct tv_canvas *c, bool planning);
 void render_hosts(struct app *app);
+/* Remote setup (U10): setup_flow.c, setup_hosts.c, setup_render.c and
+ * setup_capture.c. The flow is a layer over the Hosts tab that owns input
+ * while open; every mutation is a `hydra remote ...` child. */
+struct native_setup *native_setup_state(struct app *app);
+bool native_setup_active(const struct app *app);
+bool native_setup_running(const struct app *app);
+void native_setup_open_form(struct app *app);
+void native_setup_resume(struct app *app, const char *name);
+/* Hosts tab e / x on an unfinished setup record (index into records). */
+void native_setup_edit(struct app *app, size_t record);
+void native_setup_remove(struct app *app, size_t record);
+/* The selected Hosts row is an unfinished setup record; *record is its index. */
+bool hosts_setup_selected(const struct app *app, size_t *record);
+bool native_setup_byte(struct app *app, unsigned char byte);
+void native_setup_flush_input(struct app *app);
+void native_setup_tick(struct app *app);
+void native_setup_sweep_tick(struct app *app);
+void native_setup_hosts_refresh(struct app *app);
+void native_setup_render(struct app *app);
+const char *native_setup_title(const struct app *app);
+const char *native_setup_hints(const struct app *app, bool narrow);
+void native_setup_destroy(struct app *app);
+int setup_terminal_handoff(struct app *app, char *const argv[], const char *step);
+void render_setup_hub(struct app *app);
+/* Hosts tab rows: fleet hosts, setup records and the "Add a host" row. */
+enum host_row_kind { HOST_ROW_HOST, HOST_ROW_SETUP, HOST_ROW_ADD };
+struct host_row { enum host_row_kind kind; size_t index; };
+size_t hosts_rows(const struct app *app, struct host_row *rows, size_t capacity);
+size_t hosts_row_count(const struct app *app);
+void hosts_open_row(struct app *app);
+void setup_row_text(const struct app *app, const struct host_row *row, char *name, size_t name_size, char *state, size_t state_size);
 void render_workflow_graph(struct app *app);
 void dashboard_style(void *context, enum tv_style tone);
 void dashboard_text(struct tv_canvas *c, int x, int y, int width,
@@ -358,6 +390,8 @@ const char *status_label(const struct head *head);
 enum tv_style status_tone(const struct head *head);
 size_t attention_count(const struct app *app);
 const char *dot(const struct app *app);
+/* Footer freshness of data observed at observed_at. Returns the tone. */
+enum tv_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size);
 void text_append(char *buffer, size_t size, const char *format, ...);
 bool frame_alloc(struct app *app);
 void frame_free(struct app *app);

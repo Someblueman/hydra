@@ -1,17 +1,19 @@
 # Hydra public contracts
 
-Hydra 2.8.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
-It adds plans that carry their own prompts and assets (`propose --asset`, inline
-`prompt`, `--assets-dir`), the policy write scope `@spawned:*`, a guided local
-policy that authorizes the head's own agent profile, proposal send-back
-(`proposal --return`), `hydra resume --terminal`, `hydra kill --dry-run`, and
-`hydra gc --policy orphaned --path`. Receipts gain optional `diagnostic`,
-`configuration` and observed-model fields; attention data is version 3 and the
-statistics export schema 4, with earlier versions still read. Since 2.7.0,
-head-associated planning proposals and the opt-in `kill --protect-untracked` are
-available; since 2.6.0, `hydra init` stays out of the source tree and the head
-environment is delivered through the tmux session and a per-instance launcher.
-See the [2.8.0 changelog](../CHANGELOG.md#280---2026-09-27).
+Hydra 2.9.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
+It adds guided remote setup (`hydra remote setup`, `provision`, `agents`,
+`install-agent`, `sign-in`) with private per-host setup state, `hydra agent locate`
+with recorded off-PATH agent locations, platform-bound install packages and pinned
+static release helpers, and `hydra doctor --fix-permissions`. Hydra's own state is
+created privately under any umask. Receivers additively advertise `agent-inventory`
+and `agent-locate-record`, and the handshake reports `platform`. Since 2.8.0, plans
+carry their own prompts and assets, with the policy write scope `@spawned:*`,
+proposal send-back, `hydra resume --terminal`, `hydra kill --dry-run`, attention
+data version 3 and statistics export schema 4; since 2.7.0, head-associated
+planning proposals and the opt-in `kill --protect-untracked` are available; since
+2.6.0, `hydra init` stays out of the source tree and the head environment is
+delivered through the tmux session and a per-instance launcher.
+See the [2.9.0 changelog](../CHANGELOG.md#290---2026-09-28).
 Interactive Codex restore retains cwd-scoped latest-session selection; headless
 resume binds an exact recorded session.
 Internal shell function names,
@@ -106,6 +108,26 @@ Lifecycle, event, and message records follow the schemas described in this guide
   schema-versioned literal declarations. Headless prompt transport, provider
   translations, exact recorded-session resume, and capability requirements are
   bounded by the rules in [workflows](workflows.md).
+- A relative profile executable resolves from PATH first (executable regular
+  files), then from a recorded location `$HYDRA_HOME/agents/locations/EXECUTABLE`
+  (one absolute path; a private file owned by the user). A record is used only when
+  its path ends in `/EXECUTABLE`, is an executable file whose entry and target belong
+  to the user or root, and whose target is not group- or world-writable; shell and
+  native resolvers apply the same rules and headless runs execute the resolved path.
+  `hydra agent locate --json` reports `agent-inventory` schema 1:
+  `{search_dirs, agents:[{profile, executable, on_path, candidates:[{path, source:
+  path|record|search, version, recordable}], recorded, status: on_path|recorded|
+  found_off_path|ambiguous|missing}]}`. Receivers expose it as the read-only
+  `agent-inventory` action (args `[]`, or `["probe", PROFILE, PATH?]` for the
+  profile's help probe of one valid candidate) and `agent-locate-record`
+  (`[EXECUTABLE, PATH]`); the handshake additively reports `platform {os, arch}`.
+- Remote installers come only from local recipes, `agent-recipes` schema 1:
+  `{"schema":"agent-recipes","schema_version":1,"recipes":[{agent, executable,
+  command, requires[], expected_dirs[], login_args[], auth_status_argv[]?, docs_url,
+  verified_on}]}`. Built-in recipes are compiled in; an optional private (0600, owned,
+  not a symlink) `$HYDRA_HOME/fleet/agent-recipes.json` with exactly these members
+  replaces built-in recipes per agent, and an unsafe or invalid file disables
+  installs (`recipe_unavailable`) rather than falling back silently.
 - The built-in `cursor` recipes pass `--trust` after `--print` for new and resumed
   runs, and its help probe requires that flag. Cursor Agent otherwise refuses a
   directory it has not trusted, and every head is a fresh Hydra-created worktree.
@@ -338,6 +360,36 @@ without shell interpolation, and delegates head/workflow mutations to the local
 shell CLI. Fleet's alias, package, and inert bundle stores are distinct from live
 state v2. Lost mutation responses never cause automatic replay.
 
+Install package schema 1 carries `bin/hydra`, `lib/hydra/*.sh`, the fleet helper
+and licenses, bound by the package SHA-256, and installs only into one exact prefix
+(default `~/.local/share/hydra/fleet/DIGEST`); an existing prefix is verified, never
+overwritten, and the staged shell and handshake must report exactly the helper's
+version. Since 2.9.0 an optional `platform` (`{"os":"linux"|"darwin","arch":
+"x86_64"|"aarch64"}`) makes bootstrap refuse a different remote `uname` before the
+package helper runs, and the installer refuses it again; packages without it still
+install. Release helpers `hydra-fleet-X.Y.Z-linux-{x86_64,aarch64}` are static,
+reproducibly built, and pinned in `release/fleet-assets.tsv`, installed as
+`share/hydra/fleet-assets.tsv`; that local table is the only trust anchor for
+provisioning downloads. Helpers from `--binary` or the local build are labelled
+unpinned in the reviewed plan.
+
+Guided remote setup (since 2.9.0) keeps private per-NAME state in
+`$HYDRA_HOME/fleet/setup/NAME.json`; `status`, `list` and `remove` are reserved names.
+Every `remote-setup*`/`remote-*` step envelope adds `data.setup_schema` 1,
+`data.steps[]` (`{id, status, detail}`, plus `error{code,message}` while an
+installer or sign-in that ran on a terminal is `failed` or `outcome_unknown`) and
+`data.next` (`{step, argv, approval_sha256}` or null). `remote-setup-list` returns
+`data.setups[]` of `{name, destination, ssh_config, status, remote_changed,
+complete, next}` (`status` is the first unfinished step's status, `done`, or
+`unreadable` with `error`), read without locks. `remote-setup-remove` deletes the
+local record after a `remove` plan is approved (`{removed, name, destination,
+record, summary, remote_left[], local_left[]}`); it never contacts the remote and
+fails with `setup_busy` or `setup_complete`. A step whose SSH connection failed
+adds OpenSSH's own reason as `data.ssh_error`. `remote-preflight` requirements are `{name, status, blocking,
+detail}` with an optional `suggestion` (an example command; Hydra never runs it).
+Plans are `remote-setup-plan` schema 1 approved by their SHA-256; exit statuses
+are 0, 1, 3 (approval required), 4 (outcome unknown) and 128+n.
+
 Task package schema 1 binds an
 exact Git bundle, selected inputs, work, destination, completion policy, and limits
 for local preparation and validation. Task protocol 1 advertises `task-accept`
@@ -368,6 +420,17 @@ fail closed. Identity, branch, worktree, instance, and profile bindings are chec
 on resume and collection. A missing owner, stale observation, timeout, or lost
 transport is an unknown outcome and never authorizes replay. Release or cancellation
 of a reservation requires confirmed termination and is scoped to the owning task.
+
+Hydra creates its own state, lock, run, cache, and evidence entries beneath
+`$HYDRA_HOME` and the repository's `<git-common-dir>/hydra` without group or other
+write permission, whatever the caller's umask (such as Ubuntu's default `002`).
+Readers still refuse group- or other-writable and foreign-owned state; the checks
+are never relaxed. Worktrees, agents, hooks, tmux sessions, and the commands run by
+exec, gate, and workflow steps keep the caller's umask; outputs a step writes into
+its run record are made private when the step ends. `hydra doctor` reports writable
+state. `hydra doctor --fix-permissions` removes group and other write from the
+current user's own regular files and directories only, never follows symbolic
+links, and reports foreign-owned or special entries without changing them.
 
 Repository-controlled configuration is inert until `hydra init --trust` records an
 approval. Trust covers regular files and symlink-safe paths under `.hydra`; linked,

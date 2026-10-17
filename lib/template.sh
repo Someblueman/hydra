@@ -8,7 +8,8 @@ HYDRA_TEMPLATES_DIR="${HYDRA_HOME:-$HOME/.hydra}/templates"
 # Ensure templates directory exists
 # Usage: init_templates_dir
 init_templates_dir() {
-    mkdir -p "$HYDRA_TEMPLATES_DIR"
+    # Hydra state is private whatever the caller's umask.
+    (umask 077; mkdir -p "$HYDRA_TEMPLATES_DIR")
 }
 
 # List all available templates
@@ -105,6 +106,7 @@ create_template() {
             *) echo "Aborted" >&2; return 1 ;;
         esac
     fi
+    (umask 077; [ -e "$_dest" ] || : > "$_dest") || return 1
 
     if [ -n "$_source" ] && [ -f "$_source" ]; then
         # Copy and add description header

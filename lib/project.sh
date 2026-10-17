@@ -17,7 +17,7 @@ project_write_host_value() {
     _pwhv_value="$2"
     case "$_pwhv_name" in *[!a-z0-9-]*|'') return 1 ;; esac
     _pwhv_dir="$(project_host_dir)" || return 1
-    mkdir -p "$_pwhv_dir" || return 1
+    hydra_private_mkdir "$_pwhv_dir" || return 1
     chmod 700 "$_pwhv_dir" 2>/dev/null || true
     _pwhv_lock="project_config_$(printf '%s' "$_pwhv_dir" | cksum | cut -d' ' -f1)"
     acquire_lock "$_pwhv_lock" "project host configuration" || return 1

@@ -25,7 +25,27 @@ _hydra() {
                     _arguments '1:action:(status configure request inspect claim cancel unknown release)' '--json[Output versioned status JSON]' '--summary[Omit individual records]' '--confirmed[Confirm execution termination]'
                     ;;
                 remote)
-                    _arguments '1:action:(add remove list)' '*:argument:'
+                    case $words[2] in
+                        setup)
+                            _arguments '1:action:(setup)' '2:name, status, list or remove:' '3:destination:' '--ssh-config[Trusted OpenSSH config]:file:_files' '--binary[Fleet helper built for the remote platform]:file:_files' '--approve[Exact plan_sha256]:SHA256:' '--timeout[SSH connect timeout, 1-300 seconds]:seconds:' '--json[Versioned JSON output]'
+                            ;;
+                        trust-key)
+                            _arguments '1:action:(trust-key)' '2:name:' '--fingerprint[Approve exactly this SHA256 host key]:fingerprint:' '--timeout[SSH connect timeout, 1-300 seconds]:seconds:' '--json[Versioned JSON output]'
+                            ;;
+                        preflight|provision|agents|install-agent|sign-in)
+                            _arguments '1:action:(preflight provision agents install-agent sign-in)' '2:name:' '--approve[Exact plan_sha256]:SHA256:' '--binary[Fleet helper built for the remote platform]:file:_files' '--record[EXECUTABLE=/absolute/path]:record:' '--agent[Agent]:agent:(claude codex opencode cursor agy pi)' '--timeout[SSH connect timeout, 1-300 seconds]:seconds:' '--json[Versioned JSON output]'
+                            ;;
+                        *)
+                            _arguments '1:action:(add remove list setup trust-key preflight provision agents install-agent sign-in)' '*:argument:'
+                            ;;
+                    esac
+                    ;;
+                agent)
+                    if [[ $words[2] == locate ]]; then
+                        _arguments '1:action:(locate)' '--json[Versioned agent-inventory JSON]' '--record[Record EXECUTABLE at an absolute path]:executable:(claude codex cursor-agent agy opencode pi copilot aider gemini):path:_files' '--forget[Forget a recorded location]:executable:(claude codex cursor-agent agy opencode pi copilot aider gemini)'
+                    else
+                        _arguments '1:action:(list show doctor init locate contract probe import)' '*:argument:'
+                    fi
                     ;;
                 fleet)
                     if [[ $words[2] == discover || $words[2] == qualify ]]; then
@@ -140,6 +160,9 @@ _hydra() {
                     ;;
                 snapshot)
                     _arguments '--native[Try the optional read-only native helper]' '--json[Output canonical JSON]'
+                    ;;
+                doctor)
+                    _arguments '--fix[Auto-fix detected issues]' '--fix-permissions[Remove group/other write from your own Hydra state]'
                     ;;
                 tui)
                     _arguments '--basic[Use the maintained shell TUI]' '--capabilities[Show TUI capability diagnostics]'

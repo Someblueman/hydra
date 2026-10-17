@@ -8,7 +8,7 @@ pass_count=0
 fail_count=0
 
 # Set up test environment
-test_home="$(mktemp -d)"
+test_home="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 HYDRA_HOME="$test_home"
 export HYDRA_HOME
 

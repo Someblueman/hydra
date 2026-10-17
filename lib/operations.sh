@@ -76,6 +76,12 @@ operations_signal_tree() (
     kill "-$_ost_signal" "$_ost_pid" 2>/dev/null || true
 )
 
+# True while PID is an unreaped child of OWNER, so it cannot have been reused.
+operations_owns_pid() {
+    _oop_parent="$(ps -o ppid= -p "$2" 2>/dev/null | tr -d ' ')"
+    [ -n "$_oop_parent" ] && [ "$_oop_parent" = "$1" ]
+}
+
 operations_capture_stream() (
     _ocs_fifo="$1"
     _ocs_output="$2"
@@ -97,6 +103,12 @@ operations_exec_worker() {
     _oew_timeout="$5"
     _oew_max="$6"
     shift 6
+    # Evidence is private whatever the caller's umask; the selected command
+    # still runs with the user's umask in its worktree. The worker always runs
+    # as its own background job (its PID is the recorded owner), so this umask
+    # never reaches the caller.
+    _oew_user_umask="$(umask)"
+    umask 077
     _oew_dir="$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/exec/$_oew_run/$_oew_head"
     mkdir -p "$_oew_dir" || return 0
     chmod 700 "$_oew_dir" 2>/dev/null || true
@@ -131,7 +143,7 @@ operations_exec_worker() {
     _oew_stderr_pid=$!
     _oew_started="$(date +%s)"
     _oew_instance="$(sed -n '1p' "$HYDRA_STATE_V2_ROOT/projects/$LIFECYCLE_PROJECT_ID/heads/$_oew_head/current-instance" 2>/dev/null || true)"
-    (cd "$_oew_worktree" && exec "$@") > "$_oew_stdout_pipe" 2> "$_oew_stderr_pipe" &
+    (cd "$_oew_worktree" && umask "$_oew_user_umask" && exec "$@") > "$_oew_stdout_pipe" 2> "$_oew_stderr_pipe" &
     _oew_pid=$!
     _oew_cancelled=0
     if [ -n "${_ce_profile:-}" ]; then
@@ -139,15 +151,26 @@ operations_exec_worker() {
     fi
     _oew_watchdog=""
     if [ "$_oew_timeout" -gt 0 ]; then
+        # The watchdog signals PIDs only while this worker still owns them.
+        # A worker lost to SIGKILL can neither stop the watchdog nor reap its
+        # children, whose PIDs may then be reused, so the watchdog leaves as
+        # soon as its owner is gone instead of outliving it until the deadline.
+        _oew_owner="$(exec sh -c 'printf %s "$PPID"')"
         (
             _oew_timer=""
             trap '[ -z "$_oew_timer" ] || kill "$_oew_timer" 2>/dev/null; exit 0' TERM HUP INT
-            sleep "$_oew_timeout" &
-            _oew_timer=$!
-            wait "$_oew_timer" || exit 0
+            _oew_waited=0
+            while [ "$_oew_waited" -lt "$_oew_timeout" ]; do
+                kill -0 "$_oew_owner" 2>/dev/null || exit 0
+                sleep 1 &
+                _oew_timer=$!
+                wait "$_oew_timer" || exit 0
+                _oew_waited=$((_oew_waited + 1))
+            done
+            kill -0 "$_oew_owner" 2>/dev/null || exit 0
             if [ ! -f "$_oew_exited" ] || [ ! -f "$_oew_stdout_done" ] || [ ! -f "$_oew_stderr_done" ]; then
                 : > "$_oew_timed"
-                if [ ! -f "$_oew_exited" ]; then
+                if [ ! -f "$_oew_exited" ] && operations_owns_pid "$_oew_owner" "$_oew_pid"; then
                     if [ -n "${_ce_profile:-}" ]; then
                         kill -TERM "$_oew_pid" 2>/dev/null || true
                     else
@@ -155,14 +178,17 @@ operations_exec_worker() {
                     fi
                 fi
                 sleep 1
-                [ -f "$_oew_exited" ] || operations_signal_tree "$_oew_pid" KILL
+                [ -f "$_oew_exited" ] || ! operations_owns_pid "$_oew_owner" "$_oew_pid" ||
+                    operations_signal_tree "$_oew_pid" KILL
                 # A reparented descendant may keep the pipes open after the
                 # direct command exits. Bound capture without claiming that
                 # an unowned descendant has been terminated.
                 if [ ! -f "$_oew_stdout_done" ] || [ ! -f "$_oew_stderr_done" ]; then
                     : > "$_oew_incomplete"
-                    [ -f "$_oew_stdout_done" ] || operations_signal_tree "$_oew_stdout_pid" KILL
-                    [ -f "$_oew_stderr_done" ] || operations_signal_tree "$_oew_stderr_pid" KILL
+                    [ -f "$_oew_stdout_done" ] || ! operations_owns_pid "$_oew_owner" "$_oew_stdout_pid" ||
+                        operations_signal_tree "$_oew_stdout_pid" KILL
+                    [ -f "$_oew_stderr_done" ] || ! operations_owns_pid "$_oew_owner" "$_oew_stderr_pid" ||
+                        operations_signal_tree "$_oew_stderr_pid" KILL
                 fi
             fi
         ) >/dev/null 2>&1 &
@@ -252,7 +278,7 @@ provenance_capture_head() {
     _pch_trust="$(project_config_hash 2>/dev/null || echo unavailable)"
     _pch_lock="state_${LIFECYCLE_PROJECT_ID}"
     acquire_lock "$_pch_lock" "record head provenance" "$LIFECYCLE_HEAD_ID" || return 1
-    mkdir -p "$_pch_dir" || { release_lock "$_pch_lock"; return 1; }
+    hydra_private_mkdir "$_pch_dir" || { release_lock "$_pch_lock"; return 1; }
     chmod 700 "$_pch_dir" 2>/dev/null || true
     if ! state_v2_write_scalar "$_pch_dir/hydra-version" "$HYDRA_VERSION" || \
        ! state_v2_write_scalar "$_pch_dir/git-version" "$(git --version 2>/dev/null | sed -n '1p')" || \

@@ -2,9 +2,9 @@
 # Public compiled-plan review negative: execution succeeds, verification fails.
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo="$fixture/repo"
-native="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+native="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 [ -x "$native" ]
 # shellcheck source=/dev/null
 . "$root/tests/fixtures/workflow-review/helpers.sh"

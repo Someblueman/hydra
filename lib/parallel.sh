@@ -69,7 +69,7 @@ parallel_claim_add() {
     _pca_root="$PARALLEL_PROJECT_DIR/claims"
     _pca_lock="claims_${PARALLEL_PROJECT_ID}"
     acquire_lock "$_pca_lock" "parallel claim add" "$_pca_head" || return 1
-    mkdir -p "$_pca_root" || { release_lock "$_pca_lock"; return 1; }
+    hydra_private_mkdir "$_pca_root" || { release_lock "$_pca_lock"; return 1; }
     chmod 700 "$_pca_root" 2>/dev/null || true
     parallel_claim_cleanup_expired || { release_lock "$_pca_lock"; return 1; }
     _pca_id="$(hydra_new_id claim "$_pca_head|$_pca_pattern|$_pca_access|$_pca_expiry")" || {
@@ -322,7 +322,7 @@ parallel_resource_allocate() {
     [ -z "$_pra_compose" ] || parallel_validate_name "$_pra_compose" || return 1
     [ -z "$_pra_database" ] || parallel_validate_name "$_pra_database" || return 1
     acquire_lock "$_pra_lock" "parallel resource allocate" "$_pra_head" || return 1
-    mkdir -p "$_pra_root" || { release_lock "$_pra_lock"; return 1; }
+    hydra_private_mkdir "$_pra_root" || { release_lock "$_pra_lock"; return 1; }
     [ ! -e "$_pra_root/$_pra_head" ] || { release_lock "$_pra_lock"; return 1; }
     if parallel_resource_value_used "$_pra_root" compose-project "$_pra_compose" || \
        parallel_resource_value_used "$_pra_root" database "$_pra_database"; then
@@ -332,7 +332,7 @@ parallel_resource_allocate() {
     _pra_tmp="$(mktemp -d "$_pra_root/.resource.XXXXXX")" || {
         release_lock "$_pra_lock"; return 1;
     }
-    : > "$_pra_tmp/ports"
+    hydra_private_touch "$_pra_tmp/ports" || { rm -rf "$_pra_tmp"; release_lock "$_pra_lock"; return 1; }
     _pra_tab="$(printf '\t')"
     while IFS="$_pra_tab" read -r _pra_name _pra_range; do
         [ -n "$_pra_name" ] || continue
@@ -428,13 +428,16 @@ parallel_gate_run() {
     _pgr_worktree_hash="$(git -C "$PARALLEL_WORKTREE" status --porcelain=v1 | hydra_hash)" || return 1
     _pgr_lock="gate_${LIFECYCLE_HEAD_ID}_${_pgr_name}"
     acquire_lock "$_pgr_lock" "parallel verification gate" "$LIFECYCLE_HEAD_ID" || return 1
-    mkdir -p "$_pgr_gate/runs" || { release_lock "$_pgr_lock"; return 1; }
+    hydra_private_mkdir "$_pgr_gate/runs" || { release_lock "$_pgr_lock"; return 1; }
     _pgr_run="$(hydra_new_id run "$LIFECYCLE_HEAD_ID|gate|$_pgr_name")" || {
         release_lock "$_pgr_lock"; return 1;
     }
     _pgr_tmp="$(mktemp -d "$_pgr_gate/runs/.run.XXXXXX")" || {
         release_lock "$_pgr_lock"; return 1;
     }
+    # Gate evidence is private; the gate command keeps the user's umask.
+    hydra_private_touch "$_pgr_tmp/stdout.raw" "$_pgr_tmp/stderr.raw" "$_pgr_tmp/stdout" \
+        "$_pgr_tmp/stderr" "$_pgr_tmp/argv" || { rm -rf "$_pgr_tmp"; release_lock "$_pgr_lock"; return 1; }
     if (cd "$PARALLEL_WORKTREE" && admission_command "$_pgr_run" "$LIFECYCLE_PROJECT_ID" "$_pgr_tmp" "$@") > "$_pgr_tmp/stdout.raw" 2> "$_pgr_tmp/stderr.raw"; then
         _pgr_status=0
     else

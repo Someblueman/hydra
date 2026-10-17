@@ -210,6 +210,8 @@ json_object *agent_run_cli(int argc, char **argv) {
     f_string_add(values, "session_id", stream.session);
     f_string_add(values, "input_dir", getenv("HYDRA_WORKFLOW_INPUTS_DIR")); f_string_add(values, "output_dir", getenv("HYDRA_WORKFLOW_OUTPUTS_DIR"));
     args = agent_arguments(profile, *request.resume_run ? "resume_argv" : "argv", values); if (!args) { unlink(path); goto invalid; }
+    /* Run exactly the probed executable, including a recorded off-PATH location. */
+    json_object_array_put_idx(args, 0, json_object_new_string(f_string(probe, "executable_path")));
     record = json_object_new_object(); json_object_object_add(record, "schema_version", json_object_new_int(1));
     f_string_add(record, "profile", request.profile); f_string_add(record, "profile_sha256", hash); f_string_add(record, "instance_id", request.instance);
     f_string_add(record, "project_id", request.project); f_string_add(record, "head_id", request.head); f_string_add(record, "worktree", worktree);

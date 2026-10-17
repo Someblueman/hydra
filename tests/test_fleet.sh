@@ -2,7 +2,7 @@
 # Public fleet CLI tests with a controlled SSH transport and real C server.
 set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 TMUX_TMPDIR="$(mktemp -d /tmp/hydra-fleet.XXXXXX)"
 TMUX_SOCKET="$TMUX_TMPDIR/tmux-$(id -u)/default"
 unset TMUX TMUX_PANE
@@ -17,19 +17,20 @@ cleanup() {
         kill "$ssh_pid" 2>/dev/null || true
     fi
     rm -rf "$fixture"
-    rmdir "$TMUX_TMPDIR/tmux-$(id -u)" 2>/dev/null || true
-    rmdir "$TMUX_TMPDIR" 2>/dev/null || true
+    # The server is gone; its socket file is not removed by kill-server.
+    rm -rf "$TMUX_TMPDIR"
 }
 trap cleanup 0
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 HYDRA_HOME="$fixture/home"
-HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 export HYDRA_HOME TMUX_TMPDIR TMUX_SOCKET HYDRA_FLEET_BIN
 mkdir -p "$fixture/bin"
 cat > "$fixture/bin/ssh" <<'SSH'
 #!/bin/sh
 set -eu
+[ -z "${HYDRA_TEST_SSH_ARGV:-}" ] || printf '%s\n' "$*" >> "$HYDRA_TEST_SSH_ARGV"
 while [ $# -gt 2 ]; do shift; done
 if [ -n "${HYDRA_TEST_OFFLINE_FILE:-}" ] && [ -f "$HYDRA_TEST_OFFLINE_FILE" ] && [ "$1" = good ]; then exit 255; fi
 case "$1" in
@@ -58,8 +59,23 @@ chmod +x "$fixture/bin/ssh"
 PATH="$fixture/bin:$PATH"
 export PATH
 "$root/bin/hydra" remote add good good --hydra "$root/bin/hydra"
+HYDRA_TEST_SSH_ARGV="$fixture/ssh-argv"
+export HYDRA_TEST_SSH_ARGV
 "$root/bin/hydra" fleet list --json > "$fixture/result"
 grep -q '"heads":\[\]' "$fixture/result"
+# Without --multiplex Hydra neither starts nor reuses a ControlMaster from the
+# user's SSH config; with it Hydra uses only its own control path.
+grep -q -- '-o ControlMaster=no -o ControlPath=none good ' "$fixture/ssh-argv"
+if grep -q -- 'ControlMaster=auto' "$fixture/ssh-argv"; then echo 'user SSH master allowed'; exit 1; fi
+"$root/bin/hydra" remote add muxed good --hydra "$root/bin/hydra" --multiplex
+: > "$fixture/ssh-argv"
+"$root/bin/hydra" fleet list muxed --json > "$fixture/muxed-result"
+grep -q '"heads":\[\]' "$fixture/muxed-result"
+grep -q -- "-o ControlMaster=auto -o ControlPersist=60 -o ControlPath=/.*/fleet/sockets/%C good " "$fixture/ssh-argv"
+if grep -q -- 'ControlPath=none' "$fixture/ssh-argv"; then echo 'multiplexed alias lost its control path'; exit 1; fi
+"$root/bin/hydra" remote remove muxed >/dev/null
+unset HYDRA_TEST_SSH_ARGV
+rm -f "$fixture/ssh-argv"
 "$root/bin/hydra" fleet overview --json > "$fixture/overview"
 grep -q '"snapshot_schema_version":1' "$fixture/overview"
 grep -q '"state":"reachable"' "$fixture/overview"
@@ -96,8 +112,9 @@ awk -F '\t' '$1=="T" && $2=="good" && $3=="responded" && $4==0 {empty=1}
     END {exit !(empty && delayed && failed)}' "$fixture/tui-v2"
 awk -F '\t' '$1=="F" && $2=="slowgood" && $3=="/srv/slowgood" && $4=="delayed" && $5=="head_delayed" && $6=="instance_delayed" {found=1}
     END {exit !found}' "$fixture/tui-v2"
-if [ -x "$root/build/hydra-tui" ]; then
-    "$root/build/hydra-tui" --fleet --headless-fixture "$fixture/tui-v2" --view hosts --ascii --size 140x30 > "$fixture/hosts.out"
+# The fleet case passes the native TUI it built; a missing binary is a failure.
+if [ -n "${HYDRA_TUI_BIN:-}" ]; then
+    "$HYDRA_TUI_BIN" --fleet --headless-fixture "$fixture/tui-v2" --view hosts --ascii --size 140x30 > "$fixture/hosts.out"
     grep -q 'good.*responded.*0 heads' "$fixture/hosts.out"
     grep -q 'offline.*failed' "$fixture/hosts.out"
     grep -q 'CPU / memory / load: unavailable' "$fixture/hosts.out"
@@ -162,7 +179,13 @@ if (cd "$guard_repo" && "$root/bin/hydra" fleet-local attach fleet-guard "$guard
 fi
 grep -Fq 'head instance changed' "$fixture/stale-attach"
 
+guard_server_pid="$(tmux -S "$TMUX_SOCKET" display-message -p '#{pid}')"
 tmux -S "$TMUX_SOCKET" kill-server
+# kill-server returns before the old server exits; a client that connects to
+# it meanwhile fails with "server exited unexpectedly".
+attempt=0
+while kill -0 "$guard_server_pid" 2>/dev/null && [ "$attempt" -lt 100 ]; do sleep 0.05; attempt=$((attempt + 1)); done
+if kill -0 "$guard_server_pid" 2>/dev/null; then echo 'tmux server survived kill-server' >&2; exit 1; fi
 tmux -f /dev/null new-session -d -s "$guard_session" /bin/sh
 [ "$(tmux display-message -p -t "=$guard_session:" '#{session_id}')" = "$guard_session_id" ]
 tmux set-environment -t "$guard_session" HYDRA_PROJECT_ID replacement_project

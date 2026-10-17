@@ -18,13 +18,62 @@ doctor_info() {
     fi
 }
 
+# Print up to ten entries of a newline-separated list, then a remainder count.
+# Usage: doctor_list_entries <entries>
+doctor_list_entries() {
+    printf '%s\n' "$1" | sed -n '1,10s/^/         - /p'
+    _dle_count="$(printf '%s\n' "$1" | grep -c .)"
+    [ "$_dle_count" -le 10 ] || echo "         ... and $((_dle_count - 10)) more"
+}
+
+# Report group- or other-writable Hydra state, which readers refuse. With
+# repair set, first remove group and other write from your own regular files
+# and directories (never following links); foreign-owned entries are only
+# reported.
+# Usage: doctor_state_permissions <repair:0|1> <root>...
+# Returns: 0 when no writable entry remains, 1 otherwise
+doctor_state_permissions() {
+    _dsp_repair="$1"
+    shift
+    _dsp_owned="$(state_writable_entries owned "$@")"
+    if [ -n "$_dsp_owned" ] && [ "$_dsp_repair" -eq 1 ]; then
+        _dsp_count="$(printf '%s\n' "$_dsp_owned" | grep -c .)"
+        state_repair_permissions "$@" || true
+        _dsp_owned="$(state_writable_entries owned "$@")"
+        _dsp_left="$(printf '%s' "$_dsp_owned" | grep -c . || true)"
+        print_success "Removed group and other write from $((_dsp_count - _dsp_left)) Hydra state entries (chmod go-w)"
+    fi
+    _dsp_other="$(state_writable_entries other "$@")"
+    _dsp_status=0
+    if [ -n "$_dsp_owned" ]; then
+        doctor_fail "Hydra state is group- or other-writable, so Hydra refuses it:" \
+            "hydra doctor --fix-permissions   (chmod go-w on your own files and directories only)"
+        doctor_list_entries "$_dsp_owned"
+        _dsp_status=1
+    fi
+    if [ -n "$_dsp_other" ]; then
+        doctor_fail "Writable Hydra state that is not your own file or directory (left unchanged):" \
+            "inspect these entries, then remove them or correct their owner and mode yourself"
+        doctor_list_entries "$_dsp_other"
+        _dsp_status=1
+    fi
+    [ "$_dsp_status" -ne 0 ] || print_success "Hydra state is private (no group- or other-writable entries)"
+    return "$_dsp_status"
+}
+
 cmd_doctor() {
-    # Parse --fix flag
+    # Parse flags. --fix repairs consistency issues; --fix-permissions removes
+    # group and other write from your own Hydra state.
     fix_mode=0
+    fix_permissions=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --fix|-f)
                 fix_mode=1
+                shift
+                ;;
+            --fix-permissions)
+                fix_permissions=1
                 shift
                 ;;
             *)
@@ -99,6 +148,12 @@ cmd_doctor() {
     else
         doctor_fail "HYDRA_HOME is not writable: $HYDRA_HOME" \
             "export HYDRA_HOME=\"\$HOME/.hydra\" and ensure that directory is writable"
+        errors=$((errors + 1))
+    fi
+
+    # Hydra's own state: HYDRA_HOME and this repository's host-local records.
+    _doctor_common="$(hydra_git_common_dir 2>/dev/null || true)"
+    if ! doctor_state_permissions "$fix_permissions" "$HYDRA_HOME" ${_doctor_common:+"$_doctor_common/hydra"}; then
         errors=$((errors + 1))
     fi
 

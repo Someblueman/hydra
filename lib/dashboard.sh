@@ -64,7 +64,7 @@ collect_session_panes() {
     fi
     
     # Clear restoration map
-    : > "$DASHBOARD_RESTORE_MAP"
+    (umask 077; : > "$DASHBOARD_RESTORE_MAP")
     
     # Determine how many panes to collect per session
     per_session_raw="${HYDRA_DASHBOARD_PANES_PER_SESSION:-1}"

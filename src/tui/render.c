@@ -3,6 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "fleet_budget.h"
 /* One frame canvas serves every view. Views draw into it; the presenter paints
  * only changed cells, so idle refreshes never clear or flicker the screen.
  * Semantic tones stay restrained: cyan chrome, amber attention, green running. */
@@ -272,6 +273,10 @@ void pair(struct app *app, const char *left_label, const char *left, enum tv_sty
 /* Shared chrome: title row, tab row, footer rows. Tab hits are recorded for the mouse. */
 static const char *view_titles[] = {"WORK", "DETAILS", "COORDINATION", "RECOVERY", "OVERVIEW", "WORKFLOWS", "HOSTS", "WORKSPACE", "STATISTICS", "ATTENTION"};
 static const char *tab_labels[] = {"Work", "Details", "Coordination", "Recovery", "Overview", "Workflows", "Hosts", "Workspace", "Statistics", "Attention"};
+/* Below TAB_SHORT_BELOW columns the tab bar uses these so every tab, Hosts
+ * included, fits at 80 columns; keys and view titles are unchanged. */
+static const char *tab_short[] = {"Work", "Details", "Coord", "Recovery", "Overview", "Flows", "Hosts", "Workspace", "Stats", "Attention"};
+#define TAB_SHORT_BELOW 100
 
 size_t tab_order(const struct app *app, int *views) {
     size_t count = 0;
@@ -282,19 +287,21 @@ size_t tab_order(const struct app *app, int *views) {
     views[count++] = 9; views[count++] = 3;
     if (!app->fleet) views[count++] = 5;
     views[count++] = 8; views[count++] = 7;
+    /* Local work keeps its tab numbers; Hosts adds and continues remote setup. */
+    if (!app->fleet) views[count++] = 6;
     return count;
 }
 
-static int tab_width(int view, bool current) {
-    return (int)strlen(tab_labels[view]) + (current ? 2 : 0);
+static int tab_width(const char *const *labels, int view, bool current) {
+    return (int)strlen(labels[view]) + (current ? 2 : 0);
 }
 
 /* First tab to draw so the active tab stays visible in the available width. */
-static size_t tabs_first_visible(const int *views, size_t active, int gap, int width) {
+static size_t tabs_first_visible(const char *const *labels, const int *views, size_t active, int gap, int width) {
     size_t first = 0, i;
     while (first < active) {
         int needed = 0;
-        for (i = first; i <= active; i++) needed += tab_width(views[i], i == active) + gap;
+        for (i = first; i <= active; i++) needed += tab_width(labels, views[i], i == active) + gap;
         if (needed <= width) break;
         first++;
     }
@@ -309,17 +316,19 @@ static void record_tab(struct app *app, int x, int length, int view) {
 
 static void chrome_tabs(struct app *app, struct tv_canvas *c, int row) {
     int views[12], gap = 2, x = 1, total = 0, width = c->width - 1;
+    const char *const *labels = app->cols < TAB_SHORT_BELOW ? tab_short : tab_labels;
     size_t count = tab_order(app, views), i, first, active = 0;
-    for (i = 0; i < count; i++) { total += tab_width(views[i], views[i] == app->view); if (views[i] == app->view) active = i; }
-    if (total + (int)(count - 1) * gap > width) gap = 1;
+    for (i = 0; i < count; i++) { total += tab_width(labels, views[i], views[i] == app->view); if (views[i] == app->view) active = i; }
+    /* Tabs start at column x, so they have width - x columns. */
+    if (total + (int)(count - 1) * gap > width - x) gap = 1;
     app->tab_count = 0;
-    first = tabs_first_visible(views, active, gap, width);
+    first = tabs_first_visible(labels, views, active, gap, width - x);
     for (i = first; i < count; i++) {
         char label[32];
         bool current = views[i] == app->view;
-        int length = tab_width(views[i], current);
+        int length = tab_width(labels, views[i], current);
         if (x + length > width) { tv_text(c, (struct tv_rect){x, row, width - x, 1}, "..", TV_MUTED); break; }
-        snprintf(label, sizeof(label), current ? "[%s]" : "%s", tab_labels[views[i]]);
+        snprintf(label, sizeof(label), current ? "[%s]" : "%s", labels[views[i]]);
         tv_text(c, (struct tv_rect){x, row, length, 1}, label, current ? TV_SELECTED : TV_MUTED);
         record_tab(app, x, length, views[i]);
         x += length + gap;
@@ -431,10 +440,12 @@ void render_empty_work(struct app *app) {
     style(app, TONE_BASE);
     linef(app, "");
     if (app->search[0]) { paragraph(app, "Esc clears the search.", TV_BASE); return; }
-    if (app->fleet) { paragraph(app, "Hosts shows connectivity for each machine; Recovery lists host problems.", TV_BASE); return; }
+    if (app->fleet) { paragraph(app, "Hosts shows connectivity for each machine; Recovery lists host problems. In Hosts, A adds a machine.", TV_BASE); return; }
     paragraph(app, "A head is one piece of work: its own branch and worktree, a terminal, and an agent working inside it. You can follow several heads here at once.", TV_BASE);
     linef(app, "");
     paragraph(app, "Press n to start one: Hydra creates the branch and worktree, opens the terminal and starts your agent in it. Press : for other actions.", TV_BASE);
+    linef(app, "");
+    paragraph(app, "To run agents on another machine, press H for Hosts and add it there.", TV_MUTED);
 }
 
 /* One-panel summary of the selected head under the list. */
@@ -640,6 +651,7 @@ static void render_help(struct app *app) {
     linef(app, "P  review the agent's proposal   V  validate   F  request changes (feedback to the agent)");
     linef(app, "E  execute the validated revision (confirm with y)   I  import draft and policy files");
     section(app, "OTHER");
+    linef(app, "H  hosts: A adds a remote machine over SSH; Enter continues its setup");
     linef(app, "t  theme (terminal / dark / light)    D  statistics    I  attention    ?  close help    q  quit");
 }
 
@@ -655,6 +667,7 @@ static void render_result(struct app *app) {
 }
 
 static void render_content(struct app *app) {
+    if (app->view == 6 && native_setup_active(app)) { native_setup_render(app); return; }
     if (app->result_open) { render_result(app); return; }
     if (app->help) { render_help(app); return; }
     switch (app->view) {
@@ -676,11 +689,26 @@ static bool render_workspace_view(struct app *app, unsigned frame, bool headless
     return false;
 }
 
-static long snapshot_age(const struct app *app, bool *stale) {
-    time_t observed_at = app->view == 5 ? app->workflow_at : app->snapshot_at;
-    long age = !observed_at ? 0L : (long)(time(NULL) - observed_at);
-    *stale = app->view == 5 ? app->workflow_stale : app->snapshot_stale;
-    return age < 0 ? 0 : age;
+/* Each successful refresh takes a new snapshot, so while refreshes keep
+ * succeeding an age only restarts every interval and says nothing: a steady
+ * "Live" shows instead. The age counts up once the shown data is older than
+ * two refresh intervals (plus one remote request in fleet mode), or when the
+ * last refresh failed. */
+static long snapshot_age(time_t observed_at, bool headless) {
+    long age = headless || !observed_at ? 0L : (long)(time(NULL) - observed_at);
+    return age < 0 ? 0L : age;
+}
+static long snapshot_limit(const struct app *app) {
+    return 2L * HYDRA_TUI_REFRESH_SECONDS + (app->fleet ? (long)HYDRA_FLEET_TUI_REQUEST_SECONDS : 0L);
+}
+enum tv_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size) {
+    long age = snapshot_age(observed_at, headless), limit = snapshot_limit(app);
+    if (stale && observed_at) { snprintf(out, size, "STALE: last good snapshot, updated %lds ago", age); return TV_WARNING; }
+    if (stale) { snprintf(out, size, "STALE: no snapshot yet"); return TV_WARNING; }
+    if (!observed_at && !headless) { snprintf(out, size, "Waiting for the first snapshot"); return TV_MUTED; }
+    if (age > limit) { snprintf(out, size, "Updated %lds ago", age); return TV_BASE; }
+    snprintf(out, size, "Live");
+    return TV_MUTED;
 }
 
 static void status_marked(struct app *app, char *out, size_t size) {
@@ -689,17 +717,18 @@ static void status_marked(struct app *app, char *out, size_t size) {
              app->notice[0] ? sep : "", app->notice);
 }
 
-static void status_line(struct app *app, char *out, size_t size, enum tv_style *tone) {
-    bool stale;
-    long age = snapshot_age(app, &stale);
+static void status_line(struct app *app, char *out, size_t size, enum tv_style *tone, bool headless) {
+    bool stale = app->view == 5 ? app->workflow_stale : app->snapshot_stale;
     const char *sep = dot(app);
+    char fresh[96];
+    enum tv_style fresh_tone = snapshot_freshness(app, app->view == 5 ? app->workflow_at : app->snapshot_at, stale, headless, fresh, sizeof(fresh));
     *tone = TV_MUTED;
     if (app->marked_count) { status_marked(app, out, size); *tone = TV_STRONG; return; }
-    if (stale && app->snapshot_error[0]) { snprintf(out, size, "STALE: last good snapshot%s%s", sep, app->snapshot_error); *tone = TV_WARNING; return; }
+    if (stale && app->snapshot_error[0]) { snprintf(out, size, "%s%s%s", fresh, sep, app->snapshot_error); *tone = TV_WARNING; return; }
     if (app->notice[0]) { snprintf(out, size, "%s", app->notice); *tone = TV_BASE; return; }
     if (app->search[0]) { snprintf(out, size, "Search: %s%sEsc clears", app->search, sep); *tone = TV_BASE; return; }
-    if (stale) { snprintf(out, size, "STALE: last good snapshot%sage %lds", sep, age); *tone = TV_WARNING; return; }
-    snprintf(out, size, "Current snapshot%sage %lds", sep, age);
+    snprintf(out, size, "%s", fresh);
+    *tone = fresh_tone;
 }
 
 /* Recovery offers x only for a clean leftover worktree the shell gc can remove. */
@@ -713,6 +742,15 @@ static const char *recovery_hints(const struct app *app, bool narrow) {
                      : "j/k select  Enter run the check  d explain  Esc back  ? help  q quit";
 }
 
+/* Hosts: the setup flow's own keys, or e / x on an unfinished setup row. */
+static const char *hosts_hints(struct app *app, bool narrow) {
+    if (native_setup_active(app)) return native_setup_hints(app, narrow);
+    if (hosts_setup_selected(app, &(size_t){0}))
+        return narrow ? "Enter continue  e edit  x remove  q quit"
+                      : "j/k select  Enter continue  e edit  x remove  A add a host  Esc back  ? help  q quit";
+    return narrow ? "Enter open  A add host  ? help  q quit" : "j/k select  Enter open  A add a host  Esc back  ? help  q quit";
+}
+
 /* Hints for views whose keys do not depend on local versus fleet mode. */
 static const char *view_hints(struct app *app, bool narrow) {
     if (app->view == 9) {
@@ -720,7 +758,7 @@ static const char *view_hints(struct app *app, bool narrow) {
         return narrow ? "Enter details  r review  ? help  q quit" : "j/k select  Enter details  r review  s mark seen  I refresh  Esc back  ? help  q quit";
     }
     if (app->view == 5) return narrow ? "j/k step  [/] run  ? help  q quit" : "j/k step  [/] run  h/l/J/K pan  Enter recentre  Esc back  ? help  q quit";
-    if (app->view == 6) return "j/k host  Enter show its heads  Esc back  ? help  q quit";
+    if (app->view == 6) return hosts_hints(app, narrow);
     if (app->view == 3) return recovery_hints(app, narrow);
     return NULL;
 }
@@ -768,6 +806,7 @@ static void detail_title(const struct app *app, const struct head *head, char *o
 static const char *panel_title(struct app *app, char *out, size_t size) {
     static const char *names[] = {NULL, NULL, "Coordination", "Recovery", "Overview", "Workflows", "Hosts", NULL, NULL, "Attention"};
     const struct head *head = selected_head(app);
+    if (app->view == 6 && native_setup_active(app)) return native_setup_title(app);
     if (app->result_open) return app->result_title;
     if (app->help) return "HELP";
     if (app->view == 0) snprintf(out, size, "%s", app->fleet ? "Remote heads" : "Heads in this project");
@@ -796,7 +835,7 @@ void render(struct app *app, unsigned frame, bool headless) {
     render_content(app);
     app->boxed = false;
     app->limit = app->rows;
-    status_line(app, status, sizeof(status), &tone);
+    status_line(app, status, sizeof(status), &tone, headless);
     chrome_footer(app, &app->frame, status, tone, hint_line(app));
     frame_end(app, frame, headless);
 }

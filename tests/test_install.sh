@@ -71,8 +71,8 @@ SRC_BEFORE="$(snapshot_source_repo)"
 
 # --- install.sh to a writable prefix ---
 echo "Testing install.sh to a writable PREFIX..."
-home1="$(mktemp -d)"
-prefix1="$(mktemp -d)"
+home1="$(test_mktemp_dir)"
+prefix1="$(test_mktemp_dir)"
 export HOME="$home1"
 unset HYDRA_ROOT
 unset HYDRA_HOME
@@ -91,7 +91,7 @@ assert_file "$prefix1/lib/hydra/git.sh" "install.sh installs libraries"
 
 ver_out="$(HOME="$home1" HYDRA_ROOT='' HYDRA_HOME='' "$prefix1/bin/hydra" version 2>&1)"
 assert_success $? "installed hydra version should succeed"
-assert_contains "$ver_out" "Hydra version 2.8.0" "installed hydra reports 2.8.0"
+assert_contains "$ver_out" "Hydra version 2.9.0" "installed hydra reports 2.9.0"
 
 doc_out="$(cd "$home1" && HOME="$home1" HYDRA_HOME="$home1/.hydra" HYDRA_ROOT='' "$prefix1/bin/hydra" doctor 2>&1)"
 assert_success $? "installed hydra doctor should succeed"
@@ -100,7 +100,7 @@ assert_contains "$doc_out" "$prefix1/lib/hydra" "doctor should name installed li
 
 # Replace the installed binary with an older version marker, then reinstall into
 # the same prefix. User state lives outside PREFIX and must survive the upgrade.
-sed 's/HYDRA_VERSION="2.8.0"/HYDRA_VERSION="2.4.0"/' "$prefix1/bin/hydra" > "$prefix1/bin/hydra.upgrade"
+sed 's/HYDRA_VERSION="2.9.0"/HYDRA_VERSION="2.4.0"/' "$prefix1/bin/hydra" > "$prefix1/bin/hydra.upgrade"
 mv "$prefix1/bin/hydra.upgrade" "$prefix1/bin/hydra"
 chmod +x "$prefix1/bin/hydra"
 mkdir -p "$home1/.hydra"
@@ -111,7 +111,7 @@ printf '%s\n' 'preserve-upgrade-state' > "$home1/.hydra/upgrade-marker"
 ) >/dev/null
 assert_success $? "install.sh should upgrade an existing PREFIX"
 upgrade_ver="$(HOME="$home1" HYDRA_ROOT='' HYDRA_HOME='' "$prefix1/bin/hydra" version 2>&1)"
-assert_contains "$upgrade_ver" "Hydra version 2.8.0" "upgrade replaces the older binary"
+assert_contains "$upgrade_ver" "Hydra version 2.9.0" "upgrade replaces the older binary"
 assert_equal "preserve-upgrade-state" "$(sed -n '1p' "$home1/.hydra/upgrade-marker")" "upgrade preserves HYDRA_HOME state"
 
 un_out="$(
@@ -128,8 +128,8 @@ rm -rf "$home1" "$prefix1"
 
 # --- make install / make uninstall ---
 echo "Testing make install to a writable PREFIX..."
-home2="$(mktemp -d)"
-prefix2="$(mktemp -d)"
+home2="$(test_mktemp_dir)"
+prefix2="$(test_mktemp_dir)"
 export HOME="$home2"
 unset HYDRA_ROOT
 unset HYDRA_HOME
@@ -162,8 +162,8 @@ rm -rf "$home2" "$prefix2"
 
 # --- DESTDIR staging ---
 echo "Testing make install DESTDIR staging..."
-stage="$(mktemp -d)"
-home3="$(mktemp -d)"
+stage="$(test_mktemp_dir)"
+home3="$(test_mktemp_dir)"
 output="$(cd "$REPO_ROOT" && HOME="$home3" HYDRA_HOME='' HYDRA_ROOT='' make install PREFIX=/usr/local DESTDIR="$stage" 2>&1)"
 assert_success $? "make install DESTDIR should succeed"
 assert_file "$stage/usr/local/bin/hydra" "DESTDIR stages the binary"

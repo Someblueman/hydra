@@ -8,9 +8,11 @@
  * and its shell survive every client close. */
 #define _XOPEN_SOURCE 700
 #include "hydra_fixture.h"
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 static struct hf_fixture f;
 static struct tv_session s;
@@ -58,6 +60,24 @@ static int agent_cursor(void) {
     int x = -1, y = -1;
     CHECK(sscanf(out, "%d:%d", &x, &y) == 2, "agent cursor");
     return y * 1000 + x;
+}
+
+/* True once the pane's terminal has the size tmux gives the pane, that is,
+ * once the shell has been sent the resize. tmux rate-limits pane resizes (one
+ * soon after another waits up to 250ms) but passes keys on at once. */
+static bool agent_size_applied(void) {
+    const char *argv[] = {"tmux", "display-message", "-p", "-t", target, "#{pane_tty} #{pane_width} #{pane_height}", NULL};
+    char tty[256];
+    unsigned cols = 0, rows = 0;
+    struct winsize size;
+    bool applied;
+    int fd;
+    if (sscanf(tmux_out(argv), "%255s %u %u", tty, &cols, &rows) != 3) return false;
+    fd = open(tty, O_RDONLY | O_NOCTTY | O_NONBLOCK);
+    if (fd < 0) return false;
+    applied = !ioctl(fd, TIOCGWINSZ, &size) && size.ws_col == cols && size.ws_row == rows;
+    close(fd);
+    return applied;
 }
 
 static size_t clients(void) {
@@ -220,6 +240,19 @@ static void disconnected_client(void) {
     wait_clients(0);
 }
 
+/* Typing takes the size back, but a command typed in one go can run before
+ * the shell sees the new size; the shell's redraw for the resize then lands
+ * on the command's output. Type, and run the command once the shell has it. */
+static void run_after_resize(const char *command) {
+    double end = tv_now() + 5;
+    tv_send(&s, command);
+    while ((tv_contains(&s, "sized by another client") || !agent_size_applied()) && tv_now() < end)
+        tv_pump(&s, .1);
+    if (tv_contains(&s, "sized by another client")) fail_with("typing in Hydra did not take the size back");
+    CHECK(agent_size_applied(), "the agent is resized to the size typing took back");
+    tv_send(&s, "\r");
+}
+
 /* Another, smaller client of the same session that typed last makes tmux
  * shrink the window and fill the rest of Hydra's view with dots. Hydra names
  * that honestly; typing in Hydra takes the size back and the dots go. */
@@ -236,10 +269,10 @@ static void shared_session(void) {
     tv_until(&other, "OTHER_CLIENT", 5);
     tv_until(&s, "sized by another client", 5);
     save("shared-size", 91);
-    tv_send(&s, "echo HYDRA_$((6*7))\r");
+    run_after_resize("echo HYDRA_$((6*7))");
     tv_until(&s, "HYDRA_42", 5);
     tv_pump(&s, .5);
-    if (tv_contains(&s, "sized by another client")) fail_with("typing in Hydra did not take the size back");
+    if (tv_contains(&s, "sized by another client")) fail_with("Hydra lost the size it took back");
     CHECK(!row_has_run(tv_text(&s), "\xc2\xb7", 8), "no dotted fill once Hydra sets the size");
     save("shared-size-restored", 92);
     tv_send(&other, "\002d"); /* the other client detaches itself */
@@ -255,6 +288,24 @@ static void shared_session(void) {
     tv_send(&s, "\002x");
     wait_clients(0);
     owner_alive("a second client killed the agent");
+}
+
+/* A terminal that stops reading Hydra's output (a slow link, a paused
+ * terminal) stalls Hydra right after it attaches. tmux queries the new client
+ * and, once its 5-second query window has passed, takes any late answer for
+ * typed keys. Nothing Hydra answers may reach the agent as input. */
+static void stalled_terminal(void) {
+    tv_send(&s, "a");
+    tv_sleep(6);
+    tv_until(&s, "INPUT TO AGENT", 10);
+    wait_clients(1);
+    tv_pump(&s, .5);
+    tv_send(&s, "echo STALLED_$((6*7))\r");
+    tv_until(&s, "STALLED_42", 5);
+    if (tv_contains(&s, "not found")) fail_with("a terminal answer was typed into the agent");
+    tv_send(&s, "\002x");
+    wait_clients(0);
+    owner_alive("a stalled terminal killed the agent");
 }
 
 static void write_raw(void) {
@@ -305,6 +356,7 @@ int main(void) {
     }
     disconnected_client();
     shared_session();
+    stalled_terminal();
     /* Nothing typed in any cycle was lost: the agent session holds it all. */
     for (i = 0; i < sizeof(cycles) / sizeof(*cycles); i++) {
         tv_format(marker, sizeof(marker), "MARK_%zu", i * 1000 + 7);
@@ -316,7 +368,7 @@ int main(void) {
     CHECK(clients() == 0, "no leaked attach clients");
     hf_finish(&f);
     printf("PASS attach cycles: %zu cycles of attach/type/leave/close/layout/resize/reattach at 140x40, 100x30, "
-           "80x24 and 60x20; disconnected client releases input; shared-size fill named; evidence in %s\n",
+           "80x24 and 60x20; disconnected client releases input; shared-size fill named; a stalled terminal types nothing; evidence in %s\n",
            sizeof(cycles) / sizeof(*cycles), evidence);
     return 0;
 }

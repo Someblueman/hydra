@@ -1,5 +1,6 @@
 #include "fleet/transport/bundle.h"
 #include "fleet/transport/remote.h"
+#include "fleet/transport/platform.h"
 #include "fleet/support/files.h"
 #include "fleet/support/json.h"
 #include "fleet/support/process.h"
@@ -73,12 +74,15 @@ static bool qualify_stage(const char *stage) {
     char checkhome[F_PATH], exe[F_PATH]; struct f_capture cap = {0}; json_object *reply = NULL; bool ok = false;
     if (f_path(checkhome, sizeof(checkhome), stage, ".qualification") || setenv("HYDRA_HOME", checkhome, 1)) return false;
     unsetenv("HYDRA_ROOT"); unsetenv("HYDRA_FLEET_BIN");
-    if (!executable_version(stage, "bin/hydra", "Hydra version 2.") ||
+    /* The staged shell must be exactly this helper's release. */
+    if (!executable_version(stage, "bin/hydra", "Hydra version " F_VERSION "\n") ||
         !executable_version(stage, "libexec/hydra/hydra-fleet", "Hydra fleet protocol 1\n") ||
         f_path(exe, sizeof(exe), stage, "bin/hydra")) goto done;
     char *argv[] = {exe, "fleet", "handshake", "--json", NULL};
     if (f_run(argv, NULL, 0, 5, &cap) || cap.status) goto done;
-    reply = f_parse(cap.out); ok = json_object_get_boolean(f_field(reply, "ok")) && f_handshake_compatible(f_field(reply, "data"));
+    reply = f_parse(cap.out);
+    ok = json_object_get_boolean(f_field(reply, "ok")) && f_handshake_compatible(f_field(reply, "data")) &&
+        f_string(f_field(reply, "data"), "hydra_version") && !strcmp(f_string(f_field(reply, "data"), "hydra_version"), F_VERSION);
 done:
     json_object_put(reply); f_capture_free(&cap);
     if (!access(checkhome, F_OK) && f_remove_tree(checkhome)) ok = false;
@@ -97,6 +101,13 @@ json_object *f_install(json_object *package, const char *digest, const char *pre
 done:
     if (stage[0]) f_remove_tree(stage);
     return result ? result : f_error("fleet-bootstrap", "install_failed", "package paths, executable platform, or exact destination failed validation");
+}
+/* A package that names a platform installs only on that platform; older
+ * platform-neutral packages still install. */
+static bool platform_allowed(json_object *package) {
+    struct f_platform wanted, local; int found = f_package_platform(package, &wanted);
+    if (found) return found > 0;
+    return !f_platform_local(&local) && f_platform_equal(&wanted, &local);
 }
 static bool input_digest(const char *text, const char *digest) {
     struct f_capture cap = {0}; char *argv[] = {"shasum", "-a", "256", NULL}; bool matches = false;
@@ -117,6 +128,7 @@ json_object *f_install_cli(int argc, char **argv) {
     text = f_read(NULL, F_LIMIT); package = text ? f_parse(text) : NULL;
     if (!package || !input_digest(text, argv[1])) result = f_error("fleet-bootstrap", "hash_mismatch", "package digest failed");
     else if (!strcmp(argv[0], "install-check")) result = f_install_check(package, argv[1], prefix);
+    else if (!platform_allowed(package)) result = f_error("fleet-bootstrap", "platform_mismatch", "the package names a different platform than this host; nothing was installed");
     else result = f_install(package, argv[1], prefix);
     json_object_put(package); free(text); return result;
 }

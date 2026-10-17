@@ -2,8 +2,8 @@
 # Real public task/result bundles through a local-only fake SSH transport.
 set -eu
 root="$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)"
-fixture="$(mktemp -d)"
-HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:-$root/build/hydra-fleet}"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
+HYDRA_FLEET_BIN="${HYDRA_FLEET_BIN:?HYDRA_FLEET_BIN is required: run via make test or make test-one T=<name>}"
 BUILD_DIR="$(dirname "$HYDRA_FLEET_BIN")"
 HYDRA_HOME="$fixture/client"
 HYDRA_REVIEW_FIXTURE="$fixture"

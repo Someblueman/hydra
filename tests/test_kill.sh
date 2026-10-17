@@ -4,7 +4,7 @@
 test_count=0
 pass_count=0
 fail_count=0
-test_root="$(mktemp -d)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/hydra-test.XXXXXX")"
 repo="$test_root/repo"
 HYDRA_HOME="$test_root/home"
 TMUX_TMPDIR="$test_root/tmux"
