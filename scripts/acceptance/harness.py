@@ -231,6 +231,33 @@ class Case(usability.Journey):
                 "exclude": (self.repo / ".git" / "info" / "exclude").read_text()}
 
 
+def select_head(j: Case, name: str, attempts: int = 12) -> str:
+    """Move the Work list selection to the named head with k/j."""
+    j.keys(b"k" * attempts)
+    time.sleep(0.3)
+    for _ in range(attempts):
+        row = j.selected_row()
+        if row.split()[1:2] == [name]:
+            return row
+        j.keys(b"j")
+        time.sleep(0.2)
+    raise AssertionError(f"head {name!r} not found in the list; last selected {j.selected_row()!r}")
+
+
+def make_stopped(j: Case, branch: str) -> None:
+    """A head whose agent reported its exit through the public adapter
+    contract and whose terminal is gone: shown as 'stopped'."""
+    lifecycle = json.loads(j.cli("lifecycle", branch, "--json"))["data"]
+    event = json.dumps({"schema_version": 1, "instance_id": lifecycle["instance_id"],
+                        "kind": "observed", "status": "exited"})
+    result = subprocess.run([str(j.hydra), "adapter", "ingest", branch], cwd=j.repo, env=j.env, input=event,
+                            capture_output=True, text=True, timeout=30, check=False)
+    if result.returncode:
+        raise RuntimeError(f"adapter ingest failed: {result.stderr}")
+    j.proof.append({"command": ("hydra", "adapter", "ingest", branch), "input": event, "output": result.stdout})
+    j.tmux("kill-session", "-t", branch)
+
+
 def profile_fixture(j: Case, name: str = "codex", script: Path | None = None) -> Path:
     """Install the deterministic provider as `name` on a private PATH."""
     tools = j.base / "fixture-bin"
