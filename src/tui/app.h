@@ -113,6 +113,7 @@ struct app {
     char result_title[TEXT];
     char result_text[8192];
     size_t result_scroll;
+    size_t help_scroll;
     bool result_open;
 };
 #endif

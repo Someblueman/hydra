@@ -59,6 +59,17 @@ static size_t wrap_chunk(const char *text, size_t length, size_t width) {
     return cut;
 }
 
+/* How many rows paragraph() needs for text at this width. */
+size_t wrapped_rows(const char *text, size_t width) {
+    size_t length = strlen(text), offset = 0U, rows = 0U;
+    while (offset < length) {
+        offset += wrap_chunk(text + offset, length - offset, width ? width : 1U);
+        offset += strspn(text + offset, " ");
+        rows++;
+    }
+    return rows;
+}
+
 /* "Label       text" with the text wrapped under itself; the label column
  * is label_width wide. The first *skip rows are counted off instead of
  * drawn (a scrolled detail); rows beyond the content area are not drawn. */
@@ -134,4 +145,30 @@ void key_row(struct app *app, const char *key, const char *action) {
     char text[512];
     snprintf(text, sizeof(text), "%s  %s", key, action);
     paragraph(app, text, TV_BASE);
+}
+
+/* A footer that does not fit drops whole "key action" hints (separated by
+ * two spaces) from its right, keeping a trailing "? help" and "q quit", so
+ * no hint is cut mid-word; hints that fit are returned unchanged. */
+const char *fit_hints(const char *hints, size_t width, char *out, size_t size) {
+    const char *tail = NULL, *at, *end = hints + strlen(hints);
+    size_t used = 0U, tail_length;
+    if (strlen(hints) <= width || size == 0U) return hints;
+    if ((at = strstr(hints, "? help  q quit")) != NULL && at + 14 == end) tail = at;
+    else if (end - hints >= 6 && !strcmp(end - 6, "q quit")) tail = end - 6;
+    tail_length = tail ? strlen(tail) : 0U;
+    out[0] = '\0';
+    for (at = hints; at < (tail ? tail : end);) {
+        const char *next = strstr(at, "  ");
+        size_t length = next && next < (tail ? tail : end) ? (size_t)(next - at) : (size_t)((tail ? tail : end) - at);
+        while (length && at[length - 1U] == ' ') length--;
+        if (!length) { at += 2; continue; }
+        if (used + (used ? 2U : 0U) + length + (tail_length ? 2U + tail_length : 0U) > width || used + length + 3U >= size) break;
+        used += (size_t)snprintf(out + used, size - used, "%s%.*s", used ? "  " : "", (int)length, at);
+        at += length;
+        while (*at == ' ') at++;
+    }
+    if (tail_length && used + 2U + tail_length < size && used + (used ? 2U : 0U) + tail_length <= width)
+        snprintf(out + used, size - used, "%s%s", used ? "  " : "", tail);
+    return out;
 }

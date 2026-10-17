@@ -228,6 +228,7 @@ static void horizontal_arrow(struct app *app, int direction) {
 }
 static void selection_arrow(struct app *app, char key, int direction) {
     if (app->result_open) { if (direction < 0 && app->result_scroll) app->result_scroll--; else if (direction > 0) app->result_scroll++; return; }
+    if (app->help) { (void)help_scroll_key(app, direction > 0 ? 'j' : 'k'); return; }
     if (app->view == 9) (void)native_attention_key(app, key);
     else move_selection(app, direction);
 }
@@ -359,6 +360,7 @@ static bool overlay_key(struct app *app, char key) {
         return true;
     }
     if (app->help) {
+        if (help_scroll_key(app, key)) return true;
         app->help = false;
         return key == '?' || key == 27;
     }
@@ -460,7 +462,7 @@ static void head_key(struct app *app, char key) {
         case 'x': remove_or_interrupt(app); break;
         case 'G': group_key(app); break;
         case 't': cycle_theme(app); break;
-        case '?': app->help = !app->help; break;
+        case '?': app->help = !app->help; app->help_scroll = 0U; break;
         case 27: handle_escape(app); break;
         default: break;
     }

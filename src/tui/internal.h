@@ -241,6 +241,10 @@ void labelled_pair(struct app *app, const char *left_label, const char *left, en
                    const char *right_label, const char *right, enum tv_style right_tone);
 void lead_block(struct app *app, const char *eyebrow, const char *title);
 void key_row(struct app *app, const char *key, const char *action);
+const char *fit_hints(const char *hints, size_t width, char *out, size_t size);
+size_t wrapped_rows(const char *text, size_t width);
+void render_help(struct app *app);
+bool help_scroll_key(struct app *app, char key);
 /* Shared text-view helpers (render.c) and the head details view (detail.c). */
 void column(struct app *app, int x, int width, enum tv_style tone, const char *text);
 void paragraph(struct app *app, const char *text, enum tv_style tone);

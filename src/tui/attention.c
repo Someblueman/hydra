@@ -770,7 +770,7 @@ static void render_rows(struct app *app, struct native_attention *view)
 static void snapshot_notes(struct app *app, const struct native_attention *view)
 {
     struct cursor at = {0U, 0U, SIZE_MAX};
-    if (view->stale) wrap(app, &at, "", "", "STALE: last good attention snapshot. The latest refresh failed; I tries again.", TONE_WARNING);
+    if (view->stale) wrap(app, &at, "", "", "STALE: last good attention snapshot. The latest refresh failed; press I to refresh again.", TONE_WARNING);
     if (view->truncated) wrap(app, &at, "", "", "Only part of the attention list could be read (a size limit was reached); some items may be missing.", TONE_WARNING);
     else if (view->partial) wrap(app, &at, "", "", view->unknown_count ? "Some records could not be read completely; they are listed below as Needs inspection."
         : "Some records could not be read completely; the list may be incomplete.", TONE_WARNING);
@@ -862,7 +862,7 @@ static void render_unavailable(struct app *app, const struct native_attention *v
     lead_block(app, "ATTENTION", "Attention is unavailable right now.");
     labelled(app, "Why", view->error, TV_WARNING);
     linef(app, "");
-    paragraph(app, "No valid attention snapshot has been read yet, so nothing can be listed. I tries again; nothing is decided or acknowledged by looking.", TV_MUTED);
+    paragraph(app, "Nothing can be listed until a valid attention snapshot is read. Press I to refresh; nothing is decided or acknowledged by looking.", TV_MUTED);
 }
 bool native_attention_detail_open(const struct app *app)
 { return app->attention && app->attention->detail && item_selected(app->attention); }

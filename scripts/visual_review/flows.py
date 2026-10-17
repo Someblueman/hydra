@@ -82,7 +82,7 @@ def work(s: Session) -> None:
     s.state("details-terminal-gone", "Details: notes-cleanup", "terminal gone", keys=ESC + "jjjj\r", group="detail")
     s.state("coordination", "COORDINATION", keys="c")
     s.state("recovery", "RECOVERY", "Terminal stopped", keys=BACK + "5")
-    s.state("recovery-finding", "Inspect:", "kept", keys="d", group="diagnostic")
+    s.state("recovery-finding", "DIAGNOSTICS", "kept", keys="d", group="diagnostic")
     s.keys("d")
     s.state("workflows", "HYDRA / WORKFLOWS", "kill-dry-run", keys="w")
     s.state("statistics", "HYDRA / STATISTICS", "RUNS", keys=BACK + "7")
@@ -99,7 +99,7 @@ def work(s: Session) -> None:
     s.state("review-result", "RESULT  add-kill-dry-run", "verdict PASS", keys="r")
     s.state("review-verified", "HOW IT WAS VERIFIED", "Full log: press L", keys="nn")
     s.state("review-changes", "CHANGES ON kill-dry-run-worker", keys="n")
-    s.state("review-identity", "selected identity", "Source: workflow records", keys="i", group="detail")
+    s.state("review-identity", "SELECTED IDENTITY", "workflow records", keys="i", group="detail")
     s.keys("i")
     s.fixture("review", FIXTURES / "review-v1.tsv")
     s.keys(ESC)
@@ -114,10 +114,10 @@ def work(s: Session) -> None:
 def fleet(s: Session) -> None:
     """Fleet navigation: remote heads, overview, hosts, recovery, attention."""
     s.state("fleet-workspace", "HYDRA /", "[Workspace]")
-    s.state("fleet-heads", "Remote heads", "feature-build", keys="1")
-    s.state("fleet-overview", "REMOTE HEADS / desired state", keys="o")
+    s.state("fleet-heads", "Heads: remote work", "feature-build", keys="1")
+    s.state("fleet-overview", "HYDRA / OVERVIEW", "builder/feature-build", keys="o")
     s.state("fleet-hosts", "HOSTS / latest list response", "builder", keys="H")
-    s.state("fleet-recovery", "RECOVERY", keys=BACK + "6", note="Fleet tabs: Hosts sits before Attention, so Recovery is 6")
+    s.state("fleet-recovery", "RECOVERY", keys=BACK + "5", note="one tab bar for local and remote work: Recovery is 5")
     s.state("fleet-attention", "ATTENTION", "need you", keys="I")
 
 

@@ -656,12 +656,16 @@ const char *native_review_hints(const struct app *app, bool narrow)
 {
     const struct native_review *review = app->review;
     if (!native_review_active(app)) return NULL;
-    if (review->log_view) return narrow ? "j/k scroll  g/G ends  Esc back  q quit" : "j/k scroll  Space/b page  g/G top/end  Esc back to the review  ? help  q quit";
+    bool compact = app->cols < 100; /* hints that fit whole; ? lists the rest */
+    if (review->log_view) return narrow ? "j/k scroll  g/G ends  Esc back  q quit" : compact ? "j/k scroll  Space/b page  g/G top/end  Esc back  ? help  q quit"
+                                                                                           : "j/k scroll  Space/b page  g/G top/end  Esc back to the review  ? help  q quit";
     if (review->identity_view) return narrow ? "j/k scroll  Esc back  q quit" : "j/k scroll  i back to evidence  f references  Esc back  ? help  q quit";
     if (review->references && review->preview) return narrow ? "j/k scroll  Esc back  q quit" : "j/k scroll  Esc back to the references  ? help  q quit";
-    if (review->references) return narrow ? "j/k select  Enter open  Esc back  q quit" : "j/k select  Enter open  l/t/p add log/transcript/PR  i identity  Esc back  ? help  q quit";
+    if (review->references) return narrow ? "j/k select  Enter open  Esc back  q quit" : compact ? "j/k select  Enter open  l/t/p add  i identity  Esc back  ? help  q quit"
+                                                                                           : "j/k select  Enter open  l/t/p add log/transcript/PR  i identity  Esc back  ? help  q quit";
     if (!review->document) return narrow ? "Esc back  q quit" : "Esc back to the list  ? help  q quit";
     return narrow ? "j/k scroll  n/N section  Esc back  q quit"
+                  : compact ? "j/k scroll  L full log  f references  i identity  Esc back  ? help  q quit"
                   : "j/k scroll  n/N section  Space/b page  L full log  f references  i identity  Esc back  ? help  q quit";
 }
 

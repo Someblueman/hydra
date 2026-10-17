@@ -360,7 +360,9 @@ static void workspace_empty(struct app *app, struct tv_canvas *c) {
 }
 
 static enum tv_style details_session(struct app *app, const struct head *h, char *text, size_t size) {
-    if (head_remote(h)) { snprintf(text, size, "Session   %s%sdesired %s", remote_head_status(app, h), dot(app), h->desired); return remote_head_tone(app, h); }
+    /* The observed status carries the tone; the desired state is a request,
+     * not an observation, and sits on its own muted row (8). */
+    if (head_remote(h)) { snprintf(text, size, "Session   %s", remote_head_status(app, h)); return remote_head_tone(app, h); }
     if (head_headless(h)) { snprintf(text, size, "Terminal  headless (no terminal)"); return TV_MUTED; }
     snprintf(text, size, "Session   %s", status_label(h));
     return status_tone(h);
@@ -427,7 +429,10 @@ static enum tv_style details_line(struct app *app, const struct head *h, size_t 
     case 5: return details_reported(app, h, text, size);
     case 6: details_group(app, h, text, size); return TV_BASE;
     case 7: details_run(app, h, text, size); return TV_BASE;
-    case 8: if (!head_headless(h)) details_stale(h, text, size); return TV_WARNING;
+    case 8:
+        if (head_remote(h)) { snprintf(text, size, "Desired   %s (requested; not a live process)", h->desired[0] ? h->desired : "unknown"); return TV_MUTED; }
+        if (!head_headless(h)) details_stale(h, text, size);
+        return TV_WARNING;
     case 10: snprintf(text, size, "%s", head_headless(h) ? "p  step output in Details      Enter  full details" :
                       head_terminal_gone(app, h) ? "a  restart its terminal        Enter  full details" : "a  talk to the agent here      Enter  full details"); return TV_MUTED;
     case 11: snprintf(text, size, "%s", head_remote(h) ? "x  interrupt (confirmed)       r  retry its host" : ":  more actions                d  technical details"); return TV_MUTED;
