@@ -173,7 +173,9 @@ $(BUILD_DIR)/tui/%.o: src/tui/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-TERMVIZ_SOURCES = $(filter src/termviz/%.c,$(NATIVE_SOURCES))
+# src/termviz/tools holds standalone programs with their own main(); they
+# link the library but are never part of it.
+TERMVIZ_SOURCES = $(filter-out src/termviz/tools/%,$(filter src/termviz/%.c,$(NATIVE_SOURCES)))
 TERMVIZ_HEADERS = $(wildcard src/termviz/*.h src/termviz/*.inc)
 TERMVIZ_OBJECTS = $(patsubst src/termviz/%.c,$(BUILD_DIR)/termviz/%.o,$(TERMVIZ_SOURCES))
 TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o $(BUILD_DIR)/hydra_statistics_metrics.o
@@ -355,6 +357,9 @@ help:
 	@echo "  make build-fleet-static [ARCH=x86_64|aarch64] - Reproducible static Linux fleet helper (Docker)"
 	@echo "  make check-fleet-assets - Validate the pinned release/fleet-assets.tsv digests table"
 	@echo "  make smoke-onboarding - Throwaway-repo no-agent first-head smoke"
+	@echo "  make visual-review [VISUAL_BASELINE=dir] - Capture, render and lint the native TUI screens into one contact sheet"
+	@echo "  make test-visual-lint - Run the bounded layout lint over the visual-review captures"
+	@echo "  make test-u10-loopback - Guided remote setup of a throwaway account over loopback SSH through the control centre"
 	@echo "  make dev-setup - Set up development environment (git hooks)"
 	@echo "  make help      - Show this help message"
 
@@ -556,3 +561,36 @@ include scripts/shell-tests.mk
 USABILITY_OUTPUT ?= $(BUILD_DIR)/usability-$(shell date +%Y%m%d-%H%M%S)
 test-usability: build-core build-tui build-fleet $(BUILD_DIR)/test-tui-pty
 	python3 scripts/usability.py --output "$(USABILITY_OUTPUT)"
+
+# Replays captured terminal bytes through the product's own terminal
+# interpreter (src/termviz) and prints exact cells; see docs/VISUAL-REVIEW.md.
+$(BUILD_DIR)/termviz-cells: src/termviz/tools/cells.c $(TERMVIZ_OBJECTS) src/termviz/terminal.h
+	$(CC) $(CORE_CFLAGS) src/termviz/tools/cells.c $(TERMVIZ_OBJECTS) -o $@
+
+# Visual review without manual runs (U4, I4, 2.9.0 Hosts screens): drives the
+# prefix-installed native TUI over a PTY through fixture states at 80x24 and
+# 140x40 in the dark, light and no-colour themes, renders each capture to
+# HTML/SVG with exact colours, lints the layouts and writes one contact sheet
+# to $(VISUAL_REVIEW_OUTPUT)/index.html. VISUAL_BASELINE=dir adds before/after
+# columns from an earlier output directory.
+VISUAL_REVIEW_OUTPUT ?= $(BUILD_DIR)/visual-review
+.PHONY: visual-review test-visual-lint
+visual-review: build-core build-tui build-fleet $(BUILD_DIR)/termviz-cells
+	python3 scripts/visual_review/run.py --output "$(abspath $(VISUAL_REVIEW_OUTPUT))" \
+		--cells "$(abspath $(BUILD_DIR))/termviz-cells" $(if $(VISUAL_BASELINE),--baseline "$(VISUAL_BASELINE)")
+
+# The bounded, deterministic layout lint over the captures (captures them
+# first when the output directory has none).
+test-visual-lint: $(BUILD_DIR)/termviz-cells
+	@if [ ! -f "$(VISUAL_REVIEW_OUTPUT)/manifest.json" ]; then $(MAKE) visual-review VISUAL_REVIEW_OUTPUT="$(VISUAL_REVIEW_OUTPUT)"; fi
+	python3 scripts/visual_review/lint.py "$(abspath $(VISUAL_REVIEW_OUTPUT))"
+
+# U10 loopback acceptance: a private sshd on a loopback port serves a fresh
+# throwaway account (root or sudo -n needed; otherwise the case prints SKIP),
+# and the control centre's Hosts tab is driven over a PTY through the whole
+# guided setup, a real fixture-agent task, reconnection and the existing
+# installation, missing prerequisites, failed sign-in and interrupted cases.
+.PHONY: test-u10-loopback
+test-u10-loopback: build-fleet build-tui build-core $(BUILD_DIR)/termviz-cells
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" \
+		HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_u10_loopback.sh
