@@ -323,7 +323,12 @@ def lint_directory(output: Path) -> dict:
     # One finding per (capture, rule, message) keeps the report bounded.
     unique = {(f["capture"], f["rule"], f["message"]): f for f in findings}
     findings = sorted(unique.values(), key=lambda f: (f["capture"], f["rule"], f["row"], f["message"]))
-    return {"screens": len(manifest["captures"]), "findings": findings,
+    # A known row that no finding matches any more: the screen was fixed (or
+    # the state is no longer captured); report it so the row can go.
+    resolved = [{"rule": k[0], "capture": k[1], "message": k[2], "reason": k[3]} for k in known
+                if not any(f["rule"] == k[0] and fnmatch.fnmatch(f["capture"], k[1]) and k[2] in f["message"]
+                           for f in findings)]
+    return {"screens": len(manifest["captures"]), "findings": findings, "resolved": resolved,
             "known": sum(1 for f in findings if f["known"]), "new": sum(1 for f in findings if not f["known"])}
 
 
@@ -337,7 +342,10 @@ def main() -> int:
     for f in result["findings"]:
         mark = "known" if f["known"] else "FAIL"
         print(f"[{mark}] {f['capture']} row {f['row']} {f['rule']}: {f['message']}")
-    print(f"visual lint: {result['screens']} screens, {len(result['findings'])} findings, {result['known']} known, {result['new']} new")
+    for r in result["resolved"]:
+        print(f"[resolved] {r['rule']} {r['capture']} '{r['message']}': no longer found; remove its row from lint-known.tsv")
+    print(f"visual lint: {result['screens']} screens, {len(result['findings'])} findings, {result['known']} known, "
+          f"{result['new']} new, {len(result['resolved'])} known row(s) resolved")
     return 1 if result["new"] else 0
 
 

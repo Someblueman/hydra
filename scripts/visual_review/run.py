@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Visual review without manual runs: capture, render, lint, contact sheet.
 
-Installs this checkout into a private prefix (as scripts/usability.py does),
+Installs this checkout into a private prefix (as the usability runner under scripts/usability does),
 drives the installed native TUI over a PTY through the states in flows.py at
 80x24 and 140x40 in the dark, light and no-colour themes, keeps the raw byte
 stream of every state, renders each through the product's own terminal
@@ -32,7 +32,7 @@ import lint  # noqa: E402
 import render  # noqa: E402
 import report  # noqa: E402
 from driver import Driver  # noqa: E402
-from usability import run as run_command, tree  # noqa: E402
+from usability.journey import run as run_command, tree  # noqa: E402
 
 ROOT = HERE.parent.parent
 SIZES = ((80, 24), (140, 40))

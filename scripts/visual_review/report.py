@@ -89,6 +89,12 @@ def write(output: Path, manifest: dict, findings: dict, baseline: Path | None) -
         parts.append("</table>")
     else:
         parts.append("<p>none</p>")
+    if findings.get("resolved"):
+        parts.append("<h2>Known findings no longer seen</h2><ul>")
+        for r in findings["resolved"]:
+            parts.append(f"<li><b>{html.escape(r['rule'])}</b> {html.escape(r['capture'])} "
+                         f"'{html.escape(r['message'])}': remove its row from lint-known.tsv ({html.escape(r['reason'])})</li>")
+        parts.append("</ul>")
 
     current_flow = None
     for (flow, state), entries in states.items():
