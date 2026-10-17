@@ -202,9 +202,13 @@ static void job_finish(struct app *app, struct native_onboarding *s) {
     copy_text(path, sizeof(path), s->argv.count > 1 ? s->argv.words[s->argv.count - 2] : "");
     if (cancelled) {
         free(text);
+        char label[sizeof(s->job_label)];
+        copy_text(label, sizeof(label), s->job_label);
         s->screen = s->back;
-        snprintf(s->notice, sizeof(s->notice), "Cancelled: %s. Nothing further runs until you ask", s->job_label);
+        /* The status read replaces the label and notice when it starts; set it after. */
         if (kind == ONB_JOB_APPLY) status_start(app, s);
+        snprintf(s->notice, sizeof(s->notice), kind == ONB_JOB_APPLY ? "Cancelled: %s. Rows it reached may be outcome_unknown; reading the recorded status, nothing reruns"
+                                                                     : "Cancelled: %s. Nothing further runs until you ask", label);
         return;
     }
     if (kind == ONB_JOB_HOME) { home_result(app, s, text); free(text); return; }
