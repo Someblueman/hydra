@@ -108,5 +108,12 @@ bool px_proposal_validate(json_object *proposal, json_object *errors) {
         plan_error(errors, "steps", "empty_expansion", "an expansion adds 1 to 64 new steps; an empty expansion changes nothing and is refused");
         return false;
     }
-    return claims(proposal, errors) & dependencies(proposal, errors) & joins(proposal, errors) & envelope_shape(proposal, errors);
+    /* Run every check so all diagnostics are reported, then combine. */
+    {
+        bool ok = claims(proposal, errors);
+        ok = dependencies(proposal, errors) && ok;
+        ok = joins(proposal, errors) && ok;
+        ok = envelope_shape(proposal, errors) && ok;
+        return ok;
+    }
 }

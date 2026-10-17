@@ -25,7 +25,7 @@ static size_t cache_files(void) {
   f_capture_free(&c);
   return n;
 }
-static json_object *revoke(const char *scope, const char *id) {
+static json_object *revoke_identity(const char *scope, const char *id) {
   char *argv[] = {dc_hydra, "fleet", "revoke", (char *)scope, (char *)id,
                   "--reason", "fixture decision", "--json", NULL};
   struct f_capture c = nt_run(argv);
@@ -233,7 +233,7 @@ static void dnssd(void) {
            "invalid_input");
 }
 static void revoked(void) {
-  json_object *v = revoke("candidate", "good");
+  json_object *v = revoke_identity("candidate", "good");
   assert(!strcmp(f_string(f_field(v, "data"), "id"), "cand_676f6f64"));
   json_object_put(v);
   v = DC("qualify", true, "--ssh", "good", "--ssh", "other");
@@ -270,7 +270,7 @@ static void revoked(void) {
   json_object_put(v);
   dc_error(DC("discover", false, "--source", selector, "--select", "w"),
            "invalid_inventory");
-  json_object_put(revoke("source", selector));
+  json_object_put(revoke_identity("source", selector));
   v = DC("discover", false, "--source", selector);
   assert(!strcmp(f_string(f_field(v, "error"), "code"), "revoked"));
   s = source0(v);
@@ -290,7 +290,7 @@ static void progress_revoked(void) {
   nt_equal(f_field(f_field(v, "data"), "complete"), "true");
   json_object_put(v);
   assert(dc_call_count() == 2);
-  json_object_put(revoke("candidate", "cand_676f6f64"));
+  json_object_put(revoke_identity("candidate", "cand_676f6f64"));
   v = DC("qualify", true, "--inventory", file, "--select", "a", "--select",
          "b", "--progress", progress);
   json_object *r = json_object_array_get_idx(dc_rows(v), 0);
@@ -312,7 +312,7 @@ static void key_changed(void) {
   nt_write(p, "{\"schema_version\":1,\"target\":\"changed\",\"hydra\":"
               "\"hydra\",\"home\":\"\",\"accepted_host_key\":\"SHA256:"
               "revokedfixturekey\",\"multiplex\":false}");
-  json_object_put(revoke("transport", "rotated"));
+  json_object_put(revoke_identity("transport", "rotated"));
   json_object *v = DC("qualify", false, "--ssh", "changed"),
               *e = f_field(f_field(json_object_array_get_idx(dc_rows(v), 0),
                                    "qualification"),
