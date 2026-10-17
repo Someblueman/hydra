@@ -3,6 +3,7 @@
 #include "fleet/support/process.h"
 #include "fleet/transport/remote.h"
 #include "fleet/setup/setup.h"
+#include "fleet/revocation/revocation.h"
 #include "fleet/fleet.h"
 #include <dirent.h>
 #include <ctype.h>
@@ -29,7 +30,9 @@ static int remote_path(char path[F_PATH], const char *name) {
 int f_remote_load(const char *name, struct f_remote *remote) {
     char path[F_PATH]; char *text; json_object *obj; int status = -1;
     memset(remote, 0, sizeof(*remote));
-    if (remote_path(path, name) || !(text = f_read(path, 16384))) return -1;
+    /* A revoked transport binding never loads: no operation, alias reuse,
+     * endpoint change or source refresh can reach the host through it. */
+    if (remote_path(path, name) || revocation_blocked("transport", name) || !(text = f_read(path, 16384))) return -1;
     obj = f_parse(text); free(text);
     if (!obj) return -1;
     if (!f_number_is(obj, "schema_version", 1) || !f_target(f_string(obj, "target"))) goto done;
@@ -73,7 +76,7 @@ static int sync_alias_directory(void) {
 }
 int f_remote_enrolled(const struct f_remote *remote, bool publish) {
     char path[F_PATH], dir[F_PATH]; json_object *expected = remote_record(remote), *existing = NULL; int status = -1;
-    if (remote_path(path, remote->name)) goto done;
+    if (remote_path(path, remote->name) || revocation_blocked("transport", remote->name)) goto done;
     if (!access(path, F_OK)) {
         existing = f_read_json(path, 16384); status = json_object_equal(existing, expected) ? 0 : -1; goto done;
     }
@@ -112,6 +115,9 @@ static json_object *alias_options(struct f_remote *remote, int argc, char **argv
 json_object *f_remote_cli(int argc, char **argv) {
     struct f_remote remote; char path[F_PATH]; json_object *error;
     memset(&remote, 0, sizeof(remote));
+    /* A revoked alias name cannot be reused by add or by a new guided setup. */
+    if (argc >= 2 && (!strcmp(argv[0], "add") || setup_command(argv[0])) && f_name(argv[1]) && revocation_blocked("transport", argv[1]))
+        return revocation_error("remote", "transport", argv[1]);
     /* Guided setup and its step commands share one private state machine. */
     if (argc >= 1 && setup_command(argv[0])) return setup_cli(argc, argv);
     if (argc == 1 && !strcmp(argv[0], "list")) return f_success("remote-list", f_remotes());

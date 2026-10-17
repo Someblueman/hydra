@@ -113,7 +113,10 @@ int main(int argc, char **argv) {
              *errors[] = {
                  "No ED25519 host key is known for fixture and you have "
                  "requested strict checking.\nHost key verification failed.",
-                 "REMOTE HOST IDENTIFICATION HAS CHANGED!\nHost key "
+                 "@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n"
+                 "The fingerprint for the ED25519 key sent by the remote host "
+                 "is\nSHA256:newfixturekey0123456789abcdefghijklmnopqrstuv.\n"
+                 "Offending ED25519 key in /fixture/known_hosts:3\nHost key "
                  "verification failed.",
                  "Host key verification failed.",
                  "Permission denied (publickey).", "Connection refused"};

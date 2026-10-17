@@ -14,5 +14,6 @@ void dc_snapshot(char out[F_PATH], const char *kind, json_object *records,
                  int64_t observed);
 void dc_error(json_object *response, const char *code);
 void dc_progress_cases(void);
+void dc_live_cases(void);
 #define DC(op, ok, ...) dc_cli(op, (const char *[]){__VA_ARGS__, NULL}, ok)
 #endif

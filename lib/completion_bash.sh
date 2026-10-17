@@ -72,15 +72,23 @@ _hydra_completion() {
             return 0
             ;;
         fleet)
-            COMPREPLY=($(compgen -W "handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
+            COMPREPLY=($(compgen -W "handshake discover qualify enroll revoke list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui --json --jobs --timeout --project --instance --input --output --sha256" -- "${cur}"))
             return 0
             ;;
         discover|qualify)
-            COMPREPLY=($(compgen -W "--ssh --inventory --select --ssh-config --timeout --require --json" -- "${cur}"))
+            COMPREPLY=($(compgen -W "--ssh --inventory --select --source --diff --ssh-config --timeout --require --progress --json" -- "${cur}"))
             return 0
             ;;
         auth)
             COMPREPLY=($(compgen -W "status preview copy login help --agent --provider --source --approve --executable" -- "${cur}"))
+            return 0
+            ;;
+        enroll)
+            COMPREPLY=($(compgen -W "review apply --input --output --candidate --project --package --sha256 --prefix --alias --confirm --timeout --json" -- "${cur}"))
+            return 0
+            ;;
+        revoke)
+            COMPREPLY=($(compgen -W "candidate source transport package project list --reason --scope --json" -- "${cur}"))
             return 0
             ;;
         task)

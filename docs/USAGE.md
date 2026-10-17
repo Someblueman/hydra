@@ -328,6 +328,37 @@ see [workflows](workflows.md). An accepted digest binds execution
 scope; it does not establish that a natural-language objective was interpreted
 correctly. Inspect the final deliverable and its checks.
 
+## Fleet discovery sources and revocation
+
+`hydra fleet discover` and `hydra fleet qualify` take explicit selections only.
+Besides `--ssh ALIAS` and `--inventory FILE --select NAME`, an opt-in live source
+reads the operator's own inventory through its normal client or files:
+
+```sh
+hydra fleet discover --source ssh-config --diff --json            # ~/.ssh/config Host names
+hydra fleet discover --source ansible-inventory:/etc/ansible/hosts --json
+hydra fleet discover --source dns-sd --json                       # avahi-browse, or unavailable
+hydra fleet qualify --source ssh-config --select build --require list
+```
+
+Each report names the scope the records belong to, the cache age, and the
+added/removed/changed/conflicting records against the previous private snapshot.
+A missing file or client, a timeout, partial output, a conflicting identity or a
+revoked identity is reported and never widens the selection. Credentials found in
+an inventory are counted and dropped.
+
+```sh
+hydra fleet revoke transport build --reason "host key rotated"
+hydra fleet revoke candidate cand_6275696c64 --reason "retired"
+hydra fleet revoke list --json
+```
+
+A revocation is final for that identity, keeps who/when/reason and the superseded
+binding, blocks new operations and pending enrollment intents, and never cancels a
+task, uninstalls a package, deletes remote state or edits `known_hosts`. See
+[fleet](FLEET.md#discover-qualify-and-enroll-hosts) and
+[revocation](FLEET.md#revoke-decisions).
+
 ## Expert terminal utilities
 
 These operate on tmux panes and terminal activity. `broadcast` does not provide

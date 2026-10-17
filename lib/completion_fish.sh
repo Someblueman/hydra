@@ -32,7 +32,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_sub
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from install-agent sign-in' -l agent -r -a 'claude codex opencode cursor agy pi' -d 'Agent'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup trust-key preflight provision agents install-agent sign-in' -l timeout -r -d 'SSH connect timeout, 1-300 seconds'
 complete -c hydra -f -n '__fish_seen_subcommand_from remote; and __fish_seen_subcommand_from setup trust-key preflight provision agents install-agent sign-in' -l json -d 'Versioned JSON output'
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth' -a 'handshake discover qualify list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and not __fish_seen_subcommand_from task auth enroll revoke' -a 'handshake discover qualify enroll revoke list overview doctor admission bootstrap package task auth init spawn signal cancel workflow attach export import reconcile watch tui'
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -a 'prepare inspect announce submit start resume requests decide status observe cancel logs result inspect-result collect collected help'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l source -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from task' -l spec -r
@@ -262,6 +262,22 @@ complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcomm
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l select -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l ssh-config -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from qualify' -l require -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l source -r -d 'Live source: ssh-config[:FILE], ansible-inventory:FILE, dns-sd[:DOMAIN]'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l diff -d 'List added, removed and changed records against the previous snapshot'
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from qualify' -l progress -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -a 'review apply'
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l input -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l output -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l candidate -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l project -r
+complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l package -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l sha256 -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l prefix -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l alias -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l confirm -r
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from revoke' -a 'candidate source transport package project list'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from revoke' -l reason -r -d 'Retained reason (required)'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from revoke' -l scope -r -a 'candidate source transport package project'
 
 EOF
 }

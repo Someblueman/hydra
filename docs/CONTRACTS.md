@@ -390,6 +390,57 @@ detail}` with an optional `suggestion` (an example command; Hydra never runs it)
 Plans are `remote-setup-plan` schema 1 approved by their SHA-256; exit statuses
 are 0, 1, 3 (approval required), 4 (outcome unknown) and 128+n.
 
+Host discovery (`fleet discover|qualify`) returns candidate schema 1:
+`data.{candidate_schema_version, observed_at, required_capability, partial_failure,
+revoked_count, candidates[]}` where a candidate carries `candidate_id` (`cand_` plus
+hex of the exact target), `target`, `deduplication`, `sources[]` (`{kind, locator,
+name, observed_at, age_seconds, freshness, labels}`, plus `scope` and `client` for
+snapshot and live sources), `resolution`, `qualification`, `qualified_at` and
+`status` (`discovered`, `resolution_failed`, `not_qualified`, `compatible`,
+`qualification_failed` or `revoked`, the last with `revocation`). Inventories are
+schema 1 (`{schema_version, observed_at, hosts[{name, target, labels}]}`) or schema
+2 with a closed `source_snapshot` (`kind` `mdns|vpn|cloud-tags|config-management`,
+`locator`, `scope`, `observed_at`, `freshness`, up to 100 `records`). Since 3.0,
+`--source KIND[:LOCATOR]` (`ssh-config`, `ansible-inventory`, `dns-sd`; at most four,
+each acquired once per invocation within `--timeout`, 1 MiB and 100 records) adds
+`data.sources[]`: `{kind, locator, scope, client, source_id, status
+acquired|partial|unavailable|revoked, reason, observed_at, bytes, record_count,
+credentials_omitted, skipped[{name, reason}], cache {observed_at, age_seconds,
+record_count, status}|null, diff {diff_schema_version 1, first_observation,
+added_count, removed_count, changed_count, conflicting_count, conflicting[{name,
+target, reason duplicate_name|duplicate_target|target_reassigned}], and with --diff
+added[], removed[], changed[{name, previous_target, target, previous_labels,
+labels}]}, revoked[{name, target, revocation}]}` and `data.diff_requested`. An
+unavailable or revoked source fails the command with `source_unavailable` or
+`revoked` while retaining every report. Each source's previous acquisition is a
+private snapshot `{schema_version 1, kind "fleet-discovery-source-snapshot", source,
+status, observed_at, records}` under `$HYDRA_HOME/fleet/discovery/sources/`, keyed by
+the SHA-256 of `KIND:LOCATOR`; qualification progress binds `sources[{kind, locator,
+records_sha256}]`. A `host_key_changed` qualification adds `error.host_key`
+(`presented_fingerprint`, `key_type`, `known_hosts`, `known_hosts_line`,
+`observation`, `observed_at`, `recorded[{fingerprint, source}]`, `acceptance`);
+an enrollment apply row with that status adds `host_key {reviewed_fingerprint,
+reviewed_source, presented_fingerprint, observation, acceptance,
+presented_key_revoked?}`. Enrollment intent schema 2 and progress schema 1 are
+unchanged; a row may now have status `revoked` with `revocation`.
+
+Revocation (`fleet revoke SCOPE ID --reason TEXT`, since 3.0) writes one private
+record `{schema_version 1, kind "fleet-revocation", scope candidate|source|
+transport|package|project, id, requested_id?, reason, revoked_at, revoked_by {user,
+uid, host}, superseded, effect}` at `$HYDRA_HOME/fleet/revocations/SCOPE/<sha256 of
+id>.json` (0600 inside 0700 directories, never replaced; a repeat fails with
+`already_revoked`). Identities are canonical: a candidate target becomes its
+`cand_` ID, a source is `KIND:LOCATOR`, a transport is the alias name, a package its
+64-hex digest, a project its absolute path. `superseded` retains the alias record
+(with `target`, `principal`, `project`, `accepted_host_key`), the candidate target,
+the source's cached snapshot summary, or the aliases mapped to a project.
+`fleet-revoke-list` returns `data.{revocation_schema_version 1, count,
+revocations[]}`. Blocked operations fail with code `revoked` and `data` holding the
+record's `{scope, id, reason, revoked_at, revoked_by}`; `fleet list` reports a
+revoked alias as a row with that error. Revocation records are decisions, not
+remote state: they cancel nothing, uninstall nothing and never modify
+`known_hosts` or an alias record.
+
 Task package schema 1 binds an
 exact Git bundle, selected inputs, work, destination, completion policy, and limits
 for local preparation and validation. Task protocol 1 advertises `task-accept`

@@ -418,6 +418,7 @@ int main(int argc, char **argv) {
   ec_batch_case();
   ec_cleanup();
   ec_package_cases();
+  ec_revocation_cases();
   free(original_path);
   return 0;
 }

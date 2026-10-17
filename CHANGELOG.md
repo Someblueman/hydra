@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `hydra fleet discover|qualify --source KIND[:LOCATOR]` acquires one explicitly
+  selected live inventory and feeds the existing candidate importer: `ssh-config`
+  scans the literal `Host` names of `~/.ssh/config` (or a file) and its literal
+  includes, `ansible-inventory:FILE` reads an INI hosts file (groups become labels,
+  secret-looking variables are counted and dropped, `vars`/`children` sections are
+  ignored), and `dns-sd[:DOMAIN]` runs one terminating `avahi-browse` for
+  `_ssh._tcp` and reports `unavailable` without the client. Each source runs once
+  per invocation within `--timeout`, 1 MiB and 100 records, records its account or
+  network scope and client, and is diffed against its previous private snapshot
+  (`$HYDRA_HOME/fleet/discovery/sources/`): cache age and added, removed, changed
+  and conflicting records are reported before selection (`--diff` lists them).
+  Stale caches, missing files or clients, timeouts, partial output, identity
+  conflicts and revoked identities are reported with provenance and never widen
+  the selection; `qualify` over a source requires `--select`.
+- `hydra fleet revoke candidate|source|transport|package|project ID --reason TEXT`
+  records a final local revocation (private, with who/when/reason and the
+  superseded binding) and `hydra fleet revoke list [--scope SCOPE]` shows them.
+  Revoked identities show as `revoked` in discovery, re-import and resumed
+  qualification, are refused by `fleet enroll review`, invalidate pending `fleet
+  enroll apply` rows before any connection, and block every operation, task
+  submission, alias reuse, setup and enrollment publication for a revoked alias;
+  a revoked package or project is refused by bootstrap, review and `--project`
+  operations. A changed host key now reports the presented and the recorded
+  fingerprints with where each was observed (`qualify`, `enroll apply`, `remote
+  trust-key`); acceptance stays with the operator's `ssh-keygen -R` and a fresh
+  review. Revocation never cancels a task, uninstalls a package, deletes remote
+  state or edits `known_hosts`. Help and bash, zsh and fish completions include
+  the new commands and options.
+
 ## [2.9.0] - 2026-09-28
 
 ### Added

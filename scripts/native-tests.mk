@@ -48,8 +48,8 @@ test-workflow-metrics: $(BUILD_DIR)/native-tests/test-statistics-export
 test-plan-inspection: $(BUILD_DIR)/native-tests/test-plan-inspection
 test-plan-reuse: $(BUILD_DIR)/native-tests/test-plan-reuse-invalidation $(BUILD_DIR)/native-tests/test-retention-accepted
 
-$(BUILD_DIR)/native-tests/test-discovery: tests/native/discovery_progress.c
-$(BUILD_DIR)/native-tests/test-enrollment: tests/native/enrollment_batch.c tests/native/enrollment_packages.c
+$(BUILD_DIR)/native-tests/test-discovery: tests/native/discovery_progress.c tests/native/discovery_live.c
+$(BUILD_DIR)/native-tests/test-enrollment: tests/native/enrollment_batch.c tests/native/enrollment_packages.c tests/native/enrollment_revocation.c
 NATIVE_FIXTURES = $(addprefix $(BUILD_DIR)/native-tests/,discovery-ssh-fixture enrollment-ssh-fixture enrollment-loopback-fixture)
 $(BUILD_DIR)/native-tests/discovery-ssh-fixture: tests/native/discovery_ssh_fixture.c
 $(BUILD_DIR)/native-tests/enrollment-ssh-fixture: tests/native/enrollment_ssh_fixture.c

@@ -7,6 +7,10 @@ explicit configuration/history transport, and a native fleet view.
 `fleet discover` and `fleet qualify` inspect explicitly
 selected OpenSSH aliases/static records and qualify them with a strict read-only
 handshake. Candidate evidence stays separate from registered aliases and trust.
+Opt-in [live sources](#discover-qualify-and-enroll-hosts) read the operator's own
+SSH configuration, an Ansible hosts file or an mDNS client and diff each
+acquisition against the previous private snapshot; [revocation](#revoke-decisions)
+blocks a candidate, source, alias, key, package or project decision for good.
 
 The `remote task interface` prepares exact source/input packages,
 persists receiver-owned acceptance and execution, and supports disconnected
@@ -204,6 +208,119 @@ installers and provider sign-in take over the terminal and return to Hydra when
 they finish (on failure after Enter, so the output can be read); a failure is
 explained from the error the CLI recorded for that step. An unknown outcome offers Enter
 to reconcile, which never replays the earlier attempt.
+
+## Discover, qualify and enroll hosts
+
+```sh
+hydra fleet discover --ssh build --ssh mac --json
+hydra fleet discover --inventory /path/hosts.json --select build --json
+hydra fleet qualify --ssh build --require list --timeout 5 > qualification.json
+hydra fleet enroll review --input qualification.json --candidate cand_6275696c64 \
+  --project /srv/project --output enrollment.json
+hydra fleet enroll apply --input enrollment.json --confirm INTENT_SHA256
+```
+
+`discover` resolves explicitly selected targets with `ssh -G` and makes no
+connection; `qualify` adds one strict read-only protocol-1 handshake per selected
+candidate and records the authenticated peer fingerprint. `enroll review` binds
+selected compatible candidates, their source, principal, fingerprint, policy
+digest, project and optional pinned package into a digest-confirmed intent;
+`enroll apply` performs the reviewed steps with durable per-host progress. The
+candidate/result, inventory, intent and progress schemas are in
+[CONTRACTS.md](CONTRACTS.md#fleet-coordination-since-v210). Discovery never
+accepts a host key, creates an alias, installs Hydra or submits work.
+
+**Live sources.** `--source KIND[:LOCATOR]` acquires one explicitly selected
+inventory through its normal client or the operator's own files and feeds the
+same candidate importer. At most four distinct sources per invocation, each run
+once (Hydra never polls), each bounded to `--timeout` seconds of client time,
+1 MiB of file or client output and 100 records; beyond those the report is
+`partial`. Every record is `{name, target, labels}`; credentials never enter a
+record. The report carries the scope the records belong to (`account:USER@HOST`
+for local files, `network:DOMAIN via HOST` for mDNS) and the client used.
+
+| Source | Reads | Scope and limits |
+| --- | --- | --- |
+| `ssh-config[:FILE]` | Literal `Host` names from `~/.ssh/config` (or FILE) and its literal `Include` files; each becomes a candidate that the normal `ssh -G` resolution then explains. Patterns (`*`, `?`, `!`), `Match` blocks and glob includes are reported as skipped, never expanded. | The local account; at most 16 files, two include levels. |
+| `ansible-inventory:FILE` | Host lines of plain `[group]` sections in an INI hosts file; groups become labels, `ansible_host`/`ansible_user` form the target and `ansible_port` a `port:N` label. `[group:vars]` and `[group:children]` are ignored, ranges and non-SSH connections skipped, and any variable that looks like a secret (`pass`, `token`, `secret`, `private_key`, `become`, `vault`, `credential`) is counted in `credentials_omitted` and dropped. | The local account. |
+| `dns-sd[:DOMAIN]` | `_ssh._tcp` services from one terminating `avahi-browse -rtpk` run (port 22 only; names are unescaped). Without `avahi-browse` the source is `unavailable` with reason `client_missing` (`client_unsupported` when only macOS `dns-sd` is present): Hydra never browses the network itself. | `network:DOMAIN` (default `local`). Live multicast acquisition is unqualified; see the roadmap. |
+
+Each acquisition is compared with the previous private snapshot of the same
+source (`$HYDRA_HOME/fleet/discovery/sources/`, owner-only) before any
+selection: the report shows the cache age and the added, removed, changed and
+conflicting records (`--diff` lists them; counts are always present). The cache
+is replaced only by a complete or partial acquisition. When the file is gone,
+the client is missing or times out, or the source was revoked, the report is
+`unavailable`/`revoked`, the command fails with `source_unavailable`/`revoked`,
+the stale cache is shown with its age and record count, and nothing from it is
+imported. Only records of a complete current acquisition become candidates by
+default; `--select NAME` imports named records, also from a partial acquisition,
+and `qualify` over a source always requires `--select`. Records that conflict
+(two names for one target, one name for two targets, or a target that another
+name held in the previous snapshot) or whose identity is revoked are reported
+with provenance and never imported; selecting one is an error. A larger or
+changed acquisition changes the qualification progress binding, so a resumed
+batch cannot silently reuse results for a different membership.
+
+`make test-discovery` covers these adapters with fixture files and a fixture
+`avahi-browse` only. No live mDNS network, Ansible installation or provider was
+observed; that qualification needs a separately authorized operator run.
+
+## Revoke decisions
+
+```sh
+hydra fleet revoke transport build --reason "host key rotated 2026-10-17"
+hydra fleet revoke candidate cand_6275696c64 --reason "retired"
+hydra fleet revoke source ansible-inventory:/etc/ansible/hosts --reason "moved"
+hydra fleet revoke package PACKAGE_SHA256 --reason "superseded build"
+hydra fleet revoke project /srv/project --reason "decommissioned"
+hydra fleet revoke list [--scope transport] --json
+```
+
+A revocation is an explicit local decision about one identity: a candidate (by
+`cand_` ID or exact target), a source (`KIND:LOCATOR`), a transport binding (an
+alias name together with its recorded accepted host key), a package digest or a
+project path. The private record (`$HYDRA_HOME/fleet/revocations/SCOPE/`,
+0600 in 0700 directories) keeps who, when, the reason and the superseded
+binding: for an alias, the alias record with its target, principal, project and
+accepted key; for a source, its cached snapshot summary; for a project, the
+aliases mapped to it. The live alias record stays on disk for inspection and is
+never edited, and a second revocation of the same identity is refused with
+`already_revoked`. Revocation is final for that identity; there is no
+un-revoke, so a rotated host is enrolled again under a fresh review and a new
+alias.
+
+Revoked bindings block new operations and invalidate pending intents: a revoked
+alias cannot be loaded by any `fleet` operation, `fleet task` submission, agent
+sign-in or workflow binding (typed `revoked`, with the record's detail), shows
+as a `revoked` row in `fleet list`, cannot be re-added, re-set-up or published by
+enrollment under the same name, and no endpoint change or source refresh reaches
+the host through it. A revoked candidate shows as `revoked` in `discover`,
+`qualify` and resumed progress (its earlier evidence is retained under the
+status), is reported but not imported from any inventory or live source, and is
+refused by `enroll review`. A revoked source is not acquired. A revoked package
+digest is refused by `fleet bootstrap` and `enroll review`; a revoked project by
+`enroll review` and every `--project` operation. `enroll apply` marks a reviewed
+host whose candidate, alias, accepted key, package or project was revoked after
+review as `revoked` before any connection; rows already `enrolled` stay as they
+are. A host that still presents a revoked alias's accepted key is refused by
+review even under a new alias.
+
+Revocation alone cancels no task, uninstalls no package, deletes no remote state
+and rewrites no `known_hosts`; those actions keep their own explicit commands.
+
+**Changed host keys.** When strict OpenSSH refuses a changed key during
+`qualify`, the candidate's `host_key_changed` result adds `error.host_key`: the
+presented fingerprint, key type and offending `known_hosts` file and line as
+OpenSSH reported them, the fingerprints Hydra has recorded for that target
+(alias `accepted_host_key`, revoked transports' superseded keys, earlier
+qualification results) each with its source, and the acceptance path. `enroll
+apply` reports `host_key` with the reviewed and the presented fingerprint and
+where each was observed; `remote trust-key` adds the alias's recorded
+fingerprint next to the presented one. Hydra never accepts the new key or edits
+`known_hosts`: verify it out of band, remove the old entry with your own
+`ssh-keygen -R`, re-qualify, and review enrollment afresh. The old binding can
+then be revoked explicitly so nothing silently re-points to the rotated host.
 
 ## Register and bootstrap a host
 
