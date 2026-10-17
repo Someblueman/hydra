@@ -141,7 +141,7 @@ _hydra() {
                     ;;
                 workflow)
                     if [[ ${words[2]} == plan ]]; then
-                        _arguments '2:planning action:(schema propose proposal validate compile show obligations checks explain compare evaluate observed decision run result)' '--accept[Accept exact compiled digest]:sha256:' '--json[Output resolved JSON]' '--branch[Head that owns the proposal]:branch:' '--local-policy[Write the local policy preset]' '--return[Return the proposal with requested changes]:feedback:' '*--asset[Publish a proposal asset NAME=FILE]:asset:' '--assets-dir[Directory holding the plan assets]:directory:_files -/' '*:file:_files'
+                        _arguments '2:planning action:(schema propose proposal validate compile show obligations checks explain compare evaluate observed decision expand run result)' '--accept[Accept exact compiled digest]:sha256:' '--run[Base run to expand]:run ID:' '--proposal[Expansion proposal]:file:_files' '--json[Output resolved JSON]' '--branch[Head that owns the proposal]:branch:' '--local-policy[Write the local policy preset]' '--return[Return the proposal with requested changes]:feedback:' '*--asset[Publish a proposal asset NAME=FILE]:asset:' '--assets-dir[Directory holding the plan assets]:directory:_files -/' '*:file:_files'
                         return
                     fi
                     _arguments '1:subcommand:(list show validate dry-run run status cancel resume replay requests decide statistics-data statistics-json statistics-compare plan)' '--json[Output versioned status JSON]' '2:workflow or run:'

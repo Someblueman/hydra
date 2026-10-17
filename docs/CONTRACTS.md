@@ -271,6 +271,43 @@ and candidate: `interfaces.declared` and `interfaces.adapted` with `accepted`,
 `status` and `limits`. Unobserved quantities are `null` or `unknown` strings,
 never estimates.
 
+A policy may additively declare `expansion` bounds (`max_nodes` 1-256,
+`max_work_seconds` 1-864000, `max_artifact_bytes` 1-33554432, `max_rounds` 1-16,
+`max_repairs_per_claim` 0-10, all required when present); earlier releases
+reject the member as `invalid_policy`, and the bounds are part of the compiled
+artifact and its digest. An expansion proposal (`hydra-plan-expansion-1`) is a
+closed object: `schema_version` 1, `expansion`, `base_sha256`, `claims` (rows
+`{id, kind: new}` or `{id, kind: retry, of}`, one per requirement),
+`dependencies` (at most 16 rows `{input, deliverable}`), `joins` (1 to 64 step
+IDs), `steps`, `deliverables`, `requirements`, `checks`, optional `obligations`,
+`data.steps` and optional `envelope`. The expansion record
+(`round-N/expansion.json`, schema 1, `record` `hydra-plan-expansion-record-1`)
+is canonical JSON with `round`, `recorded_at`, `compiler`, `base_run_id`,
+`base_sha256`, `previous_sha256` (the version it extends),
+`previous_record_sha256` (the previous record file, `null` for round 1),
+`policy_sha256`, `compiled_sha256`, `proposal_sha256` (the proposal file),
+`claims` (with `repair_attempt` on retries), `dependencies` (rows with `input`,
+`deliverable`, `version`, `sha256`, `bytes`, `effects`), `joins` (step to
+frozen member list), `bounds` (`used`/`max` per bound and per retried claim)
+and `limits`. `expand --json` returns `base_run_id`, `base_sha256`,
+`latest_sha256`, `rounds`, `integrity` (`intact` or `invalid`), `diagnostics`
+(chain rows with `path` `round-N` and codes `invalid_run`, `unsupported_base`,
+`expansion_not_authorized`, `expansion_changed`, `run_mismatch`), `policy`,
+`bounds` and `versions` (per version `round`, `compiled_sha256`, `run_id`,
+`run_state` among `not_executed`, `absent`, `unknown`, `succeeded`, `failed`,
+`cancelled`, `claims` with `status`, `dependencies` with `status`, `joins`,
+`compiled` and `recorded_at` for rounds). An admission returns `round`,
+`compiled_sha256`, `proposal_sha256`, `compiled`, `record`, `resolved` and
+`acceptance`. Refusals are typed `invalid_chain`, `invalid_expansion`,
+`stale_base`, `duplicate_id`, `claim_restated`, `claim_changed`,
+`duplicate_work`, `unknown_claim`, `retry_of_retry`, `unknown_outcome`,
+`unknown_dependency`, `dependency_failed`, `unsupported_artifact`,
+`authority_enlarged`, `invalid_joins`, `expansion_bound_exceeded` (with
+`data.bound`, `used`, `max`), `invalid_plan` (compiler diagnostics) and
+`source_changed`; execution of a round adds `acceptance_mismatch`,
+`dependency_changed` and `round_executed`. A round's run records
+`plan-expansion.json` (the admitting record) and the round records `run-id`.
+
 Workflow definition schema v1 is the stable finite-DAG contract. Definitions use the
 documented restricted YAML subset, every step declares idempotency, argv is the
 default execution form, and shell strings require both `allow_shell: true` and a
@@ -815,6 +852,20 @@ one private `planning/decisions/<id>/` directory per decision (see the decision
 record schema above); `decision list` and `decision show` are read-only and
 create no planning state. A decision is a recorded reason, not a validation,
 approval or execution receipt.
+
+`hydra workflow plan expand <head> --run <run-id> --proposal <file>` admits,
+under the head lock, one private round directory
+`planning/expansions/<run-id>/round-N/` holding `proposal.json`,
+`compiled.json` and, written last, `expansion.json`; directories are created
+`0700` and files `0600` independent of the caller's umask. The round is built in
+a scratch `.round.XXXXXX` directory and renamed into place only after every
+check passed, so an interrupted admission leaves only scratch that no later
+admission counts and nothing is replayed. Without `--proposal` the command is
+read-only and creates no planning state. Executing a round through `hydra
+workflow plan run round-N/compiled.json --accept <sha256>` records the run ID in
+`round-N/run-id` (created exclusively, so a round never gets two runs; a link to
+a run that was never published is cleared) and the record in the run's
+`plan-expansion.json`. Admission is neither approval nor execution.
 
 The private launch owner `hydra workflow plan --workspace-owner <sha256>
 [<head-id> <instance-id>]` reads the compiled snapshot on stdin. The optional pair
