@@ -345,6 +345,13 @@ The subsequent six findings are covered by U13 (statistics), U14 (output), U15
       a report with reproducible actions, captures and independent outcome checks;
       known UX defects fail their desired-behavior checks. Human visual review and
       live qualification remain explicit, not replaced by fixture passes or an AI score.
+      Delivered for 3.0.0: `make test-usability` runs the scripted journeys, six
+      goal-driven screen-only trials driven by a deterministic rule-based evaluator
+      that sees only the goal and the screen (steps, dead ends, help reads and fit
+      scored per goal, outcomes verified against Git, tmux and state) and the U19
+      comprehension trials, at 80x24 and 140x40, with `--trial NAME` selection.
+      The report names the live-provider, visual, human first-use and
+      remote-onboarding gates as unexecuted; those remain open.
 
 - [ ] **U19 — Explain features where users encounter them.** Users cannot be
       expected to know what a workflow, head, plan, gate, coordination view or Fleet
@@ -367,6 +374,13 @@ The subsequent six findings are covered by U13 (statistics), U14 (output), U15
       without leaving the control centre. Extend U18 with goal-driven comprehension
       trials that do not give the evaluator feature names or shortcuts; verify that
       its chosen action fits the goal, alongside human first-use review.
+      Delivered for 3.0.0: comprehension trials assert, at each entry point or
+      empty state and at both sizes, purpose, when it helps, a concrete example,
+      the next action, plain language, consequences before approval, interruption
+      and removal, and command names cross-checked against `hydra help`; the copy
+      was fixed where they failed (Work, Workflows, run panel, Attention, plan
+      pane, Coordination, Hosts, Statistics, Details, attached status, shell TUI).
+      Human first-use review remains open.
 
 Delivery boundary: the items above remain outstanding requirements. Source changes
 have shipped as follows; each item stays open until its installed-build
@@ -377,14 +391,15 @@ part of that work.
 
 | Item | Shipped source changes |
 | --- | --- |
-| U1, U2, U4, U6, U7, U8, U9, U13, U19 | [2.6.0](../CHANGELOG.md#260---2026-09-14) |
+| U1, U2, U4, U6, U7, U8, U9, U13 | [2.6.0](../CHANGELOG.md#260---2026-09-14) |
+| U19 | explanations and empty states in 2.6.0; comprehension trials and copy fixes at every entry point in 3.0.0 (human first-use review open) |
 | U3 | CLI half in 2.6.0; in-app conversation launch and interactive spawn/resume opening inside Hydra in 2.7.0 |
 | U12 | in-app removal in 2.6.0; untracked-file protection in 2.7.0 |
 | U14 | DEC special graphics and a labelled read-only Details excerpt in 2.7.0; read-only transcripts in 2.8.0 (accepted) |
 | U15 | view consolidation in 2.6.0 |
 | U16 | nested tmux attachment with deterministic input/resize/return checks in 2.7.0; leave/close keys, disconnect release and attach cycles in 2.8.0 (accepted locally) |
 | U17 | head-associated proposals, guided local policy, invalidation and exact-digest approval in 2.7.0 |
-| U18 | initial deterministic installed-journey runner in 2.7.0 |
+| U18 | initial deterministic installed-journey runner in 2.7.0; goal-driven screen-only trials, discoverability scores and comprehension trials in 3.0.0 (live and human gates open) |
 | U5 | accepted on 27 September 2026; its fixes ship in 2.8.0 |
 | U10 | guided setup CLI, control-centre flow, static release helpers in 2.9.0 |
 | U11 | none yet |

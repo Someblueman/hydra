@@ -441,7 +441,7 @@ void render_empty_work(struct app *app) {
     linef(app, "");
     if (app->search[0]) { paragraph(app, "Esc clears the search.", TV_BASE); return; }
     if (app->fleet) { paragraph(app, "Hosts shows connectivity for each machine; Recovery lists host problems. In Hosts, A adds a machine.", TV_BASE); return; }
-    paragraph(app, "A head is one piece of work: its own branch and worktree, a terminal, and an agent working inside it. You can follow several heads here at once.", TV_BASE);
+    paragraph(app, "A head is one piece of work: its own branch and worktree, a terminal, and an agent working inside it. You can follow several heads here at once: for example, one head adds tests while another fixes a bug, each on its own branch.", TV_BASE);
     linef(app, "");
     paragraph(app, "Press n to start one: Hydra creates the branch and worktree, opens the terminal and starts your agent in it. Press : for other actions.", TV_BASE);
     linef(app, "");
@@ -553,7 +553,7 @@ static void render_coordination(struct app *app) {
         return;
     }
     linef(app, "");
-    paragraph(app, "This head is a single agent session. Coordination between heads uses claims (files a head intends to change), scopes (areas it stays within), a shared work queue and allocated resources. A workflow adds steps, dependencies and handoffs on top.", TV_BASE);
+    paragraph(app, "This head is a single agent session. Coordination between heads matters when several heads work in the same project: claims (files a head intends to change), scopes (areas it stays within), a shared work queue and allocated resources let Hydra flag overlap early. For example, two heads that both claim lib/ are reported before they conflict. A workflow adds steps, dependencies and handoffs on top.", TV_BASE);
     section(app, "THIS HEAD");
     if (!head->head_id[0]) { linef(app, "Counters unknown: there is no readable head record for this branch."); }
     else {
@@ -566,7 +566,7 @@ static void render_coordination(struct app *app) {
     section(app, "WORKFLOW");
     if (app->workflows && app->workflows->run_count)
         linef(app, "%zu recorded workflow run(s) in this project; Workflows shows steps and dependencies.", app->workflows->run_count);
-    else linef(app, "No workflow run is linked to this head. A single conversation does not need one.");
+    else paragraph(app, "No workflow run is linked to this head. A single conversation does not need one.", TV_BASE);
 }
 
 static void render_recovery_detail(struct app *app) {

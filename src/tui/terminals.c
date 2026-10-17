@@ -238,7 +238,7 @@ static bool terminal_start(struct app *app, const struct head *h, size_t availab
     if (!attachment_argv(app, h, t, argv, socket)) goto fail;
     if (!tv_pty_spawn(&t->client,app->hydra,argv,&app->saved,80,24)) goto fail;
     app->terminals->selected=available;
-    copy_text(app->notice,sizeof(app->notice),"Attached; keys go to the agent");
+    copy_text(app->notice,sizeof(app->notice),"Attached; keys go to the agent; leaving or closing keeps it running");
     return true;
 fail:
     /* screen can be absent when the first allocation failed. */

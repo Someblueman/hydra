@@ -10,6 +10,18 @@ notes.
 ## Starting out
 
 Open `hydra` in your repository and press `n`.
+Each view explains its concept where you meet it, in its empty state: Work says
+what a head is (one piece of work with its own branch, worktree, terminal and
+agent, with an example), Workflows what a workflow is and when a single
+conversation is enough, the plan pane that a proposal runs nothing until it is
+validated and the exact revision approved, Overview's run panel how a run starts,
+Attention what needs a decision (an approval request, a failed check, a result to
+review, a stopped terminal), Hosts when a remote machine helps, and Details that
+`Session` is the live terminal while `Reported` is the outcome the agent declares.
+While typing to an agent the status row says that leaving or closing the view
+keeps the agent running; removal and execution approval state their consequences
+before `y`. The shell TUI (`hydra tui --basic`) carries the same explanation of a
+head in its empty list.
 Enter a task name, choose an available agent profile (`none` opens a shell), then
 enter an objective or leave it blank to start a conversation. A task name that is
 not already a valid branch, such as `add kill dry run`, starts on a derived branch
