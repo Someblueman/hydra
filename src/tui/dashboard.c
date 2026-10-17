@@ -269,9 +269,9 @@ static void run_agent_line(struct app *app, struct tv_canvas *c, struct tv_rect 
 
 static void run_panel_empty(struct tv_canvas *c, struct tv_rect r) {
     dashboard_text(c, r.x + 2, r.y + 2, r.width - 4, TV_STRONG, "No workflow run yet.");
-    dashboard_text(c, r.x + 2, r.y + 3, r.width - 4, TV_BASE, "A run appears here when you execute an approved plan (E in the plan review)");
-    dashboard_text(c, r.x + 2, r.y + 4, r.width - 4, TV_BASE, "or start one with hydra workflow run. It shows each step, the head it ran on,");
-    dashboard_text(c, r.x + 2, r.y + 5, r.width - 4, TV_BASE, "and what needs you next.");
+    statistics_wrap(c, r.x + 2, r.y + 3, r.width - 4, r.height - 4, TV_BASE,
+                    "A run appears here when you execute an approved plan (E in the plan review) or start one with "
+                    "hydra workflow run. It shows each step, the head it ran on, and what needs you next.");
 }
 
 static int run_panel_steps(struct app *app, struct tv_canvas *c, struct tv_rect r, size_t run, int bottom) {

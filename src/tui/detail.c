@@ -97,6 +97,8 @@ static void detail_identity(struct app *app, const struct head *head) {
     if (owner != SIZE_MAX) detail_run_pair(app, owner, record);
     detail_group_label(app, head, group, sizeof(group));
     detail_reported(app, head, group);
+    if (!head_headless(head))
+        paragraph(app, "Session is the live terminal; Reported is the outcome the agent declares when it finishes, for example done or blocked.", TV_MUTED);
     if (!head_headless(head) && !strcmp(display_status(head), "STALE"))
         paragraph(app, "The terminal is gone but the last observation said the agent was still working. Files in the worktree are kept; a restarts the terminal in the same worktree. Check the files before removing the head.", TV_WARNING);
 }

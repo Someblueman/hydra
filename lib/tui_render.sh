@@ -153,8 +153,11 @@ tui_render() {
             printf "\n  Press Esc to clear search\n"
         else
             printf "\n%s  No active Hydra sessions%s\n" "$TUI_YELLOW" "$TUI_RESET"
-            printf "\n  Press 'n' to spawn a new session\n"
-            printf "  Press 'r' to regenerate sessions from existing worktrees\n"
+            printf "\n  A head is one piece of work: its own branch and worktree, a terminal,\n"
+            printf "  and an agent working inside it. You can follow several at once:\n"
+            printf "  for example, one head adds tests while another fixes a bug.\n"
+            printf "\n  Press 'n' to start one: Hydra creates the branch and worktree and\n"
+            printf "  opens the terminal. Press 'r' to regenerate sessions from existing worktrees\n"
         fi
         printf "  Press 'q' to quit\n"
         return 0

@@ -252,10 +252,10 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
     else if (!v->model || (!v->model->run_count && v->model->warnings)) {
         dashboard_text(&c,2,3,width-4,TV_STRONG,"No workflow statistics yet");
         if (height>10) {
-            dashboard_text(&c,2,5,width-4,TV_BASE,"Statistics cover workflows that Hydra ran and recorded: their steps, timing,");
-            dashboard_text(&c,2,6,width-4,TV_BASE,"outcomes and retries. A standalone agent conversation is not a recorded run,");
-            dashboard_text(&c,2,7,width-4,TV_BASE,"so it does not appear here until it is part of a workflow.");
-            dashboard_text(&c,2,9,width-4,TV_MUTED,"r retries the sample   Workflows explains what a workflow is");
+            int used=statistics_wrap(&c,2,5,width-4,height-8,TV_BASE,"Statistics cover workflows that Hydra ran and recorded: "
+                "their steps, timing, outcomes and retries, for example how long each step took and which steps were retried. "
+                "A standalone agent conversation is not a recorded run, so it does not appear here until it is part of a workflow.");
+            dashboard_text(&c,2,6+used,width-4,TV_MUTED,"r retries the sample   Workflows explains what a workflow is");
         }
     } else if (v->metric_page) {
         statistics_metrics_render(app,&c,(struct tv_rect){0,2,width,height-4});
