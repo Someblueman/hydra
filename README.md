@@ -168,8 +168,11 @@ hydra fleet tui
 
 The native fleet view shows heads by host and supports attach and confirmed
 interrupts. Agent executables and repositories live on the host that runs the work.
-See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements, remote
-workflows, and recovery behavior.
+New remote tasks can be placed automatically across eligible hosts
+(`hydra fleet task submit --placement auto`), with every decision recorded and
+replayable (`hydra fleet placement explain|replay`); explicit host pinning is the
+default. See [fleet setup](docs/FLEET.md) for pinned bootstrap, host requirements,
+remote workflows, placement, and recovery behavior.
 
 ## Plan an objective
 
