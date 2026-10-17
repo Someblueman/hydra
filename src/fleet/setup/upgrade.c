@@ -13,21 +13,35 @@
 /* ---- Runtime upgrade ---- */
 /* Numeric comparison of dotted versions: <0, 0 or >0; 0 also when either
  * part is not numeric (the caller then reports "different"). */
+static bool version_part(const char **text, unsigned long *value) {
+    char *end;
+    *value = strtoul(*text, &end, 10);
+    if (end == *text) return false;
+    *text = *end == '.' ? end + 1 : end;
+    return true;
+}
+static bool part_follows(const char *text) { return !*text || (*text >= '0' && *text <= '9'); }
+/* Compares the next part of each version; false once the order is decided
+ * or a part is not numeric (order then stays 0). */
+static bool next_parts(const char **left, const char **right, int *order) {
+    unsigned long a, b;
+    *order = 0;
+    if (!version_part(left, &a) || !version_part(right, &b)) return false;
+    if (a != b) { *order = a < b ? -1 : 1; return false; }
+    return part_follows(*left) && part_follows(*right);
+}
 static int version_compare(const char *left, const char *right) {
-    while (*left || *right) {
-        char *left_end, *right_end;
-        unsigned long a = strtoul(left, &left_end, 10), b = strtoul(right, &right_end, 10);
-        if (left_end == left || right_end == right) return 0;
-        if (a != b) return a < b ? -1 : 1;
-        left = *left_end == '.' ? left_end + 1 : left_end;
-        right = *right_end == '.' ? right_end + 1 : right_end;
-        if ((*left && (*left < '0' || *left > '9')) || (*right && (*right < '0' || *right > '9'))) return 0;
-    }
-    return 0;
+    int order = 0;
+    while ((*left || *right) && next_parts(&left, &right, &order)) continue;
+    return order;
 }
 static const char *relation(const char *from) {
     int order = version_compare(from, F_VERSION);
     return order < 0 ? "older" : order > 0 ? "newer" : "different";
+}
+static void upgrade_summary(const char *how, const char *from, char *summary, size_t size) {
+    if (!strcmp(how, "older")) snprintf(summary, size, "older Hydra (%s) on this host; upgrade to " F_VERSION, from);
+    else snprintf(summary, size, "%s Hydra (%s) on this host; install " F_VERSION " beside it", !strcmp(how, "newer") ? "newer" : "another", from);
 }
 json_object *setup_runtime_upgrade(struct setup_ctx *ctx) {
     json_object *detail = setup_state_detail(ctx, "provision"), *flight = f_field(detail, "upgrade"), *view;
@@ -48,9 +62,7 @@ json_object *setup_runtime_upgrade(struct setup_ctx *ctx) {
     f_string_add(view, "previous_hydra", hydra);
     if (prefix) f_string_add(view, "previous_prefix", prefix);
     else json_object_object_add(view, "previous_prefix", NULL);
-    if (!strcmp(how, "older")) snprintf(summary, sizeof(summary), "older Hydra (%s) on this host; upgrade to " F_VERSION, from);
-    else snprintf(summary, sizeof(summary), "%s Hydra (%s) on this host; install " F_VERSION " beside it",
-                  !strcmp(how, "newer") ? "newer" : "another", from);
+    upgrade_summary(how, from, summary, sizeof(summary));
     f_string_add(view, "summary", summary);
     return view;
 }
