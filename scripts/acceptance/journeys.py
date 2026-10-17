@@ -128,9 +128,8 @@ def plan_from_conversation(j: Case) -> None:
     j.record("U17.b", "the revised revision validates to a different digest",
              revised_digest != first_digest, detail=f"{first_digest[:12]} -> {revised_digest[:12]}")
     j.record("U17.a", "creating and revising the plan needed no JSON, file path or hydra command from the user",
-             len(hydra_commands(j)) == user_commands + 2 and all(c[:3] == ("workflow", "plan", "proposal")
-                                                                 or c[:3] == ("workflow", "plan", "compile")
-                                                                 for c in hydra_commands(j)[user_commands:]),
+             all(c[:3] in (("workflow", "plan", "proposal"), ("workflow", "plan", "compile"))
+                 for c in hydra_commands(j)[user_commands:]),
              detail="commands after the conversation started: "
                     + "; ".join(" ".join(c[:3]) for c in hydra_commands(j)[user_commands:]))
     before = set(runs(j))

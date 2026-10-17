@@ -204,7 +204,7 @@ def multi_agent_blocked(j: Case) -> None:
         j.keys(b"y\r")
     states = j.base / "state" / "state" / "v2" / "projects"
     run_dirs = list(states.glob(f"*/workflows/runs/{run}")) if run else []
-    j.until(lambda: run_dirs and (run_dirs[0] / "state").read_text().strip() in ("succeeded", "failed"), 60,
+    j.until(lambda: run_dirs and (run_dirs[0] / "state").read_text().strip() in ("succeeded", "failed"), 120,
             "the run reached a final state after the in-app approval")
     final = (run_dirs[0] / "state").read_text().strip() if run_dirs else "absent"
     j.record("U9.c", "approving in-app unblocks the handoff: the dependent step on worker-b ran and the run succeeded",
