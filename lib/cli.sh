@@ -69,7 +69,7 @@ Commands:
                     Options: --project PATH, --instance ID, --jobs 1-16, --timeout 1-300
                     Onboarding: discover|qualify --ssh ALIAS | --inventory FILE --select NAME
                                 | --source ssh-config[:FILE]|ansible-inventory:FILE|dns-sd[:DOMAIN]
-                                  [--select NAME] [--diff]; enroll review|apply (see fleet help)
+                                  [--select NAME] [--diff]; enroll review|apply|status (see fleet help)
                     Revocation: revoke candidate|source|transport|package|project ID --reason TEXT
                                 revoke list [--scope SCOPE]; final, local, never edits known_hosts
   capabilities      Print machine-readable Hydra and agent capabilities

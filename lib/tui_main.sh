@@ -156,6 +156,12 @@ cmd_tui() {
             tui_native_emit_attention_data
             return $?
             ;;
+        --onboarding-home)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_onboarding_home
+            return $?
+            ;;
         --head-output)
             shift
             [ $# -eq 1 ] || return 2

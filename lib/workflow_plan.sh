@@ -64,6 +64,11 @@ cmd_workflow_plan() (
             shift
             workflow_plan_decision "$@"
             ;;
+        expand)
+            _load_lib workflow_plan_expansion
+            shift
+            workflow_plan_expansion "$@"
+            ;;
         tui-data)
             [ "$#" -eq 2 ] || exit 1
             workflow_plan_tool tui-data "$2"
@@ -91,6 +96,9 @@ cmd_workflow_plan() (
             trap 'exit 130' INT
             trap 'exit 143' TERM
             trap 'exit 129' HUP
+            # An admitted expansion round executes once, with its admitted digest.
+            _load_lib workflow_plan_expansion
+            workflow_plan_expansion_bind "$2" "$4" "$_workflow_plan_stage" || exit 1
             workflow_plan_tool admit "$2" "$_cwp_root" "$4" "$_workflow_plan_stage" > "$_workflow_plan_stage/admission.json" || {
                 cat "$_workflow_plan_stage/admission.json" >&2
                 exit 1
@@ -122,6 +130,7 @@ cmd_workflow_plan() (
                 '       hydra workflow plan decision record <head> --select <compiled.json> <reason> [--reject <compiled.json> <reason>]... [--estimates <estimates.json>] [--json]' \
                 '       hydra workflow plan decision list <head> [--json]' \
                 '       hydra workflow plan decision show <head> <decision-id> [--json]' \
+                '       hydra workflow plan expand <head> --run <run-id> [--proposal <expansion.json>] [--json]' \
                 '       hydra workflow plan run <compiled.json> --accept <sha256>' \
                 '       hydra workflow plan result <run-id>' \
                 '       hydra workflow plan check-definition <compiled.json> <check-id>' \
@@ -131,7 +140,9 @@ cmd_workflow_plan() (
                 'nothing needs to be committed to the source to plan.' \
                 'Execution uses the existing workflow status, cancel and resume commands.' \
                 'evaluate separates decomposition, fixed-graph scheduling and placement; observed turns' \
-                'a run'"'"'s recorded step durations into an estimates file; decisions replay their comparison.'
+                'a run'"'"'s recorded step durations into an estimates file; decisions replay their comparison.' \
+                'expand admits a bounded hydra-plan-expansion-1 proposal over a finished run as a new version;' \
+                'each round runs through plan run with its own exact digest and never enlarges the policy.'
             ;;
         *) cli_error 'workflow plan' invalid_arguments 'unknown planning command' 'run hydra workflow plan --help'; exit 1 ;;
     esac
@@ -151,6 +162,10 @@ workflow_plan_initialize() {
     workflow_plan_tool roles "$1/compiled.json" > "$1/plan-roles.tsv" || return 1
     _wpi_timeout="$(workflow_plan_tool timeout "$1/compiled.json")" || return 1
     workflow_atomic_scalar "$1/plan-deadline" "$(($(date +%s) + _wpi_timeout))" || return 1
+    if [ -n "${_workflow_plan_expansion:-}" ]; then
+        _load_lib workflow_plan_expansion
+        workflow_plan_expansion_link "$1" || return 1
+    fi
     workflow_plan_bindings_match "$1"
 }
 

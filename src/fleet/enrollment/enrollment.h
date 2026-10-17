@@ -10,6 +10,8 @@ struct enrollment_options {
 json_object *enrollment_cli(int argc, char **argv);
 json_object *enrollment_review(const struct enrollment_options *options);
 json_object *enrollment_apply(const struct enrollment_options *options);
+/* Read-only: the intent's hosts with their recorded apply progress. */
+json_object *enrollment_status(const struct enrollment_options *options);
 bool enrollment_path(const char *path);
 bool enrollment_digest(const char *value);
 int enrollment_hash(json_object *value, char hash[65]);

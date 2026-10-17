@@ -271,6 +271,43 @@ and candidate: `interfaces.declared` and `interfaces.adapted` with `accepted`,
 `status` and `limits`. Unobserved quantities are `null` or `unknown` strings,
 never estimates.
 
+A policy may additively declare `expansion` bounds (`max_nodes` 1-256,
+`max_work_seconds` 1-864000, `max_artifact_bytes` 1-33554432, `max_rounds` 1-16,
+`max_repairs_per_claim` 0-10, all required when present); earlier releases
+reject the member as `invalid_policy`, and the bounds are part of the compiled
+artifact and its digest. An expansion proposal (`hydra-plan-expansion-1`) is a
+closed object: `schema_version` 1, `expansion`, `base_sha256`, `claims` (rows
+`{id, kind: new}` or `{id, kind: retry, of}`, one per requirement),
+`dependencies` (at most 16 rows `{input, deliverable}`), `joins` (1 to 64 step
+IDs), `steps`, `deliverables`, `requirements`, `checks`, optional `obligations`,
+`data.steps` and optional `envelope`. The expansion record
+(`round-N/expansion.json`, schema 1, `record` `hydra-plan-expansion-record-1`)
+is canonical JSON with `round`, `recorded_at`, `compiler`, `base_run_id`,
+`base_sha256`, `previous_sha256` (the version it extends),
+`previous_record_sha256` (the previous record file, `null` for round 1),
+`policy_sha256`, `compiled_sha256`, `proposal_sha256` (the proposal file),
+`claims` (with `repair_attempt` on retries), `dependencies` (rows with `input`,
+`deliverable`, `version`, `sha256`, `bytes`, `effects`), `joins` (step to
+frozen member list), `bounds` (`used`/`max` per bound and per retried claim)
+and `limits`. `expand --json` returns `base_run_id`, `base_sha256`,
+`latest_sha256`, `rounds`, `integrity` (`intact` or `invalid`), `diagnostics`
+(chain rows with `path` `round-N` and codes `invalid_run`, `unsupported_base`,
+`expansion_not_authorized`, `expansion_changed`, `run_mismatch`), `policy`,
+`bounds` and `versions` (per version `round`, `compiled_sha256`, `run_id`,
+`run_state` among `not_executed`, `absent`, `unknown`, `succeeded`, `failed`,
+`cancelled`, `claims` with `status`, `dependencies` with `status`, `joins`,
+`compiled` and `recorded_at` for rounds). An admission returns `round`,
+`compiled_sha256`, `proposal_sha256`, `compiled`, `record`, `resolved` and
+`acceptance`. Refusals are typed `invalid_chain`, `invalid_expansion`,
+`stale_base`, `duplicate_id`, `claim_restated`, `claim_changed`,
+`duplicate_work`, `unknown_claim`, `retry_of_retry`, `unknown_outcome`,
+`unknown_dependency`, `dependency_failed`, `unsupported_artifact`,
+`authority_enlarged`, `invalid_joins`, `expansion_bound_exceeded` (with
+`data.bound`, `used`, `max`), `invalid_plan` (compiler diagnostics) and
+`source_changed`; execution of a round adds `acceptance_mismatch`,
+`dependency_changed` and `round_executed`. A round's run records
+`plan-expansion.json` (the admitting record) and the round records `run-id`.
+
 Workflow definition schema v1 is the stable finite-DAG contract. Definitions use the
 documented restricted YAML subset, every step declares idempotency, argv is the
 default execution form, and shell strings require both `allow_shell: true` and a
@@ -429,6 +466,27 @@ started and completed times), with `E` agent receipt summaries and `R` rows for
 heads a run's spawn steps created (worker or verifier, and retirement). Version-1
 workflow fixtures remain readable. `hydra tui --head-output <branch>` is a private,
 bounded, read-only text view of the step running (or last run) on a headless head.
+
+The onboarding view (`O` on Hosts, since 3.0) reads CLI envelopes only:
+`fleet-discovery` (candidate schema 1, with `sources[]`), `fleet-enrollment-review`,
+`fleet-enrollment-status` and `fleet-enrollment`, parsed within the CLI's own
+bounds (100 candidates and records, four sources, 100 intent hosts). `hydra tui
+--onboarding-home` (internal) creates `$HYDRA_HOME/fleet/onboarding` owner-only
+and prints its path; the view writes there only through `fleet qualify
+--progress DIR/qualification-N.json` and `fleet enroll review --output
+DIR/intent-N.json`. The only mutation it runs is exactly `hydra fleet enroll apply
+--input INTENT --confirm DIGEST --json` for the intent and digest displayed,
+after a typed confirmation of at least 12 leading digest characters. Headless,
+`hydra-tui --headless-fixture FILE --onboarding-fixture ENVELOPE
+[--onboarding-intent ENVELOPE] [--onboarding-screen
+list|detail|changes|intent|select|review]` renders recorded envelopes, and
+`--onboarding-dump` prints the model as `HYDRA_ONBOARDING<TAB>1`, then
+`C<TAB>candidate_id<TAB>target<TAB>status<TAB>typed<TAB>source<TAB>platform<TAB>alias<TAB>apply_status`
+per candidate (`-` without an intent row), `N<TAB>name<TAB>target<TAB>reason<TAB>conflicting|revoked<TAB>source`
+per reported record and `END<TAB>count`. Typed states are `new`, `qualified`,
+`failed`, `conflicting`, `revoked`, `reviewed`, `unknown` and `enrolled`; they
+are a display of the CLI's statuses, not new state. This dump is a test
+projection, not an automation API.
 
 Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. Both
 retain navigation, search, refresh, preview, switch, spawn, group assignment,
@@ -635,6 +693,22 @@ an enrollment apply row with that status adds `host_key {reviewed_fingerprint,
 reviewed_source, presented_fingerprint, observation, acceptance,
 presented_key_revoked?}`. Enrollment intent schema 2 and progress schema 1 are
 unchanged; a row may now have status `revoked` with `revocation`.
+`fleet enroll status --input INTENT` (since 3.0, additive, read-only: no
+connection, no apply lock, no write) returns `fleet-enrollment-status` with
+`data.{enrollment_status_schema 1, intent_sha256, intent, reviewed_at,
+progress_recorded, progress (path)|null, partial_failure|null, hosts[]}`. Each
+host keeps the intent's `alias, candidate_id, target, principal, project,
+fingerprint, required_capability, package_sha256, prefix, ssh_config` in intent
+order, adds the recorded progress row's `operation_id, status, phase, host_key,
+revocation` and `attempted`; a host never attempted is `{operation_id
+"DIGEST:ALIAS", status "not_started", phase "preflight", attempted false}`, and a
+host not `enrolled` whose binding has since been revoked reads `revoked` with
+`revocation`, as apply would mark it before any connection. A recorded
+`outcome_unknown` is reported as recorded, never resolved by reading. Failures:
+`invalid_input` (any option besides `--input`), `invalid_intent` (not a complete
+schema-2 intent whose digest verifies) and `state_unavailable` (progress
+unreadable or bound to another digest). `enroll` also accepts `--json`, as
+`discover` does; output is always the envelope.
 
 Revocation (`fleet revoke SCOPE ID --reason TEXT`, since 3.0) writes one private
 record `{schema_version 1, kind "fleet-revocation", scope candidate|source|
@@ -815,6 +889,20 @@ one private `planning/decisions/<id>/` directory per decision (see the decision
 record schema above); `decision list` and `decision show` are read-only and
 create no planning state. A decision is a recorded reason, not a validation,
 approval or execution receipt.
+
+`hydra workflow plan expand <head> --run <run-id> --proposal <file>` admits,
+under the head lock, one private round directory
+`planning/expansions/<run-id>/round-N/` holding `proposal.json`,
+`compiled.json` and, written last, `expansion.json`; directories are created
+`0700` and files `0600` independent of the caller's umask. The round is built in
+a scratch `.round.XXXXXX` directory and renamed into place only after every
+check passed, so an interrupted admission leaves only scratch that no later
+admission counts and nothing is replayed. Without `--proposal` the command is
+read-only and creates no planning state. Executing a round through `hydra
+workflow plan run round-N/compiled.json --accept <sha256>` records the run ID in
+`round-N/run-id` (created exclusively, so a round never gets two runs; a link to
+a run that was never published is cleared) and the record in the run's
+`plan-expansion.json`. Admission is neither approval nor execution.
 
 The private launch owner `hydra workflow plan --workspace-owner <sha256>
 [<head-id> <instance-id>]` reads the compiled snapshot on stdin. The optional pair

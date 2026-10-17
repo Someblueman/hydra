@@ -49,6 +49,10 @@ bool plan_text(json_object *value);
 bool plan_has(json_object *array, const char *text);
 int plan_index(json_object *steps, const char *id);
 int plan_validate(json_object *plan, json_object *policy, json_object *errors);
+/* Whether a <head>:<path> scope is covered by an envelope's write scopes, and
+ * whether its head is a branch created by one of the given spawn steps. */
+bool plan_scope_permitted(json_object *allowed, const char *scope);
+bool plan_scope_spawned(json_object *steps, const char *scope);
 int plan_relations(json_object *plan, json_object *errors);
 int plan_graph(json_object *plan, json_object *errors);
 int plan_evidence_graph(json_object *plan, bool reach[PLAN_STEPS][PLAN_STEPS], json_object *errors);

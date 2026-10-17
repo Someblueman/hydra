@@ -417,6 +417,16 @@ tui_native_emit_attention_data() {
     return "$_tnead_status"
 }
 
+# Onboarding operator view (H5): the private directory where the control
+# centre asks the CLI to record qualification exports (`fleet qualify
+# --progress`) and reviewed intents (`fleet enroll review --output`). Created
+# owner-only like other fleet state; the native TUI never creates it itself.
+tui_native_onboarding_home() {
+    _tnoh_dir="$HYDRA_HOME/fleet/onboarding"
+    hydra_private_mkdir "$_tnoh_dir" || return 1
+    printf '%s\n' "$_tnoh_dir"
+}
+
 tui_native_exec() {
     _tne_binary="$(tui_native_find_binary)" || {
         echo "Error: native TUI is unavailable" >&2

@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `hydra workflow plan expand <head> --run <run-id> --proposal <file> [--json]`
+  admits a bounded expansion of a finished schema 1 plan run (roadmap 9F). The
+  closed `hydra-plan-expansion-1` proposal names new nodes, dependencies on
+  sealed deliverables of earlier versions, new checks and the joins they feed;
+  it is lowered into an ordinary static plan whose bundle inputs are the exact
+  sealed bytes, compiled by the one compiler under the base run's own policy
+  (obligation, handoff, source, tool and scope checks unchanged) and recorded
+  as version N+1 under the head's private `planning/expansions/<run-id>/round-N/`
+  with its own digest. Each round runs once through `hydra workflow plan run
+  <round>/compiled.json --accept <sha256>`; a changed round, a changed sealed
+  dependency or a second execution is refused. The policy's new `expansion`
+  member bounds total nodes, work seconds, artifact bytes, rounds and repairs
+  per claim over the whole chain; exceeding any is one typed
+  `expansion_bound_exceeded` refusal, never a partial admission. The envelope
+  may only shrink (`authority_enlarged`). A retry restates an earlier claim
+  exactly and consumes its repair budget; restating a claim as new, changing a
+  claim while calling it a retry, retrying verified work, retrying or depending
+  on an outcome without a recorded terminal verdict, depending on failed or
+  untransportable bytes and skipped branches are all refused or reported rather
+  than completed. `expand <head> --run <run-id> [--json]` prints the chain with
+  recomputed claim, dependency, run and integrity states. Help and bash, zsh and
+  fish completions include the command; `make test-plan-expansion` runs the
+  native and public-CLI cases.
 - `make visual-review` installs this checkout into a private prefix, drives the
   installed native TUI over a pseudo-terminal through the planning, running,
   finished and failed, waiting-for-input, details, recovery, workflows,
@@ -70,6 +93,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   40x10), the `L` location filter (all, local, remote, each recorded host) and a
   scope note that says which remote receipts measured CPU and memory; local steps
   are a cohort of their own and are never measured as zero.
+- The control centre's Hosts tab opens an onboarding operator view with `O`:
+  discovered and qualified candidates with filters by state (new, qualified,
+  failed, conflicting, revoked, reviewed, unknown, enrolled), source, platform,
+  label and text; a candidate detail with provenance, observation age,
+  qualification result, presented and recorded fingerprints on a key change and
+  revocation; the source changes of `discover --diff`; and the reviewed intent
+  with per-host apply status, phase and operation ID. Every action is a
+  `hydra fleet` child: `Q` runs `qualify --progress` and `r` runs `enroll review`
+  into the private `$HYDRA_HOME/fleet/onboarding/`, and `a` shows the intent
+  digest, project, package digest, prefix and the exact `fleet enroll apply
+  --input INTENT --confirm DIGEST` command, which runs once only after the
+  operator types at least 12 leading digest characters. Revoked, failed and
+  conflicting rows are inspect-only; nothing is retried automatically, an
+  interrupted apply is followed by a read-only status read, and the view never
+  bootstraps a host or writes state. Qualified with recorded fixtures only
+  (`tests/test_onboarding_view.sh`, `test-tui-onboarding`, `pty-onboarding`);
+  no live multi-host onboarding was observed.
+- `hydra fleet enroll status --input INTENT [--json]` reads an intent's reviewed
+  hosts with the progress `enroll apply` recorded for its digest
+  (`fleet-enrollment-status`, `enrollment_status_schema` 1): never-attempted hosts
+  are `not_started`, recorded rows keep their status (including
+  `outcome_unknown`) and phase, and bindings revoked since review read `revoked`.
+  It connects nowhere and writes nothing. `fleet enroll` now accepts `--json`.
 - `hydra fleet discover|qualify --source KIND[:LOCATOR]` acquires one explicitly
   selected live inventory and feeds the existing candidate importer: `ssh-config`
   scans the literal `Host` names of `~/.ssh/config` (or a file) and its literal

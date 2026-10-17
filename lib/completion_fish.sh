@@ -205,13 +205,15 @@ complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l gate -d 'Appr
 complete -c hydra -f -n '__fish_seen_subcommand_from sync land' -l dry-run -d 'Simulate without mutation'
 complete -c hydra -f -n '__fish_seen_subcommand_from land' -l into -d 'Current target branch'
 complete -c hydra -f -n '__fish_seen_subcommand_from land' -l keep-head -d 'Keep source head after landing'
-complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -a 'schema propose proposal validate compile show obligations checks explain compare evaluate observed decision run result'
+complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -a 'schema propose proposal validate compile show obligations checks explain compare evaluate observed decision expand run result'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l accept -r -d 'Accept exact compiled digest'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l branch -r -d 'Head that owns the proposal'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l local-policy -d 'Write the local policy preset'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l return -r -d 'Return the proposal with requested changes'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l asset -r -d 'Publish a proposal asset NAME=FILE'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l assets-dir -r -d 'Directory holding the plan assets'
+complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l run -r -d 'Base run to expand'
+complete -c hydra -f -n '__fish_seen_subcommand_from workflow; and __fish_seen_subcommand_from plan' -l proposal -r -d 'Expansion proposal file'
 complete -c hydra -f -n '__fish_seen_subcommand_from workflow' -l json -d 'Output versioned status JSON'
 complete -c hydra -f -n '__fish_seen_subcommand_from pool; and not __fish_seen_subcommand_from create add seal claim complete cancel status list run' -a 'create add seal claim complete cancel status list run'
 complete -c hydra -f -n '__fish_seen_subcommand_from pool; and __fish_seen_subcommand_from create' -l max-tasks -r -d 'Sealed task bound'
@@ -302,7 +304,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subc
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l source -r -d 'Live source: ssh-config[:FILE], ansible-inventory:FILE, dns-sd[:DOMAIN]'
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from discover qualify' -l diff -d 'List added, removed and changed records against the previous snapshot'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from qualify' -l progress -r
-complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -a 'review apply'
+complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -a 'review apply status'
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l input -r
 complete -c hydra -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l output -r
 complete -c hydra -f -n '__fish_seen_subcommand_from fleet; and __fish_seen_subcommand_from enroll' -l candidate -r

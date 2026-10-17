@@ -713,7 +713,7 @@ static void render_help(struct app *app) {
     linef(app, "P  review the agent's proposal   V  validate   F  request changes (feedback to the agent)");
     linef(app, "E  execute the validated revision (confirm with y)   I  import draft and policy files");
     section(app, "OTHER");
-    linef(app, "H  hosts: Enter follows a host's work, r retries it, A adds a machine over SSH");
+    linef(app, "H  hosts: Enter follows a host's work, r retries it, A adds a machine over SSH, O onboarding");
     linef(app, "t  theme (terminal / dark / light)    D  statistics    I  attention    ?  close help    q  quit");
 }
 
@@ -730,6 +730,7 @@ static void render_result(struct app *app) {
 
 static void render_content(struct app *app) {
     if (app->view == 6 && native_setup_active(app)) { native_setup_render(app); return; }
+    if (app->view == 6 && native_onboarding_active(app)) { native_onboarding_render(app); return; }
     if (app->result_open) { render_result(app); return; }
     if (app->help) { render_help(app); return; }
     switch (app->view) {
@@ -828,10 +829,11 @@ static const char *recovery_hints(const struct app *app, bool narrow) {
 /* Hosts: the setup flow's own keys, or e / x on an unfinished setup row. */
 static const char *hosts_hints(struct app *app, bool narrow) {
     if (native_setup_active(app)) return native_setup_hints(app, narrow);
+    if (native_onboarding_active(app)) return native_onboarding_hints(app, narrow);
     if (hosts_setup_selected(app, &(size_t){0}))
         return narrow ? "Enter continue  e edit  x remove  q quit"
                       : "j/k select  Enter continue  e edit  x remove  A add a host  Esc back  ? help  q quit";
-    return narrow ? "Enter follow  r retry  A add host  ? help  q quit" : "j/k select  Enter follow its work  r retry  A add a host  Esc back  ? help  q quit";
+    return narrow ? "Enter follow  r retry  A add host  O onboard  q quit" : "j/k select  Enter follow its work  r retry  A add a host  O onboarding  Esc back  ? help  q quit";
 }
 
 /* Hints for views whose keys do not depend on local versus fleet mode. */
@@ -897,6 +899,7 @@ static const char *panel_title(struct app *app, char *out, size_t size) {
     static const char *names[] = {NULL, NULL, "Coordination", "Recovery", "Overview", "Workflows", "Hosts", NULL, NULL, "Attention"};
     const struct head *head = selected_head(app);
     if (app->view == 6 && native_setup_active(app)) return native_setup_title(app);
+    if (app->view == 6 && native_onboarding_active(app)) return native_onboarding_title(app);
     if (app->result_open) return app->result_title;
     if (app->help) return "HELP";
     if (app->view == 0 && !app->location[0]) snprintf(out, size, "%s", "Heads in this project");

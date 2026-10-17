@@ -108,7 +108,7 @@ _hydra_completion() {
             return 0
             ;;
         enroll)
-            COMPREPLY=($(compgen -W "review apply --input --output --candidate --project --package --sha256 --prefix --alias --confirm --timeout --json" -- "${cur}"))
+            COMPREPLY=($(compgen -W "review apply status --input --output --candidate --project --package --sha256 --prefix --alias --confirm --timeout --json" -- "${cur}"))
             return 0
             ;;
         revoke)
@@ -278,8 +278,8 @@ _hydra_completion() {
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--into --gate --dry-run --keep-head" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[@]}" =~ workflow ]]; then
-        if [[ "${prev}" == plan ]]; then COMPREPLY=($(compgen -W "schema propose proposal validate compile show obligations checks explain compare evaluate observed decision run result" -- "${cur}")); return 0; fi
-        if [[ "${COMP_WORDS[@]}" =~ plan && "${cur}" == -* ]]; then COMPREPLY=($(compgen -W "--accept --json --branch --local-policy --return --asset --assets-dir" -- "${cur}")); return 0; fi
+        if [[ "${prev}" == plan ]]; then COMPREPLY=($(compgen -W "schema propose proposal validate compile show obligations checks explain compare evaluate observed decision expand run result" -- "${cur}")); return 0; fi
+        if [[ "${COMP_WORDS[@]}" =~ plan && "${cur}" == -* ]]; then COMPREPLY=($(compgen -W "--accept --json --branch --local-policy --return --asset --assets-dir --run --proposal" -- "${cur}")); return 0; fi
         case "${cur}" in -*) COMPREPLY=($(compgen -W "--json" -- ${cur})); return 0 ;; esac
     fi
     if [[ "${COMP_WORDS[@]}" =~ integrate ]]; then

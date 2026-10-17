@@ -220,12 +220,16 @@ $(BUILD_DIR)/test-tui-transcript: tests/c/test_tui_transcript.c src/tui/transcri
 $(BUILD_DIR)/test-tui-setup: tests/c/test_tui_setup.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
-test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup
+$(BUILD_DIR)/test-tui-onboarding: tests/c/test_tui_onboarding.c $(TERMVIZ_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
+	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
+
+test-tui: build-tui $(BUILD_DIR)/test-tui-input $(BUILD_DIR)/test-tui-actions $(BUILD_DIR)/test-tui-planning $(BUILD_DIR)/test-tui-transcript $(BUILD_DIR)/test-tui-setup $(BUILD_DIR)/test-tui-onboarding
 	$(BUILD_DIR)/test-tui-input
 	$(BUILD_DIR)/test-tui-actions
 	$(BUILD_DIR)/test-tui-planning
 	$(BUILD_DIR)/test-tui-transcript
 	$(BUILD_DIR)/test-tui-setup tests/fixtures/tui/setup "$(abspath $(BUILD_DIR))/setup-screens"
+	$(BUILD_DIR)/test-tui-onboarding tests/fixtures/tui/onboarding "$(abspath $(BUILD_DIR))/onboarding-screens"
 	@HYDRA_TUI_BIN="$(abspath $(BUILD_DIR))/hydra-tui" sh tests/test_native_tui.sh
 
 test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
@@ -245,6 +249,7 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 	if [ "$$before" != "$$after" ]; then echo "native crash path changed Hydra state" >&2; exit 1; fi; \
 	exit $$status
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-remote-setup"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-onboarding"
 
 test-parity: build-core
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh
@@ -399,7 +404,7 @@ $(BUILD_DIR)/native-tests/statistics-evidence: tests/native/statistics_evidence.
 # Compile shared fleet code once. Compiler dependency files track the actual
 # header/.inc closure for each object and test, including sanitizer builds.
 FLEET_OBJECTS = $(patsubst src/fleet/%.c,$(BUILD_DIR)/fleet/%.o,$(filter-out src/fleet/main.c,$(FLEET_SOURCES)))
-FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data workflow-schedule agent-profile agent-auth plan remote-setup agent-recipes fleet-assets placement)
+FLEET_TEST_BINS = $(addprefix $(BUILD_DIR)/test-,fleet task-package task-result workflow-data workflow-schedule agent-profile agent-auth plan plan-expansion remote-setup agent-recipes fleet-assets placement)
 
 $(BUILD_DIR)/fleet/%.o: src/fleet/%.c
 	@mkdir -p "$(@D)"
@@ -433,6 +438,7 @@ $(BUILD_DIR)/test-workflow-data: tests/c/test_workflow_data.c
 $(BUILD_DIR)/test-agent-profile: tests/c/test_agent_profile.c
 $(BUILD_DIR)/test-agent-auth: tests/c/test_agent_auth.c
 $(BUILD_DIR)/test-plan: tests/c/test_plan.c
+$(BUILD_DIR)/test-plan-expansion: tests/c/test_plan_expansion.c tests/c/test_plan_expansion_cases.inc
 $(BUILD_DIR)/test-workflow-schedule: tests/c/test_workflow_schedule.c
 $(BUILD_DIR)/test-remote-setup: tests/c/test_remote_setup.c
 $(BUILD_DIR)/test-agent-recipes: tests/c/test_agent_recipes.c
@@ -474,6 +480,13 @@ test-workflow-metrics: build-fleet build-core
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-workflow-task-metrics"
 	HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-workflow-task-cohorts"
 	"$(BUILD_DIR)/native-tests/test-statistics-export" "$(abspath $(BUILD_DIR))/hydra-core"
+
+# Bounded expansions (roadmap 9F): native admission cases over fabricated run
+# records, then the public CLI over real base and round runs.
+.PHONY: test-plan-expansion
+test-plan-expansion: build-fleet $(BUILD_DIR)/test-plan-expansion $(SHELL_TEST_PREREQS)
+	$(BUILD_DIR)/test-plan-expansion
+	@BUILD_DIR="$(abspath $(BUILD_DIR))" sh scripts/run-shell-test.sh "$(BUILD_DIR)/test-logs" plan-expansion tests/test_workflow_plan_expansion.sh
 
 test-plan-staged: build-fleet build-plan-precompile
 	HYDRA_PLAN_EXAMPLE_BIN="$(abspath $(BUILD_DIR))/plan-example" HYDRA_PLAN_PRECOMPILE_BIN="$(abspath $(BUILD_DIR))/plan-precompile" HYDRA_FLEET_BIN="$(abspath $(BUILD_DIR))/hydra-fleet" "$(BUILD_DIR)/native-tests/test-plan-staged"

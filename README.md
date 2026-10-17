@@ -176,6 +176,9 @@ bootstrap, host requirements, remote workflows, and recovery behavior.
 ansible-inventory:FILE|dns-sd` lists candidates from your own inventories with a
 diff against the previous snapshot, and `hydra fleet revoke` records a final,
 local revocation of a candidate, source, alias, package or project decision.
+`O` on the control centre's Hosts tab reviews those candidates, their
+qualification and per-host enrollment progress, and runs `hydra fleet enroll
+apply` only after you type the reviewed intent's digest.
 New remote tasks can be placed automatically across eligible hosts
 (`hydra fleet task submit --placement auto`), with every decision recorded and
 replayable (`hydra fleet placement explain|replay`); explicit host pinning is the
@@ -193,6 +196,9 @@ Use `hydra workflow replay <run-id>` to check recorded scheduling choices.
 fixed-graph scheduling and placement with ranges and explicit unknowns, `plan
 decision` records why one was selected and replays that comparison from its
 recorded inputs, and `make test-plan-eval` measures held-out planning quality.
+`hydra workflow plan expand` admits a bounded expansion of a finished run as a
+new version compiled under the same policy, with retries kept apart from new
+claims and every round run with its own exact digest.
 Planning does not call a model itself; an ordinary agent authors the proposal
 through the CLI. Plans carry their own inline agent prompts and proposal assets,
 bound by the acceptance digest, so planning never commits to your checkout. See the
