@@ -82,7 +82,7 @@ static void detail_run_pair(struct app *app, size_t owner, size_t record) {
 
 /* Reported outcome and group; an empty group is left out of a narrow view. */
 static void detail_reported(struct app *app, const struct head *head, const char *group) {
-    const char *reported = head->declared[0] ? head->declared : "nothing yet";
+    const char *reported = head->declared[0] ? head->declared : "nothing yet; declared when done: done or blocked";
     enum tv_style tone = head->declared[0] ? TV_STRONG : TV_MUTED;
     if (app->content_width < 110 && !strcmp(group, "none")) labelled(app, "Reported", reported, tone);
     else detail_pair(app, "Reported", reported, tone, "Group", group, TV_BASE);
@@ -93,12 +93,14 @@ static void detail_identity(struct app *app, const struct head *head) {
     size_t record, owner = head_owner_run(app, head, &record);
     head_agent_text(app, head, agent, sizeof(agent));
     if (head_headless(head)) detail_pair(app, "Agent", agent, TV_BASE, "Terminal", "headless (no terminal)", TV_MUTED);
-    else detail_pair(app, "Agent", agent, TV_BASE, "Session", status_label(head), status_tone(head));
+    else {
+        char session[96];
+        snprintf(session, sizeof(session), "%s%s", status_label(head), !strcmp(status_label(head), "running") ? " (the live terminal)" : "");
+        detail_pair(app, "Agent", agent, TV_BASE, "Session", session, status_tone(head));
+    }
     if (owner != SIZE_MAX) detail_run_pair(app, owner, record);
     detail_group_label(app, head, group, sizeof(group));
     detail_reported(app, head, group);
-    if (!head_headless(head))
-        paragraph(app, "Session is the live terminal; Reported is the outcome the agent declares when it finishes, for example done or blocked.", TV_MUTED);
     if (!head_headless(head) && !strcmp(display_status(head), "STALE"))
         paragraph(app, "The terminal is gone but the last observation said the agent was still working. Files in the worktree are kept; a restarts the terminal in the same worktree. Check the files before removing the head.", TV_WARNING);
 }
