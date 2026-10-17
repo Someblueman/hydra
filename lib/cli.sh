@@ -62,7 +62,10 @@ Commands:
   fleet             Bootstrap, inspect, attach, and operate trusted remote Hydra hosts
                     Commands: list, doctor, admission, handshake, bootstrap, package, init, spawn,
                               signal, cancel, workflow, attach, export, import,
-                              overview, reconcile, watch, tui, task (see fleet help)
+                              overview, reconcile, watch, tui, task, placement (see fleet help)
+                    Placement: fleet task submit --placement auto|HOST --input PACKAGE --key KEY
+                               [--separate-from TASK_ID]; fleet placement explain|replay|withdraw
+                               TASK_ID; fleet placement drain|undrain HOST; fleet placement policy
                     Options: --project PATH, --instance ID, --jobs 1-16, --timeout 1-300
   capabilities      Print machine-readable Hydra and agent capabilities
   workflow          Run or inspect finite, recoverable workflow definitions

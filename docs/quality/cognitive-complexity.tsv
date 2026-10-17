@@ -25,6 +25,12 @@ src/fleet/auth/agent_auth_files.c	read_at	19
 src/fleet/cli.c	f_cli	66
 src/fleet/cli.c	parse_options	32
 src/fleet/main.c	main	41
+src/fleet/placement/placement_cli.c	placement_cli	24
+src/fleet/placement/placement_cli.c	withdraw	23
+src/fleet/placement/placement_observe.c	placement_observe	18
+src/fleet/placement/placement_policy.c	placement_inputs	19
+src/fleet/placement/placement_submit.c	attempt_ranked	19
+src/fleet/placement/placement_submit.c	placement_submit_locked	22
 src/fleet/plan/plan_cli.c	plan_cli	16
 src/fleet/plan/plan_compile.c	bind_inputs	21
 src/fleet/plan/plan_compile.c	plan_compile	20
@@ -42,8 +48,12 @@ src/fleet/plan/plan_schema.c	recipe	24
 src/fleet/support/files.c	f_mkdirs	16
 src/fleet/support/json.c	finite_json	21
 src/fleet/support/process.c	run	68
+src/fleet/task/task_accept.c	dependencies	19
+src/fleet/task/task_accept.c	receipt	18
 src/fleet/task/task_accept.c	task_accept	34
+src/fleet/task/task_accept.c	task_read_operation	16
 src/fleet/task/task_accept.c	task_serve	33
+src/fleet/task/task_accept.c	task_validate_option_groups	18
 src/fleet/task/task_approval.c	task_approval	30
 src/fleet/task/task_cli.c	task_cli	38
 src/fleet/task/task_collection.c	materialized	16
@@ -60,8 +70,10 @@ src/fleet/task/task_execute.c	task_execute	59
 src/fleet/task/task_launch.c	detach	18
 src/fleet/task/task_launch.c	launch	49
 src/fleet/task/task_launch.c	task_runtime_valid	19
+src/fleet/task/task_remote.c	parse_limits	16
 src/fleet/task/task_remote.c	parse_options	25
 src/fleet/task/task_remote.c	task_remote_cli	34
+src/fleet/task/task_remote.c	transact	16
 src/fleet/task/task_result.c	artifacts	17
 src/fleet/task/task_result.c	snapshot	21
 src/fleet/task/task_result_bindings.c	task_result_bindings	33
@@ -76,6 +88,7 @@ src/fleet/task/task_source.c	task_inspect	25
 src/fleet/task/task_spec.c	task_path	22
 src/fleet/task/task_spec.c	task_spec	19
 src/fleet/task/task_store.c	task_read_record	16
+src/fleet/task/task_withdraw.c	task_withdraw	26
 src/fleet/transport/aggregate.c	f_aggregate	57
 src/fleet/transport/bootstrap.c	f_bootstrap	26
 src/fleet/transport/bootstrap.c	f_install	54
@@ -190,6 +203,8 @@ tests/c/test_agent_profile.c	decoders	49
 tests/c/test_agent_profile.c	main	49
 tests/c/test_agent_profile.c	provider_failures	20
 tests/c/test_fleet.c	main	26
+tests/c/test_placement.c	filtering_and_ranking	26
+tests/c/test_placement.c	record_store	26
 tests/c/test_plan.c	expect	16
 tests/c/test_plan.c	parse_cases	21
 tests/c/test_statistics.c	main	38
