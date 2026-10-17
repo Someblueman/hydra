@@ -399,6 +399,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Concurrent supervised headless runs no longer stop healthy workers when a
+  provider status observation cannot be recorded (item 10 finding 1: ten heads
+  with sustained output lost 8 to 10 runs as `observation_unavailable`, exit
+  125). The cause was the shared project state lock: every status line ran a
+  synchronous `hydra adapter ingest` whose lock wait gave up after 5 tries of
+  50 ms, and the failure was reported as "unsupported adapter status". The
+  supervisor now records a status only when it changes within the run, retries a
+  failed one no sooner than 1 s later and once after the provider exits, and
+  never stops the worker for it; the receipt's new `diagnostic.observation`
+  keeps the failure count, the last ingest's exit status, deadline flag and
+  stderr, and any final status never recorded. Observed status waits up to about
+  2 s for the state lock (as declared outcomes do), holds it only to recheck the
+  head and replace five small files, and an ingest stopped at its deadline releases the
+  locks it owns. `hydra adapter ingest` now reports an unsupported status, a busy
+  state lock and a failed write distinctly. The `observation_unavailable` end
+  state is no longer produced. A new case,
+  `make test-one T=concurrent_headless_observation`, runs ten concurrent
+  supervised heads (`HYDRA_TEST_OBSERVATION_HEADS` scales it).
 - `make test-bench-i1` always failed its cancel stimulus: the I1 gate waited
   for a "Current snapshot" status line that the native client now shows as
   "Live".

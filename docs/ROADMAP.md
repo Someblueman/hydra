@@ -869,8 +869,9 @@ the first Linux x86_64 container baseline is published under
 (one trial, deterministic stand-in agents, shared 4-core container with the load
 recorded per fixture). It measures 45 cells: 1 and 10 worktrees in all four cases
 with one and three clients, interactive and headless, preview closed and open
-(except 10-head headless sustained output), and 50 interactive worktrees quiescent
-and one-changing. Its budgets are Linux-container provisional, not frozen release
+(except 10-head headless sustained output, measured afterwards in the bundle
+README's addendum once the concurrent observation defect was fixed), and 50
+interactive worktrees quiescent and one-changing. Its budgets are Linux-container provisional, not frozen release
 budgets. The efficiency slice, macOS, remote headless, T2/T3, authenticated
 live-agent cells and frozen budgets remain open.
 
@@ -887,8 +888,8 @@ whether or not it changed.
       a separate performance service. Retain existing 5/20/100-head checks for
       their narrower scope until explicitly replaced with equivalent coverage.
       Delivered on Linux (17 October 2026): stand-in baselines at 1 and 10 heads
-      for all four cases (10-head headless sustained output excepted, see output
-      pressure) and at 50 interactive heads for quiescent and one-changing, one
+      for all four cases (10-head headless sustained output measured separately
+      after the observation fix, see output pressure) and at 50 interactive heads for quiescent and one-changing, one
       trial each, over the I1 fixture and PTY observer; the 5/20/100-head checks
       remain. Finding: 50 headless heads never became usable in two attempts (the
       native client reported its shell data adapter timed out and showed no
@@ -943,18 +944,23 @@ whether or not it changed.
       Delivered on Linux: 128-byte lines at the declared interval per producer,
       preview closed and open, with backlog, EAGAIN, queue-non-empty time, resident
       growth and recovery time, and result retention checked after the output
-      phases (verified for interactive fixtures and 1 headless head). Finding: with
-      ten supervised headless runs, coinciding `hydra adapter ingest` calls (one
-      per provider status line, bounded at 5 s) fail and the run ends
-      `observation_unavailable` (exit 125) and stops its worker. Four
-      sustained-output attempts (125 ms twice, 1 s, and 1 s with a non-default
-      `HYDRA_LOCK_RETRIES=200`) lost 8 to 10 of 10 runs mid-phase, so the 10-head
-      headless sustained-output cells are unmeasured; without output, 7 of 10 runs
-      still ended this way on their final simultaneous observation. The failing
-      call's reason is not retained, so the cause is not isolated. Dropped/
-      coalesced display updates are not exposed by the renderer (unknown). Open:
-      the 10-head headless output cells, disconnect/reconnect under pressure and
-      macOS.
+      phases (verified for interactive fixtures and 1 headless head). Finding
+      (baseline): with ten supervised headless runs, coinciding `hydra adapter
+      ingest` calls (one per provider status line, bounded at 5 s) failed and the
+      run ended `observation_unavailable` (exit 125), stopping its worker; four
+      sustained-output attempts lost 8 to 10 of 10 runs. Fixed afterwards: the
+      cause was the shared project state lock (5 tries of 50 ms, reported as an
+      "unsupported adapter status"; with `HYDRA_LOCK_RETRIES=200` the per-line
+      ingests queued into their 5 s deadline). Status is now recorded only when
+      it changes, a lost observation never stops the worker and the receipt says
+      why (`diagnostic.observation`), and observed status has a bounded 2 s lock
+      window. `make test-one T=concurrent_headless_observation` reproduces it
+      (2 of 10 and 1 of 20 runs survived before; three consecutive passes at 10
+      and 20 heads under load after), and the rerun 10-head headless
+      sustained-output cells (1 and 3 clients, one trial) measured 2/2 with every
+      run completed; see the evidence README addendum. Dropped/coalesced display
+      updates are not exposed by the renderer (unknown). Open: 50 headless heads
+      (finding 2), disconnect/reconnect under pressure and macOS.
 - [ ] Qualify **change locality** using per-worktree attribution: compare no-change
       cost and the incremental cost of changing exactly one worktree at each scale.
       Unchanged worktrees should not incur repeated Git scans, helper launches, or
