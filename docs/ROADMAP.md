@@ -720,12 +720,24 @@ timestamps and tagged stimuli, record clock uncertainty, attribute agent/tmux/
 observer work separately, and treat unsupported counters as unknown.
 
 The [local measurement harness](performance-harness.md) provides reproducible
-readiness checks and individual deterministic-worker cells. Its availability
-does not complete the matrix or establish performance budgets below.
+readiness checks, individual deterministic-worker cells and the matrix runner over
+them: `make perf-matrix`, `make perf-attention`, `make test-perf-matrix` and
+`scripts/perf_matrix_merge.py`. **The measurement slice is delivered on Linux**:
+the first Linux x86_64 container baseline is published under
+[docs/evidence/performance/2026-10-17-linux-x86_64/](evidence/performance/2026-10-17-linux-x86_64/README.md)
+(one trial, deterministic stand-in agents, shared 4-core container with the load
+recorded per fixture). It measures 45 cells: 1 and 10 worktrees in all four cases
+with one and three clients, interactive and headless, preview closed and open
+(except 10-head headless sustained output), and 50 interactive worktrees quiescent
+and one-changing. Its budgets are Linux-container provisional, not frozen release
+budgets. The efficiency slice, macOS, remote headless, T2/T3, authenticated
+live-agent cells and frozen budgets remain open.
 
 Target: **with no changes, Hydra should do almost no work; with one changed
 worktree, work should be mostly confined to that worktree.** This is an acceptance
-objective, not a claim about the current periodic snapshot implementation.
+objective, not a claim about the current periodic snapshot implementation. The
+Linux baseline shows the opposite today: every worktree is scanned on every refresh
+whether or not it changed.
 
 - [ ] Establish repeatable baselines at **1, 10, and 50 real worktrees with active
       agents**. Separate quiescent, one-changing, all-changing, and sustained-output
@@ -733,29 +745,75 @@ objective, not a claim about the current periodic snapshot implementation.
       trials. Extend existing benchmark/PTY infrastructure rather than introducing
       a separate performance service. Retain existing 5/20/100-head checks for
       their narrower scope until explicitly replaced with equivalent coverage.
+      Delivered on Linux (17 October 2026): stand-in baselines at 1 and 10 heads
+      for all four cases (10-head headless sustained output excepted, see output
+      pressure) and at 50 interactive heads for quiescent and one-changing, one
+      trial each, over the I1 fixture and PTY observer; the 5/20/100-head checks
+      remain. Finding: 50 headless heads never became usable in two attempts (the
+      native client reported its shell data adapter timed out and showed no
+      heads). Open: a second trial for repeatability, 50-head headless, macOS, and
+      live-agent trials.
 - [ ] Measure **idle cost** after settling: CPU time per second, clearly normalized
       CPU percentage, wakeups per second, and subprocess launches per minute across
       Hydra and its helpers. Attribute agent, tmux, and observer overhead separately;
       also record scans, redraws, filesystem operations, and remote requests.
+      Delivered on Linux: per-role CPU (seconds, percent of one core and of the
+      machine), context-switch wakeups, memory, descriptor and process counts, and
+      shimmed git/tmux/hydra launches per minute attributed to launcher, worktree
+      and session. Open: redraw counts, unshimmed filesystem operations and remote
+      requests (not exposed; recorded as unknown), and macOS.
 - [ ] Measure **interaction latency** from scheduled input injection to the matching
       rendered response: median, p95, p99 where supported by sample count, observed
       maximum, and missed deadlines. Include navigation, search, resize, and cancel
       under refresh and output load. Distinguish PTY frame completion from visible
       terminal presentation; do not label the former input-to-pixel latency.
+      Delivered on Linux: the four stimuli in every cell, with medians, maxima and
+      deadline misses per stimulus and scale. One trial gives one sample per
+      stimulus per cell (at most 19 per scale), so per-scale p95/p99 stay null
+      with the sample count as the reason; the pooled distribution mixes
+      conditions. Finding: at 50 heads cancel took 2.0 to 3.9 s or missed the 4 s
+      deadline (three misses) and one search missed; at 1 and 10 heads every
+      stimulus was observed. Open: enough trials for tails, and macOS.
 - [ ] Measure **update latency** from a timestamped repository or agent change to
       its matching display state. Separate detection, collection, model update,
       and render delay; include selected and unselected worktrees, bursts, and
       remote disconnect/reconnect. Bound remote clock uncertainty explicitly.
+      Delivered on Linux: selected-head changed-file count latency with a polling
+      lower bound (median 1.4 s at 1 head, 2.0 s at 10; at 50 heads none of 18
+      declared changes appeared within the window). Open: the stage split (no
+      stage timestamps exist), unselected worktrees (no matching display state),
+      bursts, remote disconnect/reconnect and remote clock bounds.
 - [ ] Measure **fleet scaling** across the matrix: total and per-worktree CPU,
       resident/peak memory, process and descriptor counts, scans, remote traffic,
       startup/time-to-usable, and interaction/update tails. Record agent activity,
       repository size, host placement, and admission limits; queued work must not
       be reported as concurrently active agents.
+      Delivered on Linux: per-role CPU, memory, process and descriptor counts,
+      scans per worktree, spawn and client time-to-usable at 1, 10 and 50 heads,
+      with the workload seed and sequential public spawns recorded. Idle helper
+      CPU under the native client grows from about 0.2 core at 1 head to about 1
+      core at 10 and 3.1 cores at 50. Open: remote traffic, tails, 50-head
+      headless, and macOS.
 - [ ] Measure **output pressure** at declared bytes/second, line sizes, producer
       counts, and durations, with preview open and closed. Track input latency,
       update backlog/age, peak memory and growth, dropped/coalesced display updates,
       producer blocking, and time to recover after output stops. Preserve authoritative
       task results and required evidence even when display updates are coalesced.
+      Delivered on Linux: 128-byte lines at the declared interval per producer,
+      preview closed and open, with backlog, EAGAIN, queue-non-empty time, resident
+      growth and recovery time, and result retention checked after the output
+      phases (verified for interactive fixtures and 1 headless head). Finding: with
+      ten supervised headless runs, coinciding `hydra adapter ingest` calls (one
+      per provider status line, bounded at 5 s) fail and the run ends
+      `observation_unavailable` (exit 125) and stops its worker. Four
+      sustained-output attempts (125 ms twice, 1 s, and 1 s with a non-default
+      `HYDRA_LOCK_RETRIES=200`) lost 8 to 10 of 10 runs mid-phase, so the 10-head
+      headless sustained-output cells are unmeasured; without output, 7 of 10 runs
+      still ended this way on their final simultaneous observation. The failing
+      call's reason is not retained, so the cause is not isolated. Dropped/
+      coalesced display updates are not exposed by the renderer (unknown). Open:
+      the 10-head headless output cells, disconnect/reconnect under pressure and
+      macOS.
 - [ ] Qualify **change locality** using per-worktree attribution: compare no-change
       cost and the incremental cost of changing exactly one worktree at each scale.
       Unchanged worktrees should not incur repeated Git scans, helper launches, or
@@ -763,6 +821,11 @@ objective, not a claim about the current periodic snapshot implementation.
       and bounded reconciliation separately; do not achieve low cost by hiding stale
       state. Explore event notification, invalidation, batching, and bounded caches
       only where profiles support them; prove missed-event and reconnect recovery.
+      Measured on Linux: git launches per unchanged worktree equal those of the
+      changed worktree and are the same whether no worktree or one worktree
+      changed (the periodic snapshot scans every worktree each refresh; the rate
+      per worktree falls with scale only because a refresh takes longer). The
+      efficiency work is not started.
 - [ ] Store exact revisions, builds, workload seeds, raw timestamped samples,
       environment/tool versions, attribution boundaries, and observer overhead.
       Separate startup from steady state and alternate baseline/candidate trials.
@@ -770,6 +833,16 @@ objective, not a claim about the current periodic snapshot implementation.
       the initial supported-platform baselines and product needs, then freeze them
       before evaluating optimizations. Retain stalls and uncertainty; never treat
       a short-run maximum as a guaranteed worst case or missing counters as zero.
+      Delivered on Linux: the `hydra-perf-matrix/1` bundle with revisions, hashes,
+      seed, tool versions, clock bounds, shim overhead and gzipped raw samples;
+      startup is reported apart from steady state; the runner alternates
+      baseline/candidate fixtures per trial. Linux-container provisional idle,
+      tail-latency, memory, recovery and locality budgets (1.5 times the observed
+      maximum per scale, with the observed load) are in the evidence README; at
+      50 heads cancel already breaks the zero-miss rule and no update was seen to
+      bound. Open: a
+      macOS baseline and the decision that freezes the budgets; no candidate trial
+      has been run.
 - [ ] Include one and three attached clients, local interactive/local headless/
       remote headless cases, and disconnect/reconnect under output pressure.
       Attribute PTY parsing, generated/transmitted frames and per-client rendering;
@@ -777,21 +850,27 @@ objective, not a claim about the current periodic snapshot implementation.
       against annotated blocked/question/approval, working, done-but-unseen, idle
       and unknown cases, reporting false positives and missed signals separately.
       These measurements do not make an attention hint an accepted outcome.
+      Delivered on Linux: one and three clients, local interactive and local
+      headless, unsupported cells recorded with reasons, and the thirteen-case
+      attention corpus (`make perf-attention`) with zero false positives and zero
+      missed signals. Open: remote headless (needs a live verified fleet host),
+      disconnect/reconnect under pressure, and per-client frame attribution.
 
 The I2/I3 local acceptance packet records reproducible behavior and bounded local
 fixture evidence in [attention-review-acceptance.md](attention-review-acceptance.md).
 Its accepted bounded measurements retain denominators, attribution, and
-late/missed observations; item 10's full matrix, idle budgets, and platform/T2/T3
-qualification remain open. These measurements are not a baseline, parity claim,
-or item 10 completion.
+late/missed observations; item 10's platform/T2/T3 qualification remains open.
+These measurements are not a parity claim or item 10 completion.
 
 Acceptance: publish reproducible baseline evidence for every matrix cell on macOS
 and Linux, with explicit unsupported measurements and separate live-agent coverage.
 The measurement slice completes with recorded budgets and correctness checks;
-the efficiency slice completes only when repeated before/after trials meet those
-budgets, demonstrate near-idle behavior and bounded unrelated-worktree cost, and
-preserve freshness, cancellation, recovery, and result integrity under output load.
-No performance baseline or improvement is claimed by this roadmap addition.
+on Linux it is delivered with provisional budgets, and completes when a macOS
+baseline exists and the budgets are frozen. The efficiency slice completes only
+when repeated before/after trials meet those budgets, demonstrate near-idle
+behavior and bounded unrelated-worktree cost, and preserve freshness,
+cancellation, recovery, and result integrity under output load; it has not
+started. No performance improvement is claimed.
 
 #### 6. Load balancing across eligible hosts
 

@@ -21,7 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with unsupported cells and unknown counters kept explicit. The evidence bundle
   (`hydra-perf-matrix/1`) stores revisions, hashes, seeds, tool versions, clock
   calibration, observer overhead and raw samples; `--evidence-dir` publishes a
-  compact copy with a Markdown summary and provisional budgets.
+  compact gzipped copy (`bundle.json.gz`), a Markdown summary, provisional
+  budgets and gzipped raw samples within a byte budget. `--fixture-env KEY=VALUE`
+  runs a fixture under a declared non-default configuration.
 - `make perf-attention` (`scripts/perf_matrix_attention.py`, also
   `scripts/bench-attention.py --local-corpus`) scores `hydra workflow attention`
   against thirteen annotated local cases (blocked/approval, question, working,
@@ -29,7 +31,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   missed signals separately.
 - `make test-perf-matrix` runs the unit checks, the attention corpus, the
   smallest interactive and headless cells and the bundle schema validation.
-- First Linux x86_64 container baseline under `docs/evidence/performance/`.
+- `scripts/perf_matrix_merge.py` joins several runner invocations (a retried
+  fixture, the 50-head cells run on their own) into one validated bundle and
+  summary; fixtures keep their errors, cells carry the run label, and cells
+  measured under a non-default configuration are flagged and left out of the
+  proposed budgets.
+- First Linux x86_64 container baseline under
+  `docs/evidence/performance/2026-10-17-linux-x86_64/` (one trial, shared 4-core
+  container, load recorded per fixture): 45 measured cells covering 1 and 10
+  worktrees in all four cases with one and three clients, interactive and
+  headless, preview closed and open, and 50 interactive worktrees quiescent and
+  one-changing; Linux-container provisional (not frozen) idle, tail-latency,
+  memory, recovery and locality budgets. The 10-head headless sustained-output
+  cells and the 50-head headless cells could not be measured and are recorded
+  as findings (concurrent supervised runs ending `observation_unavailable`; the
+  native client never receiving a first snapshot at 50 headless heads); remote
+  headless and macOS cells are recorded as unmeasured.
 
 ### Changed
 
