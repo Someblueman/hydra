@@ -127,6 +127,19 @@ class Case(usability.Journey):
         lines = (screen or self.screen()).rstrip("\n").splitlines()
         return lines[-1].strip() if lines else ""
 
+    def settled(self, screen: str, quiet: float = 0.3, timeout: float = 6) -> str:
+        """The screen once two consecutive snapshots agree. A snapshot can land
+        between the bytes of one frame (new rows above, the previous view's
+        footer still below), so a footer is read from a settled screen."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            time.sleep(quiet)
+            current = self.screen()
+            if current == screen:
+                return current
+            screen = current
+        return screen
+
     def styled(self, tag: str) -> vt.Screen:
         """Re-derive the latest snapshot with colours from the retained raw bytes."""
         assert self.observer

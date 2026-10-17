@@ -97,6 +97,8 @@ bad:
 static bool restore_row(json_object *row, json_object *prior) {
     static const char *fields[] = {"status", "qualification", "qualified_at", "qualification_attempts", "qualification_history", "qualification_history_truncated", NULL};
     const char *status = f_string(prior, "status"), *current = f_string(row, "status");
+    /* Read before the loop below replaces the row's status, which frees current. */
+    bool revoked_now = current && !strcmp(current, "revoked");
     json_object *count = f_field(prior, "qualification_attempts"), *history = f_field(prior, "qualification_history");
     if (count && (!json_object_is_type(count, json_type_int) || json_object_get_int64(count) < 0 || json_object_get_int64(count) >= 1000000)) return false;
     if (history && (!json_object_is_type(history, json_type_array) || json_object_array_length(history) > 4)) return false;
@@ -110,7 +112,7 @@ static bool restore_row(json_object *row, json_object *prior) {
     f_string_add(row, "qualification_freshness", "retained; reauthentication required before enrollment");
     /* A revocation wins over any retained result and is never undone by a
      * saved record; the prior evidence stays inspectable under it. */
-    if ((current && !strcmp(current, "revoked")) || !strcmp(status, "revoked")) {
+    if (revoked_now || !strcmp(status, "revoked")) {
         f_string_add(row, "status", "revoked"); f_string_add(row, "qualification_freshness", "retained; identity revoked");
     }
     return true;

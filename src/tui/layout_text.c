@@ -147,28 +147,64 @@ void key_row(struct app *app, const char *key, const char *action) {
     paragraph(app, text, TV_BASE);
 }
 
+/* Where the kept tail of a footer starts: a trailing "? help  q quit", else a
+ * trailing "q quit", else the end (nothing is kept). */
+static const char *hints_tail(const char *hints, const char *end) {
+    const char *at = strstr(hints, "? help  q quit");
+    if (at && at + 14 == end) return at;
+    if (end - hints >= 6 && !strcmp(end - 6, "q quit")) return end - 6;
+    return end;
+}
+
+/* Length of the hint starting at `at`: up to the next two spaces or `limit`,
+ * without trailing spaces. */
+static size_t hint_length(const char *at, const char *limit) {
+    const char *next = strstr(at, "  ");
+    size_t length = next && next < limit ? (size_t)(next - at) : (size_t)(limit - at);
+    while (length && at[length - 1U] == ' ') length--;
+    return length;
+}
+
+/* The start of the hint after the one of `length` at `at` (an empty one is
+ * a stray pair of spaces). */
+static const char *next_hint(const char *at, size_t length) {
+    at += length ? length : 2U;
+    while (*at == ' ') at++;
+    return at;
+}
+
+/* Appends one hint (two spaces apart from the previous one) if it fits in
+ * `width` columns with `reserve` columns kept free; false when it does not. */
+static bool append_hint(char *out, size_t size, size_t *used, const char *text, size_t length,
+                        size_t width, size_t reserve) {
+    size_t gap = *used ? 2U : 0U;
+    if (*used + gap + length + reserve > width || *used + length + 3U >= size) return false;
+    *used += (size_t)snprintf(out + *used, size - *used, "%s%.*s", gap ? "  " : "", (int)length, text);
+    return true;
+}
+
+/* Appends the kept tail when it still fits after the hints already placed. */
+static void append_tail(char *out, size_t size, size_t used, const char *tail, size_t width) {
+    size_t length = strlen(tail), gap = used ? 2U : 0U;
+    if (used + 2U + length < size && used + gap + length <= width) snprintf(out + used, size - used, "%s%s", gap ? "  " : "", tail);
+}
+
 /* A footer that does not fit drops whole "key action" hints (separated by
  * two spaces) from its right, keeping a trailing "? help" and "q quit", so
  * no hint is cut mid-word; hints that fit are returned unchanged. */
 const char *fit_hints(const char *hints, size_t width, char *out, size_t size) {
-    const char *tail = NULL, *at, *end = hints + strlen(hints);
-    size_t used = 0U, tail_length;
-    if (strlen(hints) <= width || size == 0U) return hints;
-    if ((at = strstr(hints, "? help  q quit")) != NULL && at + 14 == end) tail = at;
-    else if (end - hints >= 6 && !strcmp(end - 6, "q quit")) tail = end - 6;
-    tail_length = tail ? strlen(tail) : 0U;
+    const char *end = hints + strlen(hints), *tail, *at = hints;
+    size_t used = 0U, tail_length, reserve;
+    if ((size_t)(end - hints) <= width || size == 0U) return hints;
+    tail = hints_tail(hints, end);
+    tail_length = (size_t)(end - tail);
+    reserve = tail_length ? 2U + tail_length : 0U;
     out[0] = '\0';
-    for (at = hints; at < (tail ? tail : end);) {
-        const char *next = strstr(at, "  ");
-        size_t length = next && next < (tail ? tail : end) ? (size_t)(next - at) : (size_t)((tail ? tail : end) - at);
-        while (length && at[length - 1U] == ' ') length--;
-        if (!length) { at += 2; continue; }
-        if (used + (used ? 2U : 0U) + length + (tail_length ? 2U + tail_length : 0U) > width || used + length + 3U >= size) break;
-        used += (size_t)snprintf(out + used, size - used, "%s%.*s", used ? "  " : "", (int)length, at);
-        at += length;
-        while (*at == ' ') at++;
+    while (at < tail) {
+        size_t length = hint_length(at, tail);
+        if (length && !append_hint(out, size, &used, at, length, width, reserve)) break;
+        at = next_hint(at, length);
     }
-    if (tail_length && used + 2U + tail_length < size && used + (used ? 2U : 0U) + tail_length <= width)
-        snprintf(out + used, size - used, "%s%s", used ? "  " : "", tail);
+    if (tail_length) append_tail(out, size, used, tail, width);
     return out;
 }

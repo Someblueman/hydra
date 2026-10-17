@@ -711,7 +711,11 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
         if (compact) {
             if (app->notice[0] && !(native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen))
                 tv_text(c,(struct tv_rect){0,height-1,width,1},app->notice,TV_WARNING);
-            else tv_text(c,(struct tv_rect){0,height-1,width,1},workspace_hints(app,w,width),TV_MUTED);
+            else {
+                char fitted[512];
+                tv_text(c,(struct tv_rect){0,height-1,width,1},
+                        fit_hints(workspace_hints(app,w,width),width > 0 ? (size_t)width : 1U,fitted,sizeof(fitted)),TV_MUTED);
+            }
         } else chrome_footer(app, c, status, tone, workspace_hints(app, w, width));
     }
     frame_end(app, frame, headless);

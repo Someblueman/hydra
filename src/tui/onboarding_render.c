@@ -103,30 +103,16 @@ static enum tv_style typed_tone(enum onb_typed typed, bool selected) {
     return TV_BASE;
 }
 static void list_row(struct app *app, const struct onb_row *row, bool selected, long long now) {
-    struct native_onboarding *s = app->onboarding;
-    const struct onb_model *m = s->model;
+    const struct onb_model *m = app->onboarding->model;
     int width = app->content_width, name_w = width >= 110 ? 30 : width >= 80 ? 22 : 16, state_w = width >= 110 ? 30 : 22;
-    char name[300], state[64], age[16], line[600];
-    enum tv_style tone;
-    if (row->kind == ONB_ROW_CANDIDATE) {
-        const struct onb_candidate *c = &m->candidates[row->index];
-        enum onb_typed typed = onb_candidate_typed(m, c);
-        onb_candidate_state(m, c, state, sizeof(state));
-        onb_candidate_age(c, now, age, sizeof(age));
-        snprintf(name, sizeof(name), "%s", c->source_count && c->sources[0].name[0] && strcmp(c->sources[0].name, c->target) ? c->sources[0].name : c->target);
-        tone = typed_tone(typed, selected);
-        if (width >= 80) snprintf(line, sizeof(line), "%c %-*.*s %-*.*s %-10.10s %-14.14s %5s", selected ? '>' : ' ', name_w, name_w, name, state_w, state_w, state,
-                                  onb_candidate_source(c), onb_candidate_platform(c), age);
-        else snprintf(line, sizeof(line), "%c %-*.*s %-*.*s", selected ? '>' : ' ', name_w, name_w, name, state_w, state_w, state);
-    } else {
-        const struct onb_record *r = &m->records[row->index];
-        tone = typed_tone(r->revocation.present ? ONB_REVOKED : ONB_CONFLICTING, selected);
-        snprintf(state, sizeof(state), "%s: %s", r->revocation.present ? "revoked" : "conflicting", r->revocation.present ? "not imported" : r->reason);
-        if (width >= 80) snprintf(line, sizeof(line), "%c %-*.*s %-*.*s %-10.10s %-14.14s %5s", selected ? '>' : ' ', name_w, name_w, r->name, state_w, state_w, state, r->source, "-", "-");
-        else snprintf(line, sizeof(line), "%c %-*.*s %-*.*s", selected ? '>' : ' ', name_w, name_w, r->name, state_w, state_w, state);
-    }
+    char line[600], mark = selected ? '>' : ' ';
+    struct onb_row_cells cells;
+    onb_row_cells(m, row, now, &cells);
+    if (width >= 80) snprintf(line, sizeof(line), "%c %-*.*s %-*.*s %-10.10s %-14.14s %5s", mark, name_w, name_w, cells.name, state_w, state_w, cells.state,
+                              cells.source, cells.platform, cells.age);
+    else snprintf(line, sizeof(line), "%c %-*.*s %-*.*s", mark, name_w, name_w, cells.name, state_w, state_w, cells.state);
     if (selected) column(app, 0, width, TV_SELECTED, "");
-    column(app, 0, width, tone, line);
+    column(app, 0, width, typed_tone(cells.typed, selected), line);
     app->line++;
 }
 static void list_summary(struct app *app, char *out, size_t size) {
@@ -141,6 +127,22 @@ static void list_summary(struct app *app, char *out, size_t size) {
     if (!m->complete && m->remaining) text_append(out, size, " / %lld not yet compatible", m->remaining);
     if (m->intent.loaded) text_append(out, size, " / intent %.12s (%zu host%s)", m->intent.digest, m->intent.host_count, m->intent.host_count == 1 ? "" : "s");
 }
+static void render_list_empty(struct app *app) {
+    struct native_onboarding *s = app->onboarding;
+    linef(app, "");
+    paragraph(app, s->model->candidate_count || s->model->record_count ? "No row matches the filters; x clears them."
+              : "No candidates yet. f discovers explicitly named SSH aliases, an inventory or a live source (no connection is made); "
+                "Q then qualifies them with one strict read-only handshake each and records the export; o opens an export made on the command line.", TV_BASE);
+    app->line = app->limit - 2;
+    column(app, 0, app->content_width, s->notice[0] ? TV_WARNING : TV_MUTED, s->notice[0] ? s->notice : "Nothing here changes a host: enrollment is applied only from a reviewed intent after a typed confirmation.");
+}
+static void list_header(struct app *app) {
+    int width = app->content_width, name_w = width >= 110 ? 30 : 22;
+    char header[400];
+    if (width >= 80) snprintf(header, sizeof(header), "  %-*s %-*s %-10s %-14s %5s", name_w, "NAME / TARGET", name_w, "STATE", "SOURCE", "PLATFORM", "AGE");
+    else snprintf(header, sizeof(header), "  %-16s %-22s", "NAME / TARGET", "STATE");
+    column(app, 0, width, TV_MUTED, header); app->line++;
+}
 static void render_list(struct app *app) {
     struct native_onboarding *s = app->onboarding;
     struct onb_row rows[ONB_CANDIDATES + ONB_RECORDS];
@@ -152,18 +154,8 @@ static void render_list(struct app *app) {
     title(app, TV_STRONG, "ONBOARDING / candidates, qualification and enrollment");
     list_summary(app, summary, sizeof(summary));
     column(app, 0, width, TV_MUTED, summary); app->line++;
-    if (!count) {
-        linef(app, "");
-        paragraph(app, s->model->candidate_count || s->model->record_count ? "No row matches the filters; x clears them."
-                  : "No candidates yet. f discovers explicitly named SSH aliases, an inventory or a live source (no connection is made); "
-                    "Q then qualifies them with one strict read-only handshake each and records the export; o opens an export made on the command line.", TV_BASE);
-        app->line = app->limit - 2;
-        column(app, 0, width, s->notice[0] ? TV_WARNING : TV_MUTED, s->notice[0] ? s->notice : "Nothing here changes a host: enrollment is applied only from a reviewed intent after a typed confirmation.");
-        return;
-    }
-    if (width >= 80) snprintf(header, sizeof(header), "  %-*s %-*s %-10s %-14s %5s", width >= 110 ? 30 : 22, "NAME / TARGET", width >= 110 ? 30 : 22, "STATE", "SOURCE", "PLATFORM", "AGE");
-    else snprintf(header, sizeof(header), "  %-16s %-22s", "NAME / TARGET", "STATE");
-    column(app, 0, width, TV_MUTED, header); app->line++;
+    if (!count) { render_list_empty(app); return; }
+    list_header(app);
     available = app->limit - 2 - app->line;
     if (available < 1) available = 1;
     start = s->selected >= (size_t)available ? s->selected - (size_t)available + 1 : 0;
@@ -216,31 +208,40 @@ static void enrollment_pairs(struct pen *p, const struct onb_host *h) {
     if (h->key_changed) { snprintf(text, sizeof(text), "reviewed %s, presented %s", h->reviewed, h->presented); pen_pair(p, "Host key", text, TV_WARNING); }
     revocation_pairs(p, &h->revocation);
 }
+static void resolution_pair(struct pen *p, const struct onb_candidate *c) {
+    char text[600];
+    if (!c->resolution_ok) { pen_pair(p, "Resolved", "no: ssh -G could not resolve this target", TV_WARNING); return; }
+    snprintf(text, sizeof(text), "%.100s@%.200s port %.8s, policy %.12s%s%.200s", c->user, c->hostname, c->port[0] ? c->port : "22", c->policy_sha256, c->ssh_config[0] ? ", config " : "", c->ssh_config);
+    pen_pair(p, "Resolved", text, TV_BASE);
+}
+static void remote_pair(struct pen *p, const struct onb_candidate *c) {
+    char text[600];
+    if (!c->platform[0] && !c->hydra_version[0]) return;
+    snprintf(text, sizeof(text), "%s, Hydra %s, fleet protocol %d", onb_candidate_platform(c), c->hydra_version[0] ? c->hydra_version : "?", c->fleet_protocol);
+    pen_pair(p, "Remote", text, TV_BASE);
+}
+static void qualification_pairs(struct pen *p, const struct onb_candidate *c) {
+    char text[600], when[48];
+    if (!c->qualified) { pen_pair(p, "Qualification", "not yet: Q runs one strict read-only handshake", TV_BASE); return; }
+    onb_time_text(c->qualified_at, when, sizeof(when));
+    snprintf(text, sizeof(text), "%s at %s (%lld attempt%s, %s)", c->qualification_ok ? "compatible" : "failed", when, c->attempts, c->attempts == 1 ? "" : "s", c->freshness[0] ? c->freshness : "freshness unknown");
+    pen_pair(p, "Qualification", text, c->qualification_ok ? TV_SUCCESS : TV_WARNING);
+    if (c->fingerprint[0]) pen_pair(p, "Peer key", c->fingerprint, TV_BASE);
+    remote_pair(p, c);
+    if (c->code[0]) { snprintf(text, sizeof(text), "%s: %s", c->code, c->message); pen_pair(p, "Error", text, TV_WARNING); }
+    if (c->recovery[0] && !c->key_changed) pen_pair(p, "Next", c->recovery, TV_MUTED);
+    key_change_pairs(p, c);
+}
 static void render_candidate(struct app *app, struct pen *p, const struct onb_candidate *c) {
     const struct onb_model *m = app->onboarding->model;
-    char text[600], when[48], state[64];
+    char state[64];
     onb_candidate_state(m, c, state, sizeof(state));
     pen_pair(p, "Candidate", c->candidate_id, TV_STRONG);
     pen_pair(p, "Target", c->target, TV_BASE);
     pen_pair(p, "State", state, typed_tone(onb_candidate_typed(m, c), false));
     source_pairs(p, c);
-    if (c->resolution_ok) {
-        snprintf(text, sizeof(text), "%.100s@%.200s port %.8s, policy %.12s%s%.200s", c->user, c->hostname, c->port[0] ? c->port : "22", c->policy_sha256, c->ssh_config[0] ? ", config " : "", c->ssh_config);
-        pen_pair(p, "Resolved", text, TV_BASE);
-    } else pen_pair(p, "Resolved", "no: ssh -G could not resolve this target", TV_WARNING);
-    if (c->qualified) {
-        onb_time_text(c->qualified_at, when, sizeof(when));
-        snprintf(text, sizeof(text), "%s at %s (%lld attempt%s, %s)", c->qualification_ok ? "compatible" : "failed", when, c->attempts, c->attempts == 1 ? "" : "s", c->freshness[0] ? c->freshness : "freshness unknown");
-        pen_pair(p, "Qualification", text, c->qualification_ok ? TV_SUCCESS : TV_WARNING);
-        if (c->fingerprint[0]) pen_pair(p, "Peer key", c->fingerprint, TV_BASE);
-        if (c->platform[0] || c->hydra_version[0]) {
-            snprintf(text, sizeof(text), "%s, Hydra %s, fleet protocol %d", onb_candidate_platform(c), c->hydra_version[0] ? c->hydra_version : "?", c->fleet_protocol);
-            pen_pair(p, "Remote", text, TV_BASE);
-        }
-        if (c->code[0]) { snprintf(text, sizeof(text), "%s: %s", c->code, c->message); pen_pair(p, "Error", text, TV_WARNING); }
-        if (c->recovery[0] && !c->key_changed) pen_pair(p, "Next", c->recovery, TV_MUTED);
-        key_change_pairs(p, c);
-    } else pen_pair(p, "Qualification", "not yet: Q runs one strict read-only handshake", TV_BASE);
+    resolution_pair(p, c);
+    qualification_pairs(p, c);
     revocation_pairs(p, &c->revocation);
     enrollment_pairs(p, onb_host_for(m, c->candidate_id));
 }
@@ -263,9 +264,8 @@ static void render_detail(struct app *app) {
 
 /* ---- Changes ---- */
 
-static void source_block(struct pen *p, const struct onb_source_report *r) {
+static void acquisition_pairs(struct pen *p, const struct onb_source_report *r) {
     char text[600], when[48];
-    size_t i;
     onb_time_text(r->observed_at, when, sizeof(when));
     snprintf(text, sizeof(text), "%s:%s", r->kind, r->locator);
     pen_pair(p, "Source", text, TV_STRONG);
@@ -273,22 +273,39 @@ static void source_block(struct pen *p, const struct onb_source_report *r) {
              r->record_count == 1 ? "" : "s", r->bytes, r->scope[0] ? ", scope " : "", r->scope);
     pen_pair(p, "Acquisition", text, strcmp(r->status, "acquired") ? TV_WARNING : TV_BASE);
     if (r->client[0]) pen_pair(p, "Client", r->client, TV_BASE);
-    if (r->credentials_omitted || r->skipped) {
-        snprintf(text, sizeof(text), "%lld credential%s omitted, %lld skipped", r->credentials_omitted, r->credentials_omitted == 1 ? "" : "s", r->skipped);
-        pen_pair(p, "Dropped", text, TV_BASE);
-    }
-    if (r->cached) { snprintf(text, sizeof(text), "%s, %llds old, %lld record%s", r->cache_status, r->cache_age, r->cache_count, r->cache_count == 1 ? "" : "s"); pen_pair(p, "Previous", text, TV_BASE); }
-    else pen_pair(p, "Previous", r->first_observation ? "none: first observation of this source" : "none", TV_BASE);
-    snprintf(text, sizeof(text), "%lld added, %lld removed, %lld changed, %lld conflicting, %lld revoked", r->added_count, r->removed_count, r->changed_count, r->conflicting_count, r->revoked_count);
-    pen_pair(p, "Since then", text, r->conflicting_count || r->revoked_count ? TV_WARNING : TV_BASE);
+    if (!r->credentials_omitted && !r->skipped) return;
+    snprintf(text, sizeof(text), "%lld credential%s omitted, %lld skipped", r->credentials_omitted, r->credentials_omitted == 1 ? "" : "s", r->skipped);
+    pen_pair(p, "Dropped", text, TV_BASE);
+}
+static void previous_pair(struct pen *p, const struct onb_source_report *r) {
+    char text[600];
+    if (!r->cached) { pen_pair(p, "Previous", r->first_observation ? "none: first observation of this source" : "none", TV_BASE); return; }
+    snprintf(text, sizeof(text), "%s, %llds old, %lld record%s", r->cache_status, r->cache_age, r->cache_count, r->cache_count == 1 ? "" : "s");
+    pen_pair(p, "Previous", text, TV_BASE);
+}
+static void changed_names(struct pen *p, const struct onb_source_report *r) {
+    char text[600];
+    size_t i;
     for (i = 0; i < r->added_n; i++) pen_pair(p, i ? "" : "Added", r->added[i], TV_SUCCESS);
     for (i = 0; i < r->removed_n; i++) pen_pair(p, i ? "" : "Removed", r->removed[i], TV_WARNING);
     for (i = 0; i < r->changed_n; i++) {
         snprintf(text, sizeof(text), "%s: %s -> %s", r->changed[i].name, r->changed[i].previous_target[0] ? r->changed[i].previous_target : "(same target)", r->changed[i].target);
         pen_pair(p, i ? "" : "Changed", text, TV_WARNING);
     }
-    if ((r->added_count > (long long)r->added_n || r->removed_count > (long long)r->removed_n || r->changed_count > (long long)r->changed_n) && !r->added_n && !r->removed_n && !r->changed_n)
-        pen_pair(p, "Names", "run discover with --diff to list them", TV_MUTED);
+}
+/* Counts without names: the report was taken without its name lists. */
+static bool names_unlisted(const struct onb_source_report *r) {
+    if (r->added_n || r->removed_n || r->changed_n) return false;
+    return r->added_count > 0 || r->removed_count > 0 || r->changed_count > 0;
+}
+static void source_block(struct pen *p, const struct onb_source_report *r) {
+    char text[600];
+    acquisition_pairs(p, r);
+    previous_pair(p, r);
+    snprintf(text, sizeof(text), "%lld added, %lld removed, %lld changed, %lld conflicting, %lld revoked", r->added_count, r->removed_count, r->changed_count, r->conflicting_count, r->revoked_count);
+    pen_pair(p, "Since then", text, r->conflicting_count || r->revoked_count ? TV_WARNING : TV_BASE);
+    changed_names(p, r);
+    if (names_unlisted(r)) pen_pair(p, "Names", "run discover with --diff to list them", TV_MUTED);
     pen_blank(p);
 }
 static void render_changes(struct app *app) {

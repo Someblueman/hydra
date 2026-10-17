@@ -75,9 +75,13 @@ static json_object *hosts_with_records(json_object *record) {
     }
     return out;
 }
+/* host may be borrowed from generation's own "host" during reconciliation, so
+ * both copies are made before either field is replaced. */
 static void set_assignment(json_object *record, json_object *generation, const char *host, const char *reservation, const char *digest) {
-    json_object_object_add(generation, "host", host ? json_object_new_string(host) : json_object_new_null());
-    json_object_object_add(record, "assigned_host", host ? json_object_new_string(host) : json_object_new_null());
+    json_object *generation_host = host ? json_object_new_string(host) : json_object_new_null();
+    json_object *assigned_host = host ? json_object_new_string(host) : json_object_new_null();
+    json_object_object_add(generation, "host", generation_host);
+    json_object_object_add(record, "assigned_host", assigned_host);
     f_string_add(generation, "reservation", reservation); f_string_add(record, "reservation", reservation);
     json_object_object_add(generation, "bound_spec_sha256", digest ? json_object_new_string(digest) : json_object_new_null());
     json_object_object_add(record, "bound_spec_sha256", digest ? json_object_new_string(digest) : json_object_new_null());
@@ -92,7 +96,10 @@ static json_object *dispatch(json_object *record, json_object *generation, json_
     json_object_object_add(attempt, "requested_at", json_object_new_int64((int64_t)time(NULL)));
     json_object_array_add(attempts, attempt);
     if (!(bound = rebind(package, host))) { f_string_add(attempt, "outcome", "error"); f_string_add(attempt, "code", "rebind_failed"); *outcome = "error"; return f_error("fleet-task-submit", "io_failed", "cannot bind the package to the selected host"); }
+    /* The digest is read from the attempt's copy: bound is released after the
+     * request, and set_assignment still needs it then. */
     digest = f_string(bound, "spec_sha256"); f_string_add(attempt, "spec_sha256", digest);
+    if (digest) digest = f_string(attempt, "spec_sha256");
     if (placement_record_write(record)) { json_object_put(bound); f_string_add(attempt, "outcome", "error"); *outcome = "error"; return f_error("fleet-task-submit", "io_failed", "cannot record the placement attempt durably; nothing was sent"); }
     response = task_remote_submit(host, bound, key, trust ? digest : NULL, json_object_get_int(f_field(generation, "generation")), seconds);
     json_object_put(bound);

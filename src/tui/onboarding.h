@@ -99,6 +99,9 @@ struct onb_row { enum onb_row_kind kind; size_t index; };
 struct onb_filter { int typed; char source[32], platform[48], label[64], search[128]; };
 bool onb_row_visible(const struct onb_model *m, const struct onb_filter *f, const struct onb_row *row);
 size_t onb_rows(const struct onb_model *m, const struct onb_filter *f, struct onb_row *rows, size_t capacity);
+/* A list row's displayed cells; name, source and platform point into the model. */
+struct onb_row_cells { const char *name, *source, *platform; char state[64], age[16]; enum onb_typed typed; };
+void onb_row_cells(const struct onb_model *m, const struct onb_row *row, long long now, struct onb_row_cells *cells);
 /* Distinct source kinds / platforms for the filter cycles; next value after
  * current (empty for all). */
 void onb_next_source(const struct onb_model *m, char *current, size_t size);

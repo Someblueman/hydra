@@ -112,8 +112,11 @@ for viz_size in 40x10 80x24 140x40; do
     viz_cols="${viz_size%x*}" viz_rows="${viz_size#*x}"
     awk -v cols="$viz_cols" -v rows="$viz_rows" 'length >= cols {exit 1} END {if (NR!=rows+1) exit 1}' "$viz_tmp/hosts.out"
 done
-grep -q 'empty.*responded.*0 heads' "$viz_tmp/hosts.out"
-grep -q 'offline.*failed' "$viz_tmp/hosts.out"
+# The list row names the connection; a host that did not respond shows no
+# head count rather than zero, and the detail keeps the raw list response.
+grep -q 'empty  *connected  *0 heads' "$viz_tmp/hosts.out"
+grep -q 'offline  *disconnected  *-- heads' "$viz_tmp/hosts.out"
+grep -q 'List response: responded' "$viz_tmp/hosts.out"
 for viz_size in 999999999999999999x24 80x9999999999999999 4097x24; do
     if "$viz_tui" --headless-fixture "$viz_tmp/heads.tsv" --size "$viz_size" >/dev/null 2>&1; then
         echo 'FAIL: accepted out-of-range dimensions'; exit 1

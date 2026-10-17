@@ -47,22 +47,52 @@ static const char *apply_word(const char *status) {
     return status;
 }
 
+/* Words for a recorded status; an unlisted status is spelled as recorded. */
+static const char *word_for(const char *const (*words)[2], const char *status, const char *otherwise) {
+    for (; (*words)[0]; words++) if (!strcmp((*words)[0], status)) return (*words)[1];
+    return otherwise;
+}
+static void host_state(const struct onb_host *h, char *out, size_t size) {
+    if (!strcmp(h->status, "not_started")) snprintf(out, size, "reviewed, not applied");
+    else if (!strcmp(h->status, "enrolled")) snprintf(out, size, "enrolled: %s", h->phase);
+    else snprintf(out, size, "apply: %s", apply_word(h->status));
+}
+static void qualification_failure(const struct onb_model *m, const struct onb_candidate *c, char *out, size_t size) {
+    static const char *const words[][2] = {{"host_key_changed", "failed: key changed"}, {"host_key_unknown", "failed: key unknown"}, {NULL, NULL}};
+    const char *word = word_for(words, c->code, NULL);
+    if (word) snprintf(out, size, "%s", word);
+    else if (!strcmp(c->code, "capability_unavailable")) snprintf(out, size, "failed: no %s", m->capability[0] ? m->capability : "capability");
+    else snprintf(out, size, "failed: %.40s", c->code[0] ? c->code : "qualification");
+}
 void onb_candidate_state(const struct onb_model *m, const struct onb_candidate *c, char *out, size_t size) {
+    static const char *const words[][2] = {{"compatible", "qualified"}, {"resolution_failed", "failed: unresolved"},
+                                           {"not_qualified", "new: not yet qualified"}, {NULL, NULL}};
     const struct onb_host *h = onb_host_for(m, c->candidate_id);
-    if (!strcmp(c->status, "revoked")) { snprintf(out, size, "revoked"); return; }
-    if (h && strcmp(h->status, "not_started")) { snprintf(out, size, "%s: %s", !strcmp(h->status, "enrolled") ? "enrolled" : "apply", !strcmp(h->status, "enrolled") ? h->phase : apply_word(h->status)); return; }
-    if (h) { snprintf(out, size, "reviewed, not applied"); return; }
-    if (!strcmp(c->status, "compatible")) { snprintf(out, size, "qualified"); return; }
-    if (!strcmp(c->status, "qualification_failed")) {
-        if (!strcmp(c->code, "host_key_changed")) snprintf(out, size, "failed: key changed");
-        else if (!strcmp(c->code, "host_key_unknown")) snprintf(out, size, "failed: key unknown");
-        else if (!strcmp(c->code, "capability_unavailable")) snprintf(out, size, "failed: no %s", m->capability[0] ? m->capability : "capability");
-        else snprintf(out, size, "failed: %.40s", c->code[0] ? c->code : "qualification");
-        return;
-    }
-    if (!strcmp(c->status, "resolution_failed")) { snprintf(out, size, "failed: unresolved"); return; }
-    if (!strcmp(c->status, "not_qualified")) { snprintf(out, size, "new: not yet qualified"); return; }
-    snprintf(out, size, "new: discovered");
+    if (!strcmp(c->status, "revoked")) snprintf(out, size, "revoked");
+    else if (h) host_state(h, out, size);
+    else if (!strcmp(c->status, "qualification_failed")) qualification_failure(m, c, out, size);
+    else snprintf(out, size, "%s", word_for(words, c->status, "new: discovered"));
+}
+
+/* One list row's cells: a candidate, or a reported record that is never imported. */
+static void candidate_cells(const struct onb_model *m, const struct onb_candidate *c, long long now, struct onb_row_cells *cells) {
+    const char *first = c->source_count ? c->sources[0].name : "";
+    onb_candidate_state(m, c, cells->state, sizeof(cells->state));
+    onb_candidate_age(c, now, cells->age, sizeof(cells->age));
+    cells->name = first[0] && strcmp(first, c->target) ? first : c->target;
+    cells->source = onb_candidate_source(c); cells->platform = onb_candidate_platform(c);
+    cells->typed = onb_candidate_typed(m, c);
+}
+static void record_cells(const struct onb_record *r, struct onb_row_cells *cells) {
+    bool revoked = r->revocation.present;
+    snprintf(cells->state, sizeof(cells->state), "%s: %s", revoked ? "revoked" : "conflicting", revoked ? "not imported" : r->reason);
+    copy_text(cells->age, sizeof(cells->age), "-");
+    cells->name = r->name; cells->source = r->source; cells->platform = "-";
+    cells->typed = revoked ? ONB_REVOKED : ONB_CONFLICTING;
+}
+void onb_row_cells(const struct onb_model *m, const struct onb_row *row, long long now, struct onb_row_cells *cells) {
+    if (row->kind == ONB_ROW_CANDIDATE) candidate_cells(m, &m->candidates[row->index], now, cells);
+    else record_cells(&m->records[row->index], cells);
 }
 
 const char *onb_candidate_source(const struct onb_candidate *c) {
@@ -206,23 +236,31 @@ static bool add_words(struct onb_argv *a, const char *option, const char *text, 
     return true;
 }
 
+/* An option and its value, added only when the value is set. */
+static bool add_option(struct onb_argv *a, const char *option, const char *value) {
+    return !value[0] || (onb_argv_add(a, option) && onb_argv_add(a, value));
+}
+/* The selection is one of: aliases, an inventory with names, a live source
+ * (names optional for discover, required for qualify). */
+static bool selection_complete(const struct onb_selection *s, size_t aliases, size_t names, bool qualify) {
+    bool listed = s->inventory[0] || s->source[0];
+    if (listed && !names && (qualify || s->inventory[0])) return false;
+    if (names && !listed) return false;
+    return aliases || names || s->source[0];
+}
+static bool add_mode(struct onb_argv *a, bool qualify, const char *export_path) {
+    if (!qualify) return onb_argv_add(a, "--diff");
+    if (!export_path || export_path[0] != '/') return false;
+    return onb_argv_add(a, "--require") && onb_argv_add(a, "list") && onb_argv_add(a, "--progress") && onb_argv_add(a, export_path);
+}
 bool onb_discover_argv(struct onb_argv *a, const struct onb_selection *s, bool qualify, const char *export_path) {
     size_t aliases = 0, names = 0;
     onb_argv_reset(a);
-    if (!onb_argv_add(a, "hydra") || !onb_argv_add(a, "fleet") || !onb_argv_add(a, qualify ? "qualify" : "discover")) return false;
-    if (!add_words(a, "--ssh", s->aliases, &aliases) || aliases > 16) return false;
-    if (s->inventory[0] && (!onb_argv_add(a, "--inventory") || !onb_argv_add(a, s->inventory))) return false;
-    if (s->source[0] && (!onb_argv_add(a, "--source") || !onb_argv_add(a, s->source))) return false;
-    if (!add_words(a, "--select", s->names, &names) || names > 100) return false;
-    if ((s->inventory[0] || s->source[0]) && !names && (qualify || s->inventory[0])) return false;
-    if (names && !s->inventory[0] && !s->source[0]) return false;
-    if (!aliases && !names && !s->source[0]) return false;
-    if (s->config[0] && (!onb_argv_add(a, "--ssh-config") || !onb_argv_add(a, s->config))) return false;
-    if (qualify) {
-        if (!export_path || export_path[0] != '/') return false;
-        if (!onb_argv_add(a, "--require") || !onb_argv_add(a, "list") || !onb_argv_add(a, "--progress") || !onb_argv_add(a, export_path)) return false;
-    } else if (!onb_argv_add(a, "--diff")) return false;
-    return onb_argv_add(a, "--json");
+    return onb_argv_add(a, "hydra") && onb_argv_add(a, "fleet") && onb_argv_add(a, qualify ? "qualify" : "discover") &&
+        add_words(a, "--ssh", s->aliases, &aliases) && aliases <= 16 &&
+        add_option(a, "--inventory", s->inventory) && add_option(a, "--source", s->source) &&
+        add_words(a, "--select", s->names, &names) && names <= 100 && selection_complete(s, aliases, names, qualify) &&
+        add_option(a, "--ssh-config", s->config) && add_mode(a, qualify, export_path) && onb_argv_add(a, "--json");
 }
 
 static bool append_word(char *text, size_t size, const char *word) {
@@ -237,45 +275,49 @@ static bool append_word(char *text, size_t size, const char *word) {
     return true;
 }
 
+/* A source names one live selector or one inventory for the whole export. */
+static bool set_single(char *slot, size_t size, const char *value) {
+    if (slot[0] && strcmp(slot, value)) return false;
+    copy_text(slot, size, value);
+    return true;
+}
+static bool select_source(struct onb_selection *s, const struct onb_source_ref *r) {
+    char selector[ONB_PATH + 40];
+    if (r->scope[0]) {
+        snprintf(selector, sizeof(selector), "%s:%s", r->kind, r->locator);
+        return set_single(s->source, sizeof(s->source), selector) && append_word(s->names, sizeof(s->names), r->name);
+    }
+    if (!strcmp(r->kind, "ssh-config")) return append_word(s->aliases, sizeof(s->aliases), r->name);
+    if (!strcmp(r->kind, "static"))
+        return set_single(s->inventory, sizeof(s->inventory), r->locator) && append_word(s->names, sizeof(s->names), r->name);
+    return false;
+}
 bool onb_export_selection(const struct onb_model *m, struct onb_selection *s) {
     size_t i, j;
     memset(s, 0, sizeof(*s));
     for (i = 0; i < m->candidate_count; i++) {
         const struct onb_candidate *c = &m->candidates[i];
         if (c->ssh_config[0]) copy_text(s->config, sizeof(s->config), c->ssh_config);
-        for (j = 0; j < c->source_count; j++) {
-            const struct onb_source_ref *r = &c->sources[j];
-            char selector[ONB_PATH + 40];
-            if (r->scope[0]) {
-                snprintf(selector, sizeof(selector), "%s:%s", r->kind, r->locator);
-                if (s->source[0] && strcmp(s->source, selector)) return false;
-                copy_text(s->source, sizeof(s->source), selector);
-                if (!append_word(s->names, sizeof(s->names), r->name)) return false;
-            } else if (!strcmp(r->kind, "ssh-config")) {
-                if (!append_word(s->aliases, sizeof(s->aliases), r->name)) return false;
-            } else if (!strcmp(r->kind, "static")) {
-                if (s->inventory[0] && strcmp(s->inventory, r->locator)) return false;
-                copy_text(s->inventory, sizeof(s->inventory), r->locator);
-                if (!append_word(s->names, sizeof(s->names), r->name)) return false;
-            } else return false;
-        }
+        for (j = 0; j < c->source_count; j++) if (!select_source(s, &c->sources[j])) return false;
     }
     return s->aliases[0] || s->names[0];
 }
 
+static bool absolute(const char *path) { return path && path[0] == '/'; }
+/* A package, its digest and the install prefix go together or not at all. */
+static bool add_package(struct onb_argv *a, const struct onb_review *r) {
+    if (!r->package[0] && !r->sha256[0] && !r->prefix[0]) return true;
+    if (!absolute(r->package) || !onb_hex_digest(r->sha256) || !absolute(r->prefix)) return false;
+    return onb_argv_add(a, "--package") && onb_argv_add(a, r->package) && onb_argv_add(a, "--sha256") && onb_argv_add(a, r->sha256) &&
+        onb_argv_add(a, "--prefix") && onb_argv_add(a, r->prefix);
+}
 bool onb_review_argv(struct onb_argv *a, const char *export_path, const char *candidate_id, const struct onb_review *r, const char *intent_path) {
     onb_argv_reset(a);
-    if (!export_path || export_path[0] != '/' || !intent_path || intent_path[0] != '/' || strncmp(candidate_id, "cand_", 5) || r->project[0] != '/') return false;
-    if (!onb_argv_add(a, "hydra") || !onb_argv_add(a, "fleet") || !onb_argv_add(a, "enroll") || !onb_argv_add(a, "review")) return false;
-    if (!onb_argv_add(a, "--input") || !onb_argv_add(a, export_path) || !onb_argv_add(a, "--candidate") || !onb_argv_add(a, candidate_id)) return false;
-    if (!onb_argv_add(a, "--project") || !onb_argv_add(a, r->project)) return false;
-    if (r->alias[0] && (!onb_argv_add(a, "--alias") || !onb_argv_add(a, r->alias))) return false;
-    if (r->package[0] || r->sha256[0] || r->prefix[0]) {
-        if (r->package[0] != '/' || !onb_hex_digest(r->sha256) || r->prefix[0] != '/') return false;
-        if (!onb_argv_add(a, "--package") || !onb_argv_add(a, r->package) || !onb_argv_add(a, "--sha256") || !onb_argv_add(a, r->sha256) ||
-            !onb_argv_add(a, "--prefix") || !onb_argv_add(a, r->prefix)) return false;
-    }
-    return onb_argv_add(a, "--output") && onb_argv_add(a, intent_path) && onb_argv_add(a, "--json");
+    if (!absolute(export_path) || !absolute(intent_path) || strncmp(candidate_id, "cand_", 5) || !absolute(r->project)) return false;
+    return onb_argv_add(a, "hydra") && onb_argv_add(a, "fleet") && onb_argv_add(a, "enroll") && onb_argv_add(a, "review") &&
+        onb_argv_add(a, "--input") && onb_argv_add(a, export_path) && onb_argv_add(a, "--candidate") && onb_argv_add(a, candidate_id) &&
+        onb_argv_add(a, "--project") && onb_argv_add(a, r->project) && add_option(a, "--alias", r->alias) && add_package(a, r) &&
+        onb_argv_add(a, "--output") && onb_argv_add(a, intent_path) && onb_argv_add(a, "--json");
 }
 
 bool onb_status_argv(struct onb_argv *a, const char *intent_path) {
@@ -308,18 +350,30 @@ static bool under(const char *path, const char *directory) {
     return n && path[0] == '/' && !strncmp(path, directory, n) && path[n] == '/' && !strstr(path, "/../") && !strchr(path + n + 1, '/');
 }
 
-bool onb_discover_argv_valid(const struct onb_argv *a, const char *directory) {
+static bool valued_option(const char *word) {
     static const char *const valued[] = {"--ssh", "--inventory", "--select", "--source", "--ssh-config", "--require", "--progress", "--timeout", NULL};
-    size_t i, j;
+    size_t i;
+    for (i = 0; valued[i]; i++) if (!strcmp(word, valued[i])) return true;
+    return false;
+}
+/* The option at i takes the next word as its value; --progress only for
+ * qualify and only to a file directly under the onboarding directory. */
+static bool option_valid(const struct onb_argv *a, size_t i, bool qualify, const char *directory, bool *progress) {
+    const char *option = a->words[i], *value = a->words[i + 1];
+    if (!valued_option(option) || i + 2 >= a->count || value[0] == '-' || !value[0]) return false;
+    if (strcmp(option, "--progress")) return true;
+    *progress = true;
+    return qualify && under(value, directory);
+}
+bool onb_discover_argv_valid(const struct onb_argv *a, const char *directory) {
+    size_t i;
     bool qualify, progress = false;
     if (a->count < 5 || strcmp(a->words[0], "hydra") || strcmp(a->words[1], "fleet") || strcmp(a->words[a->count - 1], "--json")) return false;
     qualify = !strcmp(a->words[2], "qualify");
     if (!qualify && strcmp(a->words[2], "discover")) return false;
     for (i = 3; i + 1 < a->count; i++) {
-        if (!strcmp(a->words[i], "--diff")) { if (qualify) return false; continue; }
-        for (j = 0; valued[j]; j++) if (!strcmp(a->words[i], valued[j])) break;
-        if (!valued[j] || i + 2 >= a->count || a->words[i + 1][0] == '-' || !a->words[i + 1][0]) return false;
-        if (!strcmp(a->words[i], "--progress")) { if (!qualify || !under(a->words[i + 1], directory)) return false; progress = true; }
+        if (!qualify && !strcmp(a->words[i], "--diff")) continue;
+        if (!option_valid(a, i, qualify, directory, &progress)) return false;
         i++;
     }
     return !qualify || progress;

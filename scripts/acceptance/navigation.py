@@ -49,7 +49,7 @@ def hints(j: Case) -> None:
     j.cli("spawn", "beta", "--no-agent")
     j.open()
     j.keys(b"1")
-    screen = j.see_all("[Work]", "alpha", "beta")
+    screen = j.settled(j.see_all("[Work]", "alpha", "beta"))
     hint = j.hint(screen)
     first = j.selected_row(screen)
     j.keys(DOWN)
@@ -62,7 +62,7 @@ def hints(j: Case) -> None:
              "j/k select" in hint and first and second and first != second and back == first,
              detail=f"{first[:30]!r} -> {second[:30]!r} -> {back[:30]!r}")
     j.keys(ENTER)
-    screen = j.see("[Details]")
+    screen = j.settled(j.see("[Details]"))
     j.record("U8.a", "Work hint 'Enter details': Enter opens the selected head's details",
              "Enter details" in hint and first.split()[1] in screen.splitlines()[2])
     hint = j.hint(screen)
@@ -82,7 +82,7 @@ def hints(j: Case) -> None:
              "Tab / Shift-Tab" in help_screen and after_tab == "Details" and after_back == "Work")
     # Overview: arrows select, Enter opens details, Tab goes to the next tab.
     j.keys(b"3")
-    screen = j.see("[Overview]")
+    screen = j.settled(j.see("[Overview]"))
     hint = j.hint(screen)
     before = j.selected_row(screen)
     j.keys(DOWN)
@@ -102,7 +102,7 @@ def hints(j: Case) -> None:
     j.keys(b"2")
     j.see("[Details]")
     j.keys(b"c")
-    screen = j.see_any("[Coordination]", "[Coord]")
+    screen = j.settled(j.see_any("[Coordination]", "[Coord]"))
     hint = j.hint(screen)
     j.keys(ESC)
     j.record("U8.a", f"Coordination hint {hint!r}: Esc goes back",
@@ -123,7 +123,7 @@ def hints(j: Case) -> None:
 
 def workspace_focus(j: Case) -> None:
     j.keys(b"W")
-    screen = j.see("[Workspace]")
+    screen = j.settled(j.see("[Workspace]"))
     hint = j.hint(screen)
     titles = pane_titles(screen)
     j.record("U8.b", f"Workspace hint {hint!r} offers Tab for panes; panes visible: {', '.join(titles)}",
