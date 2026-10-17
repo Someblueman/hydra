@@ -2,7 +2,7 @@
 #ifdef __APPLE__
 #define _DARWIN_C_SOURCE
 #endif
-#include "internal.h"
+#include "statistics_cohorts.h"
 void statistics_toggle(struct app *app) {
     if (!statistics_init(app)) return;
     if (app->view == 8) app->view = app->statistics->back_view;
@@ -46,7 +46,9 @@ static void statistics_workflow(struct statistics_view *v, int direction) {
 
 static bool statistics_filter_key(struct app *app, char key) {
     struct statistics_view *v=app->statistics;
-    if(key=='M' && !app->fleet) { v->metric_page=(v->metric_page+1)%(HS_METRICS+1); v->step_scroll=0; }
+    if(key=='M' && !app->fleet) { v->metric_page=v->metric_page>=HS_METRICS ? 0 : v->metric_page+1; v->step_scroll=0; }
+    else if(key=='C' && !app->fleet) { v->metric_page=v->metric_page==STATISTICS_COHORT_PAGE ? 0 : STATISTICS_COHORT_PAGE; v->step_scroll=0; }
+    else if(key=='L' && !app->fleet) { statistics_location_cycle(v,1); v->detail=false; v->step_scroll=0; }
     else if(key=='T' && !app->fleet) { v->filter.days=v->filter.days==0 ? 1 : v->filter.days==1 ? 7 : 0; v->detail=false; }
     else if(key=='!') { v->filter.attention=!v->filter.attention; v->detail=false; }
     else if(key=='0') { memset(&v->filter,0,sizeof(v->filter)); v->detail=false; }
