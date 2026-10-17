@@ -190,6 +190,12 @@ contains "3.85M in / 23.0k out" "$test_root/stats-usage.out" "the run table show
 assert_success $? "the old truncated resource note is gone"
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 80x24 --view statistics > "$test_root/stats-usage-narrow.out"
 contains "tokens in 3.85M" "$test_root/stats-usage-narrow.out" "narrow statistics keep the token total on the timing line"
+# Schema 5 remote rows: the scope panel reports what remote task receipts measured
+# and keeps local steps unmeasured; the location filter is visible.
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v5.tsv" --size 140x40 --view statistics > "$test_root/stats-remote.out"
+contains "Remote CPU 5.5s" "$test_root/stats-remote.out" "remote receipts' CPU is reported with its coverage"
+contains "Location: all" "$test_root/stats-remote.out" "the location filter is shown in the scope panel"
+contains "C cohorts" "$test_root/stats-remote.out" "the cohorts page is announced"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view workspace > "$test_root/workspace-tabs.out"
 contains "[Workspace]" "$test_root/workspace-tabs.out" "workspace keeps the shared tab bar"
 contains "HYDRA / PLAN TOGETHER" "$test_root/workspace-tabs.out" "workspace conversation layout is titled after the reviewed mockup"

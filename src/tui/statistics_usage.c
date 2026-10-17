@@ -79,7 +79,7 @@ void statistics_scope_notes(struct tv_canvas *c, int x, int y, int width, int ro
     if (row + 1 < end) row++;
     if (!s->remote_steps) {
         row += statistics_wrap(c, x, row, width, end - row, TV_MUTED,
-            "CPU and memory: unknown. Local steps carry no task receipt; remote task receipts report them (C cohorts).");
+            "CPU and memory: not measured for local steps (no task receipt); remote task receipts report them (C cohorts).");
     } else {
         char cpu[40], rss[40], note[160];
         statistics_remote_text(HS_CPU_MICROSECONDS, s->remote[HS_CPU_MICROSECONDS], s->remote_known[HS_CPU_MICROSECONDS], s->remote_steps, cpu, sizeof(cpu));
