@@ -251,7 +251,7 @@ digest, project and optional pinned package into a digest-confirmed intent;
 candidate/result, inventory, intent and progress schemas are in
 [CONTRACTS.md](CONTRACTS.md#fleet-coordination-since-v210). Discovery never
 accepts a host key, creates an alias, installs Hydra or submits work.
-`enroll status` (since 3.0) reads an intent's reviewed hosts with the per-host
+`enroll status` (since 3.0.0) reads an intent's reviewed hosts with the per-host
 progress `enroll apply` recorded for its digest: `not_started` for a host never
 attempted, the recorded status and phase otherwise (`outcome_unknown` stays
 unknown), and `revoked` for a binding revoked since review. It connects nowhere,
@@ -641,7 +641,7 @@ deadlines, and retained claims after owner loss.
 
 Remote task submission pins one host by default: the package's immutable `host`
 must be the alias you submit to, and nothing is recorded beyond the receiver's
-acceptance. Automatic placement (since 3.0) chooses the receiver for **new,
+acceptance. Automatic placement (since 3.0.0) chooses the receiver for **new,
 unassigned work** from the registered aliases and records why:
 
 ```sh
@@ -757,7 +757,7 @@ need real hosts and have not been run; no performance improvement is claimed.
 
 ## Task telemetry
 
-Since 3.0 the task owner records what it measured about the execution phase in
+Since 3.0.0 the task owner records what it measured about the execution phase in
 the task's `state.json` as an optional, additive `telemetry` object (telemetry
 block 1). The block travels with the receipt: `task status`, `task observation`
 and the coordinator's `attempt-N/remote/observation.json` carry it under

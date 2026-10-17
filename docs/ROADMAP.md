@@ -1,8 +1,8 @@
 # Hydra Roadmap
 
 > - **Status:** canonical outstanding-work backlog
-> - **Snapshot:** 28 September 2026
-> - **Release:** `v2.9.0` guided remote setup, private state and test hardening
+> - **Snapshot:** 17 October 2026
+> - **Release:** `v3.0.0` one control centre for local and remote work, automatic placement, pools and verified acceptance
 > - **Release planning:** versions are assigned from compatibility impact when backlog work is ready
 > - **Related:** [README](../README.md) · [CHANGELOG](../CHANGELOG.md) ·
 >   [Contracts](CONTRACTS.md) · [Release definition of done](#release-definition-of-done)
@@ -39,29 +39,110 @@ describe only the revisions they name.
 backlog and released when a coherent feature or meaningful change is ready. The
 version number is chosen at release time from compatibility impact.
 
-## Next target: guided remote onboarding
+## Next target: live and human acceptance
 
-Release 2.9.0 fixes R1 and ships the U10 source; see the
-[2.9.0 changelog](../CHANGELOG.md#290---2026-09-28). `hydra remote setup` and the
-control centre's Hosts tab take a fresh SSH account to a verified fleet alias:
-host-key trust after a typed confirmation (never a changed key), a read-only
-preflight, provisioning into a pinned prefix from static Linux release helpers that
-CI rebuilds reproducibly and checks against `release/fleet-assets.tsv`, agent
-detection outside a non-interactive `PATH`, and provider installs and sign-in after
-per-provider approval, each resumable from private setup state. The test suite was
-hardened alongside: each case gets private temporary directories and tmux sockets,
-takes native binaries only from `BUILD_DIR` and polls instead of sleeping, and the
-loopback-SSH enrollment and host-key checks run in CI.
+Release 3.0.0 ships the source of most of the open product and fleet work; see
+the [3.0.0 changelog](../CHANGELOG.md#300---2026-10-17), whose Compatibility
+section explains why it is a major release. What remains is mostly acceptance
+that only a human, a real host or a real provider can give.
 
-U10 stays open until its live acceptance: onboard the operator VPS from an
-installed 2.9.0 build through the control centre, launch a real agent task and
-reconnect, and exercise an existing installation, missing prerequisites, failed
-sign-in and interrupted setup. Remote project selection and pruning old bootstrap
-pins may follow. Scheduling, task pools, automatic placement, T2/T3 and performance
-baselines remain outside this target. A visual design and graphics pass across the
-control centre (I4, extended) is the next candidate after U10. These priorities do
-not establish a release date; compatibility impact still determines the next
-version.
+One control centre (U11): `hydra tui` composes the local snapshot with the fleet
+observation, lists remote heads and receiver-owned tasks beside local heads with
+their host and observation age, filters by location, and attaches, interrupts and
+decides remote work with the local keymap through the public fleet commands. A
+disconnected host keeps its rows as a retained observation and nothing stale,
+retained or unknown authorizes an action; `hydra fleet tui` is now the same
+control centre filtered to remote work. Remote panes scroll the host's own tmux
+history (U16).
+
+Placement, pools and schedules (items 6 and 8): `hydra fleet task submit
+--placement auto` filters and ranks eligible hosts and seals a replayable
+`fleet-placement` record; accepted work that has not started can be withdrawn
+through the receiver's `task-withdraw` and placed again under fenced assignment
+generations. `hydra pool` and `hydra schedule` keep bounded, file-backed pools and
+host-timer schedules that submit through `hydra workflow run` and `hydra exec`,
+with no new scheduler or daemon.
+
+Onboarding many hosts (H4–H6, U10): `fleet discover|qualify --source` acquires
+`ssh-config`, Ansible INI and DNS-SD inventories with private snapshot diffs;
+`fleet revoke` records final, scoped revocations that block every later use;
+`fleet enroll status` reads apply progress without connecting; `O` on the Hosts
+tab is an operator view whose only mutation is a typed-digest `enroll apply`. The
+Hosts tab can provision from a development helper (`HYDRA_REMOTE_SETUP_BINARY`).
+
+Planning (9E, 9F): `plan evaluate`, `plan observed` and `plan decision` separate
+decomposition, scheduling and placement, keep ranges and unknowns, and replay
+selection records byte for byte; `make test-plan-eval` measures held-out outcome
+errors; `plan expand` admits bounded expansions of a finished run through the one
+compiler and policy.
+
+Observation and measurement (item 10, statistics): the task owner records
+telemetry block 1 in every receipt, statistics schema 5 and export schema 3 add
+remote cohorts, and the first Linux container baseline is published with
+provisional budgets. The concurrent headless observation defect it found (item 10
+finding 1, runs ending `observation_unavailable`) is fixed.
+
+Automated acceptance: `make test-acceptance` runs the Acceptance sentences of U1,
+U2, U3, U6, U7, U8, U9, U12, U13, U15 and U17 against a fresh installation;
+`make test-usability` adds goal-driven and comprehension trials (U18, U19);
+`make visual-review` and `make test-visual-lint` capture and lint every screen
+(U4, I4, whose source pass also ships); `make test-t2-headless` and
+`make test-t3-distributed` qualify tmux-less execution; `make test-u10-loopback`
+onboards a throwaway account over loopback SSH.
+
+Open after 3.0.0, by what each item still needs:
+
+- **Product findings (fix in the product, then rerun `make test-acceptance`):**
+  U3.c, Work and Details keep presenting a running agent after the provider exits
+  for lack of a login; U7.a, Details do not show the objective given at launch;
+  U9.c, Coordination for the head holding a queued step calls it a single agent
+  session and names neither the assignment nor the blocking approval; U13.a and
+  U13.b, the number keys shift while Coordination is open (7 reaches Workflows),
+  and at 80 columns Statistics during standalone work lacks the
+  not-a-recorded-run explanation. See [ACCEPTANCE.md](ACCEPTANCE.md).
+- **Human review of the U items** (the "Still needs a human" column below): U1 and
+  U12 need none and close once their rows are green on a 3.0.0 run; U2 in real
+  terminal applications (macOS Terminal, iTerm2); U3 and U17 with a live
+  provider's sign-in and plan authoring; U4 by comparing the contact sheet with
+  both references; U6 by perceptual review of the retained recordings in a real
+  terminal; U7, U9 and U15 by judging the wording and whether each view answers a
+  real question; U8, U18 and U19 by human first use (U18's live-provider, visual
+  and remote-onboarding gates are reported as unexecuted). U5's follow-ups
+  (answering an agent question mid-run, a failed check with supported recovery,
+  leaving and returning) await the next real run.
+- **I4:** the user's review of the `make visual-review` contact sheet (themes,
+  contrast, hierarchy, the palette contrast rows in `lint-known.tsv`) and the
+  interactive walk-through of finding, reviewing and returning to an item.
+- **U10:** the operator VPS run recorded in the item, from an installed 3.0.0
+  build through the Hosts tab with a real provider sign-in, a real agent task and
+  a reconnect.
+- **U11 and U16 remote:** on a live host, real SSH attach, reconnect after a real
+  disconnection and remote history scrolling, including a host tmux with a
+  non-default prefix. Remote tasks are not yet nodes of the workspace navigation
+  tree.
+- **T2 and T3:** the same steps on a real, separately authenticated host without
+  tmux and with a signed-in headless adapter, then the two-host scenario across
+  real hosts ([T2/T3 qualification](T2_T3_QUALIFICATION.md)).
+- **Item 6:** heterogeneous-host trials comparing explicit and automatic placement
+  by queue wait, time to verified result, throughput, transfer bytes and
+  starvation.
+- **Item 8:** a live cron, systemd or launchd installation, macOS, and workers on
+  more than one host.
+- **Item 10:** a second Linux trial and a macOS baseline before the budgets are
+  frozen; 50 headless heads, which never became usable (finding 2); the host
+  admission lock refusing some simultaneous `exec` starts at 10 or more heads
+  (`state_unavailable`, 1 of 10 and 14 of 20 in the evidence addendum); remote
+  headless and live-agent cells; and the efficiency slice, not started.
+- **9E:** a semantic planning benefit over its overhead on a real workload with
+  live agents, with recorded human corrections and supplied estimates.
+- **H4–H6 live:** a live mDNS network, a real Ansible inventory and
+  `avahi-browse` on a real LAN; onboarding a real multi-host fleet through the
+  operator view; a real host key rotation.
+- **Statistics:** telemetry from real remote hosts and provider cost figures.
+- **Standalone termviz:** the user's publication decision.
+
+These priorities do not establish a release date; compatibility impact still
+determines the next version.
 
 ## Product and engineering guardrails
 
@@ -261,17 +342,18 @@ an acceptance blocker, not optional cosmetic polish.
       real recipe machinery and recorded off `PATH`, a sign-in killed mid-way and
       resumed without being repeated, a sign-in whose verification fails and is
       retried, a real fixture-agent task launched on the host (`hydra fleet
-      spawn`; the control centre has no remote launch until U11) and found again
-      in the Fleet view after the client reconnects, a second setup of the same
+      spawn`; the control centre observes and controls remote work since U11 but
+      does not launch it) and found again in the control centre filtered to
+      remote work after the client reconnects, a second setup of the same
       account reusing the pin, a host whose sshd hides `git` (the explained
       requirement with its suggestion, continuing once `git` is back), unrelated
       files byte-identical and no local credential copied
       ([FLEET.md](FLEET.md#guided-remote-setup)). The operator VPS run remains the
-      only thing a human need do: from an installed build, `hydra tui`, `H`, `A`,
+      only thing a human need do: from an installed 3.0.0 build, `hydra tui`, `H`, `A`,
       enter `ubuntu@<vps>`, type `yes` for the fingerprint read on the VPS,
       approve the plans and sign in to a real provider on the VPS, then
       `hydra fleet spawn <name> --project /abs/project -- task --profile <agent>`
-      and `hydra tui --fleet` to find it; a pinned release build needs no
+      and `hydra tui --location remote` to find it; a pinned release build needs no
       `HYDRA_REMOTE_SETUP_BINARY`.
 - [ ] **U11 — One workspace across local and remote execution.** Unify ordinary
       and Fleet UI navigation, agent interaction, task details, attention and review.
@@ -284,7 +366,7 @@ an acceptance blocker, not optional cosmetic polish.
       agent, inspect results and handle remote disconnection without switching
       applications or learning another keymap. Stale remote observations must not
       authorize actions or make ongoing work appear successfully completed.
-      Shipped in 3.0.0 (unreleased): `hydra tui` composes the local snapshot with
+      Shipped in 3.0.0: `hydra tui` composes the local snapshot with
       the fleet observation, lists remote heads and remote tasks beside local
       heads with their host and observation age, filters by location (`L`,
       `--location`), attaches, interrupts and decides remote work with the local
@@ -359,10 +441,11 @@ an acceptance blocker, not optional cosmetic polish.
       views, residual screen regions or lost work; closing a client does not kill
       its execution owner. Verify leaving attachment with actual user input.
       Accepted locally by the user on 27 September 2026 after reviewing the 2.8.0
-      attach/leave/close/resize captures. Since 3.0.0 (unreleased) a remote pane
+      attach/leave/close/resize captures. Since 3.0.0 a remote pane
       scrolls the host's own tmux history through the attached client (`Ctrl-B
       [`, which needs the host tmux's default prefix); remote attach cycles are
-      covered by the U11 fixtures and remain to be accepted on a live host.
+      covered by the U11 fixtures, and their live-host acceptance is tracked
+      under U11.
 - [ ] **U17 — Conversation-to-plan integration without manual JSON.** The current
       plan page asks the user to load draft and policy files. Make agent-authored
       planning part of the conversation: discuss an objective, generate a structured
@@ -561,15 +644,15 @@ to open work:
 
 | Source finding | Open destination and next action |
 | --- | --- |
-| Terminal attachment remains separate from the durable execution owner ([optional tmux][src-tmux]). | [T2](#t-optional-tmux-for-headless-and-remote-execution) live qualification, then [T3](#t-optional-tmux-for-headless-and-remote-execution). Next: qualify an authenticated host without tmux, then the two-host scenario; interactive heads retain tmux. |
+| Terminal attachment remains separate from the durable execution owner ([optional tmux][src-tmux]). | [T2](#t-optional-tmux-for-headless-and-remote-execution) live qualification, then [T3](#t-optional-tmux-for-headless-and-remote-execution); both are reproducibly qualified on tmux-less loopback receivers in 3.0.0. Next: qualify an authenticated host without tmux, then the two-host scenario; interactive heads retain tmux. |
 | Control-mode polling is a bounded historical lead ([tmux prototype][src-tmux-prototype]). | Item 10 may evaluate it; reconnect, restart, partial frames, sustained CPU/RSS, resize and platform parity remain unqualified. Next: measure the supported matrix before selecting a change. |
 | Scheduled input, coordinated omission, monotonic clocks, attribution and counter limits ([performance research][src-performance]). | [Item 10](#10-performance-baselines-idle-efficiency-and-change-locality): a Linux container baseline at 1/10/50 worktrees with agent/tmux/observer attribution, explicit unknown counters and provisional budgets is published. Next: a macOS baseline, repeated trials and frozen budgets before parity claims. |
-| Discovery supplies untrusted coordinates and needs typed, private candidate state ([host discovery][src-host-report]). | [H4](#h-host-discovery-qualification-and-staged-onboarding). Next: select one live source, then implement and qualify bounded acquisition and snapshot diffs. |
+| Discovery supplies untrusted coordinates and needs typed, private candidate state ([host discovery][src-host-report]). | [H4](#h-host-discovery-qualification-and-staged-onboarding) delivered within local fixture qualification in 3.0.0 (`ssh-config`, Ansible INI and DNS-SD sources with snapshot diffs). Next: observe one live source on a real network or inventory. |
 | Onboarding needs provenance, freshness, identity and typed progress ([host discovery][src-host-brief]). | [H5](#h-host-discovery-qualification-and-staged-onboarding) delivered within local fixture qualification. Next: observe one live multi-host onboarding through the control centre. |
-| Changed keys and source conflicts require explicit revocation and review ([host discovery][src-host-report]). | [H6](#h-host-discovery-qualification-and-staged-onboarding). Next: implement and qualify scoped revocation and reviewed key rotation without cancelling or replaying tasks. |
+| Changed keys and source conflicts require explicit revocation and review ([host discovery][src-host-report]). | [H6](#h-host-discovery-qualification-and-staged-onboarding) delivered within local fixture qualification in 3.0.0 (`fleet revoke`, reported key changes). Next: observe a real host key rotation. |
 | Real Codex, Pi, OpenCode and plain-prompt VPS checks passed; Claude remote qualification was deferred ([workflow acceptance][src-workflow-acceptance]). | Item 2 has no open provider checks: Claude's and Cursor's (with the `--trust` profile fix) remote tasks passed on 26 September 2026; Antigravity is closed upstream ([antigravity-cli#219](https://github.com/google-antigravity/antigravity-cli/issues/219)). The operator-provided Ubuntu VPS runs Hydra with tmux installed; prepare a separate tmux-absent environment for T2. |
 | Structural plan inspection, three-concern evaluation, replayable decision records and a held-out deterministic evaluation are implemented; semantic planning benefit over overhead on a real workload with live agents remains open. | [9E](#9e-explainable-planning-and-measured-plan-quality). Next: run `make test-plan-eval`'s matched protocol on a live-agent workload with recorded human corrections and supplied estimates before claiming planning benefit. |
-| Runtime membership/expansion, PTY server replacement, cloud-manager integration and shared inventory remain conditional ([optional tmux][src-tmux], [host discovery][src-host-brief]). | 9F's open expansion item and the conditional extensions below. Next: revisit only with an explicit authority, workload and acceptance decision. |
+| Runtime membership/expansion, PTY server replacement, cloud-manager integration and shared inventory remain conditional ([optional tmux][src-tmux], [host discovery][src-host-brief]). | 9F's runtime membership changes and late conditional evaluation (unsupported; bounded static expansion shipped in 3.0.0) and the conditional extensions below. Next: revisit only with an explicit authority, workload and acceptance decision. |
 
 [hist]: https://github.com/Someblueman/hydra/tree/66a5baad011d50b17949f981b807f31627c59250/docs
 
@@ -680,7 +763,8 @@ execution substrate and the existing public CLI; strengthen what is planned,
 compiled, handed off, and accepted as a completed outcome.
 
 Milestone IDs are stable references, not release numbers. **9A–9D** are delivered;
-the open work is **9E**'s measured planning evaluation and **9F**'s bounded expansion.
+**9F**'s bounded expansion is delivered within local qualification (3.0.0), and the
+open work is **9E**'s measured planning benefit with live agents.
 Item **6** follows 9E's measured baseline, while 9F is a workload-driven extension
 and does not block basic load balancing.
 
@@ -959,8 +1043,12 @@ whether or not it changed.
       and 20 heads under load after), and the rerun 10-head headless
       sustained-output cells (1 and 3 clients, one trial) measured 2/2 with every
       run completed; see the evidence README addendum. Dropped/coalesced display
-      updates are not exposed by the renderer (unknown). Open: 50 headless heads
-      (finding 2), disconnect/reconnect under pressure and macOS.
+      updates are not exposed by the renderer (unknown). Starting many
+      supervised runs at the same instant is a separate limit: the host
+      admission lock refused 1 of 10 and 14 of 20 simultaneous `exec` starts
+      (`state_unavailable`) in a side experiment recorded in the addendum. Open:
+      50 headless heads (finding 2), simultaneous starts at 10 or more heads,
+      disconnect/reconnect under pressure and macOS.
 - [ ] Qualify **change locality** using per-worktree attribution: compare no-change
       cost and the incremental cost of changing exactly one worktree at each scale.
       Unchanged worktrees should not incur repeated Git scans, helper launches, or

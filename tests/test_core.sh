@@ -145,7 +145,7 @@ printf '%s\n' \
     '    orphan) (sleep 20 & echo $! > "$FAKE_CORE_CHILD_PID"); sleep 20 ;;' \
     '    *) echo 1 ;; esac ;;' \
     '  --version)' \
-    '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 2.9.0 protocol 1" ;; esac ;;' \
+    '    case "${FAKE_CORE_MODE:-}" in version-skew) echo "Hydra core 0.0.0 protocol 1" ;; *) echo "Hydra core 3.0.0 protocol 1" ;; esac ;;' \
     '  snapshot)' \
     '    case "${FAKE_CORE_MODE:-}" in malformed) echo not-json ;; shape) echo '\''{"schema_version":1,"ok":true,"command":"snapshot","data":{"state_schema":2,"projects":1,"heads":[{"project_id":false}]}}'\'' ;; crash) exit 9 ;; *) echo not-json ;; esac ;;' \
     'esac' > "$fake_core"

@@ -1,19 +1,24 @@
 # Hydra public contracts
 
-Hydra 2.9.0 retains state v2, core protocol 1, TUI protocol 2 and Fleet protocol 1.
-It adds guided remote setup (`hydra remote setup`, `provision`, `agents`,
-`install-agent`, `sign-in`) with private per-host setup state, `hydra agent locate`
-with recorded off-PATH agent locations, platform-bound install packages and pinned
-static release helpers, and `hydra doctor --fix-permissions`. Hydra's own state is
-created privately under any umask. Receivers additively advertise `agent-inventory`
-and `agent-locate-record`, and the handshake reports `platform`. Since 2.8.0, plans
-carry their own prompts and assets, with the policy write scope `@spawned:*`,
-proposal send-back, `hydra resume --terminal`, `hydra kill --dry-run`, attention
-data version 3 and statistics export schema 4; since 2.7.0, head-associated
+Hydra 3.0.0 retains state v2, core protocol 1, TUI protocol 2, Fleet protocol 1
+and task protocol 1. It adds one control centre for local and remote work
+(`hydra tui --location`, internal `--remote-data`, `hydra fleet tui` as a
+remote-filtered entry), automatic placement with `fleet-placement` records,
+assignment generations and the receiver capability `task-withdraw`, task pools and
+schedules, live discovery sources, scoped revocation and `fleet enroll status`,
+bounded plan expansion, plan evaluation and decision records, and fleet task
+telemetry. Statistics data is schema 5 and its export schema 3, with earlier
+versions still read; a headless receipt may carry `diagnostic.observation`, and the
+fleet coordinator accepts Hydra 2.x and 3.x receivers. Since 2.9.0, guided remote
+setup, `hydra agent locate`, platform-bound packages with pinned static release
+helpers and `hydra doctor --fix-permissions` are available and Hydra's own state is
+private under any umask; since 2.8.0, plans carry their own prompts and assets, with
+the policy write scope `@spawned:*`, proposal send-back, `hydra resume --terminal`,
+`hydra kill --dry-run` and attention data version 3; since 2.7.0, head-associated
 planning proposals and the opt-in `kill --protect-untracked` are available; since
 2.6.0, `hydra init` stays out of the source tree and the head environment is
 delivered through the tmux session and a per-instance launcher.
-See the [2.9.0 changelog](../CHANGELOG.md#290---2026-09-28).
+See the [3.0.0 changelog](../CHANGELOG.md#300---2026-10-17).
 Interactive Codex restore retains cwd-scoped latest-session selection; headless
 resume binds an exact recorded session.
 Internal shell function names,
@@ -485,7 +490,7 @@ heads a run's spawn steps created (worker or verifier, and retirement). Version-
 workflow fixtures remain readable. `hydra tui --head-output <branch>` is a private,
 bounded, read-only text view of the step running (or last run) on a headless head.
 
-The onboarding view (`O` on Hosts, since 3.0) reads CLI envelopes only:
+The onboarding view (`O` on Hosts, since 3.0.0) reads CLI envelopes only:
 `fleet-discovery` (candidate schema 1, with `sources[]`), `fleet-enrollment-review`,
 `fleet-enrollment-status` and `fleet-enrollment`, parsed within the CLI's own
 bounds (100 candidates and records, four sources, 100 intent hosts). `hydra tui
@@ -688,7 +693,7 @@ snapshot and live sources), `resolution`, `qualification`, `qualified_at` and
 `qualification_failed` or `revoked`, the last with `revocation`). Inventories are
 schema 1 (`{schema_version, observed_at, hosts[{name, target, labels}]}`) or schema
 2 with a closed `source_snapshot` (`kind` `mdns|vpn|cloud-tags|config-management`,
-`locator`, `scope`, `observed_at`, `freshness`, up to 100 `records`). Since 3.0,
+`locator`, `scope`, `observed_at`, `freshness`, up to 100 `records`). Since 3.0.0,
 `--source KIND[:LOCATOR]` (`ssh-config`, `ansible-inventory`, `dns-sd`; at most four,
 each acquired once per invocation within `--timeout`, 1 MiB and 100 records) adds
 `data.sources[]`: `{kind, locator, scope, client, source_id, status
@@ -711,7 +716,7 @@ an enrollment apply row with that status adds `host_key {reviewed_fingerprint,
 reviewed_source, presented_fingerprint, observation, acceptance,
 presented_key_revoked?}`. Enrollment intent schema 2 and progress schema 1 are
 unchanged; a row may now have status `revoked` with `revocation`.
-`fleet enroll status --input INTENT` (since 3.0, additive, read-only: no
+`fleet enroll status --input INTENT` (since 3.0.0, additive, read-only: no
 connection, no apply lock, no write) returns `fleet-enrollment-status` with
 `data.{enrollment_status_schema 1, intent_sha256, intent, reviewed_at,
 progress_recorded, progress (path)|null, partial_failure|null, hosts[]}`. Each
@@ -728,7 +733,7 @@ schema-2 intent whose digest verifies) and `state_unavailable` (progress
 unreadable or bound to another digest). `enroll` also accepts `--json`, as
 `discover` does; output is always the envelope.
 
-Revocation (`fleet revoke SCOPE ID --reason TEXT`, since 3.0) writes one private
+Revocation (`fleet revoke SCOPE ID --reason TEXT`, since 3.0.0) writes one private
 record `{schema_version 1, kind "fleet-revocation", scope candidate|source|
 transport|package|project, id, requested_id?, reason, revoked_at, revoked_by {user,
 uid, host}, superseded, effect}` at `$HYDRA_HOME/fleet/revocations/SCOPE/<sha256 of
@@ -778,7 +783,7 @@ local gate, approval, and promotion flow without restoring remote live state.
 Fleet stdin rejects embedded NUL bytes
 and input beyond its 8 MiB bound instead of accepting a truncated JSON prefix.
 
-Automatic placement (since 3.0, [FLEET.md](FLEET.md#automatic-placement)) adds
+Automatic placement (since 3.0.0, [FLEET.md](FLEET.md#automatic-placement)) adds
 to task protocol 1, additively: receivers advertise `task-withdraw`; a `submit`,
 `start` or `resume` request may carry `assignment_generation` (integer
 1..1000000), which acceptance records as `assignment_generation` (1 when absent)

@@ -24,17 +24,18 @@ use ordinary shell sessions alongside agents.
 
 [Demo transcript and recording instructions](assets/demos/README.md)
 
-**v2.9.0** adds guided remote setup: give Hydra an SSH destination, from the
-command line (`hydra remote setup`) or the control centre's Hosts tab, and it
-checks the host, installs a pinned Hydra runtime from the release's static
-helpers, finds or installs your agents and guides sign-in, showing a plan for
-every change and never accepting a changed host key. Hydra's own state now stays
-private under a group-writable umask such as Ubuntu's default, and
-`hydra doctor --fix-permissions` repairs older state.
+**v3.0.0** makes the control centre one workspace for local and remote work:
+`hydra tui` shows the heads and tasks of your registered hosts beside local work,
+with their host and how fresh each observation is, and attaches, interrupts and
+answers remote work with the same keys. Remote tasks can be placed automatically
+on an eligible host, task pools and host-timer schedules run work through the
+same commands, and onboarding many hosts gains live inventory sources, revocation
+and an operator view. This is a major release: see the changelog's compatibility
+notes before upgrading scripts or fleet hosts.
 Install the
 [latest release](https://github.com/Someblueman/hydra/releases/latest) and see the
 [changelog](CHANGELOG.md) for features and upgrade notes. Next work is tracked in
-[the roadmap](docs/ROADMAP.md#next-target-guided-remote-onboarding)
+[the roadmap](docs/ROADMAP.md#next-target-live-and-human-acceptance)
 and [usability testing](docs/USABILITY-TESTING.md).
 
 ## What you can do
