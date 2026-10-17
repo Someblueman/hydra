@@ -114,15 +114,17 @@ evidence join before composition.
 ## Interactive regressions with tmux installed
 
 The interactive surface keeps its tmux requirement. These existing suites
-were re-run with tmux 3.4 installed after the change to `check_tmux_version`:
-
-- `make test-one T=tmux`, `T=lifecycle`, `T=spawn_ux`, `T=spawn_bootstrap`,
-  `T=switch`, `T=group_messaging`, `T=kill`, `T=kill_all`,
-  `T=terminal_restore`, `T=headless_execution`, `T=fleet_install`,
-  `T=workflow_run_heads`
-- `make test-tui` (deterministic TUI acceptance including transcript) and
-  `make test-tui-pty` (real pseudo-terminal attach and input)
-- `make test-fast`
+were re-run with tmux 3.4 installed after the change to `check_tmux_version`,
+all passing: `make test-one T=tmux` (66), `T=lifecycle` (43), `T=spawn_ux`
+(56), `T=spawn_bootstrap` (58), `T=switch`, `T=group_messaging`, `T=kill`
+(133), `T=kill_all`, `T=terminal_restore`, `T=headless_execution` (19/19),
+`T=fleet_install` (29), `T=workflow_run_heads` (39), `T=deps`; `make test-tui`
+(185, including transcript); and the fast lane's shell, TUI and native checks.
+`make test-tui-pty` (real pseudo-terminal attach, capture and review) must be
+run on a quiet machine: its process-reaping checks compare recorded PIDs
+against the live process table and are disturbed by concurrent process churn
+from other test workloads on the same host; the suite, its fixtures and the
+TUI sources are unchanged by this work.
 
 ## Remaining operator step
 
