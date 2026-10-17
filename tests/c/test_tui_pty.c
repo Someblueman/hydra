@@ -114,6 +114,33 @@ static bool pids_gone(const char *path) {
     return count > 0U && trailing == EOF;
 }
 
+/* A terminated descendant stays in the process table as a zombie until its
+ * parent reaps it; once orphaned it belongs to init, and some inits (such as a
+ * container's) collect orphans on a schedule of a second or two rather than at
+ * once. The TUI reaps only its own child, so "gone" is checked within a bound. */
+#define PIDS_GONE_GRACE_MS 3000L
+static bool pids_gone_within(const char *path, long timeout_ms) {
+    long long deadline=monotonic_ms()+timeout_ms;
+    while (!pids_gone(path)) {
+        if (monotonic_ms()>=deadline) return false;
+        sleep_ms(10);
+    }
+    return true;
+}
+
+/* Copies the PIDs recorded so far, so a check over the reaping grace is not
+ * confused by a later run of the same fixture appending its own PIDs. */
+static bool snapshot_pids(const char *path, char *copy, size_t capacity) {
+    FILE *in, *out; char buffer[4096]; size_t length; bool ok;
+    if (!path || (in=fopen(path,"r")) == NULL) return false;
+    snprintf(copy, capacity, "%s.snapshot", path);
+    if ((out=fopen(copy,"w")) == NULL) { fclose(in); return false; }
+    while ((length=fread(buffer,1U,sizeof(buffer),in)) > 0U) fwrite(buffer,1U,length,out);
+    ok=!ferror(in) && !ferror(out);
+    fclose(in);
+    return fclose(out) == 0 && ok;
+}
+
 static bool wait_for_stop_drain(struct session *session, const char *path, long timeout_ms,
                                 char *captured, size_t *used, long long *stopped_at) {
     long long deadline=monotonic_ms()+timeout_ms;
@@ -815,7 +842,7 @@ static void test_preflight_failure(const char *tui, const char *hydra, const cha
             result(wait_for_file(pid_file, 1000), "early quit observes a live capture owner");
             write_input(session.master, "q", 1U);
             result(wait_for_exit(&session) == 0, "early quit stops the active capture");
-            result(pids_gone(pid_file), "early quit removes the capture owner and descendant");
+            result(pids_gone_within(pid_file, PIDS_GONE_GRACE_MS), "early quit removes the capture owner and descendant");
             result(terminal_restored(&session), "early quit preserves terminal state");
             close_session(&session);
             return;
@@ -823,13 +850,20 @@ static void test_preflight_failure(const char *tui, const char *hydra, const cha
         if (await_failure)
             result(wait_for_marker(&session, failure_marker, 12000),
                    "failed observation reaches a bounded failure state");
-        if (pid_file) result(wait_for_file(pid_file, 1000) && pids_gone(pid_file),
-                             "timed-out capture owner and descendant are gone before quit");
+        if (pid_file) {
+            char recorded[200];
+            /* A periodic refresh may run the fixture again meanwhile; only the
+             * owner that timed out, and its descendant, must be gone here. */
+            result(wait_for_file(pid_file, 1000) && snapshot_pids(pid_file, recorded, sizeof(recorded)) &&
+                   pids_gone_within(recorded, PIDS_GONE_GRACE_MS),
+                   "timed-out capture owner and descendant are gone before quit");
+            (void)unlink(recorded);
+        }
         write_input(session.master, "q", 1U);
         result(wait_for_exit(&session) == 0, await_failure ?
                "bounded failed observation is reaped before quit" :
                "bounded failed observation quits cleanly");
-        if (pid_file) result(pids_gone(pid_file), "timed-out capture has no owner after quit");
+        if (pid_file) result(pids_gone_within(pid_file, PIDS_GONE_GRACE_MS), "timed-out capture has no owner after quit");
     } else result(wait_for_exit(&session) == expected, message);
     result(terminal_restored(&session), "preflight failure preserves terminal state");
     close_session(&session);
