@@ -103,7 +103,7 @@ assert_equal "$(printf 'C\tcand_6275696c64\tbuild\tcompatible\treviewed\tssh\tli
 "$tui" --ascii --headless-fixture "$empty" --onboarding-fixture "$export_file" --onboarding-intent "$fixture/status.json" --onboarding-screen intent --size 140x40 --view hosts > "$fixture/intent.txt"
 case "$(cat "$fixture/intent.txt")" in *"Intent digest"*"$digest"*"Apply command"*"hydra fleet enroll apply --input"*"--confirm"*) command_shown=yes ;; *) command_shown=no ;; esac
 assert_equal yes "$command_shown" "the intent screen shows the digest and the apply command"
-assert_equal 2 "$(grep -c "$digest" "$fixture/intent.txt")" "the digest appears as the binding and in the command"
+assert_equal 3 "$(grep -c "$digest" "$fixture/intent.txt")" "the digest appears as the binding, in the operation ID and in the command"
 "$hydra" fleet enroll apply --input "$fixture/intent.json" --confirm 0000000000000000000000000000000000000000000000000000000000000000 --json > "$fixture/apply.json" && status=0 || status=$?
 assert_failure "$status" "apply with a wrong digest fails"
 assert_equal invalid_intent "$(json_field code < "$fixture/apply.json")" "a wrong digest is typed invalid_intent"
