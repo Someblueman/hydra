@@ -20,10 +20,10 @@ static int form_columns(const char *text, size_t length, bool ascii) {
     int columns=0;
     while (i<length) {
         uint32_t cp;
-        size_t n=tv_utf8_decode(text+i,length-i,&cp);
+        size_t n=kt_utf8_decode(text+i,length-i,&cp);
         int width;
         if (!n) { columns++; break; }
-        width=tv_codepoint_width(cp);
+        width=kt_codepoint_width(cp);
         columns+=ascii && cp>127 ? 1 : width<0 ? 1 : width;
         i+=n;
     }
@@ -40,24 +40,24 @@ static int form_break(const struct app *app, const char *text, size_t offset, si
     return x+form_columns(text+offset,n-offset,app->ascii)>width ? 1 : 0;
 }
 /* Where the next character goes; with no canvas the pen only counts rows. */
-struct form_pen { struct tv_canvas *c; int width, bottom, x, y; enum tv_style tone; };
+struct form_pen { struct kt_canvas *c; int width, bottom, x, y; enum kt_style tone; };
 /* Places one character, moving to the next row when it does not fit.
  * Returns the bytes it used, or 0 for an undecodable sequence. */
 static size_t form_place(const struct app *app, struct form_pen *pen, const char *text, size_t length) {
     uint32_t cp;
-    size_t used=tv_utf8_decode(text,length,&cp);
+    size_t used=kt_utf8_decode(text,length,&cp);
     int columns;
     if (!used) return 0;
-    columns=tv_codepoint_width(cp);
+    columns=kt_codepoint_width(cp);
     if (columns<0 || (app->ascii && cp>126)) { cp='?'; columns=1; }
     if (pen->x+columns>pen->width) { pen->x=0; pen->y++; }
-    if (pen->c && pen->y<pen->bottom) tv_put(pen->c,pen->x,pen->y,cp,pen->tone);
+    if (pen->c && pen->y<pen->bottom) kt_put(pen->c,pen->x,pen->y,cp,pen->tone);
     pen->x+=columns;
     return used;
 }
 /* Word-wraps text into rows [y, bottom) of c; with no canvas it only counts.
  * Returns the row after the last one used. */
-static int form_wrap(const struct app *app, struct tv_canvas *c, int width, int y, int bottom, const char *text, enum tv_style tone) {
+static int form_wrap(const struct app *app, struct kt_canvas *c, int width, int y, int bottom, const char *text, enum kt_style tone) {
     struct form_pen pen={c,width,bottom,0,y,tone};
     size_t offset=0, length=strlen(text);
     while (offset<length && pen.y<bottom) {
@@ -72,34 +72,34 @@ static int form_wrap(const struct app *app, struct tv_canvas *c, int width, int 
     return pen.y+1;
 }
 static void form_draw(struct app *app, const char *prompt, const char *text, size_t cursor) {
-    struct tv_cell cells[512U*8U];
-    struct tv_canvas c;
+    struct kt_cell cells[512U*8U];
+    struct kt_canvas c;
     int width=app->cols>512 ? 511 : app->cols-1, row, column, height, prompt_rows, limit=app->rows/2>8 ? app->rows/2 : 8;
     size_t start=0;
     if (width<5 || app->rows<4) return;
-    prompt_rows=form_wrap(app,NULL,width,0,app->rows,prompt,TV_STRONG);
+    prompt_rows=form_wrap(app,NULL,width,0,app->rows,prompt,KT_STRONG);
     height=prompt_rows+3;
     if (height>limit) height=limit;
     if (height>app->rows) height=app->rows;
-    (void)tv_init(&c,cells,512U*8U,width,height,!app->ascii);
-    tv_clear(&c,TV_BASE);
+    (void)kt_init(&c,cells,512U*8U,width,height,!app->ascii);
+    kt_clear(&c,KT_BASE);
     while (start<cursor && form_columns(text+start,cursor-start,app->ascii)>=width-2) start=form_next(text,start,cursor);
     column=form_columns(text+start,cursor-start,app->ascii);
-    tv_text(&c,(struct tv_rect){0,0,width,1},"INPUT TO HYDRA / text field",TV_SELECTED);
-    (void)form_wrap(app,&c,width,1,height-2,prompt,TV_STRONG);
-    tv_text(&c,(struct tv_rect){0,height-2,width,1},text+start,TV_BASE);
-    if (cursor<strlen(text)) c.cells[(size_t)c.stride*(size_t)(height-2)+(size_t)column].style=TV_SELECTED;
-    else tv_put(&c,column,height-2,'_',TV_SELECTED);
-    tv_text(&c,(struct tv_rect){0,height-1,width,1},"Enter submit / Esc cancel",TV_BORDER);
+    kt_text(&c,(struct kt_rect){0,0,width,1},"INPUT TO HYDRA / text field",KT_SELECTED);
+    (void)form_wrap(app,&c,width,1,height-2,prompt,KT_STRONG);
+    kt_text(&c,(struct kt_rect){0,height-2,width,1},text+start,KT_BASE);
+    if (cursor<strlen(text)) c.cells[(size_t)c.stride*(size_t)(height-2)+(size_t)column].style=KT_SELECTED;
+    else kt_put(&c,column,height-2,'_',KT_SELECTED);
+    kt_text(&c,(struct kt_rect){0,height-1,width,1},"Enter submit / Esc cancel",KT_BORDER);
     for (row=0;row<height;row++) {
         printf("\033[%d;1H",app->rows-height+1+row);
-        (void)tv_write_row(&c,row,stdout,dashboard_style,app);
+        (void)kt_write_row(&c,row,stdout,dashboard_style,app);
     }
     fflush(stdout);
 }
 
 static void form_insert(char *buffer, size_t size, size_t *length, size_t *cursor,
-                        const struct tv_event *event) {
+                        const struct kt_event *event) {
     size_t i;
     if (event->length >= size - *length) return;
     for (i=0; i<event->length && *length+1<size; i++) {
@@ -112,7 +112,7 @@ static void form_insert(char *buffer, size_t size, size_t *length, size_t *curso
 }
 
 int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) {
-    struct tv_input input;
+    struct kt_input input;
     size_t length=0, cursor=0;
     unsigned queued=0;
     bool redraw=true;
@@ -120,9 +120,9 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
     int result=-1;
     if (!size) return -1;
     buffer[0]='\0';
-    tv_input_init(&input);
+    kt_input_init(&input);
     while (!terminal_stopped() && app->running) {
-        struct tv_event e;
+        struct kt_event e;
         char byte;
         bool event;
         if (redraw) {
@@ -141,22 +141,22 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
         if (read_key(input.length>1 ? 150 : redraw ? 40 : 0,&byte)>0) {
             redraw=++queued>=64;
             if (redraw) queued=0;
-            event=tv_input_feed(&input,(unsigned char)byte,&e);
+            event=kt_input_feed(&input,(unsigned char)byte,&e);
         } else if (!redraw) {
             redraw=true; queued=0; continue;
-        } else event=tv_input_flush(&input,&e);
+        } else event=kt_input_flush(&input,&e);
         if (!event) continue;
-        if (e.type==TV_KEY && (e.key==27 || e.key==3)) break;
-        if (e.type==TV_KEY && (e.key=='\r' || e.key=='\n')) { result=0; break; }
-        if (e.type==TV_KEY && (e.key==127 || e.key==8)) {
+        if (e.type==KT_KEY && (e.key==27 || e.key==3)) break;
+        if (e.type==KT_KEY && (e.key=='\r' || e.key=='\n')) { result=0; break; }
+        if (e.type==KT_KEY && (e.key==127 || e.key==8)) {
             size_t previous=form_previous(buffer,cursor);
             memmove(buffer+previous,buffer+cursor,length-cursor+1);
             length-=cursor-previous; cursor=previous;
-        } else if (e.type==TV_KEY && e.key==TV_KEY_LEFT) cursor=form_previous(buffer,cursor);
-        else if (e.type==TV_KEY && e.key==TV_KEY_RIGHT) cursor=form_next(buffer,cursor,length);
-        else if (e.type==TV_KEY && e.key==TV_KEY_HOME) cursor=0;
-        else if (e.type==TV_KEY && e.key==TV_KEY_END) cursor=length;
-        else if (e.type==TV_PASTE || (e.type==TV_KEY && e.key<0x110000)) {
+        } else if (e.type==KT_KEY && e.key==KT_KEY_LEFT) cursor=form_previous(buffer,cursor);
+        else if (e.type==KT_KEY && e.key==KT_KEY_RIGHT) cursor=form_next(buffer,cursor,length);
+        else if (e.type==KT_KEY && e.key==KT_KEY_HOME) cursor=0;
+        else if (e.type==KT_KEY && e.key==KT_KEY_END) cursor=length;
+        else if (e.type==KT_PASTE || (e.type==KT_KEY && e.key<0x110000)) {
             form_insert(buffer,size,&length,&cursor,&e);
         }
     }
@@ -166,24 +166,24 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
 }
 
 /* Wraps one line of a decision panel; returns the next free row. */
-static int confirm_line(struct app *app, struct tv_canvas *c, int y, int bottom, const char *text, enum tv_style tone) {
+static int confirm_line(struct app *app, struct kt_canvas *c, int y, int bottom, const char *text, enum kt_style tone) {
     return form_wrap(app,c,c->width,y,bottom,text,tone);
 }
 
 static void confirm_draw(struct app *app, const char *title, const char *const lines[], size_t count, const char *footer) {
-    struct tv_cell cells[512U*12U];
-    struct tv_canvas c;
+    struct kt_cell cells[512U*12U];
+    struct kt_canvas c;
     int width=app->cols>512 ? 511 : app->cols-1, height=app->rows<12 ? app->rows : 12, y=1, row;
     size_t i;
     if (width<5 || height<4) return;
-    (void)tv_init(&c,cells,512U*12U,width,height,!app->ascii);
-    tv_clear(&c,TV_BASE);
-    tv_text(&c,(struct tv_rect){0,0,width,1},title,TV_SELECTED);
-    for (i=0;i<count;i++) y=confirm_line(app,&c,y,height-1,lines[i],i ? TV_BASE : TV_STRONG);
-    tv_text(&c,(struct tv_rect){0,height-1,width,1},footer,TV_BORDER);
+    (void)kt_init(&c,cells,512U*12U,width,height,!app->ascii);
+    kt_clear(&c,KT_BASE);
+    kt_text(&c,(struct kt_rect){0,0,width,1},title,KT_SELECTED);
+    for (i=0;i<count;i++) y=confirm_line(app,&c,y,height-1,lines[i],i ? KT_BASE : KT_STRONG);
+    kt_text(&c,(struct kt_rect){0,height-1,width,1},footer,KT_BORDER);
     for (row=0;row<height;row++) {
         printf("\033[%d;1H",app->rows-height+1+row);
-        (void)tv_write_row(&c,row,stdout,dashboard_style,app);
+        (void)kt_write_row(&c,row,stdout,dashboard_style,app);
     }
     fflush(stdout);
 }
@@ -192,8 +192,8 @@ static void confirm_draw(struct app *app, const char *title, const char *const l
  * Ctrl-C decline; Enter, paste and every other key are ignored, so an
  * accidental keystroke cannot approve. Observations and clients keep moving. */
 /* 1 accepts, 0 declines, -1 keeps waiting. */
-static int confirm_key(const struct tv_event *e, const char *choices) {
-    if (e->type!=TV_KEY) return -1;
+static int confirm_key(const struct kt_event *e, const char *choices) {
+    if (e->type!=KT_KEY) return -1;
     if (e->key==27 || e->key==3 || e->key=='n' || e->key=='N') return 0;
     return e->key>0 && e->key<128 && strchr(choices,(int)e->key) ? 1 : -1;
 }
@@ -208,19 +208,19 @@ static void confirm_refresh(struct app *app, time_t *last_refresh) {
 }
 
 bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices) {
-    struct tv_input input;
+    struct kt_input input;
     char footer[128];
     bool redraw=true;
     int decision=-1;
     time_t last_refresh=time(NULL);
     snprintf(footer,sizeof(footer),"%s confirm   n / Esc cancel",choices);
-    tv_input_init(&input);
+    kt_input_init(&input);
     while (decision<0 && !terminal_stopped() && app->running) {
-        struct tv_event e;
+        struct kt_event e;
         char byte;
         if (redraw) { confirm_refresh(app,&last_refresh); confirm_draw(app,title,lines,count,footer); }
         redraw=read_key(input.length>1 ? 150 : 40,&byte)<=0;
-        if (redraw ? tv_input_flush(&input,&e) : tv_input_feed(&input,(unsigned char)byte,&e)) decision=confirm_key(&e,choices);
+        if (redraw ? kt_input_flush(&input,&e) : kt_input_feed(&input,(unsigned char)byte,&e)) decision=confirm_key(&e,choices);
     }
     frame_invalidate(app);
     return decision==1;

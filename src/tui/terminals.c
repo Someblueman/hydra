@@ -88,7 +88,7 @@ bool native_terminal_history(struct app *app, struct native_terminal *t, bool en
 void native_terminal_close(struct native_terminal *t) {
     if (!t->screen) return;
     outbox_clear(t);
-    tv_pty_close(&t->client);
+    kt_pty_close(&t->client);
     free(t->screen); free(t->cells); free(t->history);
     memset(t,0,sizeof(*t)); t->client.fd=-1; t->client.pid=-1;
 }
@@ -208,7 +208,7 @@ bool native_terminal_attach_head(struct app *app, const struct head *h) {
     if (!app->terminals) {
         app->terminals=calloc(1,sizeof(*app->terminals));
         if (!app->terminals) return false;
-        tv_input_init(&app->terminals->input);
+        kt_input_init(&app->terminals->input);
     }
     available = terminal_slot(app, h);
     if (available < NATIVE_TERMINALS && app->terminals->slots[available].screen &&
@@ -228,7 +228,7 @@ static bool terminal_start(struct app *app, const struct head *h, size_t availab
     t->cells=calloc(NATIVE_TERMINAL_CELLS*2,sizeof(*t->cells));
     t->history=calloc(512U*256U,sizeof(*t->history));
     if (!t->screen || !t->cells || !t->history) goto fail;
-    if (!tv_term_init(t->screen,t->cells,t->cells+NATIVE_TERMINAL_CELLS,512,256,t->history,256,80,24)) goto fail;
+    if (!kt_term_init(t->screen,t->cells,t->cells+NATIVE_TERMINAL_CELLS,512,256,t->history,256,80,24)) goto fail;
     copy_text(t->head,sizeof(t->head),h->head_id); copy_text(t->instance,sizeof(t->instance),h->instance);
     copy_text(t->label,sizeof(t->label),h->branch);
     if (app->fleet) {
@@ -236,20 +236,20 @@ static bool terminal_start(struct app *app, const struct head *h, size_t availab
         copy_text(t->remote_project,sizeof(t->remote_project),h->remote_project);
     }
     if (!attachment_argv(app, h, t, argv, socket)) goto fail;
-    if (!tv_pty_spawn(&t->client,app->hydra,argv,&app->saved,80,24)) goto fail;
+    if (!kt_pty_spawn(&t->client,app->hydra,argv,&app->saved,80,24)) goto fail;
     app->terminals->selected=available;
     copy_text(app->notice,sizeof(app->notice),"Attached; keys go to the agent");
     return true;
 fail:
     /* screen can be absent when the first allocation failed. */
-    tv_pty_close(&t->client); free(t->screen); free(t->cells); free(t->history);
+    kt_pty_close(&t->client); free(t->screen); free(t->cells); free(t->history);
     memset(t,0,sizeof(*t)); t->client.fd=-1; t->client.pid=-1;
     copy_text(app->notice,sizeof(app->notice),"Unable to allocate or start attachment client");
     return false;
 }
 
 void native_terminal_send(struct app *app, struct native_terminal *t, const void *bytes, size_t length) {
-    if (!t || !t->screen || t->client.eof || !tv_pty_enqueue(&t->client,bytes,length))
+    if (!t || !t->screen || t->client.eof || !kt_pty_enqueue(&t->client,bytes,length))
         copy_text(app->notice,sizeof(app->notice),"Input not delivered: client disconnected or input queue full");
 }
 
@@ -303,14 +303,14 @@ static void terminal_read(struct native_terminal *t) {
     size_t chunks;
     for (chunks=0; !t->client.eof && t->client.fd>=0 && chunks<8; chunks++) {
         char bytes[4096];
-        ssize_t n=tv_pty_read(&t->client,bytes,sizeof(bytes));
+        ssize_t n=kt_pty_read(&t->client,bytes,sizeof(bytes));
         if (n<=0) {
-            if (!n) tv_term_finish(t->screen);
-            else if (errno!=EAGAIN && errno!=EINTR) tv_pty_close(&t->client);
+            if (!n) kt_term_finish(t->screen);
+            else if (errno!=EAGAIN && errno!=EINTR) kt_pty_close(&t->client);
             return;
         }
         if (!t->received) { t->received=true; (void)clock_gettime(CLOCK_MONOTONIC,&t->outbox_at); }
-        tv_term_feed(t->screen,bytes,(size_t)n);
+        kt_term_feed(t->screen,bytes,(size_t)n);
     }
 }
 
@@ -322,9 +322,9 @@ void native_terminals_pump(struct app *app) {
         uint64_t before;
         if (!t->screen) continue;
         before=t->screen->history_serial;
-        if (!tv_pty_flush(&t->client) || !tv_pty_reap(&t->client)) {
+        if (!kt_pty_flush(&t->client) || !kt_pty_reap(&t->client)) {
             copy_text(app->notice,sizeof(app->notice),"Attachment transport failed; recorded agent outcome is unchanged");
-            tv_pty_close(&t->client);
+            kt_pty_close(&t->client);
         }
         terminal_read(t);
         if (t->scroll>t->screen->history_count) t->scroll=t->screen->history_count;
@@ -341,7 +341,7 @@ void native_terminals_pump(struct app *app) {
          * its size from the PTY. So they are dropped, never typed. */
         if (t->screen->reply_length) {
             char reply[256];
-            (void)tv_term_take_reply(t->screen,reply,sizeof(reply));
+            (void)kt_term_take_reply(t->screen,reply,sizeof(reply));
         }
         outbox_step(app,t);
     }
@@ -352,36 +352,36 @@ static bool edge_glyph(uint32_t glyph) { return glyph == 0x2502U || glyph == 0x2
 
 /* A row ending in tmux's out-of-window fill: a window edge, then dots to the
  * right margin. tmux draws this when another client set a smaller size. */
-static bool fill_row(const struct tv_canvas *c, int y) {
-    const struct tv_cell *row = c->cells + (size_t)y * (size_t)c->stride;
+static bool fill_row(const struct kt_canvas *c, int y) {
+    const struct kt_cell *row = c->cells + (size_t)y * (size_t)c->stride;
     int x = c->width - 1, dots = 0;
     while (x >= 0 && fill_glyph(row[x].glyph)) { x--; dots++; }
     return dots >= 4 && x >= 0 && edge_glyph(row[x].glyph);
 }
 
 /* Two such rows identify another client's window size, not agent output. */
-static bool foreign_size(const struct tv_canvas *c) {
+static bool foreign_size(const struct kt_canvas *c) {
     int y, rows = 0;
     for (y = 0; y < c->height && rows < 2; y++) rows += fill_row(c, y);
     return rows >= 2;
 }
 
-static void strip_rendition(struct tv_canvas *c) {
+static void strip_rendition(struct kt_canvas *c) {
     int x,y;
     for (y=0;y<c->height;y++) for (x=0;x<c->width;x++) {
-        struct tv_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
-        cell->attributes=0; cell->style=TV_BASE;
+        struct kt_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
+        cell->attributes=0; cell->style=KT_BASE;
     }
 }
 
-void native_terminal_draw(struct app *app, struct native_terminal *t, struct tv_canvas *c, bool focused) {
+void native_terminal_draw(struct app *app, struct native_terminal *t, struct kt_canvas *c, bool focused) {
     if (!t || !t->screen) return;
     if (c->width!=t->screen->primary.canvas.width || c->height!=t->screen->primary.canvas.height) {
-        if (!tv_term_resize(t->screen,c->width,c->height) ||
-            (!t->client.finished && !tv_pty_resize(&t->client,c->width,c->height)))
+        if (!kt_term_resize(t->screen,c->width,c->height) ||
+            (!t->client.finished && !kt_pty_resize(&t->client,c->width,c->height)))
             copy_text(app->notice,sizeof(app->notice),"Attachment resize unavailable");
     }
-    tv_term_draw(t->screen,c,t->scroll,focused && !t->scrolling);
+    kt_term_draw(t->screen,c,t->scroll,focused && !t->scrolling);
     t->foreign_size = !t->scroll && foreign_size(c);
     if (app->no_color) strip_rendition(c);
 }

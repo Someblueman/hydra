@@ -209,7 +209,7 @@ JSON and subprocess capture. The native TUI lives in `src/tui/`, with independen
 compiled model, adapter, process, selection, rendering, input and terminal modules.
 Workspace views include A/B/C layouts, attached tmux clients, draft validation,
 exact-digest execution and selected-run evidence. Statistics and graph rendering
-use the reusable `src/termviz/` components; see its [standalone library guide](src/termviz/STANDALONE.md).
+use the reusable `src/kettle/` components; see its [standalone library guide](src/kettle/STANDALONE.md).
 
 Testing requires a C99 compiler, JSON-C development files and pkg-config in
 addition to Git, tmux, dash and ShellCheck. Python is not required; Make builds

@@ -1,45 +1,45 @@
 #include "workspace_demo.h"
 #include <stdio.h>
 
-void demo_colors(void *context, enum tv_style style) {
+void demo_colors(void *context, enum kt_style style) {
     static const char *palette[] = {"\033[0;38;5;252;48;5;234m", "\033[0;38;5;103;48;5;234m",
         "\033[1;38;5;153;48;5;234m", "\033[0;38;5;16;48;5;147m",
         "\033[0;38;5;215;48;5;234m", "\033[1;38;5;183;48;5;234m"};
     (void)context;
-    fputs(palette[style >= TV_BASE && style <= TV_STRONG ? style : TV_BASE], stdout);
+    fputs(palette[style >= KT_BASE && style <= KT_STRONG ? style : KT_BASE], stdout);
 }
 
-void demo_draw(struct tv_canvas *c, struct demo *d) {
-    struct tv_workspace *w = &d->workspace;
+void demo_draw(struct kt_canvas *c, struct demo *d) {
+    struct kt_workspace *w = &d->workspace;
     int i, row;
     char text[200];
-    tv_clear(c, TV_BASE);
-    tv_text(c, (struct tv_rect){1,0,c->width-2,1}, "termviz / workspace demo", TV_TITLE);
+    kt_clear(c, KT_BASE);
+    kt_text(c, (struct kt_rect){1,0,c->width-2,1}, "kettle / workspace demo", KT_TITLE);
     for (i = 0; i < w->count; i++) {
-        struct tv_pane *p = &w->panes[i];
-        struct tv_canvas view;
-        if (p->split != TV_LEAF) {
+        struct kt_pane *p = &w->panes[i];
+        struct kt_canvas view;
+        if (p->split != KT_LEAF) {
             for (row = 0; row < p->divider.height; row++) {
                 int x;
                 for (x = 0; x < p->divider.width; x++)
-                    tv_put(c, p->divider.x + x, p->divider.y + row, p->split == TV_COLUMNS ? 0x2502 : 0x2500, TV_BORDER);
+                    kt_put(c, p->divider.x + x, p->divider.y + row, p->split == KT_COLUMNS ? 0x2502 : 0x2500, KT_BORDER);
             }
             continue;
         }
-        if (!tv_canvas_view(&view, c, p->bounds)) continue;
-        tv_panel(&view, (struct tv_rect){0,0,view.width,view.height}, i == 1 ? "WORKSPACES" : i == 3 ? (d->model ? "REAL SHELL" : "ACTIVITY") : "INSPECT");
+        if (!kt_canvas_view(&view, c, p->bounds)) continue;
+        kt_panel(&view, (struct kt_rect){0,0,view.width,view.height}, i == 1 ? "WORKSPACES" : i == 3 ? (d->model ? "REAL SHELL" : "ACTIVITY") : "INSPECT");
         snprintf(text, sizeof(text), "%s pane %d / offset %zu", i == w->focus ? "FOCUS" : "     ", i, p->scroll);
-        tv_text(&view, (struct tv_rect){1,1,view.width-2,1}, text, i == w->focus ? TV_SELECTED : TV_BORDER);
+        kt_text(&view, (struct kt_rect){1,1,view.width-2,1}, text, i == w->focus ? KT_SELECTED : KT_BORDER);
         if (i == 1) {
-            struct tv_canvas content;
-            if (tv_canvas_view(&content, &view, (struct tv_rect){1,2,view.width-2,view.height-3}))
-                tv_tree_draw(&d->tree, &content, &p->scroll, w->focus == 1);
+            struct kt_canvas content;
+            if (kt_canvas_view(&content, &view, (struct kt_rect){1,2,view.width-2,view.height-3}))
+                kt_tree_draw(&d->tree, &content, &p->scroll, w->focus == 1);
             continue;
         }
         if (i == 3 && d->model) {
-            struct tv_canvas content;
-            if (tv_canvas_view(&content, &view, (struct tv_rect){1,2,view.width-2,view.height-3}))
-                tv_term_draw(d->model, &content, p->scroll, w->focus == 3 && !d->scrolling);
+            struct kt_canvas content;
+            if (kt_canvas_view(&content, &view, (struct kt_rect){1,2,view.width-2,view.height-3}))
+                kt_term_draw(d->model, &content, p->scroll, w->focus == 3 && !d->scrolling);
             continue;
         }
         for (row = 2; row < view.height - 1; row++) {
@@ -57,9 +57,9 @@ void demo_draw(struct tv_canvas *c, struct demo *d) {
                 default: snprintf(text, sizeof(text), "^B [ scroll / ^B ] live"); break;
                 }
             } else snprintf(text, sizeof(text), "row %zu / isolated scroll", index);
-            tv_text(&view, (struct tv_rect){1,row,view.width-2,1}, text, index % 3 ? TV_BASE : TV_STRONG);
+            kt_text(&view, (struct kt_rect){1,row,view.width-2,1}, text, index % 3 ? KT_BASE : KT_STRONG);
         }
     }
-    tv_text(c, (struct tv_rect){0,c->height-1,c->width,1}, d->notice[0] ? d->notice : c->width < 60 ? (d->model ? "^B Tab focus ^B q quit ^B [ scroll" : "Tab focus j/k scroll drag q quit") : d->model ? (d->prefix ? "Prefix: Tab focus / q quit / [ scroll / ] live" : "^B Tab focus | ^B q quit | ^B [ scroll | drag split") : "Tab focus | j/k scroll | drag split | q quit", TV_BORDER);
+    kt_text(c, (struct kt_rect){0,c->height-1,c->width,1}, d->notice[0] ? d->notice : c->width < 60 ? (d->model ? "^B Tab focus ^B q quit ^B [ scroll" : "Tab focus j/k scroll drag q quit") : d->model ? (d->prefix ? "Prefix: Tab focus / q quit / [ scroll / ] live" : "^B Tab focus | ^B q quit | ^B [ scroll | drag split") : "Tab focus | j/k scroll | drag split | q quit", KT_BORDER);
 }
 

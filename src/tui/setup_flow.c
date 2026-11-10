@@ -31,7 +31,7 @@ struct native_setup *native_setup_state(struct app *app) {
         native_setup_destroy(app);
         return NULL;
     }
-    tv_input_init(&app->setup->input);
+    kt_input_init(&app->setup->input);
     return app->setup;
 }
 
@@ -339,7 +339,7 @@ void native_setup_open_form(struct app *app) {
     memset(s->fields, 0, sizeof(s->fields));
     s->focus = SETUP_FIELD_DESTINATION; s->problem[0] = s->notice[0] = s->editing[0] = '\0';
     s->screen = SETUP_SCREEN_FORM; s->automatic = 0; s->replacing = false;
-    tv_input_init(&s->input);
+    kt_input_init(&s->input);
 }
 
 static void field_set(struct setup_field *f, const char *text) {
@@ -383,7 +383,7 @@ void native_setup_remove(struct app *app, size_t record) {
     if (!s || record >= s->record_count) return;
     if (s->job.active) { copy_text(app->notice, sizeof(app->notice), "A setup step is still running; wait for its result"); return; }
     s->open = true; s->automatic = 0; s->notice[0] = '\0'; s->replacing = false; s->editing[0] = '\0';
-    tv_input_init(&s->input);
+    kt_input_init(&s->input);
     copy_text(s->name, sizeof(s->name), s->records[record].name);
     remove_plan_start(app, s);
 }
@@ -392,7 +392,7 @@ void native_setup_resume(struct app *app, const char *name) {
     struct native_setup *s = native_setup_state(app);
     if (!s) return;
     s->open = true; s->automatic = 0; s->notice[0] = '\0';
-    tv_input_init(&s->input);
+    kt_input_init(&s->input);
     if (s->job.active) { s->screen = SETUP_SCREEN_RUNNING; return; }
     s->agents_offered = false;
     copy_text(s->name, sizeof(s->name), name);
@@ -606,7 +606,7 @@ static void text_target(struct native_setup *s, char **text, size_t *size, size_
     } else { *text = s->typed; *size = sizeof(s->typed); *cursor = &s->typed_cursor; }
 }
 
-static void text_insert(struct native_setup *s, const struct tv_event *e) {
+static void text_insert(struct native_setup *s, const struct kt_event *e) {
     char *text; size_t size, *cursor, length, i;
     text_target(s, &text, &size, &cursor);
     length = strlen(text);
@@ -620,16 +620,16 @@ static void text_insert(struct native_setup *s, const struct tv_event *e) {
 
 /* Cursor movement within the focused text; false for other keys. */
 static bool cursor_key(uint32_t key, size_t *cursor, size_t length) {
-    if (key == TV_KEY_LEFT) { if (*cursor) (*cursor)--; }
-    else if (key == TV_KEY_RIGHT) { if (*cursor < length) (*cursor)++; }
-    else if (key == TV_KEY_HOME) *cursor = 0;
-    else if (key == TV_KEY_END) *cursor = length;
+    if (key == KT_KEY_LEFT) { if (*cursor) (*cursor)--; }
+    else if (key == KT_KEY_RIGHT) { if (*cursor < length) (*cursor)++; }
+    else if (key == KT_KEY_HOME) *cursor = 0;
+    else if (key == KT_KEY_END) *cursor = length;
     else return false;
     return true;
 }
 
 /* Editing keys of the focused text; false for keys the screen handles. */
-static bool text_key(struct native_setup *s, const struct tv_event *e) {
+static bool text_key(struct native_setup *s, const struct kt_event *e) {
     char *text; size_t size, *cursor, length;
     text_target(s, &text, &size, &cursor);
     length = strlen(text);
@@ -637,7 +637,7 @@ static bool text_key(struct native_setup *s, const struct tv_event *e) {
     if (e->key == 127 || e->key == 8) {
         if (*cursor) { memmove(text + *cursor - 1, text + *cursor, length - *cursor + 1); (*cursor)--; }
     } else if (!cursor_key(e->key, cursor, length)) {
-        if (e->key < 32 || e->key >= TV_KEY_UP) return false;
+        if (e->key < 32 || e->key >= KT_KEY_UP) return false;
         text_insert(s, e);
     }
     s->problem[0] = '\0';
@@ -690,17 +690,17 @@ static void letter(struct app *app, struct native_setup *s, uint32_t key) {
 }
 
 /* Focus and scroll: Tab / Shift-Tab and arrows move, pages scroll. */
-static bool navigation_key(struct app *app, struct native_setup *s, const struct tv_event *e) {
+static bool navigation_key(struct app *app, struct native_setup *s, const struct kt_event *e) {
     uint32_t key = e->key;
-    if (key == TV_KEY_SEQUENCE && !strcmp(e->bytes, "\033[Z")) move(s, -1);
-    else if (key == '\t' || key == TV_KEY_DOWN) move(s, 1);
-    else if (key == TV_KEY_UP) move(s, -1);
-    else if (key == TV_KEY_PAGE_UP || key == TV_KEY_PAGE_DOWN) page(app, s, key == TV_KEY_PAGE_UP ? -1 : 1);
+    if (key == KT_KEY_SEQUENCE && !strcmp(e->bytes, "\033[Z")) move(s, -1);
+    else if (key == '\t' || key == KT_KEY_DOWN) move(s, 1);
+    else if (key == KT_KEY_UP) move(s, -1);
+    else if (key == KT_KEY_PAGE_UP || key == KT_KEY_PAGE_DOWN) page(app, s, key == KT_KEY_PAGE_UP ? -1 : 1);
     else return false;
     return true;
 }
 
-static void screen_key(struct app *app, struct native_setup *s, const struct tv_event *e) {
+static void screen_key(struct app *app, struct native_setup *s, const struct kt_event *e) {
     uint32_t key = e->key;
     if (navigation_key(app, s, e)) return;
     if (key == '\r' || key == '\n') enter(app, s);
@@ -708,24 +708,24 @@ static void screen_key(struct app *app, struct native_setup *s, const struct tv_
     else if (!text_screen(s) && key < 128) letter(app, s, key);
 }
 
-static void setup_event(struct app *app, struct native_setup *s, const struct tv_event *e) {
-    if (e->type == TV_MOUSE || e->type == TV_PASTE_BEGIN || e->type == TV_PASTE_END) return;
+static void setup_event(struct app *app, struct native_setup *s, const struct kt_event *e) {
+    if (e->type == KT_MOUSE || e->type == KT_PASTE_BEGIN || e->type == KT_PASTE_END) return;
     s->automatic = 0;
-    if (e->type == TV_PASTE) { if (text_screen(s)) text_insert(s, e); return; }
+    if (e->type == KT_PASTE) { if (text_screen(s)) text_insert(s, e); return; }
     if (text_screen(s) && e->key != 27 && text_key(s, e)) return;
     screen_key(app, s, e);
 }
 
 bool native_setup_byte(struct app *app, unsigned char byte) {
-    struct tv_event e;
+    struct kt_event e;
     struct native_setup *s = app->setup;
     if (!s || !s->open || app->view != 6) return false;
-    if (tv_input_feed(&s->input, byte, &e)) setup_event(app, s, &e);
+    if (kt_input_feed(&s->input, byte, &e)) setup_event(app, s, &e);
     return true;
 }
 
 void native_setup_flush_input(struct app *app) {
-    struct tv_event e;
+    struct kt_event e;
     struct native_setup *s = app->setup;
-    if (s && s->open && tv_input_flush(&s->input, &e)) setup_event(app, s, &e);
+    if (s && s->open && kt_input_flush(&s->input, &e)) setup_event(app, s, &e);
 }

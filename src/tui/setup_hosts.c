@@ -121,14 +121,14 @@ static void hub_row(struct app *app, const struct host_row *row, size_t index) {
     char name[160], state[200], line[400];
     bool selected = index == app->host_selected, narrow = app->content_width < 60;
     int width = app->content_width, state_x = narrow ? 4 : 26;
-    enum tv_style name_tone = row->kind == HOST_ROW_ADD ? TV_STRONG : TV_BASE;
+    enum kt_style name_tone = row->kind == HOST_ROW_ADD ? KT_STRONG : KT_BASE;
     setup_row_text(app, row, name, sizeof(name), state, sizeof(state));
     hub_hit(app, index);
     snprintf(line, sizeof(line), "%c %s", selected ? '>' : ' ', name);
-    if (selected) column(app, 0, width, TV_SELECTED, "");
-    column(app, 0, narrow ? width : 24, selected ? TV_SELECTED : name_tone, line);
+    if (selected) column(app, 0, width, KT_SELECTED, "");
+    column(app, 0, narrow ? width : 24, selected ? KT_SELECTED : name_tone, line);
     if (narrow) app->line++;
-    if (app->line < app->limit) column(app, state_x, width - state_x, selected && !narrow ? TV_SELECTED : TV_MUTED, state);
+    if (app->line < app->limit) column(app, state_x, width - state_x, selected && !narrow ? KT_SELECTED : KT_MUTED, state);
     app->line++;
 }
 
@@ -139,10 +139,10 @@ void render_setup_hub(struct app *app) {
     style(app, TONE_STRONG); linef(app, "REMOTE HOSTS"); style(app, TONE_BASE);
     paragraph(app, "Hydra can run agents on other machines over SSH. Adding a host checks its SSH host key and "
               "requirements, installs a matching Hydra there and helps you install and sign in to agents. "
-              "Nothing changes on the remote until you approve it.", TV_BASE);
+              "Nothing changes on the remote until you approve it.", KT_BASE);
     linef(app, "");
     for (i = 0; i < count && app->line < app->limit - 2; i++) hub_row(app, &rows[i], i);
     linef(app, "");
     paragraph(app, count > 1 ? "Enter continues a host's setup; e edits and x removes an unfinished one. Follow work on a set-up host with hydra fleet tui."
-                             : "Press Enter or A to add a host.", TV_MUTED);
+                             : "Press Enter or A to add a host.", KT_MUTED);
 }

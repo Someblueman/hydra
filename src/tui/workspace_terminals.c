@@ -34,7 +34,7 @@ void native_workspace_sync_terminal(struct app *app) {
 }
 
 void native_workspace_focus_next(struct app *app) {
-    tv_workspace_focus_next(&app->workspace->layout,1);
+    kt_workspace_focus_next(&app->workspace->layout,1);
     native_workspace_sync_terminal(app);
 }
 
@@ -79,7 +79,7 @@ void native_workspace_split_agents(struct app *app) {
     selected=app->terminals->selected;
     for (other=0;other<NATIVE_TERMINALS;other++) if (other!=selected && app->terminals->slots[other].screen) break;
     if (other==NATIVE_TERMINALS) goto unavailable;
-    first=tv_workspace_split(&w->layout,3,TV_COLUMNS,500);
+    first=kt_workspace_split(&w->layout,3,KT_COLUMNS,500);
     if (first<0) return;
     /* Two conversations share the agent column side by side. */
     w->layout.panes[first].min_width=w->layout.panes[first+1].min_width=30;

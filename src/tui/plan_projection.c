@@ -51,9 +51,9 @@ static bool native_plan_accept(struct native_plan *p, FILE *input) {
     }
     if (!trailer || ferror(input)) goto done;
     {
-        size_t indices[TV_GRAPH_MAX_NODES], count, n=workflow_nodes(graph,0,indices);
-        struct tv_edge edges[TV_GRAPH_MAX_EDGES]; struct tv_graph_layout layout;
-        if (!workflow_edges(graph,indices,n,edges,&count) || !tv_graph_layout(edges,count,n,&layout)) goto done;
+        size_t indices[KT_GRAPH_MAX_NODES], count, n=workflow_nodes(graph,0,indices);
+        struct kt_edge edges[KT_GRAPH_MAX_EDGES]; struct kt_graph_layout layout;
+        if (!workflow_edges(graph,indices,n,edges,&count) || !kt_graph_layout(edges,count,n,&layout)) goto done;
     }
     p->graph=*graph;
     free(p->text); p->text=preview; preview=NULL; p->text_length=used; p->text_scroll=0;

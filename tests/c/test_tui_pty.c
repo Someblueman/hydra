@@ -918,7 +918,7 @@ static void session_feed(struct session *session, const char *bytes, size_t leng
         session->screen = screen;
         if (!screen) return;
     }
-    tv_term_feed(&screen->terminal, bytes, length);
+    kt_term_feed(&screen->terminal, bytes, length);
 }
 
 /* Drain pending PTY output into the emulator without blocking. */
@@ -936,7 +936,7 @@ static bool session_visible(struct session *session, const char *text) {
 }
 
 static int screen_text_row(const struct measure_screen *screen, const char *text) {
-    const struct tv_canvas *canvas = screen->terminal.alternate_active ?
+    const struct kt_canvas *canvas = screen->terminal.alternate_active ?
         &screen->terminal.alternate.canvas : &screen->terminal.primary.canvas;
     for (int y = 0; y < canvas->height; y++) {
         char line[MEASURE_COLUMNS + 1];
@@ -958,7 +958,7 @@ static bool wait_for_screen_text(struct session *session, const char *text, int 
     if (!screen) return false;
     while (!found && monotonic_ms() < deadline) {
         char bytes[4096]; ssize_t length = read_marker_output(session, bytes, sizeof(bytes));
-        if (length > 0) tv_term_feed(&screen->terminal, bytes, (size_t)length);
+        if (length > 0) kt_term_feed(&screen->terminal, bytes, (size_t)length);
         else sleep_ms(10);
         found = screen_text_row(screen, text)>=0;
     }

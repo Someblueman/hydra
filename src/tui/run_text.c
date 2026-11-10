@@ -182,13 +182,13 @@ const char *head_list_status(const struct app *app, const struct head *h) {
     return step_state_word(step->state);
 }
 
-enum tv_style head_list_tone(const struct app *app, const struct head *h) {
+enum kt_style head_list_tone(const struct app *app, const struct head *h) {
     const struct workflow_node *step;
-    if (app->fleet) return TV_BASE;
+    if (app->fleet) return KT_BASE;
     if (!head_headless(h)) return status_tone(h);
     step = head_step(app, h);
-    if (step && !strcmp(step->state, "running")) return TV_SUCCESS;
-    return head_needs_attention(app, h) ? TV_WARNING : TV_BASE;
+    if (step && !strcmp(step->state, "running")) return KT_SUCCESS;
+    return head_needs_attention(app, h) ? KT_WARNING : KT_BASE;
 }
 
 const char *head_run_role(const struct app *app, const struct head *h) {
@@ -280,7 +280,7 @@ static void outline_run_text(const struct app *app, const struct outline_row *ro
     snprintf(t->name, sizeof(t->name), "%*s%s %s %s", row->depth * 2, "", outline_glyph(app, row->open), run_label_kind(r), r->name);
     if (heads) snprintf(t->count, sizeof(t->count), "%zu head%s", heads, heads == 1 ? "" : "s");
     t->status = r->state; t->agent = t->count;
-    t->tone = run_needs_attention(app, row->run) ? TV_WARNING : !strcmp(r->state, "running") ? TV_SUCCESS : TV_BASE;
+    t->tone = run_needs_attention(app, row->run) ? KT_WARNING : !strcmp(r->state, "running") ? KT_SUCCESS : KT_BASE;
 }
 
 /* A run head that is not active: retired or kept by the run, removed by the
@@ -298,7 +298,7 @@ static void outline_retired_text(const struct app *app, const struct outline_row
     const struct workflow_head *r = &app->workflows->heads[row->record];
     snprintf(t->name, sizeof(t->name), "%*s%-8s %s", row->depth * 2, "", r->role, r->branch);
     t->status = run_head_absence(app, r);
-    t->tone = TV_MUTED;
+    t->tone = KT_MUTED;
 }
 
 static void outline_head_text(const struct app *app, const struct outline_row *row, struct outline_text *t) {
@@ -314,7 +314,7 @@ static void outline_head_text(const struct app *app, const struct outline_row *r
 void outline_row_text(const struct app *app, const struct outline_row *row, struct outline_text *t) {
     t->name[0] = t->count[0] = '\0';
     t->status = t->agent = t->reported = "";
-    t->tone = TV_BASE;
+    t->tone = KT_BASE;
     if (row->kind == OUTLINE_RUN) outline_run_text(app, row, t);
     else if (row->kind == OUTLINE_RETIRED) outline_retired_text(app, row, t);
     else outline_head_text(app, row, t);

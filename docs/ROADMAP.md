@@ -995,14 +995,14 @@ or claim that source reachability proves host health. Keep shared multi-user
 inventory and automatic failover outside this slice until their authority and
 reconciliation contracts are separately approved.
 
-## Native workspace and standalone termviz track
+## Native workspace and standalone kettle track
 
 This track develops dependency-free C terminal infrastructure, using Hydra as its
 first real consumer and eventual standalone release as the direction. Existing
 visualization architecture and limits are documented in the native helper
-behavior in [workflows.md](workflows.md) and the [termviz module guide](../src/termviz/README.md).
+behavior in [workflows.md](workflows.md) and the [kettle module guide](../src/kettle/README.md).
 
-Termviz owns reusable rendering, layout, input routing, and terminal screen
+Kettle owns reusable rendering, layout, input routing, and terminal screen
 interpretation. Hydra owns agent/workflow semantics and authoritative actions.
 Keep OS-specific terminal lifecycle and PTY process handling in small adapters,
 separate from the portable core. Add no third-party dependencies. Preserve the
@@ -1010,12 +1010,12 @@ shell-only path, current CLI/state contracts, and tmux authority for Hydra heads
 the standalone shell example does not introduce a competing Hydra execution owner.
 
 Milestones 1–8 are implemented: the workspace foundation and embedded shell
-(see the [terminal contract](../src/termviz/TERMINAL.md) for the qualified subset),
+(see the [terminal contract](../src/kettle/TERMINAL.md) for the qualified subset),
 the Hydra workspace with conversation-first planning, comprehensive overview,
 monitoring and statistics layouts (A–D), integrated working terminals, operational
 views, interaction and visual polish, a recorded real-workflow exercise, and local
-standalone source readiness (`make test-termviz-export`; see
-[ownership and compatibility boundaries](../src/termviz/STANDALONE.md)). Codex CLI
+standalone source readiness (`make test-kettle-export`; see
+[ownership and compatibility boundaries](../src/kettle/STANDALONE.md)). Codex CLI
 0.153.3 is the qualified agent in the recorded local configuration.
 
 Installed-build feedback on 13 September reopened product, visual and real-workflow
@@ -1026,7 +1026,7 @@ implementation checks do not establish that the experience is product-ready.
 - [ ] Add remote workflow cohorts to statistics when the fleet protocol supplies
       reliable evidence. Provider/resource telemetry requires explicit protocol and
       measurement contracts; missing measurements never appear as zero.
-- [ ] Standalone termviz release. Darwin 25.6.0 arm64 (Apple Clang 17, UBSan) and
+- [ ] Standalone kettle release. Darwin 25.6.0 arm64 (Apple Clang 17, UBSan) and
       Linux aarch64 (Debian GCC 12.2, ASan/UBSan) passed standalone component/PTY
       checks on 8 September 2026; other platforms remain unqualified. Publication
       needs a separate release decision; local readiness does not authorize

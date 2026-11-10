@@ -43,7 +43,7 @@ void statistics_scope_tokens(const struct hs_summary *s, char *out, size_t size)
 }
 
 /* Word-wraps text into at most rows lines of width cells; returns rows used. */
-int statistics_wrap(struct tv_canvas *c, int x, int y, int width, int rows, enum tv_style tone, const char *text) {
+int statistics_wrap(struct kt_canvas *c, int x, int y, int width, int rows, enum kt_style tone, const char *text) {
     int used = 0;
     while (*text && used < rows && width > 0) {
         size_t length = strlen(text), take = length <= (size_t)width ? length : (size_t)width;
@@ -61,25 +61,25 @@ int statistics_wrap(struct tv_canvas *c, int x, int y, int width, int rows, enum
 
 /* The scope side panel: token totals, cost only when reported, and the
  * resource metrics Hydra does not collect, said in full. */
-void statistics_scope_notes(struct tv_canvas *c, int x, int y, int width, int rows, const struct hs_summary *s) {
+void statistics_scope_notes(struct kt_canvas *c, int x, int y, int width, int rows, const struct hs_summary *s) {
     static const char *const labels[] = {"in", "cached", "out"};
     char value[24], cost[48];
     int row = y, end = y + rows;
     size_t i;
-    dashboard_text(c, x, row++, width, TV_STRONG, "Agent tokens");
-    if (!s->agent_steps && row < end) dashboard_text(c, x, row++, width, TV_MUTED, "no agent steps");
+    dashboard_text(c, x, row++, width, KT_STRONG, "Agent tokens");
+    if (!s->agent_steps && row < end) dashboard_text(c, x, row++, width, KT_MUTED, "no agent steps");
     for (i = 0; s->agent_steps && i < 3 && row < end; i++) {
         statistics_count(s->usage[i], s->usage_known[i] > 0, value, sizeof(value));
-        dashboard_text(c, x, row++, width, TV_BASE, "%-7s %s", labels[i], value);
+        dashboard_text(c, x, row++, width, KT_BASE, "%-7s %s", labels[i], value);
     }
     if (s->agent_steps && row < end)
-        dashboard_text(c, x, row++, width, TV_MUTED, "%zu of %zu reported", s->usage_known[HS_TOKENS_IN], s->agent_steps);
+        dashboard_text(c, x, row++, width, KT_MUTED, "%zu of %zu reported", s->usage_known[HS_TOKENS_IN], s->agent_steps);
     cost_text(s->usage[HS_COST_MICROUSD], s->usage_known[HS_COST_MICROUSD] > 0, cost, sizeof(cost));
-    if (s->agent_steps && row < end) dashboard_text(c, x, row++, width, TV_MUTED, "%s", cost);
+    if (s->agent_steps && row < end) dashboard_text(c, x, row++, width, KT_MUTED, "%s", cost);
     if (row + 1 < end) row++;
-    row += statistics_wrap(c, x, row, width, end - row, TV_MUTED,
+    row += statistics_wrap(c, x, row, width, end - row, KT_MUTED,
         "CPU and memory: not measured. Hydra does not sample processes yet (roadmap item 10).");
-    if (row + 1 < end) statistics_wrap(c, x, row + 1, width, end - row - 1, TV_MUTED, "0 resets filters");
+    if (row + 1 < end) statistics_wrap(c, x, row + 1, width, end - row - 1, KT_MUTED, "0 resets filters");
 }
 
 /* Per-run token total for the run table; empty when the run has no agent step. */
@@ -117,16 +117,16 @@ void statistics_step_agent(const struct hs_step *s, bool compact, char *out, siz
 }
 
 /* The expanded block for the first visible step of the selected run. */
-void statistics_step_detail(struct tv_canvas *c, struct tv_rect r, const struct hs_model *m, const struct hs_step *s) {
+void statistics_step_detail(struct kt_canvas *c, struct kt_rect r, const struct hs_model *m, const struct hs_step *s) {
     char text[512], tokens[96], cost[48], seconds[32] = "time unknown";
     const struct hs_usage *u = &s->usage;
     uint64_t duration;
     int row = r.y;
     if (hs_duration(m, s, &duration)) (void)snprintf(seconds, sizeof(seconds), "%llus", (unsigned long long)duration);
-    dashboard_text(c, r.x, row++, r.width, TV_STRONG, "%s: %s, %s, %u attempt%s", s->id, s->state, seconds,
+    dashboard_text(c, r.x, row++, r.width, KT_STRONG, "%s: %s, %s, %u attempt%s", s->id, s->state, seconds,
         s->attempts, s->attempts == 1 ? "" : "s");
     if (!u->recorded) {
-        statistics_wrap(c, r.x, row, r.width, r.height - 1, TV_MUTED,
+        statistics_wrap(c, r.x, row, r.width, r.height - 1, KT_MUTED,
             strcmp(s->kind, "exec") ? "Not an agent step: no tokens apply." : "No agent receipt was recorded for this step.");
         return;
     }
@@ -136,6 +136,6 @@ void statistics_step_detail(struct tv_canvas *c, struct tv_rect r, const struct 
                  u->profile[0] ? u->profile : "unknown", u->version[0] ? u->version : "not recorded",
                  u->model[0] ? u->model : "not recorded", u->effort[0] ? u->effort : "not recorded") >= (int)sizeof(text))
         text[sizeof(text) - 1] = '\0';
-    row += statistics_wrap(c, r.x, row, r.width, r.height - 2, TV_BASE, text);
-    dashboard_text(c, r.x, row, r.width, TV_BASE, "Tokens %s; %s.", tokens, cost);
+    row += statistics_wrap(c, r.x, row, r.width, r.height - 2, KT_BASE, text);
+    dashboard_text(c, r.x, row, r.width, KT_BASE, "Tokens %s; %s.", tokens, cost);
 }

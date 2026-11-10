@@ -24,31 +24,31 @@ static void workflow_compact(struct app *app, const struct workflow_model *m, co
 }
 
 /* The selected step: kind and role, state, attempts and the head it ran on. */
-static void workflow_node_footer(struct tv_canvas *c, int width, int height, const struct workflow_node *node) {
+static void workflow_node_footer(struct kt_canvas *c, int width, int height, const struct workflow_node *node) {
     char where[TEXT + 96] = "";
     if (node->head[0]) snprintf(where, sizeof(where), " / on %s%s%s%s", node->head, node->profile[0] ? " (" : "",
                                 node->profile, node->profile[0] ? ")" : "");
-    dashboard_text(c, 1, height - 3, width - 2, TV_STRONG, "%s [%s%s%s] / %s / attempts %u%s",
+    dashboard_text(c, 1, height - 3, width - 2, KT_STRONG, "%s [%s%s%s] / %s / attempts %u%s",
                    node->id, node->kind, node->role[0] ? "/" : "", node->role, node->state, node->attempts, where);
-    dashboard_text(c, 1, height - 2, width - 2, TV_BASE, "Requires: %s", node->needs);
+    dashboard_text(c, 1, height - 2, width - 2, KT_BASE, "Requires: %s", node->needs);
 }
 
 void render_workflow_graph(struct app *app) {
     struct workflow_model *m = app->workflows;
-    struct tv_canvas c;
-    struct tv_graph_layout layout;
-    struct tv_node nodes[TV_GRAPH_MAX_NODES];
-    struct tv_edge edges[TV_GRAPH_MAX_EDGES];
-    size_t indices[TV_GRAPH_MAX_NODES], n, count, i;
+    struct kt_canvas c;
+    struct kt_graph_layout layout;
+    struct kt_node nodes[KT_GRAPH_MAX_NODES];
+    struct kt_edge edges[KT_GRAPH_MAX_EDGES];
+    size_t indices[KT_GRAPH_MAX_NODES], n, count, i;
     int width = app->cols - 1, height = app->limit - app->line;
-    struct tv_rect area;
+    struct kt_rect area;
     if (app->fleet) { linef(app, "Workflow graphs show local recorded runs. Remote graphs are unavailable."); return; }
     if (!m || !m->run_count) { workflow_empty(app); return; }
     if (width > 300) width = 300;
     if (height > 120) height = 120;
     if (app->workflow_run >= m->run_count) app->workflow_run = 0;
     n = workflow_nodes(m, app->workflow_run, indices);
-    if (n > TV_GRAPH_MAX_NODES || !workflow_edges(m, indices, n, edges, &count) || !tv_graph_layout(edges, count, n, &layout)) {
+    if (n > KT_GRAPH_MAX_NODES || !workflow_edges(m, indices, n, edges, &count) || !kt_graph_layout(edges, count, n, &layout)) {
         linef(app, "Recorded graph is invalid; inspect workflow status"); return;
     }
     if (app->workflow_node >= n) app->workflow_node = 0;
@@ -57,18 +57,18 @@ void render_workflow_graph(struct app *app) {
     width = c.width; height = c.height;
     if (width > 300) width = 300;
     if (height > 120) height = 120;
-    dashboard_text(&c, 1, 0, width - 2, TV_STRONG, "%s / %s / run %zu of %zu", m->runs[app->workflow_run].name,
+    dashboard_text(&c, 1, 0, width - 2, KT_STRONG, "%s / %s / run %zu of %zu", m->runs[app->workflow_run].name,
                    m->runs[app->workflow_run].state, app->workflow_run + 1, m->run_count);
-    dashboard_text(&c, 1, 1, width - 2, app->workflow_stale ? TV_WARNING : TV_BORDER,
+    dashboard_text(&c, 1, 1, width - 2, app->workflow_stale ? KT_WARNING : KT_BORDER,
                    "%s / %zu steps / %zu dependency edges", app->workflow_stale ? "STALE snapshot" : "Recorded state", n, count);
-    tv_panel(&c, (struct tv_rect){0, 3, width, height - 6}, "DEPENDENCIES / prerequisite -> dependent");
-    area = (struct tv_rect){2, 5, width - 4, height - 9};
+    kt_panel(&c, (struct kt_rect){0, 3, width, height - 6}, "DEPENDENCIES / prerequisite -> dependent");
+    area = (struct kt_rect){2, 5, width - 4, height - 9};
     if (area.height < 1) area.height = 1;
     for (i = 0; i < n; i++) {
         struct workflow_node *node = &m->nodes[indices[i]];
-        nodes[i] = (struct tv_node){node->id, node->state,
-            !strcmp(node->state, "failed") || !strcmp(node->state, "recovery-required") ? TV_WARNING :
-            !strcmp(node->state, "succeeded") ? TV_SUCCESS : TV_BASE};
+        nodes[i] = (struct kt_node){node->id, node->state,
+            !strcmp(node->state, "failed") || !strcmp(node->state, "recovery-required") ? KT_WARNING :
+            !strcmp(node->state, "succeeded") ? KT_SUCCESS : KT_BASE};
     }
     if (n && app->graph_follow) {
         app->graph_x = layout.x[app->workflow_node] - (area.width - 22) / 2;
@@ -76,7 +76,7 @@ void render_workflow_graph(struct app *app) {
         if (app->graph_x < 0) app->graph_x = 0;
         if (app->graph_y < 0) app->graph_y = 0;
     }
-    tv_graph(&c, area, nodes, n, edges, count, &layout, app->graph_x, app->graph_y, app->workflow_node);
+    kt_graph(&c, area, nodes, n, edges, count, &layout, app->graph_x, app->graph_y, app->workflow_node);
     for (i = 0; i < n && app->hit_count < MAX_HEADS; i++) {
         int x = area.x + layout.x[i] - app->graph_x, y = area.y + layout.y[i] - app->graph_y;
         size_t hit = app->hit_count;
@@ -88,6 +88,6 @@ void render_workflow_graph(struct app *app) {
         app->hit_items[hit] = i; app->hit_count++;
     }
     if (n) workflow_node_footer(&c, width, height, &m->nodes[indices[app->workflow_node]]);
-    dashboard_text(&c, 1, height - 1, width - 2, TV_WARNING, "%s", app->workflow_error[0] ? app->workflow_error : m->warning);
+    dashboard_text(&c, 1, height - 1, width - 2, KT_WARNING, "%s", app->workflow_error[0] ? app->workflow_error : m->warning);
     app->line = app->limit;
 }

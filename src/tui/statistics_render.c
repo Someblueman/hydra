@@ -15,7 +15,7 @@ static void statistics_time(uint64_t epoch, char *out, size_t capacity) {
         copy_text(out, capacity, "unknown date");
 }
 
-static void statistics_hit(struct app *app, struct tv_rect r, size_t item) {
+static void statistics_hit(struct app *app, struct kt_rect r, size_t item) {
     size_t n = app->hit_count;
     if (n == MAX_HEADS) return;
     app->hit_rows[n] = r.y + 1; app->hit_bottom[n] = r.y + r.height;
@@ -23,95 +23,95 @@ static void statistics_hit(struct app *app, struct tv_rect r, size_t item) {
     app->hit_items[n] = item; app->hit_count++;
 }
 
-static void statistics_distribution(struct tv_canvas *c, struct tv_rect r, const struct hs_summary *s) {
+static void statistics_distribution(struct kt_canvas *c, struct kt_rect r, const struct hs_summary *s) {
     static const char *names[] = {"Succeeded", "Failed", "Running", "Queued", "Blocked", "Cancelled", "Unknown"};
     size_t i;
-    tv_panel(c, r, "RUN OUTCOMES / recorded");
+    kt_panel(c, r, "RUN OUTCOMES / recorded");
     for (i = 0; i < HS_STATES && (int)i < r.height - 3; i++) {
         int row = r.y + 2 + (int)i, bar = r.width - 22;
-        enum tv_style tone = i == HS_FAILED || i == HS_BLOCKED || i == HS_UNKNOWN ? TV_WARNING : TV_BASE;
+        enum kt_style tone = i == HS_FAILED || i == HS_BLOCKED || i == HS_UNKNOWN ? KT_WARNING : KT_BASE;
         dashboard_text(c, r.x+2, row, r.width-4, tone, "%-10s %3zu", names[i], s->run_states[i]);
-        if (bar > 1) tv_bar(c, (struct tv_rect){r.x+19,row,bar,1}, s->run_states[i], s->runs, tone);
+        if (bar > 1) kt_bar(c, (struct kt_rect){r.x+19,row,bar,1}, s->run_states[i], s->runs, tone);
     }
 }
 
-static void statistics_trend(struct tv_canvas *c, struct tv_rect r, const struct hs_summary *s) {
+static void statistics_trend(struct kt_canvas *c, struct kt_rect r, const struct hs_summary *s) {
     size_t i, maximum = 1;
-    tv_panel(c, r, "RUN CREATION / 7 x 24h");
+    kt_panel(c, r, "RUN CREATION / 7 x 24h");
     for (i = 0; i < 7; i++) if (s->daily[i] > maximum) maximum = s->daily[i];
     for (i = 0; i < 7 && (int)i < r.height - 3; i++) {
         int row = r.y + 2 + (int)i;
-        dashboard_text(c, r.x+2, row, r.width-4, TV_BORDER, "-%zud %3zu", 6-i, s->daily[i]);
-        tv_bar(c, (struct tv_rect){r.x+12,row,r.width-15,1}, s->daily[i], maximum, TV_BORDER);
+        dashboard_text(c, r.x+2, row, r.width-4, KT_BORDER, "-%zud %3zu", 6-i, s->daily[i]);
+        kt_bar(c, (struct kt_rect){r.x+12,row,r.width-15,1}, s->daily[i], maximum, KT_BORDER);
     }
 }
 
 /* One run: name, state, creation date and, when wide, its token total. */
-static void statistics_run_row(const struct statistics_view *v, struct tv_canvas *c, struct tv_rect r, int row, size_t i) {
+static void statistics_run_row(const struct statistics_view *v, struct kt_canvas *c, struct kt_rect r, int row, size_t i) {
     const struct hs_run *run = &v->model->runs[v->visible[i]];
     char date[40], tokens[64] = "";
     bool wide = r.width > 90, dated = r.width > 70;
     int name_width = wide ? r.width-73 : dated ? r.width-47 : r.width-25;
-    enum tv_style tone = i == v->selected ? TV_SELECTED : hs_state(run->state) == HS_FAILED ? TV_WARNING : TV_BASE;
+    enum kt_style tone = i == v->selected ? KT_SELECTED : hs_state(run->state) == HS_FAILED ? KT_WARNING : KT_BASE;
     statistics_time(run->created, date, sizeof(date));
     if (wide) statistics_run_tokens(v->model, v->visible[i], tokens, sizeof(tokens));
     dashboard_text(c, r.x+2, row, r.width-4, tone, "%c %-*.*s %-18.18s%s%-16s  %s",
         i == v->selected ? '>' : ' ', name_width, name_width, run->name, run->state, dated ? "  " : "", dated ? date : "", tokens);
 }
 
-static void statistics_run_table(struct app *app, struct tv_canvas *c, struct tv_rect r) {
+static void statistics_run_table(struct app *app, struct kt_canvas *c, struct kt_rect r) {
     struct statistics_view *v = app->statistics;
     size_t i, start;
     int available = r.height - 4, row = r.y + 2;
-    tv_panel(c, r, "RUNS / newest creation first");
+    kt_panel(c, r, "RUNS / newest creation first");
     if (!v->count) {
-        dashboard_text(c, r.x+2, row, r.width-4, TV_WARNING, "No matching recorded runs");
-        dashboard_text(c, r.x+2, row+1, r.width-4, TV_BORDER, "0 reset filters / / search"); return;
+        dashboard_text(c, r.x+2, row, r.width-4, KT_WARNING, "No matching recorded runs");
+        dashboard_text(c, r.x+2, row+1, r.width-4, KT_BORDER, "0 reset filters / / search"); return;
     }
     if (available < 1) return;
     start = v->selected >= (size_t)available ? v->selected - (size_t)available + 1 : 0;
     for (i = start; i < v->count && row < r.y+r.height-2; i++, row++) {
         statistics_run_row(v, c, r, row, i);
-        statistics_hit(app, (struct tv_rect){r.x+1,row,r.width-2,1}, i);
+        statistics_hit(app, (struct kt_rect){r.x+1,row,r.width-2,1}, i);
     }
-    dashboard_text(c, r.x+2, r.y+r.height-2, r.width-4, TV_BORDER, "%zu/%zu / Enter evidence / g graph", v->selected+1, v->count);
+    dashboard_text(c, r.x+2, r.y+r.height-2, r.width-4, KT_BORDER, "%zu/%zu / Enter evidence / g graph", v->selected+1, v->count);
 }
 
-static void statistics_step_row(struct tv_canvas *c, struct tv_rect r, int row, const struct hs_model *m, const struct hs_step *s) {
+static void statistics_step_row(struct kt_canvas *c, struct kt_rect r, int row, const struct hs_model *m, const struct hs_step *s) {
     char seconds[24] = "--", attempts[24] = "--", agent[160];
     uint64_t duration;
     bool compact = r.width < 100;
     if (hs_duration(m,s,&duration)) snprintf(seconds,sizeof(seconds),"%llu",(unsigned long long)duration);
     if (s->attempts_known) snprintf(attempts,sizeof(attempts),"%u",s->attempts);
     statistics_step_agent(s,compact,agent,sizeof(agent));
-    dashboard_text(c,r.x+2,row,r.width-4,hs_state(s->state)==HS_FAILED ? TV_WARNING : TV_BASE,
+    dashboard_text(c,r.x+2,row,r.width-4,hs_state(s->state)==HS_FAILED ? KT_WARNING : KT_BASE,
         compact ? "%-16.16s %-10.10s %3s %5s  %s" : "%-20.20s %-15.15s %5s %8s  %s",s->id,s->state,attempts,seconds,agent);
 }
 
 /* The run's totals over its recorded steps, then the first visible step in full. */
-static void statistics_run_totals(struct tv_canvas *c, struct tv_rect r, const struct hs_model *m, size_t run_index) {
+static void statistics_run_totals(struct kt_canvas *c, struct kt_rect r, const struct hs_model *m, size_t run_index) {
     struct hs_summary totals;
     char tokens[192];
     size_t i;
     memset(&totals,0,sizeof(totals));
     for (i = 0; i < m->step_count; i++) if (m->steps[i].run == run_index) hs_usage_add(&totals,&m->steps[i]);
     statistics_scope_tokens(&totals,tokens,sizeof(tokens));
-    dashboard_text(c,r.x+2,r.y+3,r.width-4,TV_BASE,"Run %s",tokens);
+    dashboard_text(c,r.x+2,r.y+3,r.width-4,KT_BASE,"Run %s",tokens);
 }
 
-static void statistics_run_detail(struct app *app, struct tv_canvas *c, struct tv_rect r) {
+static void statistics_run_detail(struct app *app, struct kt_canvas *c, struct kt_rect r) {
     struct statistics_view *v = app->statistics;
     const struct hs_run *run;
     const struct hs_step *first = NULL;
     size_t i, ordinal = 0, run_index;
     int row = r.y + 5, bottom = r.y + r.height - (r.height > 12 ? 6 : 2);
-    tv_panel(c, r, "RUN EVIDENCE / latest attempts");
-    if (!v->count) { dashboard_text(c,r.x+2,r.y+2,r.width-4,TV_WARNING,"Selected run no longer matches"); return; }
+    kt_panel(c, r, "RUN EVIDENCE / latest attempts");
+    if (!v->count) { dashboard_text(c,r.x+2,r.y+2,r.width-4,KT_WARNING,"Selected run no longer matches"); return; }
     run_index = v->visible[v->selected]; run = &v->model->runs[run_index];
-    dashboard_text(c,r.x+2,r.y+1,r.width-4,TV_STRONG,"%s / %s",run->name,run->state);
-    dashboard_text(c,r.x+2,r.y+2,r.width-4,TV_BORDER,"%s",run->id);
+    dashboard_text(c,r.x+2,r.y+1,r.width-4,KT_STRONG,"%s / %s",run->name,run->state);
+    dashboard_text(c,r.x+2,r.y+2,r.width-4,KT_BORDER,"%s",run->id);
     statistics_run_totals(c,r,v->model,run_index);
-    dashboard_text(c,r.x+2,r.y+4,r.width-4,TV_BORDER,r.width < 100 ? "STEP             STATE      TRY  SECS  AGENT TOKENS IN/CACHED/OUT"
+    dashboard_text(c,r.x+2,r.y+4,r.width-4,KT_BORDER,r.width < 100 ? "STEP             STATE      TRY  SECS  AGENT TOKENS IN/CACHED/OUT"
         : "STEP                 STATE           TRIES  SECONDS  AGENT / TOKENS");
     for (i = 0; i < v->model->step_count && row < bottom; i++) {
         const struct hs_step *s = &v->model->steps[i];
@@ -119,55 +119,55 @@ static void statistics_run_detail(struct app *app, struct tv_canvas *c, struct t
         if (!first) first = s;
         statistics_step_row(c,r,row++,v->model,s);
     }
-    if (row == r.y+5) dashboard_text(c,r.x+2,row,r.width-4,TV_WARNING,"No step evidence at this scroll position");
-    if (first && r.height > 12) statistics_step_detail(c,(struct tv_rect){r.x+2,bottom,r.width-4,4},v->model,first);
-    dashboard_text(c,r.x+2,r.y+r.height-2,r.width-4,TV_BORDER,"j/k scroll (first row is detailed below) / g graph / Esc statistics");
+    if (row == r.y+5) dashboard_text(c,r.x+2,row,r.width-4,KT_WARNING,"No step evidence at this scroll position");
+    if (first && r.height > 12) statistics_step_detail(c,(struct kt_rect){r.x+2,bottom,r.width-4,4},v->model,first);
+    dashboard_text(c,r.x+2,r.y+r.height-2,r.width-4,KT_BORDER,"j/k scroll (first row is detailed below) / g graph / Esc statistics");
 }
 
-static void statistics_fleet(struct app *app, struct tv_canvas *c, struct tv_rect r) {
+static void statistics_fleet(struct app *app, struct kt_canvas *c, struct kt_rect r) {
     struct statistics_view *v = app->statistics;
     size_t i, responded = 0, failed = 0, heads = 0;
     char reported[24]="--";
     int row = r.y+5;
     size_t start = 0;
-    tv_panel(c,r,"HOST STATISTICS / latest fleet response");
+    kt_panel(c,r,"HOST STATISTICS / latest fleet response");
     for (i=0;i<v->count;i++) {
         const struct host_observation *h = &app->model.hosts[v->visible[i]];
         if (!strcmp(h->state,"failed")) failed++; else { responded++; heads+=h->heads; }
     }
     if(responded) snprintf(reported,sizeof(reported),"%zu",heads);
     if (r.height < 10 || r.width < 65) {
-        dashboard_text(c,r.x+1,r.y,r.width-2,TV_STRONG,"%zu responded / %zu failed",responded,failed);
-        dashboard_text(c,r.x+1,r.y+1,r.width-2,TV_BASE,"%s reported heads",reported);
+        dashboard_text(c,r.x+1,r.y,r.width-2,KT_STRONG,"%zu responded / %zu failed",responded,failed);
+        dashboard_text(c,r.x+1,r.y+1,r.width-2,KT_BASE,"%s reported heads",reported);
         if (v->count) {
             const struct host_observation *h=&app->model.hosts[v->visible[v->selected]];
-            dashboard_text(c,r.x+1,r.y+2,r.width-2,TV_SELECTED,"%zu/%zu %s",v->selected+1,v->count,h->name);
-            dashboard_text(c,r.x+1,r.y+3,r.width-2,TV_BASE,"%s / Enter evidence",h->state);
+            dashboard_text(c,r.x+1,r.y+2,r.width-2,KT_SELECTED,"%zu/%zu %s",v->selected+1,v->count,h->name);
+            dashboard_text(c,r.x+1,r.y+3,r.width-2,KT_BASE,"%s / Enter evidence",h->state);
             if (v->detail) {
                 size_t ordinal=0;
                 bool shown=false;
                 for (i=0;i<app->model.head_count;i++) {
                     const struct head *head=&app->model.heads[i];
                     if (strcmp(head->remote_host,h->name) || ordinal++<v->step_scroll) continue;
-                    dashboard_text(c,r.x+1,r.y+3,r.width-2,TV_BASE,"%s / %s",head->branch,head->desired);
+                    dashboard_text(c,r.x+1,r.y+3,r.width-2,KT_BASE,"%s / %s",head->branch,head->desired);
                     shown=true; break;
                 }
-                if (!shown) dashboard_text(c,r.x+1,r.y+3,r.width-2,TV_WARNING,"No head evidence at this offset");
+                if (!shown) dashboard_text(c,r.x+1,r.y+3,r.width-2,KT_WARNING,"No head evidence at this offset");
             }
-        } else dashboard_text(c,r.x+1,r.y+2,r.width-2,TV_WARNING,"No matching hosts / 0 reset");
+        } else dashboard_text(c,r.x+1,r.y+2,r.width-2,KT_WARNING,"No matching hosts / 0 reset");
         return;
     }
-    dashboard_text(c,r.x+2,r.y+2,r.width-4,TV_STRONG,"%zu responded   %zu failed   %s reported heads",responded,failed,reported);
-    if (r.height > 5) dashboard_text(c,r.x+2,r.y+3,r.width-4,TV_WARNING,"Failed hosts have unknown head counts");
+    dashboard_text(c,r.x+2,r.y+2,r.width-4,KT_STRONG,"%zu responded   %zu failed   %s reported heads",responded,failed,reported);
+    if (r.height > 5) dashboard_text(c,r.x+2,r.y+3,r.width-4,KT_WARNING,"Failed hosts have unknown head counts");
     if (v->detail && v->count) {
         const char *host = app->model.hosts[v->visible[v->selected]].name;
         size_t ordinal = 0;
         for (i=0;i<app->model.head_count && row<r.y+r.height-3;i++) {
             const struct head *h = &app->model.heads[i];
             if (strcmp(h->remote_host,host) || ordinal++<v->step_scroll) continue;
-            dashboard_text(c,r.x+2,row++,r.width-4,TV_BASE,"%s / %s / %s",h->remote_project,h->branch,h->desired);
+            dashboard_text(c,r.x+2,row++,r.width-4,KT_BASE,"%s / %s / %s",h->remote_project,h->branch,h->desired);
         }
-        if (!ordinal) dashboard_text(c,r.x+2,row++,r.width-4,TV_WARNING,"No head rows for %s / inspect host state",host);
+        if (!ordinal) dashboard_text(c,r.x+2,row++,r.width-4,KT_WARNING,"No head rows for %s / inspect host state",host);
     } else {
         size_t available=(size_t)(r.height-8);
         if (v->selected >= available) start=v->selected-available+1;
@@ -175,15 +175,15 @@ static void statistics_fleet(struct app *app, struct tv_canvas *c, struct tv_rec
             const struct host_observation *h = &app->model.hosts[v->visible[i]];
             char count[24]="--";
             if (strcmp(h->state,"failed")) snprintf(count,sizeof(count),"%u",h->heads);
-            dashboard_text(c,r.x+2,row,r.width-4,i==v->selected ? TV_SELECTED : TV_BASE,
+            dashboard_text(c,r.x+2,row,r.width-4,i==v->selected ? KT_SELECTED : KT_BASE,
                 "%c %-20.20s %-10s %s heads",i==v->selected ? '>' : ' ',h->name,h->state,count);
-            statistics_hit(app,(struct tv_rect){r.x+1,row,r.width-2,1},i);
+            statistics_hit(app,(struct kt_rect){r.x+1,row,r.width-2,1},i);
         }
     }
-    dashboard_text(c,r.x+2,r.y+r.height-2,r.width-4,TV_WARNING,"Remote workflow history / CPU / memory / cost: unavailable");
+    dashboard_text(c,r.x+2,r.y+r.height-2,r.width-4,KT_WARNING,"Remote workflow history / CPU / memory / cost: unavailable");
 }
 
-static void statistics_compact_step(struct statistics_view *v, struct tv_canvas *c, int width) {
+static void statistics_compact_step(struct statistics_view *v, struct kt_canvas *c, int width) {
     char duration[40]="--";
     size_t i, ordinal=0;
     bool shown=false;
@@ -194,41 +194,41 @@ static void statistics_compact_step(struct statistics_view *v, struct tv_canvas 
         char agent[160];
         if (hs_duration(v->model,s,&seconds)) snprintf(duration,sizeof(duration),"%llus",(unsigned long long)seconds);
         statistics_step_agent(s,true,agent,sizeof(agent));
-        dashboard_text(c,1,5,width-2,TV_BASE,"%s / %s / %s%s%s",s->id,s->state,duration,agent[0] ? " / " : "",agent); shown=true; break;
+        dashboard_text(c,1,5,width-2,KT_BASE,"%s / %s / %s%s%s",s->id,s->state,duration,agent[0] ? " / " : "",agent); shown=true; break;
     }
-    if(!shown) dashboard_text(c,1,5,width-2,TV_WARNING,"No step at this offset / k back");
+    if(!shown) dashboard_text(c,1,5,width-2,KT_WARNING,"No step at this offset / k back");
 }
 
-static void statistics_compact(struct app *app, struct tv_canvas *c, int width, int height, const struct hs_summary *summary, const char *retries) {
+static void statistics_compact(struct app *app, struct kt_canvas *c, int width, int height, const struct hs_summary *summary, const char *retries) {
     struct statistics_view *v=app->statistics;
-    dashboard_text(c,1,2,width-2,TV_STRONG,"%zu runs / %zu steps / %s retries",summary->runs,summary->steps,retries);
-    dashboard_text(c,1,3,width-2,TV_BASE,"Run OK %zu / fail %zu / unknown %zu",summary->run_states[HS_SUCCEEDED],summary->run_states[HS_FAILED],summary->run_states[HS_UNKNOWN]);
+    dashboard_text(c,1,2,width-2,KT_STRONG,"%zu runs / %zu steps / %s retries",summary->runs,summary->steps,retries);
+    dashboard_text(c,1,3,width-2,KT_BASE,"Run OK %zu / fail %zu / unknown %zu",summary->run_states[HS_SUCCEEDED],summary->run_states[HS_FAILED],summary->run_states[HS_UNKNOWN]);
     if (v->count) {
         const struct hs_run *run=&v->model->runs[v->visible[v->selected]];
-        dashboard_text(c,1,4,width-2,TV_SELECTED,"%zu/%zu %s",v->selected+1,v->count,run->name);
-        dashboard_text(c,1,5,width-2,TV_BASE,"%s / Enter evidence",run->state);
+        dashboard_text(c,1,4,width-2,KT_SELECTED,"%zu/%zu %s",v->selected+1,v->count,run->name);
+        dashboard_text(c,1,5,width-2,KT_BASE,"%s / Enter evidence",run->state);
         if (v->detail) statistics_compact_step(v,c,width);
-    } else dashboard_text(c,1,4,width-2,TV_WARNING,"No matching runs / 0 reset filters");
-    if (height>9) dashboard_text(c,1,6,width-2,TV_BORDER,"Timing %zu/%zu / missing stays --",summary->duration_known,summary->steps);
+    } else dashboard_text(c,1,4,width-2,KT_WARNING,"No matching runs / 0 reset filters");
+    if (height>9) dashboard_text(c,1,6,width-2,KT_BORDER,"Timing %zu/%zu / missing stays --",summary->duration_known,summary->steps);
 }
 
 /* Without the side panel, token totals share the timing line in short form. */
-static void statistics_timing_line(struct tv_canvas *c, int x, int width, const struct hs_summary *s,
+static void statistics_timing_line(struct kt_canvas *c, int x, int width, const struct hs_summary *s,
                                    const char *duration, const char *maximum, bool tokens) {
     char in[24], cached[24], out[24];
     if (!tokens || !s->agent_steps) {
-        dashboard_text(c,x,7,width,TV_MUTED,"Latest attempts average %s over %zu timed steps, longest %s",duration,s->duration_known,maximum);
+        dashboard_text(c,x,7,width,KT_MUTED,"Latest attempts average %s over %zu timed steps, longest %s",duration,s->duration_known,maximum);
         return;
     }
     statistics_count(s->usage[HS_TOKENS_IN],s->usage_known[HS_TOKENS_IN] > 0,in,sizeof(in));
     statistics_count(s->usage[HS_TOKENS_CACHED],s->usage_known[HS_TOKENS_CACHED] > 0,cached,sizeof(cached));
     statistics_count(s->usage[HS_TOKENS_OUT],s->usage_known[HS_TOKENS_OUT] > 0,out,sizeof(out));
-    dashboard_text(c,x,7,width,TV_MUTED,"Avg %s over %zu steps, max %s; tokens in %s, cached %s, out %s",
+    dashboard_text(c,x,7,width,KT_MUTED,"Avg %s over %zu steps, max %s; tokens in %s, cached %s, out %s",
         duration,s->duration_known,maximum,in,cached,out);
 }
 
 bool render_statistics(struct app *app, unsigned frame, bool headless) {
-    struct tv_canvas c;
+    struct kt_canvas c;
     struct statistics_view *v;
     struct hs_summary summary;
     int width, height;
@@ -248,57 +248,57 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
     snprintf(scope,sizeof(scope),"%s%s%s%s%.60s%s%s%.60s",app->fleet ? "Fleet snapshot" : "Recorded workflow runs",sep,app->fleet ? "latest response" : statistics_range(v),sep,
         v->filter.query[0] ? v->filter.query : "all work", v->filter.attention ? " / attention only" : "",
         v->filter.workflow[0] ? " / workflow: " : "",v->filter.workflow);
-    if (app->fleet) statistics_fleet(app,&c,(struct tv_rect){0,2,width,height-4});
+    if (app->fleet) statistics_fleet(app,&c,(struct kt_rect){0,2,width,height-4});
     else if (!v->model || (!v->model->run_count && v->model->warnings)) {
-        dashboard_text(&c,2,3,width-4,TV_STRONG,"No workflow statistics yet");
+        dashboard_text(&c,2,3,width-4,KT_STRONG,"No workflow statistics yet");
         if (height>10) {
-            dashboard_text(&c,2,5,width-4,TV_BASE,"Statistics cover workflows that Hydra ran and recorded: their steps, timing,");
-            dashboard_text(&c,2,6,width-4,TV_BASE,"outcomes and retries. A standalone agent conversation is not a recorded run,");
-            dashboard_text(&c,2,7,width-4,TV_BASE,"so it does not appear here until it is part of a workflow.");
-            dashboard_text(&c,2,9,width-4,TV_MUTED,"r retries the sample   Workflows explains what a workflow is");
+            dashboard_text(&c,2,5,width-4,KT_BASE,"Statistics cover workflows that Hydra ran and recorded: their steps, timing,");
+            dashboard_text(&c,2,6,width-4,KT_BASE,"outcomes and retries. A standalone agent conversation is not a recorded run,");
+            dashboard_text(&c,2,7,width-4,KT_BASE,"so it does not appear here until it is part of a workflow.");
+            dashboard_text(&c,2,9,width-4,KT_MUTED,"r retries the sample   Workflows explains what a workflow is");
         }
     } else if (v->metric_page) {
-        statistics_metrics_render(app,&c,(struct tv_rect){0,2,width,height-4});
+        statistics_metrics_render(app,&c,(struct kt_rect){0,2,width,height-4});
     } else if (height<18 || width<65) {
         statistics_compact(app,&c,width,height,&summary,retries);
     } else {
         left=width>=110 ? 25 : 0; body=width-left; cards=body/4;
         if (left) {
-            tv_panel(&c,(struct tv_rect){0,2,left-1,height-4},"SCOPE");
-            dashboard_text(&c,2,4,left-5,TV_STRONG,"%s",statistics_range(v));
-            dashboard_text(&c,2,5,left-5,TV_MUTED,"T changes the range");
-            dashboard_text(&c,2,7,left-5,TV_BASE,"Workflow: %s",v->filter.workflow[0] ? v->filter.workflow : "all");
-            dashboard_text(&c,2,8,left-5,TV_MUTED,"[ ] chooses one");
-            dashboard_text(&c,2,10,left-5,TV_BASE,"%zu undated",summary.undated);
-            dashboard_text(&c,2,11,left-5,TV_BASE,"%zu outside range",summary.excluded_undated);
-            dashboard_text(&c,2,13,left-5,TV_BASE,"Timing %zu/%zu",summary.duration_known,summary.steps);
-            dashboard_text(&c,2,14,left-5,TV_BASE,"Attempts %zu/%zu",summary.attempts_known,summary.steps);
+            kt_panel(&c,(struct kt_rect){0,2,left-1,height-4},"SCOPE");
+            dashboard_text(&c,2,4,left-5,KT_STRONG,"%s",statistics_range(v));
+            dashboard_text(&c,2,5,left-5,KT_MUTED,"T changes the range");
+            dashboard_text(&c,2,7,left-5,KT_BASE,"Workflow: %s",v->filter.workflow[0] ? v->filter.workflow : "all");
+            dashboard_text(&c,2,8,left-5,KT_MUTED,"[ ] chooses one");
+            dashboard_text(&c,2,10,left-5,KT_BASE,"%zu undated",summary.undated);
+            dashboard_text(&c,2,11,left-5,KT_BASE,"%zu outside range",summary.excluded_undated);
+            dashboard_text(&c,2,13,left-5,KT_BASE,"Timing %zu/%zu",summary.duration_known,summary.steps);
+            dashboard_text(&c,2,14,left-5,KT_BASE,"Attempts %zu/%zu",summary.attempts_known,summary.steps);
             if (height>23) statistics_scope_notes(&c,2,16,left-4,height-22,&summary);
         }
         {
-            struct tv_canvas card_view;
-            (void)tv_canvas_view(&card_view,&c,(struct tv_rect){left,2,body,5});
-            dashboard_card(&card_view,0,cards-1,"RUNS",summary.runs,"in this scope",TV_STRONG);
-            dashboard_card(&card_view,cards,cards-1,"RUNNING",summary.step_states[HS_RUNNING],"steps right now",TV_SUCCESS);
-            dashboard_card(&card_view,2*cards,cards-1,"NEED ATTENTION",summary.run_states[HS_FAILED]+summary.run_states[HS_BLOCKED]+summary.run_states[HS_UNKNOWN],"failed, blocked or unknown",TV_WARNING);
-            dashboard_card(&card_view,3*cards,body-3*cards,"RETRIES",summary.attempts_known || !summary.steps ? (size_t)summary.retries : SIZE_MAX,"repeated attempts",TV_STRONG);
+            struct kt_canvas card_view;
+            (void)kt_canvas_view(&card_view,&c,(struct kt_rect){left,2,body,5});
+            dashboard_card(&card_view,0,cards-1,"RUNS",summary.runs,"in this scope",KT_STRONG);
+            dashboard_card(&card_view,cards,cards-1,"RUNNING",summary.step_states[HS_RUNNING],"steps right now",KT_SUCCESS);
+            dashboard_card(&card_view,2*cards,cards-1,"NEED ATTENTION",summary.run_states[HS_FAILED]+summary.run_states[HS_BLOCKED]+summary.run_states[HS_UNKNOWN],"failed, blocked or unknown",KT_WARNING);
+            dashboard_card(&card_view,3*cards,body-3*cards,"RETRIES",summary.attempts_known || !summary.steps ? (size_t)summary.retries : SIZE_MAX,"repeated attempts",KT_STRONG);
         }
         if (summary.duration_known) snprintf(duration,sizeof(duration),"%.1fs",(double)summary.duration_sum/(double)summary.duration_known);
         statistics_timing_line(&c,left+1,body-2,&summary,duration,maximum,left==0);
-        if (v->detail) statistics_run_detail(app,&c,(struct tv_rect){left,8,body,height-10});
+        if (v->detail) statistics_run_detail(app,&c,(struct kt_rect){left,8,body,height-10});
         else {
             chart_height=height>=32 ? 10 : 0;
             if (chart_height) {
-                statistics_distribution(&c,(struct tv_rect){left,8,body/2-1,chart_height},&summary);
-                statistics_trend(&c,(struct tv_rect){left+body/2,8,body-body/2,chart_height},&summary);
+                statistics_distribution(&c,(struct kt_rect){left,8,body/2-1,chart_height},&summary);
+                statistics_trend(&c,(struct kt_rect){left+body/2,8,body-body/2,chart_height},&summary);
             }
-            statistics_run_table(app,&c,(struct tv_rect){left,8+chart_height,body,height-10-chart_height});
+            statistics_run_table(app,&c,(struct kt_rect){left,8+chart_height,body,height-10-chart_height});
         }
     }
     snprintf(status,sizeof(status),"%s%s",v->model && v->model->warnings ? "PARTIAL / " : "",v->error[0] ? v->error : app->notice[0] ? app->notice : v->model && v->model->warnings ? v->model->warning : scope);
     if (height>=25 && v->model && !app->fleet && width>=110)
-        dashboard_text(&c,2,height-5,20,TV_MUTED,"%s",updated);
-    chrome_footer(app,&c,status,(v->stale || (v->model && v->model->warnings)) ? TV_WARNING : TV_MUTED,
+        dashboard_text(&c,2,height-5,20,KT_MUTED,"%s",updated);
+    chrome_footer(app,&c,status,(v->stale || (v->model && v->model->warnings)) ? KT_WARNING : KT_MUTED,
         width<48 ? "D back  M metric  ? help  q quit" : width<65 ? "D back  M metric  / find  Enter  ? help  q quit" : width<100 ? "D back  M metric  T range  / find  Enter evidence  g graph  ? help  q quit" :
         "D or Esc back  M metric  T range  ! attention only  [ ] workflow  / find  Enter evidence  g graph  ? help  q quit");
     frame_end(app,frame,headless);

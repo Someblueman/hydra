@@ -173,7 +173,7 @@ jobs:
         TMUX_TMPDIR: ${{ runner.temp }}/hydra-workspace
       run: |
         mkdir -p "$TMUX_TMPDIR"
-        make test-visualization test-workspace-pty test-attached-pty test-plan-workspace test-statistics test-termviz-export
+        make test-visualization test-workspace-pty test-attached-pty test-plan-workspace test-statistics test-kettle-export
 
     - name: Package exact source commit
       run: |

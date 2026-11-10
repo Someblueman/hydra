@@ -10,7 +10,7 @@
 /* A scrolled, word-wrapped body between fixed title and footer rows. */
 struct pen { struct app *app; size_t row, skip; int bottom; bool more; };
 
-static void pen_emit(struct pen *p, int indent, enum tv_style tone, const char *text, size_t length) {
+static void pen_emit(struct pen *p, int indent, enum kt_style tone, const char *text, size_t length) {
     char line[1024];
     struct app *app = p->app;
     if (p->row++ < p->skip) return;
@@ -36,9 +36,9 @@ static size_t wrap_length(const char *text, size_t length, int width) {
 
 /* A label column and a value wrapped with a hanging indent under itself;
  * an empty label wraps plain text at x. */
-struct hanging { int x, width; const char *label; enum tv_style label_tone; };
+struct hanging { int x, width; const char *label; enum kt_style label_tone; };
 
-static void pen_hanging(struct pen *p, const struct hanging *h, const char *value, enum tv_style tone) {
+static void pen_hanging(struct pen *p, const struct hanging *h, const char *value, enum kt_style tone) {
     int width = p->app->content_width - h->x - h->width;
     const char *rest = value;
     if (width < 8) width = 8;
@@ -54,18 +54,18 @@ static void pen_hanging(struct pen *p, const struct hanging *h, const char *valu
     } while (*rest);
 }
 
-static void pen_text(struct pen *p, int indent, enum tv_style tone, const char *text) {
-    struct hanging h = {indent, 0, "", TV_BASE};
+static void pen_text(struct pen *p, int indent, enum kt_style tone, const char *text) {
+    struct hanging h = {indent, 0, "", KT_BASE};
     pen_hanging(p, &h, text, tone);
 }
 
-static void pen_pair(struct pen *p, const char *label, const char *value, enum tv_style tone) {
-    struct hanging h = {2, p->app->content_width < 70 ? 14 : 20, label, TV_MUTED};
+static void pen_pair(struct pen *p, const char *label, const char *value, enum kt_style tone) {
+    struct hanging h = {2, p->app->content_width < 70 ? 14 : 20, label, KT_MUTED};
     pen_hanging(p, &h, value, tone);
 }
 
-static void title(struct app *app, enum tv_style tone, const char *text) {
-    style(app, tone == TV_WARNING ? TONE_WARNING : tone == TV_SUCCESS ? TONE_SUCCESS : TONE_STRONG);
+static void title(struct app *app, enum kt_style tone, const char *text) {
+    style(app, tone == KT_WARNING ? TONE_WARNING : tone == KT_SUCCESS ? TONE_SUCCESS : TONE_STRONG);
     linef(app, "%s", text);
     style(app, TONE_BASE);
 }
@@ -78,24 +78,24 @@ static void pen_begin(struct pen *p, struct app *app, int footer) {
 /* Footer rows: the scroll marker, an optional typed answer, then the
  * screen's notice or prompt. The answer sits directly above that notice, so
  * pen_begin reserves three footer rows for a screen that has one. */
-static void footer_answer(struct app *app, struct pen *p, const char *answer, const char *prompt, enum tv_style tone) {
+static void footer_answer(struct app *app, struct pen *p, const char *answer, const char *prompt, enum kt_style tone) {
     struct native_setup *s = app->setup;
     s->more = p->more;
     app->line = app->limit - (answer ? 3 : 2);
     if (p->more || p->skip) {
-        column(app, 0, app->content_width, TV_MUTED, p->more ? (app->ascii ? "v more below: Down or PgDn scrolls" : "\xe2\x86\x93 more below: Down or PgDn scrolls")
+        column(app, 0, app->content_width, KT_MUTED, p->more ? (app->ascii ? "v more below: Down or PgDn scrolls" : "\xe2\x86\x93 more below: Down or PgDn scrolls")
                                                                : "Up or PgUp scrolls back");
     }
     app->line++;
     if (answer) {
-        column(app, 0, app->content_width, TV_SELECTED, answer);
+        column(app, 0, app->content_width, KT_SELECTED, answer);
         app->line++;
     }
-    column(app, 0, app->content_width, s->notice[0] ? TV_WARNING : tone, s->notice[0] ? s->notice : prompt);
+    column(app, 0, app->content_width, s->notice[0] ? KT_WARNING : tone, s->notice[0] ? s->notice : prompt);
     app->line++;
 }
 
-static void footer(struct app *app, struct pen *p, const char *prompt, enum tv_style tone) {
+static void footer(struct app *app, struct pen *p, const char *prompt, enum kt_style tone) {
     footer_answer(app, p, NULL, prompt, tone);
 }
 
@@ -110,40 +110,40 @@ static void field_row(struct app *app, struct native_setup *s, int index, const 
     if (width > 70) width = 70;
     while (f->cursor > start && (int)(f->cursor - start) >= width - 1) start++;
     snprintf(shown, sizeof(shown), "%.*s", width - 1, f->text + start);
-    column(app, 0, label_width + 2, focused ? TV_STRONG : TV_MUTED, label);
-    column(app, label_width + 2, width, focused ? TV_SELECTED : TV_BORDER, "");
-    column(app, label_width + 2, width, focused ? TV_SELECTED : TV_BASE, shown);
-    if (focused && f->cursor <= length) column(app, label_width + 2 + (int)(f->cursor - start), 1, TV_FOCUS, f->cursor < length ? "" : "_");
+    column(app, 0, label_width + 2, focused ? KT_STRONG : KT_MUTED, label);
+    column(app, label_width + 2, width, focused ? KT_SELECTED : KT_BORDER, "");
+    column(app, label_width + 2, width, focused ? KT_SELECTED : KT_BASE, shown);
+    if (focused && f->cursor <= length) column(app, label_width + 2 + (int)(f->cursor - start), 1, KT_FOCUS, f->cursor < length ? "" : "_");
     app->line++;
-    if (app->line < app->limit) { column(app, label_width + 2, width, TV_MUTED, help); app->line++; }
+    if (app->line < app->limit) { column(app, label_width + 2, width, KT_MUTED, help); app->line++; }
 }
 
 static void render_form(struct app *app, struct native_setup *s) {
     char text[400];
     if (s->editing[0]) {
         snprintf(text, sizeof(text), "EDIT THE SETUP OF %.120s", s->editing);
-        title(app, TV_STRONG, text);
+        title(app, KT_STRONG, text);
         paragraph(app, "Nothing has changed on this remote yet. With the same name, Hydra removes the old setup record "
-                  "(you approve that first) and starts again with these values.", TV_BASE);
+                  "(you approve that first) and starts again with these values.", KT_BASE);
     } else {
-        title(app, TV_STRONG, "ADD A REMOTE HOST");
-        paragraph(app, "Hydra connects with your own SSH setup. It checks the machine and asks before every change; nothing changes on the remote until you approve it.", TV_BASE);
+        title(app, KT_STRONG, "ADD A REMOTE HOST");
+        paragraph(app, "Hydra connects with your own SSH setup. It checks the machine and asks before every change; nothing changes on the remote until you approve it.", KT_BASE);
     }
     linef(app, "");
     field_row(app, s, SETUP_FIELD_DESTINATION, "SSH destination", "user@host, or a Host from ~/.ssh/config");
     field_row(app, s, SETUP_FIELD_NAME, "Name in Hydra", "empty: the host name is used");
     field_row(app, s, SETUP_FIELD_CONFIG, "SSH config file", "absolute path or ~/...; empty: your usual SSH config");
     linef(app, "");
-    if (s->problem[0]) paragraph(app, s->problem, TV_WARNING);
-    else paragraph(app, "Next: Hydra reads the machine's SSH host key and shows it for you to confirm.", TV_MUTED);
+    if (s->problem[0]) paragraph(app, s->problem, KT_WARNING);
+    else paragraph(app, "Next: Hydra reads the machine's SSH host key and shows it for you to confirm.", KT_MUTED);
 }
 
 /* ---- Steps ---- */
 
-static enum tv_style step_tone(const char *status) {
-    if (!strcmp(status, "done") || !strcmp(status, "running")) return TV_SUCCESS;
-    if (!strcmp(status, "pending") || !strcmp(status, "skipped")) return TV_MUTED;
-    return TV_WARNING;
+static enum kt_style step_tone(const char *status) {
+    if (!strcmp(status, "done") || !strcmp(status, "running")) return KT_SUCCESS;
+    if (!strcmp(status, "pending") || !strcmp(status, "skipped")) return KT_MUTED;
+    return KT_WARNING;
 }
 
 static void step_row(struct app *app, struct pen *p, const struct setup_step *step, bool selected, bool running) {
@@ -152,28 +152,28 @@ static void step_row(struct app *app, struct pen *p, const struct setup_step *st
     int width = app->content_width;
     setup_step_label(step->id, label, sizeof(label));
     snprintf(line, sizeof(line), "%s %-24s %s", setup_status_mark(status, app->ascii), label, setup_status_label(status));
-    if (p->row >= p->skip && app->line < p->bottom && selected) column(app, 0, width, TV_SELECTED, "");
+    if (p->row >= p->skip && app->line < p->bottom && selected) column(app, 0, width, KT_SELECTED, "");
     if (width >= 90) {
         char detail[300];
         snprintf(detail, sizeof(detail), "%-52.52s %s", line, step->detail);
-        pen_emit(p, 2, selected ? TV_SELECTED : step_tone(status), detail, strlen(detail));
+        pen_emit(p, 2, selected ? KT_SELECTED : step_tone(status), detail, strlen(detail));
         return;
     }
-    pen_emit(p, 2, selected ? TV_SELECTED : step_tone(status), line, strlen(line));
-    if (step->detail[0]) pen_text(p, 6, TV_MUTED, step->detail);
+    pen_emit(p, 2, selected ? KT_SELECTED : step_tone(status), line, strlen(line));
+    if (step->detail[0]) pen_text(p, 6, KT_MUTED, step->detail);
 }
 
 /* The action row: what is running, or the selectable Continue setup. */
 static void steps_action(struct app *app, const struct native_setup *s, bool running) {
     char work[200], label[96];
     if (!running) {
-        column(app, 0, app->content_width, s->selected ? TV_STRONG : TV_SELECTED, s->selected ? "  Continue setup" : "> Continue setup");
+        column(app, 0, app->content_width, s->selected ? KT_STRONG : KT_SELECTED, s->selected ? "  Continue setup" : "> Continue setup");
         app->line++;
         return;
     }
     setup_running_label(s->job_step, label, sizeof(label));
     snprintf(work, sizeof(work), "%s%s %lds", label, app->ascii ? "..." : "\xe2\x80\xa6", (long)(time(NULL) - s->job_started));
-    column(app, 0, app->content_width, TV_SUCCESS, work);
+    column(app, 0, app->content_width, KT_SUCCESS, work);
     app->line++;
 }
 
@@ -183,16 +183,16 @@ static void render_steps(struct app *app, struct native_setup *s, bool running) 
     char heading[512];
     size_t i;
     snprintf(heading, sizeof(heading), "SET UP %.120s%s%.200s", s->name, dot(app), e->destination[0] ? e->destination : s->destination);
-    title(app, TV_STRONG, heading);
+    title(app, KT_STRONG, heading);
     steps_action(app, s, running);
     linef(app, "");
     pen_begin(&p, app, 2);
     for (i = 0; i < e->step_count; i++)
         step_row(app, &p, &e->steps[i], !running && s->selected == i + 1, running && !strcmp(e->steps[i].id, s->job_step));
-    if (!e->step_count) pen_text(&p, 2, TV_MUTED, running ? "Contacting the machine..." : "No steps recorded yet.");
+    if (!e->step_count) pen_text(&p, 2, KT_MUTED, running ? "Contacting the machine..." : "No steps recorded yet.");
     footer(app, &p, !running ? "Continue setup runs the next step; changes ask for approval."
                     : s->job.cancelled ? "Stopping the step; Hydra then rereads the recorded setup status."
-                    : "Esc or c cancels (a rerun continues safely); b runs it in the background.", TV_MUTED);
+                    : "Esc or c cancels (a rerun continues safely); b runs it in the background.", KT_MUTED);
 }
 
 /* ---- Plans ---- */
@@ -228,12 +228,12 @@ static const char *const plan_values[][4] = {
     {"source", "local", "LOCAL recipe from your $HYDRA_HOME/fleet/agent-recipes.json", "w"},
 };
 
-static void value_text(const struct setup_row *row, char *out, size_t size, enum tv_style *tone) {
+static void value_text(const struct setup_row *row, char *out, size_t size, enum kt_style *tone) {
     size_t i;
     for (i = 0; i < sizeof(plan_values) / sizeof(plan_values[0]); i++) {
         if (strcmp(row->key, plan_values[i][0]) || strcmp(row->value, plan_values[i][1])) continue;
         copy_text(out, size, plan_values[i][2]);
-        *tone = plan_values[i][3][0] == 'w' ? TV_WARNING : plan_values[i][3][0] == 's' ? TV_SUCCESS : TV_BASE;
+        *tone = plan_values[i][3][0] == 'w' ? KT_WARNING : plan_values[i][3][0] == 's' ? KT_SUCCESS : KT_BASE;
         return;
     }
     if (!row->value[0] && strstr(row->key, "_left")) { copy_text(out, size, "nothing"); return; }
@@ -242,9 +242,9 @@ static void value_text(const struct setup_row *row, char *out, size_t size, enum
 
 static void plan_row(struct pen *p, const struct setup_row *row, const char *label) {
     char value[600], generic[64], *c;
-    enum tv_style tone = TV_BASE;
+    enum kt_style tone = KT_BASE;
     value_text(row, value, sizeof(value), &tone);
-    if (!strcmp(row->key, "fingerprint") || !strcmp(row->key, "command")) tone = TV_STRONG;
+    if (!strcmp(row->key, "fingerprint") || !strcmp(row->key, "command")) tone = KT_STRONG;
     if (!label) {
         copy_text(generic, sizeof(generic), row->key);
         for (c = generic; *c; c++) if (*c == '_' || *c == '.') *c = ' ';
@@ -274,19 +274,19 @@ static void render_trust(struct app *app, struct native_setup *s) {
     struct pen p;
     char text[600], prompt[96];
     snprintf(text, sizeof(text), "TRUST THE HOST KEY OF %.120s?", s->name);
-    title(app, TV_STRONG, text);
+    title(app, KT_STRONG, text);
     pen_begin(&p, app, 3);
     /* Sized so the whole explanation fits above the prompt at 80x24. */
     snprintf(text, sizeof(text), "Hydra has not connected to %.200s before. Compare this fingerprint with one read on the "
              "machine itself.", e->destination[0] ? e->destination : s->name);
-    pen_text(&p, 0, TV_BASE, text);
-    pen_text(&p, 0, TV_BASE, "");
+    pen_text(&p, 0, KT_BASE, text);
+    pen_text(&p, 0, KT_BASE, "");
     plan_rows(&p, e);
-    pen_text(&p, 0, TV_BASE, "");
-    pen_text(&p, 0, TV_BASE, "If they match, type yes: Hydra appends exactly one line to the file above.");
-    pen_text(&p, 0, TV_BASE, "If this key ever changes, Hydra refuses to connect rather than replace it.");
+    pen_text(&p, 0, KT_BASE, "");
+    pen_text(&p, 0, KT_BASE, "If they match, type yes: Hydra appends exactly one line to the file above.");
+    pen_text(&p, 0, KT_BASE, "If this key ever changes, Hydra refuses to connect rather than replace it.");
     snprintf(prompt, sizeof(prompt), "Type yes to trust this key: %s%s", s->typed, "_");
-    footer_answer(app, &p, prompt, "Anything but yes leaves the key untrusted. Esc declines.", TV_MUTED);
+    footer_answer(app, &p, prompt, "Anything but yes leaves the key untrusted. Esc declines.", KT_MUTED);
 }
 
 static const char *or_text(const char *value, const char *fallback) { return value[0] ? value : fallback; }
@@ -301,13 +301,13 @@ static void plan_heading(const struct native_setup *s, char *out, size_t size) {
 
 static void plan_guarantees(struct pen *p, const struct setup_envelope *e) {
     if (!strcmp(e->plan_kind, "provision")) {
-        pen_text(p, 0, TV_BASE, "Hydra copies a verified runtime to the machine and installs it only in the location above: "
+        pen_text(p, 0, KT_BASE, "Hydra copies a verified runtime to the machine and installs it only in the location above: "
                  "no PATH changes, no sudo, and other Hydra installs there stay untouched.");
     } else if (!strcmp(e->plan_kind, "remove")) {
-        pen_text(p, 0, TV_BASE, "Only this machine's record of the setup is deleted. Hydra does not connect to the remote, and "
+        pen_text(p, 0, KT_BASE, "Only this machine's record of the setup is deleted. Hydra does not connect to the remote, and "
                  "nothing listed above is removed or undone.");
     } else if (!strcmp(e->plan_kind, "install_agent")) {
-        pen_text(p, 0, TV_BASE, "The command runs on the remote as your user, in this terminal so you can answer it; no sudo. "
+        pen_text(p, 0, KT_BASE, "The command runs on the remote as your user, in this terminal so you can answer it; no sudo. "
                  "Hydra returns here as soon as it succeeds; after a failure it waits for Enter so you can read the output.");
     }
 }
@@ -317,15 +317,15 @@ static void render_plan(struct app *app, struct native_setup *s) {
     struct pen p;
     char text[600];
     plan_heading(s, text, sizeof(text));
-    title(app, TV_STRONG, text);
+    title(app, KT_STRONG, text);
     pen_begin(&p, app, 2);
-    if (!strcmp(e->code, "approval_mismatch")) pen_text(&p, 0, TV_WARNING, "The plan changed since it was approved, so nothing ran. This is the new plan.");
+    if (!strcmp(e->code, "approval_mismatch")) pen_text(&p, 0, KT_WARNING, "The plan changed since it was approved, so nothing ran. This is the new plan.");
     plan_rows(&p, e);
-    pen_text(&p, 0, TV_BASE, "");
+    pen_text(&p, 0, KT_BASE, "");
     plan_guarantees(&p, e);
     snprintf(text, sizeof(text), "Plan SHA-256 %.16s... y approves exactly this plan; if it changes, Hydra asks again.", e->plan_sha256);
-    pen_text(&p, 0, TV_MUTED, text);
-    footer(app, &p, "y approve   n or Esc decline (nothing changes)", TV_STRONG);
+    pen_text(&p, 0, KT_MUTED, text);
+    footer(app, &p, "y approve   n or Esc decline (nothing changes)", KT_STRONG);
 }
 
 /* ---- Problems ---- */
@@ -350,21 +350,21 @@ static void render_key_changed(struct app *app, struct native_setup *s) {
     struct pen p;
     char command[800];
     setup_explain("host_key_changed", &x);
-    title(app, TV_WARNING, "THE HOST KEY CHANGED: HYDRA WILL NOT CONNECT");
+    title(app, KT_WARNING, "THE HOST KEY CHANGED: HYDRA WILL NOT CONNECT");
     pen_begin(&p, app, 2);
-    pen_text(&p, 0, TV_BASE, x.body);
-    pen_text(&p, 0, TV_BASE, "");
-    if (e->presented[0]) pen_pair(&p, "Presented key", e->presented, TV_STRONG);
-    if (e->key_file[0]) pen_pair(&p, "Old key in", e->key_file, TV_BASE);
-    pen_text(&p, 0, TV_BASE, "");
-    pen_text(&p, 0, TV_STRONG, "What you can do");
-    pen_text(&p, 2, TV_BASE, "1. Confirm the new key with whoever runs the machine, over a channel other than this connection.");
-    pen_text(&p, 2, TV_BASE, "2. Only if the change is expected, remove the old entry yourself:");
+    pen_text(&p, 0, KT_BASE, x.body);
+    pen_text(&p, 0, KT_BASE, "");
+    if (e->presented[0]) pen_pair(&p, "Presented key", e->presented, KT_STRONG);
+    if (e->key_file[0]) pen_pair(&p, "Old key in", e->key_file, KT_BASE);
+    pen_text(&p, 0, KT_BASE, "");
+    pen_text(&p, 0, KT_STRONG, "What you can do");
+    pen_text(&p, 2, KT_BASE, "1. Confirm the new key with whoever runs the machine, over a channel other than this connection.");
+    pen_text(&p, 2, KT_BASE, "2. Only if the change is expected, remove the old entry yourself:");
     removal_command(s, command, sizeof(command));
-    pen_text(&p, 6, TV_STRONG, command);
-    pen_text(&p, 2, TV_BASE, "3. Press Enter to check again; Hydra then shows the new key for your review.");
-    if (e->message[0]) { pen_text(&p, 0, TV_BASE, ""); snprintf(command, sizeof(command), "Hydra says: %s", e->message); pen_text(&p, 0, TV_MUTED, command); }
-    footer(app, &p, "Hydra never accepts a changed key; there is no option to do so here.", TV_MUTED);
+    pen_text(&p, 6, KT_STRONG, command);
+    pen_text(&p, 2, KT_BASE, "3. Press Enter to check again; Hydra then shows the new key for your review.");
+    if (e->message[0]) { pen_text(&p, 0, KT_BASE, ""); snprintf(command, sizeof(command), "Hydra says: %s", e->message); pen_text(&p, 0, KT_MUTED, command); }
+    footer(app, &p, "Hydra never accepts a changed key; there is no option to do so here.", KT_MUTED);
 }
 
 static bool blocking(const struct setup_envelope *e) {
@@ -375,14 +375,14 @@ static bool blocking(const struct setup_envelope *e) {
 
 static void requirement_row(struct app *app, struct pen *p, const struct setup_requirement *r) {
     const char *status = r->blocking && strcmp(r->status, "ok") ? "BLOCKS" : r->status;
-    enum tv_style tone = !strcmp(r->status, "ok") ? TV_SUCCESS : TV_WARNING;
+    enum kt_style tone = !strcmp(r->status, "ok") ? KT_SUCCESS : KT_WARNING;
     char label[96], fix[300];
     bool narrow = app->content_width < 70;
     struct hanging h = {2, narrow ? 8 : 25, label, tone};
     snprintf(label, sizeof(label), narrow ? "%.7s" : "%-8s %.15s", status, r->name);
     if (narrow) { pen_text(p, 2, tone, r->name); h.label = status; }
-    pen_hanging(p, &h, r->detail[0] ? r->detail : "-", narrow ? TV_MUTED : TV_BASE);
-    if (r->command[0]) { snprintf(fix, sizeof(fix), "fix: %s", r->command); h.label = ""; pen_hanging(p, &h, fix, TV_STRONG); }
+    pen_hanging(p, &h, r->detail[0] ? r->detail : "-", narrow ? KT_MUTED : KT_BASE);
+    if (r->command[0]) { snprintf(fix, sizeof(fix), "fix: %s", r->command); h.label = ""; pen_hanging(p, &h, fix, KT_STRONG); }
 }
 
 /* A guided run stopped here because heads cannot run on the host: say so,
@@ -393,15 +393,15 @@ static void render_paused(struct app *app, struct native_setup *s) {
     char text[300];
     size_t i;
     snprintf(text, sizeof(text), "HEADS CANNOT RUN ON %.120s YET", s->name);
-    title(app, TV_WARNING, text);
+    title(app, KT_WARNING, text);
     pen_begin(&p, app, 2);
-    pen_text(&p, 0, TV_BASE, "This machine has no tmux 3.0 or newer, so Hydra cannot run heads there. Setup can still "
+    pen_text(&p, 0, KT_BASE, "This machine has no tmux 3.0 or newer, so Hydra cannot run heads there. Setup can still "
                              "finish; install tmux yourself (Hydra never uses sudo) before starting work on it.");
-    pen_text(&p, 0, TV_BASE, "");
-    pen_text(&p, 2, TV_MUTED, app->content_width < 70 ? "STATUS  REQUIREMENT" : "STATUS   REQUIREMENT     DETAIL");
+    pen_text(&p, 0, KT_BASE, "");
+    pen_text(&p, 2, KT_MUTED, app->content_width < 70 ? "STATUS  REQUIREMENT" : "STATUS   REQUIREMENT     DETAIL");
     for (i = 0; i < e->requirement_count; i++) if (strcmp(e->requirements[i].status, "ok")) requirement_row(app, &p, &e->requirements[i]);
     for (i = 0; i < e->requirement_count; i++) if (!strcmp(e->requirements[i].status, "ok")) requirement_row(app, &p, &e->requirements[i]);
-    footer(app, &p, "Enter continues setup anyway   Esc back", TV_STRONG);
+    footer(app, &p, "Enter continues setup anyway   Esc back", KT_STRONG);
 }
 
 static void render_preflight(struct app *app, struct native_setup *s) {
@@ -412,15 +412,15 @@ static void render_preflight(struct app *app, struct native_setup *s) {
     bool blocked = blocking(e) || !strcmp(e->code, "prerequisite_missing");
     if (s->paused) { render_paused(app, s); return; }
     snprintf(text, sizeof(text), "%s ON %.120s", blocked ? "MISSING REQUIREMENTS" : "REQUIREMENTS", s->name);
-    title(app, blocked ? TV_WARNING : TV_STRONG, text);
+    title(app, blocked ? KT_WARNING : KT_STRONG, text);
     pen_begin(&p, app, 2);
-    pen_text(&p, 0, TV_BASE, blocked ? "Setup cannot continue until the items marked BLOCKS are installed. Hydra never uses sudo: "
+    pen_text(&p, 0, KT_BASE, blocked ? "Setup cannot continue until the items marked BLOCKS are installed. Hydra never uses sudo: "
                                        "run the suggested commands on the machine yourself, then check again."
                                      : "Nothing blocks setup. Warnings are worth fixing but do not stop it.");
-    pen_text(&p, 0, TV_BASE, "");
-    pen_text(&p, 2, TV_MUTED, app->content_width < 70 ? "STATUS  REQUIREMENT" : "STATUS   REQUIREMENT     DETAIL");
+    pen_text(&p, 0, KT_BASE, "");
+    pen_text(&p, 2, KT_MUTED, app->content_width < 70 ? "STATUS  REQUIREMENT" : "STATUS   REQUIREMENT     DETAIL");
     for (i = 0; i < e->requirement_count; i++) requirement_row(app, &p, &e->requirements[i]);
-    footer(app, &p, blocked ? "Enter checks again after you install them   Esc back" : "Enter continues setup   Esc back", TV_STRONG);
+    footer(app, &p, blocked ? "Enter checks again after you install them   Esc back" : "Enter continues setup   Esc back", KT_STRONG);
 }
 
 static const char *agent_status(const char *status) {
@@ -446,7 +446,7 @@ static void agent_actions(struct app *app, const struct native_setup *s) {
     char line[200];
     size_t i;
     for (i = 0; i <= e->choice_count && app->line < app->limit - 4; i++) {
-        enum tv_style tone = s->selected == i ? TV_SELECTED : i ? TV_BASE : TV_STRONG;
+        enum kt_style tone = s->selected == i ? KT_SELECTED : i ? KT_BASE : KT_STRONG;
         choice_text(i ? &e->choices[i - 1] : NULL, s->selected == i, line, sizeof(line));
         column(app, 0, app->content_width, tone, line);
         app->line++;
@@ -459,20 +459,20 @@ static void render_agents(struct app *app, struct native_setup *s) {
     char text[600];
     size_t i;
     snprintf(text, sizeof(text), "AGENTS ON %.120s", s->name);
-    title(app, TV_STRONG, text);
+    title(app, KT_STRONG, text);
     paragraph(app, "Choose an agent to install or sign in to, or continue setup without one. Installers ask for your approval; "
-              "sign-in runs in this terminal.", TV_BASE);
+              "sign-in runs in this terminal.", KT_BASE);
     agent_actions(app, s);
     linef(app, "");
     pen_begin(&p, app, 2);
-    pen_text(&p, 0, TV_MUTED, "Found on the remote PATH and in common per-user install directories:");
+    pen_text(&p, 0, KT_MUTED, "Found on the remote PATH and in common per-user install directories:");
     for (i = 0; i < e->agent_count; i++) {
         const struct setup_agent *a = &e->agents[i];
         snprintf(text, sizeof(text), "%-12s %-20s %s%s%s", a->name, agent_status(a->status), a->path, a->version[0] ? "  " : "", a->version);
-        pen_text(&p, 2, !strcmp(a->status, "missing") || !strcmp(a->status, "ambiguous") ? TV_WARNING : TV_BASE, text);
+        pen_text(&p, 2, !strcmp(a->status, "missing") || !strcmp(a->status, "ambiguous") ? KT_WARNING : KT_BASE, text);
     }
-    if (!e->agent_count) pen_text(&p, 2, TV_MUTED, "No agent programs were reported.");
-    footer(app, &p, "Up/Down choose   Enter run   PgDn more agents   Esc back", TV_STRONG);
+    if (!e->agent_count) pen_text(&p, 2, KT_MUTED, "No agent programs were reported.");
+    footer(app, &p, "Up/Down choose   Enter run   PgDn more agents   Esc back", KT_STRONG);
 }
 
 static void render_handoff(struct app *app, struct native_setup *s) {
@@ -483,18 +483,18 @@ static void render_handoff(struct app *app, struct native_setup *s) {
     setup_step_label(s->handoff_step, label, sizeof(label));
     snprintf(text, sizeof(text), "%.90s ON %.120s", label, s->name);
     for (i = 0; text[i]; i++) text[i] = (char)toupper((unsigned char)text[i]);
-    title(app, TV_STRONG, text);
+    title(app, KT_STRONG, text);
     pen_begin(&p, app, 2);
-    pen_text(&p, 0, TV_BASE, sign_in ? "The provider's sign-in asks questions or shows a link to open in your browser. Hydra hands this "
+    pen_text(&p, 0, KT_BASE, sign_in ? "The provider's sign-in asks questions or shows a link to open in your browser. Hydra hands this "
                                        "terminal to it. Credentials stay on the remote; Hydra copies nothing."
                                      : "The installer runs in this terminal so you can answer it.");
-    pen_text(&p, 0, TV_BASE, "When it succeeds you return here at once; after a failure Hydra waits for Enter so you can read "
+    pen_text(&p, 0, KT_BASE, "When it succeeds you return here at once; after a failure Hydra waits for Enter so you can read "
                              "the output.");
-    pen_text(&p, 0, TV_BASE, "");
+    pen_text(&p, 0, KT_BASE, "");
     text[0] = '\0';
     for (i = 0; i < s->handoff_argc; i++) text_append(text, sizeof(text), "%s%s", i ? " " : "", s->handoff[i]);
-    pen_pair(&p, "Command", text, TV_STRONG);
-    footer(app, &p, "Enter hands over the terminal   Esc later", TV_STRONG);
+    pen_pair(&p, "Command", text, KT_STRONG);
+    footer(app, &p, "Enter hands over the terminal   Esc later", KT_STRONG);
 }
 
 static void render_problem(struct app *app, struct native_setup *s) {
@@ -503,16 +503,16 @@ static void render_problem(struct app *app, struct native_setup *s) {
     struct pen p;
     char text[800];
     setup_explain(e->code, &x);
-    title(app, TV_WARNING, x.title);
+    title(app, KT_WARNING, x.title);
     pen_begin(&p, app, 2);
-    pen_text(&p, 0, TV_BASE, x.body);
-    pen_text(&p, 0, TV_BASE, "");
-    if (e->message[0]) { snprintf(text, sizeof(text), "Hydra says: %s", e->message); pen_text(&p, 0, TV_BASE, text); }
-    if (e->recovery[0]) { snprintf(text, sizeof(text), "Suggested: %s", e->recovery); pen_text(&p, 0, TV_BASE, text); }
+    pen_text(&p, 0, KT_BASE, x.body);
+    pen_text(&p, 0, KT_BASE, "");
+    if (e->message[0]) { snprintf(text, sizeof(text), "Hydra says: %s", e->message); pen_text(&p, 0, KT_BASE, text); }
+    if (e->recovery[0]) { snprintf(text, sizeof(text), "Suggested: %s", e->recovery); pen_text(&p, 0, KT_BASE, text); }
     snprintf(text, sizeof(text), "code %s%sexit %d", e->code, dot(app), e->exit_status);
-    pen_text(&p, 0, TV_MUTED, text);
+    pen_text(&p, 0, KT_MUTED, text);
     snprintf(text, sizeof(text), "%s   Esc back", x.action ? x.action : "Nothing to retry here");
-    footer(app, &p, text, x.action ? TV_STRONG : TV_MUTED);
+    footer(app, &p, text, x.action ? KT_STRONG : KT_MUTED);
 }
 
 static void render_done(struct app *app, struct native_setup *s) {
@@ -521,15 +521,15 @@ static void render_done(struct app *app, struct native_setup *s) {
     char text[600];
     size_t i;
     snprintf(text, sizeof(text), "%.120s IS READY", s->name);
-    title(app, TV_SUCCESS, text);
+    title(app, KT_SUCCESS, text);
     pen_begin(&p, app, 2);
     snprintf(text, sizeof(text), "Hydra added %.120s (%.200s) as a remote host.", s->name, e->destination[0] ? e->destination : s->destination);
-    pen_text(&p, 0, TV_BASE, text);
-    pen_text(&p, 0, TV_BASE, "");
+    pen_text(&p, 0, KT_BASE, text);
+    pen_text(&p, 0, KT_BASE, "");
     for (i = 0; i < e->step_count; i++) step_row(app, &p, &e->steps[i], false, false);
-    pen_text(&p, 0, TV_BASE, "");
-    pen_text(&p, 0, TV_BASE, "Follow and start work on it with hydra fleet tui.");
-    footer(app, &p, "Enter or Esc closes", TV_STRONG);
+    pen_text(&p, 0, KT_BASE, "");
+    pen_text(&p, 0, KT_BASE, "Follow and start work on it with hydra fleet tui.");
+    footer(app, &p, "Enter or Esc closes", KT_STRONG);
 }
 
 /* ---- A name that already has an unfinished setup ---- */
@@ -541,19 +541,19 @@ static void render_duplicate(struct app *app, struct native_setup *s) {
     size_t i;
     for (i = 0; i < s->record_count; i++) if (!strcmp(s->records[i].name, s->duplicate)) r = &s->records[i];
     snprintf(text, sizeof(text), "%.120s ALREADY HAS AN UNFINISHED SETUP", s->duplicate);
-    title(app, TV_WARNING, text);
+    title(app, KT_WARNING, text);
     pen_begin(&p, app, 2);
-    pen_text(&p, 0, TV_BASE, "Hydra keeps one setup per name, so this form would fail. Continue that setup, change it, or go back "
+    pen_text(&p, 0, KT_BASE, "Hydra keeps one setup per name, so this form would fail. Continue that setup, change it, or go back "
              "and choose another name.");
-    pen_text(&p, 0, TV_BASE, "");
-    pen_pair(&p, "Destination", r ? r->destination : "", TV_BASE);
-    pen_pair(&p, "SSH config", r && r->config[0] ? r->config : "your usual SSH config", TV_BASE);
-    pen_pair(&p, "Progress", r ? r->summary : "", TV_BASE);
-    pen_text(&p, 0, TV_BASE, "");
-    pen_text(&p, 0, TV_BASE, r && r->remote_changed
+    pen_text(&p, 0, KT_BASE, "");
+    pen_pair(&p, "Destination", r ? r->destination : "", KT_BASE);
+    pen_pair(&p, "SSH config", r && r->config[0] ? r->config : "your usual SSH config", KT_BASE);
+    pen_pair(&p, "Progress", r ? r->summary : "", KT_BASE);
+    pen_text(&p, 0, KT_BASE, "");
+    pen_text(&p, 0, KT_BASE, r && r->remote_changed
              ? "It already changed the remote, so it cannot be edited: x removes its record (the plan lists what stays there)."
              : "e edits it (nothing changed on the remote yet); x removes its record.");
-    footer(app, &p, "Enter continues that setup   e edit   x remove   Esc back to the form", TV_STRONG);
+    footer(app, &p, "Enter continues that setup   e edit   x remove   Esc back to the form", KT_STRONG);
 }
 
 void native_setup_render(struct app *app) {

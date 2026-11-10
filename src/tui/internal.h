@@ -21,12 +21,12 @@
 #include <time.h>
 #include <unistd.h>
 #include <langinfo.h>
-#include "../termviz/termviz.h"
-#include "../termviz/workspace.h"
-#include "../termviz/tree.h"
-#include "../termviz/terminal.h"
-#include "../termviz/pty_posix.h"
-#include "../termviz/input.h"
+#include "../kettle/kettle.h"
+#include "../kettle/workspace.h"
+#include "../kettle/tree.h"
+#include "../kettle/terminal.h"
+#include "../kettle/pty_posix.h"
+#include "../kettle/input.h"
 #include "../hydra_tui_workflow.h"
 #include "../hydra_statistics.h"
 
@@ -107,9 +107,9 @@ struct native_links {
 /* preview reads a headless head's step output (adapter.c). */
 struct native_observations { struct native_capture jobs[5]; struct native_capture preview; };
 struct native_terminal {
-    struct tv_pty client;
-    struct tv_terminal_model *screen;
-    struct tv_cell *cells, *history;
+    struct kt_pty client;
+    struct kt_terminal_model *screen;
+    struct kt_cell *cells, *history;
     char head[TEXT], instance[TEXT], label[TEXT];
     char remote_host[128], remote_project[SOURCE_TEXT];
     size_t scroll;
@@ -127,16 +127,16 @@ struct native_terminal {
 struct native_terminals {
     struct native_terminal slots[NATIVE_TERMINALS];
     size_t selected;
-    struct tv_input input;
+    struct kt_input input;
     bool prefix;
 };
 struct native_workspace {
-    struct tv_workspace layout;
-    struct tv_workspace saved[3];
+    struct kt_workspace layout;
+    struct kt_workspace saved[3];
     bool saved_zoom[3], initialized[3];
     int mode;
-    struct tv_tree tree;
-    struct tv_tree_node nodes[MAX_HEADS + 1 + 512 + WF_RUNS];
+    struct kt_tree tree;
+    struct kt_tree_node nodes[MAX_HEADS + 1 + 512 + WF_RUNS];
     char run_labels[WF_RUNS][200];
     char member_labels[MAX_HEADS][TEXT + 16];
     char project_label[256];
@@ -170,7 +170,7 @@ bool outline_toggle(struct app *app, int direction);
 void outline_release_run(struct app *app);
 bool text_matches(const char *text, const char *search);
 /* Run and headless-head presentation (run_text.c). Outputs are caller buffers. */
-struct outline_text { char name[TEXT + 64], count[32]; const char *status, *agent, *reported; enum tv_style tone; };
+struct outline_text { char name[TEXT + 64], count[32]; const char *status, *agent, *reported; enum kt_style tone; };
 void outline_row_text(const struct app *app, const struct outline_row *row, struct outline_text *t);
 const char *head_agent_short(const struct app *app, const struct head *head);
 const char *run_head_absence(const struct app *app, const struct workflow_head *r);
@@ -182,7 +182,7 @@ void run_next_text(const struct app *app, size_t run, char *out, size_t size);
 size_t overview_run(struct app *app);
 void head_agent_text(const struct app *app, const struct head *h, char *out, size_t size);
 const char *head_list_status(const struct app *app, const struct head *h);
-enum tv_style head_list_tone(const struct app *app, const struct head *h);
+enum kt_style head_list_tone(const struct app *app, const struct head *h);
 const char *head_run_role(const struct app *app, const struct head *h);
 void exec_model_text(const struct workflow_exec *e, bool running, char *out, size_t size);
 void exec_effort_text(const struct workflow_exec *e, bool running, char *out, size_t size);
@@ -191,17 +191,17 @@ bool exec_configuration_text(const struct workflow_exec *e, char *out, size_t si
 void step_duration_text(const struct workflow_node *n, char *out, size_t size);
 void plan_approval_text(const struct app *app, size_t run, char *out, size_t size);
 /* Shared text-view helpers (render.c) and the head details view (detail.c). */
-void column(struct app *app, int x, int width, enum tv_style tone, const char *text);
-void paragraph(struct app *app, const char *text, enum tv_style tone);
+void column(struct app *app, int x, int width, enum kt_style tone, const char *text);
+void paragraph(struct app *app, const char *text, enum kt_style tone);
 void section(struct app *app, const char *label);
 /* Read-only captured output in the remaining content rows; see transcript.h. */
 void transcript_view(struct app *app, const char *text, size_t length, struct transcript_layout *layout);
 /* One logical line of a scrolled document: rows before scroll are counted,
  * visible rows drawn with tone; returns the line's wrapped rows. */
-size_t transcript_line_view(struct app *app, const char *text, size_t length, enum tv_style tone, size_t row, size_t scroll);
+size_t transcript_line_view(struct app *app, const char *text, size_t length, enum kt_style tone, size_t row, size_t scroll);
 void transcript_view_reset(struct app *app);
-void pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
-          const char *right_label, const char *right, enum tv_style right_tone);
+void pair(struct app *app, const char *left_label, const char *left, enum kt_style left_tone,
+          const char *right_label, const char *right, enum kt_style right_tone);
 void render_empty_work(struct app *app);
 void render_head_detail(struct app *app);
 /* Internal views borrow app; destroy functions release their owned view state. */
@@ -216,7 +216,7 @@ bool native_control_key(struct app *app, char key);
 int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size);
 bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices);
 bool render_statistics(struct app *app, unsigned frame, bool headless);
-void statistics_metrics_render(struct app *app, struct tv_canvas *c, struct tv_rect r);
+void statistics_metrics_render(struct app *app, struct kt_canvas *c, struct kt_rect r);
 int native_workspace_agent_index(struct native_workspace *w, int pane);
 struct native_terminal *native_workspace_terminal(struct app *app, int pane);
 void native_workspace_sync_terminal(struct app *app);
@@ -245,9 +245,9 @@ void native_workspace_move(struct app *app, int direction);
 bool native_workspace_key(struct app *app, char key);
 void native_workspace_mouse(struct app *app, unsigned button, int x, int y, bool release);
 bool render_native_workspace(struct app *app, unsigned frame, bool headless);
-void native_workspace_evidence_text(struct app *app, struct tv_canvas *c, size_t *scroll);
-void native_workspace_plan_text(struct app *app, struct tv_canvas *c, size_t *scroll);
-void native_workspace_graph(struct app *app, struct tv_canvas *c, bool planning);
+void native_workspace_evidence_text(struct app *app, struct kt_canvas *c, size_t *scroll);
+void native_workspace_plan_text(struct app *app, struct kt_canvas *c, size_t *scroll);
+void native_workspace_graph(struct app *app, struct kt_canvas *c, bool planning);
 void render_hosts(struct app *app);
 /* Remote setup (U10): setup_flow.c, setup_hosts.c, setup_render.c and
  * setup_capture.c. The flow is a layer over the Hosts tab that owns input
@@ -281,11 +281,11 @@ size_t hosts_row_count(const struct app *app);
 void hosts_open_row(struct app *app);
 void setup_row_text(const struct app *app, const struct host_row *row, char *name, size_t name_size, char *state, size_t state_size);
 void render_workflow_graph(struct app *app);
-void dashboard_style(void *context, enum tv_style tone);
-void dashboard_text(struct tv_canvas *c, int x, int y, int width,
-                           enum tv_style tone, const char *format, ...);
-void dashboard_card(struct tv_canvas *c, int x, int width, const char *title,
-                           size_t count, const char *caption, enum tv_style tone);
+void dashboard_style(void *context, enum kt_style tone);
+void dashboard_text(struct kt_canvas *c, int x, int y, int width,
+                           enum kt_style tone, const char *format, ...);
+void dashboard_card(struct kt_canvas *c, int x, int width, const char *title,
+                           size_t count, const char *caption, enum kt_style tone);
 void render_dashboard(struct app *app);
 struct native_terminal *native_terminal_selected(struct app *app);
 void native_terminal_attention(struct app *app, const struct native_terminal *t, char *out, size_t size);
@@ -302,7 +302,7 @@ void native_terminals_destroy(struct app *app);
 bool native_terminal_attach(struct app *app);
 void native_terminal_send(struct app *app, struct native_terminal *t, const void *bytes, size_t length);
 void native_terminals_pump(struct app *app);
-void native_terminal_draw(struct app *app, struct native_terminal *t, struct tv_canvas *c, bool focused);
+void native_terminal_draw(struct app *app, struct native_terminal *t, struct kt_canvas *c, bool focused);
 void native_observations_cancel(struct app *app, size_t source);
 void native_observations_destroy(struct app *app);
 void native_observations_tick(struct app *app, bool request);
@@ -342,15 +342,15 @@ void statistics_move(struct app *app, int direction);
 void statistics_count(uint64_t value, bool known, char *out, size_t size);
 void statistics_tokens(const struct hs_usage *u, char *out, size_t size);
 void statistics_scope_tokens(const struct hs_summary *s, char *out, size_t size);
-int statistics_wrap(struct tv_canvas *c, int x, int y, int width, int rows, enum tv_style tone, const char *text);
-void statistics_scope_notes(struct tv_canvas *c, int x, int y, int width, int rows, const struct hs_summary *s);
+int statistics_wrap(struct kt_canvas *c, int x, int y, int width, int rows, enum kt_style tone, const char *text);
+void statistics_scope_notes(struct kt_canvas *c, int x, int y, int width, int rows, const struct hs_summary *s);
 void statistics_step_agent(const struct hs_step *s, bool compact, char *out, size_t size);
 void statistics_run_tokens(const struct hs_model *m, size_t run, char *out, size_t size);
-void statistics_step_detail(struct tv_canvas *c, struct tv_rect r, const struct hs_model *m, const struct hs_step *s);
+void statistics_step_detail(struct kt_canvas *c, struct kt_rect r, const struct hs_model *m, const struct hs_step *s);
 bool workflow_id(const char *s);
 size_t workflow_nodes(const struct workflow_model *m, size_t run, size_t *indices);
 bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_t n,
-                            struct tv_edge *edges, size_t *count);
+                            struct kt_edge *edges, size_t *count);
 int accept_workflows(struct app *app, FILE *input);
 int refresh_workflows(struct app *app, const char *fixture);
 void workflow_move(struct app *app, int direction);
@@ -387,20 +387,20 @@ const char *theme_name(int theme);
 void linef(struct app *app, const char *format, ...);
 const char *display_status(const struct head *head);
 const char *status_label(const struct head *head);
-enum tv_style status_tone(const struct head *head);
+enum kt_style status_tone(const struct head *head);
 size_t attention_count(const struct app *app);
 const char *dot(const struct app *app);
 /* Footer freshness of data observed at observed_at. Returns the tone. */
-enum tv_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size);
+enum kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size);
 void text_append(char *buffer, size_t size, const char *format, ...);
 bool frame_alloc(struct app *app);
 void frame_free(struct app *app);
 bool frame_begin(struct app *app, bool headless);
 void frame_end(struct app *app, unsigned frame, bool headless);
 void frame_invalidate(struct app *app);
-bool frame_content(struct app *app, struct tv_canvas *out);
-void chrome_header(struct app *app, struct tv_canvas *c, const char *title);
-void chrome_footer(struct app *app, struct tv_canvas *c, const char *status, enum tv_style tone, const char *hints);
+bool frame_content(struct app *app, struct kt_canvas *out);
+void chrome_header(struct app *app, struct kt_canvas *c, const char *title);
+void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, enum kt_style tone, const char *hints);
 void recovery_explain(const struct recovery *item, char *title, size_t title_size, char *detail, size_t detail_size);
 void show_result(struct app *app, const char *title, const char *text);
 void render(struct app *app, unsigned frame, bool headless);

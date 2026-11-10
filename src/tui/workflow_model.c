@@ -15,14 +15,14 @@ bool workflow_id(const char *s) {
 size_t workflow_nodes(const struct workflow_model *m, size_t run, size_t *indices) {
     size_t i, n = 0;
     for (i = 0; i < m->node_count; i++) if (m->nodes[i].run == run) {
-        if (n == TV_GRAPH_MAX_NODES) return n + 1;
+        if (n == KT_GRAPH_MAX_NODES) return n + 1;
         indices[n++] = i;
     }
     return n;
 }
 
 bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_t n,
-                            struct tv_edge *edges, size_t *count) {
+                            struct kt_edge *edges, size_t *count) {
     size_t i;
     *count = 0;
     for (i = 0; i < n; i++) {
@@ -34,13 +34,13 @@ bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_
         while (token) {
             size_t j;
             for (j = 0; j < n; j++) if (!strcmp(token, m->nodes[indices[j]].id)) break;
-            if (j == n || *count == TV_GRAPH_MAX_EDGES) return false;
+            if (j == n || *count == KT_GRAPH_MAX_EDGES) return false;
             {
                 size_t previous;
                 for (previous = 0; previous < *count; previous++)
                     if (edges[previous].from == j && edges[previous].to == i) return false;
             }
-            edges[(*count)++] = (struct tv_edge){j, i};
+            edges[(*count)++] = (struct kt_edge){j, i};
             token = strtok_r(NULL, ",", &save);
         }
     }
@@ -171,10 +171,10 @@ static int workflow_record(struct workflow_model *m, char **f, size_t count, boo
 static bool workflow_graphs_valid(const struct workflow_model *m) {
     size_t i;
     for (i = 0; i < m->run_count; i++) {
-        size_t indices[TV_GRAPH_MAX_NODES], count, n = workflow_nodes(m, i, indices);
-        struct tv_edge edges[TV_GRAPH_MAX_EDGES]; struct tv_graph_layout layout;
-        if (n > TV_GRAPH_MAX_NODES || !workflow_edges(m, indices, n, edges, &count) ||
-            !tv_graph_layout(edges, count, n, &layout)) return false;
+        size_t indices[KT_GRAPH_MAX_NODES], count, n = workflow_nodes(m, i, indices);
+        struct kt_edge edges[KT_GRAPH_MAX_EDGES]; struct kt_graph_layout layout;
+        if (n > KT_GRAPH_MAX_NODES || !workflow_edges(m, indices, n, edges, &count) ||
+            !kt_graph_layout(edges, count, n, &layout)) return false;
     }
     return true;
 }
@@ -213,7 +213,7 @@ int accept_workflows(struct app *app, FILE *input) {
     }
     fclose(input);
     if (app->workflows && app->workflow_run < app->workflows->run_count) {
-        size_t i, previous[TV_GRAPH_MAX_NODES], next_indices[TV_GRAPH_MAX_NODES];
+        size_t i, previous[KT_GRAPH_MAX_NODES], next_indices[KT_GRAPH_MAX_NODES];
         size_t old_count = workflow_nodes(app->workflows, app->workflow_run, previous);
         char selected_id[65] = "";
         if (app->workflow_node < old_count) copy_text(selected_id, sizeof(selected_id), app->workflows->nodes[previous[app->workflow_node]].id);
@@ -242,7 +242,7 @@ int refresh_workflows(struct app *app, const char *fixture) {
 }
 
 void workflow_move(struct app *app, int direction) {
-    size_t indices[TV_GRAPH_MAX_NODES], n;
+    size_t indices[KT_GRAPH_MAX_NODES], n;
     if (!app->workflows) return;
     n = workflow_nodes(app->workflows, app->workflow_run, indices);
     if (direction > 0 && app->workflow_node + 1 < n) app->workflow_node++;

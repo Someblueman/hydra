@@ -1,0 +1,125 @@
+#include "kettle/terminal.h"
+#include <assert.h>
+#include <string.h>
+
+static struct kt_terminal_model t, other;
+static struct kt_cell primary[20*8], alternate[20*8], history[20*4];
+static struct kt_cell p2[20*8], a2[20*8], h2[20*4];
+static void feed(const char *s) { kt_term_feed(&t, s, strlen(s)); }
+static uint32_t at(int x, int y) { return (t.alternate_active ? alternate : primary)[y*20+x].glyph; }
+
+static void graphics(void) {
+    feed("\033(0lqqk\033(Bq");
+    assert(at(0,0) == 0x250c && at(1,0) == 0x2500 && at(3,0) == 0x2510 && at(4,0) == 'q');
+    feed("\033)0\016x\017x");
+    assert(at(5,0) == 0x2502 && at(6,0) == 'x');
+    feed("\016\0337\017\033)B\0338x");
+    assert(at(7,0) == 0x2502);
+    kt_term_reset(&t);
+    feed("q"); assert(at(0,0) == 'q');
+    kt_term_reset(&t);
+}
+
+/* Cursor columns after each sequence match tmux 3.5a measured in a 40-column
+ * pane: ZWJ emoji, skin-tone modifier, flag pair and VS16 symbols take two
+ * cells; ZWSP takes none and a soft hyphen shows as one '-'. */
+static void clusters(void) {
+    static const struct { const char *text; int column; } cases[] = {
+        {"A\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x92\xbb", 3},
+        {"C\xf0\x9f\x91\x8d\xf0\x9f\x8f\xbd", 3},
+        {"E\xf0\x9f\x87\xb8\xf0\x9f\x87\xaa", 3},
+        {"G\xe2\x80\x8bH\xc2\xad", 3},
+        {"J\xe2\x9d\xa4\xef\xb8\x8f", 3},
+        {"x\xcc\x81", 1},
+    };
+    size_t i;
+    for (i = 0; i < sizeof(cases) / sizeof(*cases); i++) {
+        kt_term_reset(&t);
+        feed(cases[i].text);
+        assert(t.primary.x == cases[i].column);
+    }
+    kt_term_reset(&t);
+    feed("J\xe2\x9d\xa4\xef\xb8\x8fK");
+    assert(primary[1].width == 2 && primary[2].width == 0 && at(3,0) == 'K');
+    assert(primary[1].combining_count == 1 && primary[1].combining[0] == 0xfe0f);
+    kt_term_reset(&t);
+    feed("\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x92\xbbZ");
+    assert(primary[0].glyph == 0x1f468 && primary[0].combining_count == 2 && primary[0].combining[1] == 0x1f4bb);
+    assert(at(2,0) == 'Z');
+    {
+        struct kt_cell cells[10*2];
+        struct kt_canvas ascii;
+        kt_term_reset(&t);
+        feed("\xe2\x94\x8c\xe2\x94\x80\xe7\x95\x8c\xe2\x86\x92" "caf\xc3\xa9");
+        assert(kt_init(&ascii, cells, 20, 10, 2, false));
+        kt_term_draw(&t, &ascii, 0, false);
+        assert(cells[0].glyph == '+' && cells[1].glyph == '-' && cells[2].glyph == '?' && cells[3].glyph == ' ');
+        assert(cells[3].width == 1 && cells[4].glyph == '>' && cells[8].glyph == 'e');
+    }
+    kt_term_reset(&t);
+}
+
+int main(void) {
+    size_t split, i;
+    const char *stream = "\033[2J\033[2;3Hcaf\xc3\xa9\xe7\x95\x8c\033[31m!\033[0m\r\nnext\033(0lqk\033(B\033)0\016x\017\033[?1049hALT\033[?1049l\033[6n";
+    assert(kt_term_init(&t, primary, alternate, 20, 8, history, 4, 10, 4));
+    graphics();
+    clusters();
+    feed("0123456789");
+    assert(t.primary.wrap_pending && t.primary.x == 9);
+    feed("X"); assert(at(0,1) == 'X');
+    feed("\033[2;3H\033[38;2;10;20;30mY\033[0m");
+    assert(at(2,1) == 'Y' && primary[22].foreground == 0x0a141e);
+    feed("\033[2;3H\033[K"); assert(at(2,1) == ' ' && at(0,1) == 'X');
+    feed("\033[?1049hALT\033[?25l");
+    assert(t.alternate_active && at(0,0) == 'A' && !t.cursor_visible);
+    feed("\033[?1049l"); assert(!t.alternate_active && at(0,1) == 'X' && t.primary.x == 2);
+    kt_term_reset(&t);
+    feed("one\r\ntwo\r\nthree\r\nfour\r\nfive\r\nsix\r\nseven\r\neight\r\nnine");
+    assert(t.history_count == 4 && t.history_serial == 5 && at(0,0) == 's');
+    {
+        struct kt_cell visible[40]; struct kt_canvas c;
+        assert(kt_init(&c, visible, 40, 10, 4, true));
+        kt_term_draw(&t, &c, 4, false); assert(visible[0].glyph == 't');
+        kt_term_draw(&t, &c, 0, false); assert(visible[0].glyph == 's');
+    }
+    kt_term_reset(&t);
+    feed("top\033[2;4r\033[4;1HZ\n");
+    assert(at(0,0) == 't' && t.history_count == 0 && at(0,2) == 'Z');
+    feed("\033[?6h\033[1;1HO"); assert(at(0,1) == 'O');
+    feed("\033[?6l\033[r\033[1;1Habcde\033[1;2H\033[2P");
+    assert(at(0,0) == 'a' && at(1,0) == 'd' && at(2,0) == 'e');
+    feed("\033[1;2H\033[2@XY"); assert(at(1,0) == 'X' && at(3,0) == 'd');
+    kt_term_reset(&t);
+    feed("\033]52;c;secret\007safe\033Pignored\033\\!");
+    assert(at(0,0) == 's' && at(4,0) == '!' && t.reply_length == 0);
+    feed("\033[999999999999999999999999H?"); assert(at(5,0) == '?');
+    for (split = 0; split <= strlen(stream); split++) {
+        char reply1[64], reply2[64]; size_t n1, n2;
+        kt_term_reset(&t);
+        assert(kt_term_init(&other, p2, a2, 20, 8, h2, 4, 10, 4));
+        feed(stream);
+        kt_term_feed(&other, stream, split); kt_term_feed(&other, stream + split, strlen(stream) - split);
+        for (i = 0; i < 160; i++) assert(kt_cell_equal(primary+i,p2+i) && kt_cell_equal(alternate+i,a2+i));
+        n1 = kt_term_take_reply(&t, reply1, sizeof(reply1)); n2 = kt_term_take_reply(&other, reply2, sizeof(reply2));
+        assert(n1 == n2 && !memcmp(reply1,reply2,n1));
+    }
+    kt_term_reset(&t);
+    feed("abc\xe7\x95\x8c\xcc\x81"); assert(primary[3].width == 2 && primary[3].combining_count == 1);
+    assert(kt_term_resize(&t,4,3)); assert(primary[3].glyph == ' ');
+    assert(kt_term_resize(&t,10,4)); assert(primary[4].glyph == ' ');
+    feed("\xf0\x9f"); kt_term_finish(&t); assert(t.utf8_length == 0);
+    {
+        unsigned seed = 9187;
+        for (i = 0; i < 50000; i++) {
+            unsigned char b;
+            seed = seed * 1664525U + 1013904223U; b = (unsigned char)(seed >> 24);
+            kt_term_feed(&t, &b, 1);
+            assert(t.primary.x >= 0 && t.primary.x < t.primary.canvas.width);
+            assert(t.primary.y >= 0 && t.primary.y < t.primary.canvas.height);
+            assert(t.history_count <= 4 && t.reply_length <= sizeof(t.reply));
+        }
+    }
+    puts("terminal: emoji clusters, ASCII fallback, wrapping, RGB, erase, alternate screen, history, margins, edits, hostile sequences, every stream split and bounds passed");
+    return 0;
+}

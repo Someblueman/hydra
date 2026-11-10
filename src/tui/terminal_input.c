@@ -61,7 +61,7 @@ static void history_key(struct app *app, struct native_terminal *t, bool enter) 
 }
 
 /* Ctrl-B commands: Hydra's own keys while an agent view may hold input. */
-static void prefix_key(struct app *app, struct native_terminal *t, const struct tv_event *e) {
+static void prefix_key(struct app *app, struct native_terminal *t, const struct kt_event *e) {
     if (e->key=='q') app->running=false;
     else if (e->key=='\t') leave_input(app);
     else if (e->key=='D') statistics_toggle(app);
@@ -76,18 +76,18 @@ static void prefix_key(struct app *app, struct native_terminal *t, const struct 
     else if (e->key==2) native_terminal_send(app,t,e->bytes,e->length);
 }
 
-static void native_terminal_event(struct app *app, const struct tv_event *e) {
+static void native_terminal_event(struct app *app, const struct kt_event *e) {
     struct native_terminals *set=app->terminals;
     struct native_terminal *t=native_terminal_selected(app);
     struct native_workspace *w=app->workspace;
     if (!set || !w) return;
-    if (e->type==TV_MOUSE) {
-        struct tv_rect r={0,0,0,0};
+    if (e->type==KT_MOUSE) {
+        struct kt_rect r={0,0,0,0};
         int pane;
         int left=w->compact ? 0 : 1, top=w->compact ? 1 : 2, border=w->compact ? 0 : 1;
         for (pane=0;pane<w->layout.count;pane++) {
             struct native_terminal *candidate=native_workspace_terminal(app,pane);
-            struct tv_rect bounds=w->layout.panes[pane].bounds;
+            struct kt_rect bounds=w->layout.panes[pane].bounds;
             if (candidate && candidate->screen && e->x>=bounds.x+left && e->x<bounds.x+bounds.width-border &&
                 e->y>=bounds.y+top && e->y<bounds.y+bounds.height-border) {
                 r=bounds; t=candidate;
@@ -103,19 +103,19 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
         } else native_workspace_mouse(app,e->button,e->x,e->y,e->release);
         return;
     }
-    if (e->type!=TV_KEY) {
-        if (native_terminal_focused(app) && (e->type==TV_PASTE || (t->screen->bracketed_paste &&
-            (e->type==TV_PASTE_BEGIN || e->type==TV_PASTE_END)))) native_terminal_send(app,t,e->bytes,e->length);
+    if (e->type!=KT_KEY) {
+        if (native_terminal_focused(app) && (e->type==KT_PASTE || (t->screen->bracketed_paste &&
+            (e->type==KT_PASTE_BEGIN || e->type==KT_PASTE_END)))) native_terminal_send(app,t,e->bytes,e->length);
         return;
     }
     if (set->prefix) { set->prefix=false; prefix_key(app,t,e); return; }
     if (e->key==2) { set->prefix=true; return; }
     if (!native_terminal_focused(app)) return;
     if (t->scrolling) {
-        size_t delta=(e->key==TV_KEY_PAGE_UP || e->key==TV_KEY_PAGE_DOWN) ? 10 : 1;
-        if (e->key=='k' || e->key==TV_KEY_UP || e->key==TV_KEY_PAGE_UP)
+        size_t delta=(e->key==KT_KEY_PAGE_UP || e->key==KT_KEY_PAGE_DOWN) ? 10 : 1;
+        if (e->key=='k' || e->key==KT_KEY_UP || e->key==KT_KEY_PAGE_UP)
             t->scroll=delta>t->screen->history_count-t->scroll ? t->screen->history_count : t->scroll+delta;
-        else if (e->key=='j' || e->key==TV_KEY_DOWN || e->key==TV_KEY_PAGE_DOWN)
+        else if (e->key=='j' || e->key==KT_KEY_DOWN || e->key==KT_KEY_PAGE_DOWN)
             t->scroll=t->scroll>delta ? t->scroll-delta : 0;
         else if (e->key==27) { t->scrolling=false; t->scroll=0; }
         return;
@@ -124,13 +124,13 @@ static void native_terminal_event(struct app *app, const struct tv_event *e) {
 }
 
 bool native_terminal_byte(struct app *app, unsigned char byte) {
-    struct tv_event e;
+    struct kt_event e;
     if (!app->terminals || (!native_terminal_focused(app) && !app->terminals->prefix && byte!=2)) return false;
-    if (tv_input_feed(&app->terminals->input,byte,&e)) native_terminal_event(app,&e);
+    if (kt_input_feed(&app->terminals->input,byte,&e)) native_terminal_event(app,&e);
     return true;
 }
 
 void native_terminal_flush_input(struct app *app) {
-    struct tv_event e;
-    if (app->terminals && tv_input_flush(&app->terminals->input,&e)) native_terminal_event(app,&e);
+    struct kt_event e;
+    if (app->terminals && kt_input_flush(&app->terminals->input,&e)) native_terminal_event(app,&e);
 }

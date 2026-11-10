@@ -3,18 +3,18 @@ $(BUILD_DIR)/fixture-lock: tests/fixture/lock.c
 	@mkdir -p "$(@D)"
 	$(CC) -std=c99 -Wall -Wextra -Werror -pedantic $< -o $@
 
-PTY_SUPPORT = tests/termviz/pty_support.c tests/termviz/screen_support.c tests/termviz/fixture_support.c
+PTY_SUPPORT = tests/kettle/pty_support.c tests/kettle/screen_support.c tests/kettle/fixture_support.c
 PTY_NAMES = pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads remote-setup
 PTY_BINS = $(addprefix $(BUILD_DIR)/native-tests/pty-,$(PTY_NAMES))
 $(BUILD_DIR)/native-tests:
 	mkdir -p $@
-$(foreach n,$(PTY_NAMES),$(eval $(BUILD_DIR)/native-tests/pty-$(n): tests/termviz/test_$(subst -,_,$(n)).c))
-$(addprefix $(BUILD_DIR)/native-tests/pty-,attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads): tests/termviz/hydra_fixture.c
+$(foreach n,$(PTY_NAMES),$(eval $(BUILD_DIR)/native-tests/pty-$(n): tests/kettle/test_$(subst -,_,$(n)).c))
+$(addprefix $(BUILD_DIR)/native-tests/pty-,attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads): tests/kettle/hydra_fixture.c
 $(BUILD_DIR)/native-tests/pty-attached-pty: src/tui/fleet_budget.h
-$(BUILD_DIR)/native-tests/pty-fleet-recovery: tests/termviz/fleet_recovery_support.c
+$(BUILD_DIR)/native-tests/pty-fleet-recovery: tests/kettle/fleet_recovery_support.c
 $(addprefix $(BUILD_DIR)/native-tests/pty-,plan-workspace plan-launch plan-conversation plan-assets fleet-recovery): PTY_JSON_CFLAGS = $(FLEET_JSON_CFLAGS)
 $(addprefix $(BUILD_DIR)/native-tests/pty-,plan-workspace plan-launch plan-conversation plan-assets fleet-recovery): PTY_JSON_LIB = $(FLEET_JSON_LIB)
-$(PTY_BINS): $(PTY_SUPPORT) $(wildcard tests/termviz/*.h) | $(BUILD_DIR)/native-tests
+$(PTY_BINS): $(PTY_SUPPORT) $(wildcard tests/kettle/*.h) | $(BUILD_DIR)/native-tests
 	$(CC) $(CORE_CFLAGS) $(PTY_JSON_CFLAGS) $(filter %.c,$^) $(PTY_JSON_LIB) -o $@
 test-workspace-pty: $(BUILD_DIR)/native-tests/pty-pty
 test-statistics: $(BUILD_DIR)/native-tests/pty-statistics-pty

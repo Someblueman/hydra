@@ -18,11 +18,11 @@ static size_t wrap_chunk(const char *text, size_t length, size_t width) {
 }
 
 /* "Label       text" with the text wrapped under itself. */
-static void labelled_at(struct app *app, int label_width, const char *label, const char *text, enum tv_style tone) {
+static void labelled_at(struct app *app, int label_width, const char *label, const char *text, enum kt_style tone) {
     size_t length = strlen(text), offset = 0, width;
     int saved_x = app->content_x, saved_width = app->content_width;
     if (app->line >= app->limit) return;
-    column(app, 0, label_width, TV_MUTED, label);
+    column(app, 0, label_width, KT_MUTED, label);
     app->content_x += label_width; app->content_width -= label_width;
     width = app->content_width > 0 ? (size_t)app->content_width : 1;
     do {
@@ -37,12 +37,12 @@ static void labelled_at(struct app *app, int label_width, const char *label, con
     app->content_x = saved_x; app->content_width = saved_width;
 }
 
-static void labelled(struct app *app, const char *label, const char *text, enum tv_style tone) {
+static void labelled(struct app *app, const char *label, const char *text, enum kt_style tone) {
     labelled_at(app, DETAIL_LABEL, label, text, tone);
 }
 
 static void detail_fleet(struct app *app, const struct head *head) {
-    pair(app, "Host", head->remote_host, TV_BASE, "Desired", head->desired, TV_BASE);
+    pair(app, "Host", head->remote_host, KT_BASE, "Desired", head->desired, KT_BASE);
     linef(app, "Project     %s", head->remote_project);
     section(app, "NEXT");
     linef(app, "a  attach to the remote terminal to see what it is doing");
@@ -65,8 +65,8 @@ static const char *role_text(const char *role) {
 
 /* Two labelled values per row where they fit; one per row otherwise, so a
  * long agent or run description is never cut. */
-static void detail_pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
-                        const char *right_label, const char *right, enum tv_style right_tone) {
+static void detail_pair(struct app *app, const char *left_label, const char *left, enum kt_style left_tone,
+                        const char *right_label, const char *right, enum kt_style right_tone) {
     if (app->content_width >= 110) { pair(app, left_label, left, left_tone, right_label, right, right_tone); return; }
     labelled(app, left_label, left, left_tone);
     labelled(app, right_label, right, right_tone);
@@ -76,43 +76,43 @@ static void detail_run_pair(struct app *app, size_t owner, size_t record) {
     const struct workflow_run *r = &app->workflows->runs[owner];
     char run[TEXT + 96];
     snprintf(run, sizeof(run), "%s %s%s%s", run_label_kind(r), r->name, dot(app), r->state);
-    detail_pair(app, "Run", run, run_needs_attention(app, owner) ? TV_WARNING : TV_BASE, "Role",
-                record != SIZE_MAX ? role_text(app->workflows->heads[record].role) : "created by the run", TV_BASE);
+    detail_pair(app, "Run", run, run_needs_attention(app, owner) ? KT_WARNING : KT_BASE, "Role",
+                record != SIZE_MAX ? role_text(app->workflows->heads[record].role) : "created by the run", KT_BASE);
 }
 
 /* Reported outcome and group; an empty group is left out of a narrow view. */
 static void detail_reported(struct app *app, const struct head *head, const char *group) {
     const char *reported = head->declared[0] ? head->declared : "nothing yet";
-    enum tv_style tone = head->declared[0] ? TV_STRONG : TV_MUTED;
+    enum kt_style tone = head->declared[0] ? KT_STRONG : KT_MUTED;
     if (app->content_width < 110 && !strcmp(group, "none")) labelled(app, "Reported", reported, tone);
-    else detail_pair(app, "Reported", reported, tone, "Group", group, TV_BASE);
+    else detail_pair(app, "Reported", reported, tone, "Group", group, KT_BASE);
 }
 
 static void detail_identity(struct app *app, const struct head *head) {
     char agent[TEXT + 96], group[TEXT + 64];
     size_t record, owner = head_owner_run(app, head, &record);
     head_agent_text(app, head, agent, sizeof(agent));
-    if (head_headless(head)) detail_pair(app, "Agent", agent, TV_BASE, "Terminal", "headless (no terminal)", TV_MUTED);
-    else detail_pair(app, "Agent", agent, TV_BASE, "Session", status_label(head), status_tone(head));
+    if (head_headless(head)) detail_pair(app, "Agent", agent, KT_BASE, "Terminal", "headless (no terminal)", KT_MUTED);
+    else detail_pair(app, "Agent", agent, KT_BASE, "Session", status_label(head), status_tone(head));
     if (owner != SIZE_MAX) detail_run_pair(app, owner, record);
     detail_group_label(app, head, group, sizeof(group));
     detail_reported(app, head, group);
     if (!head_headless(head) && !strcmp(display_status(head), "STALE"))
-        paragraph(app, "The terminal is gone but the last observation said the agent was still working. Files in the worktree are kept; a restarts the terminal in the same worktree. Check the files before removing the head.", TV_WARNING);
+        paragraph(app, "The terminal is gone but the last observation said the agent was still working. Files in the worktree are kept; a restarts the terminal in the same worktree. Check the files before removing the head.", KT_WARNING);
 }
 
 static void detail_step_exec(struct app *app, const struct workflow_node *step) {
     char text[512];
     const struct workflow_exec *e = &step->exec;
     bool running = !strcmp(step->state, "running");
-    labelled(app, "Executable", e->version[0] ? e->version : "unknown (the probe recorded no version)", e->version[0] ? TV_BASE : TV_MUTED);
+    labelled(app, "Executable", e->version[0] ? e->version : "unknown (the probe recorded no version)", e->version[0] ? KT_BASE : KT_MUTED);
     exec_model_text(e, running, text, sizeof(text));
-    labelled(app, "Model", text, !strcmp(e->model_source, "observed") ? TV_BASE : TV_MUTED);
+    labelled(app, "Model", text, !strcmp(e->model_source, "observed") ? KT_BASE : KT_MUTED);
     exec_effort_text(e, running, text, sizeof(text));
-    labelled(app, "Effort", text, !strcmp(e->effort_source, "observed") ? TV_BASE : TV_MUTED);
-    if (exec_configuration_text(e, text, sizeof(text))) labelled(app, "Configured", text, TV_MUTED);
+    labelled(app, "Effort", text, !strcmp(e->effort_source, "observed") ? KT_BASE : KT_MUTED);
+    if (exec_configuration_text(e, text, sizeof(text))) labelled(app, "Configured", text, KT_MUTED);
     exec_tokens_text(e, text, sizeof(text));
-    labelled(app, "Tokens", text, TV_BASE);
+    labelled(app, "Tokens", text, KT_BASE);
 }
 
 /* The step that runs, or last ran, on this head. */
@@ -123,10 +123,10 @@ static void detail_step(struct app *app, const struct head *head) {
     snprintf(title, sizeof(title), "%s  %s%s%s, attempt %u", step->profile[0] ? "AGENT STEP" : "STEP", step->id,
              step->role[0] ? " / " : "", step->role, step->attempts);
     section(app, title);
-    labelled(app, "State", step->state, !strcmp(step->state, "failed") ? TV_WARNING : !strcmp(step->state, "running") ? TV_SUCCESS : TV_BASE);
+    labelled(app, "State", step->state, !strcmp(step->state, "failed") ? KT_WARNING : !strcmp(step->state, "running") ? KT_SUCCESS : KT_BASE);
     if (step->profile[0]) detail_step_exec(app, step);
     step_duration_text(step, duration, sizeof(duration));
-    labelled(app, "Duration", duration, TV_BASE);
+    labelled(app, "Duration", duration, KT_BASE);
 }
 
 /* The plan a planning head launched, instead of gate counts. */
@@ -137,19 +137,19 @@ static void detail_plan(struct app *app, const struct head *head) {
         if (run_owner_head(app, run) != index) continue;
         if (!shown++) section(app, "PLAN");
         plan_approval_text(app, run, text, sizeof(text));
-        labelled(app, "Plan", text, run_needs_attention(app, run) ? TV_WARNING : TV_BASE);
+        labelled(app, "Plan", text, run_needs_attention(app, run) ? KT_WARNING : KT_BASE);
         run_next_text(app, run, text, sizeof(text));
-        labelled(app, "Next", text, TV_BASE);
+        labelled(app, "Next", text, KT_BASE);
     }
 }
 
 static void detail_changes(struct app *app, const struct head *head) {
     char changes[96];
     section(app, "CHANGES");
-    if (!head->head_id[0]) { labelled(app, "Changed", "unknown (no head record; see Recovery)", TV_MUTED); return; }
+    if (!head->head_id[0]) { labelled(app, "Changed", "unknown (no head record; see Recovery)", KT_MUTED); return; }
     snprintf(changes, sizeof(changes), "%u %s in the worktree, not yet committed", head->diff, head->diff == 1 ? "file" : "files");
-    labelled(app, "Changed", changes, TV_BASE);
-    labelled(app, "Full diff", "everything since the branch base: press : and choose diff", TV_MUTED);
+    labelled(app, "Changed", changes, KT_BASE);
+    labelled(app, "Full diff", "everything since the branch base: press : and choose diff", KT_MUTED);
 }
 
 /* Gate approval requests for this head; a plan's own approval is shown under
@@ -158,14 +158,14 @@ static void detail_checks(struct app *app, const struct head *head) {
     char approvals[128];
     unsigned pending;
     section(app, "CHECKS");
-    if (!head->head_id[0]) { labelled_at(app, 19, "Approval requests", "unknown", TV_MUTED); return; }
+    if (!head->head_id[0]) { labelled_at(app, 19, "Approval requests", "unknown", KT_MUTED); return; }
     pending = head->gates > head->approved ? head->gates - head->approved : 0;
     if (!head->gates) snprintf(approvals, sizeof(approvals), "none");
     else snprintf(approvals, sizeof(approvals), "%u of %u approved%s%s", head->approved, head->gates,
                   pending ? dot(app) : "", pending ? "waiting for your decision" : "");
-    labelled_at(app, 19, "Approval requests", approvals, pending ? TV_WARNING : TV_BASE);
+    labelled_at(app, 19, "Approval requests", approvals, pending ? KT_WARNING : KT_BASE);
     snprintf(approvals, sizeof(approvals), "%u exchanged with other heads", head->messages);
-    labelled_at(app, 19, "Messages", approvals, TV_BASE);
+    labelled_at(app, 19, "Messages", approvals, KT_BASE);
 }
 
 /* What the transcript is and that keys shown inside it need live input. */
@@ -227,7 +227,7 @@ static void technical_row(struct app *app, const char *label, const char *format
     char text[1024];
     va_list args;
     va_start(args, format); vsnprintf(text, sizeof(text), format, args); va_end(args);
-    labelled(app, label, text, TV_BASE);
+    labelled(app, label, text, KT_BASE);
 }
 
 static void technical_heading(struct app *app, const char *label, bool first) {

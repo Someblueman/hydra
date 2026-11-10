@@ -3,7 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
-/* Hydra's view owns data interpretation; termviz owns layout, focus and paint.
+/* Hydra's view owns data interpretation; kettle owns layout, focus and paint.
  * The workspace shares the frame, header, tabs and footer with every other view. */
 
 bool native_workspace_monitoring(struct app *app) {
@@ -22,13 +22,13 @@ void native_workspace_invalidate(struct app *app) {
 /* Narrow navigation, the agent conversation at full height, and the plan
  * review beside it (dependencies above the plan text). The conversation takes
  * most of the width; the plan overview and monitor favour the review. Where
- * both sides cannot fit their minimum widths (80 columns), termviz shows the
+ * both sides cannot fit their minimum widths (80 columns), kettle shows the
  * focused side: Tab or B reveals the review and A returns to the agent. */
-static void workspace_layout(struct tv_workspace *layout, int mode) {
-    tv_workspace_init(layout, 18, 5);
-    (void)tv_workspace_split(layout, 0, TV_COLUMNS, 150);
-    (void)tv_workspace_split(layout, 2, TV_COLUMNS, mode == 0 ? 620 : 380);
-    (void)tv_workspace_split(layout, 4, TV_ROWS, 350);
+static void workspace_layout(struct kt_workspace *layout, int mode) {
+    kt_workspace_init(layout, 18, 5);
+    (void)kt_workspace_split(layout, 0, KT_COLUMNS, 150);
+    (void)kt_workspace_split(layout, 2, KT_COLUMNS, mode == 0 ? 620 : 380);
+    (void)kt_workspace_split(layout, 4, KT_ROWS, 350);
     layout->panes[3].min_width = 50;
     layout->panes[5].min_width = layout->panes[6].min_width = 36;
 }
@@ -46,36 +46,36 @@ bool native_workspace_init(struct app *app) {
     return true;
 }
 
-static int subtree_width(const struct tv_workspace *l, int node) {
-    const struct tv_pane *p=&l->panes[node];
+static int subtree_width(const struct kt_workspace *l, int node) {
+    const struct kt_pane *p=&l->panes[node];
     int a, b;
-    if (p->split==TV_LEAF) return p->min_width;
+    if (p->split==KT_LEAF) return p->min_width;
     a=subtree_width(l,p->first); b=subtree_width(l,p->second);
-    return p->split==TV_COLUMNS ? a+b+1 : a>b ? a : b;
+    return p->split==KT_COLUMNS ? a+b+1 : a>b ? a : b;
 }
 
-static bool subtree_has(const struct tv_workspace *l, int node, int leaf) {
+static bool subtree_has(const struct kt_workspace *l, int node, int leaf) {
     for (; leaf>=0; leaf=l->panes[leaf].parent) if (leaf==node) return true;
     return false;
 }
 
-/* termviz shows only the focused subtree when minima cannot fit, which would
+/* kettle shows only the focused subtree when minima cannot fit, which would
  * drop navigation together with the side that is not focused. Where the agent
  * and the review cannot sit side by side, keep navigation and give the rest to
  * the side holding focus: the agent, unless the review is focused. */
-static void workspace_arrange(struct tv_workspace *l, struct tv_rect r) {
-    struct tv_pane right;
-    struct tv_rect nav, divider, area;
-    (void)tv_workspace_layout(l,r);
-    if (l->root || l->count<7 || l->panes[2].split==TV_LEAF || (l->panes[1].bounds.width && l->panes[2].bounds.width)) return;
+static void workspace_arrange(struct kt_workspace *l, struct kt_rect r) {
+    struct kt_pane right;
+    struct kt_rect nav, divider, area;
+    (void)kt_workspace_layout(l,r);
+    if (l->root || l->count<7 || l->panes[2].split==KT_LEAF || (l->panes[1].bounds.width && l->panes[2].bounds.width)) return;
     right=l->panes[2];
-    l->panes[2].split=TV_LEAF;
+    l->panes[2].split=KT_LEAF;
     l->panes[2].min_width=subtree_width(l,subtree_has(l,right.second,l->focus) ? right.second : right.first);
-    (void)tv_workspace_layout(l,r);
+    (void)kt_workspace_layout(l,r);
     nav=l->panes[1].bounds; divider=l->panes[0].divider; area=l->panes[2].bounds;
     l->panes[2]=right;
-    if (!nav.width || !area.width) { (void)tv_workspace_layout(l,r); return; }
-    l->root=2; (void)tv_workspace_layout(l,area); l->root=0;
+    if (!nav.width || !area.width) { (void)kt_workspace_layout(l,r); return; }
+    l->root=2; (void)kt_workspace_layout(l,area); l->root=0;
     l->panes[0].bounds=r; l->panes[0].divider=divider; l->panes[1].bounds=nav; l->bounds=r;
 }
 
@@ -143,7 +143,7 @@ struct workspace_tree_build {
     size_t owner[MAX_HEADS];
 };
 
-static bool tree_add(struct workspace_tree_build *b, struct tv_tree_node node) {
+static bool tree_add(struct workspace_tree_build *b, struct kt_tree_node node) {
     if (b->count>=sizeof(b->w->nodes)/sizeof(b->w->nodes[0])) {
         copy_text(b->app->notice,sizeof(b->app->notice),"Navigation limit reached; use / to filter heads");
         return false;
@@ -158,7 +158,7 @@ static void tree_member(struct workspace_tree_build *b, size_t head, unsigned de
     const char *role=head_run_role(app,h);
     snprintf(b->w->member_labels[head],sizeof(b->w->member_labels[head]),"%s%s%s",role ? role : "",role ? " " : "",h->branch);
     if (head==app->selected && !app->run_row && !b->w->run_selected) b->chosen=b->count;
-    (void)tree_add(b,(struct tv_tree_node){b->w->member_labels[head],head,depth,false,head_list_tone(app,h)==TV_SUCCESS ? TV_BASE : head_list_tone(app,h)});
+    (void)tree_add(b,(struct kt_tree_node){b->w->member_labels[head],head,depth,false,head_list_tone(app,h)==KT_SUCCESS ? KT_BASE : head_list_tone(app,h)});
 }
 
 static void tree_run(struct workspace_tree_build *b, size_t run, size_t owner, unsigned depth) {
@@ -166,8 +166,8 @@ static void tree_run(struct workspace_tree_build *b, size_t run, size_t owner, u
     size_t i;
     bool open=run_expanded(app,run) || (!b->w->run_selected && app->selected<app->model.head_count && b->owner[app->selected]==run);
     if (b->w->run_selected && run==app->workflow_run && (owner==MAX_HEADS || owner==app->selected)) b->chosen=b->count;
-    if (!tree_add(b,(struct tv_tree_node){b->w->run_labels[run],(run+1)*(MAX_HEADS+1)+owner,depth,open,
-        run_needs_attention(app,run) ? TV_WARNING : TV_MUTED})) return;
+    if (!tree_add(b,(struct kt_tree_node){b->w->run_labels[run],(run+1)*(MAX_HEADS+1)+owner,depth,open,
+        run_needs_attention(app,run) ? KT_WARNING : KT_MUTED})) return;
     for (i=0;i<app->model.head_count;i++)
         if (b->owner[i]==run && head_matches(&app->model.heads[i],app->search)) tree_member(b,i,depth+1);
 }
@@ -177,8 +177,8 @@ static void tree_user_head(struct workspace_tree_build *b, size_t head) {
     const struct head *h=&app->model.heads[head];
     size_t r;
     if (head==app->selected && !b->w->run_selected) { b->chosen=b->count; b->w->selection_initialized=true; }
-    if (!tree_add(b,(struct tv_tree_node){h->branch,head,1,!head_collapsed(b->w,h->branch),
-        app->fleet ? TV_BASE : head_list_tone(app,h)==TV_SUCCESS ? TV_BASE : head_list_tone(app,h)})) return;
+    if (!tree_add(b,(struct kt_tree_node){h->branch,head,1,!head_collapsed(b->w,h->branch),
+        app->fleet ? KT_BASE : head_list_tone(app,h)==KT_SUCCESS ? KT_BASE : head_list_tone(app,h)})) return;
     for (r=0;!app->fleet && app->workflows && r<app->workflows->run_count;r++)
         if (run_owner_head(app,r)==head) tree_run(b,r,head,2);
 }
@@ -190,7 +190,7 @@ static void native_workspace_tree(struct app *app) {
     bool root_selected = w->selection_initialized && w->tree.count && !w->tree.selected;
     if (w->tree.count) w->root_open = w->nodes[0].expanded;
     workspace_project_label(app, w);
-    w->nodes[0] = (struct tv_tree_node){app->fleet ? "Remote heads" : app->links ? w->project_label : "This project", SIZE_MAX, 0, w->root_open, TV_STRONG};
+    w->nodes[0] = (struct kt_tree_node){app->fleet ? "Remote heads" : app->links ? w->project_label : "This project", SIZE_MAX, 0, w->root_open, KT_STRONG};
     prune_collapsed(app, w);
     workspace_run_labels(app, w);
     retarget_selection(app);
@@ -199,7 +199,7 @@ static void native_workspace_tree(struct app *app) {
         if (b.owner[i] == SIZE_MAX && head_matches(&app->model.heads[i], app->search)) tree_user_head(&b, i);
     for (i = 0; !app->fleet && app->workflows && i < app->workflows->run_count; i++)
         if (run_owner_head(app, i) == SIZE_MAX) tree_run(&b, i, MAX_HEADS, 1);
-    (void)tv_tree_init(&w->tree, w->nodes, b.count);
+    (void)kt_tree_init(&w->tree, w->nodes, b.count);
     w->tree.selected = root_selected ? 0 : b.chosen;
 }
 
@@ -232,24 +232,24 @@ void native_workspace_move(struct app *app, int direction) {
         if (direction<0 && t->scroll<t->screen->history_count) t->scroll++;
         if (direction>0 && t->scroll) t->scroll--;
     }
-    else if (native_workspace_agent_index(w,w->layout.focus)>=0) tv_workspace_scroll(&w->layout,direction,13);
+    else if (native_workspace_agent_index(w,w->layout.focus)>=0) kt_workspace_scroll(&w->layout,direction,13);
     else if (w->layout.focus==5) {
         size_t *selected=w->mode==1 && app->plan ? &app->plan->selected : &app->workflow_node;
-        size_t indices[TV_GRAPH_MAX_NODES];
+        size_t indices[KT_GRAPH_MAX_NODES];
         size_t count=w->mode==1 && app->plan ? app->plan->graph.node_count :
             app->workflows ? workflow_nodes(app->workflows,app->workflow_run,indices) : 0;
         if (direction<0 && *selected) (*selected)--;
         if (direction>0 && *selected+1<count) (*selected)++;
     }
-    else if (w->layout.focus == 1) { tv_tree_move(&w->tree, direction); native_workspace_select(app); }
-    else tv_workspace_scroll(&w->layout, direction, w->layout.focus==6 ? NATIVE_PLAN_TEXT :
+    else if (w->layout.focus == 1) { kt_tree_move(&w->tree, direction); native_workspace_select(app); }
+    else kt_workspace_scroll(&w->layout, direction, w->layout.focus==6 ? NATIVE_PLAN_TEXT :
         app->fleet ? app->model.host_count+2 : app->model.recovery_count+8);
 }
 
 /* Pane focus is the workspace's Tab model; Shift-Tab reverses it. */
 void native_workspace_focus_previous(struct app *app) {
     if (!app->workspace) return;
-    tv_workspace_focus_next(&app->workspace->layout,-1);
+    kt_workspace_focus_next(&app->workspace->layout,-1);
     native_workspace_sync_terminal(app);
 }
 
@@ -265,7 +265,7 @@ static void workspace_host_key(struct app *app) {
 /* Expand or collapse the selected head or run and remember the choice. */
 static void workspace_expand_key(struct app *app, struct native_workspace *w, bool expand) {
     size_t index=w->tree.selected, k;
-    tv_tree_expand(&w->tree, expand);
+    kt_tree_expand(&w->tree, expand);
     if (index<w->tree.count && w->nodes[index].value!=SIZE_MAX && w->nodes[index].value>=MAX_HEADS+1)
         run_set_expanded(app,w->nodes[index].value/(MAX_HEADS+1)-1,w->nodes[index].expanded);
     if (index<w->tree.count && w->nodes[index].value<app->model.head_count && w->nodes[index].value<MAX_HEADS) {
@@ -323,15 +323,15 @@ bool native_workspace_key(struct app *app, char key) {
 void native_workspace_mouse(struct app *app, unsigned button, int x, int y, bool release) {
     struct native_workspace *w = app->workspace;
     if (!w) return;
-    if (release) { tv_workspace_release(&w->layout); return; }
-    if (button == 32) { (void)tv_workspace_motion(&w->layout, x, y); return; }
+    if (release) { kt_workspace_release(&w->layout); return; }
+    if (button == 32) { (void)kt_workspace_motion(&w->layout, x, y); return; }
     if (button == 0 || button == 64 || button == 65) {
-        if (!tv_workspace_press(&w->layout, x, y)) return;
+        if (!kt_workspace_press(&w->layout, x, y)) return;
         if (w->layout.drag >= 0) return;
         native_workspace_sync_terminal(app);
         if (button == 64 || button == 65) native_workspace_move(app, button == 64 ? -1 : 1);
         else if (w->layout.focus == 1) {
-            (void)tv_tree_click(&w->tree, w->layout.panes[1].scroll, y - w->layout.panes[1].bounds.y - 1);
+            (void)kt_tree_click(&w->tree, w->layout.panes[1].scroll, y - w->layout.panes[1].bounds.y - 1);
             native_workspace_select(app);
         }
     }
@@ -341,30 +341,30 @@ static const char *agent_name(const struct head *h) {
     return h->profile[0] == '\0' || !strcmp(h->profile, "none") || !strcmp(h->profile, "-") ? "shell (no agent)" : h->profile;
 }
 
-static void workspace_empty(struct app *app, struct tv_canvas *c) {
+static void workspace_empty(struct app *app, struct kt_canvas *c) {
     int y = 0;
-    dashboard_text(c, 0, y++, c->width, TV_STRONG, "%s", app->fleet ? "No remote heads observed" : "No agent work in this project yet");
+    dashboard_text(c, 0, y++, c->width, KT_STRONG, "%s", app->fleet ? "No remote heads observed" : "No agent work in this project yet");
     y++;
     if (app->fleet) {
-        dashboard_text(c, 0, y++, c->width, TV_BASE, "Hosts shows connectivity for each machine.");
-        dashboard_text(c, 0, y++, c->width, TV_BASE, "Recovery lists host problems.");
+        dashboard_text(c, 0, y++, c->width, KT_BASE, "Hosts shows connectivity for each machine.");
+        dashboard_text(c, 0, y++, c->width, KT_BASE, "Recovery lists host problems.");
         return;
     }
-    dashboard_text(c, 0, y++, c->width, TV_BASE, "Press n to start a task. Hydra creates a branch and");
-    dashboard_text(c, 0, y++, c->width, TV_BASE, "worktree, opens a terminal and starts your agent in it.");
+    dashboard_text(c, 0, y++, c->width, KT_BASE, "Press n to start a task. Hydra creates a branch and");
+    dashboard_text(c, 0, y++, c->width, KT_BASE, "worktree, opens a terminal and starts your agent in it.");
     y++;
-    dashboard_text(c, 0, y++, c->width, TV_BASE, "The conversation with that agent appears in this pane;");
-    dashboard_text(c, 0, y++, c->width, TV_BASE, "its plan and progress appear next to it.");
+    dashboard_text(c, 0, y++, c->width, KT_BASE, "The conversation with that agent appears in this pane;");
+    dashboard_text(c, 0, y++, c->width, KT_BASE, "its plan and progress appear next to it.");
     y++;
-    dashboard_text(c, 0, y++, c->width, TV_BASE, "To run agents on another machine, press H for Hosts");
-    dashboard_text(c, 0, y++, c->width, TV_BASE, "and add it there.");
+    dashboard_text(c, 0, y++, c->width, KT_BASE, "To run agents on another machine, press H for Hosts");
+    dashboard_text(c, 0, y++, c->width, KT_BASE, "and add it there.");
     y++;
-    dashboard_text(c, 0, y++, c->width, TV_MUTED, "n new task   H hosts   : more actions   ? help");
+    dashboard_text(c, 0, y++, c->width, KT_MUTED, "n new task   H hosts   : more actions   ? help");
 }
 
-static enum tv_style details_session(struct app *app, const struct head *h, char *text, size_t size) {
-    if (app->fleet) { snprintf(text, size, "Session   %s", h->desired); return TV_BASE; }
-    if (head_headless(h)) { snprintf(text, size, "Terminal  headless (no terminal)"); return TV_MUTED; }
+static enum kt_style details_session(struct app *app, const struct head *h, char *text, size_t size) {
+    if (app->fleet) { snprintf(text, size, "Session   %s", h->desired); return KT_BASE; }
+    if (head_headless(h)) { snprintf(text, size, "Terminal  headless (no terminal)"); return KT_MUTED; }
     snprintf(text, size, "Session   %s", status_label(h));
     return status_tone(h);
 }
@@ -386,18 +386,18 @@ static void details_where(struct app *app, const struct head *h, char *text, siz
              app->fleet ? h->remote_project : app->links ? app->links->root : "this project");
 }
 
-static enum tv_style details_changes(struct app *app, const struct head *h, char *text, size_t size) {
-    if (app->fleet || !h->head_id[0]) { snprintf(text,size,"Changes   unknown"); return TV_MUTED; }
+static enum kt_style details_changes(struct app *app, const struct head *h, char *text, size_t size) {
+    if (app->fleet || !h->head_id[0]) { snprintf(text,size,"Changes   unknown"); return KT_MUTED; }
     snprintf(text,size,"Changes   %u file%s not yet committed%s%u queued",h->diff,h->diff==1 ? "" : "s",dot(app),h->queue);
-    return TV_BASE;
+    return KT_BASE;
 }
 
-static enum tv_style details_reported(struct app *app, const struct head *h, char *text, size_t size) {
+static enum kt_style details_reported(struct app *app, const struct head *h, char *text, size_t size) {
     const char *reported = h->declared[0] ? h->declared : "nothing yet";
-    if (app->fleet || !h->head_id[0]) { snprintf(text,size,"Reported  %s", reported); return TV_BASE; }
+    if (app->fleet || !h->head_id[0]) { snprintf(text,size,"Reported  %s", reported); return KT_BASE; }
     snprintf(text, size, "Reported  %s", reported);
     if (h->gates) text_append(text, size, "%s%u of %u approval requests approved", dot(app), h->approved, h->gates);
-    return h->gates > h->approved ? TV_WARNING : TV_BASE;
+    return h->gates > h->approved ? KT_WARNING : KT_BASE;
 }
 
 static void details_group(struct app *app, const struct head *h, char *text, size_t size) {
@@ -414,50 +414,50 @@ static void details_run(struct app *app, const struct head *h, char *text, size_
 }
 
 /* One line of the selected-work pane; returns its tone. */
-static enum tv_style details_line(struct app *app, const struct head *h, size_t index, char *text, size_t size) {
+static enum kt_style details_line(struct app *app, const struct head *h, size_t index, char *text, size_t size) {
     text[0] = '\0';
     switch (index) {
-    case 0: snprintf(text, size, "%s", h->branch); return TV_STRONG;
+    case 0: snprintf(text, size, "%s", h->branch); return KT_STRONG;
     case 1: return details_session(app, h, text, size);
-    case 2: details_agent(app, h, text, size); return TV_BASE;
-    case 3: details_where(app, h, text, size); return TV_BASE;
+    case 2: details_agent(app, h, text, size); return KT_BASE;
+    case 3: details_where(app, h, text, size); return KT_BASE;
     case 4: return details_changes(app, h, text, size);
     case 5: return details_reported(app, h, text, size);
-    case 6: details_group(app, h, text, size); return TV_BASE;
-    case 7: details_run(app, h, text, size); return TV_BASE;
-    case 8: if (!head_headless(h)) details_stale(h, text, size); return TV_WARNING;
+    case 6: details_group(app, h, text, size); return KT_BASE;
+    case 7: details_run(app, h, text, size); return KT_BASE;
+    case 8: if (!head_headless(h)) details_stale(h, text, size); return KT_WARNING;
     case 10: snprintf(text, size, "%s", head_headless(h) ? "p  step output in Details      Enter  full details" :
-                      head_terminal_gone(app, h) ? "a  restart its terminal        Enter  full details" : "a  talk to the agent here      Enter  full details"); return TV_MUTED;
-    case 11: snprintf(text, size, ":  more actions                d  technical details"); return TV_MUTED;
-    default: return TV_BASE;
+                      head_terminal_gone(app, h) ? "a  restart its terminal        Enter  full details" : "a  talk to the agent here      Enter  full details"); return KT_MUTED;
+    case 11: snprintf(text, size, ":  more actions                d  technical details"); return KT_MUTED;
+    default: return KT_BASE;
     }
 }
 
-static void native_workspace_details(struct app *app, struct tv_canvas *c, size_t scroll) {
+static void native_workspace_details(struct app *app, struct kt_canvas *c, size_t scroll) {
     const struct head *h = selected_head(app);
     int row;
     if (!h) { workspace_empty(app, c); return; }
     for (row = 0; row < c->height; row++) {
         char text[1024];
-        enum tv_style tone = details_line(app, h, scroll + (size_t)row, text, sizeof(text));
-        tv_text(c, (struct tv_rect){0,row,c->width,1}, text, tone);
+        enum kt_style tone = details_line(app, h, scroll + (size_t)row, text, sizeof(text));
+        kt_text(c, (struct kt_rect){0,row,c->width,1}, text, tone);
     }
 }
 
-static enum tv_style activity_host_line(struct app *app, const struct host_observation *host, char *text, size_t size) {
+static enum kt_style activity_host_line(struct app *app, const struct host_observation *host, char *text, size_t size) {
     char count[24]="unknown";
-    if (!host) { text[0]='\0'; return TV_BASE; }
+    if (!host) { text[0]='\0'; return KT_BASE; }
     if (strcmp(host->state,"failed")) snprintf(count,sizeof(count),"%u",host->heads);
     snprintf(text,size,"%s%s%s%s%s heads",host->name,dot(app),host->state,dot(app),count);
-    if (!strcmp(host->state,"failed")) return TV_WARNING;
-    return TV_BASE;
+    if (!strcmp(host->state,"failed")) return KT_WARNING;
+    return KT_BASE;
 }
 
-static enum tv_style activity_fleet_line(struct app *app, size_t index, char *text, size_t size) {
-    if (!index) { snprintf(text,size,"Hosts: %zu observed", app->model.host_count); return TV_STRONG; }
+static enum kt_style activity_fleet_line(struct app *app, size_t index, char *text, size_t size) {
+    if (!index) { snprintf(text,size,"Hosts: %zu observed", app->model.host_count); return KT_STRONG; }
     if (index<=app->model.host_count) return activity_host_line(app, &app->model.hosts[index-1], text, size);
-    if (index==app->model.host_count+1) { snprintf(text,size,"CPU and memory are not measured"); return TV_MUTED; }
-    return TV_BASE;
+    if (index==app->model.host_count+1) { snprintf(text,size,"CPU and memory are not measured"); return KT_MUTED; }
+    return KT_BASE;
 }
 
 static void activity_summary(struct app *app, size_t attention, char *text, size_t size) {
@@ -470,51 +470,51 @@ static void activity_summary(struct app *app, size_t attention, char *text, size
 }
 
 /* Rows 2-4: counters for the selected head with a readable record. */
-static enum tv_style activity_head_line(struct app *app, const struct head *h, size_t index, char *text, size_t size) {
-    if (index == 2) { snprintf(text, size, "Selected %s%s%u events%s%u messages%s%u signals", h->branch, dot(app), h->events, dot(app), h->messages, dot(app), h->signals); return TV_BASE; }
-    if (index == 3) { snprintf(text, size, "Approval requests %u of %u approved%s%u queued entries", h->approved, h->gates, dot(app), h->queue); return h->gates > h->approved ? TV_WARNING : TV_BASE; }
-    if (index == 4) { snprintf(text, size, "Claims %u%sscopes %u  (coordination with other heads)", h->claims, dot(app), h->scopes); return TV_MUTED; }
-    return TV_BASE;
+static enum kt_style activity_head_line(struct app *app, const struct head *h, size_t index, char *text, size_t size) {
+    if (index == 2) { snprintf(text, size, "Selected %s%s%u events%s%u messages%s%u signals", h->branch, dot(app), h->events, dot(app), h->messages, dot(app), h->signals); return KT_BASE; }
+    if (index == 3) { snprintf(text, size, "Approval requests %u of %u approved%s%u queued entries", h->approved, h->gates, dot(app), h->queue); return h->gates > h->approved ? KT_WARNING : KT_BASE; }
+    if (index == 4) { snprintf(text, size, "Claims %u%sscopes %u  (coordination with other heads)", h->claims, dot(app), h->scopes); return KT_MUTED; }
+    return KT_BASE;
 }
 
 /* Rows 6 onward: recovery findings in plain language. */
-static enum tv_style activity_recovery_line(struct app *app, size_t index, char *text, size_t size) {
+static enum kt_style activity_recovery_line(struct app *app, size_t index, char *text, size_t size) {
     size_t findings = app->model.recovery_count;
-    if (!findings) return TV_BASE;
-    if (index == 6) { snprintf(text, size, "NEEDS REPAIR"); return TV_BORDER; }
+    if (!findings) return KT_BASE;
+    if (index == 6) { snprintf(text, size, "NEEDS REPAIR"); return KT_BORDER; }
     if (index >= 7 && index - 7 < findings) {
         char detail[1024];
         recovery_explain(&app->model.recovery[index - 7], text, size, detail, sizeof(detail));
-        return TV_WARNING;
+        return KT_WARNING;
     }
-    if (index == 7 + findings) { snprintf(text, size, "Recovery explains each finding and runs its check"); return TV_MUTED; }
-    return TV_BASE;
+    if (index == 7 + findings) { snprintf(text, size, "Recovery explains each finding and runs its check"); return KT_MUTED; }
+    return KT_BASE;
 }
 
 /* A selected head without a readable record has no counters to show. */
-static enum tv_style activity_missing_record(const struct head *h, size_t index, char *text, size_t size) {
-    if (index==2 && h) { snprintf(text, size, "No readable head record for %s; counters unknown", h->branch); return TV_WARNING; }
-    return TV_BASE;
+static enum kt_style activity_missing_record(const struct head *h, size_t index, char *text, size_t size) {
+    if (index==2 && h) { snprintf(text, size, "No readable head record for %s; counters unknown", h->branch); return KT_WARNING; }
+    return KT_BASE;
 }
 
-static enum tv_style activity_line(struct app *app, const struct head *h, size_t attention, size_t index, char *text, size_t size) {
+static enum kt_style activity_line(struct app *app, const struct head *h, size_t attention, size_t index, char *text, size_t size) {
     text[0] = '\0';
     if (app->fleet) return activity_fleet_line(app, index, text, size);
-    if (index == 0) { activity_summary(app, attention, text, size); return TV_STRONG; }
-    if (!app->model.head_count && index == 2) { snprintf(text, size, "Nothing has happened yet."); return TV_MUTED; }
+    if (index == 0) { activity_summary(app, attention, text, size); return KT_STRONG; }
+    if (!app->model.head_count && index == 2) { snprintf(text, size, "Nothing has happened yet."); return KT_MUTED; }
     if (index < 6 && (!h || !h->head_id[0])) return activity_missing_record(h, index, text, size);
     if (index < 6) return activity_head_line(app, h, index, text, size);
     return activity_recovery_line(app, index, text, size);
 }
 
-static void native_workspace_activity(struct app *app, struct tv_canvas *c, size_t scroll) {
+static void native_workspace_activity(struct app *app, struct kt_canvas *c, size_t scroll) {
     const struct head *h = selected_head(app);
     size_t attention = attention_count(app);
     int row;
     for (row = 0; row < c->height; row++) {
         char text[1024];
-        enum tv_style tone = activity_line(app, h, attention, scroll + (size_t)row, text, sizeof(text));
-        tv_text(c, (struct tv_rect){0,row,c->width,1}, text, tone);
+        enum kt_style tone = activity_line(app, h, attention, scroll + (size_t)row, text, sizeof(text));
+        kt_text(c, (struct kt_rect){0,row,c->width,1}, text, tone);
     }
 }
 
@@ -627,7 +627,7 @@ static const char *workspace_hints(struct app *app, struct native_workspace *w, 
 
 bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
     struct native_workspace *w;
-    struct tv_canvas *c;
+    struct kt_canvas *c;
     int width, height, i, x, y;
     bool compact;
     char status[512];
@@ -640,48 +640,48 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
     {
         int root=w->layout.root;
         if (w->zoom || compact) w->layout.root=w->layout.focus;
-        workspace_arrange(&w->layout, (struct tv_rect){0,compact ? 1 : 2,width,height-(compact ? 2 : 4)});
+        workspace_arrange(&w->layout, (struct kt_rect){0,compact ? 1 : 2,width,height-(compact ? 2 : 4)});
         w->layout.root=root;
     }
     native_workspace_tree(app);
     if (compact) {
         char title[96];
         snprintf(title, sizeof(title), "HYDRA / %s", w->mode==0 ? "PLAN TOGETHER" : w->mode==1 ? "PLAN OVERVIEW" : "MONITOR");
-        tv_text(c, (struct tv_rect){1,0,width-2,1}, title, TV_TITLE);
+        kt_text(c, (struct kt_rect){1,0,width-2,1}, title, KT_TITLE);
     } else chrome_header(app, c, w->mode==0 ? "PLAN TOGETHER" : w->mode==1 ? "PLAN OVERVIEW" : "MONITOR");
     for (i = 0; i < w->layout.count; i++) {
-        struct tv_pane *p = &w->layout.panes[i];
-        struct tv_canvas view, content;
+        struct kt_pane *p = &w->layout.panes[i];
+        struct kt_canvas view, content;
         struct native_terminal *t=native_workspace_terminal(app,i);
         bool agent=native_workspace_agent_index(w,i)>=0, attached=t && t->screen, focused=i==w->layout.focus;
         char agent_title[TEXT+64], attention[TEXT+64];
-        if (p->split != TV_LEAF) {
+        if (p->split != KT_LEAF) {
             for (y = 0; y < p->divider.height; y++) for (x = 0; x < p->divider.width; x++)
-                tv_put(c, p->divider.x+x, p->divider.y+y, p->split == TV_COLUMNS ? (app->ascii ? '|' : 0x2502) : (app->ascii ? '-' : 0x2500), TV_BORDER);
+                kt_put(c, p->divider.x+x, p->divider.y+y, p->split == KT_COLUMNS ? (app->ascii ? '|' : 0x2502) : (app->ascii ? '-' : 0x2500), KT_BORDER);
             continue;
         }
-        if (!tv_canvas_view(&view, c, p->bounds)) continue;
+        if (!kt_canvas_view(&view, c, p->bounds)) continue;
         if (attached) {
             native_terminal_attention(app,t,attention,sizeof(attention));
             snprintf(agent_title,sizeof(agent_title),"%.200s%s%.100s",t->label,sep,attention);
         }
         if (compact) {
-            if (attached) dashboard_text(&view,0,0,view.width,TV_SELECTED,"%s / %.6s / %s",
+            if (attached) dashboard_text(&view,0,0,view.width,KT_SELECTED,"%s / %.6s / %s",
                 t->client.finished || t->client.eof ? "DISCONNECTED" : "INPUT TO AGENT",t->label,attention);
-            else dashboard_text(&view,0,0,view.width,TV_SELECTED,"FOCUS / %s",i==1 ? "NAVIGATION" : agent ? "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY");
+            else dashboard_text(&view,0,0,view.width,KT_SELECTED,"FOCUS / %s",i==1 ? "NAVIGATION" : agent ? "SELECTED WORK" : i==5 ? "DEPENDENCIES" : i==6 ? "PLAN / EVIDENCE" : "ACTIVITY");
         } else {
             char titled[TEXT+96];
             const char *base_title = pane_title(app,w,i,agent,attached,agent_title);
             if (!attached && p->scroll) snprintf(titled,sizeof(titled),"%s%sscroll %zu",base_title,sep,p->scroll);
             else snprintf(titled,sizeof(titled),"%s",base_title);
-            tv_panel_styled(&view, (struct tv_rect){0,0,view.width,view.height}, titled,
-                            focused ? TV_FOCUS : TV_BORDER, focused ? TV_SELECTED : TV_STRONG);
-            if (attached) dashboard_text(&view,1,1,view.width-2,focused ? TV_SELECTED : TV_MUTED,
+            kt_panel_styled(&view, (struct kt_rect){0,0,view.width,view.height}, titled,
+                            focused ? KT_FOCUS : KT_BORDER, focused ? KT_SELECTED : KT_STRONG);
+            if (attached) dashboard_text(&view,1,1,view.width-2,focused ? KT_SELECTED : KT_MUTED,
                 "%s", attached_label(t, focused, view.width-2));
         }
-        if (!tv_canvas_view(&content, &view, compact ? (struct tv_rect){0,1,view.width,view.height-1} :
-            (struct tv_rect){1,attached ? 2 : 1,view.width-2,view.height-(attached ? 3 : 2)})) continue;
-        if (i == 1) tv_tree_draw(&w->tree, &content, &w->layout.panes[1].scroll, w->layout.focus == 1);
+        if (!kt_canvas_view(&content, &view, compact ? (struct kt_rect){0,1,view.width,view.height-1} :
+            (struct kt_rect){1,attached ? 2 : 1,view.width-2,view.height-(attached ? 3 : 2)})) continue;
+        if (i == 1) kt_tree_draw(&w->tree, &content, &w->layout.panes[1].scroll, w->layout.focus == 1);
         else if (attached) native_terminal_draw(app,t,&content,w->layout.focus==i);
         else if (agent) native_workspace_details(app, &content, p->scroll);
         else if (i==5) native_workspace_graph(app,&content,w->mode==1 || (w->mode==0 && app->plan));
@@ -692,8 +692,8 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
     {
         char fresh[96];
         const char *notice=app->snapshot_stale ? app->snapshot_error : app->notice;
-        enum tv_style tone = snapshot_freshness(app, app->snapshot_at, app->snapshot_stale, headless, fresh, sizeof(fresh));
-        if (!app->snapshot_stale && app->notice[0]) tone = TV_BASE;
+        enum kt_style tone = snapshot_freshness(app, app->snapshot_at, app->snapshot_stale, headless, fresh, sizeof(fresh));
+        if (!app->snapshot_stale && app->notice[0]) tone = KT_BASE;
         if (app->snapshot_stale) snprintf(status, sizeof(status), "%s%s%s", fresh, notice[0] ? sep : "", notice);
         else {
             const char *tail = app->notice[0] ? app->notice : w->zoom ? "z restores the splits" : "";
@@ -701,8 +701,8 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
         }
         if (compact) {
             if (app->notice[0] && !(native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen))
-                tv_text(c,(struct tv_rect){0,height-1,width,1},app->notice,TV_WARNING);
-            else tv_text(c,(struct tv_rect){0,height-1,width,1},workspace_hints(app,w,width),TV_MUTED);
+                kt_text(c,(struct kt_rect){0,height-1,width,1},app->notice,KT_WARNING);
+            else kt_text(c,(struct kt_rect){0,height-1,width,1},workspace_hints(app,w,width),KT_MUTED);
         } else chrome_footer(app, c, status, tone, workspace_hints(app, w, width));
     }
     frame_end(app, frame, headless);

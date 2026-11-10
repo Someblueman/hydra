@@ -2,7 +2,7 @@
 #define HYDRA_TUI_APP_H
 #include "model.h"
 #include "../hydra_tui_workflow.h"
-#include "../termviz/termviz.h"
+#include "../kettle/kettle.h"
 #include <termios.h>
 #include <sys/types.h>
 #include <time.h>
@@ -82,9 +82,9 @@ struct app {
     struct termios saved;
     /* One frame canvas and presenter serve every view, so repaints only touch
      * changed cells. The frame owner allocates cells before rendering. */
-    struct tv_canvas frame;
-    struct tv_cell *frame_cells, *frame_previous;
-    struct tv_presenter presenter;
+    struct kt_canvas frame;
+    struct kt_cell *frame_cells, *frame_previous;
+    struct kt_presenter presenter;
     int frame_theme, tone, previous_view;
     int content_x, content_width;
     int tab_left[12], tab_right[12], tab_view[12];

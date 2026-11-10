@@ -435,20 +435,20 @@ static void wrapped_line(struct app *app, const char *text, size_t length, size_
     size_t width = app->content_width > 16 ? (size_t)app->content_width : 16U, indent = 0U, hang, take;
     if (width > 4000U) width = 4000U;
     if (length <= width || !plain_text(text, length)) {
-        *row += transcript_line_view(app, text, length, (enum tv_style)app->tone, *row, scroll);
+        *row += transcript_line_view(app, text, length, (enum kt_style)app->tone, *row, scroll);
         return;
     }
     while (indent < length && text[indent] == ' ') indent++;
     hang = indent + 4U < width / 2U ? indent + 4U : width / 2U;
     take = word_break(text, length, width);
-    *row += transcript_line_view(app, text, take, (enum tv_style)app->tone, *row, scroll);
+    *row += transcript_line_view(app, text, take, (enum kt_style)app->tone, *row, scroll);
     for (text += take, length -= take; length; text += take, length -= take) {
         while (length && *text == ' ') { text++; length--; }
         if (!length) break;
         take = word_break(text, length, width - hang);
         memset(buffer, ' ', hang);
         memcpy(buffer + hang, text, take);
-        *row += transcript_line_view(app, buffer, hang + take, (enum tv_style)app->tone, *row, scroll);
+        *row += transcript_line_view(app, buffer, hang + take, (enum kt_style)app->tone, *row, scroll);
     }
 }
 

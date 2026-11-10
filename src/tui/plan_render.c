@@ -4,7 +4,7 @@
 #endif
 #include "internal.h"
 /* Wrapped documents share painting and clamp scroll when their length changes. */
-static void native_workspace_text(struct tv_canvas *c, const char *text, size_t length, size_t *scroll) {
+static void native_workspace_text(struct kt_canvas *c, const char *text, size_t length, size_t *scroll) {
     int pass;
     if (!text || c->height<2 || c->width<1) return;
     for (pass=0;pass<2;pass++) {
@@ -12,17 +12,17 @@ static void native_workspace_text(struct tv_canvas *c, const char *text, size_t 
         int x=0,y=1;
         while (offset<length && (!pass || y<c->height)) {
             uint32_t cp;
-            size_t used=tv_utf8_decode(text+offset,length-offset,&cp);
+            size_t used=kt_utf8_decode(text+offset,length-offset,&cp);
             int width;
             if (!used) break;
             offset+=used;
             if (cp=='\n') { x=0; if (line++>=*scroll && pass) y++; continue; }
             if (cp<32 || cp==127) cp=' ';
-            width=tv_codepoint_width(cp);
+            width=kt_codepoint_width(cp);
             if (width<0 || (!c->unicode && cp>126)) { cp='?'; width=1; }
             if (x+width>c->width) { x=0; if (line++>=*scroll && pass) y++; }
             if (pass && y>=c->height) break;
-            if (pass && line>=*scroll) tv_put(c,x,y,cp,TV_BASE);
+            if (pass && line>=*scroll) kt_put(c,x,y,cp,KT_BASE);
             x+=width;
         }
         if (!pass) {
@@ -32,22 +32,22 @@ static void native_workspace_text(struct tv_canvas *c, const char *text, size_t 
     }
 }
 
-void native_workspace_evidence_text(struct app *app, struct tv_canvas *c, size_t *scroll) {
+void native_workspace_evidence_text(struct app *app, struct kt_canvas *c, size_t *scroll) {
     struct native_evidence *e=app->evidence;
     const char *state="unavailable";
     size_t i;
-    if (!e || !e->run[0]) { tv_text(c,(struct tv_rect){0,0,c->width,1},"No selected recorded run",TV_WARNING); return; }
+    if (!e || !e->run[0]) { kt_text(c,(struct kt_rect){0,0,c->width,1},"No selected recorded run",KT_WARNING); return; }
     if (app->workflows) for (i=0;i<app->workflows->run_count;i++)
         if (!strcmp(app->workflows->runs[i].id,e->run)) { state=app->workflows->runs[i].state; break; }
-    dashboard_text(c,0,0,c->width,e->stale || e->verdict==3 ? TV_WARNING : TV_STRONG,"%s / %s%s / %s",
+    dashboard_text(c,0,0,c->width,e->stale || e->verdict==3 ? KT_WARNING : KT_STRONG,"%s / %s%s / %s",
         e->stale ? "STALE EVIDENCE" : !e->text ? "LOADING EVIDENCE" : e->verdict==2 ? "VERIFIED ARTIFACTS" :
         e->verdict==3 ? "ARTIFACTS REFUSED" : c->width<60 ? "OBSERVED" : "OBSERVED EVIDENCE",
         c->width<60 ? "" : "run ",state,e->step);
     if (e->text) native_workspace_text(c,e->text,e->length,scroll);
-    else tv_text(c,(struct tv_rect){0,1,c->width,1},e->stale ? "Complete evidence unavailable" : "Reading run, output and artifact records",TV_WARNING);
+    else kt_text(c,(struct kt_rect){0,1,c->width,1},e->stale ? "Complete evidence unavailable" : "Reading run, output and artifact records",KT_WARNING);
 }
 
-void native_workspace_plan_text(struct app *app, struct tv_canvas *c, size_t *scroll) {
+void native_workspace_plan_text(struct app *app, struct kt_canvas *c, size_t *scroll) {
     struct native_plan *p=app->plan;
     const char *text, *state, *owner;
     size_t length;
@@ -56,7 +56,7 @@ void native_workspace_plan_text(struct app *app, struct tv_canvas *c, size_t *sc
     static const char empty[]="P reviews the agent's proposal; I imports draft and policy files.\n"
         "Then V validates it, F requests changes from the agent and E executes the validated revision.";
     if (!p) {
-        tv_text(c,(struct tv_rect){0,0,c->width,1},"No proposal loaded",TV_WARNING);
+        kt_text(c,(struct kt_rect){0,0,c->width,1},"No proposal loaded",KT_WARNING);
         native_workspace_text(c,empty,sizeof(empty)-1,scroll);
         return;
     }
@@ -64,35 +64,35 @@ void native_workspace_plan_text(struct app *app, struct tv_canvas *c, size_t *sc
         (p->launched_run[0] ? "RUN RECORDED / C monitor" : "LAUNCH REQUESTED / awaiting run receipt") : states[p->state];
     owner=p->proposal_head[0] ? p->proposal_head : "Imported plan";
     /* A narrow review keeps the revision and state; the head names the agent pane. */
-    if ((int)(strlen(owner)+strlen(state)+18)>c->width) dashboard_text(c,0,0,c->width,TV_STRONG,"Revision %u / %s",p->revision,state);
-    else dashboard_text(c,0,0,c->width,TV_STRONG,"%s / Revision %u / %s",owner,p->revision,state);
+    if ((int)(strlen(owner)+strlen(state)+18)>c->width) dashboard_text(c,0,0,c->width,KT_STRONG,"Revision %u / %s",p->revision,state);
+    else dashboard_text(c,0,0,c->width,KT_STRONG,"%s / Revision %u / %s",owner,p->revision,state);
     text=p->state==PLAN_DRAFT && p->source_bytes ? p->source_bytes : p->text;
     length=p->state==PLAN_DRAFT && p->source_bytes ? p->source_length : p->text_length;
     native_workspace_text(c,text,length,scroll);
 }
-void native_workspace_graph(struct app *app, struct tv_canvas *c, bool planning) {
+void native_workspace_graph(struct app *app, struct kt_canvas *c, bool planning) {
     struct workflow_model *m=planning ? app->plan ? &app->plan->graph : NULL : app->workflows;
-    size_t run=planning ? 0 : app->workflow_run, indices[TV_GRAPH_MAX_NODES], n,count,i;
+    size_t run=planning ? 0 : app->workflow_run, indices[KT_GRAPH_MAX_NODES], n,count,i;
     size_t *selected=planning && app->plan ? &app->plan->selected : &app->workflow_node;
-    struct tv_edge edges[TV_GRAPH_MAX_EDGES];
-    struct tv_node nodes[TV_GRAPH_MAX_NODES];
-    struct tv_graph_layout layout;
+    struct kt_edge edges[KT_GRAPH_MAX_EDGES];
+    struct kt_node nodes[KT_GRAPH_MAX_NODES];
+    struct kt_graph_layout layout;
     int sx,sy;
-    if (!m || !m->run_count) { tv_text(c,(struct tv_rect){0,0,c->width,1},planning ? "Validate a draft to inspect dependencies" : "No recorded run",TV_WARNING); return; }
+    if (!m || !m->run_count) { kt_text(c,(struct kt_rect){0,0,c->width,1},planning ? "Validate a draft to inspect dependencies" : "No recorded run",KT_WARNING); return; }
     if (run>=m->run_count) run=0;
     n=workflow_nodes(m,run,indices);
-    if (!n || !workflow_edges(m,indices,n,edges,&count) || !tv_graph_layout(edges,count,n,&layout)) return;
+    if (!n || !workflow_edges(m,indices,n,edges,&count) || !kt_graph_layout(edges,count,n,&layout)) return;
     if (*selected>=n) *selected=0;
-    dashboard_text(c,0,0,c->width,TV_STRONG,"%s / %s",m->runs[run].name,m->runs[run].state);
+    dashboard_text(c,0,0,c->width,KT_STRONG,"%s / %s",m->runs[run].name,m->runs[run].state);
     if (c->width<26 || c->height<7) {
         const struct workflow_node *node=&m->nodes[indices[*selected]];
-        dashboard_text(c,0,1,c->width,TV_BASE,"%zu/%zu %s [%s]",*selected+1,n,node->id,node->state);
-        dashboard_text(c,0,2,c->width,TV_BASE,"Needs: %s",node->needs); return;
+        dashboard_text(c,0,1,c->width,KT_BASE,"%zu/%zu %s [%s]",*selected+1,n,node->id,node->state);
+        dashboard_text(c,0,2,c->width,KT_BASE,"Needs: %s",node->needs); return;
     }
     for (i=0;i<n;i++) {
         struct workflow_node *node=&m->nodes[indices[i]];
-        nodes[i]=(struct tv_node){node->id,node->state,!strcmp(node->state,"failed") ? TV_WARNING : TV_BASE};
+        nodes[i]=(struct kt_node){node->id,node->state,!strcmp(node->state,"failed") ? KT_WARNING : KT_BASE};
     }
     sx=layout.x[*selected]-(c->width-22)/2; sy=layout.y[*selected]-(c->height-5)/2;
-    tv_graph(c,(struct tv_rect){0,1,c->width,c->height-1},nodes,n,edges,count,&layout,sx<0 ? 0 : sx,sy<0 ? 0 : sy,*selected);
+    kt_graph(c,(struct kt_rect){0,1,c->width,c->height-1},nodes,n,edges,count,&layout,sx<0 ? 0 : sx,sy<0 ? 0 : sy,*selected);
 }

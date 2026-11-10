@@ -56,7 +56,7 @@ bool frame_alloc(struct app *app) {
     app->frame_cells = calloc(WORKSPACE_CAPACITY, sizeof(*app->frame_cells));
     app->frame_previous = calloc(WORKSPACE_CAPACITY, sizeof(*app->frame_previous));
     if (!app->frame_cells || !app->frame_previous) { frame_free(app); return false; }
-    (void)tv_present_init(&app->presenter, app->frame_previous, WORKSPACE_CAPACITY);
+    (void)kt_present_init(&app->presenter, app->frame_previous, WORKSPACE_CAPACITY);
     app->frame_theme = app->theme;
     return true;
 }
@@ -66,15 +66,15 @@ void frame_free(struct app *app) {
     app->frame_cells = NULL; app->frame_previous = NULL;
 }
 
-void frame_invalidate(struct app *app) { tv_present_invalidate(&app->presenter); }
+void frame_invalidate(struct app *app) { kt_present_invalidate(&app->presenter); }
 
 bool frame_begin(struct app *app, bool headless) {
     int width = app->cols > 512 ? 511 : app->cols - 1;
     int height = app->rows > 256 ? 256 : app->rows;
     if (width < 1 || height < 1 || !frame_alloc(app)) return false;
     app->paint = !headless && !app->no_color;
-    if (!tv_init(&app->frame, app->frame_cells, WORKSPACE_CAPACITY, width, height, !app->ascii)) return false;
-    tv_clear(&app->frame, TV_BASE);
+    if (!kt_init(&app->frame, app->frame_cells, WORKSPACE_CAPACITY, width, height, !app->ascii)) return false;
+    kt_clear(&app->frame, KT_BASE);
     app->line = 0; app->tone = TONE_BASE; app->tab_count = 0;
     app->content_x = 2; app->content_width = width - 4;
     if (app->content_width < 1) app->content_width = 1;
@@ -85,31 +85,31 @@ void frame_end(struct app *app, unsigned frame, bool headless) {
     int y;
     if (headless) {
         printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
-        for (y = 0; y < app->frame.height; y++) { (void)tv_write_row(&app->frame, y, stdout, NULL, NULL); putchar('\n'); }
+        for (y = 0; y < app->frame.height; y++) { (void)kt_write_row(&app->frame, y, stdout, NULL, NULL); putchar('\n'); }
         fflush(stdout);
         return;
     }
     if (app->frame_theme != app->theme) { frame_invalidate(app); app->frame_theme = app->theme; }
     if (!app->presenter.valid) { emit_style(app, TONE_BASE); fputs("\033[H", stdout); }
-    if (!tv_present(&app->presenter, &app->frame, stdout, dashboard_style, app)) {
+    if (!kt_present(&app->presenter, &app->frame, stdout, dashboard_style, app)) {
         copy_text(app->notice, sizeof(app->notice), "Screen output failed"); app->running = false;
     }
 }
 
 /* A borrowed view of the remaining content rows, for canvas-based views. */
-bool frame_content(struct app *app, struct tv_canvas *out) {
-    struct tv_rect r = {app->content_x, app->line, app->content_width, app->limit - app->line};
+bool frame_content(struct app *app, struct kt_canvas *out) {
+    struct kt_rect r = {app->content_x, app->line, app->content_width, app->limit - app->line};
     if (r.height < 1) return false;
-    return tv_canvas_view(out, &app->frame, r);
+    return kt_canvas_view(out, &app->frame, r);
 }
 
-static void text_at(struct app *app, int x, int width, enum tv_style tone, const char *text) {
+static void text_at(struct app *app, int x, int width, enum kt_style tone, const char *text) {
     if (width < 1) return;
-    tv_text(&app->frame, (struct tv_rect){x, app->line, width, 1}, text, tone);
+    kt_text(&app->frame, (struct kt_rect){x, app->line, width, 1}, text, tone);
 }
 
 /* Fixed-width column inside the content area. Text is clipped to width. */
-void column(struct app *app, int x, int width, enum tv_style tone, const char *text) {
+void column(struct app *app, int x, int width, enum kt_style tone, const char *text) {
     text_at(app, app->content_x + x, width, tone, text);
 }
 
@@ -120,7 +120,7 @@ void linef(struct app *app, const char *format, ...) {
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
-    text_at(app, app->content_x, app->content_width, (enum tv_style)app->tone, buffer);
+    text_at(app, app->content_x, app->content_width, (enum kt_style)app->tone, buffer);
     app->line++;
 }
 
@@ -143,12 +143,12 @@ const char *status_label(const struct head *head) {
     return "stopped";
 }
 
-enum tv_style status_tone(const struct head *head) {
+enum kt_style status_tone(const struct head *head) {
     const char *status = display_status(head);
-    if (!strcmp(status, "LIVE")) return TV_SUCCESS;
-    if (!strcmp(status, "STOPPED")) return TV_MUTED;
-    if (!strcmp(status, "UNOBSERVED")) return TV_BASE;
-    return TV_WARNING;
+    if (!strcmp(status, "LIVE")) return KT_SUCCESS;
+    if (!strcmp(status, "STOPPED")) return KT_MUTED;
+    if (!strcmp(status, "UNOBSERVED")) return KT_BASE;
+    return KT_WARNING;
 }
 
 
@@ -191,7 +191,7 @@ void recovery_explain(const struct recovery *item, char *title, size_t title_siz
 }
 
 /* Wrap plain text into the content area. */
-void paragraph(struct app *app, const char *text, enum tv_style tone) {
+void paragraph(struct app *app, const char *text, enum kt_style tone) {
     size_t length = strlen(text), offset = 0;
     size_t width = (size_t)app->content_width;
     int saved = app->tone;
@@ -215,7 +215,7 @@ static struct transcript *view_transcript(struct app *app) {
 }
 
 void transcript_view(struct app *app, const char *text, size_t length, struct transcript_layout *layout) {
-    struct tv_rect area = {app->content_x, app->line, app->content_width, app->limit - app->line};
+    struct kt_rect area = {app->content_x, app->line, app->content_width, app->limit - app->line};
     struct transcript *t = view_transcript(app);
     layout->color = !app->no_color;
     if (!t) { layout->rows = layout->drawn = 0; linef(app, "Output unavailable: out of memory"); return; }
@@ -235,7 +235,7 @@ static size_t plain_rows(const char *text, size_t length, int width) {
     return length <= room ? 1 : 1 + (length - room + room - 2) / (room - 1);
 }
 
-size_t transcript_line_view(struct app *app, const char *text, size_t length, enum tv_style tone, size_t row, size_t scroll) {
+size_t transcript_line_view(struct app *app, const char *text, size_t length, enum kt_style tone, size_t row, size_t scroll) {
     struct transcript *t = view_transcript(app);
     size_t rows = plain_rows(text, length, app->content_width);
     if (rows && (row + rows <= scroll || app->line >= app->limit)) return rows;
@@ -243,7 +243,7 @@ size_t transcript_line_view(struct app *app, const char *text, size_t length, en
     transcript_parse(t, text, length);
     rows = transcript_rows(t, app->content_width);
     if (row + rows > scroll && app->line < app->limit)
-        app->line += transcript_draw(t, &app->frame, (struct tv_rect){app->content_x, app->line, app->content_width,
+        app->line += transcript_draw(t, &app->frame, (struct kt_rect){app->content_x, app->line, app->content_width,
             app->limit - app->line}, scroll > row ? scroll - row : 0, tone, !app->no_color);
     return rows;
 }
@@ -253,19 +253,19 @@ void section(struct app *app, const char *label) {
     style(app, TONE_BORDER); linef(app, "%s", label); style(app, TONE_BASE);
 }
 
-void pair(struct app *app, const char *left_label, const char *left, enum tv_style left_tone,
-                 const char *right_label, const char *right, enum tv_style right_tone) {
+void pair(struct app *app, const char *left_label, const char *left, enum kt_style left_tone,
+                 const char *right_label, const char *right, enum kt_style right_tone) {
     if (app->line >= app->limit) return;
     if (app->content_width < 56) {
-        column(app, 0, 11, TV_MUTED, left_label); column(app, 12, app->content_width - 12, left_tone, left); app->line++;
+        column(app, 0, 11, KT_MUTED, left_label); column(app, 12, app->content_width - 12, left_tone, left); app->line++;
         if (app->line >= app->limit) return;
-        column(app, 0, 11, TV_MUTED, right_label); column(app, 12, app->content_width - 12, right_tone, right); app->line++;
+        column(app, 0, 11, KT_MUTED, right_label); column(app, 12, app->content_width - 12, right_tone, right); app->line++;
         return;
     }
     {
         int half = app->content_width / 2;
-        column(app, 0, 11, TV_MUTED, left_label); column(app, 12, half - 13, left_tone, left);
-        column(app, half, 11, TV_MUTED, right_label); column(app, half + 12, app->content_width - half - 12, right_tone, right);
+        column(app, 0, 11, KT_MUTED, left_label); column(app, 12, half - 13, left_tone, left);
+        column(app, half, 11, KT_MUTED, right_label); column(app, half + 12, app->content_width - half - 12, right_tone, right);
         app->line++;
     }
 }
@@ -314,7 +314,7 @@ static void record_tab(struct app *app, int x, int length, int view) {
     app->tab_view[app->tab_count++] = view;
 }
 
-static void chrome_tabs(struct app *app, struct tv_canvas *c, int row) {
+static void chrome_tabs(struct app *app, struct kt_canvas *c, int row) {
     int views[12], gap = 2, x = 1, total = 0, width = c->width - 1;
     const char *const *labels = app->cols < TAB_SHORT_BELOW ? tab_short : tab_labels;
     size_t count = tab_order(app, views), i, first, active = 0;
@@ -327,9 +327,9 @@ static void chrome_tabs(struct app *app, struct tv_canvas *c, int row) {
         char label[32];
         bool current = views[i] == app->view;
         int length = tab_width(labels, views[i], current);
-        if (x + length > width) { tv_text(c, (struct tv_rect){x, row, width - x, 1}, "..", TV_MUTED); break; }
+        if (x + length > width) { kt_text(c, (struct kt_rect){x, row, width - x, 1}, "..", KT_MUTED); break; }
         snprintf(label, sizeof(label), current ? "[%s]" : "%s", labels[views[i]]);
-        tv_text(c, (struct tv_rect){x, row, length, 1}, label, current ? TV_SELECTED : TV_MUTED);
+        kt_text(c, (struct kt_rect){x, row, length, 1}, label, current ? KT_SELECTED : KT_MUTED);
         record_tab(app, x, length, views[i]);
         x += length + gap;
     }
@@ -364,25 +364,25 @@ static int text_columns(const char *text) {
     return length;
 }
 
-void chrome_header(struct app *app, struct tv_canvas *c, const char *title) {
+void chrome_header(struct app *app, struct kt_canvas *c, const char *title) {
     char left[256], right[256] = "", project[128];
     int width = c->width, length;
     snprintf(left, sizeof(left), "HYDRA / %s", title);
-    tv_text(c, (struct tv_rect){1, 0, width - 2, 1}, left, TV_TITLE);
+    kt_text(c, (struct kt_rect){1, 0, width - 2, 1}, left, KT_TITLE);
     if (width >= 60) {
         header_project(app, project, sizeof(project));
         header_summary(app, project, right, sizeof(right));
         length = text_columns(right);
         if (length + (int)strlen(left) + 4 < width)
-            tv_text(c, (struct tv_rect){width - length - 1, 0, length, 1}, right, TV_MUTED);
+            kt_text(c, (struct kt_rect){width - length - 1, 0, length, 1}, right, KT_MUTED);
     }
     chrome_tabs(app, c, 1);
 }
 
-void chrome_footer(struct app *app, struct tv_canvas *c, const char *status, enum tv_style tone, const char *hints) {
+void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, enum kt_style tone, const char *hints) {
     int height = c->height;
-    if (height >= 3) tv_text(c, (struct tv_rect){1, height - 2, c->width - 2, 1}, status, tone);
-    tv_text(c, (struct tv_rect){1, height - 1, c->width - 2, 1}, hints, TV_MUTED);
+    if (height >= 3) kt_text(c, (struct kt_rect){1, height - 2, c->width - 2, 1}, status, tone);
+    kt_text(c, (struct kt_rect){1, height - 1, c->width - 2, 1}, hints, KT_MUTED);
     (void)app;
 }
 
@@ -400,16 +400,16 @@ static void head_row_layout(int width, struct head_columns *k) {
 static void outline_heading(const struct app *app, struct outline_text *t) {
     copy_text(t->name, sizeof(t->name), "HEAD");
     t->status = app->fleet ? "DESIRED" : "STATUS"; t->agent = app->fleet ? "HOST" : "AGENT";
-    t->reported = "REPORTED"; t->tone = TV_MUTED;
+    t->reported = "REPORTED"; t->tone = KT_MUTED;
 }
 
 static bool outline_marked(const struct app *app, const struct outline_row *row) {
     return row && row->kind == OUTLINE_HEAD && marked_index(app, app->model.heads[row->head].branch) < app->marked_count;
 }
 
-static enum tv_style outline_tone(const struct outline_row *row, bool selected) {
-    if (!row || row->kind == OUTLINE_RETIRED) return TV_MUTED;
-    return selected ? TV_SELECTED : TV_BASE;
+static enum kt_style outline_tone(const struct outline_row *row, bool selected) {
+    if (!row || row->kind == OUTLINE_RETIRED) return KT_MUTED;
+    return selected ? KT_SELECTED : KT_BASE;
 }
 
 /* Work list: aligned columns, status tone only on the status cell. A NULL
@@ -419,15 +419,15 @@ static void outline_line(struct app *app, const struct outline_row *row, bool se
     struct head_columns k;
     struct outline_text t;
     char cell[TEXT + 96];
-    enum tv_style row_tone = outline_tone(row, selected);
+    enum kt_style row_tone = outline_tone(row, selected);
     if (app->line >= app->limit) return;
     head_row_layout(width, &k);
     if (row) outline_row_text(app, row, &t);
     else outline_heading(app, &t);
     snprintf(cell, sizeof(cell), "%c%c %s", selected ? '>' : ' ', outline_marked(app, row) ? '*' : ' ', t.name);
-    if (selected) column(app, 0, width, TV_SELECTED, "");
+    if (selected) column(app, 0, width, KT_SELECTED, "");
     column(app, 0, k.name_width + 3, row_tone, cell);
-    column(app, k.status_x, 14, selected ? TV_SELECTED : t.tone, t.status);
+    column(app, k.status_x, 14, selected ? KT_SELECTED : t.tone, t.status);
     if (k.medium || k.wide) column(app, k.agent_x, k.wide ? 15 : 14, row_tone, t.agent);
     if (k.wide && !app->fleet) column(app, k.reported_x, 12, row_tone, t.reported);
     app->line++;
@@ -439,13 +439,13 @@ void render_empty_work(struct app *app) {
     linef(app, app->search[0] ? "No heads match the search." : app->fleet ? "No remote heads." : "No agent work in this project yet.");
     style(app, TONE_BASE);
     linef(app, "");
-    if (app->search[0]) { paragraph(app, "Esc clears the search.", TV_BASE); return; }
-    if (app->fleet) { paragraph(app, "Hosts shows connectivity for each machine; Recovery lists host problems. In Hosts, A adds a machine.", TV_BASE); return; }
-    paragraph(app, "A head is one piece of work: its own branch and worktree, a terminal, and an agent working inside it. You can follow several heads here at once.", TV_BASE);
+    if (app->search[0]) { paragraph(app, "Esc clears the search.", KT_BASE); return; }
+    if (app->fleet) { paragraph(app, "Hosts shows connectivity for each machine; Recovery lists host problems. In Hosts, A adds a machine.", KT_BASE); return; }
+    paragraph(app, "A head is one piece of work: its own branch and worktree, a terminal, and an agent working inside it. You can follow several heads here at once.", KT_BASE);
     linef(app, "");
-    paragraph(app, "Press n to start one: Hydra creates the branch and worktree, opens the terminal and starts your agent in it. Press : for other actions.", TV_BASE);
+    paragraph(app, "Press n to start one: Hydra creates the branch and worktree, opens the terminal and starts your agent in it. Press : for other actions.", KT_BASE);
     linef(app, "");
-    paragraph(app, "To run agents on another machine, press H for Hosts and add it there.", TV_MUTED);
+    paragraph(app, "To run agents on another machine, press H for Hosts and add it there.", KT_MUTED);
 }
 
 /* One-panel summary of the selected head under the list. */
@@ -481,12 +481,12 @@ static void summary_actions(struct app *app, const struct head *head, char *line
 }
 
 static void summary_panel(struct app *app, const char *title, const char *first, const char *second) {
-    struct tv_rect r = {app->content_x - 1, app->line + 1, app->content_width + 2, app->limit - app->line - 1};
+    struct kt_rect r = {app->content_x - 1, app->line + 1, app->content_width + 2, app->limit - app->line - 1};
     if (r.height > 5) r.height = 5;
-    tv_panel_styled(&app->frame, r, title, TV_BORDER, TV_STRONG);
+    kt_panel_styled(&app->frame, r, title, KT_BORDER, KT_STRONG);
     app->line = r.y + 1;
     app->content_x++; app->content_width -= 2;
-    paragraph(app, first, TV_BASE);
+    paragraph(app, first, KT_BASE);
     if (app->line < r.y + r.height - 1) { style(app, TONE_MUTED); linef(app, "%s", second); style(app, TONE_BASE); }
     app->content_x--; app->content_width += 2;
     app->line = r.y + r.height;
@@ -549,11 +549,11 @@ static void render_coordination(struct app *app) {
     if (head == NULL) { render_empty_work(app); return; }
     style(app, TONE_STRONG); linef(app, "COORDINATION  %s", head->branch); style(app, TONE_BASE);
     if (app->fleet) {
-        paragraph(app, "Remote heads are coordinated on their host. Use hydra fleet workflow to inspect assignments there.", TV_BASE);
+        paragraph(app, "Remote heads are coordinated on their host. Use hydra fleet workflow to inspect assignments there.", KT_BASE);
         return;
     }
     linef(app, "");
-    paragraph(app, "This head is a single agent session. Coordination between heads uses claims (files a head intends to change), scopes (areas it stays within), a shared work queue and allocated resources. A workflow adds steps, dependencies and handoffs on top.", TV_BASE);
+    paragraph(app, "This head is a single agent session. Coordination between heads uses claims (files a head intends to change), scopes (areas it stays within), a shared work queue and allocated resources. A workflow adds steps, dependencies and handoffs on top.", KT_BASE);
     section(app, "THIS HEAD");
     if (!head->head_id[0]) { linef(app, "Counters unknown: there is no readable head record for this branch."); }
     else {
@@ -574,8 +574,8 @@ static void render_recovery_detail(struct app *app) {
     char title[TEXT + 64], detail[1024];
     recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
     /* Wrapped so long labels, such as a leftover worktree's path, stay readable. */
-    paragraph(app, title, TV_STRONG);
-    paragraph(app, detail, TV_BASE);
+    paragraph(app, title, KT_STRONG);
+    paragraph(app, detail, KT_BASE);
     linef(app, "");
     linef(app, "Check: %s", item->action);
     style(app, TONE_MUTED);
@@ -592,9 +592,9 @@ static void render_recovery_row(struct app *app, size_t index) {
     bool selected = index == app->recovery_selected, wide = app->content_width >= 100;
     recovery_explain(item, title, sizeof(title), detail, sizeof(detail));
     record_hit(app, index);
-    if (selected) column(app, 0, app->content_width, TV_SELECTED, ">");
-    column(app, 2, wide ? app->content_width - 22 : app->content_width - 2, selected ? TV_SELECTED : TV_WARNING, title);
-    if (wide) column(app, app->content_width - 18, 18, selected ? TV_SELECTED : TV_MUTED, item->kind);
+    if (selected) column(app, 0, app->content_width, KT_SELECTED, ">");
+    column(app, 2, wide ? app->content_width - 22 : app->content_width - 2, selected ? KT_SELECTED : KT_WARNING, title);
+    if (wide) column(app, app->content_width - 18, 18, selected ? KT_SELECTED : KT_MUTED, item->kind);
     app->line++;
 }
 
@@ -604,7 +604,7 @@ static void render_recovery(struct app *app) {
     style(app, TONE_STRONG); linef(app, "RECOVERY  %zu finding%s", app->model.recovery_count, app->model.recovery_count == 1 ? "" : "s"); style(app, TONE_BASE);
     if (app->model.recovery_count == 0U) {
         linef(app, "");
-        paragraph(app, "Nothing needs repair. Findings appear here when a terminal stops unexpectedly, a removal does not finish, or saved state cannot be read.", TV_BASE);
+        paragraph(app, "Nothing needs repair. Findings appear here when a terminal stops unexpectedly, a removal does not finish, or saved state cannot be read.", KT_BASE);
         return;
     }
     if (app->recovery_selected >= app->model.recovery_count) app->recovery_selected = 0U;
@@ -701,14 +701,14 @@ static long snapshot_age(time_t observed_at, bool headless) {
 static long snapshot_limit(const struct app *app) {
     return 2L * HYDRA_TUI_REFRESH_SECONDS + (app->fleet ? (long)HYDRA_FLEET_TUI_REQUEST_SECONDS : 0L);
 }
-enum tv_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size) {
+enum kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size) {
     long age = snapshot_age(observed_at, headless), limit = snapshot_limit(app);
-    if (stale && observed_at) { snprintf(out, size, "STALE: last good snapshot, updated %lds ago", age); return TV_WARNING; }
-    if (stale) { snprintf(out, size, "STALE: no snapshot yet"); return TV_WARNING; }
-    if (!observed_at && !headless) { snprintf(out, size, "Waiting for the first snapshot"); return TV_MUTED; }
-    if (age > limit) { snprintf(out, size, "Updated %lds ago", age); return TV_BASE; }
+    if (stale && observed_at) { snprintf(out, size, "STALE: last good snapshot, updated %lds ago", age); return KT_WARNING; }
+    if (stale) { snprintf(out, size, "STALE: no snapshot yet"); return KT_WARNING; }
+    if (!observed_at && !headless) { snprintf(out, size, "Waiting for the first snapshot"); return KT_MUTED; }
+    if (age > limit) { snprintf(out, size, "Updated %lds ago", age); return KT_BASE; }
     snprintf(out, size, "Live");
-    return TV_MUTED;
+    return KT_MUTED;
 }
 
 static void status_marked(struct app *app, char *out, size_t size) {
@@ -717,16 +717,16 @@ static void status_marked(struct app *app, char *out, size_t size) {
              app->notice[0] ? sep : "", app->notice);
 }
 
-static void status_line(struct app *app, char *out, size_t size, enum tv_style *tone, bool headless) {
+static void status_line(struct app *app, char *out, size_t size, enum kt_style *tone, bool headless) {
     bool stale = app->view == 5 ? app->workflow_stale : app->snapshot_stale;
     const char *sep = dot(app);
     char fresh[96];
-    enum tv_style fresh_tone = snapshot_freshness(app, app->view == 5 ? app->workflow_at : app->snapshot_at, stale, headless, fresh, sizeof(fresh));
-    *tone = TV_MUTED;
-    if (app->marked_count) { status_marked(app, out, size); *tone = TV_STRONG; return; }
-    if (stale && app->snapshot_error[0]) { snprintf(out, size, "%s%s%s", fresh, sep, app->snapshot_error); *tone = TV_WARNING; return; }
-    if (app->notice[0]) { snprintf(out, size, "%s", app->notice); *tone = TV_BASE; return; }
-    if (app->search[0]) { snprintf(out, size, "Search: %s%sEsc clears", app->search, sep); *tone = TV_BASE; return; }
+    enum kt_style fresh_tone = snapshot_freshness(app, app->view == 5 ? app->workflow_at : app->snapshot_at, stale, headless, fresh, sizeof(fresh));
+    *tone = KT_MUTED;
+    if (app->marked_count) { status_marked(app, out, size); *tone = KT_STRONG; return; }
+    if (stale && app->snapshot_error[0]) { snprintf(out, size, "%s%s%s", fresh, sep, app->snapshot_error); *tone = KT_WARNING; return; }
+    if (app->notice[0]) { snprintf(out, size, "%s", app->notice); *tone = KT_BASE; return; }
+    if (app->search[0]) { snprintf(out, size, "Search: %s%sEsc clears", app->search, sep); *tone = KT_BASE; return; }
     snprintf(out, size, "%s", fresh);
     *tone = fresh_tone;
 }
@@ -817,7 +817,7 @@ static const char *panel_title(struct app *app, char *out, size_t size) {
 
 void render(struct app *app, unsigned frame, bool headless) {
     char status[512], title[TEXT];
-    enum tv_style tone;
+    enum kt_style tone;
     app->hit_count = 0U;
     app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
     app->hit_tabs = true;
@@ -828,8 +828,8 @@ void render(struct app *app, unsigned frame, bool headless) {
     app->limit = app->rows - 3;
     app->boxed = true;
     chrome_header(app, &app->frame, view_titles[app->view]);
-    if (app->rows >= 6) tv_panel_styled(&app->frame, (struct tv_rect){0, 2, app->frame.width, app->frame.height - 4},
-                                        panel_title(app, title, sizeof(title)), TV_BORDER, TV_STRONG);
+    if (app->rows >= 6) kt_panel_styled(&app->frame, (struct kt_rect){0, 2, app->frame.width, app->frame.height - 4},
+                                        panel_title(app, title, sizeof(title)), KT_BORDER, KT_STRONG);
     app->line = 3;
     style(app, TONE_BASE);
     render_content(app);

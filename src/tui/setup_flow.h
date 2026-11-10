@@ -1,7 +1,7 @@
 #ifndef HYDRA_TUI_SETUP_FLOW_H
 #define HYDRA_TUI_SETUP_FLOW_H
 #include "setup_model.h"
-#include "../termviz/input.h"
+#include "../kettle/input.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <time.h>
@@ -49,7 +49,7 @@ struct native_setup {
     time_t job_started;
     size_t handoff_argc, selected, scroll, typed_cursor, record_count;
     struct setup_capture job, sweep;
-    struct tv_input input;
+    struct kt_input input;
     struct setup_field fields[SETUP_FORM_FIELDS];
     enum setup_screen screen;
     enum setup_job job_kind;

@@ -1,6 +1,6 @@
 /* Item10 observer for test_tui_pty.c. No product rendering changes.
  * This observes applied ASCII semantic regions, never whole frames or pixels. */
-#include "termviz/terminal.h"
+#include "kettle/terminal.h"
 
 #define MEASURE_COLUMNS 160
 #define MEASURE_ROWS 48
@@ -11,15 +11,15 @@ struct measure_region {
     const char *text;
 };
 struct measure_screen {
-    struct tv_terminal_model terminal;
-    struct tv_cell primary[MEASURE_CELLS], alternate[MEASURE_CELLS];
+    struct kt_terminal_model terminal;
+    struct kt_cell primary[MEASURE_CELLS], alternate[MEASURE_CELLS];
 };
 
 /* Caller owns model storage; regions borrow their ASCII expected strings. */
 static bool measure_region_matches(const struct measure_screen *screen,
                                    const struct measure_region *region) {
-    const struct tv_terminal_model *t = &screen->terminal;
-    const struct tv_canvas *c = t->alternate_active ? &t->alternate.canvas : &t->primary.canvas;
+    const struct kt_terminal_model *t = &screen->terminal;
+    const struct kt_canvas *c = t->alternate_active ? &t->alternate.canvas : &t->primary.canvas;
     size_t length;
     if (!region->text || region->x < 0 || region->y < 0 || region->width < 1 ||
         region->y >= c->height || region->x >= c->width || region->width > c->width-region->x)
@@ -27,7 +27,7 @@ static bool measure_region_matches(const struct measure_screen *screen,
     length = strlen(region->text);
     if (length > (size_t)region->width) return false;
     for (int i = 0; i < region->width; i++) {
-        const struct tv_cell *cell = &c->cells[(size_t)region->y*(size_t)c->stride+(size_t)(region->x+i)];
+        const struct kt_cell *cell = &c->cells[(size_t)region->y*(size_t)c->stride+(size_t)(region->x+i)];
         uint32_t expected = (size_t)i < length ? (unsigned char)region->text[i] : ' ';
         if (expected < 32U || expected > 126U || cell->glyph != expected || cell->width != 1 || cell->combining_count)
             return false;
@@ -48,21 +48,21 @@ static bool measure_semantic_matches(const struct measure_screen *screen,
 static struct measure_screen *measure_screen_create(int columns, int rows) {
     struct measure_screen *s = calloc(1, sizeof(*s));
     if (!s) return NULL;
-    if (!tv_term_init(&s->terminal, s->primary, s->alternate, MEASURE_COLUMNS, MEASURE_ROWS,
+    if (!kt_term_init(&s->terminal, s->primary, s->alternate, MEASURE_COLUMNS, MEASURE_ROWS,
                       NULL, 0, columns, rows)) {
         free(s); return NULL;
     }
     return s;
 }
 
-/* Encode the actual termviz presenter into caller-owned bounded output. */
-static size_t measure_present_bytes(struct tv_presenter *p, const struct tv_canvas *c,
+/* Encode the actual kettle presenter into caller-owned bounded output. */
+static size_t measure_present_bytes(struct kt_presenter *p, const struct kt_canvas *c,
                                     char *out, size_t capacity) {
     FILE *stream = tmpfile();
     size_t length = 0;
     long size;
     if (!stream) return 0;
-    if (!tv_present(p, c, stream, NULL, NULL) || (size = ftell(stream)) <= 0 ||
+    if (!kt_present(p, c, stream, NULL, NULL) || (size = ftell(stream)) <= 0 ||
         (unsigned long)size >= capacity || fseek(stream, 0, SEEK_SET)) goto done;
     length = fread(out, 1, (size_t)size, stream);
     if (length != (size_t)size) length = 0;
@@ -81,9 +81,9 @@ static void measure_control_check(bool condition, bool *valid, int *checks, int 
 
 static int measure_semantic_controls(void) {
     struct measure_screen *s = NULL;
-    struct tv_cell *cells = NULL, *previous = NULL;
-    struct tv_canvas canvas;
-    struct tv_presenter presenter;
+    struct kt_cell *cells = NULL, *previous = NULL;
+    struct kt_canvas canvas;
+    struct kt_presenter presenter;
     const struct measure_region identity = {2,1,28,"HEAD head_104729_001"};
     const struct measure_region response = {3,5,34,"TAG-head_104729_001-v2"};
     struct measure_region wrong_identity = identity, wrong_response = response;
@@ -97,17 +97,17 @@ static int measure_semantic_controls(void) {
     cells = calloc(80U*16U, sizeof(*cells));
     previous = calloc(80U*16U, sizeof(*previous));
     if (!s || !cells || !previous) goto cleanup;
-    if (!tv_init(&canvas,cells,80U*16U,80,16,true)) goto cleanup;
-    if (!tv_present_init(&presenter,previous,80U*16U)) goto cleanup;
+    if (!kt_init(&canvas,cells,80U*16U,80,16,true)) goto cleanup;
+    if (!kt_present_init(&presenter,previous,80U*16U)) goto cleanup;
     checks+=3;
-    tv_text(&canvas,(struct tv_rect){identity.x,identity.y,identity.width,1},identity.text,TV_BASE);
-    tv_text(&canvas,(struct tv_rect){response.x,response.y,response.width,1},response.text,TV_BASE);
+    kt_text(&canvas,(struct kt_rect){identity.x,identity.y,identity.width,1},identity.text,KT_BASE);
+    kt_text(&canvas,(struct kt_rect){response.x,response.y,response.width,1},response.text,KT_BASE);
     length = measure_present_bytes(&presenter,&canvas,full,sizeof(full));
     REGION_CHECK(length > 0);
     for (size_t split = 0; split <= length; split++) {
-        tv_term_reset(&s->terminal);
-        tv_term_feed(&s->terminal,full,split);
-        tv_term_feed(&s->terminal,full+split,length-split);
+        kt_term_reset(&s->terminal);
+        kt_term_feed(&s->terminal,full,split);
+        kt_term_feed(&s->terminal,full+split,length-split);
         REGION_CHECK(measure_semantic_matches(s,&identity,&response));
         splits++;
     }
@@ -120,27 +120,27 @@ static int measure_semantic_controls(void) {
     wrong_response = response; wrong_response.width--;
     wrong_response.x = 159;
     REGION_CHECK(!measure_semantic_matches(s,&identity,&wrong_response));
-    tv_term_feed(&s->terminal,"\033[",2);
+    kt_term_feed(&s->terminal,"\033[",2);
     REGION_CHECK(!measure_semantic_matches(s,&identity,&response));
-    tv_term_feed(&s->terminal,"0m",2);
+    kt_term_feed(&s->terminal,"0m",2);
     REGION_CHECK(measure_semantic_matches(s,&identity,&response));
-    tv_term_feed(&s->terminal,"\xf0\x9f",2);
+    kt_term_feed(&s->terminal,"\xf0\x9f",2);
     REGION_CHECK(!measure_semantic_matches(s,&identity,&response));
-    tv_term_reset(&s->terminal);
-    tv_term_feed(&s->terminal,title,sizeof(title)-1);
+    kt_term_reset(&s->terminal);
+    kt_term_feed(&s->terminal,title,sizeof(title)-1);
     REGION_CHECK(!measure_semantic_matches(s,&identity,&response));
-    tv_term_reset(&s->terminal);
-    tv_term_feed(&s->terminal,full,length);
-    tv_text(&canvas,(struct tv_rect){response.x,response.y,response.width,1},"TAG-head_104729_001-v3",TV_BASE);
+    kt_term_reset(&s->terminal);
+    kt_term_feed(&s->terminal,full,length);
+    kt_text(&canvas,(struct kt_rect){response.x,response.y,response.width,1},"TAG-head_104729_001-v3",KT_BASE);
     delta_length = measure_present_bytes(&presenter,&canvas,delta,sizeof(delta));
     REGION_CHECK(delta_length > 0 && delta_length < length);
-    tv_term_feed(&s->terminal,delta,delta_length);
+    kt_term_feed(&s->terminal,delta,delta_length);
     REGION_CHECK(!measure_semantic_matches(s,&identity,&response));
     wrong_response = response; wrong_response.text = "TAG-head_104729_001-v3";
     REGION_CHECK(measure_semantic_matches(s,&identity,&wrong_response));
-    REGION_CHECK(tv_term_resize(&s->terminal,120,24));
+    REGION_CHECK(kt_term_resize(&s->terminal,120,24));
     REGION_CHECK(measure_semantic_matches(s,&identity,&wrong_response));
-    REGION_CHECK(tv_term_resize(&s->terminal,15,4));
+    REGION_CHECK(kt_term_resize(&s->terminal,15,4));
     REGION_CHECK(!measure_semantic_matches(s,&identity,&wrong_response));
     printf("{\"status\":\"%s\",\"checks\":%d,\"fragment_splits\":%zu,\"presenter_bytes\":%zu,"
            "\"incremental_presenter_bytes\":%zu,\"boundary\":\"applied-semantic-region-at-complete-ANSI-sequence\","
@@ -238,17 +238,17 @@ static void measure_finish_expectation(struct measure_live *m, struct measure_ex
     e->pending_late=!found && e->input_ns!=0;
 }
 
-static int measure_ascii(const struct tv_cell *cell) {
+static int measure_ascii(const struct kt_cell *cell) {
     if (cell->width==0) return ' ';
     return cell->glyph>=32 && cell->glyph<=126 ? (int)cell->glyph : '?';
 }
 
-static bool measure_write_canvas(const struct tv_canvas *c, FILE *file) {
+static bool measure_write_canvas(const struct kt_canvas *c, FILE *file) {
     bool ok=true;
     /* One ASCII character per cell preserves coordinates; styles are excluded. */
     for (int y=0;y<c->height;y++) {
         for (int x=0;x<c->width;x++) {
-            const struct tv_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
+            const struct kt_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
             int value=measure_ascii(cell);
             if (fputc(value,file)==EOF) ok=false;
         }
@@ -258,7 +258,7 @@ static bool measure_write_canvas(const struct tv_canvas *c, FILE *file) {
 }
 
 static bool measure_snapshot(struct measure_live *m, const char *id) {
-    const struct tv_canvas *c=m->screen->terminal.alternate_active ?
+    const struct kt_canvas *c=m->screen->terminal.alternate_active ?
         &m->screen->terminal.alternate.canvas : &m->screen->terminal.primary.canvas;
     char path[4096]; FILE *file; int fd; bool ok=true;
     if (snprintf(path,sizeof(path),"%s/snapshot-%s.txt",m->directory,id)>=(int)sizeof(path)) return false;
@@ -326,7 +326,7 @@ static bool measure_resize(struct measure_live *m, struct measure_expectation *e
         e->armed=false;
         printf("{\"event\":\"invalid-expectation\",\"id\":\"%s\",\"predicate_before_input\":true}\n",e->action);
     }
-    if (ioctl(m->session.master,TIOCSWINSZ,&size) || !tv_term_resize(&m->screen->terminal,(int)columns,(int)rows)) return false;
+    if (ioctl(m->session.master,TIOCSWINSZ,&size) || !kt_term_resize(&m->screen->terminal,(int)columns,(int)rows)) return false;
     if (e && e->armed) e->input_ns=started;
     printf("{\"event\":\"resize\",\"id\":\"%s\",\"sent_ns\":%llu,\"columns\":%u,\"rows\":%u}\n",
            part[1],(unsigned long long)started,columns,rows);
@@ -380,7 +380,7 @@ static bool measure_receive(struct measure_live *m) {
         if (fwrite(bytes,1,(size_t)length,m->raw)!=(size_t)length) return false;
         m->raw_written+=(size_t)length;
     } else m->overflow=true;
-    tv_term_feed(&m->screen->terminal,bytes,(size_t)length);
+    kt_term_feed(&m->screen->terminal,bytes,(size_t)length);
     m->applied_ns=measure_now_ns();
     for (size_t i=0;i<m->expectation_count;i++) measure_observe(m,&m->expectations[i]);
     return true;
