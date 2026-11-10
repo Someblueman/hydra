@@ -33,8 +33,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   continue it is reported instead of being dropped silently. See "TUI keys" in
   `docs/USAGE.md`.
 
+- kettle programs can wait for an answer from inside `update` by running the
+  loop themselves (`kt_program_next`, `kt_program_dispatch`,
+  `kt_program_render`), and can lend the terminal to a foreground child and
+  take it back (`kt_program_release`, `kt_program_reclaim`). SIGQUIT ends a
+  program with the terminal restored, like SIGINT. `sequence_ms` lets a key
+  split by a slow link arrive whole while a lone Escape stays prompt.
+
 ### Changed
 
+- The control centre (`hydra tui`) runs on the kettle runtime instead of a
+  40 ms polling loop. Typing to an attached agent echoes as the agent answers
+  (about 1 ms in the loop, where every key used to wait for the next tick);
+  agent output and finished background reads are drawn when they arrive; a
+  burst of keys or a paste costs one frame; each frame is a single write
+  inside a synchronized update; and resizing, switching theme or layout, and
+  opening or closing a prompt or confirmation repaint without erasing the
+  screen. An idle control centre writes nothing and wakes only for its
+  2-second refresh. Agent panes keep updating while an action runs. It draws
+  on the alternate screen, so the terminal's previous contents return on exit.
+- Arrow and page keys no longer act as commands behind an open overlay: over a
+  result they scroll it, and over help they only close it.
+- A large paste to an attached agent is delivered in full instead of being cut
+  at the client's queue.
 - **Breaking:** `Ctrl-]` now returns input from an attached agent to Hydra, and
   the other agent-pane commands moved from the `Ctrl-B` prefix to `Ctrl-\`
   (`Ctrl-\ x` close view, `Ctrl-\ n` next agent, `Ctrl-\ [` scroll, ...).

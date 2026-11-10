@@ -383,8 +383,9 @@ tui_native_run() {
     fi
     if [ -t 1 ]; then
         # The helper draws on the alternate screen and leaves it itself; one
-        # that was killed or crashed may not have.
-        if [ "$_tnr_status" -ne 0 ]; then
+        # ended by a signal may not have. A helper that refused to start never
+        # took the screen, and leaving it again would move the cursor.
+        if [ "$_tnr_status" -gt 128 ]; then
             printf '\033[?1049l'
         fi
         printf '\033[?1000l\033[?1006l\033[?1002l\033[?2004l\033[0m\033[?25h'
