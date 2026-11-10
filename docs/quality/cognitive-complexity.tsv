@@ -157,10 +157,10 @@ src/tui/render.c	render_footer	18
 src/tui/render.c	render_header	20
 src/tui/render.c	render_list	38
 src/tui/selection.c	move_selection	19
-src/tui/statistics_input.c	statistics_key	30
-src/tui/statistics_model.c	statistics_move	20
-src/tui/statistics_model.c	statistics_visible	34
-src/tui/statistics_render.c	render_statistics	115
+src/tui/statistics_input.c	statistics_runs_key	30
+src/tui/statistics_model.c	statistics_runs_move	20
+src/tui/statistics_model.c	statistics_runs_visible	34
+src/tui/statistics_render.c	render_statistics_runs	115
 src/tui/statistics_render.c	statistics_fleet	60
 src/tui/statistics_render.c	statistics_run_detail	19
 src/tui/statistics_render.c	statistics_run_table	18

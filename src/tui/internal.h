@@ -69,6 +69,11 @@ struct statistics_view {
     char error[TEXT], selected_id[128];
     /* The run whose graph opens when the workflow read asked for arrives. */
     char graph_run[128];
+    /* The head sessions page (statistics_sessions.c): whether it is shown
+     * rather than workflow runs, whether the user chose, and its rows. */
+    bool sessions, sessions_chosen;
+    size_t session_rows[HS_SESSIONS], session_count, session_selected;
+    char session_id[80];
 };
 /* RETURNED: the user requested changes to this exact draft; it cannot be
  * validated or executed until the agent publishes a different draft. */
@@ -247,6 +252,15 @@ bool native_control_key(struct app *app, char key);
 int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size);
 bool confirm_choice(struct app *app, const char *title, const char *const lines[], size_t count, const char *choices);
 bool render_statistics(struct app *app, unsigned frame, bool headless);
+bool render_statistics_runs(struct app *app, unsigned frame, bool headless);
+bool statistics_runs_key(struct app *app, char key);
+/* The head sessions page and what the two pages share (statistics_sessions.c). */
+bool statistics_sessions_shown(const struct app *app);
+void statistics_sessions_default(struct statistics_view *v);
+void statistics_sessions_visible(struct app *app);
+void statistics_sessions_move(struct app *app, int direction);
+void statistics_select(struct app *app, size_t item);
+const char *statistics_hints(const struct app *app, int width);
 void statistics_metrics_render(struct app *app, struct kt_canvas *c, struct kt_rect r);
 int native_workspace_agent_index(struct native_workspace *w, int pane);
 struct native_terminal *native_workspace_terminal(struct app *app, int pane);

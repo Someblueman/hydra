@@ -188,6 +188,30 @@ contains "CPU and memory: not" "$test_root/stats-usage.out" "unmeasured resource
 contains "3.85M in / 23.0k out" "$test_root/stats-usage.out" "the run table shows per-run tokens"
 ! grep -Fq "Tokens / cost: not m" "$test_root/stats-usage.out"
 assert_success $? "the old truncated resource note is gone"
+# Head sessions (schema 5): a sample without runs opens on them; inferred
+# times are labelled, unobserved time is its own number, unknown is "--".
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v5-sessions.tsv" --size 140x40 --view statistics > "$test_root/stats-sessions.out"
+contains "HEAD SESSIONS / newest start first" "$test_root/stats-sessions.out" "statistics opens on head sessions when there are no runs"
+contains "Observed 38% of 6h00m session time; 10m00s reported by adapters, the rest inferred from terminal output" "$test_root/stats-sessions.out" "session coverage and its sources are stated"
+contains "inferred, 53% of observed" "$test_root/stats-sessions.out" "the quiet share is labelled as inferred"
+contains "Unobserved      3h42m" "$test_root/stats-sessions.out" "unobserved time is shown apart from quiet"
+contains "docs-refresh                    opencode resumed  09-07 08:00 UTC  2h00m    active --        quiet --" "$test_root/stats-sessions.out" "an unobserved session shows unknown activity"
+contains "old-experiment                  -        ended    unknown date     --" "$test_root/stats-sessions.out" "an undated session shows unknown length"
+contains "SESSIONS STARTED / 7 x 24h" "$test_root/stats-sessions.out" "sessions per day are charted"
+contains "s shows runs (0)" "$test_root/stats-sessions.out" "the sessions page names the runs page"
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v5.tsv" --size 140x40 --view statistics > "$test_root/stats-mixed.out"
+contains "RUNS / newest creation first" "$test_root/stats-mixed.out" "a sample with runs opens on runs"
+contains "s head sessions" "$test_root/stats-mixed.out" "the runs page offers head sessions"
+"$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v5-empty.tsv" --size 140x40 --view statistics > "$test_root/stats-empty.out"
+contains "No head sessions recorded yet" "$test_root/stats-empty.out" "an empty sample says nothing was recorded"
+! grep -Fq "7 x 24h" "$test_root/stats-empty.out"
+assert_success $? "an empty sample draws no chart"
+# Samples without sessions render exactly as they did before sessions existed.
+for stats_case in v2:80x24 v2:140x40 v4:80x24 v4:140x40; do
+    "$tui" --ascii --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-${stats_case%%:*}.tsv" --size "${stats_case##*:}" --view statistics > "$test_root/stats-same.out"
+    cmp -s "$test_root/stats-same.out" "$repo_root/tests/fixtures/tui/statistics-${stats_case%%:*}-${stats_case##*:}.txt"
+    assert_success $? "statistics ${stats_case%%:*} at ${stats_case##*:} is unchanged without sessions"
+done
 "$tui" --headless-fixture "$fixture" --statistics-fixture "$repo_root/tests/fixtures/tui/statistics-v4.tsv" --size 80x24 --view statistics > "$test_root/stats-usage-narrow.out"
 contains "tokens in 3.85M" "$test_root/stats-usage-narrow.out" "narrow statistics keep the token total on the timing line"
 "$tui" --headless-fixture "$fixture" --size 80x24 --view workspace > "$test_root/workspace-tabs.out"

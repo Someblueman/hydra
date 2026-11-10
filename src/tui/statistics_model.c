@@ -6,6 +6,8 @@
 /* View state is caller-owned and independent of head/graph selection. */
 
 
+static void statistics_runs_move(struct app *app, int direction);
+
 bool statistics_init(struct app *app) {
     if (!app->statistics) {
         app->statistics = calloc(1, sizeof(*app->statistics));
@@ -20,7 +22,7 @@ void statistics_destroy(struct app *app) {
     free(app->statistics->model); free(app->statistics); app->statistics = NULL;
 }
 
-void statistics_visible(struct app *app) {
+static void statistics_runs_visible(struct app *app) {
     struct statistics_view *v = app->statistics;
     size_t i, j;
     v->count = 0;
@@ -50,6 +52,12 @@ void statistics_visible(struct app *app) {
     else v->selected_id[0] = '\0';
 }
 
+/* The rows of both pages after a new sample or a changed filter. */
+void statistics_visible(struct app *app) {
+    statistics_runs_visible(app);
+    statistics_sessions_visible(app);
+}
+
 /* Consumes the completed observation stream. */
 int accept_statistics(struct app *app, FILE *input) {
     struct hs_model *next;
@@ -62,6 +70,7 @@ int accept_statistics(struct app *app, FILE *input) {
         return -1;
     }
     fclose(input); free(app->statistics->model); app->statistics->model = next;
+    statistics_sessions_default(app->statistics);
     app->statistics->stale = false; app->statistics->error[0] = '\0';
     statistics_visible(app);
     return 0;
@@ -82,6 +91,12 @@ void statistics_request(struct app *app) {
 }
 
 void statistics_move(struct app *app, int direction) {
+    if (!app->statistics) return;
+    if (statistics_sessions_shown(app)) statistics_sessions_move(app, direction);
+    else statistics_runs_move(app, direction);
+}
+
+static void statistics_runs_move(struct app *app, int direction) {
     struct statistics_view *v = app->statistics;
     if (!v) return;
     if (v->detail) {

@@ -179,6 +179,110 @@ static void fleet_statistics(void) {
     kt_close(&s, "q", 0, 0);
     puts("PASS fleet statistics: responded/failed/empty, known counts, filters, drill-down");
 }
+/* Head sessions: the page a sample without runs opens on, its filters and
+ * drill-down, and s between sessions and workflow runs. The steps share one
+ * session, passed by pointer; a marker that is not on screen fails the wait. */
+#define PU(marker) kt_until(p, (marker), 3)
+#define PS(keys) kt_send(p, (keys))
+#define PHAS(marker) kt_contains(p, (marker))
+
+static void session_overview(struct kt_session *p) {
+    PU("HEAD SESSIONS / newest start first");
+    PU("Observed 38% of 6h00m session time; 10m00s reported by adapters, the rest inferred from terminal output");
+    PU("> fix-login-timeout");
+    PU("1/5 / Enter evidence");
+    PU("inferred from output");
+    PU("Unobserved      3h42m");
+    PU("Length 4/5");
+    PU("Observed 2/5");
+    PU("1 undated");
+    save(p, "statistics-sessions", 140, 40);
+}
+
+static void session_filters(struct kt_session *p) {
+    PS("T");
+    PU("Head sessions \302\267 24 hours");
+    PU("1/3 / Enter evidence");
+    PU("1 outside range");
+    PS("0/");
+    PU("Find branch, agent or head:");
+    PS("absent\r");
+    PU("No sessions match: 5 recorded, all filtered out");
+    PS("0!");
+    PU("Head sessions \302\267 all recorded \302\267 all heads / attention only");
+    PU("> nightly-import");
+    PS("\r");
+    PU("A headless head has no terminal to observe");
+    PS("\033");
+    PU("HEAD SESSIONS / newest start first");
+    PS("0/");
+    PU("Find branch, agent or head:");
+    PS("docs\r");
+    PU("Head sessions \302\267 all recorded \302\267 docs");
+    PU("2/2 / Enter evidence");
+}
+
+static void session_evidence(struct kt_session *p) {
+    PS("\r");
+    PU("SESSION EVIDENCE");
+    PU("docs-refresh / resumed");
+    PU("instance_bbbbbbbbbbbbbbb1");
+    PU("Active --   Quiet --   Unobserved 2h00m   Observed 0%");
+    PU("Nobody observed this session");
+    PS("\033");
+    PU("HEAD SESSIONS / newest start first");
+    PS("k\r");
+    PU("Reported by an adapter (exact): 10m00s");
+    PU("Active 40m00s   Quiet 50m00s   Unobserved 30m00s   Observed 75%");
+    PU("inferred from terminal output (tmux)");
+    PS("\033");
+    PU("HEAD SESSIONS / newest start first");
+}
+
+static void session_pages(struct kt_session *p) {
+    PS("0M");
+    PU("That key is for workflow runs; s shows them");
+    PS("s");
+    PU("RUNS / newest creation first");
+    PU("No matching recorded runs");
+    PU("s head sessions");
+    PS("s");
+    PU("HEAD SESSIONS / newest start first");
+    kt_resize(p, 80, 24);
+    PU("Observed 38% of 6h00m; 10m00s reported, the rest inferred from output");
+    CHECK(!p->screen.overflow, "medium session statistics overflow");
+    save(p, "statistics-sessions", 80, 24);
+    kt_resize(p, 40, 10);
+    PU("5 sessions / 1 open");
+    PU("Active 1h05m / quiet 1h13m");
+    CHECK(!p->screen.overflow, "small session statistics overflow");
+}
+
+static void session_statistics(void) {
+    struct kt_session s;
+    const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
+    CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v5-sessions.tsv", 1), "session fixture environment");
+    kt_open_terminal(&s, argv, 140, 40, NULL);
+    U("HYDRA / PLAN TOGETHER");
+    S("D");
+    session_overview(&s);
+    session_filters(&s);
+    session_evidence(&s);
+    session_pages(&s);
+    kt_close(&s, "q", 0, 0);
+    CHECK(!setenv("HYDRA_TEST_STATS_FIXTURE", "statistics-v5.tsv", 1), "mixed fixture environment");
+    kt_open_terminal(&s, argv, 140, 40, NULL);
+    U("HYDRA / PLAN TOGETHER");
+    S("D");
+    U("RUNS / newest creation first");
+    U("s head sessions");
+    U("> kill-dry-run");
+    S("s");
+    U("s shows runs (1)");
+    kt_close(&s, "q", 0, 0);
+    CHECK(!unsetenv("HYDRA_TEST_STATS_FIXTURE"), "session fixture environment cleared");
+    puts("PASS session statistics: default page, coverage, filters, drill-down, unknowns, sizes");
+}
 int main(void) {
     kt_init();
     unsetenv("NO_COLOR");
@@ -190,5 +294,6 @@ int main(void) {
     local_statistics();
     fleet_statistics();
     metric_pages();
+    session_statistics();
     return 0;
 }

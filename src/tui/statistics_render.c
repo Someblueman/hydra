@@ -227,7 +227,9 @@ static void statistics_timing_line(struct kt_canvas *c, int x, int width, const 
         duration,s->duration_known,maximum,in,cached,out);
 }
 
-bool render_statistics(struct app *app, unsigned frame, bool headless) {
+/* The workflow runs page; render_statistics chooses between it and the head
+ * sessions page. */
+bool render_statistics_runs(struct app *app, unsigned frame, bool headless) {
     struct kt_canvas c;
     struct statistics_view *v;
     struct hs_summary summary;
@@ -250,12 +252,12 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
         v->filter.workflow[0] ? " / workflow: " : "",v->filter.workflow);
     if (app->fleet) statistics_fleet(app,&c,(struct kt_rect){0,2,width,height-4});
     else if (!v->model || (!v->model->run_count && v->model->warnings)) {
-        dashboard_text(&c,2,3,width-4,KT_STRONG,"%s",!v->model && native_observations_loading(app,OBSERVE_STATISTICS) ? "Loading statistics..." : "No workflow statistics yet");
+        dashboard_text(&c,2,3,width-4,KT_STRONG,"%s",!v->model && native_observations_loading(app,OBSERVE_STATISTICS) ? "Loading statistics..." : "No statistics yet");
         if (height>10) {
-            dashboard_text(&c,2,5,width-4,KT_BASE,"Statistics cover workflows that Hydra ran and recorded: their steps, timing,");
-            dashboard_text(&c,2,6,width-4,KT_BASE,"outcomes and retries. A standalone agent conversation is not a recorded run,");
-            dashboard_text(&c,2,7,width-4,KT_BASE,"so it does not appear here until it is part of a workflow.");
-            dashboard_text(&c,2,9,width-4,KT_MUTED,"r retries the sample   Workflows explains what a workflow is");
+            dashboard_text(&c,2,5,width-4,KT_BASE,"Statistics cover head sessions (each start or resume of a head, and how long");
+            dashboard_text(&c,2,6,width-4,KT_BASE,"its terminal was active or quiet while a control centre watched) and the");
+            dashboard_text(&c,2,7,width-4,KT_BASE,"workflow runs Hydra recorded: steps, timing, outcomes, retries and tokens.");
+            dashboard_text(&c,2,9,width-4,KT_MUTED,"r retries the sample   s switches between sessions and runs");
         }
     } else if (v->metric_page) {
         statistics_metrics_render(app,&c,(struct kt_rect){0,2,width,height-4});
@@ -299,8 +301,7 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
     if (height>=25 && v->model && !app->fleet && width>=110)
         dashboard_text(&c,2,height-5,20,KT_MUTED,"%s",updated);
     chrome_footer(app,&c,status,(v->stale || (v->model && v->model->warnings)) ? KT_WARNING : KT_MUTED,
-        width<48 ? "D back  M metric  ? help  q quit" : width<65 ? "D back  M metric  / find  Enter  ? help  q quit" : width<100 ? "D back  M metric  T range  / find  Enter evidence  g graph  ? help  q quit" :
-        "D or Esc back  M metric  T range  ! attention only  [ ] workflow  / find  Enter evidence  g graph  ? help  q quit");
+        statistics_hints(app,width));
     frame_end(app,frame,headless);
     return true;
 }

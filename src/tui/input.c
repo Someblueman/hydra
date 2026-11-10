@@ -104,8 +104,7 @@ static void statistics_mouse(struct app *app, const unsigned values[3]) {
         if (!mouse_hit(app, values, index)) continue;
         if (values[0] == 64 || values[0] == 65) statistics_move(app, values[0] == 64 ? -1 : 1);
         else if (values[0] == 0) {
-            app->statistics->selected = app->hit_items[index];
-            app->statistics->selected_id[0] = '\0'; statistics_visible(app);
+            statistics_select(app, app->hit_items[index]);
         }
         return;
     }

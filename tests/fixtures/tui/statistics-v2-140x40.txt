@@ -1,0 +1,41 @@
+FRAME 1 140x40
+ HYDRA / STATISTICS                                                           Local / 3 heads / 1 running / 3 need attention / 4 to repair 
+ Work  Details  Overview  Attention  Recovery  Workflows  [Statistics]  Workspace  Hosts                                                   
++- SCOPE --------------+ +- RUNS ------------------+ +- RUNNING ---------------+ +- NEED ATTENTION --------+ +- RETRIES ------------------+
+|                      | | 8                       | | 1                       | | 3                       | | 3                          |
+| all recorded         | |                         | |                         | |                         | |                            |
+| T changes the range  | | in this scope           | | steps right now         | | failed, blocked or unkn | | repeated attempts          |
+|                      | +-------------------------+ +-------------------------+ +-------------------------+ +----------------------------+
+| Workflow: all        |  Latest attempts average 95.0s over 6 timed steps, longest 120s                                                   
+| [ ] chooses one      | +- RUN OUTCOMES / recorded ----------------------------+ +- RUN CREATION / 7 x 24h ------------------------------+
+|                      | |                                                      | |                                                       |
+| 1 undated            | | Succeeded    3   #############.....................  | | -6d   0   ..........................................  |
+| 0 outside range      | | Failed       1   #####.............................  | | -5d   0   ..........................................  |
+|                      | | Running      1   #####.............................  | | -4d   0   ..........................................  |
+| Timing 6/11          | | Queued       0   ..................................  | | -3d   0   ..........................................  |
+| Attempts 8/11        | | Blocked      1   #####.............................  | | -2d   1   ###########...............................  |
+|                      | | Cancelled    1   #####.............................  | | -1d   1   ###########...............................  |
+| Agent tokens         | | Unknown      1   #####.............................  | | -0d   4   ##########################################  |
+| no agent steps       | +------------------------------------------------------+ +-------------------------------------------------------+
+|                      | +- RUNS / newest creation first ---------------------------------------------------------------------------------+
+| CPU and memory: not  | |                                                                                                                |
+| measured. Hydra does | | > visualization-proof                       running             09-07 13:30 UTC                                |
+| not sample processes | |   release-check                             succeeded           09-07 13:00 UTC                                |
+| yet (roadmap item    | |   recovery-check                            failed              09-07 12:00 UTC                                |
+| 10).                 | |   recovery-check                            recovery-required   09-07 08:00 UTC                                |
+|                      | |   release-check                             succeeded           09-06 13:00 UTC                                |
+| 0 resets filters     | |   release-check                             succeeded           09-05 14:00 UTC                                |
+|                      | |   release-check                             cancelled           08-28 04:00 UTC                                |
+|                      | |   imported-work                             -                   unknown date                                   |
+|                      | |                                                                                                                |
+|                      | |                                                                                                                |
+|                      | |                                                                                                                |
+|                      | |                                                                                                                |
+|                      | |                                                                                                                |
+|                      | |                                                                                                                |
+|                      | |                                                                                                                |
+| 09-07 14:00 UTC      | |                                                                                                                |
+|                      | | 1/8 / Enter evidence / g graph                                                                                 |
++----------------------+ +----------------------------------------------------------------------------------------------------------------+
+ Recorded workflow runs / all recorded / all work                                                                                          
+ D or Esc back  M metric  T range  ! attention only  [ ] workflow  / find  Enter evidence  g graph  ? help  q quit                         

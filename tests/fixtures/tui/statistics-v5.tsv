@@ -1,0 +1,12 @@
+HYDRA_STATISTICS	5	1788789600
+R	run_bbbbbbbbbbbbbbbbbbbb	kill-dry-run	succeeded	project_demo	2026-09-07T13:30:00Z	complete	1788787800	1788788500	1788788500	0	1	-	0	-
+S	run_bbbbbbbbbbbbbbbbbbbb	spawn-worker	spawn	succeeded	1	1788787800	1788787810	1788787800	1788787800
+S	run_bbbbbbbbbbbbbbbbbbbb	implement	exec	succeeded	1	1788787810	1788788446	1788787810	1788787810
+S	run_bbbbbbbbbbbbbbbbbbbb	verify	exec	succeeded	1	1788788350	1788788480	1788788350	1788788350
+U	run_bbbbbbbbbbbbbbbbbbbb	implement	codex	codex-cli 0.99.0	gpt-fixture	high	3850000	3740000	23000	-
+H	head_aaaaaaaaaaaaaaaaaaaa	instance_aaaaaaaaaaaaaaa1	fix-login-timeout	codex	interactive	open	1788786000	-	-	1500	1380	720	0
+H	head_bbbbbbbbbbbbbbbbbbbb	instance_bbbbbbbbbbbbbbb2	docs-refresh	opencode	interactive	ended	1788775200	1788782400	done	2400	3000	1800	600
+H	head_bbbbbbbbbbbbbbbbbbbb	instance_bbbbbbbbbbbbbbb1	docs-refresh	opencode	interactive	superseded	1788768000	1788775200	-	-	-	7200	0
+H	head_cccccccccccccccccccc	instance_ccccccccccccccc1	nightly-import	codex	headless	ended	1788700000	1788703600	failed	-	-	3600	0
+H	head_dddddddddddddddddddd	instance_ddddddddddddddd1	old-experiment	-	interactive	ended	-	1788600000	abandoned	-	-	-	-
+Z	1	3	5

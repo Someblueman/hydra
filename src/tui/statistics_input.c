@@ -81,7 +81,8 @@ static bool statistics_filter_key(struct app *app, char key) {
     return true;
 }
 
-bool statistics_key(struct app *app, char key) {
+/* Keys of the workflow runs page (statistics_key routes to it). */
+bool statistics_runs_key(struct app *app, char key) {
     struct statistics_view *v=app->statistics;
     if(!v) return false;
     app->notice[0]='\0';
