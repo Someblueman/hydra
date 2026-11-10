@@ -9,10 +9,13 @@ extern char **environ;
  * output captured so the control centre stays on screen; interactive commands
  * such as switch or dashboard still take over the terminal. */
 
+/* Runs a command that needs the terminal: the control centre steps aside,
+ * the command's output stays up until Enter, then the screen is repainted. */
 static int run_argv(struct app *app, char *const argv[]) {
+    struct terminal_loan loan;
     pid_t pid;
     int status = 0;
-    restore_terminal(app);
+    if (!terminal_lend(app, &loan, false)) return -1;
     printf("\033[H\033[2J");
     fflush(stdout);
     if (posix_spawnp(&pid, app->hydra, NULL, NULL, argv, environ) != 0) {
@@ -25,10 +28,7 @@ static int run_argv(struct app *app, char *const argv[]) {
     fflush(stdout);
     while (getchar() != '\n' && !feof(stdin)) { }
     clearerr(stdin);
-    if (enter_raw(app) != 0) {
-        app->running = false;
-        return -1;
-    }
+    if (!terminal_return(app, &loan)) return -1;
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 

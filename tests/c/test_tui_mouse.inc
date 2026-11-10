@@ -65,7 +65,7 @@ static void test_mouse(const char *tui, const char *hydra, const char *fake_bin)
     mouse_input(&session, "\033[<65;8;5M");
     result(wait_for_marker(&session, ">  feature-unavail", 1000), "wheel scroll keeps selection visible after resize");
     write_input(session.master, "q", 1U);
-    result(wait_for_marker(&session, "\033[?1000l\033[?1006l", 1000), "quit disables both mouse modes");
+    result(wait_for_marker(&session, "\033[?1002l\033[?1006l", 1000), "quit disables mouse reporting");
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "mouse session restores exact terminal state");
     close_session(&session);
 }

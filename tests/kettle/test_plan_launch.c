@@ -93,6 +93,11 @@ static void review_approval(struct kt_session *s, const char *digest) {
     CHECK(kt_contains(s, "INPUT TO HYDRA / execution approval"), "Enter, other keys and paste cannot approve");
     kt_send(s, "n");
     kt_until(s, "Execution not approved", 3);
+    /* The confirmation is part of the frame: opening it, resizing under it
+     * and closing it overwrite cells and never erase the display. */
+    kt_pump(s, .3);
+    CHECK(!kt_contains(s, "INPUT TO HYDRA / execution approval"), "approval closed");
+    CHECK(hf_count(s->raw, "\033[2J") == 1, "a confirmation opens, resizes and closes without erasing the display");
 }
 static void sanitize_path(const char *input, char *output, size_t capacity) {
     size_t i;

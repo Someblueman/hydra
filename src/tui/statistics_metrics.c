@@ -86,6 +86,7 @@ void statistics_metrics_render(struct app *app, struct kt_canvas *c, struct kt_r
     dashboard_text(c,1,r.y,r.width-2,KT_STRONG,"%s / M next",metric_name(metric));
     dashboard_text(c,1,r.y+1,r.width-2,KT_BASE,"Mean %s / known %zu/%zu",mean,s.known,s.eligible);
     dashboard_text(c,1,r.y+2,r.width-2,KT_BASE,"%s",percentiles);
+    clock_mark();
     dashboard_text(c,1,r.y+3,r.width-2,KT_BORDER,"Sample age %llus / -- unknown",(unsigned long long)age);
     if (r.height>6) {
         dashboard_text(c,1,r.y+4,r.width-2,KT_BORDER,"%s",metric_boundary(metric));

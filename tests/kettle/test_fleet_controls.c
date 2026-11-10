@@ -47,7 +47,7 @@ static const char wrapper_script[] =
     "exit 0\n";
 static void launch(struct kt_session *s) {
     const char *argv[] = {tui, "--fleet", "--view", "overview", NULL};
-    kt_open(s, argv, 120, 40, base);
+    kt_open_terminal(s, argv, 120, 40, base);
     kt_until(s, "task_2", 8);
     kt_send(s, "j");
     kt_until(s, "req-2", 3);

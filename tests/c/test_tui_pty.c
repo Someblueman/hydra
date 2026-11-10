@@ -792,7 +792,7 @@ static void test_signal(const char *tui, const char *hydra, const char *fake_bin
     snprintf(message, sizeof(message), "%s reaches interactive raw mode", name);
     result(wait_for_raw(&session), message);
     (void)kill(session.pid, signal_number);
-    result(wait_for_marker(&session, "\033[?1000l\033[?1006l", 1000), "signal disables mouse reporting");
+    result(wait_for_marker(&session, "\033[?1002l\033[?1006l", 1000), "signal disables mouse reporting");
     snprintf(message, sizeof(message), "%s exits with the signal category", name);
     result(wait_for_exit(&session) == 128 + signal_number, message);
     snprintf(message, sizeof(message), "%s restores exact terminal state", name);

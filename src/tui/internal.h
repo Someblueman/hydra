@@ -28,6 +28,7 @@
 #include "../kettle/pty_posix.h"
 #include "../kettle/input.h"
 #include "../kettle/keymap.h"
+#include "../kettle/program.h"
 #include "../hydra_tui_workflow.h"
 #include "../hydra_statistics.h"
 
@@ -124,6 +125,10 @@ struct native_terminal {
     bool outbox_submit[4], received, enter_pending;
     size_t outbox_count;
     struct timespec outbox_at;
+    /* Input beyond what the client's queue holds (a large paste), sent on as
+     * the client reads; later keys queue behind it so order is kept. */
+    char *backlog;
+    size_t backlog_length, backlog_sent;
 };
 struct native_terminals {
     struct native_terminal slots[NATIVE_TERMINALS];
@@ -205,8 +210,11 @@ void render_empty_work(struct app *app);
 void render_head_detail(struct app *app);
 /* Internal views borrow app; destroy functions release their owned view state. */
 bool native_terminal_focused(struct app *app);
-bool native_terminal_byte(struct app *app, unsigned char byte);
-void native_terminal_flush_input(struct app *app);
+/* The agent-pane layer (terminal_input.c): whether a key or mouse event is
+ * its to handle, the handling, and a paste (true when the layer took it). */
+bool native_terminal_wants(struct app *app, const struct kt_event *e);
+void native_terminal_event(struct app *app, const struct kt_event *e);
+bool native_terminal_paste(struct app *app, const char *bytes, size_t length);
 void statistics_toggle(struct app *app);
 bool statistics_key(struct app *app, char key);
 bool statistics_back(struct app *app);
@@ -237,7 +245,6 @@ void native_workspace_show_terminal(struct app *app, bool focus);
 void native_workspace_split_agents(struct app *app);
 bool native_workspace_monitoring(struct app *app);
 void native_workspace_destroy(struct app *app);
-void native_workspace_invalidate(struct app *app);
 bool native_workspace_init(struct app *app);
 void native_workspace_mode(struct app *app, int mode);
 void native_workspace_move(struct app *app, int direction);
@@ -261,8 +268,8 @@ void native_setup_edit(struct app *app, size_t record);
 void native_setup_remove(struct app *app, size_t record);
 /* The selected Hosts row is an unfinished setup record; *record is its index. */
 bool hosts_setup_selected(const struct app *app, size_t *record);
-bool native_setup_byte(struct app *app, unsigned char byte);
-void native_setup_flush_input(struct app *app);
+void native_setup_event(struct app *app, const struct kt_event *e);
+void native_setup_paste(struct app *app, const char *bytes, size_t length);
 void native_setup_tick(struct app *app);
 void native_setup_sweep_tick(struct app *app);
 void native_setup_hosts_refresh(struct app *app);
@@ -360,16 +367,22 @@ bool native_capture_step(struct native_capture *p);
 FILE *native_capture_result(struct native_capture *p, bool *success);
 FILE *native_capture_take(struct native_capture *p);
 bool native_detached_start(pid_t *pid, char *const argv[], int input_fd);
-int read_key(int timeout_ms, char *key);
+/* The interactive loop (loop.c) and what handlers use of it. */
+extern const struct kt_app tui_app;
+void tui_options(const struct app *app, struct kt_options *options);
 int interactive_main(struct app *app);
-void restore_terminal(struct app *app);
-int enter_raw(struct app *app);
-void update_size(struct app *app);
-void terminal_pipe_signal(void);
-void terminal_watch(struct app *app);
-bool terminal_stopped(void);
-int terminal_exit_status(void);
-void terminal_request_stop(int number);
+void loop_service(struct app *app, bool request);
+void input_event(struct app *app, const struct kt_event *e);
+void input_paste(struct app *app, const char *bytes, size_t length, bool truncated);
+/* A frame that shows an age or elapsed time says so, to be redrawn as it advances. */
+void clock_mark(void);
+enum modal_event { MODAL_STOPPED, MODAL_INPUT, MODAL_WOKE };
+bool modal_push(struct app *app, const struct modal *modal);
+void modal_pop(struct app *app);
+enum modal_event modal_wait(struct app *app, struct kt_msg *msg);
+struct terminal_loan { struct sigaction stop, interrupt, quit; bool lent, shield, stop_changed; };
+bool terminal_lend(struct app *app, struct terminal_loan *loan, bool shield);
+bool terminal_return(struct app *app, struct terminal_loan *loan);
 void copy_text(char *dst, size_t size, const char *src);
 bool parse_unsigned(const char *value, unsigned *result);
 int output_start(struct output_child *child, char *const argv[], long budget_ms);
@@ -396,7 +409,6 @@ bool frame_alloc(struct app *app);
 void frame_free(struct app *app);
 bool frame_begin(struct app *app, bool headless);
 void frame_end(struct app *app, unsigned frame, bool headless);
-void frame_invalidate(struct app *app);
 bool frame_content(struct app *app, struct kt_canvas *out);
 void chrome_header(struct app *app, struct kt_canvas *c, const char *title);
 void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, enum kt_style tone, const char *hints);

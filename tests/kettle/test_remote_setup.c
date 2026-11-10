@@ -90,7 +90,7 @@ static void see(struct kt_session *s, const char *text) { kt_until(s, text, 3); 
 static void launch(struct kt_session *s, int cols, int rows) {
     const char *argv[] = {tui, NULL};
     kt_format(label, sizeof(label), "%dx%d", cols, rows);
-    kt_open(s, argv, cols, rows, base);
+    kt_open_terminal(s, argv, cols, rows, base);
     kt_until(s, "press H for Hosts", 8);
     capture(s, "01-entry");
 }

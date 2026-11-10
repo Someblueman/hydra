@@ -172,6 +172,7 @@ static void steps_action(struct app *app, const struct native_setup *s, bool run
         return;
     }
     setup_running_label(s->job_step, label, sizeof(label));
+    clock_mark();
     snprintf(work, sizeof(work), "%s%s %lds", label, app->ascii ? "..." : "\xe2\x80\xa6", (long)(time(NULL) - s->job_started));
     column(app, 0, app->content_width, KT_SUCCESS, work);
     app->line++;

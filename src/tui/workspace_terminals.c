@@ -72,7 +72,6 @@ void native_workspace_split_agents(struct app *app) {
         if (w->layout.focus>=first) w->layout.focus=3;
         w->layout.drag=-1;
         w->agents[w->mode].first=0;
-        native_workspace_invalidate(app);
         return;
     }
     if (!app->terminals || !native_terminal_selected(app)->screen) goto unavailable;
@@ -86,7 +85,6 @@ void native_workspace_split_agents(struct app *app) {
     w->agents[w->mode].first=first;
     w->agents[w->mode].slots[0]=selected; w->agents[w->mode].slots[1]=other;
     w->layout.focus=first;
-    native_workspace_invalidate(app);
     key_hint(app,app->notice,sizeof(app->notice)," / ","Two attached agents|{terminal.leave} changes focus|{workspace.split} restores one pane");
     return;
 unavailable:

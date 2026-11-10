@@ -147,7 +147,7 @@ int main(void) {
     kt_mkdir(evidence);
     {
         const char *argv[] = {f.tui, "--hydra", adapter, NULL};
-        kt_open(&s, argv, 140, 40, f.repo);
+        kt_open_terminal(&s, argv, 140, 40, f.repo);
     }
     U("HYDRA / PLAN TOGETHER", 3);
     U("Session   running", 3);

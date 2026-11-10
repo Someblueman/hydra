@@ -4,8 +4,8 @@
 #endif
 #include "internal.h"
 #include "fleet_budget.h"
-/* One frame canvas serves every view. Views draw into it; the presenter paints
- * only changed cells, so idle refreshes never clear or flicker the screen.
+/* One frame canvas serves every view. Views draw into it; the loop's runtime
+ * paints only changed cells, so idle refreshes never clear or flicker the screen.
  * Semantic tones stay restrained: cyan chrome, amber attention, green running. */
 
 static const char *theme_names[] = {"terminal", "dark", "light"};
@@ -50,30 +50,36 @@ void text_append(char *buffer, size_t size, const char *format, ...) {
     va_end(args);
 }
 
-/* Frame lifecycle. The canvas leaves the terminal's last column unused. */
+/* Frame lifecycle. The canvas leaves the terminal's last column unused. The
+ * interactive loop lends the frame it will present (app->target); otherwise
+ * the frame owns cells sized for the screen being rendered. */
 bool frame_alloc(struct app *app) {
-    if (app->frame_cells) return true;
-    app->frame_cells = calloc(WORKSPACE_CAPACITY, sizeof(*app->frame_cells));
-    app->frame_previous = calloc(WORKSPACE_CAPACITY, sizeof(*app->frame_previous));
-    if (!app->frame_cells || !app->frame_previous) { frame_free(app); return false; }
-    (void)kt_present_init(&app->presenter, app->frame_previous, WORKSPACE_CAPACITY);
-    app->frame_theme = app->theme;
-    return true;
+    size_t columns = app->cols > 512 ? 512U : app->cols > 0 ? (size_t)app->cols : 1U;
+    size_t rows = app->rows > 256 ? 256U : app->rows > 0 ? (size_t)app->rows : 1U;
+    size_t needed = columns * rows;
+    if (app->frame_cells && app->frame_capacity >= needed) return true;
+    free(app->frame_cells);
+    app->frame_cells = calloc(needed, sizeof(*app->frame_cells));
+    app->frame_capacity = app->frame_cells ? needed : 0;
+    return app->frame_cells != NULL;
 }
 
 void frame_free(struct app *app) {
-    free(app->frame_cells); free(app->frame_previous);
-    app->frame_cells = NULL; app->frame_previous = NULL;
+    free(app->frame_cells);
+    app->frame_cells = NULL; app->frame_capacity = 0;
 }
 
-void frame_invalidate(struct app *app) { kt_present_invalidate(&app->presenter); }
+static bool frame_canvas(struct app *app, int width, int height) {
+    if (app->target) return kt_canvas_view(&app->frame, app->target, (struct kt_rect){0, 0, width, height});
+    return frame_alloc(app) && kt_init(&app->frame, app->frame_cells, app->frame_capacity, width, height, !app->ascii);
+}
 
 bool frame_begin(struct app *app, bool headless) {
     int width = app->cols > 512 ? 511 : app->cols - 1;
     int height = app->rows > 256 ? 256 : app->rows;
-    if (width < 1 || height < 1 || !frame_alloc(app)) return false;
+    if (width < 1 || height < 1) return false;
     app->paint = !headless && !app->no_color;
-    if (!kt_init(&app->frame, app->frame_cells, WORKSPACE_CAPACITY, width, height, !app->ascii)) return false;
+    if (!frame_canvas(app, width, height)) return false;
     kt_clear(&app->frame, KT_BASE);
     app->line = 0; app->tone = TONE_BASE; app->tab_count = 0;
     app->content_x = 2; app->content_width = width - 4;
@@ -81,19 +87,13 @@ bool frame_begin(struct app *app, bool headless) {
     return true;
 }
 
+/* Deterministic rendering prints the frame as text; the loop presents its own. */
 void frame_end(struct app *app, unsigned frame, bool headless) {
     int y;
-    if (headless) {
-        printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
-        for (y = 0; y < app->frame.height; y++) { (void)kt_write_row(&app->frame, y, stdout, NULL, NULL); putchar('\n'); }
-        fflush(stdout);
-        return;
-    }
-    if (app->frame_theme != app->theme) { frame_invalidate(app); app->frame_theme = app->theme; }
-    if (!app->presenter.valid) { emit_style(app, stdout, TONE_BASE); fputs("\033[H", stdout); }
-    if (!kt_present(&app->presenter, &app->frame, stdout, dashboard_style, app)) {
-        copy_text(app->notice, sizeof(app->notice), "Screen output failed"); app->running = false;
-    }
+    if (!headless) return;
+    printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
+    for (y = 0; y < app->frame.height; y++) { (void)kt_write_row(&app->frame, y, stdout, NULL, NULL); putchar('\n'); }
+    fflush(stdout);
 }
 
 /* A borrowed view of the remaining content rows, for canvas-based views. */
@@ -721,6 +721,7 @@ static long snapshot_limit(const struct app *app) {
 }
 enum kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size) {
     long age = snapshot_age(observed_at, headless), limit = snapshot_limit(app);
+    if (!headless && observed_at && (stale || age > limit)) clock_mark();
     if (stale && observed_at) { snprintf(out, size, "STALE: last good snapshot, updated %lds ago", age); return KT_WARNING; }
     if (stale) { snprintf(out, size, "STALE: no snapshot yet"); return KT_WARNING; }
     if (!observed_at && !headless) { snprintf(out, size, "Waiting for the first snapshot"); return KT_MUTED; }

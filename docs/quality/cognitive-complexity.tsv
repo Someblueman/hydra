@@ -138,12 +138,9 @@ src/tui/dashboard.c	dashboard_heads	26
 src/tui/dashboard.c	render_dashboard	49
 src/tui/evidence.c	native_evidence_tick	22
 src/tui/forms.c	form_draw	23
-src/tui/forms.c	prompt_text	45
 src/tui/hosts.c	render_hosts	30
-src/tui/input.c	handle_escape	24
 src/tui/input.c	handle_key	17
 src/tui/input.c	handle_mouse	43
-src/tui/input.c	interactive_main	16
 src/tui/links.c	native_links_load	21
 src/tui/main.c	main	47
 src/tui/model.c	load_model_stream	33

@@ -166,7 +166,7 @@ static void hydra(void) {
     kt_format(fake, sizeof(fake), "%s/tests/fixtures/tui/fake-hydra.sh", root);
     {
         const char *argv[] = {tui, "--hydra", fake, "--theme", "dark", NULL};
-        kt_open(&s, argv, 140, 40, NULL);
+        kt_open_terminal(&s, argv, 140, 40, NULL);
     }
     kt_until(&s, "HYDRA / PLAN TOGETHER", 3);
     kt_until(&s, "Session   running", 3);
@@ -194,7 +194,7 @@ static void hydra(void) {
 }
 static void hydra_startup_open(struct kt_session *s, const char *tui, const char *fake) {
     const char *argv[] = {tui, "--hydra", fake, NULL};
-    kt_open(s, argv, 140, 40, NULL);
+    kt_open_terminal(s, argv, 140, 40, NULL);
     kt_until(s, "Loading snapshot...", 3);
     kt_until(s, "visualization-proof", 3);
     CHECK(kt_contains(s, "No agent work in this project yet"), "workflow arrives before delayed heads");

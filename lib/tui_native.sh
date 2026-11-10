@@ -382,6 +382,11 @@ tui_native_run() {
         _tnr_status=$?
     fi
     if [ -t 1 ]; then
+        # The helper draws on the alternate screen and leaves it itself; one
+        # that was killed or crashed may not have.
+        if [ "$_tnr_status" -ne 0 ]; then
+            printf '\033[?1049l'
+        fi
         printf '\033[?1000l\033[?1006l\033[?1002l\033[?2004l\033[0m\033[?25h'
     fi
     case "$_tnr_status" in

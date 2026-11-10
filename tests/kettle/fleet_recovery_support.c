@@ -140,7 +140,7 @@ void cleanup(void) {
 }
 void open_observer(struct kt_session *s) {
     const char *args[] = {tui, "--fleet", "--view", "overview", NULL};
-    kt_open(s, args, 140, 40, source);
+    kt_open_terminal(s, args, 140, 40, source);
 }
 void select_task(struct kt_session *s, const char *task) {
     char selected[256];

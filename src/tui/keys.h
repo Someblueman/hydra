@@ -19,9 +19,8 @@ enum key_action {
 struct native_keys {
     struct kt_binding bindings[KEY_ACTIONS];
     struct kt_keymap map;
-    /* The TERMINAL-scope chord being entered, and the decoder of its keys. */
+    /* The TERMINAL-scope chord being entered. */
     struct kt_keymap_state state;
-    struct kt_input input;
     /* The keys file read at startup (or where it would be), and why it was
      * not applied exactly as written; problem is empty when it was. */
     char path[4096], problem[TEXT];

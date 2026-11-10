@@ -15,10 +15,6 @@ void native_workspace_destroy(struct app *app) {
     free(app->workspace); app->workspace = NULL;
 }
 
-void native_workspace_invalidate(struct app *app) {
-    frame_invalidate(app);
-}
-
 /* Narrow navigation, the agent conversation at full height, and the plan
  * review beside it (dependencies above the plan text). The conversation takes
  * most of the width; the plan overview and monitor favour the review. Where
@@ -39,7 +35,6 @@ bool native_workspace_init(struct app *app) {
     w = calloc(1, sizeof(*w));
     if (!w) return false;
     app->workspace = w;
-    if (!frame_alloc(app)) { native_workspace_destroy(app); return false; }
     workspace_layout(&w->layout, 0);
     w->layout.focus = 1;
     w->root_open = true; w->theme = app->theme;
@@ -98,7 +93,6 @@ void native_workspace_mode(struct app *app, int mode) {
     /* Explicit plan/monitor navigation keeps keys in Hydra, not the agent. */
     if (mode!=0) w->layout.focus=6;
     native_workspace_show_terminal(app,false);
-    native_workspace_invalidate(app);
 }
 
 static void workspace_project_label(struct app *app, struct native_workspace *w) {

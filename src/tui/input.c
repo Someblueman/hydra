@@ -5,21 +5,12 @@
 #include "internal.h"
 #include "fleet_budget.h"
 /* One interaction model everywhere: Tab / Shift-Tab move between tabs (or
- * panes inside the workspace), arrows select, Enter opens, Esc steps back. */
+ * panes inside the workspace), arrows select, Enter opens, Esc steps back.
+ * The loop delivers decoded events; input_event sends each to the layer that
+ * owns it, and the views' single-character key handlers are reached through
+ * one translation at the end of this file. */
 
 static void handle_key(struct app *app, char key);
-
-int read_key(int timeout_ms, char *key) {
-    fd_set readfds;
-    struct timeval timeout;
-    int ready;
-    FD_ZERO(&readfds); FD_SET(STDIN_FILENO, &readfds);
-    timeout.tv_sec = timeout_ms / 1000;
-    timeout.tv_usec = (timeout_ms % 1000) * 1000;
-    ready = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &timeout);
-    if (ready <= 0) return ready;
-    return read(STDIN_FILENO, key, 1U) == 1 ? 1 : -1;
-}
 
 /* Views that load their own data when opened. */
 static void enter_view_refresh(struct app *app, int view) {
@@ -120,20 +111,6 @@ static void statistics_mouse(struct app *app, const unsigned values[3]) {
     }
 }
 
-static const char *parse_mouse(const char *sequence, unsigned values[3]) {
-    const char *cursor = sequence + 1;
-    size_t field;
-    for (field = 0U; field < 3U; field++) {
-        if (*cursor < '0' || *cursor > '9') return NULL;
-        while (*cursor >= '0' && *cursor <= '9') {
-            values[field] = values[field] * 10U + (unsigned)(*cursor++ - '0');
-            if (values[field] > 65535U) return NULL;
-        }
-        if (field < 2U && *cursor++ != ';') return NULL;
-    }
-    return cursor;
-}
-
 static bool tab_click(struct app *app, const unsigned values[3]) {
     size_t index;
     if (values[0] != 0U || values[2] != 2U || app->help || app->result_open) return false;
@@ -146,23 +123,21 @@ static bool tab_click(struct app *app, const unsigned values[3]) {
     return false;
 }
 
-static void handle_mouse(struct app *app, const char *sequence) {
-    unsigned values[3] = {0U, 0U, 0U};
-    const char *cursor = parse_mouse(sequence, values);
+/* values are a report's button, column and row, the latter two counted from
+ * one as the terminal sends them. */
+static void handle_mouse(struct app *app, const struct kt_event *e) {
+    unsigned values[3];
     size_t index;
-    if (!cursor) return;
-    if ((*cursor != 'M' && *cursor != 'm') || cursor[1] != '\0') return;
-    update_size(app);
+    values[0] = e->button; values[1] = (unsigned)e->x + 1U; values[2] = (unsigned)e->y + 1U;
     if (app->cols != app->hit_cols || app->rows != app->hit_height ||
         app->view != app->hit_view || app->cols < 40 || app->rows < 10) return;
-    if (values[1] == 0U || values[1] >= (unsigned)app->cols ||
-        values[2] == 0U || values[2] > (unsigned)app->rows) return;
-    if (*cursor == 'M' && tab_click(app, values)) return;
+    if (values[1] >= (unsigned)app->cols || values[2] > (unsigned)app->rows) return;
+    if (!e->release && tab_click(app, values)) return;
     if (app->view == 7 && !app->help && !app->diagnostics && !app->result_open) {
-        native_workspace_mouse(app, values[0], (int)values[1] - 1, (int)values[2] - 1, *cursor == 'm');
+        native_workspace_mouse(app, e->button, e->x, e->y, e->release);
         return;
     }
-    if (*cursor == 'm') return;
+    if (e->release) return;
     if (app->view == 8 && !app->help && !app->diagnostics && !app->result_open) {
         statistics_mouse(app, values);
         return;
@@ -181,41 +156,6 @@ static void handle_mouse(struct app *app, const char *sequence) {
 }
 
 
-static bool escape_expired(const struct timespec *started) {
-    struct timespec now;
-    (void)clock_gettime(CLOCK_MONOTONIC, &now);
-    return now.tv_sec - started->tv_sec > 1 ||
-        (now.tv_sec - started->tv_sec == 1 && now.tv_nsec >= started->tv_nsec);
-}
-
-static bool csi_final(char ch) {
-    return (unsigned char)ch >= 0x40U && (unsigned char)ch <= 0x7eU;
-}
-
-static bool discard_complete(struct app *app, char ch) {
-    static const char paste_end[] = "\033[201~";
-    if (app->input_mode == INPUT_DISCARD_CSI) return csi_final(ch);
-    if (ch == paste_end[app->paste_matched]) app->paste_matched++;
-    else app->paste_matched = ch == paste_end[0] ? 1U : 0U;
-    return app->paste_matched == sizeof(paste_end) - 1U;
-}
-
-/* A budget yields to the UI, never turns discarded bytes into key bindings.
- * The caller owns app and retains the terminator match across input batches. */
-static void discard_input(struct app *app, char ch) {
-    struct timespec started;
-    size_t consumed = 0U;
-    (void)clock_gettime(CLOCK_MONOTONIC, &started);
-    for (;;) {
-        if (discard_complete(app, ch)) {
-            app->input_mode = INPUT_KEYS;
-            app->paste_matched = 0U;
-            return;
-        }
-        if (++consumed >= 8192U || escape_expired(&started) || read_key(20, &ch) <= 0) return;
-    }
-}
-
 static void horizontal_arrow(struct app *app, int direction) {
     if (app->result_open || app->help) return;
     if (app->view == 7) { (void)native_workspace_key(app, direction > 0 ? 'l' : 'h'); return; }
@@ -227,17 +167,6 @@ static void selection_arrow(struct app *app, char key, int direction) {
     if (app->view == 9) (void)native_attention_key(app, key);
     else move_selection(app, direction);
 }
-static void discard_legacy_mouse(char *key) {
-    size_t count;
-    for (count = 0U; count < 3U; count++) if (read_key(20, key) <= 0) break;
-}
-static void begin_paste_discard(struct app *app, char *key) {
-    app->input_mode = INPUT_DISCARD_PASTE;
-    app->paste_matched = 0U;
-    copy_text(app->notice, sizeof(app->notice), "bracketed paste ignored");
-    if (read_key(20, key) > 0) discard_input(app, *key);
-}
-
 /* PgUp/PgDn page read-only output: the result overlay or the Details
  * transcript (rows back from its newest output). */
 static void page_output(struct app *app, bool up) {
@@ -247,53 +176,6 @@ static void page_output(struct app *app, bool up) {
     if (!rows) return;
     if (back) *rows += page;
     else *rows = *rows > page ? *rows - page : 0;
-}
-
-static void dispatch_escape(struct app *app, const char *sequence) {
-    char ch;
-    if (sequence[0] == '<') handle_mouse(app, sequence);
-    else if (strcmp(sequence, "A") == 0) selection_arrow(app, 'A', -1);
-    else if (strcmp(sequence, "B") == 0) selection_arrow(app, 'B', 1);
-    else if (strcmp(sequence, "C") == 0) horizontal_arrow(app, 1);
-    else if (strcmp(sequence, "D") == 0) horizontal_arrow(app, -1);
-    else if (strcmp(sequence, "Z") == 0) {
-        if (app->view == 7 && !app->help && !app->result_open) native_workspace_focus_previous(app);
-        else if (!app->help && !app->result_open) select_tab(app, -1);
-    }
-    else if (strcmp(sequence, "5~") == 0 || strcmp(sequence, "6~") == 0) page_output(app, sequence[0] == '5');
-    else if (strcmp(sequence, "M") == 0) {
-        /* Legacy X10 carries three bytes after CSI M; never treat them as keys. */
-        discard_legacy_mouse(&ch);
-    }
-    else if (strcmp(sequence, "200~") == 0) {
-        begin_paste_discard(app, &ch);
-    }
-}
-
-static void handle_escape(struct app *app) {
-    char ch, sequence[64];
-    size_t count = 0U, consumed = 0U;
-    struct timespec started;
-    bool complete = false;
-    if (read_key(20, &ch) <= 0) { go_back(app); return; }
-    if (ch != '[') {
-        /* A bare Escape acts immediately; a key that follows within the escape
-         * window (Esc then q, or Esc then H) is still handled, never dropped. */
-        if (app->view == 9) (void)native_attention_key(app, 27);
-        else go_back(app);
-        handle_key(app, ch);
-        return;
-    }
-    (void)clock_gettime(CLOCK_MONOTONIC, &started);
-    while (consumed++ < 8192U && read_key(20, &ch) > 0) {
-        if (count + 1U < sizeof(sequence)) sequence[count++] = ch;
-        if (csi_final(ch)) { complete = true; break; }
-        if (escape_expired(&started)) break;
-    }
-    if (!complete) { app->input_mode = INPUT_DISCARD_CSI; return; }
-    if (consumed >= sizeof(sequence)) return;
-    sequence[count] = '\0';
-    dispatch_escape(app, sequence);
 }
 
 static void interactive_prompt(struct app *app, char prefix) {
@@ -393,7 +275,7 @@ static bool hosts_key(struct app *app, char key) {
 }
 
 static bool view_key(struct app *app, char key) {
-    if (key == 27 && app->view == 9) { handle_escape(app); return true; }
+    if (key == 27 && app->view == 9) { go_back(app); return true; }
     if (app->view == 9 && native_attention_key(app, key)) return true;
     if (key == 'D') { statistics_toggle(app); return true; }
     if (app->view == 8 && statistics_key(app, key)) return true;
@@ -442,15 +324,12 @@ static void head_key(struct app *app, char key) {
         case 'G': group_key(app); break;
         case 't': cycle_theme(app); break;
         case '?': app->help = !app->help; break;
-        case 27: handle_escape(app); break;
+        case 27: go_back(app); break;
         default: break;
     }
 }
 
 static void handle_key(struct app *app, char key) {
-    if (native_terminal_byte(app, (unsigned char)key)) return;
-    if (key == 3) { terminal_request_stop(SIGINT); return; }
-    if (native_setup_byte(app, (unsigned char)key)) return;
     if (overlay_key(app, key)) return;
     if (key == 'q') { app->running = false; return; }
     if (view_key(app, key)) return;
@@ -458,70 +337,86 @@ static void handle_key(struct app *app, char key) {
     head_key(app, key);
 }
 
-static void handle_input(struct app *app, char key) {
-    if (app->input_mode == INPUT_KEYS) handle_key(app, key);
-    else discard_input(app, key);
+/* Any key that arrives as an escape sequence closes help and does nothing
+ * else; over the result overlay only the keys that scroll it act. */
+static bool overlay_takes(struct app *app, const struct kt_event *e) {
+    bool scrolls = e->key == KT_KEY_UP || e->key == KT_KEY_DOWN || e->key == KT_KEY_PAGE_UP || e->key == KT_KEY_PAGE_DOWN;
+    if (app->help) { app->help = false; return true; }
+    return app->result_open && !scrolls;
 }
 
-static void refresh_observations(struct app *app, time_t *last_refresh) {
-    time_t now = time(NULL);
-    if (now - *last_refresh >= HYDRA_TUI_REFRESH_SECONDS) {
-        native_observations_tick(app,true);
-        if (app->preview && !native_terminal_focused(app)) capture_preview(app);
-        *last_refresh = now;
-    } else native_observations_tick(app,false);
+static void arrow_key(struct app *app, uint32_t key) {
+    switch (key) {
+        case KT_KEY_UP: selection_arrow(app, 'A', -1); break;
+        case KT_KEY_DOWN: selection_arrow(app, 'B', 1); break;
+        case KT_KEY_RIGHT: horizontal_arrow(app, 1); break;
+        case KT_KEY_LEFT: horizontal_arrow(app, -1); break;
+        case KT_KEY_PAGE_UP: page_output(app, true); break;
+        case KT_KEY_PAGE_DOWN: page_output(app, false); break;
+        default: break;
+    }
 }
 
-static bool terminal_ready(struct app *app) {
-    const char *term = getenv("TERM");
-    if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
-        fputs("hydra-tui requires interactive stdin/stdout; use --headless-fixture for deterministic rendering\n", stderr);
-        return false;
-    }
-    if (term == NULL || strcmp(term, "dumb") == 0) {
-        fputs("hydra-tui cannot use TERM=dumb; use hydra list and hydra switch in this terminal\n", stderr);
-        return false;
-    }
-    update_size(app);
-    if (app->cols < 40 || app->rows < 10) {
-        fputs("hydra-tui requires at least 40 columns by 10 rows; enlarge the terminal, or use hydra list and hydra switch\n", stderr);
-        return false;
-    }
+/* Keys that arrive as an escape sequence: arrows, pages and Shift-Tab. */
+static void named_key(struct app *app, const struct kt_event *e) {
+    if (overlay_takes(app, e)) return;
+    /* The statistics view drops its notice on any key, these included. */
+    if (app->view == 8 && app->statistics && !app->result_open) app->notice[0] = '\0';
+    if (kt_event_is(e, KT_KEY_TAB, KT_MOD_SHIFT)) {
+        if (app->view == 7) native_workspace_focus_previous(app);
+        else select_tab(app, -1);
+    } else if (!e->mods) arrow_key(app, e->key);
+}
+
+/* An escape sequence that stalled after "ESC [" must not turn into keys when
+ * its tail arrives: single bytes are dropped up to and including the one that
+ * would have ended the sequence. */
+static bool sequence_tail(struct app *app, const struct kt_event *e) {
+    unsigned char byte = (unsigned char)e->bytes[0];
+    if (!app->sequence_tail) return false;
+    if (e->length != 1) { app->sequence_tail = false; return false; }
+    if (byte >= 0x40U && byte <= 0x7eU) app->sequence_tail = false;
     return true;
 }
 
-/* A keys file that was not applied as written is the first thing shown. */
-static void startup_notice(struct app *app) {
-    const char *problem = native_keys(app)->problem;
-    copy_text(app->notice, sizeof(app->notice), problem[0] ? problem : "Loading snapshot...");
+/* The single boundary between key events and the views' key handlers, which
+ * take one character: a key that is one byte is that character; Escape and a
+ * key in quick succession (reported as the key with Alt) are Escape, then the
+ * key; arrows, Shift-Tab and the page keys keep their own actions. */
+static void view_key_event(struct app *app, const struct kt_event *e) {
+    if (sequence_tail(app, e)) return;
+    if (e->length == 1) { handle_key(app, e->bytes[0]); return; }
+    if (e->mods == KT_MOD_ALT && e->length == 2 && e->bytes[0] == '\033') {
+        if (e->bytes[1] == '[') { app->sequence_tail = true; return; }
+        handle_key(app, 27);
+        if (app->running) handle_key(app, e->bytes[1]);
+        return;
+    }
+    if (e->mods == KT_MOD_ALT && e->bytes[0] == '\033' && e->key < KT_KEY_UP) { handle_key(app, 27); return; }
+    if (e->key >= KT_KEY_UP && e->key < KT_KEY_SEQUENCE) named_key(app, e);
 }
 
-int interactive_main(struct app *app) {
-    time_t last_refresh;
-    char key;
-    if (!terminal_ready(app)) return 3;
-    terminal_watch(app);
-    startup_notice(app);
+/* A key or mouse event from the terminal, sent to the layer that owns it: an
+ * agent pane holding input (or a chord of Hydra's own keys), Ctrl-C, the
+ * remote setup flow, then the views. */
+void input_event(struct app *app, const struct kt_event *e) {
+    bool setup = native_setup_active(app) && app->view == 6;
+    if (native_terminal_wants(app, e)) { native_terminal_event(app, e); return; }
+    if (e->type == KT_MOUSE) { if (!setup) handle_mouse(app, e); return; }
+    if (e->type != KT_KEY) return;
+    if (kt_event_is(e, 'c', KT_MOD_CTRL)) { terminal_request_stop(SIGINT); return; }
+    if (setup) { native_setup_event(app, e); return; }
+    view_key_event(app, e);
+}
 
-    refresh_current_session(app);
-    if (enter_raw(app) != 0) return 4;
-    native_observations_tick(app, true);
-    capture_preview(app);
-    last_refresh = time(NULL);
-    app->running = true;
-    while (app->running && !terminal_stopped()) {
-        refresh_observations(app, &last_refresh);
-        native_terminals_pump(app);
-        native_setup_tick(app);
-        update_size(app);
-        render(app, 0U, false);
-        if (read_key(app->terminals || app->observations || app->setup ? 40 : 500, &key) <= 0) {
-            native_terminal_flush_input(app);
-            native_setup_flush_input(app);
-            continue;
-        }
-        handle_input(app, key);
+/* Pasted text is data for whoever takes text: the agent, a setup field. To
+ * the views it is nothing, so it can never run a command. */
+void input_paste(struct app *app, const char *bytes, size_t length, bool truncated) {
+    app->sequence_tail = false;
+    if (native_terminal_paste(app, bytes, length)) {
+        if (truncated) copy_text(app->notice, sizeof(app->notice), "Paste too long: only its beginning was sent");
+        return;
     }
-    restore_terminal(app);
-    return terminal_exit_status();
+    if (native_setup_active(app) && app->view == 6) { native_setup_paste(app, bytes, length); return; }
+    copy_text(app->notice, sizeof(app->notice), "bracketed paste ignored");
 }

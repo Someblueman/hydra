@@ -7,7 +7,19 @@
 #include <termios.h>
 #include <sys/types.h>
 #include <time.h>
-enum input_mode { INPUT_KEYS, INPUT_DISCARD_CSI, INPUT_DISCARD_PASTE };
+struct kt_program;
+struct kt_cmds;
+struct app;
+/* A helper that waits inside a key handler (a prompt, a confirmation, a
+ * captured action) while the loop keeps running around it (loop.c). tick runs
+ * with the other background pollers and says what the helper waits for; draw
+ * paints it over the frame. Either may be NULL. */
+struct modal {
+    void (*tick)(struct app *app, void *context);
+    void (*draw)(struct app *app, void *context);
+    void *context;
+};
+#define MODAL_DEPTH 6
 struct native_workspace;
 struct statistics_view;
 struct native_terminals;
@@ -49,8 +61,22 @@ struct app {
     size_t hit_items[MAX_HEADS], hit_count;
     bool hit_tabs;
     int rows, cols, line, limit;
-    bool raw, no_color, preview, help, running, fleet, diagnostics, paint, boxed;
+    bool no_color, preview, help, running, fleet, diagnostics, paint, boxed;
     bool ascii, snapshot_stale;
+    /* The interactive loop; NULL for deterministic rendering and in tests
+     * that call the handlers directly. cmds is valid while the loop runs. */
+    struct kt_program *program;
+    struct kt_cmds *cmds;
+    struct modal modals[MODAL_DEPTH];
+    size_t modal_count;
+    unsigned long long modal_frame_at, clock_timer;
+    unsigned service_serial;
+    /* Captured actions in progress (action_capture.c). */
+    unsigned action_depth;
+    /* started: the loop took the terminal. sequence_tail: the rest of a
+     * stalled escape sequence is being dropped. clock_drawn: the frame shows
+     * an age or elapsed time, so it is redrawn every second. */
+    bool started, modal_dirty, sequence_tail, clock_drawn, clock_armed;
     double queue_history[120];
     bool history_valid[120];
     size_t history_count;
@@ -63,8 +89,6 @@ struct app {
     bool workflow_stale, graph_follow;
     time_t workflow_at;
     char workflow_error[TEXT];
-    enum input_mode input_mode;
-    size_t paste_matched;
     char marked[MAX_HEADS][TEXT];
     size_t marked_count;
     char current_session[TEXT];
@@ -82,12 +106,14 @@ struct app {
     char expanded_runs[WF_RUNS][80];
     size_t expanded_count;
     bool run_row;
+    /* The terminal's settings as found; attach clients start with them. */
     struct termios saved;
-    /* One frame canvas and presenter serve every view, so repaints only touch
-     * changed cells. The frame owner allocates cells before rendering. */
+    /* One frame canvas serves every view. The loop lends it for each frame
+     * (target); deterministic rendering draws into frame_cells instead. */
     struct kt_canvas frame;
-    struct kt_cell *frame_cells, *frame_previous;
-    struct kt_presenter presenter;
+    struct kt_canvas *target;
+    struct kt_cell *frame_cells;
+    size_t frame_capacity;
     int frame_theme, tone, previous_view;
     int content_x, content_width;
     int tab_left[12], tab_right[12], tab_view[12];

@@ -22,7 +22,7 @@ static void local_statistics(void) {
     kt_temp(base, sizeof(base), "hydra-statistics");
     kt_format(failure, sizeof(failure), "%s/fail", base);
     CHECK(!setenv("HYDRA_TEST_STATS_FAIL_FILE", failure, 1), "stats failure environment");
-    kt_open(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, NULL);
     U("HYDRA / PLAN TOGETHER");
     /* Tab order: selected work, dependencies, then activity. */
     S("j\tjj\t\tjjj");
@@ -84,7 +84,7 @@ static void local_statistics(void) {
         U("HYDRA / STATISTICS");
         U("q quit");
         CHECK(!s.screen.overflow, "statistics resize overflow");
-        CHECK(s.screen.clears >= 1, "resize invalidates presentation");
+        CHECK(s.screen.repaints >= 1 && !s.screen.clears, "resize repaints every cell without erasing the display");
         save(&s, "statistics", sizes[i][0], sizes[i][1]);
     }
     kt_close(&s, "q", 0, 0);
@@ -103,7 +103,7 @@ static void metric_pages(void) {
     const char *names[] = {"queue-delay", "total-execution", "recorded-verification",
                            "owner-recoveries"};
     size_t i, j;
-    kt_open(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, NULL);
     U("Latest attempts average");
     for (i = 0; i < 3; i++) {
         if (s.screen.cols != sizes[i][0] || s.screen.rows != sizes[i][1])
@@ -140,7 +140,7 @@ static void fleet_statistics(void) {
     struct kt_session s;
     const char *argv[] = {tui,       "--hydra", fake,         "--theme", "dark",
                           "--fleet", "--view",  "statistics", NULL};
-    kt_open(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, NULL);
     U("HOST STATISTICS");
     U("2 responded   1 failed   1 reported heads");
     CHECK(HAS("offline") && HAS("-- heads"), "unknown failed-host heads");

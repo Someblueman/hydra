@@ -1,23 +1,8 @@
 /* Production actions with real spawn, pipes, clocks, signals and waits.
- * Only terminal painting/input waiting is replaced for this process test. */
-#define update_size test_update_size
-#define render test_render
-#define read_key test_read_key
-#define terminal_stopped test_terminal_stopped
+ * There is no loop here, so a captured action waits by polling its own pipe,
+ * as it does once the control centre is shutting down. */
 #include "../../src/tui/actions.c"
 #include "../../src/tui/action_capture.c"
-#undef update_size
-#undef render
-#undef read_key
-#undef terminal_stopped
-
-void test_update_size(struct app *app) { (void)app; }
-void test_render(struct app *app, unsigned frame, bool headless) { (void)app; (void)frame; (void)headless; }
-int test_read_key(int timeout_ms, char *key) {
-    const struct timespec pause = {0, timeout_ms * 1000000L};
-    (void)key; (void)nanosleep(&pause, NULL); return 0;
-}
-bool test_terminal_stopped(void) { return false; }
 
 static int check(bool ok, const char *name) {
     printf("[%s] %s\n", ok ? "PASS" : "FAIL", name);

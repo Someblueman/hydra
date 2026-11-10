@@ -185,7 +185,7 @@ void hf_commit_init(struct hf_fixture *f) {
 }
 void hf_open(struct hf_fixture *f, struct kt_session *s) {
     const char *argv[] = {f->tui, "--hydra", f->hydra, NULL};
-    kt_open(s, argv, 140, 40, f->repo);
+    kt_open_terminal(s, argv, 140, 40, f->repo);
 }
 void hf_glob_one(const char *pattern, char *out, size_t capacity) {
     glob_t g;

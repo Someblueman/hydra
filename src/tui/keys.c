@@ -75,7 +75,6 @@ struct native_keys *native_keys(struct app *app) {
     if (!k->ready) {
         memset(k, 0, sizeof(*k));
         keys_defaults(k);
-        kt_input_init(&k->input);
         k->ready = true;
     }
     k->map.bindings = k->bindings;

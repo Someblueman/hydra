@@ -49,7 +49,6 @@ struct native_setup {
     time_t job_started;
     size_t handoff_argc, selected, scroll, typed_cursor, record_count;
     struct setup_capture job, sweep;
-    struct kt_input input;
     struct setup_field fields[SETUP_FORM_FIELDS];
     enum setup_screen screen;
     enum setup_job job_kind;

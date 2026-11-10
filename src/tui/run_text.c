@@ -243,6 +243,7 @@ void step_duration_text(const struct workflow_node *n, char *out, size_t size) {
     if (n->started < 0) { snprintf(out, size, "-"); return; }
     if (n->completed >= n->started) { format_duration(n->completed - n->started, out, size); return; }
     format_duration(now - n->started, out, size);
+    clock_mark();
     if (!strcmp(n->state, "running")) text_append(out, size, " so far");
 }
 

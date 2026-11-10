@@ -268,7 +268,7 @@ static void shared_session(void) {
     kt_send(&s, "a");
     kt_until(&s, "INPUT TO AGENT", 5);
     wait_clients(1);
-    kt_open(&other, argv, 50, 15, f.repo);
+    kt_open_terminal(&other, argv, 50, 15, f.repo);
     wait_clients(2);
     kt_send(&other, "echo OTHER_CLIENT\r");
     kt_until(&other, "OTHER_CLIENT", 5);
@@ -402,7 +402,7 @@ static void open_tui(const char *keys) {
     const char *argv[] = {f.tui, "--hydra", f.hydra, NULL};
     if (keys) CHECK(!setenv("HYDRA_TUI_KEYS", keys, 1), "keys file override");
     else unsetenv("HYDRA_TUI_KEYS");
-    kt_open(&s, argv, 140, 40, f.repo);
+    kt_open_terminal(&s, argv, 140, 40, f.repo);
     kt_until(&s, "Session   running", 8);
 }
 

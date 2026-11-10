@@ -142,11 +142,15 @@ static void terminal_mouse(struct app *app, const struct kt_event *e) {
     native_workspace_mouse(app,e->button,e->x,e->y,e->release);
 }
 
-/* Pasted text is the agent's; the brackets go along when it asked for them. */
-static void terminal_paste(struct app *app, const struct kt_event *e) {
+/* Pasted text is the agent's; the brackets go along when it asked for them.
+ * True when this layer holds input, whether or not an agent could take it. */
+bool native_terminal_paste(struct app *app, const char *bytes, size_t length) {
     struct native_terminal *t=native_terminal_selected(app);
-    if (!native_terminal_focused(app)) return;
-    if (e->type==KT_PASTE || t->screen->bracketed_paste) native_terminal_send(app,t,e->bytes,e->length);
+    if (!native_terminal_focused(app)) return native_keys(app)->state.pending.count != 0;
+    if (t->screen->bracketed_paste) native_terminal_send(app,t,"\033[200~",6);
+    native_terminal_send(app,t,bytes,length);
+    if (t->screen->bracketed_paste) native_terminal_send(app,t,"\033[201~",6);
+    return true;
 }
 
 /* Keys while a fleet client's own history is shown. */
@@ -188,36 +192,23 @@ static void terminal_key(struct app *app, const struct kt_event *e) {
     else native_terminal_send(app,t,e->bytes,e->length);
 }
 
-static void native_terminal_event(struct app *app, const struct kt_event *e) {
+void native_terminal_event(struct app *app, const struct kt_event *e) {
     if (e->type==KT_MOUSE) terminal_mouse(app,e);
     else if (e->type==KT_KEY) terminal_key(app,e);
-    else terminal_paste(app,e);
 }
 
 /* A control key that begins a chord. Hydra keeps these whether or not an
  * agent pane holds input, so its commands are reachable from every view. */
-static bool reserved_byte(const struct native_keys *k, unsigned char byte) {
-    struct kt_input probe;
+static bool reserved_key(const struct native_keys *k, const struct kt_event *e) {
     struct kt_keymap_state idle;
-    struct kt_event e;
-    kt_input_init(&probe);
+    if (e->type!=KT_KEY || e->length!=1 || !(e->mods&KT_MOD_CTRL)) return false;
     kt_keymap_reset(&idle);
-    if (!kt_input_feed(&probe,byte,&e) || !(e.mods&KT_MOD_CTRL)) return false;
-    return kt_keymap_feed(&k->map,&idle,KEY_SCOPE_TERMINAL,&e,NULL)!=KT_KEY_UNBOUND;
+    return kt_keymap_feed(&k->map,&idle,KEY_SCOPE_TERMINAL,e,NULL)!=KT_KEY_UNBOUND;
 }
 
-/* True when the byte belongs to this layer: an agent pane holds input, a
- * chord or an escape sequence is under way, or the byte starts a chord. */
-bool native_terminal_byte(struct app *app, unsigned char byte) {
-    struct native_keys *k=native_keys(app);
-    struct kt_event e;
-    bool busy=k->state.pending.count || k->input.length || k->input.discard || k->input.legacy_remaining;
-    if (!native_terminal_focused(app) && !busy && !reserved_byte(k,byte)) return false;
-    if (kt_input_feed(&k->input,byte,&e)) native_terminal_event(app,&e);
-    return true;
-}
-
-void native_terminal_flush_input(struct app *app) {
-    struct kt_event e;
-    if (kt_input_flush(&native_keys(app)->input,&e)) native_terminal_event(app,&e);
+/* True when the event belongs to this layer: an agent pane holds input, a
+ * chord is under way, or the key starts a chord. */
+bool native_terminal_wants(struct app *app, const struct kt_event *e) {
+    const struct native_keys *k=native_keys(app);
+    return native_terminal_focused(app) || k->state.pending.count || reserved_key(k,e);
 }

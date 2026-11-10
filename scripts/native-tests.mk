@@ -4,12 +4,12 @@ $(BUILD_DIR)/fixture-lock: tests/fixture/lock.c
 	$(CC) -std=c99 -Wall -Wextra -Werror -pedantic $< -o $@
 
 PTY_SUPPORT = tests/kettle/pty_support.c tests/kettle/screen_support.c tests/kettle/fixture_support.c
-PTY_NAMES = pty program-pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads remote-setup
+PTY_NAMES = pty program-pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore interactive-loop plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads remote-setup
 PTY_BINS = $(addprefix $(BUILD_DIR)/native-tests/pty-,$(PTY_NAMES))
 $(BUILD_DIR)/native-tests:
 	mkdir -p $@
 $(foreach n,$(PTY_NAMES),$(eval $(BUILD_DIR)/native-tests/pty-$(n): tests/kettle/test_$(subst -,_,$(n)).c))
-$(addprefix $(BUILD_DIR)/native-tests/pty-,attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads): tests/kettle/hydra_fixture.c
+$(addprefix $(BUILD_DIR)/native-tests/pty-,attached-pty attach-cycles output-fidelity terminal-restore interactive-loop plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads): tests/kettle/hydra_fixture.c
 $(BUILD_DIR)/native-tests/pty-attached-pty: src/tui/fleet_budget.h
 $(BUILD_DIR)/native-tests/pty-fleet-recovery: tests/kettle/fleet_recovery_support.c
 $(addprefix $(BUILD_DIR)/native-tests/pty-,plan-workspace plan-launch plan-conversation plan-assets fleet-recovery): PTY_JSON_CFLAGS = $(FLEET_JSON_CFLAGS)
@@ -25,6 +25,7 @@ test-attached-pty: $(BUILD_DIR)/native-tests/pty-attached-pty
 test-attached-pty: $(BUILD_DIR)/native-tests/pty-attach-cycles
 test-attached-pty: $(BUILD_DIR)/native-tests/pty-output-fidelity
 test-attached-pty: $(BUILD_DIR)/native-tests/pty-terminal-restore
+test-attached-pty: $(BUILD_DIR)/native-tests/pty-interactive-loop
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-workspace
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-launch
 test-plan-workspace: $(BUILD_DIR)/native-tests/pty-plan-conversation

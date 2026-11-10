@@ -374,32 +374,42 @@ static void screens_at(struct app *app, int cols, int rows) {
     paused_case(app, cols, rows);
 }
 
+/* Keys as the loop delivers them: decoded from terminal bytes, then routed by
+ * the control centre's input boundary to the open setup flow. */
+static void setup_keys(struct app *app, const char *bytes) {
+    struct kt_input decoder;
+    struct kt_event event;
+    kt_input_init(&decoder);
+    for (; *bytes; bytes++)
+        if (kt_input_feed(&decoder, (unsigned char)*bytes, &event)) input_event(app, &event);
+    if (kt_input_flush(&decoder, &event)) input_event(app, &event);
+}
+
 /* Keys that must never run anything: declining, wrong confirmation text and
  * keys on a changed-key screen. */
 static void key_cases(struct app *app) {
     struct native_setup *s = app->setup;
-    const char *keys;
     app->cols = 100; app->rows = 30; s->open = true;
     load("provision-approval.json", s->current, 3); s->screen = SETUP_SCREEN_PLAN;
-    for (keys = "\r"; *keys; keys++) (void)native_setup_byte(app, (unsigned char)*keys);
+    setup_keys(app, "\r");
     check(s->screen == SETUP_SCREEN_PLAN && !s->job.active && strstr(s->notice, "Press y"), "Enter does not approve a plan");
-    (void)native_setup_byte(app, 'n');
+    setup_keys(app, "n");
     check(s->screen == SETUP_SCREEN_STEPS && !s->job.active && strstr(s->notice, "nothing was changed"), "n declines and runs nothing");
     load("host-key-approval.json", s->current, 3); s->screen = SETUP_SCREEN_TRUST_KEY; s->typed[0] = '\0'; s->typed_cursor = 0;
-    for (keys = "y\r"; *keys; keys++) (void)native_setup_byte(app, (unsigned char)*keys);
+    setup_keys(app, "y\r");
     check(s->screen == SETUP_SCREEN_TRUST_KEY && !s->job.active && strstr(s->notice, "Type yes"), "a partial yes does not trust the key");
-    (void)native_setup_byte(app, 27); native_setup_flush_input(app);
+    setup_keys(app, "\033");
     check(s->screen == SETUP_SCREEN_STEPS && !s->job.active, "Esc declines the host key");
     load("agents.json", s->current, 0); s->screen = SETUP_SCREEN_AGENTS; s->selected = 0;
-    (void)native_setup_byte(app, 'j'); (void)native_setup_byte(app, 'j');
+    setup_keys(app, "j"); setup_keys(app, "j");
     check(s->screen == SETUP_SCREEN_AGENTS && s->selected == 2 && !s->job.active, "arrows choose an agent without running anything");
     load("host-key-changed.json", s->current, 1); s->screen = SETUP_SCREEN_KEY_CHANGED;
-    for (keys = "yes"; *keys; keys++) (void)native_setup_byte(app, (unsigned char)*keys);
+    setup_keys(app, "yes");
     check(s->screen == SETUP_SCREEN_KEY_CHANGED && !s->job.active, "no key accepts a changed host key");
 }
 
 static void type_text(struct app *app, const char *text) {
-    for (; *text; text++) (void)native_setup_byte(app, (unsigned char)*text);
+    setup_keys(app, text);
 }
 
 /* A form name that already has an unfinished setup asks what to do; e edits
@@ -428,10 +438,10 @@ static void edit_cases(struct app *app) {
     check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "ovh ALREADY HAS AN UNFINISHED SETUP") &&
           strstr(frame, "/Users/you/.ssh/private") && strstr(frame, "Enter continues that setup"), "the duplicate screen offers continue, edit and remove");
     keep("duplicate", 100, 30, frame);
-    (void)native_setup_byte(app, 27); native_setup_flush_input(app);
+    setup_keys(app, "\033");
     check(s->screen == SETUP_SCREEN_FORM && s->focus == SETUP_FIELD_NAME, "Esc returns to the form at the name");
     type_text(app, "\r\r");
-    (void)native_setup_byte(app, 'e');
+    setup_keys(app, "e");
     check(s->screen == SETUP_SCREEN_FORM && !strcmp(s->editing, "ovh") && !strcmp(s->fields[SETUP_FIELD_CONFIG].text, "/Users/you/.ssh/private") &&
           !strcmp(s->fields[SETUP_FIELD_DESTINATION].text, "deploy@ovh.example.net") && !s->job.active, "e opens the setup prefilled");
     check(render_capture(app, frame, sizeof(frame)) && strstr(frame, "EDIT THE SETUP OF ovh") && strstr(frame, "removes the old setup record"),
@@ -468,7 +478,7 @@ static void running_cases(struct app *app) {
     keep("running", 80, 24, frame);
     check(strstr(frame, "Checking the host key\xe2\x80\xa6 12s") && strstr(frame, "Esc or c cancel"),
           "a running step shows its phrase, elapsed seconds and how to cancel");
-    (void)native_setup_byte(app, 'c');
+    setup_keys(app, "c");
     check(s->job.cancelled && s->job.active, "c cancels the running child");
     for (waited = 0; waited < 250 && s->job.active; waited++) { native_setup_tick(app); nanosleep(&pause, NULL); }
     check(!s->job.active && s->screen == SETUP_SCREEN_STEPS && strstr(s->notice, "Cancelled: Checking the host key"),

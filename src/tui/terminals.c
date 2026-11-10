@@ -3,6 +3,9 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "wake.h"
+#include <poll.h>
+#define TERMINAL_BACKLOG (8U*1024U*1024U)
 /* Hydra owns the attachment set. Each PTY owns only an attach client; tmux
  * continues owning the agent session when a client is closed or the UI exits. */
 
@@ -64,6 +67,7 @@ static void outbox_clear(struct native_terminal *t) {
     size_t i;
     for (i=0;i<t->outbox_count;i++) free(t->outbox[i]);
     t->outbox_count=0; t->enter_pending=false;
+    free(t->backlog); t->backlog=NULL; t->backlog_length=t->backlog_sent=0;
 }
 
 /* A tmux client draws on the alternate screen without scrollback, so the
@@ -249,8 +253,36 @@ fail:
     return false;
 }
 
+/* Keeps input the client's queue has no room for, in order. */
+static bool backlog_add(struct native_terminal *t, const void *bytes, size_t length) {
+    size_t unsent=t->backlog_length-t->backlog_sent;
+    char *grown;
+    if (length>TERMINAL_BACKLOG-unsent) return false;
+    if (t->backlog_sent) memmove(t->backlog,t->backlog+t->backlog_sent,unsent);
+    t->backlog_length=unsent; t->backlog_sent=0;
+    grown=realloc(t->backlog,unsent+length);
+    if (!grown) return false;
+    memcpy(grown+unsent,bytes,length);
+    t->backlog=grown; t->backlog_length=unsent+length;
+    return true;
+}
+
+/* Moves backlog into the client's queue as it drains. */
+static void backlog_step(struct native_terminal *t) {
+    while (t->backlog_sent<t->backlog_length && !t->client.finished && t->client.fd>=0) {
+        size_t room=sizeof(t->client.pending)-t->client.pending_length, left=t->backlog_length-t->backlog_sent;
+        size_t part=left<room ? left : room;
+        if (!part || !kt_pty_enqueue(&t->client,t->backlog+t->backlog_sent,part)) break;
+        t->backlog_sent+=part;
+        if (!kt_pty_flush(&t->client)) break;
+    }
+    if (t->backlog && t->backlog_sent==t->backlog_length) { free(t->backlog); t->backlog=NULL; t->backlog_length=t->backlog_sent=0; }
+}
+
 void native_terminal_send(struct app *app, struct native_terminal *t, const void *bytes, size_t length) {
-    if (!t || !t->screen || t->client.eof || !kt_pty_enqueue(&t->client,bytes,length))
+    bool open=t && t->screen && !t->client.eof && !t->client.finished && t->client.fd>=0;
+    if (open && !t->backlog && kt_pty_enqueue(&t->client,bytes,length)) return;
+    if (!open || !backlog_add(t,bytes,length))
         copy_text(app->notice,sizeof(app->notice),"Input not delivered: client disconnected or input queue full");
 }
 
@@ -315,37 +347,50 @@ static void terminal_read(struct native_terminal *t) {
     }
 }
 
+/* A client is polled again when it has output, when it can take queued
+ * input, and when Hydra-authored input is due. Its exit arrives as a signal. */
+static void terminal_wake(const struct native_terminal *t) {
+    bool queued=t->client.pending_length || t->backlog;
+    if (t->client.fd<0 || t->client.eof) return;
+    wake_fd(t->client.fd,(short)(queued && !t->client.finished ? POLLIN|POLLOUT : POLLIN));
+    if (t->outbox_count && t->received && !t->client.finished) wake_at(&t->outbox_at,300);
+}
+
+/* One client: queued input out, a bounded burst of output in. */
+static void terminal_pump(struct app *app, struct native_terminal *t) {
+    uint64_t before=t->screen->history_serial;
+    if (!kt_pty_flush(&t->client) || !kt_pty_reap(&t->client)) {
+        copy_text(app->notice,sizeof(app->notice),"Attachment transport failed; recorded agent outcome is unchanged");
+        kt_pty_close(&t->client);
+    }
+    backlog_step(t);
+    terminal_read(t);
+    if (t->scroll>t->screen->history_count) t->scroll=t->screen->history_count;
+    if (t->scroll && t->screen->history_serial>before) {
+        uint64_t added=t->screen->history_serial-before;
+        t->scroll=added>t->screen->history_count-t->scroll ? t->screen->history_count : t->scroll+(size_t)added;
+    }
+    /* The client is always a tmux attach client, and its input is the
+     * agent's input. tmux takes an answer to its terminal queries that
+     * arrives after its 5-second query window for typed keys, and Hydra
+     * cannot bound when its answer arrives (its own terminal can stall
+     * it). The answers the model gives teach tmux nothing: it adds
+     * features only for a level 61+ device-attributes answer and reads
+     * its size from the PTY. So they are dropped, never typed. */
+    if (t->screen->reply_length) {
+        char reply[256];
+        (void)kt_term_take_reply(t->screen,reply,sizeof(reply));
+    }
+    outbox_step(app,t);
+    (void)kt_pty_flush(&t->client);
+    terminal_wake(t);
+}
+
 void native_terminals_pump(struct app *app) {
     size_t i;
     if (!app->terminals) return;
-    for (i=0;i<NATIVE_TERMINALS;i++) {
-        struct native_terminal *t=&app->terminals->slots[i];
-        uint64_t before;
-        if (!t->screen) continue;
-        before=t->screen->history_serial;
-        if (!kt_pty_flush(&t->client) || !kt_pty_reap(&t->client)) {
-            copy_text(app->notice,sizeof(app->notice),"Attachment transport failed; recorded agent outcome is unchanged");
-            kt_pty_close(&t->client);
-        }
-        terminal_read(t);
-        if (t->scroll>t->screen->history_count) t->scroll=t->screen->history_count;
-        if (t->scroll && t->screen->history_serial>before) {
-            uint64_t added=t->screen->history_serial-before;
-            t->scroll=added>t->screen->history_count-t->scroll ? t->screen->history_count : t->scroll+(size_t)added;
-        }
-        /* The client is always a tmux attach client, and its input is the
-         * agent's input. tmux takes an answer to its terminal queries that
-         * arrives after its 5-second query window for typed keys, and Hydra
-         * cannot bound when its answer arrives (its own terminal can stall
-         * it). The answers the model gives teach tmux nothing: it adds
-         * features only for a level 61+ device-attributes answer and reads
-         * its size from the PTY. So they are dropped, never typed. */
-        if (t->screen->reply_length) {
-            char reply[256];
-            (void)kt_term_take_reply(t->screen,reply,sizeof(reply));
-        }
-        outbox_step(app,t);
-    }
+    for (i=0;i<NATIVE_TERMINALS;i++)
+        if (app->terminals->slots[i].screen) terminal_pump(app,&app->terminals->slots[i]);
 }
 
 static bool fill_glyph(uint32_t glyph) { return glyph == 0xb7U || glyph == '.'; }

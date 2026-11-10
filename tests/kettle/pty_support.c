@@ -225,6 +225,10 @@ void kt_until_match(struct kt_session *s, const char *pattern, char groups[][256
 void kt_resize(struct kt_session *s, int cols, int rows) {
     struct winsize size;
     double end;
+    /* The size a terminal already has is not a resize: nothing is signalled
+     * and nothing needs repainting. */
+    if (s->screen.cols == cols && s->screen.rows == rows)
+        return;
     kt_screen_reset(&s->screen, cols, rows, true);
     memset(&size, 0, sizeof(size));
     size.ws_col = (unsigned short)cols;

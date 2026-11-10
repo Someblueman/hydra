@@ -226,7 +226,7 @@ $(BUILD_DIR)/test-tui-pty: tests/c/test_tui_pty.c tests/c/test_tui_mouse.inc tes
 test-c: $(BUILD_DIR)/test-libhydra
 	$(BUILD_DIR)/test-libhydra
 
-$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c src/tui/input.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/input.o,$(TUI_OBJECTS))
+$(BUILD_DIR)/test-tui-input: tests/c/test_tui_input.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o,$(TUI_OBJECTS))
 	$(CC) $(CORE_CFLAGS) $< $(filter %.o,$^) -o $@
 
 $(BUILD_DIR)/test-tui-actions: tests/c/test_tui_actions.c src/tui/actions.c src/tui/action_capture.c $(KETTLE_OBJECTS) $(TUI_DATA_OBJECTS) $(filter-out $(BUILD_DIR)/tui/main.o $(BUILD_DIR)/tui/actions.o $(BUILD_DIR)/tui/action_capture.o,$(TUI_OBJECTS))
@@ -531,6 +531,7 @@ test-attached-pty: build-tui
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-attach-cycles"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-output-fidelity"
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-terminal-restore"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-interactive-loop"
 sanitize-attached:
 	@$(MAKE) BUILD_DIR=build/attached-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-attached-pty
 
