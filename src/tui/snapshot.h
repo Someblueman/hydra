@@ -30,6 +30,12 @@ bool snapshot_step(struct native_snapshot *s, FILE **rows, bool *timed_out);
 /* Stops the refresh in flight and its commands. */
 void snapshot_cancel(struct native_snapshot *s);
 
+/* What tmux said at the latest refresh that asked it, once: lines of
+ * "session:" followed by the times, space separated, at which each of the
+ * session's windows last produced output. The caller frees it; NULL when
+ * nothing new arrived since the last call. */
+char *snapshot_take_activity(struct native_snapshot *s);
+
 /* Where the records are, once a refresh has located the repository; NULL
  * before that. */
 const struct store_location *snapshot_where(const struct native_snapshot *s);

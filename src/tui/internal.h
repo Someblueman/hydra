@@ -340,6 +340,10 @@ void native_observations_tick(struct app *app, bool request);
  * whether one is in flight. */
 void native_observations_request(struct app *app, size_t source);
 bool native_observations_loading(const struct app *app, size_t source);
+/* Inferred head activity (activity.c), from the tmux answer the head snapshot
+ * already asks for: one hydra child per change, none per refresh. */
+void native_activity_tick(struct app *app);
+void native_activity_destroy(struct app *app);
 void native_attention_destroy(struct app *app);
 void native_attention_tick(struct app *app, bool request);
 bool native_attention_key(struct app *app, char key);

@@ -7,7 +7,20 @@ fi
 case "${1:-}" in
     -V) printf 'tmux 3.4\n' ;;
     list-sessions)
-        printf '%s' "${FAKE_TMUX_SESSIONS:-}" | tr ',' '\n'
+        # With FAKE_TMUX_ACTIVITY (a file of "session time" lines, where the
+        # time "now" stands for output at this moment) every listed session
+        # carries its window activity, as the control centre asks for it.
+        if [ -f "${FAKE_TMUX_ACTIVITY:-}" ]; then
+            now="$(date +%s)"
+            printf '%s' "${FAKE_TMUX_SESSIONS:-}" | tr ',' '\n' | while IFS= read -r session || [ -n "$session" ]; do
+                [ -n "$session" ] || continue
+                activity="$(awk -v name="$session" '$1 == name { print $2; exit }' "$FAKE_TMUX_ACTIVITY")"
+                [ "$activity" != now ] || activity="$now"
+                printf '%s:%s \n' "$session" "$activity"
+            done
+        else
+            printf '%s' "${FAKE_TMUX_SESSIONS:-}" | tr ',' '\n'
+        fi
         ;;
     list-panes)
         printf '%s' "${FAKE_TMUX_SESSIONS:-}" | tr ',' '\n' | while IFS= read -r session; do

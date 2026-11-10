@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 /* What the periodic refresh costs when the control centre reads the state
@@ -14,9 +15,13 @@
  * index changed are read at the next refresh, every worktree is read within a
  * bounded number of refreshes, and a read that runs out of time leaves the
  * last good snapshot on screen, marked stale. Workflow runs are asked of the
- * CLI only when their records changed or one has not ended. */
+ * CLI only when their records changed or one has not ended. Observing head
+ * activity rides on the refresh's one tmux command: the CLI is started once
+ * per change of a head's activity and once in a while to say that someone is
+ * watching, never per refresh or per head. */
 
 static char root[4096], build[4096], tui[4096], base[4096], hydra[4096], calls[4096], slow[4096];
+static char slow_record[4096], activity[4096];
 static char real_git[4096];
 static char log_text[1 << 20];
 
@@ -86,7 +91,17 @@ static const char run_script[] =
     "put \"$run/steps/check/attempts\" 1\n";
 
 static const char git_script[] = "#!/bin/sh\nprintf 'git %s\\n' \"$*\" >> \"$RC_CALLS\"\nexec \"$RC_GIT\" \"$@\"\n";
-static const char hydra_script[] = "#!/bin/sh\nprintf 'hydra %s\\n' \"$*\" >> \"$RC_CALLS\"\nexec \"$RC_HYDRA\" \"$@\"\n";
+/* An activity recorder also logs when it has finished, and can be slowed
+ * down so that one is still running when the control centre quits. */
+static const char hydra_script[] =
+    "#!/bin/sh\n"
+    "printf 'hydra %s\\n' \"$*\" >> \"$RC_CALLS\"\n"
+    "[ \"${1:-}:${2:-}\" = adapter:activity ] || exec \"$RC_HYDRA\" \"$@\"\n"
+    "if [ -f \"$RC_SLOW_RECORD\" ]; then sleep 1; fi\n"
+    "\"$RC_HYDRA\" \"$@\"\n"
+    "status=$?\n"
+    "printf 'recorded %s %s\\n' \"$3\" \"$status\" >> \"$RC_CALLS\"\n"
+    "exit \"$status\"\n";
 static const char tmux_script[] =
     "#!/bin/sh\n"
     "printf 'tmux %s\\n' \"$*\" >> \"$RC_CALLS\"\n"
@@ -124,6 +139,9 @@ static void wrappers(void) {
     environment("RC_GIT", real_git);
     environment("RC_CALLS", calls);
     environment("RC_SLOW", slow);
+    kt_format(slow_record, sizeof(slow_record), "%s/recording-is-slow", base);
+    environment("RC_SLOW_RECORD", slow_record);
+    kt_format(activity, sizeof(activity), "%s/window-activity", base);
     kt_format(value, sizeof(value), "%s/bin/hydra", root);
     environment("RC_HYDRA", value);
     kt_format(value, sizeof(value), "%s/tests/fixtures/tui/fake-bin/tmux", root);
@@ -325,6 +343,114 @@ static void workflow_reads(void) {
     puts("PASS workflow reads: ended runs once, again when a record changes; unended runs every refresh");
 }
 
+/* The activity.changed events in one head's log that carry text. */
+static int recorded_events(const char *project, int head, const char *text) {
+    static char log[1 << 16];
+    char path[8192];
+    const char *at;
+    int count = 0;
+    kt_format(path, sizeof(path), "%s/home/state/v2/projects/project_00000000000000c0/heads/head_%016x/events/events.jsonl", project, (unsigned)head);
+    kt_read(path, log, sizeof(log));
+    for (at = strstr(log, "\"type\":\"activity.changed\""); at; at = strstr(at + 1, "\"type\":\"activity.changed\"")) {
+        const char *end = strchr(at, '\n'), *found = strstr(at, text);
+        if (found && (!end || found < end)) count++;
+    }
+    return count;
+}
+
+/* When each session's window last produced output, as the fake tmux says it. */
+static void window_activity(const char *first, long long others) {
+    char text[512];
+    kt_format(text, sizeof(text), "session-1 %s\nsession-2 %lld\nsession-3 %lld\n", first, others, others - 1);
+    kt_write(activity, text);
+}
+
+/* Three silent heads are each recorded as quiet once; after that refreshes
+ * go on and the CLI is asked only to note that someone is watching. */
+static void activity_steady(struct kt_session *s, const char *project, long long silent_since) {
+    char since[64];
+    kt_format(since, sizeof(since), "\"state\":\"quiet\",\"since\":%lld,", silent_since);
+    kt_pump(s, 3.0);
+    CHECK(logged("recorded ", " 0") == 3, "the first state of every head is recorded once");
+    CHECK(recorded_events(project, 1, since) == 1, "a quiet head is recorded with the moment its output stopped");
+    CHECK(recorded_events(project, 2, "\"source\":\"tmux\",\"confidence\":\"inferred\"") == 1, "the record says it is inferred from tmux");
+}
+
+static void activity_unchanged(struct kt_session *s) {
+    struct cost c = watch(s, 6.0);
+    CHECK(c.refreshes >= 2 && c.tmux == c.refreshes, "observing three heads adds no tmux command to a refresh");
+    CHECK(logged("hydra ", "adapter activity") == 0, "an unchanged head starts no recorder");
+    CHECK(c.hydra <= 1 && c.hydra == logged("hydra ", "adapter watch"), "the CLI is started only to note the observer, not per refresh");
+}
+
+static void activity_changed_once(const char *project);
+
+/* One head starts producing output and keeps going: one recorder, once. */
+static void activity_change(struct kt_session *s, const char *project, long long silent_since) {
+    double waited = 0;
+    kt_write(calls, "");
+    window_activity("now", silent_since);
+    while (waited < 15 && !logged("recorded ", "work-1 0")) { kt_pump(s, 0.5); waited += 0.5; }
+    CHECK(waited >= 3.5, "output shorter than four seconds is not yet a change");
+    kt_pump(s, 4.5);
+    activity_changed_once(project);
+}
+
+static void activity_changed_once(const char *project) {
+    CHECK(logged("hydra ", "adapter activity") == 1, "a change starts exactly one recorder");
+    CHECK(logged("hydra ", "adapter activity work-1") == 1, "the recorder is for the head that changed");
+    CHECK(recorded_events(project, 1, "\"state\":\"active\"") == 1, "the change is in the head's event log");
+    CHECK(recorded_events(project, 2, "\"state\":\"active\"") == 0, "the other heads record nothing");
+}
+
+/* The active head pauses for less than ten seconds and goes on: a spinner
+ * pause is not a pair of changes. */
+static void activity_pause(struct kt_session *s, const char *project, long long silent_since) {
+    char paused[32];
+    kt_write(calls, "");
+    kt_format(paused, sizeof(paused), "%lld", (long long)time(NULL));
+    window_activity(paused, silent_since);
+    kt_pump(s, 7.0);
+    window_activity("now", silent_since);
+    kt_pump(s, 3.0);
+    CHECK(logged("hydra ", "adapter activity") == 0, "a pause shorter than ten seconds starts no recorder");
+    CHECK(recorded_events(project, 1, "\"state\":\"quiet\"") == 1, "the paused head is still recorded quiet only once");
+}
+
+/* Inferred head activity: observed with the refresh's own tmux command and
+ * recorded through the CLI once per change; quitting waits for recorders that
+ * are still appending and leaves none behind. */
+static void activity_observed(void) {
+    struct kt_session s;
+    char project[4096];
+    long long silent_since = (long long)time(NULL) - 300;
+    char first[32];
+    kt_format(first, sizeof(first), "%lld", silent_since);
+    window_activity(first, silent_since);
+    environment("FAKE_TMUX_ACTIVITY", activity);
+    open_project(&s, "activity", 3, project, sizeof(project));
+    activity_steady(&s, project, silent_since);
+    activity_unchanged(&s);
+    activity_change(&s, project, silent_since);
+    activity_pause(&s, project, silent_since);
+    kt_close(&s, "q", 0, 0);
+    /* A second observer finds two heads quiet as recorded and one whose
+     * output has stopped: the recorders it starts are still running when it
+     * is asked to quit. */
+    kt_format(first, sizeof(first), "%lld", silent_since + 200);
+    window_activity(first, silent_since);
+    kt_write(slow_record, "");
+    open_session(&s, project);
+    while (!logged("hydra ", "adapter activity")) kt_pump(&s, 0.2);
+    kt_close(&s, "q", 0, 0);
+    CHECK(logged("hydra ", "adapter activity") >= 1, "recorders were running at quit");
+    CHECK(logged("hydra ", "adapter activity") == logged("recorded ", ""), "quitting waits for running recorders and leaves none behind");
+    CHECK(recorded_events(project, 2, "\"state\":\"quiet\"") == 1, "a state another observer recorded is not recorded twice");
+    CHECK(!unlink(slow_record) && !unlink(activity), "activity fixtures removed");
+    unsetenv("FAKE_TMUX_ACTIVITY");
+    puts("PASS activity: no process per refresh, one recorder per change, none without or for a short pause, none left at quit");
+}
+
 int main(void) {
     const char *remove[] = {"rm", "-rf", base, NULL};
     struct cost few, many;
@@ -337,6 +463,7 @@ int main(void) {
     puts("PASS cost: a refresh starts the same few processes for 4 and for 24 heads, and never the CLI");
     rationing();
     workflow_reads();
+    activity_observed();
     slow_read();
     kt_command_ok(NULL, remove);
     return 0;

@@ -163,6 +163,7 @@ int main(int argc, char **argv) {
     native_workspace_destroy(&app);
     native_terminals_destroy(&app);
     native_observations_destroy(&app);
+    native_activity_destroy(&app);
     native_attention_destroy(&app);
     native_plan_destroy(&app);
     native_setup_destroy(&app);

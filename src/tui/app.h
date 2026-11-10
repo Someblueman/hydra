@@ -31,6 +31,7 @@ struct native_attention;
 struct native_review;
 struct native_setup;
 struct native_snapshot;
+struct native_activity;
 struct transcript;
 
 struct app {
@@ -54,6 +55,9 @@ struct app {
     bool store;
     /* Lazily allocated interpreter for read-only captured output. */
     struct transcript *transcript;
+    /* Inferred activity of interactive heads (activity.c); allocated when
+     * the control centre first observes one. */
+    struct native_activity *activity;
     pid_t control_pids[4];
     pid_t action_pid;
     /* Full 127-byte task/run identity plus action and label text. */

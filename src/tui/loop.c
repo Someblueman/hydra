@@ -31,6 +31,7 @@ static void poll_work(struct app *app, bool request) {
         if (request && app->preview && !native_terminal_focused(app)) capture_preview(app);
         native_setup_tick(app);
     }
+    native_activity_tick(app);
     native_terminals_pump(app);
     for (i = 0; i < app->modal_count; i++)
         if (app->modals[i].tick) app->modals[i].tick(app, app->modals[i].context);

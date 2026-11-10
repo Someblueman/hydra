@@ -60,6 +60,9 @@ struct native_snapshot {
     struct store_snapshot store;
     struct native_capture locate, sessions, leftovers;
     char *session_text, *leftover_rows;
+    /* What tmux said about window activity at the latest refresh that asked
+     * it, until snapshot_take_activity hands it over. */
+    char *activity_text;
     struct diff_probe probes[SNAPSHOT_PROBES];
 };
 
@@ -265,9 +268,27 @@ static bool diff_lookup(void *context, const char *worktree, unsigned *count) {
 
 /* ---- one refresh ---------------------------------------------------------- */
 
+/* tmux lists a live session as its name, a colon (no session name holds
+ * one) and when each of its windows last produced output. The rows are written
+ * from the names; the whole answer is kept for snapshot_take_activity, so the
+ * one tmux command of a refresh also serves whoever watches activity. */
+static void sessions_accept(struct native_snapshot *s, char *text) {
+    char *from, *to;
+    free(s->activity_text);
+    s->activity_text = text ? strdup(text) : NULL;
+    s->session_text = text;
+    for (from = to = text; from && *from; ) {
+        size_t line = strcspn(from, "\n"), name = strcspn(from, ":\n");
+        memmove(to, from, name);
+        to += name; from += line;
+        if (*from == '\n') { *to++ = '\n'; from++; }
+    }
+    if (to) *to = '\0';
+}
+
 /* Reads the store, then asks tmux, git and the CLI for what it cannot say. */
 static void refresh_read(struct native_snapshot *s) {
-    char *sessions[] = {(char *)"tmux", (char *)"list-sessions", (char *)"-F", (char *)"#{session_name}", NULL};
+    char *sessions[] = {(char *)"tmux", (char *)"list-sessions", (char *)"-F", (char *)"#{session_name}:#{W:#{window_activity} }", NULL};
     char *leftovers[] = {s->hydra, (char *)"tui", (char *)"--orphan-rows", NULL};
     s->read = true;
     if (!store_read(&s->where, &s->cache, &s->store)) { s->failed = true; return; }
@@ -285,7 +306,7 @@ static bool refresh_advance(struct native_snapshot *s) {
     }
     if (!s->read) refresh_read(s);
     if (s->failed) return false;
-    if (s->sessions.pid && native_capture_step(&s->sessions)) s->session_text = command_text(s, &s->sessions);
+    if (s->sessions.pid && native_capture_step(&s->sessions)) sessions_accept(s, command_text(s, &s->sessions));
     if (s->leftovers.pid && native_capture_step(&s->leftovers)) s->leftover_rows = command_text(s, &s->leftovers);
     busy = probes_step(s);
     return busy || s->sessions.pid || s->leftovers.pid;
@@ -339,6 +360,12 @@ void snapshot_cancel(struct native_snapshot *s) {
     refresh_end(s);
 }
 
+char *snapshot_take_activity(struct native_snapshot *s) {
+    char *text = s ? s->activity_text : NULL;
+    if (s) s->activity_text = NULL;
+    return text;
+}
+
 const struct store_location *snapshot_where(const struct native_snapshot *s) {
     return s && s->located ? &s->where : NULL;
 }
@@ -359,6 +386,7 @@ void snapshot_free(struct native_snapshot *s) {
     snapshot_cancel(s);
     store_cache_free(&s->cache);
     free(s->diffs);
+    free(s->activity_text);
     free(s);
 }
 
