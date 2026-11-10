@@ -1,22 +1,21 @@
 #include "workspace_demo.h"
 #include <stdio.h>
 
-void demo_colors(void *context, FILE *out, enum kt_style style) {
+void demo_colors(void *model, FILE *out, enum kt_style style) {
     static const char *palette[] = {"\033[0;38;5;252;48;5;234m", "\033[0;38;5;103;48;5;234m",
         "\033[1;38;5;153;48;5;234m", "\033[0;38;5;16;48;5;147m",
         "\033[0;38;5;215;48;5;234m", "\033[1;38;5;183;48;5;234m"};
-    (void)context;
+    (void)model;
     fputs(palette[style >= KT_BASE && style <= KT_STRONG ? style : KT_BASE], out);
 }
 
-void demo_draw(struct kt_canvas *c, struct demo *d) {
-    struct kt_workspace *w = &d->workspace;
+void demo_draw(struct kt_canvas *c, const struct demo *d) {
+    const struct kt_workspace *w = &d->workspace;
     int i, row;
     char text[200];
-    kt_clear(c, KT_BASE);
     kt_text(c, (struct kt_rect){1,0,c->width-2,1}, "kettle / workspace demo", KT_TITLE);
     for (i = 0; i < w->count; i++) {
-        struct kt_pane *p = &w->panes[i];
+        const struct kt_pane *p = &w->panes[i];
         struct kt_canvas view;
         if (p->split != KT_LEAF) {
             for (row = 0; row < p->divider.height; row++) {
@@ -31,9 +30,12 @@ void demo_draw(struct kt_canvas *c, struct demo *d) {
         snprintf(text, sizeof(text), "%s pane %d / offset %zu", i == w->focus ? "FOCUS" : "     ", i, p->scroll);
         kt_text(&view, (struct kt_rect){1,1,view.width-2,1}, text, i == w->focus ? KT_SELECTED : KT_BORDER);
         if (i == 1) {
+            /* update settled the scroll; drawing works on copies and changes nothing. */
             struct kt_canvas content;
+            struct kt_tree tree = d->tree;
+            size_t scroll = p->scroll;
             if (kt_canvas_view(&content, &view, (struct kt_rect){1,2,view.width-2,view.height-3}))
-                kt_tree_draw(&d->tree, &content, &p->scroll, w->focus == 1);
+                kt_tree_draw(&tree, &content, &scroll, w->focus == 1);
             continue;
         }
         if (i == 3 && d->model) {

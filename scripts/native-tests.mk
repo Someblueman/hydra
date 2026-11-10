@@ -4,7 +4,7 @@ $(BUILD_DIR)/fixture-lock: tests/fixture/lock.c
 	$(CC) -std=c99 -Wall -Wextra -Werror -pedantic $< -o $@
 
 PTY_SUPPORT = tests/kettle/pty_support.c tests/kettle/screen_support.c tests/kettle/fixture_support.c
-PTY_NAMES = pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads remote-setup
+PTY_NAMES = pty program-pty statistics-pty fleet-controls fleet-recovery attached-pty attach-cycles output-fidelity terminal-restore plan-workspace plan-launch plan-conversation plan-assets workflow-controls runs-heads remote-setup
 PTY_BINS = $(addprefix $(BUILD_DIR)/native-tests/pty-,$(PTY_NAMES))
 $(BUILD_DIR)/native-tests:
 	mkdir -p $@
@@ -17,6 +17,7 @@ $(addprefix $(BUILD_DIR)/native-tests/pty-,plan-workspace plan-launch plan-conve
 $(PTY_BINS): $(PTY_SUPPORT) $(wildcard tests/kettle/*.h) | $(BUILD_DIR)/native-tests
 	$(CC) $(CORE_CFLAGS) $(PTY_JSON_CFLAGS) $(filter %.c,$^) $(PTY_JSON_LIB) -o $@
 test-workspace-pty: $(BUILD_DIR)/native-tests/pty-pty
+test-program-pty: $(BUILD_DIR)/native-tests/pty-program-pty
 test-statistics: $(BUILD_DIR)/native-tests/pty-statistics-pty
 test-fleet-controls: $(BUILD_DIR)/native-tests/pty-fleet-controls
 test-fleet-recovery: $(BUILD_DIR)/native-tests/pty-fleet-recovery

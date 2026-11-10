@@ -15,7 +15,9 @@ struct kt_cell {
 };
 struct kt_screen {
     int cols, rows, x, y, clears, overflow;
-    bool awaiting_clear, bold, reverse;
+    /* Cells painted by the synchronized update (DEC mode 2026) being read. */
+    int frame_cells, frame_overflow, repaints;
+    bool awaiting_clear, in_frame, bold, reverse;
     unsigned fg, bg, utf_value;
     int utf_remaining;
     char escape[260];
@@ -46,6 +48,10 @@ void kt_fail(const char *file, int line, const char *message);
             kt_fail(__FILE__, __LINE__, (message));                                                \
     } while (0)
 void kt_open(struct kt_session *s, const char *const argv[], int cols, int rows, const char *cwd);
+/* Like kt_open, and the PTY is the child's controlling terminal, as under a
+ * terminal emulator: kt_resize then raises SIGWINCH in the child. */
+void kt_open_terminal(struct kt_session *s, const char *const argv[], int cols, int rows,
+                      const char *cwd);
 size_t kt_pump(struct kt_session *s, double seconds);
 void kt_send(struct kt_session *s, const char *text);
 void kt_send_n(struct kt_session *s, const void *bytes, size_t length);

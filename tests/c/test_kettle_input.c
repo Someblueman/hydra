@@ -12,6 +12,31 @@ static bool send(const char *bytes) {
     return got;
 }
 
+/* kt_tree_scroll is the scroll kt_tree_draw settles on, without drawing. */
+static void tree_scroll(void) {
+    struct kt_tree tree;
+    struct kt_tree_node nodes[] = {{"a", 0, 0, true, KT_BASE}, {"b", 1, 1, true, KT_BASE},
+        {"c", 2, 1, true, KT_BASE}, {"d", 3, 0, true, KT_BASE}, {"e", 4, 0, true, KT_BASE}};
+    struct kt_cell storage[20];
+    struct kt_canvas c;
+    size_t scroll = 0;
+    assert(kt_tree_init(&tree, nodes, 5));
+    assert(kt_tree_scroll(&tree, 0, 2) == 0);
+    tree.selected = 4;
+    assert(kt_tree_scroll(&tree, 0, 2) == 3);
+    assert(kt_tree_scroll(&tree, 4, 2) == 4);
+    assert(kt_tree_scroll(&tree, 9, 2) == 4);
+    nodes[0].expanded = false;
+    assert(kt_tree_scroll(&tree, 0, 2) == 1);
+    tree.selected = 2; /* hidden by its collapsed parent: shown as that parent */
+    assert(kt_tree_scroll(&tree, 3, 2) == 0);
+    tree.selected = 4;
+    assert(kt_init(&c, storage, 20, 10, 2, true));
+    kt_tree_draw(&tree, &c, &scroll, true);
+    assert(scroll == 1);
+    assert(kt_tree_scroll(&tree, 9, 0) == 9);
+}
+
 int main(void) {
     struct kt_tree tree;
     struct kt_tree_node nodes[] = {{"Root", 0, 0, true, KT_BASE}, {"Child", 1, 1, true, KT_BASE},
@@ -45,6 +70,7 @@ int main(void) {
     kt_tree_draw(&tree, &c, &scroll, true); assert(scroll == 1);
     assert(kt_tree_click(&tree, scroll, 0) && tree.selected == 1);
     nodes[1].depth = 3; assert(!kt_tree_init(&tree, nodes, 4));
+    tree_scroll();
     puts("input/tree: fragmented mouse, paste isolation, legacy/overlong input, focus, collapse and selection bounds passed");
     return 0;
 }

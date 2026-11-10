@@ -62,6 +62,19 @@ static bool poll_exit(struct kt_session *s) {
     }
     return s->exited;
 }
+static bool controlling_terminal;
+/* Runs in the child: a new session, which optionally adopts the PTY. */
+static void session_begin(int slave) {
+    (void)setsid();
+    if (controlling_terminal && ioctl(slave, TIOCSCTTY, 0) != 0)
+        _exit(125);
+}
+void kt_open_terminal(struct kt_session *s, const char *const argv[], int cols, int rows,
+                      const char *cwd) {
+    controlling_terminal = true;
+    kt_open(s, argv, cols, rows, cwd);
+    controlling_terminal = false;
+}
 void kt_open(struct kt_session *s, const char *const argv[], int cols, int rows, const char *cwd) {
     struct winsize size;
     const char *slave;
@@ -89,7 +102,7 @@ void kt_open(struct kt_session *s, const char *const argv[], int cols, int rows,
     s->pid = fork();
     CHECK(s->pid >= 0, "fork PTY child");
     if (!s->pid) {
-        (void)setsid();
+        session_begin(s->slave);
         if (cwd && chdir(cwd))
             _exit(125);
         if (dup2(s->slave, 0) < 0 || dup2(s->slave, 1) < 0 || dup2(s->slave, 2) < 0)

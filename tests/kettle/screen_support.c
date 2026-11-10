@@ -93,10 +93,52 @@ static void sgr(struct kt_screen *s, const int *v, size_t n) {
             s->bg = palette(x - 40);
     }
 }
+/* A resize is acknowledged by a display erase or, from a program that never
+ * erases, by one synchronized update that paints every cell of the new grid.
+ * While waiting, an update is applied provisionally and dropped again unless
+ * it turns out to be that full repaint: output drawn for the old size never
+ * covers the new grid exactly. */
+static void frame_edge(struct kt_screen *s, bool begin) {
+    bool whole = s->frame_cells == s->cols * s->rows && s->overflow == s->frame_overflow;
+    if (begin) {
+        s->in_frame = true;
+        s->frame_cells = 0;
+        s->frame_overflow = s->overflow;
+        return;
+    }
+    if (!s->in_frame)
+        return;
+    s->in_frame = false;
+    if (whole)
+        s->repaints++;
+    if (!s->awaiting_clear)
+        return;
+    if (whole) {
+        s->awaiting_clear = false;
+        return;
+    }
+    s->overflow = s->frame_overflow;
+    clear_cells(s);
+}
+/* True for sequences the cell grid ignores: non-CSI and private modes. */
+static bool escape_ignored(struct kt_screen *s) {
+    if (s->escape[1] != '[')
+        return true;
+    if (s->escape[2] != '?')
+        return false;
+    if (s->escape_size == 8 && !memcmp(s->escape + 2, "?2026", 5))
+        frame_edge(s, s->escape[7] == 'h');
+    return true;
+}
+/* Output is discarded while a resize waits for its repaint, except inside a
+ * synchronized update, which may be that repaint. */
+static bool output_discarded(const struct kt_screen *s) {
+    return s->awaiting_clear && !s->in_frame;
+}
 static void escape_end(struct kt_screen *s, unsigned code) {
     int values[64] = {0};
     size_t n = 1, i;
-    if (s->escape[1] != '[' || s->escape[2] == '?')
+    if (escape_ignored(s))
         return;
     for (i = 2; i + 1 < s->escape_size; i++) {
         char ch = s->escape[i];
@@ -138,7 +180,7 @@ static void character(struct kt_screen *s, unsigned code) {
         s->escape_size = 1;
         return;
     }
-    if (s->awaiting_clear)
+    if (output_discarded(s))
         return;
     if (code == '\r') {
         s->x = 0;
@@ -181,6 +223,7 @@ static void character(struct kt_screen *s, unsigned code) {
         c->bg = s->reverse ? s->fg : s->bg;
         c->bold = s->bold;
         c->width = width;
+        s->frame_cells += width;
         if (width == 2) {
             c[1] = *c;
             c[1].text[0] = 0;

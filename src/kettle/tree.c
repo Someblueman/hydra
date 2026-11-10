@@ -48,18 +48,29 @@ void kt_tree_expand(struct kt_tree *t, bool expand) {
     } else if (expand && children(t, selected)) kt_tree_move(t, 1);
 }
 
+/* The row drawn as selected: a selection hidden by a collapsed ancestor
+ * shows as the nearest visible row before it. */
+static size_t shown_selection(const struct kt_tree *t) {
+    size_t selected = t->selected < t->count ? t->selected : 0;
+    while (selected && !visible(t, selected)) selected--;
+    return selected;
+}
+
+size_t kt_tree_scroll(const struct kt_tree *t, size_t scroll, int height) {
+    size_t i, chosen = 0, selected;
+    if (!t->count || height < 1) return scroll;
+    selected = shown_selection(t);
+    for (i = 0; i < selected; i++) if (visible(t, i)) chosen++;
+    if (scroll > chosen) return chosen;
+    return chosen >= scroll + (size_t)height ? chosen - (size_t)height + 1 : scroll;
+}
+
 void kt_tree_draw(struct kt_tree *t, struct kt_canvas *c, size_t *scroll, bool focused) {
-    size_t i, ordinal = 0, chosen = 0, total = 0;
+    size_t i, ordinal = 0;
     int row = 0;
     if (!t->count) { kt_text(c, (struct kt_rect){0,0,c->width,1}, "No entries", KT_BORDER); return; }
-    if (t->selected >= t->count) t->selected = 0;
-    while (t->selected && !visible(t, t->selected)) t->selected--;
-    for (i = 0; i < t->count; i++) if (visible(t, i)) {
-        if (i == t->selected) chosen = total;
-        total++;
-    }
-    if (*scroll > chosen) *scroll = chosen;
-    if (chosen >= *scroll + (size_t)c->height) *scroll = chosen - (size_t)c->height + 1;
+    t->selected = shown_selection(t);
+    *scroll = kt_tree_scroll(t, *scroll, c->height);
     for (i = 0; i < t->count && row < c->height; i++) {
         struct kt_tree_node *n = &t->nodes[i];
         enum kt_style tone = i == t->selected && focused ? KT_SELECTED : n->style;

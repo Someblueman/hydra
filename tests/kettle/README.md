@@ -14,9 +14,10 @@ make test-workspace-pty test-statistics test-fleet-controls \
 ```
 
 `BUILD_DIR` selects the existing native application build. The standalone kettle
-package compiles `test_pty.c` with `pty_support.c`, `screen_support.c`, and
-`fixture_support.c`; its `make test-pty` invokes `--standalone` to run the workspace,
-shell and interruption scenarios without Hydra or JSON-C. Hydra planning and
+package compiles `test_pty.c` and `test_program_pty.c` with `pty_support.c`,
+`screen_support.c`, and `fixture_support.c`; its `make test-pty` runs the runtime
+scenarios and invokes `test-pty --standalone` to run the workspace, shell and
+interruption scenarios without Hydra or JSON-C. Hydra planning and
 receiver drivers use JSON-C, already required by the native fleet build.
 
 ## Preserved scenario mapping
@@ -30,14 +31,20 @@ receiver drivers use JSON-C, already required by the native fleet build.
 | `test_attached_pty.py` | `test_attached_pty.c`: real identity-checked tmux attachment and stale-instance refusal; exact/reported confidence labels; slow observations do not block terminal input; forms do not block output; bracketed paste, Unicode editing and Ctrl-C routing; unsent drafts across modes, zoom, detach/reconnect and resize; two sessions with independent history, mouse focus and draft submission; compact terminal dimensions; client-only exit preserves shell PIDs and leaves no client. |
 | `test_plan_launch.py` | `test_plan_launch.c`: full digest at three sizes, incorrect/stale approval produces no run, durable receipt while execution is active, duplicate refusal, UI temporary-file cleanup, detached completion and exact sealed artifact; escaped tab/newline checkout framing, historical navigation, live artifact corruption refusal, trusted provenance remains distinct from spoofing text in selected task output. |
 | `test_workflow_controls.py` | `test_workflow_controls.c`: explicit approval/rejection/cancellation, wrong confirmation has no effect, durable decision is separate from resume, only approved resumed work executes, UI can exit during execution, terminal runs cannot resume/cancel, selection clears stale footer, unsent attached input and original panes survive. |
+| (new) | `test_program_pty.c` with `program_fixture.c` (`make test-program-pty`, part of `make test-workspace-pty`): the kettle runtime on a real terminal. The screen is entered and cleared once in the first frame; all output is whole synchronized updates; an idle program writes nothing; a forced repaint and SIGWINCH at three sizes rewrite every cell without erasing the display and reach the last column and row; paste, focus and cursor modes; SIGTERM/SIGINT/SIGHUP exit 128+signal; SIGSEGV/SIGBUS/SIGFPE/SIGILL/SIGABRT, `abort()` and `exit()` keep their status; in every case the last bytes written undo the terminal modes and the settings are restored exactly; `kt_cmd_exec` runs its child on a cooked terminal; suspend, SIGTSTP and SIGCONT re-enter and repaint. |
 | (new) | `test_attach_cycles.c`: eight attach, type, leave (`Ctrl-B Tab`), Tab re-entry, close (`Ctrl-B x`), layout switch and resize cycles at 140x40, 100x30, 80x24 and 60x20; leave/close hints visible, Esc delivered to the agent, one view per agent, a forced full repaint equals the incremental screen, no dotted fill, owner shell PID and all typed work survive; a disconnected client releases input; another smaller client's size is named. HTML and raw PTY evidence in `build/attach-cycles-evidence`. |
 | (new) | `test_output_fidelity.c`: recorded Claude Code and Codex output printed in a head, read back in the Details transcript and the attached pane at 140x40 and 80x24 with resize and tmux history: verbatim Unicode, aligned wide cells, provider and themed diff colors, wrapped long lines with markers, no escape residue or `?` runs, key hints labelled. Evidence in `build/output-fidelity-evidence`. |
 | `test_fleet_recovery.py` | `test_fleet_recovery.c` with `fleet_recovery_support.c`: two actual local receiver homes and controlled SSH loss, exact recorded-owner failure isolated to one task, independent receiver completion, result verification; observer exit/restart preserves task/run/attempt, complete ordered cursor stream, real 64-byte owner-log prefix plus nonempty resumed suffix equals full log, exact work artifact, no new acceptance/replay, saved ASCII announcements and owned-fixture quiescence. |
 
 Every session checks the expected exit status and exact terminal flag, character
 control and baud-rate restoration. The shared observer retains cursor addressing,
-full-clear acknowledgement, SGR colors/reverse/bold, wide and combining characters,
-incremental UTF-8 decoding, overflow accounting and HTML cell evidence.
+resize acknowledgement, SGR colors/reverse/bold, wide and combining characters,
+incremental UTF-8 decoding, overflow accounting and HTML cell evidence. A resize
+is acknowledged by a display erase (`hydra-tui`) or by one synchronized update
+(DEC mode 2026) that paints every cell of the new grid (the kettle runtime, which
+never erases for a repaint); output drawn for the old size is discarded either
+way. Sessions opened with `kt_open_terminal` make the PTY the child's controlling
+terminal, as a terminal emulator does, so a resize raises SIGWINCH.
 
 Receiver cleanup uses the existing lock-based fixture quiescence helper. Tmux
 wrappers use a fixture-owned socket; teardown does not enumerate or kill unrelated

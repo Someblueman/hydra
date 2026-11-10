@@ -1,12 +1,10 @@
 #ifndef KT_POSIX_H
 #define KT_POSIX_H
-/* Optional POSIX adapter. The portable core never includes this header. */
+/* Optional POSIX adapter. The portable core never includes this header.
+ * Terminal modes, input and signals belong to the runtime (program.h); this
+ * is only for output that is not a program, such as a report sized to the
+ * terminal it is printed on. */
 #include <stdbool.h>
-#include <termios.h>
-struct kt_terminal { struct termios saved; int flags; bool active; };
-/* Caller owns struct; begin/end must run on the same thread and terminal.
- * Caller handles signals and must call end before exiting or delegating input. */
-bool kt_terminal_begin(struct kt_terminal *terminal);
-void kt_terminal_end(struct kt_terminal *terminal);
+/* Size of the terminal on standard output, capped at 512 x 256. */
 bool kt_terminal_size(int *columns, int *rows);
 #endif

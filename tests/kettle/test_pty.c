@@ -36,7 +36,7 @@ static void workspace(void) {
     struct kt_session s;
     int before;
     const char *argv[] = {demo, NULL};
-    kt_open(&s, argv, 80, 24, NULL);
+    kt_open_terminal(&s, argv, 80, 24, NULL);
     kt_until(&s, "ACTIVITY", 3);
     kt_pump(&s, .1);
     CHECK(kt_pump(&s, .2) == 0, "unchanged frame emitted bytes");
@@ -77,7 +77,7 @@ static void shell_test(void) {
     char groups[2][256], model[2][256], reported[2][256], command[8192];
     pid_t pid;
     const char *argv[] = {demo, "--shell", NULL};
-    kt_open(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, NULL);
     kt_until(&s, "TV$ ", 3);
     kt_send(&s, "printf '\\033[31mSHELL_%s\\033[0m\\n' OK; false; printf 'STATUS:%s\\n' \"$?\"\r");
     kt_until(&s, "SHELL_OK", 3);
@@ -137,7 +137,7 @@ static void interruption(void) {
     struct kt_session s;
     char groups[1][256], out[1024];
     const char *argv[] = {demo, "--shell", NULL};
-    kt_open(&s, argv, 140, 40, NULL);
+    kt_open_terminal(&s, argv, 140, 40, NULL);
     kt_until(&s, "TV$ ", 3);
     kt_send(&s, "sleep 30 & printf 'JOB_PID:'; jobs -p; wait\r");
     kt_until_match(&s, "JOB_PID:([0-9]+)", groups, 1, 3);
@@ -152,7 +152,7 @@ static void interruption(void) {
     }
     {
         const char *bad[] = {demo, "--command", "/nonexistent/kettle-child", NULL};
-        kt_open(&s, bad, 80, 24, NULL);
+        kt_open_terminal(&s, bad, 80, 24, NULL);
         kt_until(&s, "exited / status 127", 3);
         kt_close(&s, "\002q", 0, 0);
     }

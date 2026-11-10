@@ -8,10 +8,12 @@ qualify when updating. Public structs expose caller-owned storage, so changes to
 their layout can affect both source and binary compatibility.
 
 ```
-make                    # portable C99 static library, no POSIX adapters
-make test               # six component suites
-make examples           # chart and POSIX workspace examples
-make test-pty           # actual shell/PTY interaction, native C observer
+make                    # portable C99 static library, no POSIX layer
+make runtime            # also the optional POSIX runtime and its test driver
+make test               # component suites, the runtime, the counter example's test
+make examples           # chart, counter and workspace examples
+make test-pty           # the runtime and a real shell on actual PTYs, native C observer
+build/kettle-counter
 build/kettle-workspace --shell
 ```
 
@@ -30,12 +32,17 @@ tree's `build` directory.
   perform OS access; output functions write to the supplied stream.
 - [Layout](workspace.h): a caller-owned value object. Pane IDs remain
   stable until reinitialization. The caller owns labels, domain data and actions.
+- [Runtime](program.h): optional, POSIX. It owns the event loop, the
+  terminal's modes, signal handlers while it runs, the frame buffers and the
+  child processes it starts; the application owns its model and whatever its
+  `update` opens. Memory comes from the allocator in `kt_options`. Its
+  [test driver](testing.h) runs the same loop without a terminal.
 - [Terminal](terminal.h): the caller supplies disjoint primary,
-  alternate and history buffers and drives input/output in its event loop.
+  alternate and history buffers and feeds it the child's output.
   [Protocol limits](TERMINAL.md) are explicit; this is a bounded terminal
   subset, not a general replacement for an established terminal emulator.
-- [POSIX terminal](posix.h) and [PTY](pty_posix.h) adapters
-  are optional. The application owns signal policy, child lifecycle and cleanup.
+- The [PTY](pty_posix.h) and [terminal size](posix.h) adapters are
+  optional. The application owns a PTY child's lifecycle and cleanup.
   The example closes its owned child; an application attaching to an external
   session must distinguish its client process from the external execution owner.
 

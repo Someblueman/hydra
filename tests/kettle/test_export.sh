@@ -16,6 +16,8 @@ for _guide_path in \
     src/kettle/terminal.h \
     src/kettle/TERMINAL.md \
     src/kettle/posix.h \
+    src/kettle/program.h \
+    src/kettle/testing.h \
     src/kettle/pty_posix.h \
     LICENSE \
     src/kettle/UNICODE-LICENSE.txt; do
