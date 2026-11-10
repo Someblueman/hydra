@@ -231,14 +231,9 @@ int accept_workflows(struct app *app, FILE *input) {
     return 0;
 }
 
-int refresh_workflows(struct app *app, const char *fixture) {
-    char notice[TEXT];
-    FILE *input;
-    copy_text(notice,sizeof(notice),app->notice);
-    if (!fixture) native_observations_cancel(app,1);
-    input=fixture ? fopen(fixture,"r") : capture_adapter(app,"workflow","tui-data",2000);
-    copy_text(app->notice,sizeof(app->notice),notice);
-    return accept_workflows(app,input);
+/* Deterministic rendering reads a recorded stream in place of the adapter. */
+int load_workflow_fixture(struct app *app, const char *fixture) {
+    return accept_workflows(app, fopen(fixture, "r"));
 }
 
 void workflow_move(struct app *app, int direction) {

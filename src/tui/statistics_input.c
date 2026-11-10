@@ -10,25 +10,52 @@ void statistics_toggle(struct app *app) {
         app->statistics->back_view = app->view;
         app->statistics->graph_open = false;
         app->view = 8;
-        (void)refresh_statistics(app, NULL);
+        statistics_request(app);
     }
     app->help = false; app->diagnostics = false;
     app->notice[0] = '\0';
 }
 
-static void statistics_graph(struct app *app) {
+#define GRAPH_LOADING "Opening the graph..."
+
+/* Shows the selected run in the graph view when the retained workflow read
+ * includes it. */
+static bool statistics_graph_open(struct app *app) {
     struct statistics_view *v = app->statistics;
     size_t i;
-    if (app->fleet || !v->model || !v->count) return;
-    if (refresh_workflows(app,NULL)) {
-        copy_text(app->notice,sizeof(app->notice),"Graph unavailable; statistics selection retained"); return;
-    }
     for (i=0;i<app->workflows->run_count;i++) if (!strcmp(app->workflows->runs[i].id,v->selected_id)) break;
-    if (i == app->workflows->run_count) {
-        copy_text(app->notice,sizeof(app->notice),"Selected run outside graph sample; inspect recorded run evidence here"); return;
-    }
+    if (i == app->workflows->run_count) return false;
     app->workflow_run=i; app->workflow_node=0; app->graph_x=app->graph_y=0; app->graph_follow=true;
     app->view=5; v->graph_open=true;
+    return true;
+}
+
+/* g asks for a fresh workflow read and does not wait for it. A retained read
+ * that shows the run opens the graph at once; otherwise the graph opens, or
+ * says why it cannot, when the read arrives. */
+static void statistics_graph(struct app *app) {
+    struct statistics_view *v = app->statistics;
+    if (app->fleet || !v->model || !v->count) return;
+    v->graph_run[0]='\0';
+    native_observations_request(app,OBSERVE_WORKFLOWS);
+    if (app->workflows && !app->workflow_stale && statistics_graph_open(app)) return;
+    copy_text(v->graph_run,sizeof(v->graph_run),v->selected_id);
+    copy_text(app->notice,sizeof(app->notice),GRAPH_LOADING);
+}
+
+/* A workflow read ended. The graph that g asked for opens only if the same
+ * run is still selected in Statistics. */
+void statistics_graph_arrived(struct app *app, bool ok) {
+    struct statistics_view *v = app->statistics;
+    bool wanted;
+    if (!v || !v->graph_run[0]) return;
+    wanted = app->view==8 && !strcmp(v->graph_run,v->selected_id);
+    v->graph_run[0]='\0';
+    if (!strcmp(app->notice,GRAPH_LOADING)) app->notice[0]='\0';
+    if (!wanted) return;
+    if (!ok) copy_text(app->notice,sizeof(app->notice),"Graph unavailable; statistics selection retained");
+    else if (!statistics_graph_open(app))
+        copy_text(app->notice,sizeof(app->notice),"Selected run outside graph sample; inspect recorded run evidence here");
 }
 
 static void statistics_workflow(struct statistics_view *v, int direction) {
@@ -69,7 +96,7 @@ bool statistics_key(struct app *app, char key) {
     }
     else if(key=='\r' || key=='\n') { v->detail=!v->detail; v->step_scroll=0; }
     else if(key=='g') statistics_graph(app);
-    else if(key=='r') (void)refresh_statistics(app,NULL);
+    else if(key=='r') statistics_request(app);
     else if(strchr(":pac AxGd",key)) copy_text(app->notice,sizeof(app->notice),"Statistics is read-only; Enter evidence / g graph / D back");
     else return false;
     statistics_visible(app);

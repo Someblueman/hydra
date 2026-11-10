@@ -99,7 +99,7 @@ struct app {
     char preview_text[32768];
     /* Rows the Details transcript is scrolled back from its newest output. */
     size_t preview_back;
-    /* The head whose step output an asynchronous preview read belongs to. */
+    /* The head whose output preview_text holds, or is being read for. */
     char preview_head[TEXT];
     /* Work outline: runs the user expanded, and whether a run row rather
      * than a head is selected in Work or Overview (workflow_run names it). */

@@ -60,12 +60,6 @@ static void close_view(struct app *app, struct native_terminal *t) {
     copy_text(app->notice,sizeof(app->notice),"View closed; the agent keeps running (a reopens)");
 }
 
-static void history_key(struct app *app, struct native_terminal *t, bool enter) {
-    if (enter) { t->scrolling=!native_terminal_history(app,t,true); return; }
-    if (!t->scrolling) (void)native_terminal_history(app,t,false);
-    t->scrolling=false; t->scroll=0;
-}
-
 /* Commands on the selected agent view. The literal command sends the key
  * that completed its chord, so a key Hydra keeps can still be typed. */
 static void view_command(struct app *app, enum key_action action, const struct kt_event *e) {
@@ -74,8 +68,8 @@ static void view_command(struct app *app, enum key_action action, const struct k
     switch (action) {
     case KEY_TERMINAL_RECONNECT: reconnect(app,t); break;
     case KEY_TERMINAL_CLOSE: close_view(app,t); break;
-    case KEY_TERMINAL_HISTORY: history_key(app,t,true); break;
-    case KEY_TERMINAL_LIVE: history_key(app,t,false); break;
+    case KEY_TERMINAL_HISTORY: native_terminal_history(app,t,true); break;
+    case KEY_TERMINAL_LIVE: native_terminal_history(app,t,false); break;
     case KEY_TERMINAL_LITERAL: if (native_terminal_focused(app)) native_terminal_send(app,t,e->bytes,e->length); break;
     default: break;
     }

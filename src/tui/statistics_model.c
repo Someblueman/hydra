@@ -67,15 +67,18 @@ int accept_statistics(struct app *app, FILE *input) {
     return 0;
 }
 
-int refresh_statistics(struct app *app, const char *fixture) {
-    char notice[TEXT];
-    FILE *input;
+/* Deterministic rendering reads a recorded stream in place of the adapter. */
+int load_statistics_fixture(struct app *app, const char *fixture) {
     if (app->fleet) { if (!statistics_init(app)) return -1; statistics_visible(app); return 0; }
-    copy_text(notice,sizeof(notice),app->notice);
-    if (!fixture) native_observations_cancel(app,2);
-    input=fixture ? fopen(fixture,"r") : capture_adapter(app,"workflow","statistics-data",2000);
-    copy_text(app->notice,sizeof(app->notice),notice);
-    return accept_statistics(app,input);
+    return accept_statistics(app, fopen(fixture, "r"));
+}
+
+/* Asks for a fresh sample without waiting for it: the view keeps the sample
+ * it has until the new one arrives. */
+void statistics_request(struct app *app) {
+    if (!statistics_init(app)) return;
+    if (app->fleet) { statistics_visible(app); return; }
+    native_observations_request(app, OBSERVE_STATISTICS);
 }
 
 void statistics_move(struct app *app, int direction) {

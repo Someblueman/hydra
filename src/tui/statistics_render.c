@@ -250,7 +250,7 @@ bool render_statistics(struct app *app, unsigned frame, bool headless) {
         v->filter.workflow[0] ? " / workflow: " : "",v->filter.workflow);
     if (app->fleet) statistics_fleet(app,&c,(struct kt_rect){0,2,width,height-4});
     else if (!v->model || (!v->model->run_count && v->model->warnings)) {
-        dashboard_text(&c,2,3,width-4,KT_STRONG,"No workflow statistics yet");
+        dashboard_text(&c,2,3,width-4,KT_STRONG,"%s",!v->model && native_observations_loading(app,OBSERVE_STATISTICS) ? "Loading statistics..." : "No workflow statistics yet");
         if (height>10) {
             dashboard_text(&c,2,5,width-4,KT_BASE,"Statistics cover workflows that Hydra ran and recorded: their steps, timing,");
             dashboard_text(&c,2,6,width-4,KT_BASE,"outcomes and retries. A standalone agent conversation is not a recorded run,");

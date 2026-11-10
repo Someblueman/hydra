@@ -67,6 +67,8 @@ struct statistics_view {
     unsigned metric_page;
     bool stale, detail, graph_open;
     char error[TEXT], selected_id[128];
+    /* The run whose graph opens when the workflow read asked for arrives. */
+    char graph_run[128];
 };
 /* RETURNED: the user requested changes to this exact draft; it cannot be
  * validated or executed until the agent publishes a different draft. */
@@ -106,8 +108,20 @@ struct native_links {
     size_t count;
     bool stale;
 };
-/* preview reads a headless head's step output (adapter.c). */
-struct native_observations { struct native_capture jobs[5]; struct native_capture preview; };
+/* The sources read in the background (observations.c); attention keeps its
+ * own request rules (attention.c). */
+enum { OBSERVE_HEADS, OBSERVE_WORKFLOWS, OBSERVE_STATISTICS, OBSERVE_LINKS, OBSERVE_ATTENTION, OBSERVE_SOURCES };
+/* again: a read asked for while its source was being read; it starts when
+ * that read ends, so the newest request is answered and reads never pile up.
+ * preview reads the selected head's pane or step output (adapter.c) for the
+ * head and kind it names. */
+struct native_observations {
+    struct native_capture jobs[OBSERVE_SOURCES];
+    bool again[OBSERVE_SOURCES];
+    struct native_capture preview;
+    char preview_branch[TEXT];
+    bool preview_headless, preview_again;
+};
 struct native_terminal {
     struct kt_pty client;
     struct kt_terminal_model *screen;
@@ -129,6 +143,12 @@ struct native_terminal {
      * the client reads; later keys queue behind it so order is kept. */
     char *backlog;
     size_t backlog_length, backlog_sent;
+    /* The tmux command that enters or leaves the pane's history, and the one
+     * asked for while it ran. Keys typed meanwhile are held in the backlog,
+     * so they reach the pane only once it has changed mode. */
+    struct native_capture history_job;
+    int history_op, history_next;
+    bool held;
 };
 struct native_terminals {
     struct native_terminal slots[NATIVE_TERMINALS];
@@ -300,9 +320,10 @@ bool native_terminal_deliver(struct app *app, struct native_terminal *t, const c
 const char *native_agent_name(const struct head *h);
 bool head_terminal_gone(const struct app *app, const struct head *h);
 void native_terminal_close(struct native_terminal *t);
-/* Enters (or leaves) the agent's own tmux history for a local attachment;
- * false when that history is unavailable and the client's model scrolls. */
-bool native_terminal_history(struct app *app, struct native_terminal *t, bool enter);
+/* Enters (or leaves) the agent's own tmux history for a local attachment
+ * without waiting for tmux; where that history is unavailable the client's
+ * model scrolls. */
+void native_terminal_history(struct app *app, struct native_terminal *t, bool enter);
 void native_terminals_destroy(struct app *app);
 bool native_terminal_attach(struct app *app);
 void native_terminal_send(struct app *app, struct native_terminal *t, const void *bytes, size_t length);
@@ -311,6 +332,10 @@ void native_terminal_draw(struct app *app, struct native_terminal *t, struct kt_
 void native_observations_cancel(struct app *app, size_t source);
 void native_observations_destroy(struct app *app);
 void native_observations_tick(struct app *app, bool request);
+/* Asks for a fresh read of one source without waiting for it; loading says
+ * whether one is in flight. */
+void native_observations_request(struct app *app, size_t source);
+bool native_observations_loading(const struct app *app, size_t source);
 void native_attention_destroy(struct app *app);
 void native_attention_tick(struct app *app, bool request);
 bool native_attention_key(struct app *app, char key);
@@ -342,7 +367,9 @@ bool statistics_init(struct app *app);
 void statistics_destroy(struct app *app);
 void statistics_visible(struct app *app);
 int accept_statistics(struct app *app, FILE *input);
-int refresh_statistics(struct app *app, const char *fixture);
+int load_statistics_fixture(struct app *app, const char *fixture);
+void statistics_request(struct app *app);
+void statistics_graph_arrived(struct app *app, bool ok);
 void statistics_move(struct app *app, int direction);
 void statistics_count(uint64_t value, bool known, char *out, size_t size);
 void statistics_tokens(const struct hs_usage *u, char *out, size_t size);
@@ -357,7 +384,7 @@ size_t workflow_nodes(const struct workflow_model *m, size_t run, size_t *indice
 bool workflow_edges(const struct workflow_model *m, const size_t *indices, size_t n,
                             struct kt_edge *edges, size_t *count);
 int accept_workflows(struct app *app, FILE *input);
-int refresh_workflows(struct app *app, const char *fixture);
+int load_workflow_fixture(struct app *app, const char *fixture);
 void workflow_move(struct app *app, int direction);
 bool workflow_key(struct app *app, char key);
 void native_capture_destroy(struct native_capture *p);
@@ -426,11 +453,11 @@ void toggle_mark(struct app *app);
 void select_all_visible(struct app *app);
 const struct head *head_for_branch(const struct app *app, const char *branch);
 void record_snapshot(struct app *app, bool valid);
-FILE *capture_adapter(struct app *app, const char *command, const char *option, long budget_ms);
 int accept_model_data(struct app *app, FILE *input);
 void refresh_current_session(struct app *app);
 void capture_preview(struct app *app);
-void headless_preview_tick(struct app *app);
+void preview_tick(struct app *app);
+bool preview_loading(const struct app *app);
 size_t split_fields(char *line, char **fields, size_t capacity);
 int load_model_stream(FILE *input, struct model *model, char *error, size_t error_size);
 int load_fixture(const char *path, struct model *model, char *error, size_t error_size);

@@ -185,7 +185,7 @@ static void detail_preview(struct app *app, const struct head *head) {
     struct transcript_layout layout;
     bool headless = head_headless(head);
     const char *text = app->preview_text[0] ? app->preview_text :
-        headless ? "Reading the step output..." : "No terminal output available.";
+        headless ? "Reading the step output..." : preview_loading(app) ? "Reading the terminal output..." : "No terminal output available.";
     int top, limit = app->limit;
     detail_preview_heading(app, headless);
     top = app->line;

@@ -287,6 +287,7 @@ test-tui-pty: build-tui $(BUILD_DIR)/test-tui-pty
 	if [ "$$before" != "$$after" ]; then echo "native crash path changed Hydra state" >&2; exit 1; fi; \
 	exit $$status
 	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-remote-setup"
+	BUILD_DIR="$(abspath $(BUILD_DIR))" "$(BUILD_DIR)/native-tests/pty-responsive-reads"
 
 test-parity: build-core
 	@HYDRA_CORE="$(abspath $(BUILD_DIR))/hydra-core" sh tests/test_core.sh

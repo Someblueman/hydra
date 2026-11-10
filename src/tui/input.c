@@ -28,7 +28,7 @@ void enter_view(struct app *app, int view) {
     if (view != 0 && view != 4 && view != 5) outline_release_run(app);
     app->view = view;
     app->diagnostics = false; app->help = false; app->result_open = false;
-    if (view == 5) { app->graph_follow = true; if (!app->fleet) (void)refresh_workflows(app, NULL); }
+    if (view == 5) { app->graph_follow = true; native_observations_request(app, OBSERVE_WORKFLOWS); }
     enter_view_refresh(app, view);
 }
 

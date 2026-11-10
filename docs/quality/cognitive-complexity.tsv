@@ -144,7 +144,6 @@ src/tui/input.c	handle_mouse	43
 src/tui/links.c	native_links_load	21
 src/tui/main.c	main	47
 src/tui/model.c	load_model_stream	33
-src/tui/observations.c	native_observations_tick	79
 src/tui/plan_launch.c	native_plan_launch_tick	61
 src/tui/plan_model.c	native_plan_destroy	19
 src/tui/plan_projection.c	native_plan_accept	56

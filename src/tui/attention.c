@@ -463,7 +463,7 @@ void native_attention_tick(struct app *app, bool request)
     struct attention_op list = {"", "", false, true};
     if (!app->attention) app->attention = calloc(1U, sizeof(*app->attention));
     if (!app->attention || !app->observations) return;
-    job = &app->observations->jobs[4];
+    job = &app->observations->jobs[OBSERVE_ATTENTION];
     if (job->pid && native_capture_step(job)) {
         FILE *input = native_capture_take(job);
         if (input) accept_attention(app, input); else capture_failure(app);

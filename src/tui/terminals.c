@@ -73,25 +73,70 @@ static void outbox_clear(struct native_terminal *t) {
 /* A tmux client draws on the alternate screen without scrollback, so the
  * pane's history lives in tmux: scrolling uses tmux copy mode on the exact
  * session, and q, Esc or the terminal.live chord leave it. Fleet clients keep
- * model scroll. */
-bool native_terminal_history(struct app *app, struct native_terminal *t, bool enter) {
+ * model scroll. tmux is not waited for: the command runs in the background
+ * and keys typed to the pane meanwhile are held until it has ended. */
+enum { HISTORY_NONE, HISTORY_ENTER, HISTORY_LEAVE };
+
+static bool history_available(struct app *app, const struct native_terminal *t) {
     const struct head *h = terminal_head(app, t);
-    struct output_child child;
+    return !app->fleet && h && h->session[0] && !t->client.finished && !t->client.eof;
+}
+
+/* The command ended. Without tmux history the client's model scrolls, and
+ * keys held for the history are not the agent's to receive. */
+static void history_done(struct app *app, struct native_terminal *t, int op, bool ok) {
+    t->held = false;
+    if (op == HISTORY_ENTER && !ok) {
+        t->scrolling = true;
+        free(t->backlog); t->backlog = NULL; t->backlog_length = t->backlog_sent = 0;
+        return;
+    }
+    copy_text(app->notice, sizeof(app->notice), op == HISTORY_ENTER ? "Agent history: PgUp/PgDn or arrows scroll; q leaves" : "Back to live agent output");
+}
+
+static void history_start(struct app *app, struct native_terminal *t, int op) {
+    const struct head *h = terminal_head(app, t);
     char target[TEXT + 8U];
     char *copy[] = {(char *)"tmux", (char *)"copy-mode", (char *)"-u", (char *)"-t", target, NULL};
     char *cancel[] = {(char *)"tmux", (char *)"send-keys", (char *)"-t", target, (char *)"-X", (char *)"cancel", NULL};
-    char discard[256];
-    if (app->fleet || !h || !h->session[0] || t->client.finished || t->client.eof) return false;
+    t->history_next = HISTORY_NONE;
+    if (!h) return;
     snprintf(target, sizeof(target), "=%s:", h->session);
-    if (output_start(&child, enter ? copy : cancel, 1000L)) return false;
-    while (output_read(&child, discard, sizeof(discard)) > 0) {}
-    if (output_finish(&child, false) && enter) return false;
-    copy_text(app->notice, sizeof(app->notice), enter ? "Agent history: PgUp/PgDn or arrows scroll; q leaves" : "Back to live agent output");
-    return true;
+    if (!native_capture_start(&t->history_job, op == HISTORY_ENTER ? copy : cancel, 1000L)) { history_done(app, t, op, false); return; }
+    t->history_op = op; t->held = true;
+}
+
+/* One command at a time; the newest one asked for meanwhile runs next. */
+static void history_request(struct app *app, struct native_terminal *t, int op) {
+    if (!history_available(app, t)) return;
+    if (t->history_job.pid) t->history_next = op;
+    else history_start(app, t, op);
+}
+
+static void history_step(struct app *app, struct native_terminal *t) {
+    FILE *output;
+    bool ok;
+    int next = t->history_next;
+    if (!t->history_job.pid || !native_capture_step(&t->history_job)) return;
+    output = native_capture_result(&t->history_job, &ok);
+    if (output) fclose(output);
+    history_done(app, t, t->history_op, ok);
+    if (next != HISTORY_NONE) history_request(app, t, next);
+}
+
+void native_terminal_history(struct app *app, struct native_terminal *t, bool enter) {
+    if (!enter) {
+        if (!t->scrolling) history_request(app, t, HISTORY_LEAVE);
+        t->scrolling = false; t->scroll = 0;
+    } else if (history_available(app, t)) {
+        t->scrolling = false;
+        history_request(app, t, HISTORY_ENTER);
+    } else t->scrolling = true;
 }
 
 void native_terminal_close(struct native_terminal *t) {
     if (!t->screen) return;
+    if (t->history_job.pid) native_capture_destroy(&t->history_job);
     outbox_clear(t);
     kt_pty_close(&t->client);
     free(t->screen); free(t->cells); free(t->history);
@@ -269,7 +314,7 @@ static bool backlog_add(struct native_terminal *t, const void *bytes, size_t len
 
 /* Moves backlog into the client's queue as it drains. */
 static void backlog_step(struct native_terminal *t) {
-    while (t->backlog_sent<t->backlog_length && !t->client.finished && t->client.fd>=0) {
+    while (!t->held && t->backlog_sent<t->backlog_length && !t->client.finished && t->client.fd>=0) {
         size_t room=sizeof(t->client.pending)-t->client.pending_length, left=t->backlog_length-t->backlog_sent;
         size_t part=left<room ? left : room;
         if (!part || !kt_pty_enqueue(&t->client,t->backlog+t->backlog_sent,part)) break;
@@ -281,7 +326,7 @@ static void backlog_step(struct native_terminal *t) {
 
 void native_terminal_send(struct app *app, struct native_terminal *t, const void *bytes, size_t length) {
     bool open=t && t->screen && !t->client.eof && !t->client.finished && t->client.fd>=0;
-    if (open && !t->backlog && kt_pty_enqueue(&t->client,bytes,length)) return;
+    if (open && !t->backlog && !t->held && kt_pty_enqueue(&t->client,bytes,length)) return;
     if (!open || !backlog_add(t,bytes,length))
         copy_text(app->notice,sizeof(app->notice),"Input not delivered: client disconnected or input queue full");
 }
@@ -350,7 +395,7 @@ static void terminal_read(struct native_terminal *t) {
 /* A client is polled again when it has output, when it can take queued
  * input, and when Hydra-authored input is due. Its exit arrives as a signal. */
 static void terminal_wake(const struct native_terminal *t) {
-    bool queued=t->client.pending_length || t->backlog;
+    bool queued=t->client.pending_length || (t->backlog && !t->held);
     if (t->client.fd<0 || t->client.eof) return;
     wake_fd(t->client.fd,(short)(queued && !t->client.finished ? POLLIN|POLLOUT : POLLIN));
     if (t->outbox_count && t->received && !t->client.finished) wake_at(&t->outbox_at,300);
@@ -363,6 +408,7 @@ static void terminal_pump(struct app *app, struct native_terminal *t) {
         copy_text(app->notice,sizeof(app->notice),"Attachment transport failed; recorded agent outcome is unchanged");
         kt_pty_close(&t->client);
     }
+    history_step(app,t);
     backlog_step(t);
     terminal_read(t);
     if (t->scroll>t->screen->history_count) t->scroll=t->screen->history_count;

@@ -4,7 +4,9 @@
 #endif
 #include "internal.h"
 static void workflow_empty(struct app *app) {
-    style(app, TONE_STRONG); linef(app, "%s", app->workflow_error[0] ? app->workflow_error : "No workflow runs recorded in this project."); style(app, TONE_BASE);
+    const char *lead = app->workflow_error[0] ? app->workflow_error :
+        !app->workflows && native_observations_loading(app, OBSERVE_WORKFLOWS) ? "Loading workflow runs..." : "No workflow runs recorded in this project.";
+    style(app, TONE_STRONG); linef(app, "%s", lead); style(app, TONE_BASE);
     linef(app, "");
     linef(app, "A workflow is a saved sequence of steps Hydra runs and tracks for a task: for example");
     linef(app, "implement a change, run the tests, then wait for your review. Steps can run agents or");
