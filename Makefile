@@ -109,6 +109,9 @@ $(BUILD_DIR)/test-kettle-terminal: tests/c/test_kettle_terminal.c $(KETTLE_SOURC
 $(BUILD_DIR)/test-kettle-input: tests/c/test_kettle_input.c $(KETTLE_SOURCES) src/kettle/input.h src/kettle/tree.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_input.c $(KETTLE_SOURCES) -o $@
 
+$(BUILD_DIR)/test-kettle-keymap: tests/c/test_kettle_keymap.c $(KETTLE_SOURCES) src/kettle/keymap.h src/kettle/input.h | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_keymap.c $(KETTLE_SOURCES) -o $@
+
 # The runtime: headless driver cases, then real child processes on a private PTY.
 $(BUILD_DIR)/test-kettle-program: tests/c/test_kettle_program.c $(KETTLE_SOURCES) | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) tests/c/test_kettle_program.c $(KETTLE_SOURCES) -o $@
@@ -117,13 +120,14 @@ $(BUILD_DIR)/test-kettle-program: tests/c/test_kettle_program.c $(KETTLE_SOURCES
 $(BUILD_DIR)/test-kettle-counter: examples/counter_test.c examples/counter.c $(KETTLE_SOURCES) | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/counter_test.c $(KETTLE_SOURCES) -o $@
 
-test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-workspace $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter
+test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-workspace $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-keymap
 	$(BUILD_DIR)/test-kettle
 	$(BUILD_DIR)/test-kettle-present
 	$(BUILD_DIR)/test-kettle-workspace
 	$(BUILD_DIR)/test-kettle-unicode
 	$(BUILD_DIR)/test-kettle-terminal
 	$(BUILD_DIR)/test-kettle-input
+	$(BUILD_DIR)/test-kettle-keymap
 	$(BUILD_DIR)/test-kettle-program
 	$(BUILD_DIR)/test-kettle-counter
 
@@ -547,7 +551,7 @@ sanitize-plan-workspace:
 sanitize-workspace:
 	@$(MAKE) BUILD_DIR=build/workspace-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-kettle test-workspace-pty
 
-$(BUILD_DIR)/kettle-workspace $(BUILD_DIR)/kettle-example $(BUILD_DIR)/kettle-counter $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter: $(KETTLE_HEADERS)
+$(BUILD_DIR)/kettle-workspace $(BUILD_DIR)/kettle-example $(BUILD_DIR)/kettle-counter $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter: $(KETTLE_HEADERS)
 
 # Read-only discovery acceptance uses real OpenSSH config expansion and a
 # controlled SSH executable; it does not use tmux or contact network hosts.

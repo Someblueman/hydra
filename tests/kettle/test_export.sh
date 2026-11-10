@@ -14,6 +14,8 @@ for _guide_path in \
     src/kettle/kettle.h \
     src/kettle/workspace.h \
     src/kettle/terminal.h \
+    src/kettle/input.h \
+    src/kettle/keymap.h \
     src/kettle/TERMINAL.md \
     src/kettle/posix.h \
     src/kettle/program.h \

@@ -218,7 +218,14 @@ or demo runtime dependencies.
   drag routing and independent scroll state. Insufficient space shows the focused
   subtree; focus cycling still reaches hidden leaves. No app content is owned.
 * `input.h` and `tree.h`: bounded incremental key/mouse/paste decoding and a
-  preorder navigation tree. The application maps events to domain actions.
+  preorder navigation tree. A key event names the key (a Unicode scalar or a
+  `KT_KEY_*` value) and its Shift/Alt/Ctrl modifiers, and always carries the
+  exact bytes received, so a terminal passthrough forwards input unchanged.
+* `keymap.h`: one binding table for key chords ("ctrl+]", "ctrl+\ x") that
+  drives matching, hint text and user configuration. A chord under way is
+  visible to the caller; one that matches nothing is consumed whole and
+  reported. Configuration text is parsed line by line with errors that name
+  the line; conflicting chords are refused. No allocation or file access.
 * `terminal.h`: bounded child-output interpretation and screen/history storage.
   [TERMINAL.md](TERMINAL.md) specifies the supported protocol subset and limits.
 * `program.h`: the optional POSIX runtime described above. It allocates (frame

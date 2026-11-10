@@ -634,10 +634,10 @@ static bool text_key(struct native_setup *s, const struct kt_event *e) {
     text_target(s, &text, &size, &cursor);
     length = strlen(text);
     if (*cursor > length) *cursor = length;
-    if (e->key == 127 || e->key == 8) {
+    if (kt_event_is(e, KT_KEY_BACKSPACE, 0) || kt_event_is(e, 'h', KT_MOD_CTRL)) {
         if (*cursor) { memmove(text + *cursor - 1, text + *cursor, length - *cursor + 1); (*cursor)--; }
     } else if (!cursor_key(e->key, cursor, length)) {
-        if (e->key < 32 || e->key >= KT_KEY_UP) return false;
+        if (!kt_event_text(e)) return false;
         text_insert(s, e);
     }
     s->problem[0] = '\0';
@@ -692,8 +692,8 @@ static void letter(struct app *app, struct native_setup *s, uint32_t key) {
 /* Focus and scroll: Tab / Shift-Tab and arrows move, pages scroll. */
 static bool navigation_key(struct app *app, struct native_setup *s, const struct kt_event *e) {
     uint32_t key = e->key;
-    if (key == KT_KEY_SEQUENCE && !strcmp(e->bytes, "\033[Z")) move(s, -1);
-    else if (key == '\t' || key == KT_KEY_DOWN) move(s, 1);
+    if (kt_event_is(e, KT_KEY_TAB, KT_MOD_SHIFT)) move(s, -1);
+    else if (kt_event_is(e, KT_KEY_TAB, 0) || key == KT_KEY_DOWN) move(s, 1);
     else if (key == KT_KEY_UP) move(s, -1);
     else if (key == KT_KEY_PAGE_UP || key == KT_KEY_PAGE_DOWN) page(app, s, key == KT_KEY_PAGE_UP ? -1 : 1);
     else return false;
@@ -703,16 +703,16 @@ static bool navigation_key(struct app *app, struct native_setup *s, const struct
 static void screen_key(struct app *app, struct native_setup *s, const struct kt_event *e) {
     uint32_t key = e->key;
     if (navigation_key(app, s, e)) return;
-    if (key == '\r' || key == '\n') enter(app, s);
-    else if (key == 27) back(app, s);
-    else if (!text_screen(s) && key < 128) letter(app, s, key);
+    if (kt_event_is(e, KT_KEY_ENTER, 0) || kt_event_is(e, 'j', KT_MOD_CTRL)) enter(app, s);
+    else if (key == KT_KEY_ESCAPE) back(app, s);
+    else if (!text_screen(s) && !e->mods && key < 128) letter(app, s, key);
 }
 
 static void setup_event(struct app *app, struct native_setup *s, const struct kt_event *e) {
     if (e->type == KT_MOUSE || e->type == KT_PASTE_BEGIN || e->type == KT_PASTE_END) return;
     s->automatic = 0;
     if (e->type == KT_PASTE) { if (text_screen(s)) text_insert(s, e); return; }
-    if (text_screen(s) && e->key != 27 && text_key(s, e)) return;
+    if (text_screen(s) && e->key != KT_KEY_ESCAPE && text_key(s, e)) return;
     screen_key(app, s, e);
 }
 

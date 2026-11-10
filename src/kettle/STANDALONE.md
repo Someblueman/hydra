@@ -32,6 +32,9 @@ tree's `build` directory.
   perform OS access; output functions write to the supplied stream.
 - [Layout](workspace.h): a caller-owned value object. Pane IDs remain
   stable until reinitialization. The caller owns labels, domain data and actions.
+- [Input](input.h) and [key bindings](keymap.h): the caller owns the decoder,
+  the binding table and the chord state. Key events carry the exact bytes
+  received. Bindings hold pointers to caller strings, which must outlive them.
 - [Runtime](program.h): optional, POSIX. It owns the event loop, the
   terminal's modes, signal handlers while it runs, the frame buffers and the
   child processes it starts; the application owns its model and whatever its

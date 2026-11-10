@@ -19,6 +19,8 @@ sed \
     -e 's|(kettle\.h)|(src/kettle/kettle.h)|g' \
     -e 's|(workspace\.h)|(src/kettle/workspace.h)|g' \
     -e 's|(terminal\.h)|(src/kettle/terminal.h)|g' \
+    -e 's|(input\.h)|(src/kettle/input.h)|g' \
+    -e 's|(keymap\.h)|(src/kettle/keymap.h)|g' \
     -e 's|(TERMINAL\.md)|(src/kettle/TERMINAL.md)|g' \
     -e 's|(posix\.h)|(src/kettle/posix.h)|g' \
     -e 's|(program\.h)|(src/kettle/program.h)|g' \

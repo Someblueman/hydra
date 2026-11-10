@@ -63,7 +63,7 @@ static void history_key(struct app *app, struct native_terminal *t, bool enter) 
 /* Ctrl-B commands: Hydra's own keys while an agent view may hold input. */
 static void prefix_key(struct app *app, struct native_terminal *t, const struct kt_event *e) {
     if (e->key=='q') app->running=false;
-    else if (e->key=='\t') leave_input(app);
+    else if (kt_event_is(e,KT_KEY_TAB,0)) leave_input(app);
     else if (e->key=='D') statistics_toggle(app);
     else if (e->key=='A' || e->key=='B' || e->key=='C') native_workspace_mode(app,(int)e->key-'A');
     else if (e->key=='z') (void)native_workspace_key(app,'z');
@@ -73,7 +73,7 @@ static void prefix_key(struct app *app, struct native_terminal *t, const struct 
     else if (e->key=='r' && t->screen) reconnect(app,t);
     else if (e->key=='x') close_view(app,t);
     else if (e->key=='[' || e->key==']') history_key(app,t,e->key=='[');
-    else if (e->key==2) native_terminal_send(app,t,e->bytes,e->length);
+    else if (kt_event_is(e,'b',KT_MOD_CTRL)) native_terminal_send(app,t,e->bytes,e->length);
 }
 
 static void native_terminal_event(struct app *app, const struct kt_event *e) {
@@ -109,7 +109,7 @@ static void native_terminal_event(struct app *app, const struct kt_event *e) {
         return;
     }
     if (set->prefix) { set->prefix=false; prefix_key(app,t,e); return; }
-    if (e->key==2) { set->prefix=true; return; }
+    if (kt_event_is(e,'b',KT_MOD_CTRL)) { set->prefix=true; return; }
     if (!native_terminal_focused(app)) return;
     if (t->scrolling) {
         size_t delta=(e->key==KT_KEY_PAGE_UP || e->key==KT_KEY_PAGE_DOWN) ? 10 : 1;
@@ -117,7 +117,7 @@ static void native_terminal_event(struct app *app, const struct kt_event *e) {
             t->scroll=delta>t->screen->history_count-t->scroll ? t->screen->history_count : t->scroll+delta;
         else if (e->key=='j' || e->key==KT_KEY_DOWN || e->key==KT_KEY_PAGE_DOWN)
             t->scroll=t->scroll>delta ? t->scroll-delta : 0;
-        else if (e->key==27) { t->scrolling=false; t->scroll=0; }
+        else if (e->key==KT_KEY_ESCAPE) { t->scrolling=false; t->scroll=0; }
         return;
     }
     native_terminal_send(app,t,e->bytes,e->length);

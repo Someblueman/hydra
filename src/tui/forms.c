@@ -111,6 +111,31 @@ static void form_insert(char *buffer, size_t size, size_t *length, size_t *curso
     }
 }
 
+/* Esc and Ctrl-C cancel; Enter (or Ctrl-J) submits; Backspace (or Ctrl-H) erases. */
+static bool form_cancel_key(const struct kt_event *e) {
+    return kt_event_is(e,KT_KEY_ESCAPE,0) || kt_event_is(e,'c',KT_MOD_CTRL);
+}
+static bool form_submit_key(const struct kt_event *e) {
+    return kt_event_is(e,KT_KEY_ENTER,0) || kt_event_is(e,'j',KT_MOD_CTRL);
+}
+static bool form_erase_key(const struct kt_event *e) {
+    return kt_event_is(e,KT_KEY_BACKSPACE,0) || kt_event_is(e,'h',KT_MOD_CTRL);
+}
+
+/* Applies typed or pasted text, or an editing key, to the field. */
+static void form_edit(char *buffer, size_t size, size_t *length, size_t *cursor, const struct kt_event *e) {
+    if (e->type==KT_PASTE || kt_event_text(e)) { form_insert(buffer,size,length,cursor,e); return; }
+    if (e->type!=KT_KEY) return;
+    if (form_erase_key(e)) {
+        size_t previous=form_previous(buffer,*cursor);
+        memmove(buffer+previous,buffer+*cursor,*length-*cursor+1);
+        *length-=*cursor-previous; *cursor=previous;
+    } else if (e->key==KT_KEY_LEFT) *cursor=form_previous(buffer,*cursor);
+    else if (e->key==KT_KEY_RIGHT) *cursor=form_next(buffer,*cursor,*length);
+    else if (e->key==KT_KEY_HOME) *cursor=0;
+    else if (e->key==KT_KEY_END) *cursor=*length;
+}
+
 int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) {
     struct kt_input input;
     size_t length=0, cursor=0;
@@ -146,19 +171,9 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
             redraw=true; queued=0; continue;
         } else event=kt_input_flush(&input,&e);
         if (!event) continue;
-        if (e.type==KT_KEY && (e.key==27 || e.key==3)) break;
-        if (e.type==KT_KEY && (e.key=='\r' || e.key=='\n')) { result=0; break; }
-        if (e.type==KT_KEY && (e.key==127 || e.key==8)) {
-            size_t previous=form_previous(buffer,cursor);
-            memmove(buffer+previous,buffer+cursor,length-cursor+1);
-            length-=cursor-previous; cursor=previous;
-        } else if (e.type==KT_KEY && e.key==KT_KEY_LEFT) cursor=form_previous(buffer,cursor);
-        else if (e.type==KT_KEY && e.key==KT_KEY_RIGHT) cursor=form_next(buffer,cursor,length);
-        else if (e.type==KT_KEY && e.key==KT_KEY_HOME) cursor=0;
-        else if (e.type==KT_KEY && e.key==KT_KEY_END) cursor=length;
-        else if (e.type==KT_PASTE || (e.type==KT_KEY && e.key<0x110000)) {
-            form_insert(buffer,size,&length,&cursor,&e);
-        }
+        if (form_cancel_key(&e)) break;
+        if (form_submit_key(&e)) { result=0; break; }
+        form_edit(buffer,size,&length,&cursor,&e);
     }
     /* The form temporarily paints over the presented frame. */
     frame_invalidate(app);
@@ -194,8 +209,8 @@ static void confirm_draw(struct app *app, const char *title, const char *const l
 /* 1 accepts, 0 declines, -1 keeps waiting. */
 static int confirm_key(const struct kt_event *e, const char *choices) {
     if (e->type!=KT_KEY) return -1;
-    if (e->key==27 || e->key==3 || e->key=='n' || e->key=='N') return 0;
-    return e->key>0 && e->key<128 && strchr(choices,(int)e->key) ? 1 : -1;
+    if (form_cancel_key(e) || kt_event_is(e,'n',0) || kt_event_is(e,'N',0)) return 0;
+    return !e->mods && e->key>0 && e->key<128 && strchr(choices,(int)e->key) ? 1 : -1;
 }
 
 static void confirm_refresh(struct app *app, time_t *last_refresh) {

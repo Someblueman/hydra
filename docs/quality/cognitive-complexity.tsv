@@ -113,7 +113,6 @@ src/kettle/canvas.c	kt_text	17
 src/kettle/graph.c	kt_graph	93
 src/kettle/graph.c	kt_graph_layout	29
 src/kettle/input.c	mouse	16
-src/kettle/input.c	kt_input_feed	27
 src/kettle/output.c	kt_write_row	65
 src/kettle/plot.c	kt_plot	56
 src/kettle/present.c	kt_present	39
@@ -194,7 +193,6 @@ tests/c/test_plan.c	expect	16
 tests/c/test_plan.c	parse_cases	21
 tests/c/test_statistics.c	main	38
 tests/c/test_kettle.c	main	32
-tests/c/test_kettle_input.c	main	40
 tests/c/test_kettle_present.c	main	19
 tests/c/test_kettle_terminal.c	main	56
 tests/c/test_kettle_unicode.c	main	27
