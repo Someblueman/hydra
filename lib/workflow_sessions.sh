@@ -31,6 +31,7 @@ HYDRA_SESSIONS_CHECKPOINT_EVENTS=64
 
 # Prints the directory for this project's checkpoints, or nothing when they
 # cannot be kept privately (the whole history is then interpreted every time).
+# HYDRA_SESSIONS_NO_CACHE turns checkpoints off; tests use it to compare.
 _workflow_sessions_cache_dir() {
     [ -z "${HYDRA_SESSIONS_NO_CACHE:-}" ] || return 0
     _wsc_dir="$HYDRA_HOME/cache/sessions/$1"

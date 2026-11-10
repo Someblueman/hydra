@@ -20,11 +20,13 @@ bool statistics_sessions_shown(const struct app *app) {
     return !app->fleet && sessions_page(app->statistics);
 }
 
-/* Until the user chooses, a sample without workflow runs opens on sessions.
- * Feeds older than schema 5 carry none and keep the runs page. */
+/* The first sample chooses the page: one without workflow runs opens on
+ * sessions. Later samples and the user's own choice leave it alone. Feeds
+ * older than schema 5 carry no sessions and keep the runs page. */
 void statistics_sessions_default(struct statistics_view *v) {
     if (v->sessions_chosen || !v->model) return;
     v->sessions = v->model->schema_version >= 5 && !v->model->run_count;
+    v->sessions_chosen = true;
 }
 
 static void sessions_toggle(struct statistics_view *v) {
@@ -139,9 +141,11 @@ static void date_text(uint64_t epoch, bool known, char *out, size_t size) {
         copy_text(out, size, "unknown date");
 }
 
+/* A session a resume took over from is "replaced": the head went on in a
+ * new instance. */
 static const char *state_text(const struct hs_session *s) {
     if (s->state == HS_SESSION_OPEN) return "open";
-    return s->state == HS_SESSION_ENDED ? "ended" : "resumed";
+    return s->state == HS_SESSION_ENDED ? "ended" : "replaced";
 }
 
 static const char *range_text(const struct statistics_view *v) {

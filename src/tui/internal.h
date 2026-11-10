@@ -70,7 +70,8 @@ struct statistics_view {
     /* The run whose graph opens when the workflow read asked for arrives. */
     char graph_run[128];
     /* The head sessions page (statistics_sessions.c): whether it is shown
-     * rather than workflow runs, whether the user chose, and its rows. */
+     * rather than workflow runs, whether that has been chosen (by the first
+     * sample or the user), and its rows. */
     bool sessions, sessions_chosen;
     size_t session_rows[HS_SESSIONS], session_count, session_selected;
     char session_id[80];

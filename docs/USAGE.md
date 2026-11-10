@@ -616,8 +616,9 @@ what comes next. See [workflows](workflows.md#heads-a-plan-run-creates).
 
 Statistics (`D`) has two pages; `s` switches between them. Head sessions lists
 every start or resume of a head in this project, newest first, with its agent,
-state, start, length and how long its terminal was active or quiet; a project
-without workflow runs opens on this page. Active and quiet are inferred from
+state (`open`, `ended`, or `replaced` when a resume took over), start, length
+and how long its terminal was active or quiet; a project without workflow runs
+opens on this page. Active and quiet are inferred from
 terminal output: while a control centre is open it notes when each interactive
 head's tmux window stops or resumes producing output (quiet after 10 seconds of
 silence, active once output has continued for 4 seconds). They say what the

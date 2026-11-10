@@ -195,7 +195,7 @@ contains "HEAD SESSIONS / newest start first" "$test_root/stats-sessions.out" "s
 contains "Observed 38% of 6h00m session time; 10m00s reported by adapters, the rest inferred from terminal output" "$test_root/stats-sessions.out" "session coverage and its sources are stated"
 contains "inferred, 53% of observed" "$test_root/stats-sessions.out" "the quiet share is labelled as inferred"
 contains "Unobserved      3h42m" "$test_root/stats-sessions.out" "unobserved time is shown apart from quiet"
-contains "docs-refresh                    opencode resumed  09-07 08:00 UTC  2h00m    active --        quiet --" "$test_root/stats-sessions.out" "an unobserved session shows unknown activity"
+contains "docs-refresh                    opencode replaced 09-07 08:00 UTC  2h00m    active --        quiet --" "$test_root/stats-sessions.out" "an unobserved session shows unknown activity"
 contains "old-experiment                  -        ended    unknown date     --" "$test_root/stats-sessions.out" "an undated session shows unknown length"
 contains "SESSIONS STARTED / 7 x 24h" "$test_root/stats-sessions.out" "sessions per day are charted"
 contains "s shows runs (0)" "$test_root/stats-sessions.out" "the sessions page names the runs page"

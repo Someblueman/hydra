@@ -225,7 +225,7 @@ static void session_filters(struct kt_session *p) {
 static void session_evidence(struct kt_session *p) {
     PS("\r");
     PU("SESSION EVIDENCE");
-    PU("docs-refresh / resumed");
+    PU("docs-refresh / replaced");
     PU("instance_bbbbbbbbbbbbbbb1");
     PU("Active --   Quiet --   Unobserved 2h00m   Observed 0%");
     PU("Nobody observed this session");
