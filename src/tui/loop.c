@@ -260,10 +260,27 @@ void tui_options(const struct app *app, struct kt_options *options) {
     options->paste_limit = 4U * 1024U * 1024U;
 }
 
+/* The signals that end the control centre end it also when it was started
+ * with them ignored (under nohup, as a background job): the runtime leaves an
+ * ignored signal ignored, so they are given their default first. restore puts
+ * back what was found, for the clean-up that follows the loop. */
+static const int ending_signals[] = {SIGINT, SIGTERM, SIGHUP};
+#define ENDING_SIGNALS (sizeof(ending_signals) / sizeof(ending_signals[0]))
+
+static void signals_heed(struct sigaction found[ENDING_SIGNALS], bool restore) {
+    size_t i;
+    for (i = 0; i < ENDING_SIGNALS; i++) {
+        if (restore) { (void)sigaction(ending_signals[i], &found[i], NULL); continue; }
+        if (sigaction(ending_signals[i], NULL, &found[i]) != 0) continue;
+        if (found[i].sa_handler == SIG_IGN) (void)signal(ending_signals[i], SIG_DFL);
+    }
+}
+
 /* 0 on quit and 128 + signal after a signal. 3: no usable terminal. 4: the
  * terminal could not be put into raw mode. A terminal that went away while
  * running ends like the hangup it is. */
 int interactive_main(struct app *app) {
+    struct sigaction found[ENDING_SIGNALS];
     struct kt_options options;
     struct kt_program *program;
     int status;
@@ -274,7 +291,10 @@ int interactive_main(struct app *app) {
     program = kt_program_new(&tui_app, app, &options);
     if (!program) return 4;
     app->program = program;
+    memset(found, 0, sizeof(found));
+    signals_heed(found, false);
     status = kt_program_run(program);
+    signals_heed(found, true);
     app->program = NULL; app->cmds = NULL;
     app->modal_count = 0;
     wake_forget();

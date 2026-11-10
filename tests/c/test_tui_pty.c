@@ -227,6 +227,10 @@ static void child_session(const struct session *session, const char *tui, const 
     setenv("PATH", path, 1);
     fixture_repo = getenv("HYDRA_FIXTURE_REPO");
     if (fixture_repo != NULL && chdir(fixture_repo) != 0) _exit(122);
+    /* As under nohup or as a background job of a shell without job control. */
+    if (getenv("HYDRA_TEST_SIGNALS_IGNORED") != NULL) {
+        (void)signal(SIGINT, SIG_IGN); (void)signal(SIGHUP, SIG_IGN);
+    }
     execute_test_tui(tui_path, hydra_path);
     _exit(127);
 }
@@ -800,6 +804,15 @@ static void test_signal(const char *tui, const char *hydra, const char *fake_bin
     close_session(&session);
 }
 
+/* Started with its ending signals ignored, the control centre still ends on
+ * them, restored, with the signal's status. */
+static void test_signal_ignored_at_start(const char *tui, const char *hydra, const char *fake_bin) {
+    (void)setenv("HYDRA_TEST_SIGNALS_IGNORED", "1", 1);
+    test_signal(tui, hydra, fake_bin, SIGINT, "SIGINT ignored at start");
+    test_signal(tui, hydra, fake_bin, SIGHUP, "SIGHUP ignored at start");
+    (void)unsetenv("HYDRA_TEST_SIGNALS_IGNORED");
+}
+
 static void test_preflight_failure(const char *tui, const char *hydra, const char *fake_bin,
                                    unsigned short cols, unsigned short rows, int expected,
                                    bool await_failure, const char *failure_marker,
@@ -1068,6 +1081,7 @@ int main(int argc, char **argv) {
     test_signal(argv[1], argv[2], argv[3], SIGINT, "SIGINT");
     test_signal(argv[1], argv[2], argv[3], SIGTERM, "SIGTERM");
     test_signal(argv[1], argv[2], argv[3], SIGHUP, "SIGHUP");
+    test_signal_ignored_at_start(argv[1], argv[2], argv[3]);
     test_preflight_failure(argv[1], argv[2], argv[3], 39, 9, 3, false,
                            "shell data adapter", NULL, false,
                            "narrow terminal fails before raw mode");
