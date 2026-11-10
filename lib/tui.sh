@@ -38,6 +38,12 @@ cmd_tui() {
             tui_native_emit_data
             return $?
             ;;
+        --orphan-rows)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_emit_orphans
+            return $?
+            ;;
         --head-output)
             shift
             [ $# -eq 1 ] || return 2

@@ -30,6 +30,7 @@ struct native_links;
 struct native_attention;
 struct native_review;
 struct native_setup;
+struct native_snapshot;
 struct transcript;
 
 struct app {
@@ -47,6 +48,10 @@ struct app {
     struct native_setup *setup;
     /* Configurable keys; read through native_keys(), which fills the defaults. */
     struct native_keys keys;
+    /* The local head snapshot read from the state store in this process
+     * (snapshot.h), when the launching CLI said its store may be read. */
+    struct native_snapshot *snapshot;
+    bool store;
     /* Lazily allocated interpreter for read-only captured output. */
     struct transcript *transcript;
     pid_t control_pids[4];

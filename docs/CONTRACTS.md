@@ -252,6 +252,27 @@ head rows, extends `T` with connection/freshness fields, and adds bounded `O` ta
 rows. Version-1 and version-2 fleet fixtures remain readable. Unsupported protocol
 versions fail closed. This adapter is not a general automation API.
 
+`hydra tui --data` (the shell reader) is the reference for the local snapshot. The
+control centre started by `hydra tui` (`hydra-tui --store`) does not run it for each
+refresh: it reads the same state v2 records in its own process and writes the same
+rows, then parses them as it parses the shell reader's. `hydra-tui --hydra PATH --data`
+prints that read, and `make test-parity` (`tests/test_tui_store_parity.sh`) requires
+it to equal `hydra tui --data` byte for byte over records of every kind. Three facts
+are not in the store. Live sessions come from one `tmux list-sessions` per refresh.
+Uncommitted-file counts come from `git --no-optional-locks status --short`, for a
+bounded number of worktrees per refresh: every worktree whose index or `HEAD` changed
+since it was read and the selected head's, plus the four least recently read others,
+so a count can lag an edit that touched neither by a few refreshes. Leftover
+worktrees are described by the private `hydra tui --orphan-rows`, which prints only
+those `R` rows and is run only while a `head_<id>` directory under the project's
+worktree root has no head record. A helper started without `--store` asks its
+`--hydra` command for `tui --data`, as before. With `--store` the helper also answers
+the workflow projection and the workspace links itself when the project records no
+run, keeps the workspace links while no run was added or removed and no recorded
+graph changed, and keeps the workflow projection while every run has ended and its
+state, step and retirement records are unchanged (asking again every 30 seconds
+regardless); a run that has not ended is read at every refresh.
+
 Version-2 `H` rows may add a trailing terminal mode (`interactive` or
 `headless`); readers accept rows without it. The workflow projection (`workflow
 tui-data`) is internal protocol `HYDRA_WORKFLOW_TUI<TAB>2`: version 1 `W` and `N`

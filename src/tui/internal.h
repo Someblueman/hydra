@@ -118,6 +118,10 @@ enum { OBSERVE_HEADS, OBSERVE_WORKFLOWS, OBSERVE_STATISTICS, OBSERVE_LINKS, OBSE
 struct native_observations {
     struct native_capture jobs[OBSERVE_SOURCES];
     bool again[OBSERVE_SOURCES];
+    /* The last complete CLI read of a workflow source: the stamp of the runs
+     * it read (asked: of the read in flight), and for how many refreshes it
+     * has been shown again without asking (observations.c). */
+    struct { bool valid; unsigned long long stamp, asked; unsigned reused; } kept[OBSERVE_SOURCES];
     struct native_capture preview;
     char preview_branch[TEXT];
     bool preview_headless, preview_again;
@@ -340,7 +344,7 @@ void native_attention_destroy(struct app *app);
 void native_attention_tick(struct app *app, bool request);
 bool native_attention_key(struct app *app, char key);
 void render_attention(struct app *app);
-void native_links_accept(struct app *app, FILE *input);
+bool native_links_accept(struct app *app, FILE *input);
 void native_controls_tick(struct app *app);
 bool native_control_submit(struct app *app, const char *run, const char *action, const char *request);
 bool native_fleet_control_submit(struct app *app, const struct task_observation *task,

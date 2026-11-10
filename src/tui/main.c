@@ -3,6 +3,7 @@
 #define _DARWIN_C_SOURCE
 #endif
 #include "internal.h"
+#include "snapshot.h"
 /* Command-line parsing and process entry point. */
 
 static int parse_size(const char *value, int *cols, int *rows) {
@@ -20,6 +21,7 @@ static void usage(FILE *out) {
     fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--ascii] [--fleet]\n"
           "  [--view statistics|workspace|overview|heads|detail|coordination|recovery|workflows|hosts]\n"
           "  [--version|--protocol-version|--print-keys|--diagnostics|--hydra PATH|--task BRANCH]\n"
+          "  [--store|--data]\n"
           "  [--headless-fixture FILE [--workflow-fixture FILE] [--statistics-fixture FILE]\n"
           "   --size COLSxROWS --frames N]\n", out);
 }
@@ -90,11 +92,15 @@ static int print_keys_option(struct app *app) {
     return keys->problem[0] ? 1 : 0;
 }
 
-/* Options that only set a flag; false for anything else. */
-static bool flag_option(struct app *app, const char *option, bool *print_keys) {
+/* Options that only set a flag; false for anything else. --store: the
+ * launching CLI's state store may be read here instead of asking that CLI
+ * for the head snapshot. --data prints that snapshot and exits. */
+static bool flag_option(struct app *app, const char *option, bool *print_keys, bool *print_data) {
     if (strcmp(option, "--no-color") == 0) app->no_color = true;
     else if (strcmp(option, "--ascii") == 0) app->ascii = true;
     else if (strcmp(option, "--print-keys") == 0) *print_keys = true;
+    else if (strcmp(option, "--store") == 0) app->store = true;
+    else if (strcmp(option, "--data") == 0) *print_data = true;
     else return false;
     return true;
 }
@@ -112,7 +118,7 @@ int main(int argc, char **argv) {
     const char *statistics_fixture = NULL;
     unsigned frames = 1U;
     int index;
-    bool explicit_view = false, print_keys = false;
+    bool explicit_view = false, print_keys = false, print_data = false;
     const char *theme = getenv("HYDRA_TUI_THEME");
     initialize_app(&app);
     for (index = 1; index < argc; index++) {
@@ -140,8 +146,9 @@ int main(int argc, char **argv) {
             app.graph_follow = app.view == 5;
         } else if (strcmp(argv[index], "--diagnostics") == 0) diagnostic_option(&app, explicit_view);
         else if (strcmp(argv[index], "--theme") == 0 && index + 1 < argc) theme = argv[++index];
-        else if (!flag_option(&app, argv[index], &print_keys)) { usage(stderr); return 2; }
+        else if (!flag_option(&app, argv[index], &print_keys, &print_data)) { usage(stderr); return 2; }
     }
+    if (print_data) return snapshot_print(app.hydra, stdout);
     if (!theme_option(&app, theme)) return 2;
     /* Deterministic rendering reads a keys file only when one is named. */
     native_keys_load(&app, fixture == NULL);

@@ -183,8 +183,9 @@ void hf_commit_init(struct hf_fixture *f) {
     hf_run(f, NULL, 0, commit);
     hf_run(f, NULL, 0, hydra);
 }
+/* Started as `hydra tui` starts it: the helper reads the state store itself. */
 void hf_open(struct hf_fixture *f, struct kt_session *s) {
-    const char *argv[] = {f->tui, "--hydra", f->hydra, NULL};
+    const char *argv[] = {f->tui, "--hydra", f->hydra, "--store", NULL};
     kt_open_terminal(s, argv, 140, 40, f->repo);
 }
 void hf_glob_one(const char *pattern, char *out, size_t capacity) {

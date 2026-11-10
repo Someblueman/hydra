@@ -334,9 +334,15 @@ EOF
             fi
         done
     fi
-    # Same authority as 'hydra gc --policy orphaned'; the label is
-    # "<branch> (<path>), <size>" with a cached, bounded size, and the source is
-    # the exact path an in-app removal passes to gc --path.
+    tui_native_emit_orphans
+}
+
+# R rows for leftover worktrees. Same authority as 'hydra gc --policy
+# orphaned'; the label is "<branch> (<path>), <size>" with a cached, bounded
+# size, and the source is the exact path an in-app removal passes to gc --path.
+# The native reader of the state store asks for these rows alone (--orphan-rows)
+# when a worktree directory without a head record exists.
+tui_native_emit_orphans() {
     list_orphan_worktree_rows cached | while IFS="$(printf '\t')" read -r _tned_state _tned_obranch _tned_okib _tned_opath; do
         [ -n "$_tned_opath" ] || continue
         _tned_okind=orphan-worktree
@@ -376,7 +382,9 @@ tui_native_run() {
         tui_native_report_unavailable
         return 1
     fi
-    if "$_tnr_binary" --hydra "$HYDRA_BIN_CMD" "$@"; then
+    # --store: this CLI's state store is the helper's to read in-process; the
+    # helper then asks the CLI only for what the store cannot say.
+    if "$_tnr_binary" --hydra "$HYDRA_BIN_CMD" --store "$@"; then
         _tnr_status=0
     else
         _tnr_status=$?

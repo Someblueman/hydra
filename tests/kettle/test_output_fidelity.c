@@ -187,7 +187,7 @@ int main(void) {
     fixture();
     show_in_head("codex-exec.raw");
     {
-        const char *argv[] = {f.tui, "--hydra", f.hydra, NULL};
+        const char *argv[] = {f.tui, "--hydra", f.hydra, "--store", NULL};
         kt_open_terminal(&s, argv, 140, 40, f.repo);
     }
     kt_until(&s, "Session   running", 8);

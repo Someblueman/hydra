@@ -399,7 +399,7 @@ static void literal_keys(void) {
 }
 
 static void open_tui(const char *keys) {
-    const char *argv[] = {f.tui, "--hydra", f.hydra, NULL};
+    const char *argv[] = {f.tui, "--hydra", f.hydra, "--store", NULL};
     if (keys) CHECK(!setenv("HYDRA_TUI_KEYS", keys, 1), "keys file override");
     else unsetenv("HYDRA_TUI_KEYS");
     kt_open_terminal(&s, argv, 140, 40, f.repo);
