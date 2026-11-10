@@ -15,8 +15,9 @@ workflow_statistics_scalar() {
 }
 
 workflow_statistics_data() (
-    printf 'HYDRA_STATISTICS\t4\t%s\n' "$(date +%s)"
-    _wst_root="$(workflow_runs_dir 2>/dev/null)" || { printf 'X\tProject identity unavailable\n'; printf 'Z\t0\t0\n'; return; }
+    _wst_now="$(date +%s)"
+    printf 'HYDRA_STATISTICS\t5\t%s\n' "$_wst_now"
+    _wst_root="$(workflow_runs_dir 2>/dev/null)" || { printf 'X\tProject identity unavailable\n'; printf 'Z\t0\t0\t0\n'; return; }
     _wst_runs=0 _wst_steps=0
     for _wst_dir in "$_wst_root"/run_*; do
         [ -d "$_wst_dir" ] || continue
@@ -71,7 +72,12 @@ workflow_statistics_data() (
         done < "$_wst_dir/graph.tsv"
         workflow_statistics_usage "$_wst_dir" "$_wst_id" "$_wst_listed"
     done
-    printf 'Z\t%s\t%s\n' "$_wst_runs" "$_wst_steps"
+    # Schema 5 H rows: one per head session, newest first.
+    _load_lib workflow_sessions
+    _wst_sessions="$(workflow_sessions_rows "$_wst_now")"
+    [ -z "$_wst_sessions" ] || printf '%s\n' "$_wst_sessions"
+    printf 'Z\t%s\t%s\t%s\n' "$_wst_runs" "$_wst_steps" \
+        "$(printf '%s\n' "$_wst_sessions" | awk '/^H\t/ { n++ } END { print n + 0 }')"
 )
 
 # Called only after acquiring the run's drive lock. Old runs without a counter

@@ -176,9 +176,9 @@ review review "$unknown_row" > "$fixture/unknown-review.json"
 jq -e '.ok and .data.inventory_state == "not_applicable" and .data.checks.state != "failed" and .data.identity.kind == "unknown"' "$fixture/unknown-review.json" >/dev/null
 printf '1\n' > "$run_dir/steps/spawn-worker/authoritative-attempt"
 
-# Statistics schema 4 carries the exec receipt evidence for the agent step.
+# The statistics feed carries the exec receipt evidence for the agent step (U rows).
 hydra workflow statistics-data > "$fixture/statistics.tsv"
-[ "$(sed -n '1p' "$fixture/statistics.tsv" | cut -f1-2)" = "HYDRA_STATISTICS${tab}4" ]
+[ "$(sed -n '1p' "$fixture/statistics.tsv" | cut -f1-2)" = "HYDRA_STATISTICS${tab}5" ]
 grep -Fqx "U${tab}$run${tab}implement${tab}fixture-codex${tab}codex-cli 0.99.0-fixture${tab}-${tab}-${tab}3850000${tab}3740000${tab}23000${tab}-" "$fixture/statistics.tsv"
 [ "$(grep -c "^U$tab" "$fixture/statistics.tsv")" -eq 1 ]
 
