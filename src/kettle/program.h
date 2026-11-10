@@ -182,8 +182,10 @@ struct kt_app {
      * runtime uses it for one thing: an unhandled KT_MSG_SIGNAL quits with
      * status 128 + signal. Components use it to route input. */
     bool (*update)(void *model, const struct kt_msg *msg, struct kt_cmds *cmds);
-    /* Required. Draws the whole frame. Called at most once per frame interval
-     * and only after at least one message was processed. */
+    /* Required. Draws the whole frame. Called only after at least one message
+     * was processed, and not again within the frame interval of a frame that
+     * changed the screen; a frame that changed nothing does not delay the
+     * next, so the reply to a key shows as soon as it arrives. */
     void (*view)(const void *model, struct kt_frame *frame);
     /* Maps a cell's semantic style to SGR bytes written to `out`. NULL emits no
      * styling. (Replaced by themes in the style layer.) */
@@ -204,7 +206,7 @@ struct kt_options {
     enum kt_mouse_mode mouse;       /* default mouse reporting                    */
     bool no_synchronized_output;    /* do not bracket frames with DEC mode 2026   */
     bool ascii;                     /* canvas draws ASCII fallbacks               */
-    int fps;                        /* frame cap; 0 = 60                          */
+    int fps;                        /* cap on frames that change the screen; 0 = 60 */
     int escape_ms;                  /* wait before a lone ESC is Escape; 0 = 50   */
     /* Wait before an escape sequence that began but did not finish is given
      * up; 0 = escape_ms. A longer value lets a key split by a slow link

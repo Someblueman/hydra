@@ -236,7 +236,6 @@ bool kt_frame_render(struct kt_program *p) {
     frame_begin(p, &frame);
     p->app->view(p->model, &frame);
     p->dirty = false;
-    p->frame_at = p->backend->now(p->context) + p->frame_interval;
     rewind(p->out);
     if (!p->options.no_synchronized_output) fputs(sync_begin, p->out);
     start = ftell(p->out);
@@ -244,7 +243,10 @@ bool kt_frame_render(struct kt_program *p) {
     if (!cells_emit(p)) { kt_program_fail(p); return false; }
     cursor_emit(p, &frame, ftell(p->out) != start);
     end = ftell(p->out);
+    /* The frame cap paces what the terminal is sent. A frame that changed
+     * nothing sent nothing, so the change that follows it need not wait. */
     if (end == start) return true;
+    p->frame_at = p->backend->now(p->context) + p->frame_interval;
     if (!p->options.no_synchronized_output) { fputs(sync_end, p->out); end += (long)sizeof(sync_end) - 1; }
     if (fflush(p->out) != 0 || ferror(p->out) || !p->backend->write(p->context, p->out_bytes, (size_t)end)) {
         kt_program_fail(p);

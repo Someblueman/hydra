@@ -83,8 +83,10 @@ What the runtime guarantees, so applications cannot get it wrong:
   descriptors and child pipes are in the poll set, so their data is handled the
   moment it arrives, not on a tick.
 * Every message from one wake-up goes through `update` before anything is
-  drawn: a burst of keys or a 4 KB read costs one frame. `view` runs at most
-  once per frame interval (`fps`, default 60) and only after a message.
+  drawn: a burst of keys or a 4 KB read costs one frame. `view` runs only after
+  a message, and frames that change the screen are at least one frame interval
+  apart (`fps`, default 60). A frame that changes nothing writes nothing and
+  does not delay the next one.
 * A frame (mode changes, changed cells, cursor) leaves in one `write`, wrapped in
   a synchronized update (DEC mode 2026) unless disabled. A full repaint (new
   size, `kt_cmd_repaint`) overwrites every cell and never erases the display;

@@ -290,6 +290,7 @@ static void test_idle_is_silent(void) {
 static void test_frame_cap(void) {
     struct recorder r;
     struct kt_options options = {0};
+    struct kt_msg nothing = {KT_MSG_USER + 9, 0, {{0}}};
     struct kt_test *t;
     options.fps = 10;
     t = start(&r, &options);
@@ -306,6 +307,14 @@ static void test_frame_cap(void) {
     CHECK(kt_test_frames(t) == 2);
     CHECK(kt_test_contains(t, "updates 3"));
     CHECK(kt_test_sleep(t) == -1);
+    /* A frame that changed nothing does not hold back the one that follows:
+     * a key that only produces a reply later is answered when the reply comes. */
+    kt_test_advance(t, 1000);
+    r.updates--;
+    kt_test_send(t, &nothing);
+    CHECK(r.views == 3 && kt_test_frames(t) == 2);
+    kt_test_type(t, "c");
+    CHECK(r.views == 4 && kt_test_frames(t) == 3);
     kt_test_free(t);
 }
 
