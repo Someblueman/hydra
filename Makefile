@@ -90,7 +90,7 @@ build-core: $(BUILD_DIR)/hydra-core
 
 build-tui: $(BUILD_DIR)/hydra-tui
 
-.PHONY: test-kettle example-kettle example-workspace example-counter test-workspace-pty test-program-pty test-visualization sanitize-workspace
+.PHONY: test-kettle example-kettle example-workspace example-counter example-themes test-workspace-pty test-program-pty test-visualization sanitize-workspace
 test-visualization: build-tui test-kettle $(BUILD_DIR)/test-statistics
 	BUILD_DIR="$(abspath $(BUILD_DIR))" sh tests/test_visualization.sh
 $(BUILD_DIR)/test-kettle: tests/c/test_kettle.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
@@ -128,7 +128,10 @@ $(BUILD_DIR)/test-kettle-program: tests/c/test_kettle_program.c $(KETTLE_SOURCES
 $(BUILD_DIR)/test-kettle-counter: examples/counter_test.c examples/counter.c $(KETTLE_SOURCES) | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/counter_test.c $(KETTLE_SOURCES) -o $@
 
-test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-workspace $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-keymap
+$(BUILD_DIR)/test-kettle-themes: examples/themes_test.c examples/themes.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/themes_test.c $(KETTLE_SOURCES) -o $@
+
+test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-workspace $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/test-kettle-keymap
 	$(BUILD_DIR)/test-kettle
 	$(BUILD_DIR)/test-kettle-present
 	$(BUILD_DIR)/test-kettle-style
@@ -140,6 +143,7 @@ test-kettle: $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_D
 	$(BUILD_DIR)/test-kettle-keymap
 	$(BUILD_DIR)/test-kettle-program
 	$(BUILD_DIR)/test-kettle-counter
+	$(BUILD_DIR)/test-kettle-themes
 
 $(BUILD_DIR)/kettle-example: examples/kettle.c $(KETTLE_SOURCES) src/kettle/kettle.h | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/kettle.c $(KETTLE_SOURCES) -o $@
@@ -149,6 +153,9 @@ $(BUILD_DIR)/kettle-workspace: examples/workspace.c examples/workspace_view.c ex
 
 $(BUILD_DIR)/kettle-counter: examples/counter.c $(KETTLE_SOURCES) | $(BUILD_DIR)
 	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/counter.c $(KETTLE_SOURCES) -o $@
+
+$(BUILD_DIR)/kettle-themes: examples/themes.c $(KETTLE_SOURCES) | $(BUILD_DIR)
+	$(CC) $(CORE_CFLAGS) -Isrc/kettle examples/themes.c $(KETTLE_SOURCES) -o $@
 
 # A runtime application driven on real PTYs by tests/kettle/test_program_pty.c.
 $(BUILD_DIR)/kettle-program-fixture: tests/kettle/program_fixture.c $(KETTLE_SOURCES) | $(BUILD_DIR)
@@ -179,6 +186,8 @@ example-workspace: $(BUILD_DIR)/kettle-workspace
 example-kettle: $(BUILD_DIR)/kettle-example
 
 example-counter: $(BUILD_DIR)/kettle-counter
+
+example-themes: $(BUILD_DIR)/kettle-themes
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -561,7 +570,7 @@ sanitize-plan-workspace:
 sanitize-workspace:
 	@$(MAKE) BUILD_DIR=build/workspace-sanitize CFLAGS="-O1 -g $(SANITIZER_FLAGS) -fno-omit-frame-pointer" test-kettle test-workspace-pty
 
-$(BUILD_DIR)/kettle-workspace $(BUILD_DIR)/kettle-example $(BUILD_DIR)/kettle-counter $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter: $(KETTLE_HEADERS)
+$(BUILD_DIR)/kettle-workspace $(BUILD_DIR)/kettle-example $(BUILD_DIR)/kettle-counter $(BUILD_DIR)/kettle-themes $(BUILD_DIR)/test-kettle-themes $(BUILD_DIR)/kettle-program-fixture $(BUILD_DIR)/test-kettle $(BUILD_DIR)/test-kettle-present $(BUILD_DIR)/test-kettle-style $(BUILD_DIR)/test-kettle-draw $(BUILD_DIR)/test-kettle-unicode $(BUILD_DIR)/test-kettle-terminal $(BUILD_DIR)/test-kettle-input $(BUILD_DIR)/test-kettle-keymap $(BUILD_DIR)/test-kettle-program $(BUILD_DIR)/test-kettle-counter: $(KETTLE_HEADERS)
 
 # Read-only discovery acceptance uses real OpenSSH config expansion and a
 # controlled SSH executable; it does not use tmux or contact network hosts.

@@ -10,8 +10,8 @@ their layout can affect both source and binary compatibility.
 ```
 make                    # portable C99 static library, no POSIX layer
 make runtime            # also the optional POSIX runtime and its test driver
-make test               # component suites, the runtime, the counter example's test
-make examples           # chart, counter and workspace examples
+make test               # component suites, the runtime, the examples' own tests
+make examples           # chart, counter, themes and workspace examples
 make test-pty           # the runtime and a real shell on actual PTYs, native C observer
 build/kettle-counter
 build/kettle-workspace --shell
@@ -30,7 +30,12 @@ tree's `build` directory.
 - [Core API](kettle.h): the caller allocates cells and presenter history.
   Views borrow storage and must not outlive it. Rendering does not allocate or
   perform OS access; output functions write to the supplied stream.
-- [Layout](workspace.h): a caller-owned value object. Pane IDs remain
+- [Styles](style.h): values, with nothing to own. A theme is caller data,
+  normally `static const`; the presenter and the runtime keep a pointer to it
+  and never copy it. Profile detection reads the environment only through the
+  lookup the caller passes.
+- [Rectangles](layout.h): pure functions; the caller owns the arrays they fill.
+- [Panes](workspace.h): a caller-owned value object. Pane IDs remain
   stable until reinitialization. The caller owns labels, domain data and actions.
 - [Input](input.h) and [key bindings](keymap.h): the caller owns the decoder,
   the binding table and the chord state. Key events carry the exact bytes

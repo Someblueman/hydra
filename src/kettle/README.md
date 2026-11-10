@@ -1,9 +1,11 @@
 # kettle
 
 Dependency-free C99 terminal infrastructure, developed with Hydra as its first
-consumer. The portable core provides width-aware cell surfaces, incremental ANSI
-presentation, nested pane layout, focus and scrolling, a navigation tree, charts,
-DAG drawing, a bounded input decoder, and an embedded terminal screen/parser.
+consumer. The portable core provides width-aware cell surfaces, styles and
+themes that adapt to what the terminal can show, incremental ANSI
+presentation, layout helpers and nested panes, focus and scrolling, a
+navigation tree, charts, DAG drawing, a bounded input decoder, and an embedded
+terminal screen/parser.
 On top of it, an optional POSIX runtime turns three functions (init, update,
 view) into a terminal application: it owns the event loop, terminal modes,
 signals, child processes and output. A second optional adapter runs one child
@@ -46,7 +48,7 @@ static void view(const void *model, struct kt_frame *frame) {
 }
 
 int main(void) {
-    static const struct kt_app counter = {init, update, view, style};
+    static const struct kt_app counter = {init, update, view};
     struct model model = {0};
     struct kt_options options = {0};
     options.alt_screen = true;
@@ -68,14 +70,17 @@ int main(void) {
   the loop's `poll`), `kt_cmd_spawn` (a child in its own session, output captured,
   time budget enforced, exactly one `KT_MSG_PROCESS`), `kt_cmd_exec` (lend the
   terminal to an editor), `kt_cmd_suspend`, `kt_cmd_post`, `kt_cmd_cancel`,
-  `kt_cmd_repaint`, `kt_cmd_quit`. Each takes a `tag` that comes back in the
-  message, so a reply finds its request.
+  `kt_cmd_repaint`, `kt_cmd_theme`, `kt_cmd_quit`. Each takes a `tag` that
+  comes back in the message, so a reply finds its request.
 * **`view` draws everything, every time,** into the frame's canvas. It must not
   change the model. The runtime compares the frame with what the terminal shows
   and writes only the cells that differ. Cursor position, mouse reporting and
   window title are part of the frame (`kt_frame_cursor`, `kt_frame_mouse`,
   `kt_frame_title`); the runtime emits the changes and undoes them on exit.
-* **`style`** maps a cell's semantic style to SGR bytes on the stream it is given.
+* **How it looks is not the view's business.** `view` draws in styles that name
+  what a thing is; the theme in `kt_options` (or a later `kt_cmd_theme`) says
+  what that looks like, and the runtime writes whatever the terminal can show.
+  [Styling](#styling) is the whole story.
 
 What the runtime guarantees, so applications cannot get it wrong:
 
@@ -93,6 +98,11 @@ What the runtime guarantees, so applications cannot get it wrong:
   the screen is cleared once, when the program takes it over.
 * The canvas is always exactly the terminal's size (SIGWINCH is handled; a
   `KT_MSG_RESIZE` precedes the first frame) and every column is usable.
+* The runtime owns the terminal's rendition. It finds out what the terminal can
+  show (24-bit colour, 256 colours, 16, or none; `NO_COLOR` is honoured) and
+  converts every colour to that. Only changes of rendition are written, a frame
+  that set one ends by resetting it, and a theme change repaints every cell in
+  one update without erasing the display.
 * The terminal settings, descriptor flags and signal dispositions are restored
   on every way out: `kt_cmd_quit`, a signal, `exit()` and fatal signals
   (SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT, which then proceed as usual).
@@ -118,7 +128,8 @@ that `update` must finish itself. [program.h](program.h) is the specification.
 [testing.h](testing.h) runs the same `kt_app` through the same loop with no
 terminal: a fixed size, a clock that moves only when the test moves it, input
 fed as raw bytes through the real decoder, and `kt_cmd_spawn` requests recorded
-for the test to answer. [`examples/counter_test.c`](../../examples/counter_test.c)
+for the test to answer. Its pretended terminal shows 24-bit colour whatever the
+environment the test runs in, unless the options name a profile. [`examples/counter_test.c`](../../examples/counter_test.c)
 tests the counter this way:
 
 ```c
@@ -146,20 +157,125 @@ real loop would. `kt_test_row` and `kt_test_screen` return the last frame as
 text, `kt_test_output` the exact bytes that frame sent to the terminal, and
 `kt_test_sleep` how long the loop would now block.
 
+## Styling
+
+A cell's look is a style: a foreground, a background and attributes. A style is
+a value. Build one where it is needed and pass it to any drawing function:
+
+```c
+kt_text(canvas, area, "3 need attention", KT_STYLE(KT_COLOR_WARNING, KT_COLOR_SURFACE, KT_BOLD));
+kt_text(canvas, area, "updated 4s ago", KT_INK(KT_COLOR_MUTED, 0));   /* over whatever is there */
+```
+
+* **A colour is a reference**, resolved when the frame is presented and not
+  before. It is one of four things: the terminal's own colour (`KT_DEFAULT`,
+  which is also what a zeroed style means), a 24-bit value (`KT_RGB`, `KT_HEX`),
+  a palette entry (`KT_INDEX`, for content that arrived as one, such as a
+  child's terminal output), or a **theme token** (`KT_COLOR_TEXT`,
+  `KT_COLOR_MUTED`, `KT_COLOR_SELECTION`, ...). Cells keep the reference, so the
+  same frame can be shown in another theme or on a poorer terminal without the
+  view running again.
+* **`KT_KEEP` leaves what a cell already has.** Fill a surface once, then draw
+  text over it with `KT_INK(colour, attributes)`, which keeps the background.
+  The view never repeats which surface it is on, and a row drawn the same way
+  can sit on the panel or on the selection.
+* **Tokens name what a thing is**: text, muted and faint text; the surface, a
+  raised panel and a sunken well; the selection and the text on it; border;
+  accent and the text on it; success, warning, danger, info. That is the whole
+  vocabulary, on purpose. An application adds its own from `KT_TOKEN_USER`:
+
+  ```c
+  enum { TOKEN_BRAND = KT_TOKEN_USER };
+  #define BRAND KT_INK(KT_TOKEN(TOKEN_BRAND), KT_BOLD)
+  ```
+
+* **A theme is data**: a `static const struct kt_theme` that says what each
+  token is. `kt_theme_dark` and `kt_theme_light` are 24-bit palettes;
+  `kt_theme_terminal` uses only the terminal's own sixteen colours and its
+  default background, for people who want their terminal's palette respected.
+  Each entry holds the colour, optionally the palette entry to use at 256 and
+  at 16 colours where the automatic choice would lose the point (a selection
+  that came out the colour of the surface), attributes the token always
+  carries (a theme may say "muted" with dim instead of a colour), and
+  attributes it carries only when there is no colour at all:
+
+  ```c
+  static const struct kt_theme mine = {"mine", {
+      [KT_TOKEN_TEXT]      = {KT_HEX(0xD9DCE3), 0, 0, 0, 0},
+      [KT_TOKEN_SURFACE]   = {KT_HEX(0x16181D), 0, 0, 0, 0},
+      [KT_TOKEN_MUTED]     = {KT_HEX(0x969DAB), 0, 0, 0, KT_DIM},
+      /* colour, at 256, at 16, always, without colour */
+      [KT_TOKEN_SELECTION] = {KT_HEX(0x2B3550), KT_INDEX(24), KT_INDEX(4), 0, KT_REVERSE},
+      [TOKEN_BRAND]        = {KT_RGB(255, 0, 128), 0, KT_INDEX(13), 0, KT_UNDERLINE},
+  }};
+  ```
+
+  Light or dark is the application's choice of theme: `options.theme` to start
+  with, `kt_cmd_theme` to change it. The theme is not copied.
+* **The profile is what the terminal can show**: `KT_PROFILE_TRUECOLOR`, `_256`,
+  `_16` or `_NONE`. The runtime detects it from the environment the usual way
+  (`NO_COLOR`, `COLORTERM`, `TERM`, `CLICOLOR_FORCE`; output that is not a
+  terminal gets none), or takes it from `options.profile`. Colours are
+  converted to it by nearest colour, weighted the way the eye is, not by
+  cutting channels down. Without colour, attributes still go out, and the
+  built-in themes keep a selection visible with reverse video. A view that
+  wants to do more (a marker beside the selected row) can ask
+  `kt_frame_profile`.
+* **The stock styles** (`KT_BASE`, `KT_MUTED`, `KT_STRONG`, `KT_TITLE`,
+  `KT_BORDER`, `KT_SELECTED`, `KT_WARNING`, `KT_SUCCESS`, `KT_FOCUS`) are
+  ordinary styles made of tokens, used by the widgets here and free for
+  applications. Each names both colours, so drawing one replaces whatever was
+  there. The frame is cleared to `KT_BASE` before `view` runs.
+
+What to draw with:
+
+* `kt_fill` gives an area a surface. A panel is a filled rectangle; it does not
+  need a box around it.
+* `kt_rule` is a horizontal line with a title set into it. It groups what
+  follows without a box inside a box. `kt_rule_styled` puts the title left,
+  centre or right and gives title and line their own styles.
+* `kt_box` draws a border from data: `kt_border_light`, `_rounded`, `_heavy`,
+  `_double`, `_none`, and `kt_border_bar`, a single column at the left edge
+  that marks a row or a quote. Each carries its ASCII form. `kt_box_title` sets
+  a title into the top edge and `kt_box_inner` gives the room inside.
+* `kt_text_aligned` draws one line left, centred or right in its area and cuts
+  what does not fit with an ellipsis (`...` on an ASCII canvas), between cells:
+  never through a wide character or a cluster of joined scalars.
+  `kt_text_width` measures. `kt_spans` draws a line made of differently styled
+  runs and cuts it the same way. `kt_restyle` changes the look of what is
+  already drawn.
+* [layout.h](layout.h) is arithmetic over `struct kt_rect`, so a view says how
+  its space divides instead of computing columns: `kt_rect_cut` takes rows or
+  columns off an edge and returns both parts, `kt_rect_inset` and
+  `kt_rect_pad` shrink, `kt_rect_center` centres, and `kt_rect_columns` /
+  `kt_rect_rows` (`kt_split` for bare lengths) divide by constraint: `KT_FIXED`
+  cells, `KT_PERCENT`, `KT_MIN` and `KT_FLEX` weights. No size is ever
+  negative. When space runs out, parts are served in order and later ones go
+  to zero.
+
+[`examples/themes.c`](../../examples/themes.c) puts these together: a raised
+panel, a rule, a selected row with a bar, three columns by constraint and a
+status line, in any of the three themes (`t` changes it) and at any profile.
+`build/kettle-themes --print` writes the same view once per theme without the
+runtime, through `kt_write_row`; piped, it carries attributes and no colour.
+[style.h](style.h) is the specification.
+
 ## Run the standalone examples
 
 From the repository root:
 
 ```sh
-make example-kettle example-counter example-workspace
+make example-kettle example-counter example-themes example-workspace
 build/kettle-example
 build/kettle-counter
+build/kettle-themes
 build/kettle-workspace
 build/kettle-workspace --shell
 ```
 
 `kettle-example` prints one static frame with the portable core alone.
-`kettle-counter` and `kettle-workspace` are runtime applications.
+`kettle-counter`, `kettle-themes` and `kettle-workspace` are runtime
+applications.
 
 The workspace without a shell uses explicitly synthetic content. Tab changes pane
 focus; `j/k` and arrows navigate/scroll; `h/l` collapse/expand the tree; the mouse
@@ -204,7 +320,7 @@ The POSIX demo is locally qualified on macOS; other platforms require their own
 runtime qualification. Python is used only by the optional PTY test target.
 
 `make test-kettle` exercises components, the runtime under its headless driver
-and with real child processes, and the counter example's own test.
+and with real child processes, and the counter and themes examples' own tests.
 `make test-workspace-pty` (which includes `make test-program-pty`) drives a
 runtime fixture and the workspace example on actual PTYs and reconstructs their
 displayed cells independently of the C parser. `make sanitize-workspace` runs
@@ -213,14 +329,19 @@ or demo runtime dependencies.
 
 ## Boundaries and behavior
 
-* `kettle.h`: caller-owned cells, borrowed clipped surfaces, semantic or explicit
-  RGB styles, text, panels, bars, plots, graphs and presentation. Unchanged frames
+* `kettle.h`: caller-owned cells, borrowed clipped surfaces, text, fills,
+  borders, rules, panels, bars, plots, graphs and presentation. Unchanged frames
   emit zero bytes. A changed run emits cursor positioning and changed cells;
-  resizing or explicit invalidation repaints. Code that calls `kt_present`
-  itself invalidates after outside writers, theme changes, terminal suspension,
-  or screen changes, and reserves the last outer terminal column to avoid
-  automatic wrapping; under the runtime none of that is the application's
-  concern.
+  resizing, another theme or profile, or explicit invalidation repaints. Code
+  that calls `kt_present` itself hands it the theme and profile, invalidates
+  after outside writers, terminal suspension, or screen changes, and reserves
+  the last outer terminal column to avoid automatic wrapping; under the runtime
+  none of that is the application's concern. `kt_write_row` without a paint is
+  plain text with no escape sequence.
+* `style.h`: colours, styles, theme tokens and the built-in themes, colour
+  profiles and their detection from an environment the caller supplies, nearest
+  colour conversion, and the SGR between two styles. No terminal or environment
+  access of its own. `layout.h`: rectangle cuts and constraint splits.
 * `workspace.h`: stable pane IDs, nested column/row splits, minimum sizes, focus,
   drag routing and independent scroll state. Insufficient space shows the focused
   subtree; focus cycling still reaches hidden leaves. No app content is owned.

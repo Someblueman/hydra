@@ -18,6 +18,8 @@ cp "$_package_root/scripts/kettle.mk" "$_package_dest/Makefile"
 sed \
     -e 's|(kettle\.h)|(src/kettle/kettle.h)|g' \
     -e 's|(workspace\.h)|(src/kettle/workspace.h)|g' \
+    -e 's|(style\.h)|(src/kettle/style.h)|g' \
+    -e 's|(layout\.h)|(src/kettle/layout.h)|g' \
     -e 's|(terminal\.h)|(src/kettle/terminal.h)|g' \
     -e 's|(input\.h)|(src/kettle/input.h)|g' \
     -e 's|(keymap\.h)|(src/kettle/keymap.h)|g' \
@@ -30,7 +32,8 @@ sed \
     -e 's|(UNICODE-LICENSE\.txt)|(src/kettle/UNICODE-LICENSE.txt)|g' \
     "$_package_root/src/kettle/STANDALONE.md" > "$_package_dest/README.md"
 cp "$_package_root"/examples/workspace*.c "$_package_root/examples/workspace_demo.h" "$_package_root/examples/kettle.c" \
-    "$_package_root/examples/counter.c" "$_package_root/examples/counter_test.c" "$_package_dest/examples/"
+    "$_package_root/examples/counter.c" "$_package_root/examples/counter_test.c" \
+    "$_package_root/examples/themes.c" "$_package_root/examples/themes_test.c" "$_package_dest/examples/"
 cp "$_package_root"/tests/c/test_kettle*.c "$_package_root/tests/c/test_workspace_child.c" "$_package_dest/tests/c/"
 for _package_file in pty_support.h pty_support.c screen_support.c fixture_support.c test_pty.c \
     program_fixture.c test_program_pty.c; do
