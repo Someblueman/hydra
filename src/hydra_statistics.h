@@ -7,6 +7,7 @@
 
 #define HS_RUNS 128
 #define HS_STEPS 1024
+#define HS_SESSIONS 256
 enum hs_state { HS_SUCCEEDED, HS_FAILED, HS_RUNNING, HS_QUEUED, HS_BLOCKED, HS_CANCELLED, HS_UNKNOWN, HS_STATES };
 struct hs_run {
     char id[80], name[80], project[80], state[40];
@@ -34,12 +35,27 @@ struct hs_step {
     bool attempts_known;
     struct hs_usage usage;
 };
+/* One head session (schema 5 H rows): an instance of a head from its start to
+ * its teardown, or to the resume that superseded it. Every time has its own
+ * known flag: an unknown time is never zero. Active and quiet seconds are
+ * inferred from terminal output while an observer watched, except for the
+ * reported seconds, which an adapter stated; the rest of the session is
+ * unobserved. */
+enum hs_session_state { HS_SESSION_OPEN, HS_SESSION_ENDED, HS_SESSION_SUPERSEDED };
+struct hs_session {
+    char head[80], instance[80], branch[128], profile[40], outcome[16];
+    enum hs_session_state state;
+    bool headless;
+    uint64_t started, ended, active, quiet, unobserved, reported;
+    bool started_known, ended_known, active_known, quiet_known, unobserved_known, reported_known;
+};
 /* Caller owns this bounded value object and its storage. Loading replaces it.
  * Missing numeric evidence stays unknown; malformed framing rejects the stream. */
 struct hs_model {
     struct hs_run runs[HS_RUNS];
     struct hs_step steps[HS_STEPS];
-    size_t run_count, step_count, warnings;
+    struct hs_session sessions[HS_SESSIONS];
+    size_t run_count, step_count, session_count, warnings;
     uint64_t observed;
     unsigned schema_version;
     char warning[256];
@@ -63,6 +79,21 @@ void hs_summarize(const struct hs_model *m, const struct hs_filter *filter, stru
 bool hs_duration(const struct hs_model *m, const struct hs_step *step, uint64_t *seconds);
 /* Adds one step's recorded usage to a summary; used for run and scope totals. */
 void hs_usage_add(struct hs_summary *out, const struct hs_step *step);
+/* Head sessions match the days, attention and query filters; a workflow
+ * filter does not apply to them. Attention means a failed or blocked outcome. */
+bool hs_session_matches(const struct hs_model *m, size_t session, const struct hs_filter *filter);
+/* From the start to the end, or to the sample time while the session is open. */
+bool hs_session_length(const struct hs_model *m, const struct hs_session *s, uint64_t *seconds);
+/* Sums over the matched sessions, each with the number of sessions that
+ * contributed: sessions is the eligible count for all of them. Observed time
+ * is active plus quiet; coverage is observed over observed plus unobserved. */
+struct hs_session_summary {
+    size_t sessions, open, undated, excluded_undated;
+    size_t length_known, activity_known, coverage_known;
+    uint64_t length_sum, length_max, active_sum, quiet_sum, unobserved_sum, reported_sum;
+    size_t daily[7];
+};
+void hs_session_summarize(const struct hs_model *m, const struct hs_filter *filter, struct hs_session_summary *out);
 enum hs_metric { HS_QUEUE, HS_ELAPSED, HS_VERIFIED, HS_RECOVERIES, HS_METRICS };
 enum hs_evidence { HS_INELIGIBLE, HS_MISSING, HS_KNOWN };
 struct hs_metric_summary {
