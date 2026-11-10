@@ -17,7 +17,12 @@
  *
  * Calls that feed the program also run it until it has nothing left to do,
  * exactly as one wake-up of the real loop would: every available message
- * goes through update, then at most one frame is drawn. */
+ * goes through update, then at most one frame is drawn.
+ *
+ * Nothing here ever blocks. An update that pumps the loop itself (a modal
+ * helper calling kt_program_next) gets false from a wait for input the test
+ * has not fed yet or for time the test has not advanced: queue a helper's
+ * whole input with kt_test_feed before the step that opens it. */
 #include "program.h"
 
 struct kt_test;
@@ -45,8 +50,8 @@ void kt_test_step(struct kt_test *test);
 /* Delivers a message, as kt_program_post would. */
 void kt_test_send(struct kt_test *test, const struct kt_msg *msg);
 void kt_test_resize(struct kt_test *test, int columns, int rows);
-/* SIGINT, SIGTERM, SIGHUP, SIGCHLD, SIGWINCH, SIGTSTP or SIGCONT as the
- * runtime would see it. */
+/* SIGINT, SIGTERM, SIGHUP, SIGQUIT, SIGCHLD, SIGWINCH, SIGTSTP or SIGCONT as
+ * the runtime would see it. */
 void kt_test_signal(struct kt_test *test, int number);
 /* Moves the clock forward, stopping at every deadline on the way (timers,
  * the Escape wait, the frame cap, process budgets) so each fires on time. */

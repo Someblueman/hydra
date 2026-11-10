@@ -13,6 +13,8 @@ BUILD_DIR ?= build
 # Build and analysis share recursive discovery so domain directories cannot
 # silently omit native sources from the quality gate.
 NATIVE_SOURCES = $(shell find src -type f -name '*.c' | LC_ALL=C sort)
+# Named in prerequisite lists below, which make expands as it reads them.
+KETTLE_SOURCES = $(filter src/kettle/%.c,$(NATIVE_SOURCES))
 SANITIZER_FLAGS ?= $(shell if [ "$$(uname -s)" = Darwin ]; then printf '%s' '-fsanitize=undefined'; else printf '%s' '-fsanitize=address,undefined'; fi)
 
 # Sanitizer diagnostics must fail a case even when its output is captured.
@@ -199,7 +201,6 @@ $(BUILD_DIR)/tui/%.o: src/tui/%.c
 	@mkdir -p "$(@D)"
 	$(CC) $(CORE_CFLAGS) -MMD -MP -c $< -o $@
 
-KETTLE_SOURCES = $(filter src/kettle/%.c,$(NATIVE_SOURCES))
 KETTLE_HEADERS = $(wildcard src/kettle/*.h src/kettle/*.inc)
 KETTLE_OBJECTS = $(patsubst src/kettle/%.c,$(BUILD_DIR)/kettle/%.o,$(KETTLE_SOURCES))
 TUI_DATA_OBJECTS = $(BUILD_DIR)/hydra_statistics.o $(BUILD_DIR)/hydra_statistics_metrics.o

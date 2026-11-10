@@ -164,14 +164,14 @@ static void resizing(void) {
 }
 
 static void terminations(void) {
-    static const int numbers[] = {SIGTERM, SIGINT, SIGHUP};
+    static const int numbers[] = {SIGTERM, SIGINT, SIGHUP, SIGQUIT};
     struct kt_session s;
     size_t i;
     for (i = 0; i < sizeof(numbers) / sizeof(numbers[0]); i++) {
         begin(&s, 80, 24);
         finish(&s, NULL, numbers[i], 128 + numbers[i]);
     }
-    puts("PASS signals: SIGTERM, SIGINT and SIGHUP restore the terminal and exit 128+signal");
+    puts("PASS signals: SIGTERM, SIGINT, SIGHUP and SIGQUIT restore the terminal and exit 128+signal");
 }
 
 static void crashes(void) {
@@ -215,6 +215,62 @@ static void lending(void) {
     puts("PASS hand-off: exec on a cooked terminal, suspend, SIGTSTP and SIGCONT re-enter and repaint");
 }
 
+/* An update that waits for an answer runs the loop itself: its question is
+ * part of the frame, the program stays live around it, and nothing is erased. */
+static void asking(void) {
+    struct kt_session s;
+    begin(&s, 80, 24);
+    kt_send(&s, "m");
+    kt_until(&s, "really? y answers", 3);
+    kt_pump(&s, .1);
+    EXPECT(kt_pump(&s, .3) == 0, "an open question writes nothing while idle");
+    kt_send(&s, "kk\033[200~held\033[201~");
+    kt_resize(&s, 60, 15);
+    kt_until(&s, "size 60x15", 3);
+    EXPECT(kt_contains(&s, "really? y answers") && kt_contains(&s, "keys 1"), "question stays up; other keys are the helper's");
+    EXPECT(kt_contains(&s, "paste [held]"), "messages the helper passes on reach update");
+    kt_send(&s, "y");
+    kt_until(&s, "answers 1", 3);
+    EXPECT(!kt_contains(&s, "really?"), "question gone once answered");
+    kt_send(&s, "k");
+    kt_until(&s, "keys 2", 3);
+    EXPECT(count(s.raw, "\033[2J") == 1, "asking and answering erase nothing");
+    EXPECT(frames_whole(s.raw), "all output is whole synchronized updates");
+    kt_send(&s, "m");
+    kt_until(&s, "really? y answers", 3);
+    finish(&s, NULL, SIGTERM, 128 + SIGTERM);
+    puts("PASS pump inside update: question drawn in the frame, silent when idle, resize and paste pass through, "
+         "a signal ends it with the terminal restored");
+}
+
+static void lent(void) {
+    struct kt_session s;
+    size_t mark;
+    const char *cooked;
+    begin(&s, 80, 24);
+    mark = s.raw_size;
+    kt_send(&s, "l");
+    await_raw(&s, "LENT_COOKED", mark);
+    cooked = strstr(s.raw + mark, "LENT_COOKED");
+    EXPECT(strstr(s.raw + mark, LEAVE) && strstr(s.raw + mark, LEAVE) < cooked, "terminal released before it was lent");
+    kt_send(&s, "typed while lent\n");
+    kt_until(&s, "lends 1", 5);
+    EXPECT(strstr(cooked, FRAME_BEGIN ENTER) != NULL, "screen entered again after the reclaim");
+    EXPECT(bordered(&s) && kt_contains(&s, "keys 1"), "repaint after the reclaim; the line typed meanwhile is not keys");
+    mark = s.raw_size;
+    kt_send(&s, "l");
+    await_raw(&s, "LENT_COOKED", mark);
+    /* The quit key of a cooked terminal: the signal is kept until the
+     * terminal is taken back, and the program then leaves as for any other. */
+    EXPECT(kill(s.pid, SIGQUIT) == 0, "quit signal while lent");
+    kt_send(&s, "\n");
+    await_exit(&s);
+    EXPECT(!strstr(s.raw + mark, FRAME_BEGIN), "nothing is drawn once the quit is seen");
+    kt_close(&s, "", 0, 128 + SIGQUIT);
+    puts("PASS release and reclaim: cooked while lent, re-entered and repainted after, "
+         "a quit signal while lent exits 128+signal with the terminal as found");
+}
+
 int main(void) {
     kt_init();
     kt_paths(root, sizeof(root), build, sizeof(build));
@@ -225,5 +281,7 @@ int main(void) {
     terminations();
     crashes();
     lending();
+    asking();
+    lent();
     return 0;
 }

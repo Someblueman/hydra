@@ -48,6 +48,8 @@ struct recorder {
     uint64_t repeat, second, spawn, watch;
     int watched, written;
     struct kt_spawn spawn_options;
+    struct kt_program *program;  /* set by tests whose keys pump or lend */
+    bool paste_opens_helper;
 };
 
 static void note(struct recorder *r, const char *format, ...) {
@@ -94,6 +96,32 @@ static void key_other(struct recorder *r, char key, struct kt_cmds *cmds) {
     if (key == 'T') r->titled = !r->titled;
 }
 
+/* A helper that does not return before it has its answer: it runs the loop
+ * itself, keeps the keys ('.' ends it, 'q' goes to update) and lets every
+ * other message take the ordinary path. */
+static void helper(struct recorder *r, struct kt_cmds *cmds) {
+    struct kt_msg msg;
+    note(r, "h[ ");
+    kt_cmd_timer(cmds, TAG_ONCE, 0, 0);
+    while (kt_program_next(r->program, &msg, -1)) {
+        char key = msg.type == KT_MSG_KEY ? msg.u.event.bytes[0] : '\0';
+        if (key == '.') break;
+        if (msg.type == KT_MSG_PASTE) note(r, "p:%.*s ", (int)msg.u.paste.length, msg.u.paste.bytes);
+        else if (key && key != 'q') note(r, "k:%c ", key);
+        else (void)kt_program_dispatch(r->program, &msg);
+        (void)kt_program_render(r->program);
+    }
+    note(r, "]h ");
+}
+
+/* Lends the terminal and takes it back within one update. */
+static void lend(struct recorder *r) {
+    note(r, "L:%d", (int)kt_program_release(r->program));
+    note(r, "%d", (int)kt_program_release(r->program));
+    note(r, "%d", (int)kt_program_render(r->program));
+    note(r, "%d ", (int)kt_program_reclaim(r->program));
+}
+
 static void on_key(struct recorder *r, const struct kt_event *event, struct kt_cmds *cmds) {
     char key = event->length == 1 ? event->bytes[0] : '\0';
     if (event->key == KT_KEY_UP) note(r, "K:up ");
@@ -102,6 +130,15 @@ static void on_key(struct recorder *r, const struct kt_event *event, struct kt_c
     key_timers(r, key, cmds);
     key_processes(r, key, cmds);
     key_other(r, key, cmds);
+    if (key == 'h' && r->program) helper(r, cmds);
+    if (key == 'l' && r->program) lend(r);
+}
+
+/* The outer message's bytes must outlive the helper's own messages. */
+static void on_paste(struct recorder *r, const struct kt_msg *msg, struct kt_cmds *cmds) {
+    if (r->paste_opens_helper) { r->paste_opens_helper = false; helper(r, cmds); }
+    note(r, "P:%d%s:%.*s ", (int)msg->u.paste.length, msg->u.paste.truncated ? "u" : "",
+         (int)msg->u.paste.length, msg->u.paste.bytes);
 }
 
 static void on_process(struct recorder *r, const struct kt_process_result *result) {
@@ -146,10 +183,7 @@ static bool recorder_update(void *model, const struct kt_msg *msg, struct kt_cmd
     switch (msg->type) {
     case KT_MSG_KEY: on_key(r, &msg->u.event, cmds); return true;
     case KT_MSG_MOUSE: note(r, "M:%d,%d ", msg->u.event.x, msg->u.event.y); return true;
-    case KT_MSG_PASTE:
-        note(r, "P:%d%s:%.*s ", (int)msg->u.paste.length, msg->u.paste.truncated ? "u" : "",
-             (int)msg->u.paste.length, msg->u.paste.bytes);
-        return true;
+    case KT_MSG_PASTE: on_paste(r, msg, cmds); return true;
     case KT_MSG_RESIZE: note(r, "R:%dx%d ", msg->u.resize.columns, msg->u.resize.rows); return true;
     case KT_MSG_FOCUS: note(r, "focus "); return true;
     case KT_MSG_BLUR: note(r, "blur "); return true;
@@ -355,6 +389,49 @@ static void test_escape_wait_option(void) {
     kt_test_free(t);
 }
 
+/* A key split by a slow link arrives whole when sequences may wait longer
+ * than a lone Escape; one that never finishes is dropped with its tail. */
+static void test_sequence_wait(void) {
+    struct recorder r;
+    struct kt_options options = {0};
+    struct kt_test *t;
+    options.escape_ms = 5; options.sequence_ms = 100;
+    t = start(&r, &options);
+    kt_test_type(t, "\033");
+    CHECK(kt_test_sleep(t) == 5);
+    kt_test_type(t, "[");
+    CHECK(kt_test_sleep(t) == 100);
+    kt_test_advance(t, 99);
+    kt_test_type(t, "A");
+    CHECK(!strcmp(r.log, "init R:20x4 K:up "));
+    kt_test_type(t, "\033[1;");
+    kt_test_advance(t, 100);
+    CHECK(kt_test_sleep(t) == -1);
+    kt_test_type(t, "5Cx");
+    CHECK(!strcmp(r.log, "init R:20x4 K:up K:x "));
+    kt_test_free(t);
+    /* Unset, sequences wait as long as Escape does. */
+    t = start(&r, NULL);
+    kt_test_type(t, "\033[");
+    CHECK(kt_test_sleep(t) == 50);
+    kt_test_free(t);
+}
+
+/* The closing bracket of a paste may stall for longer than any key wait. */
+static void test_paste_outlasts_waits(void) {
+    struct recorder r;
+    struct kt_options options = {0};
+    struct kt_test *t;
+    options.bracketed_paste = true;
+    t = start(&r, &options);
+    kt_test_type(t, "\033[200~ab\033[20");
+    CHECK(kt_test_sleep(t) == -1);
+    kt_test_advance(t, 60000);
+    kt_test_type(t, "1~x");
+    CHECK(!strcmp(r.log, "init R:20x4 P:2:ab K:x "));
+    kt_test_free(t);
+}
+
 static void test_paste(void) {
     struct recorder r;
     struct kt_options options = {0};
@@ -515,11 +592,11 @@ static void test_posts_and_order(void) {
 }
 
 static void test_signals(void) {
-    static const int fatal[] = {SIGINT, SIGTERM, SIGHUP};
+    static const int fatal[] = {SIGINT, SIGTERM, SIGHUP, SIGQUIT};
     struct recorder r;
     struct kt_test *t;
     size_t i;
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < sizeof(fatal) / sizeof(*fatal); i++) {
         t = start(&r, NULL);
         kt_test_signal(t, SIGCHLD);
         CHECK(kt_test_running(t));
@@ -696,6 +773,61 @@ static void test_pump(void) {
     kt_test_free(t);
 }
 
+/* update runs the loop itself: its queued commands take effect, its own
+ * message survives, other messages take the ordinary path, frames are drawn. */
+static void test_pump_inside_update(void) {
+    struct recorder r;
+    struct kt_options options = {0};
+    struct kt_test *t;
+    int views;
+    options.bracketed_paste = true;
+    t = start(&r, &options);
+    r.program = kt_test_program(t);
+    views = r.views;
+    kt_test_type(t, "hab.c");
+    /* Input in hand comes first, as in the loop proper; the timer queued
+     * before the wait is due once the input is used up. */
+    CHECK(!strcmp(r.log, "init R:20x4 K:h h[ k:a k:b ]h K:c T:1 "));
+    CHECK(r.views >= views + 3);
+    CHECK(kt_test_contains(t, "updates 4"));
+    /* The paste that opened the helper is intact after a paste inside it. */
+    r.log[0] = '\0'; r.paste_opens_helper = true;
+    kt_test_type(t, "\033[200~outer\033[201~\033[200~inner\033[201~.");
+    CHECK(!strcmp(r.log, "h[ p:inner ]h P:5:outer T:1 "));
+    /* Nothing more to read: the wait gives up instead of hanging the test. */
+    r.log[0] = '\0';
+    kt_test_type(t, "hx");
+    CHECK(!strcmp(r.log, "K:h h[ k:x T:1 ]h "));
+    CHECK(kt_test_running(t));
+    /* A quit inside the helper ends its wait; the rest is never read. */
+    r.log[0] = '\0';
+    kt_test_type(t, "hq.z");
+    CHECK(!strcmp(r.log, "K:h h[ K:q ]h "));
+    CHECK(!kt_test_running(t) && kt_test_status(t) == 7);
+    kt_test_free(t);
+}
+
+static void test_release_and_reclaim(void) {
+    struct recorder r;
+    struct kt_options options = {0};
+    struct kt_test *t;
+    options.alt_screen = true;
+    t = start(&r, &options);
+    CHECK(!kt_program_reclaim(kt_test_program(t)));
+    r.program = kt_test_program(t);
+    kt_test_type(t, "l\033");
+    /* Released once, not twice; no frame while lent; taken back. */
+    CHECK(has(r.log, "L:1001 "));
+    CHECK(!strncmp(kt_test_output(t, NULL), "\033[?2026h\033[?1049h\033[H\033[2J", 22));
+    CHECK(has(kt_test_output(t, NULL), "updates 2"));
+    /* Input read before the hand-off is not replayed after it. */
+    kt_test_advance(t, 1000);
+    CHECK(!has(r.log, "K:esc"));
+    kt_test_type(t, "x");
+    CHECK(has(r.log, "K:x "));
+    kt_test_free(t);
+}
+
 static long live_blocks;
 static void *counting_resize(void *context, void *pointer, size_t size) {
     (void)context;
@@ -723,6 +855,13 @@ static void test_allocator(void) {
     kt_test_type(t, "s\033[200~unfinished");
     kt_test_free(t);
     CHECK(live_blocks == 0);
+    /* Messages left over from a helper's own loop are released too. */
+    t = start(&r, &options);
+    r.program = kt_test_program(t);
+    r.paste_opens_helper = true;
+    kt_test_type(t, "\033[200~outer\033[201~\033[200~inner\033[201~");
+    kt_test_free(t);
+    CHECK(live_blocks == 0);
 }
 
 static void headless(void) {
@@ -735,7 +874,9 @@ static void headless(void) {
     test_clipped_terminal();
     test_escape();
     test_escape_wait_option();
+    test_sequence_wait();
     test_paste();
+    test_paste_outlasts_waits();
     test_paste_limit();
     test_mouse_and_focus();
     test_cursor_and_title();
@@ -752,6 +893,8 @@ static void headless(void) {
     test_exit_reports_children();
     test_exec_and_suspend();
     test_pump();
+    test_pump_inside_update();
+    test_release_and_reclaim();
     test_allocator();
     puts("program (headless): frames, input, timers, signals, commands, processes and the pump passed");
 }
@@ -1148,7 +1291,7 @@ static bool same_terminal(const struct termios *a, const struct termios *b) {
 }
 
 static const int handled_signals[] = {SIGWINCH, SIGINT, SIGTERM, SIGHUP, SIGCHLD, SIGCONT, SIGTSTP,
-                                      SIGPIPE, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT};
+                                      SIGQUIT, SIGPIPE, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT};
 #define HANDLED (sizeof(handled_signals) / sizeof(*handled_signals))
 
 static void actions_read(struct sigaction actions[HANDLED]) {

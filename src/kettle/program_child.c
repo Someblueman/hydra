@@ -168,7 +168,7 @@ static void children_release(struct kt_program *p) {
 /* Waits for a child pipe or the next stop deadline, a second at most: the
  * program is ending and must not hang on a wake-up that never comes. */
 static bool children_wait(struct kt_program *p) {
-    struct kt_ready ready = {false, 0};
+    struct kt_ready ready = {false, false, 0};
     struct kt_msg dropped;
     size_t i, count = 2 + p->child_count;
     uint64_t at = kt_children_deadline(p), time = now(p);

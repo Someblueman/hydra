@@ -60,8 +60,8 @@ int main(void) {
 * **The model** is ordinary data that the application owns. `update` is the only
   place it changes, one message at a time: a key, a mouse report, a whole paste,
   a new terminal size, a timer, a ready descriptor, a finished child, a signal.
-  `update` returns whether it handled the message; an unhandled SIGINT, SIGTERM
-  or SIGHUP quits with status 128 + signal.
+  `update` returns whether it handled the message; an unhandled SIGINT, SIGTERM,
+  SIGHUP or SIGQUIT quits with status 128 + signal.
 * **Effects are commands.** `update` never sleeps, forks or reads a descriptor.
   It queues a request and gets a message when there is news:
   `kt_cmd_timer` (once or repeating), `kt_cmd_watch` (a PTY, socket or pipe joins
@@ -104,7 +104,12 @@ valid until `update` returns. A watch is level-triggered: read what it reports
 or cancel it. Another thread or a signal handler talks to the program only
 through `kt_program_post`. Code that must keep its own loop for now can drive
 the runtime with `kt_program_begin`, `_next`, `_dispatch`, `_render` and `_end`
-instead of `kt_program_run`. [program.h](program.h) is the specification.
+instead of `kt_program_run`. A helper called from `update` that cannot return
+before it has an answer (a prompt, a confirmation) may run the loop the same
+way from inside `update`: it keeps the messages it wants, passes the rest to
+`kt_program_dispatch`, and `view` draws its question as part of the frame.
+`kt_program_release` and `kt_program_reclaim` lend the terminal for a hand-off
+that `update` must finish itself. [program.h](program.h) is the specification.
 
 ### Testing an application
 

@@ -43,6 +43,7 @@ static void options_normalize(struct kt_options *o, const struct kt_options *giv
     if (!o->output_fd) o->output_fd = 1;
     o->fps = bounded(o->fps, 60, 1000);
     o->escape_ms = bounded(o->escape_ms, 50, 10000);
+    o->sequence_ms = bounded(o->sequence_ms, o->escape_ms, 10000);
     o->max_columns = bounded(o->max_columns, 512, 4096);
     o->max_rows = bounded(o->max_rows, 256, 4096);
     if (!o->paste_limit) o->paste_limit = 1024U * 1024U;
@@ -160,15 +161,23 @@ static void input_event(struct kt_program *p, const struct kt_event *event) {
     (void)kt_program_push(p, &msg, NULL);
 }
 
+/* How long bytes left open at the end of the input may wait for the rest. A
+ * paste ends only with its closing bracket, however slowly that arrives. */
+static uint64_t open_wait(const struct kt_program *p) {
+    if (!p->decoder.length || p->decoder.paste) return KT_NEVER;
+    return (uint64_t)(p->decoder.length > 1 ? p->options.sequence_ms : p->options.escape_ms);
+}
+
 /* Decodes buffered bytes until one message is ready. A sequence left open at
  * the end of the buffer starts the wait that tells a lone Escape apart. */
 static bool input_decode(struct kt_program *p) {
     struct kt_event event;
+    uint64_t wait;
     if (p->input_at == p->input_length) return false;
     while (p->input_at < p->input_length && p->queue_head == p->queue_count)
         if (kt_input_feed(&p->decoder, p->input[p->input_at++], &event)) input_event(p, &event);
-    if (p->input_at == p->input_length && p->decoder.length)
-        p->escape_at = now(p) + (uint64_t)p->options.escape_ms;
+    wait = p->input_at == p->input_length ? open_wait(p) : KT_NEVER;
+    if (wait != KT_NEVER) p->escape_at = now(p) + wait;
     return true;
 }
 
@@ -180,11 +189,16 @@ static void input_read(struct kt_program *p) {
     } else if (count == KT_READ_END) p->input_closed = true;
 }
 
+/* The wait is over: a lone Escape (or Escape and one key) is that key. A
+ * longer sequence that never finished is given up, and whatever is still to
+ * come of it is drained instead of being read as keys. */
 static void escape_flush(struct kt_program *p) {
     struct kt_event event;
+    bool unfinished = p->decoder.length > 2;
     if (p->escape_at == KT_NEVER || p->input_at < p->input_length || now(p) < p->escape_at) return;
     p->escape_at = KT_NEVER;
     if (kt_input_flush(&p->decoder, &event)) input_event(p, &event);
+    else if (unfinished) p->decoder.discard = true;
 }
 
 /* ---- commands ----------------------------------------------------------- */
@@ -431,7 +445,7 @@ static void continued(struct kt_program *p) {
 static void signals_take(struct kt_program *p, unsigned signals) {
     static const struct { unsigned wake; int number; } reported[] = {
         {KT_WAKE_HANGUP, SIGHUP}, {KT_WAKE_INTERRUPT, SIGINT}, {KT_WAKE_TERMINATE, SIGTERM},
-        {KT_WAKE_CHILD, SIGCHLD}
+        {KT_WAKE_QUIT, SIGQUIT}, {KT_WAKE_CHILD, SIGCHLD}
     };
     size_t i;
     if (signals & KT_WAKE_STOP) suspend(p);
@@ -495,15 +509,16 @@ static bool poll_prepare(struct kt_program *p, size_t *count) {
 }
 
 /* One wait and everything it found, in a fixed order: signals, posted
- * messages, timers, watched descriptors, children, then terminal input. */
-static void collect(struct kt_program *p, int timeout) {
+ * messages, timers, watched descriptors, children, then terminal input.
+ * False when the backend could not wait and has nothing to give. */
+static bool collect(struct kt_program *p, int timeout) {
     struct kt_ready ready;
     struct kt_msg posted;
     size_t count, watches = p->watch_count;
-    ready.input = !p->input_closed; ready.signals = 0;
+    ready.input = !p->input_closed && !p->released; ready.starved = false; ready.signals = 0;
     if (!poll_prepare(p, &count) || !p->backend->wait(p->context, p->fds, count, timeout, &ready)) {
         kt_program_fail(p);
-        return;
+        return false;
     }
     signals_take(p, ready.signals);
     while (p->backend->posted(p->context, &posted)) (void)kt_program_push(p, &posted, NULL);
@@ -512,6 +527,7 @@ static void collect(struct kt_program *p, int timeout) {
     kt_children_service(p, p->fds + 2 + watches);
     if (ready.input) input_read(p);
     escape_flush(p);
+    return !ready.starved;
 }
 
 static uint64_t deadline(const struct kt_program *p) {
@@ -593,7 +609,7 @@ static void state_release(struct kt_program *p) {
 bool kt_program_begin(struct kt_program *p) {
     if (!p || p->begun || !p->backend->begin(p->context)) return false;
     p->begun = p->running = true;
-    p->dirty = p->input_closed = p->pasting = p->paste_truncated = false;
+    p->dirty = p->input_closed = p->pasting = p->paste_truncated = p->released = false;
     p->status = 0; p->terminal_columns = p->terminal_rows = 0;
     p->escape_at = KT_NEVER; p->frame_at = 0;
     kt_input_init(&p->decoder);
@@ -612,11 +628,14 @@ static bool alive(struct kt_program *p) {
     return p->running;
 }
 
+/* An update that pumps the loop itself queued its commands before it began to
+ * wait, so they are performed here as well as after update returns. */
 bool kt_program_next(struct kt_program *p, struct kt_msg *msg, int timeout_ms) {
     uint64_t end = KT_NEVER;
     bool waited = false;
     if (!p || !p->begun || !msg) return false;
     held_release(p);
+    perform(p);
     if (timeout_ms >= 0) end = now(p) + (uint64_t)timeout_ms;
     while (p->running) {
         int left;
@@ -624,7 +643,7 @@ bool kt_program_next(struct kt_program *p, struct kt_msg *msg, int timeout_ms) {
         if (input_decode(p)) continue;
         left = until(p, end, -1);
         if (!alive(p) || (waited && !left)) break;
-        collect(p, until(p, deadline(p), left));
+        if (!collect(p, until(p, deadline(p), left)) && !pending(p)) break;
         waited = true;
     }
     return false;
@@ -632,27 +651,55 @@ bool kt_program_next(struct kt_program *p, struct kt_msg *msg, int timeout_ms) {
 
 static bool quits_unhandled(const struct kt_msg *msg) {
     int number = msg->u.signal.number;
-    return msg->type == KT_MSG_SIGNAL && (number == SIGINT || number == SIGTERM || number == SIGHUP);
+    if (msg->type != KT_MSG_SIGNAL) return false;
+    return number == SIGINT || number == SIGTERM || number == SIGHUP || number == SIGQUIT;
 }
 
+/* The message's bytes belong to this update until it returns, also when the
+ * update pumps the loop and further messages come and go meanwhile. */
 bool kt_program_dispatch(struct kt_program *p, const struct kt_msg *msg) {
+    void *owned;
     bool handled;
     if (!p || !p->running || !msg) return false;
+    owned = p->held; p->held = NULL;
     handled = p->app->update(p->model, msg, &p->cmds);
+    held_release(p);
+    p->held = owned;
     perform(p);
     if (!handled && quits_unhandled(msg)) quit(p, 128 + msg->u.signal.number);
     p->dirty = true;
     return p->running;
 }
 
+bool kt_program_release(struct kt_program *p) {
+    if (!p || !p->running || p->released) return false;
+    terminal_release(p);
+    p->released = true;
+    return true;
+}
+
+/* Bytes read before the terminal was lent, and a sequence they left open, are
+ * not input for what follows. Signals that arrived meanwhile are gathered at
+ * once, so one that ends the program does so before a frame is drawn. */
+bool kt_program_reclaim(struct kt_program *p) {
+    if (!p || !p->begun || !p->released) return false;
+    p->released = false;
+    p->input_at = p->input_length = 0;
+    p->escape_at = KT_NEVER;
+    kt_input_init(&p->decoder);
+    terminal_reclaim(p);
+    if (p->running) (void)collect(p, 0);
+    return p->running;
+}
+
 bool kt_program_render(struct kt_program *p) {
-    return p && p->running && kt_frame_render(p);
+    return p && p->running && !p->released && kt_frame_render(p);
 }
 
 /* A frame is drawn only when the messages of the last wake-up are used up, so
  * a burst of input costs one frame and a busy source cannot starve drawing. */
 static void frame_when_due(struct kt_program *p) {
-    if (p->running && p->dirty && !pending(p) && now(p) >= p->frame_at) (void)kt_frame_render(p);
+    if (p->running && p->dirty && !p->released && !pending(p) && now(p) >= p->frame_at) (void)kt_frame_render(p);
 }
 
 bool kt_program_turn(struct kt_program *p, int limit_ms) {

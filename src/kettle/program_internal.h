@@ -16,10 +16,12 @@
 /* Signals a backend reports from its wait. */
 enum kt_wake {
     KT_WAKE_RESIZE = 1, KT_WAKE_INTERRUPT = 2, KT_WAKE_TERMINATE = 4, KT_WAKE_HANGUP = 8,
-    KT_WAKE_CHILD = 16, KT_WAKE_CONTINUE = 32, KT_WAKE_STOP = 64
+    KT_WAKE_CHILD = 16, KT_WAKE_CONTINUE = 32, KT_WAKE_STOP = 64, KT_WAKE_QUIT = 128
 };
-/* In: whether terminal input is wanted. Out: what the wait found. */
-struct kt_ready { bool input; unsigned signals; };
+/* In: whether terminal input is wanted. Out: what the wait found. `starved`
+ * is set by a backend that cannot block (the headless driver) when it was
+ * asked to wait and nothing will ever arrive by waiting. */
+struct kt_ready { bool input, starved; unsigned signals; };
 
 /* Results of the two read operations besides a positive byte count. */
 enum { KT_READ_END = 0, KT_READ_NONE = -1, KT_READ_ERROR = -2 };
@@ -128,6 +130,7 @@ struct kt_program {
     size_t input_at, input_length;
     bool input_closed, pasting, paste_truncated;
     uint64_t escape_at;
+    bool released;
     char *paste;
     size_t paste_length, paste_capacity;
     /* Effects. */

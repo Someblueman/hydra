@@ -32,9 +32,10 @@ enum { RECORD_WAKE = 0, RECORD_POST = 1 };
 /* A posted message must reach the pipe in one atomic write. */
 typedef char kt_post_fits_pipe_buf[POST_RECORD <= _POSIX_PIPE_BUF ? 1 : -1];
 
-static const int wake_signals[] = {SIGWINCH, SIGINT, SIGTERM, SIGHUP, SIGCHLD, SIGCONT, SIGTSTP};
+static const int wake_signals[] = {SIGWINCH, SIGINT, SIGTERM, SIGHUP, SIGCHLD, SIGCONT, SIGTSTP, SIGQUIT};
 static const unsigned wake_bits[] = {KT_WAKE_RESIZE, KT_WAKE_INTERRUPT, KT_WAKE_TERMINATE,
-                                     KT_WAKE_HANGUP, KT_WAKE_CHILD, KT_WAKE_CONTINUE, KT_WAKE_STOP};
+                                     KT_WAKE_HANGUP, KT_WAKE_CHILD, KT_WAKE_CONTINUE, KT_WAKE_STOP,
+                                     KT_WAKE_QUIT};
 static const int fatal_signals[] = {SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT};
 #define WAKE_COUNT (sizeof(wake_signals) / sizeof(*wake_signals))
 #define FATAL_COUNT (sizeof(fatal_signals) / sizeof(*fatal_signals))
@@ -143,7 +144,8 @@ static void signal_install(struct kt_posix *b, size_t slot, int number, void (*h
  * control) stays ignored. */
 static bool keeps_ignored(int number) {
     struct sigaction current;
-    if (number != SIGINT && number != SIGTERM && number != SIGHUP && number != SIGTSTP) return false;
+    if (number != SIGINT && number != SIGTERM && number != SIGHUP && number != SIGTSTP && number != SIGQUIT)
+        return false;
     return sigaction(number, NULL, &current) == 0 && current.sa_handler == SIG_IGN;
 }
 
@@ -338,6 +340,7 @@ static bool posix_wait(void *context, struct pollfd *fds, size_t count, int time
     if (fds[1].revents) records_read(b);
     b->input_events = fds[0].revents;
     ready->input = fds[0].revents != 0;
+    ready->starved = false;
     ready->signals = signals_take();
     return true;
 }
@@ -426,7 +429,6 @@ static void child_signals(void) {
     action.sa_handler = SIG_DFL;
     (void)sigemptyset(&action.sa_mask);
     for (slot = 0; slot < SIGNAL_SLOTS; slot++) (void)sigaction(slot_signal(slot), &action, NULL);
-    (void)sigaction(SIGQUIT, &action, NULL);
     (void)sigemptyset(&none);
     (void)sigprocmask(SIG_SETMASK, &none, NULL);
 }

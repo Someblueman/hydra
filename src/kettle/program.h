@@ -9,7 +9,8 @@
  *           quit); the runtime performs them and reports back with a message
  *
  * The runtime owns the event loop, terminal modes, signals, the frame buffers
- * and output. update and view never run concurrently and never re-enter. One
+ * and output. update and view never run concurrently, and never re-enter
+ * unless update pumps the loop itself (see "pumping from inside update"). One
  * thread drives everything; kt_program_post is the only cross-thread entry.
  *
  * This is the optional POSIX layer (poll, sigaction, fork). It allocates with
@@ -36,7 +37,7 @@ enum kt_msg_type {
     KT_MSG_FD,       /* u.fd: a watched descriptor is ready                   */
     KT_MSG_PROCESS,  /* u.process: a kt_cmd_spawn child finished              */
     KT_MSG_EXEC,     /* u.exec: a kt_cmd_exec child returned the terminal     */
-    KT_MSG_SIGNAL,   /* u.signal: SIGINT/SIGTERM/SIGHUP/SIGCHLD arrived       */
+    KT_MSG_SIGNAL,   /* u.signal: SIGINT/SIGTERM/SIGHUP/SIGQUIT/SIGCHLD arrived */
     KT_MSG_RESUME,   /* the program continued after a suspend or stop signal  */
     KT_MSG_USER = 0x1000  /* applications number their own types from here   */
 };
@@ -54,13 +55,16 @@ struct kt_process_result {
 
 /* A message is a plain value. Pointers inside it (paste bytes, process output)
  * are owned by the runtime and stay valid only until update returns (with the
- * pump below: until the next kt_program_next); copy what the model keeps. `tag`
- * is the caller's routing value from the command that produced the message (0
- * for input and signals).
+ * pump below: until the next kt_program_next at the same level); copy what the
+ * model keeps. `tag` is the caller's routing value from the command that
+ * produced the message (0 for input and signals).
  *
- * KT_MSG_SIGNAL: an unhandled SIGINT, SIGTERM or SIGHUP quits. SIGCHLD arrives
- * after the runtime has reaped its own kt_cmd_spawn children, so an application
- * that owns other children (a PTY child) can reap them; unhandled it is ignored. */
+ * KT_MSG_SIGNAL: an unhandled SIGINT, SIGTERM, SIGHUP or SIGQUIT quits with
+ * the terminal restored. In raw mode the terminal's interrupt and quit keys
+ * are ordinary keys; the signals come from outside, or from the keyboard while
+ * the terminal is lent out. SIGCHLD arrives after the runtime has reaped its
+ * own kt_cmd_spawn children, so an application that owns other children (a PTY
+ * child) can reap them; unhandled it is ignored. */
 struct kt_msg {
     uint32_t type;
     uint64_t tag;
@@ -202,6 +206,12 @@ struct kt_options {
     bool ascii;                     /* canvas draws ASCII fallbacks               */
     int fps;                        /* frame cap; 0 = 60                          */
     int escape_ms;                  /* wait before a lone ESC is Escape; 0 = 50   */
+    /* Wait before an escape sequence that began but did not finish is given
+     * up; 0 = escape_ms. A longer value lets a key split by a slow link
+     * arrive whole while Escape stays prompt. What was read of a sequence
+     * given up is dropped, and so is the rest of it if it still arrives. An
+     * open bracketed paste is never given up. */
+    int sequence_ms;
     size_t paste_limit;             /* 0 = 1 MiB; longer pastes are truncated     */
     int max_columns, max_rows;      /* 0 = 512 x 256; larger terminals are clipped */
     struct kt_allocator allocator;
@@ -244,5 +254,48 @@ int  kt_program_status(const struct kt_program *program);
 /* Restores the terminal, stops and reports remaining children, releases
  * everything begin acquired. The program can begin again afterwards. */
 void kt_program_end(struct kt_program *program);
+
+/* ---- pumping from inside update -----------------------------------------
+ * A helper that update calls and that must not return before it has an answer
+ * (a prompt, a confirmation, a wait for a child it started) can run the loop
+ * itself with kt_program_next, kt_program_dispatch and kt_program_render,
+ * instead of reading the terminal behind the runtime's back:
+ *
+ *     while (!answered && kt_program_next(program, &msg, -1)) {
+ *         if (msg.type == KT_MSG_KEY) answered = on_key(model, &msg.u.event);
+ *         else kt_program_dispatch(program, &msg);     // timers, watches, signals
+ *         kt_program_render(program);                  // view draws the prompt too
+ *     }
+ *
+ * - Commands queued so far, by this update or an earlier one, are performed
+ *   when kt_program_next is entered, so a timer or watch the helper asked for
+ *   is live while it waits.
+ * - kt_program_dispatch calls update again for the message it is given. The
+ *   application decides which messages its helper keeps and which take the
+ *   ordinary path, and must leave its model fit for update and view whenever
+ *   it pumps. Helpers may nest.
+ * - The message the outer update was called with stays valid, pointers
+ *   included, until that update returns.
+ * - kt_program_next returns false once the program stops (kt_cmd_quit, an
+ *   unhandled signal, a failure). The helper must then give up and return:
+ *   nothing further arrives, and the loop ends when the outer update returns.
+ *   Under the headless driver it also returns false when it would have to
+ *   wait for something the test has not supplied. */
+
+/* Lends the terminal to the caller, from inside update: raw mode, the
+ * alternate screen and every mode the runtime set are undone, as for a
+ * kt_cmd_exec child, and nothing is drawn or read until kt_program_reclaim.
+ * For a hand-off that update must finish itself, such as running a foreground
+ * child and then waiting for Enter. While the terminal is lent out its keys
+ * raise signals again; they reach update as KT_MSG_SIGNAL after the reclaim
+ * unless the caller changes their disposition for the duration, and a caller
+ * that waits for a child should let the stop key stop both, as kt_cmd_exec
+ * does. False when the program is not running or the terminal is already lent. */
+bool kt_program_release(struct kt_program *program);
+/* Takes the terminal back: raw mode again, unread input discarded, and the
+ * next frame enters the screen and repaints every cell. False when the
+ * terminal was not lent out or could not be taken back; the program then
+ * stops with status -1. */
+bool kt_program_reclaim(struct kt_program *program);
 
 #endif

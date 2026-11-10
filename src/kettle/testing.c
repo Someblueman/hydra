@@ -106,17 +106,26 @@ static long test_read(void *context, void *buffer, size_t capacity) {
     return (long)count;
 }
 
+static bool descriptors_ready(const struct pollfd *fds, size_t count) {
+    size_t i;
+    for (i = 2; i < count; i++) if (fds[i].revents) return true;
+    return false;
+}
+
 static bool test_wait(void *context, struct pollfd *fds, size_t count, int timeout_ms,
                       struct kt_ready *ready) {
     struct kt_test *t = context;
     size_t i;
-    (void)timeout_ms;
     fds[0].fd = fds[1].fd = -1;
     if (count > 2 && poll(fds, (nfds_t)count, 0) < 0)
         for (i = 0; i < count; i++) fds[i].revents = 0;
     ready->input = ready->input && t->input_length > 0;
     ready->signals = t->signals;
     t->signals = 0;
+    /* Waiting cannot bring anything: the clock and the input only move when
+     * the test moves them. */
+    ready->starved = timeout_ms != 0 && !ready->input && !ready->signals && t->post_at == t->post_count &&
+                     !descriptors_ready(fds, count);
     return true;
 }
 
@@ -291,7 +300,7 @@ void kt_test_signal(struct kt_test *t, int number) {
     static const struct { int number; unsigned wake; } known[] = {
         {SIGINT, KT_WAKE_INTERRUPT}, {SIGTERM, KT_WAKE_TERMINATE}, {SIGHUP, KT_WAKE_HANGUP},
         {SIGCHLD, KT_WAKE_CHILD}, {SIGCONT, KT_WAKE_CONTINUE}, {SIGTSTP, KT_WAKE_STOP},
-        {SIGWINCH, KT_WAKE_RESIZE}
+        {SIGWINCH, KT_WAKE_RESIZE}, {SIGQUIT, KT_WAKE_QUIT}
     };
     size_t i;
     for (i = 0; i < sizeof(known) / sizeof(*known); i++)
