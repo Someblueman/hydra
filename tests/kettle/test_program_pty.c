@@ -245,17 +245,17 @@ static void asking(void) {
 
 static void lent(void) {
     struct kt_session s;
-    size_t mark;
-    const char *cooked;
+    size_t mark, cooked;
     begin(&s, 80, 24);
     mark = s.raw_size;
     kt_send(&s, "l");
     await_raw(&s, "LENT_COOKED", mark);
-    cooked = strstr(s.raw + mark, "LENT_COOKED");
-    EXPECT(strstr(s.raw + mark, LEAVE) && strstr(s.raw + mark, LEAVE) < cooked, "terminal released before it was lent");
+    /* An offset: the buffer moves as more output is read. */
+    cooked = (size_t)(strstr(s.raw + mark, "LENT_COOKED") - s.raw);
+    EXPECT(strstr(s.raw + mark, LEAVE) && strstr(s.raw + mark, LEAVE) < s.raw + cooked, "terminal released before it was lent");
     kt_send(&s, "typed while lent\n");
     kt_until(&s, "lends 1", 5);
-    EXPECT(strstr(cooked, FRAME_BEGIN ENTER) != NULL, "screen entered again after the reclaim");
+    EXPECT(strstr(s.raw + cooked, FRAME_BEGIN ENTER) != NULL, "screen entered again after the reclaim");
     EXPECT(bordered(&s) && kt_contains(&s, "keys 1"), "repaint after the reclaim; the line typed meanwhile is not keys");
     mark = s.raw_size;
     kt_send(&s, "l");
