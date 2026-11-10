@@ -163,7 +163,7 @@ complete -c hydra -f -n '__fish_seen_subcommand_from agent; and __fish_seen_subc
 complete -c hydra -f -n '__fish_seen_subcommand_from agent; and __fish_seen_subcommand_from locate' -l forget -r -a 'claude codex cursor-agent agy opencode pi copilot aider gemini' -d 'Forget a recorded location'
 complete -c hydra -f -n '__fish_seen_subcommand_from state' -a 'verify backup migrate rollback'
 complete -c hydra -f -n '__fish_seen_subcommand_from events' -a 'verify tail filter retain repair'
-complete -c hydra -f -n '__fish_seen_subcommand_from adapter' -a 'ingest'
+complete -c hydra -f -n '__fish_seen_subcommand_from adapter' -a 'ingest activity watch'
 complete -c hydra -f -n '__fish_seen_subcommand_from notify' -a 'enable disable list test'
 complete -c hydra -f -n '__fish_seen_subcommand_from claim' -a 'add list remove'
 complete -c hydra -f -n '__fish_seen_subcommand_from scope' -a 'set show check'

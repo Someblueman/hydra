@@ -133,7 +133,11 @@ cmd_adapter() {
         messages_safe_point "$2" "$3" "$4"
         return $?
     fi
-    [ "${1:-}" = ingest ] || { echo "Usage: hydra adapter ingest <branch>" >&2; return 1; }
+    case "${1:-}" in
+        activity) shift; _cmd_adapter_activity "$@"; return $? ;;
+        watch) shift; _cmd_adapter_watch "$@"; return $? ;;
+    esac
+    [ "${1:-}" = ingest ] || { echo "Usage: hydra adapter <ingest|activity> <branch> | hydra adapter watch" >&2; return 1; }
     _ca_branch="${2:-}"
     if [ -z "$_ca_branch" ] || [ $# -ne 2 ]; then
         echo "Usage: hydra adapter ingest <branch>" >&2
@@ -161,6 +165,60 @@ cmd_adapter() {
         *) echo "Error: adapter kind must be observed or outcome" >&2; return 1 ;;
     esac || { echo "Error: unsupported adapter status '$_ca_status'" >&2; return 1; }
     echo "Accepted adapter event for $_ca_branch instance $_ca_instance"
+}
+
+# An observer's inferred activity change for an interactive head, as canonical
+# JSON on stdin. Only a change is appended to the head's event log.
+_cmd_adapter_activity() {
+    _caa_branch="${1:-}"
+    if [ -z "$_caa_branch" ] || [ $# -ne 1 ]; then
+        echo "Usage: hydra adapter activity <branch>" >&2
+        return 1
+    fi
+    _caa_input="$(LC_ALL=C dd bs=1025 count=1 2>/dev/null)"
+    _caa_bytes="$(printf '%s' "$_caa_input" | LC_ALL=C wc -c | tr -d ' ')"
+    [ "$_caa_bytes" -le 1024 ] || { echo "Error: activity input exceeds 1024 bytes" >&2; return 1; }
+    _caa_compact="$(printf '%s' "$_caa_input" | tr -d ' \t\r\n')"
+    _caa_pattern='^{"schema_version":1,"instance_id":"\(instance_[0-9a-f]*\)","kind":"activity","state":"\([a-z]*\)","since":\([1-9][0-9]*\)}$'
+    _caa_instance="$(printf '%s' "$_caa_compact" | sed -n "s/$_caa_pattern/\\1/p")"
+    _caa_state="$(printf '%s' "$_caa_compact" | sed -n "s/$_caa_pattern/\\2/p")"
+    _caa_since="$(printf '%s' "$_caa_compact" | sed -n "s/$_caa_pattern/\\3/p")"
+    if [ -z "$_caa_instance" ] || [ -z "$_caa_state" ] || [ -z "$_caa_since" ] || [ "${#_caa_since}" -gt 10 ]; then
+        echo "Error: malformed activity event; use canonical activity JSON v1" >&2
+        return 1
+    fi
+    case "$_caa_state" in
+        active|quiet) ;;
+        *) echo "Error: activity state must be active or quiet" >&2; return 1 ;;
+    esac
+    _load_lib activity
+    _caa_result="$(activity_record "$_caa_branch" "$_caa_instance" "$_caa_state" "$_caa_since")" || {
+        echo "Error: activity for $_caa_branch was not recorded" >&2
+        return 1
+    }
+    if [ "$_caa_result" = unchanged ]; then
+        echo "Unchanged activity for $_caa_branch instance $_caa_instance ($_caa_state)"
+    else
+        echo "Recorded activity for $_caa_branch instance $_caa_instance ($_caa_state, inferred from tmux)"
+    fi
+}
+
+# An observer says it is watching this project's interactive heads now.
+_cmd_adapter_watch() {
+    if [ $# -ne 0 ]; then
+        echo "Usage: hydra adapter watch" >&2
+        return 1
+    fi
+    _caw_project="$(hydra_get_project_id 2>/dev/null)" || {
+        echo "Error: no Hydra project here" >&2
+        return 1
+    }
+    _load_lib activity
+    activity_observer_beat "$_caw_project" || {
+        echo "Error: observer coverage was not recorded" >&2
+        return 1
+    }
+    echo "Observer coverage recorded for $_caw_project"
 }
 
 _cmd_resume_abort() {

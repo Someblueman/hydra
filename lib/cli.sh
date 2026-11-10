@@ -75,6 +75,8 @@ Commands:
   outcome <head>    Declare an instance-scoped outcome
   wait <head>       Wait for durable lifecycle evidence
   adapter ingest    Ingest a canonical provider-neutral adapter event
+  adapter activity  Record an observer's inferred activity change (JSON on stdin)
+  adapter watch     Record that an observer is watching this project's heads
   resume <head>     Create a new instance using durable resume metadata
                     --terminal: restart only a stopped interactive terminal;
                     requires the existing worktree and never recreates it
