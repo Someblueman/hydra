@@ -490,12 +490,18 @@ static bool terminal_ready(struct app *app) {
     return true;
 }
 
+/* A keys file that was not applied as written is the first thing shown. */
+static void startup_notice(struct app *app) {
+    const char *problem = native_keys(app)->problem;
+    copy_text(app->notice, sizeof(app->notice), problem[0] ? problem : "Loading snapshot...");
+}
+
 int interactive_main(struct app *app) {
     time_t last_refresh;
     char key;
     if (!terminal_ready(app)) return 3;
     terminal_watch(app);
-    copy_text(app->notice, sizeof(app->notice), "Loading snapshot...");
+    startup_notice(app);
 
     refresh_current_session(app);
     if (enter_raw(app) != 0) return 4;

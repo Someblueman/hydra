@@ -59,7 +59,7 @@ def view_actions(
         (
             0,
             "navigation",
-            b"\x02x\x1b" if from_attachment else b"\n",
+            b"\x1cx\x1b" if from_attachment else b"\n",
             (1, 1, 6, "[Work]") if from_attachment else (7, 1, 9, "[Details]"),
         ),
         (

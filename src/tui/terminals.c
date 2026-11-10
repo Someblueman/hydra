@@ -68,7 +68,8 @@ static void outbox_clear(struct native_terminal *t) {
 
 /* A tmux client draws on the alternate screen without scrollback, so the
  * pane's history lives in tmux: scrolling uses tmux copy mode on the exact
- * session, and q, Esc or Ctrl-B ] leave it. Fleet clients keep model scroll. */
+ * session, and q, Esc or the terminal.live chord leave it. Fleet clients keep
+ * model scroll. */
 bool native_terminal_history(struct app *app, struct native_terminal *t, bool enter) {
     const struct head *h = terminal_head(app, t);
     struct output_child child;
@@ -208,13 +209,13 @@ bool native_terminal_attach_head(struct app *app, const struct head *h) {
     if (!app->terminals) {
         app->terminals=calloc(1,sizeof(*app->terminals));
         if (!app->terminals) return false;
-        kt_input_init(&app->terminals->input);
     }
     available = terminal_slot(app, h);
     if (available < NATIVE_TERMINALS && app->terminals->slots[available].screen &&
         !app->terminals->slots[available].client.finished && !app->terminals->slots[available].client.eof) return true;
     if (available==NATIVE_TERMINALS) {
-        copy_text(app->notice,sizeof(app->notice),"Four attached panes open; Ctrl-B x closes only the selected client"); return false;
+        key_hint(app,app->notice,sizeof(app->notice),"","Four attached panes open; {terminal.close} closes only the selected client~Four attached panes open; close one before opening another");
+        return false;
     }
     return terminal_start(app, h, available);
 }

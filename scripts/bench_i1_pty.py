@@ -331,7 +331,7 @@ class Observer:
         self.closed = True
         try:
             if self.process.poll() is None:
-                self.send("Q cleanup " + (b"\x02q" if attached else b"\x1b\x1bq").hex())
+                self.send("Q cleanup " + (b"\x1cq" if attached else b"\x1b\x1bq").hex())
             self.process.wait(timeout=5)
         except (BrokenPipeError, RuntimeError, subprocess.TimeoutExpired):
             if not any(

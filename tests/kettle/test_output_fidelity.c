@@ -146,9 +146,9 @@ static void attached(void) {
     clean_screen("attached pane");
     CHECK(fg_of("-w\xc3\xb6rld") == RED_FG, "attached pane keeps provider red");
     save("attached");
-    /* Ctrl-B [ opens the agent's own tmux history: output that scrolled past
+    /* Ctrl-\ [ opens the agent's own tmux history: output that scrolled past
      * is reachable with PgUp, wide characters intact. */
-    kt_send(&s, "\002[");
+    kt_send(&s, "\034[");
     kt_until(&s, "Agent history", 3);
     for (i = 0; i < 40 && find_row("OpenAI Codex", NULL) < 0; i++) {
         kt_send(&s, "\033[5~");
@@ -158,7 +158,7 @@ static void attached(void) {
     if (find_row("OpenAI Codex", NULL) < 0 || !wide) fail_with("scrollback lost streamed output");
     clean_screen("scrollback");
     save("attached-scrollback");
-    kt_send(&s, "\002]");
+    kt_send(&s, "\034]");
     kt_until(&s, "Back to live agent output", 3);
     kt_until(&s, "for agents", 3);
 }
@@ -225,7 +225,7 @@ int main(void) {
         out = fopen(path, "wb");
         CHECK(out && fwrite(s.raw, 1, s.raw_size, out) == s.raw_size && !fclose(out), "raw PTY log");
     }
-    kt_close(&s, "\002q", 0, 0);
+    kt_close(&s, "\034q", 0, 0);
     hf_finish(&f);
     printf("PASS output fidelity: real Claude/Codex output in Details and the attached pane at 140x40 and 80x24, "
            "resize, scrollback; evidence in %s\n", evidence);

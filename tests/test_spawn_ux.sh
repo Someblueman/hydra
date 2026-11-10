@@ -87,7 +87,7 @@ run_in_tty() {
             *"Typing goes to the agent"*)
                 if [ "$tty_workspace" -eq 0 ]; then
                     tty_workspace=1
-                    tmux -L "$tty_server" send-keys -t "$_rit_name" C-b q
+                    tmux -L "$tty_server" send-keys -t "$_rit_name" "C-\\" q
                 fi
                 ;;
         esac

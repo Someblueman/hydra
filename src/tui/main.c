@@ -19,7 +19,7 @@ static int parse_size(const char *value, int *cols, int *rows) {
 static void usage(FILE *out) {
     fputs("usage: hydra-tui [--theme terminal|dark|light] [--no-color] [--ascii] [--fleet]\n"
           "  [--view statistics|workspace|overview|heads|detail|coordination|recovery|workflows|hosts]\n"
-          "  [--version|--protocol-version|--diagnostics|--hydra PATH|--task BRANCH]\n"
+          "  [--version|--protocol-version|--print-keys|--diagnostics|--hydra PATH|--task BRANCH]\n"
           "  [--headless-fixture FILE [--workflow-fixture FILE] [--statistics-fixture FILE]\n"
           "   --size COLSxROWS --frames N]\n", out);
 }
@@ -80,6 +80,25 @@ static void diagnostic_option(struct app *app, bool explicit_view) {
     if (!explicit_view) app->view = 1;
 }
 
+/* Prints the keys in effect as a keys file. A file that was not applied as
+ * written is reported on stderr and fails the command, so it also validates. */
+static int print_keys_option(struct app *app) {
+    const struct native_keys *keys = native_keys(app);
+    native_keys_print(app, stdout);
+    if (keys->problem[0]) fprintf(stderr, "hydra-tui: %s\n", keys->problem);
+    if (fflush(stdout) != 0 || ferror(stdout)) return 3;
+    return keys->problem[0] ? 1 : 0;
+}
+
+/* Options that only set a flag; false for anything else. */
+static bool flag_option(struct app *app, const char *option, bool *print_keys) {
+    if (strcmp(option, "--no-color") == 0) app->no_color = true;
+    else if (strcmp(option, "--ascii") == 0) app->ascii = true;
+    else if (strcmp(option, "--print-keys") == 0) *print_keys = true;
+    else return false;
+    return true;
+}
+
 static bool theme_option(struct app *app, const char *theme) {
     if (!theme || parse_theme(theme, &app->theme)) return true;
     fputs("hydra-tui: theme must be terminal, dark, or light\n", stderr);
@@ -93,7 +112,7 @@ int main(int argc, char **argv) {
     const char *statistics_fixture = NULL;
     unsigned frames = 1U;
     int index;
-    bool explicit_view = false;
+    bool explicit_view = false, print_keys = false;
     const char *theme = getenv("HYDRA_TUI_THEME");
     initialize_app(&app);
     for (index = 1; index < argc; index++) {
@@ -121,11 +140,12 @@ int main(int argc, char **argv) {
             app.graph_follow = app.view == 5;
         } else if (strcmp(argv[index], "--diagnostics") == 0) diagnostic_option(&app, explicit_view);
         else if (strcmp(argv[index], "--theme") == 0 && index + 1 < argc) theme = argv[++index];
-        else if (strcmp(argv[index], "--no-color") == 0) app.no_color = true;
-        else if (strcmp(argv[index], "--ascii") == 0) app.ascii = true;
-        else { usage(stderr); return 2; }
+        else if (!flag_option(&app, argv[index], &print_keys)) { usage(stderr); return 2; }
     }
     if (!theme_option(&app, theme)) return 2;
+    /* Deterministic rendering reads a keys file only when one is named. */
+    native_keys_load(&app, fixture == NULL);
+    if (print_keys) return print_keys_option(&app);
     if (fixture != NULL) {
         return render_fixture(&app, fixture, workflow_fixture, statistics_fixture, frames);
     }

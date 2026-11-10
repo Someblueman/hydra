@@ -20,7 +20,7 @@ visible in the agent pane; existing repository trust checks still apply.
 
 For a plan, ask the agent to author a draft using `hydra workflow plan schema` and
 publish it with `hydra workflow plan propose <draft.json>` from its head. Press
-`Ctrl-B Tab` to return input to Hydra, `B` for the plan, and `P` to review the
+`Ctrl-]` to return input to Hydra, `B` for the plan, and `P` to review the
 proposal with the bounded local policy. `V` validates and compiles it; `E` requires
 the exact displayed digest before execution. Republished drafts invalidate prior
 validation. The agent writes the worker's instructions inline (`prompt`) and
@@ -39,8 +39,9 @@ permissions. Agent proposals alone never authorize execution.
 Interactive `spawn` and `spawn --resume` now open agent input inside the native
 control centre; without the optional native TUI they print the head's context and
 stay in the terminal. `--attach` selects direct tmux attachment; `HYDRA_NO_SWITCH`, headless and
-non-TTY invocations retain their existing behavior. `Ctrl-B Tab` returns input to
-Hydra, `Ctrl-B x` closes only the attached client, and `Ctrl-B q` exits the UI.
+non-TTY invocations retain their existing behavior. `Ctrl-]` returns input to
+Hydra, `Ctrl-\ x` closes only the attached client, and `Ctrl-\ q` exits the UI;
+[TUI keys](#tui-keys) lists these chords and how to change them.
 
 UI removal refuses ordinary untracked files as well as tracked changes. The CLI
 exposes the same protection as `hydra kill <branch> --protect-untracked`; existing
@@ -380,6 +381,7 @@ hydra completion fish > ~/.config/fish/completions/hydra.fish
 | `HYDRA_CORE` | Explicit optional `hydra-core` executable for native qualification |
 | `HYDRA_CORE_TIMEOUT_SECONDS` | Native handshake/command timeout (default `2`) |
 | `HYDRA_TUI_BIN` | Explicit optional `hydra-tui` executable for qualification |
+| `HYDRA_TUI_KEYS` | Keys file for the native TUI instead of `$HYDRA_HOME/tui/keys.conf` (see [TUI keys](#tui-keys)) |
 
 Per-head profile, task, identity, worktree path, instance, and lifecycle event are
 stored in project-scoped state v2. The durable state, security, out-of-band
@@ -391,6 +393,92 @@ the native helpers.
 Supported systems and upgrade policy are in the root README and [Contracts](CONTRACTS.md).
 Existing 1.9 installations should review the state backup and migration guidance
 in [Contracts](CONTRACTS.md) before removing their backup.
+
+### TUI keys
+
+While you type to an attached agent every key goes to the agent, except Hydra's
+own chords. A chord is one to four keys pressed in order. `Ctrl-]` alone leaves
+agent input; the other commands follow `Ctrl-\`:
+
+| Action | Default chords | Effect |
+|--------|----------------|--------|
+| `terminal.leave` | `ctrl+]`, `ctrl+\ tab` | Leave input: keys go to Hydra, the view stays open |
+| `terminal.close` | `ctrl+\ x` | Close the view; the agent keeps running (`a` reopens it) |
+| `terminal.next` | `ctrl+\ n` | Next open agent view |
+| `terminal.reconnect` | `ctrl+\ r` | Reattach a disconnected client |
+| `terminal.history` | `ctrl+\ [` | The agent's tmux history (PgUp/PgDn; `q` returns) |
+| `terminal.live` | `ctrl+\ ]` | Back to live output |
+| `terminal.literal` | `ctrl+\ ctrl+\`, `ctrl+\ ctrl+]` | Send the chord's last key to the agent |
+| `app.quit` | `ctrl+\ q` | Quit Hydra; agents keep running |
+| `view.statistics` | `ctrl+\ D` | Statistics |
+| `workspace.layout.conversation` | `ctrl+\ A` | Conversation layout |
+| `workspace.layout.plan` | `ctrl+\ B` | Plan overview layout |
+| `workspace.layout.monitor` | `ctrl+\ C` | Monitoring layout |
+| `workspace.zoom` | `ctrl+\ z` | Zoom the focused pane |
+| `workspace.split` | `ctrl+\ S` | Two agents side by side |
+
+After the first key of a chord the status line shows the chord so far and what
+may follow (`Ctrl-\ ...  Tab leave input / x close view / ...`). A key that completes
+nothing is named (`Ctrl-\ k is not bound`) and the whole chord is dropped: no part
+of it reaches the agent. Letters match by case, so `ctrl+\ D` and `ctrl+\ d` differ.
+Chords that start with a Ctrl key also work when no agent pane holds input, from
+every view; other chords work only while you type to the agent. Hints, notices and
+`?` help always name the chords in effect.
+
+`Ctrl-B` is not Hydra's: it reaches the agent, so the tmux the agent runs in
+answers its usual prefix. `Ctrl-\` and `Ctrl-]` are single control bytes that
+terminals send without special settings; a shell normally turns `Ctrl-\` into a quit
+signal for the running program, and Hydra takes the key before that happens. The
+two `terminal.literal` chords type either key to the agent. On a keyboard layout
+where `\` or `]` needs AltGr, choose other keys.
+
+To change the keys, write a keys file at `$HYDRA_HOME/tui/keys.conf` (default
+`~/.hydra/tui/keys.conf`), or name one in `HYDRA_TUI_KEYS`. `hydra tui --print-keys`
+prints the keys in effect in the file's own syntax, so this is a valid start:
+
+```sh
+mkdir -p ~/.hydra/tui && hydra tui --print-keys > ~/.hydra/tui/keys.conf
+```
+
+- One `action = chord[, chord]` per line, at most two chords per action; `none`
+  unbinds the action; `#` starts a comment; actions a file does not name keep
+  their defaults.
+- A chord's keys are separated by spaces. A key is a single character, written as
+  typed (`D` is Shift-d), or a name: `tab`, `enter`, `esc`, `space`, `backspace`,
+  `delete`, `insert`, `up`, `down`, `left`, `right`, `home`, `end`, `pageup`,
+  `pagedown`, `f1` to `f12`, and `comma`, `hash`, `plus`, `minus` for those characters.
+- Modifiers are `ctrl`, `alt` and `shift`, joined with `+` (or `-`): `ctrl+]`,
+  `alt+enter`, `shift+tab`, `ctrl+alt+x`. A terminal sends some combinations as
+  another key, and they are read that way: `ctrl+i` is `tab`, `ctrl+m` is `enter`,
+  `ctrl+[` is `esc`; `ctrl+B` is `ctrl+b`.
+- Two actions cannot share a chord, and a chord cannot be the beginning of another.
+- `terminal.leave` cannot be unbound: without it input could never return to Hydra.
+
+A keys file never stops Hydra from starting. A line it cannot read keeps that
+action's default while the other lines apply; conflicting chords put every key back
+to its default. Either way a notice (and the `?` help) names the file, the line and
+the reason. `hydra tui --print-keys` reports the same on stderr and exits 1, so it
+also checks a file. This file brings back the `Ctrl-B` prefix of earlier releases:
+
+```
+terminal.leave = ctrl+b tab
+terminal.close = ctrl+b x
+terminal.next = ctrl+b n
+terminal.reconnect = ctrl+b r
+terminal.history = ctrl+b [
+terminal.live = ctrl+b ]
+terminal.literal = ctrl+b ctrl+b
+app.quit = ctrl+b q
+view.statistics = ctrl+b D
+workspace.layout.conversation = ctrl+b A
+workspace.layout.plan = ctrl+b B
+workspace.layout.monitor = ctrl+b C
+workspace.zoom = ctrl+b z
+workspace.split = ctrl+b S
+```
+
+With it `Ctrl-B` is Hydra's again: the agent's tmux receives its prefix only through
+`ctrl+b ctrl+b`.
 
 ## Project registration and shared config
 
@@ -541,11 +629,13 @@ source and confidence available.
 
 Inside Workspace, `A` / `B` / `C` switch between the conversation, plan-overview and
 monitoring layouts, `z` zooms the focused pane and `S` shows two agents side by side.
-While typing to an attached agent, Esc and Tab go to the agent; `Ctrl-B Tab` leaves
-input (keys go to Hydra, the view stays open), `Ctrl-B x` closes the view while the
-agent keeps running in its tmux session (`a` reopens it), `Ctrl-B n` switches agent
-and `Ctrl-B [` opens the agent's tmux history (PgUp/PgDn, `q` returns). A client
-that disconnects never holds input; `a` or `Ctrl-B r` reattaches. `p` shows a
+While typing to an attached agent, Esc, Tab and `Ctrl-B` go to the agent; `Ctrl-]` leaves
+input (keys go to Hydra, the view stays open), `Ctrl-\ x` closes the view while the
+agent keeps running in its tmux session (`a` reopens it), `Ctrl-\ n` switches agent
+and `Ctrl-\ [` opens the agent's tmux history (PgUp/PgDn, `q` returns). A client
+that disconnects never holds input; `a` or `Ctrl-\ r` reattaches. After `Ctrl-\` the
+status line lists what may follow. These chords are yours to change: see
+[TUI keys](#tui-keys). `p` shows a
 read-only transcript of the agent's terminal with its colors and wrapped long lines
 (PgUp/PgDn scroll it); key hints printed by the agent there only work in live
 input. The action

@@ -346,11 +346,11 @@ def attachment(j: Journey) -> None:
             (j.columns, 40 if j.columns > 80 else 24),
         ):
             j.observer.resize(f"resize-{cycle}-{width}", width, height)
-            j.see("Ctrl-B")
-        j.keys(b"\x02\t")
+            j.see("Ctrl-]")
+        j.keys(b"\x1d")
         j.attached = False
         j.see("HYDRA /")
-        j.keys(b"\x02x")
+        j.keys(b"\x1cx")
         j.keys(b"\x1b\x1b")
         j.see("[Work]")
         assert j.command("tmux", "list-panes", "-a", "-F", "#{pane_pid}")
@@ -418,7 +418,7 @@ def planning(j: Journey) -> None:
     j.attached = True
     j.keys(b"draft\r")
     j.see("PROPOSAL READY")
-    j.keys(b"\x02\t")
+    j.keys(b"\x1d")
     j.attached = False
     j.keys(b"B")
     j.see("PLAN OVERVIEW")
@@ -448,7 +448,7 @@ def planning(j: Journey) -> None:
     j.attached = True
     j.keys(b"revise\r")
     j.see("PROPOSAL REVISION READY")
-    j.keys(b"\x02\t")
+    j.keys(b"\x1d")
     j.attached = False
     j.keys(b"B")
     j.see("unvalidated")
@@ -654,7 +654,7 @@ def converse_and_validate(j: Journey, task: str) -> None:
     j.attached = True
     j.keys(b"draft\r")
     j.see("PROPOSAL READY")
-    j.keys(b"\x02\t")
+    j.keys(b"\x1d")
     j.attached = False
     j.keys(b"B")
     j.see("PLAN OVERVIEW")
@@ -834,7 +834,7 @@ def recovery(j: Journey) -> None:
     j.see("FIXTURE RECEIVED HYDRA NOTICE")
     j.keys(b"fix\r")
     j.see("PROPOSAL FIX READY")
-    j.keys(b"\x02\t")
+    j.keys(b"\x1d")
     j.attached = False
     j.keys(b"B")
     j.see("unvalidated")

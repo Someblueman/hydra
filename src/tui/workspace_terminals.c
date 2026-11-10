@@ -87,7 +87,7 @@ void native_workspace_split_agents(struct app *app) {
     w->agents[w->mode].slots[0]=selected; w->agents[w->mode].slots[1]=other;
     w->layout.focus=first;
     native_workspace_invalidate(app);
-    copy_text(app->notice,sizeof(app->notice),"Two attached agents / Ctrl-B Tab changes focus / Ctrl-B S restores one pane");
+    key_hint(app,app->notice,sizeof(app->notice)," / ","Two attached agents|{terminal.leave} changes focus|{workspace.split} restores one pane");
     return;
 unavailable:
     copy_text(app->notice,sizeof(app->notice),"Attach two local heads with a before splitting agent panes");

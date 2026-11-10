@@ -1,6 +1,7 @@
 #ifndef HYDRA_TUI_APP_H
 #define HYDRA_TUI_APP_H
 #include "model.h"
+#include "keys.h"
 #include "../hydra_tui_workflow.h"
 #include "../kettle/kettle.h"
 #include <termios.h>
@@ -32,6 +33,8 @@ struct app {
     struct native_review *review;
     /* In-app remote setup (U10); allocated when Hosts is first used. */
     struct native_setup *setup;
+    /* Configurable keys; read through native_keys(), which fills the defaults. */
+    struct native_keys keys;
     /* Lazily allocated interpreter for read-only captured output. */
     struct transcript *transcript;
     pid_t control_pids[4];

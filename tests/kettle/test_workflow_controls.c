@@ -150,7 +150,7 @@ int main(void) {
         kt_pump(&s, .3);
         if (i == 0)
             S("printf unsubmitted > unsent-control-proof");
-        S("\002\t\tz");
+        S("\035\tz");
         U("OBSERVED EVIDENCE", 15);
         kt_repeat(&s, "]", run_index(H("workflow", "tui-data"), run_id));
         U(run_id, 15);

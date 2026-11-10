@@ -87,7 +87,7 @@ static void restore(const char *worktree, const char *head, const char *status) 
     S("printf restored > restored-proof\r");
     kt_format(path, sizeof(path), "%s/restored-proof", worktree);
     wait_for_file(&s, path, 10);
-    kt_close(&s, "\002q", 0, 0);
+    kt_close(&s, "\034q", 0, 0);
     CHECK(!unlink(path), "remove the input proof");
     work_kept(worktree, head, status);
 }

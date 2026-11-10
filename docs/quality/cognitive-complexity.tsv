@@ -168,7 +168,6 @@ src/tui/statistics_render.c	render_statistics	115
 src/tui/statistics_render.c	statistics_fleet	60
 src/tui/statistics_render.c	statistics_run_detail	19
 src/tui/statistics_render.c	statistics_run_table	18
-src/tui/terminal_input.c	native_terminal_event	109
 src/tui/terminals.c	native_terminal_attach	21
 src/tui/terminals.c	native_terminals_pump	31
 src/tui/workflow_model.c	accept_workflows	29

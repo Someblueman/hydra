@@ -379,11 +379,17 @@ void chrome_header(struct app *app, struct kt_canvas *c, const char *title) {
     chrome_tabs(app, c, 1);
 }
 
+/* A partly entered chord takes the status line until it completes: its keys
+ * so far and the keys that may follow. */
 void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, enum kt_style tone, const char *hints) {
+    char pending[512];
     int height = c->height;
+    if (key_pending_text(app, pending, sizeof(pending))) {
+        status = pending; tone = KT_STRONG;
+        if (height < 3) hints = pending;
+    }
     if (height >= 3) kt_text(c, (struct kt_rect){1, height - 2, c->width - 2, 1}, status, tone);
     kt_text(c, (struct kt_rect){1, height - 1, c->width - 2, 1}, hints, KT_MUTED);
-    (void)app;
 }
 
 struct head_columns { int status_x, agent_x, reported_x, name_width; bool wide, medium; };
@@ -617,6 +623,20 @@ static void render_recovery(struct app *app) {
     style(app, TONE_BASE);
 }
 
+/* The agent-pane commands with the chords bound to them now, and where to
+ * change them. A keys file that was not applied as written is named. */
+static void help_agent_keys(struct app *app) {
+    const struct native_keys *keys = native_keys(app);
+    char text[1024];
+    key_hint(app, text, sizeof(text), " ",
+             "While typing to an agent (Esc and Tab go to it):|{terminal.leave} leaves input,|"
+             "{terminal.close} closes the view (the agent keeps running; a reopens it),|"
+             "{terminal.next} switches agent,|{terminal.history} scrolls history,|{app.quit} quits.|"
+             "hydra tui --print-keys lists every key; set your own in $HYDRA_HOME/tui/keys.conf.");
+    paragraph(app, text, KT_BASE);
+    if (keys->problem[0]) paragraph(app, keys->problem, KT_WARNING);
+}
+
 static void render_help(struct app *app) {
     const char *sep = dot(app);
     style(app, TONE_STRONG); linef(app, "KEYBOARD HELP"); style(app, TONE_BASE);
@@ -644,9 +664,7 @@ static void render_help(struct app *app) {
     }
     section(app, "WORKSPACE");
     linef(app, "A  conversation   B  plan overview   C  monitor   z  zoom the focused pane   S  two agents");
-    linef(app, "While typing to an agent (Esc and Tab go to the agent): Ctrl-B Tab leaves input,");
-    linef(app, "Ctrl-B x closes the view (the agent keeps running; a reopens it), Ctrl-B n switches");
-    linef(app, "agent, Ctrl-B [ scrolls history, Ctrl-B q quits.");
+    help_agent_keys(app);
     section(app, "PLANNING");
     linef(app, "P  review the agent's proposal   V  validate   F  request changes (feedback to the agent)");
     linef(app, "E  execute the validated revision (confirm with y)   I  import draft and policy files");

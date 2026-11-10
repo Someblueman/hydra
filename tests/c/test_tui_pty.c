@@ -255,7 +255,7 @@ static bool measure_i1_start(struct i1_measurement *measurement, const char *tui
     if (!measurement->workspace_ready) return true;
     write_input(measurement->session.master, "a", 1U);
     measurement->attached = wait_for_marker_capture(&measurement->session,
-        "INPUT TO AGENT / Ctrl-B Tab Hydra", 5000, measurement->transcript,
+        "INPUT TO AGENT / Ctrl-]", 5000, measurement->transcript,
         &measurement->transcript_used);
     if (measurement->attached && getenv("HYDRA_I1_READY_FILE") != NULL) {
         char ready[128];
@@ -325,9 +325,9 @@ static int measure_i1(const char *tui, unsigned heads, const char *seed) {
     long long interval_stop=observed;
     if (measurement.handshake) stop_received=wait_for_stop_drain(&measurement.session,getenv("HYDRA_I1_STOP_FILE"),6000,
                                                      measurement.transcript,&measurement.transcript_used,&interval_stop);
-    /* Ctrl-B q is Hydra's documented terminal prefix and exits the observer
+    /* Ctrl-\ q is Hydra's documented quit chord and exits the observer
      * while closing its attachment clients. */
-    write_input(measurement.session.master,"\002q",2U);
+    write_input(measurement.session.master,"\034q",2U);
     exit_status=wait_for_exit(&measurement.session);
     restored=terminal_restored(&measurement.session);
     close_session(&measurement.session);
@@ -755,7 +755,7 @@ static void test_fleet_attach(const char *tui, const char *hydra, const char *fa
     result(strstr(captured, "fleet\nattach\nbuilder\n--project\n/work/project\n--instance\ninstance_aaaaaaaaaaaaaaaaaaaa\n--\nfeature-build\n") != NULL,
            "fleet attach uses exact host, project, and instance argv");
     result(wait_for_screen_text(&session, "FAKE REMOTE ATTACH", 80, 24, 2000), "fleet attachment renders its terminal in the initialized workspace");
-    write_input(session.master, "\002q", 2U);
+    write_input(session.master, "\034q", 2U);
     result(wait_for_exit(&session) == 0 && terminal_restored(&session), "fleet attachment exits normally and restores terminal state");
     close_session(&session);
     (void)unlink(argv_path);

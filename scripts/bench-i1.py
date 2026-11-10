@@ -155,7 +155,7 @@ def readiness(
                 attached = True
                 report["live_input_gate"] = live_input_gate(client, workers[0], fixture)
                 if args.preview != "open":
-                    client.input("close-readiness-terminal", b"\x02x\x1b")
+                    client.input("close-readiness-terminal", b"\x1cx\x1b")
                     client.visible("HYDRA / WORK")
                     attached = False
                 report["view_action_gate"] = view_actions(

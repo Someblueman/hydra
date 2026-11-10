@@ -617,5 +617,119 @@ awk 'BEGIN { FS = OFS = "\t" } $1 == "H" { NF = 30 } { print }' "$runs_heads" > 
 "$tui" --ascii --headless-fixture "$test_root/runs-v30.tsv" --workflow-fixture "$runs_done" --task kill-dry-run-worker --size 120x30 --view detail > "$test_root/runs-v30.out"
 contains "headless (no terminal)" "$test_root/runs-v30.out" "rows without a terminal-mode field still recognise a headless head"
 
+# Keys: --print-keys writes the bindings in effect as a keys file, which reads
+# back unchanged. A keys file comes from $HYDRA_HOME/tui/keys.conf or
+# HYDRA_TUI_KEYS; a bad one is reported and never stops the UI.
+keys_home="$test_root/keys-home"
+mkdir -p "$keys_home/tui"
+keys_lines() { sed -e '/^#/d' -e 's/ *#.*$//' "$1"; }
+HYDRA_TUI_KEYS='' HYDRA_HOME="$keys_home" "$tui" --print-keys > "$test_root/keys-default.conf" 2> "$test_root/keys-default.err"
+assert_success $? "default keys print without a keys file"
+assert_equal "" "$(cat "$test_root/keys-default.err")" "a missing default keys file is not reported"
+cat > "$test_root/keys-expected.lines" <<'EOF'
+terminal.leave = ctrl+], ctrl+\ tab
+terminal.close = ctrl+\ x
+terminal.next = ctrl+\ n
+terminal.reconnect = ctrl+\ r
+terminal.history = ctrl+\ [
+terminal.live = ctrl+\ ]
+app.quit = ctrl+\ q
+view.statistics = ctrl+\ D
+workspace.layout.conversation = ctrl+\ A
+workspace.layout.plan = ctrl+\ B
+workspace.layout.monitor = ctrl+\ C
+workspace.zoom = ctrl+\ z
+workspace.split = ctrl+\ S
+terminal.literal = ctrl+\ ctrl+\, ctrl+\ ctrl+]
+EOF
+keys_lines "$test_root/keys-default.conf" > "$test_root/keys-default.lines"
+cmp -s "$test_root/keys-expected.lines" "$test_root/keys-default.lines"
+assert_success $? "default keys are Ctrl-] to leave and the Ctrl-\\ leader for the rest"
+HYDRA_TUI_KEYS="$test_root/keys-default.conf" HYDRA_HOME="$keys_home" "$tui" --print-keys > "$test_root/keys-default-again.conf" 2> "$test_root/keys-again.err"
+assert_success $? "printed default keys are a valid keys file"
+cmp -s "$test_root/keys-default.conf" "$test_root/keys-default-again.conf"
+assert_success $? "printed default keys read back unchanged"
+assert_equal "" "$(cat "$test_root/keys-again.err")" "printed keys raise no report"
+cat > "$keys_home/tui/keys.conf" <<'EOF'
+# the tmux-style prefix again
+terminal.leave = ctrl+b tab
+terminal.close = Ctrl-B x
+app.quit = ctrl+b q, f10
+terminal.reconnect = none
+terminal.literal = ctrl+b ctrl+b
+EOF
+HYDRA_TUI_KEYS='' HYDRA_HOME="$keys_home" "$tui" --print-keys > "$test_root/keys-custom.conf" 2> "$test_root/keys-custom.err"
+assert_success $? "keys file in HYDRA_HOME/tui is read"
+assert_equal "" "$(cat "$test_root/keys-custom.err")" "valid keys file raises no report"
+keys_lines "$test_root/keys-custom.conf" > "$test_root/keys-custom.lines"
+contains 'terminal.leave = ctrl+b tab' "$test_root/keys-custom.lines" "keys file rebinds leave to the old prefix"
+contains 'terminal.close = ctrl+b x' "$test_root/keys-custom.lines" "display spelling is accepted in a keys file"
+contains 'app.quit = ctrl+b q, f10' "$test_root/keys-custom.lines" "an action takes two chords"
+contains 'terminal.reconnect = none' "$test_root/keys-custom.lines" "none unbinds an action"
+contains 'terminal.next = ctrl+\ n' "$test_root/keys-custom.lines" "actions a keys file does not name keep their defaults"
+HYDRA_TUI_KEYS="$test_root/keys-custom.conf" HYDRA_HOME="$test_root/no-such-home" "$tui" --print-keys > "$test_root/keys-custom-again.conf" 2>/dev/null
+assert_success $? "HYDRA_TUI_KEYS names the keys file"
+cmp -s "$test_root/keys-custom.conf" "$test_root/keys-custom-again.conf"
+assert_success $? "printed custom keys read back unchanged"
+HYDRA_TUI_KEYS="$test_root/keys-default.conf" HYDRA_HOME="$keys_home" "$tui" --print-keys > "$test_root/keys-override.conf" 2>/dev/null
+cmp -s "$test_root/keys-default.conf" "$test_root/keys-override.conf"
+assert_success $? "HYDRA_TUI_KEYS takes precedence over the file in HYDRA_HOME"
+(cd "$adapter_repo" && HYDRA_HOME="$adapter_home" HYDRA_TUI_KEYS="$test_root/keys-custom.conf" HYDRA_TUI_BIN="$tui" \
+    "$repo_root/bin/hydra" tui --print-keys) > "$test_root/keys-shell.conf" 2> "$test_root/keys-shell.err"
+assert_success $? "hydra tui --print-keys reaches the native TUI"
+cmp -s "$test_root/keys-custom.conf" "$test_root/keys-shell.conf"
+assert_success $? "hydra tui passes the keys file through"
+(cd "$adapter_repo" && HYDRA_HOME="$adapter_home" HYDRA_TUI_BIN="$tui" "$repo_root/bin/hydra" tui --print-keys extra) > /dev/null 2>&1
+assert_equal "2" "$?" "hydra tui --print-keys takes no arguments"
+
+printf '%s\n' 'terminal.close = ctrl+b x' 'terminal.leav = f9' 'terminal.next = ctrl+foo' '' 'app.quit ctrl+q' > "$test_root/keys-bad.conf"
+HYDRA_TUI_KEYS="$test_root/keys-bad.conf" "$tui" --print-keys > "$test_root/keys-bad.out" 2> "$test_root/keys-bad.err"
+assert_equal "1" "$?" "a keys file with refused lines fails --print-keys"
+contains "keys-bad.conf line 2: unknown action 'terminal.leav' (and 2 more); other lines applied ($test_root/keys-bad.conf)" \
+    "$test_root/keys-bad.err" "the report names the file, the line and the reason"
+keys_lines "$test_root/keys-bad.out" > "$test_root/keys-bad.lines"
+contains 'terminal.close = ctrl+b x' "$test_root/keys-bad.lines" "good lines of a bad keys file apply"
+contains 'terminal.leave = ctrl+], ctrl+\ tab' "$test_root/keys-bad.lines" "a refused line keeps the default"
+contains 'terminal.next = ctrl+\ n' "$test_root/keys-bad.lines" "an unreadable chord keeps the default"
+contains 'app.quit = ctrl+\ q' "$test_root/keys-bad.lines" "a line without = keeps the default"
+printf '%s\n' 'terminal.next = ctrl+\ x' > "$test_root/keys-conflict.conf"
+HYDRA_TUI_KEYS="$test_root/keys-conflict.conf" "$tui" --print-keys > "$test_root/keys-conflict.out" 2> "$test_root/keys-conflict.err"
+assert_equal "1" "$?" "conflicting chords fail --print-keys"
+contains 'keys-conflict.conf has conflicting keys: terminal.close and terminal.next (line 1) both use Ctrl-\ x; using the default keys' \
+    "$test_root/keys-conflict.err" "a conflict names both actions and the chord"
+cmp -s "$test_root/keys-default.conf" "$test_root/keys-conflict.out"
+assert_success $? "conflicting chords put every key back to its default"
+printf '%s\n' "terminal.leave = ctrl+\\" > "$test_root/keys-prefix.conf"
+HYDRA_TUI_KEYS="$test_root/keys-prefix.conf" "$tui" --print-keys > /dev/null 2> "$test_root/keys-prefix.err"
+assert_equal "1" "$?" "a chord that begins another is refused"
+contains 'terminal.leave (line 1) uses Ctrl-\, which begins Ctrl-\ x of terminal.close' "$test_root/keys-prefix.err" \
+    "a chord that begins another is explained"
+printf '%s\n' 'terminal.leave = none' 'terminal.close = f6' > "$test_root/keys-trap.conf"
+HYDRA_TUI_KEYS="$test_root/keys-trap.conf" "$tui" --print-keys > "$test_root/keys-trap.out" 2> "$test_root/keys-trap.err"
+assert_equal "1" "$?" "a keys file cannot unbind leaving agent input"
+contains 'keys-trap.conf leaves terminal.leave unbound; its default is kept' "$test_root/keys-trap.err" "an unbound leave key is explained"
+keys_lines "$test_root/keys-trap.out" > "$test_root/keys-trap.lines"
+contains 'terminal.leave = ctrl+], ctrl+\ tab' "$test_root/keys-trap.lines" "leaving agent input keeps its default chords"
+contains 'terminal.close = f6' "$test_root/keys-trap.lines" "the rest of that keys file applies"
+HYDRA_TUI_KEYS="$test_root/keys-missing.conf" "$tui" --print-keys > "$test_root/keys-missing.out" 2> "$test_root/keys-missing.err"
+assert_equal "1" "$?" "a named keys file that does not exist is reported"
+contains 'keys-missing.conf does not exist; using the default keys' "$test_root/keys-missing.err" "a missing named keys file is explained"
+cmp -s "$test_root/keys-default.conf" "$test_root/keys-missing.out"
+assert_success $? "a missing named keys file leaves the defaults"
+HYDRA_TUI_KEYS="$keys_home" "$tui" --print-keys > /dev/null 2> "$test_root/keys-directory.err"
+assert_equal "1" "$?" "an unreadable keys file is reported"
+contains 'cannot be read' "$test_root/keys-directory.err" "an unreadable keys file is explained"
+awk 'BEGIN { for (i = 0; i < 3000; i++) print "# padding padding padding padding" }' > "$test_root/keys-large.conf"
+HYDRA_TUI_KEYS="$test_root/keys-large.conf" "$tui" --print-keys > /dev/null 2> "$test_root/keys-large.err"
+assert_equal "1" "$?" "an oversized keys file is refused"
+contains 'is larger than 64 KiB' "$test_root/keys-large.err" "an oversized keys file is explained"
+# Deterministic rendering ignores the user's own keys file and survives a bad named one.
+HYDRA_TUI_KEYS='' HYDRA_HOME="$keys_home" "$tui" --ascii --headless-fixture "$fixture" --size 80x24 > "$test_root/keys-headless-home.out"
+HYDRA_TUI_KEYS='' HYDRA_HOME="$test_root/no-such-home" "$tui" --ascii --headless-fixture "$fixture" --size 80x24 > "$test_root/keys-headless-none.out"
+cmp -s "$test_root/keys-headless-home.out" "$test_root/keys-headless-none.out"
+assert_success $? "headless rendering does not depend on a keys file in HYDRA_HOME"
+HYDRA_TUI_KEYS="$test_root/keys-bad.conf" "$tui" --ascii --headless-fixture "$fixture" --size 80x24 > /dev/null 2>&1
+assert_success $? "a bad keys file does not stop rendering"
+
 printf '\nTests: %d, Passed: %d, Failed: %d\n' "$test_count" "$pass_count" "$fail_count"
 [ "$fail_count" -eq 0 ]

@@ -66,6 +66,9 @@ claims, resources, gates, and provenance use validated opaque IDs as path keys.
 Human labels are scalar values, never path identity. See [Durable state v2](#durable-state-v2).
 `$HYDRA_HOME/cache` holds disposable derived data, such as recent leftover-worktree
 sizes for Recovery, and is never an authority.
+`$HYDRA_HOME/tui/keys.conf` is the user's optional key configuration for the native
+TUI ([TUI keys](USAGE.md#tui-keys)). Hydra reads it at startup, never writes it, and
+starts with its default keys when the file is absent or unusable.
 
 A leftover (orphaned) worktree is a registered `head_<id>` worktree directly under
 the project's recorded worktree root whose head record is gone. `hydra gc --policy

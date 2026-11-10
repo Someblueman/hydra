@@ -540,49 +540,54 @@ static const char *fitting(const char *const *choices, size_t count, int width) 
 
 /* How to leave agent input and close the view stay visible at every width,
  * down to the 40-column minimum. A disconnected client takes no input, so its
- * keys go to Hydra and a reattaches. */
-static const char *attached_hints(const struct native_workspace *w, const struct native_terminal *t, int width) {
+ * keys go to Hydra and a reattaches. The keys named are the bound chords
+ * (key_hint), so a keys file shows here too. */
+static void attached_hints(struct app *app, const struct native_workspace *w, const struct native_terminal *t,
+                           int width, char *out, size_t size) {
     static const char *const disconnected[] = {
-        "Agent client disconnected; keys go to Hydra  a or Ctrl-B r reconnect  Ctrl-B x close view  Tab next pane",
-        "Client disconnected  a reconnect  Ctrl-B x close view  Tab next pane",
-        "Disconnected  a reconnect  Ctrl-B x close"};
+        "Agent client disconnected; keys go to Hydra|a or {terminal.reconnect} reconnect~a reconnect|{terminal.close} close view|Tab next pane",
+        "Client disconnected|a reconnect|{terminal.close} close view|Tab next pane",
+        "Disconnected|a reconnect|{terminal.close} close"};
     static const char *const hidden[] = {
-        "Typing goes to the agent  Ctrl-B Tab leave input  Ctrl-B x close view  Ctrl-B B plan review  Ctrl-B q quit",
-        "Typing goes to the agent  Ctrl-B Tab leave  Ctrl-B x close  Ctrl-B B plan",
-        "Typing goes to the agent  Ctrl-B Tab leave  Ctrl-B x close",
-        "Ctrl-B Tab leave  Ctrl-B x close"};
+        "Typing goes to the agent|{terminal.leave} leave input|{terminal.close} close view|{workspace.layout.plan} plan review|{app.quit} quit",
+        "Typing goes to the agent|{terminal.leave} leave|{terminal.close} close|{workspace.layout.plan} plan",
+        "Typing goes to the agent|{terminal.leave} leave|{terminal.close} close",
+        "{terminal.leave} leave|{terminal.close} close"};
     static const char *const live[] = {
-        "Typing goes to the agent  Ctrl-B Tab leave input  Ctrl-B x close view  Ctrl-B n next agent  Ctrl-B [ scroll  Ctrl-B q quit",
-        "Typing goes to the agent  Ctrl-B Tab leave input  Ctrl-B x close view",
-        "Typing goes to the agent  Ctrl-B Tab leave  Ctrl-B x close",
-        "Ctrl-B Tab leave  Ctrl-B x close"};
+        "Typing goes to the agent|{terminal.leave} leave input|{terminal.close} close view|{terminal.next} next agent|{terminal.history} scroll|{app.quit} quit",
+        "Typing goes to the agent|{terminal.leave} leave input|{terminal.close} close view",
+        "Typing goes to the agent|{terminal.leave} leave|{terminal.close} close",
+        "{terminal.leave} leave|{terminal.close} close"};
     int room = w->compact ? width : width - 2;
-    if (t->client.finished || t->client.eof) return fitting(disconnected, 3, room);
-    if (workspace_review_hidden(w)) return fitting(hidden, 4, room);
-    return fitting(live, 4, room);
+    if (t->client.finished || t->client.eof) key_hint_fit(app, out, size, "  ", disconnected, 3, room);
+    else if (workspace_review_hidden(w)) key_hint_fit(app, out, size, "  ", hidden, 4, room);
+    else key_hint_fit(app, out, size, "  ", live, 4, room);
 }
 
 /* The attached pane's own first row: whether keys reach the agent and how
  * to leave input and close the view, fitted to the pane. */
-static const char *attached_label(const struct native_terminal *t, bool focused, int width) {
+static const char *attached_label(struct app *app, const struct native_terminal *t, bool focused, int width,
+                                  char *out, size_t size) {
     static const char *const input[] = {
-        "ATTACHED / INPUT TO AGENT / Ctrl-B Tab leaves input / Ctrl-B x closes view",
-        "ATTACHED / INPUT TO AGENT / Ctrl-B Tab leave / Ctrl-B x close",
-        "INPUT TO AGENT / Ctrl-B Tab leave / Ctrl-B x close",
-        "ATTACHED / INPUT TO AGENT / Ctrl-B Tab / Ctrl-B x"};
+        "ATTACHED|INPUT TO AGENT|{terminal.leave} leaves input|{terminal.close} closes view",
+        "ATTACHED|INPUT TO AGENT|{terminal.leave} leave|{terminal.close} close",
+        "INPUT TO AGENT|{terminal.leave} leave|{terminal.close} close",
+        "ATTACHED|INPUT TO AGENT|{terminal.leave}|{terminal.close}"};
     static const char *const disconnected[] = {
-        "CLIENT DISCONNECTED / NO INPUT / a or Ctrl-B r reconnect / Ctrl-B x close view",
-        "CLIENT DISCONNECTED / NO INPUT / a reconnect / Ctrl-B x close",
-        "DISCONNECTED / NO INPUT / a reconnect / Ctrl-B x close",
-        "CLIENT DISCONNECTED / NO INPUT / Ctrl-B r reconnect"};
+        "CLIENT DISCONNECTED|NO INPUT|a or {terminal.reconnect} reconnect~a reconnect|{terminal.close} close view",
+        "CLIENT DISCONNECTED|NO INPUT|a reconnect|{terminal.close} close",
+        "DISCONNECTED|NO INPUT|a reconnect|{terminal.close} close",
+        "CLIENT DISCONNECTED|NO INPUT|{terminal.reconnect} reconnect~a reconnect"};
     static const char *const shared[] = {
         "ATTACHED / INPUT TO AGENT / another client sets the size (dots lie outside it); typing here resizes",
         "ATTACHED / INPUT TO AGENT / sized by another client; typing resizes",
         "INPUT TO AGENT / sized by another client; typing resizes",
         "ATTACHED / INPUT TO AGENT / SIZED BY ANOTHER CLIENT"};
-    if (t->client.finished || t->client.eof) return fitting(disconnected, 4, width);
+    if (t->client.finished || t->client.eof) { key_hint_fit(app, out, size, " / ", disconnected, 4, width); return out; }
     if (t->foreign_size) return focused ? fitting(shared, 4, width) : "ATTACHED / sized by another client / Tab here and type to resize";
-    return focused ? fitting(input, 4, width) : "ATTACHED / Tab here to talk to the agent";
+    if (!focused) return "ATTACHED / Tab here to talk to the agent";
+    key_hint_fit(app, out, size, " / ", input, 4, width);
+    return out;
 }
 
 /* Plan keys follow the plan's state, so each step names the next useful one. */
@@ -612,10 +617,11 @@ static const char *layout_hints(const struct app *app, const struct native_works
     return NULL;
 }
 
-static const char *workspace_hints(struct app *app, struct native_workspace *w, int width) {
+/* buffer holds the hints that name configurable keys. */
+static const char *workspace_hints(struct app *app, struct native_workspace *w, int width, char *buffer, size_t size) {
     struct native_terminal *t = native_workspace_terminal(app, w->layout.focus);
     const char *layout;
-    if (t && t->screen) return attached_hints(w, t, width);
+    if (t && t->screen) { attached_hints(app, w, t, width, buffer, size); return buffer; }
     if (w->layout.focus == 1 && w->run_selected) return "Enter evidence / h parent / Tab panes / ? help / q quit";
     layout = layout_hints(app, w, width);
     if (layout) return layout;
@@ -625,12 +631,23 @@ static const char *workspace_hints(struct app *app, struct native_workspace *w, 
         "Tab pane  Enter select  a talk to agent  n new task  x remove  B plan  C monitor  z zoom  ? help  q quit";
 }
 
+/* The compact layout's single bottom row: a chord being entered, else a
+ * notice when no agent view is focused, else the hints. */
+static void compact_footer(struct app *app, struct native_workspace *w, struct kt_canvas *c) {
+    const struct native_terminal *t = native_workspace_terminal(app, w->layout.focus);
+    struct kt_rect row = {0, c->height - 1, c->width, 1};
+    char text[512];
+    if (key_pending_text(app, text, sizeof(text))) kt_text(c, row, text, KT_STRONG);
+    else if (app->notice[0] && !(t && t->screen)) kt_text(c, row, app->notice, KT_WARNING);
+    else kt_text(c, row, workspace_hints(app, w, c->width, text, sizeof(text)), KT_MUTED);
+}
+
 bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
     struct native_workspace *w;
     struct kt_canvas *c;
     int width, height, i, x, y;
     bool compact;
-    char status[512];
+    char status[512], hints[512];
     const char *sep = dot(app);
     if (!native_workspace_init(app) || !frame_begin(app, headless)) return false;
     c = &app->frame; width = c->width; height = c->height;
@@ -654,7 +671,7 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
         struct kt_canvas view, content;
         struct native_terminal *t=native_workspace_terminal(app,i);
         bool agent=native_workspace_agent_index(w,i)>=0, attached=t && t->screen, focused=i==w->layout.focus;
-        char agent_title[TEXT+64], attention[TEXT+64];
+        char agent_title[TEXT+64], attention[TEXT+64], label[256];
         if (p->split != KT_LEAF) {
             for (y = 0; y < p->divider.height; y++) for (x = 0; x < p->divider.width; x++)
                 kt_put(c, p->divider.x+x, p->divider.y+y, p->split == KT_COLUMNS ? (app->ascii ? '|' : 0x2502) : (app->ascii ? '-' : 0x2500), KT_BORDER);
@@ -677,7 +694,7 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
             kt_panel_styled(&view, (struct kt_rect){0,0,view.width,view.height}, titled,
                             focused ? KT_FOCUS : KT_BORDER, focused ? KT_SELECTED : KT_STRONG);
             if (attached) dashboard_text(&view,1,1,view.width-2,focused ? KT_SELECTED : KT_MUTED,
-                "%s", attached_label(t, focused, view.width-2));
+                "%s", attached_label(app, t, focused, view.width-2, label, sizeof(label)));
         }
         if (!kt_canvas_view(&content, &view, compact ? (struct kt_rect){0,1,view.width,view.height-1} :
             (struct kt_rect){1,attached ? 2 : 1,view.width-2,view.height-(attached ? 3 : 2)})) continue;
@@ -699,11 +716,8 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
             const char *tail = app->notice[0] ? app->notice : w->zoom ? "z restores the splits" : "";
             snprintf(status, sizeof(status), "%s%s%s", fresh, tail[0] ? sep : "", tail);
         }
-        if (compact) {
-            if (app->notice[0] && !(native_workspace_terminal(app,w->layout.focus) && native_workspace_terminal(app,w->layout.focus)->screen))
-                kt_text(c,(struct kt_rect){0,height-1,width,1},app->notice,KT_WARNING);
-            else kt_text(c,(struct kt_rect){0,height-1,width,1},workspace_hints(app,w,width),KT_MUTED);
-        } else chrome_footer(app, c, status, tone, workspace_hints(app, w, width));
+        if (compact) compact_footer(app, w, c);
+        else chrome_footer(app, c, status, tone, workspace_hints(app, w, width, hints, sizeof(hints)));
     }
     frame_end(app, frame, headless);
     return true;

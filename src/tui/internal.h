@@ -27,6 +27,7 @@
 #include "../kettle/terminal.h"
 #include "../kettle/pty_posix.h"
 #include "../kettle/input.h"
+#include "../kettle/keymap.h"
 #include "../hydra_tui_workflow.h"
 #include "../hydra_statistics.h"
 
@@ -127,8 +128,6 @@ struct native_terminal {
 struct native_terminals {
     struct native_terminal slots[NATIVE_TERMINALS];
     size_t selected;
-    struct kt_input input;
-    bool prefix;
 };
 struct native_workspace {
     struct kt_workspace layout;

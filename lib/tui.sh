@@ -51,6 +51,12 @@ cmd_tui() {
             tui_native_exec --headless-fixture "$@"
             return $?
             ;;
+        --print-keys)
+            shift
+            [ $# -eq 0 ] || return 2
+            tui_native_exec --print-keys
+            return $?
+            ;;
         '')
             tui_native_run
             return $?
@@ -61,7 +67,7 @@ cmd_tui() {
             ;;
         *)
             echo "Error: unknown TUI option '$1'" >&2
-            echo "Usage: hydra tui [--capabilities [--json]|--task BRANCH|--view NAME|--theme NAME|--ascii|--no-color|--headless-fixture FILE ...]" >&2
+            echo "Usage: hydra tui [--capabilities [--json]|--task BRANCH|--view NAME|--theme NAME|--ascii|--no-color|--print-keys|--headless-fixture FILE ...]" >&2
             return 2
             ;;
     esac

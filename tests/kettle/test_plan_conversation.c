@@ -108,7 +108,7 @@ static void open_conversation(struct kt_session *s) {
     kt_format(command, sizeof(command), "/bin/cat > '%s'\r", input_path);
     S(command);
     kt_pump(s, .5);
-    S("\002\t");
+    S("\035");
     S("P");
     U("Review with local policy", 3);
     CHECK(form_words_whole(s), "policy prompt wraps at words (140 columns)");
@@ -154,12 +154,12 @@ static void capture_layout(struct kt_session *s, int cols, int rows, const char 
 }
 
 static void capture_layouts(struct kt_session *s) {
-    capture_layout(s, 80, 24, "Ctrl-B B plan");
+    capture_layout(s, 80, 24, "Ctrl-\\ B plan");
     capture_layout(s, 140, 40, "RETURNED / changes requested");
 }
 
 static void returned_is_blocked(struct kt_session *s) {
-    S("\002\t");
+    S("\035");
     S("V");
     U("This revision was returned for changes", 3);
     S("E");
