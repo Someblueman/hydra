@@ -2,6 +2,36 @@
 #include <assert.h>
 #include <string.h>
 
+static void tagged(void *context, FILE *out, enum kt_style style) {
+    (void)context;
+    fprintf(out, "<%d>", (int)style);
+}
+
+/* An overwriting presenter repaints every cell without erasing the display,
+ * and styles travel in the same stream as the cells they apply to. */
+static void overwrite(void) {
+    const char expected[] = "\033[1;1H<0> A  \033[2;1H<0>  <2>B<0> ";
+    struct kt_cell cells[8], previous[8];
+    struct kt_canvas canvas;
+    struct kt_presenter presenter;
+    char bytes[64] = "";
+    FILE *out = tmpfile();
+    assert(out);
+    assert(kt_init(&canvas, cells, 8, 4, 2, true));
+    assert(kt_present_init(&presenter, previous, 8) && !presenter.overwrite);
+    presenter.overwrite = true;
+    kt_put(&canvas, 1, 0, 'A', KT_BASE);
+    kt_put(&canvas, 2, 1, 'B', KT_TITLE);
+    assert(kt_present(&presenter, &canvas, out, tagged, NULL));
+    rewind(out);
+    assert(fread(bytes, 1, sizeof(bytes) - 1, out) == sizeof(expected) - 1);
+    assert(!strcmp(bytes, expected));
+    kt_present_invalidate(&presenter);
+    assert(kt_present(&presenter, &canvas, out, tagged, NULL));
+    assert(ftell(out) == 2 * (long)(sizeof(expected) - 1));
+    fclose(out);
+}
+
 int main(void) {
     struct kt_cell cells[80], previous[80];
     struct kt_canvas canvas;
@@ -35,6 +65,7 @@ int main(void) {
     presenter.capacity = 1;
     assert(!kt_present(&presenter, &canvas, out, NULL, NULL));
     fclose(out);
-    puts("present: unchanged frame 0 bytes; one-cell update 7 bytes; invalidate/resize passed");
+    overwrite();
+    puts("present: unchanged frame 0 bytes; one-cell update 7 bytes; invalidate/resize; overwrite repaint passed");
     return 0;
 }

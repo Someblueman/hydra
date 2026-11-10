@@ -281,7 +281,7 @@ size_t hosts_row_count(const struct app *app);
 void hosts_open_row(struct app *app);
 void setup_row_text(const struct app *app, const struct host_row *row, char *name, size_t name_size, char *state, size_t state_size);
 void render_workflow_graph(struct app *app);
-void dashboard_style(void *context, enum kt_style tone);
+void dashboard_style(void *context, FILE *out, enum kt_style tone);
 void dashboard_text(struct kt_canvas *c, int x, int y, int width,
                            enum kt_style tone, const char *format, ...);
 void dashboard_card(struct kt_canvas *c, int x, int width, const char *title,
@@ -382,7 +382,7 @@ void execute_palette(struct app *app, const char *query);
 void fleet_action(struct app *app);
 bool parse_theme(const char *name, int *theme);
 void style(struct app *app, enum tone tone);
-void emit_style(const struct app *app, enum tone tone);
+void emit_style(const struct app *app, FILE *out, enum tone tone);
 const char *theme_name(int theme);
 void linef(struct app *app, const char *format, ...);
 const char *display_status(const struct head *head);

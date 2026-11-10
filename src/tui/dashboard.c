@@ -5,8 +5,8 @@
 #include "internal.h"
 /* Hydra maps observations to reusable widgets. These functions do not collect
  * data or infer remote liveness from desired state. */
-void dashboard_style(void *context, enum kt_style tone) {
-    emit_style(context, (enum tone)tone);
+void dashboard_style(void *context, FILE *out, enum kt_style tone) {
+    emit_style(context, out, (enum tone)tone);
 }
 
 void dashboard_text(struct kt_canvas *c, int x, int y, int width,

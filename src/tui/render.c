@@ -21,7 +21,7 @@ bool parse_theme(const char *name, int *theme) {
 
 /* Palette order follows enum tone: base, border, title, selected, warning,
  * strong, success, muted, focus. Terminal mode keeps the user's base colors. */
-void emit_style(const struct app *app, enum tone tone) {
+void emit_style(const struct app *app, FILE *out, enum tone tone) {
     static const char *palettes[3][9] = {
         {"\033[0m", "\033[0;36m", "\033[0;1;36m", "\033[0;1;7m", "\033[0;33m", "\033[0;1m",
          "\033[0;32m", "\033[0;2m", "\033[0;1;36m"},
@@ -33,7 +33,7 @@ void emit_style(const struct app *app, enum tone tone) {
          "\033[0;38;5;28;48;5;255m", "\033[0;38;5;245;48;5;255m", "\033[0;1;38;5;24;48;5;255m"}
     };
     if (tone < TONE_BASE || tone > TONE_FOCUS) tone = TONE_BASE;
-    if (app->paint) fputs(palettes[app->theme][tone], stdout);
+    if (app->paint) fputs(palettes[app->theme][tone], out);
 }
 
 void style(struct app *app, enum tone tone) { app->tone = (int)tone; }
@@ -90,7 +90,7 @@ void frame_end(struct app *app, unsigned frame, bool headless) {
         return;
     }
     if (app->frame_theme != app->theme) { frame_invalidate(app); app->frame_theme = app->theme; }
-    if (!app->presenter.valid) { emit_style(app, TONE_BASE); fputs("\033[H", stdout); }
+    if (!app->presenter.valid) { emit_style(app, stdout, TONE_BASE); fputs("\033[H", stdout); }
     if (!kt_present(&app->presenter, &app->frame, stdout, dashboard_style, app)) {
         copy_text(app->notice, sizeof(app->notice), "Screen output failed"); app->running = false;
     }

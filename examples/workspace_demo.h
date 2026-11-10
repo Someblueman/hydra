@@ -14,7 +14,7 @@ struct demo {
     bool prefix, scrolling;
     char notice[128];
 };
-void demo_colors(void *context, enum kt_style style);
+void demo_colors(void *context, FILE *out, enum kt_style style);
 void demo_draw(struct kt_canvas *canvas, struct demo *demo);
 bool demo_handle(struct demo *demo, const struct kt_event *event);
 #endif

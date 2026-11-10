@@ -4,7 +4,7 @@
 bool kt_present_init(struct kt_presenter *p, struct kt_cell *previous, size_t capacity) {
     if (!p || !previous || !capacity) return false;
     p->previous = previous; p->capacity = capacity;
-    p->width = p->height = 0; p->valid = false;
+    p->width = p->height = 0; p->valid = false; p->overwrite = false;
     return true;
 }
 
@@ -25,8 +25,13 @@ static int present_run_end(const struct kt_presenter *p, const struct kt_canvas 
     return end;
 }
 
+/* A full repaint starts from an erased display unless the caller overwrites. */
+static bool present_erase(const struct kt_presenter *p, FILE *out, bool full) {
+    return !full || p->overwrite || fputs("\033[2J", out) != EOF;
+}
+
 bool kt_present(struct kt_presenter *p, const struct kt_canvas *c, FILE *out,
-                void (*style)(void *, enum kt_style), void *context) {
+                void (*style)(void *, FILE *, enum kt_style), void *context) {
     int x, y;
     bool full;
     size_t count;
@@ -36,7 +41,7 @@ bool kt_present(struct kt_presenter *p, const struct kt_canvas *c, FILE *out,
     if (count > p->capacity) return false;
     full = !p->valid || p->width != c->width || p->height != c->height;
     p->valid = false;
-    if (full && fputs("\033[2J", out) == EOF) return false;
+    if (!present_erase(p, out, full)) return false;
     for (y = 0; y < c->height; y++) for (x = 0; x < c->width;) {
         size_t offset = (size_t)y * (size_t)c->stride + (size_t)x;
         size_t old_offset = (size_t)y * (size_t)c->width + (size_t)x;

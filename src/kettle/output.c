@@ -13,7 +13,7 @@ static bool color(FILE *out, uint32_t rgb, bool foreground) {
 }
 
 bool kt_write_row(const struct kt_canvas *c, int row, FILE *out,
-                  void (*style)(void *, enum kt_style), void *context) {
+                  void (*style)(void *, FILE *, enum kt_style), void *context) {
     int x;
     const struct kt_cell *previous = NULL;
     if (row < 0 || row >= c->height || !out) return false;
@@ -35,7 +35,7 @@ bool kt_write_row(const struct kt_canvas *c, int row, FILE *out,
         } else {
             if (previous && (previous->attributes & KT_EXPLICIT) && fputs("\033[0m", out) == EOF) return false;
             if (style && (!previous || previous->style != cell->style || (previous->attributes & KT_EXPLICIT)))
-                style(context, cell->style);
+                style(context, out, cell->style);
         }
         if (!scalar(out, cell->glyph)) return false;
         for (i = 0; i < cell->combining_count && i < KT_COMBINING_MAX; i++)

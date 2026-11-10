@@ -1,12 +1,12 @@
 #include "workspace_demo.h"
 #include <stdio.h>
 
-void demo_colors(void *context, enum kt_style style) {
+void demo_colors(void *context, FILE *out, enum kt_style style) {
     static const char *palette[] = {"\033[0;38;5;252;48;5;234m", "\033[0;38;5;103;48;5;234m",
         "\033[1;38;5;153;48;5;234m", "\033[0;38;5;16;48;5;147m",
         "\033[0;38;5;215;48;5;234m", "\033[1;38;5;183;48;5;234m"};
     (void)context;
-    fputs(palette[style >= KT_BASE && style <= KT_STRONG ? style : KT_BASE], stdout);
+    fputs(palette[style >= KT_BASE && style <= KT_STRONG ? style : KT_BASE], out);
 }
 
 void demo_draw(struct kt_canvas *c, struct demo *d) {

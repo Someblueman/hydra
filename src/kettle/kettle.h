@@ -74,26 +74,32 @@ void kt_bar(struct kt_canvas *canvas, struct kt_rect area, uint64_t value,
  * explicit, zero-based. Caller supplies labels and units outside the plot. */
 void kt_plot(struct kt_canvas *canvas, struct kt_rect area, const double *values,
              const bool *valid, size_t count, double maximum, enum kt_style style);
-/* Emits one row; ANSI styles are supplied by the application callback. Output
- * errors are reported; no terminal escape sequences originate in data cells. */
+/* Emits one row; ANSI styles are supplied by the application callback, which
+ * writes a style's SGR bytes to the stream the cells go to, so styling and
+ * text stay in one ordered stream. Output errors are reported; no terminal
+ * escape sequences originate in data cells. */
 bool kt_write_row(const struct kt_canvas *canvas, int row, FILE *output,
-                  void (*style)(void *, enum kt_style), void *context);
+                  void (*style)(void *context, FILE *out, enum kt_style style), void *context);
 
 /* Caller owns the previous-frame storage for the presenter's entire lifetime.
  * Output uses ANSI cursor addressing. Leave the outer terminal's last column
  * unused or disable automatic wrapping in the platform adapter. Invalidate after
  * any external writer, screen switch, or terminal recovery. No-op frames emit
- * nothing; successful calls flush output before accepting the frame. */
+ * nothing; successful calls flush output before accepting the frame.
+ * A full repaint (first frame, new size, after invalidation) erases the display
+ * with ESC[2J and then writes every cell. Setting `overwrite` after init skips
+ * the erase: every cell is still written, so the terminal never shows a blank
+ * frame; the caller then clears once when it takes over the screen. */
 struct kt_presenter {
     struct kt_cell *previous;
     size_t capacity;
     int width, height;
-    bool valid;
+    bool valid, overwrite;
 };
 bool kt_present_init(struct kt_presenter *p, struct kt_cell *previous, size_t capacity);
 void kt_present_invalidate(struct kt_presenter *p);
 bool kt_present(struct kt_presenter *p, const struct kt_canvas *c, FILE *output,
-                void (*style)(void *, enum kt_style), void *context);
+                void (*style)(void *context, FILE *out, enum kt_style style), void *context);
 
 #define KT_GRAPH_MAX_NODES 128
 #define KT_GRAPH_MAX_EDGES 512
