@@ -265,9 +265,39 @@ assert_failure $? "non-TTY invocation fails cleanly"
 # shellcheck disable=SC2016
 printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.9.0 protocol 2"; exit 0; }\nexit 4\n' > "$test_root/native-transient"
 chmod +x "$test_root/native-transient"
-HYDRA_TUI_BIN="$test_root/native-transient" "$repo_root/bin/hydra" tui > /dev/null 2> "$test_root/fallback.err"
-assert_failure $? "non-TTY basic fallback still fails cleanly"
-contains "starting the basic TUI" "$test_root/fallback.err" "transient native failure dispatches to basic fallback"
+HYDRA_TUI_BIN="$test_root/native-transient" "$repo_root/bin/hydra" tui > "$test_root/unexpected.out" 2> "$test_root/unexpected.err"
+assert_equal "4" "$?" "unexpected native exit status is returned unchanged"
+contains "native TUI exited unexpectedly with status 4" "$test_root/unexpected.err" "unexpected native exit status is reported"
+assert_equal "1" "$(wc -l < "$test_root/unexpected.err" | tr -d ' ')" "unexpected native exit is reported in one line"
+assert_equal "" "$(cat "$test_root/unexpected.out")" "no other interface starts after an unexpected native exit"
+
+for missing_args in "" "--task feature-live" "--view heads"; do
+    # shellcheck disable=SC2086
+    HYDRA_TUI_BIN="$test_root/missing-hydra-tui" "$repo_root/bin/hydra" tui $missing_args \
+        > "$test_root/missing.out" 2> "$test_root/missing.err"
+    assert_equal "1" "$?" "missing native TUI fails: tui $missing_args"
+    contains "native TUI is unavailable" "$test_root/missing.err" "missing native TUI is named: tui $missing_args"
+    contains "the control centre needs the hydra-tui helper" "$test_root/missing.err" "missing native TUI explains the requirement: tui $missing_args"
+    contains "make build-tui" "$test_root/missing.err" "missing native TUI says how to build it: tui $missing_args"
+    contains "HYDRA_TUI_ARTIFACT" "$test_root/missing.err" "missing native TUI names the installer artifact: tui $missing_args"
+    contains "'hydra list' and 'hydra switch' work without it" "$test_root/missing.err" "missing native TUI names what still works: tui $missing_args"
+    assert_equal "" "$(cat "$test_root/missing.out")" "no other interface starts without the native TUI: tui $missing_args"
+done
+
+for basic_tui in "$tui" "$test_root/missing-hydra-tui"; do
+    HYDRA_TUI_BIN="$basic_tui" "$repo_root/bin/hydra" tui --basic > "$test_root/basic.out" 2> "$test_root/basic.err"
+    assert_equal "2" "$?" "removed --basic mode is a usage error"
+    contains "the basic shell TUI was removed" "$test_root/basic.err" "removed --basic mode says it was removed"
+    contains "'hydra list' and 'hydra switch'" "$test_root/basic.err" "removed --basic mode names what to use instead"
+    assert_equal "" "$(cat "$test_root/basic.out")" "removed --basic mode starts no interface"
+done
+"$repo_root/bin/hydra" help > "$test_root/help.out" 2>&1
+contains "  tui  " "$test_root/help.out" "help lists the tui command"
+if grep -Fq -- "--basic" "$test_root/help.out"; then
+    assert_success 1 "help no longer offers --basic"
+else
+    assert_success 0 "help no longer offers --basic"
+fi
 
 # shellcheck disable=SC2016
 printf '#!/bin/sh\n[ "${1:-}" = --version ] && { echo "Hydra TUI 2.9.0 protocol 2"; exit 0; }\nprintf "NATIVE DEFAULT\\n"\n' > "$test_root/native-success"
@@ -282,7 +312,7 @@ _timeout_started="$(date +%s)"
 HYDRA_TUI_TIMEOUT_SECONDS=1 HYDRA_TUI_BIN="$test_root/native-hanging" \
     "$repo_root/bin/hydra" tui --capabilities --json > "$test_root/hanging-capabilities.json"
 _timeout_elapsed=$(($(date +%s) - _timeout_started))
-contains '"native":false' "$test_root/hanging-capabilities.json" "hung native qualification falls back visibly"
+contains '"native":false' "$test_root/hanging-capabilities.json" "hung native qualification is reported as unavailable"
 if [ "$_timeout_elapsed" -lt 4 ]; then
     assert_success 0 "native qualification is bounded"
 else
@@ -292,7 +322,7 @@ fi
 printf '#!/bin/sh\necho "Hydra TUI 1.9.0 protocol 2"\n' > "$test_root/native-skew"
 chmod +x "$test_root/native-skew"
 HYDRA_TUI_BIN="$test_root/native-skew" "$repo_root/bin/hydra" tui > /dev/null 2> "$test_root/skew.err"
-assert_failure $? "version-skewed native TUI falls back cleanly"
+assert_equal "1" "$?" "version-skewed native TUI is refused"
 contains "native TUI is unavailable" "$test_root/skew.err" "version-skewed native TUI is rejected before dispatch"
 
 "$repo_root/bin/hydra" tui --native > /dev/null 2> "$test_root/removed-native.err"
@@ -301,7 +331,16 @@ contains "unknown TUI option '--native'" "$test_root/removed-native.err" "remove
 
 HYDRA_TUI_BIN="$tui" "$repo_root/bin/hydra" tui --capabilities --json > "$test_root/capabilities.json"
 contains '"default_mode":"native"' "$test_root/capabilities.json" "capability diagnostics report native-first dispatch"
-contains '"fallback_mode":"basic"' "$test_root/capabilities.json" "capability diagnostics report the basic fallback"
+contains '"fallback_mode":"none","basic":false' "$test_root/capabilities.json" "capability diagnostics report that no fallback exists"
+HYDRA_TUI_BIN="$test_root/missing-hydra-tui" "$repo_root/bin/hydra" tui --capabilities > "$test_root/capabilities.txt"
+assert_success $? "capability diagnostics succeed without the native TUI"
+contains "native TUI: unavailable" "$test_root/capabilities.txt" "capability diagnostics name a missing native TUI"
+contains "hydra list and hydra switch still work" "$test_root/capabilities.txt" "capability diagnostics name what works without it"
+if grep -Fqi "basic" "$test_root/capabilities.txt"; then
+    assert_success 1 "capability diagnostics no longer mention a basic TUI"
+else
+    assert_success 0 "capability diagnostics no longer mention a basic TUI"
+fi
 contains '"mutation_authority":"shell-cli"' "$test_root/capabilities.json" "capability diagnostics name shell mutation authority"
 
 adapter_home="$test_root/adapter-home"
@@ -496,7 +535,7 @@ while [ "$change_index" -lt 20 ]; do
     change_index=$((change_index + 1))
 done
 wait "$change_pid"
-assert_equal "20" "$change_index" "changing state remains a complete native/basic snapshot"
+assert_equal "20" "$change_index" "changing state remains a complete native snapshot"
 
 "$tui" --fleet --headless-fixture "$repo_root/tests/fixtures/tui/fleet-v1.tsv" --size 100x24 > "$test_root/fleet.txt"
 contains 'DESIRED' "$test_root/fleet.txt" 'fleet labels durable desired state explicitly'

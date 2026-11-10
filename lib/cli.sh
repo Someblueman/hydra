@@ -180,9 +180,8 @@ Commands:
   dashboard         View all sessions in a single dashboard
                     Options:
                       -p, --panes-per-session <N|all>  Collect multiple panes per session
-  tui               Native mission control with visible basic fallback
+  tui               Native mission control (needs the hydra-tui helper)
                     Options:
-                      --basic                  Use the maintained shell TUI explicitly
                       --capabilities [--json]  Show TUI availability and dispatch policy
   cycle-layout      Cycle through tmux pane layouts
   queue             View and manage pending spawn queue

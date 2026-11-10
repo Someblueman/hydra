@@ -520,7 +520,7 @@ spawn_finish_launch() {
         else
             spawn_print_context "$_sfl_branch" "$_sfl_session" "$_sfl_profile" "$_sfl_verb"
             # Task input lives in the optional native workspace. Without it,
-            # stay in this terminal: the basic TUI cannot open the new task.
+            # stay in this terminal with the context printed above.
             _load_libs_for_cmd tui
             if tui_native_find_binary >/dev/null 2>&1; then
                 cmd_tui --task "$_sfl_branch"

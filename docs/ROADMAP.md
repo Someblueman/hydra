@@ -1043,8 +1043,8 @@ remote execution changes require their own bounded scope.
       for dataflow; make any structured-parser dependency an explicit toolchain
       decision rather than growing ad hoc YAML or shell interpolation.
 - [ ] Present historical heads as inspectable history with explicit restore, not as
-      live workers. Preserve the dashboard and shell-only TUI; expand views only for
-      a concrete operator need rather than requiring decorative frontend parity.
+      live workers. Preserve the dashboard; expand views only for a concrete
+      operator need rather than requiring decorative frontend parity.
 
 There is no usage evidence yet to justify deleting a major shipped feature. Review
 actual workflows and maintenance cost before proposing removal. Revisit storage or

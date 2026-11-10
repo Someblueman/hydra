@@ -479,12 +479,12 @@ static bool terminal_ready(struct app *app) {
         return false;
     }
     if (term == NULL || strcmp(term, "dumb") == 0) {
-        fputs("hydra-tui cannot use TERM=dumb; run hydra tui --basic\n", stderr);
+        fputs("hydra-tui cannot use TERM=dumb; use hydra list and hydra switch in this terminal\n", stderr);
         return false;
     }
     update_size(app);
     if (app->cols < 40 || app->rows < 10) {
-        fputs("hydra-tui requires at least 40 columns by 10 rows; run hydra tui --basic\n", stderr);
+        fputs("hydra-tui requires at least 40 columns by 10 rows; enlarge the terminal, or use hydra list and hydra switch\n", stderr);
         return false;
     }
     return true;

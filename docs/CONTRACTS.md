@@ -242,12 +242,6 @@ and never pushes. See [workflows.md](workflows.md).
 
 ## TUI protocols and parity
 
-The basic TUI row is seven tab-separated fields:
-
-```text
-branch  session  profile  status  activity  group  pr
-```
-
 The internal native adapter begins with `HYDRA_TUI<TAB>2`, followed by bounded `H`
 head and `R` recovery rows whose fields contain no tabs or newlines. The fleet
 overview adapter uses `HYDRA_FLEET_TUI<TAB>3`: it retains version-2 `T` host and `F`
@@ -265,9 +259,12 @@ heads a run's spawn steps created (worker or verifier, and retirement). Version-
 workflow fixtures remain readable. `hydra tui --head-output <branch>` is a private,
 bounded, read-only text view of the step running (or last run) on a headless head.
 
-Plain `hydra tui` is native-first with a visible `hydra tui --basic` fallback. Both
-retain navigation, search, refresh, preview, switch, spawn, group assignment,
-dashboard, regenerate, confirmed kill, and help behavior. Native mutations execute
+Plain `hydra tui` runs the native control centre and has no fallback interface.
+Without a qualified `hydra-tui` helper it prints how to obtain one and exits 1;
+an unexpected helper exit status is reported on one line and returned after the
+terminal is restored. `hydra tui --basic` is rejected as a usage error (exit 2).
+`hydra tui --capabilities --json` keeps its fields and reports
+`"fallback_mode":"none"` and `"basic":false`. Native mutations execute
 the public shell CLI with explicit argv and never write Hydra state directly. Native
 attention consumes `workflow attention-data` or `fleet attention-data`; its `I`
 view and `r` exact review route are read-only client interaction.

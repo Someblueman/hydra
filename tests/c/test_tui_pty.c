@@ -860,18 +860,48 @@ static void test_delayed_initial_snapshot(const char *tui, const char *hydra, co
     } else result(false, "configure delayed snapshot fixture");
 }
 
-static void test_crash_fallback(const char *dispatch, const char *fake_bin) {
+/* Like wait_for_exit, but keep what the session still writes while it ends. */
+static int capture_exit(struct session *session, char *captured, size_t *used) {
+    int attempt, status = 0;
+    pid_t waited = 0;
+    for (attempt = 0; attempt < 150 && waited != session->pid; attempt++) {
+        char buffer[4096];
+        ssize_t length;
+        waited = waitpid(session->pid, &status, WNOHANG);
+        while ((length = read_marker_output(session, buffer, sizeof(buffer))) > 0)
+            capture_bytes(captured, used, buffer, (size_t)length);
+        if (waited != session->pid) sleep_ms(20);
+    }
+    if (waited != session->pid) {
+        kill(session->pid, SIGKILL);
+        (void)waitpid(session->pid, &status, 0);
+        return 254;
+    }
+    if (WIFEXITED(status)) return WEXITSTATUS(status);
+    return WIFSIGNALED(status) ? 128 + WTERMSIG(status) : 255;
+}
+
+/* A crashed native TUI is never replaced by another interface: the dispatcher
+ * resets the terminal, names the status on one line and exits with it. */
+static void test_crash_report(const char *dispatch, const char *fake_bin) {
+    static const char report[] = "\033[?25hError: native TUI exited unexpectedly with status 139";
     struct session session;
+    char output[65536] = "";
+    size_t used = 0U;
+    const char *line;
+    int status;
     if (dispatch == NULL || dispatch[0] == '\0') return;
     if (!result(open_session(&session, dispatch, "/usr/bin/false", fake_bin, 80, 24) == 0,
-                "open crash-fallback pseudo-terminal")) return;
-    result(wait_for_marker(&session, "\033[?1000l\033[?1006l", 3000),
-           "crash fallback disables mouse reporting");
-    result(wait_for_marker(&session, "Hydra TUI", 3000),
-           "native crash restores the terminal before basic fallback");
-    write_input(session.master, "q", 1U);
-    result(wait_for_exit(&session) == 0, "basic fallback exits cleanly after native crash");
-    result(terminal_restored(&session), "native crash and basic fallback restore exact terminal state");
+                "open native-crash pseudo-terminal")) return;
+    result(wait_for_marker_capture(&session, report, 3000, output, &used),
+           "native crash is reported with its exit status right after the terminal reset");
+    result(strstr(output, "\033[?1000l\033[?1006l") != NULL, "native crash disables mouse reporting");
+    status = capture_exit(&session, output, &used);
+    result(status == 139, "native crash status is returned without waiting for input");
+    line = strstr(output, report);
+    result(line != NULL && line[sizeof(report) - 1U + strspn(line + sizeof(report) - 1U, "\r\n")] == '\0',
+           "nothing follows the one-line crash report: no other interface starts");
+    result(terminal_restored(&session), "native crash restores exact terminal state");
     close_session(&session);
 }
 
@@ -1065,7 +1095,7 @@ int main(int argc, char **argv) {
     (void)unsetenv("HYDRA_TEST_PID_FILE");
     (void)unlink(timeout_pids);
     test_delayed_initial_snapshot(argv[1], argv[2], argv[3]);
-    test_crash_fallback(getenv("HYDRA_TEST_CRASH_DISPATCH"), argv[3]);
+    test_crash_report(getenv("HYDRA_TEST_CRASH_DISPATCH"), argv[3]);
     printf("Tests: %d, Failed: %d\n", tests, failures);
     return failures == 0 ? 0 : 1;
 }

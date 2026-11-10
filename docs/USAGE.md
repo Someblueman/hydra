@@ -191,9 +191,8 @@ hydra snapshot --native # explicitly try the optional read-only native helper
 
 # Dashboard & TUI
 hydra dashboard                                    # multi-session overview
-hydra tui                                          # native mission control; visible basic fallback
-hydra tui --basic                                  # explicit basic shell TUI
-hydra tui --capabilities                           # native/basic diagnostics
+hydra tui                                          # native mission control
+hydra tui --capabilities                           # native TUI availability diagnostics
 ```
 
 ## Launching heads and attaching
@@ -385,7 +384,7 @@ hydra completion fish > ~/.config/fish/completions/hydra.fish
 Per-head profile, task, identity, worktree path, instance, and lifecycle event are
 stored in project-scoped state v2. The durable state, security, out-of-band
 execution, provenance, and parallel coordination rules are in
-[Contracts](CONTRACTS.md) and [workflows](workflows.md). Native/basic dispatch, terminal safety,
+[Contracts](CONTRACTS.md) and [workflows](workflows.md). Native dispatch, terminal safety,
 keymaps, accessibility, and recovery are documented in
 the native helpers.
 
@@ -477,16 +476,19 @@ An interactive head receives `HYDRA_PROJECT_ID`, `HYDRA_HEAD_ID`,
 
 ## TUI
 
-Hydra launches native mission control by default when its qualified executable is
-available and falls back visibly to the basic shell TUI over the same shell-owned
-state.
+`hydra tui` is native mission control: the `hydra-tui` helper renders shell-owned
+state and runs every action through the shell CLI. There is no other interface
+behind it. Without a qualified helper (missing, or built for another Hydra
+version) `hydra tui` prints how to get one and exits with status 1; `hydra list`
+and `hydra switch` work without it. If the helper exits with an unexpected status,
+Hydra restores the terminal, reports that status on one line and returns it.
 
 The source installer builds the native TUI automatically when a C99 toolchain is
-available. Set `HYDRA_INSTALL_TUI=never` for a compiler-free shell-only install.
+available; `make build-tui` builds it in a checkout. Set `HYDRA_INSTALL_TUI=never`
+for a compiler-free install without `hydra tui`.
 
 ```sh
-hydra tui                  # native-first with visible basic fallback
-hydra tui --basic          # explicit basic mode
+hydra tui                  # native mission control
 hydra tui --capabilities   # availability and observation diagnostics
 ```
 
@@ -556,26 +558,3 @@ selected reference, and `Esc` backs out. `l`, `t`, and `p` supply one explicit l
 transcript, or PR reference to the public review producer. A stale attention snapshot
 cannot be reviewed until it is refreshed. Seen state is client-local and does not
 approve, accept, or mutate a workflow.
-
-The larger keymap below belongs to the maintained basic shell TUI.
-
-| Key | Action |
-|-----|--------|
-| `j/k`, arrows | Navigate sessions |
-| `Enter` / `s` | Switch to selected session |
-| `n` | Spawn new session (interactive wizard) |
-| `d` | Kill selected session |
-| `D` | Open tmux dashboard |
-| `A` | Select all sessions |
-| `Space` | Toggle selection (for bulk ops) |
-| `x` | Bulk kill selected |
-| `G` | Bulk set group on selected |
-| `p` | Toggle preview panel |
-| `/` | Search (branch, session, group, AI) |
-| `i` | Show status output |
-| `r` | Regenerate sessions |
-| `?` | Show help overlay |
-| `Esc` | Clear selection / filters |
-| `q` | Quit |
-
-Environment variables: `HYDRA_TUI_PREVIEW_LINES`, `HYDRA_TUI_REFRESH_MS`, `HYDRA_TUI_ACTIVITY_INTERVAL`, `HYDRA_NONINTERACTIVE`.

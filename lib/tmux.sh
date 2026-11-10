@@ -120,24 +120,6 @@ tmux_clear_snapshot() {
     _TMUX_SNAPSHOT_PANES=""
 }
 
-# Latest window_activity timestamp for a session from the snapshot.
-# Usage: tmux_snapshot_window_activity <session>
-# Returns: unix timestamp or 0
-tmux_snapshot_window_activity() {
-    _sa_session="$1"
-    if [ -z "${_TMUX_SNAPSHOT_PANES:-}" ]; then
-        printf '%s' "0"
-        return 0
-    fi
-    printf '%s\n' "$_TMUX_SNAPSHOT_PANES" | awk -F '	' -v s="$_sa_session" '
-        $1 == s {
-            act = $4 + 0
-            if (act > max) max = act
-        }
-        END { print max + 0 }
-    '
-}
-
 # True if every pane in the session is marked pane_dead.
 # Usage: tmux_snapshot_session_dead <session>
 # Returns: 0 if all panes dead, 1 otherwise

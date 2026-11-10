@@ -125,7 +125,7 @@ _hydra_completion() {
         integrate) COMPREPLY=($(compgen -W "train status report cancel resume approve promote cleanup" -- ${cur})); return 0 ;;
         worktree) COMPREPLY=($(compgen -W "doctor" -- ${cur})); return 0 ;;
         snapshot) COMPREPLY=($(compgen -W "--native --json" -- ${cur})); return 0 ;;
-        tui) COMPREPLY=($(compgen -W "--basic --capabilities" -- ${cur})); return 0 ;;
+        tui) COMPREPLY=($(compgen -W "--capabilities" -- ${cur})); return 0 ;;
         kill)
             # Complete with git branch names or kill options
             case "${cur}" in

@@ -40,7 +40,7 @@ and [usability testing](docs/USABILITY-TESTING.md).
 ## What you can do
 
 - **Lead from native mission control.** Browse heads, inspect activity and changes,
-  and launch actions from the native C TUI. The shell TUI provides a fallback.
+  and launch actions from the native C TUI.
 - **Run coding agents across your fleet.** Select agent profiles and task prompts,
   bootstrap trusted SSH hosts, launch remote heads and workflows, and attach to
   their sessions. Inspect host-qualified heads in the native fleet view.
@@ -88,7 +88,8 @@ qualification await sign-in; Claude remote qualification remains deferred.
 
 GitHub CLI, `fzf`, and coding agents are optional integrations. For a compiler-free
 local installation, skip `make build-fleet` and set `HYDRA_INSTALL_TUI=never` when
-running the installer.
+running the installer. `hydra tui` is then unavailable; `hydra list` and
+`hydra switch` work without the native helper.
 
 Upgrading from 1.9? Review the compatibility and backup notes in
 [Contracts](docs/CONTRACTS.md) before upgrading.
@@ -124,7 +125,7 @@ shell. [Agent profiles and inputs](docs/USAGE.md#agent-profiles-and-inputs) desc
 ## Inspect and finish
 
 ```sh
-hydra tui                         # native mission control, with basic fallback
+hydra tui                         # native mission control
 hydra diff feature/search --stat
 hydra exec --branch feature/search -- make test # use your project's test command
 hydra review feature/search --json
@@ -134,7 +135,7 @@ To steer an agent, queue an inbox message with `hydra send feature/search "Revie
 the failing test"`; read it with `hydra recv --peek` inside that head. A queued
 message is not evidence of consumption or completion.
 
-Use `hydra tui --basic` for the shell interface. In the native control centre,
+In the native control centre,
 `Tab` moves between tabs (or workspace panes), arrows select, `Enter` opens and
 `Esc` steps back. `n` starts a task, `a` talks to the selected agent, `x` removes
 heads after an in-app confirmation, `:` opens actions, `?` shows help and `q` exits.
