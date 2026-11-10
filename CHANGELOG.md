@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- kettle (the terminal library under `src/kettle/`, formerly termviz) gains an
+  application runtime, `kt_program`: the application supplies `init`, `update`
+  and `view` over its own model; input, resizes, timers, watched descriptors,
+  child processes and signals arrive as messages; effects are queued as
+  commands (`kt_cmd_timer`, `kt_cmd_watch`, `kt_cmd_spawn`, `kt_cmd_exec`,
+  `kt_cmd_quit`, ...) and performed by the runtime. The runtime owns the event
+  loop, terminal modes and restoration on every exit path. A burst of input
+  costs one frame, each frame leaves as one write inside a synchronized update,
+  a repaint never erases the display, and an idle program does not wake.
+  `testing.h` runs the same loop without a terminal under a virtual clock.
+  `examples/counter.c` is a complete application in about 100 lines; see
+  "Writing an application" in `src/kettle/README.md`.
+- kettle key events carry modifiers and named keys (`Ctrl`, `Alt`, `Shift`;
+  Tab, Enter, Escape, Backspace, Delete, Insert, F1 to F12), and `keymap.h`
+  adds chord bindings: one table drives matching, hints and a text
+  configuration format.
+- The control centre's commands while you type to an attached agent are
+  configurable. Write `$HYDRA_HOME/tui/keys.conf` (or name a file in
+  `HYDRA_TUI_KEYS`); `hydra tui --print-keys` prints the keys in effect in the
+  file's syntax and reports a file it cannot read. A partly entered chord is
+  shown in the status line with what may follow, and a key that does not
+  continue it is reported instead of being dropped silently. See "TUI keys" in
+  `docs/USAGE.md`.
+
+### Changed
+
+- **Breaking:** `Ctrl-]` now returns input from an attached agent to Hydra, and
+  the other agent-pane commands moved from the `Ctrl-B` prefix to `Ctrl-\`
+  (`Ctrl-\ x` close view, `Ctrl-\ n` next agent, `Ctrl-\ [` scroll, ...).
+  `Ctrl-B` reaches the agent, so the tmux it runs in answers its usual prefix
+  and an outer tmux no longer collides with Hydra. `docs/USAGE.md` shows a keys
+  file that restores the previous chords.
+- **Breaking (library):** the termviz library is renamed kettle: `src/kettle/`,
+  `kettle.h`, the `kt_`/`KT_` prefixes, and the `test-kettle`, `example-kettle`
+  and `test-kettle-export` targets. Style callbacks receive the output stream
+  (`void (*)(void *, FILE *, enum kt_style)`); `kt_terminal_begin`/`_end` are
+  replaced by the runtime; control keys decode as a letter with `KT_MOD_CTRL`
+  rather than as their byte value.
+
+### Removed
+
+- **Breaking:** the basic shell TUI (`hydra tui --basic`) and the silent
+  fallback to it. Without the native helper, `hydra tui` says what is needed
+  and that `hydra list` and `hydra switch` work without it, and exits 1; if the
+  helper exits unexpectedly, the terminal is restored and its status is
+  reported and returned. `hydra tui --basic` is a usage error.
+
 ## [2.9.0] - 2026-09-28
 
 ### Added
