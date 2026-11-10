@@ -248,9 +248,19 @@ put "$rich/worktree" "$worktrees/head_0000000000000002"
 mkdir -p "$home/locks"
 make_lock "$home/locks/state_gone.lock" "$dead_pid" "$this_host"
 
-live="session-plain,session-rich,session-stopping,session-spaced,session-unknown,session-no-instance,session-blocked,session-empty,session-override,session-partial,session-plain-dir,session-twice,session-legacy,session-misbound"
+# Records reached through symbolic links, and a field with a tab in it.
+make_head head_00000000000000f4 linked session-linked none
+mkdir -p "$test_root/rich/linked-queue" "$test_root/rich/linked-gates/gate" "$heads/head_00000000000000f4/messages"
+: > "$test_root/rich/linked-queue/message"
+: > "$test_root/rich/linked-gates/gate/approved-at"
+ln -s "$test_root/rich/linked-queue" "$heads/head_00000000000000f4/messages/queue"
+ln -s "$test_root/rich/linked-gates" "$heads/head_00000000000000f4/gates"
+make_head head_00000000000000f5 tabbed session-tabbed none
+printf 'left\tright\n' > "$heads/head_00000000000000f5/group"
+
+live="session-linked,session-tabbed,session-plain,session-rich,session-stopping,session-spaced,session-unknown,session-no-instance,session-blocked,session-empty,session-override,session-partial,session-plain-dir,session-twice,session-legacy,session-misbound"
 same_rows "a project with every kind of record reads the same in both readers" FAKE_TMUX_SESSIONS="$live"
-assert_equal "16" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/native.tsv")" "every active head has a row and the stopped one has none"
+assert_equal "18" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/native.tsv")" "every active head has a row and the stopped one has none"
 assert_equal "session-rich custom team 42 active live done idle reported" \
     "$(row_fields rich 3 4 5 6 7 8 9 10 11)" "the recorded scalars of a head"
 assert_equal "5 2 3 3 2 2 3 3 4 2" \
@@ -276,7 +286,7 @@ assert_equal "1" "$(rows_of stale-lock)" "the stale lock is a recovery finding"
 assert_equal "0" "$(rows_of orphan-worktree)" "a recorded worktree is not a leftover"
 
 same_rows "with no live session every terminal head is dead in both readers"
-assert_equal "14" "$(rows_of dead-session)" "every terminal head is reported once"
+assert_equal "16" "$(rows_of dead-session)" "every terminal head is reported once"
 
 # HYDRA_HOME through a symbolic link is reported by its physical path.
 ln -s "$home" "$test_root/rich/home-link"
@@ -293,7 +303,7 @@ repo="$top/sub/dir"
 same_rows "a subdirectory of the repository reads the same in both readers" FAKE_TMUX_SESSIONS="$live"
 repo="$worktrees/head_0000000000000002"
 same_rows "a linked worktree of the repository reads the same in both readers" FAKE_TMUX_SESSIONS="$live"
-assert_equal "16" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/native.tsv")" "the worktree sees its project's heads"
+assert_equal "18" "$(awk -F '\t' '$1 == "H" { n++ } END { print n + 0 }' "$test_root/native.tsv")" "the worktree sees its project's heads"
 repo="$top"
 
 # ---- leftover worktrees --------------------------------------------------------

@@ -137,11 +137,11 @@ static unsigned lines_equal(const char *path, const char *text) {
 }
 
 /* Every entry below a directory, parents before children, in the order the
- * directory lists them (the order find prints them). Symbolic links are not
- * followed. */
+ * directory lists them (the order find prints them). Symbolic links below it
+ * are not followed. */
 typedef void walk_fn(const char *path, const char *name, const struct stat *info, void *context);
-static void walk(const char *directory, int depth, bool recurse, walk_fn *visit, void *context) {
-    DIR *stream = depth < WALK_DEPTH && is_directory(directory) ? opendir(directory) : NULL;
+static void walk_entries(const char *directory, int depth, bool recurse, walk_fn *visit, void *context) {
+    DIR *stream = depth < WALK_DEPTH ? opendir(directory) : NULL;
     struct dirent *entry;
     if (!stream) return;
     while ((entry = readdir(stream)) != NULL) {
@@ -151,9 +151,20 @@ static void walk(const char *directory, int depth, bool recurse, walk_fn *visit,
         path_child(path, sizeof(path), directory, entry->d_name);
         if (!path[0] || lstat(path, &info) != 0) continue;
         visit(path, entry->d_name, &info, context);
-        if (recurse && S_ISDIR(info.st_mode)) walk(path, depth + 1, true, visit, context);
+        if (recurse && S_ISDIR(info.st_mode)) walk_entries(path, depth + 1, true, visit, context);
     }
     closedir(stream);
+}
+
+/* As find walks: a starting point that is a symbolic link is not entered. */
+static void walk(const char *directory, bool recurse, walk_fn *visit, void *context) {
+    struct stat info;
+    if (directory[0] && lstat(directory, &info) == 0 && S_ISDIR(info.st_mode)) walk_entries(directory, 0, recurse, visit, context);
+}
+
+/* As a shell glob lists a directory: through a symbolic link too. */
+static void list(const char *directory, walk_fn *visit, void *context) {
+    if (is_directory(directory)) walk_entries(directory, 0, false, visit, context);
 }
 
 struct tally { const char *name, *text; unsigned count; bool directories; };
@@ -173,7 +184,7 @@ static void tally_named(const char *path, const char *name, const struct stat *i
 /* Files, or directories, directly inside a directory. */
 static unsigned count_children(const char *directory, bool directories) {
     struct tally t = {NULL, NULL, 0, directories};
-    walk(directory, 0, false, tally_kind, &t);
+    walk(directory, false, tally_kind, &t);
     return t.count;
 }
 
@@ -181,7 +192,7 @@ static unsigned count_children(const char *directory, bool directories) {
  * in them that are exactly text. */
 static unsigned count_named(const char *directory, const char *name, const char *text) {
     struct tally t = {name, text, 0, false};
-    walk(directory, 0, true, tally_named, &t);
+    walk(directory, true, tally_named, &t);
     return t.count;
 }
 
@@ -692,7 +703,7 @@ static void stale_locks(const struct store_location *where, struct text *out) {
     struct lock_walk w = {where, out};
     char directory[STORE_PATH];
     path_join(directory, sizeof(directory), where->home, "/locks");
-    walk(directory, 0, true, lock_visit, &w);
+    walk(directory, true, lock_visit, &w);
 }
 
 /* The directory part of a path, as dirname prints it. */
@@ -727,7 +738,7 @@ static bool leftovers_possible(const struct reader *r) {
         parent_of(r->where->toplevel, parent, sizeof(parent));
         store_path(root, sizeof(root), "%s/.hydra-worktrees/%s", parent, r->project);
     }
-    walk(root, 0, false, leftover_visit, &w);
+    list(root, leftover_visit, &w);
     return w.found;
 }
 
@@ -780,9 +791,9 @@ static void run_visit(const char *path, const char *name, const struct stat *inf
     mix_stamp(&runs->records, path, "/steps");
     mix_stamp(&runs->records, path, "/retirement");
     path_join(directory, sizeof(directory), path, "/steps");
-    walk(directory, 0, false, mix_child, &runs->records);
+    list(directory, mix_child, &runs->records);
     path_join(directory, sizeof(directory), path, "/retirement");
-    walk(directory, 0, false, mix_child, &runs->records);
+    list(directory, mix_child, &runs->records);
 }
 
 void store_runs(const struct store_location *where, struct store_runs *runs) {
@@ -797,7 +808,7 @@ void store_runs(const struct store_location *where, struct store_runs *runs) {
     runs->graphs = runs->records = 1469598103934665603ULL;
     if (!r.project[0]) return;
     path_join(directory, sizeof(directory), r.project_dir, "/workflows/runs");
-    walk(directory, 0, false, run_visit, runs);
+    list(directory, run_visit, runs);
 }
 
 /* ---- the snapshot ------------------------------------------------------- */
@@ -806,8 +817,9 @@ static void read_notifications(const struct reader *r, struct store_snapshot *s)
     FILE *file;
     char *line = NULL;
     size_t capacity = 0;
-    if (!r->where->common[0]) return;
-    path_join(s->notification_source, sizeof(s->notification_source), r->where->common, "/hydra/notifications");
+    /* Outside a repository the shell reader names the file by an empty directory. */
+    if (r->where->common[0]) path_join(s->notification_source, sizeof(s->notification_source), r->where->common, "/hydra/notifications");
+    else text_copy(s->notification_source, sizeof(s->notification_source), "/notifications");
     file = has_bytes(s->notification_source) ? fopen(s->notification_source, "rb") : NULL;
     while (file && getline(&line, &capacity, file) >= 0) {
         char *save = NULL, *word;

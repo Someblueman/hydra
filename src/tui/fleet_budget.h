@@ -14,8 +14,10 @@
 /* The control centre requests fresh observations this often. */
 #define HYDRA_TUI_REFRESH_SECONDS 2L
 
-/* Local state observation is a single shell transaction. Keep startup and
- * refresh bounded while allowing the measured ten-head snapshot to complete. */
+/* Local state observation is one transaction: the shell reader, or the read
+ * of the state store with the tmux and git commands it starts. Keep startup
+ * and refresh bounded while allowing the shell reader's measured ten-head
+ * snapshot to complete. */
 #define HYDRA_TUI_LOCAL_CAPTURE_BUDGET_MS 10000L
 
 #endif
