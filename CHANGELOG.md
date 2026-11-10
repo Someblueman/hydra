@@ -57,6 +57,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   truncation, and rectangle helpers (inset, cut from an edge, centre, split by
   fixed, percentage, minimum and flexible constraints).
 
+- Statistics covers interactive work, not only recorded workflow runs. While
+  a control centre is open it notes, from tmux's record of each head's last
+  output, when a head starts and stops producing terminal output, and records
+  each change as an `activity.changed` event in the head's event log (`hydra
+  adapter activity`; inferred, labelled as such, and overridden by an
+  adapter's exact report for the same time). Time when no control centre was
+  watching is counted as unobserved, never as quiet. The Statistics view
+  opens on head sessions: how many, how long, time active and quiet, the share
+  of session time observed, sessions started per day, and each session's
+  breakdown; `s` switches to workflow runs. `hydra workflow statistics-data`
+  is schema 5 (session rows; readers accept 2 to 5) and `statistics-json`
+  exports the session summaries. Tokens and cost are not measured for
+  interactive sessions.
+
 ### Changed
 
 - The control centre's three themes are unchanged in 24-bit and 256-colour
