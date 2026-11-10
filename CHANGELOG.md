@@ -40,8 +40,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program with the terminal restored, like SIGINT. `sequence_ms` lets a key
   split by a slow link arrive whole while a lone Escape stays prompt.
 
+- kettle has a styling layer (`style.h`, "Styling" in `src/kettle/README.md`,
+  `examples/themes.c`). A style is a value (`struct kt_style`: foreground,
+  background, attributes); a colour is the terminal default, an RGB value, a
+  palette index or a theme token, and `KT_KEEP` draws over whatever surface is
+  already there. Themes are data (`kt_theme_dark`, `kt_theme_light`,
+  `kt_theme_terminal`, or an application's own) and are set through the
+  runtime; changing one repaints every cell without erasing the screen. The
+  presenter emits the colour and attribute sequences itself and converts to
+  what the terminal can show (24-bit, 256, 16 or no colour, detected from
+  `NO_COLOR`, `COLORTERM`, `TERM` and `CLICOLOR_FORCE`, or set in
+  `kt_options`).
+- kettle drawing and layout helpers: `kt_fill`, borders as data (light,
+  rounded, heavy, double, left bar, each with an ASCII form) with titles,
+  titled rules, text measured in display columns with alignment and ellipsis
+  truncation, and rectangle helpers (inset, cut from an edge, centre, split by
+  fixed, percentage, minimum and flexible constraints).
+
 ### Changed
 
+- The control centre's three themes are unchanged in 24-bit and 256-colour
+  terminals. With `NO_COLOR` it now marks titles, muted text and the selection
+  with bold, dim and reverse instead of showing plain text only; in a
+  16-colour terminal it uses the terminal's sixteen colours instead of sending
+  256-colour sequences. Agent output in attached panes keeps palette colours
+  as palette colours, so it shows in your terminal's own palette, and an
+  agent's 24-bit colours are converted when the terminal does not announce
+  24-bit support (set `COLORTERM=truecolor` if yours supports it but does not
+  say so).
+- **Breaking (library):** `enum kt_style` and per-application style callbacks
+  (`kt_app.style`, the callback arguments of `kt_write_row` and `kt_present`)
+  are replaced by `struct kt_style`, themes and `struct kt_paint`. The nine
+  stock names (`KT_BASE` to `KT_FOCUS`) remain as styles; compare styles with
+  `kt_style_equal`. `KT_EXPLICIT` and `KT_COLOR_DEFAULT` are gone
+  (`KT_DEFAULT` is zero).
 - The control centre (`hydra tui`) runs on the kettle runtime instead of a
   40 ms polling loop. Typing to an attached agent echoes as the agent answers
   (about 1 ms in the loop, where every key used to wait for the next tick);
