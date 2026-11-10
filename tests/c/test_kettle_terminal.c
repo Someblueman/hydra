@@ -69,7 +69,7 @@ int main(void) {
     assert(t.primary.wrap_pending && t.primary.x == 9);
     feed("X"); assert(at(0,1) == 'X');
     feed("\033[2;3H\033[38;2;10;20;30mY\033[0m");
-    assert(at(2,1) == 'Y' && primary[22].foreground == 0x0a141e);
+    assert(at(2,1) == 'Y' && primary[22].foreground == KT_RGB(10, 20, 30));
     feed("\033[2;3H\033[K"); assert(at(2,1) == ' ' && at(0,1) == 'X');
     feed("\033[?1049hALT\033[?25l");
     assert(t.alternate_active && at(0,0) == 'A' && !t.cursor_visible);

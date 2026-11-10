@@ -24,7 +24,10 @@ struct demo {
     struct termios settings;    /* what the shell's terminal starts with */
     int spawn_error;
 };
-void demo_colors(void *model, FILE *out, enum kt_style style);
+/* Bold text in a colour the stock vocabulary has no name for. */
+enum { DEMO_TOKEN_STRONG = KT_TOKEN_USER };
+#define DEMO_STRONG KT_STYLE(KT_TOKEN(DEMO_TOKEN_STRONG), KT_COLOR_SURFACE, KT_BOLD)
+extern const struct kt_theme demo_theme;
 void demo_draw(struct kt_canvas *canvas, const struct demo *demo);
 /* False when the key asks to quit. */
 bool demo_handle(struct demo *demo, const struct kt_event *event);

@@ -96,13 +96,8 @@ static void view(const void *model, struct kt_frame *frame) {
     if (f->cursor) kt_frame_cursor(frame, 2, 4);
 }
 
-static void style(void *model, FILE *out, enum kt_style style) {
-    (void)model;
-    fputs(style == KT_BASE ? "\033[0m" : "\033[0;36m", out);
-}
-
 int main(void) {
-    static const struct kt_app app = {NULL, update, view, style};
+    static const struct kt_app app = {NULL, update, view};
     struct fixture fixture;
     struct kt_options options = {0};
     int status;

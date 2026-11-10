@@ -147,12 +147,13 @@ static void demo_content(struct demo *d) {
 }
 
 static int demo_run(struct demo *d) {
-    static const struct kt_app app = {init, update, view, demo_colors};
+    static const struct kt_app app = {init, update, view};
     struct kt_options options = {0};
     struct kt_program *program;
     int status;
     options.alt_screen = options.bracketed_paste = true;
     options.mouse = KT_MOUSE_DRAG;
+    options.theme = &demo_theme;
     /* The shell starts with the settings this terminal had before raw mode. */
     if (d->model && tcgetattr(STDIN_FILENO, &d->settings) != 0) return -1;
     program = kt_program_new(&app, d, &options);

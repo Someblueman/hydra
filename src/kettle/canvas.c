@@ -12,12 +12,26 @@ bool kt_init(struct kt_canvas *out, struct kt_cell *cells, size_t capacity,
     return true;
 }
 
-static struct kt_cell blank(enum kt_style style) {
+static struct kt_cell blank(struct kt_style style) {
     struct kt_cell cell;
     memset(&cell, 0, sizeof(cell));
-    cell.glyph = ' '; cell.style = style; cell.width = 1;
-    cell.foreground = cell.background = KT_COLOR_DEFAULT;
+    cell.glyph = ' '; cell.width = 1;
+    cell.foreground = style.fg; cell.background = style.bg; cell.attributes = style.attrs;
     return cell;
+}
+
+struct kt_style kt_cell_style(const struct kt_cell *cell) {
+    struct kt_style style;
+    style.fg = cell->foreground; style.bg = cell->background; style.attrs = cell->attributes;
+    return style;
+}
+
+/* The style a cell ends up with when `style` is drawn on it: KT_KEEP leaves
+ * the colour the cell has. */
+static struct kt_style over(const struct kt_cell *cell, struct kt_style style) {
+    if (style.fg == KT_KEEP) style.fg = cell->foreground;
+    if (style.bg == KT_KEEP) style.bg = cell->background;
+    return style;
 }
 
 bool kt_canvas_view(struct kt_canvas *out, const struct kt_canvas *parent, struct kt_rect r) {
@@ -30,23 +44,59 @@ bool kt_canvas_view(struct kt_canvas *out, const struct kt_canvas *parent, struc
 }
 
 bool kt_cell_equal(const struct kt_cell *a, const struct kt_cell *b) {
-    return a->glyph == b->glyph && a->style == b->style && a->width == b->width &&
+    return a->glyph == b->glyph && a->width == b->width &&
         a->foreground == b->foreground && a->background == b->background &&
         a->attributes == b->attributes && a->combining_count == b->combining_count &&
         !memcmp(a->combining, b->combining, sizeof(a->combining));
 }
 
-void kt_clear(struct kt_canvas *c, enum kt_style style) {
+/* There is no cell to keep a colour from: KT_KEEP clears to the default. */
+void kt_clear(struct kt_canvas *c, struct kt_style style) {
     int x, y;
-    struct kt_cell cell = blank(style);
+    struct kt_cell cell;
+    if (style.fg == KT_KEEP) style.fg = KT_DEFAULT;
+    if (style.bg == KT_KEEP) style.bg = KT_DEFAULT;
+    cell = blank(style);
     for (y = 0; y < c->height; y++) for (x = 0; x < c->width; x++)
         c->cells[(size_t)y * (size_t)c->stride + (size_t)x] = cell;
 }
 
 static void erase_partner(struct kt_canvas *c, int x, int y) {
     struct kt_cell *cell = &c->cells[(size_t)y * (size_t)c->stride + (size_t)x];
-    if (!cell->width && x > 0) cell[-1] = blank(cell->style);
-    if (cell->width == 2 && x + 1 < c->width) cell[1] = blank(cell->style);
+    if (!cell->width && x > 0) cell[-1] = blank(kt_cell_style(cell));
+    if (cell->width == 2 && x + 1 < c->width) cell[1] = blank(kt_cell_style(cell));
+}
+
+/* The part of `r` that is on the canvas; empty when none is. */
+static struct kt_rect visible(const struct kt_canvas *c, struct kt_rect r) {
+    int64_t right = (int64_t)r.x + r.width, bottom = (int64_t)r.y + r.height;
+    struct kt_rect out = {0, 0, 0, 0};
+    if (r.width <= 0 || r.height <= 0 || right <= 0 || bottom <= 0 || r.x >= c->width || r.y >= c->height) return out;
+    out.x = r.x < 0 ? 0 : r.x; out.y = r.y < 0 ? 0 : r.y;
+    out.width = (int)(right < c->width ? right : c->width) - out.x;
+    out.height = (int)(bottom < c->height ? bottom : c->height) - out.y;
+    return out;
+}
+
+void kt_fill(struct kt_canvas *c, struct kt_rect r, struct kt_style style) {
+    int x, y;
+    r = visible(c, r);
+    for (y = r.y; y < r.y + r.height; y++) for (x = r.x; x < r.x + r.width; x++) {
+        struct kt_cell *cell = &c->cells[(size_t)y * (size_t)c->stride + (size_t)x];
+        /* A wide cell the edge cuts through loses its other half as well. */
+        if (x == r.x || x == r.x + r.width - 1) erase_partner(c, x, y);
+        *cell = blank(over(cell, style));
+    }
+}
+
+void kt_restyle(struct kt_canvas *c, struct kt_rect r, struct kt_style style) {
+    int x, y;
+    r = visible(c, r);
+    for (y = r.y; y < r.y + r.height; y++) for (x = r.x; x < r.x + r.width; x++) {
+        struct kt_cell *cell = &c->cells[(size_t)y * (size_t)c->stride + (size_t)x];
+        struct kt_style next = over(cell, style);
+        cell->foreground = next.fg; cell->background = next.bg; cell->attributes |= next.attrs;
+    }
 }
 
 /* The base cell a joining scalar at column x would attach to, if any. */
@@ -71,7 +121,7 @@ static int join_scalar(struct kt_canvas *c, struct kt_rect r, int x, struct kt_c
     return 1;
 }
 
-int kt_put_scalar(struct kt_canvas *c, struct kt_rect r, int x, uint32_t cp, enum kt_style style) {
+int kt_put_scalar(struct kt_canvas *c, struct kt_rect r, int x, uint32_t cp, struct kt_style style) {
     struct kt_cell *cell, *base;
     enum kt_join join;
     int width;
@@ -87,23 +137,23 @@ int kt_put_scalar(struct kt_canvas *c, struct kt_rect r, int x, uint32_t cp, enu
     erase_partner(c, x, r.y);
     if (width == 2) erase_partner(c, x + 1, r.y);
     cell = &c->cells[(size_t)r.y * (size_t)c->stride + (size_t)x];
-    *cell = blank(style); cell->glyph = cp; cell->width = (unsigned char)width;
+    if (width == 2) cell[1] = blank(over(&cell[1], style));
+    *cell = blank(over(cell, style)); cell->glyph = cp; cell->width = (unsigned char)width;
     if (!c->unicode && cp > 126) {
         /* The approximation keeps a wide scalar's columns so alignment holds. */
         cell->glyph = kt_ascii_fallback(cp); cell->width = 1;
-        if (width == 2) cell[1] = blank(style);
-    } else if (width == 2) { cell[1] = blank(style); cell[1].width = 0; }
+    } else if (width == 2) cell[1].width = 0;
     return width;
 }
 
-void kt_put(struct kt_canvas *c, int x, int y, uint32_t glyph, enum kt_style style) {
+void kt_put(struct kt_canvas *c, int x, int y, uint32_t glyph, struct kt_style style) {
     struct kt_rect row = {0, y, c->width, 1};
     if (x < 0 || y < 0 || x > c->width || y >= c->height) return;
     /* A wide scalar at the last column is replaced by a space. */
     if (kt_put_scalar(c, row, x, glyph, style) < 0 && x < c->width) (void)kt_put_scalar(c, row, x, ' ', style);
 }
 
-void kt_text(struct kt_canvas *c, struct kt_rect r, const char *text, enum kt_style style) {
+void kt_text(struct kt_canvas *c, struct kt_rect r, const char *text, struct kt_style style) {
     int64_t x = r.x, end = (int64_t)r.x + r.width;
     struct kt_rect area;
     size_t remaining;
@@ -132,7 +182,7 @@ static uint32_t panel_corner(bool unicode, bool top, bool left) {
 }
 
 static void panel_cell(struct kt_canvas *c, struct kt_rect r, int64_t right, int64_t bottom,
-                       int x, int y, enum kt_style border) {
+                       int x, int y, struct kt_style border) {
     bool horizontal = (y == r.y || y == bottom) && x >= r.x && x <= right;
     bool vertical = (x == r.x || x == right) && y >= r.y && y <= bottom;
     uint32_t glyph;
@@ -144,7 +194,7 @@ static void panel_cell(struct kt_canvas *c, struct kt_rect r, int64_t right, int
 }
 
 void kt_panel_styled(struct kt_canvas *c, struct kt_rect r, const char *title,
-                     enum kt_style border, enum kt_style title_style) {
+                     struct kt_style border, struct kt_style title_style) {
     int x, y;
     int64_t right = (int64_t)r.x + r.width - 1, bottom = (int64_t)r.y + r.height - 1;
     if (r.width < 2 || r.height < 2) return;
@@ -161,7 +211,7 @@ void kt_panel(struct kt_canvas *c, struct kt_rect r, const char *title) {
 }
 
 void kt_bar(struct kt_canvas *c, struct kt_rect r, uint64_t value, uint64_t maximum,
-            enum kt_style style) {
+            struct kt_style style) {
     int x;
     if (r.width <= 0 || r.height <= 0 || r.y < 0 || r.y >= c->height) return;
     if (maximum == 0) { kt_text(c, r, "unavailable", KT_WARNING); return; }
@@ -176,4 +226,3 @@ void kt_bar(struct kt_canvas *c, struct kt_rect r, uint64_t value, uint64_t maxi
         kt_put(c, x, r.y, c->unicode ? (part == 0 ? 0x2591U : 0x2590U - part) : (part ? '#' : '.'), style);
     }
 }
-

@@ -119,10 +119,7 @@ void kt_term_glyph(struct kt_terminal_model *t, uint32_t cp) {
         if (c->cells[(size_t)s->y * (size_t)c->stride + (size_t)c->width - 1].width == 2)
             c->cells[(size_t)s->y * (size_t)c->stride + (size_t)c->width - 1] = kt_term_blank(t);
     }
-    kt_put(c, s->x, s->y, cp, KT_BASE);
-    cell->attributes = t->pen.attributes;
-    cell->foreground = t->pen.foreground; cell->background = t->pen.background;
-    if (width == 2) { cell[1].attributes = cell->attributes; cell[1].foreground = cell->foreground; cell[1].background = cell->background; }
+    kt_put(c, s->x, s->y, cp, kt_cell_style(&t->pen));
     s->x += width;
     if (s->x >= c->width) { s->x = c->width - 1; s->wrap_pending = t->autowrap; }
 }
@@ -144,8 +141,8 @@ void kt_term_restore(struct kt_terminal_model *t) {
 void kt_term_reset(struct kt_terminal_model *t) {
     int i;
     memset(&t->pen, 0, sizeof(t->pen));
-    t->pen.foreground = t->pen.background = KT_COLOR_DEFAULT;
-    t->pen.attributes = KT_EXPLICIT; t->pen.width = 1; t->pen.glyph = ' ';
+    t->pen.foreground = t->pen.background = KT_DEFAULT;
+    t->pen.width = 1; t->pen.glyph = ' ';
     t->alternate_active = t->origin = t->insert = t->application_cursor = t->bracketed_paste = t->mouse_sgr = false;
     t->autowrap = t->cursor_visible = true; t->mouse_mode = 0;
     t->history_count = t->history_start = 0;

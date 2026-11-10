@@ -16,6 +16,8 @@ static const char *const mouse_off[] = {"", "\033[?1000l", "\033[?1002l", "\033[
 struct kt_canvas *kt_frame_canvas(struct kt_frame *frame) { return &frame->canvas; }
 int kt_frame_columns(const struct kt_frame *frame) { return frame->canvas.width; }
 int kt_frame_rows(const struct kt_frame *frame) { return frame->canvas.height; }
+enum kt_profile kt_frame_profile(const struct kt_frame *frame) { return frame->paint.profile; }
+const struct kt_theme *kt_frame_theme(const struct kt_frame *frame) { return frame->paint.theme; }
 
 void kt_frame_cursor(struct kt_frame *frame, int x, int y) {
     frame->cursor = x >= 0 && y >= 0 && x < frame->canvas.width && y < frame->canvas.height;
@@ -215,7 +217,7 @@ static void margin_erase(struct kt_program *p) {
 
 static bool cells_emit(struct kt_program *p) {
     bool full = !p->presenter.valid;
-    if (!kt_present(&p->presenter, &p->canvas, p->out, p->app->style, p->model)) return false;
+    if (!kt_present(&p->presenter, &p->canvas, p->out, &p->paint)) return false;
     if (full) margin_erase(p);
     return true;
 }
@@ -226,6 +228,7 @@ static void frame_begin(struct kt_program *p, struct kt_frame *frame) {
     frame->title[0] = '\0';
     kt_clear(&p->canvas, KT_BASE);
     frame->canvas = p->canvas;
+    frame->paint = p->paint;
     frame->mouse = p->options.mouse >= KT_MOUSE_OFF && p->options.mouse <= KT_MOUSE_ALL
                        ? p->options.mouse : KT_MOUSE_OFF;
 }

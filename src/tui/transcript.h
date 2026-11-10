@@ -44,7 +44,7 @@ size_t transcript_rows(const struct transcript *t, int width);
 /* Draws wrapped rows [first, first + height) of the last parsed line into
  * rows y.. of the area; cells without their own style take tone. */
 int transcript_draw(const struct transcript *t, struct kt_canvas *c, struct kt_rect area,
-                    size_t first, enum kt_style tone, bool color);
+                    size_t first, struct kt_style tone, bool color);
 /* Lays out a whole document into area: trailing blank lines are omitted,
  * unified diffs are toned and provider hints are detected. */
 void transcript_render(struct transcript *t, struct kt_canvas *c, struct kt_rect area,

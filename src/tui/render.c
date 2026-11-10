@@ -19,21 +19,58 @@ bool parse_theme(const char *name, int *theme) {
     return false;
 }
 
-/* Palette order follows enum tone: base, border, title, selected, warning,
- * strong, success, muted, focus. Terminal mode keeps the user's base colors. */
-void emit_style(const struct app *app, FILE *out, enum tone tone) {
-    static const char *palettes[3][9] = {
-        {"\033[0m", "\033[0;36m", "\033[0;1;36m", "\033[0;1;7m", "\033[0;33m", "\033[0;1m",
-         "\033[0;32m", "\033[0;2m", "\033[0;1;36m"},
-        {"\033[0;38;5;252;48;5;234m", "\033[0;38;5;66;48;5;234m", "\033[0;1;38;5;117;48;5;234m",
-         "\033[0;38;5;16;48;5;117m", "\033[0;38;5;214;48;5;234m", "\033[0;1;38;5;252;48;5;234m",
-         "\033[0;38;5;114;48;5;234m", "\033[0;38;5;245;48;5;234m", "\033[0;1;38;5;117;48;5;234m"},
-        {"\033[0;38;5;16;48;5;255m", "\033[0;38;5;67;48;5;255m", "\033[0;1;38;5;24;48;5;255m",
-         "\033[0;1;38;5;231;48;5;24m", "\033[0;38;5;130;48;5;255m", "\033[0;1;38;5;16;48;5;255m",
-         "\033[0;38;5;28;48;5;255m", "\033[0;38;5;245;48;5;255m", "\033[0;1;38;5;24;48;5;255m"}
-    };
-    if (tone < TONE_BASE || tone > TONE_FOCUS) tone = TONE_BASE;
-    if (app->paint) fputs(palettes[app->theme][tone], out);
+/* The three themes, as palette entries so a 256-colour terminal shows exactly
+ * these. Terminal keeps the user's own colours and background: muted is dim
+ * and the selection is bold reverse video. Without colour (NO_COLOR) every
+ * theme falls back to those same attributes. A 16-colour terminal gets the
+ * nearest of its own colours, or the one named here where nearest would be a
+ * grey that loses the meaning. */
+static const struct kt_theme themes[3] = {
+    {"terminal", {
+        [KT_TOKEN_MUTED] = {KT_DEFAULT, 0, 0, KT_DIM, 0},
+        [KT_TOKEN_SELECTION] = {KT_DEFAULT, 0, 0, KT_REVERSE, 0},
+        [KT_TOKEN_ON_SELECTION] = {KT_DEFAULT, 0, 0, KT_BOLD, 0},
+        [KT_TOKEN_BORDER] = {KT_INDEX(6), 0, 0, 0, 0},
+        [KT_TOKEN_ACCENT] = {KT_INDEX(6), 0, 0, 0, 0},
+        [KT_TOKEN_SUCCESS] = {KT_INDEX(2), 0, 0, 0, 0},
+        [KT_TOKEN_WARNING] = {KT_INDEX(3), 0, 0, 0, 0}}},
+    {"dark", {
+        [KT_TOKEN_TEXT] = {KT_INDEX(252), 0, 0, 0, 0},
+        [KT_TOKEN_MUTED] = {KT_INDEX(245), 0, 0, 0, KT_DIM},
+        [KT_TOKEN_SURFACE] = {KT_INDEX(234), 0, 0, 0, 0},
+        [KT_TOKEN_SELECTION] = {KT_INDEX(117), 0, KT_INDEX(14), 0, KT_REVERSE},
+        [KT_TOKEN_ON_SELECTION] = {KT_INDEX(16), 0, 0, 0, KT_BOLD},
+        [KT_TOKEN_BORDER] = {KT_INDEX(66), 0, KT_INDEX(6), 0, 0},
+        [KT_TOKEN_ACCENT] = {KT_INDEX(117), 0, KT_INDEX(14), 0, 0},
+        [KT_TOKEN_SUCCESS] = {KT_INDEX(114), 0, KT_INDEX(10), 0, 0},
+        [KT_TOKEN_WARNING] = {KT_INDEX(214), 0, 0, 0, 0}}},
+    {"light", {
+        [KT_TOKEN_TEXT] = {KT_INDEX(16), 0, 0, 0, 0},
+        [KT_TOKEN_MUTED] = {KT_INDEX(245), 0, 0, 0, KT_DIM},
+        [KT_TOKEN_SURFACE] = {KT_INDEX(255), 0, 0, 0, 0},
+        [KT_TOKEN_SELECTION] = {KT_INDEX(24), 0, KT_INDEX(4), 0, KT_REVERSE},
+        [KT_TOKEN_ON_SELECTION] = {KT_INDEX(231), 0, 0, KT_BOLD, 0},
+        [KT_TOKEN_BORDER] = {KT_INDEX(67), 0, KT_INDEX(4), 0, 0},
+        [KT_TOKEN_ACCENT] = {KT_INDEX(24), 0, KT_INDEX(4), 0, 0},
+        [KT_TOKEN_SUCCESS] = {KT_INDEX(28), 0, 0, 0, 0},
+        [KT_TOKEN_WARNING] = {KT_INDEX(130), 0, KT_INDEX(3), 0, 0}}}
+};
+
+const struct kt_theme *tui_theme(int theme) { return &themes[theme >= 0 && theme < 3 ? theme : 0]; }
+
+/* The style of a tone; anything else is the base text. */
+struct kt_style tone_style(int tone) {
+    switch (tone) {
+    case TONE_BORDER: return KT_BORDER;
+    case TONE_TITLE: return KT_TITLE;
+    case TONE_SELECTED: return KT_SELECTED;
+    case TONE_WARNING: return KT_WARNING;
+    case TONE_STRONG: return KT_STRONG;
+    case TONE_SUCCESS: return KT_SUCCESS;
+    case TONE_MUTED: return KT_MUTED;
+    case TONE_FOCUS: return KT_FOCUS;
+    default: return KT_BASE;
+    }
 }
 
 void style(struct app *app, enum tone tone) { app->tone = (int)tone; }
@@ -78,7 +115,7 @@ bool frame_begin(struct app *app, bool headless) {
     int width = app->cols > 512 ? 511 : app->cols - 1;
     int height = app->rows > 256 ? 256 : app->rows;
     if (width < 1 || height < 1) return false;
-    app->paint = !headless && !app->no_color;
+    (void)headless;
     if (!frame_canvas(app, width, height)) return false;
     kt_clear(&app->frame, KT_BASE);
     app->line = 0; app->tone = TONE_BASE; app->tab_count = 0;
@@ -92,7 +129,7 @@ void frame_end(struct app *app, unsigned frame, bool headless) {
     int y;
     if (!headless) return;
     printf("FRAME %u %dx%d\n", frame, app->cols, app->rows);
-    for (y = 0; y < app->frame.height; y++) { (void)kt_write_row(&app->frame, y, stdout, NULL, NULL); putchar('\n'); }
+    for (y = 0; y < app->frame.height; y++) { (void)kt_write_row(&app->frame, y, stdout, NULL); putchar('\n'); }
     fflush(stdout);
 }
 
@@ -103,14 +140,21 @@ bool frame_content(struct app *app, struct kt_canvas *out) {
     return kt_canvas_view(out, &app->frame, r);
 }
 
-static void text_at(struct app *app, int x, int width, enum kt_style tone, const char *text) {
+static void text_at(struct app *app, int x, int width, struct kt_style tone, const char *text) {
     if (width < 1) return;
     kt_text(&app->frame, (struct kt_rect){x, app->line, width, 1}, text, tone);
 }
 
 /* Fixed-width column inside the content area. Text is clipped to width. */
-void column(struct app *app, int x, int width, enum kt_style tone, const char *text) {
+void column(struct app *app, int x, int width, struct kt_style tone, const char *text) {
     text_at(app, app->content_x + x, width, tone, text);
+}
+
+/* One line of the content area, in a style. */
+static void line_text(struct app *app, struct kt_style tone, const char *text) {
+    if (app->line >= app->limit) return;
+    text_at(app, app->content_x, app->content_width, tone, text);
+    app->line++;
 }
 
 void linef(struct app *app, const char *format, ...) {
@@ -120,8 +164,7 @@ void linef(struct app *app, const char *format, ...) {
     va_start(args, format);
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
-    text_at(app, app->content_x, app->content_width, (enum kt_style)app->tone, buffer);
-    app->line++;
+    line_text(app, tone_style(app->tone), buffer);
 }
 
 /* Internal session tokens; user-facing labels come from status_label. */
@@ -143,7 +186,7 @@ const char *status_label(const struct head *head) {
     return "stopped";
 }
 
-enum kt_style status_tone(const struct head *head) {
+struct kt_style status_tone(const struct head *head) {
     const char *status = display_status(head);
     if (!strcmp(status, "LIVE")) return KT_SUCCESS;
     if (!strcmp(status, "STOPPED")) return KT_MUTED;
@@ -191,22 +234,21 @@ void recovery_explain(const struct recovery *item, char *title, size_t title_siz
 }
 
 /* Wrap plain text into the content area. */
-void paragraph(struct app *app, const char *text, enum kt_style tone) {
+void paragraph(struct app *app, const char *text, struct kt_style tone) {
     size_t length = strlen(text), offset = 0;
     size_t width = (size_t)app->content_width;
-    int saved = app->tone;
-    app->tone = (int)tone;
     while (offset < length && app->line < app->limit) {
+        char line[2048];
         size_t chunk = length - offset, cut;
         if (chunk > width) {
             chunk = width;
             for (cut = chunk; cut > width / 2; cut--) if (text[offset + cut] == ' ') { chunk = cut; break; }
         }
-        linef(app, "%.*s", (int)chunk, text + offset);
+        snprintf(line, sizeof(line), "%.*s", (int)chunk, text + offset);
+        line_text(app, tone, line);
         offset += chunk;
         while (offset < length && text[offset] == ' ') offset++;
     }
-    app->tone = saved;
 }
 
 static struct transcript *view_transcript(struct app *app) {
@@ -235,7 +277,7 @@ static size_t plain_rows(const char *text, size_t length, int width) {
     return length <= room ? 1 : 1 + (length - room + room - 2) / (room - 1);
 }
 
-size_t transcript_line_view(struct app *app, const char *text, size_t length, enum kt_style tone, size_t row, size_t scroll) {
+size_t transcript_line_view(struct app *app, const char *text, size_t length, struct kt_style tone, size_t row, size_t scroll) {
     struct transcript *t = view_transcript(app);
     size_t rows = plain_rows(text, length, app->content_width);
     if (rows && (row + rows <= scroll || app->line >= app->limit)) return rows;
@@ -253,8 +295,8 @@ void section(struct app *app, const char *label) {
     style(app, TONE_BORDER); linef(app, "%s", label); style(app, TONE_BASE);
 }
 
-void pair(struct app *app, const char *left_label, const char *left, enum kt_style left_tone,
-                 const char *right_label, const char *right, enum kt_style right_tone) {
+void pair(struct app *app, const char *left_label, const char *left, struct kt_style left_tone,
+                 const char *right_label, const char *right, struct kt_style right_tone) {
     if (app->line >= app->limit) return;
     if (app->content_width < 56) {
         column(app, 0, 11, KT_MUTED, left_label); column(app, 12, app->content_width - 12, left_tone, left); app->line++;
@@ -381,7 +423,7 @@ void chrome_header(struct app *app, struct kt_canvas *c, const char *title) {
 
 /* A partly entered chord takes the status line until it completes: its keys
  * so far and the keys that may follow. */
-void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, enum kt_style tone, const char *hints) {
+void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone, const char *hints) {
     char pending[512];
     int height = c->height;
     if (key_pending_text(app, pending, sizeof(pending))) {
@@ -413,7 +455,7 @@ static bool outline_marked(const struct app *app, const struct outline_row *row)
     return row && row->kind == OUTLINE_HEAD && marked_index(app, app->model.heads[row->head].branch) < app->marked_count;
 }
 
-static enum kt_style outline_tone(const struct outline_row *row, bool selected) {
+static struct kt_style outline_tone(const struct outline_row *row, bool selected) {
     if (!row || row->kind == OUTLINE_RETIRED) return KT_MUTED;
     return selected ? KT_SELECTED : KT_BASE;
 }
@@ -425,7 +467,7 @@ static void outline_line(struct app *app, const struct outline_row *row, bool se
     struct head_columns k;
     struct outline_text t;
     char cell[TEXT + 96];
-    enum kt_style row_tone = outline_tone(row, selected);
+    struct kt_style row_tone = outline_tone(row, selected);
     if (app->line >= app->limit) return;
     head_row_layout(width, &k);
     if (row) outline_row_text(app, row, &t);
@@ -719,7 +761,7 @@ static long snapshot_age(time_t observed_at, bool headless) {
 static long snapshot_limit(const struct app *app) {
     return 2L * HYDRA_TUI_REFRESH_SECONDS + (app->fleet ? (long)HYDRA_FLEET_TUI_REQUEST_SECONDS : 0L);
 }
-enum kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size) {
+struct kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size) {
     long age = snapshot_age(observed_at, headless), limit = snapshot_limit(app);
     if (!headless && observed_at && (stale || age > limit)) clock_mark();
     if (stale && observed_at) { snprintf(out, size, "STALE: last good snapshot, updated %lds ago", age); return KT_WARNING; }
@@ -736,11 +778,11 @@ static void status_marked(struct app *app, char *out, size_t size) {
              app->notice[0] ? sep : "", app->notice);
 }
 
-static void status_line(struct app *app, char *out, size_t size, enum kt_style *tone, bool headless) {
+static void status_line(struct app *app, char *out, size_t size, struct kt_style *tone, bool headless) {
     bool stale = app->view == 5 ? app->workflow_stale : app->snapshot_stale;
     const char *sep = dot(app);
     char fresh[96];
-    enum kt_style fresh_tone = snapshot_freshness(app, app->view == 5 ? app->workflow_at : app->snapshot_at, stale, headless, fresh, sizeof(fresh));
+    struct kt_style fresh_tone = snapshot_freshness(app, app->view == 5 ? app->workflow_at : app->snapshot_at, stale, headless, fresh, sizeof(fresh));
     *tone = KT_MUTED;
     if (app->marked_count) { status_marked(app, out, size); *tone = KT_STRONG; return; }
     if (stale && app->snapshot_error[0]) { snprintf(out, size, "%s%s%s", fresh, sep, app->snapshot_error); *tone = KT_WARNING; return; }
@@ -836,7 +878,7 @@ static const char *panel_title(struct app *app, char *out, size_t size) {
 
 void render(struct app *app, unsigned frame, bool headless) {
     char status[512], title[TEXT];
-    enum kt_style tone;
+    struct kt_style tone;
     app->hit_count = 0U;
     app->hit_cols = app->cols; app->hit_height = app->rows; app->hit_view = app->view;
     app->hit_tabs = true;
@@ -845,14 +887,12 @@ void render(struct app *app, unsigned frame, bool headless) {
     }
     if (!frame_begin(app, headless)) return;
     app->limit = app->rows - 3;
-    app->boxed = true;
     chrome_header(app, &app->frame, view_titles[app->view]);
     if (app->rows >= 6) kt_panel_styled(&app->frame, (struct kt_rect){0, 2, app->frame.width, app->frame.height - 4},
                                         panel_title(app, title, sizeof(title)), KT_BORDER, KT_STRONG);
     app->line = 3;
     style(app, TONE_BASE);
     render_content(app);
-    app->boxed = false;
     app->limit = app->rows;
     status_line(app, status, sizeof(status), &tone, headless);
     chrome_footer(app, &app->frame, status, tone, hint_line(app));

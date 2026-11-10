@@ -4,7 +4,7 @@
 #endif
 #include "internal.h"
 
-static enum kt_style host_tone(const struct host_observation *host, bool selected) {
+static struct kt_style host_tone(const struct host_observation *host, bool selected) {
     if (selected) return KT_SELECTED;
     if (!strcmp(host->state, "failed") || !strcmp(host->freshness, "stale") || !strcmp(host->connection, "unreachable")) return KT_WARNING;
     return KT_BASE;

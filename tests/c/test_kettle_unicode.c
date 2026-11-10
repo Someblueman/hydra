@@ -47,11 +47,11 @@ int main(void) {
     kt_text(&c, (struct kt_rect){7,0,1,1}, "e\xcc\x81", KT_BASE);
     assert(cells[7].glyph == 'e' && cells[7].combining[0] == 0x301);
     assert(kt_present_init(&p, old, 24));
-    assert(kt_present(&p, &c, out, NULL, NULL));
+    assert(kt_present(&p, &c, out, NULL));
     before = ftell(out);
     kt_put(&c, 6, 0, 'x', KT_SELECTED); /* overwrite wide continuation */
     assert(cells[5].glyph == ' ' && cells[5].width == 1 && cells[6].glyph == 'x');
-    assert(kt_present(&p, &c, out, NULL, NULL));
+    assert(kt_present(&p, &c, out, NULL));
     assert(fseek(out, before, SEEK_SET) == 0);
     memset(buffer, 0, sizeof(buffer));
     assert(fread(buffer, 1, sizeof(buffer)-1, out) > 0);

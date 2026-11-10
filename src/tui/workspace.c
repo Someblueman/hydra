@@ -152,7 +152,7 @@ static void tree_member(struct workspace_tree_build *b, size_t head, unsigned de
     const char *role=head_run_role(app,h);
     snprintf(b->w->member_labels[head],sizeof(b->w->member_labels[head]),"%s%s%s",role ? role : "",role ? " " : "",h->branch);
     if (head==app->selected && !app->run_row && !b->w->run_selected) b->chosen=b->count;
-    (void)tree_add(b,(struct kt_tree_node){b->w->member_labels[head],head,depth,false,head_list_tone(app,h)==KT_SUCCESS ? KT_BASE : head_list_tone(app,h)});
+    (void)tree_add(b,(struct kt_tree_node){b->w->member_labels[head],head,depth,false,kt_style_equal(head_list_tone(app,h),KT_SUCCESS) ? KT_BASE : head_list_tone(app,h)});
 }
 
 static void tree_run(struct workspace_tree_build *b, size_t run, size_t owner, unsigned depth) {
@@ -172,7 +172,7 @@ static void tree_user_head(struct workspace_tree_build *b, size_t head) {
     size_t r;
     if (head==app->selected && !b->w->run_selected) { b->chosen=b->count; b->w->selection_initialized=true; }
     if (!tree_add(b,(struct kt_tree_node){h->branch,head,1,!head_collapsed(b->w,h->branch),
-        app->fleet ? KT_BASE : head_list_tone(app,h)==KT_SUCCESS ? KT_BASE : head_list_tone(app,h)})) return;
+        app->fleet ? KT_BASE : kt_style_equal(head_list_tone(app,h),KT_SUCCESS) ? KT_BASE : head_list_tone(app,h)})) return;
     for (r=0;!app->fleet && app->workflows && r<app->workflows->run_count;r++)
         if (run_owner_head(app,r)==head) tree_run(b,r,head,2);
 }
@@ -356,7 +356,7 @@ static void workspace_empty(struct app *app, struct kt_canvas *c) {
     dashboard_text(c, 0, y++, c->width, KT_MUTED, "n new task   H hosts   : more actions   ? help");
 }
 
-static enum kt_style details_session(struct app *app, const struct head *h, char *text, size_t size) {
+static struct kt_style details_session(struct app *app, const struct head *h, char *text, size_t size) {
     if (app->fleet) { snprintf(text, size, "Session   %s", h->desired); return KT_BASE; }
     if (head_headless(h)) { snprintf(text, size, "Terminal  headless (no terminal)"); return KT_MUTED; }
     snprintf(text, size, "Session   %s", status_label(h));
@@ -380,13 +380,13 @@ static void details_where(struct app *app, const struct head *h, char *text, siz
              app->fleet ? h->remote_project : app->links ? app->links->root : "this project");
 }
 
-static enum kt_style details_changes(struct app *app, const struct head *h, char *text, size_t size) {
+static struct kt_style details_changes(struct app *app, const struct head *h, char *text, size_t size) {
     if (app->fleet || !h->head_id[0]) { snprintf(text,size,"Changes   unknown"); return KT_MUTED; }
     snprintf(text,size,"Changes   %u file%s not yet committed%s%u queued",h->diff,h->diff==1 ? "" : "s",dot(app),h->queue);
     return KT_BASE;
 }
 
-static enum kt_style details_reported(struct app *app, const struct head *h, char *text, size_t size) {
+static struct kt_style details_reported(struct app *app, const struct head *h, char *text, size_t size) {
     const char *reported = h->declared[0] ? h->declared : "nothing yet";
     if (app->fleet || !h->head_id[0]) { snprintf(text,size,"Reported  %s", reported); return KT_BASE; }
     snprintf(text, size, "Reported  %s", reported);
@@ -408,7 +408,7 @@ static void details_run(struct app *app, const struct head *h, char *text, size_
 }
 
 /* One line of the selected-work pane; returns its tone. */
-static enum kt_style details_line(struct app *app, const struct head *h, size_t index, char *text, size_t size) {
+static struct kt_style details_line(struct app *app, const struct head *h, size_t index, char *text, size_t size) {
     text[0] = '\0';
     switch (index) {
     case 0: snprintf(text, size, "%s", h->branch); return KT_STRONG;
@@ -433,12 +433,12 @@ static void native_workspace_details(struct app *app, struct kt_canvas *c, size_
     if (!h) { workspace_empty(app, c); return; }
     for (row = 0; row < c->height; row++) {
         char text[1024];
-        enum kt_style tone = details_line(app, h, scroll + (size_t)row, text, sizeof(text));
+        struct kt_style tone = details_line(app, h, scroll + (size_t)row, text, sizeof(text));
         kt_text(c, (struct kt_rect){0,row,c->width,1}, text, tone);
     }
 }
 
-static enum kt_style activity_host_line(struct app *app, const struct host_observation *host, char *text, size_t size) {
+static struct kt_style activity_host_line(struct app *app, const struct host_observation *host, char *text, size_t size) {
     char count[24]="unknown";
     if (!host) { text[0]='\0'; return KT_BASE; }
     if (strcmp(host->state,"failed")) snprintf(count,sizeof(count),"%u",host->heads);
@@ -447,7 +447,7 @@ static enum kt_style activity_host_line(struct app *app, const struct host_obser
     return KT_BASE;
 }
 
-static enum kt_style activity_fleet_line(struct app *app, size_t index, char *text, size_t size) {
+static struct kt_style activity_fleet_line(struct app *app, size_t index, char *text, size_t size) {
     if (!index) { snprintf(text,size,"Hosts: %zu observed", app->model.host_count); return KT_STRONG; }
     if (index<=app->model.host_count) return activity_host_line(app, &app->model.hosts[index-1], text, size);
     if (index==app->model.host_count+1) { snprintf(text,size,"CPU and memory are not measured"); return KT_MUTED; }
@@ -464,7 +464,7 @@ static void activity_summary(struct app *app, size_t attention, char *text, size
 }
 
 /* Rows 2-4: counters for the selected head with a readable record. */
-static enum kt_style activity_head_line(struct app *app, const struct head *h, size_t index, char *text, size_t size) {
+static struct kt_style activity_head_line(struct app *app, const struct head *h, size_t index, char *text, size_t size) {
     if (index == 2) { snprintf(text, size, "Selected %s%s%u events%s%u messages%s%u signals", h->branch, dot(app), h->events, dot(app), h->messages, dot(app), h->signals); return KT_BASE; }
     if (index == 3) { snprintf(text, size, "Approval requests %u of %u approved%s%u queued entries", h->approved, h->gates, dot(app), h->queue); return h->gates > h->approved ? KT_WARNING : KT_BASE; }
     if (index == 4) { snprintf(text, size, "Claims %u%sscopes %u  (coordination with other heads)", h->claims, dot(app), h->scopes); return KT_MUTED; }
@@ -472,7 +472,7 @@ static enum kt_style activity_head_line(struct app *app, const struct head *h, s
 }
 
 /* Rows 6 onward: recovery findings in plain language. */
-static enum kt_style activity_recovery_line(struct app *app, size_t index, char *text, size_t size) {
+static struct kt_style activity_recovery_line(struct app *app, size_t index, char *text, size_t size) {
     size_t findings = app->model.recovery_count;
     if (!findings) return KT_BASE;
     if (index == 6) { snprintf(text, size, "NEEDS REPAIR"); return KT_BORDER; }
@@ -486,12 +486,12 @@ static enum kt_style activity_recovery_line(struct app *app, size_t index, char 
 }
 
 /* A selected head without a readable record has no counters to show. */
-static enum kt_style activity_missing_record(const struct head *h, size_t index, char *text, size_t size) {
+static struct kt_style activity_missing_record(const struct head *h, size_t index, char *text, size_t size) {
     if (index==2 && h) { snprintf(text, size, "No readable head record for %s; counters unknown", h->branch); return KT_WARNING; }
     return KT_BASE;
 }
 
-static enum kt_style activity_line(struct app *app, const struct head *h, size_t attention, size_t index, char *text, size_t size) {
+static struct kt_style activity_line(struct app *app, const struct head *h, size_t attention, size_t index, char *text, size_t size) {
     text[0] = '\0';
     if (app->fleet) return activity_fleet_line(app, index, text, size);
     if (index == 0) { activity_summary(app, attention, text, size); return KT_STRONG; }
@@ -507,7 +507,7 @@ static void native_workspace_activity(struct app *app, struct kt_canvas *c, size
     int row;
     for (row = 0; row < c->height; row++) {
         char text[1024];
-        enum kt_style tone = activity_line(app, h, attention, scroll + (size_t)row, text, sizeof(text));
+        struct kt_style tone = activity_line(app, h, attention, scroll + (size_t)row, text, sizeof(text));
         kt_text(c, (struct kt_rect){0,row,c->width,1}, text, tone);
     }
 }
@@ -703,7 +703,7 @@ bool render_native_workspace(struct app *app, unsigned frame, bool headless) {
     {
         char fresh[96];
         const char *notice=app->snapshot_stale ? app->snapshot_error : app->notice;
-        enum kt_style tone = snapshot_freshness(app, app->snapshot_at, app->snapshot_stale, headless, fresh, sizeof(fresh));
+        struct kt_style tone = snapshot_freshness(app, app->snapshot_at, app->snapshot_stale, headless, fresh, sizeof(fresh));
         if (!app->snapshot_stale && app->notice[0]) tone = KT_BASE;
         if (app->snapshot_stale) snprintf(status, sizeof(status), "%s%s%s", fresh, notice[0] ? sep : "", notice);
         else {

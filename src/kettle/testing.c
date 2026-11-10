@@ -217,11 +217,15 @@ static int test_exec(void *context, char *const argv[]) {
 
 static void test_suspend(void *context) { ((struct kt_test *)context)->suspends++; }
 
+/* The pretended terminal shows every colour, whatever the environment the
+ * test itself runs in. */
+static enum kt_profile test_profile(void *context) { (void)context; return KT_PROFILE_TRUECOLOR; }
+
 static const struct kt_backend test_backend = {
     test_now, test_begin, test_end, test_raw, test_size, test_write, test_read,
     test_wait, test_restore, test_leave, test_post, test_posted, test_spawn, test_child_ready,
     test_child_read, test_child_signal, test_child_reap, test_child_close,
-    test_exec, test_suspend, NULL
+    test_exec, test_suspend, NULL, test_profile
 };
 
 /* ---- lifetime ----------------------------------------------------------- */

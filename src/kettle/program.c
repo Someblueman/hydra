@@ -315,6 +315,11 @@ void kt_cmd_cancel(struct kt_cmds *cmds, uint64_t id) {
 void kt_cmd_suspend(struct kt_cmds *cmds) { (void)command(cmds, KT_CMD_SUSPEND); }
 void kt_cmd_repaint(struct kt_cmds *cmds) { (void)command(cmds, KT_CMD_REPAINT); }
 
+void kt_cmd_theme(struct kt_cmds *cmds, const struct kt_theme *theme) {
+    struct kt_cmd *cmd = command(cmds, KT_CMD_THEME);
+    if (cmd) cmd->u.theme = theme ? theme : &kt_theme_terminal;
+}
+
 void kt_cmd_post(struct kt_cmds *cmds, const struct kt_msg *msg) {
     struct kt_cmd *cmd = msg ? command(cmds, KT_CMD_POST) : NULL;
     if (cmd) cmd->u.msg = *msg;
@@ -401,6 +406,8 @@ static void perform_one(struct kt_program *p, struct kt_cmd *cmd, size_t *posts)
     /* Posts go ahead of everything already waiting, in the order queued. */
     case KT_CMD_POST: (void)queue_insert(p, (*posts)++, &cmd->u.msg, NULL); break;
     case KT_CMD_REPAINT: kt_present_invalidate(&p->presenter); break;
+    /* The presenter repaints when it is handed another theme. */
+    case KT_CMD_THEME: p->paint.theme = cmd->u.theme; p->dirty = true; break;
     }
 }
 
@@ -566,6 +573,8 @@ struct kt_program *kt_program_new_backend(const struct kt_app *app, void *model,
     p->app = app; p->model = model; p->options = normal;
     p->backend = backend; p->context = context;
     p->cmds.program = p;
+    p->paint.theme = normal.theme ? normal.theme : &kt_theme_terminal;
+    p->paint.profile = normal.profile;
     p->frame_interval = (uint64_t)(1000 / normal.fps);
     p->escape_at = KT_NEVER;
     return p;
@@ -606,6 +615,14 @@ static void state_release(struct kt_program *p) {
     p->paste_length = p->paste_capacity = p->input_at = p->input_length = 0;
 }
 
+/* The profile the options name, or else what the backend finds. */
+static enum kt_profile profile_settled(const struct kt_program *p) {
+    enum kt_profile profile = p->options.profile;
+    if (profile <= KT_PROFILE_AUTO || profile > KT_PROFILE_TRUECOLOR)
+        profile = p->backend->profile ? p->backend->profile(p->context) : KT_PROFILE_NONE;
+    return profile <= KT_PROFILE_AUTO || profile > KT_PROFILE_TRUECOLOR ? KT_PROFILE_NONE : profile;
+}
+
 bool kt_program_begin(struct kt_program *p) {
     if (!p || p->begun || !p->backend->begin(p->context)) return false;
     p->begun = p->running = true;
@@ -615,6 +632,7 @@ bool kt_program_begin(struct kt_program *p) {
     kt_input_init(&p->decoder);
     memset(&p->applied, 0, sizeof(p->applied));
     p->reassert = false;
+    p->paint.profile = profile_settled(p);
     p->out = open_memstream(&p->out_bytes, &p->out_size);
     if (!p->out) { kt_program_end(p); return false; }
     if (p->app->init) { p->app->init(p->model, &p->cmds); perform(p); }

@@ -181,8 +181,8 @@ static void claude_width(struct transcript *t, const struct document *d, int wid
     assert(rows < 400 && layout.hints); /* "← for agents" is a provider key hint */
     same_content(&c, rows, d->plain);
     assert(count_glyph(&c, rows, 27) == 0 && count_glyph(&c, rows, '?') == 0);
-    assert(cell_of(&c, rows, "-w\xc3\xb6rld", 0)->foreground == 0xcd3131);
-    assert(cell_of(&c, rows, "+world \xe2\x9c\x93", 0)->foreground == 0x0dbc79);
+    assert(cell_of(&c, rows, "-w\xc3\xb6rld", 0)->foreground == KT_INDEX(1));
+    assert(cell_of(&c, rows, "+world \xe2\x9c\x93", 0)->foreground == KT_INDEX(2));
     assert(cell_of(&c, rows, "\xe7\x95\x8c\xe9\x9d\xa2", 0)->width == 2);
     assert(!cell_of(&c, rows, "\xe7\x95\x8c\xe9\x9d\xa2", 1)->width);
     assert(cell_of(&c, rows, "\xe7\x95\x8c\xe9\x9d\xa2", 2)->glyph == 0x9762);
@@ -191,14 +191,21 @@ static void claude_width(struct transcript *t, const struct document *d, int wid
     assert(find(&c, rows, "/rc", &x) >= 0 && find(&c, rows, "8;id", &x) < 0);
 }
 
-/* NO_COLOR: explicit colors are dropped; text and +/- markers remain. */
+/* The cell's whole style, for comparing with a tone. */
+static struct kt_style look(const struct kt_canvas *c, int rows, const char *needle, int offset) {
+    return kt_cell_style(cell_of(c, rows, needle, offset));
+}
+
+/* NO_COLOR: explicit colors are dropped, so the cell takes the theme's tone
+ * like any unstyled text; text and +/- markers remain. */
 static void claude_no_color(struct transcript *t, const struct document *d) {
     struct transcript_layout layout;
     struct kt_canvas c;
     const struct kt_cell *removed;
     render(t, &c, 80, 400, d, false, &layout);
     removed = cell_of(&c, (int)layout.rows, "-w\xc3\xb6rld", 0);
-    assert(removed->foreground == KT_COLOR_DEFAULT && !(removed->attributes & KT_EXPLICIT));
+    assert(KT_COLOR_KIND(removed->foreground) == KT_KIND_TOKEN && KT_COLOR_KIND(removed->background) == KT_KIND_TOKEN);
+    assert(!removed->attributes);
 }
 
 /* An 80x24 or 140x40 viewport following the newest rows shows exactly the
@@ -244,12 +251,13 @@ static void codex_width(struct transcript *t, const struct document *d, int widt
     rows = (int)layout.rows;
     same_content(&c, rows, d->plain);
     assert(!layout.hints && count_glyph(&c, rows, '?') == 0);
-    assert(cell_of(&c, rows, "-w\xc3\xb6rld", 0)->style == KT_WARNING && !cell_of(&c, rows, "-w\xc3\xb6rld", 0)->attributes);
-    assert(cell_of(&c, rows, "+world", 0)->style == KT_SUCCESS);
-    assert(cell_of(&c, rows, "@@ -1,3 +1,3 @@", 0)->style == KT_BORDER);
-    assert(cell_of(&c, rows, "--- a/greeting.txt", 0)->style == KT_STRONG);
-    assert(cell_of(&c, rows, " hello", 1)->style == KT_BASE);
-    assert((cell_of(&c, rows, "workdir:", 0)->attributes & KT_BOLD) && cell_of(&c, rows, "workdir:", 0)->style == KT_BASE);
+    assert(kt_style_equal(look(&c, rows, "-w\xc3\xb6rld", 0), KT_WARNING));
+    assert(kt_style_equal(look(&c, rows, "+world", 0), KT_SUCCESS));
+    assert(kt_style_equal(look(&c, rows, "@@ -1,3 +1,3 @@", 0), KT_BORDER));
+    assert(kt_style_equal(look(&c, rows, "--- a/greeting.txt", 0), KT_STRONG));
+    assert(kt_style_equal(look(&c, rows, " hello", 1), KT_BASE));
+    /* Captured bold is kept as captured: bold in the terminal's own colours. */
+    assert(kt_style_equal(look(&c, rows, "workdir:", 0), KT_STYLE(KT_DEFAULT, KT_DEFAULT, KT_BOLD)));
     y = find(&c, rows, "LONGLINE:", &x);
     assert(y >= 0 && at(&c, 0, y + 1)->glyph == MARK);
 }
@@ -310,8 +318,8 @@ static void claude_raw_colors(const struct kt_canvas *screen) {
     load(&d, FIXTURES "claude-interactive.screen.ansi");
     memset(&layout, 0, sizeof(layout)); layout.color = true;
     transcript_render(t, &reference, (struct kt_rect){0, 0, 100, 400}, d.data, d.length, &layout);
-    assert(cell_of(screen, 40, "-w\xc3\xb6rld", 0)->foreground == 0xcd3131);
-    assert(cell_of(&reference, (int)layout.rows, "-w\xc3\xb6rld", 0)->foreground == 0xcd3131);
+    assert(cell_of(screen, 40, "-w\xc3\xb6rld", 0)->foreground == KT_INDEX(1));
+    assert(cell_of(&reference, (int)layout.rows, "-w\xc3\xb6rld", 0)->foreground == KT_INDEX(1));
     assert(cell_of(screen, 40, "+world", 0)->foreground == cell_of(&reference, (int)layout.rows, "+world", 0)->foreground);
     assert(cell_of(screen, 40, "Baked for", 0)->foreground == cell_of(&reference, (int)layout.rows, "Baked for", 0)->foreground);
     transcript_free(t);

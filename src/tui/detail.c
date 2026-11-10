@@ -18,7 +18,7 @@ static size_t wrap_chunk(const char *text, size_t length, size_t width) {
 }
 
 /* "Label       text" with the text wrapped under itself. */
-static void labelled_at(struct app *app, int label_width, const char *label, const char *text, enum kt_style tone) {
+static void labelled_at(struct app *app, int label_width, const char *label, const char *text, struct kt_style tone) {
     size_t length = strlen(text), offset = 0, width;
     int saved_x = app->content_x, saved_width = app->content_width;
     if (app->line >= app->limit) return;
@@ -37,7 +37,7 @@ static void labelled_at(struct app *app, int label_width, const char *label, con
     app->content_x = saved_x; app->content_width = saved_width;
 }
 
-static void labelled(struct app *app, const char *label, const char *text, enum kt_style tone) {
+static void labelled(struct app *app, const char *label, const char *text, struct kt_style tone) {
     labelled_at(app, DETAIL_LABEL, label, text, tone);
 }
 
@@ -65,8 +65,8 @@ static const char *role_text(const char *role) {
 
 /* Two labelled values per row where they fit; one per row otherwise, so a
  * long agent or run description is never cut. */
-static void detail_pair(struct app *app, const char *left_label, const char *left, enum kt_style left_tone,
-                        const char *right_label, const char *right, enum kt_style right_tone) {
+static void detail_pair(struct app *app, const char *left_label, const char *left, struct kt_style left_tone,
+                        const char *right_label, const char *right, struct kt_style right_tone) {
     if (app->content_width >= 110) { pair(app, left_label, left, left_tone, right_label, right, right_tone); return; }
     labelled(app, left_label, left, left_tone);
     labelled(app, right_label, right, right_tone);
@@ -83,7 +83,7 @@ static void detail_run_pair(struct app *app, size_t owner, size_t record) {
 /* Reported outcome and group; an empty group is left out of a narrow view. */
 static void detail_reported(struct app *app, const struct head *head, const char *group) {
     const char *reported = head->declared[0] ? head->declared : "nothing yet";
-    enum kt_style tone = head->declared[0] ? KT_STRONG : KT_MUTED;
+    struct kt_style tone = head->declared[0] ? KT_STRONG : KT_MUTED;
     if (app->content_width < 110 && !strcmp(group, "none")) labelled(app, "Reported", reported, tone);
     else detail_pair(app, "Reported", reported, tone, "Group", group, KT_BASE);
 }

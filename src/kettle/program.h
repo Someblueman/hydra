@@ -154,6 +154,13 @@ void kt_cmd_post(struct kt_cmds *cmds, const struct kt_msg *msg);
  * to the terminal. */
 void kt_cmd_repaint(struct kt_cmds *cmds);
 
+/* Changes the theme. Cells hold token references, not colours, so nothing is
+ * redrawn by the application: the next frame repaints every cell in the new
+ * theme, in one synchronized update and without erasing the display. The
+ * theme is not copied and must outlive the program; NULL is
+ * kt_theme_terminal. */
+void kt_cmd_theme(struct kt_cmds *cmds, const struct kt_theme *theme);
+
 /* ---- view -------------------------------------------------------------- */
 
 enum kt_mouse_mode { KT_MOUSE_OFF, KT_MOUSE_BUTTONS, KT_MOUSE_DRAG, KT_MOUSE_ALL };
@@ -164,6 +171,11 @@ enum kt_mouse_mode { KT_MOUSE_OFF, KT_MOUSE_BUTTONS, KT_MOUSE_DRAG, KT_MOUSE_ALL
 struct kt_canvas *kt_frame_canvas(struct kt_frame *frame);
 int  kt_frame_columns(const struct kt_frame *frame);
 int  kt_frame_rows(const struct kt_frame *frame);
+/* What the frame will be painted with, for a view that draws something
+ * differently when there is little or no colour (a marker beside a selection
+ * that would otherwise rely on its background). Never KT_PROFILE_AUTO. */
+enum kt_profile kt_frame_profile(const struct kt_frame *frame);
+const struct kt_theme *kt_frame_theme(const struct kt_frame *frame);
 /* Show the terminal cursor at a cell this frame; hidden unless called, and
  * when the cell is outside the frame. */
 void kt_frame_cursor(struct kt_frame *frame, int x, int y);
@@ -187,9 +199,6 @@ struct kt_app {
      * changed the screen; a frame that changed nothing does not delay the
      * next, so the reply to a key shows as soon as it arrives. */
     void (*view)(const void *model, struct kt_frame *frame);
-    /* Maps a cell's semantic style to SGR bytes written to `out`. NULL emits no
-     * styling. (Replaced by themes in the style layer.) */
-    void (*style)(void *model, FILE *out, enum kt_style style);
 };
 
 struct kt_allocator {
@@ -206,6 +215,12 @@ struct kt_options {
     enum kt_mouse_mode mouse;       /* default mouse reporting                    */
     bool no_synchronized_output;    /* do not bracket frames with DEC mode 2026   */
     bool ascii;                     /* canvas draws ASCII fallbacks               */
+    /* What the terminal can show. KT_PROFILE_AUTO (zero) detects it from the
+     * environment when the program begins (kt_profile_detect: NO_COLOR,
+     * COLORTERM, TERM, CLICOLOR_FORCE); any other value is used as given. */
+    enum kt_profile profile;
+    /* The theme to start with; NULL is kt_theme_terminal. Not copied. */
+    const struct kt_theme *theme;
     int fps;                        /* cap on frames that change the screen; 0 = 60 */
     int escape_ms;                  /* wait before a lone ESC is Escape; 0 = 50   */
     /* Wait before an escape sequence that began but did not finish is given

@@ -182,7 +182,7 @@ const char *head_list_status(const struct app *app, const struct head *h) {
     return step_state_word(step->state);
 }
 
-enum kt_style head_list_tone(const struct app *app, const struct head *h) {
+struct kt_style head_list_tone(const struct app *app, const struct head *h) {
     const struct workflow_node *step;
     if (app->fleet) return KT_BASE;
     if (!head_headless(h)) return status_tone(h);

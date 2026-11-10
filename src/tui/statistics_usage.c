@@ -43,7 +43,7 @@ void statistics_scope_tokens(const struct hs_summary *s, char *out, size_t size)
 }
 
 /* Word-wraps text into at most rows lines of width cells; returns rows used. */
-int statistics_wrap(struct kt_canvas *c, int x, int y, int width, int rows, enum kt_style tone, const char *text) {
+int statistics_wrap(struct kt_canvas *c, int x, int y, int width, int rows, struct kt_style tone, const char *text) {
     int used = 0;
     while (*text && used < rows && width > 0) {
         size_t length = strlen(text), take = length <= (size_t)width ? length : (size_t)width;

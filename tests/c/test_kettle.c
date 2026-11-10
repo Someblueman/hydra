@@ -43,7 +43,7 @@ int main(void) {
     assert(layout.x[0] == 0 && layout.x[1] == 27 && layout.x[2] == 27 && layout.x[3] == 54);
     assert(layout.y[1] != layout.y[2]);
     kt_graph(&canvas, (struct kt_rect){0, 0, 80, 24}, nodes, 4, diamond, 4, &layout, 27, 0, 1);
-    assert(canvas.cells[0].style == KT_SELECTED);
+    assert(kt_style_equal(kt_cell_style(&canvas.cells[0]), KT_SELECTED));
     diamond[3] = (struct kt_edge){3, 0};
     assert(!kt_graph_layout(diamond, 4, 4, &layout));
     diamond[3] = (struct kt_edge){2, 4};
@@ -58,7 +58,7 @@ int main(void) {
     assert(kt_init(&canvas, storage + 1, 80 * 24, 80, 24, false));
     kt_panel(&canvas, (struct kt_rect){0, 0, 80, 24}, "ASCII");
     out = tmpfile(); assert(out);
-    assert(kt_write_row(&canvas, 0, out, NULL, NULL));
+    assert(kt_write_row(&canvas, 0, out, NULL));
     rewind(out);
     assert(fread(text, 1, 80, out) == 80);
     assert(text[0] == '+' && text[2] == ' ' && text[3] == 'A' && text[8] == ' ' && text[9] == '-' && text[79] == '+');

@@ -29,7 +29,7 @@ static void statistics_distribution(struct kt_canvas *c, struct kt_rect r, const
     kt_panel(c, r, "RUN OUTCOMES / recorded");
     for (i = 0; i < HS_STATES && (int)i < r.height - 3; i++) {
         int row = r.y + 2 + (int)i, bar = r.width - 22;
-        enum kt_style tone = i == HS_FAILED || i == HS_BLOCKED || i == HS_UNKNOWN ? KT_WARNING : KT_BASE;
+        struct kt_style tone = i == HS_FAILED || i == HS_BLOCKED || i == HS_UNKNOWN ? KT_WARNING : KT_BASE;
         dashboard_text(c, r.x+2, row, r.width-4, tone, "%-10s %3zu", names[i], s->run_states[i]);
         if (bar > 1) kt_bar(c, (struct kt_rect){r.x+19,row,bar,1}, s->run_states[i], s->runs, tone);
     }
@@ -52,7 +52,7 @@ static void statistics_run_row(const struct statistics_view *v, struct kt_canvas
     char date[40], tokens[64] = "";
     bool wide = r.width > 90, dated = r.width > 70;
     int name_width = wide ? r.width-73 : dated ? r.width-47 : r.width-25;
-    enum kt_style tone = i == v->selected ? KT_SELECTED : hs_state(run->state) == HS_FAILED ? KT_WARNING : KT_BASE;
+    struct kt_style tone = i == v->selected ? KT_SELECTED : hs_state(run->state) == HS_FAILED ? KT_WARNING : KT_BASE;
     statistics_time(run->created, date, sizeof(date));
     if (wide) statistics_run_tokens(v->model, v->visible[i], tokens, sizeof(tokens));
     dashboard_text(c, r.x+2, row, r.width-4, tone, "%c %-*.*s %-18.18s%s%-16s  %s",

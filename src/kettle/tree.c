@@ -73,7 +73,7 @@ void kt_tree_draw(struct kt_tree *t, struct kt_canvas *c, size_t *scroll, bool f
     *scroll = kt_tree_scroll(t, *scroll, c->height);
     for (i = 0; i < t->count && row < c->height; i++) {
         struct kt_tree_node *n = &t->nodes[i];
-        enum kt_style tone = i == t->selected && focused ? KT_SELECTED : n->style;
+        struct kt_style tone = i == t->selected && focused ? KT_SELECTED : n->style;
         int indent = 1 + (int)n->depth * 2, x;
         if (!visible(t, i) || ordinal++ < *scroll) continue;
         for (x = 0; x < c->width; x++) kt_put(c, x, row, ' ', tone);

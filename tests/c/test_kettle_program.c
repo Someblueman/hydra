@@ -94,6 +94,9 @@ static void key_other(struct recorder *r, char key, struct kt_cmds *cmds) {
     if (key == 'C') r->cursor = !r->cursor;
     if (key == 'M') r->all_motion = !r->all_motion;
     if (key == 'T') r->titled = !r->titled;
+    if (key == 'D') kt_cmd_theme(cmds, &kt_theme_dark);
+    if (key == 'G') kt_cmd_theme(cmds, &kt_theme_light);
+    if (key == 'N') kt_cmd_theme(cmds, NULL);
 }
 
 /* A helper that does not return before it has its answer: it runs the loop
@@ -210,12 +213,7 @@ static void recorder_view(const void *model, struct kt_frame *frame) {
     }
 }
 
-static void recorder_style(void *model, FILE *out, enum kt_style style) {
-    (void)model;
-    fputs(style == KT_TITLE ? "\033[1m" : "\033[0m", out);
-}
-
-static const struct kt_app recorder_app = {recorder_init, recorder_update, recorder_view, recorder_style};
+static const struct kt_app recorder_app = {recorder_init, recorder_update, recorder_view};
 
 static struct kt_test *start(struct recorder *r, const struct kt_options *options) {
     struct kt_test *t;
@@ -241,7 +239,12 @@ static void test_first_frame(void) {
     CHECK(length > 8);
     CHECK(!strcmp(bytes + length - 8, "\033[?2026l"));
     CHECK(has(bytes, "\033[?25l"));
-    CHECK(has(bytes, "\033[2;1H\033[1mcaf\xc3\xa9 \xe7\x95\x8c"));
+    /* The first frame does not trust the rendition it finds: it starts from
+     * a reset, then writes only what changes. The title is bold in the
+     * terminal's own cyan; the text after it is plain again. */
+    CHECK(has(bytes, "\033[1;1H\033[0mupdates 1"));
+    CHECK(has(bytes, "\033[2;1H\033[1;36mcaf\xc3\xa9 \xe7\x95\x8c\033[0m "));
+    CHECK(occurrences(bytes, "\033[0m") == 2);
     CHECK(!has(bytes, "\033[?1049h"));
     CHECK(!strcmp(kt_test_row(t, 0), "updates 1"));
     CHECK(!strcmp(kt_test_row(t, 1), "caf\xc3\xa9 \xe7\x95\x8c"));
@@ -261,8 +264,9 @@ static void test_burst_is_one_frame(void) {
     CHECK(r.updates == 4);
     CHECK(r.views == 2);
     CHECK(kt_test_frames(t) == 2);
-    /* Only the changed digit travels, inside one synchronized update. */
-    CHECK(!strcmp(bytes, "\033[?2026h\033[1;9H\033[0m4\033[?2026l"));
+    /* Only the changed digit travels, inside one synchronized update; its
+     * rendition is the one the last frame left, so none is written. */
+    CHECK(!strcmp(bytes, "\033[?2026h\033[1;9H4\033[?2026l"));
     CHECK(length == strlen(bytes));
     CHECK(kt_test_contains(t, "updates 4"));
     kt_test_free(t);
@@ -346,6 +350,73 @@ static void test_repaint_overwrites(void) {
     CHECK(!has(bytes, "\033[2J"));
     CHECK(has(bytes, "\033[5;1H"));
     CHECK(!strcmp(kt_test_screen(t), "updates 3\ncaf\xc3\xa9 \xe7\x95\x8c\n\n\n"));
+    kt_test_free(t);
+}
+
+/* A theme change paints every cell again in the new colours although no
+ * cell's text or style changed: one synchronized update, no erase. */
+static void test_theme_change(void) {
+    const char dark[] = "\033[1;1H\033[0;38;2;217;220;227;48;2;22;24;29mupdates 1";
+    const char light[] = "\033[1;1H\033[0;38;2;31;36;48;48;2;251;251;252mupdates 1";
+    const char blank_rows[] = "\033[3;1H                    \033[4;1H                    ";
+    struct kt_msg nothing = {KT_MSG_USER + 9, 0, {{0}}};
+    struct recorder r;
+    struct kt_options options = {0};
+    struct kt_test *t;
+    const char *bytes;
+    options.theme = &kt_theme_dark;
+    t = start(&r, &options);
+    CHECK(has(kt_test_output(t, NULL), dark));
+    r.updates--;
+    kt_test_type(t, "G");
+    bytes = kt_test_output(t, NULL);
+    CHECK(kt_test_frames(t) == 2);
+    CHECK(!strncmp(bytes, "\033[?2026h\033[1;1H", 14));
+    CHECK(occurrences(bytes, "\033[?2026h") == 1 && occurrences(bytes, "\033[?2026l") == 1);
+    CHECK(!has(bytes, "\033[2J"));
+    CHECK(has(bytes, light));
+    CHECK(has(bytes, "\033[2;1H") && has(bytes, blank_rows));
+    /* The frame gives the terminal back its default rendition. */
+    CHECK(has(bytes, "\033[0m\033[?2026l"));
+    CHECK(!strcmp(kt_test_screen(t), "updates 1\ncaf\xc3\xa9 \xe7\x95\x8c\n\n"));
+    /* The same theme again, and a frame that changes nothing: nothing is written. */
+    r.updates--;
+    kt_test_type(t, "G");
+    CHECK(r.views == 3 && kt_test_frames(t) == 2);
+    r.updates--;
+    kt_test_send(t, &nothing);
+    CHECK(r.views == 4 && kt_test_frames(t) == 2);
+    /* NULL is the terminal's own colours: default background, no colour on plain text. */
+    r.updates--;
+    kt_test_type(t, "N");
+    bytes = kt_test_output(t, NULL);
+    CHECK(kt_test_frames(t) == 3 && !has(bytes, "\033[2J"));
+    CHECK(has(bytes, "\033[1;1H\033[0mupdates 1") && has(bytes, blank_rows));
+    kt_test_free(t);
+}
+
+/* What the terminal can show decides what a style becomes. With no colour
+ * only attributes are written, and nothing at all where there are none. */
+static void test_profiles(void) {
+    struct recorder r;
+    struct kt_options options = {0};
+    struct kt_test *t;
+    const char *bytes;
+    options.theme = &kt_theme_dark;
+    options.profile = KT_PROFILE_NONE;
+    t = start(&r, &options);
+    bytes = kt_test_output(t, NULL);
+    CHECK(has(bytes, "\033[1;1Hupdates 1"));
+    CHECK(has(bytes, "\033[2;1H\033[1mcaf\xc3\xa9 \xe7\x95\x8c\033[0m "));
+    CHECK(!has(bytes, "38;") && !has(bytes, "48;") && occurrences(bytes, "m") == 2);
+    kt_test_free(t);
+    options.profile = KT_PROFILE_256;
+    t = start(&r, &options);
+    CHECK(has(kt_test_output(t, NULL), "\033[1;1H\033[0;38;5;253;48;5;234mupdates 1"));
+    kt_test_free(t);
+    options.profile = KT_PROFILE_16;
+    t = start(&r, &options);
+    CHECK(has(kt_test_output(t, NULL), "\033[1;1H\033[0;37;40mupdates 1"));
     kt_test_free(t);
 }
 
@@ -487,7 +558,7 @@ static void test_mouse_and_focus(void) {
     kt_test_type(t, "\033[<0;5;3M\033[I\033[O");
     CHECK(!strcmp(r.log, "init R:20x4 M:4,2 focus blur "));
     kt_test_type(t, "M");
-    CHECK(!strcmp(kt_test_output(t, NULL), "\033[?2026h\033[?1002l\033[?1003h\033[1;9H\033[0m5\033[?2026l"));
+    CHECK(!strcmp(kt_test_output(t, NULL), "\033[?2026h\033[?1002l\033[?1003h\033[1;9H5\033[?2026l"));
     kt_test_type(t, "M");
     CHECK(has(kt_test_output(t, NULL), "\033[?1003l\033[?1002h"));
     kt_test_free(t);
@@ -880,6 +951,8 @@ static void headless(void) {
     test_frame_cap();
     test_unsynchronized_output();
     test_repaint_overwrites();
+    test_theme_change();
+    test_profiles();
     test_clipped_terminal();
     test_escape();
     test_escape_wait_option();
@@ -1073,7 +1146,7 @@ static void probe_view(const void *model, struct kt_frame *frame) {
     kt_text(kt_frame_canvas(frame), (struct kt_rect){0, 0, kt_frame_columns(frame), 1}, line, KT_BASE);
 }
 
-static const struct kt_app probe_app = {probe_init, probe_update, probe_view, NULL};
+static const struct kt_app probe_app = {probe_init, probe_update, probe_view};
 
 static int probe_run(struct probe *probe) {
     struct terminal terminal = terminal_open();

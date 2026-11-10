@@ -121,7 +121,7 @@ static void hub_row(struct app *app, const struct host_row *row, size_t index) {
     char name[160], state[200], line[400];
     bool selected = index == app->host_selected, narrow = app->content_width < 60;
     int width = app->content_width, state_x = narrow ? 4 : 26;
-    enum kt_style name_tone = row->kind == HOST_ROW_ADD ? KT_STRONG : KT_BASE;
+    struct kt_style name_tone = row->kind == HOST_ROW_ADD ? KT_STRONG : KT_BASE;
     setup_row_text(app, row, name, sizeof(name), state, sizeof(state));
     hub_hit(app, index);
     snprintf(line, sizeof(line), "%c %s", selected ? '>' : ' ', name);

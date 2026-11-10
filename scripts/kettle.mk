@@ -5,14 +5,14 @@ CFLAGS = -O2
 CPPFLAGS =
 WARN = -std=c99 -Wall -Wextra -Werror -pedantic
 INCLUDES = -Isrc -Isrc/kettle
-CORE = canvas plot graph present workspace unicode output input keymap tree terminal_screen terminal_csi terminal_sgr terminal_parser
+CORE = canvas color theme plot graph present workspace unicode output input keymap tree terminal_screen terminal_csi terminal_sgr terminal_parser
 # The optional POSIX runtime (program.h) and its headless test driver (testing.h).
 RUNTIME = program program_frame program_child program_posix testing
 SOURCES = $(addprefix src/kettle/,$(addsuffix .c,$(CORE)))
 OBJECTS = $(addprefix build/,$(addsuffix .o,$(CORE)))
 RUNTIME_OBJECTS = $(addprefix build/,$(addsuffix .o,$(RUNTIME)))
 LIBRARIES = build/libkettle-program.a build/libkettle.a
-TESTS = test_kettle test_kettle_present test_kettle_workspace test_kettle_unicode test_kettle_terminal test_kettle_input test_kettle_keymap test_kettle_program test_kettle_counter
+TESTS = test_kettle test_kettle_present test_kettle_style test_kettle_workspace test_kettle_unicode test_kettle_terminal test_kettle_input test_kettle_keymap test_kettle_program test_kettle_counter
 TEST_BINS = $(addprefix build/,$(TESTS))
 HEADERS = $(wildcard src/kettle/*.h src/kettle/*.inc)
 PTY_SUPPORT = tests/kettle/pty_support.c tests/kettle/screen_support.c tests/kettle/fixture_support.c

@@ -42,7 +42,7 @@ static int form_break(const struct app *app, const char *text, size_t offset, si
     return x+form_columns(text+offset,n-offset,app->ascii)>width ? 1 : 0;
 }
 /* Where the next character goes; with no canvas the pen only counts rows. */
-struct form_pen { struct kt_canvas *c; int width, bottom, x, y; enum kt_style tone; };
+struct form_pen { struct kt_canvas *c; int width, bottom, x, y; struct kt_style tone; };
 /* Places one character, moving to the next row when it does not fit.
  * Returns the bytes it used, or 0 for an undecodable sequence. */
 static size_t form_place(const struct app *app, struct form_pen *pen, const char *text, size_t length) {
@@ -59,7 +59,7 @@ static size_t form_place(const struct app *app, struct form_pen *pen, const char
 }
 /* Word-wraps text into rows [y, bottom) of c; with no canvas it only counts.
  * Returns the row after the last one used. */
-static int form_wrap(const struct app *app, struct kt_canvas *c, int width, int y, int bottom, const char *text, enum kt_style tone) {
+static int form_wrap(const struct app *app, struct kt_canvas *c, int width, int y, int bottom, const char *text, struct kt_style tone) {
     struct form_pen pen={c,width,bottom,0,y,tone};
     size_t offset=0, length=strlen(text);
     while (offset<length && pen.y<bottom) {
@@ -96,7 +96,7 @@ static void form_draw(struct app *app, const char *prompt, const char *text, siz
     kt_text(&c,(struct kt_rect){0,0,width,1},"INPUT TO HYDRA / text field",KT_SELECTED);
     (void)form_wrap(app,&c,width,1,height-2,prompt,KT_STRONG);
     kt_text(&c,(struct kt_rect){0,height-2,width,1},text+start,KT_BASE);
-    if (cursor<strlen(text)) c.cells[(size_t)c.stride*(size_t)(height-2)+(size_t)column].style=KT_SELECTED;
+    if (cursor<strlen(text)) kt_restyle(&c,(struct kt_rect){column,height-2,1,1},KT_SELECTED);
     else kt_put(&c,column,height-2,'_',KT_SELECTED);
     kt_text(&c,(struct kt_rect){0,height-1,width,1},"Enter submit / Esc cancel",KT_BORDER);
 }
@@ -193,7 +193,7 @@ int prompt_text(struct app *app, const char *prompt, char *buffer, size_t size) 
 }
 
 /* Wraps one line of a decision panel; returns the next free row. */
-static int confirm_line(struct app *app, struct kt_canvas *c, int y, int bottom, const char *text, enum kt_style tone) {
+static int confirm_line(struct app *app, struct kt_canvas *c, int y, int bottom, const char *text, struct kt_style tone) {
     return form_wrap(app,c,c->width,y,bottom,text,tone);
 }
 

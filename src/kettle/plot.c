@@ -3,7 +3,7 @@
 
 /* Each Braille cell stores a 2x4 pixel column. ASCII plots use whole cells. */
 void kt_plot(struct kt_canvas *c, struct kt_rect r, const double *values,
-             const bool *valid, size_t count, double maximum, enum kt_style style) {
+             const bool *valid, size_t count, double maximum, struct kt_style style) {
     static const unsigned dots[2][4] = {{0, 1, 2, 6}, {3, 4, 5, 7}};
     int x, y;
     if (!values || !count || r.width <= 0 || r.height <= 0 ||

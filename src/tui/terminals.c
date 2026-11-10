@@ -412,14 +412,6 @@ static bool foreign_size(const struct kt_canvas *c) {
     return rows >= 2;
 }
 
-static void strip_rendition(struct kt_canvas *c) {
-    int x,y;
-    for (y=0;y<c->height;y++) for (x=0;x<c->width;x++) {
-        struct kt_cell *cell=&c->cells[(size_t)y*(size_t)c->stride+(size_t)x];
-        cell->attributes=0; cell->style=KT_BASE;
-    }
-}
-
 void native_terminal_draw(struct app *app, struct native_terminal *t, struct kt_canvas *c, bool focused) {
     if (!t || !t->screen) return;
     if (c->width!=t->screen->primary.canvas.width || c->height!=t->screen->primary.canvas.height) {
@@ -429,5 +421,4 @@ void native_terminal_draw(struct app *app, struct native_terminal *t, struct kt_
     }
     kt_term_draw(t->screen,c,t->scroll,focused && !t->scrolling);
     t->foreign_size = !t->scroll && foreign_size(c);
-    if (app->no_color) strip_rendition(c);
 }

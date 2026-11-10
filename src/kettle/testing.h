@@ -5,8 +5,9 @@
  * Runs an application's init/update/view through the real runtime loop with
  * no terminal: the size is fixed, the clock only moves when the test moves it,
  * input is whatever the test feeds, and kt_cmd_spawn / kt_cmd_exec are
- * recorded instead of started. Everything is deterministic and single
- * threaded, so a test reads as a script:
+ * recorded instead of started. The environment is not consulted: the colour
+ * profile is KT_PROFILE_TRUECOLOR unless the options name one. Everything is
+ * deterministic and single threaded, so a test reads as a script:
  *
  *     struct kt_test *t = kt_test_new(&app, &model, 40, 10, NULL);
  *     kt_test_type(t, "jj");

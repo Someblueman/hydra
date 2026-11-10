@@ -602,9 +602,19 @@ void *kt_posix_backend_new(const struct kt_options *options) {
     return b;
 }
 
+static const char *posix_variable(void *context, const char *name) {
+    (void)context;
+    return getenv(name);
+}
+
+static enum kt_profile posix_profile(void *context) {
+    struct kt_posix *b = context;
+    return kt_profile_detect(posix_variable, NULL, isatty(b->output_fd) != 0);
+}
+
 const struct kt_backend kt_posix_backend = {
     posix_now, posix_begin, posix_end, posix_raw, posix_size, posix_write, posix_read,
     posix_wait, posix_restore, posix_leave, posix_post, posix_posted, posix_start, NULL,
     posix_child_read, posix_child_signal, posix_child_reap, posix_child_close,
-    posix_exec, posix_suspend, posix_destroy
+    posix_exec, posix_suspend, posix_destroy, posix_profile
 };

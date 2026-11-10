@@ -69,10 +69,11 @@ static void on_signal(int number) {
     if (number == SIGINT || number == SIGTERM || number == SIGHUP || number == SIGQUIT) terminal_request_stop(number);
 }
 
-/* What every message ends with: a theme change repaints each cell (its
- * colours changed, its text did not), and a quit ends the loop. */
+/* What every message ends with: a theme change is handed to the runtime,
+ * which repaints each cell (its colours changed, its text did not), and a
+ * quit ends the loop. */
 static void settle(struct app *app, struct kt_cmds *cmds) {
-    if (app->frame_theme != app->theme) { app->frame_theme = app->theme; kt_cmd_repaint(cmds); }
+    if (app->frame_theme != app->theme) { app->frame_theme = app->theme; kt_cmd_theme(cmds, tui_theme(app->theme)); }
     if (!app->running || terminal_stopped()) kt_cmd_quit(cmds, terminal_exit_status());
 }
 
@@ -126,7 +127,7 @@ static void loop_view(const void *model, struct kt_frame *frame) {
     app->clock_armed = kt_program_post(app->program, &clock);
 }
 
-const struct kt_app tui_app = {loop_init, loop_update, loop_view, dashboard_style};
+const struct kt_app tui_app = {loop_init, loop_update, loop_view};
 
 /* ---- helpers that wait inside a handler --------------------------------- */
 
@@ -250,12 +251,16 @@ static void startup_notice(struct app *app) {
 }
 
 /* Escape acts after 20 ms; a key split by a slow link has 150 ms to arrive
- * whole. Mouse reports cover presses, releases and drags. */
+ * whole. Mouse reports cover presses, releases and drags. NO_COLOR and
+ * --no-color show no colour whatever the terminal could; otherwise the
+ * runtime finds out what it can show. */
 void tui_options(const struct app *app, struct kt_options *options) {
     memset(options, 0, sizeof(*options));
     options->alt_screen = options->bracketed_paste = true;
     options->mouse = KT_MOUSE_DRAG;
     options->ascii = app->ascii;
+    options->theme = tui_theme(app->theme);
+    options->profile = app->no_color ? KT_PROFILE_NONE : KT_PROFILE_AUTO;
     options->escape_ms = 20; options->sequence_ms = 150;
     options->paste_limit = 4U * 1024U * 1024U;
 }

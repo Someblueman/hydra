@@ -65,6 +65,8 @@ struct kt_backend {
     int (*exec)(void *context, char *const argv[]);
     void (*suspend)(void *context);
     void (*destroy)(void *context);
+    /* What the terminal can show, when the options leave it to be detected. */
+    enum kt_profile (*profile)(void *context);
 };
 
 struct kt_queued { struct kt_msg msg; void *owned; };
@@ -81,7 +83,7 @@ struct kt_child {
 
 enum kt_cmd_type {
     KT_CMD_QUIT, KT_CMD_TIMER, KT_CMD_WATCH, KT_CMD_SPAWN, KT_CMD_CANCEL,
-    KT_CMD_EXEC, KT_CMD_SUSPEND, KT_CMD_POST, KT_CMD_REPAINT
+    KT_CMD_EXEC, KT_CMD_SUSPEND, KT_CMD_POST, KT_CMD_REPAINT, KT_CMD_THEME
 };
 struct kt_cmd {
     enum kt_cmd_type type;
@@ -92,6 +94,7 @@ struct kt_cmd {
         struct { int fd; short events; } watch;
         struct { struct kt_spawn spec; void *block; } spawn;
         struct kt_msg msg;
+        const struct kt_theme *theme;
     } u;
 };
 struct kt_cmds { struct kt_program *program; struct kt_cmd *items; size_t count, capacity; };
@@ -106,6 +109,7 @@ struct kt_modes {
 };
 struct kt_frame {
     struct kt_canvas canvas;
+    struct kt_paint paint;
     bool cursor, titled;
     int cursor_x, cursor_y;
     enum kt_mouse_mode mouse;
@@ -149,6 +153,8 @@ struct kt_program {
     size_t cell_capacity;
     struct kt_canvas canvas;
     struct kt_presenter presenter;
+    /* The theme in effect and the profile settled when the program began. */
+    struct kt_paint paint;
     int terminal_columns, terminal_rows;
     FILE *out;
     char *out_bytes;

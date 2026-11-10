@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     if (!kt_graph_layout(edges, 4, 4, &layout)) return 1;
     kt_graph(&c, (struct kt_rect){4, 15, 92, 11}, nodes, 4, edges, 4, &layout, 0, 0, 1);
     for (row = 0; row < c.height; row++) {
-        if (!kt_write_row(&c, row, stdout, NULL, NULL) || putchar('\n') == EOF) return 1;
+        if (!kt_write_row(&c, row, stdout, NULL) || putchar('\n') == EOF) return 1;
     }
     return 0;
 }

@@ -32,7 +32,7 @@ bool kt_graph_layout(const struct kt_edge *edges, size_t edge_count, size_t node
 }
 
 static void point(struct kt_canvas *c, struct kt_rect r, int64_t x, int64_t y,
-                   uint32_t glyph, enum kt_style style) {
+                   uint32_t glyph, struct kt_style style) {
     if (x >= r.x && y >= r.y && x < (int64_t)r.x + r.width && y < (int64_t)r.y + r.height &&
         x >= 0 && x < c->width && y >= 0 && y < c->height) kt_put(c, (int)x, (int)y, glyph, style);
 }
@@ -63,7 +63,7 @@ void kt_graph(struct kt_canvas *c, struct kt_rect r, const struct kt_node *nodes
     }
     for (i = 0; i < node_count; i++) {
         int64_t nx = (int64_t)r.x + layout->x[i] - pan_x, ny = (int64_t)r.y + layout->y[i] - pan_y;
-        enum kt_style tone = i == selected ? KT_SELECTED : nodes[i].style;
+        struct kt_style tone = i == selected ? KT_SELECTED : nodes[i].style;
         for (y = 0; y < 4; y++) for (x = 0; x < 22; x++) {
             uint32_t glyph = ' ';
             if (y == 0 || y == 3) glyph = c->unicode ? 0x2500U : '-';

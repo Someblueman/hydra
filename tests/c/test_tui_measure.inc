@@ -62,7 +62,7 @@ static size_t measure_present_bytes(struct kt_presenter *p, const struct kt_canv
     size_t length = 0;
     long size;
     if (!stream) return 0;
-    if (!kt_present(p, c, stream, NULL, NULL) || (size = ftell(stream)) <= 0 ||
+    if (!kt_present(p, c, stream, NULL) || (size = ftell(stream)) <= 0 ||
         (unsigned long)size >= capacity || fseek(stream, 0, SEEK_SET)) goto done;
     length = fread(out, 1, (size_t)size, stream);
     if (length != (size_t)size) length = 0;

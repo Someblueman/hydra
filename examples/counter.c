@@ -76,15 +76,7 @@ static void view(const void *model, struct kt_frame *frame) {
             "up/down or +/- count   d ask date again   q quit", KT_MUTED);
 }
 
-/* Cells carry meaning (KT_STRONG, KT_MUTED); this gives it a look. */
-static void style(void *model, FILE *out, enum kt_style style) {
-    static const char *const sgr[] = {"\033[0m", "\033[0;36m", "\033[0;1;36m", "\033[0;7m",
-        "\033[0;33m", "\033[0;1m", "\033[0;32m", "\033[0;2m", "\033[0;1;36m"};
-    (void)model;
-    fputs(sgr[style <= KT_FOCUS ? style : KT_BASE], out);
-}
-
-static const struct kt_app counter = {init, update, view, style};
+static const struct kt_app counter = {init, update, view};
 
 int main(void) {
     struct model model = {0};

@@ -1,13 +1,21 @@
 #include "workspace_demo.h"
 #include <stdio.h>
 
-void demo_colors(void *model, FILE *out, enum kt_style style) {
-    static const char *palette[] = {"\033[0;38;5;252;48;5;234m", "\033[0;38;5;103;48;5;234m",
-        "\033[1;38;5;153;48;5;234m", "\033[0;38;5;16;48;5;147m",
-        "\033[0;38;5;215;48;5;234m", "\033[1;38;5;183;48;5;234m"};
-    (void)model;
-    fputs(palette[style >= KT_BASE && style <= KT_STRONG ? style : KT_BASE], out);
-}
+/* The demo's own look: the stock styles keep their meaning, this says which
+ * palette entries they are. Strong text gets a colour of its own, so it is an
+ * application token. */
+const struct kt_theme demo_theme = {"demo", {
+    [KT_TOKEN_TEXT] = {KT_INDEX(252), 0, 0, 0, 0},
+    [KT_TOKEN_MUTED] = {KT_INDEX(103), 0, 0, 0, KT_DIM},
+    [KT_TOKEN_SURFACE] = {KT_INDEX(234), 0, 0, 0, 0},
+    [KT_TOKEN_SELECTION] = {KT_INDEX(147), 0, 0, 0, KT_REVERSE},
+    [KT_TOKEN_ON_SELECTION] = {KT_INDEX(16), 0, 0, 0, 0},
+    [KT_TOKEN_BORDER] = {KT_INDEX(103), 0, 0, 0, 0},
+    [KT_TOKEN_ACCENT] = {KT_INDEX(153), 0, 0, 0, 0},
+    [KT_TOKEN_SUCCESS] = {KT_INDEX(114), 0, 0, 0, 0},
+    [KT_TOKEN_WARNING] = {KT_INDEX(215), 0, 0, 0, 0},
+    [DEMO_TOKEN_STRONG] = {KT_INDEX(183), 0, 0, 0, 0}
+}};
 
 void demo_draw(struct kt_canvas *c, const struct demo *d) {
     const struct kt_workspace *w = &d->workspace;
@@ -59,7 +67,7 @@ void demo_draw(struct kt_canvas *c, const struct demo *d) {
                 default: snprintf(text, sizeof(text), "^B [ scroll / ^B ] live"); break;
                 }
             } else snprintf(text, sizeof(text), "row %zu / isolated scroll", index);
-            kt_text(&view, (struct kt_rect){1,row,view.width-2,1}, text, index % 3 ? KT_BASE : KT_STRONG);
+            kt_text(&view, (struct kt_rect){1,row,view.width-2,1}, text, index % 3 ? KT_BASE : DEMO_STRONG);
         }
     }
     kt_text(c, (struct kt_rect){0,c->height-1,c->width,1}, d->notice[0] ? d->notice : c->width < 60 ? (d->model ? "^B Tab focus ^B q quit ^B [ scroll" : "Tab focus j/k scroll drag q quit") : d->model ? (d->prefix ? "Prefix: Tab focus / q quit / [ scroll / ] live" : "^B Tab focus | ^B q quit | ^B [ scroll | drag split") : "Tab focus | j/k scroll | drag split | q quit", KT_BORDER);

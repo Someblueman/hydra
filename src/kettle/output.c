@@ -1,4 +1,4 @@
-#include "kettle.h"
+#include "output_internal.h"
 
 static bool scalar(FILE *out, uint32_t cp) {
     char bytes[4];
@@ -6,43 +6,52 @@ static bool scalar(FILE *out, uint32_t cp) {
     return fwrite(bytes, 1, length, out) == length;
 }
 
-static bool color(FILE *out, uint32_t rgb, bool foreground) {
-    if (rgb == KT_COLOR_DEFAULT) return true;
-    return fprintf(out, "\033[%d;2;%u;%u;%um", foreground ? 38 : 48,
-                   (rgb >> 16) & 255U, (rgb >> 8) & 255U, rgb & 255U) >= 0;
+static bool glyphs(FILE *out, const struct kt_cell *cell) {
+    unsigned i;
+    if (!scalar(out, cell->glyph)) return false;
+    for (i = 0; i < cell->combining_count && i < KT_COMBINING_MAX; i++)
+        if (!scalar(out, cell->combining[i])) return false;
+    return true;
 }
 
-bool kt_write_row(const struct kt_canvas *c, int row, FILE *out,
-                  void (*style)(void *, FILE *, enum kt_style), void *context) {
+void kt_pen_begin(struct kt_pen *pen, const struct kt_paint *paint, bool known) {
+    static const struct kt_style plain = {KT_DEFAULT, KT_DEFAULT, 0};
+    pen->paint = paint; pen->now = plain; pen->known = known; pen->cached = false;
+}
+
+/* Moves the terminal's rendition to a cell's style. */
+static bool pen_move(struct kt_pen *pen, const struct kt_cell *cell, FILE *out) {
+    struct kt_style style = kt_cell_style(cell);
+    char sequence[KT_SGR_MAX];
+    if (!pen->cached || !kt_style_equal(style, pen->seen)) {
+        pen->seen = style; pen->shown = kt_style_resolve(style, pen->paint); pen->cached = true;
+    }
+    if (!kt_sgr(sequence, pen->known ? &pen->now : NULL, pen->shown)) return true;
+    pen->now = pen->shown; pen->known = true;
+    return fputs(sequence, out) != EOF;
+}
+
+bool kt_pen_row(struct kt_pen *pen, const struct kt_canvas *c, int row, FILE *out) {
     int x;
-    const struct kt_cell *previous = NULL;
-    if (row < 0 || row >= c->height || !out) return false;
     for (x = 0; x < c->width; x++) {
         const struct kt_cell *cell = &c->cells[(size_t)row * (size_t)c->stride + (size_t)x];
-        unsigned i;
         if (!cell->width) continue;
-        if (cell->attributes & KT_EXPLICIT) {
-            if (!previous || previous->attributes != cell->attributes ||
-                previous->foreground != cell->foreground || previous->background != cell->background) {
-                if (fputs("\033[0m", out) == EOF) return false;
-                if ((cell->attributes & KT_BOLD) && fputs("\033[1m", out) == EOF) return false;
-                if ((cell->attributes & KT_DIM) && fputs("\033[2m", out) == EOF) return false;
-                if ((cell->attributes & KT_ITALIC) && fputs("\033[3m", out) == EOF) return false;
-                if ((cell->attributes & KT_UNDERLINE) && fputs("\033[4m", out) == EOF) return false;
-                if ((cell->attributes & KT_REVERSE) && fputs("\033[7m", out) == EOF) return false;
-                if (!color(out, cell->foreground, true) || !color(out, cell->background, false)) return false;
-            }
-        } else {
-            if (previous && (previous->attributes & KT_EXPLICIT) && fputs("\033[0m", out) == EOF) return false;
-            if (style && (!previous || previous->style != cell->style || (previous->attributes & KT_EXPLICIT)))
-                style(context, out, cell->style);
-        }
-        if (!scalar(out, cell->glyph)) return false;
-        for (i = 0; i < cell->combining_count && i < KT_COMBINING_MAX; i++)
-            if (!scalar(out, cell->combining[i])) return false;
-        previous = cell;
+        if (pen->paint && !pen_move(pen, cell, out)) return false;
+        if (!glyphs(out, cell)) return false;
     }
-    /* Do not leave an embedded child's attributes active in the outer UI. */
-    if (previous && (previous->attributes & KT_EXPLICIT) && fputs("\033[0m", out) == EOF) return false;
     return !ferror(out);
+}
+
+bool kt_pen_end(struct kt_pen *pen, FILE *out) {
+    static const struct kt_style plain = {KT_DEFAULT, KT_DEFAULT, 0};
+    if (!pen->paint || !pen->known || kt_style_equal(pen->now, plain)) return true;
+    pen->now = plain;
+    return fputs("\033[0m", out) != EOF;
+}
+
+bool kt_write_row(const struct kt_canvas *c, int row, FILE *out, const struct kt_paint *paint) {
+    struct kt_pen pen;
+    if (row < 0 || row >= c->height || !out) return false;
+    kt_pen_begin(&pen, paint, true);
+    return kt_pen_row(&pen, c, row, out) && kt_pen_end(&pen, out) && !ferror(out);
 }

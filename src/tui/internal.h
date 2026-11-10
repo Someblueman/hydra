@@ -174,7 +174,7 @@ bool outline_toggle(struct app *app, int direction);
 void outline_release_run(struct app *app);
 bool text_matches(const char *text, const char *search);
 /* Run and headless-head presentation (run_text.c). Outputs are caller buffers. */
-struct outline_text { char name[TEXT + 64], count[32]; const char *status, *agent, *reported; enum kt_style tone; };
+struct outline_text { char name[TEXT + 64], count[32]; const char *status, *agent, *reported; struct kt_style tone; };
 void outline_row_text(const struct app *app, const struct outline_row *row, struct outline_text *t);
 const char *head_agent_short(const struct app *app, const struct head *head);
 const char *run_head_absence(const struct app *app, const struct workflow_head *r);
@@ -186,7 +186,7 @@ void run_next_text(const struct app *app, size_t run, char *out, size_t size);
 size_t overview_run(struct app *app);
 void head_agent_text(const struct app *app, const struct head *h, char *out, size_t size);
 const char *head_list_status(const struct app *app, const struct head *h);
-enum kt_style head_list_tone(const struct app *app, const struct head *h);
+struct kt_style head_list_tone(const struct app *app, const struct head *h);
 const char *head_run_role(const struct app *app, const struct head *h);
 void exec_model_text(const struct workflow_exec *e, bool running, char *out, size_t size);
 void exec_effort_text(const struct workflow_exec *e, bool running, char *out, size_t size);
@@ -195,17 +195,17 @@ bool exec_configuration_text(const struct workflow_exec *e, char *out, size_t si
 void step_duration_text(const struct workflow_node *n, char *out, size_t size);
 void plan_approval_text(const struct app *app, size_t run, char *out, size_t size);
 /* Shared text-view helpers (render.c) and the head details view (detail.c). */
-void column(struct app *app, int x, int width, enum kt_style tone, const char *text);
-void paragraph(struct app *app, const char *text, enum kt_style tone);
+void column(struct app *app, int x, int width, struct kt_style tone, const char *text);
+void paragraph(struct app *app, const char *text, struct kt_style tone);
 void section(struct app *app, const char *label);
 /* Read-only captured output in the remaining content rows; see transcript.h. */
 void transcript_view(struct app *app, const char *text, size_t length, struct transcript_layout *layout);
 /* One logical line of a scrolled document: rows before scroll are counted,
  * visible rows drawn with tone; returns the line's wrapped rows. */
-size_t transcript_line_view(struct app *app, const char *text, size_t length, enum kt_style tone, size_t row, size_t scroll);
+size_t transcript_line_view(struct app *app, const char *text, size_t length, struct kt_style tone, size_t row, size_t scroll);
 void transcript_view_reset(struct app *app);
-void pair(struct app *app, const char *left_label, const char *left, enum kt_style left_tone,
-          const char *right_label, const char *right, enum kt_style right_tone);
+void pair(struct app *app, const char *left_label, const char *left, struct kt_style left_tone,
+          const char *right_label, const char *right, struct kt_style right_tone);
 void render_empty_work(struct app *app);
 void render_head_detail(struct app *app);
 /* Internal views borrow app; destroy functions release their owned view state. */
@@ -287,11 +287,10 @@ size_t hosts_row_count(const struct app *app);
 void hosts_open_row(struct app *app);
 void setup_row_text(const struct app *app, const struct host_row *row, char *name, size_t name_size, char *state, size_t state_size);
 void render_workflow_graph(struct app *app);
-void dashboard_style(void *context, FILE *out, enum kt_style tone);
 void dashboard_text(struct kt_canvas *c, int x, int y, int width,
-                           enum kt_style tone, const char *format, ...);
+                           struct kt_style tone, const char *format, ...);
 void dashboard_card(struct kt_canvas *c, int x, int width, const char *title,
-                           size_t count, const char *caption, enum kt_style tone);
+                           size_t count, const char *caption, struct kt_style tone);
 void render_dashboard(struct app *app);
 struct native_terminal *native_terminal_selected(struct app *app);
 void native_terminal_attention(struct app *app, const struct native_terminal *t, char *out, size_t size);
@@ -348,7 +347,7 @@ void statistics_move(struct app *app, int direction);
 void statistics_count(uint64_t value, bool known, char *out, size_t size);
 void statistics_tokens(const struct hs_usage *u, char *out, size_t size);
 void statistics_scope_tokens(const struct hs_summary *s, char *out, size_t size);
-int statistics_wrap(struct kt_canvas *c, int x, int y, int width, int rows, enum kt_style tone, const char *text);
+int statistics_wrap(struct kt_canvas *c, int x, int y, int width, int rows, struct kt_style tone, const char *text);
 void statistics_scope_notes(struct kt_canvas *c, int x, int y, int width, int rows, const struct hs_summary *s);
 void statistics_step_agent(const struct hs_step *s, bool compact, char *out, size_t size);
 void statistics_run_tokens(const struct hs_model *m, size_t run, char *out, size_t size);
@@ -394,16 +393,19 @@ void execute_palette(struct app *app, const char *query);
 void fleet_action(struct app *app);
 bool parse_theme(const char *name, int *theme);
 void style(struct app *app, enum tone tone);
-void emit_style(const struct app *app, FILE *out, enum tone tone);
+/* The theme behind --theme and the t key (0 terminal, 1 dark, 2 light), and
+ * the style a tone draws in. */
+const struct kt_theme *tui_theme(int theme);
+struct kt_style tone_style(int tone);
 const char *theme_name(int theme);
 void linef(struct app *app, const char *format, ...);
 const char *display_status(const struct head *head);
 const char *status_label(const struct head *head);
-enum kt_style status_tone(const struct head *head);
+struct kt_style status_tone(const struct head *head);
 size_t attention_count(const struct app *app);
 const char *dot(const struct app *app);
 /* Footer freshness of data observed at observed_at. Returns the tone. */
-enum kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size);
+struct kt_style snapshot_freshness(const struct app *app, time_t observed_at, bool stale, bool headless, char *out, size_t size);
 void text_append(char *buffer, size_t size, const char *format, ...);
 bool frame_alloc(struct app *app);
 void frame_free(struct app *app);
@@ -411,7 +413,7 @@ bool frame_begin(struct app *app, bool headless);
 void frame_end(struct app *app, unsigned frame, bool headless);
 bool frame_content(struct app *app, struct kt_canvas *out);
 void chrome_header(struct app *app, struct kt_canvas *c, const char *title);
-void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, enum kt_style tone, const char *hints);
+void chrome_footer(struct app *app, struct kt_canvas *c, const char *status, struct kt_style tone, const char *hints);
 void recovery_explain(const struct recovery *item, char *title, size_t title_size, char *detail, size_t detail_size);
 void show_result(struct app *app, const char *title, const char *text);
 void render(struct app *app, unsigned frame, bool headless);

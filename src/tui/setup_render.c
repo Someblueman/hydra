@@ -10,7 +10,7 @@
 /* A scrolled, word-wrapped body between fixed title and footer rows. */
 struct pen { struct app *app; size_t row, skip; int bottom; bool more; };
 
-static void pen_emit(struct pen *p, int indent, enum kt_style tone, const char *text, size_t length) {
+static void pen_emit(struct pen *p, int indent, struct kt_style tone, const char *text, size_t length) {
     char line[1024];
     struct app *app = p->app;
     if (p->row++ < p->skip) return;
@@ -36,9 +36,9 @@ static size_t wrap_length(const char *text, size_t length, int width) {
 
 /* A label column and a value wrapped with a hanging indent under itself;
  * an empty label wraps plain text at x. */
-struct hanging { int x, width; const char *label; enum kt_style label_tone; };
+struct hanging { int x, width; const char *label; struct kt_style label_tone; };
 
-static void pen_hanging(struct pen *p, const struct hanging *h, const char *value, enum kt_style tone) {
+static void pen_hanging(struct pen *p, const struct hanging *h, const char *value, struct kt_style tone) {
     int width = p->app->content_width - h->x - h->width;
     const char *rest = value;
     if (width < 8) width = 8;
@@ -54,18 +54,18 @@ static void pen_hanging(struct pen *p, const struct hanging *h, const char *valu
     } while (*rest);
 }
 
-static void pen_text(struct pen *p, int indent, enum kt_style tone, const char *text) {
+static void pen_text(struct pen *p, int indent, struct kt_style tone, const char *text) {
     struct hanging h = {indent, 0, "", KT_BASE};
     pen_hanging(p, &h, text, tone);
 }
 
-static void pen_pair(struct pen *p, const char *label, const char *value, enum kt_style tone) {
+static void pen_pair(struct pen *p, const char *label, const char *value, struct kt_style tone) {
     struct hanging h = {2, p->app->content_width < 70 ? 14 : 20, label, KT_MUTED};
     pen_hanging(p, &h, value, tone);
 }
 
-static void title(struct app *app, enum kt_style tone, const char *text) {
-    style(app, tone == KT_WARNING ? TONE_WARNING : tone == KT_SUCCESS ? TONE_SUCCESS : TONE_STRONG);
+static void title(struct app *app, struct kt_style tone, const char *text) {
+    style(app, kt_style_equal(tone, KT_WARNING) ? TONE_WARNING : kt_style_equal(tone, KT_SUCCESS) ? TONE_SUCCESS : TONE_STRONG);
     linef(app, "%s", text);
     style(app, TONE_BASE);
 }
@@ -78,7 +78,7 @@ static void pen_begin(struct pen *p, struct app *app, int footer) {
 /* Footer rows: the scroll marker, an optional typed answer, then the
  * screen's notice or prompt. The answer sits directly above that notice, so
  * pen_begin reserves three footer rows for a screen that has one. */
-static void footer_answer(struct app *app, struct pen *p, const char *answer, const char *prompt, enum kt_style tone) {
+static void footer_answer(struct app *app, struct pen *p, const char *answer, const char *prompt, struct kt_style tone) {
     struct native_setup *s = app->setup;
     s->more = p->more;
     app->line = app->limit - (answer ? 3 : 2);
@@ -95,7 +95,7 @@ static void footer_answer(struct app *app, struct pen *p, const char *answer, co
     app->line++;
 }
 
-static void footer(struct app *app, struct pen *p, const char *prompt, enum kt_style tone) {
+static void footer(struct app *app, struct pen *p, const char *prompt, struct kt_style tone) {
     footer_answer(app, p, NULL, prompt, tone);
 }
 
@@ -140,7 +140,7 @@ static void render_form(struct app *app, struct native_setup *s) {
 
 /* ---- Steps ---- */
 
-static enum kt_style step_tone(const char *status) {
+static struct kt_style step_tone(const char *status) {
     if (!strcmp(status, "done") || !strcmp(status, "running")) return KT_SUCCESS;
     if (!strcmp(status, "pending") || !strcmp(status, "skipped")) return KT_MUTED;
     return KT_WARNING;
@@ -229,7 +229,7 @@ static const char *const plan_values[][4] = {
     {"source", "local", "LOCAL recipe from your $HYDRA_HOME/fleet/agent-recipes.json", "w"},
 };
 
-static void value_text(const struct setup_row *row, char *out, size_t size, enum kt_style *tone) {
+static void value_text(const struct setup_row *row, char *out, size_t size, struct kt_style *tone) {
     size_t i;
     for (i = 0; i < sizeof(plan_values) / sizeof(plan_values[0]); i++) {
         if (strcmp(row->key, plan_values[i][0]) || strcmp(row->value, plan_values[i][1])) continue;
@@ -243,7 +243,7 @@ static void value_text(const struct setup_row *row, char *out, size_t size, enum
 
 static void plan_row(struct pen *p, const struct setup_row *row, const char *label) {
     char value[600], generic[64], *c;
-    enum kt_style tone = KT_BASE;
+    struct kt_style tone = KT_BASE;
     value_text(row, value, sizeof(value), &tone);
     if (!strcmp(row->key, "fingerprint") || !strcmp(row->key, "command")) tone = KT_STRONG;
     if (!label) {
@@ -376,7 +376,7 @@ static bool blocking(const struct setup_envelope *e) {
 
 static void requirement_row(struct app *app, struct pen *p, const struct setup_requirement *r) {
     const char *status = r->blocking && strcmp(r->status, "ok") ? "BLOCKS" : r->status;
-    enum kt_style tone = !strcmp(r->status, "ok") ? KT_SUCCESS : KT_WARNING;
+    struct kt_style tone = !strcmp(r->status, "ok") ? KT_SUCCESS : KT_WARNING;
     char label[96], fix[300];
     bool narrow = app->content_width < 70;
     struct hanging h = {2, narrow ? 8 : 25, label, tone};
@@ -447,7 +447,7 @@ static void agent_actions(struct app *app, const struct native_setup *s) {
     char line[200];
     size_t i;
     for (i = 0; i <= e->choice_count && app->line < app->limit - 4; i++) {
-        enum kt_style tone = s->selected == i ? KT_SELECTED : i ? KT_BASE : KT_STRONG;
+        struct kt_style tone = s->selected == i ? KT_SELECTED : i ? KT_BASE : KT_STRONG;
         choice_text(i ? &e->choices[i - 1] : NULL, s->selected == i, line, sizeof(line));
         column(app, 0, app->content_width, tone, line);
         app->line++;

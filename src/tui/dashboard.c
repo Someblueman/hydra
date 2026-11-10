@@ -5,12 +5,8 @@
 #include "internal.h"
 /* Hydra maps observations to reusable widgets. These functions do not collect
  * data or infer remote liveness from desired state. */
-void dashboard_style(void *context, FILE *out, enum kt_style tone) {
-    emit_style(context, out, (enum tone)tone);
-}
-
 void dashboard_text(struct kt_canvas *c, int x, int y, int width,
-                           enum kt_style tone, const char *format, ...) {
+                           struct kt_style tone, const char *format, ...) {
     char buffer[1024];
     va_list args;
     va_start(args, format); vsnprintf(buffer, sizeof(buffer), format, args); va_end(args);
@@ -18,7 +14,7 @@ void dashboard_text(struct kt_canvas *c, int x, int y, int width,
 }
 
 void dashboard_card(struct kt_canvas *c, int x, int width, const char *title,
-                           size_t count, const char *caption, enum kt_style tone) {
+                           size_t count, const char *caption, struct kt_style tone) {
     kt_panel(c, (struct kt_rect){x, 0, width, 5}, title);
     if (count == SIZE_MAX) dashboard_text(c, x + 2, 1, width - 4, tone, "--");
     else dashboard_text(c, x + 2, 1, width - 4, tone, "%zu", count);
@@ -121,7 +117,7 @@ static void dashboard_detail(struct app *app, struct kt_canvas *c, struct kt_rec
 }
 
 static void fleet_binding_line(struct kt_canvas *c, struct kt_rect r, int *row,
-                               const char *label, const char *value, enum kt_style tone) {
+                               const char *label, const char *value, struct kt_style tone) {
     char text[512];
     snprintf(text, sizeof(text), "%s%s", label, value);
     size_t used = 0, length = strlen(text), width = (size_t)(r.width - 4);
@@ -228,7 +224,7 @@ static const char *run_step_head(const struct app *app, const struct workflow_no
     return n->head;
 }
 
-static enum kt_style run_step_tone(const char *state) {
+static struct kt_style run_step_tone(const char *state) {
     if (!strcmp(state, "failed") || !strcmp(state, "recovery-required") || !strcmp(state, "waiting-approval")) return KT_WARNING;
     if (!strcmp(state, "running")) return KT_SUCCESS;
     if (!strcmp(state, "succeeded")) return KT_BASE;
@@ -306,7 +302,7 @@ static size_t wrap_width(const char *text, size_t length, size_t width) {
 static void run_panel_next(struct app *app, struct kt_canvas *c, struct kt_rect r, size_t run, int row) {
     char text[1536];
     size_t offset = 0, length, width = (size_t)(r.width - 10);
-    enum kt_style tone = run_needs_attention(app, run) ? KT_WARNING : KT_BASE;
+    struct kt_style tone = run_needs_attention(app, run) ? KT_WARNING : KT_BASE;
     run_next_text(app, run, text, sizeof(text));
     length = strlen(text);
     dashboard_text(c, r.x + 2, row, 6, KT_STRONG, "Next");

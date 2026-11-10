@@ -138,13 +138,12 @@ size_t transcript_rows(const struct transcript *t, int width) {
 
 /* Captured rendition is kept (colors only when enabled); unstyled cells take
  * the line tone so diffs and headings follow the theme. */
-static struct kt_cell styled_cell(const struct kt_cell *source, enum kt_style tone, bool color, bool unicode) {
+static struct kt_cell styled_cell(const struct kt_cell *source, struct kt_style tone, bool color, bool unicode) {
     struct kt_cell cell = *source;
-    unsigned emphasis = cell.attributes & (unsigned)~KT_EXPLICIT;
-    if (!color) cell.foreground = cell.background = KT_COLOR_DEFAULT;
-    cell.style = tone;
-    cell.attributes = emphasis || cell.foreground != KT_COLOR_DEFAULT || cell.background != KT_COLOR_DEFAULT ?
-        emphasis | KT_EXPLICIT : 0;
+    if (!color) cell.foreground = cell.background = KT_DEFAULT;
+    if (!cell.attributes && cell.foreground == KT_DEFAULT && cell.background == KT_DEFAULT) {
+        cell.foreground = tone.fg; cell.background = tone.bg; cell.attributes = tone.attrs;
+    }
     if (!unicode && (cell.glyph > 126 || !cell.width || cell.combining_count)) {
         cell.glyph = cell.width ? kt_ascii_fallback(cell.glyph) : ' ';
         cell.width = 1; cell.combining_count = 0;
@@ -153,7 +152,7 @@ static struct kt_cell styled_cell(const struct kt_cell *source, enum kt_style to
 }
 
 static void draw_segment(const struct transcript *t, struct kt_canvas *c, int x, int y, size_t start, size_t end,
-                         enum kt_style tone, bool color) {
+                         struct kt_style tone, bool color) {
     size_t i;
     for (i = start; i < end && x + (int)(i - start) < c->width; i++)
         c->cells[(size_t)y * (size_t)c->stride + (size_t)x + (i - start)] = styled_cell(&t->line[i], tone, color, c->unicode);
@@ -162,7 +161,7 @@ static void draw_segment(const struct transcript *t, struct kt_canvas *c, int x,
 /* One wrapped row: continuation marker, cells, and a truncation marker on
  * the last row of a line longer than TRANSCRIPT_COLUMNS. */
 static void draw_row(const struct transcript *t, struct kt_canvas *c, struct kt_rect row, size_t start, size_t end,
-                     bool continuation, enum kt_style tone, bool color) {
+                     bool continuation, struct kt_style tone, bool color) {
     struct kt_canvas line;
     if (kt_canvas_view(&line, c, row)) kt_clear(&line, KT_BASE);
     if (continuation) kt_put(c, row.x, row.y, c->unicode ? 0x21aaU : '>', KT_MUTED);
@@ -171,7 +170,7 @@ static void draw_row(const struct transcript *t, struct kt_canvas *c, struct kt_
 }
 
 int transcript_draw(const struct transcript *t, struct kt_canvas *c, struct kt_rect area,
-                    size_t first, enum kt_style tone, bool color) {
+                    size_t first, struct kt_style tone, bool color) {
     size_t row = 0, start = 0;
     int y = area.y, bottom = area.y + area.height < c->height ? area.y + area.height : c->height;
     if (area.width < 2 || area.x < 0 || area.x + area.width > c->width) return 0;
@@ -208,7 +207,7 @@ static bool diff_header(const char *text) {
 }
 
 /* Enters diff context on a header, hunk or ```diff fence; returns its tone. */
-static bool diff_entry(struct transcript *t, const char *text, size_t at, enum kt_style *tone) {
+static bool diff_entry(struct transcript *t, const char *text, size_t at, struct kt_style *tone) {
     if (starts(text, "```diff")) { t->diff = true; t->diff_indent = at; *tone = KT_MUTED; return true; }
     if (t->diff && starts(text, "```")) { t->diff = false; *tone = KT_MUTED; return true; }
     if (diff_header(text) || (t->diff && (starts(text, "index ") || starts(text, "new file mode") ||
@@ -218,10 +217,10 @@ static bool diff_entry(struct transcript *t, const char *text, size_t at, enum k
 }
 
 /* Theme tone of a unified-diff line in context; leaves context otherwise. */
-static enum kt_style diff_tone(struct transcript *t, enum kt_style tone) {
+static struct kt_style diff_tone(struct transcript *t, struct kt_style tone) {
     char text[64];
     size_t at = indent(t);
-    enum kt_style entry;
+    struct kt_style entry;
     line_text(t, at, text, sizeof(text));
     if (diff_entry(t, text, at, &entry)) return entry;
     if (!t->diff || !t->count) return tone;
@@ -271,7 +270,7 @@ static size_t transcript_walk(struct transcript *t, struct kt_canvas *c, struct 
     transcript_reset(t);
     while (at < length || (!length && !row)) {
         size_t n = line_length(text + at, length - at), rows;
-        enum kt_style tone;
+        struct kt_style tone;
         transcript_parse(t, text + at, n);
         tone = diff_tone(t, KT_BASE);
         rows = transcript_rows(t, area.width);

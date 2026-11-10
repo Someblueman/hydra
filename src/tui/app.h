@@ -61,7 +61,7 @@ struct app {
     size_t hit_items[MAX_HEADS], hit_count;
     bool hit_tabs;
     int rows, cols, line, limit;
-    bool no_color, preview, help, running, fleet, diagnostics, paint, boxed;
+    bool no_color, preview, help, running, fleet, diagnostics;
     bool ascii, snapshot_stale;
     /* The interactive loop; NULL for deterministic rendering and in tests
      * that call the handlers directly. cmds is valid while the loop runs. */
