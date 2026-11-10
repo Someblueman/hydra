@@ -84,6 +84,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   screen. An idle control centre writes nothing and wakes only for its
   2-second refresh. Agent panes keep updating while an action runs. It draws
   on the alternate screen, so the terminal's previous contents return on exit.
+- The control centre reads the head snapshot from Hydra's state store in its
+  own process instead of running `hydra tui --data` every two seconds. A
+  refresh costs one `tmux` call and a few `git status` calls whatever the
+  number of heads (with 20 heads: about 10 ms and 6 processes, where it took
+  about 2 s and 2000). Uncommitted-file counts are re-read for the selected
+  head and any worktree whose index or `HEAD` changed at every refresh, and
+  for the rest four at a time, so the count for an unselected head can lag an
+  edit by a few refreshes. `hydra tui --data` is unchanged and remains the
+  reference; `make test-parity` requires the two readers to agree byte for
+  byte.
+- No key in the control centre waits for a subprocess. Opening Workflows or
+  Statistics, refreshing them, opening a run's graph, the output preview and
+  an attached agent's history start their read in the background and show
+  what is known (or a "Loading..." line) until it arrives; they used to block
+  input for up to two seconds.
 - Arrow and page keys no longer act as commands behind an open overlay: over a
   result they scroll it, and over help they only close it.
 - A large paste to an attached agent is delivered in full instead of being cut
