@@ -58,7 +58,8 @@ static int by_value(const void *a, const void *b) {
 }
 
 /* With nothing happening the terminal is sent nothing, and between refreshes
- * the process sleeps: the old loop woke 25 times a second. */
+ * the process sleeps: a loop that polled on a 40 ms tick would wake 25 times
+ * a second, which the bound below excludes. */
 static void idle(struct kt_session *s) {
     long before, after;
     kt_pump(s, 2.0);
@@ -128,7 +129,8 @@ static void repaints(struct kt_session *s) {
 }
 
 /* The time from typing a character to an attached agent until its echo is on
- * the screen. The old loop looked at agent output once per 40 ms tick. */
+ * the screen. The agent's PTY is watched, so the echo is drawn when it
+ * arrives; reading it on a 40 ms tick would put the median near 40 ms. */
 static void latency(struct kt_session *s) {
     enum { KEYS = 40, LINE = 8 };
     static const char letters[] = "abcdefghijklmnopqrstuvwxyzabcdefghijklmn";
@@ -161,7 +163,7 @@ static void latency(struct kt_session *s) {
     qsort(took, KEYS, sizeof(took[0]), by_value);
     printf("attached key-to-echo: median %.1f ms, p95 %.1f ms, max %.1f ms over %d keys\n", took[KEYS / 2],
            took[KEYS * 95 / 100], took[KEYS - 1], KEYS);
-    CHECK(took[KEYS / 2] < 15, "a key typed to an agent is echoed well inside the old 40 ms tick");
+    CHECK(took[KEYS / 2] < 15, "a key typed to an agent is echoed when the echo arrives, not on a tick");
     kt_send(s, "\025");
 }
 

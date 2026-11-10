@@ -22,7 +22,7 @@ static int theme_rows_painted(const char *frame, int rows) {
  * and the update that names it has ended. A theme switch changes the colours
  * of cells whose text stays the same: every cell is painted again, in the
  * new base colour first, inside one synchronized update, and the display is
- * never erased (an erase would flash the old or the default background). */
+ * never erased (an erase would flash the default background). */
 static bool theme_switch(struct session *session, const char *base, const char *name) {
     char frame[65536] = "";
     size_t used = 0U;
