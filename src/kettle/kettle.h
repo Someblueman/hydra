@@ -67,7 +67,45 @@ void kt_fill(struct kt_canvas *canvas, struct kt_rect area, struct kt_style styl
  * replace the cells' (KT_KEEP leaves one), the attributes are added. */
 void kt_restyle(struct kt_canvas *canvas, struct kt_rect area, struct kt_style style);
 
-/* A rounded box in KT_BORDER with a KT_STRONG title. */
+/* Display columns of UTF-8 text as kt_text lays it out on a Unicode canvas. */
+int kt_text_width(const char *text);
+enum kt_align { KT_ALIGN_LEFT, KT_ALIGN_CENTER, KT_ALIGN_RIGHT };
+/* One line of text on the first row of `area`, aligned within the part of
+ * the area that is on the canvas. Text that does not fit is cut between
+ * cells, never inside a wide cell or a cluster of joined scalars, and ends
+ * with an ellipsis: U+2026, or "..." on an ASCII canvas. Returns the columns
+ * drawn, ellipsis included. */
+int kt_text_aligned(struct kt_canvas *canvas, struct kt_rect area, const char *text,
+                    enum kt_align align, struct kt_style style);
+/* One line made of differently styled runs, drawn left to right and cut the
+ * same way; the ellipsis takes the style of the run it cuts. */
+struct kt_span { const char *text; struct kt_style style; };
+int kt_spans(struct kt_canvas *canvas, struct kt_rect area, const struct kt_span *spans, size_t count);
+
+/* Borders are data: the glyph for each side and corner, for Unicode and for
+ * ASCII canvases. Zero leaves that side or corner undrawn, so a border can be
+ * one side only: kt_border_bar is a single column at the left edge. */
+struct kt_border_glyphs { uint32_t top, bottom, left, right, top_left, top_right, bottom_left, bottom_right; };
+struct kt_border { struct kt_border_glyphs unicode, ascii; };
+extern const struct kt_border kt_border_none, kt_border_light, kt_border_rounded,
+    kt_border_heavy, kt_border_double, kt_border_bar;
+/* Draws the border along the edge of `area`; the inside is left as it is. */
+void kt_box(struct kt_canvas *canvas, struct kt_rect area, const struct kt_border *border, struct kt_style style);
+/* A title in the top edge of a box at `area`, set off by a space on each side
+ * and kept clear of the corners; cut with an ellipsis when the edge is short. */
+void kt_box_title(struct kt_canvas *canvas, struct kt_rect area, const char *title,
+                  enum kt_align align, struct kt_style style);
+/* The area inside a border: `area` less one cell for each side it draws. */
+struct kt_rect kt_box_inner(struct kt_rect area, const struct kt_border *border);
+/* A horizontal rule on the first row of `area` with an optional title set
+ * into it: "Title ------" (left), "--- Title ---" or "------ Title". Groups
+ * what follows without boxing it in. kt_rule draws both in one style. */
+void kt_rule(struct kt_canvas *canvas, struct kt_rect area, const char *title, struct kt_style style);
+void kt_rule_styled(struct kt_canvas *canvas, struct kt_rect area, const char *title, enum kt_align align,
+                    struct kt_style title_style, struct kt_style line_style);
+
+/* A rounded box in KT_BORDER with a KT_STRONG title, clipped without an
+ * ellipsis; kt_box and kt_box_title are the general form. */
 void kt_panel(struct kt_canvas *canvas, struct kt_rect area, const char *title);
 /* Panel with explicit border and title styles, for focus indication. */
 void kt_panel_styled(struct kt_canvas *canvas, struct kt_rect area, const char *title,
