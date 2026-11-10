@@ -100,6 +100,42 @@ Head history remains after teardown with `desired-state=stopped`.
   superseded. Stale-instance adapter input is rejected.
 - Teardown defaults to no transcript. `redacted` and `full` are explicit policies;
   retained transcripts are bounded and instance-scoped.
+- `activity.changed` records that an interactive head's terminal started or
+  stopped producing output: payload
+  `{"state":"active"|"quiet","since":<epoch>,"source":"tmux","confidence":"inferred"}`,
+  actor `observer`/`tmux`. `since` is when the state began (the first output of a
+  burst, or the last output before the silence), not when it was noticed. It is
+  an inference from tmux window activity, never a statement about what an agent
+  is waiting for. It is independent of observed status: it does not change
+  `observed-status`, `hydra wait`, completion or liveness, and it is not a
+  notification event.
+- `hydra adapter activity <branch>` appends that event from canonical JSON on
+  stdin, `{"schema_version":1,"instance_id":"instance_...","kind":"activity","state":"active"|"quiet","since":<epoch>}`
+  (at most 1024 bytes). Malformed input, a non-current instance, a `since` in the
+  future, and headless or stopped heads are rejected; a `since` before the
+  instance started is moved to its start. Under the head's activity lock a state
+  equal to the last recorded one (`instances/<instance>/activity-state`) is
+  dropped and reported as unchanged, so several observers record one change once.
+- `hydra adapter watch` records that an observer is watching the project's
+  interactive heads now; recording a change does the same. Coverage is kept in
+  `projects/<project>/activity/coverage`: a first line
+  `HYDRA_ACTIVITY_COVERAGE<TAB>1<TAB>unknown-before` and up to 512
+  `start<TAB>last` epoch intervals. A report within 45 seconds of the newest
+  interval extends it; a later one starts a new interval. When the oldest
+  interval is dropped, or a damaged file is set aside as `coverage.corrupt.<epoch>`,
+  `unknown-before` moves forward: time before it is unknown, not unobserved.
+- The control centre started by `hydra tui` (`hydra-tui --store`) is the
+  observer. Its 2-second refresh already runs one `tmux list-sessions` for the
+  head snapshot; that call also names every session's window activity times
+  (`#{W:#{window_activity} }`), so observing adds no process. A local
+  interactive head is quiet after 10 seconds without output and active once
+  output has continued for 4 seconds. Only a change starts a recorder (at most
+  two at a time, retried with backoff when refused), and `adapter watch` runs
+  every 10 seconds while it observes. A head therefore records at most two
+  changes per 14 seconds; the stream stays subject to the per-event limit and
+  to `hydra events retain`. Headless, remote and fleet heads are never observed
+  (their owners report exact status), and nothing is observed while no control
+  centre is running.
 
 Lifecycle, event, and message records follow the schemas described in this guide.
 
@@ -258,7 +294,9 @@ refresh: it reads the same state v2 records in its own process and writes the sa
 rows, then parses them as it parses the shell reader's. `hydra-tui --hydra PATH --data`
 prints that read, and `make test-parity` (`tests/test_tui_store_parity.sh`) requires
 it to equal `hydra tui --data` byte for byte over records of every kind. Three facts
-are not in the store. Live sessions come from one `tmux list-sessions` per refresh.
+are not in the store. Live sessions come from one `tmux list-sessions` per refresh;
+its answer also carries each session's window activity times, which the snapshot
+rows do not use and the activity observer does (see `activity.changed`).
 Uncommitted-file counts come from `git --no-optional-locks status --short`, for a
 bounded number of worktrees per refresh: every worktree whose index or `HEAD` changed
 since it was read and the selected head's, plus the four least recently read others,
@@ -350,10 +388,50 @@ this first and offers each check log as a local `REF log`. Plan checks of a run
 that is not terminal are `pending`; a step without deliverables reports
 `inventory_state` and `readiness` `not_applicable`.
 
-`workflow statistics-data` is `HYDRA_STATISTICS<TAB>4`. Schema 4 adds
+`workflow statistics-data` is `HYDRA_STATISTICS<TAB>5`. Schema 4 added
 `U<TAB>run<TAB>step<TAB>profile<TAB>executable-version<TAB>model<TAB>effort<TAB>tokens-in<TAB>tokens-cached<TAB>tokens-out<TAB>cost-microusd`
 after a run's `S` rows, one per listed step with an exec receipt; `-` is unknown,
-never zero. Readers accept schemas 2 to 4. CPU and memory are not collected.
+never zero. CPU and memory are not collected. Schema 5 adds, after the runs, one
+row per head session of the project and a fourth field on the closing row,
+`Z<TAB>runs<TAB>steps<TAB>sessions`. Readers accept schemas 2 to 5.
+
+A head session is one instance of a head: it starts at `lifecycle.started` or
+`lifecycle.resumed` and ends at `lifecycle.torn-down`, or when a resume
+supersedes it. Its row is
+`H<TAB>head<TAB>instance<TAB>branch<TAB>profile<TAB>terminal<TAB>state<TAB>started<TAB>ended<TAB>outcome<TAB>active<TAB>quiet<TAB>unobserved<TAB>reported`:
+`terminal` is `interactive` or `headless`, `state` is `open`, `ended` or
+`superseded`, `started` and `ended` are epochs, `outcome` is the declared
+outcome, and the last four are seconds. `-` is unknown, never zero. Within the
+session (up to the sample time while it is open), `reported` seconds are those
+for which an adapter reported `running` (counted as active) or `idle` (quiet)
+through `hydra adapter ingest`: they are exact, need no observer and override
+inferred activity until the instance's next observation. Otherwise time is
+active or quiet only where an observer was watching and an `activity.changed`
+state was in force; all other time is `unobserved`. A session nobody observed
+has `-` for active and quiet, and one that began before the coverage history
+(`unknown-before`), or whose start is no longer in the log, has `-` for all four.
+A branch name longer than 120 bytes is shortened.
+
+Rows are newest first and bounded: at most 256 sessions (the newest; an `X`
+warning row says so when there are more) of at most 512 heads. Sessions are
+derived from each head's `events/events.jsonl` and its unexpired archives, so a
+finished session stays countable after `hydra kill` (head history remains with
+`desired-state=stopped`) and after `hydra events retain` until the archive that
+holds its start expires. Symbolic links are not followed, torn and malformed
+lines are discarded, and an event file over 8 MiB is skipped with an `X` row.
+State is only read. What a head's events older than 120 seconds add up to is
+kept as a disposable checkpoint under `$HYDRA_HOME/cache/sessions/<project>/`
+(private, replaced atomically, ignored when it does not validate), so polling
+interprets only newer events.
+
+`workflow statistics-json` exports schema 5 feeds as export schema 3: the
+schema 2 document plus `sessions` with `count`, `open`, `undated`,
+`length_seconds`, `active_seconds`, `quiet_seconds`, `unobserved_seconds` and
+`reported_seconds` (each with `state`, `eligible`, `known` and `sum`, `null`
+when nothing is known), `observed_fraction`, `quiet_fraction_of_observed`,
+`started_daily` (seven 24-hour buckets) and
+`inference` (`source` `tmux`, `confidence` `inferred`). Earlier feeds export
+exactly as before. Tokens and cost of interactive sessions are not collected.
 
 ## Process, install, and platform contracts
 

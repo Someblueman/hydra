@@ -614,6 +614,24 @@ duration) rather than by a terminal, and `p` shows that step's live output.
 Overview centres on the selected or active run: its steps, where each ran, and
 what comes next. See [workflows](workflows.md#heads-a-plan-run-creates).
 
+Statistics (`D`) has two pages; `s` switches between them. Head sessions lists
+every start or resume of a head in this project, newest first, with its agent,
+state, start, length and how long its terminal was active or quiet; a project
+without workflow runs opens on this page. Active and quiet are inferred from
+terminal output: while a control centre is open it notes when each interactive
+head's tmux window stops or resumes producing output (quiet after 10 seconds of
+silence, active once output has continued for 4 seconds). They say what the
+terminal did, not what the agent was waiting for, and the page labels them as
+inferred. Time nobody watched (no control centre open) is shown as unobserved,
+never as quiet, together with the share of session time that was observed; a
+value that is not known is `--`. Headless and remote heads are not observed:
+their owners report exact status, which counts where it exists. Tokens and cost
+are not measured for sessions. `T` changes the range, `/` finds a branch, agent
+or head, `!` keeps sessions declared failed or blocked, and Enter shows one
+session's evidence. The workflow runs page shows recorded runs with their steps,
+timing, retries and tokens (`M` for metrics, `[` `]` for one workflow, `g` for the
+run's graph). `hydra workflow statistics-json` exports both.
+
 Hosts, the last tab of local work, adds a remote machine without leaving the control
 centre: `A` asks for the SSH destination and a name, then walks through the guided
 `hydra remote setup` steps (host key, requirements, installing Hydra, agents and

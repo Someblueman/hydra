@@ -285,4 +285,7 @@ Technical identity and retained-contract checks follow the result.
 item to a collapsed Seen group and out of the count, and lasts until the item
 changes. An approval that is marked seen stays listed until someone decides.
 The Statistics view (`D`) shows the same token counts per step and run, with
-totals for the selected range; CPU and memory are not measured.
+totals for the selected range; CPU and memory are not measured. Its other page
+(`s`) covers the heads you work in directly: session length and the time each
+terminal was active, quiet or unobserved, described under
+[TUI](USAGE.md#tui).

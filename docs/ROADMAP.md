@@ -270,13 +270,20 @@ an acceptance blocker, not optional cosmetic polish.
       The UI remains the interaction surface, accurately reflects each outcome, and
       never requires a successful-action shell detour or a return-to-UI keypress.
 
-- [ ] **U13 — Shared navigation and meaningful statistics.** Statistics currently
-      drops the other tabs and shows an empty recorded-workflow dashboard while an
-      agent session exists. Retain the common navigation, selected work and a clear
-      return path. Explain which activity is covered: a standalone agent session is
-      not automatically a recorded workflow run. Show relevant available activity,
-      distinguish no history from filters excluding data or unsupported measurements,
-      and avoid large empty charts and unexplained `unavailable` fields. Acceptance:
+- [ ] **U13 — Shared navigation and meaningful statistics.** Statistics keeps the
+      common navigation, the selected work and a clear return path. It now covers
+      head sessions as well as recorded workflow runs: every start or resume of a
+      head is listed with its length and the time its terminal was active, quiet
+      or unobserved, sessions per day are charted, and a project without runs
+      opens on its sessions instead of an empty workflow dashboard. Activity is
+      inferred from tmux window output while a control centre is open and is
+      labelled as inferred; observed coverage is shown, unobserved time is never
+      called quiet, unknown values are `--`, "no history" is told apart from
+      "filtered out", and empty charts are not drawn. Still open: tokens and cost
+      for interactive sessions (they need each provider's own session records),
+      activity while no control centre is running, the workflow-runs page's own
+      empty charts, and the redesign of the screen. Headless and remote heads are
+      deliberately not inferred; their owners report exact status. Acceptance:
       navigate to and from statistics during standalone agent work and a recorded
       workflow, with both empty and populated history, without losing context.
 - [x] **U14 — Faithful, readable agent output.** The supplied output capture contains
@@ -1032,8 +1039,8 @@ implementation checks do not establish that the experience is product-ready.
       needs a separate release decision; local readiness does not authorize
       repository creation, pushing or publication.
 
-Full terminal compatibility, a broad widget catalogue, new telemetry collection and
-remote execution changes require their own bounded scope.
+Full terminal compatibility, a broad widget catalogue and remote execution changes
+require their own bounded scope.
 
 ## Simplification alongside feature work
 
