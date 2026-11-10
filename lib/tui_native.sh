@@ -385,7 +385,9 @@ tui_native_run() {
         printf '\033[?1000l\033[?1006l\033[?1002l\033[?2004l\033[0m\033[?25h'
     fi
     case "$_tnr_status" in
-        0|2|129|130|131|133|137|143) ;;
+        # 3 is the helper refusing to start (no terminal, TERM=dumb, too small);
+        # it has already said why.
+        0|2|3|129|130|131|133|137|143) ;;
         *)
             if [ -n "$_tnr_saved_stty" ]; then
                 stty "$_tnr_saved_stty" 2>/dev/null || true
